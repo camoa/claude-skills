@@ -8,6 +8,7 @@ Templates, commands, and size guidelines for rapid skill development.
 ---
 name: my-skill-name
 description: Use when [specific triggers] - [what it does, third person]. Keywords: [relevant terms]
+version: 1.0.0
 ---
 
 # My Skill Name
@@ -109,8 +110,10 @@ python scripts/validate_skill.py .
 
 | Field | Required | Format |
 |-------|----------|--------|
-| `name` | Yes | Lowercase, numbers, hyphens. Max 64 chars |
-| `description` | Yes | Max 1024 chars. No angle brackets |
+| `name` | Yes | Lowercase letters, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude" |
+| `description` | Yes | Max 1024 chars. No XML tags. Must include WHAT and WHEN |
+| `version` | No | Semantic versioning (e.g., 1.0.0) |
+| `dependencies` | No | List of required packages (e.g., python>=3.8, pandas>=1.5.0) |
 | `license` | No | License name or file reference |
 | `allowed-tools` | No | Array of tool names |
 | `metadata` | No | Key-value pairs |

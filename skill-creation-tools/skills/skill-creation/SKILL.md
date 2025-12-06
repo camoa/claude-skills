@@ -1,6 +1,7 @@
 ---
 name: skill-creation
-description: Use when creating, updating, or validating Claude Code skills - provides six-step workflow, progressive disclosure architecture, and reference-first philosophy. Triggers on requests to build skills, package skills, optimize skill descriptions, or troubleshoot skill discovery issues.
+description: Use when creating, validating, or packaging Claude Code skills - provides six-step workflow, progressive disclosure, and reference-first philosophy.
+version: 1.0.0
 ---
 
 # Skill Creation
