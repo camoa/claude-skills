@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-06
+
+### Added
+- `.reports/` directory for all JSON output (git-ignored)
+- Operation 8: Generate Markdown Report from JSON
+- New reference: `composer-scripts.md` with recommended scripts
+- New reference: `json-schemas.md` documenting report structures
+- More trigger phrases ("Install testing tools", etc.)
+
+### Changed
+- SKILL.md rewritten as Claude instructions (not documentation)
+- Each operation now saves JSON reports independently
+- Console shows summary, detailed reports saved to files
+- Reduced SKILL.md from 612 to 231 lines (moved content to references)
+
+### Fixed
+- Skill now properly guides Claude through each operation step-by-step
+- Clear separation between setup, individual checks, and full audit
+
 ## [1.0.0] - 2025-12-06
 
 ### Added

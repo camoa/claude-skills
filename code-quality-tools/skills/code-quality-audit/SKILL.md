@@ -1,229 +1,231 @@
 ---
 name: code-quality-audit
-description: Use when auditing code for TDD compliance, SOLID principles, DRY violations, or test coverage - runs PHPStan, PHPMD, PHPCPD via DDEV and generates structured reports with actionable recommendations
-version: 1.0.0
+description: Use when user asks to audit code quality, check test coverage, find SOLID violations, detect code duplication, setup quality tools, or run TDD workflows - provides step-by-step guidance for PHPStan, PHPMD, PHPCPD via DDEV with actionable recommendations
+version: 1.1.0
 ---
 
 # Code Quality Audit
 
-Automated code quality auditing for Drupal projects. Runs TDD, SOLID, and DRY checks via DDEV.
+This skill guides you through code quality auditing for Drupal projects. Follow these instructions based on what the user requests.
 
-## When to Use This Skill
+## Trigger Recognition
 
-**Trigger phrases:**
-- "Run a code quality audit"
-- "Check my test coverage"
-- "Find SOLID violations"
-- "Check for code duplication"
-- "Is my code following DRY principles?"
-- "Setup quality tools"
+Use this skill when user says things like:
+- "Setup code quality tools" / "Install testing tools" / "Install PHPStan"
+- "Run a code quality audit" / "Audit my code" / "Check code quality"
+- "Check test coverage" / "What's my coverage?"
+- "Find SOLID violations" / "Run PHPStan" / "Check for complexity"
+- "Check for duplication" / "Find duplicate code" / "DRY check"
+- "Check [specific module] for issues"
+- "Add quality checks to CI"
+- "Generate quality report" / "Show me the audit report"
 
-## Quick Start
+## Before You Start
 
-### 1. Detect Environment
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-environment.sh
+### Find the Drupal Project
+
+1. **Check common locations**:
+   - `./web/core/lib/Drupal.php` (standard)
+   - `./drupal-app/web/core/lib/Drupal.php` (monorepo)
+   - `./docroot/core/lib/Drupal.php` (Acquia)
+
+2. **Verify DDEV**: Check `.ddev/config.yaml` exists, run `ddev describe`
+
+3. **If not found**, ask user for path
+
+4. **Set paths**:
+   - `DRUPAL_ROOT` = path with `core/lib/Drupal.php`
+   - `DRUPAL_MODULES_PATH` = `web/modules/custom`
+   - `REPORTS_DIR` = `.reports`
+
+### Reports Directory
+
+All operations save JSON to `.reports/`:
+```
+.reports/
+├── coverage-report.json
+├── solid-report.json
+├── dry-report.json
+├── audit-report.json
+└── audit-report.md
 ```
 
-### 2. Install Tools (if needed)
+**First time**: `mkdir -p .reports && echo ".reports/" >> .gitignore`
+
+## Operation 1: Setup Quality Tools
+
+**Triggers**: "Setup tools", "Install testing tools", "Install PHPStan"
+
+1. Create `.reports/` and add to `.gitignore`
+2. Check installed tools: `ddev exec vendor/bin/phpstan --version`
+3. Install missing:
+   ```bash
+   ddev composer require --dev phpstan/phpstan phpstan/extension-installer \
+     mglaman/phpstan-drupal phpmd/phpmd systemsdk/phpcpd mglaman/drupal-check drupal/coder
+   ```
+4. Copy templates from `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/templates/drupal/` to project:
+   - `phpstan.neon`, `phpmd.xml`, `phpunit.xml`
+5. Check PCOV: `ddev exec php -m | grep pcov` - if missing, recommend adding to `.ddev/config.yaml`
+6. Suggest composer scripts (see `references/composer-scripts.md`)
+
+**Report**: List what was installed, files created, next steps.
+
+## Operation 2: Run Full Audit
+
+**Triggers**: "Run audit", "Check code quality", "Full quality check"
+
+1. Verify tools installed, create `.reports/`
+2. Determine target path (default: `web/modules/custom`)
+3. Run all checks:
+
+**Coverage**:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/install-tools.sh
+ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --testsuite unit,kernel --coverage-text
 ```
 
-### 3. Run Full Audit
+**PHPStan**:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/full-audit.sh
+ddev exec vendor/bin/phpstan analyse {path} --error-format=json > .reports/phpstan-raw.json
 ```
 
-## Audit Types
+**PHPMD**:
+```bash
+ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design --exclude tests > .reports/phpmd-raw.json
+```
 
-| Type | Script | What It Checks |
-|------|--------|----------------|
-| **Full Audit** | `full-audit.sh` | All checks, aggregated report |
-| **Coverage** | `drupal/coverage-report.sh` | PHPUnit + PCOV line coverage |
-| **SOLID** | `drupal/solid-check.sh` | PHPStan, PHPMD, drupal-check |
-| **DRY** | `drupal/dry-check.sh` | PHPCPD duplication |
-| **TDD Helper** | `drupal/tdd-workflow.sh` | Watch mode for RED-GREEN-REFACTOR |
+**PHPCPD**:
+```bash
+ddev exec vendor/bin/phpcpd {path} --min-lines=10 --exclude tests
+```
 
-## Thresholds (Environment Variables)
+**Static calls**:
+```bash
+ddev exec grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COVERAGE_MINIMUM` | 70 | CI gate (fail below) |
-| `COVERAGE_TARGET` | 80 | Goal for new code |
-| `DUPLICATION_MAX` | 5 | Max duplication % |
-| `COMPLEXITY_MAX` | 10 | Max cyclomatic complexity |
-| `DRUPAL_MODULES_PATH` | `web/modules/custom` | Path to analyze |
-| `REPORT_DIR` | `./reports/quality` | Output directory |
+4. Save aggregated `.reports/audit-report.json` (see schema in `schemas/`)
+5. Show console summary table with PASS/WARN/FAIL status
+6. Provide top 3-5 recommendations
 
-## Output Format
+**Thresholds**: Coverage <70% FAIL, 70-80% WARN | PHPStan >10 FAIL | Duplication >10% FAIL
 
-All scripts produce JSON reports, converted to Markdown via `report-processor.sh`.
+## Operation 3: Check Coverage Only
 
-**Exit Codes:**
-- `0` = Pass (all checks within thresholds)
-- `1` = Warning (some checks exceeded soft thresholds)
-- `2` = Fail (critical thresholds exceeded)
+**Triggers**: "Check coverage", "What's my test coverage?"
 
-## SOLID Principle Detection
+1. `mkdir -p .reports`
+2. Run: `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --testsuite unit,kernel --coverage-text`
+3. Parse output for `Lines: XX.XX%`
+4. Save `.reports/coverage-report.json`
+5. Show summary with 70%/80% thresholds
 
-| Principle | Tool | Detection | Threshold |
-|-----------|------|-----------|-----------|
-| **SRP** | PHPMD | Cyclomatic complexity | >10 |
-| **SRP** | PHPMD | Methods per class | >25 |
-| **OCP** | Manual | Switch on types | Review |
-| **LSP** | PHPStan | Type checking level 8 | 0 errors |
-| **ISP** | Manual | Interface method count | >7 |
-| **DIP** | phpstan-drupal | Static `\Drupal::` calls | 0 |
-| **DIP** | drupal-check | Deprecated service usage | 0 |
+## Operation 4: Check SOLID Only
 
-See `references/solid-detection.md` for detailed detection methods.
+**Triggers**: "Find SOLID violations", "Run PHPStan", "Check complexity"
 
-## DRY Thresholds
+1. `mkdir -p .reports`
+2. Run PHPStan: `ddev exec vendor/bin/phpstan analyse {path} --error-format=json > .reports/phpstan-raw.json`
+3. Run PHPMD: `ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design > .reports/phpmd-raw.json`
+4. Check DIP: `ddev exec grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests`
+5. Save `.reports/solid-report.json`
+6. Categorize by principle (SRP, DIP, LSP) and show with fix suggestions
 
-| Duplication % | Rating | Action |
-|---------------|--------|--------|
-| <5% | Excellent | Maintain |
-| 5-10% | Acceptable | Monitor |
-| 10-15% | Warning | Refactor |
-| >15% | Critical | Immediate action |
+**SOLID Mapping**:
+| Issue | Principle | Severity |
+|-------|-----------|----------|
+| Complexity >15 | SRP | Critical |
+| Static `\Drupal::` in services | DIP | Critical |
+| Type errors | LSP | Warning |
 
-See `references/dry-detection.md` for PHPCPD configuration.
+## Operation 5: Check DRY Only
 
-## Coverage Interpretation
+**Triggers**: "Check duplication", "Find duplicate code", "DRY check"
 
-| Level | Coverage | Use Case |
-|-------|----------|----------|
-| Minimum | 70% | CI gate |
-| Target | 80% | New code goal |
-| Excellent | 90%+ | Mature projects |
+1. `mkdir -p .reports`
+2. Run: `ddev exec vendor/bin/phpcpd {path} --min-lines=10 --min-tokens=70 --exclude tests`
+3. Save `.reports/dry-report.json`
+4. Show duplication % with threshold (<5% PASS, 5-10% WARN, >10% FAIL)
+5. List clones with file locations
 
-See `references/coverage-metrics.md` for PCOV vs Xdebug comparison.
+**Before recommending extraction**: Is it knowledge duplication or coincidence? Rule of Three.
 
-## Test Type Selection
+## Operation 6: Check Specific Module
 
-When writing tests, choose the right type:
+**Triggers**: "Check {module_name}", "Audit contentbench_organizations"
 
-| Need DB? | Need Services? | Need Browser? | Test Type |
-|----------|----------------|---------------|-----------|
+1. Verify module: `ls -la web/modules/custom/{module_name}`
+2. Run all checks scoped to that path
+3. Save reports with module prefix: `.reports/{module_name}-*.json`
+
+## Operation 7: Setup CI Integration
+
+**Triggers**: "Add to CI", "Setup GitHub Actions"
+
+1. Copy `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/templates/ci/github-drupal.yml`
+2. Write to `.github/workflows/quality.yml`
+3. Explain: Lint → Static Analysis → Tests → Coverage (fails <70%)
+
+## Operation 8: Generate Markdown Report
+
+**Triggers**: "Generate report", "Show quality report"
+
+1. Check `.reports/audit-report.json` exists
+2. Read and parse JSON
+3. Generate `.reports/audit-report.md` with:
+   - Summary table (PASS/WARN/FAIL icons)
+   - Coverage details
+   - SOLID violations by severity
+   - Code duplication clones
+   - Prioritized recommendations
+4. Tell user: "Generated `.reports/audit-report.md`"
+
+## Quick Reference
+
+### Thresholds
+
+| Metric | Pass | Warning | Fail |
+|--------|------|---------|------|
+| Coverage | >80% | 70-80% | <70% |
+| Duplication | <5% | 5-10% | >10% |
+| Complexity | <10 | 10-15 | >15 |
+| PHPStan | 0 | 1-10 | >10 |
+
+### Test Type Selection
+
+| Need DB? | Need Services? | Need Browser? | Use |
+|----------|----------------|---------------|-----|
 | No | No | No | Unit |
 | Yes | Yes | No | Kernel |
-| Yes | Yes | Yes (no JS) | Functional |
-| Yes | Yes | Yes (with JS) | FunctionalJavascript |
+| Yes | Yes | Yes | Functional |
 
-**Rule of thumb:** Start with Kernel tests for Drupal (10-15x faster than Functional).
+**Default**: Kernel tests (10-15x faster than Functional)
 
-See `decision-guides/test-type-selection.md` for detailed decision tree.
+### Tool Commands
 
-## Tools Reference
-
-### Installed via install-tools.sh
-
-```bash
-composer require --dev \
-  phpstan/phpstan \
-  phpstan/extension-installer \
-  mglaman/phpstan-drupal \
-  phpstan/phpstan-deprecation-rules \
-  phpmd/phpmd \
-  systemsdk/phpcpd \
-  mglaman/drupal-check \
-  drupal/coder
-```
-
-### Tool Versions (December 2025)
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| PHPStan | 2.x | Level 10 max, 50% less memory |
-| phpstan-drupal | Latest | Drupal 11 support |
-| PHPMD | Latest | JSON output support |
-| PHPCPD | 8.x | systemsdk fork (PHP 8.3+) |
-| drupal-check | 1.5+ | Drupal 11 support |
-| Drupal Coder | 9.x | PHP_CodeSniffer 4.x |
-
-## TDD Workflow
-
-RED-GREEN-REFACTOR cycle:
-
-1. **RED**: Write failing test first
-2. **GREEN**: Minimal code to pass
-3. **REFACTOR**: Clean up, maintain green
-
-Use `drupal/tdd-workflow.sh` for watch mode.
-
-See `references/tdd-workflow.md` for when TDD makes sense.
-
-## Integration with Other Skills
-
-This skill references but does not duplicate:
-
-| Skill | Use For |
+| Check | Command |
 |-------|---------|
-| `drupal-testing` | PHPUnit test patterns, assertions |
-| `drupal-ai-1.2` | Testing AI agent integrations |
-| `drupal-jsonapi` | API testing patterns |
-
-## Templates
-
-Copy templates to your project:
-
-| Template | Purpose |
-|----------|---------|
-| `templates/drupal/phpunit.xml` | PHPUnit + coverage config |
-| `templates/drupal/phpstan.neon` | PHPStan level 8 + Drupal |
-| `templates/drupal/phpmd.xml` | PHPMD rulesets |
-| `templates/ci/github-drupal.yml` | GitHub Actions workflow |
-
-## Troubleshooting
-
-### DDEV Not Running
-```bash
-ddev start
-```
-
-### PCOV Not Available
-Add to `.ddev/config.yaml`:
-```yaml
-webimage_extra_packages:
-  - php${DDEV_PHP_VERSION}-pcov
-```
-Then: `ddev restart`
-
-### PHPStan Memory Issues
-```bash
-ddev exec vendor/bin/phpstan analyse --memory-limit=2G
-```
-
-### PHPCPD Requires PHP 8.3
-Update `.ddev/config.yaml`:
-```yaml
-php_version: "8.3"
-```
+| PHPStan | `ddev exec vendor/bin/phpstan analyse {path}` |
+| PHPMD | `ddev exec vendor/bin/phpmd {path} text cleancode,codesize` |
+| PHPCPD | `ddev exec vendor/bin/phpcpd {path} --min-lines=10` |
+| Coverage | `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text` |
 
 ## References
 
-- `references/tdd-workflow.md` - When and how to use TDD
-- `references/solid-detection.md` - Detailed SOLID principle detection
-- `references/dry-detection.md` - PHPCPD configuration and thresholds
-- `references/coverage-metrics.md` - PCOV vs Xdebug, interpretation
-- `references/tool-comparison.md` - Drupal vs Next.js tools
+- `references/tdd-workflow.md` - RED-GREEN-REFACTOR cycle
+- `references/solid-detection.md` - Detailed SOLID detection and fixes
+- `references/dry-detection.md` - PHPCPD config, refactoring patterns
+- `references/coverage-metrics.md` - PCOV vs Xdebug
+- `references/composer-scripts.md` - Recommended composer scripts
+- `references/json-schemas.md` - Report JSON structures
 
 ## Decision Guides
 
-- `decision-guides/test-type-selection.md` - Unit vs Kernel vs Functional
+- `decision-guides/test-type-selection.md` - Full decision tree
 - `decision-guides/quality-audit-checklist.md` - When to run what
 
-## Scripts
+## Templates
 
-### Core
-- `scripts/core/detect-environment.sh` - Detect project type, validate DDEV
-- `scripts/core/install-tools.sh` - Install quality tools via composer
-- `scripts/core/full-audit.sh` - Run all checks, aggregate report
-- `scripts/core/report-processor.sh` - Convert JSON to Markdown
-
-### Drupal
-- `scripts/drupal/coverage-report.sh` - PHPUnit + PCOV coverage
-- `scripts/drupal/solid-check.sh` - PHPStan + PHPMD + drupal-check
-- `scripts/drupal/dry-check.sh` - PHPCPD duplication analysis
-- `scripts/drupal/tdd-workflow.sh` - TDD watch mode helper
+- `templates/drupal/phpunit.xml`
+- `templates/drupal/phpstan.neon`
+- `templates/drupal/phpmd.xml`
+- `templates/ci/github-drupal.yml`
