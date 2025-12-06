@@ -32,6 +32,14 @@ Guide for creating effective Claude Code skills - covers workflow, progressive d
 | [Superpowers](https://github.com/obra/superpowers-marketplace) | TDD skill development | `/plugin marketplace add obra/superpowers-marketplace` |
 | [Skill Seeker MCP](https://github.com/camoa/skill-seeker) | Automated doc scraping | See repo README |
 
+## Acknowledgments
+
+This skill was built by combining original work with patterns and insights from:
+
+- [Anthropic Agent Skills](https://github.com/anthropics/skills) - Official skill-creator and best practices (Apache 2.0)
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD approach and writing-skills methodology (MIT)
+- [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) - Official guidelines
+
 ## License
 
 MIT
