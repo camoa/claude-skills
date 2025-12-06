@@ -55,7 +55,9 @@ Guide for creating effective Claude Code skills - covers workflow, progressive d
 
 ## Acknowledgments
 
-This skill was built by combining original work with patterns and insights from:
+This marketplace was built collaboratively by Carlos Ospina and Claude (Anthropic). The methodology, frameworks, and domain expertise came from Carlos. Claude contributed code generation, research synthesis, documentation structure, and pattern implementation. Neither could have produced this alone.
+
+Patterns and insights drawn from:
 
 - [Anthropic Agent Skills](https://github.com/anthropics/skills) - Official skill-creator and best practices (Apache 2.0)
 - [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD approach and writing-skills methodology (MIT)
