@@ -19,6 +19,16 @@
       "author": {
         "name": "camoa"
       }
+    },
+    {
+      "name": "drupal-dev-framework",
+      "source": "./drupal-dev-framework",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands",
+      "version": "1.0.0",
+      "author": {
+        "name": "camoa"
+      },
+      "keywords": ["drupal", "development", "workflow", "architecture", "tdd"]
     }
   ]
 }

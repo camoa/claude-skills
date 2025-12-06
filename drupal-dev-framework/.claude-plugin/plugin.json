@@ -1,0 +1,10 @@
+{
+  "name": "drupal-dev-framework",
+  "version": "1.0.0",
+  "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with human control at every step.",
+  "author": {
+    "name": "camoa"
+  },
+  "license": "MIT",
+  "keywords": ["drupal", "development", "workflow", "architecture", "tdd"]
+}
