@@ -2,6 +2,19 @@
 
 Common mistakes when creating skills and how to avoid them.
 
+## The #1 Anti-Pattern: Documentation Instead of Instructions
+
+**SKILL.md must be INSTRUCTIONS for Claude, not documentation about the skill.**
+
+| Documentation (WRONG) | Instructions (CORRECT) |
+|----------------------|------------------------|
+| "This skill helps with PDF processing" | "Process PDF files using this workflow" |
+| "What Are Skills?" | "## Workflow" |
+| "Skills extend Claude's capabilities" | "When triggered, execute these steps" |
+| "Guide for creating effective skills" | "Follow this workflow to create a skill" |
+
+**How to detect**: Read each sentence. If it explains what something IS rather than what to DO, rewrite it.
+
 ## Content Anti-Patterns
 
 | Pattern | Problem | Solution |

@@ -6,106 +6,129 @@ version: 1.0.0
 
 # Skill Creation
 
-Guide for creating effective Claude Code skills that are discoverable, efficient, and maintainable.
+Follow this workflow when creating Claude Code skills.
 
-## What Are Skills?
+## Critical Understanding
 
-Skills extend Claude's capabilities by packaging expertise into composable resources. They are **model-invoked** (Claude decides when to use them based on description).
+**SKILL.md files are INSTRUCTIONS for Claude, not documentation about the skill.**
 
-See `references/what-are-skills.md` for: definitions, characteristics, comparison with other Claude features.
+When creating any SKILL.md (including for users of this skill), write imperatives telling Claude what to do, not explanations of what the skill is. The difference:
 
-## Core Philosophy
+| Documentation (WRONG) | Instructions (CORRECT) |
+|----------------------|------------------------|
+| "This skill helps with PDF processing" | "Process PDF files using this workflow" |
+| "Skills are model-invoked resources" | "When triggered, execute these steps" |
+| "The description field is important" | "Write the description starting with 'Use when...'" |
 
-1. **Claude is already very smart** - Only add context Claude doesn't have
-2. **Reference, don't reproduce** - Point to source files, don't copy implementations
-3. **Decision-focused** - "When to use X vs Y" not "How to install X"
-4. **Context is a public good** - Every token must justify its cost
+## Workflow
 
-See `references/core-philosophy.md` for: iron laws, content strategy, degrees of freedom, DRY principle.
+### Step 1. Gather Concrete Examples
 
-## Six-Step Workflow
+Before writing anything, collect specific usage scenarios:
 
-### Step 1: Understand with Concrete Examples
-Clarify exactly how the skill will be used:
-- What would a user say that should trigger this skill?
-- What are 3-5 concrete usage examples?
-- What outputs does the user expect?
+1. Ask: "What would a user say that should trigger this skill?"
+2. List 3-5 concrete examples with expected inputs and outputs
+3. Identify trigger words and symptoms
 
-### Step 2: Plan Reusable Contents
-For each example, identify:
-- Scripts to execute repeatedly
+### Step 2. Plan Resources
+
+For each example, determine:
+- Scripts needed for repeated execution
 - References to load on demand
-- Assets to use in output
+- Assets for output (templates, images)
 
-### Step 3: Initialize
+### Step 3. Initialize
+
+Run the initialization script:
 ```bash
 python scripts/init_skill.py <skill-name> --path <output-dir>
 ```
 
-### Step 4: Edit the Skill
-1. Implement bundled resources (scripts/, references/, assets/)
-2. Write SKILL.md answering: purpose, triggers, workflow
+Or create manually:
+```bash
+mkdir -p my-skill/{scripts,references,assets}
+touch my-skill/SKILL.md
+```
 
-**Writing style**: Imperative form ("To accomplish X, do Y")
+### Step 4. Write the SKILL.md
 
-See `references/writing-skillmd.md` for: voice/style guide, structure, word count targets.
-See `references/reference-dont-reproduce.md` for: code example strategy, when to reference vs reproduce.
+Write instructions following these rules:
 
-### Step 5: Validate and Package
+1. **Imperative voice**: "Run this", "Check that", "If X, do Y"
+2. **Action-oriented**: Tell Claude what to do, not what the skill is
+3. **Under 500 lines**: Move details to references/
+4. **Reference, don't reproduce**: Point to files, don't copy code
+
+Structure the content as:
+```markdown
+---
+name: skill-name
+description: Use when [triggers] - [what it does, third person]
+version: 1.0.0
+---
+
+# Skill Name
+
+[1-2 sentence instruction for Claude]
+
+## When to Use
+- [Trigger 1]
+- [Trigger 2]
+- NOT for: [anti-pattern]
+
+## Workflow
+[Step-by-step instructions]
+
+## Quick Reference
+[Table of common operations]
+
+## See Also
+- references/details.md
+- scripts/helper.py
+```
+
+See `references/writing-skillmd.md` for detailed voice/style guidance.
+
+### Step 5. Validate and Package
+
+Run validation:
 ```bash
 python scripts/validate_skill.py <skill-path>
+```
+
+Package for distribution:
+```bash
 python scripts/package_skill.py <skill-path>
 ```
 
-### Step 6: Iterate
-Test on real tasks, note struggles, update, re-test.
+### Step 6. Iterate
 
-## Skill Anatomy
-
-```
-my-skill/
-├── SKILL.md              # Required: triggers, workflow, quick reference
-├── scripts/              # Executed without loading into context
-├── references/           # Loaded on demand when Claude needs them
-└── assets/               # Used in output, never loaded into context
-```
+Test on real tasks. Note struggles. Update. Re-test.
 
 ## The Description Field
 
-**The most critical part** - determines whether Claude loads your skill.
-
-**Formula:**
+Write the description using this formula:
 ```
 Use when [specific triggers] - [what it does, third person]
 ```
 
-**Checklist:**
+Checklist:
 - Starts with "Use when..."
 - Third person (not "you should")
 - Includes specific symptoms/triggers
 - Includes relevant keywords
 - Under 1024 characters (ideal: 200-500)
 
-See: `references/description-patterns.md` for templates by skill type.
+See `references/description-patterns.md` for templates by skill type.
 
-## Progressive Disclosure
-
-| Level | Content | When Loaded |
-|-------|---------|-------------|
-| Metadata | name + description (~100 tokens) | Always |
-| SKILL.md body | Core instructions (<5k tokens) | When triggered |
-| Bundled resources | scripts, references, assets | On demand |
-
-**Key rule**: Keep SKILL.md under 500 lines. Split into references/ if larger.
-
-## Component Selection
+## Component Placement
 
 | Content Type | Location |
 |--------------|----------|
-| Core workflow Claude must know | SKILL.md body |
+| Core workflow instructions | SKILL.md body |
 | Detailed reference (>100 lines) | references/{topic}.md |
 | Reusable, tested code | scripts/{name}.py |
-| Template/image used in output | assets/{name}/ |
+| Templates, images for output | assets/{name}/ |
 | Everything else | DON'T INCLUDE |
 
 ## Quick Validation
@@ -125,15 +148,15 @@ grep -o 'references/[^)]*' SKILL.md | while read f; do [ -f "$f" ] || echo "Miss
 
 | Mistake | Fix |
 |---------|-----|
+| Writing documentation instead of instructions | Rewrite in imperative voice: "Do X", not "X is..." |
 | Copying code that exists elsewhere | Reference file paths instead |
-| Description too vague | Add specific triggers, keywords |
+| Description too vague | Add specific triggers and keywords |
 | SKILL.md over 500 lines | Split into references/ |
 | Untested scripts | Run scripts before packaging |
-| First person in description | Use third person: "Use when..." |
 
-## Should You Create a Skill?
+## Decision Frameworks
 
-**First, check if another approach fits better:**
+Before creating a skill, verify it's the right approach:
 
 | Instead of Skill | Use When |
 |------------------|----------|
@@ -142,31 +165,28 @@ grep -o 'references/[^)]*' SKILL.md | while read f; do [ -f "$f" ] || echo "Miss
 | Agent definition | Complex autonomous multi-step work |
 | CLAUDE.md | Project-specific context |
 
-**The 5-10 Rule**: Done 5+ times? Will do 10+ more? → Create a skill.
+**The 5-10 Rule**: Done 5+ times? Will do 10+ more? Create a skill.
 
-**Multiple creation approaches exist** - see `references/creation-approaches.md` for:
-- Manual vs Automated (Skill Seeker MCP) vs Hybrid
-- When to use each tool
-- Decision framework
+See `references/decision-frameworks.md` for complete decision trees.
 
 ## References
 
 ### Foundational
-- `references/what-are-skills.md` - Definitions, characteristics, skill types, comparison with other features
-- `references/core-philosophy.md` - Iron laws, content strategy, degrees of freedom, DRY principle
-- `references/decision-frameworks.md` - All decision trees: should I create? what type? where does content live?
+- `references/what-are-skills.md` - Definitions and characteristics
+- `references/core-philosophy.md` - Iron laws and content strategy
+- `references/decision-frameworks.md` - All decision trees
 
 ### Creation Process
-- `references/creation-approaches.md` - Manual vs automated vs hybrid, tool installation, comparison matrix
-- `references/writing-skillmd.md` - Voice/style, structure, word count targets, progressive disclosure patterns
-- `references/reference-dont-reproduce.md` - Code example strategy, format standards, when to reference
+- `references/creation-approaches.md` - Manual vs automated vs hybrid
+- `references/writing-skillmd.md` - Voice, style, structure guidelines
+- `references/reference-dont-reproduce.md` - Code example strategy
 
 ### Components & Quality
-- `references/description-patterns.md` - Templates for description field by skill type
-- `references/bundled-resources.md` - When to use scripts vs references vs assets
-- `references/anti-patterns.md` - Common mistakes and how to avoid them
-- `references/testing.md` - TDD approach for skills, validation checklists
-- `references/quick-reference.md` - Templates, validation commands, size guidelines
+- `references/description-patterns.md` - Templates by skill type
+- `references/bundled-resources.md` - Scripts, references, assets
+- `references/anti-patterns.md` - Common mistakes to avoid
+- `references/testing.md` - TDD approach and validation
+- `references/quick-reference.md` - Templates and size guidelines
 
 ## Scripts
 

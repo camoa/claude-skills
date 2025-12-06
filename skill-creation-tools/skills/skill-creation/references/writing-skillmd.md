@@ -2,6 +2,22 @@
 
 Detailed guidance on voice, style, structure, and word count for SKILL.md files.
 
+## The Critical Distinction
+
+**SKILL.md files are INSTRUCTIONS for Claude, not documentation about the skill.**
+
+This is the most common mistake. When Claude reads a SKILL.md, it needs to know what to DO, not what the skill IS.
+
+| Documentation (WRONG) | Instructions (CORRECT) |
+|----------------------|------------------------|
+| "This skill processes PDFs" | "Process PDFs using this workflow" |
+| "Skills extend Claude's capabilities" | "When triggered, follow these steps" |
+| "The form filling feature supports..." | "To fill forms, run scripts/fill_form.py" |
+| "What Are Skills?" | "## Workflow" |
+| "Guide for creating skills" | "Follow this workflow to create a skill" |
+
+**Test your SKILL.md**: Read each sentence and ask "Does this tell Claude what to DO?" If it explains what something IS, rewrite it.
+
 ## Voice and Style
 
 | Do | Don't |
