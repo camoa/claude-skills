@@ -1,0 +1,24 @@
+{
+  "name": "camoa-skills",
+  "owner": {
+    "name": "camoa",
+    "email": ""
+  },
+  "metadata": {
+    "description": "Custom skills and tools for Claude Code development workflows",
+    "version": "1.0.0",
+    "categories": ["Development", "Productivity", "Skills"],
+    "tags": ["skills", "development", "workflows", "automation"]
+  },
+  "plugins": [
+    {
+      "name": "skill-creation-tools",
+      "source": "./skill-creation-tools",
+      "description": "Tools and guidance for creating effective Claude Code skills",
+      "version": "1.0.0",
+      "author": {
+        "name": "camoa"
+      }
+    }
+  ]
+}

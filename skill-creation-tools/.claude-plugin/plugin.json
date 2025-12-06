@@ -1,0 +1,10 @@
+{
+  "name": "skill-creation-tools",
+  "description": "Tools and guidance for creating effective Claude Code skills following Anthropic best practices and guide-framework-maintainer philosophy",
+  "version": "1.0.0",
+  "author": {
+    "name": "camoa"
+  },
+  "license": "MIT",
+  "keywords": ["skills", "skill-creation", "development", "best-practices"]
+}
