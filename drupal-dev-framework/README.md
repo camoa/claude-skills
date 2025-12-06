@@ -151,6 +151,12 @@ Works with:
 - `superpowers:verification-before-completion` - Final checks
 - `drupal-dev-tools:drupal` - Drupal audits, DDEV operations
 
+## Acknowledgments
+
+This plugin builds on patterns and integrates with:
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD, brainstorming, verification workflows
+- [drupal-dev-tools](https://github.com/camoa/drupal-dev-tools) - Drupal/DDEV operations
+
 ## License
 
 MIT
