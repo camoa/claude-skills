@@ -1,0 +1,148 @@
+#
+# GitHub Actions workflow for Drupal code quality
+# Copy to .github/workflows/quality.yml
+#
+# Prerequisites:
+#   - DDEV configured in project
+#   - Quality tools installed via composer
+#   - CODECOV_TOKEN secret (optional, for coverage upload)
+#
+
+name: Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  COVERAGE_MINIMUM: 70
+  COVERAGE_TARGET: 80
+  DUPLICATION_MAX: 5
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup DDEV
+        uses: ddev/github-action-setup-ddev@v1
+        with:
+          autostart: true
+
+      - name: Install dependencies
+        run: ddev composer install --no-interaction
+
+      - name: Install quality tools
+        run: |
+          ddev composer require --dev \
+            phpstan/phpstan \
+            mglaman/phpstan-drupal \
+            phpstan/extension-installer \
+            phpmd/phpmd \
+            systemsdk/phpcpd \
+            drupal/coder \
+            --no-interaction
+
+      # =====================
+      # Static Analysis
+      # =====================
+      - name: PHPStan Analysis
+        run: |
+          ddev exec vendor/bin/phpstan analyse \
+            web/modules/custom \
+            --level=8 \
+            --error-format=github \
+            --no-progress
+        continue-on-error: true
+
+      # =====================
+      # Code Smells
+      # =====================
+      - name: PHPMD Analysis
+        run: |
+          ddev exec vendor/bin/phpmd \
+            web/modules/custom \
+            github \
+            cleancode,codesize,design
+        continue-on-error: true
+
+      # =====================
+      # Duplication Check
+      # =====================
+      - name: PHPCPD Duplication
+        run: |
+          ddev exec vendor/bin/phpcpd \
+            --min-lines=10 \
+            --min-tokens=70 \
+            --exclude=tests \
+            web/modules/custom
+        continue-on-error: true
+
+      # =====================
+      # Coding Standards
+      # =====================
+      - name: Drupal Coding Standards
+        run: |
+          ddev exec vendor/bin/phpcs \
+            --standard=Drupal,DrupalPractice \
+            --extensions=php,module,inc,install \
+            --report=checkstyle \
+            web/modules/custom
+        continue-on-error: true
+
+      # =====================
+      # Tests with Coverage
+      # =====================
+      - name: Run Tests with Coverage
+        run: |
+          ddev exec php -d pcov.enabled=1 \
+            vendor/bin/phpunit \
+            --testsuite unit,kernel \
+            --coverage-clover coverage.xml \
+            --coverage-text
+
+      - name: Check Coverage Threshold
+        run: |
+          COVERAGE=$(grep -oP 'line-rate="\K[\d.]+' coverage.xml | head -1 || echo "0")
+          COVERAGE_PCT=$(echo "$COVERAGE * 100" | bc)
+          echo "Coverage: ${COVERAGE_PCT}%"
+
+          if (( $(echo "$COVERAGE_PCT < $COVERAGE_MINIMUM" | bc -l) )); then
+            echo "::error::Coverage ${COVERAGE_PCT}% is below minimum ${COVERAGE_MINIMUM}%"
+            exit 1
+          elif (( $(echo "$COVERAGE_PCT < $COVERAGE_TARGET" | bc -l) )); then
+            echo "::warning::Coverage ${COVERAGE_PCT}% is below target ${COVERAGE_TARGET}%"
+          else
+            echo "::notice::Coverage ${COVERAGE_PCT}% meets target"
+          fi
+
+      # =====================
+      # Upload Coverage
+      # =====================
+      - name: Upload to Codecov
+        if: github.event_name == 'push'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      # =====================
+      # Summary Report
+      # =====================
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| PHPStan | ${{ steps.phpstan.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PHPMD | ${{ steps.phpmd.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Duplication | ${{ steps.phpcpd.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ steps.tests.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY

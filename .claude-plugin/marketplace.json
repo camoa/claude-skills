@@ -29,6 +29,16 @@
         "name": "camoa"
       },
       "keywords": ["drupal", "development", "workflow", "architecture", "tdd"]
+    },
+    {
+      "name": "code-quality-tools",
+      "source": "./code-quality-tools",
+      "description": "Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV",
+      "version": "1.0.0",
+      "author": {
+        "name": "camoa"
+      },
+      "keywords": ["code-quality", "tdd", "solid", "dry", "drupal", "testing", "phpstan", "phpmd"]
     }
   ]
 }

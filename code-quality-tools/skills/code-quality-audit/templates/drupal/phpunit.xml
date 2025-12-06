@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PHPUnit configuration for Drupal custom modules
+  Copy to project root and adjust paths as needed
+
+  Usage:
+    ddev exec php -d pcov.enabled=1 vendor/bin/phpunit
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="web/core/tests/bootstrap.php"
+         colors="true"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         beStrictAboutOutputDuringTests="true"
+         cacheResult="true"
+         cacheDirectory=".phpunit.cache">
+
+    <php>
+        <!-- Drupal configuration -->
+        <ini name="memory_limit" value="512M"/>
+        <env name="SIMPLETEST_BASE_URL" value="http://localhost"/>
+        <env name="SIMPLETEST_DB" value="mysql://db:db@db/db"/>
+        <env name="BROWSERTEST_OUTPUT_DIRECTORY" value="/var/www/html/web/sites/simpletest/browser_output"/>
+
+        <!-- Symfony deprecation handling -->
+        <env name="SYMFONY_DEPRECATIONS_HELPER" value="weak"/>
+    </php>
+
+    <testsuites>
+        <!-- Unit tests - fastest, no database -->
+        <testsuite name="unit">
+            <directory>web/modules/custom/*/tests/src/Unit</directory>
+        </testsuite>
+
+        <!-- Kernel tests - has container, database -->
+        <testsuite name="kernel">
+            <directory>web/modules/custom/*/tests/src/Kernel</directory>
+        </testsuite>
+
+        <!-- Functional tests - full Drupal bootstrap -->
+        <testsuite name="functional">
+            <directory>web/modules/custom/*/tests/src/Functional</directory>
+        </testsuite>
+
+        <!-- JavaScript functional tests -->
+        <testsuite name="functional-javascript">
+            <directory>web/modules/custom/*/tests/src/FunctionalJavascript</directory>
+        </testsuite>
+
+        <!-- All tests -->
+        <testsuite name="all">
+            <directory>web/modules/custom/*/tests/src</directory>
+        </testsuite>
+    </testsuites>
+
+    <!-- Source code to analyze for coverage -->
+    <source>
+        <include>
+            <directory suffix=".php">web/modules/custom</directory>
+        </include>
+        <exclude>
+            <!-- Exclude test files -->
+            <directory>web/modules/custom/*/tests</directory>
+            <!-- Exclude .module files (procedural) -->
+            <file>web/modules/custom/*/*.module</file>
+            <!-- Exclude install files -->
+            <file>web/modules/custom/*/*.install</file>
+        </exclude>
+    </source>
+
+    <!-- Coverage report configuration -->
+    <coverage>
+        <report>
+            <!-- Console output -->
+            <text outputFile="php://stdout" showOnlySummary="true"/>
+            <!-- XML for CI tools -->
+            <clover outputFile="reports/coverage/clover.xml"/>
+            <!-- HTML for manual review -->
+            <html outputDirectory="reports/coverage/html"/>
+        </report>
+    </coverage>
+
+    <!-- Logging -->
+    <logging>
+        <junit outputFile="reports/junit.xml"/>
+    </logging>
+</phpunit>

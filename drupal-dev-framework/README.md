@@ -2,6 +2,12 @@
 
 A Claude Code plugin implementing a systematic 3-phase Drupal development workflow with human control at every step.
 
+## Prerequisites
+
+- Claude Code with superpowers plugin installed
+- drupal-dev-tools plugin (optional, for DDEV integration)
+- Guides in `~/workspace/claude_memory/guides/` (optional, for guide-integrator)
+
 ## Installation
 
 ```bash
@@ -28,6 +34,70 @@ This plugin automates the Drupal Development Guide v3.0 workflow:
 2. **Interactive implementation** - AI writes code piece-by-piece with developer approval
 3. **Memory-driven continuity** - Project state persists across sessions
 4. **Integration over reinvention** - Leverages superpowers, drupal-dev-tools
+
+## Quick Start
+
+### Starting a New Project
+
+```bash
+# 1. Create project structure
+/drupal-dev-framework:new my_content_module
+
+# 2. Answer requirements questions when prompted
+# (scope, integrations, constraints, etc.)
+
+# 3. Research existing solutions
+/drupal-dev-framework:research content workflow
+/drupal-dev-framework:research entity references
+
+# 4. Design architecture (Phase 2)
+/drupal-dev-framework:design
+
+# 5. Get pattern recommendations
+/drupal-dev-framework:pattern settings form
+/drupal-dev-framework:pattern content entity
+
+# 6. Validate architecture before coding
+/drupal-dev-framework:validate
+
+# 7. Start implementing (Phase 3)
+/drupal-dev-framework:implement settings_form
+
+# 8. Mark task complete when done
+/drupal-dev-framework:complete
+```
+
+### Resuming Work
+
+```bash
+# Check current status
+/drupal-dev-framework:status
+
+# Get recommendation for next action
+/drupal-dev-framework:next
+```
+
+### Typical Workflow
+
+```
+Phase 1: Research (no code)
+├── /drupal-dev-framework:new <project>
+├── /drupal-dev-framework:research <topic>
+└── Review findings, decide approach
+
+Phase 2: Architecture (no code)
+├── /drupal-dev-framework:design
+├── /drupal-dev-framework:pattern <use-case>
+├── /drupal-dev-framework:validate
+└── Review designs, approve before Phase 3
+
+Phase 3: Implementation (interactive coding)
+├── /drupal-dev-framework:implement <task>
+├── Write code piece-by-piece with approval
+├── /drupal-dev-framework:validate
+├── /drupal-dev-framework:complete
+└── Repeat for each task
+```
 
 ## Commands
 
