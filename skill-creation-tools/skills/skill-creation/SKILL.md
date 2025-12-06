@@ -1,7 +1,7 @@
 ---
 name: skill-creation
 description: Use when creating, validating, or packaging Claude Code skills - provides six-step workflow, progressive disclosure, and reference-first philosophy.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Skill Creation
