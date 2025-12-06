@@ -26,17 +26,42 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 ## Installation
 
 ```bash
+# Add the marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
+
+# Install individual plugins
 /plugin install skill-creation-tools@camoa-skills
+/plugin install drupal-dev-framework@camoa-skills
+/plugin install code-quality-tools@camoa-skills
 ```
 
 ## Plugins
 
 ### skill-creation-tools
 
-Guide for creating effective Claude Code skills - covers workflow, progressive disclosure, and validation.
+Guide for creating effective Claude Code skills. Covers workflow, progressive disclosure, and validation.
 
-**Skill:** `skill-creation`
+| Component | Name |
+|-----------|------|
+| Skill | `skill-creation` |
+
+### drupal-dev-framework
+
+Systematic 3-phase Drupal development workflow with agents, skills, and commands.
+
+| Component | Contents |
+|-----------|----------|
+| Skills | 15 skills (phase-detector, requirements-gatherer, component-designer, tdd-companion, etc.) |
+| Commands | 9 commands (/new, /design, /implement, /validate, /next, /status, /complete, /research, /pattern) |
+| Agents | 5 agents (project-orchestrator, architecture-drafter, contrib-researcher, pattern-recommender, architecture-validator) |
+
+### code-quality-tools
+
+Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV.
+
+| Component | Name |
+|-----------|------|
+| Skill | `code-quality-audit` |
 
 ## Official Documentation
 
