@@ -30,8 +30,14 @@ skill-creation/
 └── references/        # Detailed guides (11 files)
 ```
 
-## See Also
+## Official Anthropic Docs
 
-- [Anthropic skill-creator](https://github.com/anthropics/agent-skills) - Official creator
+- [Agent Skills Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+- [Agent Skills Overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
+- [Anthropic Skills Repository](https://github.com/anthropics/skills)
+
+## Related Tools
+
+- [Anthropic skill-creator](https://github.com/anthropics/skills) - Official creator
 - [Superpowers writing-skills](https://github.com/obra/superpowers-marketplace) - TDD approach
-- [Skill Seeker MCP](https://github.com/your-org/skill-seeker) - Automated scraping
+- [Skill Seeker MCP](https://github.com/camoa/skill-seeker) - Automated scraping

@@ -107,3 +107,41 @@ A skill is ready when:
 4. **No rationalization** - Claude doesn't skip or shortcut the skill
 5. **Scripts execute** - All bundled scripts run without errors
 6. **References exist** - All referenced files are present
+
+## Example Test Scenarios
+
+Per Anthropic guidelines, create 3+ evaluation scenarios before deployment.
+
+### Scenario 1: New Skill Creation
+**Input:** "I want to create a skill for generating API documentation"
+**Expected:**
+- Skill triggers and loads
+- Six-step workflow is followed
+- Scripts are used for init/validate/package
+- Progressive disclosure applied (SKILL.md hub, details in references/)
+
+### Scenario 2: Skill Not Discovered
+**Input:** "My skill isn't showing up when I ask Claude to use it"
+**Expected:**
+- Skill triggers on discovery issues
+- Description field guidance provided
+- Checklist for triggers/keywords reviewed
+
+### Scenario 3: Choosing Creation Approach
+**Input:** "Should I scrape docs or write a skill manually?"
+**Expected:**
+- Decision framework referenced
+- Tool comparison provided
+- Recommendation based on source material
+
+## Cross-Model Testing
+
+Anthropic recommends testing skills across models:
+
+| Model | Focus |
+|-------|-------|
+| Haiku | Speed, basic compliance |
+| Sonnet | Balance, typical usage |
+| Opus | Complex reasoning, edge cases |
+
+Run each scenario on all three models before deployment.
