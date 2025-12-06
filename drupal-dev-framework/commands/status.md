@@ -69,7 +69,7 @@ For a quick summary without full details, the output starts with:
 ## Finding Projects
 
 If no project specified and none detected:
-- Lists available projects in `~/workspace/claude_memory/`
+- Asks user to provide project path
 - Asks which one to check
 
 ## Related Commands

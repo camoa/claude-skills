@@ -1,99 +1,161 @@
 ---
 name: implementation-task-creator
 description: Use when breaking down a component for implementation - creates task file in implementation_process/in_progress/ with TDD steps and acceptance criteria
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Implementation Task Creator
 
-Break down architecture components into implementable tasks with TDD steps.
+Create task files that break down components into implementable TDD steps.
 
-## Triggers
+## Activation
 
-- User says "Break down X for implementation"
-- Ready to move from Phase 2 to Phase 3
-- Need to create task files for components
+Activate when you detect:
+- "Break down X for implementation"
+- "Create task for X"
+- Moving from Phase 2 to Phase 3
+- Need implementation tasks for a component
 
-## Process
+## Workflow
 
-1. **Read component architecture** - Load architecture/{component}.md
-2. **Identify implementation steps** - What needs to be built?
-3. **Order by dependencies** - What comes first?
-4. **Add TDD steps** - Test first, then implementation
-5. **Define acceptance criteria** - How do we know it's done?
-6. **Create task file** - Save to in_progress/
+### 1. Load Component Architecture
 
-## Task File Format
+Use `Read` on `{project_path}/architecture/{component}.md`
 
-Create `~/workspace/claude_memory/{project}/implementation_process/in_progress/{task_name}.md`:
+If file doesn't exist, ask: "No architecture found for {component}. Create architecture first?"
+
+Extract:
+- Component purpose
+- Interface (methods, parameters)
+- Dependencies
+- Pattern reference
+- Acceptance criteria
+
+### 2. Determine Task Scope
+
+Ask user:
+```
+How should this component be broken down?
+1. Single task (small component)
+2. Multiple tasks by method/feature
+3. Multiple tasks by layer (test, implementation, integration)
+
+Your choice:
+```
+
+### 3. Define Task Order
+
+Based on dependencies, determine implementation order. Ask:
+```
+Proposed task order:
+1. {task 1} - {why first}
+2. {task 2} - {depends on 1}
+3. {task 3} - {depends on 2}
+
+Adjust order? (yes/no)
+```
+
+### 4. Create Task File(s)
+
+For each task, use `Write` to create `{project_path}/implementation_process/in_progress/{nn}_{task_name}.md`:
 
 ```markdown
 # Task: {Task Name}
 
-**Component:** {component from architecture}
-**Created:** {date}
+**Component:** {component name}
+**Created:** {YYYY-MM-DD}
 **Status:** Not Started
+**Priority:** {nn}
 
 ## Objective
-{What this task accomplishes}
+{What this task accomplishes - one paragraph}
 
 ## Prerequisites
-- [ ] {Prerequisite 1 - link to completed task if applicable}
-- [ ] {Prerequisite 2}
+- [ ] {Task that must be complete first, or "None"}
 
 ## Acceptance Criteria
-- [ ] {Criterion 1}
+- [ ] {Criterion 1 - specific and testable}
 - [ ] {Criterion 2}
 - [ ] {Criterion 3}
-- [ ] Tests pass
+- [ ] All tests pass
 - [ ] Code follows Drupal standards
 
 ## TDD Steps
 
-### 1. Write Test First
-```php
-// Test file: tests/src/Unit/{TestClass}Test.php
-// or: tests/src/Kernel/{TestClass}Test.php
-
-// Test case outline:
-// - testMethodName: Tests {what}
+### Step 1: Write Failing Test
+Create test file:
+```
+tests/src/{Unit|Kernel}/{TestClass}Test.php
 ```
 
-### 2. Run Test (Should Fail)
-Confirm test fails before implementation.
+Test case:
+```php
+public function test{MethodName}(): void {
+  // Arrange: {setup}
+  // Act: {action}
+  // Assert: {expected result}
+}
+```
 
-### 3. Implement Minimum Code
-Write just enough to pass the test.
+### Step 2: Verify Test Fails
+Run: `ddev phpunit {test_path}`
+Expected: Test fails (class/method not found)
 
-### 4. Run Test (Should Pass)
-Confirm test passes.
+### Step 3: Write Minimum Implementation
+Create: `src/{Type}/{ClassName}.php`
+Implement only enough to pass the test.
 
-### 5. Refactor
-Clean up while keeping tests green.
+### Step 4: Verify Test Passes
+Run: `ddev phpunit {test_path}`
+Expected: Test passes
 
-## Implementation Notes
-{Specific considerations from architecture}
-
-## Pattern Reference
-See: `{core/contrib path from architecture}`
+### Step 5: Refactor
+Clean up code while keeping tests green.
 
 ## Files to Create/Modify
-- `src/{path}/{ClassName}.php`
-- `tests/src/{Type}/{TestClass}Test.php`
-- `my_module.services.yml` (if service)
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/{path}` | Create | Main implementation |
+| `tests/src/{path}` | Create | Test coverage |
+| `*.services.yml` | Modify | Service registration |
+
+## Pattern Reference
+Follow: `{core path from architecture}`
+
+Key aspects:
+- {what to copy from pattern}
+- {what to adapt}
+
+## Notes
+{Any specific considerations from architecture}
 ```
 
-## Task Naming Convention
+### 5. Update project_state.md
 
-`{priority}_{component}_{action}.md`
+Use `Edit` to update the project state:
+```markdown
+## Current Focus
+Implementation Phase - {component name}
 
-Examples:
-- `01_service_core_logic.md`
-- `02_form_settings.md`
-- `03_entity_definition.md`
+## Next Steps
+1. Complete task: {first task name}
+```
 
-## Human Control Points
+### 6. Confirm
 
-- User reviews task breakdown
-- User can reorder or split tasks
-- User approves task files before implementation
+Show user:
+```
+Created {count} task(s) for {component}:
+1. {task 1} - in_progress/{filename}
+2. {task 2} - in_progress/{filename}
+
+Start with task 1? Use: /drupal-dev-framework:implement {task_name}
+```
+
+## Stop Points
+
+STOP and wait for user:
+- If architecture file not found
+- After asking about task breakdown
+- After showing proposed order
+- After creating files (confirm before proceeding)

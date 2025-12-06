@@ -1,118 +1,143 @@
 ---
 name: memory-manager
 description: Use after completing any phase activity - updates project_state.md, ensures files are in correct locations, maintains lean memory
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Memory Manager
 
-Maintain clean and organized project memory state.
+Maintain clean and organized project memory.
 
-## Triggers
+## Activation
 
-- After completing any phase activity
+Activate when:
+- After completing any phase activity (research, design, implementation)
 - After task completion
 - When project state seems inconsistent
-- Periodic maintenance
+- Periodic maintenance requested
+- "Clean up project files" or "Update project state"
 
-## Responsibilities
+## Workflow
 
-1. **Update project_state.md** - Keep current status accurate
-2. **Organize files** - Ensure correct locations
-3. **Clean up** - Remove temporary/obsolete files
-4. **No versioning** - Update in place, don't create copies
+### 1. Load Current State
 
-## project_state.md Maintenance
+Use `Read` on `{project_path}/project_state.md`
 
-Keep updated:
+Extract:
+- Current phase
+- Last updated date
+- Current focus
+- Progress summary
+
+### 2. Scan Project Files
+
+Use `Glob` to inventory files:
+```
+{project_path}/architecture/*.md
+{project_path}/implementation_process/in_progress/*.md
+{project_path}/implementation_process/completed/*.md
+```
+
+Count:
+- Research files (research_*.md)
+- Component architectures
+- In-progress tasks
+- Completed tasks
+
+### 3. Detect Inconsistencies
+
+Check for issues:
+
+| Issue | Detection | Fix |
+|-------|-----------|-----|
+| Empty files | File size = 0 | Ask to delete or populate |
+| Orphaned tasks | Task in wrong folder | Move to correct location |
+| Stale state | project_state.md outdated | Update current focus |
+| Missing files | Referenced but not found | Create or update reference |
+
+### 4. Update project_state.md
+
+Use `Edit` to update:
 
 ```markdown
 # {Project Name}
 
-**Updated:** {current date}
-**Phase:** {1/2/3} - {Research/Architecture/Implementation}
+**Updated:** {today's date}
+**Phase:** {detected phase}
 **Status:** {current status}
+**Path:** {project_path}
 
 ## Overview
-{Keep this current}
+{Keep existing or update based on recent work}
 
-## Requirements
-{From requirements-gatherer, update if changed}
+## Progress
+- Phase 1 (Research): {Complete/In Progress} - {count} research files
+- Phase 2 (Architecture): {Complete/In Progress} - {count} component files
+- Phase 3 (Implementation): {X}/{Y} tasks complete
+
+## Current Focus
+{What's actively being worked on}
 
 ## Key Decisions
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| {date} | {decision} | {why} |
-
-## Current Focus
-{What's being worked on now}
-
-## Progress
-- Phase 1: {Complete/In Progress}
-- Phase 2: {Complete/In Progress}
-- Phase 3: {X/Y tasks complete}
+{add new decisions, keep old ones}
 
 ## Next Steps
 1. {Immediate next action}
 2. {Following action}
 ```
 
-## File Organization
+### 5. Organize Files
 
-### Expected Structure
-```
-~/workspace/claude_memory/{project}/
-├── project_state.md           # Always exists
-├── architecture/
-│   ├── main.md               # Main architecture
-│   ├── research_*.md         # Research findings
-│   └── {component}.md        # Component designs
-└── implementation_process/
-    ├── in_progress/          # Active tasks
-    └── completed/            # Finished tasks
+If files are misplaced, use `Bash` to move:
+
+```bash
+# Move completed task from in_progress
+mv "{project_path}/implementation_process/in_progress/{file}" "{project_path}/implementation_process/completed/{file}"
 ```
 
-### Cleanup Rules
+### 6. Clean Up
 
-**Move to completed/:**
-- Task files marked as complete
-- Files in wrong location
+Ask before deleting anything:
+```
+Found {count} empty/orphaned files:
+- {file 1}
+- {file 2}
 
-**Remove:**
-- Empty files
-- Duplicate files
-- Temporary notes (after incorporated)
+Delete these? (yes/no/review each)
+```
 
-**Never remove:**
-- project_state.md
-- architecture/main.md
-- Completed task files
+### 7. Report
 
-## Update Patterns
+Show summary:
+```
+Memory cleanup complete:
 
-### After Research
-- Update project_state.md with findings summary
-- Ensure research files are in architecture/
+Files scanned: {count}
+Issues found: {count}
+Issues fixed: {count}
 
-### After Architecture
-- Update project_state.md phase to 2
-- Verify all components documented
+Current state:
+- Phase: {phase}
+- Architecture files: {count}
+- Tasks in progress: {count}
+- Tasks completed: {count}
 
-### After Task Completion
-- Move task to completed/
-- Update project_state.md progress
-- Update next steps
+project_state.md updated.
+```
 
-## Lean Memory Principle
+## Lean Memory Principles
 
-Keep memory minimal:
-- Summarize, don't duplicate
-- Reference external files, don't copy
-- Archive completed work, don't delete
-- One source of truth per concept
+Follow these rules:
+- **One source of truth** - don't duplicate information
+- **Summarize, don't copy** - reference external files
+- **Archive, don't delete** - move to completed/, not trash
+- **Update in place** - no versioned copies (main.md, not main_v2.md)
 
-## Human Control Points
+## Stop Points
 
-- User can override file organization
-- User confirms state updates
-- User decides what to archive vs delete
+STOP and wait for user:
+- Before deleting any files
+- Before major reorganization
+- After presenting cleanup summary

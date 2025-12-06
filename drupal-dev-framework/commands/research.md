@@ -32,7 +32,7 @@ Research existing solutions for a specific topic.
 
 ## Output
 
-Creates `~/workspace/claude_memory/{project}/architecture/research_{topic}.md`:
+Creates `{project_path}/architecture/research_{topic}.md`:
 
 ```markdown
 # Research: {topic}

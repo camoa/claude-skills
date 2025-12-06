@@ -1,31 +1,76 @@
 ---
 name: component-designer
 description: Use when designing a specific module component - creates architecture/component_name.md with purpose, interface, dependencies, and pattern references
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Component Designer
 
-Design individual components (services, forms, entities) for a Drupal module.
+Design individual components (services, forms, entities, plugins) and document them.
 
-## Triggers
+## Activation
 
-- User says "Design X component" or "Design the service"
-- Breaking down architecture into implementable pieces
-- Need detailed spec for a single component
+Activate when you detect:
+- "Design X component" or "Design the service"
+- "Create spec for the form"
+- Breaking down architecture into pieces
+- Need detailed design for a single component
 
-## Process
+## Workflow
 
-1. **Identify component** - What type (service, form, entity, plugin)?
-2. **Define purpose** - What does this component do?
-3. **Specify interface** - Public methods, parameters, return types
-4. **Map dependencies** - What services does it need?
-5. **Reference patterns** - Point to core/contrib examples
-6. **Document** - Create architecture/component_name.md
+### 1. Identify Component Type
 
-## Output Format
+Ask if unclear:
+```
+What type of component is this?
+1. Service (business logic)
+2. Form (user input)
+3. Entity (data storage)
+4. Plugin (extensible behavior)
+5. Controller (routing)
+```
 
-Create `~/workspace/claude_memory/{project}/architecture/{component_name}.md`:
+### 2. Gather Component Details
+
+Ask based on type:
+
+**For Services:**
+```
+1. What operations does this service perform?
+2. What other services does it need?
+3. Should it dispatch events?
+```
+
+**For Forms:**
+```
+1. What type? (ConfigFormBase, FormBase, ConfirmFormBase)
+2. What fields are needed?
+3. What validation?
+4. What happens on submit?
+```
+
+**For Entities:**
+```
+1. Content entity or config entity?
+2. What fields/properties?
+3. What relationships to other entities?
+4. Access control needs?
+```
+
+**For Plugins:**
+```
+1. What plugin type?
+2. What does each plugin variation do?
+3. What configuration does it need?
+```
+
+### 3. Find Pattern Reference
+
+Use `core-pattern-finder` skill to locate a reference implementation in core.
+
+### 4. Create Component Document
+
+Use `Write` tool to create `{project_path}/architecture/{component_name}.md`:
 
 ```markdown
 # Component: {ComponentName}
@@ -34,76 +79,79 @@ Create `~/workspace/claude_memory/{project}/architecture/{component_name}.md`:
 {Service | Form | Entity | Plugin | Controller}
 
 ## Purpose
-{One paragraph explaining what this component does}
+{One paragraph from user input}
 
 ## Interface
 
 ### Public Methods
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
-| `methodName()` | `$param: Type` | `ReturnType` | What it does |
+| methodName() | $param: Type | ReturnType | What it does |
 
-### Events Dispatched (if any)
-| Event | When |
-|-------|------|
-| `event.name` | Condition |
+### Events (if service)
+| Event | When Dispatched |
+|-------|-----------------|
+| event.name | Condition |
 
 ## Dependencies
 
-### Required Services
 | Service | Purpose |
 |---------|---------|
-| `entity_type.manager` | Load entities |
-
-### Configuration
-| Config Key | Purpose |
-|------------|---------|
-| `my_module.settings` | Module settings |
+| entity_type.manager | {why needed} |
 
 ## Pattern Reference
-Based on: `core/modules/.../src/...`
+Based on: `{path from core-pattern-finder}`
 
-Key similarities:
-- {similarity 1}
-- {similarity 2}
+Apply from reference:
+- {what to copy}
 
-Differences for our use case:
-- {difference 1}
+Adapt for our needs:
+- {what to change}
 
-## Implementation Notes
-{Any specific considerations for implementation}
+## File Locations
+- Class: `src/{Type}/{ComponentName}.php`
+- Service definition: `my_module.services.yml`
+- Routing: `my_module.routing.yml` (if controller)
 
 ## Acceptance Criteria
-- [ ] Criterion 1
-- [ ] Criterion 2
+- [ ] {criterion 1}
+- [ ] {criterion 2}
+- [ ] {criterion 3}
 ```
 
-## Component Types
+### 5. Update Main Architecture
 
-### Service
-- Define interface and methods
-- Specify dependency injection
-- Reference service definition (services.yml)
+Use `Edit` tool to add component reference to `architecture/main.md`:
 
-### Form
-- Form type (ConfigFormBase, FormBase, etc.)
-- Form elements needed
-- Validation requirements
-- Submit behavior
+```markdown
+## Components
 
-### Entity
-- Entity type (content, config)
-- Fields and properties
-- Base table structure
-- Access control
+### {ComponentName}
+Type: {type}
+Purpose: {one line}
+Design: See `architecture/{component_name}.md`
+```
 
-### Plugin
-- Plugin type
-- Annotation/attribute requirements
-- Base class to extend
+### 6. Confirm
 
-## Human Control Points
+Show user:
+```
+Component designed: {ComponentName}
 
-- User specifies which component to design
-- User reviews interface definition
-- User approves before implementation
+Files created:
+- architecture/{component_name}.md
+
+Based on core pattern:
+- {pattern_reference}
+
+Ready for implementation in Phase 3.
+Review the design? (yes/no)
+```
+
+## Stop Points
+
+STOP and wait for user:
+- After asking component type
+- After asking for details
+- Before creating files
+- After showing confirmation

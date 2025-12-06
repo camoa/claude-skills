@@ -1,127 +1,154 @@
 ---
 name: code-pattern-checker
 description: Use before committing code - validates Drupal coding standards, SOLID/DRY principles, security practices, and CSS standards
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Code Pattern Checker
 
-Validate code against Drupal standards and best practices before commit.
+Validate code against Drupal standards and best practices.
 
-## Triggers
+## Activation
 
+Activate when you detect:
 - Before committing code
 - After implementation, before task completion
 - `/drupal-dev-framework:validate` command
-- User says "Check my code"
+- "Check my code" or "Review this"
+- Invoked by `task-completer` skill
 
-## Validation Categories
+## Workflow
 
-### 1. Drupal Coding Standards
+### 1. Identify Files to Check
 
-**PHP Standards:**
+Ask if not clear:
+```
+Which files should I check?
+1. All changed files (git diff)
+2. Specific file(s)
+3. All files in a component
+
+Your choice:
+```
+
+Use `Bash` with `git diff --name-only` to get changed files if option 1.
+
+### 2. Read and Analyze Files
+
+Use `Read` on each file. For each, check:
+
+**PHP Files:**
 - [ ] PSR-12 / Drupal coding standards
-- [ ] Proper docblocks on classes and methods
+- [ ] Docblocks on classes and public methods
 - [ ] Type hints on parameters and returns
-- [ ] No deprecated function usage
+- [ ] No deprecated functions
+- [ ] Naming: PascalCase classes, camelCase methods
 
-**Naming Conventions:**
-- [ ] Classes: PascalCase
-- [ ] Methods: camelCase
-- [ ] Constants: UPPER_SNAKE_CASE
-- [ ] Files match class names
+**SOLID Principles:**
+- [ ] Single Responsibility - one purpose per class
+- [ ] Dependency Inversion - inject dependencies, don't hardcode
 
-### 2. SOLID Principles
+**DRY Check:**
+- [ ] No duplicate code blocks
+- [ ] Shared logic in services/traits
 
-- [ ] **S**ingle Responsibility - Each class has one job
-- [ ] **O**pen/Closed - Extend, don't modify
-- [ ] **L**iskov Substitution - Subtypes are substitutable
-- [ ] **I**nterface Segregation - Specific interfaces
-- [ ] **D**ependency Inversion - Depend on abstractions
+**Security (OWASP):**
+- [ ] No raw SQL (use query builder)
+- [ ] Output escaped (Twig, Html::escape)
+- [ ] Form tokens present
+- [ ] Access checks on routes
+- [ ] Input validated
 
-### 3. DRY Principle
+**CSS/SCSS (if applicable):**
+- [ ] Mobile-first media queries
+- [ ] No `!important`
+- [ ] No `@extend`
+- [ ] Bootstrap classes preferred
+- [ ] BEM naming
 
-- [ ] No duplicated logic
-- [ ] Shared code extracted to services/traits
-- [ ] Base classes used appropriately
-- [ ] No copy-paste code blocks
+### 3. Run Automated Tools
 
-### 4. Security (OWASP)
+Suggest running (user executes):
+```bash
+# PHP CodeSniffer
+ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path}
 
-- [ ] No SQL injection vulnerabilities (use query builder)
-- [ ] No XSS vulnerabilities (use Twig, sanitize output)
-- [ ] CSRF protection on forms (form tokens)
-- [ ] Access checks on routes and operations
-- [ ] No sensitive data in logs
-- [ ] Input validation
+# PHPStan (if configured)
+ddev exec vendor/bin/phpstan analyze {path}
 
-### 5. CSS/SCSS Standards
+# SCSS Lint (if applicable)
+npm run lint:scss
+```
 
-If frontend code is included:
-- [ ] Mobile-first approach
-- [ ] No `!important` usage
-- [ ] No `@extend` in SCSS
-- [ ] Bootstrap classes used where applicable
-- [ ] BEM naming convention
-- [ ] Variables for colors/spacing
+### 4. Report Findings
 
-### 6. Performance
-
-- [ ] No N+1 query problems
-- [ ] Appropriate caching
-- [ ] Lazy loading where beneficial
-- [ ] No heavy operations in loops
-
-## Output Format
-
-```markdown
-## Code Pattern Check: {component/file}
+Format output as:
+```
+## Code Check: {file or component}
 
 ### Status: PASS / ISSUES FOUND
 
-### Drupal Standards
-- [x] PSR-12 compliance
-- [ ] Missing docblock on `methodName()`
-- [x] Proper type hints
+### Standards Check
+| Check | Status | Notes |
+|-------|--------|-------|
+| PSR-12 | PASS | - |
+| Docblocks | ISSUE | Missing on processData() |
+| Type hints | PASS | - |
 
 ### SOLID Principles
-- [x] Single Responsibility
-- [x] Open/Closed
-- [x] Dependency Inversion
-
-### DRY Check
-- [ ] Duplicate logic found in lines 45-52 and 78-85
+| Principle | Status |
+|-----------|--------|
+| Single Responsibility | PASS |
+| Dependency Inversion | PASS |
 
 ### Security
-- [x] No SQL injection risks
-- [x] Output properly escaped
-- [ ] Missing access check on route
+| Check | Status | Notes |
+|-------|--------|-------|
+| SQL Injection | PASS | Uses query builder |
+| XSS | PASS | Output escaped |
+| Access Control | ISSUE | Missing on /admin/custom route |
 
-### CSS Standards (if applicable)
-- [x] Mobile-first
-- [x] No !important
+### DRY Check
+| Issue | Location |
+|-------|----------|
+| Duplicate logic | lines 45-52 and 78-85 |
 
-### Issues to Fix
-1. Add docblock to `processData()` method
-2. Extract duplicate logic to shared method
-3. Add access check to admin route
+### Issues to Fix (Priority Order)
+1. **Security**: Add access check to admin route
+2. **Standards**: Add docblock to processData()
+3. **DRY**: Extract duplicate logic to private method
 
-### Approved for Commit: YES / NO
+### Recommendation
+- [ ] Fix security issue before merge
+- [ ] Other issues: fix now or create follow-up task
+
+Approved for commit: NO (fix security first) / YES
 ```
 
-## Automated Checks
+### 5. Offer Fixes
 
-Suggest running:
-```bash
-# PHP CodeSniffer
-vendor/bin/phpcs --standard=Drupal,DrupalPractice src/
+For each issue, offer to help:
+```
+Issue: Missing docblock on processData()
 
-# PHPStan
-vendor/bin/phpstan analyze src/
+Suggested fix:
+/**
+ * Process the input data and return results.
+ *
+ * @param array $data
+ *   The input data array.
+ *
+ * @return array
+ *   The processed results.
+ */
+
+Apply this fix? (yes/no/skip)
 ```
 
-## Human Control Points
+## Stop Points
 
-- User reviews findings
-- User decides which issues to fix
-- User approves for commit
+STOP and wait for user:
+- After asking which files to check
+- After presenting findings
+- Before applying each fix
+- If security issues found (emphasize fixing)

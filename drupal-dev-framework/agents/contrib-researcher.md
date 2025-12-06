@@ -33,7 +33,7 @@ Research existing contrib modules to:
 
 ## Output Format
 
-Store findings in `~/workspace/claude_memory/{project}/architecture/research_{topic}.md`:
+Store findings in `{project_path}/architecture/research_{topic}.md`:
 
 ```markdown
 # Research: {Topic}

@@ -34,7 +34,7 @@ Draft comprehensive architecture documents that:
 
 ## Output Format
 
-Create `~/workspace/claude_memory/{project}/architecture/main.md`:
+Create `{project_path}/architecture/main.md`:
 
 ```markdown
 # {Project} Architecture
@@ -78,7 +78,7 @@ Mermaid diagram showing how data moves through the system.
 ## Tools Used
 
 - Read to review research files
-- Existing guides from ~/workspace/claude_memory/guides/
+- User's development guides (if configured in project_state.md)
 - superpowers:brainstorming for design discussions
 
 ## Human Control Points

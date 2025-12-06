@@ -1,105 +1,143 @@
 ---
 name: session-resume
 description: Use when resuming work on existing project - reads project_state.md, summarizes current state, identifies where to continue
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Session Resume
 
-Restore context when continuing work on an existing project in a new session.
+Restore context when starting a new session on an existing project.
 
-## Triggers
+## Activation
 
-- Starting new Claude session on existing project
-- User says "Resume project X" or "Continue where I left off"
-- Opening project after break
+Activate when:
+- Starting a new Claude session on existing project
+- User says "Resume work on X" or "Continue X project"
+- User provides project path for existing project
+- "Where did we leave off?"
 
-## Process
+## Workflow
 
-1. **Locate project** - Find in ~/workspace/claude_memory/
-2. **Read state** - Load project_state.md
-3. **Detect phase** - Use phase-detector skill
-4. **Load context** - Get relevant architecture/task files
-5. **Summarize** - Present current state to user
-6. **Recommend** - Suggest next action
+### 1. Locate Project
 
-## Information to Gather
+If project path provided, use it.
 
-### From project_state.md
-- Current phase
-- Recent decisions
-- Current focus
-- Blockers (if any)
+Otherwise, ask:
+```
+Which project do you want to resume?
 
-### From architecture/
-- Overall design status
-- Component designs
-- Open questions
-
-### From implementation_process/
-- Tasks in progress
-- Recently completed tasks
-- Remaining tasks
-
-## Output Format
-
-```markdown
-## Session Resume: {Project Name}
-
-### Quick Summary
-{One sentence on project purpose}
-
-### Current State
-- **Phase:** {1/2/3} - {Name}
-- **Last Updated:** {date from project_state.md}
-- **Status:** {current status}
-
-### Recent Progress
-{What was accomplished in last session}
-
-### Current Focus
-{What was being worked on}
-
-### In Progress
-| Task | Status | File |
-|------|--------|------|
-| {task name} | {progress} | `in_progress/{file}` |
-
-### Key Decisions Made
-- {Recent decision 1}
-- {Recent decision 2}
-
-### Open Questions
-- {Question needing resolution}
-
-### Recommended Next Action
-**{Action}** - {reason}
-
-Use: `{command or skill to invoke}`
-
-### Alternative Actions
-1. {Alternative 1}
-2. {Alternative 2}
+Enter the project path or name:
 ```
 
-## Context Restoration
+### 2. Load Project State
 
-Offer to load:
-- Last worked-on task file
-- Related architecture files
-- Relevant guides
+Use `Read` on `{project_path}/project_state.md`
 
-Ask: "Would you like me to load the context for {current task}?"
+If file not found:
+```
+No project_state.md found at {path}.
 
-## Session Start Hook
+Options:
+1. Different path
+2. Initialize new project here
+3. Cancel
 
-This skill can be auto-invoked via SessionStart hook when:
-- Project folder is detected
-- User mentions project name
-- Working directory contains project files
+Your choice:
+```
 
-## Human Control Points
+### 3. Detect Current Phase
 
-- User confirms project to resume
-- User chooses next action
-- User can request different context
+Invoke `phase-detector` skill to determine phase.
+
+### 4. Load Current Focus
+
+From project_state.md, extract:
+- Current phase
+- Current focus
+- Recent key decisions
+- Next steps listed
+
+### 5. Scan Active Work
+
+Use `Glob` to find:
+```
+{project_path}/implementation_process/in_progress/*.md
+```
+
+If tasks in progress, use `Read` on each to get:
+- Task name
+- Status
+- Last progress notes
+
+### 6. Present Resume Summary
+
+Format as:
+```
+## Resuming: {Project Name}
+
+### Project Path
+{full_path}
+
+### Current Phase
+Phase {N} - {Research/Architecture/Implementation}
+
+### Last Session Summary
+{From project_state.md Current Focus}
+
+### Key Decisions Made
+- {Decision 1}
+- {Decision 2}
+
+### Where We Left Off
+{Description of last activity}
+
+### Active Tasks
+| Task | Status | Progress |
+|------|--------|----------|
+| {task 1} | In Progress | {last note} |
+
+### Suggested Next Action
+{Based on project state and phase}
+
+---
+Ready to continue? What would you like to work on?
+```
+
+### 7. Load Task Context (If In Implementation)
+
+If Phase 3 and tasks in progress, ask:
+```
+Active task: {task_name}
+
+Load full context for this task? (yes/different task/overview first)
+```
+
+If yes, invoke `task-context-loader` for that task.
+
+### 8. Set Up Session
+
+After user confirms direction:
+- Load relevant architecture files
+- Load relevant guides (if configured)
+- Invoke appropriate skill for chosen activity
+
+## Quick Resume
+
+For rapid context restoration:
+```
+Quick resume: {project_name}
+- Phase: {N}
+- Focus: {current_focus}
+- Active task: {task or "none"}
+- Next: {suggested action}
+
+Continue with {suggested action}? (yes/other)
+```
+
+## Stop Points
+
+STOP and wait for user:
+- After asking for project path (if not provided)
+- After presenting resume summary
+- After asking which task to continue
+- Before loading full task context

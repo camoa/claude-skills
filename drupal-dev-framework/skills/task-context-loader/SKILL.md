@@ -1,97 +1,117 @@
 ---
 name: task-context-loader
 description: Use when starting implementation of a task - loads architecture files, referenced patterns, relevant guides, and task file into context
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Task Context Loader
 
-Load all relevant context before starting implementation of a task.
+Load all context needed before implementing a task.
 
-## Triggers
+## Activation
 
+Activate when you detect:
 - `/drupal-dev-framework:implement <task>` command
-- User says "Work on X task" or "Implement X"
-- Starting coding session for a specific component
+- "Work on X task" or "Implement X"
+- "Start coding X"
+- Beginning a coding session for a component
 
-## Process
+## Workflow
 
-1. **Identify task** - Which component/task is being worked on?
-2. **Load architecture** - Read component's architecture file
-3. **Load patterns** - Fetch referenced core/contrib examples
-4. **Load guides** - Get relevant guide sections
-5. **Load task file** - If exists in in_progress/
-6. **Present context** - Summarize what's loaded
+### 1. Identify Project and Task
 
-## Files to Load
+Get project path from `project_state.md`. Find the task:
+- Check `implementation_process/in_progress/` for matching task file
+- If no task file exists, offer to create one via `implementation-task-creator`
 
-### Architecture Files
+### 2. Load Architecture
+
+Use `Read` tool to load:
 ```
-~/workspace/claude_memory/{project}/architecture/
-├── main.md                    # Overall architecture
-└── {component_name}.md        # Specific component
-```
-
-### Task Files
-```
-~/workspace/claude_memory/{project}/implementation_process/
-├── in_progress/{task_name}.md  # Current task
-└── completed/                   # Reference for related work
+{project_path}/architecture/main.md
+{project_path}/architecture/{component}.md (if exists)
 ```
 
-### Referenced Patterns
-From architecture files, extract and load:
-- Core module examples
-- Contrib module references
-- Pattern implementations
+Extract from architecture:
+- Component purpose
+- Dependencies
+- Pattern references
 
-### Relevant Guides
-Based on task type, load from `~/workspace/claude_memory/guides/`:
-- Development workflow guide
-- Specific feature guides (ECA, fields, etc.)
+### 3. Load Task File
 
-## Context Summary Format
+Use `Read` on `{project_path}/implementation_process/in_progress/{task}.md`
 
-```markdown
-## Context Loaded for: {Task Name}
+Extract:
+- Objective
+- Acceptance criteria
+- TDD steps
+- Files to create/modify
+- Current status/progress
+
+### 4. Load Pattern References
+
+From architecture files, find pattern references like:
+```
+Based on: core/modules/.../src/...
+```
+
+Use `Read` to load the referenced core files. Extract:
+- Key method signatures
+- Dependency injection patterns
+- Implementation approach
+
+### 5. Check for Guides
+
+If `project_state.md` has a guides path, invoke `guide-loader` skill for relevant guides.
+
+### 6. Present Context Summary
+
+Format output as:
+```
+## Ready to Implement: {Task Name}
+
+### Objective
+{from task file}
 
 ### Architecture Summary
-{Key points from architecture files}
+{key points from architecture}
 
-### Pattern References
-- Pattern 1: {brief description}
-- Pattern 2: {brief description}
+### Pattern Reference
+{primary core file}:
+- Key methods to follow: {list}
+- Dependencies to inject: {list}
 
-### Relevant Guides
-- {Guide}: {applicable sections}
+### TDD Approach
+1. Test file: {path}
+2. First test: {what to test}
 
-### Task Status
-- File: {path}
-- Progress: {current step}
-- Acceptance criteria: {count} items
+### Files to Create/Modify
+- {file 1}: {what to do}
+- {file 2}: {what to do}
 
-### Ready to Implement
-The following is ready to code:
-1. {item 1}
-2. {item 2}
+### Acceptance Criteria
+- [ ] {criterion 1}
+- [ ] {criterion 2}
 
 ### Dependencies
-Code this after:
-- {dependency 1}
+Complete these first:
+- {prerequisite task, if any}
 
-Code this before:
-- {dependent 1}
+---
+Ready to write the first test?
 ```
 
-## Integration
+### 7. Activate TDD Companion
 
-After loading context:
-- Invoke `tdd-companion` skill for TDD discipline
-- Remind about `superpowers:test-driven-development`
-- Note `architecture-validator` for validation
+After presenting context, remind:
+```
+TDD reminder: Write test first, then implement.
+Use superpowers:test-driven-development for detailed TDD guidance.
+```
 
-## Human Control Points
+## Stop Points
 
-- User specifies which task to work on
-- User can request additional context
-- User confirms ready to start coding
+STOP and wait for user:
+- If task file not found (offer to create)
+- After presenting context summary
+- If prerequisites are incomplete (ask how to proceed)

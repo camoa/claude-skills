@@ -1,109 +1,129 @@
 ---
 name: tdd-companion
 description: Use during implementation to enforce TDD - reminds test-first, validates Red-Green-Refactor cycle, integrates with superpowers:test-driven-development
-version: 1.0.0
+version: 1.1.0
 ---
 
 # TDD Companion
 
-Enforce test-driven development discipline during implementation.
+Enforce test-driven development during implementation sessions.
 
-## Triggers
+## Activation
 
-- During any coding session in Phase 3
-- Auto-activated after `task-context-loader`
-- User is about to write implementation code
+Activate automatically during Phase 3 coding when:
+- About to write implementation code
+- After `task-context-loader` loads a task
+- User asks to implement a feature
+- Code changes are being discussed
 
-## Core Principle
+## Core Rule
 
-**Test First. Always.**
+**STOP before writing any implementation code.**
 
-The Red-Green-Refactor cycle:
-1. **RED** - Write a failing test
-2. **GREEN** - Write minimum code to pass
-3. **REFACTOR** - Improve while keeping green
+Ask: "Have you written the failing test first?"
 
-## Reminders
+If no test exists, do NOT write implementation. Instead:
+1. Help write the test
+2. Confirm test fails
+3. Only then write implementation
 
-### Before Writing Implementation
-Ask: "Have you written the test first?"
+## Red-Green-Refactor Enforcement
 
-If no test exists:
-- Stop implementation
-- Guide test creation
-- Run test to confirm it fails
-
-### Before Running Tests
-Ensure:
-- Test is specific to current change
-- Test describes expected behavior
-- Test will fail without implementation
-
-### After Implementation
-Check:
-- Only minimum code was added
-- Test now passes
-- No additional untested code
-
-### Before Refactoring
-Confirm:
-- All tests are green
-- Refactoring won't change behavior
-- Tests still pass after refactoring
-
-## Integration with superpowers:test-driven-development
-
-This skill works alongside `superpowers:test-driven-development`:
-
+### RED Phase
+Before any implementation:
 ```
-Use superpowers:test-driven-development for:
-- Detailed TDD methodology
-- Complex testing scenarios
-- Test structure guidance
+CHECKPOINT: Is there a failing test for this?
 
-Use tdd-companion for:
-- Quick reminders during coding
-- Cycle enforcement
-- Drupal-specific test patterns
+If NO:
+  → Write test first
+  → Run test to confirm failure
+  → Show error message
+
+If YES:
+  → Proceed to implementation
 ```
 
-## Drupal Test Types
+### GREEN Phase
+When writing implementation:
+```
+CHECKPOINT: Write MINIMUM code to pass.
 
-| Test Type | Location | Use For |
-|-----------|----------|---------|
-| Unit | `tests/src/Unit/` | Isolated logic, no Drupal |
-| Kernel | `tests/src/Kernel/` | Services, entities, database |
-| Functional | `tests/src/Functional/` | Full page requests |
-| FunctionalJavascript | `tests/src/FunctionalJavascript/` | JavaScript behavior |
+Rules:
+- Only code needed to pass the test
+- No additional features
+- No premature optimization
+- No "while I'm here" additions
+```
 
-## Quick Test Template
+### REFACTOR Phase
+After test passes:
+```
+CHECKPOINT: Can this be improved?
 
+Only if:
+- Tests are green
+- Refactoring doesn't change behavior
+- Tests stay green after changes
+```
+
+## Drupal Test Types Quick Reference
+
+| Type | Location | Use For | Command |
+|------|----------|---------|---------|
+| Unit | `tests/src/Unit/` | Pure logic, no Drupal | `ddev phpunit --filter Unit` |
+| Kernel | `tests/src/Kernel/` | Services, entities, DB | `ddev phpunit --filter Kernel` |
+| Functional | `tests/src/Functional/` | Full page requests | `ddev phpunit --filter Functional` |
+
+## Test Template
+
+When helping write tests, use this structure:
 ```php
 <?php
 
-namespace Drupal\Tests\my_module\Unit;
+namespace Drupal\Tests\{module}\{Type};
 
-use Drupal\Tests\UnitTestCase;
+use Drupal\Tests\{TestBase};
 
-class MyServiceTest extends UnitTestCase {
+class {ClassName}Test extends {TestBase} {
 
-  public function testMethodDoesExpectedThing(): void {
+  public function test{Behavior}(): void {
     // Arrange
-    $service = new MyService();
+    $input = ...;
 
     // Act
-    $result = $service->method($input);
+    $result = $this->subject->method($input);
 
     // Assert
     $this->assertEquals($expected, $result);
   }
-
 }
 ```
 
-## Human Control Points
+## Intervention Points
 
-- Developer runs tests (Claude does NOT auto-run)
-- Developer confirms test failure before implementation
-- Developer confirms tests pass after implementation
-- Developer decides when to refactor
+Intervene when you detect:
+- "Let me just add this feature..." → "Stop. Is there a test?"
+- "I'll add tests later..." → "Tests first. What behavior are we testing?"
+- "This is too simple for tests..." → "Simple now, complex later. Test it."
+- Implementing multiple features at once → "One test, one feature at a time."
+
+## Integration with superpowers:test-driven-development
+
+For complex testing scenarios, defer:
+```
+This needs detailed TDD guidance.
+Invoking superpowers:test-driven-development for full methodology.
+```
+
+Use superpowers skill for:
+- Complex mocking scenarios
+- Integration test strategies
+- Test refactoring approaches
+
+## Stop Points
+
+STOP and enforce:
+- Before ANY implementation code is written
+- If implementation goes beyond test requirements
+- If user tries to skip testing
+- Before moving to next feature (are tests green?)

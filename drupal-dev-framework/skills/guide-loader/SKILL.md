@@ -1,108 +1,134 @@
 ---
 name: guide-loader
-description: Use when needing specialized guide content - loads guides from ~/workspace/claude_memory/guides/ based on current task
-version: 1.0.0
+description: Use when needing specialized guide content - loads guides from configured path based on current task
+version: 1.1.0
 ---
 
 # Guide Loader
 
-Load relevant development guides based on current task context.
+Load development guides into context when needed.
 
-## Triggers
+## Activation
 
-- When designing or implementing specific feature types
-- User requests specific guide
-- Guide reference found in architecture files
-- Auto-triggered during task context loading
+Activate when:
+- Designing or implementing features that match guide topics
+- User requests a specific guide
+- Invoked by other skills (guide-integrator, task-context-loader)
+- "Load the ECA guide" or "What does my guide say about..."
 
-## Available Guides
+## Workflow
 
-Located in `~/workspace/claude_memory/guides/`:
+### 1. Check for Guides Path
 
-### Core Development
-| Guide | Purpose |
-|-------|---------|
-| `drupal_development_guide.md` | Main 3-phase development workflow |
-| `project_reference_guide.md` | Tool ecosystem and integrations |
+Use `Read` on `{project_path}/project_state.md`
 
-### Feature-Specific
-| Guide | Use When |
-|-------|----------|
-| `eca_development_guide.md` | Workflow automation, events |
-| `drupal_fields_entities_guide.md` | Custom fields, entities |
-| `drupal_configuration_forms_guide.md` | Admin settings forms |
-
-### Frontend
-| Guide | Use When |
-|-------|----------|
-| `bootstrap_*.md` | Bootstrap integration |
-| `radix_*.md` | Radix theme work |
-| `sdc_*.md` | Single Directory Components |
-
-### Plugin Development
-| Guide | Use When |
-|-------|----------|
-| `claude-code-plugin-development.md` | Creating Claude Code plugins |
-
-## Loading Strategy
-
-### Full Load
-For primary reference during task:
-- Read entire guide
-- Extract relevant sections
-- Summarize key points
-
-### Section Load
-For quick reference:
-- Search for specific topic
-- Load only relevant section
-- Provide targeted guidance
-
-### Reference Only
-When just need pointer:
-- Note guide exists
-- Provide path for user reference
-- Don't load content
-
-## Process
-
-1. **Identify need** - What topic needs guidance?
-2. **Match guide** - Which guide covers this?
-3. **Determine scope** - Full, section, or reference?
-4. **Load content** - Read appropriate amount
-5. **Present** - Summarize or quote relevant parts
-
-## Output Format
-
+Look for:
 ```markdown
-## Guide Reference: {Topic}
-
-### Source
-`~/workspace/claude_memory/guides/{guide_name}.md`
-
-### Relevant Sections
-- Section A (lines X-Y): {summary}
-- Section B (lines X-Y): {summary}
-
-### Key Points for Current Task
-1. {Point 1}
-2. {Point 2}
-3. {Point 3}
-
-### Apply To Current Work
-{How this applies to what we're doing}
+**Guides Path:** {path}
 ```
 
-## Guide Not Found
+If not found:
+```
+No guides path configured.
 
-If no guide exists for topic:
-1. Note the gap
-2. Suggest creating one (via guide-framework-maintainer)
-3. Provide general best practices
-4. Search web for current standards
+To add guides, edit project_state.md and add:
+**Guides Path:** /path/to/your/guides/
 
-## Human Control Points
+For now, using Claude's built-in Drupal knowledge.
+```
 
-- User can request specific guide
-- User can request more/less detail
-- User decides how to apply guidance
+Then STOP - no guides to load.
+
+### 2. Determine Which Guide
+
+If specific guide requested, use that.
+
+Otherwise, match topic to guide:
+
+| Topic Keywords | Guide File |
+|----------------|------------|
+| ECA, event, workflow, automation | eca_development_guide.md |
+| field, entity, bundle, content type | drupal_fields_entities_guide.md |
+| form, settings, config, admin | drupal_configuration_forms_guide.md |
+| theme, CSS, SCSS, Bootstrap | bootstrap_*.md |
+| SDC, component, Twig | sdc_*.md |
+| Radix, subtheme | radix_*.md |
+| development, workflow, process | drupal_development_guide.md |
+
+### 3. Load Guide
+
+Use `Read` on `{guides_path}/{guide_file}`:
+
+If file not found:
+```
+Guide not found: {guide_file}
+Path checked: {guides_path}/{guide_file}
+
+Available in guides folder? Use Glob to check.
+```
+
+If file found, extract:
+- Table of contents (if present)
+- Key sections relevant to current task
+- Code examples
+- Warnings/gotchas
+
+### 4. Present Guide Content
+
+Format as:
+```
+## Guide Loaded: {guide name}
+
+### Overview
+{Brief description of guide scope}
+
+### Relevant Sections for Current Task
+1. **{Section Name}** - {why relevant}
+   {Key points}
+
+2. **{Section Name}** - {why relevant}
+   {Key points}
+
+### Key Patterns
+- {Pattern 1}
+- {Pattern 2}
+
+### Warnings
+- {Important gotcha from guide}
+
+### Full Reference
+{guides_path}/{guide_file}
+```
+
+### 5. Integrate with Current Work
+
+Based on guide content, suggest:
+```
+Apply to current task:
+- {Specific recommendation from guide}
+- {Pattern to follow}
+- {Thing to avoid}
+
+Add these to architecture/implementation? (yes/no)
+```
+
+## Without Guides
+
+If no guides configured, provide built-in knowledge:
+```
+No custom guides available. Using built-in Drupal knowledge.
+
+For {topic}:
+- Standard approach: {description}
+- Core reference: {path}
+- Best practices: {list}
+
+For custom guidance, configure guides path in project_state.md.
+```
+
+## Stop Points
+
+STOP and wait for user:
+- If no guides path configured (inform and continue without)
+- If requested guide not found
+- After presenting guide content (ask if need more)

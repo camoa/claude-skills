@@ -1,117 +1,143 @@
 ---
 name: task-completer
 description: Use when finishing a task - moves task to completed/, updates project_state.md, suggests next task
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Task Completer
 
-Finalize completed tasks and update project memory.
+Finalize tasks and update project memory.
 
-## Triggers
+## Activation
 
+Activate when you detect:
 - `/drupal-dev-framework:complete` command
-- User says "Done with X task" or "Task complete"
-- All acceptance criteria are met
+- "Done with X task" or "Task complete"
+- "Finish this task"
+- All acceptance criteria appear met
 
-## Process
+## Workflow
 
-1. **Verify completion** - Check acceptance criteria
-2. **Update task file** - Mark as completed with notes
-3. **Move to completed/** - Archive the task file
-4. **Update project_state.md** - Record progress
-5. **Suggest next task** - What should be done next?
+### 1. Verify Completion
 
-## Pre-Completion Checklist
+Use `Read` on the task file: `{project_path}/implementation_process/in_progress/{task}.md`
 
-Before marking complete:
-- [ ] All acceptance criteria met
-- [ ] Tests pass (user confirms)
-- [ ] Code reviewed (or ready for review)
-- [ ] No TODO comments left in code
-- [ ] Documentation updated if needed
+Check each acceptance criterion. Ask user:
+```
+Completion checklist for {task_name}:
 
-If any item is not complete:
-- Do not complete the task
-- Identify what's remaining
-- Continue working
+Acceptance Criteria:
+- [ ] {criterion 1} - Is this done?
+- [ ] {criterion 2} - Is this done?
+- [ ] {criterion 3} - Is this done?
 
-## Task File Update
+Additional checks:
+- [ ] Tests pass? (you run: ddev phpunit {path})
+- [ ] Code reviewed or ready for review?
+- [ ] No TODO comments left?
 
-Add completion section to task file:
+Confirm all items are complete (yes/no):
+```
+
+If NO, identify what's remaining and continue working.
+
+### 2. Run Code Pattern Check
+
+Before completing, invoke `code-pattern-checker` skill on the files that were created/modified.
+
+If issues found, ask: "Issues found. Fix before completing? (yes/continue anyway)"
+
+### 3. Update Task File
+
+Use `Edit` to add completion section to the task file:
 
 ```markdown
+---
+
 ## Completion
 
-**Completed:** {date}
-**Status:** Complete
+**Completed:** {YYYY-MM-DD}
+**Final Status:** Complete
 
 ### Summary
 {Brief description of what was implemented}
 
 ### Files Changed
-- `src/Service/MyService.php` - Created
-- `my_module.services.yml` - Updated
-- `tests/src/Unit/MyServiceTest.php` - Created
+| File | Action |
+|------|--------|
+| src/... | Created |
+| tests/... | Created |
+| *.services.yml | Modified |
+
+### Test Results
+- Unit tests: {count} passing
+- Kernel tests: {count} passing
+- Total: All passing
 
 ### Notes
-{Any implementation notes or deviations from plan}
-
-### Tests
-- {count} unit tests
-- {count} kernel tests
-- All passing: Yes
+{Any implementation notes, deviations, or decisions made}
 ```
 
-## Move Task
+### 4. Move Task File
 
-```
-From: implementation_process/in_progress/{task_name}.md
-To:   implementation_process/completed/{task_name}.md
+Use `Bash` to move the task:
+```bash
+mv "{project_path}/implementation_process/in_progress/{task}.md" "{project_path}/implementation_process/completed/{task}.md"
 ```
 
-## Update project_state.md
+### 5. Update project_state.md
+
+Use `Edit` to update:
 
 ```markdown
-## Progress Log
+## Progress
 
-### {date} - {task_name}
-- Component: {component}
-- Status: Completed
-- Tests: {count} passing
-- Next: {suggested next task}
+### Completed Tasks
+| Task | Completed | Notes |
+|------|-----------|-------|
+| {task_name} | {date} | {one-line summary} |
+
+## Current Focus
+{Update to next task or "Ready for next component"}
 ```
 
-## Suggest Next Task
+### 6. Suggest Next Task
 
-Based on:
-1. Task dependencies (what's unblocked now?)
-2. Priority order in task names
-3. Remaining in_progress/ files
-4. Architecture completion status
-
-Format:
-```markdown
-## Suggested Next Task
-
-**Task:** {task_name}
-**File:** implementation_process/in_progress/{task_name}.md
-**Reason:** {why this should be next}
-
-Alternative options:
-- {other task 1}
-- {other task 2}
+Use `Glob` to find remaining tasks:
+```
+{project_path}/implementation_process/in_progress/*.md
 ```
 
-## Integration
+Analyze dependencies and priorities. Present:
+```
+Task complete: {task_name}
 
-Before completing, consider invoking:
-- `superpowers:verification-before-completion` - Final checks
-- `code-pattern-checker` - Standards validation
+Next task options:
+1. {next_task} - {reason: dependency unblocked / priority}
+2. {alternative} - {reason}
+3. No more tasks - component complete
 
-## Human Control Points
+Which task next? (1/2/3 or other):
+```
 
-- User confirms acceptance criteria are met
-- User confirms tests pass
-- User approves completion
-- User chooses next task
+### 7. Invoke Verification
+
+If this was the last task for a component, suggest:
+```
+Component {name} appears complete.
+
+Run final validation?
+- superpowers:verification-before-completion
+- Full test suite
+- Integration tests
+
+Proceed? (yes/no)
+```
+
+## Stop Points
+
+STOP and wait for user:
+- After showing completion checklist (confirm all done)
+- If code-pattern-checker finds issues
+- After suggesting next task (let user choose)
+- Before running verification

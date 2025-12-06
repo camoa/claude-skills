@@ -1,56 +1,92 @@
 ---
 name: project-initializer
-description: Use when starting a new Drupal development project - creates memory folder structure with project_state.md and architecture scaffolding in ~/workspace/claude_memory/
-version: 1.0.0
+description: Use when starting a new Drupal development project - creates memory folder structure with project_state.md and architecture scaffolding
+version: 1.1.0
 ---
 
 # Project Initializer
 
-Initialize a new Drupal development project with proper memory structure for the 3-phase workflow.
+Create a new project with memory structure for the 3-phase workflow.
 
-## Triggers
+## Activation
 
-- User says "Start new project" or "Initialize project X"
-- `/drupal-dev-framework:new` command is used
-- Beginning a new Drupal module or feature development
+Activate when you detect:
+- "Start new project" or "Initialize project X"
+- `/drupal-dev-framework:new` command
+- Beginning development work that needs tracking
 
-## Process
+## Workflow
 
-1. **Get project name** - Ask for project identifier (lowercase, underscores)
-2. **Create folder structure** - Set up memory directories
-3. **Create project_state.md** - Initialize with basic info
-4. **Invoke requirements-gatherer** - Ask structured questions
-5. **Confirm setup** - Show created structure
+### 1. Get Project Name
 
-## Folder Structure Created
-
+Ask:
 ```
-~/workspace/claude_memory/{project_name}/
-├── project_state.md              # Project status and decisions
-├── architecture/
-│   └── main.md                   # Architecture document (empty initially)
-└── implementation_process/
-    ├── in_progress/              # Current task files
-    └── completed/                # Finished task files
+What should this project be called?
+(lowercase, letters, numbers, underscores only)
 ```
 
-## project_state.md Template
+Validate the name matches pattern `^[a-z][a-z0-9_]*$`. If invalid, ask again.
+
+### 2. Get Storage Location
+
+Ask:
+```
+Where should project files be stored?
+
+Default: ../claude_projects/{project_name}/
+(relative to current working directory)
+
+Options:
+1. Accept default
+2. Enter custom path
+
+Your choice:
+```
+
+Convert relative paths to absolute. Store the full path.
+
+### 3. Check Path
+
+Use `Bash` to check if folder exists:
+```bash
+ls -la {chosen_path}
+```
+
+If exists, ask: "Folder exists. Overwrite, use different name, or cancel?"
+
+### 4. Create Structure
+
+Use `Bash` to create folders:
+```bash
+mkdir -p {path}/{project_name}/architecture
+mkdir -p {path}/{project_name}/implementation_process/in_progress
+mkdir -p {path}/{project_name}/implementation_process/completed
+```
+
+### 5. Create project_state.md
+
+Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 
 ```markdown
 # {Project Name}
 
-**Created:** {date}
+**Created:** {YYYY-MM-DD}
 **Phase:** 1 - Research
 **Status:** Initializing
+**Path:** {full_path_to_project_folder}
 
 ## Overview
-{Brief description from requirements}
+{To be filled during requirements gathering}
+
+## Scope
+This project includes:
+- {To be defined}
 
 ## Requirements
 {Populated by requirements-gatherer}
 
 ## Key Decisions
-{Empty initially, populated during development}
+{Empty initially}
 
 ## Current Focus
 Initial setup - gathering requirements
@@ -61,19 +97,38 @@ Initial setup - gathering requirements
 3. Begin architecture design
 ```
 
-## Validation
+### 6. Create Empty architecture/main.md
 
-Before creating:
-- Check project name is valid (lowercase, underscores only)
-- Check folder doesn't already exist
-- Confirm with user before creating
+Use `Write` tool:
+```markdown
+# {Project Name} Architecture
 
-## After Initialization
+{To be designed in Phase 2}
+```
 
-Automatically invoke `requirements-gatherer` skill to populate initial requirements in project_state.md.
+### 7. Invoke Requirements Gatherer
 
-## Human Control Points
+After structure is created, invoke `requirements-gatherer` skill to populate requirements.
 
-- User provides project name
-- User confirms folder creation
-- User answers requirements questions
+### 8. Confirm
+
+Show user:
+```
+Project initialized at: {full_path}
+
+Created:
+- project_state.md
+- architecture/main.md
+- implementation_process/in_progress/
+- implementation_process/completed/
+
+Next: Answer requirements questions to complete Phase 1 setup.
+```
+
+## Stop Points
+
+STOP and wait for user response:
+- After asking for project name
+- After asking for storage location
+- Before creating folders if path exists
+- After showing confirmation

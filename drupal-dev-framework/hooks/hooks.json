@@ -1,0 +1,9 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "type": "message",
+      "message": "Drupal Development Framework active. Use /drupal-dev-framework:status to check project state or /drupal-dev-framework:new to start a new project."
+    }
+  ]
+}

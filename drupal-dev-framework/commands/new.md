@@ -16,8 +16,9 @@ Initialize a new Drupal development project.
 
 ## What This Does
 
-1. Creates project folder in `~/workspace/claude_memory/$1/`
-2. Sets up directory structure:
+1. Asks where to store project files (default: `../claude_projects/$1/`)
+2. Creates project folder at chosen location
+3. Sets up directory structure:
    - `project_state.md`
    - `architecture/`
    - `implementation_process/in_progress/`
@@ -29,15 +30,19 @@ Initialize a new Drupal development project.
 
 - Lowercase letters and underscores only
 - Must be valid Drupal module name format
-- Cannot already exist in claude_memory/
+- Cannot already exist at chosen path
 
 ## Example
 
 ```
 /drupal-dev-framework:new content_workflow
 
+Where should project files be stored?
+Default: ../claude_projects/content_workflow/
+> [Enter to accept]
+
 Creating project: content_workflow
-Location: ~/workspace/claude_memory/content_workflow/
+Location: ../claude_projects/content_workflow/
 
 Structure created:
 ├── project_state.md

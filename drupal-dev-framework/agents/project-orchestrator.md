@@ -24,7 +24,7 @@ Coordinate the development workflow by:
 
 ## Process
 
-1. **Locate project** - Find project folder in ~/workspace/claude_memory/
+1. **Locate project** - Find project via user-provided path or project_state.md
 2. **Read state** - Load project_state.md and key files
 3. **Detect phase** - Analyze folder structure to determine phase
 4. **Assess progress** - What's done, what's pending
