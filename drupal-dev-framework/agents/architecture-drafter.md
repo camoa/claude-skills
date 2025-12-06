@@ -1,4 +1,5 @@
 ---
+name: architecture-drafter
 description: Use when designing module architecture - creates architecture/main.md with component breakdown, service dependencies, and pattern references
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping"]
 ---

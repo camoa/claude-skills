@@ -1,4 +1,5 @@
 ---
+name: contrib-researcher
 description: Use when researching Drupal contrib modules or existing solutions - analyzes drupal.org and contrib code to identify reusable patterns and integration points
 capabilities: ["drupal-org-search", "contrib-analysis", "pattern-extraction", "integration-discovery"]
 ---

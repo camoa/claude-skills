@@ -1,4 +1,5 @@
 ---
+name: architecture-validator
 description: Use when validating implementation against architecture - checks approach matches documented patterns, dependencies, and SOLID/DRY principles
 capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check"]
 ---

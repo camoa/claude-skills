@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Custom skills and tools for Claude Code development workflows",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "categories": ["Development", "Productivity", "Skills"],
     "tags": ["skills", "development", "workflows", "automation"]
   },
@@ -18,27 +18,59 @@
       "version": "1.1.0",
       "author": {
         "name": "camoa"
-      }
+      },
+      "strict": false,
+      "skills": [
+        "./skill-creation-tools/skills/skill-creation"
+      ]
     },
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "camoa"
       },
-      "keywords": ["drupal", "development", "workflow", "architecture", "tdd"]
+      "keywords": ["drupal", "development", "workflow", "architecture", "tdd"],
+      "strict": false,
+      "skills": [
+        "./drupal-dev-framework/skills/phase-detector",
+        "./drupal-dev-framework/skills/requirements-gatherer",
+        "./drupal-dev-framework/skills/project-initializer",
+        "./drupal-dev-framework/skills/guide-loader",
+        "./drupal-dev-framework/skills/guide-integrator",
+        "./drupal-dev-framework/skills/core-pattern-finder",
+        "./drupal-dev-framework/skills/component-designer",
+        "./drupal-dev-framework/skills/diagram-generator",
+        "./drupal-dev-framework/skills/implementation-task-creator",
+        "./drupal-dev-framework/skills/task-context-loader",
+        "./drupal-dev-framework/skills/code-pattern-checker",
+        "./drupal-dev-framework/skills/tdd-companion",
+        "./drupal-dev-framework/skills/task-completer",
+        "./drupal-dev-framework/skills/session-resume",
+        "./drupal-dev-framework/skills/memory-manager"
+      ],
+      "agents": [
+        "./drupal-dev-framework/agents/"
+      ],
+      "commands": [
+        "./drupal-dev-framework/commands/"
+      ]
     },
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
       "description": "Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "camoa"
       },
-      "keywords": ["code-quality", "tdd", "solid", "dry", "drupal", "testing", "phpstan", "phpmd"]
+      "keywords": ["code-quality", "tdd", "solid", "dry", "drupal", "testing", "phpstan", "phpmd"],
+      "strict": false,
+      "skills": [
+        "./code-quality-tools/skills/code-quality-audit"
+      ]
     }
   ]
 }

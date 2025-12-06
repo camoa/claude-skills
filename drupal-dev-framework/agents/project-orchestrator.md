@@ -1,4 +1,5 @@
 ---
+name: project-orchestrator
 description: Use when checking project status or deciding next steps - reads memory files, detects phase, suggests actions, routes to appropriate agents/skills
 capabilities: ["project-status", "phase-detection", "workflow-routing", "next-action-suggestion"]
 ---
