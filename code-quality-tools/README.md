@@ -49,7 +49,7 @@ All audit results are saved to `.reports/` (git-ignored):
 ```
 You: Install testing tools for this project
 Claude: I'll set up the quality tools...
-       - Installed PHPStan, PHPMD, PHPCPD, drupal-check, coder
+       - Installed PHPStan, PHPMD, PHPCPD, coder, phpstan-deprecation-rules
        - Created phpstan.neon, phpmd.xml, phpunit.xml
        - Created .reports/ directory (added to .gitignore)
 ```
@@ -140,7 +140,7 @@ code-quality-tools/
 | [mglaman/phpstan-drupal](https://github.com/mglaman/phpstan-drupal) | Latest | Drupal rules |
 | [phpmd/phpmd](https://phpmd.org/) | Latest | Code smells |
 | [systemsdk/phpcpd](https://github.com/systemsdk/phpcpd) | 8.x | Duplication |
-| [mglaman/drupal-check](https://github.com/mglaman/drupal-check) | 1.5+ | Deprecations |
+| [phpstan/phpstan-deprecation-rules](https://github.com/phpstan/phpstan-deprecation-rules) | Latest | Deprecations |
 | [drupal/coder](https://www.drupal.org/project/coder) | 9.x | Standards |
 
 ## Acknowledgments

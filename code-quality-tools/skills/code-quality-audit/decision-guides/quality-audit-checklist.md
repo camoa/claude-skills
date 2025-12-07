@@ -200,14 +200,16 @@ XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
 
 **Fail:** Merge blocked
 
-### Stage 6: Security (optional)
+### Stage 6: Security & Deprecations (optional)
 
 ```yaml
-- drupal-check --deprecations
+- phpstan analyse --level=2  # Includes deprecation rules
 - composer audit
 ```
 
 **Fail:** Warning (critical: block)
+
+> **Note**: Use `phpstan/phpstan-deprecation-rules` instead of deprecated `drupal-check`.
 
 ## Issue Triage
 

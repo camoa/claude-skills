@@ -14,7 +14,7 @@ Links to official documentation and learning resources.
 ### Drupal-Specific
 
 - [phpstan-drupal](https://github.com/mglaman/phpstan-drupal)
-- [drupal-check](https://github.com/mglaman/drupal-check)
+- [phpstan-deprecation-rules](https://github.com/phpstan/phpstan-deprecation-rules) (replaces deprecated drupal-check)
 - [Drupal Coder](https://www.drupal.org/project/coder)
 - [Drupal Testing Documentation](https://www.drupal.org/docs/develop/automated-testing)
 
@@ -55,9 +55,10 @@ composer require --dev \
   phpstan/phpstan-deprecation-rules \
   phpmd/phpmd \
   systemsdk/phpcpd \
-  mglaman/drupal-check \
   drupal/coder
 ```
+
+> **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
 
 ### Optional
 

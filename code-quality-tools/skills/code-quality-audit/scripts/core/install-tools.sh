@@ -67,20 +67,14 @@ install_drupal_tools() {
         echo -e "${YELLOW}[WARN]${NC} PHPCPD may already be installed or had issues"
     }
 
-    # drupal-check
-    echo -e "${YELLOW}[4/6]${NC} Installing drupal-check..."
-    ddev composer require --dev mglaman/drupal-check --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} drupal-check may already be installed or had issues"
-    }
-
     # Drupal Coder
-    echo -e "${YELLOW}[5/6]${NC} Installing Drupal Coder..."
+    echo -e "${YELLOW}[4/5]${NC} Installing Drupal Coder..."
     ddev composer require --dev drupal/coder --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Drupal Coder may already be installed or had issues"
     }
 
     # Check for PCOV
-    echo -e "${YELLOW}[6/6]${NC} Checking PCOV extension..."
+    echo -e "${YELLOW}[5/5]${NC} Checking PCOV extension..."
     if ddev exec php -m 2>/dev/null | grep -q pcov; then
         echo -e "${GREEN}[OK]${NC} PCOV is available"
     else
@@ -132,17 +126,6 @@ verify_drupal_tools() {
     else
         echo -e "${RED}[FAIL]${NC} PHPCPD not found"
         tools_status+=("phpcpd:fail")
-        all_ok=false
-    fi
-
-    # drupal-check
-    if ddev exec vendor/bin/drupal-check --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/drupal-check --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} drupal-check: ${VERSION}"
-        tools_status+=("drupal-check:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} drupal-check not found"
-        tools_status+=("drupal-check:fail")
         all_ok=false
     fi
 

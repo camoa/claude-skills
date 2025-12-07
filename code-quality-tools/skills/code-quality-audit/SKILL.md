@@ -62,8 +62,11 @@ All operations save JSON to `.reports/`:
 3. Install missing:
    ```bash
    ddev composer require --dev phpstan/phpstan phpstan/extension-installer \
-     mglaman/phpstan-drupal phpmd/phpmd systemsdk/phpcpd mglaman/drupal-check drupal/coder
+     mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules \
+     phpmd/phpmd systemsdk/phpcpd drupal/coder
    ```
+
+   **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead for deprecation checking.
 4. Copy templates from `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/templates/drupal/` to project:
    - `phpstan.neon`, `phpmd.xml`, `phpunit.xml`
 5. Check PCOV: `ddev exec php -m | grep pcov` - if missing, recommend adding to `.ddev/config.yaml`

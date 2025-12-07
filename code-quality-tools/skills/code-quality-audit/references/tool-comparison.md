@@ -12,7 +12,7 @@ Mapping of code quality tools between Drupal and Next.js ecosystems.
 | Linting | PHP_CodeSniffer | ESLint |
 | Code smells | PHPMD | ESLint plugins |
 | Duplication | PHPCPD | jscpd |
-| Deprecations | drupal-check | ESLint rules |
+| Deprecations | phpstan-deprecation-rules | ESLint rules |
 
 ## Static Analysis
 
@@ -216,10 +216,11 @@ ddev exec vendor/bin/phpmetrics \
 # Install all tools
 ddev composer require --dev \
     phpstan/phpstan \
+    phpstan/extension-installer \
     mglaman/phpstan-drupal \
+    phpstan/phpstan-deprecation-rules \
     phpmd/phpmd \
     systemsdk/phpcpd \
-    mglaman/drupal-check \
     drupal/coder
 
 # Run all checks
@@ -255,10 +256,12 @@ npx jest --coverage
 | Tool | Version | PHP Requirement |
 |------|---------|-----------------|
 | PHPStan | 2.x | PHP 7.4+ |
+| phpstan-deprecation-rules | Latest | PHP 7.4+ |
 | PHPMD | Latest | PHP 8.1+ |
 | PHPCPD | 8.x | PHP 8.3+ |
-| drupal-check | 1.5+ | PHP 8.1+ |
 | Drupal Coder | 9.x | PHP 8.1+ |
+
+> **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
 
 ### Node.js Ecosystem
 

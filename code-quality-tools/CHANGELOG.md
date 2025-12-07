@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Renumbered operations (CI Integration is now Operation 8, Markdown Report is Operation 9)
 - Now 9 operations total (was 8)
+- **BREAKING**: Replaced deprecated `mglaman/drupal-check` with `phpstan/phpstan-deprecation-rules`
+- Updated all references, scripts, and documentation to use phpstan-deprecation-rules
+- Install script now installs 5 tools instead of 6
 
 ## [1.1.0] - 2025-12-06
 
