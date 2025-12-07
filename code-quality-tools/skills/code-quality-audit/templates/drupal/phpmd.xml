@@ -1,14 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  PHPMD ruleset for Drupal custom modules
-  Copy to project root as phpmd.xml
-
-  Usage:
-    ddev exec vendor/bin/phpmd web/modules/custom text phpmd.xml
-
-  Required package:
-    composer require --dev phpmd/phpmd
--->
 <ruleset name="Drupal Custom Modules"
          xmlns="http://pmd.sf.net/ruleset/1.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

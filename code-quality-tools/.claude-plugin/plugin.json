@@ -1,7 +1,7 @@
 {
   "name": "code-quality-tools",
   "description": "Code quality auditing tools for TDD, SOLID, and DRY principles - runs PHPStan, PHPMD, PHPCPD via DDEV",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "author": {
     "name": "camoa"
   },

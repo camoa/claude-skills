@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-12-06
+
+### Added
+- Operation 10: TDD Workflow with RED-GREEN-REFACTOR guidance using `scripts/drupal/tdd-workflow.sh`
+- "When to Run What" section (pre-commit vs pre-push vs pre-merge)
+- Coverage targets by code type (services 90%, security 95%, API 85%)
+- Rule of Three evaluation in DRY check
+- JSON schema enforcement for all reports
+
+### Changed
+- **Complete SKILL.md rewrite** in imperative voice (instructions for Claude, not documentation)
+- All operations now reference their corresponding scripts
+- DRY check includes knowledge vs coincidence evaluation
+- Test type selection integrated with decision guide reference
+- Composer scripts display is now mandatory
+
+### Fixed
+- Scripts were not referenced in operations (Gap 8)
+- References and decision guides now integrated inline, not just listed
+- JSON schema (`schemas/audit-report.schema.json`) now enforced in all report operations
+
+## [1.3.0] - 2025-12-06
+
+### Added
+- Coverage driver preference question in Operation 1 (PCOV vs Xdebug)
+- "When to Choose Each" and "Performance When Disabled" sections to coverage-metrics.md
+- PHPStan 2.x compatibility note in SKILL.md
+
+### Changed
+- **BREAKING**: Updated `phpstan.neon` template for PHPStan 2.x compatibility
+  - Removed deprecated `memoryLimit`, `checkMissingIterableValueType`, `checkGenericClassInNonGenericObjectType` parameters
+  - Removed `includes:` block (extension-installer auto-loads extensions)
+- Fixed `phpmd.xml` template - removed XML comment block that caused parser errors
+- Fixed PCOV installation instructions - use version-specific package name (e.g., `php8.3-pcov`)
+
+### Fixed
+- PHPStan "files included multiple times" error with extension-installer
+- PHPMD "Double hyphen within comment" XML parser error
+- PCOV installation failure in DDEV (package name format)
+
 ## [1.2.0] - 2025-12-06
 
 ### Added

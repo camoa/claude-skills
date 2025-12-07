@@ -1,12 +1,16 @@
 #
-# PHPStan configuration for Drupal custom modules
+# PHPStan 2.x configuration for Drupal custom modules
 # Copy to project root as phpstan.neon
 #
 # Usage:
 #   ddev exec vendor/bin/phpstan analyse
 #
 # Required packages:
-#   composer require --dev phpstan/phpstan mglaman/phpstan-drupal phpstan/extension-installer
+#   composer require --dev phpstan/phpstan phpstan/extension-installer \
+#     mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules
+#
+# Note: phpstan/extension-installer auto-loads extensions.
+#       Do NOT add an includes: block - it causes duplicate loading errors.
 #
 
 parameters:
@@ -28,15 +32,8 @@ parameters:
     drupal:
         drupal_root: web
 
-    # Memory limit for large codebases
-    memoryLimit: 1500M
-
     # Treat phpdoc types as certain
     treatPhpDocTypesAsCertain: false
-
-    # Check for missing typehints
-    checkMissingIterableValueType: true
-    checkGenericClassInNonGenericObjectType: true
 
     # Report unused parameters
     reportUnmatchedIgnoredErrors: true
@@ -59,8 +56,3 @@ parameters:
     # Pollute scope with loop variables
     polluteScopeWithLoopInitialAssignments: true
     polluteScopeWithAlwaysIterableForeach: true
-
-# Include Drupal extension
-includes:
-    - vendor/mglaman/phpstan-drupal/extension.neon
-    - vendor/phpstan/phpstan-deprecation-rules/rules.neon

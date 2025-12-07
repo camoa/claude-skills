@@ -23,22 +23,46 @@ Test coverage measurement and interpretation for Drupal projects.
 | Path coverage | No | Yes |
 | Memory usage | Lower | Higher |
 | Best for | CI/CD, daily use | Deep analysis |
+| Overhead when disabled | None | Some |
+
+### When to Choose Each
+
+**Choose PCOV when:**
+- Running tests in CI/CD pipelines (speed matters)
+- Daily development test runs
+- Line coverage is sufficient
+- You want minimal performance impact
+
+**Choose Xdebug when:**
+- Need branch/path coverage for critical code
+- Also need debugging/profiling capabilities
+- Doing deep analysis before releases
+
+### Performance When Disabled
+
+**PCOV**: Zero overhead when disabled (`pcov.enabled=0`). Safe to have installed but disabled - only adds overhead when explicitly enabled for coverage runs.
+
+**Xdebug**: Has some overhead even when disabled. Mode switching (`XDEBUG_MODE=off`) reduces but doesn't eliminate impact. Consider removing in production environments.
 
 ### PCOV Setup (DDEV)
 
-Add to `.ddev/config.yaml`:
+First, check your PHP version:
+```bash
+ddev exec php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"
+```
 
+Add to `.ddev/config.yaml` (replace `8.3` with your actual PHP version):
 ```yaml
-php_version: "8.3"
 webimage_extra_packages:
-  - php${DDEV_PHP_VERSION}-pcov
+  - php8.3-pcov
 ```
 
 Then restart:
-
 ```bash
 ddev restart
 ```
+
+> **Note**: DDEV uses Debian with system PHP packages. Use the version-specific package name (e.g., `php8.3-pcov`), not a variable.
 
 ### Running with PCOV
 
