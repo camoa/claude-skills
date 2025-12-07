@@ -1,17 +1,17 @@
 ---
-description: Start a new Drupal development project with memory structure
+description: Start a new development project with memory structure
 allowed-tools: Read, Write, Bash(mkdir:*), Glob
 argument-hint: <project-name>
 ---
 
 # New Project
 
-Initialize a new Drupal development project.
+Initialize a new development project.
 
 ## Usage
 
 ```
-/drupal-dev-framework:new my_module_name
+/drupal-dev-framework:new my_project_name
 ```
 
 ## What This Does
@@ -29,7 +29,6 @@ Initialize a new Drupal development project.
 ## Project Name Requirements
 
 - Lowercase letters and underscores only
-- Must be valid Drupal module name format
 - Cannot already exist at chosen path
 
 ## Example

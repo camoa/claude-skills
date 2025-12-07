@@ -12,7 +12,7 @@ Get recommendation for what to do next based on project state.
 
 ```
 /drupal-dev-framework:next                # Current project
-/drupal-dev-framework:next my_module      # Specific project
+/drupal-dev-framework:next my_project     # Specific project
 ```
 
 ## What This Does

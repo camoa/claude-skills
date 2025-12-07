@@ -92,7 +92,7 @@ The path is saved in `project_state.md`, so the plugin remembers it across sessi
 
 ```bash
 # 1. Create project structure
-/drupal-dev-framework:new my_content_module
+/drupal-dev-framework:new my_project
 
 # 2. Answer requirements questions when prompted
 # (scope, integrations, constraints, etc.)
@@ -222,6 +222,12 @@ This plugin builds on patterns and integrates with:
 - [drupal-dev-tools](https://github.com/camoa/drupal-dev-tools) - Drupal/DDEV operations
 
 ## Changelog
+
+### 1.1.3
+- Fixed assumptions that projects are always modules
+- Changed "module" references to "project" in commands, skills, agents
+- Updated examples to use generic project names instead of module names
+- Removed "Must be valid Drupal module name format" requirement from `/new` command
 
 ### 1.1.0
 - **Rewrote all 15 skills** to use imperative instructions instead of documentation style

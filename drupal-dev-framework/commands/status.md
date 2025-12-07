@@ -12,7 +12,7 @@ Show current project status, phase, and progress.
 
 ```
 /drupal-dev-framework:status              # Current project
-/drupal-dev-framework:status my_module    # Specific project
+/drupal-dev-framework:status my_project   # Specific project
 ```
 
 ## What This Does

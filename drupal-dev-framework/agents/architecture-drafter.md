@@ -1,6 +1,6 @@
 ---
 name: architecture-drafter
-description: Use when designing module architecture - creates architecture/main.md with component breakdown, service dependencies, and pattern references
+description: Use when designing project architecture - creates architecture/main.md with component breakdown, service dependencies, and pattern references
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping"]
 ---
 
@@ -11,7 +11,7 @@ Specialized agent for creating initial architecture documents during Phase 2 of 
 ## Purpose
 
 Draft comprehensive architecture documents that:
-- Break down the module into components
+- Break down the project into components
 - Map dependencies between services
 - Reference patterns from core/contrib
 - Provide clear implementation guidance
@@ -19,7 +19,7 @@ Draft comprehensive architecture documents that:
 ## When to Invoke
 
 - After Phase 1 research is complete
-- Starting design of a new module or major feature
+- Starting design of a new project or major feature
 - When `/drupal-dev-framework:design` command is used
 - When asked to "Design the architecture"
 
@@ -41,7 +41,7 @@ Create `{project_path}/architecture/main.md`:
 # {Project} Architecture
 
 ## Overview
-High-level description of what the module does.
+High-level description of what the project does.
 
 ## Components
 

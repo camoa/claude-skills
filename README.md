@@ -35,6 +35,21 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin install code-quality-tools@camoa-skills
 ```
 
+## Known Issues
+
+### Skills not auto-discovered on startup
+
+There's a [known bug in Claude Code](https://github.com/anthropics/claude-code/issues/10113) affecting git-based marketplaces. Skills may fail to load during initialization with "no such file or directory" errors because Claude Code looks for skill files in the wrong location (marketplace cache instead of the git repository).
+
+**Effects:**
+- Skills won't appear in auto-discovery during plugin initialization
+- Commands and agents may have similar issues
+
+**Workaround:**
+Skills still work when invoked via the `Skill` tool (e.g., typing the skill name or using slash commands) because the SKILL.md header contains the correct path. The issue only affects automatic discovery at startup.
+
+**Status:** Awaiting fix from Anthropic.
+
 ## Plugins
 
 ### skill-creation-tools

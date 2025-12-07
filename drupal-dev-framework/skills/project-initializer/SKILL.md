@@ -1,6 +1,6 @@
 ---
 name: project-initializer
-description: Use when starting a new Drupal development project - creates memory folder structure with project_state.md and architecture scaffolding
+description: Use when starting a new development project - creates memory folder structure with project_state.md and architecture scaffolding
 version: 1.1.0
 ---
 

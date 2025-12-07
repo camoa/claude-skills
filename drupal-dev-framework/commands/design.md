@@ -6,7 +6,7 @@ argument-hint: [component-name]
 
 # Design
 
-Design module architecture or a specific component.
+Design project architecture or a specific component.
 
 ## Usage
 

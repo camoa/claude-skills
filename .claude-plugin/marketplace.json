@@ -26,7 +26,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "author": {
         "name": "camoa"
       },
