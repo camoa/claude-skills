@@ -62,13 +62,43 @@ Guide for creating effective Claude Code skills. Covers workflow, progressive di
 
 ### drupal-dev-framework
 
-Systematic 3-phase Drupal development workflow with agents, skills, and commands.
+Systematic Drupal development workflow based on the [Claude Code Drupal Development Framework v3.0](https://adrupalcouple.us).
+
+**Quick Start:**
+```
+/drupal-dev-framework:next
+```
+
+This single command handles everything - project selection, task selection, and next action.
+
+**Workflow:**
+```
+Step 0: Project Selection (lists from registry)
+     ↓
+Step 1: Requirements (gathered once per project)
+     ↓
+Step 2: Task Selection (lists existing tasks OR create new)
+     ↓
+Step 3: Task Phases (each task cycles through):
+        Phase 1: Research → Phase 2: Architecture → Phase 3: Implementation
+     ↓
+Task Complete → Back to Step 2
+```
+
+**Key Concepts:**
+- Projects have requirements (gathered once)
+- Projects contain multiple tasks
+- Each task goes through 3 phases independently
+- No code until Phase 3 (research and design first)
+- TDD enforced in Phase 3
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 15 skills (phase-detector, requirements-gatherer, component-designer, tdd-companion, etc.) |
-| Commands | 9 commands (/new, /design, /implement, /validate, /next, /status, /complete, /research, /pattern) |
+| Skills | 15 skills (phase-detector, requirements-gatherer, tdd-companion, etc.) |
+| Commands | 9 commands (/next, /new, /research, /design, /implement, /complete, /status, /validate, /pattern) |
 | Agents | 5 agents (project-orchestrator, architecture-drafter, contrib-researcher, pattern-recommender, architecture-validator) |
+
+See [WORKFLOW.md](drupal-dev-framework/WORKFLOW.md) for complete documentation.
 
 ### code-quality-tools
 
