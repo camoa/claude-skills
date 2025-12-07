@@ -1,7 +1,7 @@
 ---
 name: session-resume
-description: Use when resuming work on existing project - reads project_state.md, summarizes current state, identifies where to continue
-version: 1.1.0
+description: Use when resuming work on existing project - lists registered projects, reads project_state.md, summarizes current state, identifies where to continue
+version: 1.2.0
 ---
 
 # Session Resume
@@ -20,11 +20,27 @@ Activate when:
 
 ### 1. Locate Project
 
-If project path provided, use it.
+**First, check the project registry:**
 
-Otherwise, ask:
+Use `Read` on `~/.claude/drupal-dev-framework/active_projects.json`
+
+If registry exists and has projects, show:
 ```
-Which project do you want to resume?
+## Registered Projects
+
+| # | Name | Phase | Last Accessed | Path |
+|---|------|-------|---------------|------|
+| 1 | {name} | Phase {N} | {date} | {path} |
+| 2 | {name} | Phase {N} | {date} | {path} |
+
+Enter number to resume, or 'new' for unregistered project:
+```
+
+If project path provided directly, use it.
+
+If registry doesn't exist or is empty:
+```
+No registered projects found.
 
 Enter the project path or name:
 ```
@@ -114,7 +130,13 @@ Load full context for this task? (yes/different task/overview first)
 
 If yes, invoke `task-context-loader` for that task.
 
-### 8. Set Up Session
+### 8. Update Registry
+
+Update the project's `lastAccessed` date in `~/.claude/drupal-dev-framework/active_projects.json`.
+
+Also update the `phase` field if it has changed based on phase detection.
+
+### 9. Set Up Session
 
 After user confirms direction:
 - Load relevant architecture files

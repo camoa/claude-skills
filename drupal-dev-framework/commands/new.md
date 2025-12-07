@@ -57,5 +57,4 @@ Now gathering requirements...
 ## Next Steps After Creation
 
 1. Answer requirements questions
-2. Run `/drupal-dev-framework:research <topic>` for Phase 1
-3. Run `/drupal-dev-framework:design` for Phase 2
+2. Run `/drupal-dev-framework:next` to get intelligent next action recommendation

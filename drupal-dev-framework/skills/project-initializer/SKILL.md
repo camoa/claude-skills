@@ -1,7 +1,7 @@
 ---
 name: project-initializer
-description: Use when starting a new development project - creates memory folder structure with project_state.md and architecture scaffolding
-version: 1.1.0
+description: Use when starting a new development project - creates memory folder structure with project_state.md, architecture scaffolding, and registers project
+version: 1.2.0
 ---
 
 # Project Initializer
@@ -106,11 +106,43 @@ Use `Write` tool:
 {To be designed in Phase 2}
 ```
 
-### 7. Invoke Requirements Gatherer
+### 7. Register Project
+
+Add project to the registry at `~/.claude/drupal-dev-framework/active_projects.json`.
+
+First, ensure the directory exists:
+```bash
+mkdir -p ~/.claude/drupal-dev-framework
+```
+
+Then read existing registry (or create new if doesn't exist) and add the project:
+
+**Registry Schema:**
+```json
+{
+  "version": "1.0",
+  "projects": [
+    {
+      "name": "{project_name}",
+      "path": "{full_path_to_project}",
+      "created": "{YYYY-MM-DD}",
+      "lastAccessed": "{YYYY-MM-DD}",
+      "phase": 1,
+      "status": "active"
+    }
+  ]
+}
+```
+
+Use `Read` to load existing registry, then `Write` to save updated version with new project appended.
+
+If registry doesn't exist, create it with just this project.
+
+### 8. Invoke Requirements Gatherer
 
 After structure is created, invoke `requirements-gatherer` skill to populate requirements.
 
-### 8. Confirm
+### 9. Confirm
 
 Show user:
 ```
@@ -124,6 +156,17 @@ Created:
 
 Next: Answer requirements questions to complete Phase 1 setup.
 ```
+
+### 10. After Requirements Gathered
+
+Once requirements-gatherer completes and user confirms, show:
+```
+Requirements gathering complete.
+
+Run `/drupal-dev-framework:next` to get your next recommended action.
+```
+
+Do NOT manually list commands like `/research` or `/design`. Always direct to `/next` for intelligent routing.
 
 ## Stop Points
 

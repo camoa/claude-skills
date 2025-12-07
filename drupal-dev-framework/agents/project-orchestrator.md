@@ -25,12 +25,35 @@ Coordinate the development workflow by:
 
 ## Process
 
-1. **Locate project** - Find project via user-provided path or project_state.md
-2. **Read state** - Load project_state.md and key files
+1. **Locate project** - Check registry at `~/.claude/drupal-dev-framework/active_projects.json`, or use user-provided path
+2. **Read state** - Load project_state.md and key files from the project's `path`
 3. **Detect phase** - Analyze folder structure to determine phase
 4. **Assess progress** - What's done, what's pending
 5. **Suggest actions** - Recommend next steps based on phase
-6. **Route** - Point to appropriate agent or skill
+6. **Update registry** - Update `lastAccessed` and `phase` in registry
+7. **Route** - Point to appropriate agent or skill
+
+## Project Registry
+
+The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all projects:
+
+```json
+{
+  "version": "1.0",
+  "projects": [
+    {
+      "name": "project_name",
+      "path": "/full/path/to/project/folder",
+      "created": "YYYY-MM-DD",
+      "lastAccessed": "YYYY-MM-DD",
+      "phase": 1,
+      "status": "active"
+    }
+  ]
+}
+```
+
+When listing projects, show registered projects first. If user provides unregistered path, offer to add it to registry.
 
 ## Phase Detection Logic
 

@@ -1,7 +1,8 @@
 ---
 name: architecture-validator
-description: Use when validating implementation against architecture - checks approach matches documented patterns, dependencies, and SOLID/DRY principles
-capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check"]
+description: Use when validating implementation against architecture - checks approach matches documented patterns, dependencies, architecture principles (Library-First, CLI-First), and SOLID/DRY principles
+capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles"]
+version: 1.1.0
 ---
 
 # Architecture Validator
@@ -35,6 +36,18 @@ Ensure implementation stays aligned with architecture by:
 
 ## Validation Checks
 
+### Architecture Principles (from Drupal Development Guide)
+
+#### Library-First Principle
+- [ ] Services defined in `src/` before any forms/controllers?
+- [ ] Core functionality usable without UI?
+- [ ] Pattern follows: Service → Form → Routing
+
+#### CLI-First Principle
+- [ ] Drush commands planned for key operations?
+- [ ] Automation-friendly design?
+- [ ] Not dependent on web UI for critical functions?
+
 ### Pattern Matching
 - [ ] Using the pattern specified in architecture
 - [ ] Following core/contrib reference implementation
@@ -46,11 +59,13 @@ Ensure implementation stays aligned with architecture by:
 - [ ] Using dependency injection, not static calls
 
 ### SOLID Principles
-- [ ] **S**ingle Responsibility - One reason to change
-- [ ] **O**pen/Closed - Open for extension, closed for modification
-- [ ] **L**iskov Substitution - Subtypes substitutable
-- [ ] **I**nterface Segregation - Specific interfaces
-- [ ] **D**ependency Inversion - Depend on abstractions
+| Principle | Check |
+|-----------|-------|
+| **S**ingle Responsibility | Each service has one purpose? |
+| **O**pen/Closed | Uses hooks/events for extension? |
+| **L**iskov Substitution | Interfaces properly implemented? |
+| **I**nterface Segregation | Lean service interfaces? |
+| **D**ependency Inversion | Uses DI, not `\Drupal::service()`? |
 
 ### DRY Check
 - [ ] Not duplicating logic that exists elsewhere
@@ -64,6 +79,10 @@ Ensure implementation stays aligned with architecture by:
 
 ### Status: APPROVED / NEEDS ADJUSTMENT
 
+### Architecture Principles
+- Library-First: PASS/FAIL - {reason}
+- CLI-First: PASS/FAIL - {reason}
+
 ### Pattern Check
 - Expected: ConfigFormBase
 - Proposed: ConfigFormBase
@@ -75,11 +94,13 @@ Ensure implementation stays aligned with architecture by:
 - Result: MISMATCH - database not in architecture
 
 ### SOLID Check
-- Single Responsibility: PASS
-- Open/Closed: PASS
-- Liskov Substitution: N/A
-- Interface Segregation: PASS
-- Dependency Inversion: PASS
+| Principle | Status | Notes |
+|-----------|--------|-------|
+| Single Responsibility | PASS | - |
+| Open/Closed | PASS | - |
+| Liskov Substitution | N/A | - |
+| Interface Segregation | PASS | - |
+| Dependency Inversion | PASS | - |
 
 ### DRY Check
 - Found similar logic in existing service X

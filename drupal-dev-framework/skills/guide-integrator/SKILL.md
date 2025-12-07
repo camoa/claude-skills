@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
-description: Use when designing features covered by existing guides - loads relevant guides and adds references to architecture (if guides are configured)
-version: 1.1.0
+description: Use when designing features covered by existing guides - auto-loads relevant guides based on keywords and adds references to architecture
+version: 1.2.0
 ---
 
 # Guide Integrator
@@ -15,6 +15,32 @@ Activate when:
 - User mentions a specific guide
 - Architecture drafting for specialized features
 - Auto-triggered by `architecture-drafter` agent
+
+## Auto-Trigger Rules
+
+Automatically load relevant guides when these keywords are detected in project requirements or architecture:
+
+| Keywords Detected | Guide to Load |
+|-------------------|---------------|
+| "ECA", "automation", "event", "workflow", "trigger" | `eca_development_guide.md` |
+| "form", "config form", "settings", "admin form" | `drupal_configuration_forms_guide.md` |
+| "entity", "field", "content type", "bundle", "storage" | `drupal_fields_entities_guide.md` |
+| "theme", "frontend", "CSS", "SCSS", "styling", "Bootstrap" | Bootstrap/Radix guides |
+| "SDC", "component", "single directory", "Twig component" | SDC-related guides |
+
+### When to Auto-Load
+
+1. **After `requirements-gatherer` completes** - Scan requirements for keywords, note applicable guides
+2. **During `architecture-drafter`** - Scan architecture decisions for keywords, load relevant guides
+3. **When user mentions any keyword** - Proactively suggest loading the relevant guide
+
+### Auto-Load Behavior
+
+When keywords are detected:
+1. Check if guides path is configured
+2. If yes, attempt to load matching guide
+3. If guide found, summarize key patterns relevant to current task
+4. Add reference to architecture file
 
 ## Workflow
 

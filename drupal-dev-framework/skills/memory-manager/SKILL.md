@@ -1,7 +1,7 @@
 ---
 name: memory-manager
-description: Use after completing any phase activity - updates project_state.md, ensures files are in correct locations, maintains lean memory
-version: 1.1.0
+description: Use after completing any phase activity - updates project_state.md, project registry, ensures files are in correct locations, maintains lean memory
+version: 1.2.0
 ---
 
 # Memory Manager
@@ -108,7 +108,25 @@ Found {count} empty/orphaned files:
 Delete these? (yes/no/review each)
 ```
 
-### 7. Report
+### 7. Update Project Registry
+
+Update the registry at `~/.claude/drupal-dev-framework/active_projects.json`:
+
+1. Read the registry file
+2. Find this project by path
+3. Update:
+   - `lastAccessed`: today's date
+   - `phase`: current detected phase
+   - `status`: "active" or "archived" if all tasks complete
+4. Write the updated registry
+
+If project not in registry, offer to add it:
+```
+This project is not in the registry.
+Add it for easier access next time? (yes/no)
+```
+
+### 8. Report
 
 Show summary:
 ```
@@ -125,6 +143,7 @@ Current state:
 - Tasks completed: {count}
 
 project_state.md updated.
+Registry updated.
 ```
 
 ## Lean Memory Principles

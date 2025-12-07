@@ -1,7 +1,7 @@
 ---
 name: requirements-gatherer
-description: Use when gathering project requirements - asks structured questions about scope, integrations, and constraints to populate project_state.md
-version: 1.1.0
+description: Use when gathering project requirements - asks structured questions about project type, scope, integrations, and constraints to populate project_state.md
+version: 1.2.0
 ---
 
 # Requirements Gatherer
@@ -28,8 +28,16 @@ Use `Read` to get `{project_path}/project_state.md`. Extract:
 
 Ask one category at a time. Wait for response before proceeding.
 
-**Category 1: Scope**
+**Category 1: Project Type & Scope**
 ```
+What type of project is this?
+- [ ] New Drupal module (starting from scratch)
+- [ ] Feature for existing module
+- [ ] Core issue/patch
+- [ ] Theme or sub-theme
+- [ ] Configuration/site building
+- [ ] Other (Claude Code plugin, documentation, etc.)
+
 What does this project include?
 - [ ] A single Drupal module
 - [ ] Multiple related modules
@@ -106,6 +114,9 @@ After all categories, use `Edit` tool to update the Requirements section:
 
 ```markdown
 ## Requirements
+
+### Project Type
+- {new module, existing feature, core issue, theme, config, other}
 
 ### Scope
 - {what project includes}
