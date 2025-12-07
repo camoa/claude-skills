@@ -72,28 +72,54 @@ The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all
 ```
 Requirements gathered?
 ├── NO → "Gather requirements first" → requirements-gatherer
-└── YES → Check tasks
+└── YES → Go to Step 2 (Task Selection)
 ```
 
-### Step 2: Check Tasks
+### Step 2: Task Selection (follows /start pattern)
+
+**Always scan `implementation_process/in_progress/` and present options:**
+
 ```
-Tasks defined?
-├── NO → "What task do you want to work on?" → Ask user
-└── YES → Check task states
+Use Glob to find: {project_path}/implementation_process/in_progress/*.md
+
+If tasks found:
+┌─────────────────────────────────────────────┐
+│ ## Tasks in Progress                        │
+│                                             │
+│ Found {N} task(s):                          │
+│                                             │
+│ 1. settings_form (Phase 2 - Architecture)   │
+│ 2. content_entity (Phase 1 - Research)      │
+│ 3. field_formatter (Phase 3 - Implementation)│
+│                                             │
+│ Which task do you want to work on?          │
+│ - Enter a number (1-3) to continue existing │
+│ - Enter a new task name to start new        │
+└─────────────────────────────────────────────┘
+
+If no tasks found:
+┌─────────────────────────────────────────────┐
+│ ## No Tasks Yet                             │
+│                                             │
+│ No tasks in implementation_process/in_progress/│
+│                                             │
+│ What task do you want to work on?           │
+│ Enter a task name (e.g., "settings_form")   │
+└─────────────────────────────────────────────┘
 ```
 
-### Step 3: Check Task States
+### Step 3: After User Selects Task
+
 ```
-Any task in progress?
-├── YES → Continue that task (check its phase)
-└── NO →
-    Queued tasks exist?
-    ├── YES → Start next queued task (Phase 1)
-    └── NO → "All tasks complete. Define new task or mark project done?"
+User selected existing task?
+├── YES → Load task file, detect phase, suggest command
+└── NO (new task name) →
+    Suggest: /drupal-dev-framework:research {task_name}
+    This creates task file and starts Phase 1
 ```
 
 ### Step 4: Task Phase Detection
-For the current task, check `implementation_process/in_progress/{task_name}.md`:
+For the selected task, check `implementation_process/in_progress/{task_name}.md`:
 
 | Task File Contains | Phase | Next Action |
 |-------------------|-------|-------------|
@@ -129,27 +155,43 @@ Phase: {1-Research / 2-Architecture / 3-Implementation}
 2. {Alternative 2}
 ```
 
-## Output When No Tasks Defined
+## Output: Task Selection
 
+### When Tasks Exist
 ```markdown
-## Project Status: {Project Name}
+## Project: {Project Name}
 
-### Requirements
-Complete ✓
+Requirements: Complete ✓
 
-### Tasks
-No tasks defined yet.
+## Tasks in Progress
 
-### Recommended Next Action
-**Action:** Define your first task
-**Question:** What feature or component do you want to work on first?
+Found 3 task(s) in implementation_process/in_progress/:
 
-Examples of tasks:
-- "Add settings form for API configuration"
-- "Create custom entity for storing templates"
-- "Build admin dashboard"
+1. settings_form (Phase 3 - Implementation, 3/5 done)
+2. content_entity (Phase 1 - Research)
+3. field_formatter (Phase 2 - Architecture)
 
-Enter task name or description:
+## Completed Tasks
+- ✅ user_service
+- ✅ config_schema
+
+Which task do you want to work on?
+- Enter a number (1-3) to continue an existing task
+- Enter a new task name to start something new
+```
+
+### When No Tasks Exist
+```markdown
+## Project: {Project Name}
+
+Requirements: Complete ✓
+
+## No Tasks Yet
+
+No tasks found in implementation_process/in_progress/
+
+What task do you want to work on?
+Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 ```
 
 ## Routing Table

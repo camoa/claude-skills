@@ -40,65 +40,116 @@ Get recommendation for what to do next based on project state.
 
 ## Decision Logic
 
-### Project Level
+### Step 1: Project Level
 1. **No requirements** → Gather requirements first
-2. **Requirements done, no tasks defined** → Ask user to define tasks
-3. **Tasks exist** → Check task states
+2. **Requirements done** → Go to Step 2 (Task Selection)
 
-### Task Level (each task has its own phase)
-| Task State | Next Action |
+### Step 2: Task Selection (like /start command)
+
+**Always list existing tasks and offer to create new:**
+
+```
+## Tasks in Progress
+
+Found {N} task(s) in implementation_process/in_progress/:
+
+1. settings_form (Phase 2 - Architecture)
+2. content_entity (Phase 1 - Research)
+3. field_formatter (Phase 3 - Implementation)
+
+Which task do you want to work on?
+- Enter a number (1-3) to continue an existing task
+- Enter a new task name to start something new
+```
+
+If no tasks exist:
+```
+## No Tasks Yet
+
+No tasks found in implementation_process/in_progress/
+
+What task do you want to work on?
+Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
+```
+
+### Step 3: Task Phase Action
+| Task Phase | Next Action |
 |------------|-------------|
-| No tasks defined | Ask: "What tasks do you want to work on?" |
-| Task in Phase 1 (Research) | Research for that task |
-| Task in Phase 2 (Architecture) | Design architecture for that task |
-| Task in Phase 3 (Implementation) | Implement that task |
-| Task complete | Pick next task or define new one |
-
-### Priority Order
-1. Complete current in-progress task (continue its phase)
-2. Start next queued task (begin Phase 1 for it)
-3. All tasks complete → Ask for new tasks or mark project done
+| New task (no file) | Create task file, start Phase 1: `/research <task>` |
+| Phase 1 (Research incomplete) | Continue research: `/research <task>` |
+| Phase 2 (Architecture incomplete) | Continue design: `/design <task>` |
+| Phase 3 (Implementation incomplete) | Continue implementation: `/implement <task>` |
+| All criteria complete | Complete task: `/complete <task>` |
 
 ## Examples
 
+### No Tasks Yet
 ```
 /drupal-dev-framework:next
 
 Project: my_module
-Requirements: Complete
-Active tasks: 0
+Requirements: Complete ✓
 
-Recommended: Define your first task
-Action: What feature or component do you want to work on first?
+## No Tasks Yet
 
-Examples of tasks:
-- "Add settings form for API configuration"
-- "Create custom entity for storing templates"
-- "Build admin dashboard"
+No tasks found in implementation_process/in_progress/
+
+What task do you want to work on?
+Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 ```
 
-```
-/drupal-dev-framework:next
-
-Project: my_module
-Current task: settings_form (Phase 2 - Architecture)
-
-Recommended: Complete architecture for settings_form
-Command: /drupal-dev-framework:design settings_form
-Reason: Task research complete, ready for architecture design.
-```
-
+### Multiple Tasks in Progress
 ```
 /drupal-dev-framework:next
 
 Project: my_module
-Current task: settings_form (Phase 3 - Implementation)
+Requirements: Complete ✓
+
+## Tasks in Progress
+
+Found 2 task(s) in implementation_process/in_progress/:
+
+1. settings_form (Phase 3 - Implementation, 3/5 criteria done)
+2. content_entity (Phase 1 - Research)
+
+Which task do you want to work on?
+- Enter 1 or 2 to continue an existing task
+- Enter a new task name to start something new
+```
+
+### User Selects Existing Task
+```
+User: 1
+
+Loading: settings_form (Phase 3 - Implementation)
+
+Progress: 3/5 acceptance criteria complete
+- [x] Form class created
+- [x] Config schema defined
+- [x] Unit tests pass
+- [ ] Form saves correctly
+- [ ] Integration test passes
 
 Recommended: Continue implementing settings_form
 Command: /drupal-dev-framework:implement settings_form
-Reason: Architecture complete, 2/5 acceptance criteria implemented.
+```
+
+### User Names New Task
+```
+User: admin_dashboard
+
+Creating new task: admin_dashboard
+
+Command: /drupal-dev-framework:research admin_dashboard
+This will:
+1. Create task file: implementation_process/in_progress/admin_dashboard.md
+2. Research existing solutions and patterns
+3. Populate the Research section
 ```
 
 ## Related Commands
 
 - `/drupal-dev-framework:status` - Full status overview
+- `/drupal-dev-framework:research <task>` - Start/continue Phase 1
+- `/drupal-dev-framework:design <task>` - Start/continue Phase 2
+- `/drupal-dev-framework:implement <task>` - Start/continue Phase 3
