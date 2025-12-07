@@ -25,5 +25,22 @@
     "./agents/contrib-researcher.md",
     "./agents/pattern-recommender.md",
     "./agents/project-orchestrator.md"
+  ],
+  "skills": [
+    "./skills/code-pattern-checker",
+    "./skills/component-designer",
+    "./skills/core-pattern-finder",
+    "./skills/diagram-generator",
+    "./skills/guide-integrator",
+    "./skills/guide-loader",
+    "./skills/implementation-task-creator",
+    "./skills/memory-manager",
+    "./skills/phase-detector",
+    "./skills/project-initializer",
+    "./skills/requirements-gatherer",
+    "./skills/session-resume",
+    "./skills/task-completer",
+    "./skills/task-context-loader",
+    "./skills/tdd-companion"
   ]
 }
