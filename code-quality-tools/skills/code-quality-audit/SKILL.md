@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when user asks to audit code quality, check test coverage, find SOLID violations, detect code duplication, setup quality tools, or run TDD workflows - provides step-by-step guidance for PHPStan, PHPMD, PHPCPD via DDEV with actionable recommendations
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Code Quality Audit
@@ -17,7 +17,8 @@ Use this skill when user says things like:
 - "Find SOLID violations" / "Run PHPStan" / "Check for complexity"
 - "Check for duplication" / "Find duplicate code" / "DRY check"
 - "Check [specific module] for issues"
-- "Add quality checks to CI"
+- "Add test scripts to composer" / "Add composer scripts" / "Setup composer quality scripts"
+- "Add quality checks to CI" / "Setup GitHub Actions"
 - "Generate quality report" / "Show me the audit report"
 
 ## Before You Start
@@ -157,7 +158,48 @@ ddev exec grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests
 2. Run all checks scoped to that path
 3. Save reports with module prefix: `.reports/{module_name}-*.json`
 
-## Operation 7: Setup CI Integration
+## Operation 7: Add Composer Scripts
+
+**Triggers**: "Add test scripts to composer", "Add composer scripts", "Setup composer quality scripts"
+
+1. Read existing `composer.json`
+2. Detect modules path (check `web/modules/custom` or `docroot/modules/custom`)
+3. Add scripts section (merge with existing if present):
+
+```json
+{
+  "scripts": {
+    "test": "phpunit",
+    "test:unit": "phpunit --testsuite unit",
+    "test:kernel": "phpunit --testsuite kernel",
+    "test:coverage": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text",
+    "test:coverage-html": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-html .reports/coverage",
+    "quality:phpstan": "phpstan analyse {modules_path}",
+    "quality:phpmd": "phpmd {modules_path} text phpmd.xml",
+    "quality:dry": "phpcpd {modules_path} --min-lines=10",
+    "quality:cs": "phpcs --standard=Drupal,DrupalPractice {modules_path}",
+    "quality:all": ["@quality:phpstan", "@quality:phpmd", "@quality:dry"],
+    "quality:fix": "phpcbf --standard=Drupal,DrupalPractice {modules_path}"
+  }
+}
+```
+
+4. Write updated `composer.json`
+5. Show usage examples:
+   ```bash
+   # Run all quality checks
+   ddev composer quality:all
+
+   # Tests with coverage
+   ddev composer test:coverage
+
+   # Auto-fix coding standards
+   ddev composer quality:fix
+   ```
+
+6. Explain CI usage: These scripts can be called directly in CI pipelines
+
+## Operation 8: Setup CI Integration
 
 **Triggers**: "Add to CI", "Setup GitHub Actions"
 
@@ -165,7 +207,7 @@ ddev exec grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests
 2. Write to `.github/workflows/quality.yml`
 3. Explain: Lint → Static Analysis → Tests → Coverage (fails <70%)
 
-## Operation 8: Generate Markdown Report
+## Operation 9: Generate Markdown Report
 
 **Triggers**: "Generate report", "Show quality report"
 

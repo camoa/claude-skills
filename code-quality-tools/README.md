@@ -21,6 +21,7 @@ Once installed, Claude handles these requests:
 | "Find SOLID violations" | PHPStan + PHPMD, saves `.reports/solid-report.json` |
 | "Check for duplication" | PHPCPD, saves `.reports/dry-report.json` |
 | "Check contentbench_organizations" | Targets specific module |
+| "Add test scripts to composer" | Adds quality/test scripts to `composer.json` |
 | "Add quality checks to CI" | Creates GitHub Actions workflow |
 | "Generate quality report" | Converts JSON to `.reports/audit-report.md` |
 

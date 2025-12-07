@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-06
+
+### Added
+- Operation 7: Add Composer Scripts - adds test/quality scripts to `composer.json`
+- New triggers: "Add test scripts to composer", "Add composer scripts", "Setup composer quality scripts"
+- Scripts include: test, test:unit, test:kernel, test:coverage, quality:phpstan, quality:phpmd, quality:dry, quality:cs, quality:all, quality:fix
+
+### Changed
+- Renumbered operations (CI Integration is now Operation 8, Markdown Report is Operation 9)
+- Now 9 operations total (was 8)
+
 ## [1.1.0] - 2025-12-06
 
 ### Added
