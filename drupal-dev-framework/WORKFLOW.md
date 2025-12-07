@@ -310,3 +310,115 @@ User: "1"
 5. **TDD in Phase 3** (test first, then implement)
 6. **User runs tests** (Claude suggests, user executes)
 7. **Memory provides context** (across sessions)
+
+---
+
+## Components by Phase
+
+This plugin includes skills and agents that activate automatically at each phase.
+
+### Step 0-1: Project Setup
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `project-orchestrator` | Agent | Central coordinator - routes to correct phase/command |
+| `project-initializer` | Skill | Creates project folder structure and memory files |
+| `requirements-gatherer` | Skill | Collects requirements across 7 categories |
+| `memory-manager` | Skill | Manages project memory files |
+| `session-resume` | Skill | Restores context when starting new session |
+
+### Step 2: Task Selection
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `phase-detector` | Skill | Analyzes task file to determine current phase |
+
+### Phase 1: Research
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `contrib-researcher` | Agent | Searches drupal.org and contrib modules |
+| `core-pattern-finder` | Skill | Finds patterns in Drupal core |
+
+### Phase 2: Architecture
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `architecture-drafter` | Agent | Designs task architecture |
+| `architecture-validator` | Agent | Validates against principles (SOLID, Library-First) |
+| `pattern-recommender` | Agent | Recommends Drupal patterns for use cases |
+| `guide-integrator` | Skill | Auto-loads relevant guides based on keywords |
+| `guide-loader` | Skill | Loads specific guide files |
+| `component-designer` | Skill | Designs individual components |
+| `diagram-generator` | Skill | Creates Mermaid diagrams for architecture |
+| `implementation-task-creator` | Skill | Breaks architecture into implementation tasks |
+
+### Phase 3: Implementation
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `task-context-loader` | Skill | Loads full context for implementation |
+| `tdd-companion` | Skill | Enforces Red-Green-Refactor TDD cycle |
+| `code-pattern-checker` | Skill | Validates CSS/SCSS (no @extend, !important, BEM) |
+
+### Task Completion
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `task-completer` | Skill | Verifies criteria, moves task to completed |
+
+---
+
+## Utility Commands
+
+These commands can be used anytime during development:
+
+| Command | Purpose | Uses |
+|---------|---------|------|
+| `/validate <task>` | Check implementation against architecture | `architecture-validator` |
+| `/pattern <use-case>` | Get pattern recommendations | `pattern-recommender` |
+| `/status [project]` | Full project and task overview | `project-orchestrator`, `phase-detector` |
+
+---
+
+## Component Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           COMPONENT ACTIVATION                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+/next (no project)
+     │
+     └──▶ project-orchestrator ──▶ memory-manager ──▶ List projects
+
+/new <project>
+     │
+     └──▶ project-initializer ──▶ requirements-gatherer ──▶ memory-manager
+
+/research <task>
+     │
+     └──▶ contrib-researcher ──▶ core-pattern-finder ──▶ memory-manager
+
+/design <task>
+     │
+     └──▶ architecture-drafter ──▶ guide-integrator ──▶ pattern-recommender
+                │
+                └──▶ component-designer ──▶ diagram-generator (optional)
+
+/implement <task>
+     │
+     └──▶ task-context-loader ──▶ tdd-companion ──▶ code-pattern-checker
+
+/complete <task>
+     │
+     └──▶ task-completer ──▶ memory-manager
+
+/validate <task>
+     │
+     └──▶ architecture-validator
+
+/pattern <use-case>
+     │
+     └──▶ pattern-recommender
+```
