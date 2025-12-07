@@ -68,7 +68,33 @@ The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all
 
 ## Decision Logic
 
-### Step 1: Check Project Requirements
+### Step 0: Project Selection (if no project specified)
+
+When invoked without a specific project:
+
+```
+Read registry: ~/.claude/drupal-dev-framework/active_projects.json
+
+Projects found?
+├── YES → List projects (sorted by lastAccessed)
+│         ┌─────────────────────────────────────────────┐
+│         │ ## Available Projects                       │
+│         │                                             │
+│         │ Found {N} project(s):                       │
+│         │                                             │
+│         │ 1. my_module (2025-12-06)                   │
+│         │    Path: /home/user/workspace/my_module     │
+│         │                                             │
+│         │ 2. another_project (2025-12-05)             │
+│         │    Path: /home/user/workspace/another       │
+│         │                                             │
+│         │ Which project? (enter number or "new")      │
+│         └─────────────────────────────────────────────┘
+│
+└── NO → "No projects found. Run /new <project-name>"
+```
+
+### Step 1: Check Project Requirements (after project selected)
 ```
 Requirements gathered?
 ├── NO → "Gather requirements first" → requirements-gatherer

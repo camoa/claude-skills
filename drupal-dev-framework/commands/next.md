@@ -40,7 +40,44 @@ Get recommendation for what to do next based on project state.
 
 ## Decision Logic
 
-### Step 1: Project Level
+### Step 0: Project Selection (if no project specified)
+
+When `/next` is called without a project name:
+
+1. Read registry at `~/.claude/drupal-dev-framework/active_projects.json`
+2. List all projects (sorted by lastAccessed, newest first)
+3. Ask user to choose
+
+```
+## Available Projects
+
+Found {N} project(s) in registry:
+
+1. my_module (last accessed: 2025-12-06)
+   Path: /home/user/workspace/my_module
+
+2. another_project (last accessed: 2025-12-05)
+   Path: /home/user/workspace/another_project
+
+3. old_project (last accessed: 2025-11-20)
+   Path: /home/user/workspace/old_project
+
+Which project do you want to work on?
+- Enter a number (1-3) to select a project
+- Enter "new" to start a new project
+```
+
+If no projects in registry:
+```
+## No Projects Found
+
+No projects registered yet.
+
+Run: /drupal-dev-framework:new <project-name>
+To start a new project.
+```
+
+### Step 1: Project Level (after project selected)
 1. **No requirements** → Gather requirements first
 2. **Requirements done** → Go to Step 2 (Task Selection)
 
