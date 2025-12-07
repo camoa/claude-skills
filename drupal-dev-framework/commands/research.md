@@ -1,68 +1,94 @@
 ---
-description: Research a topic and store findings in project memory
+description: Research a task topic and store findings in task file
 allowed-tools: Read, Write, WebSearch, WebFetch, Grep, Glob, Task
-argument-hint: <topic>
+argument-hint: <task-name>
 ---
 
 # Research
 
-Research existing solutions for a specific topic.
+Research existing solutions for a specific task (Phase 1 of a task).
 
 ## Usage
 
 ```
-/drupal-dev-framework:research <topic>
+/drupal-dev-framework:research <task-name>
 ```
 
 ## What This Does
 
-1. Invokes `contrib-researcher` agent for drupal.org/contrib search
-2. Invokes `core-pattern-finder` skill for core examples
-3. Stores findings in `architecture/research_{topic}.md`
-4. Updates `project_state.md` with research summary
+1. Creates/updates task file in `implementation_process/in_progress/{task_name}.md`
+2. Invokes `contrib-researcher` agent for drupal.org/contrib search
+3. Invokes `core-pattern-finder` skill for core examples
+4. Stores findings in the task file's Research section
+5. Updates `project_state.md` with current task
+
+## Task-Based Workflow
+
+**This command operates on a TASK, not the project.**
+
+Each task goes through:
+1. **Research** (this command) → Find patterns, existing solutions
+2. **Architecture** (`/design`) → Design the approach
+3. **Implementation** (`/implement`) → Build with TDD
 
 ## Examples
 
 ```
-/drupal-dev-framework:research workflow automation
-/drupal-dev-framework:research content moderation
-/drupal-dev-framework:research custom field types
-/drupal-dev-framework:research entity references
+/drupal-dev-framework:research settings_form
+/drupal-dev-framework:research content_entity
+/drupal-dev-framework:research field_formatter
 ```
 
 ## Output
 
-Creates `{project_path}/architecture/research_{topic}.md`:
+Creates/updates `implementation_process/in_progress/{task_name}.md`:
 
 ```markdown
-# Research: {topic}
+# Task: {task_name}
 
-## Problem Statement
+**Created:** {date}
+**Phase:** 1 - Research
+**Status:** In Progress
+
+## Description
+{What this task accomplishes}
+
+## Research
+
+### Problem Statement
 What we're trying to solve.
 
-## Contrib Modules Found
-| Module | Maintainers | Usage | Fit |
-|--------|-------------|-------|-----|
+### Existing Solutions
+| Solution | Type | Fit | Notes |
+|----------|------|-----|-------|
+| {module/pattern} | Contrib/Core | Good/Partial/Poor | {notes} |
 
-## Core Patterns Found
+### Core Patterns Found
 | Pattern | Location | Applicability |
 |---------|----------|---------------|
+| {pattern} | {path} | {notes} |
 
-## Recommendation
+### Recommendation
 Use / Extend / Build from scratch
 
-## Key Patterns to Apply
-- Pattern 1
-- Pattern 2
+### Key Patterns to Apply
+- Pattern 1: {description}
+- Pattern 2: {description}
+
+## Architecture
+{To be completed in Phase 2}
+
+## Implementation
+{To be completed in Phase 3}
 ```
-
-## Phase
-
-This is a **Phase 1** command. Use during Research phase.
 
 ## Next Steps
 
-After research is complete:
+After research is complete for this task:
 1. Review findings
-2. Make decision on approach
-3. Move to Phase 2: `/drupal-dev-framework:design`
+2. Move to Phase 2: `/drupal-dev-framework:design {task_name}`
+
+## Related Commands
+
+- `/drupal-dev-framework:design <task>` - Design architecture (Phase 2)
+- `/drupal-dev-framework:next` - See recommended next action

@@ -1,73 +1,122 @@
 ---
-description: Design architecture or a specific component
+description: Design architecture for a specific task
 allowed-tools: Read, Write, Glob, Grep, Task
-argument-hint: [component-name]
+argument-hint: <task-name>
 ---
 
 # Design
 
-Design project architecture or a specific component.
+Design architecture for a specific task (Phase 2 of a task).
 
 ## Usage
 
 ```
-/drupal-dev-framework:design              # Design overall architecture
-/drupal-dev-framework:design service      # Design specific component
-/drupal-dev-framework:design form         # Design specific component
+/drupal-dev-framework:design <task-name>
 ```
 
 ## What This Does
 
-### Without Arguments (Overall Architecture)
-1. Invokes `architecture-drafter` agent
-2. Reviews research files
-3. Creates/updates `architecture/main.md`
-4. Asks clarifying questions
-5. Invokes `guide-integrator` for relevant guides
+1. Loads task file from `implementation_process/in_progress/{task_name}.md`
+2. Reviews research findings in the task file
+3. Invokes `architecture-drafter` agent
+4. Invokes `guide-integrator` for relevant guides
+5. Updates task file's Architecture section
+6. Optionally creates component file in `architecture/{component}.md`
 
-### With Component Argument
-1. Invokes `component-designer` skill
-2. Creates `architecture/{component}.md`
-3. References patterns from core/contrib
-4. Defines interface and dependencies
+## Task-Based Workflow
+
+**This command operates on a TASK, not the project.**
+
+Each task goes through:
+1. **Research** (`/research`) → Find patterns, existing solutions
+2. **Architecture** (this command) → Design the approach
+3. **Implementation** (`/implement`) → Build with TDD
+
+## Prerequisites
+
+- Task must have completed Research phase
+- Task file must exist in `implementation_process/in_progress/`
+
+## Examples
+
+```
+/drupal-dev-framework:design settings_form
+/drupal-dev-framework:design content_entity
+/drupal-dev-framework:design field_formatter
+```
 
 ## Output
 
-### Overall Architecture (`architecture/main.md`)
-```markdown
-# {Project} Architecture
+Updates task file's Architecture section:
 
-## Overview
-## Components
-## Data Flow
-## Pattern References
-## Implementation Order
+```markdown
+## Architecture
+
+### Approach
+{High-level approach based on research}
+
+### Components
+| Component | Type | Purpose |
+|-----------|------|---------|
+| {name} | Service/Form/Entity/etc | {purpose} |
+
+### Dependencies
+- {service}: {why needed}
+- {module}: {why needed}
+
+### Pattern Reference
+Based on: `{core/contrib path}`
+
+### Interface
+```php
+// Key methods/hooks
 ```
 
-### Component Design (`architecture/{component}.md`)
+### Data Flow
+{How data moves through the component}
+
+### Acceptance Criteria
+- [ ] {Criterion 1}
+- [ ] {Criterion 2}
+- [ ] {Criterion 3}
+```
+
+## Component Architecture Files
+
+For complex tasks, also creates `architecture/{component}.md`:
+
 ```markdown
 # Component: {Name}
 
 ## Type
+{Service / Form / Entity / Controller / etc}
+
 ## Purpose
+{What this component does}
+
 ## Interface
+{Public methods and their signatures}
+
 ## Dependencies
+{Services and modules required}
+
 ## Pattern Reference
+{Core/contrib example to follow}
+
 ## Acceptance Criteria
+{List of criteria for completion}
 ```
-
-## Phase
-
-This is a **Phase 2** command. Use after Research is complete.
-
-## Related Commands
-
-- `/drupal-dev-framework:pattern <use-case>` - Get pattern recommendations
-- `/drupal-dev-framework:validate` - Validate design before implementation
 
 ## Next Steps
 
-After architecture is complete:
-1. Review all component designs
-2. Validate with `/drupal-dev-framework:validate`
-3. Move to Phase 3: `/drupal-dev-framework:implement <task>`
+After architecture is complete for this task:
+1. Review the design
+2. Validate with `/drupal-dev-framework:validate {task_name}`
+3. Move to Phase 3: `/drupal-dev-framework:implement {task_name}`
+
+## Related Commands
+
+- `/drupal-dev-framework:research <task>` - Research (Phase 1)
+- `/drupal-dev-framework:implement <task>` - Implementation (Phase 3)
+- `/drupal-dev-framework:pattern <use-case>` - Get pattern recommendations
+- `/drupal-dev-framework:validate <task>` - Validate design

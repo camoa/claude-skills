@@ -1,20 +1,34 @@
 ---
 name: project-orchestrator
-description: Use when checking project status or deciding next steps - reads memory files, detects phase, suggests actions, routes to appropriate agents/skills
-capabilities: ["project-status", "phase-detection", "workflow-routing", "next-action-suggestion"]
+description: Use when checking project status or deciding next steps - reads memory files, manages tasks, suggests actions, routes to appropriate agents/skills
+capabilities: ["project-status", "task-management", "workflow-routing", "next-action-suggestion"]
+version: 1.2.0
 ---
 
 # Project Orchestrator
 
-Central coordinator agent for managing project state and workflow progression.
+Central coordinator agent for managing project state and task workflow progression.
 
 ## Purpose
 
 Coordinate the development workflow by:
 - Reading project memory files
-- Detecting current phase
+- Managing tasks (each task has its own 3-phase cycle)
 - Suggesting appropriate next actions
 - Routing to correct agents/skills
+
+## Key Concept: Task-Based Phases
+
+**Projects contain tasks. Each TASK goes through 3 phases, not the project itself.**
+
+```
+Project
+├── Requirements (project-level, gathered once)
+└── Tasks (each has its own phases)
+    ├── Task 1: Phase 1 → Phase 2 → Phase 3 → Complete
+    ├── Task 2: Phase 1 → Phase 2 → Phase 3 → Complete
+    └── Task 3: Phase 1 → Phase 2 → Phase 3 → Complete
+```
 
 ## When to Invoke
 
@@ -25,12 +39,12 @@ Coordinate the development workflow by:
 
 ## Process
 
-1. **Locate project** - Check registry at `~/.claude/drupal-dev-framework/active_projects.json`, or use user-provided path
-2. **Read state** - Load project_state.md and key files from the project's `path`
-3. **Detect phase** - Analyze folder structure to determine phase
-4. **Assess progress** - What's done, what's pending
-5. **Suggest actions** - Recommend next steps based on phase
-6. **Update registry** - Update `lastAccessed` and `phase` in registry
+1. **Locate project** - Check registry at `~/.claude/drupal-dev-framework/active_projects.json`
+2. **Read state** - Load project_state.md from the project's `path`
+3. **Check requirements** - Are project requirements gathered?
+4. **Check tasks** - Are there defined tasks? What's their status?
+5. **Suggest actions** - Based on project and task state
+6. **Update registry** - Update `lastAccessed` in registry
 7. **Route** - Point to appropriate agent or skill
 
 ## Project Registry
@@ -46,84 +60,113 @@ The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all
       "path": "/full/path/to/project/folder",
       "created": "YYYY-MM-DD",
       "lastAccessed": "YYYY-MM-DD",
-      "phase": 1,
       "status": "active"
     }
   ]
 }
 ```
 
-When listing projects, show registered projects first. If user provides unregistered path, offer to add it to registry.
+## Decision Logic
 
-## Phase Detection Logic
+### Step 1: Check Project Requirements
+```
+Requirements gathered?
+├── NO → "Gather requirements first" → requirements-gatherer
+└── YES → Check tasks
+```
 
-### Phase 1: Research
-Indicators:
-- Only basic project_state.md exists
-- architecture/main.md is minimal or empty
-- No research_*.md files yet
+### Step 2: Check Tasks
+```
+Tasks defined?
+├── NO → "What task do you want to work on?" → Ask user
+└── YES → Check task states
+```
 
-Next actions: Run research, gather requirements
+### Step 3: Check Task States
+```
+Any task in progress?
+├── YES → Continue that task (check its phase)
+└── NO →
+    Queued tasks exist?
+    ├── YES → Start next queued task (Phase 1)
+    └── NO → "All tasks complete. Define new task or mark project done?"
+```
 
-### Phase 2: Architecture
-Indicators:
-- architecture/main.md has component breakdown
-- Research files exist
-- No implementation_process/ tasks yet
+### Step 4: Task Phase Detection
+For the current task, check `implementation_process/in_progress/{task_name}.md`:
 
-Next actions: Complete architecture, validate design
-
-### Phase 3: Implementation
-Indicators:
-- architecture/ is complete
-- implementation_process/ has task files
-- May have in_progress/ or completed/ tasks
-
-Next actions: Continue current task, pick next task
+| Task File Contains | Phase | Next Action |
+|-------------------|-------|-------------|
+| Only task description | Phase 1 - Research | `/research {task}` |
+| Research section complete | Phase 2 - Architecture | `/design {task}` |
+| Architecture section complete | Phase 3 - Implementation | `/implement {task}` |
+| Implementation complete | Done | `/complete {task}` |
 
 ## Output Format
 
 ```markdown
 ## Project Status: {Project Name}
 
-### Current Phase: {1/2/3} - {Research/Architecture/Implementation}
+### Requirements
+{Complete / Not gathered}
 
-### Evidence
-- project_state.md: {exists/missing}
-- architecture/main.md: {complete/partial/empty}
-- Research files: {count} found
-- Implementation tasks: {in_progress}/{completed}
+### Tasks
+| Task | Phase | Status |
+|------|-------|--------|
+| {task_name} | {1/2/3} | {in_progress/queued/complete} |
 
 ### Current Focus
-{What's currently being worked on}
+Task: {task_name}
+Phase: {1-Research / 2-Architecture / 3-Implementation}
 
-### Progress Summary
-- Phase 1: {Complete/In Progress/Not Started}
-- Phase 2: {Complete/In Progress/Not Started}
-- Phase 3: {Complete/In Progress/Not Started}
+### Recommended Next Action
+**Action:** {What to do}
+**Command:** {Command to run}
+**Reason:** {Why this is the priority}
 
-### Recommended Next Actions
-1. {Action 1} - Use: {agent/skill/command}
-2. {Action 2} - Use: {agent/skill/command}
-3. {Action 3} - Use: {agent/skill/command}
+### Alternative Actions
+1. {Alternative 1}
+2. {Alternative 2}
+```
 
-### Blockers (if any)
-- {Blocker description}
+## Output When No Tasks Defined
+
+```markdown
+## Project Status: {Project Name}
+
+### Requirements
+Complete ✓
+
+### Tasks
+No tasks defined yet.
+
+### Recommended Next Action
+**Action:** Define your first task
+**Question:** What feature or component do you want to work on first?
+
+Examples of tasks:
+- "Add settings form for API configuration"
+- "Create custom entity for storing templates"
+- "Build admin dashboard"
+
+Enter task name or description:
 ```
 
 ## Routing Table
 
 | Situation | Route To |
 |-----------|----------|
-| Need to research contrib | `contrib-researcher` agent |
-| Need to design architecture | `architecture-drafter` agent |
-| Need pattern guidance | `pattern-recommender` agent |
-| Ready to implement | `task-context-loader` skill |
+| No requirements | `requirements-gatherer` skill |
+| No tasks defined | Ask user for task |
+| Task needs research | `contrib-researcher` agent |
+| Task needs architecture | `architecture-drafter` agent |
+| Task needs implementation | `task-context-loader` skill |
 | Task complete | `task-completer` skill |
-| Resuming session | `session-resume` skill |
+| Need pattern guidance | `pattern-recommender` agent |
 
 ## Human Control Points
 
-- Developer chooses which suggested action to take
-- Developer can override phase detection
-- Developer decides when to advance phases
+- Developer defines what tasks to work on
+- Developer chooses which task to start next
+- Developer decides when a task phase is complete
+- Developer can skip phases if appropriate

@@ -1,12 +1,12 @@
 ---
-description: Show current project state and phase
+description: Show current project state and task progress
 allowed-tools: Read, Glob
 argument-hint: [project-name]
 ---
 
 # Status
 
-Show current project status, phase, and progress.
+Show current project status and task progress.
 
 ## Usage
 
@@ -17,31 +17,35 @@ Show current project status, phase, and progress.
 
 ## What This Does
 
-1. Invokes `project-orchestrator` agent
-2. Reads project memory files
-3. Invokes `phase-detector` skill
-4. Presents comprehensive status
+1. Checks project registry at `~/.claude/drupal-dev-framework/active_projects.json`
+2. Loads `project_state.md` from project path
+3. Scans `implementation_process/` for task files
+4. Invokes `phase-detector` for each task
+5. Presents comprehensive status
 
 ## Output Format
 
 ```markdown
 ## Project Status: {Project Name}
 
-### Current Phase: {1/2/3} - {Research/Architecture/Implementation}
+### Requirements
+{Complete / Not gathered}
 
-### Progress Summary
-| Phase | Status | Details |
-|-------|--------|---------|
-| Research | Complete | 3 research files |
-| Architecture | In Progress | 2/4 components designed |
-| Implementation | Not Started | 0 tasks |
+### Tasks Summary
+| Task | Phase | Status | Next Action |
+|------|-------|--------|-------------|
+| settings_form | 3 - Implementation | In Progress | Continue implementation |
+| content_entity | 2 - Architecture | In Progress | Complete design |
+| field_formatter | 0 - Not Started | Queued | Start research |
 
 ### Current Focus
-{What's currently being worked on}
+Task: {current_task_name}
+Phase: {1-Research / 2-Architecture / 3-Implementation}
+File: `implementation_process/in_progress/{task}.md`
 
-### Recent Activity
-- {Date}: {Activity}
-- {Date}: {Activity}
+### Completed Tasks
+- ✅ {task_name} - {completion date}
+- ✅ {task_name} - {completion date}
 
 ### Key Decisions
 - {Decision 1}
@@ -53,25 +57,46 @@ Show current project status, phase, and progress.
 ### Files
 | Location | Count |
 |----------|-------|
-| architecture/ | 4 |
-| in_progress/ | 1 |
-| completed/ | 2 |
+| architecture/ | {N} |
+| in_progress/ | {N} |
+| completed/ | {N} |
 ```
 
 ## Quick Status
 
-For a quick summary without full details, the output starts with:
+For projects with active tasks, starts with:
 
 ```
-{Project}: Phase {N} - {status}
+{Project}: {N} tasks in progress, {M} completed
+Current: {task_name} (Phase {N})
+```
+
+## No Tasks State
+
+When requirements are complete but no tasks defined:
+
+```markdown
+## Project Status: {Project Name}
+
+### Requirements
+Complete ✓
+
+### Tasks
+No tasks defined yet.
+
+### Next Action
+Define your first task. What feature or component do you want to work on?
 ```
 
 ## Finding Projects
 
-If no project specified and none detected:
-- Asks user to provide project path
-- Asks which one to check
+If no project specified:
+1. Checks registry for active projects
+2. If multiple, lists them for selection
+3. If none, asks for project path
 
 ## Related Commands
 
-- `/drupal-dev-framework:next` - Suggest next action
+- `/drupal-dev-framework:next` - Get recommended next action
+- `/drupal-dev-framework:research <task>` - Start research for a task
+- `/drupal-dev-framework:implement <task>` - Continue implementation

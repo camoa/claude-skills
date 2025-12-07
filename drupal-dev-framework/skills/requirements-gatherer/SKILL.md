@@ -146,7 +146,7 @@ After all categories, use `Edit` tool to update the Requirements section:
 - {questions marked as "not sure yet"}
 ```
 
-### 5. Confirm
+### 5. Confirm Requirements
 
 Show summary to user:
 ```
@@ -162,9 +162,34 @@ Does this look complete? (yes/no/add more)
 
 If "add more", ask what category to expand.
 
+### 6. Transition to Task Definition
+
+After user confirms requirements are complete:
+
+```
+Requirements complete!
+
+Now let's define your first task. What feature or component do you want to work on first?
+
+Examples:
+- "Add settings form for API configuration"
+- "Create custom entity for storing data"
+- "Build admin dashboard"
+
+Each task will go through:
+1. Research (understand & find patterns)
+2. Architecture (design the approach)
+3. Implementation (build with TDD)
+
+Enter your first task:
+```
+
+**IMPORTANT:** Do NOT suggest `/research` or `/design` at the project level. Tasks are what go through phases, not the project.
+
 ## Stop Points
 
 STOP and wait for user after:
 - Each category question
 - Showing summary for confirmation
+- Asking for first task
 - User says "add more"

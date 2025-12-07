@@ -71,7 +71,6 @@ Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 # {Project Name}
 
 **Created:** {YYYY-MM-DD}
-**Phase:** 1 - Research
 **Status:** Initializing
 **Path:** {full_path_to_project_folder}
 
@@ -85,17 +84,28 @@ This project includes:
 ## Requirements
 {Populated by requirements-gatherer}
 
+## Current Implementation Task
+Working on: None - define tasks after requirements are gathered
+File: -
+
+## Up Next
+Queued: {Tasks to work on after current task}
+
+## Completed Implementation Tasks
+{Empty initially}
+
 ## Key Decisions
 {Empty initially}
 
 ## Current Focus
 Initial setup - gathering requirements
-
-## Next Steps
-1. Complete requirements gathering
-2. Research existing solutions
-3. Begin architecture design
 ```
+
+**Notes:**
+- The project does NOT have a phase. Each TASK has its own phase (Research → Architecture → Implementation)
+- Multiple tasks can be in `implementation_process/in_progress/` simultaneously
+- Task files in `in_progress/` contain the task's current phase and progress
+- Move completed task files to `implementation_process/completed/`
 
 ### 6. Create Empty architecture/main.md
 
