@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-12-06
+
+### Added
+- WORKFLOW.md with complete workflow documentation
+- Step 0 (Project Selection) - lists projects from registry when `/next` called without argument
+- Step 2 (Task Selection) - lists existing tasks and offers to create new (follows `/start` pattern)
+- Components by Phase documentation showing all 15 skills and 5 agents
+- Component activation flow diagram
+
+### Changed
+- `/next` command now follows original guide's `/start` pattern:
+  1. Lists projects if none specified
+  2. Lists tasks in `in_progress/` after project selected
+  3. User picks existing task OR enters new name
+- project-orchestrator updated with Step 0 (project selection) and Step 2 (task selection)
+
 ## [1.2.0] - 2025-12-06
 
 ### Changed
