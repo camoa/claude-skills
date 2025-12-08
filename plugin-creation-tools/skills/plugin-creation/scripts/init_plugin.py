@@ -105,6 +105,17 @@ Use this agent when:
 HOOKS_TEMPLATE = """{
   "description": "Plugin hooks for automation",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup-output.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -116,19 +127,72 @@ HOOKS_TEMPLATE = """{
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
 """
 
+SETUP_OUTPUT_SCRIPT = """#!/bin/bash
+# SessionStart hook - Create output directories and set env vars
+set -e
+
+OUTPUT_DIR="${CLAUDE_PROJECT_DIR}/claude-outputs"
+
+# Create directories
+mkdir -p "${OUTPUT_DIR}/logs"
+mkdir -p "${OUTPUT_DIR}/artifacts"
+mkdir -p "${OUTPUT_DIR}/temp"
+
+# Persist environment variables for session
+if [ -n "${CLAUDE_ENV_FILE}" ]; then
+  cat >> "${CLAUDE_ENV_FILE}" <<EOF
+export PLUGIN_OUTPUT_DIR="${OUTPUT_DIR}"
+export PLUGIN_LOG_FILE="${OUTPUT_DIR}/logs/session.log"
+EOF
+fi
+
+echo "[$(date)] Output initialized at ${OUTPUT_DIR}" >> "${OUTPUT_DIR}/logs/setup.log"
+exit 0
+"""
+
+CLEANUP_SCRIPT = """#!/bin/bash
+# SessionEnd hook - Clean up temporary files
+OUTPUT_DIR="${PLUGIN_OUTPUT_DIR:-${CLAUDE_PROJECT_DIR}/claude-outputs}"
+
+# Remove temp files
+rm -rf "${OUTPUT_DIR}/temp/"* 2>/dev/null || true
+
+# Archive session log if exists
+SESSION_LOG="${OUTPUT_DIR}/logs/session.log"
+if [ -f "$SESSION_LOG" ] && [ -s "$SESSION_LOG" ]; then
+  ARCHIVE_NAME="session-$(date +%Y%m%d-%H%M%S).log"
+  mv "$SESSION_LOG" "${OUTPUT_DIR}/logs/${ARCHIVE_NAME}"
+fi
+
+exit 0
+"""
+
 HOOK_SCRIPT_TEMPLATE = """#!/bin/bash
-# Example hook script
-# Triggered after Write or Edit operations
+# PostToolUse hook - Triggered after Write or Edit operations
 
 # Access tool information via stdin (JSON)
 # input=$(cat)
 
-echo "Hook executed successfully"
+# Example: Log the operation
+OUTPUT_DIR="${PLUGIN_OUTPUT_DIR:-./claude-outputs}"
+echo "[$(date)] PostToolUse hook executed" >> "${OUTPUT_DIR}/logs/operations.log"
+
 exit 0
 """
 
@@ -165,6 +229,23 @@ Brief description of what this plugin does.
 ## Configuration
 
 [Any configuration options]
+
+## Output
+
+If hooks are enabled, outputs are written to `claude-outputs/`:
+
+```
+claude-outputs/
+├── logs/        # Session and operation logs
+├── artifacts/   # Generated files
+└── temp/        # Temporary files (cleaned on session end)
+```
+
+Add to `.gitignore`:
+```
+claude-outputs/
+.claude/settings.local.json
+```
 """
 
 
@@ -284,11 +365,27 @@ def init_plugin(plugin_name, path, components=None):
 
             scripts_dir = plugin_dir / 'scripts'
             scripts_dir.mkdir(exist_ok=True)
+
+            # SessionStart - output setup
+            setup_script = scripts_dir / 'setup-output.sh'
+            setup_script.write_text(SETUP_OUTPUT_SCRIPT)
+            setup_script.chmod(0o755)
+            print("Created scripts/setup-output.sh")
+
+            # PostToolUse - example hook
             hook_script = scripts_dir / 'example-hook.sh'
             hook_script.write_text(HOOK_SCRIPT_TEMPLATE)
             hook_script.chmod(0o755)
             print("Created scripts/example-hook.sh")
-            component_list.append("- **Hooks**: PostToolUse (Write|Edit)")
+
+            # SessionEnd - cleanup
+            cleanup_script = scripts_dir / 'cleanup.sh'
+            cleanup_script.write_text(CLEANUP_SCRIPT)
+            cleanup_script.chmod(0o755)
+            print("Created scripts/cleanup.sh")
+
+            component_list.append("- **Hooks**: SessionStart, PostToolUse, SessionEnd")
+            component_list.append("- **Output**: `claude-outputs/` directory (logs, artifacts, temp)")
         except Exception as e:
             print(f"Error creating hooks: {e}")
 
