@@ -18,11 +18,37 @@ Create branded visual content (presentations, LinkedIn carousels) with consisten
 
 ## Project Detection
 
-Before ANY operation:
+Before ANY operation, find the PROJECT_PATH using this search order:
 
-1. Check if current directory contains `brand-philosophy.md`
-2. If YES → Load brand philosophy, proceed with requested operation
-3. If NO → Direct user to run `/brand` or `/brand-init` first
+1. **Current directory** - Check if `./brand-philosophy.md` exists
+2. **Parent directory** - Check if `../brand-philosophy.md` exists
+3. **Subdirectories** - Use `find . -maxdepth 2 -name "brand-philosophy.md"` to find nearby projects
+4. **If multiple found** - Ask user which project to use
+5. **If none found** - Direct user to run `/brand-init` first
+
+**Once PROJECT_PATH is set**, the folder structure is:
+```
+{PROJECT_PATH}/
+├── brand-philosophy.md          # Always exists
+├── templates/
+│   ├── presentations/
+│   │   └── {template-name}/
+│   │       ├── template.md
+│   │       ├── canvas-philosophy.md
+│   │       └── sample.pptx
+│   └── carousels/
+│       └── {template-name}/
+│           ├── template.md
+│           ├── canvas-philosophy.md
+│           └── sample.pdf
+├── presentations/               # Output folder
+├── carousels/                   # Output folder
+└── assets/                      # Brand assets
+```
+
+**Finding templates:**
+- Presentations: `find {PROJECT_PATH}/templates/presentations -name "template.md"`
+- Carousels: `find {PROJECT_PATH}/templates/carousels -name "template.md"`
 
 ## Three-Layer System
 

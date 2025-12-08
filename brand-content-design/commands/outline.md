@@ -16,16 +16,25 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 
 ## Workflow
 
-1. **Check for template argument**
-   - If `$ARGUMENTS` provided, use as template name
-   - If not provided, continue to step 2
+1. **Find project (PROJECT_PATH)**
+   Search in this order:
+   - Check `./brand-philosophy.md` (current directory)
+   - Check `../brand-philosophy.md` (parent directory)
+   - Run `find . -maxdepth 2 -name "brand-philosophy.md"` to find nearby
+   - If multiple found, ask user which project
+   - If none found, tell user to run `/brand-init` first and stop
+   - **Set PROJECT_PATH** = directory containing brand-philosophy.md
 
-2. **Find all available templates**
-   - Glob `templates/presentations/*/template.md` for presentation templates
-   - Glob `templates/carousels/*/template.md` for carousel templates
+2. **Check for template argument**
+   - If `$ARGUMENTS` provided, use as template name
+   - If not provided, continue to step 3
+
+3. **Find all available templates**
+   - Run `find {PROJECT_PATH}/templates/presentations -name "template.md" 2>/dev/null`
+   - Run `find {PROJECT_PATH}/templates/carousels -name "template.md" 2>/dev/null`
    - Build list with type indicator: "presentation: {name}" or "carousel: {name}"
 
-3. **Ask user to select template**
+4. **Ask user to select template**
    - If argument was provided, search for it in both presentations and carousels
    - If found in only one location, use that
    - If found in both, ask user which type

@@ -14,15 +14,19 @@ Create a presentation from an existing template with user-provided content.
 
 ## Workflow
 
-1. **Verify project**
-   - Check for brand-philosophy.md in current directory
-   - If not found, check if `/brand` has set an active project path
-   - If no project found, tell user to run `/brand` first and stop
-   - Load brand philosophy
-   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
+1. **Find project (PROJECT_PATH)**
+   Search in this order:
+   - Check `./brand-philosophy.md` (current directory)
+   - Check `../brand-philosophy.md` (parent directory)
+   - Run `find . -maxdepth 2 -name "brand-philosophy.md"` to find nearby
+   - If multiple found, ask user which project
+   - If none found, tell user to run `/brand-init` first and stop
+   - **Set PROJECT_PATH** = directory containing brand-philosophy.md
+   - Load brand-philosophy.md
 
-2. **List available templates**
-   - Glob: `{PROJECT_PATH}/templates/presentations/*/template.md`
+2. **Find available templates**
+   - Run `find {PROJECT_PATH}/templates/presentations -name "template.md" 2>/dev/null`
+   - Parse results to get template names (parent folder name)
    - If none found: Tell user to run `/template-presentation` first and stop
 
 3. **Ask template selection**

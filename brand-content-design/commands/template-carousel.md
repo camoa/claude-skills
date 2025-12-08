@@ -13,16 +13,20 @@ Create a new carousel template or edit an existing one.
 
 ## Workflow
 
-1. **Verify project**
-   - Check for brand-philosophy.md in current directory
-   - If not found, check if `/brand` has set an active project path
-   - If no project found, tell user to run `/brand` first and stop
-   - Load brand philosophy
-   - Note the logo path from brand-philosophy.md (under Brand Assets section)
-   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
+1. **Find project (PROJECT_PATH)**
+   Search in this order:
+   - Check `./brand-philosophy.md` (current directory)
+   - Check `../brand-philosophy.md` (parent directory)
+   - Run `find . -maxdepth 2 -name "brand-philosophy.md"` to find nearby
+   - If multiple found, ask user which project
+   - If none found, tell user to run `/brand-init` first and stop
+   - **Set PROJECT_PATH** = directory containing brand-philosophy.md
+   - Load brand-philosophy.md
+   - Note the logo path from Brand Assets section
 
-2. **Check for existing templates**
-   - Glob `{PROJECT_PATH}/templates/carousels/*/template.md`
+2. **Find existing templates**
+   - Run `find {PROJECT_PATH}/templates/carousels -name "template.md" 2>/dev/null`
+   - Parse results to get template names (parent folder name)
    - List any existing templates found (may be empty for new projects)
 
 3. **Ask: Create new or edit existing?**

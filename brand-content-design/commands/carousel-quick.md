@@ -14,11 +14,12 @@ Create a carousel with minimal questions - just template and content.
 
 ## Workflow
 
-1. **Verify project and templates**
-   - Check for brand-philosophy.md in current directory or active project
-   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
-   - Glob: `{PROJECT_PATH}/templates/carousels/*/template.md`
-   - If none found: Tell user to run `/template-carousel` first and stop
+1. **Find project and templates**
+   - Check `./brand-philosophy.md`, then `../brand-philosophy.md`, then `find . -maxdepth 2 -name "brand-philosophy.md"`
+   - **Set PROJECT_PATH** = directory containing brand-philosophy.md
+   - Run `find {PROJECT_PATH}/templates/carousels -name "template.md" 2>/dev/null`
+   - If no project found: Tell user to run `/brand-init` first and stop
+   - If no templates found: Tell user to run `/template-carousel` first and stop
 
 2. **Single question for template**
    Use AskUserQuestion:
