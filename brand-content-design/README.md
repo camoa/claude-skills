@@ -91,6 +91,7 @@ Templates define:
 | `/brand-assets` | Manage assets (add logos, icons, fonts after extraction) |
 | `/template-presentation` | Create or edit presentation template |
 | `/template-carousel` | Create or edit carousel template |
+| `/outline <template>` | Get outline template + AI prompt (presentations or carousels) |
 | `/presentation` | Create presentation (guided) |
 | `/presentation-quick` | Create presentation (quick) |
 | `/carousel` | Create carousel (guided) |
