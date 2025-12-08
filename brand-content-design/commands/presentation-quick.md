@@ -5,7 +5,7 @@ allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 
 # Presentation Quick Command
 
-Create a presentation with minimal questions - just topic, template, and content.
+Create a presentation with minimal questions - just template and content.
 
 ## Prerequisites
 
@@ -15,8 +15,9 @@ Create a presentation with minimal questions - just topic, template, and content
 ## Workflow
 
 1. **Verify project and templates**
-   - Check for brand-philosophy.md
-   - Glob: `templates/presentations/*/template.md`
+   - Check for brand-philosophy.md in current directory or active project
+   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
+   - Glob: `{PROJECT_PATH}/templates/presentations/*/template.md`
    - If none found: Tell user to run `/template-presentation` first and stop
 
 2. **Single question for template**
@@ -30,39 +31,50 @@ Create a presentation with minimal questions - just topic, template, and content
 
    **Tip:** Mention `/outline <template>` if they need help preparing content.
 
-4. **Load template**
-   - Read `templates/presentations/{template-name}/template.md`
-   - Read `templates/presentations/{template-name}/canvas-philosophy.md`
+4. **Load template files**
+   - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
+   - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
+   - Read plugin `references/presentations-guide.md`
 
 5. **Map content to slides**
    - Parse the pasted content
    - Map to template's slide structure
    - Fill any gaps with sensible defaults based on topic
 
-6. **Generate presentation**
-   Use the **pptx** skill with the "Creating using a template" workflow:
-   - Use `templates/presentations/{template-name}/sample.pptx` as template
-   - Apply user content via replace.py workflow
-   - Incorporate logo from brand-philosophy.md
+6. **Generate presentation PDF**
+   Use the **canvas-design** skill:
+   - Provide canvas-philosophy.md as design philosophy
+   - Provide presentations-guide.md for Zen principles
+   - Provide brand-philosophy.md for colors, fonts, logo
+   - Generate each slide following template structure
+   - Reference sample.pdf for visual style (but generate fresh)
+   - Output as multi-page PDF at 1920x1080 (16:9)
 
-7. **Save outputs**
-   Create folder: `presentations/{YYYY-MM-DD}-{topic-slug}/`
+7. **Convert PDF to PPTX**
+   Use the **pptx** skill:
+   - Use html2pptx workflow to match PDF design
+   - Create editable text boxes
+   - Incorporate logo
+
+8. **Save outputs**
+   Create folder: `{PROJECT_PATH}/presentations/{YYYY-MM-DD}-{topic-slug}/`
    Save:
-   - `{topic-slug}.pptx`
    - `{topic-slug}.pdf`
+   - `{topic-slug}.pptx`
 
-8. **Show result**
+9. **Show result**
    Display:
    - Output location
    - "Use `/presentation` for more control over each slide"
 
 ## Output
 
-- Created: `presentations/{date}-{name}/{name}.pptx`
 - Created: `presentations/{date}-{name}/{name}.pdf`
+- Created: `presentations/{date}-{name}/{name}.pptx`
 
 ## Notes
 
 - This is the fast path - paste content, get presentation
 - For step-by-step control, use `/presentation` instead
 - For help preparing content, use `/outline <template>` first
+- canvas-design ensures brand and Zen principles are followed

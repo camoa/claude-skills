@@ -15,11 +15,14 @@ Create a carousel from an existing template with user-provided content.
 ## Workflow
 
 1. **Verify project**
-   - Check for brand-philosophy.md
+   - Check for brand-philosophy.md in current directory
+   - If not found, check if `/brand` has set an active project path
+   - If no project found, tell user to run `/brand` first and stop
    - Load brand philosophy
+   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
 
 2. **List available templates**
-   - Glob: `templates/carousels/*/template.md`
+   - Glob: `{PROJECT_PATH}/templates/carousels/*/template.md`
    - If none found: Tell user to run `/template-carousel` first and stop
 
 3. **Ask template selection**
@@ -28,9 +31,10 @@ Create a carousel from an existing template with user-provided content.
    - Question: "Which template would you like to use?"
    - Options: List each template by name (include platform info)
 
-4. **Load template**
-   - Read `templates/carousels/{template-name}/template.md`
-   - Read `templates/carousels/{template-name}/canvas-philosophy.md`
+4. **Load template files**
+   - Read `{PROJECT_PATH}/templates/carousels/{template-name}/template.md`
+   - Read `{PROJECT_PATH}/templates/carousels/{template-name}/canvas-philosophy.md`
+   - Read plugin `references/carousels-guide.md` for best practices
    - Note the card structure (types, purposes, content elements)
    - Note the platform/dimensions
 
@@ -68,19 +72,23 @@ Create a carousel from an existing template with user-provided content.
 7. **Ask carousel details**
    - "What is the hook/title for this carousel?"
 
-8. **Generate carousel**
+8. **Generate carousel PDF**
    Use the **canvas-design** skill:
    - Provide the canvas-philosophy.md content as the design philosophy
-   - Use the template's sample.pdf as visual reference
-   - For each card, provide the user's content
+   - Provide the carousels-guide.md best practices (mobile-first, scroll-stopping, etc.)
+   - Provide brand-philosophy.md for colors, fonts, logo
+   - For each card in the template structure:
+     - Describe the card type and purpose
+     - Provide the user's content for that card
+     - Reference the sample.pdf for visual style (but generate fresh)
    - Request output as multi-page PDF with correct dimensions:
      - LinkedIn: 1080x1350 (4:5 portrait)
      - Instagram Square: 1080x1080 (1:1)
      - Instagram Portrait: 1080x1350 (4:5)
-   - Incorporate logo from brand-philosophy.md assets
+   - Save to workspace
 
 9. **Save outputs**
-   Create folder: `carousels/{YYYY-MM-DD}-{topic-slug}/`
+   Create folder: `{PROJECT_PATH}/carousels/{YYYY-MM-DD}-{topic-slug}/`
    Save:
    - `{topic-slug}.pdf`
 
@@ -100,4 +108,5 @@ Create a carousel from an existing template with user-provided content.
 - This command requires an existing template - use `/template-carousel` to create one first
 - For best results, use `/outline <template>` to prepare content that matches the template structure
 - Keep text concise - carousels are viewed on mobile devices
+- canvas-design ensures brand consistency and carousel best practices are followed
 - The PDF can be uploaded directly to LinkedIn or split into images for Instagram

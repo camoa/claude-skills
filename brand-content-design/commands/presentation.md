@@ -15,11 +15,14 @@ Create a presentation from an existing template with user-provided content.
 ## Workflow
 
 1. **Verify project**
-   - Check for brand-philosophy.md
+   - Check for brand-philosophy.md in current directory
+   - If not found, check if `/brand` has set an active project path
+   - If no project found, tell user to run `/brand` first and stop
    - Load brand philosophy
+   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
 
 2. **List available templates**
-   - Glob: `templates/presentations/*/template.md`
+   - Glob: `{PROJECT_PATH}/templates/presentations/*/template.md`
    - If none found: Tell user to run `/template-presentation` first and stop
 
 3. **Ask template selection**
@@ -28,9 +31,10 @@ Create a presentation from an existing template with user-provided content.
    - Question: "Which template would you like to use?"
    - Options: List each template by name
 
-4. **Load template**
-   - Read `templates/presentations/{template-name}/template.md`
-   - Read `templates/presentations/{template-name}/canvas-philosophy.md`
+4. **Load template files**
+   - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
+   - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
+   - Read plugin `references/presentations-guide.md` for Zen principles
    - Note the slide structure (types, purposes, content elements)
 
 5. **Ask for content**
@@ -67,38 +71,47 @@ Create a presentation from an existing template with user-provided content.
    - "What is the title of this presentation?"
    - "Any subtitle or date to include?"
 
-8. **Generate presentation**
-   Use the **pptx** skill with the "Creating using a template" workflow:
-   - Use `templates/presentations/{template-name}/sample.pptx` as the template
-   - Follow the pptx skill's template workflow:
-     1. Extract template text and create thumbnail grid
-     2. Analyze template and create inventory
-     3. Create presentation outline with template mapping
-     4. Use rearrange.py if needed
-     5. Extract text inventory
-     6. Generate replacement text JSON from user content
-     7. Apply replacements with replace.py
+8. **Generate presentation PDF**
+   Use the **canvas-design** skill:
+   - Provide the canvas-philosophy.md content as the design philosophy
+   - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
+   - Provide brand-philosophy.md for colors, fonts, logo
+   - For each slide in the template structure:
+     - Describe the slide type and purpose
+     - Provide the user's content for that slide
+     - Reference the sample.pdf for visual style (but generate fresh)
+   - Request output as multi-page PDF at 1920x1080 (16:9)
+   - Save to workspace
+
+9. **Convert PDF to PPTX**
+   Use the **pptx** skill:
+   - Use the "Creating without a template" (html2pptx) workflow
+   - Match the PDF design exactly
+   - Create editable text boxes for each content element
    - Incorporate logo from brand-philosophy.md assets
+   - Save as PPTX
 
-9. **Save outputs**
-   Create folder: `presentations/{YYYY-MM-DD}-{topic-slug}/`
-   Save:
-   - `{topic-slug}.pptx`
-   - `{topic-slug}.pdf` (convert from pptx)
+10. **Save outputs**
+    Create folder: `{PROJECT_PATH}/presentations/{YYYY-MM-DD}-{topic-slug}/`
+    Save:
+    - `{topic-slug}.pdf`
+    - `{topic-slug}.pptx`
 
-10. **Present results**
+11. **Present results**
     Show:
     - Output location
     - File paths
+    - Preview of first slide
     - "Open the PPTX to review and make final adjustments"
 
 ## Output
 
-- Created: `presentations/{date}-{name}/{name}.pptx`
 - Created: `presentations/{date}-{name}/{name}.pdf`
+- Created: `presentations/{date}-{name}/{name}.pptx`
 
 ## Notes
 
 - This command requires an existing template - use `/template-presentation` to create one first
 - For best results, use `/outline <template>` to prepare content that matches the template structure
-- The generated PPTX can be edited in PowerPoint/Google Slides for final tweaks
+- The PDF is the source of truth - PPTX is generated from it for editability
+- canvas-design ensures brand consistency and Zen principles are followed

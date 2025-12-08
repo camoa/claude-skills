@@ -15,8 +15,9 @@ Create a carousel with minimal questions - just template and content.
 ## Workflow
 
 1. **Verify project and templates**
-   - Check for brand-philosophy.md
-   - Glob: `templates/carousels/*/template.md`
+   - Check for brand-philosophy.md in current directory or active project
+   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
+   - Glob: `{PROJECT_PATH}/templates/carousels/*/template.md`
    - If none found: Tell user to run `/template-carousel` first and stop
 
 2. **Single question for template**
@@ -30,9 +31,10 @@ Create a carousel with minimal questions - just template and content.
 
    **Tip:** Mention `/outline <template>` if they need help preparing content.
 
-4. **Load template**
-   - Read `templates/carousels/{template-name}/template.md`
-   - Read `templates/carousels/{template-name}/canvas-philosophy.md`
+4. **Load template files**
+   - Read `{PROJECT_PATH}/templates/carousels/{template-name}/template.md`
+   - Read `{PROJECT_PATH}/templates/carousels/{template-name}/canvas-philosophy.md`
+   - Read plugin `references/carousels-guide.md`
    - Note platform/dimensions
 
 5. **Map content to cards**
@@ -41,16 +43,17 @@ Create a carousel with minimal questions - just template and content.
    - Fill any gaps with sensible defaults
    - Keep text concise for mobile
 
-6. **Generate carousel**
+6. **Generate carousel PDF**
    Use the **canvas-design** skill:
    - Provide canvas-philosophy.md as design philosophy
-   - Use sample.pdf as visual reference
-   - Apply user content to each card
+   - Provide carousels-guide.md for best practices
+   - Provide brand-philosophy.md for colors, fonts, logo
+   - Generate each card following template structure
+   - Reference sample.pdf for visual style (but generate fresh)
    - Output as multi-page PDF with correct dimensions
-   - Incorporate logo from brand-philosophy.md
 
 7. **Save outputs**
-   Create folder: `carousels/{YYYY-MM-DD}-{topic-slug}/`
+   Create folder: `{PROJECT_PATH}/carousels/{YYYY-MM-DD}-{topic-slug}/`
    Save:
    - `{topic-slug}.pdf`
 
@@ -69,3 +72,4 @@ Create a carousel with minimal questions - just template and content.
 - This is the fast path - paste content, get carousel
 - For step-by-step control, use `/carousel` instead
 - For help preparing content, use `/outline <template>` first
+- canvas-design ensures brand and carousel best practices are followed
