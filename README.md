@@ -30,7 +30,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin marketplace add https://github.com/camoa/claude-skills
 
 # Install individual plugins
-/plugin install skill-creation-tools@camoa-skills
+/plugin install plugin-creation-tools@camoa-skills
 /plugin install drupal-dev-framework@camoa-skills
 /plugin install code-quality-tools@camoa-skills
 ```
@@ -52,13 +52,19 @@ Skills still work when invoked via the `Skill` tool (e.g., typing the skill name
 
 ## Plugins
 
-### skill-creation-tools
+### plugin-creation-tools
 
-Guide for creating effective Claude Code skills. Covers workflow, progressive disclosure, and validation.
+Complete guide for creating Claude Code plugins. Covers skills, commands, agents, hooks, MCP servers, settings, and output configuration.
 
 | Component | Name |
 |-----------|------|
-| Skill | `skill-creation` |
+| Skill | `plugin-creation` |
+
+**Upgrading from skill-creation-tools:**
+```bash
+/plugin uninstall skill-creation-tools@camoa-skills
+/plugin install plugin-creation-tools@camoa-skills
+```
 
 ### drupal-dev-framework
 

@@ -1,0 +1,20 @@
+{
+  "name": "marketplace-name",
+  "owner": {
+    "name": "Owner Name",
+    "email": "owner@email.com"
+  },
+  "metadata": {
+    "description": "Marketplace description",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "plugin-name",
+      "source": "./plugin-directory",
+      "description": "Plugin description",
+      "version": "1.0.0",
+      "keywords": ["keyword1", "keyword2"]
+    }
+  ]
+}

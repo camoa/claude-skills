@@ -1,0 +1,27 @@
+{
+  "enabledPlugins": {
+    "plugin-name@marketplace-name": true
+  },
+  "extraKnownMarketplaces": {
+    "team-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "org/claude-plugins"
+      }
+    }
+  },
+  "env": {
+    "PLUGIN_OUTPUT_DIR": "${HOME}/claude-outputs",
+    "PLUGIN_LOG_LEVEL": "info"
+  },
+  "permissions": {
+    "allow": [
+      "Edit(./output/**)",
+      "Edit(./logs/**)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}

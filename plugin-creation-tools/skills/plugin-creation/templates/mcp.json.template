@@ -1,0 +1,10 @@
+{
+  "server-name": {
+    "command": "${CLAUDE_PLUGIN_ROOT}/servers/server-binary",
+    "args": ["--config", "${CLAUDE_PLUGIN_ROOT}/config.json"],
+    "env": {
+      "SERVER_PORT": "8080",
+      "LOG_LEVEL": "info"
+    }
+  }
+}
