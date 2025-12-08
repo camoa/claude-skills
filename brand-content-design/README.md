@@ -67,7 +67,24 @@ Templates define:
 - Visual design philosophy (canvas-philosophy.md)
 - Sample output for reference
 
-### 4. Create Content
+### 4. Prepare Content with Outline (Optional)
+
+```
+/outline <template-name>  # Get outline template + AI prompt
+```
+
+Generates two files for your template:
+- **outline-template.md** - Fill-in-the-blank structure matching your slides/cards
+- **outline-prompt.txt** - Prompt to use in Claude Projects or any AI chat
+
+**Workflow:**
+1. Work on your content in Claude Projects (with your context)
+2. Run `/outline my-template` to get the prompt
+3. Paste the prompt + your raw content into Claude Projects
+4. Get back a structured outline that maps to your template
+5. Use that outline with `/presentation` or `/carousel`
+
+### 5. Create Content
 
 **Guided mode** (step-by-step):
 ```

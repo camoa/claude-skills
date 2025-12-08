@@ -29,6 +29,7 @@ Single entry point that adapts to context - show status, switch projects, or ini
 
    Quick actions:
    - /presentation or /carousel - create content
+   - /outline <template> - get outline template + AI prompt
    - /template-presentation or /template-carousel - create template
    - /brand-extract - update brand philosophy
    ```
