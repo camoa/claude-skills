@@ -151,27 +151,48 @@ Use environment variables for configuration:
 }
 ```
 
+## Using MCP Tools in Skills
+
+When referencing MCP tools in skill instructions, **always use fully qualified names**:
+
+```markdown
+# Good - fully qualified
+Use the BigQuery:bigquery_schema tool to retrieve table schemas.
+Use the GitHub:create_issue tool to create issues.
+
+# Bad - will fail with "tool not found"
+Use the bigquery_schema tool...
+Use create_issue to...
+```
+
+Format: `ServerName:tool_name`
+
 ## Best Practices
 
-1. **Choose appropriate transport**
+1. **Use fully qualified tool names**
+   - Format: `ServerName:tool_name`
+   - Required when multiple MCP servers available
+   - Prevents "tool not found" errors
+
+2. **Choose appropriate transport**
    - stdio for local tools
    - HTTP for remote services
 
-2. **Secure credentials**
+3. **Secure credentials**
    - Use environment variables for secrets
    - Never hardcode API keys
 
-3. **Error handling**
+4. **Error handling**
    - Log errors clearly
    - Provide helpful messages
    - Handle timeouts gracefully
 
-4. **Performance**
+5. **Performance**
    - Avoid unnecessary initialization
    - Cache when possible
    - Set reasonable timeouts
 
-5. **Security**
+6. **Security**
    - Validate all inputs
    - Limit command execution scope
    - Audit access patterns

@@ -52,13 +52,25 @@ Skills still work when invoked via the `Skill` tool (e.g., typing the skill name
 
 ## Plugins
 
-### plugin-creation-tools
+### skill-creation-tools [DEPRECATED]
+
+> **Deprecated**: Use `plugin-creation-tools` instead for comprehensive plugin development.
+
+Skills-only guide for creating Claude Code skills. Does not cover commands, agents, hooks, or MCP servers.
+
+| Component | Name |
+|-----------|------|
+| Skill | `skill-creation` |
+
+### plugin-creation-tools [BETA]
 
 Complete guide for creating Claude Code plugins. Covers skills, commands, agents, hooks, MCP servers, settings, and output configuration.
 
 | Component | Name |
 |-----------|------|
 | Skill | `plugin-creation` |
+
+**Status:** Beta - comprehensive but still being tested.
 
 **Usage:**
 
@@ -78,18 +90,16 @@ Create an agent that reviews code for security issues
 
 The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
 
-**Upgrading from skill-creation-tools:**
+**Migration from skill-creation-tools:**
 
-If you have the old `skill-creation-tools` plugin installed:
+If you have `skill-creation-tools` installed and want to try the beta:
 
 ```bash
-# 1. Uninstall old plugin
+# Option 1: Keep both (recommended during beta)
+/plugin install plugin-creation-tools@camoa-skills
+
+# Option 2: Replace deprecated with beta
 /plugin uninstall skill-creation-tools@camoa-skills
-
-# 2. Update marketplace
-/plugin marketplace update camoa-skills
-
-# 3. Install new plugin
 /plugin install plugin-creation-tools@camoa-skills
 ```
 

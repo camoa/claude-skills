@@ -2,6 +2,10 @@
 
 Claude Code settings control plugin behavior, permissions, and environment. Settings follow a hierarchy where more specific settings override general ones.
 
+## Important: Plugins Cannot Define Custom Settings
+
+**Plugins cannot add their own settings fields to settings.json.** The available settings fields are fixed by Claude Code. To configure plugin-specific options, use the `env` block pattern described below.
+
 ## Settings Hierarchy (Precedence Order)
 
 ```
@@ -93,7 +97,7 @@ Team members are prompted to install when trusting the folder.
 
 ### env
 
-Custom environment variables:
+Custom environment variables - **this is how plugins provide configurable options**:
 
 ```json
 {
@@ -106,6 +110,89 @@ Custom environment variables:
 ```
 
 Variables support expansion like `${HOME}`.
+
+## Plugin-Specific Configuration Pattern
+
+Since plugins cannot define custom settings fields, use environment variables with a naming convention:
+
+### Naming Convention
+
+Use `PLUGINNAME_SETTING` format:
+
+```json
+{
+  "env": {
+    "MYFORMATTER_STYLE": "prettier",
+    "MYFORMATTER_LINE_WIDTH": "100",
+    "MYFORMATTER_TABS": "false",
+    "MYDEPLOYER_ENV": "staging",
+    "MYDEPLOYER_DRY_RUN": "true"
+  }
+}
+```
+
+### Using in Scripts
+
+```bash
+#!/bin/bash
+# Use environment variable with fallback default
+STYLE="${MYFORMATTER_STYLE:-prettier}"
+LINE_WIDTH="${MYFORMATTER_LINE_WIDTH:-80}"
+
+# Boolean handling
+if [ "${MYFORMATTER_TABS}" = "true" ]; then
+  echo "Using tabs"
+fi
+```
+
+### Using in Python
+
+```python
+import os
+
+style = os.environ.get("MYFORMATTER_STYLE", "prettier")
+line_width = int(os.environ.get("MYFORMATTER_LINE_WIDTH", "80"))
+use_tabs = os.environ.get("MYFORMATTER_TABS", "false").lower() == "true"
+```
+
+### Alternative: Plugin Config File
+
+For complex configuration, your plugin can ship with or read a config file:
+
+```json
+// ${CLAUDE_PLUGIN_ROOT}/config.json
+{
+  "defaults": {
+    "style": "prettier",
+    "lineWidth": 80
+  },
+  "rules": {
+    "noConsoleLog": true
+  }
+}
+```
+
+Read in scripts:
+```bash
+CONFIG_FILE="${CLAUDE_PLUGIN_ROOT}/config.json"
+STYLE=$(jq -r '.defaults.style' "$CONFIG_FILE")
+```
+
+### Documenting Configuration
+
+Always document available configuration in your plugin README:
+
+```markdown
+## Configuration
+
+Set these environment variables in `.claude/settings.json`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MYPLUGIN_OUTPUT_DIR` | `./output` | Where to save generated files |
+| `MYPLUGIN_LOG_LEVEL` | `info` | Logging verbosity (debug, info, warn, error) |
+| `MYPLUGIN_FEATURE_X` | `false` | Enable experimental feature X |
+```
 
 ### permissions
 

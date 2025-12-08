@@ -2,6 +2,33 @@
 
 How to validate plugins and their components work correctly before deployment.
 
+## Workflow Checklist Pattern
+
+For complex multi-step testing, provide a checklist Claude can track:
+
+```markdown
+Copy this checklist and track progress:
+
+Testing Progress:
+- [ ] Step 1: Validate plugin structure
+- [ ] Step 2: Test skill triggering
+- [ ] Step 3: Test command execution
+- [ ] Step 4: Verify agent delegation
+- [ ] Step 5: Confirm hook firing
+```
+
+This pattern is recommended for any multi-step workflow in your skills.
+
+## Test with Multiple Models
+
+Skills behave differently across models:
+
+| Model | What to Check |
+|-------|---------------|
+| **Claude Haiku** | Does the skill provide enough guidance? |
+| **Claude Sonnet** | Is the skill clear and efficient? |
+| **Claude Opus** | Does the skill avoid over-explaining? |
+
 ## Testing Overview
 
 | Component | Test Method | Success Indicator |
