@@ -195,6 +195,7 @@ Before creating a component, verify it's the right choice:
 - `references/04-commands/` - Command creation guides
 - `references/05-agents/` - Agent creation guides
 - `references/06-hooks/` - Hook creation guides
+- `references/06-hooks/cross-platform-hooks.md` - Windows/macOS/Linux support
 - `references/07-mcp/` - MCP overview
 
 ### Configuration
@@ -212,6 +213,12 @@ Before creating a component, verify it's the right choice:
 - `references/10-distribution/versioning.md` - Version strategy
 - `references/10-distribution/complete-examples.md` - Full plugin examples
 
+## Examples
+
+Working example plugins in `examples/`:
+- `examples/simple-greeter-plugin/` - Minimal plugin with one skill
+- `examples/full-featured-plugin/` - Complete plugin with skill, commands, hooks
+
 ## Templates
 
 All templates are in the `templates/` directory:
@@ -219,6 +226,7 @@ All templates are in the `templates/` directory:
 - `templates/command/command.md.template`
 - `templates/agent/agent.md.template`
 - `templates/hooks/hooks.json.template`
+- `templates/hooks/run-hook.cmd.template` - Cross-platform hook wrapper
 - `templates/plugin.json.template`
 - `templates/marketplace.json.template`
 - `templates/settings.json.template`

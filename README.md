@@ -173,8 +173,10 @@ This marketplace was built collaboratively by Carlos Ospina and Claude (Anthropi
 Patterns and insights drawn from:
 
 - [Anthropic Agent Skills](https://github.com/anthropics/skills) - Official skill-creator and best practices (Apache 2.0)
-- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD approach and writing-skills methodology (MIT)
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD approach, writing-skills methodology, and cross-platform hooks patterns (MIT)
+- [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - Polyglot hook wrapper technique, troubleshooting patterns, and example plugin structures
 - [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) - Official guidelines
+- [Claude Code Settings Docs](https://code.claude.com/docs/en/settings) - Settings hierarchy and configuration patterns
 
 ## License
 

@@ -1,0 +1,11 @@
+{
+  "name": "full-featured-example",
+  "version": "1.0.0",
+  "description": "Example plugin demonstrating all component types - skills, commands, hooks",
+  "author": {
+    "name": "Your Name"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/your-org/full-featured-example",
+  "keywords": ["example", "demo", "tutorial"]
+}
