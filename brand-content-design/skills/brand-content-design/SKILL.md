@@ -1,6 +1,6 @@
 ---
 name: brand-content-design
-description: Use when user says "create presentation", "make carousel", "setup brand", "brand init", "extract brand", or wants to create visual content with consistent branding. Creates branded presentations and carousels using a layered philosophy system.
+description: Use when user says "create presentation", "make carousel", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations and carousels using a layered philosophy system.
 ---
 
 # Brand Content Design
@@ -13,6 +13,7 @@ Create branded visual content (presentations, LinkedIn carousels) with consisten
 - "create carousel" / "LinkedIn carousel"
 - "setup brand" / "brand init" / "extract brand"
 - "create template" / "new template"
+- "get outline" / "outline for template" / "prepare content"
 - NOT for: General design questions, non-branded content
 
 ## Project Detection

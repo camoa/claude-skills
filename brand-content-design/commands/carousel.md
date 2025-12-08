@@ -41,6 +41,8 @@ Create a carousel with guided workflow, asking for template and content at each 
 6. **Check for outline**
    Ask: "Do you have an outline you'd like to use? (paste it or say 'no')"
 
+   **Tip:** Mention that `/outline <template>` can generate an outline template and AI prompt to help prepare content.
+
 7. **If outline provided:**
    - Parse the outline
    - If template: validate against template structure

@@ -36,6 +36,8 @@ Create a presentation with guided workflow, asking for template and content at e
 5. **Check for outline**
    Ask: "Do you have an outline you'd like to use? (paste it or say 'no')"
 
+   **Tip:** Mention that `/outline <template>` can generate an outline template and AI prompt to help prepare content.
+
 6. **If outline provided:**
    - Parse the outline
    - If template selected: validate against template structure
