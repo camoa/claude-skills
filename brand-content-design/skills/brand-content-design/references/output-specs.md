@@ -30,6 +30,28 @@ Technical specifications for all content types.
 | Ideas per slide | ONE |
 | Comprehension time | 3 seconds |
 
+### Safe Zones (Critical for PPTX)
+
+**Standard PPTX dimensions**: 10" × 5.625" (720 × 405 pts at 72 dpi)
+
+| Zone | Measurement | Notes |
+|------|-------------|-------|
+| Left margin | 0.5" minimum | Content safe area |
+| Right margin | 0.5" minimum | Content safe area |
+| Top margin | 0.4" minimum | Content safe area |
+| Bottom margin | 0.5" minimum | **Critical: logos often overflow here** |
+| Logo placement | y ≤ 4.5" | For logos ~1" tall, keeps bottom at ~5.5" |
+
+**Common Overflow Issue**: Logos placed at y=5.0" with height 0.8-1.0" will overflow the 5.625" slide height!
+
+**Safe logo placement formula**: `y_position = 5.625 - logo_height - 0.1` (0.1" margin)
+
+| Logo Height | Safe Y Position | Bottom Edge |
+|-------------|-----------------|-------------|
+| 0.8" | 4.7" | 5.5" |
+| 1.0" | 4.5" | 5.5" |
+| 1.4" | 4.1" | 5.5" |
+
 ---
 
 ## LinkedIn Carousels

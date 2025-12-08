@@ -205,6 +205,18 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 | Words/slide | Max 15-20 |
 | Slides | 8-15 typical |
 
+### Safe Zones
+
+**PPTX slides are 10" × 5.625"** - all content must fit within these bounds.
+
+| Element | Safe Position |
+|---------|--------------|
+| Main content | 0.5" - 9.5" horizontal, 0.4" - 5.1" vertical |
+| Logo (bottom-right) | y ≤ 4.5" for ~1" tall logos |
+| Footer elements | y ≤ 5.0" with small heights |
+
+**Critical**: When positioning elements, ensure `top + height ≤ 5.625"` and `left + width ≤ 10.0"` to prevent overflow.
+
 ---
 
 *Based on Presentation Zen by Garr Reynolds*
