@@ -44,11 +44,12 @@ Create a presentation with minimal questions - just template and content.
 
 6. **Generate presentation PDF**
    Use the **canvas-design** skill:
-   - Provide canvas-philosophy.md as design philosophy
+   - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
+   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide presentations-guide.md for Zen principles
    - Provide brand-philosophy.md for colors, fonts, logo
    - Generate each slide following template structure
-   - Reference sample.pdf for visual style (but generate fresh)
+   - Reference sample.pdf for visual style (but generate fresh content)
    - Output as multi-page PDF at 1920x1080 (16:9)
 
 7. **Convert PDF to PPTX**

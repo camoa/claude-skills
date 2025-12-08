@@ -46,11 +46,12 @@ Create a carousel with minimal questions - just template and content.
 
 6. **Generate carousel PDF**
    Use the **canvas-design** skill:
-   - Provide canvas-philosophy.md as design philosophy
+   - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
+   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide carousels-guide.md for best practices
    - Provide brand-philosophy.md for colors, fonts, logo
    - Generate each card following template structure
-   - Reference sample.pdf for visual style (but generate fresh)
+   - Reference sample.pdf for visual style (but generate fresh content)
    - Output as multi-page PDF with correct dimensions
 
 7. **Save outputs**

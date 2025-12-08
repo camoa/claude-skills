@@ -78,13 +78,14 @@ Create a carousel from an existing template with user-provided content.
 
 8. **Generate carousel PDF**
    Use the **canvas-design** skill:
-   - Provide the canvas-philosophy.md content as the design philosophy
+   - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
+   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide the carousels-guide.md best practices (mobile-first, scroll-stopping, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
    - For each card in the template structure:
      - Describe the card type and purpose
      - Provide the user's content for that card
-     - Reference the sample.pdf for visual style (but generate fresh)
+     - Reference the sample.pdf for visual style (but generate fresh content)
    - Request output as multi-page PDF with correct dimensions:
      - LinkedIn: 1080x1350 (4:5 portrait)
      - Instagram Square: 1080x1080 (1:1)

@@ -77,13 +77,14 @@ Create a presentation from an existing template with user-provided content.
 
 8. **Generate presentation PDF**
    Use the **canvas-design** skill:
-   - Provide the canvas-philosophy.md content as the design philosophy
+   - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
+   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
    - For each slide in the template structure:
      - Describe the slide type and purpose
      - Provide the user's content for that slide
-     - Reference the sample.pdf for visual style (but generate fresh)
+     - Reference the sample.pdf for visual style (but generate fresh content)
    - Request output as multi-page PDF at 1920x1080 (16:9)
    - Save to workspace
 
