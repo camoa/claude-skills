@@ -5,63 +5,64 @@ allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 
 # Presentation Quick Command
 
-Create a presentation with minimal questions - topic and template only.
+Create a presentation with minimal questions - just topic, template, and content.
 
 ## Prerequisites
 
 - Must be in a brand project folder (contains brand-philosophy.md)
+- Must have at least one presentation template (run `/template-presentation` first)
 
 ## Workflow
 
-1. **Verify project**
+1. **Verify project and templates**
    - Check for brand-philosophy.md
-   - Load brand philosophy
-   - Note the logo path from Brand Assets section
-
-2. **Single question**
-   Get available templates:
    - Glob: `templates/presentations/*/template.md`
+   - If none found: Tell user to run `/template-presentation` first and stop
 
-   Use AskUserQuestion (single combined question):
-   - "What's the topic and which template?"
-   - Text input for topic
-   - Options for template (including "default/last used")
+2. **Single question for template**
+   Use AskUserQuestion:
+   - Header: "Template"
+   - Question: "Which template?"
+   - Options: List each template by name
 
-3. **Check for outline in user message**
-   - If user provided outline with the request, use it
-   - If not, auto-generate minimal structure from topic
+3. **Ask for content**
+   Ask: "Paste your outline or content for this presentation:"
 
-4. **Auto-generate content structure**
-   Based on template:
-   - Title slide: Topic as title
-   - Content slides: Auto-suggest 3-5 key points
-   - CTA slide: Generic call to action
+   **Tip:** Mention `/outline <template>` if they need help preparing content.
 
-5. **Load canvas philosophy**
-   - If template: Read `templates/presentations/{name}/canvas-philosophy.md`
-   - If no template: Generate a canvas philosophy using `references/canvas-philosophy-template.md` and brand-philosophy.md
+4. **Load template**
+   - Read `templates/presentations/{template-name}/template.md`
+   - Read `templates/presentations/{template-name}/canvas-philosophy.md`
+
+5. **Map content to slides**
+   - Parse the pasted content
+   - Map to template's slide structure
+   - Fill any gaps with sensible defaults based on topic
 
 6. **Generate presentation**
-   Use the **canvas-design** skill:
-   - Provide the canvas-philosophy.md content as the design philosophy input
-   - Read the logo file from assets/ and incorporate where appropriate
-   - For each slide, describe what to create based on auto-generated structure
-   - Request output as PDF at 1920x1080 (16:9)
+   Use the **pptx** skill with the "Creating using a template" workflow:
+   - Use `templates/presentations/{template-name}/sample.pptx` as template
+   - Apply user content via replace.py workflow
+   - Incorporate logo from brand-philosophy.md
 
-7. **Convert to PPTX**
-   Use pptx skill to convert
-
-8. **Save outputs**
+7. **Save outputs**
    Create folder: `presentations/{YYYY-MM-DD}-{topic-slug}/`
-   Save PDF and PPTX
+   Save:
+   - `{topic-slug}.pptx`
+   - `{topic-slug}.pdf`
 
-9. **Show preview**
+8. **Show result**
    Display:
    - Output location
-   - Quick preview
-   - "Use /presentation for more control"
+   - "Use `/presentation` for more control over each slide"
 
 ## Output
 
-- Created: `presentations/{date}-{name}/{name}.pdf`
 - Created: `presentations/{date}-{name}/{name}.pptx`
+- Created: `presentations/{date}-{name}/{name}.pdf`
+
+## Notes
+
+- This is the fast path - paste content, get presentation
+- For step-by-step control, use `/presentation` instead
+- For help preparing content, use `/outline <template>` first

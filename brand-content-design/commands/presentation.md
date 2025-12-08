@@ -1,84 +1,104 @@
 ---
-description: Create a presentation using brand and template (detailed, guided mode)
+description: Create a presentation using an existing template (detailed, guided mode)
 allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 ---
 
 # Presentation Command (Detailed Mode)
 
-Create a presentation with guided workflow, asking for template and content at each step.
+Create a presentation from an existing template with user-provided content.
 
 ## Prerequisites
 
 - Must be in a brand project folder (contains brand-philosophy.md)
+- Must have at least one presentation template (run `/template-presentation` first)
 
 ## Workflow
 
 1. **Verify project**
    - Check for brand-philosophy.md
    - Load brand philosophy
-   - Note the logo path from Brand Assets section
 
-2. **Ask topic**
-   Use AskUserQuestion:
-   - "What is this presentation about?"
-   - Get topic/title and brief description
-
-3. **List available templates**
+2. **List available templates**
    - Glob: `templates/presentations/*/template.md`
-   - Show list of available templates with descriptions
-   - Include option: "No template (one-off)"
+   - If none found: Tell user to run `/template-presentation` first and stop
 
-4. **Ask template selection**
+3. **Ask template selection**
    Use AskUserQuestion:
-   - "Which template would you like to use?"
-   - Options: List of templates + "No template"
+   - Header: "Template"
+   - Question: "Which template would you like to use?"
+   - Options: List each template by name
 
-5. **Check for outline**
-   Ask: "Do you have an outline you'd like to use? (paste it or say 'no')"
+4. **Load template**
+   - Read `templates/presentations/{template-name}/template.md`
+   - Read `templates/presentations/{template-name}/canvas-philosophy.md`
+   - Note the slide structure (types, purposes, content elements)
 
-   **Tip:** Mention that `/outline <template>` can generate an outline template and AI prompt to help prepare content.
+5. **Ask for content**
+   Use AskUserQuestion:
+   - Header: "Content"
+   - Question: "How would you like to provide content?"
+   - Options:
+     - "Paste outline" - I have a prepared outline (from `/outline` or elsewhere)
+     - "Enter slide-by-slide" - Guide me through each slide
+     - "Paste all content" - I'll paste raw content for you to organize
 
-6. **If outline provided:**
-   - Parse the outline
-   - If template selected: validate against template structure
-   - Map outline points to slides
+6. **Collect content based on selection**
 
-7. **If no outline:**
-   - Load selected template's structure
-   - For each slide in structure:
-     - Show slide type and purpose
-     - Ask for content for that slide
-     - Confirm before moving to next
+   **If "Paste outline":**
+   - Ask user to paste their outline
+   - Parse and validate against template structure
+   - Show mapping: "Slide 1 (Title) → {their content}"
+   - Ask to confirm or adjust
 
-8. **Load canvas philosophy**
-   - If template: Read `templates/presentations/{name}/canvas-philosophy.md`
-   - If no template: Generate a canvas philosophy using `references/canvas-philosophy-template.md` and brand-philosophy.md
+   **If "Enter slide-by-slide":**
+   - For each slide in template structure:
+     - Show: "Slide {n}: {type} - {purpose}"
+     - Show: "Content needed: {elements from template}"
+     - Ask user for content
+     - Confirm before next slide
 
-9. **Generate presentation**
-   Use the **canvas-design** skill:
-   - Provide the canvas-philosophy.md content as the design philosophy input
-   - Read the logo file from assets/ and incorporate where appropriate (title slide, footer)
-   - For each slide, describe what to create (topic, key message, visual approach)
-   - Request output as PDF at 1920x1080 (16:9)
-   - Generate one slide at a time or as a multi-page PDF
+   **If "Paste all content":**
+   - Ask user to paste their raw content
+   - Analyze and map to template slides
+   - Show proposed mapping
+   - Ask to confirm or adjust
 
-10. **Convert to PPTX**
-    Use pptx skill:
-    - Convert PDF to PPTX
+7. **Ask presentation details**
+   - "What is the title of this presentation?"
+   - "Any subtitle or date to include?"
 
-11. **Save outputs**
-    Create folder: `presentations/{YYYY-MM-DD}-{topic-slug}/`
-    Save:
-    - `{topic-slug}.pdf`
-    - `{topic-slug}.pptx`
+8. **Generate presentation**
+   Use the **pptx** skill with the "Creating using a template" workflow:
+   - Use `templates/presentations/{template-name}/sample.pptx` as the template
+   - Follow the pptx skill's template workflow:
+     1. Extract template text and create thumbnail grid
+     2. Analyze template and create inventory
+     3. Create presentation outline with template mapping
+     4. Use rearrange.py if needed
+     5. Extract text inventory
+     6. Generate replacement text JSON from user content
+     7. Apply replacements with replace.py
+   - Incorporate logo from brand-philosophy.md assets
 
-12. **Present results**
+9. **Save outputs**
+   Create folder: `presentations/{YYYY-MM-DD}-{topic-slug}/`
+   Save:
+   - `{topic-slug}.pptx`
+   - `{topic-slug}.pdf` (convert from pptx)
+
+10. **Present results**
     Show:
     - Output location
-    - Preview of first few slides
-    - File sizes
+    - File paths
+    - "Open the PPTX to review and make final adjustments"
 
 ## Output
 
-- Created: `presentations/{date}-{name}/{name}.pdf`
 - Created: `presentations/{date}-{name}/{name}.pptx`
+- Created: `presentations/{date}-{name}/{name}.pdf`
+
+## Notes
+
+- This command requires an existing template - use `/template-presentation` to create one first
+- For best results, use `/outline <template>` to prepare content that matches the template structure
+- The generated PPTX can be edited in PowerPoint/Google Slides for final tweaks
