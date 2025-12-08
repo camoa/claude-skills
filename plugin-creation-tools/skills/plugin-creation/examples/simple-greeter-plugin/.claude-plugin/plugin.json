@@ -1,0 +1,9 @@
+{
+  "name": "simple-greeter",
+  "version": "1.0.0",
+  "description": "A minimal example plugin with one skill",
+  "author": {
+    "name": "Your Name"
+  },
+  "license": "MIT"
+}

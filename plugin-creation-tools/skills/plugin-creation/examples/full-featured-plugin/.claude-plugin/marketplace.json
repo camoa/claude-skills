@@ -1,0 +1,9 @@
+{
+  "name": "full-featured-dev",
+  "plugins": [
+    {
+      "name": "full-featured-example",
+      "source": "./"
+    }
+  ]
+}
