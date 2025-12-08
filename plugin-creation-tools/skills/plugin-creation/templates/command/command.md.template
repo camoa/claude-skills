@@ -1,0 +1,35 @@
+---
+description: [What the command does and when to use it]
+allowed-tools: Read, Edit, Bash
+argument-hint: [arg1] [arg2]
+---
+
+# Command Name
+
+[Instructions for Claude when this command is invoked]
+
+## Usage
+
+`/command-name [arg1] [arg2]`
+
+## Parameters
+
+- `$1` - [First argument description]
+- `$2` - [Second argument description]
+- `$ARGUMENTS` - [All arguments as single string]
+
+## Steps
+
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+## Examples
+
+```
+/command-name value1 value2
+```
+
+## Notes
+
+[Any additional notes or considerations]

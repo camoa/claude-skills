@@ -6,20 +6,33 @@
   },
   "metadata": {
     "description": "Custom skills and tools for Claude Code development workflows",
-    "version": "1.0.5"
+    "version": "1.0.6"
   },
   "plugins": [
     {
       "name": "skill-creation-tools",
       "source": "./skill-creation-tools",
-      "description": "Tools and guidance for creating effective Claude Code skills",
-      "version": "1.1.2",
+      "description": "[DEPRECATED - Use plugin-creation-tools] Tools for creating Claude Code skills. Skills-only.",
+      "version": "1.1.3",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["skills", "skill-creation", "development", "best-practices"],
+      "keywords": ["deprecated", "skills", "development"],
+      "strict": false
+    },
+    {
+      "name": "plugin-creation-tools",
+      "source": "./plugin-creation-tools",
+      "description": "[BETA] Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, and configuration",
+      "version": "2.0.0-beta.1",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": ["beta", "plugins", "skills", "commands", "agents", "hooks", "mcp", "development", "best-practices"],
       "strict": false
     },
     {

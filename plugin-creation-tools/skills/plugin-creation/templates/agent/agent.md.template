@@ -1,0 +1,47 @@
+---
+name: agent-name
+description: [What agent does]. Use proactively when [trigger conditions].
+capabilities: ["capability1", "capability2", "capability3"]
+tools: Read, Grep, Glob, Bash
+model: sonnet
+permissionMode: default
+---
+
+# Agent Name
+
+## Role
+
+[Detailed description of agent's role and expertise - 2-3 sentences]
+
+## Capabilities
+
+- [Capability 1 with details]
+- [Capability 2 with details]
+- [Capability 3 with details]
+
+## When to Use
+
+- [Trigger condition 1]
+- [Trigger condition 2]
+- [Trigger condition 3]
+- NOT for: [Exclusions]
+
+## Process
+
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+## Decision Criteria
+
+[How this agent decides what to focus on]
+
+## Examples
+
+### Example 1: [Scenario]
+
+[Description of when agent would be triggered and what it would do]
+
+### Example 2: [Scenario]
+
+[Description of when agent would be triggered and what it would do]

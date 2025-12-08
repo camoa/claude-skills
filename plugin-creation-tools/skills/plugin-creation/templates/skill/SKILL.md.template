@@ -1,0 +1,49 @@
+---
+name: skill-name
+description: Use when [specific triggers] - [what it does in third person]. Use when user says "[trigger phrase]".
+---
+
+# Skill Name
+
+[Brief description of what this skill does - 1-2 sentences]
+
+## When to Use
+
+- "[trigger phrase 1]"
+- "[trigger phrase 2]"
+- "[trigger phrase 3]"
+- NOT for: [exclusions]
+
+## Quick Reference
+
+| Task | How |
+|------|-----|
+| Task 1 | Command or instruction |
+| Task 2 | Command or instruction |
+| Task 3 | Command or instruction |
+
+## Operations
+
+### Operation 1: [Name]
+
+When user says "[trigger]":
+
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+### Operation 2: [Name]
+
+When user says "[trigger]":
+
+1. [Step 1]
+2. [Step 2]
+
+## References
+
+- `references/file1.md` - [Description]
+- `references/file2.md` - [Description]
+
+## Scripts
+
+- `scripts/script1.sh` - [Description]

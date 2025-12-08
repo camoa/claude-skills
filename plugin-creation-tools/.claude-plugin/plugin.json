@@ -1,0 +1,11 @@
+{
+  "name": "plugin-creation-tools",
+  "description": "[BETA] Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, and configuration. Supersedes skill-creation-tools.",
+  "version": "2.0.0-beta.1",
+  "author": {
+    "name": "camoa"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/camoa/claude-skills",
+  "keywords": ["beta", "plugins", "skills", "commands", "agents", "hooks", "mcp", "development", "best-practices"]
+}

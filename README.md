@@ -30,7 +30,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin marketplace add https://github.com/camoa/claude-skills
 
 # Install individual plugins
-/plugin install skill-creation-tools@camoa-skills
+/plugin install plugin-creation-tools@camoa-skills
 /plugin install drupal-dev-framework@camoa-skills
 /plugin install code-quality-tools@camoa-skills
 ```
@@ -52,13 +52,56 @@ Skills still work when invoked via the `Skill` tool (e.g., typing the skill name
 
 ## Plugins
 
-### skill-creation-tools
+### skill-creation-tools [DEPRECATED]
 
-Guide for creating effective Claude Code skills. Covers workflow, progressive disclosure, and validation.
+> **Deprecated**: Use `plugin-creation-tools` instead for comprehensive plugin development.
+
+Skills-only guide for creating Claude Code skills. Does not cover commands, agents, hooks, or MCP servers.
 
 | Component | Name |
 |-----------|------|
 | Skill | `skill-creation` |
+
+### plugin-creation-tools [BETA]
+
+Complete guide for creating Claude Code plugins. Covers skills, commands, agents, hooks, MCP servers, settings, and output configuration.
+
+| Component | Name |
+|-----------|------|
+| Skill | `plugin-creation` |
+
+**Status:** Beta - comprehensive but still being tested.
+
+**Usage:**
+
+Just tell Claude what you want to create:
+
+```
+Create a plugin called "my-tools" with a deploy command
+```
+
+```
+Add a code formatting hook to my plugin
+```
+
+```
+Create an agent that reviews code for security issues
+```
+
+The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
+
+**Migration from skill-creation-tools:**
+
+If you have `skill-creation-tools` installed and want to try the beta:
+
+```bash
+# Option 1: Keep both (recommended during beta)
+/plugin install plugin-creation-tools@camoa-skills
+
+# Option 2: Replace deprecated with beta
+/plugin uninstall skill-creation-tools@camoa-skills
+/plugin install plugin-creation-tools@camoa-skills
+```
 
 ### drupal-dev-framework
 
