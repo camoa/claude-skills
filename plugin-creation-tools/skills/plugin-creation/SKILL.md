@@ -35,6 +35,13 @@ Create complete Claude Code plugins with any combination of components.
 
 When user says "create plugin", "initialize plugin", "new plugin":
 
+**Option A - Use init script**:
+```bash
+python scripts/init_plugin.py my-plugin --path ./plugins --components skill,command,hook
+```
+
+**Option B - Manual creation**:
+
 1. Create plugin directory structure:
    ```
    plugin-name/
@@ -216,3 +223,10 @@ All templates are in the `templates/` directory:
 - `templates/marketplace.json.template`
 - `templates/settings.json.template`
 - `templates/mcp.json.template`
+
+## Scripts
+
+- `scripts/init_plugin.py` - Initialize new plugin with selected components
+- `scripts/init_skill.py` - Initialize standalone skill
+- `scripts/validate_skill.py` - Validate skill structure
+- `scripts/package_skill.py` - Package skill for distribution

@@ -1,8 +1,66 @@
 # Decision Frameworks
 
-Complete decision trees for skill creation choices.
+Complete decision trees for plugin and component creation choices.
 
-## Should I Create a Skill?
+## Plugin-Level Decisions
+
+### Should I Create a Plugin?
+
+```
+Do you have reusable functionality to share?
+├─ NO → Use project-local .claude/ directory instead
+└─ YES → Will multiple projects or team members use it?
+    ├─ NO → Consider project-local first
+    └─ YES → Create a plugin
+```
+
+### Single Plugin or Multiple?
+
+```
+How many distinct capabilities?
+
+├─ 1-2 related capabilities?
+│  └─ SINGLE PLUGIN
+│     Example: "code-quality" with linting + formatting
+│
+├─ 3+ capabilities that work together?
+│  └─ SINGLE PLUGIN with multiple components
+│     Example: "enterprise-tools" with deploy, review, security
+│
+└─ Unrelated capabilities?
+   └─ MULTIPLE PLUGINS
+      Example: "pdf-tools" separate from "git-tools"
+```
+
+### Which Components Do I Need?
+
+```
+What behavior do you want?
+
+├─ Claude auto-detects and uses it?
+│  └─ SKILL (model-invoked)
+│
+├─ User explicitly triggers with /command?
+│  └─ COMMAND (user-invoked)
+│
+├─ Specialized assistant with own context?
+│  └─ AGENT (auto + manual)
+│
+├─ Automatic on events (file save, session start)?
+│  └─ HOOK (event-triggered)
+│
+├─ External API/service integration?
+│  └─ MCP SERVER
+│
+└─ Multiple of the above?
+   └─ PLUGIN with multiple component types
+```
+
+---
+
+## Skill-Specific Decisions
+
+### Should I Create a Skill?
 
 ```
 Have you done this task 5+ times?
@@ -12,7 +70,7 @@ Have you done this task 5+ times?
     └─ YES → Create a skill
 ```
 
-## What Type of Skill?
+### What Type of Skill?
 
 ```
 What's the primary purpose?
@@ -38,7 +96,7 @@ What's the primary purpose?
       Example: PDF processing, doc creation
 ```
 
-## Where Should Content Live?
+### Where Should Content Live?
 
 ```
 Is this information...
@@ -59,7 +117,7 @@ Is this information...
    └─ REMOVE IT
 ```
 
-## Which Creation Approach?
+### Which Creation Approach?
 
 ```
 What's your source material?
@@ -77,7 +135,11 @@ What's your source material?
    └─ META-SKILL (agent-skill-creator)
 ```
 
-## Skill vs Alternative?
+---
+
+## Component Selection
+
+### Skill vs Alternative?
 
 ```
 What do you need?
@@ -101,7 +163,7 @@ What do you need?
    └─ Reconsider if you need anything
 ```
 
-## Component Selection
+### File Organization
 
 ```
 Is this content...
@@ -122,7 +184,11 @@ Is this content...
    └─ DON'T INCLUDE IT
 ```
 
-## Degrees of Freedom
+---
+
+## Design Considerations
+
+### Degrees of Freedom
 
 ```
 How fragile is this task?
@@ -143,7 +209,7 @@ How fragile is this task?
       Example: "Run exactly: python script.py --flag value"
 ```
 
-## Include Code Example?
+### Include Code Example?
 
 ```
 Need to show code?
@@ -164,7 +230,7 @@ Need to show code?
    └─ Create minimal, tested example
 ```
 
-## SKILL.md Too Long?
+### SKILL.md Too Long?
 
 ```
 SKILL.md approaching 500 lines?
@@ -186,7 +252,9 @@ SKILL.md approaching 500 lines?
       Consider splitting into multiple skills
 ```
 
-## Testing Strategy?
+---
+
+## Testing Strategy
 
 ```
 What type of skill?

@@ -60,9 +60,36 @@ Complete guide for creating Claude Code plugins. Covers skills, commands, agents
 |-----------|------|
 | Skill | `plugin-creation` |
 
+**Usage:**
+
+Just tell Claude what you want to create:
+
+```
+Create a plugin called "my-tools" with a deploy command
+```
+
+```
+Add a code formatting hook to my plugin
+```
+
+```
+Create an agent that reviews code for security issues
+```
+
+The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
+
 **Upgrading from skill-creation-tools:**
+
+If you have the old `skill-creation-tools` plugin installed:
+
 ```bash
+# 1. Uninstall old plugin
 /plugin uninstall skill-creation-tools@camoa-skills
+
+# 2. Update marketplace
+/plugin marketplace update camoa-skills
+
+# 3. Install new plugin
 /plugin install plugin-creation-tools@camoa-skills
 ```
 

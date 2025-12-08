@@ -1,43 +1,135 @@
-# skill-creation
+# plugin-creation
 
-Guide for creating effective Claude Code skills.
+Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, settings, and output configuration.
 
 ## Triggers
 
-- "I want to create a skill"
-- "How do I package a skill?"
-- "My skill isn't being discovered"
+This skill activates when you say:
+- "Create a plugin" / "Make a new plugin"
+- "Add a skill" / "Create skill"
+- "Add a command" / "Create command"
+- "Make an agent" / "Add agent"
+- "Add hooks" / "Setup hooks"
+- "Configure plugin" / "Setup plugin.json"
+- "Package for marketplace"
 
 ## Quick Start
 
-```bash
-# Initialize
-python scripts/init_skill.py my-skill --path ./skills
+### Create a New Plugin
 
-# Validate
-python scripts/validate_skill.py ./skills/my-skill
-
-# Package
-python scripts/package_skill.py ./skills/my-skill
 ```
+Create a plugin called "my-tools" with a command and a skill
+```
+
+The skill will guide you through:
+1. Creating the directory structure
+2. Setting up plugin.json
+3. Creating each component
+4. Testing and validation
+5. Packaging for distribution
+
+### Add Components to Existing Plugin
+
+```
+Add a new command to my plugin that deploys to staging
+```
+
+```
+Add a hook that formats code after every write
+```
+
+## What This Skill Covers
+
+| Component | Description |
+|-----------|-------------|
+| **Skills** | Model-invoked workflows with supporting files |
+| **Commands** | User-invoked slash commands (`/command`) |
+| **Agents** | Specialized assistants with own context |
+| **Hooks** | Event-triggered automation (10 event types) |
+| **MCP Servers** | External tool integration |
+| **Settings** | Configuration hierarchy and permissions |
+| **Output** | Directory setup and logging patterns |
 
 ## Structure
 
 ```
-skill-creation/
-├── SKILL.md           # Core workflow (read first)
-├── scripts/           # init, validate, package
-└── references/        # Detailed guides (11 files)
+plugin-creation/
+├── SKILL.md           # Main workflow (read first)
+├── README.md          # This file
+├── templates/         # Starter templates (8 files)
+│   ├── skill/
+│   ├── command/
+│   ├── agent/
+│   ├── hooks/
+│   └── *.template
+├── references/        # Detailed guides (37 files)
+│   ├── 01-overview/   # What each component is
+│   ├── 02-philosophy/ # Design principles
+│   ├── 03-skills/     # Skill-specific guides
+│   ├── 04-commands/   # Command guides
+│   ├── 05-agents/     # Agent guides
+│   ├── 06-hooks/      # Hook guides
+│   ├── 07-mcp/        # MCP overview
+│   ├── 08-configuration/  # Settings, output
+│   ├── 09-testing/    # Testing and CLI reference
+│   └── 10-distribution/   # Packaging and marketplace
+└── scripts/           # Utility scripts
 ```
 
-## Official Anthropic Docs
+## Usage Examples
 
-- [Agent Skills Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
-- [Agent Skills Overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
-- [Anthropic Skills Repository](https://github.com/anthropics/skills)
+### Example 1: Create a formatting plugin
+
+```
+Create a plugin that automatically formats code after every edit
+```
+
+Result: Plugin with PostToolUse hook running a formatter script.
+
+### Example 2: Create a code review plugin
+
+```
+Create a plugin with a security-reviewer agent and a /review command
+```
+
+Result: Plugin with agent for auto-delegation and command for manual invocation.
+
+### Example 3: Add skill to existing plugin
+
+```
+Add a PDF processing skill to my document-tools plugin
+```
+
+Result: New skill directory with SKILL.md and supporting files.
+
+## CLI Reference
+
+```bash
+# Add marketplace
+/plugin marketplace add camoa/claude-skills
+
+# Install this plugin
+/plugin install plugin-creation-tools@camoa-skills
+
+# Verify installation
+/help                    # Check commands
+/agents                  # Check agents
+claude --debug           # Check loading
+
+# Validate your plugin
+claude plugin validate ./my-plugin
+```
+
+## Official Documentation
+
+- [Plugins Guide](https://code.claude.com/docs/en/plugins)
+- [Plugin Reference](https://code.claude.com/docs/en/plugins-reference)
+- [Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
+- [Settings](https://code.claude.com/docs/en/settings)
+- [Agent Skills](https://code.claude.com/docs/en/skills)
 
 ## Related Tools
 
-- [Anthropic skill-creator](https://github.com/anthropics/skills) - Official creator
-- [Superpowers writing-skills](https://github.com/obra/superpowers-marketplace) - TDD approach
-- [Skill Seeker MCP](https://github.com/camoa/skill-seeker) - Automated scraping
+- [Anthropic Skills](https://github.com/anthropics/skills) - Official skill-creator
+- [Superpowers](https://github.com/obra/superpowers-marketplace) - TDD skill development
+- [Skill Seeker MCP](https://github.com/camoa/skill-seeker) - Automated doc scraping
