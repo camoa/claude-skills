@@ -14,13 +14,16 @@ Create a new presentation template or edit an existing one.
 ## Workflow
 
 1. **Verify project**
-   - Check for brand-philosophy.md
+   - Check for brand-philosophy.md in current directory
+   - If not found, check if `/brand` has set an active project path
+   - If no project found, tell user to run `/brand` first and stop
    - Load brand philosophy
    - Note the logo path from brand-philosophy.md (under Brand Assets section)
+   - **Set PROJECT_PATH** = the directory containing brand-philosophy.md
 
 2. **Check for existing templates**
-   - Glob `templates/presentations/*/template.md`
-   - List any existing templates found
+   - Glob `{PROJECT_PATH}/templates/presentations/*/template.md`
+   - List any existing templates found (may be empty for new projects)
 
 3. **Ask: Create new or edit existing?**
    Use AskUserQuestion:
@@ -29,6 +32,8 @@ Create a new presentation template or edit an existing one.
    - Options:
      - "Create new template" - Start fresh with a new template
      - If existing templates found, add each as an option: "Edit: {template-name}" - Modify this existing template
+
+   **Note:** If no templates exist yet, skip this question and go directly to CREATE MODE.
 
 4. **Route based on selection**
 
