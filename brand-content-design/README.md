@@ -1,6 +1,16 @@
 # Brand Content Design Plugin
 
-Create branded presentations and LinkedIn carousels with consistent visual identity using a three-layer philosophy system.
+Create branded presentations and LinkedIn carousels with consistent visual identity.
+
+## The Flow
+
+```
+Brand Guidelines → Templates → Content
+```
+
+1. **Brand Guidelines** - Extract your visual & verbal identity once
+2. **Templates** - Create reusable slide/card structures (create once, use many times)
+3. **Content** - Generate presentations/carousels using your templates
 
 ## Installation
 
@@ -55,7 +65,7 @@ Analyzes your brand from multiple sources:
 
 Generates `brand-philosophy.md` with your visual identity, voice, and core principles.
 
-### 3. Create Templates (Recommended)
+### 3. Create Templates (Required before creating content)
 
 ```
 /template-presentation    # Guided wizard for presentation templates
@@ -65,7 +75,9 @@ Generates `brand-philosophy.md` with your visual identity, voice, and core princ
 Templates define:
 - Slide/card structure and sequence
 - Visual design philosophy (canvas-philosophy.md)
-- Sample output for reference
+- Sample PPTX/PDF for reference
+
+**You need at least one template before you can create presentations or carousels.**
 
 ### 4. Prepare Content with Outline (Optional)
 
@@ -84,18 +96,18 @@ Generates two files for your template:
 4. Get back a structured outline that maps to your template
 5. Use that outline with `/presentation` or `/carousel`
 
-### 5. Create Content
+### 5. Create Content (using your templates)
 
 **Guided mode** (step-by-step):
 ```
-/presentation             # Full control over each slide
-/carousel                 # Full control over each card
+/presentation             # Select template, provide content
+/carousel                 # Select template, provide content
 ```
 
-**Quick mode** (minimal questions):
+**Quick mode** (paste and go):
 ```
-/presentation-quick       # Topic + template, auto-generate
-/carousel-quick           # Topic + template, auto-generate
+/presentation-quick       # Select template, paste content
+/carousel-quick           # Select template, paste content
 ```
 
 ## Commands Reference
@@ -153,7 +165,8 @@ Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)
 ## Tips
 
 - **Start with `/brand`** - it adapts to your context
-- **Create templates first** - they make content creation faster
-- **Use quick mode** for rapid iteration, guided mode for important pieces
+- **Templates are required** - create at least one before making content
+- **One template, many outputs** - create a template once, use it for dozens of presentations/carousels
+- **Use `/outline`** - helps structure your content to match the template
+- **Quick mode** for rapid iteration, **guided mode** for important pieces
 - **Brand philosophy evolves** - re-run `/brand-extract` as your brand matures
-- **Add assets anytime** - use `/brand-assets` to add logos, fonts, etc. without re-extracting
