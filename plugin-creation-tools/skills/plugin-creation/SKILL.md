@@ -197,11 +197,13 @@ Before creating a component, verify it's the right choice:
 - `references/08-configuration/output-config.md` - Output configuration
 
 ### Testing & Distribution
-- `references/09-testing/testing.md` - Testing guide
+- `references/09-testing/testing.md` - Testing guide (all components)
 - `references/09-testing/debugging.md` - Debugging guide
+- `references/09-testing/cli-reference.md` - CLI commands reference
 - `references/10-distribution/packaging.md` - Packaging guide
 - `references/10-distribution/marketplace.md` - Marketplace guide
 - `references/10-distribution/versioning.md` - Version strategy
+- `references/10-distribution/complete-examples.md` - Full plugin examples
 
 ## Templates
 

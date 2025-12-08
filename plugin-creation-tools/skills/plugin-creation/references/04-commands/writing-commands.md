@@ -43,6 +43,22 @@ Instructions on how to use this command with examples.
 | model | string | No | Inherit | Model to use |
 | disable-model-invocation | bool | No | false | Prevent auto-invocation |
 
+### disable-model-invocation Explained
+
+When `true`, prevents Claude from invoking this command via the `SlashCommand` tool. The command remains available for direct user invocation (`/command-name`) but Claude cannot trigger it programmatically.
+
+**Use when:**
+- Command has side effects (deployments, deletions)
+- Command requires explicit human decision
+- Command is expensive or rate-limited
+
+```yaml
+---
+description: Deploy to production (requires manual confirmation)
+disable-model-invocation: true
+---
+```
+
 ## Description Best Practices
 
 The description appears in `/help` and autocomplete. Write it well:

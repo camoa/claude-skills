@@ -1,6 +1,205 @@
-# Testing Skills
+# Testing Plugins
 
-How to validate skills work correctly before deployment.
+How to validate plugins and their components work correctly before deployment.
+
+## Testing Overview
+
+| Component | Test Method | Success Indicator |
+|-----------|-------------|-------------------|
+| **Skills** | Ask matching questions | Auto-triggers, workflow runs |
+| **Commands** | Run `/command-name` | Appears in `/help`, executes correctly |
+| **Agents** | Check `/agents`, trigger scenarios | Listed, auto-delegates when expected |
+| **Hooks** | Trigger events, check `--debug` | Executes on events, output correct |
+| **MCP** | Check `/mcp`, use tools | Server listed, tools work |
+
+## Plugin-Level Testing
+
+### Quick Validation
+
+```bash
+# Validate plugin structure
+claude plugin validate .
+
+# Check with debug output
+claude --debug "plugins"
+
+# Run plugin doctor
+claude doctor
+```
+
+### Installation Test
+
+```bash
+# 1. Add local marketplace
+/plugin marketplace add ./path/to/dev-marketplace
+
+# 2. Install plugin
+/plugin install my-plugin@dev-marketplace
+
+# 3. Verify loading (no errors)
+claude --debug "plugins"
+```
+
+---
+
+## Testing Commands
+
+### Checklist
+
+- [ ] Appears in `/help` output
+- [ ] Description is clear and complete
+- [ ] Arguments work (`$1`, `$2`, `$ARGUMENTS`)
+- [ ] Tool restrictions enforced (`allowed-tools`)
+- [ ] Bash execution works (`!command`)
+- [ ] File references work (`@file.md`)
+
+### Test Process
+
+```bash
+# 1. Check command appears
+/help
+
+# 2. Run with no arguments
+/my-command
+
+# 3. Run with arguments
+/my-command arg1 arg2
+
+# 4. Test tool restrictions (should fail if restricted)
+# (run command that would use disallowed tool)
+```
+
+---
+
+## Testing Agents
+
+### Checklist
+
+- [ ] Appears in `/agents` output
+- [ ] Description triggers auto-delegation
+- [ ] Tool permissions correct
+- [ ] Handles expected scenarios
+- [ ] Returns useful results
+
+### Test Process
+
+```bash
+# 1. Check agent appears
+/agents
+
+# 2. Test auto-delegation
+# Ask question matching agent description
+# Example: "Review this code for security issues"
+
+# 3. Test manual invocation
+# Use Task tool with agent name
+
+# 4. Verify tool restrictions
+# Check agent doesn't use tools outside its list
+```
+
+### Common Issues
+
+**Agent not triggering:**
+- Description too vague
+- Missing "proactively" or action triggers
+- Competing with similar agent
+
+**Fix:** Make description more specific with examples.
+
+---
+
+## Testing Hooks
+
+### Checklist
+
+- [ ] Scripts are executable (`chmod +x`)
+- [ ] Correct event type used
+- [ ] Matcher patterns correct
+- [ ] Timeouts appropriate
+- [ ] Errors handled gracefully
+
+### Test Process
+
+```bash
+# 1. Make scripts executable
+chmod +x scripts/*.sh
+
+# 2. Test scripts directly
+./scripts/my-hook.sh
+
+# 3. Run Claude with debug
+claude --debug "hooks"
+
+# 4. Trigger the event
+# PostToolUse: Edit a file
+# SessionStart: Start new session
+# UserPromptSubmit: Enter a prompt
+```
+
+### Debug Hooks
+
+```bash
+# See all hook activity
+claude --debug "hooks"
+
+# View hook configurations
+/hooks
+```
+
+### Common Issues
+
+**Hook not firing:**
+- Script not executable
+- Wrong event type
+- Matcher doesn't match tool name
+
+**Hook fails:**
+- Script has errors (test manually first)
+- Timeout too short
+- Missing environment variables
+
+---
+
+## Testing MCP Servers
+
+### Checklist
+
+- [ ] Server binary/command exists
+- [ ] Config paths use `${CLAUDE_PLUGIN_ROOT}`
+- [ ] Environment variables set
+- [ ] Server starts without errors
+- [ ] Tools appear in listing
+
+### Test Process
+
+```bash
+# 1. Check server appears
+/mcp
+
+# 2. Test server manually
+${CLAUDE_PLUGIN_ROOT}/servers/my-server --help
+
+# 3. Debug connection
+claude --debug "mcp"
+
+# 4. Use tools
+# Ask Claude to use the MCP-provided tools
+```
+
+### Common Issues
+
+**Server not starting:**
+- Binary not found (check path)
+- Missing `${CLAUDE_PLUGIN_ROOT}` variable
+- Config file errors
+
+**Tools not working:**
+- Server crashes (run manually to debug)
+- Environment variables missing
+- Authentication required
+
+---
 
 ## TDD for Skills
 

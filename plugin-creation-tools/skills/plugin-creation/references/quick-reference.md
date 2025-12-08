@@ -186,13 +186,18 @@ Use when [triggers] - [what it does, third person]
 
 ## Hook Events
 
-| Event | Use Case |
-|-------|----------|
-| SessionStart | Setup, initialization |
-| SessionEnd | Cleanup |
-| PreToolUse | Validation before tools |
-| PostToolUse | Formatting, logging |
-| UserPromptSubmit | Input validation |
+| Event | Use Case | Matcher |
+|-------|----------|---------|
+| SessionStart | Setup, initialization | Optional |
+| SessionEnd | Cleanup | Optional |
+| PreToolUse | Validation before tools | Tool name regex |
+| PostToolUse | Formatting, logging | Tool name regex |
+| UserPromptSubmit | Input validation | No |
+| PermissionRequest | Auto-approve/deny | Tool name regex |
+| Notification | Handle alerts | Optional |
+| Stop | Intelligent continuation | No |
+| SubagentStop | Subagent completion | No |
+| PreCompact | Before compaction | Optional |
 
 ## Validation Checklist
 
@@ -209,16 +214,27 @@ Use when [triggers] - [what it does, third person]
 ```bash
 # Debug mode
 claude --debug
+claude --debug "plugins,hooks"
 
-# List plugins
-/plugin list
+# Marketplace
+/plugin marketplace add owner/repo
+/plugin marketplace list
+/plugin marketplace update name
 
-# Install plugin
+# Plugin management
+/plugin                              # Browse available
 /plugin install name@marketplace
+/plugin uninstall name@marketplace
+/plugin enable name@marketplace
+/plugin disable name@marketplace
 
-# List agents
-/agents
+# Validation
+claude plugin validate .
+claude doctor
 
-# Help
-/help
+# List components
+/help                               # Commands
+/agents                             # Agents
+/mcp                                # MCP servers
+/hooks                              # Hooks
 ```
