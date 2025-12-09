@@ -134,9 +134,11 @@ Create a new presentation template or edit an existing one.
    **Store selected palette** for use in canvas-philosophy.md generation.
 
 7. **Ask template purpose** (CREATE MODE only)
-   Use AskUserQuestion:
-   - "What is this presentation template for?"
-   - Options: Technical/Product, Sales/Pitch, Educational/Training, Other (describe)
+   Ask user directly (not AskUserQuestion):
+   "What is this template for? (2-4 words)
+   Examples: sales pitch, product demo, quarterly update, team training, investor deck, tech overview"
+
+   User provides short description like "sales pitch" or "product launch"
 
 8. **Load presentations guide**
    - Read plugin `references/presentations-guide.md` for slide type options
