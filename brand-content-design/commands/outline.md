@@ -41,14 +41,14 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - If not found, show error with available templates
    - If no argument provided, show all templates and ask user to select
 
-4. **Load template structure**
+5. **Load template structure**
    - Read the template.md file
    - Extract slide/card sequence with:
      - Type (Title, Content, Image, Data, Quote, CTA, Hook, etc.)
      - Purpose of each slide/card
      - Expected content elements
 
-5. **Generate outline template**
+6. **Generate outline template**
    Create `outline-template.md` in the template folder:
 
    **For presentations:**
@@ -99,7 +99,7 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    ...
    ```
 
-6. **Generate AI prompt**
+7. **Generate AI prompt**
    Create `outline-prompt.txt` in the template folder.
 
    **IMPORTANT**: The prompt must include slide/card type definitions so the external AI understands what content each type needs.
@@ -188,12 +188,12 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    ...
    ```
 
-7. **Save files**
+8. **Save files**
    Save to template folder (`templates/presentations/{name}/` or `templates/carousels/{name}/`):
    - `outline-template.md`
    - `outline-prompt.txt`
 
-8. **Show user the outputs**
+9. **Show user the outputs**
    - Display the outline template
    - Display the prompt
    - Explain usage:

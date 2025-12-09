@@ -45,15 +45,16 @@ Create a presentation with minimal questions - just template and content.
    - Fill any gaps with sensible defaults based on topic
 
 6. **Generate presentation PDF**
-   Use the **canvas-design** skill:
+   Use the **visual-content** skill:
    - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
-   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
+   - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide presentations-guide.md for Zen principles
    - Provide brand-philosophy.md for colors, fonts, logo
+   - **Load brand assets**: Logo (convert SVG→PNG if needed), fonts from `assets/fonts/`
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
    - Look up the style's Enforcement Block in `style-constraints.md`
-   - Pass it to canvas-design as hard constraints
+   - Pass it to visual-content as hard constraints
    - All 13 styles (Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma, Hygge, Lagom, Swiss, Memphis, Yeo-baek, Feng Shui) have enforcement blocks
 
    - Generate each slide following template structure
@@ -87,4 +88,4 @@ Create a presentation with minimal questions - just template and content.
 - This is the fast path - paste content, get presentation
 - For step-by-step control, use `/presentation` instead
 - For help preparing content, use `/outline <template>` first
-- canvas-design ensures brand and Zen principles are followed
+- visual-content ensures brand and Zen principles are followed

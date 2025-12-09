@@ -19,7 +19,8 @@ Initialize a new brand project with the required folder structure.
    {project-name}/
    ├── brand-philosophy.md
    ├── assets/                 # Processed assets ready for use in content
-   │   └── (files copied here by /brand-extract or /brand-assets)
+   │   ├── fonts/              # Brand fonts (copied from input/fonts/)
+   │   └── (other files copied here by /brand-extract or /brand-assets)
    ├── templates/
    │   ├── presentations/
    │   └── carousels/

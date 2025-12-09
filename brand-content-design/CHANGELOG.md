@@ -5,6 +5,53 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2025-12-09
+
+### Added
+- **Command validation script**: `scripts/validate_commands.py` for integrity testing
+  - Validates frontmatter, AskUserQuestion compliance, skill references, file references
+  - Checks step numbering and required sections
+  - Run with `python3 scripts/validate_commands.py`
+
+### Fixed
+- **AskUserQuestion compliance in palette selection**: Template commands now show 2+ bold options for dynamic palette lists
+- **Step numbering in `/outline`**: Fixed duplicate step 4, now correctly numbered 1-9
+- **Template edit mode**: Split into 2-question flow to respect 4-option limit
+  - Step 4a: Choose aspect to modify (Structure, Visual style, Regenerate, Start over)
+  - Step 4b: If Structure selected, choose action (Add, Remove, Reorder)
+
+## [1.4.0] - 2025-12-09
+
+### Added
+- **`visual-content` skill**: Bundled skill for generating presentations and carousels
+  - Uses artistic philosophy language ("museum-quality execution", "90% visual, 10% text")
+  - Specialized for presentations and carousels (not generic visual output)
+  - Two-phase process: Generate PDF first (source of truth), then convert to PPTX for editability
+  - Enforces style constraints (whitespace %, word limits, element counts)
+  - No external dependencies required
+  - **Part 7: Technical Implementation** with reportlab code patterns:
+    - SVG to PNG conversion for logo embedding
+    - Custom font loading from `assets/fonts/`
+    - PDF generation patterns for slides (1920x1080) and cards (1080x1350)
+    - Positioning patterns: Centered, Asymmetric, Grid layouts
+    - Color parsing from brand-philosophy.md
+- **Font support**: Custom brand fonts now flow through the system
+  - `/brand-init` creates `assets/fonts/` folder
+  - `/brand-extract` scans `input/fonts/` and copies to `assets/fonts/`
+  - `/brand-extract` detects fonts from websites and recommends downloads
+  - `brand-philosophy-template.md` includes Font Files table
+  - `visual-content` loads fonts from project's `assets/fonts/`
+
+### Changed
+- All commands now use bundled `visual-content` skill instead of external `canvas-design`
+  - `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`
+  - `/template-presentation`, `/template-carousel`
+- PDF → PPTX workflow: Visual output generated as PDF first, then converted for editability
+- SKILL.md updated to document visual-content as bundled skill
+
+### Removed
+- External `canvas-design` dependency (replaced by bundled `visual-content` skill)
+
 ## [1.3.2] - 2025-12-09
 
 ### Fixed
