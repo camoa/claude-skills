@@ -165,10 +165,12 @@ Brand Guidelines → Templates → Content
 | Component | Contents |
 |-----------|----------|
 | Skills | 1 skill (`brand-content-design`) |
-| Commands | 10 commands (`/brand-init`, `/brand`, `/template-presentation`, `/template-carousel`, `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`, `/outline`, etc.) |
+| Commands | 11 commands (`/brand-init`, `/brand`, `/brand-palette`, `/template-presentation`, `/template-carousel`, `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`, `/outline`, etc.) |
 | Agents | 1 agent (`brand-analyst`) |
 
 **Features:**
+- 13 visual styles across 4 aesthetic families (Japanese Zen, Scandinavian, European, East Asian)
+- 10 color palette types (harmony-based + tonal variations + custom)
 - Wizard-guided template creation
 - Quick mode for fast content generation
 - Outline templates for content preparation in Claude Projects

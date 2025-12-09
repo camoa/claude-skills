@@ -39,7 +39,9 @@ Create a presentation from an existing template with user-provided content.
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
    - Read plugin `references/presentations-guide.md` for Zen principles
+   - Read plugin `references/style-constraints.md` for style enforcement
    - Note the slide structure (types, purposes, content elements)
+   - **Identify the template's style** from canvas-philosophy.md (look for "Style:" at bottom or enforcement block)
 
 5. **Ask for content**
    Use AskUserQuestion:
@@ -81,6 +83,31 @@ Create a presentation from an existing template with user-provided content.
    - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
+
+   **ENFORCE STYLE CONSTRAINTS based on template's style:**
+
+   - Look up the template's style in `style-constraints.md`
+   - Copy the exact **Enforcement Block** for that style
+   - Pass it to canvas-design as hard constraints
+
+   The enforcement block format is:
+   ```
+   STYLE: [Style Name] ([Family])
+   - HARD LIMIT: Max X words/slide. Truncate if exceeded.
+   - HARD LIMIT: Min X% whitespace.
+   - HARD LIMIT: Max X elements.
+   - Layout: [Layout directive]
+   - Typography: [Typography directive]
+   - Color: [Color directive]
+   - NEVER: [Anti-patterns]
+   ```
+
+   **All 13 styles have enforcement blocks in style-constraints.md:**
+   - Japanese Zen: Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma
+   - Scandinavian: Hygge, Lagom
+   - European: Swiss, Memphis
+   - East Asian: Yeo-baek, Feng Shui
+
    - For each slide in the template structure:
      - Describe the slide type and purpose
      - Provide the user's content for that slide

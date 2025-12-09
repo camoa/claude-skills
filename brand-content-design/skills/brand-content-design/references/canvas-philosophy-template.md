@@ -2,6 +2,45 @@
 
 Use this template when creating canvas-philosophy.md files for templates. This generates the visual design philosophy that canvas-design skill will use to create visuals.
 
+**IMPORTANT**: Select aesthetic family and style FIRST, then generate the philosophy based on that style's constraints from `style-constraints.md`.
+
+---
+
+## Style Selection (Two Steps)
+
+### Step 1: Choose Aesthetic Family
+
+| Family | Character | Styles |
+|--------|-----------|--------|
+| **Japanese Zen** | Restraint, intentionality, essence | Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma |
+| **Scandinavian Nordic** | Warmth, balance, functionality | Hygge, Lagom |
+| **European Modernist** | Precision or playfulness | Swiss, Memphis |
+| **East Asian Harmony** | Space, balance, energy | Yeo-baek, Feng Shui |
+
+**Selected Family**: [japanese-zen / scandinavian / european / east-asian]
+
+### Step 2: Choose Specific Style
+
+See `style-constraints.md` for full details on each style, or use quick reference:
+
+| Style | Character | Best For |
+|-------|-----------|----------|
+| Minimal | Max whitespace, single focal | Executive, data |
+| Dramatic | Asymmetrical, bold contrast | Pitch decks |
+| Organic | Natural flow, warmth | Storytelling |
+| Wabi-Sabi | Imperfect beauty, texture | Artisan, craft |
+| Shibui | Quiet elegance, ultra-refined | Luxury |
+| Iki | B&W + pop color, editorial | Fashion |
+| Ma | 70%+ whitespace, floating | Meditation |
+| Hygge | Warm, cozy, inviting | Wellness |
+| Lagom | Balanced "just enough" | Corporate |
+| Swiss | Strict grid, mathematical | Tech |
+| Memphis | Bold colors, playful chaos | Creative |
+| Yeo-baek | Extreme emptiness, purity | Premium |
+| Feng Shui | Yin-Yang balance | Wellness |
+
+**Selected Style**: [style-name]
+
 ---
 
 # Canvas Philosophy: [Template Name]
@@ -9,7 +48,11 @@ Use this template when creating canvas-philosophy.md files for templates. This g
 ## Design Movement Name
 **"[Creative Name]"** - [2-3 word description]
 
-Example names: "Confident Clarity", "Bold Simplicity", "Warm Authority", "Technical Precision"
+Example names by family:
+- Japanese Zen: "Silent Precision", "Imperfect Beauty", "Floating Void"
+- Scandinavian: "Warm Balance", "Cozy Clarity"
+- European: "Grid Logic", "Playful Bold"
+- East Asian: "Empty Resonance", "Balanced Flow"
 
 ## Philosophy Statement
 
@@ -76,5 +119,32 @@ Example names: "Confident Clarity", "Bold Simplicity", "Warm Authority", "Techni
 
 ---
 
+## Style Constraints (ENFORCE STRICTLY)
+
+**IMPORTANT**: Copy the exact Enforcement Block for your selected style from `style-constraints.md`.
+
+Each style has a pre-defined enforcement block. Example format:
+
+```
+STYLE: [Style Name] ([Family])
+- HARD LIMIT: Max X words/slide. Truncate if exceeded.
+- HARD LIMIT: Min X% whitespace.
+- HARD LIMIT: Max X elements.
+- Layout: [Layout directive]
+- Typography: [Typography directive]
+- Color: [Color directive]
+- NEVER: [Anti-patterns]
+```
+
+**Paste the enforcement block for your selected style here:**
+
+```
+[Copy from style-constraints.md]
+```
+
+---
+
 *Philosophy created for [Template Name] template*
 *Brand: [Brand Name]*
+*Family: [aesthetic family]*
+*Style: [style name]*

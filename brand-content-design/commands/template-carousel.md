@@ -1,6 +1,6 @@
 ---
 description: Create or edit a carousel template through guided wizard
-allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Write, Glob, AskUserQuestion, Skill
 ---
 
 # Template Carousel Command
@@ -42,7 +42,10 @@ Create a new carousel template or edit an existing one.
 4. **Route based on selection**
 
    **If "Create new template" selected → CREATE MODE:**
-   - Ask: "What should we call this template?" (will become folder name)
+   - Ask: "What name do you want for this template? (e.g., tips-linkedin-minimal, story-instagram, data-highlights)"
+   - Sanitize name: lowercase, replace spaces with hyphens, remove special characters
+   - **Validate name is unique**: Run `test -d "{PROJECT_PATH}/templates/carousels/{name}" && echo "exists"`
+   - If "exists" returned: "A template named '{name}' already exists. Please choose a different name." (loop back to ask again)
    - Continue with step 5
 
    **If "Edit: {template-name}" selected → EDIT MODE:**
@@ -57,51 +60,98 @@ Create a new carousel template or edit an existing one.
      - Start over from scratch
    - Jump to appropriate step based on selection
 
-5. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
+5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+
+   **Step 5a: Choose aesthetic family**
+   Use AskUserQuestion:
+   - Header: "Aesthetic"
+   - Question: "Which design aesthetic for this carousel?"
+   - Options:
+     - **Japanese Zen** - Restraint, intentionality, essence (7 styles)
+     - **Scandinavian Nordic** - Warmth, balance, functionality (2 styles)
+     - **European Modernist** - Precision or playfulness (2 styles)
+     - **East Asian Harmony** - Space, balance, energy (2 styles)
+
+   **Step 5b: Choose specific style** (based on family selected)
+   Use AskUserQuestion:
+   - Header: "Style"
+   - Question: "Which {family} style?"
+   - Options vary by family:
+
+   **Japanese Zen options:**
+   - **Minimal** - Max whitespace, single focal, silence (data, technical)
+   - **Dramatic** - Asymmetrical, bold contrast, tension (announcements, launches)
+   - **Organic** - Natural flow, subtle depth, warmth (storytelling, education)
+   - **Wabi-Sabi** - Imperfect beauty, texture, handcraft (artisan, craft)
+   - **Shibui** - Quiet elegance, ultra-refined (luxury, professional)
+   - **Iki** - B&W + pop color, editorial confidence (fashion, editorial)
+   - **Ma** - 70%+ whitespace, floating elements (meditation, luxury)
+
+   **Scandinavian Nordic options:**
+   - **Hygge** - Warm, cozy, inviting (wellness, community)
+   - **Lagom** - Balanced "just enough" (corporate, sustainability)
+
+   **European Modernist options:**
+   - **Swiss** - Strict grid, mathematical precision (tech, corporate)
+   - **Memphis** - Bold colors, playful chaos (creative, youth)
+
+   **East Asian Harmony options:**
+   - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
+   - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
+
+   **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
+
+6. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
    Use AskUserQuestion:
    - "Which platform is this carousel for?"
    - Options: LinkedIn (4:5 portrait), Instagram (1:1 square), Instagram (4:5 portrait)
 
-5. **Ask template purpose** (CREATE MODE only)
+7. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
    - "What is this carousel template for?"
    - Options: Educational/Tips, Storytelling, Data/Statistics, Listicle, Other (describe)
 
-6. **Load carousels guide**
+8. **Load carousels guide**
    - Read plugin `references/carousels-guide.md` for card type options
 
-7. **Ask card types needed** (or modify existing in EDIT MODE)
+9. **Ask card types needed** (or modify existing in EDIT MODE)
    Use AskUserQuestion:
    - "Which card types do you need?"
    - Multi-select from: Hook, Content, Data, Story, CTA
    - Allow custom additions
    - In EDIT MODE: Show current cards, allow add/remove
 
-8. **Define card sequence**
-   Based on purpose and selected types, propose a sequence:
-   - Show proposed structure (5-10 cards)
-   - Ask user to confirm or modify
+10. **Define card sequence**
+    Based on purpose and selected types, propose a sequence:
+    - Show proposed structure (5-10 cards)
+    - Ask user to confirm or modify
 
-9. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
-   Use AskUserQuestion for style:
-   - "What visual style?" Options: Bold/Eye-catching, Clean/Minimal, Warm/Engaging, Professional/Corporate
-   - "What mood?" Options: Inspiring, Educational, Authoritative, Friendly
+11. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
+    Generate canvas-philosophy.md using:
+    - canvas-philosophy-template.md from references
+    - **Selected style constraints from style-constraints.md**
+    - Brand colors and fonts from brand-philosophy.md
+    - Platform-specific considerations (mobile-first)
 
-   Generate canvas-philosophy.md using:
-   - canvas-philosophy-template.md from references
-   - Brand colors and fonts from brand-philosophy.md
-   - Style preferences from questions
-   - Platform-specific considerations (mobile-first)
+    **Include the style's HARD LIMITS in the philosophy:**
+    - Word count limits per card
+    - Whitespace minimums
+    - Element count limits
+    - Layout directives
+    - Anti-patterns to avoid
 
-10. **Create/update template.md**
+12. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, card structure
+    - **Include selected style name and key constraints**
     - Add visual standards and Zen principles (carousel-adapted)
     - Include output configuration for platform
 
-11. **Generate sample**
+13. **Generate sample**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
+    - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
+    - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
     - Read the logo file from the path in brand-philosophy.md and incorporate it
     - **Generate ALL cards defined in template.md** (not just a subset)
     - Use placeholder/example content for each card type
@@ -111,13 +161,13 @@ Create a new carousel template or edit an existing one.
       - Instagram Portrait: 1080x1350 (4:5)
     - Save as sample.pdf
 
-12. **Save template**
+14. **Save template**
     Save to `templates/carousels/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
 
-13. **Confirm completion**
+15. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/carousel` and select this template
 

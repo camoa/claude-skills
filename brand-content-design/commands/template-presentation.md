@@ -1,6 +1,6 @@
 ---
 description: Create or edit a presentation template through guided wizard
-allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Write, Glob, AskUserQuestion, Skill
 ---
 
 # Template Presentation Command
@@ -42,7 +42,10 @@ Create a new presentation template or edit an existing one.
 4. **Route based on selection**
 
    **If "Create new template" selected → CREATE MODE:**
-   - Ask: "What should we call this template?" (will become folder name)
+   - Ask: "What name do you want for this template? (e.g., sales-pitch-enterprise, tech-demo-short, quarterly-update)"
+   - Sanitize name: lowercase, replace spaces with hyphens, remove special characters
+   - **Validate name is unique**: Run `test -d "{PROJECT_PATH}/templates/presentations/{name}" && echo "exists"`
+   - If "exists" returned: "A template named '{name}' already exists. Please choose a different name." (loop back to ask again)
    - Continue with step 5
 
    **If "Edit: {template-name}" selected → EDIT MODE:**
@@ -56,52 +59,99 @@ Create a new presentation template or edit an existing one.
      - Start over from scratch
    - Jump to appropriate step based on selection
 
-5. **Ask template purpose** (CREATE MODE only)
+5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+
+   **Step 5a: Choose aesthetic family**
+   Use AskUserQuestion:
+   - Header: "Aesthetic"
+   - Question: "Which design aesthetic for this template?"
+   - Options:
+     - **Japanese Zen** - Restraint, intentionality, essence (7 styles)
+     - **Scandinavian Nordic** - Warmth, balance, functionality (2 styles)
+     - **European Modernist** - Precision or playfulness (2 styles)
+     - **East Asian Harmony** - Space, balance, energy (2 styles)
+
+   **Step 5b: Choose specific style** (based on family selected)
+   Use AskUserQuestion:
+   - Header: "Style"
+   - Question: "Which {family} style?"
+   - Options vary by family:
+
+   **Japanese Zen options:**
+   - **Minimal** - Max whitespace, single focal, silence (executive, data)
+   - **Dramatic** - Asymmetrical, bold contrast, tension (pitch decks)
+   - **Organic** - Natural flow, subtle depth, warmth (storytelling)
+   - **Wabi-Sabi** - Imperfect beauty, texture, handcraft (artisan, craft)
+   - **Shibui** - Quiet elegance, ultra-refined (luxury, professional)
+   - **Iki** - B&W + pop color, editorial confidence (fashion, editorial)
+   - **Ma** - 70%+ whitespace, floating elements (meditation, luxury)
+
+   **Scandinavian Nordic options:**
+   - **Hygge** - Warm, cozy, inviting (wellness, community)
+   - **Lagom** - Balanced "just enough" (corporate, sustainability)
+
+   **European Modernist options:**
+   - **Swiss** - Strict grid, mathematical precision (tech, corporate)
+   - **Memphis** - Bold colors, playful chaos (creative, youth)
+
+   **East Asian Harmony options:**
+   - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
+   - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
+
+   **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
+
+6. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
    - "What is this presentation template for?"
    - Options: Technical/Product, Sales/Pitch, Educational/Training, Other (describe)
 
-5. **Load presentations guide**
+7. **Load presentations guide**
    - Read plugin `references/presentations-guide.md` for slide type options
 
-6. **Ask slide types needed** (or modify existing in EDIT MODE)
+8. **Ask slide types needed** (or modify existing in EDIT MODE)
    Use AskUserQuestion:
    - "Which slide types do you need?"
    - Multi-select from: Title, Content, Image, Data/Chart, Quote, CTA, Transition
    - Allow custom additions
    - In EDIT MODE: Show current slides, allow add/remove
 
-7. **Define slide sequence**
+9. **Define slide sequence**
    Based on purpose and selected types, propose a sequence:
    - Show proposed structure
    - Ask user to confirm or modify
 
-8. **Create/update canvas philosophy** (or skip if "Regenerate samples only")
-   Use AskUserQuestion for style:
-   - "What visual style?" Options: Bold/Dramatic, Clean/Minimal, Warm/Friendly, Technical/Precise
-   - "What mood?" Options: Professional, Creative, Authoritative, Approachable
+10. **Create/update canvas philosophy** (or skip if "Regenerate samples only")
+    Generate canvas-philosophy.md using:
+    - canvas-philosophy-template.md from references
+    - **Selected style constraints from style-constraints.md**
+    - Brand colors and fonts from brand-philosophy.md
 
-   Generate canvas-philosophy.md using:
-   - canvas-philosophy-template.md from references
-   - Brand colors and fonts from brand-philosophy.md
-   - Style preferences from questions
+    **Include the style's HARD LIMITS in the philosophy:**
+    - Word count limits per slide
+    - Whitespace minimums
+    - Element count limits
+    - Layout directives
+    - Anti-patterns to avoid
 
-9. **Create/update template.md**
-   Using template-structure.md from references:
-   - Fill in purpose, content type, slide structure
-   - Add visual standards and Zen principles
-   - Include output configuration
+11. **Create/update template.md**
+    Using template-structure.md from references:
+    - Fill in purpose, content type, slide structure
+    - **Include selected style name and key constraints**
+    - Add visual standards and Zen principles
+    - Include output configuration
 
-10. **Generate sample PDF**
+12. **Generate sample PDF**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
+    - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
+    - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
     - Read the logo file from the path in brand-philosophy.md and incorporate it
     - **Generate ALL slides defined in template.md** (not just a subset)
     - Use placeholder/example content for each slide type
     - Request output as PDF at 1920x1080 (16:9)
     - Save as sample.pdf
 
-11. **Generate sample PPTX**
+13. **Generate sample PPTX**
     Use the **pptx** skill:
     - Create an editable PowerPoint version matching the full template structure
     - Include the logo from assets/
@@ -109,14 +159,14 @@ Create a new presentation template or edit an existing one.
     - **Create ALL slides defined in template.md** with placeholder content
     - Save as sample.pptx
 
-12. **Save template**
+14. **Save template**
     Save to `templates/presentations/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
     - sample.pptx
 
-13. **Confirm completion**
+15. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/presentation` and select this template
 

@@ -219,4 +219,57 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 
 ---
 
-*Based on Presentation Zen by Garr Reynolds*
+## Visual Styles
+
+13 distinct styles across 4 aesthetic families. See `style-constraints.md` for full details and enforcement blocks.
+
+### Japanese Zen (7 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Minimal** | Max whitespace, single focal, silence | Executive, data | [Kanso](https://en.wikipedia.org/wiki/Japanese_aesthetics#Kanso) |
+| **Dramatic** | Asymmetrical, bold contrast, tension | Pitch decks | [Fukinsei](https://en.wikipedia.org/wiki/Japanese_aesthetics#Fukinsei) |
+| **Organic** | Natural flow, subtle depth, warmth | Storytelling | [Yugen](https://en.wikipedia.org/wiki/Y%C5%ABgen) |
+| **Wabi-Sabi** | Imperfect beauty, texture, handcraft | Artisan, craft | [Wabi-Sabi](https://en.wikipedia.org/wiki/Wabi-sabi) |
+| **Shibui** | Quiet elegance, ultra-refined | Luxury | [Shibui](https://en.wikipedia.org/wiki/Shibui) |
+| **Iki** | B&W + pop color, editorial confidence | Fashion | [Iki](https://en.wikipedia.org/wiki/Iki_(aesthetic_ideal)) |
+| **Ma** | 70%+ whitespace, floating elements | Meditation | [Ma](https://en.wikipedia.org/wiki/Ma_(negative_space)) |
+
+### Scandinavian Nordic (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Hygge** | Warm, cozy, inviting | Wellness, community | [Hygge](https://en.wikipedia.org/wiki/Hygge) |
+| **Lagom** | Balanced "just enough" | Corporate | [Lagom](https://en.wikipedia.org/wiki/Lagom) |
+
+### European Modernist (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Swiss** | Strict grid, mathematical precision | Tech, corporate | [Swiss Style](https://en.wikipedia.org/wiki/Swiss_Style_(design)) |
+| **Memphis** | Bold colors, playful chaos | Creative, youth | [Memphis](https://en.wikipedia.org/wiki/Memphis_Group) |
+
+### East Asian Harmony (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Yeo-baek** | Extreme emptiness, Korean purity | Premium | [Korean Design](https://adorno.design/editorial/why-korean-design-is-the-next-global-obsession/) |
+| **Feng Shui** | Yin-Yang balance, energy flow | Wellness | [Feng Shui](https://en.wikipedia.org/wiki/Feng_shui) |
+
+### Quick Reference
+
+| Style | Whitespace | Words | Elements | Layout |
+|-------|------------|-------|----------|--------|
+| Minimal | 60-70% | ≤8 | ≤3 | Centered |
+| Dramatic | 35-45% | ≤12 | ≤5 | Asymmetric |
+| Organic | 50-60% | ≤10 | ≤4 | Flowing |
+| Wabi-Sabi | 45-55% | ≤10 | ≤4 | Imperfect |
+| Shibui | 55-65% | ≤6 | ≤3 | Refined |
+| Iki | 50-60% | ≤8 | ≤4 | Editorial |
+| Ma | 70-80% | ≤5 | ≤2 | Floating |
+| Hygge | 40-50% | ≤12 | ≤5 | Cozy |
+| Lagom | 50-60% | ≤10 | ≤4 | Balanced |
+| Swiss | 45-55% | ≤10 | ≤5 | Grid |
+| Memphis | 25-35% | ≤15 | ≤7 | Playful |
+| Yeo-baek | 65-75% | ≤6 | ≤2 | Empty |
+| Feng Shui | 50-60% | ≤10 | ≤4 | Balanced |
+
+---
+
+*Based on Presentation Zen by Garr Reynolds and international design aesthetics*
