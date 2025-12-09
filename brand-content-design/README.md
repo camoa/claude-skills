@@ -113,12 +113,14 @@ Templates define:
 Generates two files for your template:
 - **outline-template.md** - Fill-in-the-blank structure matching your slides/cards
 - **outline-prompt.txt** - Prompt to use in Claude Projects or any AI chat
+  - Includes slide/card type definitions (purpose, content requirements, word limits)
+  - External AI will understand exactly what each slide/card type needs
 
 **Workflow:**
 1. Work on your content in Claude Projects (with your context)
 2. Run `/outline my-template` to get the prompt
 3. Paste the prompt + your raw content into Claude Projects
-4. Get back a structured outline that maps to your template
+4. AI structures your content respecting slide/card type requirements
 5. Use that outline with `/presentation` or `/carousel`
 
 ### 5. Create Content (using your templates)
