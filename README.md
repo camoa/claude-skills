@@ -32,6 +32,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 # Install individual plugins
 /plugin install plugin-creation-tools@camoa-skills
 /plugin install drupal-dev-framework@camoa-skills
+/plugin install brand-content-design@camoa-skills
 /plugin install code-quality-tools@camoa-skills
 ```
 
@@ -143,6 +144,40 @@ Task Complete → Back to Step 2
 
 See [WORKFLOW.md](drupal-dev-framework/WORKFLOW.md) for complete documentation.
 
+### brand-content-design
+
+Create branded presentations and carousels with consistent visual identity. Uses a three-layer system: Brand Philosophy → Templates → Content.
+
+**Quick Start:**
+```
+/brand-content-design:brand-init
+```
+
+**The Flow:**
+```
+Brand Guidelines → Templates → Content
+```
+
+1. **Brand Guidelines** - Extract visual & verbal identity once (`/brand-init`)
+2. **Templates** - Create reusable slide/card structures (`/template-presentation`, `/template-carousel`)
+3. **Content** - Generate presentations/carousels using templates (`/presentation`, `/carousel`)
+
+| Component | Contents |
+|-----------|----------|
+| Skills | 1 skill (`brand-content-design`) |
+| Commands | 10 commands (`/brand-init`, `/brand`, `/template-presentation`, `/template-carousel`, `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`, `/outline`, etc.) |
+| Agents | 1 agent (`brand-analyst`) |
+
+**Features:**
+- Wizard-guided template creation
+- Quick mode for fast content generation
+- Outline templates for content preparation in Claude Projects
+- PDF output via `canvas-design` skill
+- Editable PPTX via `pptx` skill
+- LinkedIn and Instagram carousel support
+
+See [brand-content-design/README.md](brand-content-design/README.md) for complete documentation.
+
 ### code-quality-tools
 
 Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV.
@@ -177,6 +212,8 @@ Patterns and insights drawn from:
 - [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - Polyglot hook wrapper technique, troubleshooting patterns, and example plugin structures
 - [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) - Official guidelines
 - [Claude Code Settings Docs](https://code.claude.com/docs/en/settings) - Settings hierarchy and configuration patterns
+- [canvas-design skill](https://github.com/anthropics/skills) - High-quality PDF generation for presentations and carousels (used by brand-content-design)
+- [pptx skill](https://github.com/anthropics/skills) - Editable PowerPoint creation (used by brand-content-design)
 
 ## License
 
