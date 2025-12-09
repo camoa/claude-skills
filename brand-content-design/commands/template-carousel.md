@@ -1,6 +1,6 @@
 ---
 description: Create or edit a carousel template through guided wizard
-allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Write, Glob, AskUserQuestion, Skill
 ---
 
 # Template Carousel Command
@@ -43,9 +43,9 @@ Create a new carousel template or edit an existing one.
 
    **If "Create new template" selected → CREATE MODE:**
    - Ask: "What name do you want for this template? (e.g., tips-linkedin-minimal, story-instagram, data-highlights)"
-   - **Validate name is unique**: Check if `{PROJECT_PATH}/templates/carousels/{name}/` already exists
-   - If name exists: "A template named '{name}' already exists. Please choose a different name."
    - Sanitize name: lowercase, replace spaces with hyphens, remove special characters
+   - **Validate name is unique**: Run `test -d "{PROJECT_PATH}/templates/carousels/{name}" && echo "exists"`
+   - If "exists" returned: "A template named '{name}' already exists. Please choose a different name." (loop back to ask again)
    - Continue with step 5
 
    **If "Edit: {template-name}" selected → EDIT MODE:**
