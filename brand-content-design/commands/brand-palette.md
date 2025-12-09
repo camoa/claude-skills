@@ -192,17 +192,20 @@ If user selected "Alternative":
    echo -e "\033[48;2;37;99;235m  \033[0m \033[48;2;235;130;37m  \033[0m  Complementary   #2563EB #EB8225"
    ```
 
-11. **Ask to save (multi-select)**
-    Use AskUserQuestion with multiSelect: true
+11. **Ask to save**
+    Use AskUserQuestion:
     - Header: "Save"
-    - Question: "Which palettes would you like to save?"
-    - Options: List each generated palette by name
+    - Question: "Save these palettes to brand-philosophy.md?"
+    - Options:
+      - **Yes, save all** - Add all generated palettes
+      - **No, don't save** - Just view them for now
 
-12. **Ask for custom names (if saving Custom)**
-    If Custom palette is being saved:
-    Ask: "What should we call this palette?" (e.g., "Summer Festival", "Q4 Launch")
+    If user wants specific palettes, they can run `/brand-palette` again with more specific selections.
 
-13. **Save selected palettes**
+12. **If saving and Custom palette exists, ask for name**
+    Ask: "What should we call the custom palette?" (e.g., "Summer Festival", "Q4 Launch")
+
+13. **Save palettes (if Yes)**
     Append to brand-philosophy.md under `## Alternative Palettes`:
 
     ```markdown
