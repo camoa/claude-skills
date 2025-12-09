@@ -31,17 +31,31 @@ Generate alternative color palettes derived from brand primary colors.
    echo -e "\033[48;2;R;G;Bm     \033[0m #HEX - Color Name"
    ```
 
-4. **Ask palette selection (multi-select)**
+4. **Ask palette selection (three questions to show all 10 types)**
+
+   **Question 1: Basic harmony palettes**
    Use AskUserQuestion with multiSelect: true
-   - Header: "Palettes"
-   - Question: "Which palette types would you like to generate?"
+   - Header: "Basic"
+   - Question: "Which basic harmony palettes? (most common)"
    - Options:
      - **Monochromatic** - Same hue, varying lightness (safe, cohesive)
      - **Analogous** - Adjacent colors (harmonious, comfortable)
      - **Complementary** - Opposite colors (high contrast, attention)
+
+   **Question 2: Advanced harmony palettes**
+   Use AskUserQuestion with multiSelect: true
+   - Header: "Advanced"
+   - Question: "Which advanced harmony palettes?"
+   - Options:
      - **Split-Complementary** - Contrast with less tension
      - **Triadic** - Three balanced colors (vibrant, energetic)
-     - **Tetradic** - Four colors (rich, complex)
+     - **Tetradic** - Four colors in rectangle (rich, complex)
+
+   **Question 3: Tonal variations**
+   Use AskUserQuestion with multiSelect: true
+   - Header: "Tonal"
+   - Question: "Which tonal variations?"
+   - Options:
      - **Tints** - Lighter variations (soft backgrounds)
      - **Shades** - Darker variations (bold emphasis)
      - **Tones** - Muted variations (sophisticated, subtle)
