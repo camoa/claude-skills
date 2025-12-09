@@ -35,6 +35,7 @@ claude plugins:add brand-content-design@camoa-skills
 
 ### Creating Content (repeat as needed)
 ```
+/outline <template-name>  # (Optional) Get outline structure + AI prompt
 /presentation             # Create presentation from template
 /carousel                 # Create carousel from template
 ```
