@@ -80,7 +80,7 @@ Route user requests to the appropriate command:
 | Manage assets (logos, icons, fonts) | `/brand-assets` |
 | Create presentation template | `/template-presentation` |
 | Create carousel template | `/template-carousel` |
-| Get outline template/prompt (pres or carousel) | `/outline` |
+| Get outline template + AI prompt with slide/card definitions | `/outline` |
 | Create presentation (guided) | `/presentation` |
 | Create presentation (quick) | `/presentation-quick` |
 | Create carousel (guided) | `/carousel` |

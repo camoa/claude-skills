@@ -24,7 +24,30 @@ claude plugins:add brand-content-design@camoa-skills
 /brand                    # Start here - status, switch projects, or create new
 ```
 
-## Workflow
+### First Time Setup (do once per brand)
+```
+/brand-init               # 1. Create project structure
+/brand-extract            # 2. Extract brand colors, fonts, voice
+/brand-palette            # 3. (Optional) Generate alternative palettes
+/template-presentation    # 4. Create your first presentation template
+/template-carousel        # 5. Create your first carousel template
+```
+
+### Creating Content (repeat as needed)
+```
+/outline <template-name>  # (Optional) Get outline structure + AI prompt
+/presentation             # Create presentation from template
+/carousel                 # Create carousel from template
+```
+
+### Managing Your Brand
+```
+/brand                    # Check status, switch projects
+/brand-assets             # Add/update logos, fonts after setup
+/brand-palette            # Generate new color palettes anytime
+```
+
+## Workflow (Detailed)
 
 ### 1. Initialize a Project
 
@@ -74,6 +97,8 @@ Generates `brand-philosophy.md` with your visual identity, voice, and core princ
 
 Templates define:
 - Slide/card structure and sequence
+- Visual style (from 13 styles across 4 aesthetic families)
+- Color palette (brand colors or saved alternative palette)
 - Visual design philosophy (canvas-philosophy.md)
 - Sample PPTX/PDF for reference
 
@@ -88,13 +113,20 @@ Templates define:
 Generates two files for your template:
 - **outline-template.md** - Fill-in-the-blank structure matching your slides/cards
 - **outline-prompt.txt** - Prompt to use in Claude Projects or any AI chat
+  - Includes slide/card type definitions (purpose, content requirements, word limits)
+  - External AI will understand exactly what each slide/card type needs
 
 **Workflow:**
-1. Work on your content in Claude Projects (with your context)
-2. Run `/outline my-template` to get the prompt
-3. Paste the prompt + your raw content into Claude Projects
-4. Get back a structured outline that maps to your template
-5. Use that outline with `/presentation` or `/carousel`
+1. Run `/outline my-template` to get the prompt
+2. Open Claude Projects (or any AI) where you have your content/context
+3. Paste the `outline-prompt.txt` content
+4. Add your raw content where indicated (`[PASTE YOUR CONTENT HERE]`)
+5. AI returns a structured outline matching your template's slide/card sequence
+6. Copy the AI's output
+7. Run `/presentation` or `/carousel`, select your template
+8. Paste the structured outline when asked for content
+
+**Why this works:** The prompt teaches the external AI your template's exact structure and constraints, so its output maps perfectly to `/presentation` or `/carousel`.
 
 ### 5. Create Content (using your templates)
 

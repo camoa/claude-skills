@@ -117,31 +117,47 @@ Create a new presentation template or edit an existing one.
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-6. **Ask template purpose** (CREATE MODE only)
+6. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+
+   First, check brand-philosophy.md for `## Alternative Palettes` section.
+
+   Use AskUserQuestion:
+   - Header: "Palette"
+   - Question: "Which color palette for this template?"
+   - Options (build dynamically, max 4):
+     - **Brand colors** - Use original brand palette
+     - If alternative palettes exist, add up to 3 saved palettes by name
+     - If more than 3 alternatives exist: **More palettes...** - See additional options
+
+   If "More palettes..." selected, show next batch of palettes (up to 4 at a time).
+
+   **Store selected palette** for use in canvas-philosophy.md generation.
+
+7. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
    - "What is this presentation template for?"
    - Options: Technical/Product, Sales/Pitch, Educational/Training, Other (describe)
 
-7. **Load presentations guide**
+8. **Load presentations guide**
    - Read plugin `references/presentations-guide.md` for slide type options
 
-8. **Ask slide types needed** (or modify existing in EDIT MODE)
+9. **Ask slide types needed** (or modify existing in EDIT MODE)
    Use AskUserQuestion:
    - "Which slide types do you need?"
    - Multi-select from: Title, Content, Image, Data/Chart, Quote, CTA, Transition
    - Allow custom additions
    - In EDIT MODE: Show current slides, allow add/remove
 
-9. **Define slide sequence**
-   Based on purpose and selected types, propose a sequence:
-   - Show proposed structure
-   - Ask user to confirm or modify
+10. **Define slide sequence**
+    Based on purpose and selected types, propose a sequence:
+    - Show proposed structure
+    - Ask user to confirm or modify
 
-10. **Create/update canvas philosophy** (or skip if "Regenerate samples only")
+11. **Create/update canvas philosophy** (or skip if "Regenerate samples only")
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
-    - Brand colors and fonts from brand-philosophy.md
+    - **Selected color palette** (brand colors or alternative palette from step 6)
 
     **Include the style's HARD LIMITS in the philosophy:**
     - Word count limits per slide
@@ -150,14 +166,15 @@ Create a new presentation template or edit an existing one.
     - Layout directives
     - Anti-patterns to avoid
 
-11. **Create/update template.md**
+12. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, slide structure
     - **Include selected style name and key constraints**
+    - **Include selected palette name and colors**
     - Add visual standards and Zen principles
     - Include output configuration
 
-12. **Generate sample PDF**
+13. **Generate sample PDF**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
@@ -168,22 +185,22 @@ Create a new presentation template or edit an existing one.
     - Request output as PDF at 1920x1080 (16:9)
     - Save as sample.pdf
 
-13. **Generate sample PPTX**
+14. **Generate sample PPTX**
     Use the **pptx** skill:
     - Create an editable PowerPoint version matching the full template structure
     - Include the logo from assets/
-    - Set up slide masters with brand colors and fonts
+    - Set up slide masters with **selected palette colors**
     - **Create ALL slides defined in template.md** with placeholder content
     - Save as sample.pptx
 
-14. **Save template**
+15. **Save template**
     Save to `templates/presentations/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
     - sample.pptx
 
-15. **Confirm completion**
+16. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/presentation` and select this template
 
