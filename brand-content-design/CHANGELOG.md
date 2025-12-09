@@ -5,6 +5,20 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-12-09
+
+### Fixed
+- **AskUserQuestion option limits**: Split multi-option selections to respect 4-option limit
+  - Palette selection: 3 questions (basic harmony, advanced harmony, tonal)
+  - Japanese Zen styles: 2 questions (7 styles split into 3+4)
+  - All 10 palette types and 13 styles now accessible
+
+### Added
+- `/brand-palette` added to `/brand` command quick actions
+- `/brand-palette` added to SKILL.md commands table
+- Trigger phrases for "color palette" / "generate palette" / "alternative colors"
+- `style-constraints.md` and `color-palettes.md` added to SKILL.md references
+
 ## [1.2.0] - 2025-12-08
 
 ### Added
