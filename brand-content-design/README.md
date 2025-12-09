@@ -24,7 +24,29 @@ claude plugins:add brand-content-design@camoa-skills
 /brand                    # Start here - status, switch projects, or create new
 ```
 
-## Workflow
+### First Time Setup (do once per brand)
+```
+/brand-init               # 1. Create project structure
+/brand-extract            # 2. Extract brand colors, fonts, voice
+/brand-palette            # 3. (Optional) Generate alternative palettes
+/template-presentation    # 4. Create your first presentation template
+/template-carousel        # 5. Create your first carousel template
+```
+
+### Creating Content (repeat as needed)
+```
+/presentation             # Create presentation from template
+/carousel                 # Create carousel from template
+```
+
+### Managing Your Brand
+```
+/brand                    # Check status, switch projects
+/brand-assets             # Add/update logos, fonts after setup
+/brand-palette            # Generate new color palettes anytime
+```
+
+## Workflow (Detailed)
 
 ### 1. Initialize a Project
 
