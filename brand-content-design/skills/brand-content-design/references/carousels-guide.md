@@ -269,4 +269,35 @@ Based on LinkedIn research:
 
 ---
 
+## Visual Styles
+
+Three distinct Zen-compliant styles are available. See `style-constraints.md` for full details.
+
+### Minimal (Kanso + Seijaku)
+- **Character**: Maximum whitespace, single focal point, profound silence
+- **Best for**: Data carousels, technical content, professional audiences
+- **Key constraints**: ≤8 words/card, 60% whitespace, 3 elements max, centered layout
+
+### Dramatic (Datsuzoku + Fukinsei)
+- **Character**: Asymmetrical layouts, bold contrast, visual tension
+- **Best for**: Product launches, announcements, brand campaigns
+- **Key constraints**: ≤12 words/card, 35% whitespace, 5 elements max, off-center focal
+
+### Organic (Shizen + Yugen)
+- **Character**: Natural flow, subtle depth, warm humanity
+- **Best for**: Storytelling, educational tips, lifestyle content
+- **Key constraints**: ≤10 words/card, 50% whitespace, 4 elements max, organic groupings
+
+### Quick Reference
+
+| Parameter | Minimal | Dramatic | Organic |
+|-----------|---------|----------|---------|
+| Whitespace | 60-70% | 35-45% | 50-60% |
+| Words/card | ≤8 | ≤12 | ≤10 |
+| Elements | ≤3 | ≤5 | ≤4 |
+| Layout | Centered | Asymmetric | Flowing |
+| Type weight | Light | Bold | Medium |
+
+---
+
 *Based on Presentation Zen principles adapted for carousel format*

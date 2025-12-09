@@ -57,51 +57,70 @@ Create a new carousel template or edit an existing one.
      - Start over from scratch
    - Jump to appropriate step based on selection
 
-5. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
+5. **Ask visual style FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+   Use AskUserQuestion:
+   - Header: "Style"
+   - Question: "Which visual style for this carousel?"
+   - Options:
+     - **Minimal** - Maximum whitespace, single focal point, profound silence (best for data, technical content)
+     - **Dramatic** - Asymmetrical layouts, bold contrast, visual tension (best for announcements, launches)
+     - **Organic** - Natural flow, subtle depth, warm humanity (best for storytelling, education)
+
+   **Load style constraints** from plugin `references/style-constraints.md` based on selection.
+
+6. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
    Use AskUserQuestion:
    - "Which platform is this carousel for?"
    - Options: LinkedIn (4:5 portrait), Instagram (1:1 square), Instagram (4:5 portrait)
 
-5. **Ask template purpose** (CREATE MODE only)
+7. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
    - "What is this carousel template for?"
    - Options: Educational/Tips, Storytelling, Data/Statistics, Listicle, Other (describe)
 
-6. **Load carousels guide**
+8. **Load carousels guide**
    - Read plugin `references/carousels-guide.md` for card type options
 
-7. **Ask card types needed** (or modify existing in EDIT MODE)
+9. **Ask card types needed** (or modify existing in EDIT MODE)
    Use AskUserQuestion:
    - "Which card types do you need?"
    - Multi-select from: Hook, Content, Data, Story, CTA
    - Allow custom additions
    - In EDIT MODE: Show current cards, allow add/remove
 
-8. **Define card sequence**
-   Based on purpose and selected types, propose a sequence:
-   - Show proposed structure (5-10 cards)
-   - Ask user to confirm or modify
+10. **Define card sequence**
+    Based on purpose and selected types, propose a sequence:
+    - Show proposed structure (5-10 cards)
+    - Ask user to confirm or modify
 
-9. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
-   Use AskUserQuestion for style:
-   - "What visual style?" Options: Bold/Eye-catching, Clean/Minimal, Warm/Engaging, Professional/Corporate
-   - "What mood?" Options: Inspiring, Educational, Authoritative, Friendly
+11. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
+    Generate canvas-philosophy.md using:
+    - canvas-philosophy-template.md from references
+    - **Selected style constraints from style-constraints.md**
+    - Brand colors and fonts from brand-philosophy.md
+    - Platform-specific considerations (mobile-first)
 
-   Generate canvas-philosophy.md using:
-   - canvas-philosophy-template.md from references
-   - Brand colors and fonts from brand-philosophy.md
-   - Style preferences from questions
-   - Platform-specific considerations (mobile-first)
+    **Include the style's HARD LIMITS in the philosophy:**
+    - Word count limits per card
+    - Whitespace minimums
+    - Element count limits
+    - Layout directives
+    - Anti-patterns to avoid
 
-10. **Create/update template.md**
+12. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, card structure
+    - **Include selected style name and key constraints**
     - Add visual standards and Zen principles (carousel-adapted)
     - Include output configuration for platform
 
-11. **Generate sample**
+13. **Generate sample**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
+    - **IMPORTANT**: Include the style constraints explicitly:
+      - For Minimal: "ENFORCE: Max 8 words/card, 60% whitespace, centered layout"
+      - For Dramatic: "ENFORCE: Max 12 words/card, 35% whitespace, asymmetrical layout"
+      - For Organic: "ENFORCE: Max 10 words/card, 50% whitespace, organic flow"
     - Read the logo file from the path in brand-philosophy.md and incorporate it
     - **Generate ALL cards defined in template.md** (not just a subset)
     - Use placeholder/example content for each card type
@@ -111,13 +130,13 @@ Create a new carousel template or edit an existing one.
       - Instagram Portrait: 1080x1350 (4:5)
     - Save as sample.pdf
 
-12. **Save template**
+14. **Save template**
     Save to `templates/carousels/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
 
-13. **Confirm completion**
+15. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/carousel` and select this template
 

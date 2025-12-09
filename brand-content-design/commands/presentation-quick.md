@@ -36,6 +36,8 @@ Create a presentation with minimal questions - just template and content.
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
    - Read plugin `references/presentations-guide.md`
+   - Read plugin `references/style-constraints.md`
+   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
 
 5. **Map content to slides**
    - Parse the pasted content
@@ -48,6 +50,12 @@ Create a presentation with minimal questions - just template and content.
    - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide presentations-guide.md for Zen principles
    - Provide brand-philosophy.md for colors, fonts, logo
+
+   **ENFORCE STYLE CONSTRAINTS based on template's style:**
+   - Minimal: "ENFORCE: Max 8 words/slide, 60% whitespace, centered, 3 elements max"
+   - Dramatic: "ENFORCE: Max 12 words/slide, 35% whitespace, asymmetrical, 5 elements max"
+   - Organic: "ENFORCE: Max 10 words/slide, 50% whitespace, organic flow, 4 elements max"
+
    - Generate each slide following template structure
    - Reference sample.pdf for visual style (but generate fresh content)
    - Output as multi-page PDF at 1920x1080 (16:9)

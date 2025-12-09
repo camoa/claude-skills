@@ -39,7 +39,9 @@ Create a presentation from an existing template with user-provided content.
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
    - Read plugin `references/presentations-guide.md` for Zen principles
+   - Read plugin `references/style-constraints.md` for style enforcement
    - Note the slide structure (types, purposes, content elements)
+   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
 
 5. **Ask for content**
    Use AskUserQuestion:
@@ -81,6 +83,40 @@ Create a presentation from an existing template with user-provided content.
    - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
+
+   **ENFORCE STYLE CONSTRAINTS based on template's style:**
+
+   If Minimal style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 8 words per slide. Truncate or split content if exceeded.
+   - Minimum 60% whitespace on every slide.
+   - Maximum 3 elements per slide.
+   - Center all primary elements. Use strict grid alignment.
+   - NEVER: multiple focal points, decorative elements, bullet points.
+   ```
+
+   If Dramatic style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 12 words per slide. Truncate if exceeded.
+   - Minimum 35% whitespace on every slide.
+   - Maximum 5 elements per slide.
+   - Use asymmetrical placement. Position focal elements OFF-CENTER.
+   - NEVER: center all elements, uniform spacing, small headlines.
+   ```
+
+   If Organic style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 10 words per slide. Truncate if exceeded.
+   - Minimum 50% whitespace on every slide.
+   - Maximum 4 elements per slide.
+   - Use natural groupings with organic flow.
+   - Add subtle background texture (3-5% opacity).
+   - NEVER: stark contrast, rigid grids, cold colors.
+   ```
+
    - For each slide in the template structure:
      - Describe the slide type and purpose
      - Provide the user's content for that slide

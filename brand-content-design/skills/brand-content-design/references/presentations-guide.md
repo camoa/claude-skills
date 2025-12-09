@@ -219,4 +219,35 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 
 ---
 
+## Visual Styles
+
+Three distinct Zen-compliant styles are available. See `style-constraints.md` for full details.
+
+### Minimal (Kanso + Seijaku)
+- **Character**: Maximum whitespace, single focal point, profound silence
+- **Best for**: Executive presentations, data-driven content, technical audiences
+- **Key constraints**: ≤8 words/slide, 60% whitespace, 3 elements max, centered layout
+
+### Dramatic (Datsuzoku + Fukinsei)
+- **Character**: Asymmetrical layouts, bold contrast, visual tension
+- **Best for**: Pitch decks, announcements, creative industries
+- **Key constraints**: ≤12 words/slide, 35% whitespace, 5 elements max, off-center focal
+
+### Organic (Shizen + Yugen)
+- **Character**: Natural flow, subtle depth, warm humanity
+- **Best for**: Storytelling, education, wellbeing content
+- **Key constraints**: ≤10 words/slide, 50% whitespace, 4 elements max, organic groupings
+
+### Quick Reference
+
+| Parameter | Minimal | Dramatic | Organic |
+|-----------|---------|----------|---------|
+| Whitespace | 60-70% | 35-45% | 50-60% |
+| Words/slide | ≤8 | ≤12 | ≤10 |
+| Elements | ≤3 | ≤5 | ≤4 |
+| Layout | Centered | Asymmetric | Flowing |
+| Type weight | Light | Bold | Medium |
+
+---
+
 *Based on Presentation Zen by Garr Reynolds*

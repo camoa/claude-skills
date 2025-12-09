@@ -39,8 +39,10 @@ Create a carousel from an existing template with user-provided content.
    - Read `{PROJECT_PATH}/templates/carousels/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/carousels/{template-name}/canvas-philosophy.md`
    - Read plugin `references/carousels-guide.md` for best practices
+   - Read plugin `references/style-constraints.md` for style enforcement
    - Note the card structure (types, purposes, content elements)
    - Note the platform/dimensions
+   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
 
 5. **Ask for content**
    Use AskUserQuestion:
@@ -82,6 +84,40 @@ Create a carousel from an existing template with user-provided content.
    - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide the carousels-guide.md best practices (mobile-first, scroll-stopping, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
+
+   **ENFORCE STYLE CONSTRAINTS based on template's style:**
+
+   If Minimal style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 8 words per card. Truncate or split content if exceeded.
+   - Minimum 60% whitespace on every card.
+   - Maximum 3 elements per card.
+   - Center all primary elements. Use strict grid alignment.
+   - NEVER: multiple focal points, decorative elements, bullet points.
+   ```
+
+   If Dramatic style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 12 words per card. Truncate if exceeded.
+   - Minimum 35% whitespace on every card.
+   - Maximum 5 elements per card.
+   - Use asymmetrical placement. Position focal elements OFF-CENTER.
+   - NEVER: center all elements, uniform spacing, small headlines.
+   ```
+
+   If Organic style:
+   ```
+   HARD LIMITS - ENFORCE STRICTLY:
+   - Maximum 10 words per card. Truncate if exceeded.
+   - Minimum 50% whitespace on every card.
+   - Maximum 4 elements per card.
+   - Use natural groupings with organic flow.
+   - Add subtle background texture (3-5% opacity).
+   - NEVER: stark contrast, rigid grids, cold colors.
+   ```
+
    - For each card in the template structure:
      - Describe the card type and purpose
      - Provide the user's content for that card

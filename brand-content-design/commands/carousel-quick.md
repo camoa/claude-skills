@@ -36,7 +36,9 @@ Create a carousel with minimal questions - just template and content.
    - Read `{PROJECT_PATH}/templates/carousels/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/carousels/{template-name}/canvas-philosophy.md`
    - Read plugin `references/carousels-guide.md`
+   - Read plugin `references/style-constraints.md`
    - Note platform/dimensions
+   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
 
 5. **Map content to cards**
    - Parse the pasted content
@@ -50,6 +52,12 @@ Create a carousel with minimal questions - just template and content.
    - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
    - Provide carousels-guide.md for best practices
    - Provide brand-philosophy.md for colors, fonts, logo
+
+   **ENFORCE STYLE CONSTRAINTS based on template's style:**
+   - Minimal: "ENFORCE: Max 8 words/card, 60% whitespace, centered, 3 elements max"
+   - Dramatic: "ENFORCE: Max 12 words/card, 35% whitespace, asymmetrical, 5 elements max"
+   - Organic: "ENFORCE: Max 10 words/card, 50% whitespace, organic flow, 4 elements max"
+
    - Generate each card following template structure
    - Reference sample.pdf for visual style (but generate fresh content)
    - Output as multi-page PDF with correct dimensions
