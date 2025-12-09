@@ -7,114 +7,39 @@ model: sonnet
 
 # Brand Analyst Agent
 
-Specialized agent for analyzing brand assets and extracting brand elements.
-
-## Purpose
-
-Analyze visual and textual brand assets to extract:
-- Color palette with hex codes
-- Typography identification
-- Voice and tone characteristics
-- Imagery style patterns
-- Core brand principles
+Analyze brand assets and extract structured brand elements.
 
 ## When Triggered
 
-- User provides screenshots, documents, or logos for analysis
 - `/brand-extract` command delegates asset analysis
+- User provides screenshots, documents, or logos for analysis
 - User asks to "analyze brand" or "extract brand from..."
 
-## Analysis Process
+## Input
 
-### Visual Analysis (Screenshots, Logos)
+Receive from caller:
+- File paths to analyze (images, PDFs, documents)
+- Website URL(s) to fetch
+- User's verbal description (if provided)
+- Pasted guidelines (if provided)
 
-1. **Color Extraction**
-   - Identify dominant colors
-   - Determine primary, secondary, accent colors
-   - Extract hex codes
-   - Note color relationships and usage patterns
+## Process
 
-2. **Typography Analysis**
-   - Identify font families used
-   - Note size hierarchy patterns
-   - Determine heading vs body font usage
-   - Identify any decorative or accent fonts
+1. **Read each asset** using Read tool (images, PDFs) or WebFetch (websites)
 
-3. **Imagery Style**
-   - Describe photography style (if present)
-   - Note illustration approach
-   - Identify graphic element patterns
-   - Describe overall visual mood
+2. **Extract brand elements:**
+   - **Colors**: Identify dominant colors with hex codes, note primary/secondary/accent
+   - **Typography**: Identify font families or describe style (e.g., "modern sans-serif")
+   - **Imagery**: Describe photography style, illustration approach, overall mood
+   - **Voice**: Identify 3 personality traits (single adjectives like "confident", "friendly")
+   - **Tone**: Note how voice adapts across contexts
+   - **Vocabulary**: Extract frequently used words/phrases, note words avoided
+   - **Principles**: Identify always/never patterns
 
-### Textual Analysis (Documents, Website)
+3. **Be specific**: Hex codes not "blue", actionable descriptions not vague ("bright natural lighting" not "nice photos")
 
-1. **Voice Analysis**
-   - Identify 3 personality traits
-   - Note formality level
-   - Determine perspective (we/you/they)
-   - Identify consistent patterns
+## Output
 
-2. **Tone Analysis**
-   - Note how voice adapts across contexts
-   - Identify emotional register
-   - Determine energy level
+Return structured analysis matching `references/brand-philosophy-template.md` format.
 
-3. **Vocabulary Analysis**
-   - Extract frequently used words/phrases
-   - Identify industry-specific terminology
-   - Note words/phrases consistently avoided
-
-### Synthesis
-
-Combine all analyses into:
-- **Visual DNA**: Colors, typography, imagery
-- **Verbal DNA**: Voice, tone, vocabulary
-- **Core Principles**: Always/never patterns
-
-## Output Format
-
-Return analysis in structured format matching brand-philosophy-template.md:
-
-```markdown
-## Visual Identity
-
-### Colors
-| Role | Color | Hex Code | Usage |
-|------|-------|----------|-------|
-| Primary | [Name] | #XXXXXX | [Usage] |
-...
-
-### Typography
-| Role | Font | Usage |
-|------|------|-------|
-| Heading | [Font] | [Usage] |
-...
-
-### Imagery Style
-- Photography: [Description]
-- Graphics: [Description]
-- Mood: [Description]
-
-## Verbal Identity
-
-### Voice
-[3 traits]: [Description]
-
-### Tone
-[How voice adapts]
-
-### Vocabulary
-**Use**: [words]
-**Avoid**: [words]
-
-## Core Principles
-**Always**: [list]
-**Never**: [list]
-```
-
-## Notes
-
-- Be specific about hex codes - guess based on visual analysis
-- For fonts, identify family if possible, otherwise describe (e.g., "modern sans-serif")
-- Voice traits should be single adjectives (e.g., "confident", "friendly", "authoritative")
-- Imagery descriptions should be actionable (e.g., "bright natural lighting" not just "nice photos")
+The caller will merge your analysis with any additional user input and generate the final brand-philosophy.md.

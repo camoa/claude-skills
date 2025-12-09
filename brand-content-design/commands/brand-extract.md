@@ -83,50 +83,27 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    - Core Principles (always/never patterns)"
    ```
 
-6. **Receive and review agent results**
-   The brand-analyst agent returns structured brand elements.
+6. **Receive agent results**
+   Agent returns structured brand elements matching `references/brand-philosophy-template.md` format.
 
-   If user also provided verbal description or pasted guidelines that weren't
-   sent to agent, merge those insights with agent results.
-
-7. **Synthesize final brand elements**
-   Combine agent analysis with any additional user input into:
-
-   **Visual Identity:**
-   - Colors (3-5 dominant colors with hex codes)
-   - Typography (font families or style descriptions)
-   - Imagery style (patterns, photography style, illustration approach)
-
-   **Verbal Identity:**
-   - Voice (3 personality traits)
-   - Tone (how voice adapts to context)
-   - Key vocabulary (signature words/phrases)
-
-   **Core Principles:**
-   - Always (consistent patterns observed)
-   - Never (things consistently avoided)
-
-8. **Copy brand assets to assets/ folder**
+7. **Copy brand assets to assets/ folder**
    - Copy logo files from `input/logos/` to `assets/`
    - Prefer vector formats (SVG) over raster when available
    - If multiple logos found, ask user which is the primary logo
    - Record the primary logo path in brand-philosophy.md
 
-9. **Generate brand-philosophy.md**
-   Use plugin `references/brand-philosophy-template.md` as template
-   Fill in all extracted values including:
-   - `logo_path`: Path to primary logo in assets/ (e.g., `assets/logo.svg`)
-   Write to brand-philosophy.md (overwrite placeholder)
+8. **Generate brand-philosophy.md**
+   Use `references/brand-philosophy-template.md` as template.
+   Fill in agent results + `logo_path` from step 7.
 
-10. **Present for review**
-    Show the generated brand philosophy to user
-    Ask: "Does this capture your brand accurately? What would you like to adjust?"
+9. **Present for review**
+   Show generated brand philosophy.
+   Ask: "Does this capture your brand accurately? What would you like to adjust?"
 
-11. **Refine if needed**
-    If user provides feedback, update brand-philosophy.md
-    Repeat until user confirms
+10. **Refine if needed**
+    Update brand-philosophy.md based on feedback. Repeat until confirmed.
 
-12. **Suggest next steps**
+11. **Suggest next steps**
     Once user confirms, explain what to do next:
 
     > "Your brand philosophy is ready! Here's what you can do next:
