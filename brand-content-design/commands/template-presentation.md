@@ -42,7 +42,10 @@ Create a new presentation template or edit an existing one.
 4. **Route based on selection**
 
    **If "Create new template" selected → CREATE MODE:**
-   - Ask: "What should we call this template?" (will become folder name)
+   - Ask: "What name do you want for this template? (e.g., sales-pitch-enterprise, tech-demo-short, quarterly-update)"
+   - **Validate name is unique**: Check if `{PROJECT_PATH}/templates/presentations/{name}/` already exists
+   - If name exists: "A template named '{name}' already exists. Please choose a different name."
+   - Sanitize name: lowercase, replace spaces with hyphens, remove special characters
    - Continue with step 5
 
    **If "Edit: {template-name}" selected → EDIT MODE:**
