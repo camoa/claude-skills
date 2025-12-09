@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Custom skills and tools for Claude Code development workflows",
-    "version": "1.0.6"
+    "version": "1.0.7"
   },
   "plugins": [
     {
@@ -64,8 +64,8 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded presentations and carousels with consistent visual identity using Presentation Zen principles",
-      "version": "1.0.0",
+      "description": "Create branded presentations and carousels with 13 visual styles, color palettes, and Presentation Zen principles",
+      "version": "1.2.0",
       "author": {
         "name": "camoa"
       },
