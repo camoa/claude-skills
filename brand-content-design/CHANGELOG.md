@@ -23,6 +23,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Derived: 2 harmony questions (4+2) + 1 tonal question (4) - all 10 types visible
   - Alternative: 2 mood questions (4+3) - all 7 types visible including Custom
   - Users no longer need to click "More..." to see all options
+- **Outline prompts now include slide/card type definitions**: External AI can now understand what content each type needs (word limits, purpose, content requirements)
 
 ## [1.3.0] - 2025-12-09
 

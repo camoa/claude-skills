@@ -100,19 +100,41 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    ```
 
 6. **Generate AI prompt**
-   Create `outline-prompt.txt` in the template folder:
+   Create `outline-prompt.txt` in the template folder.
+
+   **IMPORTANT**: The prompt must include slide/card type definitions so the external AI understands what content each type needs.
 
    **For presentations:**
    ```
-   I need help structuring my presentation content. I have a template with the following slide structure:
+   I need help structuring my presentation content. I have a template with a specific slide structure.
 
-   {List each slide with type and purpose}
+   ## SLIDE TYPE DEFINITIONS
 
-   Here's my raw content/ideas:
+   Each slide type has specific content requirements:
+
+   - **Title Slide**: Set context, make first impression. Content: title, subtitle, presenter. Words: under 10.
+   - **Content Slide**: Convey one key idea. Content: one concept, expressed visually when possible. Words: 10-20 max.
+   - **Image Slide**: Visual storytelling, emotional connection. Words: 5-10 (labels or headline only).
+   - **Data/Chart Slide**: Communicate ONE insight from data. Content: one chart, one insight. Words: headline + data labels only.
+   - **Quote Slide**: Add authority or emphasis. Content: quote text + attribution.
+   - **CTA Slide**: Bridge content to action. Content: clear direction, reason to act, easy next step. Words: 10-15.
+   - **Transition Slide**: Signal section changes. Content: section title only. Words: 3-5.
+
+   ## MY TEMPLATE STRUCTURE
+
+   {List each slide with type and purpose from template.md}
+
+   ## MY RAW CONTENT
 
    [PASTE YOUR CONTENT HERE]
 
-   Please help me organize this content into the following outline format. For each slide, extract or suggest the most relevant content from what I provided. If I'm missing content for a slide, suggest what I should include.
+   ## INSTRUCTIONS
+
+   Please organize my content into this outline format. For each slide:
+   1. Extract or suggest the most relevant content from what I provided
+   2. Respect the word limits for each slide type
+   3. If I'm missing content for a slide, suggest what I should include
+   4. Each slide should have ONE clear message (3-second comprehension test)
 
    OUTPUT FORMAT:
 
@@ -123,21 +145,37 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - {element}: {filled content}
 
    ...
-
-   Keep the content concise and impactful. Each slide should have a single clear message.
    ```
 
    **For carousels:**
    ```
-   I need help structuring my carousel content. I have a template with the following card structure:
+   I need help structuring my carousel content. I have a template with a specific card structure.
 
-   {List each card with type and purpose}
+   ## CARD TYPE DEFINITIONS
 
-   Here's my raw content/ideas:
+   Each card type has specific content requirements (mobile-first, 2-second comprehension):
+
+   - **Hook Card**: Stop the scroll, create curiosity. Content: one compelling promise or question. Words: 5-15.
+   - **Content Card**: Deliver value, one idea at a time. Content: one key concept. Words: 10-30.
+   - **Data Card**: Share one insight with evidence. Content: one statistic, visualized. Words: 10-20.
+   - **Story Card**: Connect emotionally through narrative. Content: one scene or moment. Words: 10-25.
+   - **CTA Card**: Drive specific action. Content: clear direction, easy next step. Words: 10-20.
+
+   ## MY TEMPLATE STRUCTURE
+
+   {List each card with type and purpose from template.md}
+
+   ## MY RAW CONTENT
 
    [PASTE YOUR CONTENT HERE]
 
-   Please help me organize this content into the following outline format. For each card, extract or suggest the most relevant content from what I provided. If I'm missing content for a card, suggest what I should include.
+   ## INSTRUCTIONS
+
+   Please organize my content into this outline format. For each card:
+   1. Extract or suggest the most relevant content from what I provided
+   2. Respect the word limits for each card type
+   3. If I'm missing content for a card, suggest what I should include
+   4. Each card must work on mobile (short, punchy, one clear message)
 
    OUTPUT FORMAT:
 
@@ -148,8 +186,6 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - {element}: {filled content}
 
    ...
-
-   Keep the content concise and scroll-stopping. Each card should have a single clear message that works on mobile.
    ```
 
 7. **Save files**
