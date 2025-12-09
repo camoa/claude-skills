@@ -53,7 +53,9 @@ Initialize a new brand project with the required folder structure.
    - Project folder created successfully
    - Next steps:
      1. Add brand assets to input/ folder
-     2. Run `/brand-extract` when ready
+     2. Run `/brand-extract` to analyze and generate brand philosophy
+     3. Run `/brand-palette` (optional) to generate alternative color palettes
+     4. Run `/template-presentation` or `/template-carousel` to create your first template
 
 ## Output
 
