@@ -5,6 +5,14 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2025-12-09
+
+### Fixed
+- **`/brand-init` next steps**: Now shows `/brand-palette` and `/template-*` commands after init
+- **Alternative palette menu**: Both mood questions now marked "ALWAYS ASK" (sequential, not conditional)
+- **Palette confirmation message**: Now correctly mentions `/template-presentation` and `/template-carousel` (not `/presentation`)
+- **Template purpose question**: Now shows examples and asks for 2-4 word description instead of limited menu options
+
 ## [1.3.1] - 2025-12-09
 
 ### Added
