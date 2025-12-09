@@ -89,13 +89,17 @@ Route user requests to the appropriate command:
 
 ## Required Skills (Dependencies)
 
-These skills are **required** for content generation (from document-skills@anthropic-agent-skills):
+These Anthropic skills are **required** for content generation:
 
 | Skill | When to Use | Required For |
 |-------|-------------|--------------|
 | **canvas-design** | Generate visual output from canvas philosophy | All content |
 | **pptx** | Create editable PowerPoint files | Presentations |
 | **pdf** | Create multi-page PDFs | Carousels |
+
+**Built-in** for Claude.ai Pro/Max/Team/Enterprise (requires Code Execution Tool beta).
+
+For Claude Code CLI: `claude plugins:add document-skills@anthropic-agent-skills`
 
 Optional:
 | **theme-factory** | Generate theme from brand colors | Styling

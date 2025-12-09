@@ -20,7 +20,7 @@ claude plugins:add brand-content-design@camoa-skills
 
 ### Required Skills
 
-This plugin uses Anthropic's document-skills for visual output:
+This plugin uses Anthropic's official skills for visual output:
 
 | Skill | Purpose | Required For |
 |-------|---------|--------------|
@@ -28,7 +28,12 @@ This plugin uses Anthropic's document-skills for visual output:
 | **pptx** | Create editable PowerPoint files | Presentations |
 | **pdf** | Create multi-page PDFs | Carousels |
 
-These skills are part of [document-skills@anthropic-agent-skills](https://github.com/anthropics/anthropic-agent-skills) and should be available by default. If content generation fails, verify these skills are installed.
+**These skills are built-in** for Claude.ai Pro, Max, Team, and Enterprise plans. They require the Code Execution Tool beta.
+
+For Claude Code CLI, install from the [Anthropic skills repository](https://github.com/anthropics/skills):
+```bash
+claude plugins:add document-skills@anthropic-agent-skills
+```
 
 ## Quick Start
 
