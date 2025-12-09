@@ -14,6 +14,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Two-phase process: Generate PDF first (source of truth), then convert to PPTX for editability
   - Enforces style constraints (whitespace %, word limits, element counts)
   - No external dependencies required
+  - **Part 7: Technical Implementation** with reportlab code patterns:
+    - SVG to PNG conversion for logo embedding
+    - Custom font loading from `assets/fonts/`
+    - PDF generation patterns for slides (1920x1080) and cards (1080x1350)
+    - Positioning patterns: Centered, Asymmetric, Grid layouts
+    - Color parsing from brand-philosophy.md
+- **Font support**: Custom brand fonts now flow through the system
+  - `/brand-init` creates `assets/fonts/` folder
+  - `/brand-extract` scans `input/fonts/` and copies to `assets/fonts/`
+  - `/brand-extract` detects fonts from websites and recommends downloads
+  - `brand-philosophy-template.md` includes Font Files table
+  - `visual-content` loads fonts from project's `assets/fonts/`
 
 ### Changed
 - All commands now use bundled `visual-content` skill instead of external `canvas-design`

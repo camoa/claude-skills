@@ -32,6 +32,14 @@ Use this template when generating brand-philosophy.md for a user's brand project
 | Body | [Font name] | [Sans-serif/Serif] | Paragraphs, readable content |
 | Accent | [Font name] | [Monospace/Display] | Code, callouts, special text |
 
+### Font Files (if available)
+| Font | File Path | Format |
+|------|-----------|--------|
+| [Font name] | `assets/fonts/[filename].ttf` | TTF |
+| [Font name] | `assets/fonts/[filename].otf` | OTF |
+
+*Note: Add brand fonts to `input/fonts/` and run `/brand-extract` to copy them to `assets/fonts/`.*
+
 ### Imagery Style
 - **Photography**: [Describe style - e.g., "Bright, natural lighting with human subjects"]
 - **Illustrations**: [Describe style - e.g., "Flat, geometric icons with brand colors"]

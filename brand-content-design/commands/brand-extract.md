@@ -22,8 +22,9 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    - `input/screenshots/*.{png,jpg,jpeg,gif,webp}`
    - `input/documents/*.{pdf,docx,doc,txt,md}`
    - `input/logos/*.{png,jpg,svg,ai,eps}`
+   - `input/fonts/*.{ttf,otf,woff,woff2}`
 
-   Summarize what was found (e.g., "I found 3 screenshots, 1 PDF, and 2 logo files.")
+   Summarize what was found (e.g., "I found 3 screenshots, 1 PDF, 2 logo files, and 2 font files.")
 
 3. **Ask for additional sources (conversational)**
    Based on what was found, ask an open question:
@@ -91,6 +92,8 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    - Prefer vector formats (SVG) over raster when available
    - If multiple logos found, ask user which is the primary logo
    - Record the primary logo path in brand-philosophy.md
+   - Copy font files from `input/fonts/` to `assets/fonts/`
+   - Record font file paths in brand-philosophy.md typography section
 
 8. **Generate brand-philosophy.md**
    Use `references/brand-philosophy-template.md` as template.
@@ -126,8 +129,37 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
 - User confirmation of accuracy
 - Clear guidance on next steps
 
+## Font Detection from Websites
+
+When analyzing a website, the brand-analyst agent should:
+
+1. **Identify fonts used** - Look for:
+   - CSS `font-family` declarations
+   - Google Fonts, Adobe Fonts, or other web font services
+   - Custom @font-face declarations
+
+2. **Report font names** - Include in analysis:
+   - Heading font(s)
+   - Body font(s)
+   - Any accent/special fonts
+
+3. **Recommend font upload** - If custom/web fonts detected:
+   > "I detected these fonts on your website:
+   > - **Heading**: Inter (Google Fonts)
+   > - **Body**: Source Sans Pro (Google Fonts)
+   >
+   > For best results, download these fonts and add them to `input/fonts/`:
+   > - [Download Inter](https://fonts.google.com/specimen/Inter)
+   > - [Download Source Sans Pro](https://fonts.google.com/specimen/Source+Sans+Pro)
+   >
+   > This ensures your presentations and carousels match your website typography."
+
+4. **Fallback recommendation** - If fonts cannot be identified or are proprietary:
+   > "I couldn't identify the exact fonts. Please add your brand fonts to `input/fonts/` or specify them manually."
+
 ## Notes
 
 - All source types are optional - use whatever the user provides
 - Multiple sources produce richer, more accurate brand philosophy
 - When sources conflict, ask user to clarify preference
+- Font files in `input/fonts/` are automatically used for visual content generation
