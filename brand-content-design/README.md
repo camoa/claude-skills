@@ -165,13 +165,22 @@ Each style has enforced constraints (whitespace %, word limits, element counts) 
 
 ## Color Palette System
 
-Generate alternative color palettes derived from your brand colors:
+Generate alternative color palettes from your brand colors:
 
 ```
 /brand-palette
 ```
 
-### Harmony-Based (Color Wheel)
+Choose between two approaches:
+
+### Derived Palettes (Color Theory)
+
+Mathematical derivations from your brand colors. Select which source colors to use:
+- **Primary only** - Generate from main brand color
+- **All brand colors** - Generate from each color, combine results
+- **Pick specific** - Choose which colors to use
+
+#### Harmony-Based (Color Wheel)
 | Type | Description | Use Case |
 |------|-------------|----------|
 | **Monochromatic** | Single hue, varying lightness | Safe, cohesive |
@@ -181,17 +190,29 @@ Generate alternative color palettes derived from your brand colors:
 | **Triadic** | Three equally spaced | Balanced, vibrant |
 | **Tetradic** | Four colors (rectangle) | Rich, complex |
 
-### Tonal Variations
+#### Tonal Variations
 | Type | Description | Use Case |
 |------|-------------|----------|
-| **Tints** | Base + white | Soft backgrounds |
-| **Shades** | Base + black | Bold emphasis |
-| **Tones** | Base + gray | Sophisticated, subtle |
+| **Tints** | Source + white | Soft backgrounds |
+| **Shades** | Source + black | Bold emphasis |
+| **Tones** | Source + gray | Sophisticated, subtle |
+| **Interpolation** | Gradients between source colors | Data viz, smooth transitions |
 
-### Custom
-Describe a mood or purpose (e.g., "summer campaign", "professional but warm") and get a generated palette.
+### Alternative Palettes (Mood-Based)
 
-Multiple palettes can be selected and saved to `brand-philosophy.md` for use in content creation.
+Completely different colors that maintain your brand's feeling. Transforms your **entire palette**:
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| **Pastel** | Lighten + desaturate | Gentle campaigns |
+| **Bold** | High saturation, strong contrast | Impact, announcements |
+| **Earthy** | Natural equivalents | Sustainable, authentic |
+| **Vibrant** | Bright, saturated | Youth, energy |
+| **Muted** | Desaturated, refined | Luxury, sophistication |
+| **Monochrome** | Grayscale + one accent | Editorial, dramatic |
+| **Custom** | Describe a mood | Seasonal campaigns |
+
+**17 palette types total** (10 derived + 7 alternative). Generated palettes are saved to `brand-philosophy.md` for use in content creation.
 
 ## Three-Layer Philosophy System
 
