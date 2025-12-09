@@ -127,6 +127,41 @@ Generates two files for your template:
 | `/carousel-quick` | Create carousel (quick) |
 | `/content-type-new` | Add new content type (infographic, etc.) |
 
+## Visual Style System
+
+Choose from **13 distinct visual styles** across 4 aesthetic families when creating templates:
+
+### Japanese Zen (7 styles)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Minimal** | Max whitespace, single focal point | Executive, data presentations |
+| **Dramatic** | Asymmetrical, bold contrast | Pitch decks, launches |
+| **Organic** | Natural flow, subtle depth | Storytelling, tips |
+| **Wabi-Sabi** | Imperfect beauty, texture | Artisan, craft brands |
+| **Shibui** | Quiet elegance, ultra-refined | Luxury, professional |
+| **Iki** | B&W + pop color, editorial | Fashion, editorial |
+| **Ma** | 70%+ whitespace, floating elements | Meditation, luxury |
+
+### Scandinavian Nordic (2 styles)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Hygge** | Warm, cozy, inviting | Wellness, community |
+| **Lagom** | Balanced "just enough" | Corporate, balance |
+
+### European Modernist (2 styles)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Swiss** | Strict grid, mathematical precision | Tech, corporate |
+| **Memphis** | Bold colors, playful chaos | Creative, youth brands |
+
+### East Asian Harmony (2 styles)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Yeo-baek** | Extreme emptiness, Korean purity | Premium, meditation |
+| **Feng Shui** | Yin-Yang balance, energy flow | Wellness, harmony |
+
+Each style has enforced constraints (whitespace %, word limits, element counts) to ensure authentic visual output.
+
 ## Three-Layer Philosophy System
 
 ```
@@ -138,11 +173,12 @@ Layer 1: BRAND PHILOSOPHY (brand-philosophy.md)
 Layer 2: CONTENT TYPE GUIDES (plugin references)
 ├── Presentation Zen principles
 ├── Carousel best practices
+├── 13 visual styles with constraints
 └── Automatically updated with plugin
 
 Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)
 ├── template.md: structure, slide sequence
-├── canvas-philosophy.md: visual design philosophy
+├── canvas-philosophy.md: visual design philosophy + style constraints
 └── sample.pdf: visual reference
 ```
 
