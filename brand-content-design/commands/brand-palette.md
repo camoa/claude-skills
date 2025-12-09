@@ -68,7 +68,7 @@ If user selected "Derived":
     **If "Pick specific" selected:**
     Ask: "Enter color numbers (e.g., 1,3 for Primary and Accent):"
 
-6. **Ask harmony type**
+6. **Ask harmony type (1/2)**
     Use AskUserQuestion with multiSelect: true
     - Header: "Harmony"
     - Question: "Which harmony palettes? (1/2)"
@@ -76,14 +76,13 @@ If user selected "Derived":
       - **Monochromatic** - Same hue, varying lightness (safe, cohesive)
       - **Analogous** - Adjacent colors on wheel (harmonious)
       - **Complementary** - Opposite colors (high contrast)
-      - **More harmonies...** - See advanced options
-
-7. **If "More harmonies..." selected, ask advanced**
-    Use AskUserQuestion with multiSelect: true
-    - Header: "Advanced"
-    - Question: "Which advanced harmony palettes? (2/2)"
-    - Options:
       - **Split-Complementary** - Contrast with less tension
+
+7. **Ask harmony type (2/2)**
+    Use AskUserQuestion with multiSelect: true
+    - Header: "Harmony"
+    - Question: "Which harmony palettes? (2/2)"
+    - Options:
       - **Triadic** - Three balanced colors (vibrant)
       - **Tetradic** - Four colors in rectangle (complex)
 
@@ -127,7 +126,7 @@ If user selected "Derived":
 
 If user selected "Alternative":
 
-5. **Ask mood style**
+5. **Ask mood style (1/2)**
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (1/2)"
@@ -135,14 +134,13 @@ If user selected "Alternative":
       - **Pastel** - Soft, light, airy (gentle campaigns)
       - **Bold** - High saturation, strong contrast (impact)
       - **Earthy** - Natural, warm, grounded (sustainable)
-      - **More moods...** - See additional options
+      - **Vibrant** - Bright, energetic (youth, excitement)
 
-6. **If "More moods..." selected, ask additional**
+6. **Ask mood style (2/2)**
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (2/2)"
     - Options:
-      - **Vibrant** - Bright, energetic (youth, excitement)
       - **Muted** - Desaturated, refined (luxury, sophistication)
       - **Monochrome** - Grayscale + one accent (editorial, dramatic)
       - **Custom** - Describe what you need

@@ -118,36 +118,52 @@ Create a new carousel template or edit an existing one.
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-6. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
+6. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+
+   First, check brand-philosophy.md for `## Alternative Palettes` section.
+
+   Use AskUserQuestion:
+   - Header: "Palette"
+   - Question: "Which color palette for this template?"
+   - Options (build dynamically, max 4):
+     - **Brand colors** - Use original brand palette
+     - If alternative palettes exist, add up to 3 saved palettes by name
+     - If more than 3 alternatives exist: **More palettes...** - See additional options
+
+   If "More palettes..." selected, show next batch of palettes (up to 4 at a time).
+
+   **Store selected palette** for use in canvas-philosophy.md generation.
+
+7. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
    Use AskUserQuestion:
    - "Which platform is this carousel for?"
    - Options: LinkedIn (4:5 portrait), Instagram (1:1 square), Instagram (4:5 portrait)
 
-7. **Ask template purpose** (CREATE MODE only)
+8. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
    - "What is this carousel template for?"
    - Options: Educational/Tips, Storytelling, Data/Statistics, Listicle, Other (describe)
 
-8. **Load carousels guide**
+9. **Load carousels guide**
    - Read plugin `references/carousels-guide.md` for card type options
 
-9. **Ask card types needed** (or modify existing in EDIT MODE)
-   Use AskUserQuestion:
-   - "Which card types do you need?"
-   - Multi-select from: Hook, Content, Data, Story, CTA
-   - Allow custom additions
-   - In EDIT MODE: Show current cards, allow add/remove
+10. **Ask card types needed** (or modify existing in EDIT MODE)
+    Use AskUserQuestion:
+    - "Which card types do you need?"
+    - Multi-select from: Hook, Content, Data, Story, CTA
+    - Allow custom additions
+    - In EDIT MODE: Show current cards, allow add/remove
 
-10. **Define card sequence**
+11. **Define card sequence**
     Based on purpose and selected types, propose a sequence:
     - Show proposed structure (5-10 cards)
     - Ask user to confirm or modify
 
-11. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
+12. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
-    - Brand colors and fonts from brand-philosophy.md
+    - **Selected color palette** (brand colors or alternative palette from step 6)
     - Platform-specific considerations (mobile-first)
 
     **Include the style's HARD LIMITS in the philosophy:**
@@ -157,18 +173,20 @@ Create a new carousel template or edit an existing one.
     - Layout directives
     - Anti-patterns to avoid
 
-12. **Create/update template.md**
+13. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, card structure
     - **Include selected style name and key constraints**
+    - **Include selected palette name and colors**
     - Add visual standards and Zen principles (carousel-adapted)
     - Include output configuration for platform
 
-13. **Generate sample**
+14. **Generate sample**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
     - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
+    - Use **selected palette colors** for all visual elements
     - Read the logo file from the path in brand-philosophy.md and incorporate it
     - **Generate ALL cards defined in template.md** (not just a subset)
     - Use placeholder/example content for each card type
@@ -178,13 +196,13 @@ Create a new carousel template or edit an existing one.
       - Instagram Portrait: 1080x1350 (4:5)
     - Save as sample.pdf
 
-14. **Save template**
+15. **Save template**
     Save to `templates/carousels/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
 
-15. **Confirm completion**
+16. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/carousel` and select this template
 

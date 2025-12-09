@@ -5,6 +5,25 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-12-09
+
+### Added
+- **Palette selection in template creation**: Templates now lock style + palette together
+  - Step 6 in `/template-presentation` and `/template-carousel` asks which palette
+  - Options: Brand colors (default) or any saved alternative palette
+  - Palette colors used in canvas-philosophy.md, template.md, and sample generation
+
+### Changed
+- Templates are now more specific: style + palette locked at template level
+- Content creation (`/presentation`, `/carousel`) uses template's locked palette
+- Step numbers updated in both template commands (now 16 steps each)
+
+### Fixed
+- **All palette options now shown**: Removed "More..." gates in `/brand-palette`
+  - Derived: 2 harmony questions (4+2) + 1 tonal question (4) - all 10 types visible
+  - Alternative: 2 mood questions (4+3) - all 7 types visible including Custom
+  - Users no longer need to click "More..." to see all options
+
 ## [1.3.0] - 2025-12-09
 
 ### Added
