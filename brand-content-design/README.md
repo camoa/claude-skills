@@ -117,11 +117,16 @@ Generates two files for your template:
   - External AI will understand exactly what each slide/card type needs
 
 **Workflow:**
-1. Work on your content in Claude Projects (with your context)
-2. Run `/outline my-template` to get the prompt
-3. Paste the prompt + your raw content into Claude Projects
-4. AI structures your content respecting slide/card type requirements
-5. Use that outline with `/presentation` or `/carousel`
+1. Run `/outline my-template` to get the prompt
+2. Open Claude Projects (or any AI) where you have your content/context
+3. Paste the `outline-prompt.txt` content
+4. Add your raw content where indicated (`[PASTE YOUR CONTENT HERE]`)
+5. AI returns a structured outline matching your template's slide/card sequence
+6. Copy the AI's output
+7. Run `/presentation` or `/carousel`, select your template
+8. Paste the structured outline when asked for content
+
+**Why this works:** The prompt teaches the external AI your template's exact structure and constraints, so its output maps perfectly to `/presentation` or `/carousel`.
 
 ### 5. Create Content (using your templates)
 
