@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Custom skills and tools for Claude Code development workflows",
-    "version": "1.0.7"
+    "version": "1.0.8"
   },
   "plugins": [
     {
