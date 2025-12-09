@@ -5,6 +5,22 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-08
+
+### Added
+- **Brand Analyst Agent Integration**: `/brand-extract` now delegates to `brand-analyst` agent
+  - Preserves main conversation context window for heavy asset analysis
+  - Agent runs in separate context for images, PDFs, websites
+- **Color Theory Analysis**: Agent enhanced with comprehensive color analysis
+  - 3-step process: identify colors, analyze relationships, note properties
+  - Color harmony identification (monochromatic, analogous, complementary, triadic, tetradic)
+  - Temperature, saturation, and emotional association analysis
+  - Wikipedia links for color theory reference
+
+### Changed
+- `/brand-extract` workflow delegates to agent instead of inline analysis
+- Agent references `brand-philosophy-template.md` instead of reproducing format (DRY)
+
 ## [1.1.0] - 2025-12-08
 
 ### Added

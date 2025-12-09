@@ -1,6 +1,6 @@
 ---
 description: Extract brand elements from multiple sources and generate brand-philosophy.md
-allowed-tools: Read, Glob, Write, WebFetch, AskUserQuestion
+allowed-tools: Read, Glob, Write, WebFetch, AskUserQuestion, Task
 ---
 
 # Brand Extract Command
@@ -42,38 +42,49 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    > - Paste existing brand guidelines"
 
 4. **Gather all sources**
-   Based on user response, collect from any combination:
-   - **Files**: Read images, PDFs, documents from input/
-   - **Website**: Use WebFetch on provided URL(s)
-   - **Verbal description**: User describes brand in chat
-   - **Pasted guidelines**: User pastes existing brand doc content
+   Based on user response, collect source list:
+   - **Files**: List of images, PDFs, documents from input/
+   - **Website**: URL(s) provided by user
+   - **Verbal description**: User's brand description text
+   - **Pasted guidelines**: Existing brand doc content
 
-   Note: User may provide multiple sources in one response. Parse and use all.
+   Note: User may provide multiple sources in one response. Parse and collect all.
 
-5. **Analyze each source**
-   - **Screenshots/Images**: Analyze for colors, layout, typography, imagery style
-   - **Documents/PDFs**: Analyze for voice, tone, key vocabulary
-   - **Logos**: Analyze for colors, shapes, style
-   - **Website**: Fetch and analyze visual design + copy
-   - **Verbal description**: Extract stated preferences and values
-   - **Pasted guidelines**: Parse and extract structured brand elements
+5. **Delegate analysis to brand-analyst agent**
+   Use the Task tool to spawn the `brand-analyst` agent for heavy analysis.
 
-6. **Synthesize brand elements**
-   Combine insights from ALL sources into:
+   **Why delegate:** Asset analysis (images, PDFs, websites) consumes significant context.
+   Running in a separate agent preserves the main conversation's context window.
 
-   **Visual Identity:**
-   - Colors (3-5 dominant colors with hex codes)
-   - Typography (font families or style descriptions)
-   - Imagery style (patterns, photography style, illustration approach)
+   **Task prompt should include:**
+   - List of all files to analyze (full paths)
+   - Website URL(s) if provided
+   - Verbal description if provided
+   - Pasted guidelines if provided
+   - Request structured output matching brand-philosophy-template.md format
 
-   **Verbal Identity:**
-   - Voice (3 personality traits)
-   - Tone (how voice adapts to context)
-   - Key vocabulary (signature words/phrases)
+   **Example Task call:**
+   ```
+   Task tool with subagent_type: "brand-content-design:brand-analyst"
+   Prompt: "Analyze these brand assets and return structured brand elements:
 
-   **Core Principles:**
-   - Always (consistent patterns observed)
-   - Never (things consistently avoided)
+   Files to analyze:
+   - /path/to/project/input/screenshots/homepage.png
+   - /path/to/project/input/logos/logo.svg
+   - /path/to/project/input/documents/brand-guide.pdf
+
+   Website: https://example.com
+
+   User description: [paste user's verbal description]
+
+   Return analysis in brand-philosophy-template.md format with:
+   - Visual Identity (colors with hex, typography, imagery style)
+   - Verbal Identity (voice traits, tone, vocabulary)
+   - Core Principles (always/never patterns)"
+   ```
+
+6. **Receive agent results**
+   Agent returns structured brand elements matching `references/brand-philosophy-template.md` format.
 
 7. **Copy brand assets to assets/ folder**
    - Copy logo files from `input/logos/` to `assets/`
@@ -82,18 +93,15 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    - Record the primary logo path in brand-philosophy.md
 
 8. **Generate brand-philosophy.md**
-   Use plugin `references/brand-philosophy-template.md` as template
-   Fill in all extracted values including:
-   - `logo_path`: Path to primary logo in assets/ (e.g., `assets/logo.svg`)
-   Write to brand-philosophy.md (overwrite placeholder)
+   Use `references/brand-philosophy-template.md` as template.
+   Fill in agent results + `logo_path` from step 7.
 
 9. **Present for review**
-   Show the generated brand philosophy to user
+   Show generated brand philosophy.
    Ask: "Does this capture your brand accurately? What would you like to adjust?"
 
 10. **Refine if needed**
-    If user provides feedback, update brand-philosophy.md
-    Repeat until user confirms
+    Update brand-philosophy.md based on feedback. Repeat until confirmed.
 
 11. **Suggest next steps**
     Once user confirms, explain what to do next:
