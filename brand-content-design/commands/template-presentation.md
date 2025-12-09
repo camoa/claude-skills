@@ -139,9 +139,10 @@ Create a new presentation template or edit an existing one.
    **If 4 or fewer total palettes:** Use AskUserQuestion
    - Header: "Palette"
    - Question: "Which color palette for this template?"
-   - Options (build dynamically):
+   - Options (build dynamically, 2-4 options):
      - **Brand colors** - Use original brand palette
-     - List each alternative palette by name
+     - **{Alternative 1}** - Name from Alternative Palettes section
+     - (add more if available, up to 4 total)
 
    **If more than 4 total palettes:** Use conversational list
    Display all palettes with numbers:

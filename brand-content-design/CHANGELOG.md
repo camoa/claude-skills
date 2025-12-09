@@ -5,6 +5,21 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2025-12-09
+
+### Added
+- **Command validation script**: `scripts/validate_commands.py` for integrity testing
+  - Validates frontmatter, AskUserQuestion compliance, skill references, file references
+  - Checks step numbering and required sections
+  - Run with `python3 scripts/validate_commands.py`
+
+### Fixed
+- **AskUserQuestion compliance in palette selection**: Template commands now show 2+ bold options for dynamic palette lists
+- **Step numbering in `/outline`**: Fixed duplicate step 4, now correctly numbered 1-9
+- **Template edit mode**: Split into 2-question flow to respect 4-option limit
+  - Step 4a: Choose aspect to modify (Structure, Visual style, Regenerate, Start over)
+  - Step 4b: If Structure selected, choose action (Add, Remove, Reorder)
+
 ## [1.4.0] - 2025-12-09
 
 ### Added
