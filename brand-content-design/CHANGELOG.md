@@ -8,22 +8,26 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.3.0] - 2025-12-09
 
 ### Added
-- **Expanded Palette System**: 18 palette types (up from 10)
-  - **Derived palettes** (color theory): 11 types
-    - Harmony: Monochromatic, Analogous, Complementary, Split-Complementary, Triadic, Tetradic, Extended Harmony
+- **Expanded Palette System**: 17 palette types (up from 10)
+  - **Derived palettes** (color theory): 10 types
+    - Harmony: Monochromatic, Analogous, Complementary, Split-Complementary, Triadic, Tetradic
     - Tonal: Tints, Shades, Tones, Interpolation
   - **Alternative palettes** (mood-based): 7 types
     - Pastel, Bold, Earthy, Vibrant, Muted, Monochrome, Custom
+- **Source color selection**: Choose which brand colors to derive from
+  - Primary only (default, simplest)
+  - All brand colors (richest results)
+  - Pick specific colors
 - **Branching palette selection**: Choose "Derived" or "Alternative" first, then specific options
-- **Multi-color source support**: Derived palettes can use full brand palette (not just primary)
-- **Extended Harmony**: Generates harmonies from all brand colors, merges results
-- **Interpolation**: Creates gradient colors between brand colors
-- **Mood-based alternatives**: Generate completely different colors that maintain brand feeling
+- **Full palette awareness**: Alternative moods transform entire brand palette, not just primary
+- **Interpolation**: Creates gradient colors between selected source colors
 
 ### Changed
 - `/brand-palette` now uses branching workflow (category → options)
+- Derived palettes use "Source" instead of "Primary" - works with any selected colors
+- Alternative palettes transform all brand colors to maintain palette structure
 - `color-palettes.md` reorganized with Derived vs Alternative sections
-- Quick decision guide updated with all 18 palette types
+- Removed "Extended Harmony" - replaced by source selection feature
 
 ## [1.2.1] - 2025-12-09
 
