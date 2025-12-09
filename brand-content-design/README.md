@@ -74,6 +74,8 @@ Generates `brand-philosophy.md` with your visual identity, voice, and core princ
 
 Templates define:
 - Slide/card structure and sequence
+- Visual style (from 13 styles across 4 aesthetic families)
+- Color palette (brand colors or saved alternative palette)
 - Visual design philosophy (canvas-philosophy.md)
 - Sample PPTX/PDF for reference
 
