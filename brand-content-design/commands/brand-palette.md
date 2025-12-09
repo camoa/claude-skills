@@ -24,11 +24,15 @@ Generate alternative color palettes - either derived from brand colors (color th
    - Find all colors: primary, secondary, accent, neutrals
    - If no colors found: Tell user to run `/brand-extract` first and stop
 
-3. **Show current colors**
+3. **Show current colors and existing palettes**
    Display current brand colors with color boxes:
    ```bash
    echo -e "\033[48;2;R;G;Bm     \033[0m #HEX - Color Name"
    ```
+
+   If `## Alternative Palettes` section exists in brand-philosophy.md:
+   - Also display saved palettes with color boxes
+   - Note: "You have X saved palettes"
 
 4. **Ask palette category (branching question)**
    Use AskUserQuestion:
@@ -44,7 +48,7 @@ Generate alternative color palettes - either derived from brand colors (color th
 
 If user selected "Derived":
 
-5a. **Ask source color(s)**
+5. **Ask source color(s)**
     Display brand colors with numbers:
     ```
     Your brand colors:
@@ -64,7 +68,7 @@ If user selected "Derived":
     **If "Pick specific" selected:**
     Ask: "Enter color numbers (e.g., 1,3 for Primary and Accent):"
 
-6a. **Ask harmony type**
+6. **Ask harmony type**
     Use AskUserQuestion with multiSelect: true
     - Header: "Harmony"
     - Question: "Which harmony palettes? (1/2)"
@@ -74,7 +78,7 @@ If user selected "Derived":
       - **Complementary** - Opposite colors (high contrast)
       - **More harmonies...** - See advanced options
 
-7a. **If "More harmonies..." selected, ask advanced**
+7. **If "More harmonies..." selected, ask advanced**
     Use AskUserQuestion with multiSelect: true
     - Header: "Advanced"
     - Question: "Which advanced harmony palettes? (2/2)"
@@ -83,7 +87,7 @@ If user selected "Derived":
       - **Triadic** - Three balanced colors (vibrant)
       - **Tetradic** - Four colors in rectangle (complex)
 
-8a. **Ask tonal variations**
+8. **Ask tonal variations**
     Use AskUserQuestion with multiSelect: true
     - Header: "Tonal"
     - Question: "Which tonal variations?"
@@ -93,7 +97,7 @@ If user selected "Derived":
       - **Tones** - Muted with gray (sophisticated)
       - **Interpolation** - Gradients between source colors
 
-9a. **Generate derived palettes**
+9. **Generate derived palettes**
     For each selected source color, apply selected harmony/tonal types:
 
     **Harmony calculations (from color wheel):**
@@ -123,7 +127,7 @@ If user selected "Derived":
 
 If user selected "Alternative":
 
-5b. **Ask mood style**
+5. **Ask mood style**
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (1/2)"
@@ -133,7 +137,7 @@ If user selected "Alternative":
       - **Earthy** - Natural, warm, grounded (sustainable)
       - **More moods...** - See additional options
 
-6b. **If "More moods..." selected, ask additional**
+6. **If "More moods..." selected, ask additional**
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (2/2)"
@@ -143,11 +147,11 @@ If user selected "Alternative":
       - **Monochrome** - Grayscale + one accent (editorial, dramatic)
       - **Custom** - Describe what you need
 
-7b. **If Custom selected, ask for description**
+7. **If Custom selected, ask for description**
     Ask: "Describe the mood or purpose for your custom palette:"
     Examples: "summer festival", "winter elegance", "tech startup energy"
 
-8b. **Generate alternative palettes**
+8. **Generate alternative palettes**
     For each selected mood, use the **full brand palette** as reference:
 
     1. **Analyze brand personality** from brand-philosophy.md
