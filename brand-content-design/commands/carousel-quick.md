@@ -38,7 +38,7 @@ Create a carousel with minimal questions - just template and content.
    - Read plugin `references/carousels-guide.md`
    - Read plugin `references/style-constraints.md`
    - Note platform/dimensions
-   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
+   - **Identify the template's style** from canvas-philosophy.md (look for "Style:" at bottom)
 
 5. **Map content to cards**
    - Parse the pasted content
@@ -54,9 +54,9 @@ Create a carousel with minimal questions - just template and content.
    - Provide brand-philosophy.md for colors, fonts, logo
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
-   - Minimal: "ENFORCE: Max 8 words/card, 60% whitespace, centered, 3 elements max"
-   - Dramatic: "ENFORCE: Max 12 words/card, 35% whitespace, asymmetrical, 5 elements max"
-   - Organic: "ENFORCE: Max 10 words/card, 50% whitespace, organic flow, 4 elements max"
+   - Look up the style's Enforcement Block in `style-constraints.md`
+   - Pass it to canvas-design as hard constraints
+   - All 13 styles (Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma, Hygge, Lagom, Swiss, Memphis, Yeo-baek, Feng Shui) have enforcement blocks
 
    - Generate each card following template structure
    - Reference sample.pdf for visual style (but generate fresh content)

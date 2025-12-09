@@ -59,16 +59,46 @@ Create a new presentation template or edit an existing one.
      - Start over from scratch
    - Jump to appropriate step based on selection
 
-5. **Ask visual style FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+
+   **Step 5a: Choose aesthetic family**
+   Use AskUserQuestion:
+   - Header: "Aesthetic"
+   - Question: "Which design aesthetic for this template?"
+   - Options:
+     - **Japanese Zen** - Restraint, intentionality, essence (7 styles)
+     - **Scandinavian Nordic** - Warmth, balance, functionality (2 styles)
+     - **European Modernist** - Precision or playfulness (2 styles)
+     - **East Asian Harmony** - Space, balance, energy (2 styles)
+
+   **Step 5b: Choose specific style** (based on family selected)
    Use AskUserQuestion:
    - Header: "Style"
-   - Question: "Which visual style for this template?"
-   - Options:
-     - **Minimal** - Maximum whitespace, single focal point, profound silence (best for executive, data, technical)
-     - **Dramatic** - Asymmetrical layouts, bold contrast, visual tension (best for pitch decks, announcements)
-     - **Organic** - Natural flow, subtle depth, warm humanity (best for storytelling, education)
+   - Question: "Which {family} style?"
+   - Options vary by family:
 
-   **Load style constraints** from plugin `references/style-constraints.md` based on selection.
+   **Japanese Zen options:**
+   - **Minimal** - Max whitespace, single focal, silence (executive, data)
+   - **Dramatic** - Asymmetrical, bold contrast, tension (pitch decks)
+   - **Organic** - Natural flow, subtle depth, warmth (storytelling)
+   - **Wabi-Sabi** - Imperfect beauty, texture, handcraft (artisan, craft)
+   - **Shibui** - Quiet elegance, ultra-refined (luxury, professional)
+   - **Iki** - B&W + pop color, editorial confidence (fashion, editorial)
+   - **Ma** - 70%+ whitespace, floating elements (meditation, luxury)
+
+   **Scandinavian Nordic options:**
+   - **Hygge** - Warm, cozy, inviting (wellness, community)
+   - **Lagom** - Balanced "just enough" (corporate, sustainability)
+
+   **European Modernist options:**
+   - **Swiss** - Strict grid, mathematical precision (tech, corporate)
+   - **Memphis** - Bold colors, playful chaos (creative, youth)
+
+   **East Asian Harmony options:**
+   - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
+   - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
+
+   **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
 6. **Ask template purpose** (CREATE MODE only)
    Use AskUserQuestion:
@@ -113,10 +143,8 @@ Create a new presentation template or edit an existing one.
 12. **Generate sample PDF**
     Use the **canvas-design** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
-    - **IMPORTANT**: Include the style constraints explicitly:
-      - For Minimal: "ENFORCE: Max 8 words/slide, 60% whitespace, centered layout"
-      - For Dramatic: "ENFORCE: Max 12 words/slide, 35% whitespace, asymmetrical layout"
-      - For Organic: "ENFORCE: Max 10 words/slide, 50% whitespace, organic flow"
+    - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
+    - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
     - Read the logo file from the path in brand-philosophy.md and incorporate it
     - **Generate ALL slides defined in template.md** (not just a subset)
     - Use placeholder/example content for each slide type

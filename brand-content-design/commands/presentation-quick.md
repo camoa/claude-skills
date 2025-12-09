@@ -37,7 +37,7 @@ Create a presentation with minimal questions - just template and content.
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
    - Read plugin `references/presentations-guide.md`
    - Read plugin `references/style-constraints.md`
-   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
+   - **Identify the template's style** from canvas-philosophy.md (look for "Style:" at bottom)
 
 5. **Map content to slides**
    - Parse the pasted content
@@ -52,9 +52,9 @@ Create a presentation with minimal questions - just template and content.
    - Provide brand-philosophy.md for colors, fonts, logo
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
-   - Minimal: "ENFORCE: Max 8 words/slide, 60% whitespace, centered, 3 elements max"
-   - Dramatic: "ENFORCE: Max 12 words/slide, 35% whitespace, asymmetrical, 5 elements max"
-   - Organic: "ENFORCE: Max 10 words/slide, 50% whitespace, organic flow, 4 elements max"
+   - Look up the style's Enforcement Block in `style-constraints.md`
+   - Pass it to canvas-design as hard constraints
+   - All 13 styles (Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma, Hygge, Lagom, Swiss, Memphis, Yeo-baek, Feng Shui) have enforcement blocks
 
    - Generate each slide following template structure
    - Reference sample.pdf for visual style (but generate fresh content)

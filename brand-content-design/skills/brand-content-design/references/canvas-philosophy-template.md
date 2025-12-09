@@ -2,21 +2,44 @@
 
 Use this template when creating canvas-philosophy.md files for templates. This generates the visual design philosophy that canvas-design skill will use to create visuals.
 
-**IMPORTANT**: Select a style FIRST, then generate the philosophy based on that style's constraints.
+**IMPORTANT**: Select aesthetic family and style FIRST, then generate the philosophy based on that style's constraints from `style-constraints.md`.
 
 ---
 
-## Style Selection (Choose One)
+## Style Selection (Two Steps)
 
-Select the visual style that best matches the template's purpose. See `style-constraints.md` for full details.
+### Step 1: Choose Aesthetic Family
+
+| Family | Character | Styles |
+|--------|-----------|--------|
+| **Japanese Zen** | Restraint, intentionality, essence | Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma |
+| **Scandinavian Nordic** | Warmth, balance, functionality | Hygge, Lagom |
+| **European Modernist** | Precision or playfulness | Swiss, Memphis |
+| **East Asian Harmony** | Space, balance, energy | Yeo-baek, Feng Shui |
+
+**Selected Family**: [japanese-zen / scandinavian / european / east-asian]
+
+### Step 2: Choose Specific Style
+
+See `style-constraints.md` for full details on each style, or use quick reference:
 
 | Style | Character | Best For |
 |-------|-----------|----------|
-| **Minimal** | Maximum whitespace, single focal point, silence | Executive, data-driven, technical |
-| **Dramatic** | Asymmetrical, bold contrast, visual tension | Pitch decks, announcements, creative |
-| **Organic** | Natural flow, subtle depth, warm humanity | Storytelling, education, wellbeing |
+| Minimal | Max whitespace, single focal | Executive, data |
+| Dramatic | Asymmetrical, bold contrast | Pitch decks |
+| Organic | Natural flow, warmth | Storytelling |
+| Wabi-Sabi | Imperfect beauty, texture | Artisan, craft |
+| Shibui | Quiet elegance, ultra-refined | Luxury |
+| Iki | B&W + pop color, editorial | Fashion |
+| Ma | 70%+ whitespace, floating | Meditation |
+| Hygge | Warm, cozy, inviting | Wellness |
+| Lagom | Balanced "just enough" | Corporate |
+| Swiss | Strict grid, mathematical | Tech |
+| Memphis | Bold colors, playful chaos | Creative |
+| Yeo-baek | Extreme emptiness, purity | Premium |
+| Feng Shui | Yin-Yang balance | Wellness |
 
-**Selected Style**: [minimal / dramatic / organic]
+**Selected Style**: [style-name]
 
 ---
 
@@ -25,10 +48,11 @@ Select the visual style that best matches the template's purpose. See `style-con
 ## Design Movement Name
 **"[Creative Name]"** - [2-3 word description]
 
-Example names by style:
-- Minimal: "Silent Precision", "Breathed Space", "Refined Restraint"
-- Dramatic: "Bold Impact", "Striking Asymmetry", "Commanding Presence"
-- Organic: "Warm Authenticity", "Natural Flow", "Human Connection"
+Example names by family:
+- Japanese Zen: "Silent Precision", "Imperfect Beauty", "Floating Void"
+- Scandinavian: "Warm Balance", "Cozy Clarity"
+- European: "Grid Logic", "Playful Bold"
+- East Asian: "Empty Resonance", "Balanced Flow"
 
 ## Philosophy Statement
 
@@ -97,88 +121,30 @@ Example names by style:
 
 ## Style Constraints (ENFORCE STRICTLY)
 
-Based on selected style, these constraints are HARD LIMITS:
+**IMPORTANT**: Copy the exact Enforcement Block for your selected style from `style-constraints.md`.
 
-### If Minimal Style:
+Each style has a pre-defined enforcement block. Example format:
+
 ```
-HARD LIMITS:
-- Maximum 8 words per slide - truncate or split if exceeded
-- Minimum 60% whitespace on every slide
-- Maximum 3 elements per slide
-- Maximum 3 colors total
-
-LAYOUT:
-- Center all primary elements OR single strong left alignment
-- Strict 8-point grid, no exceptions
-- ONE clear focal point per slide
-
-TYPOGRAPHY:
-- Weight: Light to Regular (300-400)
-- Headlines: 48-56pt
-- Body: 18-24pt
-
-NEVER:
-- Multiple competing focal points
-- Decorative elements without function
-- Bullet points
-- Drop shadows or 3D effects
+STYLE: [Style Name] ([Family])
+- HARD LIMIT: Max X words/slide. Truncate if exceeded.
+- HARD LIMIT: Min X% whitespace.
+- HARD LIMIT: Max X elements.
+- Layout: [Layout directive]
+- Typography: [Typography directive]
+- Color: [Color directive]
+- NEVER: [Anti-patterns]
 ```
 
-### If Dramatic Style:
+**Paste the enforcement block for your selected style here:**
+
 ```
-HARD LIMITS:
-- Maximum 12 words per slide - truncate if exceeded
-- Minimum 35% whitespace on every slide
-- Maximum 5 elements per slide
-- Use 4-5 colors with high contrast
-
-LAYOUT:
-- Asymmetrical placement - position focal elements OFF-CENTER
-- Intentional grid breaks for tension
-- Dynamic equilibrium through unequal weights
-
-TYPOGRAPHY:
-- Weight: Bold to Black (700-900)
-- Headlines: 56-72pt (larger than other styles)
-- Body: 14-20pt (smaller for contrast)
-
-NEVER:
-- Perfect centering of all elements
-- Uniform spacing throughout
-- Muted, desaturated colors
-- Small, timid headlines
-```
-
-### If Organic Style:
-```
-HARD LIMITS:
-- Maximum 10 words per slide - truncate if exceeded
-- Minimum 50% whitespace on every slide
-- Maximum 4 elements per slide
-- Use 5-6 warm colors
-
-LAYOUT:
-- Natural groupings with organic flow
-- Loose 8-point grid with organic alignments
-- Natural equilibrium, like objects on a table
-
-TYPOGRAPHY:
-- Weight: Medium to SemiBold (400-600)
-- Headlines: 48-60pt
-- Body: 18-22pt
-
-TEXTURE:
-- Add subtle background texture (3-5% opacity)
-
-NEVER:
-- Stark black and white contrast
-- Rigid grid alignment throughout
-- Cold, clinical color palettes
-- Pure white backgrounds
+[Copy from style-constraints.md]
 ```
 
 ---
 
 *Philosophy created for [Template Name] template*
 *Brand: [Brand Name]*
-*Style: [minimal / dramatic / organic]*
+*Family: [aesthetic family]*
+*Style: [style name]*

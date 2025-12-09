@@ -42,7 +42,7 @@ Create a carousel from an existing template with user-provided content.
    - Read plugin `references/style-constraints.md` for style enforcement
    - Note the card structure (types, purposes, content elements)
    - Note the platform/dimensions
-   - **Identify the template's style** (Minimal, Dramatic, or Organic) from canvas-philosophy.md
+   - **Identify the template's style** from canvas-philosophy.md (look for "Style:" at bottom or enforcement block)
 
 5. **Ask for content**
    Use AskUserQuestion:
@@ -87,36 +87,27 @@ Create a carousel from an existing template with user-provided content.
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
 
-   If Minimal style:
+   - Look up the template's style in `style-constraints.md`
+   - Copy the exact **Enforcement Block** for that style
+   - Pass it to canvas-design as hard constraints
+
+   The enforcement block format is:
    ```
-   HARD LIMITS - ENFORCE STRICTLY:
-   - Maximum 8 words per card. Truncate or split content if exceeded.
-   - Minimum 60% whitespace on every card.
-   - Maximum 3 elements per card.
-   - Center all primary elements. Use strict grid alignment.
-   - NEVER: multiple focal points, decorative elements, bullet points.
+   STYLE: [Style Name] ([Family])
+   - HARD LIMIT: Max X words/card. Truncate if exceeded.
+   - HARD LIMIT: Min X% whitespace.
+   - HARD LIMIT: Max X elements.
+   - Layout: [Layout directive]
+   - Typography: [Typography directive]
+   - Color: [Color directive]
+   - NEVER: [Anti-patterns]
    ```
 
-   If Dramatic style:
-   ```
-   HARD LIMITS - ENFORCE STRICTLY:
-   - Maximum 12 words per card. Truncate if exceeded.
-   - Minimum 35% whitespace on every card.
-   - Maximum 5 elements per card.
-   - Use asymmetrical placement. Position focal elements OFF-CENTER.
-   - NEVER: center all elements, uniform spacing, small headlines.
-   ```
-
-   If Organic style:
-   ```
-   HARD LIMITS - ENFORCE STRICTLY:
-   - Maximum 10 words per card. Truncate if exceeded.
-   - Minimum 50% whitespace on every card.
-   - Maximum 4 elements per card.
-   - Use natural groupings with organic flow.
-   - Add subtle background texture (3-5% opacity).
-   - NEVER: stark contrast, rigid grids, cold colors.
-   ```
+   **All 13 styles have enforcement blocks in style-constraints.md:**
+   - Japanese Zen: Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma
+   - Scandinavian: Hygge, Lagom
+   - European: Swiss, Memphis
+   - East Asian: Yeo-baek, Feng Shui
 
    - For each card in the template structure:
      - Describe the card type and purpose

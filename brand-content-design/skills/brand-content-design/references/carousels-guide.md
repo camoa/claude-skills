@@ -271,33 +271,55 @@ Based on LinkedIn research:
 
 ## Visual Styles
 
-Three distinct Zen-compliant styles are available. See `style-constraints.md` for full details.
+13 distinct styles across 4 aesthetic families. See `style-constraints.md` for full details and enforcement blocks.
 
-### Minimal (Kanso + Seijaku)
-- **Character**: Maximum whitespace, single focal point, profound silence
-- **Best for**: Data carousels, technical content, professional audiences
-- **Key constraints**: ≤8 words/card, 60% whitespace, 3 elements max, centered layout
+### Japanese Zen (7 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Minimal** | Max whitespace, single focal, silence | Data, technical | [Kanso](https://en.wikipedia.org/wiki/Japanese_aesthetics#Kanso) |
+| **Dramatic** | Asymmetrical, bold contrast, tension | Launches, announcements | [Fukinsei](https://en.wikipedia.org/wiki/Japanese_aesthetics#Fukinsei) |
+| **Organic** | Natural flow, subtle depth, warmth | Storytelling, tips | [Yugen](https://en.wikipedia.org/wiki/Y%C5%ABgen) |
+| **Wabi-Sabi** | Imperfect beauty, texture, handcraft | Artisan, craft | [Wabi-Sabi](https://en.wikipedia.org/wiki/Wabi-sabi) |
+| **Shibui** | Quiet elegance, ultra-refined | Luxury | [Shibui](https://en.wikipedia.org/wiki/Shibui) |
+| **Iki** | B&W + pop color, editorial confidence | Fashion | [Iki](https://en.wikipedia.org/wiki/Iki_(aesthetic_ideal)) |
+| **Ma** | 70%+ whitespace, floating elements | Meditation | [Ma](https://en.wikipedia.org/wiki/Ma_(negative_space)) |
 
-### Dramatic (Datsuzoku + Fukinsei)
-- **Character**: Asymmetrical layouts, bold contrast, visual tension
-- **Best for**: Product launches, announcements, brand campaigns
-- **Key constraints**: ≤12 words/card, 35% whitespace, 5 elements max, off-center focal
+### Scandinavian Nordic (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Hygge** | Warm, cozy, inviting | Wellness, community | [Hygge](https://en.wikipedia.org/wiki/Hygge) |
+| **Lagom** | Balanced "just enough" | Corporate | [Lagom](https://en.wikipedia.org/wiki/Lagom) |
 
-### Organic (Shizen + Yugen)
-- **Character**: Natural flow, subtle depth, warm humanity
-- **Best for**: Storytelling, educational tips, lifestyle content
-- **Key constraints**: ≤10 words/card, 50% whitespace, 4 elements max, organic groupings
+### European Modernist (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Swiss** | Strict grid, mathematical precision | Tech, corporate | [Swiss Style](https://en.wikipedia.org/wiki/Swiss_Style_(design)) |
+| **Memphis** | Bold colors, playful chaos | Creative, youth | [Memphis](https://en.wikipedia.org/wiki/Memphis_Group) |
+
+### East Asian Harmony (2 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Yeo-baek** | Extreme emptiness, Korean purity | Premium | [Korean Design](https://adorno.design/editorial/why-korean-design-is-the-next-global-obsession/) |
+| **Feng Shui** | Yin-Yang balance, energy flow | Wellness | [Feng Shui](https://en.wikipedia.org/wiki/Feng_shui) |
 
 ### Quick Reference
 
-| Parameter | Minimal | Dramatic | Organic |
-|-----------|---------|----------|---------|
-| Whitespace | 60-70% | 35-45% | 50-60% |
-| Words/card | ≤8 | ≤12 | ≤10 |
-| Elements | ≤3 | ≤5 | ≤4 |
-| Layout | Centered | Asymmetric | Flowing |
-| Type weight | Light | Bold | Medium |
+| Style | Whitespace | Words | Elements | Layout |
+|-------|------------|-------|----------|--------|
+| Minimal | 60-70% | ≤8 | ≤3 | Centered |
+| Dramatic | 35-45% | ≤12 | ≤5 | Asymmetric |
+| Organic | 50-60% | ≤10 | ≤4 | Flowing |
+| Wabi-Sabi | 45-55% | ≤10 | ≤4 | Imperfect |
+| Shibui | 55-65% | ≤6 | ≤3 | Refined |
+| Iki | 50-60% | ≤8 | ≤4 | Editorial |
+| Ma | 70-80% | ≤5 | ≤2 | Floating |
+| Hygge | 40-50% | ≤12 | ≤5 | Cozy |
+| Lagom | 50-60% | ≤10 | ≤4 | Balanced |
+| Swiss | 45-55% | ≤10 | ≤5 | Grid |
+| Memphis | 25-35% | ≤15 | ≤7 | Playful |
+| Yeo-baek | 65-75% | ≤6 | ≤2 | Empty |
+| Feng Shui | 50-60% | ≤10 | ≤4 | Balanced |
 
 ---
 
-*Based on Presentation Zen principles adapted for carousel format*
+*Based on Presentation Zen principles and international design aesthetics adapted for carousel format*
