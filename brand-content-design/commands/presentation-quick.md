@@ -50,6 +50,7 @@ Create a presentation with minimal questions - just template and content.
    - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide presentations-guide.md for Zen principles
    - Provide brand-philosophy.md for colors, fonts, logo
+   - **Load brand assets**: Logo (convert SVG→PNG if needed), fonts from `assets/fonts/`
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
    - Look up the style's Enforcement Block in `style-constraints.md`

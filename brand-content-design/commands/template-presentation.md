@@ -181,7 +181,10 @@ Create a new presentation template or edit an existing one.
     - Provide the canvas-philosophy.md content as the design philosophy input
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
     - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
-    - Read the logo file from the path in brand-philosophy.md and incorporate it
+    - **Load brand assets**:
+      - Read logo file from brand-philosophy.md Brand Assets section
+      - If logo is SVG, convert to PNG first (visual-content handles this)
+      - Load fonts from `{PROJECT_PATH}/assets/fonts/` if present
     - **Generate ALL slides defined in template.md** (not just a subset)
     - Use placeholder/example content for each slide type
     - Request output as PDF at 1920x1080 (16:9)

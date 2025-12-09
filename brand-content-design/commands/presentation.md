@@ -83,6 +83,10 @@ Create a presentation from an existing template with user-provided content.
    - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
+   - **Load brand assets**:
+     - Read logo file from brand-philosophy.md Brand Assets section
+     - If logo is SVG, convert to PNG first (visual-content handles this)
+     - Load fonts from `{PROJECT_PATH}/assets/fonts/` if present
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
 

@@ -189,7 +189,10 @@ Create a new carousel template or edit an existing one.
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
     - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")
     - Use **selected palette colors** for all visual elements
-    - Read the logo file from the path in brand-philosophy.md and incorporate it
+    - **Load brand assets**:
+      - Read logo file from brand-philosophy.md Brand Assets section
+      - If logo is SVG, convert to PNG first (visual-content handles this)
+      - Load fonts from `{PROJECT_PATH}/assets/fonts/` if present
     - **Generate ALL cards defined in template.md** (not just a subset)
     - Use placeholder/example content for each card type
     - Request output as multi-page PDF with platform dimensions:
