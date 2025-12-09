@@ -78,9 +78,9 @@ Create a presentation from an existing template with user-provided content.
    - "Any subtitle or date to include?"
 
 8. **Generate presentation PDF**
-   Use the **canvas-design** skill:
+   Use the **visual-content** skill:
    - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
-   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
+   - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide the presentations-guide.md principles (Zen, visual hierarchy, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
 
@@ -88,7 +88,7 @@ Create a presentation from an existing template with user-provided content.
 
    - Look up the template's style in `style-constraints.md`
    - Copy the exact **Enforcement Block** for that style
-   - Pass it to canvas-design as hard constraints
+   - Pass it to visual-content as hard constraints
 
    The enforcement block format is:
    ```
@@ -146,4 +146,4 @@ Create a presentation from an existing template with user-provided content.
 - This command requires an existing template - use `/template-presentation` to create one first
 - For best results, use `/outline <template>` to prepare content that matches the template structure
 - The PDF is the source of truth - PPTX is generated from it for editability
-- canvas-design ensures brand consistency and Zen principles are followed
+- visual-content ensures brand consistency and Zen principles are followed

@@ -79,9 +79,9 @@ Create a carousel from an existing template with user-provided content.
    - "What is the hook/title for this carousel?"
 
 8. **Generate carousel PDF**
-   Use the **canvas-design** skill:
+   Use the **visual-content** skill:
    - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
-   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
+   - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide the carousels-guide.md best practices (mobile-first, scroll-stopping, etc.)
    - Provide brand-philosophy.md for colors, fonts, logo
 
@@ -89,7 +89,7 @@ Create a carousel from an existing template with user-provided content.
 
    - Look up the template's style in `style-constraints.md`
    - Copy the exact **Enforcement Block** for that style
-   - Pass it to canvas-design as hard constraints
+   - Pass it to visual-content as hard constraints
 
    The enforcement block format is:
    ```
@@ -140,5 +140,5 @@ Create a carousel from an existing template with user-provided content.
 - This command requires an existing template - use `/template-carousel` to create one first
 - For best results, use `/outline <template>` to prepare content that matches the template structure
 - Keep text concise - carousels are viewed on mobile devices
-- canvas-design ensures brand consistency and carousel best practices are followed
+- visual-content ensures brand consistency and carousel best practices are followed
 - The PDF can be uploaded directly to LinkedIn or split into images for Instagram

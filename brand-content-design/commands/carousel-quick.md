@@ -47,15 +47,15 @@ Create a carousel with minimal questions - just template and content.
    - Keep text concise for mobile
 
 6. **Generate carousel PDF**
-   Use the **canvas-design** skill:
+   Use the **visual-content** skill:
    - **IMPORTANT:** Use the template's existing canvas-philosophy.md as the design philosophy - do NOT create a new philosophy
-   - Pass the canvas-philosophy.md content directly to canvas-design as the design direction
+   - Pass the canvas-philosophy.md content directly to visual-content as the design direction
    - Provide carousels-guide.md for best practices
    - Provide brand-philosophy.md for colors, fonts, logo
 
    **ENFORCE STYLE CONSTRAINTS based on template's style:**
    - Look up the style's Enforcement Block in `style-constraints.md`
-   - Pass it to canvas-design as hard constraints
+   - Pass it to visual-content as hard constraints
    - All 13 styles (Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma, Hygge, Lagom, Swiss, Memphis, Yeo-baek, Feng Shui) have enforcement blocks
 
    - Generate each card following template structure
@@ -82,4 +82,4 @@ Create a carousel with minimal questions - just template and content.
 - This is the fast path - paste content, get carousel
 - For step-by-step control, use `/carousel` instead
 - For help preparing content, use `/outline <template>` first
-- canvas-design ensures brand and carousel best practices are followed
+- visual-content ensures brand and carousel best practices are followed

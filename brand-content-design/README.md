@@ -282,6 +282,18 @@ Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)
 - Dimensions: 1080x1080 (1:1 square)
 - Format: PDF or PNG sequence
 
+## Dependencies
+
+This plugin uses these skills for visual output:
+
+| Skill | Purpose | Status |
+|-------|---------|--------|
+| **visual-content** | Generate presentations/carousels from canvas philosophy | Bundled (no install needed) |
+| **pptx** | Convert PDF to editable PowerPoint | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
+| **pdf** | Create multi-page PDFs | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
+
+The `visual-content` skill is bundled with this plugin - it uses artistic philosophy language to create museum-quality visual output following your brand and template constraints.
+
 ## Tips
 
 - **Start with `/brand`** - it adapts to your context

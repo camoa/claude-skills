@@ -177,7 +177,7 @@ Create a new presentation template or edit an existing one.
     - Include output configuration
 
 13. **Generate sample PDF**
-    Use the **canvas-design** skill:
+    Use the **visual-content** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
     - Copy the exact enforcement block for the selected style (e.g., "STYLE: Minimal (Japanese Zen)...")

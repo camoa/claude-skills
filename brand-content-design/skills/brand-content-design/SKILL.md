@@ -93,10 +93,11 @@ Use these skills during content generation:
 
 | Skill | When to Use |
 |-------|-------------|
-| **canvas-design** | Generate visual output from canvas philosophy |
+| **visual-content** | Generate visual output from canvas philosophy (bundled) |
 | **pptx** | Convert presentation PDFs to PowerPoint |
 | **pdf** | Create multi-page carousel PDFs |
-| **theme-factory** | Optional: Generate theme from brand colors |
+
+The `visual-content` skill is bundled with this plugin - no external dependencies required for visual generation.
 
 ## References
 
