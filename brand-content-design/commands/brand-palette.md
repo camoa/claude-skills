@@ -44,7 +44,27 @@ Generate alternative color palettes - either derived from brand colors (color th
 
 If user selected "Derived":
 
-5a. **Ask harmony type**
+5a. **Ask source color(s)**
+    Display brand colors with numbers:
+    ```
+    Your brand colors:
+    [1] ██ #2563EB - Primary (Blue)
+    [2] ██ #10B981 - Secondary (Green)
+    [3] ██ #F59E0B - Accent (Amber)
+    ```
+
+    Use AskUserQuestion:
+    - Header: "Source"
+    - Question: "Which color(s) to derive palettes from?"
+    - Options:
+      - **Primary only** - Generate from your main brand color
+      - **All brand colors** - Generate from each color, combine results
+      - **Pick specific** - Choose which colors to use
+
+    **If "Pick specific" selected:**
+    Ask: "Enter color numbers (e.g., 1,3 for Primary and Accent):"
+
+6a. **Ask harmony type**
     Use AskUserQuestion with multiSelect: true
     - Header: "Harmony"
     - Question: "Which harmony palettes? (1/2)"
@@ -54,7 +74,7 @@ If user selected "Derived":
       - **Complementary** - Opposite colors (high contrast)
       - **More harmonies...** - See advanced options
 
-6a. **If "More harmonies..." selected, ask advanced**
+7a. **If "More harmonies..." selected, ask advanced**
     Use AskUserQuestion with multiSelect: true
     - Header: "Advanced"
     - Question: "Which advanced harmony palettes? (2/2)"
@@ -62,9 +82,8 @@ If user selected "Derived":
       - **Split-Complementary** - Contrast with less tension
       - **Triadic** - Three balanced colors (vibrant)
       - **Tetradic** - Four colors in rectangle (complex)
-      - **Extended Harmony** - Harmonies from all brand colors merged
 
-7a. **Ask tonal variations**
+8a. **Ask tonal variations**
     Use AskUserQuestion with multiSelect: true
     - Header: "Tonal"
     - Question: "Which tonal variations?"
@@ -72,27 +91,31 @@ If user selected "Derived":
       - **Tints** - Lighter variations (soft backgrounds)
       - **Shades** - Darker variations (bold emphasis)
       - **Tones** - Muted with gray (sophisticated)
-      - **Interpolation** - Gradients between brand colors
+      - **Interpolation** - Gradients between source colors
 
-8a. **Generate derived palettes**
-    For each selected type, calculate colors from brand palette:
+9a. **Generate derived palettes**
+    For each selected source color, apply selected harmony/tonal types:
 
     **Harmony calculations (from color wheel):**
     - Monochromatic: Same hue, lightness at 30%, 50%, 70%, 90%
-    - Analogous: Primary ± 30° on wheel
-    - Complementary: Primary + 180°
-    - Split-Complementary: Primary + 150°, Primary + 210°
-    - Triadic: Primary + 120°, Primary + 240°
-    - Tetradic: Primary + 90°, Primary + 180°, Primary + 270°
-    - Extended Harmony: Apply Triadic to each brand color, merge unique results
+    - Analogous: Source ± 30° on wheel
+    - Complementary: Source + 180°
+    - Split-Complementary: Source + 150°, Source + 210°
+    - Triadic: Source + 120°, Source + 240°
+    - Tetradic: Source + 90°, Source + 180°, Source + 270°
 
     **Tonal calculations:**
-    - Tints: Mix with white at 25%, 50%, 75%
-    - Shades: Mix with black at 25%, 50%, 75%
-    - Tones: Mix with gray at 25%, 50%, 75%
-    - Interpolation: Blend primary → secondary at 25%, 50%, 75%
+    - Tints: Mix source with white at 25%, 50%, 75%
+    - Shades: Mix source with black at 25%, 50%, 75%
+    - Tones: Mix source with gray at 25%, 50%, 75%
+    - Interpolation: Blend between selected source colors at 25%, 50%, 75%
 
-    → Continue to step 9
+    **If multiple source colors selected:**
+    - Generate palette for each source color
+    - Label results: "Complementary (from Primary)", "Complementary (from Secondary)"
+    - Remove duplicates if colors are very similar (< 5% difference)
+
+    → Continue to step 10
 
 ---
 
@@ -125,33 +148,37 @@ If user selected "Alternative":
     Examples: "summer festival", "winter elegance", "tech startup energy"
 
 8b. **Generate alternative palettes**
-    For each selected mood:
+    For each selected mood, use the **full brand palette** as reference:
 
     1. **Analyze brand personality** from brand-philosophy.md
        - What emotions does the current palette evoke?
        - What's the brand energy level (calm, energetic, sophisticated)?
+       - How many colors in the palette? (primary, secondary, accent, neutrals)
+       - What are the color relationships? (warm/cool, high/low contrast)
 
-    2. **Generate mood-matched colors**
-       - Pastel: Light, desaturated versions maintaining brand feeling
-       - Bold: High saturation, strong contrast, same energy
-       - Earthy: Map to natural palette (browns, greens, terracotta)
-       - Vibrant: Bright, saturated alternatives
-       - Muted: Desaturated, sophisticated versions
-       - Monochrome: Convert to grayscale, keep one brand accent
-       - Custom: Interpret description, maintain brand relationships
+    2. **Generate mood-matched colors for EACH brand color**
+       Transform each brand color to the target mood:
+       - Pastel: Lighten + desaturate each brand color
+       - Bold: Increase saturation + contrast for each color
+       - Earthy: Map each color to nearest natural equivalent
+       - Vibrant: Shift each color toward bright, saturated version
+       - Muted: Desaturate each color while maintaining hue relationships
+       - Monochrome: Convert all to grayscale, keep primary as accent
+       - Custom: Interpret description, transform entire palette
 
     3. **Preserve brand characteristics**
-       - If brand has high contrast, maintain in alternative
-       - If brand is warm, keep warmth in new palette
-       - Match number of colors (3-color brand = 3-color alternative)
+       - Maintain same number of colors (3-color brand = 3-color alternative)
+       - Keep relative contrast between colors
+       - Preserve warm/cool balance
+       - Maintain hierarchy (primary still dominant, accent still pop)
 
-    → Continue to step 9
+    → Continue to step 10
 
 ---
 
 ## COMMON STEPS (Both Branches)
 
-9. **Display generated palettes**
+10. **Display generated palettes**
    Show each palette with color boxes:
    ```
    Generated palettes:
@@ -165,17 +192,17 @@ If user selected "Alternative":
    echo -e "\033[48;2;37;99;235m  \033[0m \033[48;2;235;130;37m  \033[0m  Complementary   #2563EB #EB8225"
    ```
 
-10. **Ask to save (multi-select)**
+11. **Ask to save (multi-select)**
     Use AskUserQuestion with multiSelect: true
     - Header: "Save"
     - Question: "Which palettes would you like to save?"
     - Options: List each generated palette by name
 
-11. **Ask for custom names (if saving Custom)**
+12. **Ask for custom names (if saving Custom)**
     If Custom palette is being saved:
     Ask: "What should we call this palette?" (e.g., "Summer Festival", "Q4 Launch")
 
-12. **Save selected palettes**
+13. **Save selected palettes**
     Append to brand-philosophy.md under `## Alternative Palettes`:
 
     ```markdown
@@ -197,7 +224,7 @@ If user selected "Alternative":
     - Accent: #EC4899
     ```
 
-13. **Confirm and suggest usage**
+14. **Confirm and suggest usage**
     Show:
     - "Saved X palettes to brand-philosophy.md"
     - "Use these when creating content:"

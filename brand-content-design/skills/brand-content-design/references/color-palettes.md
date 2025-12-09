@@ -20,7 +20,6 @@ Mathematical derivations from existing brand colors.
 | **Split-Complementary** | Contrast with less visual tension | Base + two adjacent to complement | [Wikipedia](https://en.wikipedia.org/wiki/Color_scheme#Split-complementary) |
 | **Triadic** | Balanced, vibrant, energetic | Three equally spaced | [Wikipedia](https://en.wikipedia.org/wiki/Color_scheme#Triadic) |
 | **Tetradic** | Rich, complex, multi-element designs | Four colors (rectangle) | [Wikipedia](https://en.wikipedia.org/wiki/Color_scheme#Tetradic) |
-| **Extended Harmony** | Rich palette from existing brand colors | Harmonies from all brand colors merged | - |
 
 #### Tonal Variations
 
@@ -57,7 +56,7 @@ Completely different colors that capture the same brand feeling/energy.
 | Professional, safe variation | Derived | Monochromatic, Tones |
 | Subtle backgrounds | Derived | Tints |
 | Bold headlines | Derived | Shades |
-| Complex infographic | Derived | Tetradic, Extended Harmony |
+| Complex infographic | Derived | Tetradic (from all colors) |
 | Smooth gradients | Derived | Interpolation |
 | Completely different look, same feel | Alternative | Pastel, Bold, Earthy |
 | Seasonal campaign | Alternative | Custom |
@@ -72,33 +71,53 @@ Completely different colors that capture the same brand feeling/energy.
 
 ```
 Monochromatic: Same hue, lightness at 30%, 50%, 70%, 90%
-Analogous: Primary ± 30° on wheel
-Complementary: Primary + 180°
-Split-Complementary: Primary + 150°, Primary + 210°
-Triadic: Primary + 120°, Primary + 240°
-Tetradic: Primary + 90°, Primary + 180°, Primary + 270°
-Extended Harmony: Apply Triadic to each brand color, merge unique results
+Analogous: Source ± 30° on wheel
+Complementary: Source + 180°
+Split-Complementary: Source + 150°, Source + 210°
+Triadic: Source + 120°, Source + 240°
+Tetradic: Source + 90°, Source + 180°, Source + 270°
+
+(Source = selected color(s): primary only, all brand colors, or specific picks)
 ```
 
 ### Tonal
 
 ```
-Tints: Mix with white at 25%, 50%, 75%
-Shades: Mix with black at 25%, 50%, 75%
-Tones: Mix with gray at 25%, 50%, 75%
-Interpolation: Blend primary → secondary at 25%, 50%, 75%
+Tints: Mix source with white at 25%, 50%, 75%
+Shades: Mix source with black at 25%, 50%, 75%
+Tones: Mix source with gray at 25%, 50%, 75%
+Interpolation: Blend between selected source colors at 25%, 50%, 75%
 ```
+
+---
+
+## Source Color Selection (Derived Palettes)
+
+When generating derived palettes, user can choose:
+- **Primary only** - Generate from main brand color (simplest)
+- **All brand colors** - Generate from each color, combine results (richest)
+- **Pick specific** - Choose which colors to use as sources
+
+If multiple sources selected, results are labeled: "Complementary (from Primary)", "Complementary (from Secondary)"
 
 ---
 
 ## Alternative Palette Generation
 
-For mood-based alternatives, analyze brand personality and translate to new colors:
+For mood-based alternatives, transform the **entire brand palette**:
 
-1. **Extract brand feeling** - What emotions does the current palette evoke?
-2. **Map to new colors** - Find colors that evoke the same emotions in the target mood
-3. **Maintain relationships** - If brand has high contrast, maintain that in alternative
-4. **Test coherence** - Ensure the alternative still "feels like" the brand
+1. **Analyze full palette** - How many colors? What relationships? What energy?
+2. **Transform each color** - Apply mood transformation to every brand color
+3. **Maintain relationships** - Keep same contrast, warmth, and hierarchy
+4. **Preserve structure** - 3-color brand = 3-color alternative
+
+Example transformations:
+```
+Brand: #2563EB (blue), #10B981 (green), #F59E0B (amber)
+Pastel: #93C5FD (soft blue), #6EE7B7 (soft green), #FCD34D (soft amber)
+Bold: #1E40AF (deep blue), #047857 (deep green), #D97706 (deep amber)
+Earthy: #6B7280 (slate), #4B5563 (charcoal), #92400E (brown)
+```
 
 ---
 
