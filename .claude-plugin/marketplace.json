@@ -39,7 +39,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands",
-      "version": "1.1.3",
+      "version": "1.3.0",
       "author": {
         "name": "camoa"
       },
@@ -52,7 +52,7 @@
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
       "description": "Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV",
-      "version": "1.1.2",
+      "version": "1.4.0",
       "author": {
         "name": "camoa"
       },
@@ -65,7 +65,7 @@
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded presentations and carousels with 13 visual styles, 17 color palettes, and Presentation Zen principles",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "author": {
         "name": "camoa"
       },
