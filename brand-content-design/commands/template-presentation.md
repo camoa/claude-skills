@@ -72,31 +72,48 @@ Create a new presentation template or edit an existing one.
      - **East Asian Harmony** - Space, balance, energy (2 styles)
 
    **Step 5b: Choose specific style** (based on family selected)
-   Use AskUserQuestion:
+   Use AskUserQuestion - options vary by family (max 4 options per question):
+
+   **Japanese Zen** (split into 2 questions due to 7 styles):
+
+   *Question 1:*
    - Header: "Style"
-   - Question: "Which {family} style?"
-   - Options vary by family:
+   - Question: "Which Japanese Zen style? (1/2)"
+   - Options:
+     - **Minimal** - Max whitespace, single focal, silence (executive, data)
+     - **Dramatic** - Asymmetrical, bold contrast, tension (pitch decks)
+     - **Organic** - Natural flow, subtle depth, warmth (storytelling)
+     - **More styles...** - See additional options
 
-   **Japanese Zen options:**
-   - **Minimal** - Max whitespace, single focal, silence (executive, data)
-   - **Dramatic** - Asymmetrical, bold contrast, tension (pitch decks)
-   - **Organic** - Natural flow, subtle depth, warmth (storytelling)
-   - **Wabi-Sabi** - Imperfect beauty, texture, handcraft (artisan, craft)
-   - **Shibui** - Quiet elegance, ultra-refined (luxury, professional)
-   - **Iki** - B&W + pop color, editorial confidence (fashion, editorial)
-   - **Ma** - 70%+ whitespace, floating elements (meditation, luxury)
+   *Question 2 (if "More styles..." selected):*
+   - Header: "Style"
+   - Question: "Which Japanese Zen style? (2/2)"
+   - Options:
+     - **Wabi-Sabi** - Imperfect beauty, texture, handcraft (artisan, craft)
+     - **Shibui** - Quiet elegance, ultra-refined (luxury, professional)
+     - **Iki** - B&W + pop color, editorial confidence (fashion, editorial)
+     - **Ma** - 70%+ whitespace, floating elements (meditation, luxury)
 
-   **Scandinavian Nordic options:**
-   - **Hygge** - Warm, cozy, inviting (wellness, community)
-   - **Lagom** - Balanced "just enough" (corporate, sustainability)
+   **Scandinavian Nordic** (2 styles - single question):
+   - Header: "Style"
+   - Question: "Which Scandinavian style?"
+   - Options:
+     - **Hygge** - Warm, cozy, inviting (wellness, community)
+     - **Lagom** - Balanced "just enough" (corporate, sustainability)
 
-   **European Modernist options:**
-   - **Swiss** - Strict grid, mathematical precision (tech, corporate)
-   - **Memphis** - Bold colors, playful chaos (creative, youth)
+   **European Modernist** (2 styles - single question):
+   - Header: "Style"
+   - Question: "Which European Modernist style?"
+   - Options:
+     - **Swiss** - Strict grid, mathematical precision (tech, corporate)
+     - **Memphis** - Bold colors, playful chaos (creative, youth)
 
-   **East Asian Harmony options:**
-   - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
-   - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
+   **East Asian Harmony** (2 styles - single question):
+   - Header: "Style"
+   - Question: "Which East Asian style?"
+   - Options:
+     - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
+     - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
