@@ -18,6 +18,18 @@ Brand Guidelines → Templates → Content
 claude plugins:add brand-content-design@camoa-skills
 ```
 
+### Required Skills
+
+This plugin uses Anthropic's document-skills for visual output:
+
+| Skill | Purpose | Required For |
+|-------|---------|--------------|
+| **canvas-design** | Generate PDF visuals from design philosophy | All content creation |
+| **pptx** | Create editable PowerPoint files | Presentations |
+| **pdf** | Create multi-page PDFs | Carousels |
+
+These skills are part of [document-skills@anthropic-agent-skills](https://github.com/anthropics/anthropic-agent-skills) and should be available by default. If content generation fails, verify these skills are installed.
+
 ## Quick Start
 
 ```

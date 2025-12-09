@@ -87,16 +87,18 @@ Route user requests to the appropriate command:
 | Create carousel (quick) | `/carousel-quick` |
 | Add new content type | `/content-type-new` |
 
-## Underlying Skills
+## Required Skills (Dependencies)
 
-Use these skills during content generation:
+These skills are **required** for content generation (from document-skills@anthropic-agent-skills):
 
-| Skill | When to Use |
-|-------|-------------|
-| **canvas-design** | Generate visual output from canvas philosophy |
-| **pptx** | Convert presentation PDFs to PowerPoint |
-| **pdf** | Create multi-page carousel PDFs |
-| **theme-factory** | Optional: Generate theme from brand colors |
+| Skill | When to Use | Required For |
+|-------|-------------|--------------|
+| **canvas-design** | Generate visual output from canvas philosophy | All content |
+| **pptx** | Create editable PowerPoint files | Presentations |
+| **pdf** | Create multi-page PDFs | Carousels |
+
+Optional:
+| **theme-factory** | Generate theme from brand colors | Styling
 
 ## References
 
