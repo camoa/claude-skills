@@ -126,7 +126,7 @@ If user selected "Derived":
 
 If user selected "Alternative":
 
-5. **Ask mood style (1/2)**
+5. **Ask mood style (1/2)** - ALWAYS ASK
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (1/2)"
@@ -136,7 +136,7 @@ If user selected "Alternative":
       - **Earthy** - Natural, warm, grounded (sustainable)
       - **Vibrant** - Bright, energetic (youth, excitement)
 
-6. **Ask mood style (2/2)**
+6. **Ask mood style (2/2)** - ALWAYS ASK (immediately after step 5)
     Use AskUserQuestion with multiSelect: true
     - Header: "Mood"
     - Question: "Which mood palettes? (2/2)"
@@ -145,7 +145,7 @@ If user selected "Alternative":
       - **Monochrome** - Grayscale + one accent (editorial, dramatic)
       - **Custom** - Describe what you need
 
-7. **If Custom selected, ask for description**
+7. **If Custom selected in step 5 or 6, ask for description**
     Ask: "Describe the mood or purpose for your custom palette:"
     Examples: "summer festival", "winter elegance", "tech startup energy"
 
@@ -232,9 +232,9 @@ If user selected "Alternative":
 14. **Confirm and suggest usage**
     Show:
     - "Saved X palettes to brand-philosophy.md"
-    - "Use these when creating content:"
-    - "  - `/presentation` or `/carousel` will ask which palette to use"
-    - "  - Or specify in your content brief"
+    - "Use these when creating templates:"
+    - "  - `/template-presentation` or `/template-carousel` will ask which palette to use"
+    - "  - Templates lock in style + palette for consistent content creation"
 
 ## Output
 

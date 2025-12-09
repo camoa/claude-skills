@@ -140,9 +140,11 @@ Create a new carousel template or edit an existing one.
    - Options: LinkedIn (4:5 portrait), Instagram (1:1 square), Instagram (4:5 portrait)
 
 8. **Ask template purpose** (CREATE MODE only)
-   Use AskUserQuestion:
-   - "What is this carousel template for?"
-   - Options: Educational/Tips, Storytelling, Data/Statistics, Listicle, Other (describe)
+   Ask user directly (not AskUserQuestion):
+   "What is this template for? (2-4 words)
+   Examples: tips carousel, story series, data highlights, how-to guide, listicle, case study"
+
+   User provides short description like "tips carousel" or "weekly insights"
 
 9. **Load carousels guide**
    - Read plugin `references/carousels-guide.md` for card type options
