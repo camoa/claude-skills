@@ -31,6 +31,7 @@ Single entry point that adapts to context - show status, switch projects, or ini
    - /presentation or /carousel - create content
    - /outline <template> - get outline template + AI prompt
    - /template-presentation or /template-carousel - create template
+   - /brand-palette - generate alternative color palettes
    - /brand-extract - update brand philosophy
    ```
 

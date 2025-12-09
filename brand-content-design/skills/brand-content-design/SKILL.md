@@ -14,6 +14,7 @@ Create branded visual content (presentations, LinkedIn carousels) with consisten
 - "setup brand" / "brand init" / "extract brand"
 - "create template" / "new template"
 - "get outline" / "outline for template" / "prepare content"
+- "color palette" / "generate palette" / "alternative colors"
 - NOT for: General design questions, non-branded content
 
 ## Project Detection
@@ -75,6 +76,7 @@ Route user requests to the appropriate command:
 | Status, switch projects, or start | `/brand` |
 | Initialize new project | `/brand-init` |
 | Extract brand from sources | `/brand-extract` |
+| Generate alternative color palettes | `/brand-palette` |
 | Manage assets (logos, icons, fonts) | `/brand-assets` |
 | Create presentation template | `/template-presentation` |
 | Create carousel template | `/template-carousel` |
@@ -103,4 +105,6 @@ Use these skills during content generation:
 - `references/canvas-philosophy-template.md` - Template for canvas philosophy
 - `references/presentations-guide.md` - Presentation best practices
 - `references/carousels-guide.md` - Carousel best practices
+- `references/style-constraints.md` - 13 visual styles with enforcement blocks
+- `references/color-palettes.md` - Color theory and palette types
 - `references/output-specs.md` - Dimensions, formats, file sizes
