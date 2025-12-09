@@ -51,12 +51,26 @@ Create a new presentation template or edit an existing one.
    **If "Edit: {template-name}" selected → EDIT MODE:**
    - Load existing template.md and canvas-philosophy.md from `templates/presentations/{template-name}/`
    - Show current structure summary
-   - Ask: "What would you like to modify?"
-     - Add/remove slides
-     - Change slide order
-     - Update visual style
-     - Regenerate samples only
-     - Start over from scratch
+
+   **Step 4a: Ask what aspect to modify**
+   Use AskUserQuestion:
+   - Header: "Modify"
+   - Question: "What would you like to modify?"
+   - Options:
+     - **Structure** - Add, remove, or reorder slides
+     - **Visual style** - Change aesthetic family, style, or palette
+     - **Regenerate samples** - Keep settings, regenerate sample files
+     - **Start over** - Discard and create from scratch
+
+   **Step 4b: If "Structure" selected, ask specific action**
+   Use AskUserQuestion:
+   - Header: "Structure"
+   - Question: "What structure change?"
+   - Options:
+     - **Add slides** - Add new slide types
+     - **Remove slides** - Remove existing slides
+     - **Reorder slides** - Change slide sequence
+
    - Jump to appropriate step based on selection
 
 5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
@@ -120,16 +134,27 @@ Create a new presentation template or edit an existing one.
 6. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
 
    First, check brand-philosophy.md for `## Alternative Palettes` section.
+   Count total palettes available (1 brand + N alternatives).
 
-   Use AskUserQuestion:
+   **If 4 or fewer total palettes:** Use AskUserQuestion
    - Header: "Palette"
    - Question: "Which color palette for this template?"
-   - Options (build dynamically, max 4):
+   - Options (build dynamically):
      - **Brand colors** - Use original brand palette
-     - If alternative palettes exist, add up to 3 saved palettes by name
-     - If more than 3 alternatives exist: **More palettes...** - See additional options
+     - List each alternative palette by name
 
-   If "More palettes..." selected, show next batch of palettes (up to 4 at a time).
+   **If more than 4 total palettes:** Use conversational list
+   Display all palettes with numbers:
+   ```
+   Available palettes:
+   1. Brand colors (original)
+   2. {Palette Name} ({Type})
+   3. {Palette Name} ({Type})
+   ... (list all)
+
+   Enter the number or name of the palette to use:
+   ```
+   Parse user response (number or name match).
 
    **Store selected palette** for use in canvas-philosophy.md generation.
 
