@@ -24,22 +24,20 @@ A **project** is a collection of related development tasks. It might include:
 
 Projects are organized by **goal**, not by file type. The plugin tracks each project in a dedicated folder with requirements, architecture documents, and implementation tasks.
 
-### Phases
-Development happens in three phases, each with a clear purpose:
-
-| Phase | What Happens | Code Written? |
-|-------|--------------|---------------|
-| **1. Research** | Gather requirements, study contrib modules, find patterns | No |
-| **2. Architecture** | Design components, choose patterns, document decisions | No |
-| **3. Implementation** | Build features interactively with TDD | Yes (with approval) |
-
-You don't write code until Phase 3. This prevents wasted effort on wrong approaches.
-
 ### Tasks
-A **task** is a single implementable unit of work (e.g., "create settings form", "build entity type"). Each task has:
-- Acceptance criteria
-- TDD steps (test first)
-- Pattern references
+A **task** is a single implementable unit of work (e.g., "create settings form", "build entity type"). Tasks are created after requirements gathering - you define what you want to work on, and the framework guides you through building it.
+
+Each task independently cycles through **three phases**:
+
+| Phase | Command | What Happens | Code Written? |
+|-------|---------|--------------|---------------|
+| **1. Research** | `/research <task>` | Study contrib modules, find core patterns | No |
+| **2. Architecture** | `/design <task>` | Design approach, choose patterns, set criteria | No |
+| **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step | Yes |
+
+**Key insight:** Phases apply to TASKS, not projects. A project can have multiple tasks, each at different phases. You don't write code until a task reaches Phase 3.
+
+Task files are stored in `implementation_process/in_progress/` and moved to `completed/` when done.
 
 ### Memory
 The plugin stores project state in markdown files, allowing:
@@ -91,63 +89,69 @@ The path is saved in `project_state.md`, so the plugin remembers it across sessi
 ### Starting a New Project
 
 ```bash
-# 1. Create project structure
+# 1. Create project and gather requirements
 /drupal-dev-framework:new my_project
 
-# 2. Answer requirements questions when prompted
-# (scope, integrations, constraints, etc.)
+# 2. Answer requirements questions (scope, integrations, constraints)
 
-# 3. Research existing solutions
-/drupal-dev-framework:research content workflow
-/drupal-dev-framework:research entity references
+# 3. When asked "Enter your first task:", provide a task name
+#    Example: "settings_form" or "content_entity"
 
-# 4. Design architecture (Phase 2)
-/drupal-dev-framework:design
+# 4. The framework automatically starts research for your task
+```
 
-# 5. Get pattern recommendations
-/drupal-dev-framework:pattern settings form
-/drupal-dev-framework:pattern content entity
+### Working on Tasks
 
-# 6. Validate architecture before coding
-/drupal-dev-framework:validate
+Each task goes through 3 phases:
 
-# 7. Start implementing (Phase 3)
+```bash
+# Phase 1: Research (automatic after task creation)
+# - Searches contrib modules, finds core patterns
+# - Review findings, then proceed to design
+
+# Phase 2: Design architecture
+/drupal-dev-framework:design settings_form
+
+# Phase 3: Implement with TDD
 /drupal-dev-framework:implement settings_form
 
-# 8. Mark task complete when done
-/drupal-dev-framework:complete
+# Mark complete when done
+/drupal-dev-framework:complete settings_form
+
+# Start next task
+/drupal-dev-framework:research api_integration
 ```
 
 ### Resuming Work
 
 ```bash
-# Check current status
-/drupal-dev-framework:status
-
-# Get recommendation for next action
+# Get intelligent recommendation for next action
 /drupal-dev-framework:next
+
+# Or check current status
+/drupal-dev-framework:status
 ```
 
-### Typical Workflow
+### Typical Session Flow
 
 ```
-Phase 1: Research (no code)
-├── /drupal-dev-framework:new <project>
-├── /drupal-dev-framework:research <topic>
-└── Review findings, decide approach
-
-Phase 2: Architecture (no code)
-├── /drupal-dev-framework:design
-├── /drupal-dev-framework:pattern <use-case>
-├── /drupal-dev-framework:validate
-└── Review designs, approve before Phase 3
-
-Phase 3: Implementation (interactive coding)
-├── /drupal-dev-framework:implement <task>
-├── Write code piece-by-piece with approval
-├── /drupal-dev-framework:validate
-├── /drupal-dev-framework:complete
-└── Repeat for each task
+/next (no argument)
+     │
+     ▼
+"Found 2 projects..."  →  Select project
+     │
+     ▼
+"Found 2 tasks..."     →  Select task or create new
+     │
+     ▼
+"Task: settings_form (Phase 2)"
+"Recommended: /design settings_form"
+     │
+     ▼
+Work on task through phases → /complete when done
+     │
+     ▼
+Back to task selection
 ```
 
 ## Commands
@@ -223,27 +227,28 @@ This plugin builds on patterns and integrates with:
 
 ## Changelog
 
-### 1.1.3
-- Fixed assumptions that projects are always modules
-- Changed "module" references to "project" in commands, skills, agents
-- Updated examples to use generic project names instead of module names
-- Removed "Must be valid Drupal module name format" requirement from `/new` command
+See [CHANGELOG.md](./CHANGELOG.md) for full version history.
+
+### 1.3.1
+- Fixed task creation flow after requirements gathering
+- Added Step 7 to requirements-gatherer: validates task name, asks for description, then invokes `/research`
+
+### 1.3.0
+- Added WORKFLOW.md with complete workflow documentation
+- Phases now apply to TASKS, not projects
+- Each task independently cycles through Research → Architecture → Implementation
+- Added project registry at `~/.claude/drupal-dev-framework/active_projects.json`
+
+### 1.2.0
+- Projects contain requirements (gathered once) + multiple tasks
+- Task-based workflow with files in `implementation_process/in_progress/`
 
 ### 1.1.0
-- **Rewrote all 15 skills** to use imperative instructions instead of documentation style
-- Changed "Triggers" sections to "Activation" with active voice
-- Changed "Human Control Points" to "Stop Points" with actionable instructions
-- Added specific tool calls (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`)
-- Added numbered workflow steps with clear actions
-- Created `hooks/hooks.json` with SessionStart message
+- Rewrote all 15 skills to use imperative instructions
 - Skills now tell Claude what to do, not explain what the skill is
 
 ### 1.0.0
-- Initial release
-- 5 agents, 15 skills, 9 commands
-- 3-phase workflow (Research → Architecture → Implementation)
-- Configurable project paths
-- Optional guides integration
+- Initial release with 5 agents, 15 skills, 9 commands
 
 ## License
 

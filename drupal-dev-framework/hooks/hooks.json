@@ -5,8 +5,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "message",
-            "message": "Drupal Development Framework active. Use /drupal-dev-framework:status to check project state or /drupal-dev-framework:new to start a new project."
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "timeout": 5
           }
         ]
       }

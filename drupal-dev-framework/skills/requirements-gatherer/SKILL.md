@@ -1,7 +1,7 @@
 ---
 name: requirements-gatherer
 description: Use when gathering project requirements - asks structured questions about project type, scope, integrations, and constraints to populate project_state.md
-version: 1.2.0
+version: 1.3.1
 ---
 
 # Requirements Gatherer
@@ -186,10 +186,37 @@ Enter your first task:
 
 **IMPORTANT:** Do NOT suggest `/research` or `/design` at the project level. Tasks are what go through phases, not the project.
 
+### 7. Create First Task
+
+When user provides a task name:
+
+1. **Validate task name** - convert to lowercase with underscores (e.g., "Add settings form" → `settings_form`)
+
+2. **Confirm task creation:**
+   ```
+   Creating task: {task_name}
+
+   Brief description (one sentence - what does this task accomplish?):
+   ```
+
+3. **Wait for user to provide description**
+
+4. **Invoke research phase:**
+   ```
+   Starting research phase for: {task_name}
+   ```
+   Then invoke `/drupal-dev-framework:research {task_name}`
+
+**CRITICAL:** Do NOT start research until:
+- Task name is confirmed
+- User provides a description
+- Task creation is acknowledged
+
 ## Stop Points
 
 STOP and wait for user after:
 - Each category question
 - Showing summary for confirmation
 - Asking for first task
+- After asking for task description (Step 7.2)
 - User says "add more"
