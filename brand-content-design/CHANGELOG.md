@@ -5,6 +5,83 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2025-12-11
+
+### Added
+- **Palette contrast validation**: `/brand-palette` now validates all generated palettes for text contrast
+  - Calculates luminance and contrast ratio for each color
+  - Automatically adds `Text (light bg)` and `Text (dark bg)` colors to every palette
+  - Uses WCAG AA standard (≥4.5:1 contrast ratio)
+  - Derives text colors from palette when possible, falls back to safe defaults
+  - Shows ⚠️ indicator when text colors are derived (not from original palette)
+- **Text colors in brand-philosophy-template.md**: New "Text Colors (Contrast-Validated)" section
+- **Multi-format illustration support**: Illustrated templates now accept SVG, PNG, and JPG
+  - "I have images" option for providing your own files
+  - "Find icons for me" with expanded resource list (Lucide, Heroicons, Unsplash, unDraw, Storyset)
+  - "Use placeholders" for quick prototyping
+
+### Changed
+- **`/template-infographic`**: Now reads `Text (light bg)` and `Text (dark bg)` from selected palette
+  - Config generation uses palette text colors for `title.fill`, `desc.fill`, `item` fills
+  - Template category table now shows Icons/Illustrated columns
+- **`/template-presentation`**: Now extracts and uses palette text colors
+  - Canvas philosophy includes text color guidance section
+- **`/template-carousel`**: Now extracts and uses palette text colors
+  - Canvas philosophy includes text color guidance section
+- **Palette storage format**: Alternative palettes now include text colors:
+  ```markdown
+  ### Pastel (Alternative)
+  - Base: #E0E7FF
+  - Text (light bg): #1E293B ⚠️
+  - Text (dark bg): #F8FAFC
+  ```
+- **Illustration storage location**: Images now stored with infographic output, not template
+  - Each infographic: `infographics/{date}-{name}/illustrations/`
+  - Templates only contain config.json and outline-template.md
+
+### Fixed
+- Pastel/low-contrast palettes no longer produce unreadable text
+- All three content types (infographics, presentations, carousels) now use consistent text contrast rules
+- Illustrated templates no longer expect images in template folder
+
+## [1.8.0] - 2025-12-11
+
+### Added
+- **Infographic Generator Skill**: Complete system for creating branded infographics
+  - Uses @antv/infographic library with 114 templates across 7 categories
+  - Three template types: text-only (100+), icon-based (8), illustrated (9)
+  - Custom background system with 11 presets (4 layered + 7 simple)
+  - Lucide icon integration (1909 icons via lucide-static)
+  - Automatic npm dependency installation on first use
+
+### Changed
+- **Color contrast system**: Dark backgrounds now use proper light text colors
+  - `colorBg` sets the background base color for gradient derivation
+  - Explicit `title`, `desc`, `item.label`, `item.desc` fill colors for contrast
+  - `darkenColor()` and `isLightColor()` helpers for intelligent color handling
+- **Removed dimension config**: Library auto-sizes based on content (width/height removed)
+
+### Fixed
+- Background presets now properly applied via `extractSVG` instead of `exportToDataURL`
+- Illustrated templates render with placeholder SVGs when files are missing
+
+## [1.7.0] - 2025-12-10
+
+### Added
+- **`/template-infographic`**: Create infographic templates with 114 designs
+- **`/infographic`**: Generate infographics (guided mode)
+- **`/infographic-quick`**: Generate infographics (fast mode)
+- **Infographic skill files**: SKILL.md, references for templates, theming, backgrounds, icons, illustrations
+- **Node.js generator**: `generate.js` with Puppeteer for PNG export
+- **Background presets**: spotlight-dots, spotlight-grid, diagonal-crosshatch, tech-matrix, and 7 simple presets
+
+## [1.5.0] - 2025-12-10
+
+### Added
+- Initial infographic generator infrastructure
+- Template command with category/design selection workflow
+- Outline template and prompt generation for infographic content
+
 ## [1.4.1] - 2025-12-09
 
 ### Added
