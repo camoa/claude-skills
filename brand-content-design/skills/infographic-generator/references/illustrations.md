@@ -48,8 +48,30 @@ The `illus` field references an SVG file: `{illus}.svg`
 | Size | 200×200 pixels minimum for raster (PNG/JPG) |
 | Colors | Monochrome or brand colors preferred for icons |
 | Style | Simple, iconic, consistent across set |
-| File location | Template illustrations folder or specified path |
-| Naming | Match the `illus` field value (e.g., `alarm.svg`, `alarm.png`)
+| Naming | Match the `illus` field value (e.g., `alarm.svg`, `alarm.png`) |
+
+### File Location
+
+Images are stored with each **infographic output**, not in the template:
+
+```
+{PROJECT_PATH}/
+├── templates/infographics/
+│   └── my-template/           # Template config (no images here)
+│       ├── config.json
+│       └── outline-template.md
+│
+└── infographics/
+    └── 2025-01-15-quarterly-report/   # Each infographic output
+        ├── quarterly-report.png       # Generated infographic
+        ├── data.json                  # Content data
+        └── illustrations/             # Images for this infographic
+            ├── growth.svg
+            ├── team.png
+            └── launch.jpg
+```
+
+**Why?** Each infographic may need different images even when using the same template. Storing images with the output keeps everything self-contained and reusable.
 
 ## Workflow: Using Illustrated Templates
 

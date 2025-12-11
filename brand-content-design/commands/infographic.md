@@ -75,9 +75,11 @@ Create a branded infographic using an existing template with guided step-by-step
 
 **If template name ends in `-illus`:**
 
-7b. **Check for existing illustrations**
-    - Look for SVG files in the template folder or output folder
-    - List any found SVGs
+7b. **Determine output folder for illustrations**
+    The infographic output folder will be: `{PROJECT_PATH}/infographics/{YYYY-MM-DD}-{infographic-name}/`
+    Illustrations should be placed in: `{OUTPUT_FOLDER}/illustrations/`
+
+    Note: We don't know the exact folder name yet (depends on step 8), so we'll ask the user to provide images from any location and copy them later.
 
 7c. **Ask about illustrations**
     Use AskUserQuestion:
@@ -97,7 +99,7 @@ Create a branded infographic using an existing template with guided step-by-step
     - JPG (raster) - good for photos without transparency
 
     - Validate files exist
-    - Map illus names to file paths
+    - Store paths for copying to output folder later (step 15)
     - If PNG/JPG: Note these will be embedded at their resolution
 
     **Naming convention:**
@@ -208,9 +210,16 @@ Create a branded infographic using an existing template with guided step-by-step
 
 15. **Save outputs**
     Create folder: `{PROJECT_PATH}/infographics/{YYYY-MM-DD}-{infographic-name}/`
+
+    **For illustrated templates:** Copy user's images to output folder
+    - Create `{OUTPUT_FOLDER}/illustrations/` subfolder
+    - Copy images from user's source location (from step 7d)
+    - Keep original filenames (must match `illus` field values)
+
     Save:
     - `{infographic-name}.png` (and/or .svg)
     - `data.json` - The content data used
+    - `illustrations/` - Image files (for `-illus` templates)
 
 16. **Show result**
     Display:
@@ -225,6 +234,7 @@ Create a branded infographic using an existing template with guided step-by-step
 
 - Created: `infographics/{date}-{name}/{name}.png`
 - Created: `infographics/{date}-{name}/data.json`
+- Created: `infographics/{date}-{name}/illustrations/` (for `-illus` templates)
 
 ## Notes
 
