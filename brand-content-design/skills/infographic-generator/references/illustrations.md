@@ -46,9 +46,34 @@ The `illus` field references an SVG file: `{illus}.svg`
 | Requirement | Specification |
 |-------------|---------------|
 | Size | 200×200 pixels minimum for raster (PNG/JPG) |
+| **Aspect ratio** | **Square (1:1) strongly recommended** |
 | Colors | Monochrome or brand colors preferred for icons |
 | Style | Simple, iconic, consistent across set |
 | Naming | Match the `illus` field value (e.g., `alarm.svg`, `alarm.png`) |
+
+### Image Sizing Behavior
+
+Images use `preserveAspectRatio="xMidYMid slice"` which means:
+- Images are **scaled to fill** their container (not letterboxed)
+- Non-square images are **cropped from center**
+- Best results with **square images** (1:1 aspect ratio)
+
+| Image Shape | Result |
+|-------------|--------|
+| Square (1:1) | Perfect fit, no cropping |
+| Portrait (3:4) | Left/right edges cropped |
+| Landscape (4:3) | Top/bottom edges cropped |
+
+**Recommendation:** Use square images or crop to square before using.
+
+### SVG Pre-processing
+
+Complex SVGs (e.g., Adobe Illustrator exports) are automatically sanitized:
+- XML declarations removed
+- DOCTYPE removed
+- Comments stripped
+
+This ensures compatibility with the @antv/infographic library.
 
 ### File Location
 

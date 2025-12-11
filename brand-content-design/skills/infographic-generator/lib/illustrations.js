@@ -3,9 +3,12 @@
  * Single Responsibility: Loading and managing user-provided illustrations
  *
  * Supports:
- * - SVG files (.svg)
+ * - SVG files (.svg) - sanitized for embedding (removes XML declarations, etc.)
  * - PNG files (.png) - converted to base64 data URI
  * - JPG/JPEG files (.jpg, .jpeg) - converted to base64 data URI
+ *
+ * All images use preserveAspectRatio="xMidYMid slice" for consistent sizing
+ * (crops overflow rather than letterboxing)
  */
 
 const fs = require('fs');
@@ -13,6 +16,30 @@ const path = require('path');
 
 // Default assets directory (can be overridden)
 let illustrationsDir = null;
+
+/**
+ * Sanitize SVG for embedding in @antv/infographic
+ * Removes XML declarations and other problematic elements
+ * @param {string} svg - Raw SVG content
+ * @returns {string} Sanitized SVG
+ */
+function sanitizeSVG(svg) {
+  let sanitized = svg;
+
+  // Remove XML declaration (<?xml ... ?>)
+  sanitized = sanitized.replace(/<\?xml[^?]*\?>\s*/gi, '');
+
+  // Remove DOCTYPE declarations
+  sanitized = sanitized.replace(/<!DOCTYPE[^>]*>\s*/gi, '');
+
+  // Remove comments (can cause issues with some parsers)
+  sanitized = sanitized.replace(/<!--[\s\S]*?-->\s*/g, '');
+
+  // Remove leading/trailing whitespace
+  sanitized = sanitized.trim();
+
+  return sanitized;
+}
 
 // Cache for loaded illustrations
 const illustrationCache = new Map();
@@ -108,8 +135,9 @@ function loadIllustration(name) {
     let result;
 
     if (check.format === 'svg') {
-      // Read SVG directly
-      const svg = fs.readFileSync(check.path, 'utf-8');
+      // Read and sanitize SVG for embedding
+      const rawSvg = fs.readFileSync(check.path, 'utf-8');
+      const svg = sanitizeSVG(rawSvg);
       result = { svg, format: 'svg' };
     } else {
       // Convert PNG/JPG to embedded SVG with image
@@ -119,8 +147,10 @@ function loadIllustration(name) {
 
       // Create SVG wrapper with embedded image
       // Using viewBox 0 0 100 100 for consistent sizing
+      // Using "slice" to crop overflow (fills container, clips edges)
+      // vs "meet" which letterboxes (shows entire image, adds padding)
       const svg = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <image width="100" height="100" preserveAspectRatio="xMidYMid meet" xlink:href="data:${mimeType};base64,${base64}"/>
+  <image width="100" height="100" preserveAspectRatio="xMidYMid slice" xlink:href="data:${mimeType};base64,${base64}"/>
 </svg>`;
       result = { svg, format: check.format };
     }
