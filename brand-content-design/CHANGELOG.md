@@ -5,6 +5,19 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.3] - 2025-12-11
+
+### Added
+- **Infographic accessibility enforcement**: Mandatory accessibility checks for infographics
+  - `generate.js` now validates WCAG AA contrast (4.5:1) before generation
+  - Warns about low-contrast text with recommended fixes
+  - `getLuminance()`, `getContrastRatio()`, `validateContrast()` functions added
+- **Infographic SKILL.md**: New "Accessibility & Readability (MANDATORY)" section
+  - Text color rules by background type (dark/light)
+  - Spacing & balance requirements
+  - Pre-generation checklist
+- **Infographic WORKFLOW.md**: Accessibility checklist section with troubleshooting
+
 ## [1.11.2] - 2025-12-11
 
 ### Fixed

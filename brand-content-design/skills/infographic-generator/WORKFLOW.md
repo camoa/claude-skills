@@ -274,11 +274,31 @@ node generate.js ... --output "output.svg"
 
 ---
 
+## Accessibility Checklist (MANDATORY)
+
+**Run these checks BEFORE generating any infographic:**
+
+```
+□ All text has 4.5:1 contrast against background
+□ Labels are 1-2 words maximum
+□ Descriptions are 2-4 words maximum
+□ Dark bg → white/light text fills
+□ Light bg → dark text fills (#1A202C, #4A5568)
+□ No palette colors used for text (shapes only)
+```
+
+**The generator will warn you about contrast issues.** Fix them before finalizing.
+
+---
+
 ## Troubleshooting
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | Text invisible | Low contrast | Check `title.fill` and `item.label.fill` in config.json |
+| ⚠️ CONTRAST WARNING | Text < 4.5:1 ratio | Use recommended color from warning message |
+| Text overlapping | Content too long | Shorten labels (1-2 words), descriptions (2-4 words) |
+| Unbalanced layout | Too many items | Reduce items or use grid/column template |
 | Image not showing | Wrong filename | Ensure filename matches `illus` value exactly |
 | Icon not rendering | Wrong template | Use template with `icon` in name |
 | Placeholder shown | Missing file | Add image file to illustrations folder |
