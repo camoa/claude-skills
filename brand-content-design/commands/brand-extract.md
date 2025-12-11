@@ -89,11 +89,24 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
 
 7. **Copy brand assets to assets/ folder**
    - Copy logo files from `input/logos/` to `assets/`
-   - Prefer vector formats (SVG) over raster when available
+   - **Logo format requirement**: reportlab requires PNG or JPG (not SVG)
+     - If logo is SVG: Convert to PNG using `cairosvg` and save as PNG
+     - If logo is PNG or JPG: Copy directly
+     - Always store the final PNG/JPG path in brand-philosophy.md
    - If multiple logos found, ask user which is the primary logo
-   - Record the primary logo path in brand-philosophy.md
+   - Record the primary logo path in brand-philosophy.md (must be .png or .jpg)
    - Copy font files from `input/fonts/` to `assets/fonts/`
    - Record font file paths in brand-philosophy.md typography section
+
+   **SVG to PNG conversion:**
+   ```python
+   import cairosvg
+   cairosvg.svg2png(
+       url="input/logos/logo.svg",
+       write_to="assets/logo.png",
+       output_width=800  # Scale up for crisp rendering
+   )
+   ```
 
 8. **Generate brand-philosophy.md**
    Use `references/brand-philosophy-template.md` as template.

@@ -5,6 +5,30 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2] - 2025-12-11
+
+### Fixed
+- **Logo format enforcement**: Logos must be PNG or JPG - SVG not supported by reportlab
+  - `/brand-extract` now converts SVG logos to PNG automatically during brand setup
+  - `brand-philosophy-template.md` clearly states PNG/JPG requirement
+  - Runtime fallback conversion if SVG encountered at generation time
+  - Added format validation with warning for unsupported formats
+
+### Added
+- **Mandatory accessibility checks**: New "Accessibility & Safety Checks" section in technical-implementation.md
+  - WCAG AA contrast validation (4.5:1 minimum) with auto-fix
+  - Text bounding box collision detection to prevent overlap
+  - Safe zone enforcement with constants for presentations and carousels
+  - Pre-render checklist that must pass before output
+  - Gradient text safety validation (contrast at both ends)
+- **Part 6b in SKILL.md**: "Accessibility & Safety (MANDATORY)" with enforcement rules
+  - No overlap rule (ABSOLUTE) - text must never overlap anything
+  - Safe zone enforcement table with usable dimensions
+  - Pre-render checklist for every slide/card
+
+### Changed
+- **Technical documentation**: Updated asset preparation section with supported formats table
+
 ## [1.11.1] - 2025-12-11
 
 ### Fixed

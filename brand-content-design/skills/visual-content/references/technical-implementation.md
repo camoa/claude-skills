@@ -17,27 +17,36 @@ Code patterns for PDF generation with reportlab.
 
 **Before generating any visual content**, prepare assets for PDF embedding.
 
-### SVG to PNG Conversion
+### Logo Format Requirements
 
-SVG logos must be converted to PNG for reliable PDF embedding:
+**reportlab requires PNG or JPG logos - SVG is not supported.**
+
+The `/brand-extract` command converts SVG logos to PNG automatically during brand setup. However, if you encounter an SVG logo at generation time, convert it first:
 
 ```python
 # Using cairosvg (recommended for quality)
 import cairosvg
 
 cairosvg.svg2png(
-    url="assets/logo.svg",
+    url="input/logo.svg",
     write_to="assets/logo.png",
     output_width=800,  # Scale up for crisp rendering
     output_height=None  # Maintain aspect ratio
 )
 
 # Or using Inkscape CLI
-# inkscape assets/logo.svg --export-filename=assets/logo.png --export-width=800
+# inkscape input/logo.svg --export-filename=assets/logo.png --export-width=800
 ```
 
-**Why PNG over JPG?**
-- PNG preserves transparency (essential for logos)
+**Supported formats:**
+| Format | Use Case | Transparency |
+|--------|----------|--------------|
+| **PNG** | Logos (recommended) | Yes |
+| **JPG** | Photos, complex images | No |
+| **SVG** | ❌ Not supported | N/A |
+
+**Why PNG for logos?**
+- PNG preserves transparency (essential for logos on any background)
 - PNG is lossless (no compression artifacts)
 - JPG only for photographs where file size matters
 
@@ -593,11 +602,16 @@ def generate_visual_content(
     logo_path = get_logo_path(brand_philosophy_path)
     load_brand_fonts(os.path.dirname(brand_philosophy_path))
 
-    # 2. Convert SVG logo if needed
-    if logo_path and logo_path.endswith('.svg'):
-        png_path = logo_path.replace('.svg', '.png')
-        convert_svg_to_png(logo_path, png_path)
-        logo_path = png_path
+    # 2. Validate logo format (PNG/JPG only, convert SVG if needed)
+    if logo_path:
+        if logo_path.endswith('.svg'):
+            # Convert SVG to PNG (should be done in brand-extract, but handle as fallback)
+            png_path = logo_path.replace('.svg', '.png')
+            convert_svg_to_png(logo_path, png_path)
+            logo_path = png_path
+        elif not logo_path.endswith(('.png', '.jpg', '.jpeg')):
+            print(f"Warning: Unsupported logo format: {logo_path}. Use PNG or JPG.")
+            logo_path = None
 
     # 3. Generate PDF based on format
     if output_format == 'presentation':
@@ -607,6 +621,223 @@ def generate_visual_content(
 
     return output_path
 ```
+
+---
+
+## Accessibility & Safety Checks (MANDATORY)
+
+**These checks are NON-NEGOTIABLE.** Run them before finalizing any PDF output.
+
+### 1. Contrast Ratio Validation (WCAG AA)
+
+All text must have minimum 4.5:1 contrast ratio against its background.
+
+```python
+def get_luminance(hex_color):
+    """Calculate relative luminance per WCAG 2.1."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) / 255 for i in (0, 2, 4))
+
+    def adjust(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * adjust(r) + 0.7152 * adjust(g) + 0.0722 * adjust(b)
+
+
+def get_contrast_ratio(color1, color2):
+    """Calculate contrast ratio between two colors."""
+    l1 = get_luminance(color1)
+    l2 = get_luminance(color2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def validate_contrast(text_color, bg_color, min_ratio=4.5):
+    """
+    Validate text/background contrast meets WCAG AA.
+
+    Returns: (is_valid, actual_ratio, recommended_color)
+    """
+    ratio = get_contrast_ratio(text_color, bg_color)
+    is_valid = ratio >= min_ratio
+
+    # If invalid, suggest a safe alternative
+    recommended = None
+    if not is_valid:
+        bg_luminance = get_luminance(bg_color)
+        recommended = '#FFFFFF' if bg_luminance < 0.5 else '#1A1A1A'
+
+    return is_valid, round(ratio, 2), recommended
+
+
+# USAGE: Validate EVERY text element before drawing
+is_valid, ratio, recommended = validate_contrast(text_color, bg_color)
+if not is_valid:
+    print(f"⚠️ CONTRAST FAIL: {ratio}:1 (need 4.5:1). Use {recommended}")
+    text_color = recommended  # Auto-fix
+```
+
+### 2. Text Bounding Box (No Overlap Prevention)
+
+Calculate text boundaries before placing to prevent overlap.
+
+```python
+def get_text_bounds(canvas, text, font, size, x, y):
+    """
+    Get bounding box for text element.
+
+    Returns: dict with left, right, top, bottom, width, height
+    """
+    text_width = canvas.stringWidth(text, font, size)
+    # Approximate height (reportlab doesn't give exact)
+    text_height = size * 1.2  # 1.2 line height factor
+
+    return {
+        'left': x,
+        'right': x + text_width,
+        'top': y + text_height,
+        'bottom': y,
+        'width': text_width,
+        'height': text_height
+    }
+
+
+def check_overlap(bounds1, bounds2, padding=10):
+    """
+    Check if two bounding boxes overlap (with optional padding).
+
+    Returns: True if overlapping
+    """
+    return not (
+        bounds1['right'] + padding < bounds2['left'] or
+        bounds1['left'] > bounds2['right'] + padding or
+        bounds1['top'] + padding < bounds2['bottom'] or
+        bounds1['bottom'] > bounds2['top'] + padding
+    )
+
+
+def check_safe_zone(bounds, canvas_width, canvas_height, margin):
+    """
+    Check if element is within safe zone.
+
+    Returns: (is_safe, violations list)
+    """
+    violations = []
+
+    if bounds['left'] < margin:
+        violations.append(f"LEFT: {bounds['left']}px < {margin}px margin")
+    if bounds['right'] > canvas_width - margin:
+        violations.append(f"RIGHT: {bounds['right']}px > {canvas_width - margin}px")
+    if bounds['bottom'] < margin:
+        violations.append(f"BOTTOM: {bounds['bottom']}px < {margin}px margin")
+    if bounds['top'] > canvas_height - margin:
+        violations.append(f"TOP: {bounds['top']}px > {canvas_height - margin}px")
+
+    return len(violations) == 0, violations
+
+
+# USAGE: Track all elements and check before rendering
+elements = []
+
+def place_text_safely(canvas, text, font, size, x, y, canvas_width, canvas_height, margin=50):
+    """Place text only if it passes all safety checks."""
+    bounds = get_text_bounds(canvas, text, font, size, x, y)
+
+    # Check safe zone
+    is_safe, violations = check_safe_zone(bounds, canvas_width, canvas_height, margin)
+    if not is_safe:
+        print(f"⚠️ SAFE ZONE VIOLATION: {violations}")
+        return False
+
+    # Check overlap with existing elements
+    for existing in elements:
+        if check_overlap(bounds, existing['bounds']):
+            print(f"⚠️ OVERLAP DETECTED: '{text}' overlaps '{existing['text']}'")
+            return False
+
+    # All checks passed - render and track
+    canvas.setFont(font, size)
+    canvas.drawString(x, y, text)
+    elements.append({'text': text, 'bounds': bounds})
+    return True
+```
+
+### 3. Safe Zone Constants
+
+```python
+# Presentation (1920x1080) - 50px margins
+PRES_SAFE_LEFT = 50
+PRES_SAFE_RIGHT = 1870  # 1920 - 50
+PRES_SAFE_TOP = 1030    # 1080 - 50
+PRES_SAFE_BOTTOM = 50
+
+# Carousel (1080x1350) - 5% margins = 54px
+CARD_MARGIN = 54
+CARD_SAFE_LEFT = 54
+CARD_SAFE_RIGHT = 1026  # 1080 - 54
+CARD_SAFE_TOP = 1296    # 1350 - 54
+CARD_SAFE_BOTTOM = 54
+```
+
+### 4. Pre-Render Checklist (Run for EVERY slide/card)
+
+```python
+def pre_render_checks(slide_content, canvas_width, canvas_height, margin, bg_color):
+    """
+    Run all accessibility checks before rendering.
+
+    Returns: (can_render, issues_list)
+    """
+    issues = []
+
+    # 1. Contrast check for all text
+    for element in slide_content.get('text_elements', []):
+        is_valid, ratio, recommended = validate_contrast(
+            element['color'], bg_color
+        )
+        if not is_valid:
+            issues.append(f"Contrast fail: '{element['text'][:20]}...' ({ratio}:1)")
+
+    # 2. Safe zone check (estimate positions)
+    # ... check each element position
+
+    # 3. Overlap detection
+    # ... compare all element bounds
+
+    # 4. Word count check (from style constraints)
+    total_words = sum(len(e['text'].split()) for e in slide_content.get('text_elements', []))
+    max_words = slide_content.get('max_words', 50)
+    if total_words > max_words:
+        issues.append(f"Word limit exceeded: {total_words} > {max_words}")
+
+    can_render = len(issues) == 0
+    return can_render, issues
+```
+
+### 5. Gradient Text Safety
+
+When using gradients, text must be readable at **both ends** of the gradient.
+
+```python
+def validate_gradient_text_contrast(text_color, gradient_start, gradient_end):
+    """
+    Ensure text is readable across entire gradient.
+    """
+    ratio_start = get_contrast_ratio(text_color, gradient_start)
+    ratio_end = get_contrast_ratio(text_color, gradient_end)
+
+    min_ratio = min(ratio_start, ratio_end)
+
+    if min_ratio < 4.5:
+        print(f"⚠️ GRADIENT CONTRAST FAIL: {min_ratio}:1 at one end")
+        # Suggest using text shadow or solid background behind text
+        return False
+
+    return True
+```
+
+---
 
 ## PPTX Conversion
 
