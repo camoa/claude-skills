@@ -5,6 +5,19 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2025-12-11
+
+### Fixed
+- **Gradient rendering bug**: Fixed `AttributeError: 'PDFPathObject' object has no attribute 'closePath'` - reportlab uses `p.close()` not `p.closePath()`
+- **Icons fallback paths**: Added fallback plugin directory detection when `BRAND_CONTENT_DESIGN_DIR` env var not set by hook
+
+### Added
+- **Intelligent usage guidelines**: Visual components now have decision framework for smart usage
+  - When to use/avoid cards, icons, gradients based on content type
+  - Slide-type recommendation matrix
+  - Quality checklist and common mistakes
+- **Outline command**: `/outline` now includes visual components in generated AI prompts
+
 ## [1.11.0] - 2025-12-11
 
 ### Added
