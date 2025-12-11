@@ -5,7 +5,7 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.0] - 2025-12-11
+## [1.10.0] - 2025-12-11
 
 ### Added
 - **Palette contrast validation**: `/brand-palette` now validates all generated palettes for text contrast
@@ -15,6 +15,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Derives text colors from palette when possible, falls back to safe defaults
   - Shows ⚠️ indicator when text colors are derived (not from original palette)
 - **Text colors in brand-philosophy-template.md**: New "Text Colors (Contrast-Validated)" section
+- **Multi-format illustration support**: Illustrated templates now accept SVG, PNG, and JPG
+  - "I have images" option for providing your own files
+  - "Find icons for me" with expanded resource list (Lucide, Heroicons, Unsplash, unDraw, Storyset)
+  - "Use placeholders" for quick prototyping
 
 ### Changed
 - **`/template-infographic`**: Now reads `Text (light bg)` and `Text (dark bg)` from selected palette
@@ -31,10 +35,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Text (light bg): #1E293B ⚠️
   - Text (dark bg): #F8FAFC
   ```
+- **Illustration storage location**: Images now stored with infographic output, not template
+  - Each infographic: `infographics/{date}-{name}/illustrations/`
+  - Templates only contain config.json and outline-template.md
 
 ### Fixed
 - Pastel/low-contrast palettes no longer produce unreadable text
 - All three content types (infographics, presentations, carousels) now use consistent text contrast rules
+- Illustrated templates no longer expect images in template folder
 
 ## [1.8.0] - 2025-12-11
 

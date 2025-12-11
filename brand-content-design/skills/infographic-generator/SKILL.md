@@ -50,15 +50,16 @@ Generate branded infographics with custom themes and backgrounds using @antv/inf
 | **Icon-based** | 8 | `icon` in name | `{ "label": "icon:rocket", "desc": "Fast" }` |
 | **Illustrated** | 9 | `-illus` suffix | `{ "label": "Step 1", "desc": "Discovery", "illus": "step-1" }` |
 
-**Recommendation:** Start with text-only templates. Illustrated templates require custom SVG files.
+**Recommendation:** Start with text-only templates. Illustrated templates require custom image files.
 
 ### Illustrated Template Workflow
 
 When using `-illus` templates:
-1. Content includes `illus` field referencing SVG filename
-2. Outline prompt asks for illustration concepts (what visual should represent each item)
-3. User provides SVGs or uses placeholders
-4. See `references/illustrations.md` for detailed workflow
+1. Content includes `illus` field referencing image filename
+2. Supported formats: SVG (recommended), PNG, JPG
+3. Options: provide your own images, find icons, or use placeholders
+4. Images stored with infographic output: `infographics/{date}-{name}/illustrations/`
+5. See `references/illustrations.md` for detailed workflow
 
 ## Text Guidelines (Avoiding Overlap)
 
@@ -176,7 +177,7 @@ See template-infographic.md for complete config examples.
 | Mistake | Fix |
 |---------|-----|
 | Text overlapping | Shorten labels (1-2 words), descriptions (2-4 words) |
-| Missing illustrations | Check template ends in `-illus`, create SVGs first |
+| Missing illustrations | Check template ends in `-illus`, provide SVG/PNG/JPG files |
 | Icon not showing | Use `icon:name` syntax, only for icon templates |
 | Background not applied | Pass `--background` flag to generate.js |
 | Text invisible on light bg | Add explicit `title`/`desc`/`item` fills with dark colors (#1A202C, #4A5568) |
