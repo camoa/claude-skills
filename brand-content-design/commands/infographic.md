@@ -12,6 +12,15 @@ Create a branded infographic using an existing template with guided step-by-step
 - Must be in a brand project folder (contains brand-philosophy.md)
 - Must have at least one infographic template (run `/template-infographic` first)
 
+## IMPORTANT: No Library Research Needed
+
+**DO NOT** analyze or read the @antv/infographic library source code during this command.
+- Template config.json already contains all necessary settings
+- The generate.js script handles all library interactions
+- User just provides content and images - no library knowledge required
+
+This command is for **using** templates, not creating or debugging them.
+
 ## Workflow
 
 ### Phase 0: Dependency Check
