@@ -143,18 +143,118 @@ function darkenColor(hex, percent) {
 }
 
 /**
+ * Calculate relative luminance per WCAG 2.1
+ * @param {string} hex - Hex color code
+ * @returns {number} Luminance value 0-1
+ */
+function getLuminance(hex) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = ((num >> 16) & 0xFF) / 255;
+  const g = ((num >> 8) & 0xFF) / 255;
+  const b = (num & 0xFF) / 255;
+
+  const adjust = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+
+  return 0.2126 * adjust(r) + 0.7152 * adjust(g) + 0.0722 * adjust(b);
+}
+
+/**
  * Check if a color is light (for contrast decisions)
  * @param {string} hex - Hex color code
  * @returns {boolean} True if color is light
  */
 function isLightColor(hex) {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = (num >> 16) & 0xFF;
-  const g = (num >> 8) & 0xFF;
-  const b = num & 0xFF;
-  // Using relative luminance formula
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5;
+  return getLuminance(hex) > 0.5;
+}
+
+/**
+ * Calculate contrast ratio between two colors (WCAG 2.1)
+ * @param {string} color1 - First hex color
+ * @param {string} color2 - Second hex color
+ * @returns {number} Contrast ratio (1-21)
+ */
+function getContrastRatio(color1, color2) {
+  const l1 = getLuminance(color1);
+  const l2 = getLuminance(color2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Validate text contrast meets WCAG AA (4.5:1)
+ * @param {string} textColor - Text hex color
+ * @param {string} bgColor - Background hex color
+ * @param {number} minRatio - Minimum ratio (default 4.5)
+ * @returns {object} { isValid, ratio, recommended }
+ */
+function validateContrast(textColor, bgColor, minRatio = 4.5) {
+  // Handle rgba colors - extract hex or use fallback
+  if (textColor.startsWith('rgba')) {
+    // For rgba, we can't accurately calculate - assume it's valid if it's white-ish or black-ish
+    const match = textColor.match(/rgba\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+      const r = parseInt(match[1]);
+      const g = parseInt(match[2]);
+      const b = parseInt(match[3]);
+      textColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    } else {
+      return { isValid: true, ratio: 'N/A (rgba)', recommended: null };
+    }
+  }
+
+  const ratio = getContrastRatio(textColor, bgColor);
+  const isValid = ratio >= minRatio;
+
+  let recommended = null;
+  if (!isValid) {
+    recommended = isLightColor(bgColor) ? '#1A202C' : '#FFFFFF';
+  }
+
+  return { isValid, ratio: ratio.toFixed(2), recommended };
+}
+
+/**
+ * Validate config text colors against background
+ * @param {object} config - Infographic config
+ * @returns {array} List of contrast issues
+ */
+function validateConfigContrast(config) {
+  const issues = [];
+  const bgColor = config.colorBg || '#FFFFFF';
+
+  // Check title contrast
+  if (config.title?.fill) {
+    const result = validateContrast(config.title.fill, bgColor);
+    if (!result.isValid) {
+      issues.push(`Title contrast: ${result.ratio}:1 (need 4.5:1). Use ${result.recommended}`);
+    }
+  }
+
+  // Check description contrast
+  if (config.desc?.fill) {
+    const result = validateContrast(config.desc.fill, bgColor);
+    if (!result.isValid) {
+      issues.push(`Description contrast: ${result.ratio}:1 (need 4.5:1). Use ${result.recommended}`);
+    }
+  }
+
+  // Check item label/desc contrast
+  if (config.item?.label?.fill) {
+    const result = validateContrast(config.item.label.fill, bgColor);
+    if (!result.isValid) {
+      issues.push(`Item label contrast: ${result.ratio}:1 (need 4.5:1). Use ${result.recommended}`);
+    }
+  }
+
+  if (config.item?.desc?.fill) {
+    const result = validateContrast(config.item.desc.fill, bgColor);
+    if (!result.isValid) {
+      issues.push(`Item desc contrast: ${result.ratio}:1 (need 4.5:1). Use ${result.recommended}`);
+    }
+  }
+
+  return issues;
 }
 
 /**
@@ -187,6 +287,16 @@ async function main() {
     if (config.illustrationsDir) {
       setIllustrationsDir(config.illustrationsDir);
       console.log(`Using illustrations from: ${config.illustrationsDir}`);
+    }
+
+    // Validate contrast (WCAG AA) before generating
+    if (config.themeConfig) {
+      const contrastIssues = validateConfigContrast(config.themeConfig);
+      if (contrastIssues.length > 0) {
+        console.warn('⚠️  CONTRAST WARNINGS (WCAG AA 4.5:1):');
+        contrastIssues.forEach(issue => console.warn(`   - ${issue}`));
+        console.warn('   Consider fixing these for better accessibility.');
+      }
     }
 
     // Create infographic

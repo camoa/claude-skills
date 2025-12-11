@@ -113,25 +113,80 @@ Select: category → design → palette → background → style
 ```
 Select template → paste content → name → get PNG
 
-## Color Contrast Rules
+## Accessibility & Readability (MANDATORY)
+
+**These checks are NON-NEGOTIABLE before generating any infographic.**
+
+### Contrast Validation (WCAG AA)
+
+| Requirement | Value |
+|-------------|-------|
+| Minimum contrast ratio | **4.5:1** for all text |
+| Large text (title) | 3:1 acceptable |
+| Standard | WCAG 2.1 AA |
 
 **Key principle:** Palette colors are for SHAPES and FILLS, not text. Text needs explicit high-contrast colors.
 
-### Dark Backgrounds (spotlight-dots, tech-matrix, etc.)
-- `colorBg`: Dark base color (e.g., `#0D2B5C`)
-- `colorPrimary`: Accent color for shapes
-- `title`: `{ "fill": "#FFFFFF" }`
-- `desc`: `{ "fill": "{accent-color}" }` or `"rgba(255,255,255,0.85)"`
-- `item.label`: `{ "fill": "#FFFFFF" }`
-- `item.desc`: `{ "fill": "rgba(255,255,255,0.7)" }`
+### Text Color Rules by Background
 
-### Light Backgrounds (solid, subtle-dots, etc.)
-- `colorBg`: Light base color (e.g., `#FFFFFF`, `#F7F9FC`)
-- `colorPrimary`: Accent color for shapes (can be pastel)
-- `title`: `{ "fill": "#1A202C" }` (near black)
-- `desc`: `{ "fill": "#4A5568" }` (dark gray)
-- `item.label`: `{ "fill": "#1A202C" }`
-- `item.desc`: `{ "fill": "#4A5568" }`
+| Background Type | Title Fill | Description Fill | Label Fill |
+|-----------------|------------|------------------|------------|
+| **Dark** (spotlight-dots, tech-matrix) | `#FFFFFF` | `rgba(255,255,255,0.85)` | `#FFFFFF` |
+| **Light** (solid, subtle-dots) | `#1A202C` | `#4A5568` | `#1A202C` |
+
+**Never use palette colors for text** - they're for decorative shapes only.
+
+### Spacing & Balance Rules
+
+| Element | Requirement |
+|---------|-------------|
+| **Item spacing** | Minimum 20px between items |
+| **Edge margins** | Never touch canvas edges (min 5% padding) |
+| **Text truncation** | Labels 1-2 words, descriptions 2-4 words |
+| **Visual balance** | Equal spacing between similar elements |
+
+### Pre-Generation Checklist
+
+```
+□ All text has 4.5:1 contrast against background
+□ Labels are 1-2 words (no overlap risk)
+□ Descriptions are 2-4 words
+□ Content fits template capacity (check item limits)
+□ Dark bg → white text, Light bg → dark text
+□ No text touching edges
+```
+
+**If ANY check fails, DO NOT generate. Fix the content or config first.**
+
+### Config Examples
+
+**Dark Backgrounds (spotlight-dots, tech-matrix, etc.)**
+```json
+{
+  "colorBg": "#0D2B5C",
+  "colorPrimary": "#60A5FA",
+  "title": { "fill": "#FFFFFF" },
+  "desc": { "fill": "rgba(255,255,255,0.85)" },
+  "item": {
+    "label": { "fill": "#FFFFFF" },
+    "desc": { "fill": "rgba(255,255,255,0.7)" }
+  }
+}
+```
+
+**Light Backgrounds (solid, subtle-dots, etc.)**
+```json
+{
+  "colorBg": "#FFFFFF",
+  "colorPrimary": "#3B82F6",
+  "title": { "fill": "#1A202C" },
+  "desc": { "fill": "#4A5568" },
+  "item": {
+    "label": { "fill": "#1A202C" },
+    "desc": { "fill": "#4A5568" }
+  }
+}
+```
 
 **Common mistake:** Using pastel palette colors for text on light backgrounds. Pastels are for decorative shapes only.
 
