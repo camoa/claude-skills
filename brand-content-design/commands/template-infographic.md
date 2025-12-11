@@ -549,12 +549,18 @@ Create a new infographic template or edit an existing one.
 
 16. **Generate sample infographic**
 
+    Select sample data based on template type:
+    - **Standard templates**: Use "Sample Data by Type" section (Sequence, List, etc.)
+    - **Illustrated templates** (name ends in `-illus`): Use "Sequence (Illustrated)" sample
+    - **Icon templates** (name contains `icon`): Use "List (Icon-based)" sample
+
     Run the Node.js generator with sample data:
     ```bash
     cd {PLUGIN_PATH}/skills/infographic-generator
     node generate.js \
       --config "{PROJECT_PATH}/templates/infographics/{template-name}/config.json" \
       --data '{sample-data-json}' \
+      --background "{background-preset}" \
       --output "{PROJECT_PATH}/templates/infographics/{template-name}/sample.png"
     ```
 
@@ -563,6 +569,7 @@ Create a new infographic template or edit an existing one.
     node generate.js \
       --config "{PROJECT_PATH}/templates/infographics/{template-name}/config.json" \
       --data '{sample-data-json}' \
+      --background "{background-preset}" \
       --output "{PROJECT_PATH}/templates/infographics/{template-name}/sample.svg"
     ```
 
@@ -720,6 +727,37 @@ Create a new infographic template or edit an existing one.
     { "label": "Quality", "desc": "Excellence in everything" },
     { "label": "Trust", "desc": "Reliability first" },
     { "label": "Growth", "desc": "Continuous learning" }
+  ]
+}
+```
+
+### Sequence (Illustrated)
+**For templates ending in `-illus`** - must include `illus` field with `illus:` prefix:
+```json
+{
+  "title": "Getting Started",
+  "desc": "Your journey with us",
+  "items": [
+    { "label": "Discovery", "desc": "Initial consultation", "illus": "illus:discovery" },
+    { "label": "Planning", "desc": "Solution architecture", "illus": "illus:planning" },
+    { "label": "Development", "desc": "Build & iterate", "illus": "illus:development" },
+    { "label": "Launch", "desc": "Deploy & optimize", "illus": "illus:launch" }
+  ]
+}
+```
+**Note:** Without actual SVG files, placeholders will be shown. Use the `--illustrations` flag to specify the folder containing SVG files.
+
+### List (Icon-based)
+**For templates with `icon` in name** - use `icon:name` syntax in label:
+```json
+{
+  "title": "Our Services",
+  "desc": "What we offer",
+  "items": [
+    { "label": "icon:cloud", "desc": "Cloud hosting" },
+    { "label": "icon:shield", "desc": "Security audit" },
+    { "label": "icon:code", "desc": "Development" },
+    { "label": "icon:chart-bar", "desc": "Analytics" }
   ]
 }
 ```

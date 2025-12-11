@@ -11,7 +11,23 @@ const fs = require('fs');
 const path = require('path');
 
 // Setup DOM before importing @antv/infographic
-const { setupDOM, createInfographic, exportToDataURL, dataURLToBuffer, svgToPng, cleanup } = require('./lib/renderer');
+const {
+  setupDOM,
+  createInfographic,
+  exportToDataURL,
+  extractSVG,
+  dataURLToBuffer,
+  svgToPng,
+  cleanup,
+  applyCustomBackground,
+  applyLayeredBackground,
+  createBackgroundPreset,
+  createLayeredPreset,
+  getBackgroundPresets,
+  getLayeredPresets,
+  getDOMInstance,
+  setIllustrationsDir
+} = require('./lib/renderer');
 setupDOM();
 
 /**
@@ -89,6 +105,16 @@ function loadConfig(options) {
     config.height = parseInt(options.height, 10);
   }
 
+  // Handle background option (can override config file)
+  if (options.background) {
+    config.background = options.background;
+  }
+
+  // Handle illustrations directory
+  if (options.illustrations) {
+    config.illustrationsDir = path.resolve(options.illustrations);
+  }
+
   return config;
 }
 
@@ -128,6 +154,12 @@ async function main() {
       throw new Error('--data or config.data is required');
     }
 
+    // Set illustrations directory if provided
+    if (config.illustrationsDir) {
+      setIllustrationsDir(config.illustrationsDir);
+      console.log(`Using illustrations from: ${config.illustrationsDir}`);
+    }
+
     // Create infographic
     console.log(`Creating infographic with template: ${config.template || 'custom design'}`);
     const infographic = await createInfographic(config);
@@ -137,15 +169,46 @@ async function main() {
     const format = getOutputFormat(outputPath);
     console.log(`Exporting as ${format.toUpperCase()}...`);
 
-    // Export to SVG first (always needed, PNG is converted from SVG)
-    const svgDataUrl = await exportToDataURL(infographic, { type: 'svg' });
-    const svgBuffer = dataURLToBuffer(svgDataUrl);
+    // Prepare background configuration
+    let exportOptions = {};
+    if (config.background) {
+      // Extract brand colors from theme config for background
+      const brandColors = {};
+      if (config.themeConfig) {
+        brandColors.primary = config.themeConfig.colorPrimary || '#194582';
+        if (config.themeConfig.palette && config.themeConfig.palette.length > 0) {
+          brandColors.dark = config.themeConfig.palette[0] || '#0D2B5C';
+          brandColors.accent = config.themeConfig.palette[1] || '#00f3ff';
+        }
+      }
+
+      // Check if it's a layered preset
+      const layeredPresets = getLayeredPresets();
+      const simplePresets = getBackgroundPresets();
+
+      if (layeredPresets.includes(config.background)) {
+        exportOptions.layeredBackground = createLayeredPreset(config.background, brandColors);
+        console.log(`Applying layered background: ${config.background}`);
+      } else if (simplePresets.includes(config.background)) {
+        exportOptions.customBackground = createBackgroundPreset(config.background, brandColors);
+        console.log(`Applying simple background: ${config.background}`);
+      } else if (config.background !== 'solid') {
+        // Default to spotlight-dots if unknown preset
+        exportOptions.layeredBackground = createLayeredPreset('spotlight-dots', brandColors);
+        console.log(`Unknown preset "${config.background}", using spotlight-dots`);
+      }
+    }
+
+    // Export SVG using extractSVG which applies backgrounds
+    const dom = getDOMInstance();
+    const svgString = extractSVG(dom, exportOptions);
+    const svgBuffer = Buffer.from(svgString, 'utf-8');
 
     // Write file based on format
     if (format === 'svg') {
       fs.writeFileSync(outputPath, svgBuffer);
     } else {
-      // Convert SVG to PNG using sharp
+      // Convert SVG to PNG using Puppeteer
       const dpr = options.dpr ? parseInt(options.dpr, 10) : 2;
       const pngBuffer = await svgToPng(svgBuffer, { dpr });
       fs.writeFileSync(outputPath, pngBuffer);
