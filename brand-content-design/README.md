@@ -399,6 +399,20 @@ Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)
 - Dimensions: 1080x1080 (1:1 square)
 - Format: PDF or PNG sequence
 
+## Accessibility & Quality Enforcement
+
+All generated content automatically enforces:
+
+| Check | Standard | Action |
+|-------|----------|--------|
+| **Contrast ratio** | WCAG AA (4.5:1 minimum) | Auto-fixes with safe colors |
+| **No text overlap** | Elements never collide | Validates bounding boxes |
+| **Safe zones** | 50px presentations, 5% carousels | Enforces margins |
+| **Gradient text** | Readable at both ends | Validates contrast range |
+| **Word limits** | Per style constraints | Prevents text walls |
+
+**Logo format**: PNG or JPG only (SVG auto-converted during `/brand-extract`)
+
 ## Dependencies
 
 This plugin uses these skills for visual output:

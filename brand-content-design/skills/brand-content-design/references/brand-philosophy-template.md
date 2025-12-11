@@ -9,10 +9,12 @@ Use this template when generating brand-philosophy.md for a user's brand project
 ## Brand Assets
 
 ### Logo
-- **Primary logo**: `assets/[logo-filename]`
+- **Primary logo**: `assets/[logo-filename].png` *(must be PNG or JPG - SVG not supported)*
 - **Logo description**: [Describe the logo - e.g., "Gradient wordmark with abstract dynamic icon"]
 - **Clear space**: [Minimum padding around logo]
 - **Minimum size**: [Smallest legible size]
+
+*Note: If you have an SVG logo, run `/brand-extract` to convert it to PNG automatically.*
 
 ## Visual Identity
 

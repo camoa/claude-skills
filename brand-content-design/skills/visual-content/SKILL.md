@@ -186,6 +186,74 @@ Take a second pass:
 
 ---
 
+## Part 6b: Accessibility & Safety (MANDATORY)
+
+**These checks are NON-NEGOTIABLE before any output is finalized.**
+
+### Contrast Validation (WCAG AA)
+
+| Requirement | Value |
+|-------------|-------|
+| Minimum contrast ratio | **4.5:1** for all text |
+| Large text (24px+) | 3:1 acceptable |
+| Standard | WCAG 2.1 AA |
+
+**Before rendering ANY text:**
+1. Calculate contrast ratio between text color and background
+2. If ratio < 4.5:1, auto-fix with safe alternative (white on dark, near-black on light)
+3. Log warning if auto-fix was needed
+
+See `references/technical-implementation.md` → "Accessibility & Safety Checks" for `validate_contrast()` code.
+
+### No Overlap Rule (ABSOLUTE)
+
+**Text elements MUST NEVER overlap.** This includes:
+- Text on text
+- Text on logos
+- Text on icons
+- Text bleeding into margins
+
+**Before placing ANY element:**
+1. Calculate bounding box (position + dimensions)
+2. Check against all existing elements for collision
+3. Check against safe zone margins
+4. If collision detected → STOP and adjust position or reduce content
+
+### Safe Zone Enforcement
+
+| Format | Margin | Safe Area |
+|--------|--------|-----------|
+| Presentation (1920×1080) | 50px | 1820×980 usable |
+| Carousel (1080×1350) | 54px (5%) | 972×1242 usable |
+
+**Nothing may cross these boundaries:**
+- No text
+- No logos (except intentional bleed designs)
+- No icons
+- No cards
+
+### Gradient Text Safety
+
+When text appears on gradients:
+- Test contrast at **BOTH ends** of the gradient
+- Minimum 4.5:1 at the **lowest contrast point**
+- If fail: add semi-transparent backing behind text OR use text shadow
+
+### Pre-Render Checklist (EVERY slide/card)
+
+```
+□ All text passes 4.5:1 contrast check
+□ No elements overlap
+□ All elements within safe zone
+□ Word count within style limit
+□ Element count within style limit
+□ Gradient text readable at both ends (if applicable)
+```
+
+**If ANY check fails, DO NOT render. Fix the issue first.**
+
+---
+
 ## Part 7: Visual Components (Optional)
 
 Some styles support visual components that enhance the design. **Components are opt-in** (user enables during template creation) **but should be used intelligently** based on content—not on every slide just because they're enabled.
@@ -274,7 +342,8 @@ For PDF generation code patterns, see `references/technical-implementation.md`:
 
 | Task | Action |
 |------|--------|
-| SVG logo | Convert to PNG with cairosvg before embedding |
+| Logo format | **PNG or JPG only** - SVG not supported by reportlab |
+| SVG logo | Convert to PNG with cairosvg (`/brand-extract` does this automatically) |
 | Custom fonts | Load from `{PROJECT_PATH}/assets/fonts/` |
 | Presentations | 1920x1080, 50px safe zones |
 | Carousels | 1080x1350 (LinkedIn), 5% margins |
