@@ -188,7 +188,16 @@ Take a second pass:
 
 ## Part 7: Visual Components (Optional)
 
-Some styles support visual components that enhance the design. Check `references/visual-components.md` for full details.
+Some styles support visual components that enhance the design. **Components are opt-in** (user enables during template creation) **but should be used intelligently** based on content—not on every slide just because they're enabled.
+
+### The Golden Rule
+
+**Don't use components everywhere.** Use them where they genuinely help:
+- **Cards** → Only when grouping multiple related points (features, tips, steps)
+- **Icons** → Only when a clear visual metaphor exists (don't force it)
+- **Gradients** → Only on 2-3 slides max (hook, transition, CTA)
+
+See `references/visual-components.md` → "Intelligent Usage Guidelines" for detailed decision framework.
 
 ### Component Availability by Style
 
@@ -235,6 +244,18 @@ Background transitions for depth:
 ```python
 # See references/technical-implementation.md for draw_gradient_background
 ```
+
+### Slide-Type Quick Reference
+
+| Slide Type | Cards | Icons | Gradient |
+|------------|:-----:|:-----:|:--------:|
+| Hook/Opening | ✗ | ✗ | ✓ |
+| Features/Steps | ✓ | ✓ | ✗ |
+| Data/Stats | ◐ | ✗ | ✗ |
+| Quote | ◐ | ✗ | ✗ |
+| CTA/Closing | ✗ | ✗ | ✓ |
+
+**Legend:** ✓ = Use | ◐ = If content warrants | ✗ = Avoid
 
 **Remember**: Visual components must serve the message. When in doubt, use fewer.
 
