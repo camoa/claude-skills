@@ -54,15 +54,17 @@ Create a new infographic template or edit an existing one.
    ```
    ## Infographic Categories
 
-   | # | Category    | Use Cases                                    | Designs |
-   |---|-------------|----------------------------------------------|---------|
-   | 1 | Sequence    | Timelines, steps, processes, roadmaps, flows | 43      |
-   | 2 | List        | Tips, features, grids, pyramids, sectors     | 23      |
-   | 3 | Hierarchy   | Org charts, tree structures, taxonomies      | 25      |
-   | 4 | Compare     | VS, before/after, pros/cons, SWOT            | 17      |
-   | 5 | Quadrant    | 2x2 matrices, priority grids                 | 3       |
-   | 6 | Relation    | Networks, circular connections               | 2       |
-   | 7 | Chart       | Statistics, metrics, bar charts              | 1       |
+   | # | Category    | Use Cases                                    | Designs | Has Icons | Has Illustrated |
+   |---|-------------|----------------------------------------------|---------|-----------|-----------------|
+   | 1 | Sequence    | Timelines, steps, processes, roadmaps, flows | 43      | ✓ (2)     | ✓ (5)           |
+   | 2 | List        | Tips, features, grids, pyramids, sectors     | 23      | ✓ (4)     | ✓ (1)           |
+   | 3 | Hierarchy   | Org charts, tree structures, taxonomies      | 25      | —         | —               |
+   | 4 | Compare     | VS, before/after, pros/cons, SWOT            | 17      | —         | —               |
+   | 5 | Quadrant    | 2x2 matrices, priority grids                 | 3       | —         | ✓ (1)           |
+   | 6 | Relation    | Networks, circular connections               | 2       | ✓ (1)     | —               |
+   | 7 | Chart       | Statistics, metrics, bar charts              | 1       | —         | —               |
+
+   **Legend:** Icons = use `icon:name` syntax | Illustrated = needs custom SVG files
 
    **Which category fits your infographic?** (enter 1-7 or name)
    ```
@@ -357,21 +359,29 @@ Create a new infographic template or edit an existing one.
 
    Extract palettes from brand-philosophy.md (Brand colors + Alternative Palettes section).
 
+   **For each palette, extract:**
+   - Shape/accent colors (Primary, Secondary, Accent, etc.)
+   - `Text (light bg)`: Color for text on light backgrounds
+   - `Text (dark bg)`: Color for text on dark backgrounds
+
+   If a palette doesn't have text colors (legacy format), calculate them using the contrast algorithm from `/brand-palette` step 10.
+
    Display available palettes:
    ```
    ## Color Palettes
 
-   | # | Palette         | Colors                                    |
-   |---|-----------------|-------------------------------------------|
-   | 1 | Brand (default) | Primary: #194582, Accent: #00f3ff         |
-   | 2 | Monochromatic   | #0C2341, #194582, #3773B4, #78A5D7        |
-   | 3 | Complementary   | #194582, #825A19, #B47D23, #D7A041        |
-   | 4 | Triadic         | #194582, #821950, #508219                 |
-   | 5 | Bold            | #0D2B5C, #00E5FF, #FF6B4A                 |
+   | # | Palette         | Colors                                    | Text Colors |
+   |---|-----------------|-------------------------------------------|-------------|
+   | 1 | Brand (default) | Primary: #194582, Accent: #00f3ff         | ✓           |
+   | 2 | Monochromatic   | #0C2341, #194582, #3773B4, #78A5D7        | ✓           |
+   | 3 | Complementary   | #194582, #825A19, #B47D23, #D7A041        | ✓           |
+   | 4 | Pastel          | #E0E7FF, #FCE7F3, #D1FAE5                 | ⚠️ derived  |
    | ... (list all from brand-philosophy.md)
 
    **Which palette?** (enter number or name, default: 1)
    ```
+
+   **Store selected palette** including text colors for config generation.
 
 8. **Choose Background**
 
@@ -428,49 +438,63 @@ Create a new infographic template or edit an existing one.
 
     Build configuration based on selections.
 
-    **IMPORTANT: Color Contrast for Dark Backgrounds**
+    **IMPORTANT: Use Text Colors from Selected Palette**
 
-    Dark background presets (spotlight-dots, spotlight-grid, diagonal-crosshatch, tech-matrix, spotlight, diagonal-fade, top-down) require:
-    - `colorBg`: Set to the dark base color (e.g., `"#0D2B5C"`)
-    - `colorPrimary`: Set to accent color for shapes (e.g., `"#00E5FF"`)
-    - `palette`: Put LIGHT colors first for text visibility
-    - `title`, `desc`, `item`: Explicit light text colors
+    The selected palette (from step 7) includes:
+    - `Text (light bg)`: Use for text when background is light
+    - `Text (dark bg)`: Use for text when background is dark
+
+    **Determine background type:**
+    - Dark backgrounds: spotlight-dots, spotlight-grid, diagonal-crosshatch, tech-matrix, spotlight, diagonal-fade, top-down
+    - Light backgrounds: solid, subtle-dots, tech-grid, crosshatch (with light colorBg)
 
     **Config for DARK backgrounds:**
+    Use `Text (dark bg)` from palette for text fills.
     ```json
     {
       "type": "{category}",
       "template": "{antv-template-name}",
       "background": "{dark-background-preset}",
       "themeConfig": {
-        "colorPrimary": "{accent-color}",
-        "colorBg": "{dark-base-color}",
-        "palette": ["#FFFFFF", "{accent-color}", "{secondary-color}", "{dark-color}"],
-        "title": { "fill": "#FFFFFF" },
-        "desc": { "fill": "{accent-color}" },
+        "colorPrimary": "{palette-accent-color}",
+        "colorBg": "{palette-darkest-color}",
+        "palette": ["{text-dark-bg}", "{palette-colors...}"],
+        "title": { "fill": "{text-dark-bg}" },
+        "desc": { "fill": "{text-dark-bg-or-accent}" },
         "item": {
-          "label": { "fill": "#FFFFFF" },
-          "desc": { "fill": "rgba(255,255,255,0.7)" }
+          "label": { "fill": "{text-dark-bg}" },
+          "desc": { "fill": "{text-dark-bg-at-70%-opacity}" }
         },
         "stylize": {stylize-config-or-null}
       }
     }
     ```
 
-    **Config for LIGHT backgrounds (solid with light colorBg):**
+    **Config for LIGHT backgrounds:**
+    Use `Text (light bg)` from palette for text fills.
     ```json
     {
       "type": "{category}",
       "template": "{antv-template-name}",
       "background": "solid",
       "themeConfig": {
-        "colorPrimary": "{dark-primary-color}",
+        "colorPrimary": "{palette-accent-color}",
         "colorBg": "#FFFFFF",
-        "palette": ["{dark-color}", "{accent-color}", "{secondary-color}", "#FFFFFF"],
+        "palette": ["{text-light-bg}", "{palette-colors...}"],
+        "title": { "fill": "{text-light-bg}" },
+        "desc": { "fill": "{text-light-bg}" },
+        "item": {
+          "label": { "fill": "{text-light-bg}" },
+          "desc": { "fill": "{text-light-bg-at-70%-opacity}" }
+        },
         "stylize": {stylize-config-or-null}
       }
     }
     ```
+
+    **70% opacity variant:** For description text, you can use the text color at 70% opacity:
+    - If text color is `#1E293B`, use `rgba(30, 41, 59, 0.7)` for descriptions
+    - If text color is `#FFFFFF`, use `rgba(255, 255, 255, 0.7)` for descriptions
 
     **Background presets:**
     - Dark (layered): `"spotlight-dots"`, `"spotlight-grid"`, `"diagonal-crosshatch"`, `"tech-matrix"`

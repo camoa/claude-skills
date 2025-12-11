@@ -32,15 +32,15 @@ Generate branded infographics with custom themes and backgrounds using @antv/inf
 
 ## Template Categories (114 Total)
 
-| Category | Count | Use Cases |
-|----------|-------|-----------|
-| Sequence | 43 | Timelines, steps, processes, roadmaps |
-| List | 23 | Features, grids, pyramids, sectors |
-| Hierarchy | 25 | Org charts, tree structures |
-| Compare | 17 | VS, before/after, SWOT |
-| Quadrant | 3 | 2x2 matrices |
-| Relation | 2 | Networks, connections |
-| Chart | 1 | Bar charts |
+| Category | Count | Use Cases | Icons | Illustrated |
+|----------|-------|-----------|-------|-------------|
+| Sequence | 43 | Timelines, steps, processes, roadmaps | ✓ (2) | ✓ (5) |
+| List | 23 | Features, grids, pyramids, sectors | ✓ (4) | ✓ (1) |
+| Hierarchy | 25 | Org charts, tree structures | — | — |
+| Compare | 17 | VS, before/after, SWOT | — | — |
+| Quadrant | 3 | 2x2 matrices | — | ✓ (1) |
+| Relation | 2 | Networks, connections | ✓ (1) | — |
+| Chart | 1 | Bar charts | — | — |
 
 ## Template Asset Types
 
@@ -112,12 +112,27 @@ Select: category → design → palette → background → style
 ```
 Select template → paste content → name → get PNG
 
-## Color Contrast for Dark Backgrounds
+## Color Contrast Rules
 
-When using dark backgrounds (spotlight-dots, tech-matrix, etc.), ensure:
-- `colorBg`: Set to dark base color (e.g., `#0D2B5C`)
-- `colorPrimary`: Set to accent color for shapes
-- Add explicit text colors: `title`, `desc`, `item.label`, `item.desc` with light fills
+**Key principle:** Palette colors are for SHAPES and FILLS, not text. Text needs explicit high-contrast colors.
+
+### Dark Backgrounds (spotlight-dots, tech-matrix, etc.)
+- `colorBg`: Dark base color (e.g., `#0D2B5C`)
+- `colorPrimary`: Accent color for shapes
+- `title`: `{ "fill": "#FFFFFF" }`
+- `desc`: `{ "fill": "{accent-color}" }` or `"rgba(255,255,255,0.85)"`
+- `item.label`: `{ "fill": "#FFFFFF" }`
+- `item.desc`: `{ "fill": "rgba(255,255,255,0.7)" }`
+
+### Light Backgrounds (solid, subtle-dots, etc.)
+- `colorBg`: Light base color (e.g., `#FFFFFF`, `#F7F9FC`)
+- `colorPrimary`: Accent color for shapes (can be pastel)
+- `title`: `{ "fill": "#1A202C" }` (near black)
+- `desc`: `{ "fill": "#4A5568" }` (dark gray)
+- `item.label`: `{ "fill": "#1A202C" }`
+- `item.desc`: `{ "fill": "#4A5568" }`
+
+**Common mistake:** Using pastel palette colors for text on light backgrounds. Pastels are for decorative shapes only.
 
 See template-infographic.md for complete config examples.
 
@@ -164,6 +179,8 @@ See template-infographic.md for complete config examples.
 | Missing illustrations | Check template ends in `-illus`, create SVGs first |
 | Icon not showing | Use `icon:name` syntax, only for icon templates |
 | Background not applied | Pass `--background` flag to generate.js |
+| Text invisible on light bg | Add explicit `title`/`desc`/`item` fills with dark colors (#1A202C, #4A5568) |
+| Pastel text unreadable | Palette colors are for shapes only; text needs high contrast (~4.5:1) |
 
 ## References
 

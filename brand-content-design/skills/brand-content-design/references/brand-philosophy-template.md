@@ -25,6 +25,14 @@ Use this template when generating brand-philosophy.md for a user's brand project
 | Text | [Color name] | #XXXXXX | Body text, readable content |
 | Background | [Color name] | #XXXXXX | Page backgrounds, containers |
 
+### Text Colors (Contrast-Validated)
+| Context | Hex Code | Contrast Ratio | Source |
+|---------|----------|----------------|--------|
+| Text (light bg) | #XXXXXX | ≥4.5:1 vs white | [from palette or derived] |
+| Text (dark bg) | #XXXXXX | ≥4.5:1 vs black | [from palette or derived] |
+
+*These colors are validated for WCAG AA accessibility. Use them for all text regardless of palette choice.*
+
 ### Typography
 | Role | Font | Fallback | Usage |
 |------|------|----------|-------|

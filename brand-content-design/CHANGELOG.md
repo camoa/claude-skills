@@ -5,6 +5,37 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2025-12-11
+
+### Added
+- **Palette contrast validation**: `/brand-palette` now validates all generated palettes for text contrast
+  - Calculates luminance and contrast ratio for each color
+  - Automatically adds `Text (light bg)` and `Text (dark bg)` colors to every palette
+  - Uses WCAG AA standard (≥4.5:1 contrast ratio)
+  - Derives text colors from palette when possible, falls back to safe defaults
+  - Shows ⚠️ indicator when text colors are derived (not from original palette)
+- **Text colors in brand-philosophy-template.md**: New "Text Colors (Contrast-Validated)" section
+
+### Changed
+- **`/template-infographic`**: Now reads `Text (light bg)` and `Text (dark bg)` from selected palette
+  - Config generation uses palette text colors for `title.fill`, `desc.fill`, `item` fills
+  - Template category table now shows Icons/Illustrated columns
+- **`/template-presentation`**: Now extracts and uses palette text colors
+  - Canvas philosophy includes text color guidance section
+- **`/template-carousel`**: Now extracts and uses palette text colors
+  - Canvas philosophy includes text color guidance section
+- **Palette storage format**: Alternative palettes now include text colors:
+  ```markdown
+  ### Pastel (Alternative)
+  - Base: #E0E7FF
+  - Text (light bg): #1E293B ⚠️
+  - Text (dark bg): #F8FAFC
+  ```
+
+### Fixed
+- Pastel/low-contrast palettes no longer produce unreadable text
+- All three content types (infographics, presentations, carousels) now use consistent text contrast rules
+
 ## [1.8.0] - 2025-12-11
 
 ### Added

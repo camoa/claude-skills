@@ -180,21 +180,60 @@ If user selected "Alternative":
 
 ## COMMON STEPS (Both Branches)
 
-10. **Display generated palettes**
-   Show each palette with color boxes:
+10. **Validate contrast and generate text colors**
+
+    For each generated palette, ensure it has usable text colors:
+
+    **Contrast Analysis Algorithm:**
+    ```
+    1. Calculate luminance for each color:
+       L = 0.299*R + 0.587*G + 0.114*B (where RGB are 0-255)
+       Normalize: L = L / 255
+
+    2. Find darkest color (lowest L) and lightest color (highest L)
+
+    3. Calculate contrast ratio (CR):
+       CR = (L_light + 0.05) / (L_dark + 0.05)
+
+    4. Determine text colors:
+       - Text (light bg): Need color with CR ≥ 4.5 against white (#FFFFFF, L=1.0)
+         → Use darkest palette color if CR ≥ 4.5
+         → Otherwise, darken it until CR ≥ 4.5 (reduce L by 10% increments)
+         → Fallback: #1E293B (near black)
+
+       - Text (dark bg): Need color with CR ≥ 4.5 against black (#000000, L=0)
+         → Use lightest palette color if CR ≥ 4.5
+         → Otherwise, lighten it until CR ≥ 4.5 (increase L by 10% increments)
+         → Fallback: #F8FAFC (near white)
+    ```
+
+    **Add text colors to each palette:**
+    - `Text (light bg)`: Color safe for text on light/white backgrounds
+    - `Text (dark bg)`: Color safe for text on dark/black backgrounds
+
+    If a palette needed adjustment (no original color had sufficient contrast):
+    - Display: "⚠️ Added contrast-safe text colors for accessibility"
+
+11. **Display generated palettes**
+   Show each palette with color boxes including text colors:
    ```
    Generated palettes:
 
    ██ ██ ██ ██  Complementary (Derived)    #1E40AF #2563EB #EB8225 #F59E0B
+                Text: #1E40AF (light bg) | #F59E0B (dark bg)
+
    ██ ██ ██     Pastel (Alternative)       #E0E7FF #FCE7F3 #D1FAE5
+                Text: #1E293B (light bg) ⚠️ | #F8FAFC (dark bg)
    ```
+
+   The ⚠️ indicates the text color was derived (not from original palette).
 
    Use Bash with ANSI codes:
    ```bash
    echo -e "\033[48;2;37;99;235m  \033[0m \033[48;2;235;130;37m  \033[0m  Complementary   #2563EB #EB8225"
    ```
 
-11. **Ask to save**
+12. **Ask to save**
     Use AskUserQuestion:
     - Header: "Save"
     - Question: "Save these palettes to brand-philosophy.md?"
@@ -204,10 +243,10 @@ If user selected "Alternative":
 
     If user wants specific palettes, they can run `/brand-palette` again with more specific selections.
 
-12. **If saving and Custom palette exists, ask for name**
+13. **If saving and Custom palette exists, ask for name**
     Ask: "What should we call the custom palette?" (e.g., "Summer Festival", "Q4 Launch")
 
-13. **Save palettes (if Yes)**
+14. **Save palettes (if Yes)**
     Append to brand-philosophy.md under `## Alternative Palettes`:
 
     ```markdown
@@ -217,19 +256,27 @@ If user selected "Alternative":
     - Primary: #2563EB
     - Complement: #EB8225
     - Accent: #F59E0B
+    - Text (light bg): #1E40AF
+    - Text (dark bg): #F59E0B
 
     ### Pastel (Alternative)
     - Base: #E0E7FF
     - Secondary: #FCE7F3
     - Accent: #D1FAE5
+    - Text (light bg): #1E293B ⚠️
+    - Text (dark bg): #F8FAFC
 
     ### Summer Festival (Custom)
     - Base: #F59E0B
     - Secondary: #10B981
     - Accent: #EC4899
+    - Text (light bg): #065F46
+    - Text (dark bg): #F59E0B
     ```
 
-14. **Confirm and suggest usage**
+    **Note:** ⚠️ indicates text color was derived (not from original palette colors).
+
+15. **Confirm and suggest usage**
     Show:
     - "Saved X palettes to brand-philosophy.md"
     - "Use these when creating templates:"

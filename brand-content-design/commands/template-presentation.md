@@ -136,6 +136,13 @@ Create a new presentation template or edit an existing one.
    First, check brand-philosophy.md for `## Alternative Palettes` section.
    Count total palettes available (1 brand + N alternatives).
 
+   **For each palette, extract:**
+   - Shape/accent colors (Primary, Secondary, Accent, etc.)
+   - `Text (light bg)`: Color for text on light backgrounds
+   - `Text (dark bg)`: Color for text on dark backgrounds
+
+   If a palette doesn't have text colors (legacy format), calculate them using the contrast algorithm from `/brand-palette` step 10.
+
    **If 4 or fewer total palettes:** Use AskUserQuestion
    - Header: "Palette"
    - Question: "Which color palette for this template?"
@@ -148,16 +155,16 @@ Create a new presentation template or edit an existing one.
    Display all palettes with numbers:
    ```
    Available palettes:
-   1. Brand colors (original)
-   2. {Palette Name} ({Type})
-   3. {Palette Name} ({Type})
+   1. Brand colors (original) - Text: ✓
+   2. {Palette Name} ({Type}) - Text: ✓
+   3. {Palette Name} ({Type}) - Text: ⚠️ derived
    ... (list all)
 
    Enter the number or name of the palette to use:
    ```
    Parse user response (number or name match).
 
-   **Store selected palette** for use in canvas-philosophy.md generation.
+   **Store selected palette** including text colors for use in canvas-philosophy.md generation.
 
 7. **Ask template purpose** (CREATE MODE only)
    Ask user directly (not AskUserQuestion):
@@ -186,6 +193,7 @@ Create a new presentation template or edit an existing one.
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
     - **Selected color palette** (brand colors or alternative palette from step 6)
+    - **Text colors from palette** (`Text (light bg)` and `Text (dark bg)`)
 
     **Include the style's HARD LIMITS in the philosophy:**
     - Word count limits per slide
@@ -193,6 +201,14 @@ Create a new presentation template or edit an existing one.
     - Element count limits
     - Layout directives
     - Anti-patterns to avoid
+
+    **Include text color guidance:**
+    ```
+    ## Text Colors (from palette contrast analysis)
+    - Light backgrounds: Use {Text (light bg)} for all text
+    - Dark backgrounds: Use {Text (dark bg)} for all text
+    - Description/secondary text: Use text color at 70% opacity
+    ```
 
 12. **Create/update template.md**
     Using template-structure.md from references:
