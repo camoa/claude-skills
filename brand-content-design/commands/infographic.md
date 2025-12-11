@@ -91,20 +91,22 @@ Create a branded infographic using an existing template with guided step-by-step
       - **Use placeholders** - Generate colored shapes as placeholders
 
 7d. **If "I have images":**
-    Ask: "Where are your image files? (folder path or list each file)"
+    User already has their images ready. Just ask for the location:
 
-    **Supported formats:**
-    - SVG (vector, recommended) - scales perfectly
-    - PNG (raster, with transparency) - good for photos/complex images
-    - JPG (raster) - good for photos without transparency
+    Ask: "Where are your image files? (folder path)"
 
-    - Validate files exist
+    **DO NOT show the table of needed images** - user knows what they have.
+
+    After user provides path:
+    - List files found in that folder
+    - Show which `illus` names from data.json will be matched
+    - Validate files exist (SVG, PNG, or JPG)
     - Store paths for copying to output folder later (step 15)
-    - If PNG/JPG: Note these will be embedded at their resolution
 
-    **Naming convention:**
-    Files should match the `illus` field name or user provides mapping:
-    - alarm.svg, alarm.png, or alarm.jpg → matches `"illus": "alarm"`
+    **Supported formats:** SVG (vector), PNG (with transparency), JPG
+
+    **Naming:** Files must match the `illus` field values from the content
+    - `"illus": "alarm"` → looks for alarm.svg, alarm.png, or alarm.jpg
 
 7e. **If "Find icons for me":**
     Show table of needed illustrations with suggested searches:
