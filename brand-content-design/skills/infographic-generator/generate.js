@@ -129,6 +129,35 @@ function getOutputFormat(outputPath) {
 }
 
 /**
+ * Darken a hex color by a percentage
+ * @param {string} hex - Hex color code
+ * @param {number} percent - Amount to darken (0-1)
+ * @returns {string} Darkened hex color
+ */
+function darkenColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, Math.floor((num >> 16) * (1 - percent)));
+  const g = Math.max(0, Math.floor(((num >> 8) & 0x00FF) * (1 - percent)));
+  const b = Math.max(0, Math.floor((num & 0x0000FF) * (1 - percent)));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * Check if a color is light (for contrast decisions)
+ * @param {string} hex - Hex color code
+ * @returns {boolean} True if color is light
+ */
+function isLightColor(hex) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = (num >> 16) & 0xFF;
+  const g = (num >> 8) & 0xFF;
+  const b = num & 0xFF;
+  // Using relative luminance formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5;
+}
+
+/**
  * Main generation function
  */
 async function main() {
@@ -173,12 +202,24 @@ async function main() {
     let exportOptions = {};
     if (config.background) {
       // Extract brand colors from theme config for background
+      // Note: For dark backgrounds, colorBg should be the dark base color
+      // The palette should have dark colors for background gradient and light accent for patterns
       const brandColors = {};
       if (config.themeConfig) {
-        brandColors.primary = config.themeConfig.colorPrimary || '#194582';
-        if (config.themeConfig.palette && config.themeConfig.palette.length > 0) {
-          brandColors.dark = config.themeConfig.palette[0] || '#0D2B5C';
-          brandColors.accent = config.themeConfig.palette[1] || '#00f3ff';
+        // Use colorBg as primary background color (for dark backgrounds, this is the dark base)
+        const bgColor = config.themeConfig.colorBg || '#0D2B5C';
+        brandColors.primary = bgColor;
+        // Derive darker shades from the background color
+        brandColors.dark = darkenColor(bgColor, 0.3);
+        brandColors.darker = darkenColor(bgColor, 0.6);
+        // Accent comes from colorPrimary (for patterns) or palette
+        brandColors.accent = config.themeConfig.colorPrimary || '#00f3ff';
+        if (config.themeConfig.palette && config.themeConfig.palette.length > 1) {
+          // If palette has accent color, use it (typically second light color for dark themes)
+          const potentialAccent = config.themeConfig.palette.find(c =>
+            isLightColor(c) && c !== '#FFFFFF' && c !== '#ffffff'
+          );
+          if (potentialAccent) brandColors.accent = potentialAccent;
         }
       }
 

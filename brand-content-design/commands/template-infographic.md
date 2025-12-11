@@ -417,51 +417,65 @@ Create a new infographic template or edit an existing one.
    **Which style?** (enter number or name, default: 1)
    ```
 
-10. **Choose Dimensions**
-
-   Display options:
-   ```
-   ## Output Dimensions
-
-   | # | Size              | Dimensions  | Use Case                    |
-   |---|-------------------|-------------|-----------------------------|
-   | 1 | Slide             | 1920×1080   | Presentations (16:9)        |
-   | 2 | Social Square     | 1080×1080   | Instagram/LinkedIn square   |
-   | 3 | Social Portrait   | 1080×1350   | Instagram/LinkedIn (4:5)    |
-   | 4 | Auto-height       | 800×auto    | Blog, flexible height       |
-
-   **Which size?** (enter number or name, default: 1)
-   ```
-
 ### Phase 4: Generate Template Assets
 
-11. **Create template directory**
+10. **Create template directory**
     ```bash
     mkdir -p "{PROJECT_PATH}/templates/infographics/{template-name}"
     ```
 
-12. **Generate config.json**
+11. **Generate config.json**
 
-    Build configuration based on selections:
+    Build configuration based on selections.
+
+    **IMPORTANT: Color Contrast for Dark Backgrounds**
+
+    Dark background presets (spotlight-dots, spotlight-grid, diagonal-crosshatch, tech-matrix, spotlight, diagonal-fade, top-down) require:
+    - `colorBg`: Set to the dark base color (e.g., `"#0D2B5C"`)
+    - `colorPrimary`: Set to accent color for shapes (e.g., `"#00E5FF"`)
+    - `palette`: Put LIGHT colors first for text visibility
+    - `title`, `desc`, `item`: Explicit light text colors
+
+    **Config for DARK backgrounds:**
     ```json
     {
       "type": "{category}",
       "template": "{antv-template-name}",
-      "background": "{background-preset}",
+      "background": "{dark-background-preset}",
       "themeConfig": {
-        "colorPrimary": "{primary-color}",
-        "colorBg": "#FFFFFF",
-        "palette": ["{palette-colors}"],
+        "colorPrimary": "{accent-color}",
+        "colorBg": "{dark-base-color}",
+        "palette": ["#FFFFFF", "{accent-color}", "{secondary-color}", "{dark-color}"],
+        "title": { "fill": "#FFFFFF" },
+        "desc": { "fill": "{accent-color}" },
+        "item": {
+          "label": { "fill": "#FFFFFF" },
+          "desc": { "fill": "rgba(255,255,255,0.7)" }
+        },
         "stylize": {stylize-config-or-null}
-      },
-      "width": {width},
-      "height": {height-or-null}
+      }
+    }
+    ```
+
+    **Config for LIGHT backgrounds (solid with light colorBg):**
+    ```json
+    {
+      "type": "{category}",
+      "template": "{antv-template-name}",
+      "background": "solid",
+      "themeConfig": {
+        "colorPrimary": "{dark-primary-color}",
+        "colorBg": "#FFFFFF",
+        "palette": ["{dark-color}", "{accent-color}", "{secondary-color}", "#FFFFFF"],
+        "stylize": {stylize-config-or-null}
+      }
     }
     ```
 
     **Background presets:**
-    - Layered: `"spotlight-dots"`, `"spotlight-grid"`, `"diagonal-crosshatch"`, `"tech-matrix"`
-    - Simple: `"spotlight"`, `"diagonal-fade"`, `"top-down"`, `"subtle-dots"`, `"tech-grid"`, `"crosshatch"`, `"solid"`
+    - Dark (layered): `"spotlight-dots"`, `"spotlight-grid"`, `"diagonal-crosshatch"`, `"tech-matrix"`
+    - Dark (simple): `"spotlight"`, `"diagonal-fade"`, `"top-down"`
+    - Light: `"solid"`, `"subtle-dots"` (with light colorBg), `"tech-grid"`, `"crosshatch"`
 
     **Stylize configurations (shape effects):**
     - Clean: `"stylize": null`
@@ -469,11 +483,11 @@ Create a new infographic template or edit an existing one.
     - Gradient: `"stylize": {"type": "linear-gradient", "angle": 135}`
     - Pattern: `"stylize": {"type": "pattern", "pattern": "diagonal-stripe"}`
 
-13. **Generate template.md**
+12. **Generate template.md**
 
     Create template documentation with type, design, brand mapping, data format.
 
-14. **Generate outline-template.md**
+13. **Generate outline-template.md**
 
     Create content slot template based on infographic type:
     - Sequence: title, description, items with label+desc
@@ -490,7 +504,7 @@ Create a new infographic template or edit an existing one.
     - Illustration concept: ___ (describe what visual should represent this item)
     ```
 
-15. **Generate outline-prompt.txt**
+14. **Generate outline-prompt.txt**
 
     Create AI prompt for filling the outline.
 
@@ -547,7 +561,7 @@ Create a new infographic template or edit an existing one.
     Keep descriptions SHORT (2-4 words) - icons take up space.
     ```
 
-16. **Generate sample infographic**
+15. **Generate sample infographic**
 
     Select sample data based on template type:
     - **Standard templates**: Use "Sample Data by Type" section (Sequence, List, etc.)
@@ -575,7 +589,7 @@ Create a new infographic template or edit an existing one.
 
 ### Phase 5: Completion
 
-17. **Confirm and show results**
+16. **Confirm and show results**
 
     Display:
     ```
