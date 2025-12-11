@@ -1,0 +1,23 @@
+{
+  "name": "infographic-generator",
+  "version": "1.0.0",
+  "description": "Node.js wrapper for @antv/infographic with jsdom for server-side rendering",
+  "main": "generate.js",
+  "bin": {
+    "generate-infographic": "./generate.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@antv/infographic": "^0.1.2",
+    "@resvg/resvg-js": "^2.6.2",
+    "jsdom": "^25.0.1",
+    "lucide-static": "^0.559.0",
+    "puppeteer": "^24.32.1",
+    "sharp": "^0.34.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
