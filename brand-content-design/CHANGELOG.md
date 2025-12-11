@@ -5,6 +5,36 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2025-12-11
+
+### Added
+- **Visual Components System**: Universal visual components for carousels and presentations
+  - **Cards**: Rounded containers for content grouping (style-dependent support)
+  - **Icons**: 1900+ Lucide icons via Python helper (`scripts/icons.py`)
+  - **Gradients**: Linear/radial backgrounds for depth
+- **Style-specific component rules**: Each of 13 styles has explicit card/icon/gradient support
+  - Full support (all three): Dramatic, Organic, Hygge, Memphis, Feng Shui
+  - Cards + Icons only: Iki, Lagom, Swiss
+  - Cards only (subtle): Minimal, Wabi-Sabi, Shibui
+  - No components: Ma, Yeo-baek
+- **Visual Components wizard**: Step 6 in `/template-carousel` and `/template-presentation`
+  - Multi-select for cards, icons, gradients based on style support
+  - Follow-up questions for card style, icon categories, gradient direction
+- **SessionStart hook**: Exports `BRAND_CONTENT_DESIGN_DIR` for portable Python imports
+- **`references/visual-components.md`**: Universal components documentation
+
+### Changed
+- **Template wizards**: Now 17 steps (added Step 6: Visual Components)
+- **`visual-content/SKILL.md`**: Added Part 7: Visual Components with usage patterns
+- **`technical-implementation.md`**: Added reportlab patterns for cards, gradients, icons
+- **`canvas-philosophy-template.md`**: Added Visual Components section template
+- **`style-constraints.md`**: Added Visual Components section to all 13 styles
+
+### Technical
+- `scripts/icons.py`: Python helper for SVG→PNG conversion (requires `cairosvg`)
+- `hooks/setup-env.sh`: Sets `BRAND_CONTENT_DESIGN_DIR=${CLAUDE_PLUGIN_ROOT}`
+- Icons sourced from `infographic-generator/node_modules/lucide-static/icons/`
+
 ## [1.10.0] - 2025-12-11
 
 ### Added

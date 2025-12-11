@@ -1,11 +1,12 @@
 {
   "name": "brand-content-design",
-  "version": "1.10.0",
-  "description": "Create branded visual content (presentations, carousels, infographics) using a layered philosophy system with Presentation Zen principles",
+  "version": "1.11.0",
+  "description": "Create branded visual content (presentations, carousels, infographics) with visual components (cards, icons, gradients) using a layered philosophy system with Presentation Zen principles",
   "author": {
     "name": "camoa"
   },
   "license": "MIT",
+  "hooks": "./hooks/hooks.json",
   "keywords": [
     "brand",
     "presentations",
@@ -18,6 +19,9 @@
     "linkedin",
     "design",
     "canvas",
-    "zen"
+    "zen",
+    "cards",
+    "icons",
+    "gradients"
   ]
 }

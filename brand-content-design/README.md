@@ -205,6 +205,38 @@ Choose from **13 distinct visual styles** across 4 aesthetic families when creat
 
 Each style has enforced constraints (whitespace %, word limits, element counts) to ensure authentic visual output.
 
+## Visual Components
+
+Enhance carousels and presentations with **visual components** - available based on your chosen style:
+
+| Component | Description | Supported Styles |
+|-----------|-------------|------------------|
+| **Cards** | Rounded containers for content grouping | Dramatic, Organic, Hygge, Memphis, Feng Shui, Iki, Lagom, Swiss |
+| **Icons** | 1900+ Lucide icons for visual accents | Dramatic, Organic, Hygge, Memphis, Feng Shui, Iki, Lagom, Swiss |
+| **Gradients** | Linear/radial backgrounds for depth | Dramatic, Organic, Hygge, Memphis, Feng Shui |
+
+### Component Support by Style
+
+| Style | Cards | Icons | Gradients |
+|-------|:-----:|:-----:|:---------:|
+| Dramatic | ✓ | ✓ | ✓ |
+| Organic | ✓ | ✓ | ✓ |
+| Hygge | ✓ | ✓ | ✓ |
+| Memphis | ✓ | ✓ | ✓ |
+| Feng Shui | ✓ | ✓ | ✓ |
+| Iki | ✓ | ✓ | ✗ |
+| Lagom | ✓ | ✓ | ✗ |
+| Swiss | ✓ | ✓ | ✗ |
+| Minimal | ◐ | ✗ | ✗ |
+| Wabi-Sabi | ◐ | ✗ | ✗ |
+| Shibui | ◐ | ✗ | ✗ |
+| Ma | ✗ | ✗ | ✗ |
+| Yeo-baek | ✗ | ✗ | ✗ |
+
+**◐** = Subtle/limited support (border-only cards)
+
+When creating templates with `/template-carousel` or `/template-presentation`, you'll be asked which visual components to enable based on your selected style.
+
 ## Color Palette System
 
 Generate alternative color palettes from your brand colors:

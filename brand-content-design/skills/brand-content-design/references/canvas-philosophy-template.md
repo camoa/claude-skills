@@ -109,6 +109,53 @@ Example names by family:
 - [What to avoid - e.g., "Decorative elements that don't communicate"]
 - [What to avoid - e.g., "Low-contrast or hard-to-read text"]
 
+## Visual Components (Style-Dependent)
+
+**IMPORTANT**: Check `style-constraints.md` for which components your selected style supports.
+
+| Component | Support Levels |
+|-----------|---------------|
+| **Cards** | ✓ Full, ◐ Subtle only, ✗ None |
+| **Icons** | ✓ Allowed, ✗ Not allowed |
+| **Gradients** | ✓ Allowed, ✗ Not allowed |
+
+### Card System
+*Skip this section if style doesn't support cards*
+
+- **Card style**: [none | subtle | bold | warm | playful]
+- **Corner radius**: [0 | 8 | 16 | 24]px
+- **Fill approach**: [transparent | solid | gradient | border-only]
+- **Usage**: [Feature grouping | Stats | Process steps | Tips]
+
+### Icon Usage
+*Skip this section if style doesn't support icons*
+
+- **Icon style**: [outline | filled]
+- **Icon placement**: [in-card | standalone | inline-with-text]
+- **Icon color**: [primary | secondary | accent | contextual]
+- **Icon size**: [24 | 32 | 48 | 64]px
+- **Categories used**: [List relevant categories from: business, growth, people, technology, communication, actions, navigation, time, documents, security, money, nature, misc]
+
+### Background Treatment
+*Skip this section if style doesn't support gradients*
+
+- **Background type**: [solid | gradient]
+- **Gradient direction**: [horizontal | vertical | diagonal | diagonal-reverse]
+- **Gradient colors**: [primary → secondary | primary → background | custom pair]
+- **Gradient intensity**: [subtle (light tints) | moderate | bold (full colors)]
+
+### Component Examples
+
+If visual components are enabled, describe how they'll be used:
+
+```markdown
+Example: Feature Highlights with Icon Cards
+- Gradient background (diagonal, primary → secondary)
+- 3 feature cards with white fill and rounded corners (16px)
+- Each card has: icon (48px, primary color) + title + description
+- Icons: lightbulb, zap, shield (from 'misc' and 'security' categories)
+```
+
 ## Quality Standards
 
 - This work must appear as if created by a master craftsman

@@ -131,7 +131,51 @@ Create a new carousel template or edit an existing one.
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-6. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+6. **Visual Components (style-dependent)** (CREATE MODE, or if changing style in EDIT MODE)
+
+   After selecting a style, check `references/style-constraints.md` for which visual components the style supports:
+   - **Cards**: ✓ Full, ◐ Subtle only, ✗ None
+   - **Icons**: ✓ Allowed, ✗ Not allowed
+   - **Gradients**: ✓ Allowed, ✗ Not allowed
+
+   **Skip this step entirely** for styles that don't support ANY visual components (Ma, Yeo-baek).
+
+   **If style supports at least one component type:**
+
+   Use AskUserQuestion:
+   - Header: "Components"
+   - Question: "Enable visual components for this template?"
+   - Options (build dynamically based on style support):
+     - **Yes, with cards** - Use rounded card containers (if style supports cards)
+     - **Yes, with icons** - Use Lucide icons (if style supports icons)
+     - **Yes, with gradient** - Use gradient backgrounds (if style supports gradients)
+     - **No components** - Keep it simple, text and images only
+
+   Note: User can select multiple options since multiSelect: true.
+
+   **If any visual components enabled, ask follow-up:**
+
+   **For Cards (if selected):**
+   - Card style: based on selected aesthetic
+     - Minimal/Shibui: thin border only, no fill
+     - Dramatic/Hygge/Memphis: solid fills allowed
+     - Swiss: grid-aligned, precise borders
+   - Corner radius: [8 | 16 | 24]px (suggest based on style)
+
+   **For Icons (if selected):**
+   - Ask: "What icon categories are relevant for this carousel?"
+   - Show categories: business, growth, people, technology, communication, actions, time, documents, money, misc
+   - User selects 2-4 relevant categories
+   - Icon size: suggest 48px for cards, 32px for inline
+
+   **For Gradients (if selected):**
+   - Gradient direction: [diagonal | horizontal | vertical]
+   - Gradient colors: primary → secondary (default) or custom pair
+   - Intensity: based on style (subtle for Organic, bold for Dramatic/Memphis)
+
+   **Store component selections** for use in canvas-philosophy.md generation.
+
+7. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
 
    First, check brand-philosophy.md for `## Alternative Palettes` section.
    Count total palettes available (1 brand + N alternatives).
@@ -166,39 +210,40 @@ Create a new carousel template or edit an existing one.
 
    **Store selected palette** including text colors for use in canvas-philosophy.md generation.
 
-7. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
+8. **Ask carousel platform** (CREATE MODE, or if changing platform in EDIT MODE)
    Use AskUserQuestion:
    - "Which platform is this carousel for?"
    - Options: LinkedIn (4:5 portrait), Instagram (1:1 square), Instagram (4:5 portrait)
 
-8. **Ask template purpose** (CREATE MODE only)
+9. **Ask template purpose** (CREATE MODE only)
    Ask user directly (not AskUserQuestion):
    "What is this template for? (2-4 words)
    Examples: tips carousel, story series, data highlights, how-to guide, listicle, case study"
 
    User provides short description like "tips carousel" or "weekly insights"
 
-9. **Load carousels guide**
-   - Read plugin `references/carousels-guide.md` for card type options
+10. **Load carousels guide**
+    - Read plugin `references/carousels-guide.md` for card type options
 
-10. **Ask card types needed** (or modify existing in EDIT MODE)
+11. **Ask card types needed** (or modify existing in EDIT MODE)
     Use AskUserQuestion:
     - "Which card types do you need?"
     - Multi-select from: Hook, Content, Data, Story, CTA
     - Allow custom additions
     - In EDIT MODE: Show current cards, allow add/remove
 
-11. **Define card sequence**
+12. **Define card sequence**
     Based on purpose and selected types, propose a sequence:
     - Show proposed structure (5-10 cards)
     - Ask user to confirm or modify
 
-12. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
+13. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
-    - **Selected color palette** (brand colors or alternative palette from step 6)
+    - **Selected color palette** (brand colors or alternative palette from step 7)
     - **Text colors from palette** (`Text (light bg)` and `Text (dark bg)`)
+    - **Visual component selections from step 6** (cards, icons, gradients)
     - Platform-specific considerations (mobile-first)
 
     **Include the style's HARD LIMITS in the philosophy:**
@@ -216,15 +261,35 @@ Create a new carousel template or edit an existing one.
     - Description/secondary text: Use text color at 70% opacity
     ```
 
-13. **Create/update template.md**
+    **Include Visual Components section (if enabled in step 6):**
+    ```
+    ## Visual Components
+
+    ### Card System
+    - Card style: {selected style}
+    - Corner radius: {selected radius}px
+    - Fill approach: {selected approach}
+
+    ### Icon Usage
+    - Icon categories: {selected categories}
+    - Icon size: {selected size}px
+    - Icon color: {primary | secondary | accent}
+
+    ### Background Treatment
+    - Gradient: {direction}, {color1} → {color2}
+    - Intensity: {subtle | moderate | bold}
+    ```
+
+14. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, card structure
     - **Include selected style name and key constraints**
     - **Include selected palette name and colors**
+    - **Include visual components configuration** (if enabled)
     - Add visual standards and Zen principles (carousel-adapted)
     - Include output configuration for platform
 
-14. **Generate sample**
+15. **Generate sample**
     Use the **visual-content** skill:
     - Provide the canvas-philosophy.md content as the design philosophy input
     - **IMPORTANT**: Include the style's Enforcement Block from `style-constraints.md`
@@ -234,6 +299,10 @@ Create a new carousel template or edit an existing one.
       - Read logo file from brand-philosophy.md Brand Assets section
       - If logo is SVG, convert to PNG first (visual-content handles this)
       - Load fonts from `{PROJECT_PATH}/assets/fonts/` if present
+    - **Apply visual components** (if enabled in step 6):
+      - Use `scripts/icons.py` for icon rendering
+      - Apply card patterns from `technical-implementation.md`
+      - Use gradient functions for background treatment
     - **Generate ALL cards defined in template.md** (not just a subset)
     - Use placeholder/example content for each card type
     - Request output as multi-page PDF with platform dimensions:
@@ -242,13 +311,13 @@ Create a new carousel template or edit an existing one.
       - Instagram Portrait: 1080x1350 (4:5)
     - Save as sample.pdf
 
-15. **Save template**
+16. **Save template**
     Save to `templates/carousels/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
 
-16. **Confirm completion**
+17. **Confirm completion**
     Show template location and sample preview
     Explain how to use: `/carousel` and select this template
 
