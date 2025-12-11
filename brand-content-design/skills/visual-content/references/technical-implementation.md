@@ -453,15 +453,36 @@ import os
 import sys
 from pathlib import Path
 
-# Get plugin directory from environment (set by SessionStart hook)
+# Icon setup with fallback paths
+ICONS_AVAILABLE = False
 plugin_dir = os.environ.get('BRAND_CONTENT_DESIGN_DIR')
-if plugin_dir:
-    sys.path.insert(0, str(Path(plugin_dir) / "scripts"))
 
-from icons import get_icon_png, search_icons, ICON_CATEGORIES
+# Fallback: try common plugin locations if env var not set
+if not plugin_dir:
+    possible_paths = [
+        Path.home() / ".claude" / "plugins" / "marketplaces" / "camoa-skills" / "brand-content-design",
+        Path.home() / "workspace" / "claude_memory" / "marketplaces" / "camoa-skills" / "brand-content-design",
+    ]
+    for path in possible_paths:
+        if (path / "scripts" / "icons.py").exists():
+            plugin_dir = str(path)
+            break
+
+if plugin_dir:
+    scripts_path = str(Path(plugin_dir) / "scripts")
+    if scripts_path not in sys.path:
+        sys.path.insert(0, scripts_path)
+    try:
+        from icons import get_icon_png, search_icons, ICON_CATEGORIES, CAIROSVG_AVAILABLE
+        ICONS_AVAILABLE = CAIROSVG_AVAILABLE
+    except ImportError as e:
+        print(f"Warning: Could not import icons module: {e}")
+        ICONS_AVAILABLE = False
+else:
+    print("Warning: brand-content-design plugin directory not found. Icons unavailable.")
 ```
 
-**Note:** The environment variable is automatically set when Claude Code loads the plugin. If running outside Claude Code, set it manually or the script will fall back to deriving the path from the script location.
+**Note:** The code tries multiple fallback paths if the environment variable isn't set. Ensure `cairosvg` is installed (`pip install cairosvg`).
 
 ```python
 def draw_icon(canvas, name, x, y, color='#000000', size=48):
