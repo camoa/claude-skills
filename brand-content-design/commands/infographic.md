@@ -199,6 +199,8 @@ This command is for **using** templates, not creating or debugging them.
 
 13. **Generate infographic**
     Run the Node.js generator:
+
+    **For text-only or icon templates:**
     ```bash
     cd {PLUGIN_PATH}/skills/infographic-generator
     node generate.js \
@@ -208,11 +210,25 @@ This command is for **using** templates, not creating or debugging them.
       --output "{OUTPUT_PATH}/{infographic-name}.png"
     ```
 
+    **For illustrated templates (-illus):** Add `--illustrations` flag
+    ```bash
+    cd {PLUGIN_PATH}/skills/infographic-generator
+    node generate.js \
+      --config "{PROJECT_PATH}/templates/infographics/{template-name}/config.json" \
+      --data '{data-json}' \
+      --background "{background-preset}" \
+      --illustrations "{USER_IMAGES_PATH}" \
+      --output "{OUTPUT_PATH}/{infographic-name}.png"
+    ```
+
+    Where `{USER_IMAGES_PATH}` is the folder path from step 7d.
+
 14. **Generate SVG if requested**
     ```bash
     node generate.js \
       --config "{PROJECT_PATH}/templates/infographics/{template-name}/config.json" \
       --data '{data-json}' \
+      --illustrations "{USER_IMAGES_PATH}" \
       --format svg \
       --output "{OUTPUT_PATH}/{infographic-name}.svg"
     ```
