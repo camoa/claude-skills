@@ -104,13 +104,22 @@ If overlap occurs: shorten text, use wider canvas (1200px+), or use column/grid 
 ```
 /template-infographic
 ```
-Select: category → design → palette → style → dimensions
+Select: category → design → palette → background → style
 
 ### 2. Generate Infographic (repeat)
 ```
 /infographic-quick
 ```
 Select template → paste content → name → get PNG
+
+## Color Contrast for Dark Backgrounds
+
+When using dark backgrounds (spotlight-dots, tech-matrix, etc.), ensure:
+- `colorBg`: Set to dark base color (e.g., `#0D2B5C`)
+- `colorPrimary`: Set to accent color for shapes
+- Add explicit text colors: `title`, `desc`, `item.label`, `item.desc` with light fills
+
+See template-infographic.md for complete config examples.
 
 ## Data Structure by Type
 

@@ -5,6 +5,44 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2025-12-11
+
+### Added
+- **Infographic Generator Skill**: Complete system for creating branded infographics
+  - Uses @antv/infographic library with 114 templates across 7 categories
+  - Three template types: text-only (100+), icon-based (8), illustrated (9)
+  - Custom background system with 11 presets (4 layered + 7 simple)
+  - Lucide icon integration (1909 icons via lucide-static)
+  - Automatic npm dependency installation on first use
+
+### Changed
+- **Color contrast system**: Dark backgrounds now use proper light text colors
+  - `colorBg` sets the background base color for gradient derivation
+  - Explicit `title`, `desc`, `item.label`, `item.desc` fill colors for contrast
+  - `darkenColor()` and `isLightColor()` helpers for intelligent color handling
+- **Removed dimension config**: Library auto-sizes based on content (width/height removed)
+
+### Fixed
+- Background presets now properly applied via `extractSVG` instead of `exportToDataURL`
+- Illustrated templates render with placeholder SVGs when files are missing
+
+## [1.7.0] - 2025-12-10
+
+### Added
+- **`/template-infographic`**: Create infographic templates with 114 designs
+- **`/infographic`**: Generate infographics (guided mode)
+- **`/infographic-quick`**: Generate infographics (fast mode)
+- **Infographic skill files**: SKILL.md, references for templates, theming, backgrounds, icons, illustrations
+- **Node.js generator**: `generate.js` with Puppeteer for PNG export
+- **Background presets**: spotlight-dots, spotlight-grid, diagonal-crosshatch, tech-matrix, and 7 simple presets
+
+## [1.5.0] - 2025-12-10
+
+### Added
+- Initial infographic generator infrastructure
+- Template command with category/design selection workflow
+- Outline template and prompt generation for infographic content
+
 ## [1.4.1] - 2025-12-09
 
 ### Added
