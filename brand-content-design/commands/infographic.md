@@ -82,43 +82,62 @@ Create a branded infographic using an existing template with guided step-by-step
 7c. **Ask about illustrations**
     Use AskUserQuestion:
     - Header: "Illustrations"
-    - Question: "This template needs SVG illustrations. Do you have them?"
+    - Question: "This template needs visual assets. What do you have?"
     - Options:
-      - "I have SVGs" - I'll provide the file paths
-      - "Generate placeholders" - Use colored rectangles as placeholders
-      - "Help me create them" - Guide me through getting illustrations
+      - **I have images** - I'll provide my own files (SVG, PNG, JPG)
+      - **Find icons for me** - Suggest icons from Lucide/Heroicons
+      - **Use placeholders** - Generate colored shapes as placeholders
 
-7d. **If "I have SVGs":**
-    Ask: "Where are your SVG files? (folder path or list each file)"
-    - Validate SVGs exist
+7d. **If "I have images":**
+    Ask: "Where are your image files? (folder path or list each file)"
+
+    **Supported formats:**
+    - SVG (vector, recommended) - scales perfectly
+    - PNG (raster, with transparency) - good for photos/complex images
+    - JPG (raster) - good for photos without transparency
+
+    - Validate files exist
     - Map illus names to file paths
+    - If PNG/JPG: Note these will be embedded at their resolution
 
-7e. **If "Generate placeholders":**
-    - Generate simple placeholder SVGs with brand colors
-    - Warn: "Placeholders will be used. Replace with real illustrations later."
+    **Naming convention:**
+    Files should match the `illus` field name or user provides mapping:
+    - alarm.svg, alarm.png, or alarm.jpg → matches `"illus": "alarm"`
 
-7f. **If "Help me create them":**
-    Show:
+7e. **If "Find icons for me":**
+    Show table of needed illustrations with suggested searches:
     ```
-    Based on your content, you need these illustrations:
+    Based on your content, you need these {N} visuals:
 
-    1. {item1.illus}: Describe what "{item1.label}" should look like
-    2. {item2.illus}: Describe what "{item2.label}" should look like
+    | # | Name | Concept | Suggested Search |
+    |---|------|---------|------------------|
+    | 1 | {illus1} | {label1} | "{search-term-1}", "{alt-term}" |
+    | 2 | {illus2} | {label2} | "{search-term-2}", "{alt-term}" |
     ...
 
-    Options to get SVGs:
-    1. Search Lucide icons: https://lucide.dev/icons/
-    2. Use an AI image generator, then convert to SVG
-    3. Create in Figma/Illustrator
-    4. Find on icon sites: flaticon.com, thenounproject.com
+    Quick options to get images:
 
-    Once you have SVGs, place them in:
-    {PROJECT_PATH}/infographics/{name}/illustrations/
+    **Icons (SVG, free):**
+    - Lucide: https://lucide.dev/icons/ (minimal line icons)
+    - Heroicons: https://heroicons.com/ (slightly bolder)
+    - Tabler: https://tabler.io/icons (4500+ icons)
 
-    Name them: {illus-name}.svg
+    **Illustrations/Photos:**
+    - Unsplash: https://unsplash.com/ (free photos)
+    - unDraw: https://undraw.co/ (free illustrations)
+    - Storyset: https://storyset.com/ (free customizable illustrations)
+
+    **AI-Generated:**
+    - Use an AI image tool, save as PNG
+    - Describe: "simple icon of {concept}, minimal style, single color"
     ```
 
-    Ask: "Ready to continue with placeholders, or do you want to get the SVGs first?"
+    Ask: "Download your images and tell me the folder path, or continue with placeholders?"
+
+7f. **If "Use placeholders":**
+    - Generate simple placeholder shapes with brand colors
+    - Each placeholder shows the illus name as text
+    - Warn: "⚠️ Placeholders will be used. Replace with real images later."
 
 ### Phase 3: Naming & Customization
 

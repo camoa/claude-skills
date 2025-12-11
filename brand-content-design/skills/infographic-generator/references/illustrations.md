@@ -31,33 +31,61 @@ Illustrated templates (`-illus` suffix) require custom SVG illustrations for eac
 
 The `illus` field references an SVG file: `{illus}.svg`
 
-## SVG Requirements
+## Image Requirements
+
+### Supported Formats
+
+| Format | Best For | Notes |
+|--------|----------|-------|
+| **SVG** (recommended) | Icons, illustrations | Scales perfectly, small file size |
+| **PNG** | Photos, complex images | Supports transparency, use 200×200+ |
+| **JPG** | Photos without transparency | Smaller files, no transparency |
+
+### Specifications
 
 | Requirement | Specification |
 |-------------|---------------|
-| Format | SVG (scalable vector) |
-| Size | 100×100 to 200×200 pixels recommended |
-| Colors | Monochrome or brand colors preferred |
+| Size | 200×200 pixels minimum for raster (PNG/JPG) |
+| Colors | Monochrome or brand colors preferred for icons |
 | Style | Simple, iconic, consistent across set |
-| File location | Same folder as the infographic output |
+| File location | Template illustrations folder or specified path |
+| Naming | Match the `illus` field value (e.g., `alarm.svg`, `alarm.png`)
 
 ## Workflow: Using Illustrated Templates
 
-### Option 1: Provide Your Own SVGs
+### Option 1: Provide Your Own Images
 
 1. Select an illustrated template
-2. Create SVG files for each item
+2. Prepare image files (SVG, PNG, or JPG) for each item
 3. Name them to match the `illus` field values
-4. Place in output folder before generating
+4. Place in template's illustrations folder or specify path
 
-### Option 2: Use AI-Generated Suggestions
+**Examples:**
+- Custom photos from a photoshoot
+- Brand illustrations from your design team
+- Screenshots or product images
+- AI-generated images saved as PNG
 
-When using `/outline infographic-{template}` with an illustrated template:
+### Option 2: Find Icons
 
-1. The outline prompt will ask about visual concepts
-2. Provide descriptions of what each illustration should show
-3. Use the descriptions with an AI image tool or find matching icons
-4. Convert to SVG format
+Use free icon libraries:
+- **Lucide**: https://lucide.dev/icons/ (minimal line icons)
+- **Heroicons**: https://heroicons.com/ (slightly bolder)
+- **Tabler**: https://tabler.io/icons (4500+ icons)
+
+### Option 3: Find Illustrations/Photos
+
+Use free image resources:
+- **Unsplash**: https://unsplash.com/ (free photos)
+- **unDraw**: https://undraw.co/ (free SVG illustrations)
+- **Storyset**: https://storyset.com/ (customizable illustrations)
+
+### Option 4: AI-Generated Images
+
+1. Use an AI image tool (DALL-E, Midjourney, etc.)
+2. Prompt: "simple icon of {concept}, minimal style, single color, white background"
+3. Save as PNG
+4. Place in illustrations folder
 
 ## Outline Prompt for Illustrated Templates
 
@@ -93,14 +121,19 @@ For each item, provide:
 ```
 ```
 
-## Converting Descriptions to SVGs
+## Getting Images from Concepts
 
-After getting illustration concepts:
+After defining what each illustration should show:
 
-1. **Find existing icons**: Search icon libraries (Lucide, Heroicons, etc.) for matching concepts
-2. **AI generation**: Use AI image tools to generate simple icons, then vectorize
-3. **Manual creation**: Create in Figma, Illustrator, or Inkscape
-4. **Commission**: Use the descriptions as briefs for a designer
+| Method | Best For | Time |
+|--------|----------|------|
+| **Icon libraries** | Simple concepts (alarm, calendar) | 2-5 min |
+| **Stock photos** | Real-world scenes, people | 5-10 min |
+| **AI generation** | Custom concepts, unique visuals | 5-10 min |
+| **Design tools** | Brand-specific, precise control | 30+ min |
+| **Commission** | High quality, brand consistency | Days |
+
+**Quick path:** Most concepts can be found as icons in Lucide/Heroicons in under 5 minutes.
 
 ## Fallback: Text-Only Alternative
 
