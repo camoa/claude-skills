@@ -47,6 +47,11 @@ Help users prepare content that maps perfectly to a template's structure. Users 
      - Type (Title, Content, Image, Data, Quote, CTA, Hook, etc.)
      - Purpose of each slide/card
      - Expected content elements
+   - Read the canvas-philosophy.md file
+   - Check for `## Visual Components` section and extract:
+     - Cards enabled? (yes/no + style: subtle/bold/warm)
+     - Icons enabled? (yes/no + categories)
+     - Gradients enabled? (yes/no + direction)
 
 6. **Generate outline template**
    Create `outline-template.md` in the template folder:
@@ -65,12 +70,16 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 
    - {Content element 1}: ___
    - {Content element 2}: ___
+   {If cards enabled: - **Card text**: ___ (content for rounded card container)}
+   {If icons enabled: - **Icon suggestion**: ___ (e.g., lightbulb, rocket, chart-bar)}
 
    ## Slide 2: {Slide Type}
    **Purpose:** {What this slide should achieve}
 
    - {Content element 1}: ___
    - {Content element 2}: ___
+   {If cards enabled: - **Card text**: ___}
+   {If icons enabled: - **Icon suggestion**: ___}
 
    ...
    ```
@@ -89,12 +98,16 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 
    - {Content element 1}: ___
    - {Content element 2}: ___
+   {If cards enabled: - **Card text**: ___ (content for rounded card container)}
+   {If icons enabled: - **Icon suggestion**: ___ (e.g., lightbulb, rocket, chart-bar)}
 
    ## Card 2: {Card Type}
    **Purpose:** {What this card should achieve}
 
    - {Content element 1}: ___
    - {Content element 2}: ___
+   {If cards enabled: - **Card text**: ___}
+   {If icons enabled: - **Icon suggestion**: ___}
 
    ...
    ```
@@ -102,11 +115,24 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 7. **Generate AI prompt**
    Create `outline-prompt.txt` in the template folder.
 
-   **IMPORTANT**: The prompt must include slide/card type definitions so the external AI understands what content each type needs.
+   **IMPORTANT**: The prompt must include slide/card type definitions so the external AI understands what content each type needs. If visual components are enabled, include that information.
 
    **For presentations:**
    ```
    I need help structuring my presentation content. I have a template with a specific slide structure.
+
+   {If any visual components enabled, add this section:}
+   ## VISUAL COMPONENTS
+
+   This template uses visual components. Please suggest content for these elements:
+
+   {If cards enabled:}
+   - **Cards**: Rounded containers that group related content. Suggest short text (2-5 words) for card labels/titles.
+   {If icons enabled:}
+   - **Icons**: Using Lucide icon library. Suggest icon names like: lightbulb, rocket, chart-bar, users, shield, target, etc.
+     Available categories: {list enabled categories from canvas-philosophy.md}
+   {If gradients enabled:}
+   - **Gradients**: Background uses {direction} gradient. Consider how content contrasts with gradient background.
 
    ## SLIDE TYPE DEFINITIONS
 
@@ -140,9 +166,13 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 
    ## Slide 1: {Type}
    - {element}: {filled content}
+   {If cards enabled: - Card text: {short label for card}}
+   {If icons enabled: - Icon: {icon-name}}
 
    ## Slide 2: {Type}
    - {element}: {filled content}
+   {If cards enabled: - Card text: {short label for card}}
+   {If icons enabled: - Icon: {icon-name}}
 
    ...
    ```
@@ -150,6 +180,19 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    **For carousels:**
    ```
    I need help structuring my carousel content. I have a template with a specific card structure.
+
+   {If any visual components enabled, add this section:}
+   ## VISUAL COMPONENTS
+
+   This template uses visual components. Please suggest content for these elements:
+
+   {If cards enabled:}
+   - **Cards**: Rounded containers that group related content. Suggest short text (2-5 words) for card labels/titles.
+   {If icons enabled:}
+   - **Icons**: Using Lucide icon library. Suggest icon names like: lightbulb, rocket, chart-bar, users, shield, target, etc.
+     Available categories: {list enabled categories from canvas-philosophy.md}
+   {If gradients enabled:}
+   - **Gradients**: Background uses {direction} gradient. Consider how content contrasts with gradient background.
 
    ## CARD TYPE DEFINITIONS
 
@@ -181,9 +224,13 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 
    ## Card 1: {Type}
    - {element}: {filled content}
+   {If cards enabled: - Card text: {short label for card}}
+   {If icons enabled: - Icon: {icon-name}}
 
    ## Card 2: {Type}
    - {element}: {filled content}
+   {If cards enabled: - Card text: {short label for card}}
+   {If icons enabled: - Icon: {icon-name}}
 
    ...
    ```

@@ -291,28 +291,166 @@ Reference components in content outlines:
 
 ---
 
-## Best Practices
+## Intelligent Usage Guidelines
 
-### Cards
-- Use cards to group related content, not to fill space
-- Maintain consistent card styling within a carousel
-- Respect style constraints - minimal styles need subtle cards
-- Keep padding consistent (24px default)
+Visual components are **opt-in** (user enables during template creation) but should be used **intelligently** based on content. Don't use components on every slide/card just because they're enabled.
 
-### Icons
-- Choose icons that clearly represent the concept
-- Use consistent icon size throughout
-- Match icon color to text or accent color
-- Don't overuse - icons should add meaning, not decoration
+---
 
-### Gradients
-- Use brand colors for cohesive look
-- Ensure text contrast on gradient backgrounds
-- Subtle gradients for professional content
-- Bold gradients for creative/playful content
+### When to Use Cards
 
-### General
-- Visual components should enhance, not distract
-- When in doubt, use fewer components
-- Test readability on mobile (carousel primary use case)
-- Maintain style consistency across all cards
+**USE cards when:**
+| Content Type | Why Cards Help |
+|--------------|----------------|
+| Multiple related points | Groups information, reduces cognitive load |
+| Feature comparisons | Visual containment shows items are comparable |
+| Tips/steps in a list | Each tip gets its own scannable container |
+| Quotes or callouts | Elevates content, signals "this is important" |
+| Stats with context | Number + label contained together |
+
+**DON'T use cards when:**
+| Situation | Why Not |
+|-----------|---------|
+| Single focal point | Cards compete with the main message |
+| Hero/hook slides | Let the headline breathe - cards add clutter |
+| Image-dominant slides | Cards fight with photography |
+| Only 1-2 words of content | Cards need substance to justify containment |
+| CTA slides | Direct action, don't wrap in containers |
+
+**Card quantity guidelines:**
+- **2-4 cards per slide** = optimal scanability
+- **1 card** = use only if it's a featured callout
+- **5+ cards** = too dense, split across slides
+
+---
+
+### When to Use Icons
+
+**USE icons when:**
+| Content Type | Why Icons Help |
+|--------------|----------------|
+| Process steps | Visual anchors help track progress (1→2→3) |
+| Feature lists | Icon + text = 20% faster comprehension than text alone |
+| Categories/topics | Icons create visual distinction between items |
+| Abstract concepts | Concrete visual for intangible ideas (e.g., "security" → shield) |
+| Inside cards | Reinforces card purpose, adds visual interest |
+
+**DON'T use icons when:**
+| Situation | Why Not |
+|-----------|---------|
+| No clear visual metaphor | Forced icons confuse more than help |
+| Emotional/story content | Icons feel clinical, break narrative flow |
+| Data/statistics | Numbers are the visual - icons compete |
+| Quote slides | Let the words speak |
+| Already image-heavy | Icons add visual noise |
+
+**Icon placement rules:**
+- **In cards**: Center or top-left, 32-48px size
+- **With text**: Left of text, vertically centered, 24-32px
+- **Standalone decorative**: Corners only, subtle, 20-24px
+
+**Icon selection criteria:**
+1. Is there an obvious icon for this concept? (lightbulb=idea, rocket=launch)
+2. Would someone understand the icon WITHOUT the label?
+3. If no clear match exists, **don't force it** - skip the icon
+
+---
+
+### When to Use Gradients
+
+**USE gradients when:**
+| Content Type | Why Gradients Help |
+|--------------|-------------------|
+| Opening/hook slides | Creates visual impact, thumb-stopping |
+| Section transitions | Signals "new chapter" in the carousel |
+| CTA slides | Draws attention to the action |
+| Brand moments | Reinforces brand colors dramatically |
+| Low-text slides | Gradient fills visual space meaningfully |
+
+**DON'T use gradients when:**
+| Situation | Why Not |
+|-----------|---------|
+| Text-heavy slides | Reduces readability, gradient competes with content |
+| Content slides with cards | Cards + gradient = too much visual complexity |
+| Every slide | Loses impact - gradients should be special |
+| Data/chart slides | Gradient distracts from the numbers |
+| Middle of carousel | Reserve for opening, transitions, closing |
+
+**Gradient frequency:**
+- **Max 2-3 gradient slides** per carousel (opening, transition, CTA)
+- Rest should be solid backgrounds for readability
+
+**Text contrast on gradients:**
+- Always use high-contrast text (white on dark gradient, dark on light)
+- Test at BOTH ends of the gradient - text must be readable throughout
+- Keep text in the gradient's lighter OR darker zone, not spanning both
+
+---
+
+### Decision Framework
+
+When generating content, ask these questions IN ORDER:
+
+**Step 1: Does this slide/card have enough content?**
+- < 10 words → Probably no cards needed
+- 10-30 words → Consider cards if grouping helps
+- > 30 words → Definitely use cards to chunk content
+
+**Step 2: Is there a clear visual metaphor?**
+- Yes, obvious icon exists → Use icon
+- Maybe, could work → Use icon only if inside a card
+- No clear match → Skip icon entirely
+
+**Step 3: What's the slide's purpose?**
+- Hook/CTA/Transition → Consider gradient background
+- Content/Data/Quote → Solid background, focus on content
+
+**Step 4: What's the visual density so far?**
+- Already has image → No gradient, minimal cards
+- Already has 3+ cards → No icons outside cards
+- Already has gradient → No cards, minimal text
+
+---
+
+### Slide-Type Recommendations
+
+| Slide Type | Cards | Icons | Gradient |
+|------------|:-----:|:-----:|:--------:|
+| **Hook/Opening** | ✗ | ✗ | ✓ |
+| **Problem** | ◐ | ◐ | ✗ |
+| **Solution Overview** | ✗ | ✗ | ✗ |
+| **Features (list)** | ✓ | ✓ | ✗ |
+| **Process/Steps** | ✓ | ✓ | ✗ |
+| **Data/Stats** | ◐ | ✗ | ✗ |
+| **Quote/Testimonial** | ◐ | ✗ | ✗ |
+| **Story/Narrative** | ✗ | ✗ | ✗ |
+| **Comparison** | ✓ | ◐ | ✗ |
+| **Transition** | ✗ | ✗ | ✓ |
+| **CTA/Closing** | ✗ | ✗ | ✓ |
+
+**Legend:** ✓ = Recommended | ◐ = If content warrants | ✗ = Avoid
+
+---
+
+### Common Mistakes to Avoid
+
+1. **Card everything** - Cards lose meaning when overused
+2. **Icon every point** - Forces bad metaphors, looks cluttered
+3. **Gradient every slide** - Becomes exhausting, loses impact
+4. **Components without content** - Visual elements need substance
+5. **Mixing all three** - Card + icon + gradient = visual chaos
+6. **Ignoring mobile** - Components must work at small sizes
+
+---
+
+### Quality Checklist
+
+Before finalizing, verify:
+
+- [ ] Cards only where content benefits from grouping
+- [ ] Icons only where clear visual metaphor exists
+- [ ] Gradients only on 2-3 slides max (hook, transition, CTA)
+- [ ] No slide has cards + icons + gradient together
+- [ ] Text readable on all backgrounds (4.5:1 contrast minimum)
+- [ ] Components consistent in style throughout
+- [ ] Mobile preview shows components at readable size
