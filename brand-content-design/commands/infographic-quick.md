@@ -14,6 +14,15 @@ Create an infographic with minimal questions - just template and content.
 
 ## Workflow
 
+0. **Ensure Node.js dependencies are installed**
+   - Set `SKILL_PATH` = path to `skills/infographic-generator/` in the plugin
+   - Check if `{SKILL_PATH}/node_modules` exists
+   - If not, run:
+     ```bash
+     cd {SKILL_PATH} && npm install
+     ```
+   - Wait for installation to complete before proceeding
+
 1. **Find project and templates**
    - Check `./brand-philosophy.md`, then `../brand-philosophy.md`, then `find . -maxdepth 2 -name "brand-philosophy.md"`
    - **Set PROJECT_PATH** = directory containing brand-philosophy.md

@@ -14,6 +14,17 @@ Create a branded infographic using an existing template with guided step-by-step
 
 ## Workflow
 
+### Phase 0: Dependency Check
+
+0. **Ensure Node.js dependencies are installed**
+   - Set `SKILL_PATH` = path to `skills/infographic-generator/` in the plugin
+   - Check if `{SKILL_PATH}/node_modules` exists
+   - If not, run:
+     ```bash
+     cd {SKILL_PATH} && npm install
+     ```
+   - Wait for installation to complete before proceeding
+
 ### Phase 1: Project Setup
 
 1. **Find project and templates**
