@@ -8,6 +8,7 @@ Code patterns for PDF generation with reportlab.
 - PDF generation patterns (presentations, carousels)
 - Color parsing from brand-philosophy.md
 - Positioning patterns (centered, asymmetric, grid)
+- **Visual components (cards, gradients, icons)**
 - Full workflow example
 
 ---
@@ -222,6 +223,335 @@ def create_grid(canvas_width, canvas_height, columns=12, rows=8):
         return (col * col_width, canvas_height - (row * row_height))
 
     return grid_pos
+```
+
+---
+
+## Visual Components
+
+Reusable components for enhanced carousel and presentation designs.
+Check `style-constraints.md` for which styles support each component type.
+
+### Cards (Rounded Containers)
+
+Content cards group related elements with optional fill, border, and rounded corners.
+
+```python
+from reportlab.lib.colors import HexColor
+
+def draw_content_card(canvas, x, y, width, height,
+                      fill_color=None, border_color=None,
+                      radius=16, border_width=2):
+    """
+    Draw a content card container.
+
+    Args:
+        canvas: reportlab canvas
+        x, y: Bottom-left corner position
+        width, height: Card dimensions
+        fill_color: Hex color for fill (None = transparent)
+        border_color: Hex color for border (None = no border)
+        radius: Corner radius in pixels (0 = sharp corners)
+        border_width: Border thickness in pixels
+    """
+    canvas.saveState()
+
+    if fill_color:
+        canvas.setFillColor(HexColor(fill_color))
+    if border_color:
+        canvas.setStrokeColor(HexColor(border_color))
+        canvas.setLineWidth(border_width)
+
+    canvas.roundRect(x, y, width, height, radius,
+                     fill=bool(fill_color),
+                     stroke=bool(border_color))
+
+    canvas.restoreState()
+
+
+def draw_icon_card(canvas, x, y, size, icon_path,
+                   fill_color=None, icon_size=48, radius=12):
+    """
+    Draw a square card with centered icon.
+
+    Args:
+        canvas: reportlab canvas
+        x, y: Bottom-left corner position
+        size: Card width and height (square)
+        icon_path: Path to icon PNG
+        fill_color: Background color
+        icon_size: Icon dimensions
+        radius: Corner radius
+    """
+    canvas.saveState()
+
+    # Draw card background
+    if fill_color:
+        canvas.setFillColor(HexColor(fill_color))
+        canvas.roundRect(x, y, size, size, radius, fill=True, stroke=False)
+
+    # Center icon in card
+    icon_x = x + (size - icon_size) / 2
+    icon_y = y + (size - icon_size) / 2
+
+    if icon_path:
+        canvas.drawImage(icon_path, icon_x, icon_y,
+                        width=icon_size, height=icon_size,
+                        mask='auto')
+
+    canvas.restoreState()
+
+
+def draw_feature_card(canvas, x, y, width, height,
+                      icon_path, title, description,
+                      fill_color, text_color,
+                      title_font="Helvetica-Bold", title_size=24,
+                      desc_font="Helvetica", desc_size=16,
+                      icon_size=48, radius=16, padding=24):
+    """
+    Draw a feature card with icon, title, and description.
+
+    Layout:
+    +------------------------+
+    |  [icon]               |
+    |  Title                |
+    |  Description text     |
+    +------------------------+
+    """
+    canvas.saveState()
+
+    # Draw card background
+    if fill_color:
+        canvas.setFillColor(HexColor(fill_color))
+        canvas.roundRect(x, y, width, height, radius, fill=True, stroke=False)
+
+    # Content area
+    content_x = x + padding
+    content_top = y + height - padding
+
+    # Icon at top
+    if icon_path:
+        canvas.drawImage(icon_path, content_x, content_top - icon_size,
+                        width=icon_size, height=icon_size, mask='auto')
+
+    # Title below icon
+    canvas.setFillColor(HexColor(text_color))
+    canvas.setFont(title_font, title_size)
+    title_y = content_top - icon_size - 20 - title_size
+    canvas.drawString(content_x, title_y, title)
+
+    # Description below title
+    canvas.setFont(desc_font, desc_size)
+    desc_y = title_y - 10 - desc_size
+    canvas.drawString(content_x, desc_y, description)
+
+    canvas.restoreState()
+```
+
+### Gradients (Background Transitions)
+
+Linear gradients for background sweeps and visual depth.
+
+```python
+from reportlab.lib.colors import linearlyInterpolatedColor, HexColor, Color
+
+def draw_gradient_rect(canvas, x, y, width, height,
+                       color1, color2, direction='diagonal', steps=100):
+    """
+    Draw a rectangle with linear gradient fill.
+
+    Args:
+        canvas: reportlab canvas
+        x, y: Bottom-left corner position
+        width, height: Rectangle dimensions
+        color1, color2: Start and end hex colors
+        direction: 'horizontal', 'vertical', 'diagonal', 'diagonal-reverse'
+        steps: Number of gradient steps (higher = smoother)
+    """
+    canvas.saveState()
+
+    c1 = HexColor(color1)
+    c2 = HexColor(color2)
+
+    if direction == 'horizontal':
+        # Left to right
+        step_width = width / steps
+        for i in range(steps):
+            ratio = i / steps
+            color = linearlyInterpolatedColor(c1, c2, 0, 1, ratio)
+            canvas.setFillColor(color)
+            canvas.rect(x + i * step_width, y, step_width + 1, height,
+                       fill=True, stroke=False)
+
+    elif direction == 'vertical':
+        # Bottom to top
+        step_height = height / steps
+        for i in range(steps):
+            ratio = i / steps
+            color = linearlyInterpolatedColor(c1, c2, 0, 1, ratio)
+            canvas.setFillColor(color)
+            canvas.rect(x, y + i * step_height, width, step_height + 1,
+                       fill=True, stroke=False)
+
+    elif direction == 'diagonal-reverse':
+        # Top-left to bottom-right
+        step_size = max(width, height) * 2 / steps
+        for i in range(steps):
+            ratio = i / steps
+            color = linearlyInterpolatedColor(c1, c2, 0, 1, ratio)
+            canvas.setFillColor(color)
+            # Draw diagonal strips
+            offset = i * step_size - max(width, height)
+            canvas.saveState()
+            p = canvas.beginPath()
+            p.moveTo(x + offset, y + height)
+            p.lineTo(x + offset + step_size, y + height)
+            p.lineTo(x + width, y + height - (width - offset - step_size))
+            p.lineTo(x + width, y + height - (width - offset))
+            p.closePath()
+            canvas.clipPath(p, stroke=0)
+            canvas.rect(x, y, width, height, fill=True, stroke=False)
+            canvas.restoreState()
+
+    else:  # diagonal (default) - bottom-left to top-right
+        step_size = max(width, height) * 2 / steps
+        for i in range(steps):
+            ratio = i / steps
+            color = linearlyInterpolatedColor(c1, c2, 0, 1, ratio)
+            canvas.setFillColor(color)
+            offset = i * step_size - max(width, height)
+            canvas.saveState()
+            p = canvas.beginPath()
+            p.moveTo(x, y + offset)
+            p.lineTo(x, y + offset + step_size)
+            p.lineTo(x + offset + step_size, y)
+            p.lineTo(x + offset, y)
+            p.closePath()
+            canvas.clipPath(p, stroke=0)
+            canvas.rect(x, y, width, height, fill=True, stroke=False)
+            canvas.restoreState()
+
+    canvas.restoreState()
+
+
+def draw_gradient_background(canvas, width, height, color1, color2, direction='diagonal'):
+    """
+    Draw full-page gradient background.
+    Convenience wrapper for draw_gradient_rect.
+    """
+    draw_gradient_rect(canvas, 0, 0, width, height, color1, color2, direction)
+```
+
+### Icons (Lucide Library)
+
+Load and render icons using the brand-content-design icon helper.
+
+**Setup:** The plugin sets `BRAND_CONTENT_DESIGN_DIR` environment variable via SessionStart hook.
+
+```python
+import os
+import sys
+from pathlib import Path
+
+# Get plugin directory from environment (set by SessionStart hook)
+plugin_dir = os.environ.get('BRAND_CONTENT_DESIGN_DIR')
+if plugin_dir:
+    sys.path.insert(0, str(Path(plugin_dir) / "scripts"))
+
+from icons import get_icon_png, search_icons, ICON_CATEGORIES
+```
+
+**Note:** The environment variable is automatically set when Claude Code loads the plugin. If running outside Claude Code, set it manually or the script will fall back to deriving the path from the script location.
+
+```python
+def draw_icon(canvas, name, x, y, color='#000000', size=48):
+    """
+    Draw a Lucide icon on canvas.
+
+    Args:
+        canvas: reportlab canvas
+        name: Icon name (e.g., 'lightbulb', 'rocket', 'check-circle')
+        x, y: Position (bottom-left of icon)
+        color: Icon stroke color (hex)
+        size: Icon dimensions in pixels
+
+    Returns:
+        True if icon was drawn, False if not found
+    """
+    icon_path = get_icon_png(name, color=color, size=size)
+
+    if icon_path:
+        canvas.drawImage(icon_path, x, y, width=size, height=size, mask='auto')
+        return True
+    return False
+
+
+# Usage examples:
+
+# Draw single icon
+draw_icon(canvas, 'rocket', x=100, y=500, color='#3B82F6', size=64)
+
+# Search for icons
+chart_icons = search_icons('chart')  # ['chart-bar', 'chart-line', 'chart-pie', ...]
+
+# Get icons by category
+business_icons = ICON_CATEGORIES['business']  # ['briefcase', 'building', ...]
+
+# Draw row of category icons
+for i, icon_name in enumerate(ICON_CATEGORIES['growth'][:4]):
+    draw_icon(canvas, icon_name, x=100 + i*80, y=400, color='#10B981', size=48)
+```
+
+### Combined Example: Feature Card with Gradient
+
+```python
+def draw_feature_slide(canvas, title, features, brand_colors):
+    """
+    Draw a slide with gradient background and feature cards.
+
+    Args:
+        canvas: reportlab canvas
+        title: Slide headline
+        features: List of dicts with 'icon', 'title', 'description'
+        brand_colors: Dict with 'primary', 'secondary', 'text', 'background'
+    """
+    width, height = 1080, 1350  # Carousel card size
+
+    # Gradient background
+    draw_gradient_background(
+        canvas, width, height,
+        brand_colors['primary'],
+        brand_colors['secondary'],
+        direction='diagonal'
+    )
+
+    # Title at top
+    canvas.setFillColor(HexColor('#FFFFFF'))
+    canvas.setFont("Helvetica-Bold", 48)
+    canvas.drawCentredString(width/2, height - 120, title)
+
+    # Feature cards
+    card_width = width - 120  # 60px margin each side
+    card_height = 200
+    card_x = 60
+    start_y = height - 250
+
+    for i, feature in enumerate(features):
+        card_y = start_y - (i * (card_height + 24))
+
+        # Get icon PNG
+        icon_path = get_icon_png(feature['icon'], color=brand_colors['primary'], size=48)
+
+        # Draw feature card
+        draw_feature_card(
+            canvas, card_x, card_y, card_width, card_height,
+            icon_path=icon_path,
+            title=feature['title'],
+            description=feature['description'],
+            fill_color='#FFFFFF',
+            text_color=brand_colors['text'],
+            radius=16
+        )
 ```
 
 ---

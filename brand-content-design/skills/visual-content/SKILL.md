@@ -186,13 +186,68 @@ Take a second pass:
 
 ---
 
-## Part 7: Technical Implementation
+## Part 7: Visual Components (Optional)
+
+Some styles support visual components that enhance the design. Check `references/visual-components.md` for full details.
+
+### Component Availability by Style
+
+Before using components, verify the style supports them (see `style-constraints.md`):
+
+| Component | Supported Styles | Not Allowed |
+|-----------|-----------------|-------------|
+| **Cards** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki | Ma, Yeo-baek |
+| **Icons** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki | Minimal, Wabi-Sabi, Shibui, Ma, Yeo-baek |
+| **Gradients** | Dramatic, Organic, Hygge, Memphis, Feng Shui | Minimal, Swiss, Ma, Yeo-baek, Lagom |
+
+### Using Cards
+
+Draw rounded containers for content grouping. See `references/technical-implementation.md` for:
+- `draw_content_card()` - Basic rounded container
+- `draw_icon_card()` - Square card with centered icon
+- `draw_feature_card()` - Card with icon, title, description
+
+### Using Icons
+
+Lucide icons available via the icon helper. The plugin sets `BRAND_CONTENT_DESIGN_DIR` via SessionStart hook.
+
+```python
+import os
+import sys
+from pathlib import Path
+
+# Plugin sets BRAND_CONTENT_DESIGN_DIR automatically
+plugin_dir = os.environ.get('BRAND_CONTENT_DESIGN_DIR')
+if plugin_dir:
+    sys.path.insert(0, str(Path(plugin_dir) / "scripts"))
+
+from icons import get_icon_png, search_icons, ICON_CATEGORIES
+
+icon_path = get_icon_png('lightbulb', color='#3B82F6', size=48)
+canvas.drawImage(icon_path, x, y, width=48, height=48, mask='auto')
+```
+
+See `references/technical-implementation.md` for full icon usage patterns.
+
+### Using Gradients
+
+Background transitions for depth:
+```python
+# See references/technical-implementation.md for draw_gradient_background
+```
+
+**Remember**: Visual components must serve the message. When in doubt, use fewer.
+
+---
+
+## Part 8: Technical Implementation
 
 For PDF generation code patterns, see `references/technical-implementation.md`:
 - Asset preparation (SVG→PNG conversion, font loading)
 - reportlab patterns for presentations (1920x1080) and carousels (1080x1350)
 - Color parsing from brand-philosophy.md
 - Positioning patterns: Centered (Ma/Minimal), Asymmetric (Dramatic/Iki), Grid (Swiss)
+- **Visual components: Cards, gradients, icons**
 
 ### Quick Reference
 
@@ -211,7 +266,7 @@ For PDF generation code patterns, see `references/technical-implementation.md`:
 
 ---
 
-## Workflow Integration
+## Part 9: Workflow Integration
 
 This skill is called by:
 - `/template-presentation` - Generate sample.pdf + sample.pptx
@@ -221,7 +276,7 @@ This skill is called by:
 - `/carousel` - Generate final carousel
 - `/carousel-quick` - Generate final carousel (fast path)
 
-## Input Requirements
+## Part 10: Input Requirements
 
 When invoking this skill, provide:
 
@@ -231,10 +286,11 @@ When invoking this skill, provide:
 4. **Brand philosophy** (colors, fonts, logo from brand-philosophy.md)
 5. **Output format** (presentation or carousel)
 6. **Dimensions** (based on content type)
+7. **Visual components config** (optional - from canvas-philosophy.md Visual Components section)
 
 ---
 
-## The Ultimate Test
+## Part 11: The Ultimate Test
 
 Before finalizing, ask:
 

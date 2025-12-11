@@ -35,6 +35,30 @@
 
 ---
 
+## Visual Components Quick Reference
+
+Components available per style. See `references/visual-components.md` for full documentation.
+
+| Style | Cards | Icons | Gradients | Notes |
+|-------|:-----:|:-----:|:---------:|-------|
+| Minimal | ◐ | ✗ | ✗ | Cards: thin border only, no fill |
+| Dramatic | ✓ | ✓ | ✓ | Bold fills, high contrast |
+| Organic | ✓ | ✓ | ✓ | Warm, soft, natural |
+| Wabi-Sabi | ◐ | ✗ | ✗ | Cards: textured, imperfect edges |
+| Shibui | ◐ | ✗ | ✗ | Cards: hairline borders only |
+| Iki | ✓ | ✓ | ✗ | B&W cards + pop color |
+| Ma | ✗ | ✗ | ✗ | No components - emptiness only |
+| Hygge | ✓ | ✓ | ✓ | Warm, cozy, soft corners |
+| Lagom | ✓ | ✓ | ✗ | Functional, balanced |
+| Swiss | ✓ | ✓ | ✗ | Grid-aligned, precise |
+| Memphis | ✓ | ✓ | ✓ | Colorful, playful, geometric |
+| Yeo-baek | ✗ | ✗ | ✗ | No components - void is design |
+| Feng Shui | ✓ | ✓ | ✓ | Balanced, harmonious |
+
+**Legend:** ✓ = Full support | ◐ = Limited/subtle | ✗ = Not allowed
+
+---
+
 # Japanese Zen Family
 
 Seven styles based on traditional Japanese aesthetic principles emphasizing restraint, essence, and intentional simplicity.
@@ -80,6 +104,11 @@ Based on **Kanso** (simplicity) and **Seijaku** (tranquil stillness). Profound c
 ### Example
 > White slide, generous margins. Single light-weight headline at optical center. Thin accent line in brand color. 65% empty space. The emptiness IS the design.
 
+### Visual Components
+- **Cards**: Limited - thin border only (1px), no fill, no shadow
+- **Icons**: Not allowed
+- **Gradients**: Not allowed
+
 ### Enforcement Block
 ```
 STYLE: Minimal (Japanese Zen)
@@ -88,7 +117,8 @@ STYLE: Minimal (Japanese Zen)
 - HARD LIMIT: Max 3 elements, 3 colors.
 - Layout: Center primary elements. Strict 8pt grid.
 - Typography: Light weights (300-400), headlines 48-56pt.
-- NEVER: Multiple focal points, decorative elements, bullet points.
+- Components: Cards (thin border only), no icons, no gradients.
+- NEVER: Multiple focal points, decorative elements, bullet points, filled cards.
 ```
 
 ---
@@ -131,6 +161,11 @@ Based on **Datsuzoku** (freedom from convention) and **Fukinsei** (asymmetry). I
 ### Example
 > Deep navy slide. Massive bold headline high and left, breaking center. Vibrant cyan accent creates tension. Image bleeds off right edge. Asymmetry intentional, contrast striking.
 
+### Visual Components
+- **Cards**: Full support - bold fills, high contrast, sharp or rounded corners
+- **Icons**: Allowed - bold, high contrast colors
+- **Gradients**: Allowed - bold angles, dramatic transitions
+
 ### Enforcement Block
 ```
 STYLE: Dramatic (Japanese Zen)
@@ -140,7 +175,8 @@ STYLE: Dramatic (Japanese Zen)
 - Layout: Asymmetrical. Focal elements OFF-CENTER.
 - Typography: Bold/black (700-900), headlines 56-72pt.
 - Color: 4-5 colors, high contrast.
-- NEVER: Center all elements, uniform spacing, muted colors.
+- Components: Bold cards, icons allowed, dramatic gradients.
+- NEVER: Center all elements, uniform spacing, muted colors, subtle cards.
 ```
 
 ---
@@ -188,6 +224,11 @@ Based on **Shizen** (naturalness) and **Yugen** (hidden depth). Warmth and human
 ### Example
 > Warm cream slide with subtle paper texture. Headline in warm charcoal, naturally off-center. Documentary image integrates with text. Everything feels connected, human.
 
+### Visual Components
+- **Cards**: Full support - soft fills in warm tones, large radius (16-24px), no sharp corners
+- **Icons**: Allowed - warm colors, organic feel
+- **Gradients**: Allowed - warm, subtle transitions (earth tones)
+
 ### Enforcement Block
 ```
 STYLE: Organic (Japanese Zen)
@@ -198,7 +239,8 @@ STYLE: Organic (Japanese Zen)
 - Typography: Medium weights (400-600), headlines 48-60pt.
 - Color: Warm palette only. No stark black or white.
 - Texture: Subtle background texture (3-5% opacity).
-- NEVER: Stark contrast, rigid grids, cold colors.
+- Components: Soft cards (warm fills, large radius), warm icons, subtle gradients.
+- NEVER: Stark contrast, rigid grids, cold colors, sharp-cornered cards.
 ```
 
 ---
@@ -248,6 +290,11 @@ Beauty in imperfection, impermanence, and incompleteness. Embraces texture, age,
 ### Example
 > Textured paper background with visible grain. Headline slightly off-axis in humanist typeface. Muted earth colors. Image with natural grain, edges soft and imperfect. Beauty in the imperfect.
 
+### Visual Components
+- **Cards**: Limited - textured/rough edges, imperfect corners, muted earth fills
+- **Icons**: Not allowed (too precise/synthetic)
+- **Gradients**: Not allowed (too smooth/perfect)
+
 ### Enforcement Block
 ```
 STYLE: Wabi-Sabi (Japanese Zen)
@@ -258,7 +305,8 @@ STYLE: Wabi-Sabi (Japanese Zen)
 - Typography: Medium (400-500), humanist fonts, 44-54pt headlines.
 - Color: Earth tones only. Muted, natural.
 - Texture: Paper/cloth texture 5-10% opacity.
-- NEVER: Perfect geometry, synthetic colors, glossy finishes.
+- Components: Textured cards only (rough edges), no icons, no gradients.
+- NEVER: Perfect geometry, synthetic colors, glossy finishes, precise icons.
 ```
 
 ---
@@ -308,6 +356,11 @@ Quiet elegance that deepens with attention. Ultra-refined, understated luxury.
 ### Example
 > Soft gray background. Refined serif headline in muted charcoal, perfectly spaced. Minimal supporting text in sophisticated small caps. 60% empty. Elegance so subtle it reveals itself slowly.
 
+### Visual Components
+- **Cards**: Limited - hairline borders only (0.5px), no fill, ultra-refined
+- **Icons**: Not allowed (too obvious)
+- **Gradients**: Not allowed (too bold)
+
 ### Enforcement Block
 ```
 STYLE: Shibui (Japanese Zen)
@@ -317,7 +370,8 @@ STYLE: Shibui (Japanese Zen)
 - Layout: Refined, sophisticated placement.
 - Typography: Light (300-400), elegant fonts, 44-52pt headlines.
 - Color: Ultra-muted only. No bright or saturated.
-- NEVER: Bold type, bright colors, busy compositions.
+- Components: Hairline cards only (no fill), no icons, no gradients.
+- NEVER: Bold type, bright colors, busy compositions, obvious design moves.
 ```
 
 ---
@@ -367,6 +421,11 @@ Urban sophistication with confident flair. Editorial elegance, B&W with striking
 ### Example
 > Stark white slide. Bold black headline positioned with editorial confidence. Single vibrant red element creates striking contrast. Black and white photography with red accent detail. Stylish, confident, urban.
 
+### Visual Components
+- **Cards**: Full support - B&W fills with pop color accents, sharp corners (0-8px)
+- **Icons**: Allowed - black, white, or pop color only
+- **Gradients**: Not allowed (breaks B&W + pop aesthetic)
+
 ### Enforcement Block
 ```
 STYLE: Iki (Japanese Zen)
@@ -376,7 +435,8 @@ STYLE: Iki (Japanese Zen)
 - Layout: Editorial grid. Confident asymmetry.
 - Typography: Medium (400-600), stylish sans, 48-60pt headlines.
 - Color: B&W base + ONE pop color only.
-- NEVER: Multiple accents, muted colors, safe layouts.
+- Components: B&W cards (sharp), icons (B&W or pop), no gradients.
+- NEVER: Multiple accents, muted colors, safe layouts, colorful cards.
 ```
 
 ---
@@ -426,6 +486,11 @@ The space between. Extreme negative space where emptiness itself is the design.
 ### Example
 > Almost entirely white slide. Single word in extra-light weight floats in center. 75% pure emptiness. The pause between thoughts. The space speaks.
 
+### Visual Components
+- **Cards**: Not allowed (fills the void)
+- **Icons**: Not allowed (too many elements)
+- **Gradients**: Not allowed (disrupts emptiness)
+
 ### Enforcement Block
 ```
 STYLE: Ma (Japanese Zen)
@@ -435,7 +500,8 @@ STYLE: Ma (Japanese Zen)
 - Layout: Floating elements. 15%+ margins.
 - Typography: Extra light (200-300), 40-50pt headlines.
 - Color: Near-monochromatic. No strong accents.
-- NEVER: Fill space, multiple elements, dense typography.
+- Components: NONE. No cards, icons, or gradients.
+- NEVER: Fill space, multiple elements, dense typography, visual components.
 ```
 
 ---
@@ -499,6 +565,11 @@ Danish concept of cozy togetherness and contentment. Warm, inviting, comfortable
 ### Example
 > Soft cream background with subtle warmth. Friendly headline in warm brown. Image of cozy scene with soft focus. Warm orange accent. Everything invites you in like a warm blanket.
 
+### Visual Components
+- **Cards**: Full support - warm fills, large radius (20-24px), soft shadows allowed
+- **Icons**: Allowed - warm colors, friendly/rounded icons
+- **Gradients**: Allowed - warm tones only (cream → amber, peach → coral)
+
 ### Enforcement Block
 ```
 STYLE: Hygge (Scandinavian)
@@ -509,7 +580,8 @@ STYLE: Hygge (Scandinavian)
 - Typography: Medium (400-500), friendly fonts, 44-56pt headlines.
 - Color: Warm candlelight palette. No cold colors.
 - Texture: Soft, tactile (wool, wood grain).
-- NEVER: Cold colors, sharp edges, clinical feel.
+- Components: Warm cards (large radius, soft shadows), friendly icons, warm gradients.
+- NEVER: Cold colors, sharp edges, clinical feel, sharp-cornered cards.
 ```
 
 ---
@@ -559,6 +631,11 @@ Swedish "just the right amount." Perfect balance, neither excess nor lacking.
 ### Example
 > Clean white-gray background. Balanced headline at comfortable weight. Elements arranged with functional clarity. Not minimal, not full - just right. Sustainable, sensible design.
 
+### Visual Components
+- **Cards**: Full support - neutral fills, medium radius (12-16px), functional borders
+- **Icons**: Allowed - neutral or gentle accent colors
+- **Gradients**: Not allowed (too dramatic)
+
 ### Enforcement Block
 ```
 STYLE: Lagom (Scandinavian)
@@ -568,7 +645,8 @@ STYLE: Lagom (Scandinavian)
 - Layout: Balanced, functional. Neither minimal nor full.
 - Typography: Regular weight (400), clean sans, 44-54pt headlines.
 - Color: Balanced neutrals. One gentle accent. No extremes.
-- NEVER: Extremes, dramatic layouts, bold colors.
+- Components: Functional cards (neutral, medium radius), icons, no gradients.
+- NEVER: Extremes, dramatic layouts, bold colors, dramatic gradients.
 ```
 
 ---
@@ -624,6 +702,11 @@ International Typographic Style. Mathematical precision, objective clarity, grid
 ### Example
 > White slide with visible grid structure. Bold Helvetica headline flush left. Black text, red accent. Mathematical precision in every measurement. Objective, universal, rational.
 
+### Visual Components
+- **Cards**: Full support - grid-aligned, precise borders, sharp corners (0-4px)
+- **Icons**: Allowed - geometric, grid-aligned, functional
+- **Gradients**: Not allowed (not objective/rational)
+
 ### Enforcement Block
 ```
 STYLE: Swiss (European Modernist)
@@ -634,7 +717,8 @@ STYLE: Swiss (European Modernist)
 - Typography: Medium (400-500), grotesque sans, 48-60pt headlines.
 - Alignment: Flush left only. Never centered.
 - Color: 3-4 colors. Functional use.
-- NEVER: Centered text, decoration, organic shapes.
+- Components: Grid-aligned cards (sharp), geometric icons, no gradients.
+- NEVER: Centered text, decoration, organic shapes, rounded cards, gradients.
 ```
 
 ---
@@ -690,6 +774,11 @@ Postmodern "less is bore." Bold colors, geometric shapes, playful rule-breaking.
 ### Example
 > Hot pink background with yellow geometric shapes. Bold black headline at an angle. Turquoise squiggle accent. Terrazzo pattern element. Joyful, irreverent, impossible to ignore.
 
+### Visual Components
+- **Cards**: Full support - colorful fills, any radius, can overlap/layer
+- **Icons**: Allowed - bold colors, playful, can be tilted
+- **Gradients**: Allowed - vibrant, multi-color, playful angles
+
 ### Enforcement Block
 ```
 STYLE: Memphis (European Modernist)
@@ -700,7 +789,8 @@ STYLE: Memphis (European Modernist)
 - Typography: Bold (600-800), playful fonts, 52-72pt. Can tilt/stack.
 - Color: 5-7 bold colors. Neons + pastels. Clashing OK.
 - Shapes: Geometric decoration (circles, squiggles, terrazzo).
-- NEVER: Minimalism, neutral colors, corporate restraint.
+- Components: Colorful cards (layered OK), bold icons, vibrant gradients.
+- NEVER: Minimalism, neutral colors, corporate restraint, subtle cards.
 ```
 
 ---
@@ -756,6 +846,11 @@ Korean concept of meaningful negative space. Emptiness that allows rest and cont
 ### Example
 > Almost entirely empty off-white slide. Single refined element in soft gray. 70% pure space. The emptiness is the message - space for thought, rest for the eye.
 
+### Visual Components
+- **Cards**: Not allowed (disrupts void)
+- **Icons**: Not allowed (too many elements)
+- **Gradients**: Not allowed (disturbs purity)
+
 ### Enforcement Block
 ```
 STYLE: Yeo-baek (East Asian)
@@ -765,7 +860,8 @@ STYLE: Yeo-baek (East Asian)
 - Layout: Void is design. Extreme margins.
 - Typography: Light (300-400), refined, 42-52pt headlines.
 - Color: Near-white, soft grays. Imperfect purity.
-- NEVER: Fill void, multiple elements, strong colors.
+- Components: NONE. No cards, icons, or gradients.
+- NEVER: Fill void, multiple elements, strong colors, visual components.
 ```
 
 ---
@@ -816,6 +912,11 @@ Chinese Yin-Yang balance. Harmonious energy flow through balanced opposing force
 ### Example
 > Soft earth-tone background. Headline balances curved and angular forms. Circular image element balanced by rectangular text block. Colors from complementary elements. Energy flows naturally through the composition.
 
+### Visual Components
+- **Cards**: Full support - mix curved and angular shapes, balanced fills
+- **Icons**: Allowed - balanced placement, Five Elements colors
+- **Gradients**: Allowed - harmonious transitions, balanced Yin-Yang
+
 ### Enforcement Block
 ```
 STYLE: Feng Shui (East Asian)
@@ -826,7 +927,8 @@ STYLE: Feng Shui (East Asian)
 - Typography: Medium (400-500), 46-56pt headlines.
 - Color: Five Elements palette (earth, fire, water, wood, metal).
 - Energy: Natural eye flow. No blocked corners.
-- NEVER: All angular or curved, imbalanced, cluttered.
+- Components: Balanced cards (curved + angular), icons, harmonious gradients.
+- NEVER: All angular or curved, imbalanced, cluttered, one-sided designs.
 ```
 
 ---
