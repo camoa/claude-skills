@@ -313,6 +313,33 @@ User: "1"
 
 ---
 
+## Enforced Principles
+
+The plugin includes built-in reference documents that are **enforced** at each phase:
+
+| Phase | Principles Enforced | Reference Files |
+|-------|---------------------|-----------------|
+| **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md` |
+| **Implementation** | TDD (Red-Green-Refactor), DRY | `references/tdd-workflow.md`, `references/dry-patterns.md` |
+| **Completion** | Quality Gates, Security | `references/quality-gates.md`, `references/security-checklist.md` |
+| **Frontend** | BEM, Mobile-First, Behaviors | `references/frontend-standards.md` |
+
+### Blocking vs Warning
+
+| Severity | Effect |
+|----------|--------|
+| **BLOCKING** | Cannot proceed until fixed |
+| **WARNING** | Can proceed, creates follow-up task |
+
+### Always Blocking
+- `\Drupal::service()` in new code
+- Business logic in forms/controllers
+- Missing access checks on routes
+- Raw SQL with user input
+- Writing implementation before test (TDD violation)
+
+---
+
 ## Components by Phase
 
 This plugin includes skills and agents that activate automatically at each phase.
@@ -344,10 +371,10 @@ This plugin includes skills and agents that activate automatically at each phase
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `architecture-drafter` | Agent | Designs task architecture |
-| `architecture-validator` | Agent | Validates against principles (SOLID, Library-First) |
+| `architecture-drafter` | Agent | Designs task architecture, **enforces SOLID + Library-First** |
+| `architecture-validator` | Agent | Validates against principles, **blocking vs warning** |
 | `pattern-recommender` | Agent | Recommends Drupal patterns for use cases |
-| `guide-integrator` | Skill | Auto-loads relevant guides based on keywords |
+| `guide-integrator` | Skill | Loads built-in references + optional custom guides |
 | `guide-loader` | Skill | Loads specific guide files |
 | `component-designer` | Skill | Designs individual components |
 | `diagram-generator` | Skill | Creates Mermaid diagrams for architecture |
@@ -358,14 +385,14 @@ This plugin includes skills and agents that activate automatically at each phase
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `task-context-loader` | Skill | Loads full context for implementation |
-| `tdd-companion` | Skill | Enforces Red-Green-Refactor TDD cycle |
-| `code-pattern-checker` | Skill | Validates CSS/SCSS (no @extend, !important, BEM) |
+| `tdd-companion` | Skill | **Enforces TDD** - blocks code before tests |
+| `code-pattern-checker` | Skill | Validates SOLID, DRY, Security, CSS standards |
 
 ### Task Completion
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `task-completer` | Skill | Verifies criteria, moves task to completed |
+| `task-completer` | Skill | **Runs 4 quality gates**, moves task to completed |
 
 ---
 
