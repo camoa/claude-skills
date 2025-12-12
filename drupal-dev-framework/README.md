@@ -250,7 +250,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 - **Self-contained references**: 7 built-in reference documents for TDD, SOLID, DRY, Library-First, Security, Quality Gates, Frontend
 - **Enforced principles**: Each phase has blocking checks (SOLID at design, TDD at implementation, Quality Gates at completion)
 - **No hardcoded paths**: Removed dependency on external guide files - works out-of-box
-- Updated all agents (v2.0.0) and 4 key skills with enforcement
+- Updated agents (v2.0.0) and 4 key skills with enforcement
 
 ### 1.3.1
 - Fixed task creation flow after requirements gathering

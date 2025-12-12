@@ -26,22 +26,6 @@ Initialize a new development project.
 4. Invokes `project-initializer` skill
 5. Invokes `requirements-gatherer` skill
 
-## Principles Enforced
-
-This framework enforces the following principles throughout development:
-
-| Principle | Phase | Reference |
-|-----------|-------|-----------|
-| SOLID | Design (Phase 2) | `references/solid-drupal.md` |
-| Library-First | Design (Phase 2) | `references/library-first.md` |
-| CLI-First | Design (Phase 2) | `references/library-first.md` |
-| TDD | Implementation (Phase 3) | `references/tdd-workflow.md` |
-| DRY | Implementation (Phase 3) | `references/dry-patterns.md` |
-| Security | Completion | `references/security-checklist.md` |
-| Quality Gates | Completion | `references/quality-gates.md` |
-
-These are checked automatically at each phase - no additional configuration needed.
-
 ## Project Name Requirements
 
 - Lowercase letters and underscores only

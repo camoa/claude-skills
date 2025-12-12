@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **code-pattern-checker** (v2.0.0): References internal docs for SOLID, DRY, Security, Frontend
 - **task-completer** (v2.0.0): Runs all 4 quality gates before allowing completion
 - **guide-integrator** (v2.0.0): Removed hardcoded guide filenames, uses built-in references first
-- **/new command**: Documents enforced principles and their phases
+- **WORKFLOW.md**: Added Enforced Principles section
 
 ### Removed
 - Hardcoded guide filenames (eca_development_guide.md, drupal_configuration_forms_guide.md, etc.)
