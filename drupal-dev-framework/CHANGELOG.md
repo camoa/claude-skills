@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-12
+
+### Added
+- **Built-in Reference Documents** - 7 self-contained reference files in `references/`:
+  - `tdd-workflow.md` - TDD with Red-Green-Refactor cycle, Drupal test types
+  - `solid-drupal.md` - SOLID principles with Drupal-specific examples
+  - `dry-patterns.md` - DRY extraction patterns (Service, Trait, Component)
+  - `library-first.md` - Library-First and CLI-First development patterns
+  - `quality-gates.md` - 4 quality gates enforced at completion
+  - `security-checklist.md` - Input validation, output escaping, access control
+  - `frontend-standards.md` - BEM, mobile-first, Drupal behaviors, SDC
+
+### Changed
+- **BREAKING**: Plugin is now fully self-contained - no hardcoded external guide paths
+- **architecture-drafter** (v2.0.0): Now enforces SOLID, Library-First, CLI-First with mandatory checklist
+- **architecture-validator** (v2.0.0): Added security checks, blocking vs warning distinction
+- **tdd-companion** (v2.0.0): References internal TDD workflow, enforces Gate 2
+- **code-pattern-checker** (v2.0.0): References internal docs for SOLID, DRY, Security, Frontend
+- **task-completer** (v2.0.0): Runs all 4 quality gates before allowing completion
+- **guide-integrator** (v2.0.0): Removed hardcoded guide filenames, uses built-in references first
+- **/new command**: Documents enforced principles and their phases
+
+### Removed
+- Hardcoded guide filenames (eca_development_guide.md, drupal_configuration_forms_guide.md, etc.)
+- Dependency on user having specific external guide files
+
+### Philosophy
+- Principles are now **enforced**, not just documented
+- Each phase has blocking checks that prevent progression if not met
+- Plugin works out-of-box without external configuration
+
 ## [1.3.1] - 2025-12-10
 
 ### Fixed

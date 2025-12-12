@@ -1,12 +1,24 @@
 ---
 name: code-pattern-checker
 description: Use before committing code - validates Drupal coding standards, SOLID/DRY principles, security practices, and CSS standards
-version: 1.1.0
+version: 2.0.0
 ---
 
 # Code Pattern Checker
 
 Validate code against Drupal standards and best practices.
+
+## Required References
+
+**Load these before checking code:**
+
+| Reference | Checks |
+|-----------|--------|
+| `references/solid-drupal.md` | SOLID principles |
+| `references/dry-patterns.md` | DRY patterns |
+| `references/security-checklist.md` | Security practices |
+| `references/frontend-standards.md` | CSS/JS standards |
+| `references/quality-gates.md` | Gate 1 requirements |
 
 ## Activation
 
@@ -16,6 +28,11 @@ Activate when you detect:
 - `/drupal-dev-framework:validate` command
 - "Check my code" or "Review this"
 - Invoked by `task-completer` skill
+
+## Gate Enforcement
+
+This skill enforces **Gate 1: Code Standards** from `references/quality-gates.md`.
+Code CANNOT be committed until Gate 1 passes.
 
 ## Workflow
 
@@ -44,27 +61,30 @@ Use `Read` on each file. For each, check:
 - [ ] No deprecated functions
 - [ ] Naming: PascalCase classes, camelCase methods
 
-**SOLID Principles:**
+**SOLID Principles (references/solid-drupal.md):**
 - [ ] Single Responsibility - one purpose per class
-- [ ] Dependency Inversion - inject dependencies, don't hardcode
+- [ ] Dependency Inversion - inject dependencies via services.yml
+- [ ] No `\Drupal::service()` in new code (BLOCKING)
+- [ ] Interfaces defined for services
 
-**DRY Check:**
-- [ ] No duplicate code blocks
+**DRY Check (references/dry-patterns.md):**
+- [ ] No duplicate code blocks (BLOCKING)
 - [ ] Shared logic in services/traits
+- [ ] Leverages Drupal base classes
 
-**Security (OWASP):**
-- [ ] No raw SQL (use query builder)
-- [ ] Output escaped (Twig, Html::escape)
-- [ ] Form tokens present
-- [ ] Access checks on routes
-- [ ] Input validated
+**Security (references/security-checklist.md):**
+- [ ] No raw SQL with user input (BLOCKING)
+- [ ] Output escaped (Twig auto, Html::escape)
+- [ ] Form tokens present (Form API handles)
+- [ ] Access checks on routes (BLOCKING)
+- [ ] Input validated via Form API
 
-**CSS/SCSS (if applicable):**
+**CSS/SCSS (references/frontend-standards.md):**
 - [ ] Mobile-first media queries
-- [ ] No `!important`
-- [ ] No `@extend`
-- [ ] Bootstrap classes preferred
-- [ ] BEM naming
+- [ ] No `!important` (BLOCKING)
+- [ ] No `@extend` (BLOCKING)
+- [ ] BEM naming convention
+- [ ] Drupal behaviors pattern for JS
 
 ### 3. Run Automated Tools
 

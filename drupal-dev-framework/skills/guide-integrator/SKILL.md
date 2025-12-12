@@ -1,154 +1,152 @@
 ---
 name: guide-integrator
-description: Use when designing features covered by existing guides - auto-loads relevant guides based on keywords and adds references to architecture
-version: 1.2.0
+description: Use when designing features - loads plugin references and optionally user's custom guides based on keywords
+version: 2.0.0
 ---
 
 # Guide Integrator
 
-Load and integrate development guides into architecture documents.
+Load development references and integrate into architecture documents.
+
+## Built-in References (Always Available)
+
+This plugin includes references that are ALWAYS available:
+
+| Topic | Reference File |
+|-------|----------------|
+| Test-Driven Development | `references/tdd-workflow.md` |
+| SOLID Principles | `references/solid-drupal.md` |
+| DRY Patterns | `references/dry-patterns.md` |
+| Library-First/CLI-First | `references/library-first.md` |
+| Quality Gates | `references/quality-gates.md` |
+| Security Practices | `references/security-checklist.md` |
+| Frontend Standards | `references/frontend-standards.md` |
 
 ## Activation
 
 Activate when:
-- Designing features that match guide topics (ECA, fields, forms, frontend)
-- User mentions a specific guide
-- Architecture drafting for specialized features
+- Designing features that match reference topics
+- User mentions specific patterns (TDD, SOLID, DRY)
+- Architecture drafting for any feature
 - Auto-triggered by `architecture-drafter` agent
 
-## Auto-Trigger Rules
+## Auto-Load Rules
 
-Automatically load relevant guides when these keywords are detected in project requirements or architecture:
+### Plugin References (Always Load)
 
-| Keywords Detected | Guide to Load |
-|-------------------|---------------|
-| "ECA", "automation", "event", "workflow", "trigger" | `eca_development_guide.md` |
-| "form", "config form", "settings", "admin form" | `drupal_configuration_forms_guide.md` |
-| "entity", "field", "content type", "bundle", "storage" | `drupal_fields_entities_guide.md` |
-| "theme", "frontend", "CSS", "SCSS", "styling", "Bootstrap" | Bootstrap/Radix guides |
-| "SDC", "component", "single directory", "Twig component" | SDC-related guides |
+These are loaded from plugin's `references/` folder - no configuration needed:
 
-### When to Auto-Load
+| Keywords Detected | Reference to Load |
+|-------------------|-------------------|
+| "test", "TDD", "unit test", "kernel test" | `references/tdd-workflow.md` |
+| "service", "dependency", "inject", "SOLID" | `references/solid-drupal.md` |
+| "duplicate", "reuse", "DRY", "extract" | `references/dry-patterns.md` |
+| "form", "drush", "command", "service first" | `references/library-first.md` |
+| "complete", "done", "quality", "gate" | `references/quality-gates.md` |
+| "security", "input", "output", "XSS", "SQL" | `references/security-checklist.md` |
+| "CSS", "SCSS", "JavaScript", "frontend", "BEM" | `references/frontend-standards.md` |
 
-1. **After `requirements-gatherer` completes** - Scan requirements for keywords, note applicable guides
-2. **During `architecture-drafter`** - Scan architecture decisions for keywords, load relevant guides
-3. **When user mentions any keyword** - Proactively suggest loading the relevant guide
+### User's Custom Guides (Optional)
 
-### Auto-Load Behavior
+If user has configured a `guides_path` in `project_state.md`, also check for custom guides:
 
-When keywords are detected:
-1. Check if guides path is configured
-2. If yes, attempt to load matching guide
-3. If guide found, summarize key patterns relevant to current task
-4. Add reference to architecture file
+| Keywords Detected | Look for Guide |
+|-------------------|----------------|
+| Feature-specific keywords | User's custom guide files |
+
+**Note:** Custom guide filenames are NOT hardcoded. The skill will search the configured path for relevant files based on keywords in filenames.
 
 ## Workflow
 
-### 1. Check for Guides Path
+### 1. Load Built-in References
+
+**Always load relevant plugin references first.** Use `Read` on the plugin's `references/` folder:
+
+Based on detected keywords in the task:
+1. Identify which references apply (see Auto-Load Rules above)
+2. Read each applicable reference file
+3. Extract patterns relevant to current task
+
+### 2. Check for Custom Guides (Optional)
 
 Use `Read` on `{project_path}/project_state.md` and look for:
 ```markdown
 **Guides Path:** {path}
 ```
 
+If guides path is configured:
+1. Use `Glob` to list files in the guides path: `{guides_path}/*.md`
+2. Match filenames to task keywords (fuzzy matching)
+3. Load any matching custom guides
+
 If no guides path configured:
-- Skip guide loading
-- Use Claude's built-in Drupal knowledge
-- Note in output: "No guides configured - using built-in knowledge"
+- Continue with built-in references only
+- Note: "Using plugin references (no custom guides configured)"
 
-### 2. Detect Feature Type
+### 3. Extract Applicable Patterns
 
-Analyze the feature being designed. Match to guide categories:
-
-| Feature Keywords | Guide to Load |
-|------------------|---------------|
-| ECA, workflow, automation, event, trigger | eca_development_guide.md |
-| field, entity, bundle, storage | drupal_fields_entities_guide.md |
-| form, settings, configuration, admin | drupal_configuration_forms_guide.md |
-| theme, CSS, SCSS, component, Bootstrap | bootstrap guides, radix guides |
-| SDC, component, Twig | sdc guides |
-
-### 3. Load Relevant Guide
-
-If guides path exists, use `Read` to load matching guide:
-```
-{guides_path}/{matched_guide}.md
-```
-
-If file not found, note: "Guide {name} not found at configured path"
-
-### 4. Extract Applicable Patterns
-
-From the loaded guide, identify:
+From loaded references and guides, identify:
 - Patterns that apply to current feature
-- Code examples to reference
-- Warnings or gotchas
+- Checklists to follow
+- Warnings or anti-patterns
 - Recommended approaches
 
-### 5. Add to Architecture
+### 4. Add to Architecture
 
-Use `Edit` tool to add a "Related Guides" section to the architecture file:
+Use `Edit` tool to add references section to architecture file:
 
 ```markdown
-## Related Guides
+## Development References
 
-### {Guide Name}
+### Plugin References Applied
+| Reference | Key Patterns |
+|-----------|--------------|
+| solid-drupal.md | Single responsibility, DI |
+| library-first.md | Service → Form → Route |
+| tdd-workflow.md | Red-Green-Refactor |
 
-**Applicable sections:**
-- {Section name}: {why relevant}
-- {Section name}: {why relevant}
+### Custom Guides Applied (if any)
+| Guide | Relevant Sections |
+|-------|-------------------|
+| {user_guide}.md | {sections} |
 
-**Patterns to apply:**
-- {pattern 1}
-- {pattern 2}
-
-**Reference:** `{guides_path}/{guide_name}.md`
-
-**Notes:**
-{Any project-specific adaptations needed}
+### Enforcement Points
+| Phase | Principle | Reference |
+|-------|-----------|-----------|
+| Design | Library-First | references/library-first.md |
+| Design | SOLID | references/solid-drupal.md |
+| Implement | TDD | references/tdd-workflow.md |
+| Implement | DRY | references/dry-patterns.md |
+| Complete | Quality Gates | references/quality-gates.md |
+| Complete | Security | references/security-checklist.md |
 ```
 
-### 6. Summarize
+### 5. Summarize
 
 Tell user:
 ```
-Integrated guide: {guide_name}
+References integrated:
 
-Added to architecture:
-- {count} applicable patterns
-- {count} reference sections
+Plugin references:
+- {reference 1}: {key points}
+- {reference 2}: {key points}
 
-Key guidance:
-- {most important point}
+Custom guides (if any):
+- {guide}: {key points}
+
+Enforcement: These will be checked at each phase.
 ```
 
-## Without Guides
+## Reference Locations
 
-If no guides are configured, provide:
-- Built-in Drupal knowledge for the feature area
-- Core pattern references (use `core-pattern-finder`)
-- Standard Drupal best practices
-
-Format as:
-```markdown
-## Development Patterns
-
-### {Feature Area}
-
-**Standard approach:**
-- {pattern 1}
-- {pattern 2}
-
-**Core reference:** `{core path}`
-
-**Best practices:**
-- {practice 1}
-- {practice 2}
-```
+| Type | Location |
+|------|----------|
+| Plugin references | `{plugin_path}/references/*.md` |
+| Custom guides | User-configured `guides_path` |
 
 ## Stop Points
 
 STOP and ask user:
-- If multiple guides could apply (ask which to prioritize)
-- If guide file not found (ask for correct path)
+- If multiple custom guides could apply (ask which to prioritize)
+- If custom guide path is configured but no files found
 - Before adding patterns that conflict with existing architecture

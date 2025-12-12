@@ -1,12 +1,21 @@
 ---
 name: task-completer
 description: Use when finishing a task - moves task to completed/, updates project_state.md, suggests next task
-version: 1.1.0
+version: 2.0.0
 ---
 
 # Task Completer
 
 Finalize tasks and update project memory.
+
+## Required References
+
+**Load before completing any task:**
+
+| Reference | Enforces |
+|-----------|----------|
+| `references/quality-gates.md` | Gates 2, 3, 4 (must ALL pass) |
+| `references/security-checklist.md` | Gate 4 security review |
 
 ## Activation
 
@@ -15,6 +24,17 @@ Activate when you detect:
 - "Done with X task" or "Task complete"
 - "Finish this task"
 - All acceptance criteria appear met
+
+## Gate Enforcement
+
+**Task CANNOT be completed until ALL gates pass:**
+
+| Gate | Check | Blocking? |
+|------|-------|-----------|
+| Gate 1 | Code standards (invoke `code-pattern-checker`) | YES |
+| Gate 2 | Tests pass (user confirms) | YES |
+| Gate 3 | Architecture compliance | YES |
+| Gate 4 | Security review | YES |
 
 ## Workflow
 
@@ -31,21 +51,47 @@ Acceptance Criteria:
 - [ ] {criterion 2} - Is this done?
 - [ ] {criterion 3} - Is this done?
 
-Additional checks:
-- [ ] Tests pass? (you run: ddev phpunit {path})
-- [ ] Code reviewed or ready for review?
-- [ ] No TODO comments left?
-
-Confirm all items are complete (yes/no):
+Confirm all acceptance criteria are met (yes/no):
 ```
 
 If NO, identify what's remaining and continue working.
 
-### 2. Run Code Pattern Check
+### 2. Run Quality Gates (references/quality-gates.md)
 
-Before completing, invoke `code-pattern-checker` skill on the files that were created/modified.
+**ALL gates must pass before completion:**
 
-If issues found, ask: "Issues found. Fix before completing? (yes/continue anyway)"
+#### Gate 1: Code Standards
+Invoke `code-pattern-checker` skill on modified files.
+- [ ] PHPCS passes
+- [ ] PHPStan passes (if configured)
+- [ ] No `\Drupal::service()` in new code
+
+#### Gate 2: Tests Pass
+Ask user to confirm:
+```
+Tests verification (user must run):
+  ddev phpunit {test_path}
+
+- [ ] All existing tests pass?
+- [ ] New code has test coverage?
+- [ ] No skipped tests without documented reason?
+
+Confirm tests pass (yes/no):
+```
+
+#### Gate 3: Architecture Compliance
+Check against architecture/main.md:
+- [ ] SOLID principles followed (references/solid-drupal.md)
+- [ ] DRY - no code duplication (references/dry-patterns.md)
+- [ ] Library-First pattern used (references/library-first.md)
+
+#### Gate 4: Security (references/security-checklist.md)
+- [ ] Input validated via Form API
+- [ ] Output escaped properly
+- [ ] No raw SQL with user input
+- [ ] Access checks on all routes
+
+**If ANY blocking gate fails:** Task completion is BLOCKED. Fix issues first.
 
 ### 3. Update Task File
 

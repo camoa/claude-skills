@@ -1,11 +1,11 @@
 {
   "name": "drupal-dev-framework",
-  "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with human control at every step.",
-  "version": "1.3.0",
+  "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with enforced SOLID, TDD, DRY, and security principles.",
+  "version": "2.0.0",
   "author": {
     "name": "camoa"
   },
   "license": "MIT",
   "repository": "https://github.com/camoa/claude-skills",
-  "keywords": ["drupal", "development", "workflow", "architecture", "tdd"]
+  "keywords": ["drupal", "development", "workflow", "architecture", "tdd", "solid", "dry", "security"]
 }

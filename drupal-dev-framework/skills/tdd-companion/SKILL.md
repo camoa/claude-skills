@@ -1,12 +1,22 @@
 ---
 name: tdd-companion
 description: Use during implementation to enforce TDD - reminds test-first, validates Red-Green-Refactor cycle, integrates with superpowers:test-driven-development
-version: 1.1.0
+version: 2.0.0
 ---
 
 # TDD Companion
 
 Enforce test-driven development during implementation sessions.
+
+## Required Reference
+
+**Before proceeding, read: `references/tdd-workflow.md`**
+
+This reference contains:
+- Red-Green-Refactor cycle details
+- Drupal test type selection guide
+- Phase 3 enforcement checkpoints
+- Common TDD violations
 
 ## Activation
 
@@ -24,8 +34,9 @@ Ask: "Have you written the failing test first?"
 
 If no test exists, do NOT write implementation. Instead:
 1. Help write the test
-2. Confirm test fails
-3. Only then write implementation
+2. Run test to confirm it FAILS (RED)
+3. Only then write MINIMUM implementation (GREEN)
+4. After passing, consider refactoring (REFACTOR)
 
 ## Red-Green-Refactor Enforcement
 
@@ -127,3 +138,18 @@ STOP and enforce:
 - If implementation goes beyond test requirements
 - If user tries to skip testing
 - Before moving to next feature (are tests green?)
+
+## Blocking Violations (from references/tdd-workflow.md)
+
+**These BLOCK implementation:**
+- Writing implementation before test exists
+- Test passes on first run (test might be wrong)
+- Adding untested features
+- Skipping RED phase confirmation
+
+## Integration with Quality Gates
+
+This skill enforces **Gate 2** from `references/quality-gates.md`:
+- All tests must pass before `/complete`
+- New code must have test coverage
+- No skipped tests without documented reason
