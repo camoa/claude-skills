@@ -64,7 +64,7 @@ Found {N} project(s) in registry:
 
 Which project do you want to work on?
 - Enter a number (1-3) to select a project
-- Enter "new" to start a new project
+- Enter a new project name to create one
 ```
 
 If no projects in registry:
@@ -73,9 +73,22 @@ If no projects in registry:
 
 No projects registered yet.
 
-Run: /drupal-dev-framework:new <project-name>
-To start a new project.
+Enter a project name to create your first project:
 ```
+
+### Creating a New Project (inline)
+
+When user enters a new project name (not a number):
+
+1. Ask where to store project files (default: `../claude_projects/{name}/`)
+2. Create project folder structure:
+   - `project_state.md`
+   - `architecture/`
+   - `implementation_process/in_progress/`
+   - `implementation_process/completed/`
+3. Invoke `project-initializer` skill
+4. Invoke `requirements-gatherer` skill
+5. Continue to Step 1 (requirements check)
 
 ### Step 1: Project Level (after project selected)
 1. **No requirements** → Gather requirements first

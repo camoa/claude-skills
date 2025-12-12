@@ -88,11 +88,18 @@ Projects found?
 │         │ 2. another_project (2025-12-05)             │
 │         │    Path: /home/user/workspace/another       │
 │         │                                             │
-│         │ Which project? (enter number or "new")      │
+│         │ Which project? (number or new name)         │
 │         └─────────────────────────────────────────────┘
 │
-└── NO → "No projects found. Run /new <project-name>"
+└── NO → "No projects found. Enter a project name to create one."
 ```
+
+### Creating New Project (when user enters a name, not a number)
+
+1. Ask where to store files (default: `../claude_projects/{name}/`)
+2. Create folder structure via `project-initializer` skill
+3. Gather requirements via `requirements-gatherer` skill
+4. Continue to Step 1
 
 ### Step 1: Check Project Requirements (after project selected)
 ```

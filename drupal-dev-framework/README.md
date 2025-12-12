@@ -51,6 +51,23 @@ The plugin stores project state in markdown files, allowing:
 2. **Interactive implementation** - AI writes code piece-by-piece with your approval, not autonomously
 3. **Memory-driven continuity** - Project state persists across sessions
 4. **Integration over reinvention** - Leverages existing tools (superpowers, drupal-dev-tools)
+5. **Principles are enforced, not just documented** - SOLID, TDD, DRY are checked at each phase
+
+## Built-in References
+
+The plugin includes reference documents that are enforced at each phase:
+
+| Reference | Enforces | Phase |
+|-----------|----------|-------|
+| `references/solid-drupal.md` | SOLID principles | Design |
+| `references/library-first.md` | Library-First & CLI-First | Design |
+| `references/tdd-workflow.md` | Test-Driven Development | Implementation |
+| `references/dry-patterns.md` | Don't Repeat Yourself | Implementation |
+| `references/quality-gates.md` | 4 Quality Gates | Completion |
+| `references/security-checklist.md` | OWASP security | Completion |
+| `references/frontend-standards.md` | CSS/JS standards | Implementation |
+
+These references are self-contained - no external guides required.
 
 ## Prerequisites
 
@@ -89,15 +106,17 @@ The path is saved in `project_state.md`, so the plugin remembers it across sessi
 ### Starting a New Project
 
 ```bash
-# 1. Create project and gather requirements
-/drupal-dev-framework:new my_project
+# 1. Run next - it handles everything
+/drupal-dev-framework:next
 
-# 2. Answer requirements questions (scope, integrations, constraints)
+# 2. Enter a project name when prompted (or select existing)
 
-# 3. When asked "Enter your first task:", provide a task name
+# 3. Answer requirements questions (scope, integrations, constraints)
+
+# 4. Enter your first task name when prompted
 #    Example: "settings_form" or "content_entity"
 
-# 4. The framework automatically starts research for your task
+# 5. The framework automatically starts research for your task
 ```
 
 ### Working on Tasks
@@ -158,13 +177,12 @@ Back to task selection
 
 | Command | Description |
 |---------|-------------|
-| `/drupal-dev-framework:new` | Start new project with memory structure |
+| `/drupal-dev-framework:next` | Main entry point - handles project/task selection and creation |
 | `/drupal-dev-framework:research <topic>` | Research a topic, store findings |
 | `/drupal-dev-framework:design [component]` | Design architecture or component |
 | `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations |
 | `/drupal-dev-framework:implement <task>` | Load context, start implementing |
 | `/drupal-dev-framework:status` | Show current project state and phase |
-| `/drupal-dev-framework:next` | Suggest next action based on state |
 | `/drupal-dev-framework:complete` | Mark task done, update memory |
 | `/drupal-dev-framework:validate` | Validate against architecture/standards |
 
@@ -229,23 +247,18 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
+### 2.0.0 (Current)
+- **Self-contained references**: 7 built-in reference documents for TDD, SOLID, DRY, Library-First, Security, Quality Gates, Frontend
+- **Enforced principles**: Each phase has blocking checks (SOLID at design, TDD at implementation, Quality Gates at completion)
+- **No hardcoded paths**: Removed dependency on external guide files - works out-of-box
+- Updated agents (v2.0.0) and 4 key skills with enforcement
+
 ### 1.3.1
 - Fixed task creation flow after requirements gathering
-- Added Step 7 to requirements-gatherer: validates task name, asks for description, then invokes `/research`
 
 ### 1.3.0
-- Added WORKFLOW.md with complete workflow documentation
 - Phases now apply to TASKS, not projects
 - Each task independently cycles through Research → Architecture → Implementation
-- Added project registry at `~/.claude/drupal-dev-framework/active_projects.json`
-
-### 1.2.0
-- Projects contain requirements (gathered once) + multiple tasks
-- Task-based workflow with files in `implementation_process/in_progress/`
-
-### 1.1.0
-- Rewrote all 15 skills to use imperative instructions
-- Skills now tell Claude what to do, not explain what the skill is
 
 ### 1.0.0
 - Initial release with 5 agents, 15 skills, 9 commands
