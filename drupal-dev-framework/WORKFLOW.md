@@ -49,7 +49,7 @@ This single command handles everything - it will guide you through project selec
 │         │                                                                        │
 │         ├── User enters number ──▶ Load that project ──▶ Step 1                 │
 │         │                                                                        │
-│         └── User enters "new" ──▶ /new <project-name>                           │
+│         └── User enters name ──▶ Create project inline ──▶ Step 1               │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
                              │
@@ -244,8 +244,7 @@ Each task file in `in_progress/` contains:
 
 | Command | Purpose |
 |---------|---------|
-| `/next [project]` | Smart routing - handles all steps |
-| `/new <project>` | Create new project |
+| `/next [project]` | Smart routing - handles all steps including project creation |
 | `/status [project]` | Show project and task status |
 | `/research <task>` | Start/continue Phase 1 |
 | `/design <task>` | Start/continue Phase 2 |
@@ -418,10 +417,9 @@ These commands can be used anytime during development:
 /next (no project)
      │
      └──▶ project-orchestrator ──▶ memory-manager ──▶ List projects
-
-/new <project>
-     │
-     └──▶ project-initializer ──▶ requirements-gatherer ──▶ memory-manager
+                                                          │
+                                   (if new name entered) ──▶ project-initializer
+                                                          └──▶ requirements-gatherer
 
 /research <task>
      │

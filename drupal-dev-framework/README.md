@@ -106,15 +106,17 @@ The path is saved in `project_state.md`, so the plugin remembers it across sessi
 ### Starting a New Project
 
 ```bash
-# 1. Create project and gather requirements
-/drupal-dev-framework:new my_project
+# 1. Run next - it handles everything
+/drupal-dev-framework:next
 
-# 2. Answer requirements questions (scope, integrations, constraints)
+# 2. Enter a project name when prompted (or select existing)
 
-# 3. When asked "Enter your first task:", provide a task name
+# 3. Answer requirements questions (scope, integrations, constraints)
+
+# 4. Enter your first task name when prompted
 #    Example: "settings_form" or "content_entity"
 
-# 4. The framework automatically starts research for your task
+# 5. The framework automatically starts research for your task
 ```
 
 ### Working on Tasks
@@ -175,13 +177,12 @@ Back to task selection
 
 | Command | Description |
 |---------|-------------|
-| `/drupal-dev-framework:new` | Start new project with memory structure |
+| `/drupal-dev-framework:next` | Main entry point - handles project/task selection and creation |
 | `/drupal-dev-framework:research <topic>` | Research a topic, store findings |
 | `/drupal-dev-framework:design [component]` | Design architecture or component |
 | `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations |
 | `/drupal-dev-framework:implement <task>` | Load context, start implementing |
 | `/drupal-dev-framework:status` | Show current project state and phase |
-| `/drupal-dev-framework:next` | Suggest next action based on state |
 | `/drupal-dev-framework:complete` | Mark task done, update memory |
 | `/drupal-dev-framework:validate` | Validate against architecture/standards |
 

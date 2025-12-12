@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WORKFLOW.md**: Added Enforced Principles section
 
 ### Removed
+- **`/new` command** - consolidated into `/next` (single entry point)
 - Hardcoded guide filenames (eca_development_guide.md, drupal_configuration_forms_guide.md, etc.)
 - Dependency on user having specific external guide files
 
