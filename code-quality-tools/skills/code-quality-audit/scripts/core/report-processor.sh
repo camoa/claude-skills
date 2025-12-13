@@ -4,7 +4,7 @@
 
 set -e
 
-REPORT_DIR="${REPORT_DIR:-./reports/quality}"
+REPORT_DIR="${REPORT_DIR:-.reports}"
 INPUT_FILE="${1:-${REPORT_DIR}/audit-report.json}"
 OUTPUT_FILE="${2:-${REPORT_DIR}/audit-report.md}"
 
@@ -49,6 +49,7 @@ generate_markdown() {
     # Summary scores
     local coverage_score=$(jq -r '.summary.coverage_score // "unknown"' "$json")
     local solid_score=$(jq -r '.summary.solid_score // "unknown"' "$json")
+    local lint_score=$(jq -r '.summary.lint_score // "unknown"' "$json")
     local dry_score=$(jq -r '.summary.dry_score // "unknown"' "$json")
 
     # Counts
@@ -79,6 +80,7 @@ generate_markdown() {
 |--------|-------|--------|
 | Test Coverage | ${line_coverage}% | $(get_icon "$coverage_score") ${coverage_score} |
 | SOLID Compliance | - | $(get_icon "$solid_score") ${solid_score} |
+$([ "$lint_score" != "unknown" ] && echo "| Lint (ESLint+TS) | - | $(get_icon "$lint_score") ${lint_score} |")
 | DRY (Duplication) | ${duplication_pct}% | $(get_icon "$dry_score") ${dry_score} |
 
 **Issues**: ${critical_count} Critical, ${warning_count} Warnings, ${suggestion_count} Suggestions
@@ -130,6 +132,26 @@ EOF
         echo "_No warnings_" >> "$OUTPUT_FILE"
     fi
     echo "" >> "$OUTPUT_FILE"
+
+    # Add Lint section for Next.js projects
+    if [ "$lint_score" != "unknown" ]; then
+        local eslint_errors=$(jq -r '.lint.eslint.errors // 0' "$json" 2>/dev/null || echo "0")
+        local eslint_warnings=$(jq -r '.lint.eslint.warnings // 0' "$json" 2>/dev/null || echo "0")
+        local ts_errors=$(jq -r '.lint.typescript.errors // 0' "$json" 2>/dev/null || echo "0")
+
+        cat >> "$OUTPUT_FILE" << LINTEOF
+---
+
+## Lint Analysis (ESLint + TypeScript)
+
+| Check | Count | Status |
+|-------|-------|--------|
+| ESLint Errors | ${eslint_errors} | $(get_icon "$([ "$eslint_errors" -eq 0 ] && echo "pass" || echo "fail")") |
+| ESLint Warnings | ${eslint_warnings} | $(get_icon "$([ "$eslint_warnings" -lt 20 ] && echo "pass" || echo "warning")") |
+| TypeScript Errors | ${ts_errors} | $(get_icon "$([ "$ts_errors" -eq 0 ] && echo "pass" || echo "fail")") |
+
+LINTEOF
+    fi
 
     cat >> "$OUTPUT_FILE" << EOF
 ---
