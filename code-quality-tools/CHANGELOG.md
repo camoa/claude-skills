@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2025-12-13 (Not fully tested)
+
+### Added
+- **SOLID check for Next.js** with madge circular dependency detection
+- Operation 19: SOLID Check (Next.js) - circular deps, complexity, large files, TypeScript strict mode
+- `scripts/nextjs/solid-check.sh` - Full SOLID principles analysis
+- `madge` npm package for circular dependency detection
+- Per-principle status reporting (SRP, OCP, LSP, ISP, DIP)
+
+### Changed
+- `full-audit.sh` now runs dedicated SOLID check for Next.js projects (not just lint)
+- `install-tools.sh` now installs madge for Next.js projects
+- Next.js full audit now runs: coverage → SOLID → lint → DRY (4 checks)
+- Added `lint_score` to audit summary for Next.js projects
+- `report-processor.sh` now includes Lint Analysis section for Next.js
+- SOLID violations now use array format compatible with Markdown generator
+
+## [1.5.0] - 2025-12-12
+
+### Added
+- **Full Next.js support** with ESLint, Jest, jscpd tooling
+- Operation 11: Lint Check (Drupal) - explicit phpcs operation with `--fix` mode
+- Operation 12: Rector Fix (Drupal) - auto-fix deprecations with drupal-rector
+- Operations 13-18: Next.js operations (Setup, Full Audit, Lint, Coverage, DRY, TDD)
+- Next.js scripts: `scripts/nextjs/lint-check.sh`, `coverage-report.sh`, `dry-check.sh`, `tdd-workflow.sh`
+- Next.js templates: `eslint.config.js` (ESLint v9 flat config), `jest.config.js`, `jest.setup.js`, `.prettierrc`
+- drupal-rector integration for automated deprecation fixing
+- jq dependency check in all scripts
+
+### Changed
+- **BREAKING**: Report directory standardized to `.reports/` (was `./reports/quality`)
+- `full-audit.sh` now auto-routes to Drupal or Next.js scripts based on project type
+- `install-tools.sh` now installs Next.js tools for Next.js projects
+- `install-tools.sh` now installs drupal-rector for Drupal projects
+- `solid-check.sh` no longer references deprecated drupal-check (PHPStan handles deprecations)
+- All 18 operations documented in SKILL.md
+
+### Fixed
+- Report directory inconsistency across scripts
+- Missing drupal-check in install-tools.sh (replaced with drupal-rector)
+- solid-check.sh drupal-check references that would fail
+
 ## [1.4.0] - 2025-12-06
 
 ### Added

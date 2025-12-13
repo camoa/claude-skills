@@ -1,25 +1,37 @@
 ---
 name: code-quality-audit
-description: Use when auditing code quality, checking coverage, finding SOLID/DRY violations, running TDD - executes PHPStan, PHPMD, PHPCPD via DDEV with actionable recommendations
-version: 1.4.0
+description: Use when auditing code quality, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD via DDEV) and Next.js (ESLint, Jest, jscpd, madge) projects
+version: 1.6.0
 ---
 
 # Code Quality Audit
 
-Run quality audits for Drupal projects using PHPStan, PHPMD, PHPCPD.
+Run quality audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
 
 ## When to Use
 
+**Drupal projects:**
 - "Setup quality tools" / "Install PHPStan"
 - "Run code audit" / "Check code quality"
 - "Check coverage" / "What's my coverage?"
 - "Find SOLID violations" / "Check complexity"
 - "Check duplication" / "DRY check"
+- "Lint code" / "Check coding standards"
+- "Fix deprecations" / "Run rector"
 - "Start TDD" / "RED-GREEN-REFACTOR"
-- NOT for: Next.js projects (use ESLint workflow instead)
+
+**Next.js projects:**
+- "Setup quality tools" / "Install ESLint"
+- "Run code audit" / "Check code quality"
+- "Check coverage" / "Run Jest coverage"
+- "Find SOLID violations" / "Check complexity" / "Check circular deps"
+- "Lint code" / "Run ESLint"
+- "Check duplication" / "DRY check"
+- "Start TDD" / "Jest watch mode"
 
 ## Quick Reference
 
+### Drupal Scripts
 | Task | Script |
 |------|--------|
 | Setup tools | `scripts/core/install-tools.sh` |
@@ -27,13 +39,31 @@ Run quality audits for Drupal projects using PHPStan, PHPMD, PHPCPD.
 | Coverage | `scripts/drupal/coverage-report.sh` |
 | SOLID check | `scripts/drupal/solid-check.sh` |
 | DRY check | `scripts/drupal/dry-check.sh` |
+| Lint check | `scripts/drupal/lint-check.sh` |
+| Fix deprecations | `scripts/drupal/rector-fix.sh` |
 | TDD cycle | `scripts/drupal/tdd-workflow.sh` |
+
+### Next.js Scripts
+| Task | Script |
+|------|--------|
+| Setup tools | `scripts/core/install-tools.sh` |
+| Full audit | `scripts/core/full-audit.sh` |
+| Coverage | `scripts/nextjs/coverage-report.sh` |
+| SOLID check | `scripts/nextjs/solid-check.sh` |
+| Lint check | `scripts/nextjs/lint-check.sh` |
+| DRY check | `scripts/nextjs/dry-check.sh` |
+| TDD cycle | `scripts/nextjs/tdd-workflow.sh` |
 
 ## Before Any Operation
 
+**Drupal:**
 1. Locate Drupal root: check `web/core/lib/Drupal.php` or `docroot/core/lib/Drupal.php`
 2. Verify DDEV: `ddev describe`
 3. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
+
+**Next.js:**
+1. Verify npm: `npm --version`
+2. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
 
 ## When to Run What
 
@@ -289,6 +319,190 @@ Read `references/tdd-workflow.md` for patterns.
 
 ---
 
+## Operation 11: Lint Check (Drupal)
+
+When user says "lint code", "check coding standards", "run phpcs":
+
+Run `scripts/drupal/lint-check.sh` or:
+
+1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path} --report=json`
+2. Save `.reports/lint-report.json`
+3. Show summary with error/warning counts
+
+**Auto-fix mode:**
+```bash
+scripts/drupal/lint-check.sh --fix
+# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice {path}
+```
+
+---
+
+## Operation 12: Rector Fix (Drupal)
+
+When user says "fix deprecations", "run rector", "auto-fix deprecated code":
+
+Run `scripts/drupal/rector-fix.sh` or:
+
+1. Dry run first: `ddev exec vendor/bin/rector process {path} --dry-run`
+2. Show proposed changes
+3. If user confirms: `ddev exec vendor/bin/rector process {path}`
+4. Save output to `.reports/rector/`
+
+**Usage:**
+```bash
+scripts/drupal/rector-fix.sh          # Dry run (preview changes)
+scripts/drupal/rector-fix.sh --apply  # Apply fixes
+```
+
+---
+
+# Next.js Operations
+
+The following operations apply to Next.js projects (detected by `next.config.js`).
+
+## Operation 13: Setup Tools (Next.js)
+
+When user says "setup tools", "install ESLint" in a Next.js project:
+
+Run `scripts/core/install-tools.sh` or:
+
+1. Install ESLint + Next.js config:
+   ```bash
+   npm install -D eslint eslint-config-next @typescript-eslint/eslint-plugin \
+       eslint-plugin-react-hooks eslint-config-prettier
+   ```
+2. Install Jest + Testing Library:
+   ```bash
+   npm install -D jest @jest/globals jest-environment-jsdom \
+       @testing-library/react @testing-library/jest-dom
+   ```
+3. Install jscpd: `npm install -D jscpd`
+4. Copy templates if needed:
+   - `templates/nextjs/eslint.config.js`
+   - `templates/nextjs/jest.config.js`
+   - `templates/nextjs/jest.setup.js`
+
+---
+
+## Operation 14: Full Audit (Next.js)
+
+When user says "run audit", "check code quality" in a Next.js project:
+
+Run `scripts/core/full-audit.sh` (auto-detects Next.js) or manually:
+
+1. Lint check (ESLint + TypeScript)
+2. Coverage check (Jest)
+3. DRY check (jscpd)
+4. Aggregate results into `.reports/audit-report.json`
+
+**Thresholds:**
+| Metric | Pass | Warning | Fail |
+|--------|------|---------|------|
+| Coverage | >80% | 70-80% | <70% |
+| ESLint errors | 0 | 1-10 | >10 |
+| TypeScript errors | 0 | - | >0 |
+| Duplication | <5% | 5-10% | >10% |
+
+---
+
+## Operation 15: Lint Check (Next.js)
+
+When user says "lint code", "run eslint", "check types":
+
+Run `scripts/nextjs/lint-check.sh` or:
+
+1. ESLint: `npx eslint . --format json > .reports/lint-report.json`
+2. TypeScript: `npx tsc --noEmit`
+3. Show summary with error/warning counts
+
+**Auto-fix mode:**
+```bash
+scripts/nextjs/lint-check.sh --fix
+# or: npx eslint . --fix
+```
+
+---
+
+## Operation 16: Coverage Check (Next.js)
+
+When user says "check coverage", "run jest coverage":
+
+Run `scripts/nextjs/coverage-report.sh` or:
+
+```bash
+npx jest --coverage --coverageReporters=json-summary
+```
+
+Reports saved to `.reports/coverage/`
+
+---
+
+## Operation 17: DRY Check (Next.js)
+
+When user says "check duplication", "DRY check":
+
+Run `scripts/nextjs/dry-check.sh` or:
+
+```bash
+npx jscpd src --reporters json --output .reports/dry/
+```
+
+Applies same Rule of Three guidance as Drupal DRY check.
+
+---
+
+## Operation 18: TDD Workflow (Next.js)
+
+When user says "start TDD", "jest watch":
+
+Run `scripts/nextjs/tdd-workflow.sh` with phases:
+
+```bash
+scripts/nextjs/tdd-workflow.sh red [test-file]      # Write failing test
+scripts/nextjs/tdd-workflow.sh green [test-file]    # Minimal implementation
+scripts/nextjs/tdd-workflow.sh refactor [test-file] # Clean up
+scripts/nextjs/tdd-workflow.sh watch                # Continuous mode
+```
+
+Target: 20-40 cycles/hour during active TDD
+
+---
+
+## Operation 19: SOLID Check (Next.js)
+
+When user says "find SOLID violations", "check complexity", "check circular dependencies":
+
+Run `scripts/nextjs/solid-check.sh` or:
+
+1. **Circular Dependencies (ISP, DIP)**: `npx madge --circular src`
+2. **Complexity Analysis (SRP)**: ESLint complexity rules
+3. **Large File Detection (SRP)**: Files >300 lines
+4. **TypeScript Strict Mode (LSP, DIP)**: Check `tsconfig.json` strict settings
+
+Categorize by principle:
+
+| Issue | Principle | Severity |
+|-------|-----------|----------|
+| Circular dependency | ISP, DIP | Critical |
+| Complexity >10 | SRP | Warning |
+| File >300 lines | SRP | Warning |
+| strict mode disabled | LSP, DIP | Warning |
+
+Save `.reports/solid-report.json` with:
+- Per-principle status (pass/warning/fail)
+- Circular dependency chains
+- Complexity violations
+- Large files list
+
+**Thresholds:**
+| Metric | Pass | Warning | Fail |
+|--------|------|---------|------|
+| Circular deps | 0 | - | >0 |
+| Complexity violations | 0 | 1-5 | >5 |
+| Large files | 0 | 1-3 | >3 |
+
+---
+
 ## Saving Reports
 
 All reports must follow `schemas/audit-report.schema.json`:
@@ -296,7 +510,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 ```json
 {
   "meta": {
-    "project_type": "drupal",
+    "project_type": "drupal|nextjs|monorepo",
     "timestamp": "2025-12-06T12:00:00Z",
     "thresholds": { "coverage_minimum": 70, "duplication_max": 5 }
   },
@@ -330,7 +544,14 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 ## Templates
 
+### Drupal
 - `templates/drupal/phpstan.neon` - PHPStan 2.x config (extensions auto-load)
 - `templates/drupal/phpmd.xml` - PHPMD ruleset for Drupal
 - `templates/drupal/phpunit.xml` - PHPUnit config with testsuites
 - `templates/ci/github-drupal.yml` - GitHub Actions workflow
+
+### Next.js
+- `templates/nextjs/eslint.config.js` - ESLint v9 flat config with TypeScript
+- `templates/nextjs/jest.config.js` - Jest config with coverage thresholds
+- `templates/nextjs/jest.setup.js` - Jest setup with Testing Library
+- `templates/nextjs/.prettierrc` - Prettier config with Tailwind plugin

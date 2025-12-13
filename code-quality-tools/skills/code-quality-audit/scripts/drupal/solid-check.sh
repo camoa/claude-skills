@@ -10,7 +10,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-REPORT_DIR="${REPORT_DIR:-./reports/quality}"
+REPORT_DIR="${REPORT_DIR:-.reports}"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
 
@@ -125,25 +125,12 @@ else
 fi
 
 # =====================
-# drupal-check (DIP - deprecations)
+# Deprecation Detection (via PHPStan)
 # =====================
-echo "Running drupal-check (deprecations, DIP)..."
-
-DRUPAL_CHECK_OUTPUT="${REPORT_DIR}/solid/drupal-check.txt"
-set +e
-ddev exec vendor/bin/drupal-check \
-    "${DRUPAL_MODULES_PATH}" \
-    2>&1 > "$DRUPAL_CHECK_OUTPUT"
-DRUPAL_CHECK_EXIT=$?
-set -e
-
-# Parse drupal-check output (it doesn't have native JSON)
-DRUPAL_CHECK_ERRORS=$(grep -c "ERROR" "$DRUPAL_CHECK_OUTPUT" 2>/dev/null || echo "0")
-DRUPAL_CHECK_WARNINGS=$(grep -c "WARNING" "$DRUPAL_CHECK_OUTPUT" 2>/dev/null || echo "0")
-echo "  drupal-check: ${DRUPAL_CHECK_ERRORS} errors, ${DRUPAL_CHECK_WARNINGS} warnings"
-
-((WARNING_COUNT += DRUPAL_CHECK_WARNINGS))
-((CRITICAL_COUNT += DRUPAL_CHECK_ERRORS))
+# Note: PHPStan with phpstan-deprecation-rules already handles deprecation detection.
+# For auto-fixing deprecations, use rector-fix.sh with drupal-rector.
+echo "Deprecation detection: Handled by PHPStan (see phpstan-deprecation-rules)"
+echo "  For auto-fixes: Run rector-fix.sh"
 
 # =====================
 # Check for static Drupal:: calls (DIP violation)

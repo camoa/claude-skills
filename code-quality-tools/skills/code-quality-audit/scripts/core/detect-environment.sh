@@ -127,7 +127,7 @@ check_modules_path() {
 
 # Create report directory
 setup_report_dir() {
-    local report_dir="${REPORT_DIR:-./reports/quality}"
+    local report_dir="${REPORT_DIR:-.reports}"
 
     if [ ! -d "${report_dir}" ]; then
         mkdir -p "${report_dir}"
@@ -162,7 +162,10 @@ main() {
     echo ""
 
     # Determine if environment is ready
-    if [ "$DDEV_AVAILABLE" == "true" ] && [ "$PROJECT_TYPE" != "unknown" ]; then
+    # Drupal requires DDEV, Next.js does not
+    if [ "$PROJECT_TYPE" == "nextjs" ]; then
+        ENV_READY="true"
+    elif [ "$DDEV_AVAILABLE" == "true" ] && [ "$PROJECT_TYPE" != "unknown" ]; then
         ENV_READY="true"
     fi
 

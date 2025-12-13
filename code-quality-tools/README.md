@@ -1,6 +1,6 @@
 # Code Quality Tools
 
-Code quality auditing plugin for Claude Code. Provides TDD, SOLID, and DRY principle checks for Drupal projects via DDEV.
+Code quality auditing plugin for Claude Code. Provides TDD, SOLID, and DRY principle checks for **Drupal** (via DDEV) and **Next.js** projects.
 
 ## Installation
 
@@ -12,18 +12,30 @@ Code quality auditing plugin for Claude Code. Provides TDD, SOLID, and DRY princ
 
 Once installed, Claude handles these requests:
 
+### Drupal Projects
+
 | Request | What Claude Does |
 |---------|------------------|
-| "Setup code quality tools" | Installs tools, copies configs, creates `.reports/` |
-| "Install testing tools" | Same as above |
+| "Setup code quality tools" | Installs PHPStan, PHPMD, PHPCPD, drupal-rector via composer |
 | "Run a code quality audit" | Runs all checks, saves JSON to `.reports/`, shows summary |
-| "Check test coverage" | Coverage only, saves `.reports/coverage-report.json` |
-| "Find SOLID violations" | PHPStan + PHPMD, saves `.reports/solid-report.json` |
-| "Check for duplication" | PHPCPD, saves `.reports/dry-report.json` |
-| "Check contentbench_organizations" | Targets specific module |
-| "Add test scripts to composer" | Adds quality/test scripts to `composer.json` |
+| "Check test coverage" | PHPUnit + PCOV coverage |
+| "Find SOLID violations" | PHPStan + PHPMD + static call detection |
+| "Check for duplication" | PHPCPD duplication analysis |
+| "Lint code" | phpcs with Drupal/DrupalPractice standards |
+| "Fix deprecations" | drupal-rector auto-fix |
 | "Add quality checks to CI" | Creates GitHub Actions workflow |
-| "Generate quality report" | Converts JSON to `.reports/audit-report.md` |
+
+### Next.js Projects
+
+| Request | What Claude Does |
+|---------|------------------|
+| "Setup code quality tools" | Installs ESLint, Jest, jscpd, madge via npm |
+| "Run a code quality audit" | Runs all checks, saves JSON to `.reports/`, shows summary |
+| "Check test coverage" | Jest coverage with thresholds |
+| "Find SOLID violations" | Circular deps (madge), complexity, large files, TS strict |
+| "Check for duplication" | jscpd duplication analysis |
+| "Lint code" | ESLint + TypeScript type checking |
+| "Start TDD" | Jest watch mode with RED-GREEN-REFACTOR |
 
 ## Reports
 
@@ -32,72 +44,12 @@ All audit results are saved to `.reports/` (git-ignored):
 ```
 .reports/
 ├── coverage-report.json    # Test coverage data
-├── solid-report.json       # PHPStan + PHPMD results
-├── dry-report.json         # PHPCPD duplication
+├── solid-report.json       # SOLID violations
+├── lint-report.json        # Lint results (Next.js)
+├── dry-report.json         # Duplication analysis
 ├── audit-report.json       # Full audit (aggregated)
-├── phpstan-raw.json        # Raw PHPStan output
-├── phpmd-raw.json          # Raw PHPMD output
 └── audit-report.md         # Human-readable report
 ```
-
-**JSON reports** are always generated for programmatic use.
-**Markdown report** is generated on request ("Generate quality report").
-
-## Example Conversations
-
-**Setup tools:**
-```
-You: Install testing tools for this project
-Claude: I'll set up the quality tools...
-       - Installed PHPStan, PHPMD, PHPCPD, coder, phpstan-deprecation-rules
-       - Created phpstan.neon, phpmd.xml, phpunit.xml
-       - Created .reports/ directory (added to .gitignore)
-```
-
-**Run audit:**
-```
-You: Run a code quality audit
-Claude: Running all checks...
-
-       | Check | Result | Status |
-       |-------|--------|--------|
-       | Coverage | 72% | WARN |
-       | PHPStan | 3 errors | WARN |
-       | Duplication | 4.2% | PASS |
-
-       Reports saved to .reports/
-       Run "Generate quality report" for detailed Markdown.
-```
-
-**Generate report:**
-```
-You: Generate quality report
-Claude: Generated .reports/audit-report.md with:
-       - Summary table
-       - SOLID violations by severity
-       - Duplication clones
-       - Prioritized recommendations
-```
-
-## Operations
-
-### Setup (One-time)
-- Installs composer dev dependencies
-- Copies config templates (phpstan.neon, phpmd.xml, phpunit.xml)
-- Creates `.reports/` directory
-- Recommends PCOV and composer scripts
-
-### Individual Checks
-Each check runs independently and saves its own JSON:
-- **Coverage**: PHPUnit + PCOV
-- **SOLID**: PHPStan + PHPMD + static call detection
-- **DRY**: PHPCPD duplication
-
-### Full Audit
-Runs all checks, aggregates into `audit-report.json`, shows summary.
-
-### Markdown Report
-Converts JSON to human-readable `.reports/audit-report.md`.
 
 ## Thresholds
 
@@ -106,13 +58,19 @@ Converts JSON to human-readable `.reports/audit-report.md`.
 | Coverage | >80% | 70-80% | <70% |
 | Duplication | <5% | 5-10% | >10% |
 | Complexity | <10 | 10-15 | >15 |
-| PHPStan | 0 | 1-10 | >10 |
+| Circular deps (Next.js) | 0 | - | >0 |
 
 ## Requirements
 
+### Drupal
 - **DDEV** - All tools run inside DDEV container
 - **Drupal 10.3+** or **11.x**
-- **PHP 8.2+** (8.3+ recommended for PHPCPD)
+- **PHP 8.2+** (8.3+ recommended)
+
+### Next.js
+- **Node.js 18+**
+- **npm** or **yarn**
+- **TypeScript** (recommended)
 
 ## Directory Structure
 
@@ -120,42 +78,42 @@ Converts JSON to human-readable `.reports/audit-report.md`.
 code-quality-tools/
 ├── skills/
 │   └── code-quality-audit/
-│       ├── SKILL.md              # Claude instructions (231 lines)
+│       ├── SKILL.md              # Claude instructions (19 operations)
+│       ├── scripts/
+│       │   ├── core/             # Shared scripts
+│       │   ├── drupal/           # Drupal-specific
+│       │   └── nextjs/           # Next.js-specific
+│       ├── templates/
+│       │   ├── drupal/           # phpstan.neon, phpmd.xml, etc.
+│       │   └── nextjs/           # eslint.config.js, jest.config.js
 │       ├── references/           # Detailed docs
-│       │   ├── tdd-workflow.md
-│       │   ├── solid-detection.md
-│       │   ├── dry-detection.md
-│       │   ├── composer-scripts.md
-│       │   └── json-schemas.md
-│       ├── decision-guides/
-│       ├── templates/drupal/     # Config files to copy
-│       └── templates/ci/         # GitHub Actions
+│       └── decision-guides/      # When to use what
 ```
 
 ## Tools Used
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| [phpstan/phpstan](https://phpstan.org/) | 2.x | Static analysis |
-| [mglaman/phpstan-drupal](https://github.com/mglaman/phpstan-drupal) | Latest | Drupal rules |
-| [phpmd/phpmd](https://phpmd.org/) | Latest | Code smells |
-| [systemsdk/phpcpd](https://github.com/systemsdk/phpcpd) | 8.x | Duplication |
-| [phpstan/phpstan-deprecation-rules](https://github.com/phpstan/phpstan-deprecation-rules) | Latest | Deprecations |
-| [drupal/coder](https://www.drupal.org/project/coder) | 9.x | Standards |
+### Drupal
+| Tool | Purpose |
+|------|---------|
+| [phpstan/phpstan](https://phpstan.org/) | Static analysis |
+| [mglaman/phpstan-drupal](https://github.com/mglaman/phpstan-drupal) | Drupal rules |
+| [phpmd/phpmd](https://phpmd.org/) | Code smells |
+| [systemsdk/phpcpd](https://github.com/systemsdk/phpcpd) | Duplication |
+| [drupal/coder](https://www.drupal.org/project/coder) | Coding standards |
+| [palantirnet/drupal-rector](https://github.com/palantirnet/drupal-rector) | Auto-fix deprecations |
 
-## Acknowledgments
+### Next.js
+| Tool | Purpose |
+|------|---------|
+| [ESLint](https://eslint.org/) | Linting |
+| [TypeScript](https://www.typescriptlang.org/) | Type checking |
+| [Jest](https://jestjs.io/) | Testing + coverage |
+| [jscpd](https://github.com/kucherenko/jscpd) | Duplication |
+| [madge](https://github.com/pahen/madge) | Circular dependency detection |
 
-### Tools
-- **[PHPStan](https://phpstan.org/)** by Ondrej Mirtes
-- **[phpstan-drupal](https://github.com/mglaman/phpstan-drupal)** by Matt Glaman
-- **[PHPMD](https://phpmd.org/)**
-- **[PHPCPD](https://github.com/systemsdk/phpcpd)** (systemsdk fork)
-- **[PCOV](https://github.com/krakjoe/pcov)** by Joe Watkins
+## Version
 
-### Methodologies
-- **[Sandi Metz](https://sandimetz.com/)** - Rule of Three for DRY
-- **[Oliver Davies](https://www.oliverdavies.uk/)** - TDD in Drupal
-- **[Matt Glaman](https://mglaman.dev/)** - DI anti-patterns
+**v1.6.0** - Full SOLID support for Next.js with madge
 
 ## License
 

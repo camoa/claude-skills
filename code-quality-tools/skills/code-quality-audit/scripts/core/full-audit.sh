@@ -13,7 +13,7 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
-REPORT_DIR="${REPORT_DIR:-./reports/quality}"
+REPORT_DIR="${REPORT_DIR:-.reports}"
 
 # Thresholds (can be overridden via environment)
 COVERAGE_MINIMUM="${COVERAGE_MINIMUM:-70}"
@@ -70,7 +70,20 @@ echo ""
 
 # Step 2: Check/install tools
 echo -e "${BLUE}[Step 2/5]${NC} Verifying tools..."
-if ! ddev exec vendor/bin/phpstan --version &> /dev/null; then
+TOOLS_OK=false
+if [ "$PROJECT_TYPE" == "nextjs" ]; then
+    # Check for ESLint (Next.js)
+    if npx eslint --version &> /dev/null; then
+        TOOLS_OK=true
+    fi
+else
+    # Check for PHPStan (Drupal)
+    if ddev exec vendor/bin/phpstan --version &> /dev/null; then
+        TOOLS_OK=true
+    fi
+fi
+
+if [ "$TOOLS_OK" != "true" ]; then
     echo -e "${YELLOW}[INFO]${NC} Installing missing tools..."
     "${SCRIPT_DIR}/install-tools.sh" || true
 fi
@@ -97,6 +110,7 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
     "overall_score": "pass",
     "coverage_score": "unknown",
     "solid_score": "unknown",
+    "lint_score": "unknown",
     "dry_score": "unknown",
     "critical_issues": 0,
     "warnings": 0,
@@ -110,11 +124,28 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
 }
 EOF
 
+# Determine script directory based on project type
+case "$PROJECT_TYPE" in
+    drupal|monorepo)
+        SCRIPTS_DIR="${SKILL_DIR}/drupal"
+        ;;
+    nextjs)
+        SCRIPTS_DIR="${SKILL_DIR}/nextjs"
+        ;;
+    *)
+        echo -e "${RED}[ERROR]${NC} Unknown project type: ${PROJECT_TYPE}"
+        exit 2
+        ;;
+esac
+
+echo -e "${GREEN}[OK]${NC} Using scripts from: ${SCRIPTS_DIR}"
+echo ""
+
 # Step 3: Run coverage check
 echo -e "${BLUE}[Step 3/5]${NC} Running coverage analysis..."
 COVERAGE_STATUS="unknown"
-if [ -f "${SKILL_DIR}/drupal/coverage-report.sh" ]; then
-    if "${SKILL_DIR}/drupal/coverage-report.sh" 2>/dev/null; then
+if [ -f "${SCRIPTS_DIR}/coverage-report.sh" ]; then
+    if "${SCRIPTS_DIR}/coverage-report.sh" 2>/dev/null; then
         COVERAGE_STATUS="pass"
     else
         exit_code=$?
@@ -142,11 +173,11 @@ fi
 echo -e "Coverage: $([ "$COVERAGE_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${COVERAGE_STATUS}${NC}")"
 echo ""
 
-# Step 4: Run SOLID check
+# Step 4: Run SOLID analysis (both Drupal and Next.js have solid-check.sh)
 echo -e "${BLUE}[Step 4/5]${NC} Running SOLID analysis..."
 SOLID_STATUS="unknown"
-if [ -f "${SKILL_DIR}/drupal/solid-check.sh" ]; then
-    if "${SKILL_DIR}/drupal/solid-check.sh" 2>/dev/null; then
+if [ -f "${SCRIPTS_DIR}/solid-check.sh" ]; then
+    if "${SCRIPTS_DIR}/solid-check.sh" 2>/dev/null; then
         SOLID_STATUS="pass"
     else
         exit_code=$?
@@ -172,13 +203,47 @@ else
     echo -e "${YELLOW}[SKIP]${NC} SOLID script not found"
 fi
 echo -e "SOLID: $([ "$SOLID_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${SOLID_STATUS}${NC}")"
+
+# Step 4b: Run lint check for Next.js (ESLint + TypeScript)
+LINT_STATUS="unknown"
+if [ "$PROJECT_TYPE" == "nextjs" ]; then
+    echo ""
+    echo -e "${BLUE}[Step 4b]${NC} Running lint analysis (ESLint + TypeScript)..."
+    if [ -f "${SCRIPTS_DIR}/lint-check.sh" ]; then
+        if "${SCRIPTS_DIR}/lint-check.sh" 2>/dev/null; then
+            LINT_STATUS="pass"
+        else
+            exit_code=$?
+            if [ $exit_code -eq 1 ]; then
+                LINT_STATUS="warning"
+                ((WARNING_COUNT++))
+            else
+                LINT_STATUS="fail"
+                ((CRITICAL_COUNT++))
+            fi
+        fi
+        update_status "$LINT_STATUS"
+
+        # Merge lint report
+        if [ -f "${REPORT_DIR}/lint-report.json" ]; then
+            jq -s '.[0] * {lint: .[1]}' \
+                "${REPORT_DIR}/audit-report.json" \
+                "${REPORT_DIR}/lint-report.json" \
+                > "${REPORT_DIR}/audit-report.tmp.json"
+            mv "${REPORT_DIR}/audit-report.tmp.json" "${REPORT_DIR}/audit-report.json"
+        fi
+    else
+        echo -e "${YELLOW}[SKIP]${NC} Lint script not found"
+    fi
+    echo -e "Lint: $([ "$LINT_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${LINT_STATUS}${NC}")"
+fi
 echo ""
 
 # Step 5: Run DRY check
 echo -e "${BLUE}[Step 5/5]${NC} Running DRY analysis..."
 DRY_STATUS="unknown"
-if [ -f "${SKILL_DIR}/drupal/dry-check.sh" ]; then
-    if "${SKILL_DIR}/drupal/dry-check.sh" 2>/dev/null; then
+if [ -f "${SCRIPTS_DIR}/dry-check.sh" ]; then
+    if "${SCRIPTS_DIR}/dry-check.sh" 2>/dev/null; then
         DRY_STATUS="pass"
     else
         exit_code=$?
@@ -210,6 +275,7 @@ echo ""
 jq --arg overall "$OVERALL_STATUS" \
    --arg coverage "$COVERAGE_STATUS" \
    --arg solid "$SOLID_STATUS" \
+   --arg lint "$LINT_STATUS" \
    --arg dry "$DRY_STATUS" \
    --argjson critical "$CRITICAL_COUNT" \
    --argjson warnings "$WARNING_COUNT" \
@@ -217,6 +283,7 @@ jq --arg overall "$OVERALL_STATUS" \
    '.summary.overall_score = $overall |
     .summary.coverage_score = $coverage |
     .summary.solid_score = $solid |
+    .summary.lint_score = $lint |
     .summary.dry_score = $dry |
     .summary.critical_issues = $critical |
     .summary.warnings = $warnings |
@@ -236,6 +303,9 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Coverage:  ${COVERAGE_STATUS}"
 echo "  SOLID:     ${SOLID_STATUS}"
+if [ "$PROJECT_TYPE" == "nextjs" ]; then
+    echo "  Lint:      ${LINT_STATUS}"
+fi
 echo "  DRY:       ${DRY_STATUS}"
 echo ""
 echo "  Critical:  ${CRITICAL_COUNT}"
