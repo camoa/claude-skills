@@ -35,6 +35,7 @@ Load these from the plugin's `references/` folder:
 | `dry-patterns.md` | DRY patterns |
 | `library-first.md` | Library-First and CLI-First |
 | `security-checklist.md` | Security patterns |
+| `purposeful-code.md` | Code purposefulness |
 | `quality-gates.md` | Gate requirements |
 
 ## Process
@@ -111,6 +112,36 @@ Load these from the plugin's `references/` folder:
 | Output escaped (Twig auto or Html::escape) | YES |
 | Database queries use placeholders/Entity Query | YES |
 | Access checks on routes | YES |
+| File extensions whitelisted (not blacklisted) | YES |
+| Sensitive files use private:// stream | YES |
+| API keys in $settings, not config | YES |
+| No sensitive data in logs | YES |
+| Sensitive content cache-contextualized | NO |
+| No unserialize() on user input | YES |
+
+### Code Purposefulness Check (references/purposeful-code.md)
+
+| Check | Blocking? |
+|-------|-----------|
+| No unnecessary try-catch blocks | YES |
+| No defensive null-checks for guaranteed values | NO |
+| All API/method calls reference real Drupal APIs | YES |
+| All hook names are valid Drupal hooks | YES |
+| Comments explain "why", not "what" | NO |
+| No instruction-style comments (prompt artifacts) | YES |
+| Developer can explain purpose of each component | YES |
+
+#### Red Flags to Detect
+
+| Pattern | Indicates | Action |
+|---------|-----------|--------|
+| `try { } catch (\Exception $e) { }` wrapping simple operations | Over-defensive, hides bugs | BLOCK |
+| Null checks on injected services (`if ($this->service)`) | Misunderstanding DI | WARN |
+| Calls to methods like `$node->getNonExistent()` | Hallucinated API | BLOCK |
+| Hook implementations like `hook_nonexistent_alter` | Invalid hook name | BLOCK |
+| Comments: "// This handles the X functionality" for obvious code | Prompt artifact | WARN |
+| Comments: "// Now we need to..." or "// Let's..." | Instruction-style | BLOCK |
+| Large blocks of nearly-identical code | Copy-paste without understanding | BLOCK |
 
 ## Output Format
 
@@ -168,6 +199,19 @@ Load these from the plugin's `references/` folder:
 | Output escaping | PASS/FAIL | {details} |
 | Database security | PASS/FAIL | {details} |
 | Access control | PASS/FAIL | {details} |
+| File upload security | PASS/FAIL | {details} |
+| Secrets management | PASS/FAIL | {details} |
+| Sensitive data exposure | PASS/FAIL | {details} |
+| Cache security | PASS/FAIL | {details} |
+
+### Code Purposefulness Check (references/purposeful-code.md)
+| Area | Status | Notes |
+|------|--------|-------|
+| Unnecessary try-catch | PASS/FAIL | {details} |
+| API validity | PASS/FAIL | {details} |
+| Hook validity | PASS/FAIL | {details} |
+| Comment quality | PASS/FAIL | {details} |
+| Developer comprehension | PASS/FAIL | {details} |
 
 ### Required Actions
 1. {action} (BLOCKING)
@@ -189,11 +233,17 @@ Load these from the plugin's `references/` folder:
 - Missing access checks
 - Raw SQL with user input
 - No test coverage for critical paths
+- Calls to non-existent APIs/methods (hallucinated code)
+- Invalid hook implementations
+- Instruction-style comments (prompt artifacts)
+- Code developer cannot explain
 
 ### Usually Warning
 - Minor pattern deviations
 - Missing Drush command for non-critical feature
 - Suboptimal base class usage
+- Over-commented obvious code
+- Unnecessary defensive null-checks
 
 ## Human Control Points
 

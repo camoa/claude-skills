@@ -11,6 +11,11 @@ Security practices verified during `/validate` and `/complete` commands.
 | Database | Never raw SQL | Entity Query API, Database API |
 | Access | Always check | Permissions, access handlers |
 | CSRF | Always protect | Form API tokens |
+| Files | Whitelist extensions | `file_validate_extensions`, private:// |
+| Secrets | Never in config | `$settings` in settings.php |
+| Logging | Never sensitive data | No passwords, keys, PII |
+| Caching | Context sensitive data | Cache contexts, tags |
+| Serialization | Never unserialize user data | JSON instead |
 
 ## Input Validation
 
@@ -181,6 +186,164 @@ if ($this->currentUser->hasPermission('administer my_module')) {
 - [ ] Entity access handlers implemented
 - [ ] Programmatic checks use `hasPermission()`
 
+## File Upload Security
+
+### Restrict File Types
+
+```php
+$form['document'] = [
+  '#type' => 'managed_file',
+  '#title' => $this->t('Document'),
+  '#upload_validators' => [
+    'file_validate_extensions' => ['pdf doc docx'],
+    'file_validate_size' => [10 * 1024 * 1024], // 10MB
+  ],
+  '#upload_location' => 'private://documents/',
+];
+```
+
+### Private vs Public Files
+
+| Location | When to Use |
+|----------|-------------|
+| `public://` | Files that can be accessed by anyone |
+| `private://` | Files that need access control |
+
+### Checklist
+- [ ] File extensions explicitly whitelisted (never blacklist)
+- [ ] File size limits set
+- [ ] Sensitive files use `private://` stream
+- [ ] No executable extensions allowed (.php, .phar, .sh)
+- [ ] MIME type validation for critical uploads
+
+## Sensitive Data Exposure
+
+### Never Log Sensitive Data
+
+```php
+// BAD: Logging passwords
+$this->logger->debug('Login attempt: @user/@pass', [
+  '@user' => $username,
+  '@pass' => $password,  // NEVER
+]);
+
+// GOOD: Log only what's needed
+$this->logger->info('Login attempt for user: @user', ['@user' => $username]);
+```
+
+### Never Expose in Errors
+
+```php
+// BAD: Exposing internal details
+throw new \Exception("Database error: $sql");
+
+// GOOD: Generic message, detailed logging
+$this->logger->error('Database error: @sql', ['@sql' => $sql]);
+throw new \Exception($this->t('An error occurred. Please try again.'));
+```
+
+### Checklist
+- [ ] No passwords in logs
+- [ ] No API keys in logs or output
+- [ ] No full SQL queries in user-facing errors
+- [ ] No stack traces in production
+- [ ] Sensitive config uses `$settings` not config API
+
+## Caching Sensitive Content
+
+### Per-User Content
+
+```php
+$build['#cache'] = [
+  'contexts' => ['user'],  // Varies by user
+  'tags' => ['user:' . $this->currentUser->id()],
+];
+```
+
+### Uncacheable Content
+
+```php
+// Disable caching for sensitive data
+$build['#cache']['max-age'] = 0;
+```
+
+### Checklist
+- [ ] Personal data blocks have user cache context
+- [ ] Sensitive data not cached or properly tagged
+- [ ] Session-specific content uncached or contextualized
+- [ ] No sensitive data in page cache
+
+## Object Injection Prevention
+
+### Never Unserialize User Input
+
+```php
+// DANGEROUS: Object injection vulnerability
+$data = unserialize($userInput);
+
+// SAFE: Use JSON
+$data = json_decode($userInput, TRUE);
+
+// SAFE: If serialization needed, use allowed_classes
+$data = unserialize($input, ['allowed_classes' => [AllowedClass::class]]);
+```
+
+### Checklist
+- [ ] No `unserialize()` on user input
+- [ ] JSON preferred over PHP serialization
+- [ ] If serialization required, `allowed_classes` specified
+
+## Third-Party API Security
+
+### Store Credentials Securely
+
+```php
+// In settings.php (not config)
+$settings['my_module']['api_key'] = 'secret_key';
+
+// In code
+$apiKey = Settings::get('my_module')['api_key'];
+```
+
+### Validate Responses
+
+```php
+$response = $this->httpClient->get($apiUrl);
+$data = json_decode($response->getBody(), TRUE);
+
+// Validate structure before use
+if (!isset($data['expected_field'])) {
+  throw new \RuntimeException('Invalid API response');
+}
+```
+
+### Checklist
+- [ ] API keys in `$settings`, not config
+- [ ] HTTPS for all external requests
+- [ ] API responses validated before use
+- [ ] Timeouts configured for external requests
+- [ ] Failed requests logged (without sensitive data)
+
+## Session Security
+
+### Session Handling
+
+Drupal handles sessions securely by default. Custom session handling:
+
+```php
+// Regenerate session after privilege change
+$this->sessionManager->regenerate();
+
+// Destroy session on logout
+$this->sessionManager->destroy();
+```
+
+### Checklist
+- [ ] Session regenerated after login/privilege change
+- [ ] Session destroyed on logout
+- [ ] No custom session handling without security review
+- [ ] Session cookies use secure flags (Drupal default)
+
 ## Security Review Checklist
 
 Before `/complete`:
@@ -192,11 +355,13 @@ Before `/complete`:
 - [ ] All input validated via Form API
 - [ ] Custom validation for business rules
 - [ ] File uploads restricted by type/size
+- [ ] No executable file extensions allowed
 
 ### Output
 - [ ] No unescaped user content
 - [ ] `|raw` only for trusted HTML
 - [ ] URLs sanitized
+- [ ] Error messages don't expose internals
 
 ### Database
 - [ ] No raw SQL with user input
@@ -207,8 +372,15 @@ Before `/complete`:
 - [ ] Routes have permission requirements
 - [ ] Entity access enforced
 - [ ] Admin pages protected
+- [ ] Private files use private:// stream
 
 ### CSRF
 - [ ] Forms use Form API (automatic)
 - [ ] State-changing links have tokens
+
+### Data Protection
+- [ ] No sensitive data in logs
+- [ ] API keys in $settings, not config
+- [ ] Sensitive content properly cached/uncached
+- [ ] No unserialize() on user data
 ```
