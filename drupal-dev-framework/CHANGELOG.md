@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-12-18
+
+### Added
+- **Gate 5: Code Purposefulness** - New reference document `purposeful-code.md` with:
+  - Every-Line-Has-a-Purpose principle
+  - Intentional complexity vs accidental complexity
+  - Code archaeology and dead code detection
+  - Redundancy elimination patterns
+  - Real-world examples of purposeless code
+- **Expanded Security Checklist** - Enhanced `security-checklist.md` with:
+  - Detailed input validation patterns
+  - Output escaping context-specific examples
+  - Access control implementation strategies
+  - CSRF protection guidelines
+  - File upload security
+  - SQL injection prevention
+- **Quality Gates Update** - `quality-gates.md` now includes Gate 5 as 5th enforcement checkpoint
+- **Architecture Validator Enhancement** - Updated to check for purposeful code patterns
+
+### Changed
+- Quality gate count increased from 4 to 5
+- Security checks now more comprehensive with real-world attack vectors
+
 ## [2.0.0] - 2025-12-12
 
 ### Added
