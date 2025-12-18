@@ -106,17 +106,30 @@ The path is saved in `project_state.md`, so the plugin remembers it across sessi
 ### Starting a New Project
 
 ```bash
-# 1. Run next - it handles everything
+# 1. Create a new project
+/drupal-dev-framework:new my_project_name
+# Or interactive mode:
+/drupal-dev-framework:new
+
+# 2. Answer requirements questions (scope, integrations, constraints)
+
+# 3. Use /next to start your first task
 /drupal-dev-framework:next
-
-# 2. Enter a project name when prompted (or select existing)
-
-# 3. Answer requirements questions (scope, integrations, constraints)
 
 # 4. Enter your first task name when prompted
 #    Example: "settings_form" or "content_entity"
 
 # 5. The framework automatically starts research for your task
+```
+
+### Continuing Existing Work
+
+```bash
+# Continue where you left off
+/drupal-dev-framework:next
+
+# View project status
+/drupal-dev-framework:status
 ```
 
 ### Working on Tasks
@@ -177,14 +190,15 @@ Back to task selection
 
 | Command | Description |
 |---------|-------------|
-| `/drupal-dev-framework:next` | Main entry point - handles project/task selection and creation |
-| `/drupal-dev-framework:research <topic>` | Research a topic, store findings |
-| `/drupal-dev-framework:design [component]` | Design architecture or component |
-| `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations |
-| `/drupal-dev-framework:implement <task>` | Load context, start implementing |
-| `/drupal-dev-framework:status` | Show current project state and phase |
-| `/drupal-dev-framework:complete` | Mark task done, update memory |
-| `/drupal-dev-framework:validate` | Validate against architecture/standards |
+| `/drupal-dev-framework:new [name]` | Start a new project with requirements gathering |
+| `/drupal-dev-framework:next [project]` | Continue existing work - select project/task and suggest next action |
+| `/drupal-dev-framework:status [project]` | Show current project state and phase |
+| `/drupal-dev-framework:research <task>` | Phase 1 - Research a task, store findings |
+| `/drupal-dev-framework:design <task>` | Phase 2 - Design architecture for a task |
+| `/drupal-dev-framework:implement <task>` | Phase 3 - Load context, start implementing |
+| `/drupal-dev-framework:complete <task>` | Mark task done, run quality gates, move to completed |
+| `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations for a use case |
+| `/drupal-dev-framework:validate [component]` | Validate implementation against architecture/standards |
 
 ## Components
 

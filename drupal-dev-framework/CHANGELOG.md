@@ -23,10 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SQL injection prevention
 - **Quality Gates Update** - `quality-gates.md` now includes Gate 5 as 5th enforcement checkpoint
 - **Architecture Validator Enhancement** - Updated to check for purposeful code patterns
+- **Restored `/new` command** - Dedicated command for starting new projects (removed in 2.0.0)
+  - Clearer separation: `/new` for new projects, `/next` for continuing work
+  - Interactive mode (no arguments) or direct mode (with project name)
+  - Automatically registers project and gathers requirements
 
 ### Changed
 - Quality gate count increased from 4 to 5
 - Security checks now more comprehensive with real-world attack vectors
+- `/next` command now focused on continuing existing projects/tasks
 
 ## [2.0.0] - 2025-12-12
 
