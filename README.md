@@ -106,14 +106,16 @@ If you have `skill-creation-tools` installed and want to try the beta:
 
 ### drupal-dev-framework
 
-Systematic Drupal development workflow based on the [Claude Code Drupal Development Framework v3.0](https://adrupalcouple.us).
+Systematic Drupal development workflow based on the [Claude Code Drupal Development Framework v3.0](https://adrupalcouple.us). Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
 
 **Quick Start:**
 ```
+# Start a new project
+/drupal-dev-framework:new my_project
+
+# Continue existing work
 /drupal-dev-framework:next
 ```
-
-This single command handles everything - project selection, task selection, and next action.
 
 **Workflow:**
 ```
@@ -126,7 +128,7 @@ Step 2: Task Selection (lists existing tasks OR create new)
 Step 3: Task Phases (each task cycles through):
         Phase 1: Research → Phase 2: Architecture → Phase 3: Implementation
      ↓
-Task Complete → Back to Step 2
+Task Complete (5 Quality Gates) → Back to Step 2
 ```
 
 **Key Concepts:**
@@ -134,13 +136,24 @@ Task Complete → Back to Step 2
 - Projects contain multiple tasks
 - Each task goes through 3 phases independently
 - No code until Phase 3 (research and design first)
-- TDD enforced in Phase 3
+- SOLID, TDD, DRY, security, and code purposefulness enforced
+- 5 quality gates at task completion
+
+**Built-in References:**
+- SOLID principles (Drupal-specific)
+- TDD workflow (Red-Green-Refactor)
+- DRY patterns (Service, Trait, Component)
+- Library-First & CLI-First development
+- Security checklist (OWASP)
+- Frontend standards (BEM, mobile-first)
+- Code Purposefulness (Gate 5)
 
 | Component | Contents |
 |-----------|----------|
 | Skills | 15 skills (phase-detector, requirements-gatherer, tdd-companion, etc.) |
-| Commands | 9 commands (/next, /new, /research, /design, /implement, /complete, /status, /validate, /pattern) |
+| Commands | 9 commands (/new, /next, /research, /design, /implement, /complete, /status, /validate, /pattern) |
 | Agents | 5 agents (project-orchestrator, architecture-drafter, contrib-researcher, pattern-recommender, architecture-validator) |
+| References | 8 reference docs (SOLID, TDD, DRY, Library-First, Quality Gates, Security, Frontend, Code Purposefulness) |
 
 See [WORKFLOW.md](drupal-dev-framework/WORKFLOW.md) for complete documentation.
 
