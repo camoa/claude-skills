@@ -52,7 +52,7 @@
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
       "description": "Code quality and security auditing tools for TDD, SOLID, DRY, and OWASP security with Semgrep, Trivy, Gitleaks",
-      "version": "1.8.0",
+      "version": "2.0.0",
       "author": {
         "name": "camoa"
       },
