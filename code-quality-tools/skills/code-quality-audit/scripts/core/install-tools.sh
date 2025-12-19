@@ -89,7 +89,7 @@ install_drupal_tools() {
     fi
 
     # Check for PCOV
-    echo -e "${YELLOW}[7/7]${NC} Checking PCOV extension..."
+    echo -e "${YELLOW}[7/9]${NC} Checking PCOV extension..."
     if ddev exec php -m 2>/dev/null | grep -q pcov; then
         echo -e "${GREEN}[OK]${NC} PCOV is available"
     else
@@ -100,6 +100,22 @@ install_drupal_tools() {
         echo "  Then run: ddev restart"
     fi
 
+    # Psalm (Security - Taint Analysis) - RECOMMENDED
+    echo -e "${YELLOW}[8/9]${NC} Installing Psalm (taint analysis - recommended for security)..."
+    ddev composer require --dev vimeo/psalm --no-interaction 2>&1 || {
+        echo -e "${YELLOW}[WARN]${NC} Psalm may already be installed or had issues"
+    }
+
+    # php-security-linter (OWASP/CIS Security Rules) - RECOMMENDED
+    echo -e "${YELLOW}[9/9]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
+    ddev composer require --dev yousha/php-security-linter --no-interaction 2>&1 || {
+        echo -e "${YELLOW}[WARN]${NC} php-security-linter may already be installed or had issues"
+    }
+
+    echo ""
+    echo -e "${BLUE}[OPTIONAL]${NC} Security Review module (Drupal config audit):"
+    echo "  ddev composer require drupal/security_review"
+    echo "  ddev drush pm:enable security_review"
     echo ""
 }
 
@@ -142,6 +158,26 @@ verify_drupal_tools() {
         echo -e "${RED}[FAIL]${NC} PHPCPD not found"
         tools_status+=("phpcpd:fail")
         all_ok=false
+    fi
+
+    # Psalm (Security - Optional)
+    if ddev exec vendor/bin/psalm --version &> /dev/null; then
+        VERSION=$(ddev exec vendor/bin/psalm --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} Psalm: ${VERSION}"
+        tools_status+=("psalm:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Psalm not found (recommended for security taint analysis)"
+        tools_status+=("psalm:optional")
+    fi
+
+    # php-security-linter (Optional)
+    if ddev exec vendor/bin/php-security-linter --version &> /dev/null; then
+        VERSION=$(ddev exec vendor/bin/php-security-linter --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} php-security-linter: ${VERSION}"
+        tools_status+=("php-security-linter:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} php-security-linter not found (recommended for OWASP security checks)"
+        tools_status+=("php-security-linter:optional")
     fi
 
     # phpcs (Drupal Coder)
