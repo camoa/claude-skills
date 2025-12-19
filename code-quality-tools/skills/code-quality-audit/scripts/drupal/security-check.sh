@@ -40,7 +40,7 @@ ISSUES="[]"
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
 
-echo -e "${BLUE}[1/6]${NC} Checking Drupal security advisories..."
+echo -e "${BLUE}[1/9]${NC} Checking Drupal security advisories..."
 # =====================
 # Drush pm:security
 # =====================
@@ -77,7 +77,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[2/6]${NC} Checking composer package vulnerabilities..."
+echo -e "${BLUE}[2/9]${NC} Checking composer package vulnerabilities..."
 # =====================
 # Composer audit
 # =====================
@@ -118,7 +118,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[3/6]${NC} Running PHPCS security linter (OWASP/CIS)..."
+echo -e "${BLUE}[3/9]${NC} Running PHPCS security linter (OWASP/CIS)..."
 # =====================
 # yousha/php-security-linter
 # =====================
@@ -165,7 +165,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[4/6]${NC} Running Psalm taint analysis..."
+echo -e "${BLUE}[4/9]${NC} Running Psalm taint analysis..."
 # =====================
 # Psalm taint analysis
 # =====================
@@ -238,7 +238,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[5/6]${NC} Checking custom Drupal security patterns..."
+echo -e "${BLUE}[5/9]${NC} Checking custom Drupal security patterns..."
 # =====================
 # Custom Drupal Pattern Checks
 # =====================
@@ -307,7 +307,7 @@ if [ "$CUSTOM_ISSUES" = "[]" ]; then
 fi
 
 echo ""
-echo -e "${BLUE}[6/6]${NC} Running Security Review module..."
+echo -e "${BLUE}[6/9]${NC} Running Security Review module..."
 # =====================
 # Security Review module (if installed)
 # =====================
@@ -347,6 +347,161 @@ else
     SECREVIEW_ISSUES="[]"
 fi
 
+echo ""
+echo -e "${BLUE}[7/9]${NC} Running Semgrep SAST (multi-language)..."
+# =====================
+# Semgrep SAST
+# =====================
+SEMGREP_JSON="${REPORT_DIR}/security/semgrep.json"
+SEMGREP_ISSUES="[]"
+
+if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; then
+    set +e
+    # Run Semgrep with auto config (includes security rules)
+    if ddev describe &> /dev/null; then
+        ddev exec semgrep scan --config=auto --json \
+            "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" > "$SEMGREP_JSON" 2>/dev/null
+    else
+        semgrep scan --config=auto --json \
+            "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" > "$SEMGREP_JSON" 2>/dev/null
+    fi
+    SEMGREP_EXIT=$?
+    set -e
+
+    if [ -f "$SEMGREP_JSON" ] && [ -s "$SEMGREP_JSON" ]; then
+        VULN_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' "$SEMGREP_JSON" 2>/dev/null || echo "0")
+        if [ "$VULN_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${VULN_COUNT} Semgrep findings${NC}"
+
+            # Convert to violations format
+            SEMGREP_ISSUES=$(jq '[.results[] | {
+                category: "Semgrep SAST",
+                severity: (if .extra.severity == "ERROR" then "high" elif .extra.severity == "WARNING" then "medium" else "low" end),
+                file: .path,
+                line: .start.line,
+                message: .extra.message,
+                owasp: (.extra.metadata.owasp // "N/A" | if type == "array" then join(", ") else . end),
+                remediation: (.extra.fix // "Review and fix the security issue")
+            }]' "$SEMGREP_JSON" 2>/dev/null || echo "[]")
+
+            # Update severity counts
+            SEMGREP_HIGH=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+            SEMGREP_MEDIUM=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+            SEMGREP_LOW=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
+
+            ((HIGH_COUNT += SEMGREP_HIGH))
+            ((MEDIUM_COUNT += SEMGREP_MEDIUM))
+            ((LOW_COUNT += SEMGREP_LOW))
+        else
+            echo -e "  ${GREEN}No Semgrep issues${NC}"
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}Semgrep not installed (optional)${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}[8/9]${NC} Running Trivy dependency/secret scanner..."
+# =====================
+# Trivy Scanner
+# =====================
+TRIVY_JSON="${REPORT_DIR}/security/trivy.json"
+TRIVY_ISSUES="[]"
+
+if command -v trivy &> /dev/null; then
+    set +e
+    # Run Trivy on filesystem (dependency + secret scanning)
+    trivy fs --scanners vuln,secret --format json --output "$TRIVY_JSON" . 2>/dev/null
+    TRIVY_EXIT=$?
+    set -e
+
+    if [ -f "$TRIVY_JSON" ] && [ -s "$TRIVY_JSON" ]; then
+        VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]?, .Results[]?.Secrets[]?] | length' "$TRIVY_JSON" 2>/dev/null || echo "0")
+        if [ "$VULN_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${VULN_COUNT} Trivy findings${NC}"
+
+            # Convert vulnerabilities to violations format
+            TRIVY_VULN=$(jq '[.Results[]?.Vulnerabilities[]? | {
+                category: "Trivy Vulnerability",
+                severity: (if .Severity == "CRITICAL" then "critical" elif .Severity == "HIGH" then "high" elif .Severity == "MEDIUM" then "medium" else "low" end),
+                file: .PkgName,
+                line: 0,
+                message: (.VulnerabilityID + ": " + .Title),
+                owasp: "A06:2021",
+                remediation: ("Update to " + (.FixedVersion // "latest version"))
+            }]' "$TRIVY_JSON" 2>/dev/null || echo "[]")
+
+            # Convert secrets to violations format
+            TRIVY_SECRETS=$(jq '[.Results[]?.Secrets[]? | {
+                category: "Trivy Secret Detection",
+                severity: "critical",
+                file: .Target,
+                line: .StartLine,
+                message: ("Potential secret detected: " + .Title),
+                owasp: "A02:2021",
+                remediation: "Remove secret from code and rotate credentials"
+            }]' "$TRIVY_JSON" 2>/dev/null || echo "[]")
+
+            # Combine and update counts
+            TRIVY_ISSUES=$(jq -n --argjson vuln "$TRIVY_VULN" --argjson secrets "$TRIVY_SECRETS" '$vuln + $secrets')
+
+            TRIVY_CRITICAL=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "critical")] | length' 2>/dev/null || echo "0")
+            TRIVY_HIGH=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+            TRIVY_MEDIUM=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+            TRIVY_LOW=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
+
+            ((CRITICAL_COUNT += TRIVY_CRITICAL))
+            ((HIGH_COUNT += TRIVY_HIGH))
+            ((MEDIUM_COUNT += TRIVY_MEDIUM))
+            ((LOW_COUNT += TRIVY_LOW))
+        else
+            echo -e "  ${GREEN}No Trivy issues${NC}"
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}Trivy not installed (optional)${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}[9/9]${NC} Running Gitleaks secret detection..."
+# =====================
+# Gitleaks Secret Detection
+# =====================
+GITLEAKS_JSON="${REPORT_DIR}/security/gitleaks.json"
+GITLEAKS_ISSUES="[]"
+
+if command -v gitleaks &> /dev/null; then
+    set +e
+    # Run Gitleaks on the repository
+    gitleaks detect --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
+    GITLEAKS_EXIT=$?
+    set -e
+
+    if [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
+        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null || echo "0")
+        if [ "$SECRET_COUNT" -gt 0 ]; then
+            echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+
+            # Convert to violations format
+            GITLEAKS_ISSUES=$(jq '[.[] | {
+                category: "Gitleaks Secret",
+                severity: "critical",
+                file: .File,
+                line: .StartLine,
+                message: ("Potential secret detected: " + .Description),
+                owasp: "A02:2021",
+                remediation: "Remove secret from code, rotate credentials, and use secret management"
+            }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
+
+            ((CRITICAL_COUNT += SECRET_COUNT))
+        else
+            echo -e "  ${GREEN}No secrets detected${NC}"
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}Gitleaks not installed (optional)${NC}"
+fi
+
 # =====================
 # Combine all issues
 # =====================
@@ -357,7 +512,10 @@ ISSUES=$(jq -n \
     --argjson psalm "$PSALM_ISSUES" \
     --argjson custom "$CUSTOM_ISSUES" \
     --argjson secreview "$SECREVIEW_ISSUES" \
-    '$drush + $composer + $phpcs + $psalm + $custom + $secreview')
+    --argjson semgrep "$SEMGREP_ISSUES" \
+    --argjson trivy "$TRIVY_ISSUES" \
+    --argjson gitleaks "$GITLEAKS_ISSUES" \
+    '$drush + $composer + $phpcs + $psalm + $custom + $secreview + $semgrep + $trivy + $gitleaks')
 
 # =====================
 # Determine overall status
@@ -388,7 +546,7 @@ jq -n \
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
-            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review"]
+            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks"]
         },
         summary: {
             overall_status: $status,

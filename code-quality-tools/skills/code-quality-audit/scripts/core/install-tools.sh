@@ -45,7 +45,7 @@ install_drupal_tools() {
     echo ""
 
     # PHPStan with Drupal extension
-    echo -e "${YELLOW}[1/7]${NC} Installing PHPStan + Drupal extension..."
+    echo -e "${YELLOW}[1/12]${NC} Installing PHPStan + Drupal extension..."
     ddev composer require --dev \
         phpstan/phpstan \
         phpstan/extension-installer \
@@ -56,31 +56,31 @@ install_drupal_tools() {
         }
 
     # PHPMD
-    echo -e "${YELLOW}[2/7]${NC} Installing PHPMD..."
+    echo -e "${YELLOW}[2/12]${NC} Installing PHPMD..."
     ddev composer require --dev phpmd/phpmd --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} PHPMD may already be installed or had issues"
     }
 
     # PHPCPD (systemsdk fork for PHP 8.3+)
-    echo -e "${YELLOW}[3/7]${NC} Installing PHPCPD..."
+    echo -e "${YELLOW}[3/12]${NC} Installing PHPCPD..."
     ddev composer require --dev systemsdk/phpcpd --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} PHPCPD may already be installed or had issues"
     }
 
     # Drupal Coder
-    echo -e "${YELLOW}[4/7]${NC} Installing Drupal Coder..."
+    echo -e "${YELLOW}[4/12]${NC} Installing Drupal Coder..."
     ddev composer require --dev drupal/coder --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Drupal Coder may already be installed or had issues"
     }
 
     # Drupal Rector (auto-fix deprecations)
-    echo -e "${YELLOW}[5/7]${NC} Installing Drupal Rector..."
+    echo -e "${YELLOW}[5/12]${NC} Installing Drupal Rector..."
     ddev composer require --dev palantirnet/drupal-rector --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Drupal Rector may already be installed or had issues"
     }
 
     # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/7]${NC} Checking jq dependency..."
+    echo -e "${YELLOW}[6/12]${NC} Checking jq dependency..."
     if command -v jq &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} jq is available"
     else
@@ -89,7 +89,7 @@ install_drupal_tools() {
     fi
 
     # Check for PCOV
-    echo -e "${YELLOW}[7/9]${NC} Checking PCOV extension..."
+    echo -e "${YELLOW}[7/12]${NC} Checking PCOV extension..."
     if ddev exec php -m 2>/dev/null | grep -q pcov; then
         echo -e "${GREEN}[OK]${NC} PCOV is available"
     else
@@ -101,21 +101,60 @@ install_drupal_tools() {
     fi
 
     # Psalm (Security - Taint Analysis) - RECOMMENDED
-    echo -e "${YELLOW}[8/9]${NC} Installing Psalm (taint analysis - recommended for security)..."
+    echo -e "${YELLOW}[8/12]${NC} Installing Psalm (taint analysis - recommended for security)..."
     ddev composer require --dev vimeo/psalm --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Psalm may already be installed or had issues"
     }
 
     # php-security-linter (OWASP/CIS Security Rules) - RECOMMENDED
-    echo -e "${YELLOW}[9/9]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
+    echo -e "${YELLOW}[9/12]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
     ddev composer require --dev yousha/php-security-linter --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} php-security-linter may already be installed or had issues"
     }
+
+    # Semgrep (Multi-language SAST) - RECOMMENDED
+    echo -e "${YELLOW}[10/12]${NC} Installing Semgrep (multi-language SAST)..."
+    if ddev exec semgrep --version &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Semgrep already installed"
+    else
+        ddev exec pip3 install semgrep 2>&1 || {
+            echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
+        }
+    fi
+
+    # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
+    echo -e "${YELLOW}[11/12]${NC} Installing Trivy (dependency/secret scanner)..."
+    if command -v trivy &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Trivy already installed"
+    else
+        echo -e "${YELLOW}[INFO]${NC} Installing Trivy..."
+        # Install Trivy binary for host system
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
+            echo -e "${YELLOW}[WARN]${NC} Trivy installation failed - install manually:"
+            echo "  See: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+        }
+    fi
+
+    # Gitleaks (Secret Detection) - RECOMMENDED
+    echo -e "${YELLOW}[12/12]${NC} Installing Gitleaks (secret detection)..."
+    if command -v gitleaks &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
+    else
+        echo -e "${YELLOW}[INFO]${NC} Installing Gitleaks..."
+        # Install Gitleaks binary for host system
+        curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
+            echo -e "${YELLOW}[WARN]${NC} Gitleaks installation failed - install manually:"
+            echo "  See: https://github.com/gitleaks/gitleaks#installation"
+        }
+    fi
 
     echo ""
     echo -e "${BLUE}[OPTIONAL]${NC} Security Review module (Drupal config audit):"
     echo "  ddev composer require drupal/security_review"
     echo "  ddev drush pm:enable security_review"
+    echo ""
+    echo -e "${BLUE}[OPTIONAL]${NC} Roave Security Advisories (blocks vulnerable packages):"
+    echo "  ddev composer require --dev roave/security-advisories:dev-latest"
     echo ""
 }
 
@@ -211,6 +250,36 @@ verify_drupal_tools() {
         tools_status+=("rector:warn")
     fi
 
+    # Semgrep (Multi-language SAST)
+    if ddev exec semgrep --version &> /dev/null; then
+        VERSION=$(ddev exec semgrep --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} Semgrep: ${VERSION}"
+        tools_status+=("semgrep:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Semgrep not found (recommended for cross-stack SAST)"
+        tools_status+=("semgrep:optional")
+    fi
+
+    # Trivy (Dependency/Secret Scanner)
+    if command -v trivy &> /dev/null; then
+        VERSION=$(trivy --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} Trivy: ${VERSION}"
+        tools_status+=("trivy:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Trivy not found (recommended for dependency/secret scanning)"
+        tools_status+=("trivy:optional")
+    fi
+
+    # Gitleaks (Secret Detection)
+    if command -v gitleaks &> /dev/null; then
+        VERSION=$(gitleaks version 2>/dev/null)
+        echo -e "${GREEN}[OK]${NC} Gitleaks: ${VERSION}"
+        tools_status+=("gitleaks:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Gitleaks not found (recommended for secret detection)"
+        tools_status+=("gitleaks:optional")
+    fi
+
     echo ""
 
     # Save tool status
@@ -246,34 +315,35 @@ install_nextjs_tools() {
         exit 1
     fi
 
-    # ESLint with Next.js config
-    echo -e "${YELLOW}[1/6]${NC} Installing ESLint + Next.js config..."
+    # ESLint with Next.js config + security plugins
+    echo -e "${YELLOW}[1/10]${NC} Installing ESLint + Next.js config + security plugins..."
     npm install -D eslint eslint-config-next @typescript-eslint/eslint-plugin \
-        eslint-plugin-react-hooks eslint-config-prettier 2>&1 || {
+        eslint-plugin-react-hooks eslint-config-prettier \
+        eslint-plugin-security eslint-plugin-no-secrets 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} ESLint may already be installed or had issues"
     }
 
     # Jest + Testing Library
-    echo -e "${YELLOW}[2/6]${NC} Installing Jest + Testing Library..."
+    echo -e "${YELLOW}[2/10]${NC} Installing Jest + Testing Library..."
     npm install -D jest @jest/globals jest-environment-jsdom \
         @testing-library/react @testing-library/jest-dom 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Jest may already be installed or had issues"
     }
 
     # jscpd for duplication detection
-    echo -e "${YELLOW}[3/6]${NC} Installing jscpd..."
+    echo -e "${YELLOW}[3/10]${NC} Installing jscpd..."
     npm install -D jscpd 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} jscpd may already be installed or had issues"
     }
 
     # madge for circular dependency detection (SOLID check)
-    echo -e "${YELLOW}[4/6]${NC} Installing madge (circular dependency detection)..."
+    echo -e "${YELLOW}[4/10]${NC} Installing madge (circular dependency detection)..."
     npm install -D madge 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} madge may already be installed or had issues"
     }
 
     # TypeScript (if not already present)
-    echo -e "${YELLOW}[5/6]${NC} Checking TypeScript..."
+    echo -e "${YELLOW}[5/10]${NC} Checking TypeScript..."
     if [ -f "tsconfig.json" ]; then
         echo -e "${GREEN}[OK]${NC} TypeScript already configured"
     else
@@ -283,13 +353,64 @@ install_nextjs_tools() {
     fi
 
     # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/6]${NC} Checking jq dependency..."
+    echo -e "${YELLOW}[6/10]${NC} Checking jq dependency..."
     if command -v jq &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} jq is available"
     else
         echo -e "${YELLOW}[WARN]${NC} jq is not installed"
         echo "  Install with: apt-get install jq (Linux) or brew install jq (macOS)"
     fi
+
+    # Semgrep (Multi-language SAST) - RECOMMENDED
+    echo -e "${YELLOW}[7/10]${NC} Installing Semgrep (multi-language SAST)..."
+    if command -v semgrep &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Semgrep already installed"
+    else
+        # Try pip3 first, fallback to npm
+        if command -v pip3 &> /dev/null; then
+            pip3 install semgrep 2>&1 || {
+                echo -e "${YELLOW}[WARN]${NC} Semgrep pip3 installation failed, trying npm..."
+                npm install -g @semgrep/cli 2>&1 || {
+                    echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
+                }
+            }
+        else
+            echo -e "${YELLOW}[INFO]${NC} pip3 not found, using npm..."
+            npm install -g @semgrep/cli 2>&1 || {
+                echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
+            }
+        fi
+    fi
+
+    # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
+    echo -e "${YELLOW}[8/10]${NC} Installing Trivy (dependency/secret scanner)..."
+    if command -v trivy &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Trivy already installed"
+    else
+        echo -e "${YELLOW}[INFO]${NC} Installing Trivy..."
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
+            echo -e "${YELLOW}[WARN]${NC} Trivy installation failed - install manually:"
+            echo "  See: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+        }
+    fi
+
+    # Gitleaks (Secret Detection) - RECOMMENDED
+    echo -e "${YELLOW}[9/10]${NC} Installing Gitleaks (secret detection)..."
+    if command -v gitleaks &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
+    else
+        echo -e "${YELLOW}[INFO]${NC} Installing Gitleaks..."
+        curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
+            echo -e "${YELLOW}[WARN]${NC} Gitleaks installation failed - install manually:"
+            echo "  See: https://github.com/gitleaks/gitleaks#installation"
+        }
+    fi
+
+    # Socket CLI (Supply Chain Security) - OPTIONAL
+    echo -e "${YELLOW}[10/10]${NC} Socket CLI (optional - supply chain security)..."
+    echo -e "${BLUE}[OPTIONAL]${NC} Install Socket CLI for supply chain attack detection:"
+    echo "  npm install -g @socketregistry/cli"
+    echo ""
 
     echo ""
     verify_nextjs_tools
@@ -355,6 +476,36 @@ verify_nextjs_tools() {
     else
         echo -e "${YELLOW}[WARN]${NC} TypeScript not found"
         tools_status+=("typescript:warn")
+    fi
+
+    # Semgrep (Multi-language SAST)
+    if command -v semgrep &> /dev/null; then
+        VERSION=$(semgrep --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} Semgrep: ${VERSION}"
+        tools_status+=("semgrep:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Semgrep not found (recommended for security scanning)"
+        tools_status+=("semgrep:optional")
+    fi
+
+    # Trivy (Dependency/Secret Scanner)
+    if command -v trivy &> /dev/null; then
+        VERSION=$(trivy --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC} Trivy: ${VERSION}"
+        tools_status+=("trivy:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Trivy not found (recommended for dependency/secret scanning)"
+        tools_status+=("trivy:optional")
+    fi
+
+    # Gitleaks (Secret Detection)
+    if command -v gitleaks &> /dev/null; then
+        VERSION=$(gitleaks version 2>/dev/null)
+        echo -e "${GREEN}[OK]${NC} Gitleaks: ${VERSION}"
+        tools_status+=("gitleaks:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Gitleaks not found (recommended for secret detection)"
+        tools_status+=("gitleaks:optional")
     fi
 
     echo ""
