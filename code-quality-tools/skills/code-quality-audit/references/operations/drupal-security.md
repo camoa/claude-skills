@@ -59,7 +59,7 @@ The audit performs 9 complementary security checks:
 ### 6. drupal/security_review (Optional)
 - **Type:** Drupal configuration audit
 - **Coverage:** Misconfiguration detection (OWASP A05:2021)
-- **Status:** ✅ Updated Nov 2024
+- **Status:** ✅ Actively maintained
 - **Installation:**
   ```bash
   ddev composer require drupal/security_review
@@ -69,7 +69,7 @@ The audit performs 9 complementary security checks:
 ### 7. Semgrep SAST
 - **Type:** Multi-language static analysis
 - **Coverage:** 20,000+ security rules for PHP, JS, TS
-- **Status:** ✅ v1.122.0 (May 2025)
+- **Status:** ✅ Actively maintained
 - **Installation:** `ddev exec pip3 install semgrep`
 - **Command:** `semgrep scan --config=auto`
 
@@ -79,14 +79,14 @@ The audit performs 9 complementary security checks:
   - Package vulnerabilities (npm + Composer)
   - Secret detection (API keys, tokens)
   - Container/IaC misconfigurations
-- **Status:** ✅ v0.68.2 (Dec 2025)
+- **Status:** ✅ Actively maintained
 - **Installation:** See `scripts/core/install-tools.sh`
 - **Command:** `trivy fs --scanners vuln,secret`
 
 ### 9. Gitleaks
 - **Type:** Secret detection
 - **Coverage:** 800+ patterns, entropy analysis
-- **Status:** ✅ Active (2024-2025)
+- **Status:** ✅ Actively maintained
 - **Installation:** See `scripts/core/install-tools.sh`
 - **Command:** `gitleaks detect --no-git`
 
@@ -178,31 +178,31 @@ cat .reports/security-report.json | jq .
 ### ❌ Abandoned Tools (DO NOT USE)
 
 **pheromone/phpcs-security-audit**
-- Last updated: March 2020 (5+ years abandoned)
+- Last updated: March 2020 (abandoned)
 - No PHP 8.x support
 - Security rules outdated
 - **Replacement:** yousha/php-security-linter
 
 **drupal-check**
-- Last updated: 2023 (2+ years abandoned)
+- Last updated: 2023 (abandoned)
 - No longer maintained
 - Superseded by PHPStan + Drupal extension
 
 ### ✅ Why These Tools?
 
-**Semgrep (v1.122.0, May 2025)**
+**Semgrep**
 - Actively maintained by Semgrep Inc
 - 20,000+ security rules
 - Multi-language support (PHP, JS, TS, React)
 - Auto-updating rule sets
 
-**Trivy (v0.68.2, Dec 2025)**
+**Trivy**
 - Most comprehensive scanner
 - Scans npm, Composer, containers, IaC
 - Secret detection with 800+ patterns
 - Fast and accurate
 
-**Gitleaks (Active 2024-2025)**
+**Gitleaks**
 - Specialized secret detection
 - Entropy analysis for custom secrets
 - No git required (`--no-git` flag)

@@ -42,7 +42,7 @@ The audit performs 6 complementary security checks:
 ### 3. Semgrep SAST
 - **Type:** Multi-language static analysis
 - **Coverage:** 20,000+ security rules for React, JS, TS
-- **Status:** ✅ v1.122.0 (May 2025)
+- **Status:** ✅ Actively maintained
 - **Command:** `semgrep scan --config=auto`
 - **Focuses on:**
   - React XSS patterns
@@ -56,13 +56,13 @@ The audit performs 6 complementary security checks:
   - npm package vulnerabilities
   - Secret detection (API keys, tokens)
   - Container/IaC misconfigurations
-- **Status:** ✅ v0.68.2 (Dec 2025)
+- **Status:** ✅ Actively maintained
 - **Command:** `trivy fs --scanners vuln,secret`
 
 ### 5. Gitleaks
 - **Type:** Secret detection
 - **Coverage:** 800+ patterns, entropy analysis
-- **Status:** ✅ Active (2024-2025)
+- **Status:** ✅ Actively maintained
 - **Command:** `gitleaks detect --no-git`
 
 ### 6. Custom React/Next.js Patterns
