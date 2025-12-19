@@ -1,6 +1,6 @@
 # Code Quality Tools
 
-Code quality auditing plugin for Claude Code. Provides TDD, SOLID, and DRY principle checks for **Drupal** (via DDEV) and **Next.js** projects.
+Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects.
 
 ## Installation
 
@@ -16,13 +16,14 @@ Once installed, Claude handles these requests:
 
 | Request | What Claude Does |
 |---------|------------------|
-| "Setup code quality tools" | Installs PHPStan, PHPMD, PHPCPD, drupal-rector via composer |
+| "Setup code quality tools" | Installs PHPStan, PHPMD, PHPCPD, Psalm, security tools via composer |
 | "Run a code quality audit" | Runs all checks, saves JSON to `.reports/`, shows summary |
 | "Check test coverage" | PHPUnit + PCOV coverage |
 | "Find SOLID violations" | PHPStan + PHPMD + static call detection |
 | "Check for duplication" | PHPCPD duplication analysis |
 | "Lint code" | phpcs with Drupal/DrupalPractice standards |
 | "Fix deprecations" | drupal-rector auto-fix |
+| **"Run security audit"** | **OWASP + Drupal security: Drush advisories, Composer audit, Psalm taint, PHPCS security, custom patterns** |
 | "Add quality checks to CI" | Creates GitHub Actions workflow |
 
 ### Next.js Projects
@@ -47,6 +48,7 @@ All audit results are saved to `.reports/` (git-ignored):
 ├── solid-report.json       # SOLID violations
 ├── lint-report.json        # Lint results (Next.js)
 ├── dry-report.json         # Duplication analysis
+├── security-report.json    # Security vulnerabilities (OWASP)
 ├── audit-report.json       # Full audit (aggregated)
 └── audit-report.md         # Human-readable report
 ```
@@ -59,6 +61,9 @@ All audit results are saved to `.reports/` (git-ignored):
 | Duplication | <5% | 5-10% | >10% |
 | Complexity | <10 | 10-15 | >15 |
 | Circular deps (Next.js) | 0 | - | >0 |
+| **Security: Critical** | **0** | **0** | **>0** |
+| **Security: High** | **0** | **1-3** | **>3** |
+| **Security: Medium** | **0** | **1-10** | **>10** |
 
 ## Requirements
 
@@ -101,6 +106,11 @@ code-quality-tools/
 | [systemsdk/phpcpd](https://github.com/systemsdk/phpcpd) | Duplication |
 | [drupal/coder](https://www.drupal.org/project/coder) | Coding standards |
 | [palantirnet/drupal-rector](https://github.com/palantirnet/drupal-rector) | Auto-fix deprecations |
+| **[vimeo/psalm](https://psalm.dev/)** | **Taint analysis (XSS/SQLi)** |
+| **[yousha/php-security-linter](https://github.com/Yousha/php-security-linter)** | **PHPCS security (OWASP/CIS)** |
+| **[drupal/security_review](https://www.drupal.org/project/security_review)** | **Drupal config audit** |
+| **Drush pm:security** | **Drupal security advisories** |
+| **Composer audit** | **Package vulnerabilities** |
 
 ### Next.js
 | Tool | Purpose |
@@ -113,7 +123,7 @@ code-quality-tools/
 
 ## Version
 
-**v1.6.0** - Full SOLID support for Next.js with madge
+**v1.7.0** - Security audit with modern OWASP tools (Psalm taint analysis, yousha/php-security-linter, Drush/Composer advisories)
 
 ## License
 

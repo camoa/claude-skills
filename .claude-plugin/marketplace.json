@@ -51,14 +51,14 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV",
-      "version": "1.4.0",
+      "description": "Code quality and security auditing tools for TDD, SOLID, DRY, and OWASP security via DDEV",
+      "version": "1.7.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["code-quality", "tdd", "solid", "dry", "drupal", "testing", "phpstan", "phpmd"],
+      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "testing", "phpstan", "psalm", "phpmd"],
       "strict": false
     },
     {

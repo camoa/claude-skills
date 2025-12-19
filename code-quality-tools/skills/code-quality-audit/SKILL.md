@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
-description: Use when auditing code quality, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD via DDEV) and Next.js (ESLint, Jest, jscpd, madge) projects
-version: 1.6.0
+description: Use when auditing code quality, security vulnerabilities, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD, Psalm taint analysis, security scanners via DDEV) and Next.js (ESLint, Jest, jscpd, madge) projects
+version: 1.7.0
 ---
 
 # Code Quality Audit
@@ -19,6 +19,7 @@ Run quality audits for **Drupal** and **Next.js** projects with consistent tooli
 - "Lint code" / "Check coding standards"
 - "Fix deprecations" / "Run rector"
 - "Start TDD" / "RED-GREEN-REFACTOR"
+- "Check security" / "Find vulnerabilities" / "OWASP audit"
 
 **Next.js projects:**
 - "Setup quality tools" / "Install ESLint"
@@ -42,6 +43,7 @@ Run quality audits for **Drupal** and **Next.js** projects with consistent tooli
 | Lint check | `scripts/drupal/lint-check.sh` |
 | Fix deprecations | `scripts/drupal/rector-fix.sh` |
 | TDD cycle | `scripts/drupal/tdd-workflow.sh` |
+| Security audit | `scripts/drupal/security-check.sh` |
 
 ### Next.js Scripts
 | Task | Script |
@@ -500,6 +502,79 @@ Save `.reports/solid-report.json` with:
 | Circular deps | 0 | - | >0 |
 | Complexity violations | 0 | 1-5 | >5 |
 | Large files | 0 | 1-3 | >3 |
+
+---
+
+## Operation 20: Security Audit (Drupal)
+
+When user says "check security", "find vulnerabilities", "security audit", "OWASP check":
+
+Run `scripts/drupal/security-check.sh` which performs:
+
+1. **Drush pm:security** - Drupal security advisories (built-in)
+2. **Composer audit** - PHP package vulnerabilities (built-in)
+3. **yousha/php-security-linter** - PHPCS security rules (OWASP/CIS) - **actively maintained 2025**
+4. **Psalm taint analysis** - XSS/SQLi detection via dataflow analysis - **optional but powerful**
+5. **drupal/security_review** - Drupal configuration audit (if installed)
+6. **Custom Drupal Patterns**:
+   - SQL Injection: Unsafe `db_query()` with variable concatenation
+   - XSS: Twig `|raw` filter usage
+   - Insecure Deserialization: `unserialize()` on user input
+   - Command Injection: `exec()`, `shell_exec()` patterns
+
+Save `.reports/security-report.json` with:
+- Security issues by severity (critical/high/medium/low)
+- OWASP 2021 category mapping
+- File locations with line numbers
+- Remediation suggestions
+
+**Modern Security Stack (2024-2025):**
+
+| Tool | Status | Purpose | OWASP Coverage |
+|------|--------|---------|----------------|
+| Drush pm:security | Built-in | Drupal advisories | A06:2021 |
+| Composer audit | Built-in | Package vulns | A06:2021 |
+| yousha/php-security-linter | ✅ Dec 2025 | PHPCS security | CIS + OWASP Top 10 |
+| Psalm taint analysis | ✅ Active | XSS/SQLi dataflow | A03:2021, A03:2021 |
+| drupal/security_review | ✅ Nov 2024 | Config audit | A05:2021 |
+| Custom patterns | Built-in | Drupal-specific | Various |
+
+**Thresholds:**
+
+| Severity | Pass | Warning | Fail |
+|----------|------|---------|------|
+| Critical | 0 | 0 | >0 |
+| High | 0 | 1-3 | >3 |
+| Medium | 0 | 1-10 | >10 |
+| Low | 0 | any | >20 |
+
+**Installation:**
+```bash
+# Required
+ddev composer require --dev yousha/php-security-linter
+
+# Recommended (Psalm taint analysis)
+ddev composer require --dev vimeo/psalm
+
+# Optional (Drupal config audit)
+ddev composer require drupal/security_review
+ddev drush pm:enable security_review
+```
+
+**Usage:**
+```bash
+# Full security audit
+ddev exec bash skills/code-quality-audit/scripts/drupal/security-check.sh
+
+# View report
+cat .reports/security-report.json | jq .
+```
+
+**Why NOT pheromone/phpcs-security-audit?**
+- Last updated March 2020 (abandoned)
+- No PHP 8.x support
+- Security rules outdated
+- Use yousha/php-security-linter instead (updated Dec 2025)
 
 ---
 
