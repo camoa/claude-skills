@@ -51,14 +51,14 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing tools for TDD, SOLID, DRY, and OWASP security with Semgrep, Trivy, Gitleaks",
-      "version": "2.0.0",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks, Socket CLI) projects - TDD, SOLID, DRY, OWASP security",
+      "version": "2.1.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks"],
+      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks", "roave", "socket", "dast", "zap", "nuclei"],
       "strict": false
     },
     {

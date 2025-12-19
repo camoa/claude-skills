@@ -146,6 +146,16 @@ All detailed operation instructions have been moved to reference files for bette
   - Custom React/Next.js patterns (XSS, eval, navigation)
   - **Socket CLI** (v2.0.0)
 
+## Optional: DAST (Dynamic Testing)
+
+**Pre-production security testing for staging environments**
+
+- **Operation 22:** [DAST Tools](references/operations/dast-tools.md) - **Dynamic security testing (v2.1.0)**
+  - OWASP ZAP (full DAST scanner)
+  - Nuclei (template-based CVE scanning)
+  - Requires running application
+  - Use before releases on staging/pre-production
+
 ---
 
 ## Saving Reports
@@ -217,6 +227,25 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 ---
 
+## What's New in v2.1.0
+
+**Phase 3 - Optional DAST Tools (NEW!):**
+- ✅ OWASP ZAP (full DAST scanner for pre-production)
+- ✅ Nuclei (template-based CVE and misconfiguration scanning)
+- ✅ Comprehensive documentation with usage examples
+- ✅ CI/CD integration guides (GitHub Actions, GitLab)
+- ✅ Pre-release checklist script
+
+**DAST Coverage:**
+- Pre-production security testing
+- Runtime vulnerability detection
+- OWASP Top 10 dynamic testing
+- 1000+ CVE templates (Nuclei)
+
+See `references/operations/dast-tools.md` for full documentation.
+
+---
+
 ## What's New in v2.0.0
 
 **Progressive Disclosure Refactoring:**
@@ -235,6 +264,6 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 **Security Coverage:**
 - Drupal: 40% → **90%** (10 security layers)
-- Next.js: 0% → **85%** (7 security layers, NEW!)
+- Next.js: 0% → **85%** (7 security layers)
 
 See `.work-in-progress-v2.0.0.md` for full implementation details.
