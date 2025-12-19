@@ -127,6 +127,22 @@ jobs:
           ddev composer audit --no-dev
         continue-on-error: false
 
+      - name: Semgrep SAST
+        run: |
+          ddev exec semgrep scan --config=auto --sarif \
+            web/modules/custom web/themes/custom
+        continue-on-error: true
+
+      - name: Trivy Scanner
+        run: |
+          trivy fs --scanners vuln,secret --format sarif --output trivy-results.sarif .
+        continue-on-error: true
+
+      - name: Gitleaks Secret Detection
+        run: |
+          gitleaks detect --no-git --report-format sarif --report-path gitleaks-results.sarif
+        continue-on-error: true
+
       # =====================
       # Tests with Coverage
       # =====================
@@ -187,6 +203,9 @@ jobs:
           echo "| PHP Security Linter | ${{ steps.security-linter.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Drush Advisories | ${{ steps.drush-security.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Composer Audit | ${{ steps.composer-audit.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep SAST | ${{ steps.semgrep.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Scanner | ${{ steps.trivy.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks Secrets | ${{ steps.gitleaks.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Testing" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY

@@ -1,7 +1,7 @@
 {
   "name": "code-quality-tools",
-  "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, security scanners via DDEV) and Next.js (ESLint, Jest, jscpd, madge) projects - TDD, SOLID, DRY, OWASP security",
-  "version": "1.7.0",
+  "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects - TDD, SOLID, DRY, OWASP security",
+  "version": "1.8.0",
   "author": {
     "name": "camoa"
   },
