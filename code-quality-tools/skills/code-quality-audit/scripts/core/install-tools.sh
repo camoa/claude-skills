@@ -45,7 +45,7 @@ install_drupal_tools() {
     echo ""
 
     # PHPStan with Drupal extension
-    echo -e "${YELLOW}[1/12]${NC} Installing PHPStan + Drupal extension..."
+    echo -e "${YELLOW}[1/13]${NC} Installing PHPStan + Drupal extension..."
     ddev composer require --dev \
         phpstan/phpstan \
         phpstan/extension-installer \
@@ -56,31 +56,31 @@ install_drupal_tools() {
         }
 
     # PHPMD
-    echo -e "${YELLOW}[2/12]${NC} Installing PHPMD..."
+    echo -e "${YELLOW}[2/13]${NC} Installing PHPMD..."
     ddev composer require --dev phpmd/phpmd --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} PHPMD may already be installed or had issues"
     }
 
     # PHPCPD (systemsdk fork for PHP 8.3+)
-    echo -e "${YELLOW}[3/12]${NC} Installing PHPCPD..."
+    echo -e "${YELLOW}[3/13]${NC} Installing PHPCPD..."
     ddev composer require --dev systemsdk/phpcpd --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} PHPCPD may already be installed or had issues"
     }
 
     # Drupal Coder
-    echo -e "${YELLOW}[4/12]${NC} Installing Drupal Coder..."
+    echo -e "${YELLOW}[4/13]${NC} Installing Drupal Coder..."
     ddev composer require --dev drupal/coder --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Drupal Coder may already be installed or had issues"
     }
 
     # Drupal Rector (auto-fix deprecations)
-    echo -e "${YELLOW}[5/12]${NC} Installing Drupal Rector..."
+    echo -e "${YELLOW}[5/13]${NC} Installing Drupal Rector..."
     ddev composer require --dev palantirnet/drupal-rector --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Drupal Rector may already be installed or had issues"
     }
 
     # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/12]${NC} Checking jq dependency..."
+    echo -e "${YELLOW}[6/13]${NC} Checking jq dependency..."
     if command -v jq &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} jq is available"
     else
@@ -89,7 +89,7 @@ install_drupal_tools() {
     fi
 
     # Check for PCOV
-    echo -e "${YELLOW}[7/12]${NC} Checking PCOV extension..."
+    echo -e "${YELLOW}[7/13]${NC} Checking PCOV extension..."
     if ddev exec php -m 2>/dev/null | grep -q pcov; then
         echo -e "${GREEN}[OK]${NC} PCOV is available"
     else
@@ -101,7 +101,7 @@ install_drupal_tools() {
     fi
 
     # Psalm (Security - Taint Analysis) - RECOMMENDED
-    echo -e "${YELLOW}[8/12]${NC} Installing Psalm (taint analysis - recommended for security)..."
+    echo -e "${YELLOW}[8/13]${NC} Installing Psalm (taint analysis - recommended for security)..."
     ddev composer require --dev vimeo/psalm --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Psalm may already be installed or had issues"
     }

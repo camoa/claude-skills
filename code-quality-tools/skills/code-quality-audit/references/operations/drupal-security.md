@@ -1,6 +1,6 @@
 # Drupal Security Audit
 
-Comprehensive security audit for Drupal projects with 9 security layers.
+Comprehensive security audit for Drupal projects with 10 security layers.
 
 ## Contents
 

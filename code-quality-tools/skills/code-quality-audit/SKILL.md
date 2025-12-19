@@ -44,7 +44,7 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 | Lint check | `scripts/drupal/lint-check.sh` | See [Lint Check](references/operations/drupal-audits.md#operation-11-lint-check) |
 | Fix deprecations | `scripts/drupal/rector-fix.sh` | See [Rector Fix](references/operations/drupal-audits.md#operation-12-rector-fix) |
 | TDD cycle | `scripts/drupal/tdd-workflow.sh` | See [TDD Workflow](references/operations/drupal-tdd.md) |
-| Security audit | `scripts/drupal/security-check.sh` | See [Security Audit](references/operations/drupal-security.md) (9 layers) |
+| Security audit | `scripts/drupal/security-check.sh` | See [Security Audit](references/operations/drupal-security.md) (10 layers) |
 
 ### Next.js Scripts
 | Task | Script | Details |
@@ -56,7 +56,7 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 | Lint check | `scripts/nextjs/lint-check.sh` | See [Lint Check](references/operations/nextjs-audits.md#operation-15-lint-check) |
 | DRY check | `scripts/nextjs/dry-check.sh` | See [DRY Check](references/operations/nextjs-audits.md#operation-17-dry-check) |
 | TDD cycle | `scripts/nextjs/tdd-workflow.sh` | See [TDD Workflow](references/operations/nextjs-tdd.md) |
-| Security audit | `scripts/nextjs/security-check.sh` | See [Security Audit](references/operations/nextjs-security.md) (6 layers) |
+| Security audit | `scripts/nextjs/security-check.sh` | See [Security Audit](references/operations/nextjs-security.md) (7 layers) |
 
 ## Before Any Operation
 
@@ -117,11 +117,12 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 10:** [TDD Workflow](references/operations/drupal-tdd.md) - RED-GREEN-REFACTOR cycle
 
 ### Security
-- **Operation 20:** [Security Audit](references/operations/drupal-security.md) - **9 security layers (v1.8.0)**
+- **Operation 20:** [Security Audit](references/operations/drupal-security.md) - **10 security layers (v2.0.0)**
   - Drush pm:security, Composer audit
   - yousha/php-security-linter, Psalm taint analysis
   - Custom Drupal patterns, Security Review module
-  - **Semgrep SAST, Trivy scanner, Gitleaks** (NEW in v1.8.0)
+  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
+  - **Roave Security Advisories** (v2.0.0)
 
 ## Next.js Operations
 
@@ -139,10 +140,11 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 18:** [TDD Workflow](references/operations/nextjs-tdd.md) - RED-GREEN-REFACTOR with Jest
 
 ### Security
-- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) - **6 security layers (NEW in v1.8.0)**
+- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) - **7 security layers (v2.0.0)**
   - npm audit, ESLint security plugins
-  - **Semgrep SAST, Trivy scanner, Gitleaks**
+  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
   - Custom React/Next.js patterns (XSS, eval, navigation)
+  - **Socket CLI** (v2.0.0)
 
 ---
 
@@ -187,11 +189,11 @@ All reports must follow `schemas/audit-report.schema.json`:
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations
 - `references/operations/drupal-audits.md` - Drupal quality audit operations
-- `references/operations/drupal-security.md` - **Drupal security (9 layers, v1.8.0)**
+- `references/operations/drupal-security.md` - **Drupal security (10 layers, v2.0.0)**
 - `references/operations/drupal-tdd.md` - Drupal TDD workflow
 - `references/operations/nextjs-setup.md` - Next.js setup operations
 - `references/operations/nextjs-audits.md` - Next.js quality audit operations
-- `references/operations/nextjs-security.md` - **Next.js security (6 layers, NEW in v1.8.0)**
+- `references/operations/nextjs-security.md` - **Next.js security (7 layers, v2.0.0)**
 - `references/operations/nextjs-tdd.md` - Next.js TDD workflow
 
 ## Decision Guides
@@ -215,20 +217,24 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 ---
 
-## What's New in v1.8.0
+## What's New in v2.0.0
 
-**Cross-Stack Security Tools:**
+**Progressive Disclosure Refactoring:**
+- ✅ SKILL.md: 632 → 234 lines (63% reduction)
+- ✅ 9 reference files created with full documentation
+- ✅ Plugin-creation-tools compliance (16/16 criteria)
+
+**Phase 1 - Cross-Stack Security Tools:**
 - ✅ Semgrep SAST (20,000+ security rules for PHP, React, JS, TS)
 - ✅ Trivy scanner (dependency/container/secret scanner)
 - ✅ Gitleaks (secret detection with 800+ patterns)
 
+**Phase 2 - Enhancement Tools:**
+- ✅ Roave Security Advisories (Drupal - Composer prevention layer)
+- ✅ Socket CLI (Next.js - supply chain attack detection)
+
 **Security Coverage:**
-- Drupal: 40% → **85%** (9 security layers)
-- Next.js: 0% → **80%** (6 security layers, NEW!)
+- Drupal: 40% → **90%** (10 security layers)
+- Next.js: 0% → **85%** (7 security layers, NEW!)
 
-**New Features:**
-- Operation 21: Next.js Security Audit
-- Scope targeting documentation
-- ESLint security plugins for Next.js
-
-See `.work-in-progress-v1.8.0.md` for full implementation details.
+See `.work-in-progress-v2.0.0.md` for full implementation details.
