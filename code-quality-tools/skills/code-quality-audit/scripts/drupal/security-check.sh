@@ -40,7 +40,7 @@ ISSUES="[]"
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
 
-echo -e "${BLUE}[1/9]${NC} Checking Drupal security advisories..."
+echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================
 # Drush pm:security
 # =====================
@@ -77,7 +77,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[2/9]${NC} Checking composer package vulnerabilities..."
+echo -e "${BLUE}[2/10]${NC} Checking composer package vulnerabilities..."
 # =====================
 # Composer audit
 # =====================
@@ -118,7 +118,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[3/9]${NC} Running PHPCS security linter (OWASP/CIS)..."
+echo -e "${BLUE}[3/10]${NC} Running PHPCS security linter (OWASP/CIS)..."
 # =====================
 # yousha/php-security-linter
 # =====================
@@ -165,7 +165,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[4/9]${NC} Running Psalm taint analysis..."
+echo -e "${BLUE}[4/10]${NC} Running Psalm taint analysis..."
 # =====================
 # Psalm taint analysis
 # =====================
@@ -238,7 +238,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[5/9]${NC} Checking custom Drupal security patterns..."
+echo -e "${BLUE}[5/10]${NC} Checking custom Drupal security patterns..."
 # =====================
 # Custom Drupal Pattern Checks
 # =====================
@@ -307,7 +307,7 @@ if [ "$CUSTOM_ISSUES" = "[]" ]; then
 fi
 
 echo ""
-echo -e "${BLUE}[6/9]${NC} Running Security Review module..."
+echo -e "${BLUE}[6/10]${NC} Running Security Review module..."
 # =====================
 # Security Review module (if installed)
 # =====================
@@ -348,7 +348,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[7/9]${NC} Running Semgrep SAST (multi-language)..."
+echo -e "${BLUE}[7/10]${NC} Running Semgrep SAST (multi-language)..."
 # =====================
 # Semgrep SAST
 # =====================
@@ -401,7 +401,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[8/9]${NC} Running Trivy dependency/secret scanner..."
+echo -e "${BLUE}[8/10]${NC} Running Trivy dependency/secret scanner..."
 # =====================
 # Trivy Scanner
 # =====================
@@ -463,7 +463,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[9/9]${NC} Running Gitleaks secret detection..."
+echo -e "${BLUE}[9/10]${NC} Running Gitleaks secret detection..."
 # =====================
 # Gitleaks Secret Detection
 # =====================
@@ -502,6 +502,35 @@ else
     echo -e "  ${YELLOW}Gitleaks not installed (optional)${NC}"
 fi
 
+echo ""
+echo -e "${BLUE}[10/10]${NC} Verifying Roave Security Advisories (prevention layer)..."
+# =====================
+# Roave Security Advisories (Prevention Layer)
+# =====================
+ROAVE_ISSUES="[]"
+
+if ddev composer show roave/security-advisories &> /dev/null; then
+    echo -e "  ${GREEN}Roave Security Advisories is installed${NC}"
+    echo -e "  ${BLUE}[INFO]${NC} Prevents installation of packages with known vulnerabilities"
+    # Roave is installed - no issues to report (it prevents issues at install time)
+else
+    echo -e "  ${YELLOW}Roave Security Advisories not installed (recommended)${NC}"
+    echo -e "  ${BLUE}[INFO]${NC} Install with: ddev composer require --dev roave/security-advisories:dev-master"
+
+    # Add informational issue
+    ROAVE_ISSUES=$(jq -n '[{
+        category: "Roave Prevention Layer",
+        severity: "low",
+        file: "composer.json",
+        line: 1,
+        message: "Roave Security Advisories not installed - prevents vulnerable package installation",
+        owasp: "A06:2021",
+        remediation: "Run: ddev composer require --dev roave/security-advisories:dev-master"
+    }]')
+
+    ((LOW_COUNT += 1))
+fi
+
 # =====================
 # Combine all issues
 # =====================
@@ -515,7 +544,8 @@ ISSUES=$(jq -n \
     --argjson semgrep "$SEMGREP_ISSUES" \
     --argjson trivy "$TRIVY_ISSUES" \
     --argjson gitleaks "$GITLEAKS_ISSUES" \
-    '$drush + $composer + $phpcs + $psalm + $custom + $secreview + $semgrep + $trivy + $gitleaks')
+    --argjson roave "$ROAVE_ISSUES" \
+    '$drush + $composer + $phpcs + $psalm + $custom + $secreview + $semgrep + $trivy + $gitleaks + $roave')
 
 # =====================
 # Determine overall status
@@ -546,7 +576,7 @@ jq -n \
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
-            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks"]
+            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"]
         },
         summary: {
             overall_status: $status,

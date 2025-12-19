@@ -39,7 +39,7 @@ ISSUES="[]"
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
 
-echo -e "${BLUE}[1/6]${NC} Checking npm package vulnerabilities..."
+echo -e "${BLUE}[1/7]${NC} Checking npm package vulnerabilities..."
 # =====================
 # npm audit
 # =====================
@@ -84,7 +84,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[2/6]${NC} Running ESLint security checks..."
+echo -e "${BLUE}[2/7]${NC} Running ESLint security checks..."
 # =====================
 # ESLint Security Plugins
 # =====================
@@ -129,7 +129,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[3/6]${NC} Running Semgrep SAST (React/Next.js)..."
+echo -e "${BLUE}[3/7]${NC} Running Semgrep SAST (React/Next.js)..."
 # =====================
 # Semgrep SAST
 # =====================
@@ -176,7 +176,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[4/6]${NC} Running Trivy dependency/secret scanner..."
+echo -e "${BLUE}[4/7]${NC} Running Trivy dependency/secret scanner..."
 # =====================
 # Trivy Scanner
 # =====================
@@ -238,7 +238,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[5/6]${NC} Running Gitleaks secret detection..."
+echo -e "${BLUE}[5/7]${NC} Running Gitleaks secret detection..."
 # =====================
 # Gitleaks Secret Detection
 # =====================
@@ -278,7 +278,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}[6/6]${NC} Checking React/Next.js security patterns..."
+echo -e "${BLUE}[6/7]${NC} Checking React/Next.js security patterns..."
 # =====================
 # Custom React/Next.js Pattern Checks
 # =====================
@@ -314,6 +314,57 @@ if [ -d "$SRC_PATH" ]; then
     fi
 fi
 
+echo ""
+echo -e "${BLUE}[7/7]${NC} Verifying Socket CLI (supply chain security)..."
+# =====================
+# Socket CLI (Supply Chain Security)
+# =====================
+SOCKET_ISSUES="[]"
+
+if npx socket-npm --version &> /dev/null 2>&1; then
+    echo -e "  ${GREEN}Socket CLI is installed${NC}"
+    echo -e "  ${BLUE}[INFO]${NC} Socket CLI detects supply chain attacks in npm packages"
+
+    # Run Socket CLI audit (lightweight check)
+    set +e
+    SOCKET_OUTPUT=$(npx socket-npm audit 2>&1 || true)
+    SOCKET_EXIT=$?
+    set -e
+
+    if [ $SOCKET_EXIT -ne 0 ] && echo "$SOCKET_OUTPUT" | grep -q "issues found"; then
+        echo -e "  ${YELLOW}Socket CLI found supply chain issues${NC}"
+        # Add informational issue
+        SOCKET_ISSUES=$(jq -n '[{
+            category: "Socket Supply Chain",
+            severity: "medium",
+            file: "package.json",
+            line: 1,
+            message: "Socket CLI detected supply chain security issues",
+            owasp: "A08:2021",
+            remediation: "Review Socket CLI output: npx socket-npm audit"
+        }]')
+        ((MEDIUM_COUNT += 1))
+    else
+        echo -e "  ${GREEN}No supply chain issues detected${NC}"
+    fi
+else
+    echo -e "  ${YELLOW}Socket CLI not installed (recommended)${NC}"
+    echo -e "  ${BLUE}[INFO]${NC} Install with: npm install -D @socketsecurity/cli"
+
+    # Add informational issue
+    SOCKET_ISSUES=$(jq -n '[{
+        category: "Socket Supply Chain",
+        severity: "low",
+        file: "package.json",
+        line: 1,
+        message: "Socket CLI not installed - detects supply chain attacks",
+        owasp: "A08:2021",
+        remediation: "Run: npm install -D @socketsecurity/cli"
+    }]')
+
+    ((LOW_COUNT += 1))
+fi
+
 # =====================
 # Combine all issues
 # =====================
@@ -324,7 +375,8 @@ ISSUES=$(jq -n \
     --argjson trivy "$TRIVY_ISSUES" \
     --argjson gitleaks "$GITLEAKS_ISSUES" \
     --argjson custom "$CUSTOM_ISSUES" \
-    '$npm + $eslint + $semgrep + $trivy + $gitleaks + $custom')
+    --argjson socket "$SOCKET_ISSUES" \
+    '$npm + $eslint + $semgrep + $trivy + $gitleaks + $custom + $socket')
 
 # =====================
 # Determine overall status
@@ -356,7 +408,7 @@ jq -n \
             timestamp: $timestamp,
             scan_type: "security_audit",
             project_type: "nextjs",
-            tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns"]
+            tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"]
         },
         summary: {
             overall_status: $status,

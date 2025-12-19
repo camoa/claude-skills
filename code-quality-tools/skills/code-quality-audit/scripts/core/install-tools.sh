@@ -107,13 +107,20 @@ install_drupal_tools() {
     }
 
     # php-security-linter (OWASP/CIS Security Rules) - RECOMMENDED
-    echo -e "${YELLOW}[9/12]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
+    echo -e "${YELLOW}[9/13]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
     ddev composer require --dev yousha/php-security-linter --no-interaction 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} php-security-linter may already be installed or had issues"
     }
 
+    # Roave Security Advisories (Composer Prevention Layer) - RECOMMENDED
+    echo -e "${YELLOW}[10/13]${NC} Installing Roave Security Advisories (vulnerability prevention)..."
+    ddev composer require --dev roave/security-advisories:dev-master --no-interaction 2>&1 || {
+        echo -e "${YELLOW}[INFO]${NC} Roave Security Advisories prevents vulnerable package installation"
+        echo -e "${YELLOW}[INFO]${NC} If installation conflicts, you may have vulnerable packages installed"
+    }
+
     # Semgrep (Multi-language SAST) - RECOMMENDED
-    echo -e "${YELLOW}[10/12]${NC} Installing Semgrep (multi-language SAST)..."
+    echo -e "${YELLOW}[11/13]${NC} Installing Semgrep (multi-language SAST)..."
     if ddev exec semgrep --version &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Semgrep already installed"
     else
@@ -123,7 +130,7 @@ install_drupal_tools() {
     fi
 
     # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
-    echo -e "${YELLOW}[11/12]${NC} Installing Trivy (dependency/secret scanner)..."
+    echo -e "${YELLOW}[12/13]${NC} Installing Trivy (dependency/secret scanner)..."
     if command -v trivy &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Trivy already installed"
     else
@@ -136,7 +143,7 @@ install_drupal_tools() {
     fi
 
     # Gitleaks (Secret Detection) - RECOMMENDED
-    echo -e "${YELLOW}[12/12]${NC} Installing Gitleaks (secret detection)..."
+    echo -e "${YELLOW}[13/13]${NC} Installing Gitleaks (secret detection)..."
     if command -v gitleaks &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
     else
@@ -217,6 +224,15 @@ verify_drupal_tools() {
     else
         echo -e "${YELLOW}[OPTIONAL]${NC} php-security-linter not found (recommended for OWASP security checks)"
         tools_status+=("php-security-linter:optional")
+    fi
+
+    # Roave Security Advisories (Optional)
+    if ddev composer show roave/security-advisories &> /dev/null; then
+        echo -e "${GREEN}[OK]${NC} Roave Security Advisories: installed (prevents vulnerable packages)"
+        tools_status+=("roave:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Roave Security Advisories not found (prevents vulnerable package installation)"
+        tools_status+=("roave:optional")
     fi
 
     # phpcs (Drupal Coder)
@@ -316,7 +332,7 @@ install_nextjs_tools() {
     fi
 
     # ESLint with Next.js config + security plugins
-    echo -e "${YELLOW}[1/10]${NC} Installing ESLint + Next.js config + security plugins..."
+    echo -e "${YELLOW}[1/11]${NC} Installing ESLint + Next.js config + security plugins..."
     npm install -D eslint eslint-config-next @typescript-eslint/eslint-plugin \
         eslint-plugin-react-hooks eslint-config-prettier \
         eslint-plugin-security eslint-plugin-no-secrets 2>&1 || {
@@ -324,26 +340,26 @@ install_nextjs_tools() {
     }
 
     # Jest + Testing Library
-    echo -e "${YELLOW}[2/10]${NC} Installing Jest + Testing Library..."
+    echo -e "${YELLOW}[2/11]${NC} Installing Jest + Testing Library..."
     npm install -D jest @jest/globals jest-environment-jsdom \
         @testing-library/react @testing-library/jest-dom 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} Jest may already be installed or had issues"
     }
 
     # jscpd for duplication detection
-    echo -e "${YELLOW}[3/10]${NC} Installing jscpd..."
+    echo -e "${YELLOW}[3/11]${NC} Installing jscpd..."
     npm install -D jscpd 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} jscpd may already be installed or had issues"
     }
 
     # madge for circular dependency detection (SOLID check)
-    echo -e "${YELLOW}[4/10]${NC} Installing madge (circular dependency detection)..."
+    echo -e "${YELLOW}[4/11]${NC} Installing madge (circular dependency detection)..."
     npm install -D madge 2>&1 || {
         echo -e "${YELLOW}[WARN]${NC} madge may already be installed or had issues"
     }
 
     # TypeScript (if not already present)
-    echo -e "${YELLOW}[5/10]${NC} Checking TypeScript..."
+    echo -e "${YELLOW}[5/11]${NC} Checking TypeScript..."
     if [ -f "tsconfig.json" ]; then
         echo -e "${GREEN}[OK]${NC} TypeScript already configured"
     else
@@ -353,7 +369,7 @@ install_nextjs_tools() {
     fi
 
     # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/10]${NC} Checking jq dependency..."
+    echo -e "${YELLOW}[6/11]${NC} Checking jq dependency..."
     if command -v jq &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} jq is available"
     else
@@ -362,7 +378,7 @@ install_nextjs_tools() {
     fi
 
     # Semgrep (Multi-language SAST) - RECOMMENDED
-    echo -e "${YELLOW}[7/10]${NC} Installing Semgrep (multi-language SAST)..."
+    echo -e "${YELLOW}[7/11]${NC} Installing Semgrep (multi-language SAST)..."
     if command -v semgrep &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Semgrep already installed"
     else
@@ -383,7 +399,7 @@ install_nextjs_tools() {
     fi
 
     # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
-    echo -e "${YELLOW}[8/10]${NC} Installing Trivy (dependency/secret scanner)..."
+    echo -e "${YELLOW}[8/11]${NC} Installing Trivy (dependency/secret scanner)..."
     if command -v trivy &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Trivy already installed"
     else
@@ -395,7 +411,7 @@ install_nextjs_tools() {
     fi
 
     # Gitleaks (Secret Detection) - RECOMMENDED
-    echo -e "${YELLOW}[9/10]${NC} Installing Gitleaks (secret detection)..."
+    echo -e "${YELLOW}[9/11]${NC} Installing Gitleaks (secret detection)..."
     if command -v gitleaks &> /dev/null; then
         echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
     else
@@ -406,10 +422,14 @@ install_nextjs_tools() {
         }
     fi
 
-    # Socket CLI (Supply Chain Security) - OPTIONAL
-    echo -e "${YELLOW}[10/10]${NC} Socket CLI (optional - supply chain security)..."
-    echo -e "${BLUE}[OPTIONAL]${NC} Install Socket CLI for supply chain attack detection:"
-    echo "  npm install -g @socketregistry/cli"
+    # Socket CLI (Supply Chain Security) - RECOMMENDED
+    echo -e "${YELLOW}[10/11]${NC} Installing Socket CLI (supply chain attack detection)..."
+    npm install -D @socketsecurity/cli 2>&1 || {
+        echo -e "${YELLOW}[WARN]${NC} Socket CLI may already be installed or had issues"
+    }
+
+    # Setup complete message
+    echo -e "${YELLOW}[11/11]${NC} Installation complete!"
     echo ""
 
     echo ""
@@ -506,6 +526,16 @@ verify_nextjs_tools() {
     else
         echo -e "${YELLOW}[OPTIONAL]${NC} Gitleaks not found (recommended for secret detection)"
         tools_status+=("gitleaks:optional")
+    fi
+
+    # Socket CLI (Supply Chain Security)
+    if npx socket-npm --version &> /dev/null 2>&1; then
+        VERSION=$(npx socket-npm --version 2>/dev/null)
+        echo -e "${GREEN}[OK]${NC} Socket CLI: ${VERSION}"
+        tools_status+=("socket:ok")
+    else
+        echo -e "${YELLOW}[OPTIONAL]${NC} Socket CLI not found (recommended for supply chain attack detection)"
+        tools_status+=("socket:optional")
     fi
 
     echo ""

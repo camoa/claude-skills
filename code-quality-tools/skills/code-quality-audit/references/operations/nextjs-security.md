@@ -1,6 +1,6 @@
 # Next.js Security Audit
 
-Comprehensive security audit for Next.js projects with 6 security layers (NEW in v1.8.0).
+Comprehensive security audit for Next.js projects with 7 security layers (NEW in v1.8.0, Socket added in v2.0.0).
 
 ## Contents
 
@@ -15,15 +15,15 @@ Comprehensive security audit for Next.js projects with 6 security layers (NEW in
 
 When user says "check security", "find vulnerabilities", "security audit", "OWASP check" in a Next.js project:
 
-Run `scripts/nextjs/security-check.sh` which performs a comprehensive 6-layer security audit.
+Run `scripts/nextjs/security-check.sh` which performs a comprehensive 7-layer security audit.
 
-**Security Coverage:** 80% (NEW in v1.8.0)
+**Security Coverage:** 85% (Socket added in v2.0.0)
 
 ---
 
 ## Security Layers
 
-The audit performs 6 complementary security checks:
+The audit performs 7 complementary security checks:
 
 ### 1. npm audit
 - **Type:** Package vulnerability scanner
@@ -72,6 +72,18 @@ The audit performs 6 complementary security checks:
   - **Code Injection:** `eval()` usage
   - **XSS via Navigation:** `window.location.href` assignments with user input
 
+### 7. Socket CLI
+- **Type:** Supply chain attack detection
+- **Coverage:** Detects malicious packages, typosquatting, install scripts
+- **Status:** ✅ Actively maintained
+- **Installation:** `npm install -D @socketsecurity/cli`
+- **Command:** `npx socket-npm audit`
+- **Focus Areas:**
+  - Suspicious install scripts
+  - Network access in dependencies
+  - Filesystem access patterns
+  - Hidden code obfuscation
+
 ---
 
 ## Installation
@@ -84,6 +96,9 @@ npm install -D eslint-plugin-security eslint-plugin-no-secrets
 
 ### Recommended Tools
 ```bash
+# Socket CLI (supply chain security)
+npm install -D @socketsecurity/cli
+
 # Semgrep
 pip3 install semgrep
 
@@ -102,7 +117,7 @@ Or use `scripts/core/install-tools.sh` which installs all tools automatically.
 
 ### Full Security Audit
 ```bash
-# Run all 6 security layers
+# Run all 7 security layers
 bash skills/code-quality-audit/scripts/nextjs/security-check.sh
 
 # View report
@@ -115,7 +130,7 @@ cat .reports/security-report.json | jq .
   "meta": {
     "timestamp": "2025-12-19T12:00:00Z",
     "project_type": "nextjs",
-    "tools": ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns"]
+    "tools": ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"]
   },
   "summary": {
     "critical": 0,

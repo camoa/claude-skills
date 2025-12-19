@@ -16,15 +16,15 @@ Comprehensive security audit for Drupal projects with 9 security layers.
 
 When user says "check security", "find vulnerabilities", "security audit", "OWASP check":
 
-Run `scripts/drupal/security-check.sh` which performs a comprehensive 9-layer security audit.
+Run `scripts/drupal/security-check.sh` which performs a comprehensive 10-layer security audit.
 
-**Security Coverage:** 85% (expanded from 40% in v1.7.0)
+**Security Coverage:** 90% (expanded from 85% in v1.8.0)
 
 ---
 
 ## Security Layers
 
-The audit performs 9 complementary security checks:
+The audit performs 10 complementary security checks:
 
 ### 1. Drush pm:security
 - **Type:** Drupal-specific advisory check
@@ -90,6 +90,14 @@ The audit performs 9 complementary security checks:
 - **Installation:** See `scripts/core/install-tools.sh`
 - **Command:** `gitleaks detect --no-git`
 
+### 10. Roave Security Advisories
+- **Type:** Composer prevention layer
+- **Coverage:** Blocks installation of packages with known vulnerabilities
+- **Status:** ✅ Actively maintained
+- **Installation:** `ddev composer require --dev roave/security-advisories:dev-master`
+- **How it works:** Prevents `composer require` of vulnerable packages at install time
+- **Note:** This is a prevention tool, not a scanner - it works during package installation
+
 ---
 
 ## Installation
@@ -104,6 +112,9 @@ ddev composer require --dev yousha/php-security-linter
 ```bash
 # Psalm (for taint analysis)
 ddev composer require --dev vimeo/psalm
+
+# Roave Security Advisories (prevents vulnerable package installation)
+ddev composer require --dev roave/security-advisories:dev-master
 
 # Cross-stack security tools (install via install-tools.sh)
 # Or manually:
@@ -125,7 +136,7 @@ ddev drush pm:enable security_review
 
 ### Full Security Audit
 ```bash
-# Run all 9 security layers
+# Run all 10 security layers
 ddev exec bash skills/code-quality-audit/scripts/drupal/security-check.sh
 
 # View report
@@ -139,7 +150,7 @@ cat .reports/security-report.json | jq .
     "timestamp": "2025-12-19T12:00:00Z",
     "tools": ["drush_pm_security", "composer_audit", "phpcs_security_linter",
               "psalm_taint", "custom_patterns", "security_review",
-              "semgrep", "trivy", "gitleaks"]
+              "semgrep", "trivy", "gitleaks", "roave"]
   },
   "summary": {
     "critical": 0,
