@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-12-19
+
+### Added
+- **Operation 22: DAST Tools (Optional)** - Dynamic Application Security Testing
+- `references/operations/dast-tools.md` - Complete DAST documentation (585 lines)
+- **OWASP ZAP** integration - Full DAST scanner for pre-production
+  - Active scanning (SQL injection, XSS, command injection)
+  - Passive scanning (security headers, sensitive data)
+  - Spider/crawler for endpoint discovery
+  - Authentication testing support
+- **Nuclei** integration - Template-based CVE scanning
+  - 1000+ vulnerability templates
+  - CVE detection (2015-2025)
+  - Misconfiguration detection
+  - Exposed panel detection
+- CI/CD integration examples (GitHub Actions, GitLab CI)
+- Pre-release security checklist script
+- Docker-based installation instructions
+
+### Documentation
+- SAST vs DAST comparison guide
+- When to use DAST (staging, pre-production, security audits)
+- Installation guides (Docker, direct install, package managers)
+- Usage examples for both tools
+- Report interpretation guidelines
+- Best practices and troubleshooting
+
+## [2.0.0] - 2025-12-19
+
+### Major Refactoring
+- **Progressive Disclosure**: SKILL.md reduced from 632 to 234 lines (63% reduction)
+- Created 9 reference files with comprehensive documentation
+- Achieved plugin-creation-tools compliance (16/16 criteria)
+- Operations reorganized by stack (Drupal: 1-8, 10-12, 20; Next.js: 13-19, 21)
+
+### Added - Phase 1: Cross-Stack Security Tools
+- **Semgrep SAST** - Multi-language static analysis
+  - 20,000+ security rules for PHP, React, JS, TS
+  - OWASP Top 10 coverage
+  - Auto-updating rule sets
+- **Trivy Scanner** - Comprehensive vulnerability scanner
+  - Package vulnerabilities (npm + Composer)
+  - Container/IaC misconfigurations
+  - Secret detection (800+ patterns)
+- **Gitleaks** - Dedicated secret detection
+  - 800+ secret patterns
+  - Entropy analysis for custom secrets
+  - No git required (`--no-git` flag)
+
+### Added - Phase 2: Enhancement Tools
+- **Roave Security Advisories** (Drupal)
+  - Composer prevention layer
+  - Blocks installation of vulnerable packages
+  - Integrated into `install-tools.sh` and `security-check.sh`
+- **Socket CLI** (Next.js)
+  - Supply chain attack detection
+  - Malicious package detection
+  - Install script analysis
+  - Integrated into `install-tools.sh` and `security-check.sh`
+
+### Changed
+- **Security Coverage Expanded**:
+  - Drupal: 40% → 90% (6 → 10 security layers)
+  - Next.js: 0% → 85% (0 → 7 security layers, NEW!)
+- **Drupal Security Layers** (10 total):
+  1. Drush pm:security
+  2. Composer audit
+  3. yousha/php-security-linter
+  4. Psalm taint analysis
+  5. Custom Drupal patterns
+  6. Security Review module (optional)
+  7. Semgrep SAST
+  8. Trivy scanner
+  9. Gitleaks
+  10. Roave Security Advisories
+- **Next.js Security Layers** (7 total):
+  1. npm audit
+  2. ESLint security plugins
+  3. Semgrep SAST
+  4. Trivy scanner
+  5. Gitleaks
+  6. Custom React/Next.js patterns
+  7. Socket CLI
+- Updated `install-tools.sh`:
+  - Drupal: 13 steps (added Roave)
+  - Next.js: 11 steps (added Socket CLI)
+- Updated security-check.sh scripts with new tools
+- plugin.json and marketplace.json descriptions updated
+
+### Documentation
+- Created `references/operations/` directory structure
+- Split into operation-specific files:
+  - drupal-setup.md, drupal-audits.md, drupal-security.md, drupal-tdd.md
+  - nextjs-setup.md, nextjs-audits.md, nextjs-security.md, nextjs-tdd.md
+- Added `references/scope-targeting.md` (env vars + cd approach)
+- All reference files include TOC and cross-references
+- Updated SKILL.md with progressive disclosure structure
+
+## [1.8.0] - 2025-12-18
+
+### Added
+- **Cross-Stack Security Tools** for both Drupal and Next.js:
+  - Semgrep SAST (20,000+ security rules)
+  - Trivy scanner (dependency/container/secret scanner)
+  - Gitleaks (secret detection with 800+ patterns)
+- Integration into security-check.sh for both stacks
+- Installation via install-tools.sh
+
+### Documentation
+- Added cross-stack tools to SKILL.md
+- Updated security documentation for both stacks
+
 ## [1.7.0] - 2025-12-18
 
 ### Added
