@@ -22,7 +22,7 @@ DUPLICATION_MAX="${DUPLICATION_MAX:-5}"
 COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           Code Quality Audit - Full Analysis                 ║"
+echo "║        Code Quality & Security Audit - Full Analysis         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -48,7 +48,7 @@ update_status() {
 }
 
 # Step 1: Detect environment
-echo -e "${BLUE}[Step 1/5]${NC} Detecting environment..."
+echo -e "${BLUE}[Step 1/6]${NC} Detecting environment..."
 if ! "${SCRIPT_DIR}/detect-environment.sh" > /dev/null 2>&1; then
     if ! "${SCRIPT_DIR}/detect-environment.sh"; then
         echo -e "${RED}[ERROR]${NC} Environment detection failed"
@@ -69,7 +69,7 @@ echo -e "${GREEN}[OK]${NC} Project type: ${PROJECT_TYPE}"
 echo ""
 
 # Step 2: Check/install tools
-echo -e "${BLUE}[Step 2/5]${NC} Verifying tools..."
+echo -e "${BLUE}[Step 2/6]${NC} Verifying tools..."
 TOOLS_OK=false
 if [ "$PROJECT_TYPE" == "nextjs" ]; then
     # Check for ESLint (Next.js)
@@ -112,6 +112,7 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
     "solid_score": "unknown",
     "lint_score": "unknown",
     "dry_score": "unknown",
+    "security_score": "unknown",
     "critical_issues": 0,
     "warnings": 0,
     "suggestions": 0
@@ -119,6 +120,7 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
   "coverage": {},
   "solid": {"violations": [], "metrics": {}},
   "dry": {"clones": []},
+  "security": {},
   "tdd": {},
   "recommendations": []
 }
@@ -142,7 +144,7 @@ echo -e "${GREEN}[OK]${NC} Using scripts from: ${SCRIPTS_DIR}"
 echo ""
 
 # Step 3: Run coverage check
-echo -e "${BLUE}[Step 3/5]${NC} Running coverage analysis..."
+echo -e "${BLUE}[Step 3/6]${NC} Running coverage analysis..."
 COVERAGE_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/coverage-report.sh" ]; then
     if "${SCRIPTS_DIR}/coverage-report.sh" 2>/dev/null; then
@@ -174,7 +176,7 @@ echo -e "Coverage: $([ "$COVERAGE_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}
 echo ""
 
 # Step 4: Run SOLID analysis (both Drupal and Next.js have solid-check.sh)
-echo -e "${BLUE}[Step 4/5]${NC} Running SOLID analysis..."
+echo -e "${BLUE}[Step 4/6]${NC} Running SOLID analysis..."
 SOLID_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/solid-check.sh" ]; then
     if "${SCRIPTS_DIR}/solid-check.sh" 2>/dev/null; then
@@ -240,7 +242,7 @@ fi
 echo ""
 
 # Step 5: Run DRY check
-echo -e "${BLUE}[Step 5/5]${NC} Running DRY analysis..."
+echo -e "${BLUE}[Step 5/6]${NC} Running DRY analysis..."
 DRY_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/dry-check.sh" ]; then
     if "${SCRIPTS_DIR}/dry-check.sh" 2>/dev/null; then
@@ -271,12 +273,47 @@ fi
 echo -e "DRY: $([ "$DRY_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${DRY_STATUS}${NC}")"
 echo ""
 
+# Step 6: Run security audit (Drupal only)
+SECURITY_STATUS="unknown"
+if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
+    echo -e "${BLUE}[Step 6/6]${NC} Running security audit..."
+    if [ -f "${SCRIPTS_DIR}/security-check.sh" ]; then
+        if "${SCRIPTS_DIR}/security-check.sh" 2>/dev/null; then
+            SECURITY_STATUS="pass"
+        else
+            exit_code=$?
+            if [ $exit_code -eq 1 ]; then
+                SECURITY_STATUS="warning"
+                ((WARNING_COUNT++))
+            else
+                SECURITY_STATUS="fail"
+                ((CRITICAL_COUNT++))
+            fi
+        fi
+        update_status "$SECURITY_STATUS"
+
+        # Merge security report
+        if [ -f "${REPORT_DIR}/security-report.json" ]; then
+            jq -s '.[0] * {security: .[1]}' \
+                "${REPORT_DIR}/audit-report.json" \
+                "${REPORT_DIR}/security-report.json" \
+                > "${REPORT_DIR}/audit-report.tmp.json"
+            mv "${REPORT_DIR}/audit-report.tmp.json" "${REPORT_DIR}/audit-report.json"
+        fi
+    else
+        echo -e "${YELLOW}[SKIP]${NC} Security script not found"
+    fi
+    echo -e "Security: $([ "$SECURITY_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${SECURITY_STATUS}${NC}")"
+    echo ""
+fi
+
 # Update summary in report
 jq --arg overall "$OVERALL_STATUS" \
    --arg coverage "$COVERAGE_STATUS" \
    --arg solid "$SOLID_STATUS" \
    --arg lint "$LINT_STATUS" \
    --arg dry "$DRY_STATUS" \
+   --arg security "$SECURITY_STATUS" \
    --argjson critical "$CRITICAL_COUNT" \
    --argjson warnings "$WARNING_COUNT" \
    --argjson suggestions "$SUGGESTION_COUNT" \
@@ -285,6 +322,7 @@ jq --arg overall "$OVERALL_STATUS" \
     .summary.solid_score = $solid |
     .summary.lint_score = $lint |
     .summary.dry_score = $dry |
+    .summary.security_score = $security |
     .summary.critical_issues = $critical |
     .summary.warnings = $warnings |
     .summary.suggestions = $suggestions' \
@@ -307,6 +345,9 @@ if [ "$PROJECT_TYPE" == "nextjs" ]; then
     echo "  Lint:      ${LINT_STATUS}"
 fi
 echo "  DRY:       ${DRY_STATUS}"
+if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
+    echo "  Security:  ${SECURITY_STATUS}"
+fi
 echo ""
 echo "  Critical:  ${CRITICAL_COUNT}"
 echo "  Warnings:  ${WARNING_COUNT}"

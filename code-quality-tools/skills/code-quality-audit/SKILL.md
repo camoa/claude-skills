@@ -1,12 +1,12 @@
 ---
 name: code-quality-audit
-description: Use when auditing code quality, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD via DDEV) and Next.js (ESLint, Jest, jscpd, madge) projects
-version: 1.6.0
+description: Use when auditing code quality, security vulnerabilities, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects
+version: 2.0.0
 ---
 
 # Code Quality Audit
 
-Run quality audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
+Run quality and security audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
 
 ## When to Use
 
@@ -19,6 +19,7 @@ Run quality audits for **Drupal** and **Next.js** projects with consistent tooli
 - "Lint code" / "Check coding standards"
 - "Fix deprecations" / "Run rector"
 - "Start TDD" / "RED-GREEN-REFACTOR"
+- "Check security" / "Find vulnerabilities" / "OWASP audit"
 
 **Next.js projects:**
 - "Setup quality tools" / "Install ESLint"
@@ -28,31 +29,34 @@ Run quality audits for **Drupal** and **Next.js** projects with consistent tooli
 - "Lint code" / "Run ESLint"
 - "Check duplication" / "DRY check"
 - "Start TDD" / "Jest watch mode"
+- "Check security" / "Find vulnerabilities" / "OWASP audit"
 
 ## Quick Reference
 
 ### Drupal Scripts
-| Task | Script |
-|------|--------|
-| Setup tools | `scripts/core/install-tools.sh` |
-| Full audit | `scripts/core/full-audit.sh` |
-| Coverage | `scripts/drupal/coverage-report.sh` |
-| SOLID check | `scripts/drupal/solid-check.sh` |
-| DRY check | `scripts/drupal/dry-check.sh` |
-| Lint check | `scripts/drupal/lint-check.sh` |
-| Fix deprecations | `scripts/drupal/rector-fix.sh` |
-| TDD cycle | `scripts/drupal/tdd-workflow.sh` |
+| Task | Script | Details |
+|------|--------|---------|
+| Setup tools | `scripts/core/install-tools.sh` | See [Drupal Setup](references/operations/drupal-setup.md#operation-1-setup-tools) |
+| Full audit | `scripts/core/full-audit.sh` | See [Full Audit](references/operations/drupal-audits.md#operation-2-full-audit) |
+| Coverage | `scripts/drupal/coverage-report.sh` | See [Coverage Check](references/operations/drupal-audits.md#operation-3-coverage-check) |
+| SOLID check | `scripts/drupal/solid-check.sh` | See [SOLID Check](references/operations/drupal-audits.md#operation-4-solid-check) |
+| DRY check | `scripts/drupal/dry-check.sh` | See [DRY Check](references/operations/drupal-audits.md#operation-5-dry-check) |
+| Lint check | `scripts/drupal/lint-check.sh` | See [Lint Check](references/operations/drupal-audits.md#operation-11-lint-check) |
+| Fix deprecations | `scripts/drupal/rector-fix.sh` | See [Rector Fix](references/operations/drupal-audits.md#operation-12-rector-fix) |
+| TDD cycle | `scripts/drupal/tdd-workflow.sh` | See [TDD Workflow](references/operations/drupal-tdd.md) |
+| Security audit | `scripts/drupal/security-check.sh` | See [Security Audit](references/operations/drupal-security.md) (10 layers) |
 
 ### Next.js Scripts
-| Task | Script |
-|------|--------|
-| Setup tools | `scripts/core/install-tools.sh` |
-| Full audit | `scripts/core/full-audit.sh` |
-| Coverage | `scripts/nextjs/coverage-report.sh` |
-| SOLID check | `scripts/nextjs/solid-check.sh` |
-| Lint check | `scripts/nextjs/lint-check.sh` |
-| DRY check | `scripts/nextjs/dry-check.sh` |
-| TDD cycle | `scripts/nextjs/tdd-workflow.sh` |
+| Task | Script | Details |
+|------|--------|---------|
+| Setup tools | `scripts/core/install-tools.sh` | See [Next.js Setup](references/operations/nextjs-setup.md) |
+| Full audit | `scripts/core/full-audit.sh` | See [Full Audit](references/operations/nextjs-audits.md#operation-14-full-audit) |
+| Coverage | `scripts/nextjs/coverage-report.sh` | See [Coverage Check](references/operations/nextjs-audits.md#operation-16-coverage-check) |
+| SOLID check | `scripts/nextjs/solid-check.sh` | See [SOLID Check](references/operations/nextjs-audits.md#operation-19-solid-check) |
+| Lint check | `scripts/nextjs/lint-check.sh` | See [Lint Check](references/operations/nextjs-audits.md#operation-15-lint-check) |
+| DRY check | `scripts/nextjs/dry-check.sh` | See [DRY Check](references/operations/nextjs-audits.md#operation-17-dry-check) |
+| TDD cycle | `scripts/nextjs/tdd-workflow.sh` | See [TDD Workflow](references/operations/nextjs-tdd.md) |
+| Security audit | `scripts/nextjs/security-check.sh` | See [Security Audit](references/operations/nextjs-security.md) (7 layers) |
 
 ## Before Any Operation
 
@@ -76,430 +80,71 @@ Read `decision-guides/quality-audit-checklist.md` for detailed guidance.
 | Pre-merge | Full audit | ~10min |
 | Weekly | Full audit + HTML reports | ~15min |
 
----
+## Scope Targeting
 
-## Operation 1: Setup Tools
+To audit specific modules or components instead of the entire project:
 
-When user says "setup tools", "install PHPStan", "install testing tools":
+**See [Scope Targeting](references/scope-targeting.md)** for three approaches:
+1. **Change directory** (recommended) - `cd web/modules/custom/my_module`
+2. **Environment variables** - `DRUPAL_MODULES_PATH=path/to/module`
+3. **Full scan** (default) - Run from project root
 
-1. Create `.reports/` directory, add to `.gitignore`
-2. Check installed: `ddev exec vendor/bin/phpstan --version`
-3. Install missing:
-   ```bash
-   ddev composer require --dev phpstan/phpstan phpstan/extension-installer \
-     mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules \
-     phpmd/phpmd systemsdk/phpcpd drupal/coder
-   ```
-4. Copy templates to project root:
-   - `templates/drupal/phpstan.neon` (PHPStan 2.x - extensions auto-load)
-   - `templates/drupal/phpmd.xml`
-   - `templates/drupal/phpunit.xml`
-5. Ask coverage driver preference:
-
-   | Option | Best For | Trade-off |
-   |--------|----------|-----------|
-   | **PCOV** | CI/CD, daily dev | 2-5x faster, line coverage only |
-   | **Xdebug** | Deep analysis | Slower, has branch/path coverage |
-
-   If PCOV: Check PHP version (`ddev exec php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"`), add to `.ddev/config.yaml`:
-   ```yaml
-   webimage_extra_packages:
-     - php8.3-pcov  # Use actual version
-   ```
-6. Show composer scripts (mandatory):
-   ```bash
-   ddev composer quality:all    # All checks
-   ddev composer test:coverage  # Tests with coverage
-   ddev composer quality:fix    # Auto-fix standards
-   ```
+Intelligent detection: Claude detects current directory and user intent.
 
 ---
 
-## Operation 2: Full Audit
-
-When user says "run audit", "check code quality", "full quality check":
-
-Run `scripts/core/full-audit.sh` or execute manually:
-
-1. Verify tools installed
-2. Run all checks on `web/modules/custom`:
-   - PHPStan: `ddev exec vendor/bin/phpstan analyse {path} --error-format=json`
-   - PHPMD: `ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design`
-   - PHPCPD: `ddev exec vendor/bin/phpcpd {path} --min-lines=10`
-   - Static calls: `grep -rn "\\Drupal::" {path} --include="*.php"`
-   - Coverage: `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text`
-3. Save `.reports/audit-report.json` following `schemas/audit-report.schema.json`
-4. Show summary with PASS/WARN/FAIL per category
-5. Provide top 3-5 recommendations
-
-**Thresholds:**
-| Metric | Pass | Warning | Fail |
-|--------|------|---------|------|
-| Coverage | >80% | 70-80% | <70% |
-| Duplication | <5% | 5-10% | >10% |
-| PHPStan errors | 0 | 1-10 | >10 |
-
----
-
-## Operation 3: Coverage Check
-
-When user says "check coverage", "what's my coverage?":
-
-Run `scripts/drupal/coverage-report.sh` or:
-
-1. Execute: `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --testsuite unit,kernel --coverage-text`
-2. Parse output for `Lines: XX.XX%`
-3. Apply targets from `references/coverage-metrics.md`:
-
-   | Code Type | Target |
-   |-----------|--------|
-   | Business logic services | 90%+ |
-   | Security-related code | 95%+ |
-   | API controllers | 85%+ |
-   | Form validation | 85%+ |
-   | Simple CRUD, getters/setters | 60-70% |
-
-4. Save `.reports/coverage-report.json` following schema
-5. Compare against code-type targets, not just blanket 70%
-
----
-
-## Operation 4: SOLID Check
-
-When user says "find SOLID violations", "run PHPStan", "check complexity":
-
-Run `scripts/drupal/solid-check.sh` or:
-
-1. PHPStan: `ddev exec vendor/bin/phpstan analyse {path} --error-format=json`
-2. PHPMD: `ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design`
-3. Static calls: `grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests`
-4. Categorize by principle:
-
-   | Issue | Principle | Severity |
-   |-------|-----------|----------|
-   | Complexity >15 | SRP | Critical |
-   | Methods >25 per class | SRP | Critical |
-   | Static `\Drupal::` in services | DIP | Critical |
-   | Type errors | LSP | Warning |
-
-5. Save `.reports/solid-report.json` following schema
-
----
-
-## Operation 5: DRY Check
-
-When user says "check duplication", "find duplicate code", "DRY check":
-
-Run `scripts/drupal/dry-check.sh` or:
-
-1. Execute: `ddev exec vendor/bin/phpcpd {path} --min-lines=10 --min-tokens=70 --exclude tests`
-2. Parse duplication percentage
-3. **Before recommending extraction**, evaluate per `references/dry-detection.md`:
-
-   **Rule of Three Questions:**
-   - Is this the 3rd+ occurrence? (If <3, duplication OK)
-   - Knowledge duplication or coincidental similarity?
-   - Will these change together? (Same reason to change?)
-   - Is the abstraction clear or would it be forced?
-
-   **Skip extraction when:**
-   - Test setup code (tests should be independent)
-   - Only 2 occurrences (wait for 3rd)
-   - Would need many parameters (wrong abstraction)
-   - Similar but different reasons to change
-
-4. Save `.reports/dry-report.json` following schema
-5. Rate: <5% excellent | 5-10% acceptable | >10% needs refactoring
-
----
-
-## Operation 6: Module-Specific Audit
-
-When user says "check {module_name}", "audit my_module":
-
-1. Verify module exists: `ls -la web/modules/custom/{module_name}`
-2. Run all checks scoped to that path
-3. Save reports with prefix: `.reports/{module_name}-*.json`
-
----
-
-## Operation 7: Add Composer Scripts
-
-When user says "add composer scripts", "setup quality scripts":
-
-1. Read existing `composer.json`
-2. Detect modules path (`web/modules/custom` or `docroot/modules/custom`)
-3. Add scripts (merge with existing):
-   ```json
-   {
-     "scripts": {
-       "test": "phpunit",
-       "test:unit": "phpunit --testsuite unit",
-       "test:kernel": "phpunit --testsuite kernel",
-       "test:coverage": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text",
-       "quality:phpstan": "phpstan analyse {modules_path}",
-       "quality:phpmd": "phpmd {modules_path} text phpmd.xml",
-       "quality:dry": "phpcpd {modules_path} --min-lines=10",
-       "quality:cs": "phpcs --standard=Drupal,DrupalPractice {modules_path}",
-       "quality:all": ["@quality:phpstan", "@quality:phpmd", "@quality:dry"],
-       "quality:fix": "phpcbf --standard=Drupal,DrupalPractice {modules_path}"
-     }
-   }
-   ```
-4. Show usage (mandatory):
-   ```bash
-   ddev composer quality:all    # All checks
-   ddev composer test:coverage  # With coverage
-   ddev composer quality:fix    # Auto-fix
-   ```
-
----
-
-## Operation 8: CI Integration
-
-When user says "add to CI", "setup GitHub Actions":
-
-1. Copy `templates/ci/github-drupal.yml` to `.github/workflows/quality.yml`
-2. Explain pipeline: Lint → Static Analysis → Tests → Coverage (fails <70%)
-
----
-
-## Operation 9: Generate Report
-
-When user says "generate report", "show quality report":
-
-1. Read `.reports/audit-report.json`
-2. Generate `.reports/audit-report.md` with:
-   - Summary table (PASS/WARN/FAIL)
-   - Coverage by code type
-   - SOLID violations by severity
-   - DRY clones with Rule of Three evaluation
-   - Prioritized recommendations
-
----
-
-## Operation 10: TDD Workflow
-
-When user says "start TDD", "TDD cycle", "RED-GREEN-REFACTOR":
-
-Read `references/tdd-workflow.md` for patterns.
-
-1. Determine test type from `decision-guides/test-type-selection.md`:
-   - Pure logic, no dependencies → Unit (~1ms)
-   - Needs services/DB → Kernel (~100ms) **← Default for Drupal**
-   - Needs browser → Functional (~1s)
-   - Needs JavaScript → FunctionalJS (~5s)
-
-2. Run TDD phases:
-
-   **RED** (test must fail):
-   ```bash
-   scripts/drupal/tdd-workflow.sh red [TestFile.php]
-   ```
-   If test passes, warn: "In RED phase, test should fail first"
-
-   **GREEN** (minimal code to pass):
-   ```bash
-   scripts/drupal/tdd-workflow.sh green [TestFile.php]
-   ```
-   Write only enough to pass. Don't optimize yet.
-
-   **REFACTOR** (clean up, stay green):
-   ```bash
-   scripts/drupal/tdd-workflow.sh refactor [TestFile.php]
-   ```
-   Improve naming, extract methods. Tests must stay green.
-
-   **Watch mode** (continuous):
-   ```bash
-   scripts/drupal/tdd-workflow.sh watch
-   ```
-
-3. Target: 20-40 cycles/hour during active TDD
-
----
-
-## Operation 11: Lint Check (Drupal)
-
-When user says "lint code", "check coding standards", "run phpcs":
-
-Run `scripts/drupal/lint-check.sh` or:
-
-1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path} --report=json`
-2. Save `.reports/lint-report.json`
-3. Show summary with error/warning counts
-
-**Auto-fix mode:**
-```bash
-scripts/drupal/lint-check.sh --fix
-# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice {path}
-```
-
----
-
-## Operation 12: Rector Fix (Drupal)
-
-When user says "fix deprecations", "run rector", "auto-fix deprecated code":
-
-Run `scripts/drupal/rector-fix.sh` or:
-
-1. Dry run first: `ddev exec vendor/bin/rector process {path} --dry-run`
-2. Show proposed changes
-3. If user confirms: `ddev exec vendor/bin/rector process {path}`
-4. Save output to `.reports/rector/`
-
-**Usage:**
-```bash
-scripts/drupal/rector-fix.sh          # Dry run (preview changes)
-scripts/drupal/rector-fix.sh --apply  # Apply fixes
-```
-
----
-
-# Next.js Operations
-
-The following operations apply to Next.js projects (detected by `next.config.js`).
-
-## Operation 13: Setup Tools (Next.js)
-
-When user says "setup tools", "install ESLint" in a Next.js project:
-
-Run `scripts/core/install-tools.sh` or:
-
-1. Install ESLint + Next.js config:
-   ```bash
-   npm install -D eslint eslint-config-next @typescript-eslint/eslint-plugin \
-       eslint-plugin-react-hooks eslint-config-prettier
-   ```
-2. Install Jest + Testing Library:
-   ```bash
-   npm install -D jest @jest/globals jest-environment-jsdom \
-       @testing-library/react @testing-library/jest-dom
-   ```
-3. Install jscpd: `npm install -D jscpd`
-4. Copy templates if needed:
-   - `templates/nextjs/eslint.config.js`
-   - `templates/nextjs/jest.config.js`
-   - `templates/nextjs/jest.setup.js`
-
----
-
-## Operation 14: Full Audit (Next.js)
-
-When user says "run audit", "check code quality" in a Next.js project:
-
-Run `scripts/core/full-audit.sh` (auto-detects Next.js) or manually:
-
-1. Lint check (ESLint + TypeScript)
-2. Coverage check (Jest)
-3. DRY check (jscpd)
-4. Aggregate results into `.reports/audit-report.json`
-
-**Thresholds:**
-| Metric | Pass | Warning | Fail |
-|--------|------|---------|------|
-| Coverage | >80% | 70-80% | <70% |
-| ESLint errors | 0 | 1-10 | >10 |
-| TypeScript errors | 0 | - | >0 |
-| Duplication | <5% | 5-10% | >10% |
-
----
-
-## Operation 15: Lint Check (Next.js)
-
-When user says "lint code", "run eslint", "check types":
-
-Run `scripts/nextjs/lint-check.sh` or:
-
-1. ESLint: `npx eslint . --format json > .reports/lint-report.json`
-2. TypeScript: `npx tsc --noEmit`
-3. Show summary with error/warning counts
-
-**Auto-fix mode:**
-```bash
-scripts/nextjs/lint-check.sh --fix
-# or: npx eslint . --fix
-```
-
----
-
-## Operation 16: Coverage Check (Next.js)
-
-When user says "check coverage", "run jest coverage":
-
-Run `scripts/nextjs/coverage-report.sh` or:
-
-```bash
-npx jest --coverage --coverageReporters=json-summary
-```
-
-Reports saved to `.reports/coverage/`
-
----
-
-## Operation 17: DRY Check (Next.js)
-
-When user says "check duplication", "DRY check":
-
-Run `scripts/nextjs/dry-check.sh` or:
-
-```bash
-npx jscpd src --reporters json --output .reports/dry/
-```
-
-Applies same Rule of Three guidance as Drupal DRY check.
-
----
-
-## Operation 18: TDD Workflow (Next.js)
-
-When user says "start TDD", "jest watch":
-
-Run `scripts/nextjs/tdd-workflow.sh` with phases:
-
-```bash
-scripts/nextjs/tdd-workflow.sh red [test-file]      # Write failing test
-scripts/nextjs/tdd-workflow.sh green [test-file]    # Minimal implementation
-scripts/nextjs/tdd-workflow.sh refactor [test-file] # Clean up
-scripts/nextjs/tdd-workflow.sh watch                # Continuous mode
-```
-
-Target: 20-40 cycles/hour during active TDD
-
----
-
-## Operation 19: SOLID Check (Next.js)
-
-When user says "find SOLID violations", "check complexity", "check circular dependencies":
-
-Run `scripts/nextjs/solid-check.sh` or:
-
-1. **Circular Dependencies (ISP, DIP)**: `npx madge --circular src`
-2. **Complexity Analysis (SRP)**: ESLint complexity rules
-3. **Large File Detection (SRP)**: Files >300 lines
-4. **TypeScript Strict Mode (LSP, DIP)**: Check `tsconfig.json` strict settings
-
-Categorize by principle:
-
-| Issue | Principle | Severity |
-|-------|-----------|----------|
-| Circular dependency | ISP, DIP | Critical |
-| Complexity >10 | SRP | Warning |
-| File >300 lines | SRP | Warning |
-| strict mode disabled | LSP, DIP | Warning |
-
-Save `.reports/solid-report.json` with:
-- Per-principle status (pass/warning/fail)
-- Circular dependency chains
-- Complexity violations
-- Large files list
-
-**Thresholds:**
-| Metric | Pass | Warning | Fail |
-|--------|------|---------|------|
-| Circular deps | 0 | - | >0 |
-| Complexity violations | 0 | 1-5 | >5 |
-| Large files | 0 | 1-3 | >3 |
+# Operations
+
+All detailed operation instructions have been moved to reference files for better organization.
+
+## Drupal Operations
+
+### Setup & Configuration
+- **Operation 1:** [Setup Tools](references/operations/drupal-setup.md#operation-1-setup-tools) - Install PHPStan, PHPMD, PHPCPD, Coder
+- **Operation 6:** [Module-Specific Audit](references/operations/drupal-setup.md#operation-6-module-specific-audit) - Scope audit to one module
+- **Operation 7:** [Add Composer Scripts](references/operations/drupal-setup.md#operation-7-add-composer-scripts) - Configure quality scripts
+- **Operation 8:** [CI Integration](references/operations/drupal-setup.md#operation-8-ci-integration) - Setup GitHub Actions
+
+### Quality Audits
+- **Operation 2:** [Full Audit](references/operations/drupal-audits.md#operation-2-full-audit) - Run all quality checks
+- **Operation 3:** [Coverage Check](references/operations/drupal-audits.md#operation-3-coverage-check) - Measure test coverage
+- **Operation 4:** [SOLID Check](references/operations/drupal-audits.md#operation-4-solid-check) - Find principle violations
+- **Operation 5:** [DRY Check](references/operations/drupal-audits.md#operation-5-dry-check) - Detect code duplication
+- **Operation 11:** [Lint Check](references/operations/drupal-audits.md#operation-11-lint-check) - Coding standards
+- **Operation 12:** [Rector Fix](references/operations/drupal-audits.md#operation-12-rector-fix) - Auto-fix deprecations
+
+### Development Workflows
+- **Operation 10:** [TDD Workflow](references/operations/drupal-tdd.md) - RED-GREEN-REFACTOR cycle
+
+### Security
+- **Operation 20:** [Security Audit](references/operations/drupal-security.md) - **10 security layers (v2.0.0)**
+  - Drush pm:security, Composer audit
+  - yousha/php-security-linter, Psalm taint analysis
+  - Custom Drupal patterns, Security Review module
+  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
+  - **Roave Security Advisories** (v2.0.0)
+
+## Next.js Operations
+
+### Setup & Configuration
+- **Operation 13:** [Setup Tools](references/operations/nextjs-setup.md) - Install ESLint, Jest, security tools
+
+### Quality Audits
+- **Operation 14:** [Full Audit](references/operations/nextjs-audits.md#operation-14-full-audit) - Run all quality checks
+- **Operation 15:** [Lint Check](references/operations/nextjs-audits.md#operation-15-lint-check) - ESLint + TypeScript
+- **Operation 16:** [Coverage Check](references/operations/nextjs-audits.md#operation-16-coverage-check) - Jest coverage
+- **Operation 17:** [DRY Check](references/operations/nextjs-audits.md#operation-17-dry-check) - Detect duplication
+- **Operation 19:** [SOLID Check](references/operations/nextjs-audits.md#operation-19-solid-check) - Circular deps, complexity
+
+### Development Workflows
+- **Operation 18:** [TDD Workflow](references/operations/nextjs-tdd.md) - RED-GREEN-REFACTOR with Jest
+
+### Security
+- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) - **7 security layers (v2.0.0)**
+  - npm audit, ESLint security plugins
+  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
+  - Custom React/Next.js patterns (XSS, eval, navigation)
+  - **Socket CLI** (v2.0.0)
 
 ---
 
@@ -511,19 +156,21 @@ All reports must follow `schemas/audit-report.schema.json`:
 {
   "meta": {
     "project_type": "drupal|nextjs|monorepo",
-    "timestamp": "2025-12-06T12:00:00Z",
+    "timestamp": "2025-12-19T12:00:00Z",
     "thresholds": { "coverage_minimum": 70, "duplication_max": 5 }
   },
   "summary": {
     "overall_score": "pass|warning|fail",
     "coverage_score": "pass|warning|fail",
     "solid_score": "pass|warning|fail",
-    "dry_score": "pass|warning|fail"
+    "dry_score": "pass|warning|fail",
+    "security_score": "pass|warning|fail"
   },
   "coverage": { "line_coverage": 75.5, "files_analyzed": 45 },
-  "solid": { "violations": [{ "principle": "SRP", "severity": "critical", "file": "...", "message": "..." }] },
+  "solid": { "violations": [] },
   "dry": { "duplication_percentage": 3.2, "clones": [] },
-  "recommendations": [{ "category": "coverage", "priority": "high", "message": "...", "action": "..." }]
+  "security": { "critical": 0, "high": 0, "medium": 3, "low": 5, "issues": [] },
+  "recommendations": []
 }
 ```
 
@@ -531,11 +178,23 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 ## References
 
+### Core Guidance
 - `references/tdd-workflow.md` - RED-GREEN-REFACTOR patterns, test naming, cycle targets
 - `references/coverage-metrics.md` - Coverage targets by code type, PCOV vs Xdebug
 - `references/dry-detection.md` - Rule of Three, when duplication is OK
 - `references/solid-detection.md` - SOLID detection patterns and fixes
 - `references/composer-scripts.md` - Ready-to-use composer scripts
+- `references/scope-targeting.md` - **Target specific modules/components (NEW in v1.8.0)**
+
+### Operations
+- `references/operations/drupal-setup.md` - Drupal setup operations
+- `references/operations/drupal-audits.md` - Drupal quality audit operations
+- `references/operations/drupal-security.md` - **Drupal security (10 layers, v2.0.0)**
+- `references/operations/drupal-tdd.md` - Drupal TDD workflow
+- `references/operations/nextjs-setup.md` - Next.js setup operations
+- `references/operations/nextjs-audits.md` - Next.js quality audit operations
+- `references/operations/nextjs-security.md` - **Next.js security (7 layers, v2.0.0)**
+- `references/operations/nextjs-tdd.md` - Next.js TDD workflow
 
 ## Decision Guides
 
@@ -548,10 +207,34 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `templates/drupal/phpstan.neon` - PHPStan 2.x config (extensions auto-load)
 - `templates/drupal/phpmd.xml` - PHPMD ruleset for Drupal
 - `templates/drupal/phpunit.xml` - PHPUnit config with testsuites
-- `templates/ci/github-drupal.yml` - GitHub Actions workflow
+- `templates/ci/github-drupal.yml` - GitHub Actions workflow with security tools
 
 ### Next.js
-- `templates/nextjs/eslint.config.js` - ESLint v9 flat config with TypeScript
+- `templates/nextjs/eslint.config.js` - ESLint v9 flat config with TypeScript + security
 - `templates/nextjs/jest.config.js` - Jest config with coverage thresholds
 - `templates/nextjs/jest.setup.js` - Jest setup with Testing Library
 - `templates/nextjs/.prettierrc` - Prettier config with Tailwind plugin
+
+---
+
+## What's New in v2.0.0
+
+**Progressive Disclosure Refactoring:**
+- ✅ SKILL.md: 632 → 234 lines (63% reduction)
+- ✅ 9 reference files created with full documentation
+- ✅ Plugin-creation-tools compliance (16/16 criteria)
+
+**Phase 1 - Cross-Stack Security Tools:**
+- ✅ Semgrep SAST (20,000+ security rules for PHP, React, JS, TS)
+- ✅ Trivy scanner (dependency/container/secret scanner)
+- ✅ Gitleaks (secret detection with 800+ patterns)
+
+**Phase 2 - Enhancement Tools:**
+- ✅ Roave Security Advisories (Drupal - Composer prevention layer)
+- ✅ Socket CLI (Next.js - supply chain attack detection)
+
+**Security Coverage:**
+- Drupal: 40% → **90%** (10 security layers)
+- Next.js: 0% → **85%** (7 security layers, NEW!)
+
+See `.work-in-progress-v2.0.0.md` for full implementation details.

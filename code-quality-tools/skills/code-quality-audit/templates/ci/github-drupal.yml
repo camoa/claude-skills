@@ -1,10 +1,11 @@
 #
-# GitHub Actions workflow for Drupal code quality
+# GitHub Actions workflow for Drupal code quality and security
 # Copy to .github/workflows/quality.yml
 #
 # Prerequisites:
 #   - DDEV configured in project
-#   - Quality tools installed via composer
+#   - Quality tools installed via composer (PHPStan, PHPMD, PHPCPD, Coder)
+#   - Security tools installed via composer (Psalm, php-security-linter)
 #   - CODECOV_TOKEN secret (optional, for coverage upload)
 #
 
@@ -46,6 +47,8 @@ jobs:
             phpmd/phpmd \
             systemsdk/phpcpd \
             drupal/coder \
+            vimeo/psalm \
+            yousha/php-security-linter \
             --no-interaction
 
       # =====================
@@ -96,6 +99,51 @@ jobs:
         continue-on-error: true
 
       # =====================
+      # Security Audit
+      # =====================
+      - name: Psalm Taint Analysis
+        run: |
+          ddev exec vendor/bin/psalm \
+            --taint-analysis \
+            --no-cache \
+            --output-format=github \
+            web/modules/custom web/themes/custom
+        continue-on-error: true
+
+      - name: PHP Security Linter (OWASP/CIS)
+        run: |
+          ddev exec vendor/bin/php-security-linter scan \
+            web/modules/custom web/themes/custom \
+            --format=github
+        continue-on-error: true
+
+      - name: Drush Security Advisories
+        run: |
+          ddev drush pm:security --format=list
+        continue-on-error: true
+
+      - name: Composer Audit
+        run: |
+          ddev composer audit --no-dev
+        continue-on-error: false
+
+      - name: Semgrep SAST
+        run: |
+          ddev exec semgrep scan --config=auto --sarif \
+            web/modules/custom web/themes/custom
+        continue-on-error: true
+
+      - name: Trivy Scanner
+        run: |
+          trivy fs --scanners vuln,secret --format sarif --output trivy-results.sarif .
+        continue-on-error: true
+
+      - name: Gitleaks Secret Detection
+        run: |
+          gitleaks detect --no-git --report-format sarif --report-path gitleaks-results.sarif
+        continue-on-error: true
+
+      # =====================
       # Tests with Coverage
       # =====================
       - name: Run Tests with Coverage
@@ -140,9 +188,26 @@ jobs:
         run: |
           echo "## Code Quality Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quality Checks" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| PHPStan | ${{ steps.phpstan.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| PHPMD | ${{ steps.phpmd.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Duplication | ${{ steps.phpcpd.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coding Standards | ${{ steps.phpcs.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Security Checks" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Psalm Taint Analysis | ${{ steps.psalm.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PHP Security Linter | ${{ steps.security-linter.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Drush Advisories | ${{ steps.drush-security.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Composer Audit | ${{ steps.composer-audit.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep SAST | ${{ steps.semgrep.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Scanner | ${{ steps.trivy.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks Secrets | ${{ steps.gitleaks.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Testing" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ${{ steps.tests.outcome || 'completed' }} |" >> $GITHUB_STEP_SUMMARY

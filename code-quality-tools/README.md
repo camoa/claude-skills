@@ -1,6 +1,6 @@
 # Code Quality Tools
 
-Code quality auditing plugin for Claude Code. Provides TDD, SOLID, and DRY principle checks for **Drupal** (via DDEV) and **Next.js** projects.
+Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects with Semgrep, Trivy, and Gitleaks.
 
 ## Installation
 
@@ -16,25 +16,27 @@ Once installed, Claude handles these requests:
 
 | Request | What Claude Does |
 |---------|------------------|
-| "Setup code quality tools" | Installs PHPStan, PHPMD, PHPCPD, drupal-rector via composer |
+| "Setup code quality tools" | Installs PHPStan, PHPMD, PHPCPD, Psalm, security tools via composer |
 | "Run a code quality audit" | Runs all checks, saves JSON to `.reports/`, shows summary |
 | "Check test coverage" | PHPUnit + PCOV coverage |
 | "Find SOLID violations" | PHPStan + PHPMD + static call detection |
 | "Check for duplication" | PHPCPD duplication analysis |
 | "Lint code" | phpcs with Drupal/DrupalPractice standards |
 | "Fix deprecations" | drupal-rector auto-fix |
+| **"Run security audit"** | **OWASP + Drupal security: Drush advisories, Composer audit, Psalm taint, PHPCS security, Semgrep SAST, Trivy, Gitleaks, custom patterns** |
 | "Add quality checks to CI" | Creates GitHub Actions workflow |
 
 ### Next.js Projects
 
 | Request | What Claude Does |
 |---------|------------------|
-| "Setup code quality tools" | Installs ESLint, Jest, jscpd, madge via npm |
+| "Setup code quality tools" | Installs ESLint + security plugins, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks via npm |
 | "Run a code quality audit" | Runs all checks, saves JSON to `.reports/`, shows summary |
 | "Check test coverage" | Jest coverage with thresholds |
 | "Find SOLID violations" | Circular deps (madge), complexity, large files, TS strict |
 | "Check for duplication" | jscpd duplication analysis |
 | "Lint code" | ESLint + TypeScript type checking |
+| **"Run security audit"** | **npm audit, ESLint security plugins, Semgrep SAST, Trivy, Gitleaks, React XSS patterns** |
 | "Start TDD" | Jest watch mode with RED-GREEN-REFACTOR |
 
 ## Reports
@@ -47,6 +49,7 @@ All audit results are saved to `.reports/` (git-ignored):
 ├── solid-report.json       # SOLID violations
 ├── lint-report.json        # Lint results (Next.js)
 ├── dry-report.json         # Duplication analysis
+├── security-report.json    # Security vulnerabilities (OWASP)
 ├── audit-report.json       # Full audit (aggregated)
 └── audit-report.md         # Human-readable report
 ```
@@ -59,6 +62,9 @@ All audit results are saved to `.reports/` (git-ignored):
 | Duplication | <5% | 5-10% | >10% |
 | Complexity | <10 | 10-15 | >15 |
 | Circular deps (Next.js) | 0 | - | >0 |
+| **Security: Critical** | **0** | **0** | **>0** |
+| **Security: High** | **0** | **1-3** | **>3** |
+| **Security: Medium** | **0** | **1-10** | **>10** |
 
 ## Requirements
 
@@ -101,19 +107,32 @@ code-quality-tools/
 | [systemsdk/phpcpd](https://github.com/systemsdk/phpcpd) | Duplication |
 | [drupal/coder](https://www.drupal.org/project/coder) | Coding standards |
 | [palantirnet/drupal-rector](https://github.com/palantirnet/drupal-rector) | Auto-fix deprecations |
+| **[vimeo/psalm](https://psalm.dev/)** | **Taint analysis (XSS/SQLi)** |
+| **[yousha/php-security-linter](https://github.com/Yousha/php-security-linter)** | **PHPCS security (OWASP/CIS)** |
+| **[Semgrep](https://semgrep.dev/)** | **Multi-language SAST (20K+ rules)** |
+| **[Trivy](https://trivy.dev/)** | **Dependency/container/secret scanner** |
+| **[Gitleaks](https://gitleaks.io/)** | **Secret detection (800+ patterns)** |
+| **[drupal/security_review](https://www.drupal.org/project/security_review)** | **Drupal config audit** |
+| **Drush pm:security** | **Drupal security advisories** |
+| **Composer audit** | **Package vulnerabilities** |
 
 ### Next.js
 | Tool | Purpose |
 |------|---------|
 | [ESLint](https://eslint.org/) | Linting |
+| **[eslint-plugin-security](https://github.com/eslint-community/eslint-plugin-security)** | **Security linting** |
 | [TypeScript](https://www.typescriptlang.org/) | Type checking |
 | [Jest](https://jestjs.io/) | Testing + coverage |
 | [jscpd](https://github.com/kucherenko/jscpd) | Duplication |
 | [madge](https://github.com/pahen/madge) | Circular dependency detection |
+| **[Semgrep](https://semgrep.dev/)** | **Multi-language SAST (React/JS/TS rules)** |
+| **[Trivy](https://trivy.dev/)** | **Dependency/container/secret scanner** |
+| **[Gitleaks](https://gitleaks.io/)** | **Secret detection (800+ patterns)** |
+| **npm audit** | **Package vulnerability scanning** |
 
 ## Version
 
-**v1.6.0** - Full SOLID support for Next.js with madge
+**v1.8.0** - Cross-stack security tools: Semgrep SAST, Trivy scanner, Gitleaks secret detection for both Drupal and Next.js
 
 ## License
 

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2025-12-18
+
+### Added
+- **Operation 20: Security Audit (Drupal)** - Comprehensive OWASP + Drupal security scanning
+- `scripts/drupal/security-check.sh` - Multi-tool security audit script
+- **Modern Security Stack (2024-2025)**:
+  - `yousha/php-security-linter` (PHPCS security - actively maintained Dec 2025)
+  - `vimeo/psalm` taint analysis (XSS/SQLi dataflow detection)
+  - `drupal/security_review` module integration (v3.1.1)
+  - Built-in Drush pm:security (Drupal advisories)
+  - Built-in Composer audit (package vulnerabilities)
+  - Custom Drupal pattern checks (SQL injection, XSS, deserialization)
+- Security report with OWASP 2021 category mapping
+- 6-layer security audit approach
+
+### Changed
+- Replaced abandoned `pheromone/phpcs-security-audit` (2020) with `yousha/php-security-linter` (2025)
+- SKILL.md updated with modern security tools and why old tools are deprecated
+- Added security audit to Quick Reference
+
+### Documentation
+- Added "Why NOT pheromone/phpcs-security-audit?" section
+- Documented modern security stack maintenance status
+- Added installation and usage examples for security tools
+
 ## [1.6.0] - 2025-12-13 (Not fully tested)
 
 ### Added
