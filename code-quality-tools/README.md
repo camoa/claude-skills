@@ -23,7 +23,7 @@ Once installed, Claude handles these requests:
 | "Check for duplication" | PHPCPD duplication analysis |
 | "Lint code" | phpcs with Drupal/DrupalPractice standards |
 | "Fix deprecations" | drupal-rector auto-fix |
-| **"Run security audit"** | **OWASP + Drupal security: Drush advisories, Composer audit, Psalm taint, PHPCS security, Semgrep SAST, Trivy, Gitleaks, custom patterns** |
+| **"Run security audit"** | **OWASP + Drupal security: Drush advisories, Composer audit, Psalm taint, PHPCS security, Semgrep SAST, Trivy, Gitleaks, Roave, custom patterns (10 layers)** |
 | "Add quality checks to CI" | Creates GitHub Actions workflow |
 
 ### Next.js Projects
@@ -36,7 +36,7 @@ Once installed, Claude handles these requests:
 | "Find SOLID violations" | Circular deps (madge), complexity, large files, TS strict |
 | "Check for duplication" | jscpd duplication analysis |
 | "Lint code" | ESLint + TypeScript type checking |
-| **"Run security audit"** | **npm audit, ESLint security plugins, Semgrep SAST, Trivy, Gitleaks, React XSS patterns** |
+| **"Run security audit"** | **npm audit, ESLint security plugins, Semgrep SAST, Trivy, Gitleaks, Socket CLI, React XSS patterns (7 layers)** |
 | "Start TDD" | Jest watch mode with RED-GREEN-REFACTOR |
 
 ## Reports
@@ -113,6 +113,7 @@ code-quality-tools/
 | **[Trivy](https://trivy.dev/)** | **Dependency/container/secret scanner** |
 | **[Gitleaks](https://gitleaks.io/)** | **Secret detection (800+ patterns)** |
 | **[drupal/security_review](https://www.drupal.org/project/security_review)** | **Drupal config audit** |
+| **[Roave Security Advisories](https://github.com/Roave/SecurityAdvisories)** | **Composer prevention layer** |
 | **Drush pm:security** | **Drupal security advisories** |
 | **Composer audit** | **Package vulnerabilities** |
 
@@ -128,11 +129,27 @@ code-quality-tools/
 | **[Semgrep](https://semgrep.dev/)** | **Multi-language SAST (React/JS/TS rules)** |
 | **[Trivy](https://trivy.dev/)** | **Dependency/container/secret scanner** |
 | **[Gitleaks](https://gitleaks.io/)** | **Secret detection (800+ patterns)** |
+| **[Socket CLI](https://socket.dev/)** | **Supply chain attack detection** |
 | **npm audit** | **Package vulnerability scanning** |
+
+## Optional: DAST Tools
+
+For **pre-production and staging environments**, optional DAST (Dynamic Application Security Testing) tools are documented:
+
+| Tool | Purpose |
+|------|---------|
+| **[OWASP ZAP](https://www.zaproxy.org/)** | Full DAST scanner - active/passive scanning, authentication testing |
+| **[Nuclei](https://nuclei.projectdiscovery.io/)** | Template-based CVE scanning - 1000+ vulnerability templates |
+
+See `references/operations/dast-tools.md` for installation and usage.
 
 ## Version
 
-**v1.8.0** - Cross-stack security tools: Semgrep SAST, Trivy scanner, Gitleaks secret detection for both Drupal and Next.js
+**v2.1.0** - Optional DAST tools (OWASP ZAP + Nuclei) for pre-production security testing
+
+**v2.0.0** - Major refactoring + Phase 1 (Semgrep, Trivy, Gitleaks) + Phase 2 (Roave, Socket CLI)
+- Drupal: 10 security layers (90% coverage)
+- Next.js: 7 security layers (85% coverage)
 
 ## License
 
