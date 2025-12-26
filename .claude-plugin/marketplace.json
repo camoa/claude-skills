@@ -62,6 +62,19 @@
       "strict": false
     },
     {
+      "name": "code-paper-test",
+      "source": "./code-paper-test",
+      "description": "Systematically test code through mental execution - trace code line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment",
+      "version": "0.1.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": ["testing", "debugging", "code-review", "paper-testing", "mental-execution", "bug-detection", "ai-code-auditing", "contract-verification", "dependency-verification"],
+      "strict": false
+    },
+    {
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded visual content (presentations, carousels, infographics) with 114 templates, 13 visual styles, visual components (cards, icons, gradients), 17 color palettes, and Presentation Zen principles",
