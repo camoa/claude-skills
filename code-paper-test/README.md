@@ -11,6 +11,43 @@ Paper testing is the practice of mentally executing code with concrete test case
 3. **Contract violations** - Mismatched interfaces, missing abstract methods
 4. **Dependency issues** - Wrong method names, incorrect return types
 
+## Why Paper Testing Now? The AI-Enabled Renaissance
+
+### Classic Era → Decline → Revival
+
+**Paper testing was effective** for simple algorithms and procedural code, but **became impractical** with:
+- External libraries (thousands of dependencies)
+- OOP complexity (inheritance, polymorphism, DI)
+- Framework magic (annotations, auto-wiring)
+- Modern scale (millions of lines)
+
+**AI changes everything** in 2025. What was impossible for humans is trivial for AI:
+
+✅ **Verify external dependencies instantly** - Check if methods exist, signatures match, return types correct
+✅ **Navigate OOP complexity** - Trace inheritance chains, verify interfaces, validate DI
+✅ **Detect AI-generated bugs** - Spot hallucinated methods, mixed API versions, wrong assumptions
+✅ **Mental execution at scale** - Follow state through complex object graphs and middleware chains
+
+### The Problem: AI Code Generation
+
+With AI generating 30-60% of modern code:
+
+- **AI hallucinates methods** that sound right but don't exist (`$entity->getFieldValue()` → doesn't exist)
+- **Mixes API versions** (Drupal 7 patterns in D10 code)
+- **Guesses signatures** (parameter order, return types)
+- **Assumes behavior** without verification
+
+**Traditional testing can't catch these early:**
+- Unit tests only run if code compiles
+- Integration tests miss logical errors
+- Static analysis doesn't verify external dependencies
+
+**AI-powered paper testing catches them before deployment:**
+- Verifies every external call exists
+- Checks actual method signatures
+- Traces logic with concrete values
+- Validates code contracts
+
 ## Installation
 
 ```bash
