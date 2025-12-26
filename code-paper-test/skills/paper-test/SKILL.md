@@ -26,6 +26,74 @@ Follow code logic with concrete test cases to find:
 
 NOT just reading - actually run the code in your head with real values.
 
+## Critical: How AI Should Verify
+
+**NEVER assume or guess** - Use your tools to verify every claim:
+
+### Verifying External Dependencies
+
+When code calls external methods/services:
+
+1. **Use Read tool** to check actual source files:
+   ```
+   Read: src/Service/UserService.php
+   → Find loadByEmail() method
+   → Note: Returns User|null, throws InvalidArgumentException if empty
+   ```
+
+2. **Use Grep tool** to find method definitions:
+   ```
+   Grep: "public function loadByEmail" in src/
+   → Verify method exists and signature
+   ```
+
+3. **Check interfaces** for injected services:
+   ```
+   Read: vendor/.../LoggerInterface.php
+   → Verify info() method signature
+   ```
+
+**DO NOT** write "Assume method exists" - Actually verify or mark as UNVERIFIED RISK.
+
+### Verifying Code Contracts
+
+When code has relationships (extends, implements, uses):
+
+1. **Read parent/base classes**:
+   ```
+   Read: src/Plugin/ActionBase.php
+   → Check for abstract methods
+   → Verify parent constructor signature
+   ```
+
+2. **Read interfaces**:
+   ```
+   Read: src/Handler/HandlerInterface.php
+   → List all required methods
+   → Note exact signatures
+   ```
+
+3. **Check service definitions**:
+   ```
+   Read: config/services.yml
+   Read: modulename.services.yml
+   → Verify service ID exists
+   → Check tags if using service collectors
+   ```
+
+### When You Cannot Verify
+
+If source is unavailable (external package, closed-source):
+
+```
+DEPENDENCY CHECK: $externalApi->fetchData()
+  VERIFICATION: Unable to read source
+  RISK: Cannot verify method exists or return type
+  RECOMMENDATION: Add runtime checks for null/exceptions
+```
+
+Mark as risk - don't assume it works.
+
 ---
 
 ## Quick Reference
