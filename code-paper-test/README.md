@@ -117,6 +117,7 @@ The main SKILL.md provides the workflow. Detailed guides in `references/`:
 - **ai-code-auditing.md** - Specific checks for AI-generated code
 - **hybrid-testing.md** - Module-level testing strategy
 - **common-flaws.md** - Catalog of frequent bugs
+- **advanced-techniques.md** - Progressive injects, red team testing, attack surface analysis, scenario-based workflows, AAR format
 
 ### Contract Pattern Coverage
 
@@ -195,7 +196,7 @@ Specific checks for AI-generated code:
 
 ## Version
 
-0.1.0
+0.1.1
 
 ## License
 
