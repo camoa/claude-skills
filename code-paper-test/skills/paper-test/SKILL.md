@@ -363,6 +363,7 @@ All detailed guides are in `references/` directory:
 - `references/ai-code-auditing.md` - Testing AI-generated code
 - `references/hybrid-testing.md` - Module-level testing strategy
 - `references/common-flaws.md` - Catalog of frequent bugs
+- `references/advanced-techniques.md` - Progressive injects, red team testing, attack surface analysis, AAR format
 
 ---
 

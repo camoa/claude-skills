@@ -5,6 +5,61 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-12-26
+
+### Added
+
+**Advanced Testing Techniques** - New reference guide adapting security tabletop exercise methodologies
+
+#### New Reference File
+- `references/advanced-techniques.md` (938 lines) - Decision-focused advanced testing techniques
+
+#### Techniques Covered
+1. **Progressive Inject Testing**
+   - Incrementally add complications to test scenarios
+   - Test resilience under cascading failures
+   - Template for designing inject sequences
+   - Full authentication flow example with 5 injects
+
+2. **Red Team Edge Case Discovery**
+   - Adversarial mindset for finding edge cases
+   - Security-focused attack questions
+   - Payment processing red team analysis example
+   - Attack surface ranking and prioritization
+
+3. **Attack Surface Analysis**
+   - Map all entry points to code
+   - Rank by risk exposure
+   - Prioritize testing effort
+   - E-commerce checkout example
+
+4. **Scenario-Based Workflow Testing**
+   - End-to-end user workflows vs isolated functions
+   - Integration bug detection
+   - Complete purchase workflow example with 8 steps
+   - Data handoff verification between components
+
+5. **After-Action Report (AAR) Format**
+   - Structured documentation of findings
+   - Root cause analysis methodology
+   - Improvement plan with owners and dates
+   - Full AAR example with 4 critical gaps found
+
+#### Design Philosophy
+- **Decision-focused**: "When to use X vs Y" not tutorials
+- **Concise**: One excellent example per technique
+- **No duplication**: Assumes Claude knows security concepts
+- **Under limits**: 938 lines (well under 1,000 line guideline)
+
+#### Updated Files
+- SKILL.md: Added reference to advanced-techniques.md
+- CHANGELOG.md: This entry
+
+### Value Proposition
+Adapted proven security tabletop exercise methodologies to code testing, providing systematic approaches for complex scenarios that standard paper testing doesn't cover.
+
+---
+
 ## [0.1.0] - 2025-12-26
 
 ### Added

@@ -65,7 +65,7 @@
       "name": "code-paper-test",
       "source": "./code-paper-test",
       "description": "Systematically test code through mental execution - trace code line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "camoa"
       },
