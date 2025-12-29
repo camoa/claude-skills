@@ -1,7 +1,7 @@
 {
   "name": "code-paper-test",
   "description": "Systematic code testing through mental execution - trace code line-by-line with concrete values to find bugs, missing logic, and edge cases before running",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "camoa"
   },
