@@ -5,8 +5,8 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for Drupal development, brand content creation (presentations, carousels, infographics), code quality auditing, and plugin development",
-    "version": "1.2.0"
+    "description": "Claude Code plugins for Drupal development (HTMX, AJAX migration), brand content creation (presentations, carousels, infographics), code quality auditing, and plugin development",
+    "version": "1.3.0"
   },
   "plugins": [
     {
@@ -46,6 +46,19 @@
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
       "keywords": ["drupal", "development", "workflow", "architecture", "tdd", "solid", "dry", "security"],
+      "strict": false
+    },
+    {
+      "name": "drupal-htmx",
+      "source": "./drupal-htmx",
+      "description": "HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+. Includes analyzers, pattern recommendations, and validation.",
+      "version": "1.0.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": ["drupal", "htmx", "ajax", "migration", "forms", "dynamic-content"],
       "strict": false
     },
     {
