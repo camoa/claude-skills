@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta.3] - 2025-12-31
+
+### Added
+- **6-step creation process**: Structured workflow for manual skill creation
+  - Added to `references/03-skills/creation-approaches.md`
+  - Step 1: Understand skill with concrete examples
+  - Step 2: Plan reusable skill contents
+  - Step 3: Initialize skill (run init_skill.py)
+  - Step 4: Edit skill (implement resources + write SKILL.md)
+  - Step 5: Package skill (run package_skill.py with validation)
+  - Step 6: Iterate based on real usage
+  - Includes decision matrices, examples, and completion criteria for each step
+
+### Enhanced
+- **Plugin vs skill level distinction**: Clarified README/CHANGELOG placement
+  - Updated `references/02-philosophy/anti-patterns.md`
+  - ✅ README.md, CHANGELOG.md, LICENSE **required** at plugin root (for humans)
+  - ❌ README.md, CHANGELOG.md **forbidden** inside skills (AI-only files)
+  - Added visual examples showing correct vs incorrect structure
+  - Explains why: Plugin docs for humans, skill SKILL.md for AI
+
+### Attribution
+- 6-step creation process adapted from Anthropic's `skill-creator` skill (document-skills@anthropic-agent-skills)
+- Plugin vs skill level distinction concept from Anthropic's skill-creator best practices
+- We preserve unique value: multi-component coverage (commands, agents, hooks, MCP) not in Anthropic's skill-creator
+
+### Context
+Aligned with Anthropic's official skill-creator guidance while preserving our multi-component (skills, commands, agents, hooks, MCP) coverage. The core philosophy (Claude is already smart, context window as public good, degrees of freedom) was already present in v2.0.0-beta.2.
+
 ## [2.0.0-beta.2] - 2025-12-08
 
 ### Added
