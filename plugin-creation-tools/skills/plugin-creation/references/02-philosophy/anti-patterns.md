@@ -72,12 +72,59 @@ Before including any code, ask: **"Can I reference existing code instead?"**
 
 ## What NOT to Include
 
+> **Attribution**: The plugin vs skill level distinction is based on best practices from Anthropic's `skill-creator` skill (document-skills@anthropic-agent-skills).
+
+**Critical distinction: Plugin level vs Skill level**
+
+### ❌ NEVER in Skills (skills/skill-name/)
+
 Skills should ONLY contain essential files for AI execution:
 
 | Don't Include | Why |
 |---------------|-----|
-| README.md | Use SKILL.md instead |
+| README.md | Use SKILL.md instead - README is for humans, SKILL.md is for AI |
 | INSTALLATION_GUIDE.md | Not needed for AI execution |
-| CHANGELOG.md | Historical clutter |
+| CHANGELOG.md | Historical clutter - skills version with their plugin |
 | QUICK_REFERENCE.md | Put in SKILL.md or references/ |
 | User-facing documentation | Skills are for AI, not humans |
+| LICENSE files | License belongs at plugin root |
+
+**Bad (skill has human docs):**
+```
+skills/my-skill/
+├── SKILL.md
+├── README.md       ❌ NO - redundant with SKILL.md
+├── CHANGELOG.md    ❌ NO - skills version with plugin
+└── LICENSE         ❌ NO - belongs at plugin root
+```
+
+**Good (skill has only AI files):**
+```
+skills/my-skill/
+├── SKILL.md        ✅ AI instructions
+├── scripts/        ✅ Bundled resources
+├── references/     ✅ Loaded as needed
+└── assets/         ✅ Used in output
+```
+
+### ✅ Required at Plugin Level (plugin root)
+
+Plugins (the overall package) SHOULD have human-facing documentation:
+
+```
+my-plugin/
+├── README.md           ✅ User-facing docs, GitHub visibility
+├── CHANGELOG.md        ✅ Version history, marketplace updates
+├── LICENSE             ✅ Legal clarity
+├── .claude-plugin/
+│   └── plugin.json
+└── skills/
+    └── my-skill/
+        └── SKILL.md    ✅ AI instructions only
+```
+
+**Why the distinction?**
+- **Plugin README/CHANGELOG**: For humans (GitHub visitors, marketplace users)
+- **Skill SKILL.md**: For AI agents only (no human-facing fluff)
+
+The skill is Claude's "onboarding guide" - it should contain ONLY what Claude needs to execute the task, nothing more.
