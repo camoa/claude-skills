@@ -89,8 +89,8 @@ When user says "add command", "create command", "slash command":
 3. Key requirements:
    - Frontmatter: description, allowed-tools, argument-hint
    - Support `$ARGUMENTS`, `$1`, `$2` for arguments
-   - Use `!` prefix for bash execution
-   - Use `@` prefix for file references
+   - Prefix lines with exclamation mark for bash execution
+   - Prefix lines with at-sign for file references
 
 ## Creating Agents
 
