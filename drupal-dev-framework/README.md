@@ -91,14 +91,24 @@ These references are self-contained - no external guides required.
 If upgrading from v2.x:
 
 1. **Backup your projects** before upgrading
-2. **Run migration** after installing v3.0.0:
+2. **Install v3.0.0**:
+   ```bash
+   /plugin install drupal-dev-framework@camoa-skills
+   ```
+3. **Automatic migration** - Just run `/next`:
+   ```bash
+   /drupal-dev-framework:next
+   ```
+   The command automatically detects old v2.x format and migrates your tasks before continuing.
+
+4. **Manual migration** (optional):
    ```bash
    /drupal-dev-framework:migrate-tasks
    ```
-3. **Verify migration** - check tasks in `implementation_process/in_progress/`
-4. **Delete backups** when confident (`.md.bak` files)
+5. **Verify migration** - check tasks in `implementation_process/in_progress/`
+6. **Delete backups** when confident (`.md.bak` files)
 
-The migration tool preserves all content while organizing it into the new structure.
+The migration preserves all content while organizing it into the new structure. See [MIGRATION.md](./MIGRATION.md) for detailed guide.
 
 ## Configuration
 

@@ -107,16 +107,24 @@ ls implementation_process/in_progress/*.md 2>/dev/null
 ```
 
 **If old v2.x format detected:**
+
+Automatically migrate tasks, then continue:
+
 ```
-## ⚠️ Migration Required
+## ⚠️ Old Task Format Detected
 
-Found {N} task(s) in old v2.x format (.md files).
+Found {N} task(s) in v2.x format (.md files).
 
-v3.0.0 uses folder-based structure.
+Migrating to v3.0.0 folder structure automatically...
 
-Please run: `/drupal-dev-framework:migrate-tasks`
+[Migration runs via task-folder-migrator skill]
 
-See MIGRATION.md for details.
+✓ Migration complete!
+
+Migrated {N} task(s) to folder structure.
+Backups saved as .md.bak files.
+
+[Continues to task selection with new folder structure]
 ```
 
 **If v3.0.0 tasks found:**

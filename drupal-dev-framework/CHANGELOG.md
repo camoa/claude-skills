@@ -37,11 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Loads research.md, architecture.md, implementation.md as needed
   - Full context loading from all phase files
 - **task-completer (v1.1.0)** - Updated to move entire directory instead of single file
-- **project-orchestrator (v3.0.0)** - Updated to scan directories and detect old format
+- **project-orchestrator (v3.0.0)** - Updated to scan directories and auto-migrate old format
   - Scans for task directories (v3.0.0)
   - Detects old `.md` files (v2.x)
-  - Warns users and recommends migration when old format found
+  - **Automatically migrates** old format when detected via `/next` command
   - Updated task phase detection for folder structure
+  - Seamless upgrade experience - one command does everything
 - **/research command** - Now writes to `research.md` instead of section in single file
   - Creates task folder structure
   - Updates task.md with phase status
@@ -57,9 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Upgrading from v2.x:
 1. Backup projects before upgrading
 2. Install v3.0.0-beta.1
-3. Run `/drupal-dev-framework:migrate-tasks` for each project
-4. Verify migration results
-5. Delete `.bak` files when confident
+3. Run `/drupal-dev-framework:next` - **automatically migrates old tasks**
+4. Or run `/drupal-dev-framework:migrate-tasks` manually if preferred
+5. Verify migration results
+6. Delete `.bak` files when confident
+
+**Note:** The `/next` command automatically detects old v2.x format and migrates tasks before continuing. No manual intervention needed!
 
 See [MIGRATION.md](./MIGRATION.md) for detailed guide.
 

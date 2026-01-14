@@ -121,23 +121,28 @@ Use Bash: ls {project_path}/implementation_process/in_progress/*.md 2>/dev/null
 ```
 
 **If old v2.x format detected (*.md files exist):**
-┌─────────────────────────────────────────────┐
-│ ⚠️ Old Task Format Detected                │
-│                                             │
-│ Found {N} task(s) in v2.x format (.md files)│
-│                                             │
-│ v3.0.0 uses folder-based structure.         │
-│                                             │
-│ **Action Required:**                        │
-│ Run `/drupal-dev-framework:migrate-tasks`   │
-│                                             │
-│ This will:                                  │
-│ - Convert tasks to folder structure         │
-│ - Preserve all content                      │
-│ - Create backups (.md.bak)                  │
-│                                             │
-│ See MIGRATION.md for details.               │
-└─────────────────────────────────────────────┘
+
+1. **Show detection message:**
+   ```
+   ⚠️ Detected old v2.x task format (.md files)
+
+   Migrating to v3.0.0 folder structure automatically...
+   ```
+
+2. **Invoke task-folder-migrator skill:**
+   - Use Skill tool: `task-folder-migrator`
+   - This will migrate all tasks from `.md` files to folder structure
+   - Creates backups automatically
+
+3. **After migration completes:**
+   ```
+   ✓ Migration complete!
+
+   Migrated {N} task(s) to folder structure.
+   Backups saved as .md.bak files.
+   ```
+
+4. **Continue to normal task selection** (folders now exist)
 
 **If v3.0.0 tasks found (directories):**
 ┌─────────────────────────────────────────────┐

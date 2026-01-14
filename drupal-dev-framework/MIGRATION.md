@@ -51,9 +51,21 @@ cp -r ~/workspace/claude_memory/projects/my_project/implementation_process \
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
-### 3. Run Migration Tool
+### 3. Run Migration
 
-Navigate to your project and run:
+**Option A: Automatic (Recommended)**
+
+Navigate to your project and run `/next`:
+
+```bash
+/drupal-dev-framework:next
+```
+
+The command automatically detects old v2.x format and migrates your tasks before continuing. You can then immediately select and work on tasks.
+
+**Option B: Manual**
+
+Run the migration tool explicitly:
 
 ```bash
 /drupal-dev-framework:migrate-tasks
