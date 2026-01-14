@@ -14,14 +14,17 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 /drupal-dev-framework:implement <task-name>
 ```
 
-## What This Does
+## What This Does (v3.0.0)
 
-1. Loads task file from `implementation_process/in_progress/{task_name}.md`
-2. Loads architecture section from task file
-3. Loads referenced patterns from core/contrib
-4. Loads relevant guides (via `guide-integrator`)
-5. Activates `tdd-companion` for TDD discipline
-6. Prepares for interactive development
+1. Loads task from `implementation_process/in_progress/{task_name}/`
+2. Loads architecture from `architecture.md`
+3. Loads research context from `research.md`
+4. Loads referenced patterns from core/contrib
+5. Loads relevant guides (via `guide-integrator`)
+6. Creates/updates `implementation.md` for progress tracking
+7. Updates `task.md` to mark Phase 3 as in progress
+8. Activates `tdd-companion` for TDD discipline
+9. Prepares for interactive development
 
 ## Task-Based Workflow
 
@@ -73,29 +76,36 @@ After context is loaded:
 5. Developer runs tests
 6. Repeat until task complete
 
-## Implementation Progress
+## Implementation Progress (v3.0.0)
 
-Updates task file's Implementation section:
+Creates/updates `implementation.md`:
 
 ```markdown
-## Implementation
+# Implementation: {task_name}
 
-### Progress
+## Progress
 - [x] Test class created
 - [x] Form class created
 - [ ] Config schema
 - [ ] Integration test
 
-### Files Created/Modified
+## Files Created/Modified
 - `src/Form/SettingsForm.php` - Created
 - `tests/src/Unit/SettingsFormTest.php` - Created
 
-### Notes
+## TDD Log
+{Test-first development notes}
+
+## Notes
 {Implementation decisions and notes}
 
-### Blockers
+## Blockers
 {Any issues encountered}
 ```
+
+Also updates `task.md`:
+- Marks Phase 3 as in progress
+- Updates acceptance criteria checkboxes as completed
 
 ## Human Control
 

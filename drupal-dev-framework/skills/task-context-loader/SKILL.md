@@ -1,7 +1,7 @@
 ---
 name: task-context-loader
 description: Use when starting implementation of a task - loads architecture files, referenced patterns, relevant guides, and task file into context
-version: 1.1.0
+version: 3.0.0
 ---
 
 # Task Context Loader
@@ -21,8 +21,15 @@ Activate when you detect:
 ### 1. Identify Project and Task
 
 Get project path from `project_state.md`. Find the task:
-- Check `implementation_process/in_progress/` for matching task file
-- If no task file exists, offer to create one via `implementation-task-creator`
+
+**v3.0.0 Folder Structure:**
+- Check `implementation_process/in_progress/{task}/` for task directory
+- If directory exists, verify `task.md` file exists
+
+**v2.x Single File (backward compatibility):**
+- Check `implementation_process/in_progress/{task}.md` for single file
+
+If neither exists, offer to create one via `implementation-task-creator`
 
 ### 2. Load Architecture
 
@@ -37,16 +44,50 @@ Extract from architecture:
 - Dependencies
 - Pattern references
 
-### 3. Load Task File
+### 3. Load Task Files
 
-Use `Read` on `{project_path}/implementation_process/in_progress/{task}.md`
+**v3.0.0 Folder Structure:**
 
-Extract:
-- Objective
-- Acceptance criteria
-- TDD steps
-- Files to create/modify
-- Current status/progress
+Load all relevant phase files:
+
+1. **Load task.md** (tracker):
+   ```
+   Use `Read` on `{task}/task.md`
+   ```
+   Extract:
+   - Goal
+   - Acceptance criteria
+   - Current phase status
+   - Related tasks
+
+2. **Load research.md** (if exists):
+   ```
+   Use `Read` on `{task}/research.md`
+   ```
+   Context from Phase 1 research
+
+3. **Load architecture.md** (if exists):
+   ```
+   Use `Read` on `{task}/architecture.md`
+   ```
+   Extract:
+   - Architecture design
+   - Pattern decisions
+   - Component specifications
+
+4. **Load implementation.md** (if exists):
+   ```
+   Use `Read` on `{task}/implementation.md`
+   ```
+   Extract:
+   - Progress notes
+   - TDD steps
+   - Files created/modified
+   - Current status
+
+**v2.x Single File (backward compatibility):**
+
+Use `Read` on `{task}.md` and extract all sections
 
 ### 4. Load Pattern References
 

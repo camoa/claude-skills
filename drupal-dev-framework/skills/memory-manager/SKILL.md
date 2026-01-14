@@ -1,7 +1,7 @@
 ---
 name: memory-manager
 description: Use after completing any phase activity - updates project_state.md, project registry, ensures files are in correct locations, maintains lean memory
-version: 1.2.0
+version: 3.0.0
 ---
 
 # Memory Manager
@@ -31,18 +31,39 @@ Extract:
 
 ### 2. Scan Project Files
 
-Use `Glob` to inventory files:
+**v3.0.0 Folder Structure Support:**
+
+Use `Bash` with `ls -d` to inventory task directories:
+```bash
+# List task directories (not .md files)
+ls -d {project_path}/implementation_process/in_progress/*/ 2>/dev/null
+ls -d {project_path}/implementation_process/completed/*/ 2>/dev/null
+```
+
+For each task directory found, check for:
+- `task.md` (main tracker) - required
+- `research.md` (Phase 1 content) - optional
+- `architecture.md` (Phase 2 content) - optional
+- `implementation.md` (Phase 3 content) - optional
+
+Also scan architecture folder:
 ```
 {project_path}/architecture/*.md
-{project_path}/implementation_process/in_progress/*.md
-{project_path}/implementation_process/completed/*.md
 ```
 
 Count:
-- Research files (research_*.md)
-- Component architectures
-- In-progress tasks
-- Completed tasks
+- Component architectures (architecture/*.md)
+- In-progress tasks (directories in in_progress/)
+- Completed tasks (directories in completed/)
+
+**Backward Compatibility:**
+
+If `*.md` files found (not directories), warn:
+```
+⚠️  Old v2.x format detected: {count} single-file tasks
+
+Run `/drupal-dev-framework:migrate-tasks` to upgrade to v3.0.0 folder structure.
+```
 
 ### 3. Detect Inconsistencies
 
@@ -92,9 +113,18 @@ Use `Edit` to update:
 
 If files are misplaced, use `Bash` to move:
 
+**v3.0.0 Folder Structure:**
 ```bash
-# Move completed task from in_progress
-mv "{project_path}/implementation_process/in_progress/{file}" "{project_path}/implementation_process/completed/{file}"
+# Move completed task directory from in_progress
+mv "{project_path}/implementation_process/in_progress/{task_name}/" \
+   "{project_path}/implementation_process/completed/{task_name}/"
+```
+
+**v2.x Single Files (backward compatibility):**
+```bash
+# Move completed task file from in_progress
+mv "{project_path}/implementation_process/in_progress/{task_name}.md" \
+   "{project_path}/implementation_process/completed/{task_name}.md"
 ```
 
 ### 6. Clean Up

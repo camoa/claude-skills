@@ -39,7 +39,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with enforced SOLID, TDD, DRY, and security principles.",
-      "version": "2.1.0",
+      "version": "3.0.0-beta.1",
       "author": {
         "name": "camoa"
       },
