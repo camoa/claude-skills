@@ -129,10 +129,12 @@ Use Bash: ls {project_path}/implementation_process/in_progress/*.md 2>/dev/null
    Migrating to v3.0.0 folder structure automatically...
    ```
 
-2. **Invoke task-folder-migrator skill:**
-   - Use Skill tool: `task-folder-migrator`
+2. **Invoke task-folder-migrator skill in automatic mode:**
+   - Use Skill tool: `drupal-dev-framework:task-folder-migrator`
+   - Pass context: automatic=true (no confirmation prompt)
    - This will migrate all tasks from `.md` files to folder structure
    - Creates backups automatically
+   - Proceeds without user confirmation
 
 3. **After migration completes:**
    ```

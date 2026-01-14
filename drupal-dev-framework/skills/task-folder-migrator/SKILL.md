@@ -13,8 +13,22 @@ Migrate single-file tasks to the new v3.0.0 folder-based structure.
 Activate when:
 - User says "migrate tasks to new structure"
 - User says "convert task files to folders"
-- User invokes `/drupal-dev-framework:migrate-tasks`
+- User invokes `/drupal-dev-framework:migrate-tasks` (manual mode)
+- Invoked by `project-orchestrator` when old format detected (automatic mode)
 - Before upgrading from v2.x to v3.0.0
+
+## Modes
+
+**Automatic Mode** (when invoked by /next command):
+- No confirmation prompt
+- Proceeds directly to migration
+- Used when user runs `/next` and old format detected
+- Backups protect against data loss
+
+**Manual Mode** (when invoked by /migrate-tasks command):
+- Shows migration plan
+- Waits for user confirmation
+- Used when user explicitly runs migration command
 
 ## What This Does
 
@@ -37,6 +51,14 @@ implementation_process/in_progress/settings_form/
 
 ## Workflow
 
+### 0. Detect Mode
+
+Check if invoked automatically or manually:
+- **Automatic:** Invoked by `project-orchestrator` agent (context includes automatic=true)
+- **Manual:** Invoked by `/migrate-tasks` command or user request
+
+Set `$automatic = true/false` based on invocation context.
+
 ### 1. Identify Project Path
 
 Get project path from `project_state.md` or ask user:
@@ -54,9 +76,21 @@ Use `Glob` to find single `.md` files:
 
 If no `.md` files found, report: "No old-style tasks found. All tasks already using v3.0.0 structure."
 
-### 3. Present Migration Plan
+### 3. Present Migration Plan (or Auto-Proceed)
 
-For each task file found, show:
+**If Automatic Mode ($automatic = true):**
+
+Show brief message and proceed immediately:
+```
+Found {N} task(s) in v2.x format.
+Auto-migrating: {list of task names}
+```
+
+Skip to Step 4 (no confirmation needed).
+
+**If Manual Mode ($automatic = false):**
+
+Show full migration plan and wait for confirmation:
 ```
 ## Tasks to Migrate
 
@@ -69,7 +103,7 @@ Found {N} task(s) in old format:
 Proceed with migration? (Creates backups with .bak extension)
 ```
 
-Wait for user confirmation.
+Wait for user confirmation. If user declines, exit gracefully.
 
 ### 4. Migrate Each Task
 
@@ -199,10 +233,15 @@ Original files backed up with .bak extension.
 
 ## Stop Points
 
-STOP and ask user if:
+**In Manual Mode**, STOP and ask user if:
 - More than 10 tasks to migrate (confirm large migration)
 - Backup file already exists (overwrite?)
 - Project path looks wrong
+
+**In Automatic Mode**, proceed but log warnings:
+- Large migration (10+ tasks): Log "Migrating {N} tasks..."
+- Backup exists: Append timestamp instead of overwriting
+- Project path issues: Abort migration, log error
 
 ## Important Notes
 

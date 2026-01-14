@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Creates folder structure with separate phase files
   - Preserves all content with automatic backups
   - Idempotent and safe to run multiple times
+  - **Automatic mode** - No confirmation when invoked by `/next`
+  - **Manual mode** - Shows plan and waits for confirmation when invoked by `/migrate-tasks`
+- **NEW: /migrate-tasks command** - Manual migration command
+  - Shows full migration plan
+  - Waits for user confirmation
+  - Full control over migration process
 - **NEW: Folder-based task structure** - Each task gets own folder with organized files:
   - `task.md` - Lightweight tracker with links, status, acceptance criteria
   - `research.md` - Phase 1 research findings
@@ -77,8 +83,8 @@ See [MIGRATION.md](./MIGRATION.md) for detailed guide.
 - ✅ Better organization and maintainability
 
 **What Stays The Same:**
-- All 15 skills still available (1 new, 4 updated)
-- All 9 commands still work (4 updated for new structure)
+- All 16 skills available (1 new: task-folder-migrator, 4 updated)
+- All 10 commands work (1 new: /migrate-tasks, 4 updated for new structure)
 - 5 agents (1 updated: project-orchestrator)
 - All 8 reference documents preserved
 - Same 3-phase workflow (Research → Architecture → Implementation)

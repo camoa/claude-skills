@@ -225,6 +225,7 @@ Back to task selection
 | `/drupal-dev-framework:complete <task>` | Mark task done, run quality gates, move to completed |
 | `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations for a use case |
 | `/drupal-dev-framework:validate [component]` | Validate implementation against architecture/standards |
+| `/drupal-dev-framework:migrate-tasks` | Manually migrate v2.x tasks to v3.0.0 folder structure (with confirmation) |
 
 ## Components
 
@@ -236,12 +237,12 @@ Agents handle complex multi-step tasks:
 - `architecture-validator` - Validates implementation against architecture
 - `project-orchestrator` - Coordinates project state and workflow
 
-### Skills (15)
+### Skills (16)
 Skills are auto-invoked based on context:
 - **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder`
 - **Phase 2:** `component-designer`, `diagram-generator`, `guide-integrator`
 - **Phase 3:** `task-context-loader`, `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
-- **Cross-Phase:** `memory-manager`, `phase-detector`, `guide-loader`, `session-resume`
+- **Cross-Phase:** `memory-manager`, `phase-detector`, `guide-loader`, `session-resume`, `task-folder-migrator`
 
 ## Project Structure (v3.0.0)
 
