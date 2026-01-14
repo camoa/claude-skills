@@ -2,7 +2,7 @@
 name: project-orchestrator
 description: Use when checking project status or deciding next steps - reads memory files, manages tasks, suggests actions, routes to appropriate agents/skills
 capabilities: ["project-status", "task-management", "workflow-routing", "next-action-suggestion"]
-version: 1.2.0
+version: 3.0.0
 ---
 
 # Project Orchestrator
@@ -112,10 +112,34 @@ Requirements gathered?
 
 **Always scan `implementation_process/in_progress/` and present options:**
 
-```
-Use Glob to find: {project_path}/implementation_process/in_progress/*.md
+```bash
+# v3.0.0: Scan for task directories
+Use Bash: ls -d {project_path}/implementation_process/in_progress/*/ 2>/dev/null
 
-If tasks found:
+# Also check for old v2.x format (single .md files)
+Use Bash: ls {project_path}/implementation_process/in_progress/*.md 2>/dev/null
+```
+
+**If old v2.x format detected (*.md files exist):**
+┌─────────────────────────────────────────────┐
+│ ⚠️ Old Task Format Detected                │
+│                                             │
+│ Found {N} task(s) in v2.x format (.md files)│
+│                                             │
+│ v3.0.0 uses folder-based structure.         │
+│                                             │
+│ **Action Required:**                        │
+│ Run `/drupal-dev-framework:migrate-tasks`   │
+│                                             │
+│ This will:                                  │
+│ - Convert tasks to folder structure         │
+│ - Preserve all content                      │
+│ - Create backups (.md.bak)                  │
+│                                             │
+│ See MIGRATION.md for details.               │
+└─────────────────────────────────────────────┘
+
+**If v3.0.0 tasks found (directories):**
 ┌─────────────────────────────────────────────┐
 │ ## Tasks in Progress                        │
 │                                             │
@@ -130,7 +154,7 @@ If tasks found:
 │ - Enter a new task name to start new        │
 └─────────────────────────────────────────────┘
 
-If no tasks found:
+**If no tasks found:**
 ┌─────────────────────────────────────────────┐
 │ ## No Tasks Yet                             │
 │                                             │
@@ -152,14 +176,25 @@ User selected existing task?
 ```
 
 ### Step 4: Task Phase Detection
-For the selected task, check `implementation_process/in_progress/{task_name}.md`:
 
-| Task File Contains | Phase | Next Action |
-|-------------------|-------|-------------|
-| Only task description | Phase 1 - Research | `/research {task}` |
-| Research section complete | Phase 2 - Architecture | `/design {task}` |
-| Architecture section complete | Phase 3 - Implementation | `/implement {task}` |
-| Implementation complete | Done | `/complete {task}` |
+**v3.0.0 Format:** Check `implementation_process/in_progress/{task_name}/` directory:
+
+```bash
+# Check which phase files exist
+[ -f "{task_name}/task.md" ] && echo "tracker"
+[ -f "{task_name}/research.md" ] && echo "research"
+[ -f "{task_name}/architecture.md" ] && echo "architecture"
+[ -f "{task_name}/implementation.md" ] && echo "implementation"
+```
+
+| Files Present | Phase | Next Action |
+|--------------|-------|-------------|
+| Only task.md | Phase 1 - Research | `/research {task}` |
+| task.md + research.md | Phase 2 - Architecture | `/design {task}` |
+| + architecture.md | Phase 3 - Implementation | `/implement {task}` |
+| + implementation.md | Done | `/complete {task}` |
+
+**v2.x Format (backward compat):** If `{task_name}.md` file exists, warn about old format and suggest migration.
 
 ## Output Format
 
@@ -190,7 +225,32 @@ Phase: {1-Research / 2-Architecture / 3-Implementation}
 
 ## Output: Task Selection
 
-### When Tasks Exist
+### When Old v2.x Format Detected
+```markdown
+## Project: {Project Name}
+
+Requirements: Complete ✓
+
+## ⚠️ Migration Required
+
+Found 3 task(s) in old v2.x format (.md files):
+- settings_form.md
+- content_entity.md
+- field_formatter.md
+
+**v3.0.0 uses folder-based structure.**
+
+Please run: `/drupal-dev-framework:migrate-tasks`
+
+This will:
+- Convert tasks to folder structure
+- Preserve all content
+- Create backups (.md.bak)
+
+See MIGRATION.md for details.
+```
+
+### When v3.0.0 Tasks Exist
 ```markdown
 ## Project: {Project Name}
 
@@ -200,13 +260,13 @@ Requirements: Complete ✓
 
 Found 3 task(s) in implementation_process/in_progress/:
 
-1. settings_form (Phase 3 - Implementation, 3/5 done)
-2. content_entity (Phase 1 - Research)
-3. field_formatter (Phase 2 - Architecture)
+1. settings_form/ (Phase 3 - Implementation)
+2. content_entity/ (Phase 1 - Research)
+3. field_formatter/ (Phase 2 - Architecture)
 
 ## Completed Tasks
-- ✅ user_service
-- ✅ config_schema
+- ✅ user_service/
+- ✅ config_schema/
 
 Which task do you want to work on?
 - Enter a number (1-3) to continue an existing task

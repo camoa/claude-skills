@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Loads research.md, architecture.md, implementation.md as needed
   - Full context loading from all phase files
 - **task-completer (v1.1.0)** - Updated to move entire directory instead of single file
+- **project-orchestrator (v3.0.0)** - Updated to scan directories and detect old format
+  - Scans for task directories (v3.0.0)
+  - Detects old `.md` files (v2.x)
+  - Warns users and recommends migration when old format found
+  - Updated task phase detection for folder structure
 - **/research command** - Now writes to `research.md` instead of section in single file
   - Creates task folder structure
   - Updates task.md with phase status
@@ -68,9 +73,9 @@ See [MIGRATION.md](./MIGRATION.md) for detailed guide.
 - ✅ Better organization and maintainability
 
 **What Stays The Same:**
-- All 15 skills still available
-- All 9 commands still work
-- All 5 agents unchanged (path updates only)
+- All 15 skills still available (1 new, 4 updated)
+- All 9 commands still work (4 updated for new structure)
+- 5 agents (1 updated: project-orchestrator)
 - All 8 reference documents preserved
 - Same 3-phase workflow (Research → Architecture → Implementation)
 
