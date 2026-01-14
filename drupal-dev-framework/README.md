@@ -84,6 +84,22 @@ These references are self-contained - no external guides required.
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
+## Upgrading to v3.0.0
+
+**Breaking Change:** v3.0.0 introduces folder-based task structure.
+
+If upgrading from v2.x:
+
+1. **Backup your projects** before upgrading
+2. **Run migration** after installing v3.0.0:
+   ```bash
+   /drupal-dev-framework:migrate-tasks
+   ```
+3. **Verify migration** - check tasks in `implementation_process/in_progress/`
+4. **Delete backups** when confident (`.md.bak` files)
+
+The migration tool preserves all content while organizing it into the new structure.
+
 ## Configuration
 
 When you create a new project, the plugin asks where to store project files:
@@ -217,7 +233,7 @@ Skills are auto-invoked based on context:
 - **Phase 3:** `task-context-loader`, `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
 - **Cross-Phase:** `memory-manager`, `phase-detector`, `guide-loader`, `session-resume`
 
-## Project Structure
+## Project Structure (v3.0.0)
 
 When you create a project, this structure is created in your chosen location:
 
@@ -229,9 +245,33 @@ When you create a project, this structure is created in your chosen location:
 │   ├── research_*.md         # Research findings
 │   └── component_name.md     # Component-specific designs
 └── implementation_process/
-    ├── in_progress/          # Current tasks
-    └── completed/            # Finished tasks
+    ├── in_progress/
+    │   └── task_name/        # Task folder (v3.0.0)
+    │       ├── task.md              # Tracker with links
+    │       ├── research.md          # Phase 1 content
+    │       ├── architecture.md      # Phase 2 content
+    │       └── implementation.md    # Phase 3 content
+    └── completed/
+        └── task_name/        # Completed task (same structure)
+            ├── task.md
+            ├── research.md
+            ├── architecture.md
+            └── implementation.md
 ```
+
+### v3.0.0 Task Structure
+
+Each task gets its own folder with files separated by phase:
+- **task.md** - Lightweight tracker with links, status, acceptance criteria
+- **research.md** - Phase 1 research findings
+- **architecture.md** - Phase 2 design
+- **implementation.md** - Phase 3 implementation notes
+
+Benefits:
+- ✅ Separates content by phase
+- ✅ Keeps files small and focused
+- ✅ Easy to navigate (max 4 files per task)
+- ✅ Simple flat structure (no nested folders)
 
 ## Integration
 
@@ -261,18 +301,23 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 2.0.0 (Current)
-- **Self-contained references**: 7 built-in reference documents for TDD, SOLID, DRY, Library-First, Security, Quality Gates, Frontend
-- **Enforced principles**: Each phase has blocking checks (SOLID at design, TDD at implementation, Quality Gates at completion)
-- **No hardcoded paths**: Removed dependency on external guide files - works out-of-box
-- Updated agents (v2.0.0) and 4 key skills with enforcement
+### 3.0.0-beta.1 (Current)
+- **BREAKING: Folder-based task structure** - Each task gets own folder with 4 files
+- **NEW: task-folder-migrator skill** - Migrate v2.x tasks to v3.0.0 structure
+- **Simple organization**: Flat structure, max 4 files per task, no nested folders
+- Updated: 4 skills (memory-manager, phase-detector, task-context-loader, task-completer)
+- Updated: 4 commands (/research, /design, /implement, /complete)
+- Migration guide and backward compatibility support
 
-### 1.3.1
-- Fixed task creation flow after requirements gathering
+### 2.1.0
+- Added Gate 5: Code Purposefulness with `purposeful-code.md` reference
+- Expanded security checklist with real-world examples
+- Restored `/new` command for clearer workflow
 
-### 1.3.0
-- Phases now apply to TASKS, not projects
-- Each task independently cycles through Research → Architecture → Implementation
+### 2.0.0
+- Self-contained references: 7 built-in reference documents
+- Enforced principles with blocking checks
+- No hardcoded paths - works out-of-box
 
 ### 1.0.0
 - Initial release with 5 agents, 15 skills, 9 commands
