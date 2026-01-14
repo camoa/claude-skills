@@ -14,14 +14,15 @@ Design architecture for a specific task (Phase 2 of a task).
 /drupal-dev-framework:design <task-name>
 ```
 
-## What This Does
+## What This Does (v3.0.0)
 
-1. Loads task file from `implementation_process/in_progress/{task_name}.md`
-2. Reviews research findings in the task file
+1. Loads task from `implementation_process/in_progress/{task_name}/`
+2. Reviews research findings in `research.md`
 3. Invokes `architecture-drafter` agent
 4. Invokes `guide-integrator` for relevant guides
-5. Updates task file's Architecture section
-6. Optionally creates component file in `architecture/{component}.md`
+5. Creates/updates `architecture.md` with design
+6. Updates `task.md` to mark Phase 2 as in progress
+7. Optionally creates component file in `architecture/{component}.md`
 
 ## Task-Based Workflow
 
@@ -45,37 +46,50 @@ Each task goes through:
 /drupal-dev-framework:design field_formatter
 ```
 
-## Output
+## Output (v3.0.0)
 
-Updates task file's Architecture section:
+Creates/updates:
+```
+implementation_process/in_progress/{task_name}/
+├── task.md           # Updated with Phase 2 status
+├── research.md       # (existing)
+└── architecture.md   # Phase 2 design (NEW)
+```
 
+**architecture.md** (Phase 2 design):
 ```markdown
-## Architecture
+# Architecture: {task_name}
 
-### Approach
+## Approach
 {High-level approach based on research}
 
-### Components
+## Components
 | Component | Type | Purpose |
 |-----------|------|---------|
 | {name} | Service/Form/Entity/etc | {purpose} |
 
-### Dependencies
+## Dependencies
 - {service}: {why needed}
 - {module}: {why needed}
 
-### Pattern Reference
+## Pattern Reference
 Based on: `{core/contrib path}`
 
-### Interface
+## Interface
 ```php
 // Key methods/hooks
 ```
 
-### Data Flow
+## Data Flow
 {How data moves through the component}
 
-### Acceptance Criteria
+## SOLID Principles Applied
+- {principle}: {how applied}
+
+## Security Considerations
+- {consideration}: {mitigation}
+
+## Acceptance Criteria (copied to task.md)
 - [ ] {Criterion 1}
 - [ ] {Criterion 2}
 - [ ] {Criterion 3}

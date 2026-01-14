@@ -1,7 +1,7 @@
 ---
 name: phase-detector
 description: Use when determining task phase - analyzes task file to identify Phase 1, 2, or 3 for a specific task
-version: 1.2.0
+version: 3.0.0
 ---
 
 # Phase Detector
@@ -37,40 +37,62 @@ Get task name from:
 - Current in_progress task
 - project_state.md "Current Task" field
 
-### 2. Locate Task File
+### 2. Locate Task Directory (v3.0.0)
 
-Check for task file at:
+Check for task directory at:
 ```
-{project_path}/implementation_process/in_progress/{task_name}.md
+{project_path}/implementation_process/in_progress/{task_name}/
 ```
 
 If not found, check:
 ```
+{project_path}/implementation_process/completed/{task_name}/
+```
+
+If neither exists, check for **v2.x single file** (backward compatibility):
+```
+{project_path}/implementation_process/in_progress/{task_name}.md
 {project_path}/implementation_process/completed/{task_name}.md
 ```
 
-If neither exists, task hasn't started yet → Phase 0 (Not Started)
+If nothing found, task hasn't started yet → Phase 0 (Not Started)
 
-### 3. Analyze Task File Content
+### 3. Analyze Task Content
 
-Use `Read` on task file and check for these sections:
+**v3.0.0 Folder Structure:**
+
+Use `Bash` to check for phase files:
+```bash
+# Check which phase files exist
+[ -f "{task_name}/task.md" ] && echo "tracker"
+[ -f "{task_name}/research.md" ] && echo "research"
+[ -f "{task_name}/architecture.md" ] && echo "architecture"
+[ -f "{task_name}/implementation.md" ] && echo "implementation"
+```
+
+Then use `Read` on `{task_name}/task.md` to check:
 
 **Phase 1 Complete Indicators:**
-- [ ] `## Research` section exists with content
-- [ ] `## Existing Solutions` or `## Patterns Found` section
-- [ ] Research notes or findings documented
+- [ ] `research.md` file exists
+- [ ] Phase Status shows "[x] Phase 1: Research"
+- [ ] Link to research.md present
 
 **Phase 2 Complete Indicators:**
-- [ ] `## Architecture` or `## Design` section exists
-- [ ] `## Components` or `## Structure` defined
-- [ ] `## Dependencies` or `## Services` listed
-- [ ] Pattern decisions documented
+- [ ] `architecture.md` file exists
+- [ ] Phase Status shows "[x] Phase 2: Architecture"
+- [ ] Link to architecture.md present
 
 **Phase 3 Progress Indicators:**
-- [ ] `## Implementation` section exists
-- [ ] `## Tests` or TDD progress noted
-- [ ] `## Progress` with checkboxes
-- [ ] Code references or file paths mentioned
+- [ ] `implementation.md` file exists
+- [ ] Phase Status shows "[ ] Phase 3: Implementation" (in progress)
+- [ ] Some acceptance criteria may be checked
+
+**v2.x Single File (backward compatibility):**
+
+If single `.md` file found, check for sections:
+- `## Research` section exists → Phase 1 complete
+- `## Architecture` section exists → Phase 2 complete
+- `## Implementation` section exists → Phase 3 in progress
 
 ### 4. Determine Phase
 
