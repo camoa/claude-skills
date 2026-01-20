@@ -1,0 +1,45 @@
+{
+  "plugins": [
+    {
+      "name": "code-quality-tools",
+      "displayName": "Code Quality & Security Tools",
+      "description": "Comprehensive code quality and security auditing for Drupal and Next.js projects with TDD, SOLID, DRY, and OWASP security checks",
+      "version": "2.2.0",
+      "path": "code-quality-tools",
+      "author": "camoa",
+      "license": "MIT",
+      "categories": ["development", "testing", "security", "quality"],
+      "tags": ["drupal", "nextjs", "phpstan", "eslint", "security", "tdd", "solid", "dry", "semgrep", "trivy"],
+      "requirements": {
+        "drupal": {
+          "tools": ["ddev", "composer"],
+          "php": ">=8.1",
+          "drupal": ">=10.3"
+        },
+        "nextjs": {
+          "tools": ["node", "npm"],
+          "node": ">=18.0"
+        }
+      },
+      "capabilities": [
+        "Static code analysis (PHPStan, Psalm, ESLint)",
+        "Security scanning (Semgrep, Trivy, Gitleaks)",
+        "Test coverage reporting",
+        "SOLID/DRY violation detection",
+        "TDD workflow support",
+        "8 slash commands for direct access"
+      ],
+      "commands": [
+        "/code-quality:setup",
+        "/code-quality:audit",
+        "/code-quality:coverage",
+        "/code-quality:security",
+        "/code-quality:lint",
+        "/code-quality:solid",
+        "/code-quality:dry",
+        "/code-quality:tdd"
+      ],
+      "documentation": "https://github.com/camoa/claude-skills/tree/main/code-quality-tools"
+    }
+  ]
+}
