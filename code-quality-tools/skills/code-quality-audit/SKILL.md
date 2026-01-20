@@ -1,12 +1,26 @@
 ---
 name: code-quality-audit
-description: Use when auditing code quality, security vulnerabilities, checking coverage, finding SOLID/DRY violations, running TDD - supports both Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects
-version: 2.0.0
+description: Use when checking code quality, running security audits, testing coverage, finding violations, or setting up quality tools - supports Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects with TDD, SOLID, DRY, and OWASP security checks
+version: 2.2.0
 ---
 
 # Code Quality Audit
 
 Run quality and security audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
+
+## Quick Commands
+
+**For direct access, use these commands:**
+- `/code-quality:setup` - First-time setup wizard (install and configure tools)
+- `/code-quality:audit` - Run full audit (all 22 operations)
+- `/code-quality:coverage` - Check test coverage
+- `/code-quality:security` - Security scan (10 layers for Drupal, 7 for Next.js)
+- `/code-quality:lint` - Code standards check
+- `/code-quality:solid` - Architecture and SOLID principles check
+- `/code-quality:dry` - Find code duplication
+- `/code-quality:tdd` - Start TDD workflow (test watcher mode)
+
+**For conversational workflows, continue reading...**
 
 ## When to Use
 
