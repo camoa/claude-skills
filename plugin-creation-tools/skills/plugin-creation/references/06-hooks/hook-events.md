@@ -1,103 +1,59 @@
 # Hook Events
 
-Complete reference for all available hook events in Claude Code.
+Complete reference for all 14 hook events in Claude Code.
 
 ## Event Reference Table
 
-| Event | Trigger | Matcher | Use Case |
-|-------|---------|---------|----------|
-| PreToolUse | Before tool execution | Yes | Validation, blocking |
-| PostToolUse | After tool execution | Yes | Formatting, logging |
-| SessionStart | Session begins | Yes | Setup, initialization |
-| SessionEnd | Session ends | Yes | Cleanup |
-| UserPromptSubmit | User submits prompt | No | Validation, injection |
-| PermissionRequest | Permission dialog shown | Yes | Auto-approve/deny |
-| Notification | Alert sent | Yes | Alert handling |
-| Stop | Claude finishes responding | No | Continuation logic |
-| SubagentStop | Subagent finishes | No | Task completion check |
-| PreCompact | Before conversation compact | Yes | Pre-compact actions |
+| Event | Trigger | Can Block? | Matcher Support |
+|-------|---------|-----------|-----------------|
+| SessionStart | Session begins or resumes | No | Yes (startup, resume, clear, compact) |
+| UserPromptSubmit | User submits prompt | Yes | No |
+| PreToolUse | Before tool execution | Yes | Yes (tool name regex) |
+| PermissionRequest | Permission dialog shown | Yes | Yes (tool name) |
+| PostToolUse | After tool succeeds | No | Yes (tool name regex) |
+| PostToolUseFailure | After tool fails | No | Yes (tool name regex) |
+| Notification | Alert sent | No | Yes (notification type) |
+| SubagentStart | Subagent spawned | No | Yes (agent type) |
+| SubagentStop | Subagent finishes | Yes | Yes (agent type) |
+| Stop | Claude finishes responding | Yes | No |
+| TeammateIdle | Agent team teammate going idle | Yes | No |
+| TaskCompleted | Task marked complete | Yes | No |
+| PreCompact | Before context compaction | No | Yes (manual, auto) |
+| SessionEnd | Session terminates | No | Yes (clear, logout, prompt_input_exit) |
+
+## MCP Tool Matcher Syntax
+
+For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest), MCP tools use the `mcp__server__tool` pattern:
+
+| Pattern | Matches |
+|---------|---------|
+| `mcp__memory__.*` | All tools from memory server |
+| `mcp__.*__write.*` | Any write tool from any server |
+| `mcp__github__create_issue` | Specific MCP tool |
+| `Write\|Edit\|mcp__fs__write` | Built-in and MCP tools combined |
 
 ## Event Details
 
-### PreToolUse
-
-**Trigger**: Before Claude executes any tool
-
-**Matcher**: Tool name (e.g., `Bash`, `Write`, `Edit`)
-
-**Use Cases**:
-- Block dangerous operations
-- Validate before execution
-- Log intended actions
-
-**Example**:
-```json
-{
-  "PreToolUse": [
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "validation",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh"
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Return Values**:
-- Exit 0: Allow execution
-- Exit non-zero: Block execution
-
-### PostToolUse
-
-**Trigger**: After Claude executes a tool
-
-**Matcher**: Tool name
-
-**Use Cases**:
-- Format code after writes
-- Log operations
-- Validate output
-
-**Example**:
-```json
-{
-  "PostToolUse": [
-    {
-      "matcher": "Write|Edit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
-          "timeout": 30
-        }
-      ]
-    }
-  ]
-}
-```
-
 ### SessionStart
 
-**Trigger**: When a Claude Code session begins
+**Trigger**: Session begins or resumes (new session, resume, clear, post-compact restart)
 
-**Matcher**: Optional (typically omitted)
+**Matcher**: Session type -- `startup`, `resume`, `clear`, `compact`
 
 **Use Cases**:
 - Setup output directories
 - Load environment variables
 - Initialize logging
+- Differentiate fresh start vs resume
 
-**Special**: Access to `${CLAUDE_ENV_FILE}` for persisting variables
+**Special**: Access to `${CLAUDE_ENV_FILE}` for persisting variables across the session.
 
 **Example**:
 ```json
 {
   "SessionStart": [
     {
+      "matcher": "startup",
       "hooks": [
         {
           "type": "command",
@@ -109,42 +65,17 @@ Complete reference for all available hook events in Claude Code.
 }
 ```
 
-### SessionEnd
-
-**Trigger**: When session ends
-
-**Matcher**: Optional
-
-**Use Cases**:
-- Cleanup temporary files
-- Save session state
-- Final logging
-
-**Example**:
-```json
-{
-  "SessionEnd": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh"
-        }
-      ]
-    }
-  ]
-}
-```
-
 ### UserPromptSubmit
 
-**Trigger**: When user submits a prompt
+**Trigger**: User submits a prompt (before Claude processes it)
 
 **Matcher**: Not supported (fires for all prompts)
 
+**Can Block**: Yes -- exit non-zero to reject the prompt
+
 **Use Cases**:
 - Validate user input
-- Inject context
+- Inject additional context into the prompt
 - Block certain prompts
 
 **Example**:
@@ -154,7 +85,7 @@ Complete reference for all available hook events in Claude Code.
     {
       "hooks": [
         {
-          "type": "validation",
+          "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-prompt.sh"
         }
       ]
@@ -163,15 +94,58 @@ Complete reference for all available hook events in Claude Code.
 }
 ```
 
+**Return Values**:
+- Exit 0 + stdout: Stdout content is added as context to the prompt
+- Exit non-zero: Prompt is blocked
+
+### PreToolUse
+
+**Trigger**: Before Claude executes any tool
+
+**Matcher**: Tool name regex (e.g., `Bash`, `Write`, `Write|Edit`, `mcp__memory__.*`)
+
+**Can Block**: Yes -- return `deny` or exit non-zero to block
+
+**Use Cases**:
+- Block dangerous operations
+- Validate tool inputs before execution
+- Log intended actions
+
+**Example**:
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Values**:
+- Exit 0: Allow execution
+- Exit non-zero: Block execution
+- Stdout `approve`: Bypass permission check
+- Stdout `deny`: Block with denial message
+
 ### PermissionRequest
 
-**Trigger**: When permission dialog shown
+**Trigger**: Permission dialog is shown to the user
 
-**Matcher**: Tool name
+**Matcher**: Tool name (supports path patterns like `Read(./docs/**)`)
+
+**Can Block**: Yes -- auto-approve or auto-deny
 
 **Use Cases**:
 - Auto-approve trusted operations
 - Auto-deny risky operations
+- Reduce permission fatigue for known-safe patterns
 
 **Example**:
 ```json
@@ -191,19 +165,85 @@ Complete reference for all available hook events in Claude Code.
 ```
 
 **Return Values**:
-- `approve`: Auto-approve
-- `deny`: Auto-deny
-- Other/empty: Show prompt
+- Stdout `approve`: Auto-approve the permission
+- Stdout `deny`: Auto-deny the permission
+- Other/empty: Show normal permission prompt
+
+### PostToolUse
+
+**Trigger**: After a tool executes successfully
+
+**Matcher**: Tool name regex (e.g., `Write|Edit`, `mcp__.*__create.*`)
+
+**Can Block**: No
+
+**Use Cases**:
+- Format code after writes
+- Log completed operations
+- Validate tool output
+- Trigger follow-up actions
+
+**Example**:
+```json
+{
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+          "timeout": 30
+        }
+      ]
+    }
+  ]
+}
+```
+
+### PostToolUseFailure
+
+**Trigger**: After a tool execution fails (error or non-zero exit)
+
+**Matcher**: Tool name regex (same patterns as PostToolUse)
+
+**Can Block**: No
+
+**Use Cases**:
+- Log failures for debugging
+- Capture error patterns
+- Trigger recovery actions
+- Alert on repeated failures
+
+**Example**:
+```json
+{
+  "PostToolUseFailure": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-failure.sh"
+        }
+      ]
+    }
+  ]
+}
+```
 
 ### Notification
 
-**Trigger**: When Claude sends notifications
+**Trigger**: When Claude sends a notification/alert
 
 **Matcher**: Notification type
 
+**Can Block**: No
+
 **Use Cases**:
-- External alert routing
+- Route alerts to external systems (Slack, email)
 - Notification logging
+- Custom alert handling
 
 **Example**:
 ```json
@@ -222,25 +262,29 @@ Complete reference for all available hook events in Claude Code.
 }
 ```
 
-### Stop
+### SubagentStart
 
-**Trigger**: When Claude finishes responding
+**Trigger**: When a subagent is spawned
 
-**Matcher**: Not supported
+**Matcher**: Agent type
+
+**Can Block**: No
 
 **Use Cases**:
-- Intelligent continuation decisions
-- Task completion checks
+- Log subagent creation
+- Track concurrent agent activity
+- Initialize subagent-specific resources
 
 **Example**:
 ```json
 {
-  "Stop": [
+  "SubagentStart": [
     {
+      "matcher": "*",
       "hooks": [
         {
-          "type": "prompt",
-          "prompt": "Check if all tasks are complete. Return 'continue' if more work needed."
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-subagent-start.sh"
         }
       ]
     }
@@ -250,23 +294,27 @@ Complete reference for all available hook events in Claude Code.
 
 ### SubagentStop
 
-**Trigger**: When a subagent finishes
+**Trigger**: When a subagent finishes its work
 
-**Matcher**: Not supported
+**Matcher**: Agent type
+
+**Can Block**: Yes -- can request continuation
 
 **Use Cases**:
 - Verify subagent task completion
 - Chain subagent operations
+- Quality-check subagent output
 
 **Example**:
 ```json
 {
   "SubagentStop": [
     {
+      "matcher": "*",
       "hooks": [
         {
           "type": "prompt",
-          "prompt": "Evaluate if the subagent completed its assigned task."
+          "prompt": "Evaluate if the subagent completed its assigned task. $ARGUMENTS"
         }
       ]
     }
@@ -274,26 +322,162 @@ Complete reference for all available hook events in Claude Code.
 }
 ```
 
-### PreCompact
+**Return Values**:
+- Stdout `continue`: Request the subagent to continue working
+- Other/empty: Accept completion
 
-**Trigger**: Before conversation is compacted
+### Stop
 
-**Matcher**: Optional
+**Trigger**: When Claude finishes responding (end of turn)
+
+**Matcher**: Not supported
+
+**Can Block**: Yes -- can force continuation
 
 **Use Cases**:
-- Notify user
-- Save important context
-- Pre-compaction logging
+- Intelligent continuation decisions
+- Task completion checks
+- Enforce multi-step workflows
+
+**Example**:
+```json
+{
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Check if all tasks are complete based on the conversation. Return 'continue' if more work is needed. $ARGUMENTS"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Values**:
+- Stdout `continue`: Force Claude to continue
+- Other/empty: Allow stop
+
+### TeammateIdle
+
+**Trigger**: When a teammate agent in an agent team is about to go idle
+
+**Matcher**: Not supported
+
+**Can Block**: Yes -- can assign new work
+
+**Use Cases**:
+- Assign follow-up tasks to idle teammates
+- Load-balance work across agents
+- Keep agent teams productive
+
+**Example**:
+```json
+{
+  "TeammateIdle": [
+    {
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "A teammate is going idle. Check if there are pending tasks to assign. $ARGUMENTS"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Values**:
+- Stdout with task description: Assign new work
+- Empty: Allow teammate to go idle
+
+### TaskCompleted
+
+**Trigger**: When a task is marked as complete
+
+**Matcher**: Not supported
+
+**Can Block**: Yes -- can reject completion
+
+**Use Cases**:
+- Verify task completion criteria
+- Run acceptance checks
+- Enforce quality gates before marking done
+
+**Example**:
+```json
+{
+  "TaskCompleted": [
+    {
+      "hooks": [
+        {
+          "type": "agent",
+          "prompt": "Verify the completed task meets all acceptance criteria by inspecting the relevant files. $ARGUMENTS"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Values**:
+- Exit 0: Accept task completion
+- Exit non-zero / stdout `deny`: Reject completion, continue working
+
+### PreCompact
+
+**Trigger**: Before conversation context is compacted
+
+**Matcher**: Compaction type -- `manual`, `auto`
+
+**Can Block**: No
+
+**Use Cases**:
+- Save important context before compaction
+- Log compaction events
+- Pre-compaction state snapshots
 
 **Example**:
 ```json
 {
   "PreCompact": [
     {
+      "matcher": "auto",
       "hooks": [
         {
-          "type": "notification",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/compact-notify.sh"
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/save-context.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### SessionEnd
+
+**Trigger**: When the session terminates
+
+**Matcher**: Termination type -- `clear`, `logout`, `prompt_input_exit`
+
+**Can Block**: No
+
+**Use Cases**:
+- Cleanup temporary files
+- Save session state
+- Final logging and reports
+
+**Example**:
+```json
+{
+  "SessionEnd": [
+    {
+      "matcher": "prompt_input_exit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh"
         }
       ]
     }
@@ -303,18 +487,29 @@ Complete reference for all available hook events in Claude Code.
 
 ## Multiple Hooks per Event
 
-You can have multiple hook configurations per event:
+Multiple matcher groups and multiple hooks per group:
 
 ```json
 {
-  "PostToolUse": [
+  "PreToolUse": [
     {
-      "matcher": "Write",
-      "hooks": [{ "type": "command", "command": "..." }]
+      "matcher": "Bash",
+      "hooks": [
+        { "type": "command", "command": "..." }
+      ]
     },
     {
-      "matcher": "Edit",
-      "hooks": [{ "type": "command", "command": "..." }]
+      "matcher": "Write|Edit",
+      "hooks": [
+        { "type": "command", "command": "..." },
+        { "type": "prompt", "prompt": "..." }
+      ]
+    },
+    {
+      "matcher": "mcp__memory__.*",
+      "hooks": [
+        { "type": "command", "command": "..." }
+      ]
     }
   ]
 }
@@ -322,5 +517,5 @@ You can have multiple hook configurations per event:
 
 ## See Also
 
-- `writing-hooks.md` - hook configuration basics
-- `hook-patterns.md` - common implementation patterns
+- `writing-hooks.md` -- hook configuration and handler types
+- `hook-patterns.md` -- common implementation patterns
