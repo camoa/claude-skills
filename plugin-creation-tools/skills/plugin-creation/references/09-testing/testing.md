@@ -67,6 +67,129 @@ claude doctor
 claude --debug "plugins"
 ```
 
+## CLI Automation for Testing
+
+Use Claude's CLI flags for non-interactive, automated plugin testing.
+
+### Non-Interactive Testing with `-p`
+
+The `-p` (print) flag runs Claude in non-interactive mode, useful for scripted tests:
+
+```bash
+# Basic non-interactive test
+claude -p "test query" --output-format json
+
+# Test that a skill triggers correctly
+claude -p "I need to create a new plugin" --output-format json
+
+# Test a command
+claude -p "/my-command arg1 arg2" --output-format json
+```
+
+### Structured Output
+
+```bash
+# JSON output with session_id for resumption
+claude -p "test query" --output-format json
+
+# Validated structured output (print mode only)
+claude -p "analyze this code" --json-schema '{"type":"object","properties":{"issues":{"type":"array"}}}'
+```
+
+### Session Resumption
+
+Capture the session_id from JSON output to resume and continue testing:
+
+```bash
+# Run initial test, capture session_id
+RESULT=$(claude -p "start a code review" --output-format json)
+SESSION_ID=$(echo "$RESULT" | jq -r '.session_id')
+
+# Resume the session with follow-up
+claude -p "now check for security issues" --resume "$SESSION_ID" --output-format json
+```
+
+### Bounded Testing
+
+Control resource usage during automated testing:
+
+```bash
+# Limit conversation turns
+claude -p "run full audit" --max-turns 5
+
+# Limit budget
+claude -p "analyze codebase" --max-budget-usd 0.50
+
+# Combine limits
+claude -p "comprehensive review" --max-turns 10 --max-budget-usd 1.00
+```
+
+### Tool Approval
+
+Auto-approve specific tools without prompting during tests:
+
+```bash
+# Allow specific tools
+claude -p "edit the config file" --allowedTools "Edit,Write,Bash"
+
+# Allow MCP tools
+claude -p "fetch data" --allowedTools "mcp__my-server__query"
+```
+
+### Custom Instructions for Testing
+
+```bash
+# Add custom instructions while preserving defaults (recommended)
+claude -p "test query" --append-system-prompt "You are testing plugin X. Report any errors."
+
+# Note: --append-system-prompt is preferred over --system-prompt
+# because it preserves Claude's default system instructions
+```
+
+### Debug Output
+
+```bash
+# Verbose turn-by-turn output for debugging
+claude -p "test query" --verbose
+
+# Combine with debug flags
+claude -p "test query" --verbose --debug "plugins,hooks"
+```
+
+### Example: Automated Test Script
+
+```bash
+#!/bin/bash
+# test-plugin.sh - Automated plugin test suite
+
+PASS=0
+FAIL=0
+
+run_test() {
+  local description="$1"
+  local query="$2"
+  local expected="$3"
+
+  RESULT=$(claude -p "$query" --output-format json --max-turns 3 --max-budget-usd 0.25)
+
+  if echo "$RESULT" | grep -q "$expected"; then
+    echo "PASS: $description"
+    ((PASS++))
+  else
+    echo "FAIL: $description"
+    echo "  Expected: $expected"
+    ((FAIL++))
+  fi
+}
+
+run_test "Skill triggers" "I need to create a plugin" "plugin-creation"
+run_test "Command works" "/my-command test" "expected output"
+run_test "Error handling" "invalid input scenario" "error message"
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed"
+```
+
 ---
 
 ## Testing Commands

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-07
+
+### Added
+- **3 slash commands** for plugin discoverability:
+  - `commands/create.md` — create a new plugin with selected components
+  - `commands/validate.md` — validate plugin structure, frontmatter, and best practices
+  - `commands/add-component.md` — add a skill, command, agent, or hook to an existing plugin
+- **Lean documentation principle** added as 6th iron law in `core-philosophy.md`
+- **Plugin project setup guidance** in SKILL.md (`.claude/rules/`, CLAUDE.md, README/CHANGELOG placement)
+
+### Updated (references synced against comprehensive guides)
+- `writing-agents.md` — added memory field (user/project/local), model selection, disallowedTools, hooks in frontmatter
+- `agent-tools.md` — added disallowedTools, MCP tool access, expanded tool list
+- `hook-events.md` — expanded from 10 to 14 events, added MCP matcher syntax, matcher values per event
+- `writing-hooks.md` — corrected to 3 hook types (command/prompt/agent), added async hooks, MCP matchers
+- `writing-skillmd.md` — added model, context, disable-model-invocation, user-invocable, dynamic context injection, ultrathink
+- `component-comparison.md` — added CLAUDE.md and Agent Teams, context cost considerations, 6-step decision process
+- `plugin-json.md` — added mcpServers, lspServers, path substitution, installation scopes, plugin caching
+- `testing.md` — added CLI automation section (--output-format json, -p flag, session resumption, --allowedTools)
+
+### Changed
+- Exited beta — version 2.0.0-beta.4 → 2.1.0
+- Removed [BETA] prefix from plugin description
+- SKILL.md updated with guidance for new features: memory, model routing, context injection, hook handler types
+
 ## [2.0.0-beta.4] - 2026-01-09
 
 ### Fixed

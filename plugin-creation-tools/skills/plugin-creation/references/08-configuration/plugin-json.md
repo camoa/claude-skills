@@ -37,7 +37,8 @@ plugin-name/
     "./agents/compliance-checker.md"
   ],
   "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.mcp.json",
+  "lspServers": "./.lsp.json"
 }
 ```
 
@@ -88,6 +89,7 @@ Or simple string:
 | agents | string/array | Custom agent file paths |
 | hooks | string/object | Hook config path or inline config |
 | mcpServers | string/object | MCP config path or inline config |
+| lspServers | string/object | LSP config path or inline config |
 
 ### Path Patterns
 
@@ -118,6 +120,104 @@ Or simple string:
 }
 ```
 
+## mcpServers Configuration
+
+The `mcpServers` field configures MCP (Model Context Protocol) servers that provide external tool integrations. It can be a path to a `.mcp.json` file or an inline object.
+
+### Path reference
+```json
+{
+  "mcpServers": "./.mcp.json"
+}
+```
+
+### Inline configuration
+```json
+{
+  "mcpServers": {
+    "my-database": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/servers/db-server",
+      "args": ["--port", "5432"],
+      "env": {
+        "DB_HOST": "localhost"
+      },
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    },
+    "my-api": {
+      "command": "npx",
+      "args": ["-y", "@company/api-mcp-server"],
+      "env": {
+        "API_KEY": ""
+      }
+    }
+  }
+}
+```
+
+### MCP Server Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| command | string | Executable to run the server |
+| args | array | Command-line arguments |
+| env | object | Environment variables |
+| cwd | string | Working directory for the server |
+
+The format matches the standard MCP configuration with server name as the key, and command, args, env, and cwd as server properties.
+
+## lspServers Configuration
+
+The `lspServers` field configures Language Server Protocol servers for code intelligence. It can be a path to a `.lsp.json` file or an inline object.
+
+### Path reference
+```json
+{
+  "lspServers": "./.lsp.json"
+}
+```
+
+### Inline configuration
+```json
+{
+  "lspServers": {
+    "typescript": {
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "extensionToLanguage": {
+        ".ts": "typescript",
+        ".tsx": "typescriptreact"
+      },
+      "transport": "stdio",
+      "env": {},
+      "initializationOptions": {},
+      "settings": {},
+      "workspaceFolder": "${CLAUDE_PLUGIN_ROOT}",
+      "startupTimeout": 10000,
+      "shutdownTimeout": 5000,
+      "restartOnCrash": true,
+      "maxRestarts": 3
+    }
+  }
+}
+```
+
+### LSP Server Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| command | string | Executable to run the LSP server |
+| args | array | Command-line arguments |
+| extensionToLanguage | object | Maps file extensions to language IDs |
+| transport | string | Communication transport (e.g., "stdio") |
+| env | object | Environment variables |
+| initializationOptions | object | LSP initialization options |
+| settings | object | LSP workspace settings |
+| workspaceFolder | string | Workspace root for the LSP server |
+| startupTimeout | number | Milliseconds to wait for server startup |
+| shutdownTimeout | number | Milliseconds to wait for server shutdown |
+| restartOnCrash | boolean | Whether to restart the server on crash |
+| maxRestarts | number | Maximum number of automatic restarts |
+
 ## Important Path Rules
 
 1. **Custom paths SUPPLEMENT default directories**
@@ -132,9 +232,9 @@ Or simple string:
    - Works across all platforms
    - Example: `./path/to/file.md`
 
-## Environment Variables
+## Environment Variables and Path Substitution
 
-Available in paths:
+Available in all path fields including mcpServers and lspServers command, args, and env values:
 
 | Variable | Description |
 |----------|-------------|
@@ -145,11 +245,39 @@ Example:
 {
   "mcpServers": {
     "my-server": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/servers/my-server"
+      "command": "${CLAUDE_PLUGIN_ROOT}/servers/my-server",
+      "args": ["--config", "${CLAUDE_PLUGIN_ROOT}/config/server.json"],
+      "env": {
+        "DATA_DIR": "${CLAUDE_PLUGIN_ROOT}/data"
+      }
     }
   }
 }
 ```
+
+`${CLAUDE_PLUGIN_ROOT}` is substituted at runtime in all path-accepting fields, including nested values in mcpServers and lspServers configurations.
+
+## Installation Scopes
+
+Plugins can be installed with different scopes:
+
+| Scope | Description |
+|-------|-------------|
+| user | Default. Available to the current user across all projects |
+| project | Available only within a specific project |
+| local | Local development install, not shared |
+| managed | Installed and managed by an organization or team |
+
+## Plugin Caching
+
+Plugins are copied to a cache directory upon installation. This has important implications:
+
+- **Paths that traverse outside the plugin root will not work** after install, because only the plugin directory tree is copied to cache.
+- Files referenced via `../` or absolute paths outside the plugin root will be missing in the cached copy.
+
+**Workarounds:**
+- Use symlinks within the plugin directory that point to external resources (symlinks are preserved during copy).
+- Restructure the marketplace/plugin so all required files are contained within the plugin root directory.
 
 ## Minimal Example
 
@@ -199,7 +327,8 @@ This minimal plugin will still load:
     "./agents/analyzer.md"
   ],
   "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.mcp.json",
+  "lspServers": "./.lsp.json"
 }
 ```
 
