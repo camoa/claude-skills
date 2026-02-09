@@ -2,7 +2,16 @@
 name: architecture-validator
 description: Use when validating implementation against architecture - checks approach matches documented patterns, dependencies, architecture principles (Library-First, CLI-First), and SOLID/DRY principles
 capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles", "security-validation"]
-version: 2.0.0
+version: 3.1.0
+model: sonnet
+memory: project
+disallowedTools: Edit, Write
+hooks:
+  PreToolUse:
+    - matcher: "Write|Edit"
+      hooks:
+        - type: prompt
+          prompt: "The architecture-validator agent is read-only and should not modify files. It attempted to use a write tool. Return 'block' to prevent this action."
 ---
 
 # Architecture Validator

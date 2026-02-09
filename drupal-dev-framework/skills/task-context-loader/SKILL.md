@@ -2,11 +2,15 @@
 name: task-context-loader
 description: Use when starting implementation of a task - loads architecture files, referenced patterns, relevant guides, and task file into context
 version: 3.0.0
+user-invocable: false
 ---
 
 # Task Context Loader
 
 Load all context needed before implementing a task.
+
+## Active Tasks
+!`ls implementation_process/in_progress/ 2>/dev/null`
 
 ## Activation
 

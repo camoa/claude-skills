@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-02-07
+
+### Added
+- **Agent memory** on 3 agents: project-orchestrator, architecture-validator, architecture-drafter (`memory: project`)
+- **Model routing** on 5 agents: opus (drafter), sonnet (orchestrator, validator, recommender), haiku (researcher)
+- **Model routing** on 5 skills: opus (component-designer), sonnet (diagram-generator), haiku (guide-loader, core-pattern-finder, phase-detector)
+- **Tool restrictions** on 3 agents: contrib-researcher and pattern-recommender (`disallowedTools: Edit, Write, Bash`), architecture-validator (`disallowedTools: Edit, Write`)
+- **Invocation control** on 6 skills: guide-loader, core-pattern-finder, phase-detector, task-context-loader, memory-manager, guide-integrator (`user-invocable: false`)
+- **Dynamic context injection** on 3 files: project-orchestrator (project state), session-resume (git branch), task-context-loader (active tasks)
+- **Agent-scoped hooks**: architecture-validator PreToolUse prompt hook to block write attempts
+- **Skills preloading**: architecture-drafter preloads guide-integrator
+- **PreCompact hook** (`hooks/pre-compact.sh`) to preserve project context before compaction
+- **CLAUDE.md** at plugin root with project conventions
+- **`.claude/rules/`** with 3 path-scoped rule files: agent-conventions, skill-conventions, command-conventions
+
+### Changed
+- Exited beta — version 3.0.0-beta.1 → 3.1.0
+- **Lean documentation**: pruned v2.x migration content and redundant output examples from project-orchestrator (~25% reduction)
+- **Lean documentation**: condensed architecture-drafter output template (70 → 10 lines)
+- Added missing `version` field to pattern-recommender and contrib-researcher
+
 ## [3.0.0-beta.1] - 2026-01-14
 
 ### Added
