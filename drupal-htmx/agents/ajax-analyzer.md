@@ -2,8 +2,10 @@
 name: ajax-analyzer
 description: Analyzes Drupal modules for AJAX patterns and identifies migration candidates. Use proactively when user wants to find AJAX code to migrate to HTMX.
 capabilities: ["AJAX pattern detection", "migration complexity assessment", "code scanning"]
-tools: Read, Grep, Glob
+version: 1.0.0
 model: sonnet
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write
 ---
 
 # AJAX Analyzer
