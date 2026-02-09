@@ -1,7 +1,8 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding violations, or setting up quality tools - supports Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects with TDD, SOLID, DRY, and OWASP security checks
-version: 2.2.0
+version: 2.3.0
+model: sonnet
 ---
 
 # Code Quality Audit

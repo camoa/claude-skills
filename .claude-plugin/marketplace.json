@@ -52,7 +52,7 @@
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
       "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks, Socket CLI) projects - TDD, SOLID, DRY, OWASP security",
-      "version": "2.1.0",
+      "version": "2.3.0",
       "author": {
         "name": "camoa"
       },

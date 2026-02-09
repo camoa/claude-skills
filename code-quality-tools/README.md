@@ -198,9 +198,12 @@ See `references/operations/dast-tools.md` for installation and usage.
 
 ## Version
 
+**v2.3.0** (Current) - Plugin conventions and model routing
+- Model routing (`sonnet`) on skill for cost optimization
+- CLAUDE.md and `.claude/rules/` conventions
+
 **v2.2.0** - Commands for direct access + improved discoverability
 - 8 new slash commands for direct operation access
-- Enhanced skill description for better auto-discovery
 - Project auto-detection (Drupal/Next.js)
 - Intelligent error handling with recovery guidance
 
