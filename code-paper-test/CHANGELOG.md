@@ -5,6 +5,19 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-09
+
+### Added
+- `model: sonnet` routing on paper-test skill for cost optimization
+- `CLAUDE.md` plugin conventions file
+- `.claude/rules/skill-conventions.md` for path-scoped skill standards
+- Version bumped to 0.2.0 in SKILL.md frontmatter
+
+### Changed
+- Aligned with camoa-skills plugin standards (model routing, rules, conventions)
+
+---
+
 ## [0.1.1] - 2025-12-26
 
 ### Added
