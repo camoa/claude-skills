@@ -33,7 +33,7 @@ Get project path from `project_state.md`. Find the task:
 **v2.x Single File (backward compatibility):**
 - Check `implementation_process/in_progress/{task}.md` for single file
 
-If neither exists, offer to create one via `implementation-task-creator`
+If neither exists, offer to create one using the Skill tool to invoke `implementation-task-creator` (it is a skill, not an agent)
 
 ### 2. Load Architecture
 
