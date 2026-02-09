@@ -2,6 +2,7 @@
 name: diagram-generator
 description: Use when visualizing architecture - generates Mermaid diagrams for data flow, service relationships, or entity structures
 version: 1.1.0
+model: sonnet
 ---
 
 # Diagram Generator

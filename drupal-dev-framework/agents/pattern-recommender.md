@@ -2,6 +2,9 @@
 name: pattern-recommender
 description: Use when choosing between Drupal patterns (FormBase vs ListBuilder, Entity vs Config) - recommends patterns with core/contrib references
 capabilities: ["pattern-recommendation", "drupal-best-practices", "core-reference", "decision-guidance"]
+version: 1.0.0
+model: sonnet
+disallowedTools: Edit, Write, Bash
 ---
 
 # Pattern Recommender

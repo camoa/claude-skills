@@ -2,6 +2,8 @@
 name: core-pattern-finder
 description: Use when needing Drupal core implementation examples - searches core modules for specific patterns and returns file path references
 version: 1.1.0
+model: haiku
+user-invocable: false
 ---
 
 # Core Pattern Finder

@@ -2,12 +2,17 @@
 name: project-orchestrator
 description: Use when checking project status or deciding next steps - reads memory files, manages tasks, suggests actions, routes to appropriate agents/skills
 capabilities: ["project-status", "task-management", "workflow-routing", "next-action-suggestion"]
-version: 3.0.0
+version: 3.1.0
+model: sonnet
+memory: project
 ---
 
 # Project Orchestrator
 
 Central coordinator agent for managing project state and task workflow progression.
+
+## Current Project State
+!`cat project_state.md 2>/dev/null || echo "No project_state.md found in current directory"`
 
 ## Purpose
 
@@ -113,40 +118,11 @@ Requirements gathered?
 **Always scan `implementation_process/in_progress/` and present options:**
 
 ```bash
-# v3.0.0: Scan for task directories
+# Scan for task directories
 Use Bash: ls -d {project_path}/implementation_process/in_progress/*/ 2>/dev/null
-
-# Also check for old v2.x format (single .md files)
-Use Bash: ls {project_path}/implementation_process/in_progress/*.md 2>/dev/null
 ```
 
-**If old v2.x format detected (*.md files exist):**
-
-1. **Show detection message:**
-   ```
-   ⚠️ Detected old v2.x task format (.md files)
-
-   Migrating to v3.0.0 folder structure automatically...
-   ```
-
-2. **Invoke task-folder-migrator skill in automatic mode:**
-   - Use Skill tool: `drupal-dev-framework:task-folder-migrator`
-   - Pass context: automatic=true (no confirmation prompt)
-   - This will migrate all tasks from `.md` files to folder structure
-   - Creates backups automatically
-   - Proceeds without user confirmation
-
-3. **After migration completes:**
-   ```
-   ✓ Migration complete!
-
-   Migrated {N} task(s) to folder structure.
-   Backups saved as .md.bak files.
-   ```
-
-4. **Continue to normal task selection** (folders now exist)
-
-**If v3.0.0 tasks found (directories):**
+**If tasks found (directories):**
 ┌─────────────────────────────────────────────┐
 │ ## Tasks in Progress                        │
 │                                             │
@@ -184,15 +160,7 @@ User selected existing task?
 
 ### Step 4: Task Phase Detection
 
-**v3.0.0 Format:** Check `implementation_process/in_progress/{task_name}/` directory:
-
-```bash
-# Check which phase files exist
-[ -f "{task_name}/task.md" ] && echo "tracker"
-[ -f "{task_name}/research.md" ] && echo "research"
-[ -f "{task_name}/architecture.md" ] && echo "architecture"
-[ -f "{task_name}/implementation.md" ] && echo "implementation"
-```
+Check `implementation_process/in_progress/{task_name}/` directory:
 
 | Files Present | Phase | Next Action |
 |--------------|-------|-------------|
@@ -200,8 +168,6 @@ User selected existing task?
 | task.md + research.md | Phase 2 - Architecture | `/design {task}` |
 | + architecture.md | Phase 3 - Implementation | `/implement {task}` |
 | + implementation.md | Done | `/complete {task}` |
-
-**v2.x Format (backward compat):** If `{task_name}.md` file exists, warn about old format and suggest migration.
 
 ## Output Format
 
@@ -228,70 +194,6 @@ Phase: {1-Research / 2-Architecture / 3-Implementation}
 ### Alternative Actions
 1. {Alternative 1}
 2. {Alternative 2}
-```
-
-## Output: Task Selection
-
-### When Old v2.x Format Detected
-```markdown
-## Project: {Project Name}
-
-Requirements: Complete ✓
-
-## ⚠️ Migration Required
-
-Found 3 task(s) in old v2.x format (.md files):
-- settings_form.md
-- content_entity.md
-- field_formatter.md
-
-**v3.0.0 uses folder-based structure.**
-
-Please run: `/drupal-dev-framework:migrate-tasks`
-
-This will:
-- Convert tasks to folder structure
-- Preserve all content
-- Create backups (.md.bak)
-
-See MIGRATION.md for details.
-```
-
-### When v3.0.0 Tasks Exist
-```markdown
-## Project: {Project Name}
-
-Requirements: Complete ✓
-
-## Tasks in Progress
-
-Found 3 task(s) in implementation_process/in_progress/:
-
-1. settings_form/ (Phase 3 - Implementation)
-2. content_entity/ (Phase 1 - Research)
-3. field_formatter/ (Phase 2 - Architecture)
-
-## Completed Tasks
-- ✅ user_service/
-- ✅ config_schema/
-
-Which task do you want to work on?
-- Enter a number (1-3) to continue an existing task
-- Enter a new task name to start something new
-```
-
-### When No Tasks Exist
-```markdown
-## Project: {Project Name}
-
-Requirements: Complete ✓
-
-## No Tasks Yet
-
-No tasks found in implementation_process/in_progress/
-
-What task do you want to work on?
-Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 ```
 
 ## Routing Table
