@@ -14,7 +14,7 @@ If omitted, agent inherits all available tools.
 
 ## The disallowedTools Field
 
-Explicitly deny specific tools. Takes precedence over `tools`:
+Explicitly deny specific tools. Removed from inherited or specified tool list:
 
 ```yaml
 # Allow all tools except Bash and Write
@@ -26,6 +26,8 @@ disallowedTools: Bash
 ```
 
 Use `disallowedTools` when it is easier to exclude a few tools than to list all allowed ones.
+
+> **Note:** `disallowedTools` applies when Claude auto-delegates to the agent based on its description. It does not apply when an agent is spawned explicitly via the Task tool from the main conversation.
 
 ## Available Tools
 

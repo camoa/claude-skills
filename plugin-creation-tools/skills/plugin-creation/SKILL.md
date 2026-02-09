@@ -99,7 +99,7 @@ When user says "add skill", "create skill", "make skill":
 - `model: haiku` for simple lookup/formatting skills, `opus` for complex reasoning
 - `context: fork` with `agent: <type>` for heavy operations that would pollute main context
 - `disable-model-invocation: true` for command-only skills (no auto-trigger)
-- `user-invocable: false` for skills only triggered by other skills/agents
+- `user-invocable: false` to hide from `/` menu (Claude can still invoke via Skill tool)
 
 **Dynamic context injection**: Use `` !`command` `` in the skill body to inject runtime state (git status, file contents, etc.) when the skill loads.
 

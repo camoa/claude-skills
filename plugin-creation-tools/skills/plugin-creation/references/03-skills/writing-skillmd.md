@@ -125,7 +125,7 @@ context: fork
 | `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
 | `agent` | No | When `context: fork`, specify agent type for the forked context. |
 | `disable-model-invocation` | No | Set to `true` to prevent Claude from auto-invoking. User must call explicitly via `/name`. Reduces context cost to zero for triggered-only skills. |
-| `user-invocable` | No | Set to `false` to make skill only auto-invocable (Claude triggers it, user cannot call directly). Default is `true`. |
+| `user-invocable` | No | Set to `false` to hide from `/` menu. Claude can still invoke via Skill tool. For background knowledge users shouldn't invoke directly. Default is `true`. |
 | `license` | No | License for the skill. |
 | `metadata` | No | Custom key-value pairs. |
 
@@ -158,7 +158,7 @@ disable-model-invocation: true
 ---
 ```
 
-**Auto-only skill** -- Claude decides when to invoke, user cannot call directly:
+**Auto-only skill** -- hidden from `/` menu, Claude decides when to invoke:
 ```yaml
 ---
 name: formatting-output
@@ -166,6 +166,10 @@ description: Formats command output for readability. Use when command output exc
 user-invocable: false
 ---
 ```
+
+> **Note:** `user-invocable: false` only controls `/` menu visibility. Claude can still invoke via the Skill tool. To block Claude from auto-invoking, use `disable-model-invocation: true` instead. These serve opposite purposes:
+> - `user-invocable: false` — user cannot call, Claude can
+> - `disable-model-invocation: true` — Claude cannot call, user can
 
 ### Naming Convention
 
