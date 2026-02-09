@@ -5,6 +5,18 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-09
+
+### Added
+- **Agent memory**: brand-analyst uses `memory: project` for cross-session brand pattern learning
+- **Model routing**: opus for visual-content (creative complexity), sonnet for brand-content-design and infographic-generator
+- **Tool restrictions**: brand-analyst has `disallowedTools: Edit, Write, Bash` for explicit read-only enforcement
+- **Invocation control**: visual-content and infographic-generator set `user-invocable: false` (called by commands only)
+- **PreCompact hook**: preserves active brand project context before context compaction
+- **CLAUDE.md**: plugin conventions at plugin root
+- **Path-scoped rules**: `.claude/rules/` with agent, skill, and command conventions
+- **Version fields**: added `version` to all agents and skills
+
 ## [1.11.3] - 2025-12-11
 
 ### Added
