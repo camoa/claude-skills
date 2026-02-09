@@ -2,11 +2,15 @@
 name: task-context-loader
 description: Use when starting implementation of a task - loads architecture files, referenced patterns, relevant guides, and task file into context
 version: 3.0.0
+user-invocable: false
 ---
 
 # Task Context Loader
 
 Load all context needed before implementing a task.
+
+## Active Tasks
+!`ls implementation_process/in_progress/ 2>/dev/null`
 
 ## Activation
 
@@ -29,7 +33,7 @@ Get project path from `project_state.md`. Find the task:
 **v2.x Single File (backward compatibility):**
 - Check `implementation_process/in_progress/{task}.md` for single file
 
-If neither exists, offer to create one via `implementation-task-creator`
+If neither exists, offer to create one using the Skill tool to invoke `implementation-task-creator` (it is a skill, not an agent)
 
 ### 2. Load Architecture
 

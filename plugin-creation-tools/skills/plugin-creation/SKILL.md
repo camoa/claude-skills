@@ -31,6 +31,21 @@ Create complete Claude Code plugins with any combination of components.
 1. Read `references/01-overview/component-comparison.md` to decide which components needed
 2. Determine if this should be a new plugin or add to existing
 
+## Plugin Project Setup
+
+When creating any plugin, also consider:
+- `.claude/rules/` with modular project rules (path-scoped if needed for different component directories)
+- `CLAUDE.md` at plugin root for project conventions
+- README.md and CHANGELOG.md at plugin root (for humans — never inside skill directories)
+
+## Documentation Principles
+
+All plugin documentation should follow lean principles:
+- **Current truth only** — no historical narratives or "previously we did X"
+- **Replace, don't append** — superseded content gets replaced entirely
+- **Delete what's irrelevant** — every edit is a chance to prune
+- Read `references/02-philosophy/core-philosophy.md` for full philosophy
+
 ## Plugin Initialization
 
 When user says "create plugin", "initialize plugin", "new plugin":
@@ -80,6 +95,16 @@ When user says "add skill", "create skill", "make skill":
 | "This skill helps with PDF processing" | "Process PDF files using this workflow" |
 | "The description field is important" | "Write the description starting with 'Use when...'" |
 
+**Consider these optional frontmatter fields:**
+- `model: haiku` for simple lookup/formatting skills, `opus` for complex reasoning
+- `context: fork` with `agent: <type>` for heavy operations that would pollute main context
+- `disable-model-invocation: true` for command-only skills (no auto-trigger)
+- `user-invocable: false` to hide from `/` menu (Claude can still invoke via Skill tool)
+
+**Dynamic context injection**: Use `` !`command` `` in the skill body to inject runtime state (git status, file contents, etc.) when the skill loads.
+
+**Extended thinking**: Include "ultrathink" in the skill body for tasks requiring deep reasoning.
+
 ## Creating Commands
 
 When user says "add command", "create command", "slash command":
@@ -103,19 +128,39 @@ When user says "add agent", "create agent", "make agent":
    - Description should include "Use proactively" for auto-delegation
    - One agent = one clear responsibility
 
+**Consider these agent-specific features:**
+- `memory: project` for agents that benefit from cross-session learning (architecture decisions, code review patterns)
+- `memory: user` for personal preferences that carry across projects
+- `model:` matched to task complexity — `haiku` for lookup/formatting, `sonnet` for balanced tasks, `opus` for complex reasoning
+- `tools` restriction to minimum needed (reduces cost and attack surface)
+- `disallowedTools` to block specific tools (e.g., `Edit`, `Write` for read-only agents)
+- `hooks` in agent frontmatter for scoped validation (runs only when that agent is active)
+
 ## Creating Hooks
 
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for event types
+2. Read `references/06-hooks/hook-events.md` for all 14 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
-   - `PreToolUse` - before tool execution
+   - `PreToolUse` - before tool execution (can block)
    - `PostToolUse` - after tool execution (formatting, logging)
    - `SessionStart` - setup, output directories
    - `SessionEnd` - cleanup
-   - `UserPromptSubmit` - validation, context injection
+   - `UserPromptSubmit` - validation, context injection (can block)
+   - `SubagentStart`/`SubagentStop` - agent lifecycle
+   - `PreCompact` - inject context before compaction
+   - `Notification`, `Stop`, `TaskCompleted`, `TeammateIdle`
+
+**Three handler types** — choose the right one:
+- `command` — shell script, fastest, no LLM cost. Use for logging, file ops, env setup.
+- `prompt` — single-turn LLM evaluation, zero script overhead. Use for lightweight validation.
+- `agent` — multi-turn subagent with tools (Read, Grep, Glob). Use for complex verification.
+
+**Async execution**: Add `"async": true` on command hooks for background operations (logging, analytics) that shouldn't block the main flow.
+
+**MCP tool matching**: Use `mcp__<server>__<tool>` pattern in matchers for PreToolUse/PostToolUse.
 
 ## Configuring Plugin
 

@@ -2,6 +2,7 @@
 name: memory-manager
 description: Use after completing any phase activity - updates project_state.md, project registry, ensures files are in correct locations, maintains lean memory
 version: 3.0.0
+user-invocable: false
 ---
 
 # Memory Manager

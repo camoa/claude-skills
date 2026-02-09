@@ -2,7 +2,10 @@
 name: architecture-drafter
 description: Use when designing project architecture - creates architecture/main.md with component breakdown, service dependencies, and pattern references
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping", "solid-enforcement", "library-first"]
-version: 2.0.0
+version: 3.1.0
+model: opus
+memory: project
+skills: guide-integrator
 ---
 
 # Architecture Drafter
@@ -79,81 +82,14 @@ Before drafting, read these reference files from the plugin's `references/` fold
 
 ## Output Format
 
-Create `{project_path}/architecture/main.md`:
-
-```markdown
-# {Project} Architecture
-
-## Overview
-High-level description of what the project does.
-
-## Architecture Principles Compliance
-
-### Library-First
-- [x] Services defined BEFORE forms/controllers
-- [x] Services usable without UI
-- Justification: {why this follows Library-First}
-
-### CLI-First
-- [x] Drush commands: {list commands}
-- [x] No UI-only features
-- Justification: {why CLI is supported}
-
-### SOLID Compliance
-| Principle | Status | Notes |
-|-----------|--------|-------|
-| Single Responsibility | ✓ | Each service has one purpose |
-| Open/Closed | ✓ | Extension via hooks/events |
-| Liskov Substitution | ✓ | Interfaces properly defined |
-| Interface Segregation | ✓ | Lean interfaces |
-| Dependency Inversion | ✓ | All DI, no static calls |
-
-## Components
-
-### Services (implement FIRST per Library-First)
-| Service | Responsibility | Interface | Dependencies |
-|---------|----------------|-----------|--------------|
-| my_module.manager | Core business logic | ManagerInterface | entity_type.manager |
-
-### Drush Commands (implement with services per CLI-First)
-| Command | Service Used | Purpose |
-|---------|--------------|---------|
-| my_module:process | my_module.manager | CLI access to processing |
-
-### Forms (implement AFTER services)
-| Form | Type | Service Used | Purpose |
-|------|------|--------------|---------|
-| SettingsForm | ConfigFormBase | my_module.manager | Configuration UI |
-
-### Entities (if any)
-| Entity | Type | Storage |
-|--------|------|---------|
-| MyEntity | Content | SQL |
-
-## Data Flow
-Mermaid diagram showing how data moves through the system.
-
-## Pattern References
-- Service pattern: See core/modules/system/src/...
-- Form pattern: See core/modules/config/src/Form/...
-
-## Implementation Order
-1. **Services first** (Library-First) - Core logic without UI
-2. **Drush commands** (CLI-First) - CLI access to services
-3. **Forms/Controllers** - UI layer using services
-4. **Integration** - Wire everything together
-
-## Open Questions
-- Question 1: Options A, B, C
-- Question 2: Needs developer decision
-```
-
-## Tools Used
-
-- Read to load plugin's `references/` files
-- Read to review research files from project
-- superpowers:brainstorming for design discussions
-- TodoWrite for tracking checklist items
+Create `{project_path}/architecture/main.md` with these sections:
+- **Overview** — high-level description
+- **Architecture Principles Compliance** — Library-First, CLI-First, SOLID status tables
+- **Components** — Services (first), Drush Commands (with services), Forms (after services), Entities
+- **Data Flow** — Mermaid diagram
+- **Pattern References** — core/contrib file paths
+- **Implementation Order** — Services → Drush → Forms → Integration
+- **Open Questions** — decisions needing developer input
 
 ## Human Control Points
 

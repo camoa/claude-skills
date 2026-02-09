@@ -2,6 +2,8 @@
 name: phase-detector
 description: Use when determining task phase - analyzes task file to identify Phase 1, 2, or 3 for a specific task
 version: 3.0.0
+model: haiku
+user-invocable: false
 ---
 
 # Phase Detector

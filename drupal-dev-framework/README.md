@@ -63,7 +63,7 @@ The plugin includes reference documents that are enforced at each phase:
 | `references/library-first.md` | Library-First & CLI-First | Design |
 | `references/tdd-workflow.md` | Test-Driven Development | Implementation |
 | `references/dry-patterns.md` | Don't Repeat Yourself | Implementation |
-| `references/quality-gates.md` | 4 Quality Gates | Completion |
+| `references/quality-gates.md` | 5 Quality Gates | Completion |
 | `references/security-checklist.md` | OWASP security | Completion |
 | `references/frontend-standards.md` | CSS/JS standards | Implementation |
 
@@ -84,31 +84,9 @@ These references are self-contained - no external guides required.
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
-## Upgrading to v3.0.0
+## Upgrading from v2.x
 
-**Breaking Change:** v3.0.0 introduces folder-based task structure.
-
-If upgrading from v2.x:
-
-1. **Backup your projects** before upgrading
-2. **Install v3.0.0**:
-   ```bash
-   /plugin install drupal-dev-framework@camoa-skills
-   ```
-3. **Automatic migration** - Just run `/next`:
-   ```bash
-   /drupal-dev-framework:next
-   ```
-   The command automatically detects old v2.x format and migrates your tasks before continuing.
-
-4. **Manual migration** (optional):
-   ```bash
-   /drupal-dev-framework:migrate-tasks
-   ```
-5. **Verify migration** - check tasks in `implementation_process/in_progress/`
-6. **Delete backups** when confident (`.md.bak` files)
-
-The migration preserves all content while organizing it into the new structure. See [MIGRATION.md](./MIGRATION.md) for detailed guide.
+v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-detects and migrates old tasks. Or run `/drupal-dev-framework:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md) for details.
 
 ## Configuration
 
@@ -230,19 +208,24 @@ Back to task selection
 ## Components
 
 ### Agents (5)
-Agents handle complex multi-step tasks:
-- `contrib-researcher` - Searches drupal.org, analyzes contrib modules
-- `architecture-drafter` - Creates architecture documents
-- `pattern-recommender` - Recommends Drupal patterns for use cases
-- `architecture-validator` - Validates implementation against architecture
-- `project-orchestrator` - Coordinates project state and workflow
+Agents handle complex multi-step tasks with model routing and tool restrictions:
+
+| Agent | Model | Features |
+|-------|-------|----------|
+| `project-orchestrator` | sonnet | `memory: project`, dynamic context injection |
+| `architecture-drafter` | opus | `memory: project`, preloads guide-integrator |
+| `architecture-validator` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write`), scoped PreToolUse hook |
+| `pattern-recommender` | sonnet | Read-only (`disallowedTools: Edit, Write, Bash`) |
+| `contrib-researcher` | haiku | Read-only (`disallowedTools: Edit, Write, Bash`), returns findings to main window |
 
 ### Skills (16)
-Skills are auto-invoked based on context:
-- **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder`
-- **Phase 2:** `component-designer`, `diagram-generator`, `guide-integrator`
-- **Phase 3:** `task-context-loader`, `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
-- **Cross-Phase:** `memory-manager`, `phase-detector`, `guide-loader`, `session-resume`, `task-folder-migrator`
+Skills are auto-invoked based on context, with model routing and invocation control:
+- **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder` (haiku, internal)
+- **Phase 2:** `component-designer` (opus), `diagram-generator` (sonnet), `guide-integrator` (internal)
+- **Phase 3:** `task-context-loader` (internal, context injection), `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
+- **Cross-Phase:** `memory-manager` (internal), `phase-detector` (haiku, internal), `guide-loader` (haiku, internal), `session-resume` (context injection), `task-folder-migrator`
+
+*Internal skills (`user-invocable: false`) are called by other skills/agents only — not visible in the `/` menu.*
 
 ## Project Structure (v3.0.0)
 
@@ -312,23 +295,16 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 3.0.0-beta.1 (Current)
-- **BREAKING: Folder-based task structure** - Each task gets own folder with 4 files
-- **NEW: task-folder-migrator skill** - Migrate v2.x tasks to v3.0.0 structure
-- **Simple organization**: Flat structure, max 4 files per task, no nested folders
-- Updated: 4 skills (memory-manager, phase-detector, task-context-loader, task-completer)
-- Updated: 4 commands (/research, /design, /implement, /complete)
-- Migration guide and backward compatibility support
+### 3.1.0 (Current)
+- Agent memory, model routing, tool restrictions across all agents and skills
+- Dynamic context injection, `.claude/rules/`, CLAUDE.md, PreCompact hook
+- Lean documentation: pruned v2.x migration content, condensed output templates
 
-### 2.1.0
-- Added Gate 5: Code Purposefulness with `purposeful-code.md` reference
-- Expanded security checklist with real-world examples
-- Restored `/new` command for clearer workflow
+### 3.0.0-beta.1
+- Folder-based task structure, task-folder-migrator skill, auto-migration via `/next`
 
-### 2.0.0
-- Self-contained references: 7 built-in reference documents
-- Enforced principles with blocking checks
-- No hardcoded paths - works out-of-box
+### 2.x
+- Self-contained references, enforced principles, Gate 5, `/new` command
 
 ### 1.0.0
 - Initial release with 5 agents, 15 skills, 9 commands

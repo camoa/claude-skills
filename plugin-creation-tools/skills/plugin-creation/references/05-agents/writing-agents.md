@@ -21,9 +21,15 @@ name: agent-name
 description: Brief, action-oriented description of when to use this agent
 capabilities: ["capability1", "capability2", "capability3"]
 tools: Read, Grep, Glob, Bash
+disallowedTools: WebFetch, WebSearch
 model: sonnet
+memory: project
 permissionMode: default
 skills: skill1, skill2
+hooks:
+  preToolCall:
+    - matcher: Write
+      command: echo "Write operation triggered"
 ---
 
 # Agent Name
@@ -51,9 +57,12 @@ How this agent decides what to focus on. Any constraints or special consideratio
 | description | string | **Yes** | When to invoke; used for auto-delegation |
 | capabilities | array | No | List of specific tasks handled |
 | tools | string | No | Comma-separated allowed tools |
-| model | string | No | Model alias (sonnet, opus, haiku, inherit) |
+| disallowedTools | string | No | Tools to explicitly deny (takes precedence over tools) |
+| model | string | No | `haiku`, `sonnet`, `opus`, or `inherit` |
+| memory | string | No | `user`, `project`, or `local` |
 | permissionMode | string | No | Permission handling mode |
-| skills | string | No | Skills to auto-load |
+| skills | string | No | Skills to preload into agent context |
+| hooks | object | No | Hooks scoped to this agent (same format as hooks.json) |
 
 ## The Description Field
 
@@ -77,6 +86,53 @@ description: Helps with code
 description: Reviews things
 ```
 
+## Model Selection
+
+Choose the model based on task complexity and cost:
+
+| Model | Best For | Cost |
+|-------|----------|------|
+| haiku | Simple, focused tasks (formatting, linting, lookups) | Lowest |
+| sonnet | Balanced tasks (code review, documentation, refactoring) | Medium |
+| opus | Complex reasoning (architecture decisions, security analysis) | Highest |
+| inherit | Use whatever model the parent session uses | Varies |
+
+```yaml
+# Cost-efficient: simple file lookups
+model: haiku
+
+# Default for most agents
+model: sonnet
+
+# Complex multi-step reasoning
+model: opus
+```
+
+If omitted, the agent inherits the parent session's model.
+
+## Memory Configuration
+
+Memory controls cross-session learning for the agent.
+
+| Mode | Scope | Use Case |
+|------|-------|----------|
+| user | All projects for current user | Personal coding preferences, universal patterns |
+| project | Current project only | Project conventions, architecture decisions |
+| local | Not shared | Temporary or sensitive tasks |
+
+```yaml
+# Agent remembers project conventions across sessions
+memory: project
+
+# Agent learns user preferences across all projects
+memory: user
+
+# No cross-session memory
+memory: local
+```
+
+If omitted, the agent has no persistent memory.
+
 ## Permission Modes
 
 | Mode | Behavior |
@@ -86,6 +142,22 @@ description: Reviews things
 | bypassPermissions | Skip permission prompts |
 | plan | Read-only mode |
 | ignore | Ignore permission system |
+
+## Hooks
+
+Scope hooks to a specific agent using the same format as `hooks.json`:
+
+```yaml
+hooks:
+  preToolCall:
+    - matcher: Bash
+      command: echo "Bash command intercepted"
+  postToolCall:
+    - matcher: Write
+      command: echo "File written: $TOOL_INPUT"
+```
+
+Hooks run only when this agent is active.
 
 ## Body Content
 
@@ -136,7 +208,9 @@ name: code-reviewer
 description: Reviews code changes for quality, bugs, and best practices. Use proactively after code modifications.
 capabilities: ["code quality", "bug detection", "best practices"]
 tools: Read, Grep, Glob
+disallowedTools: Bash, Write
 model: sonnet
+memory: project
 ---
 
 # Code Reviewer
@@ -158,33 +232,62 @@ Senior code reviewer focused on maintainability, correctness, and adherence to p
 5. Provide actionable feedback
 ```
 
-### Documentation Writer Agent
+### Quick Lookup Agent
 
 ```markdown
 ---
-name: doc-writer
-description: Creates and updates technical documentation. Use when generating README, API docs, or guides.
-capabilities: ["technical writing", "API documentation", "user guides"]
-tools: Read, Write, Glob
-model: sonnet
+name: quick-lookup
+description: Fast file and symbol lookups. Use when finding definitions, references, or file locations.
+capabilities: ["file search", "symbol lookup", "reference finding"]
+tools: Read, Grep, Glob
+model: haiku
+memory: local
+permissionMode: plan
 ---
 
-# Documentation Writer
+# Quick Lookup
 
 ## Role
-Technical writer creating clear, comprehensive documentation for developers.
+Fast, cost-efficient lookup agent for finding files, symbols, and references.
 
 ## Capabilities
-- Generate README files
-- Create API reference documentation
-- Write setup and installation guides
-- Document configuration options
+- Find file locations by name or pattern
+- Locate function and class definitions
+- Search for symbol references
+- Read specific file contents
+```
 
-## Style Guidelines
-- Use clear, concise language
-- Include code examples
-- Structure with headers and lists
-- Target the intended audience
+### Architecture Advisor Agent
+
+```markdown
+---
+name: architecture-advisor
+description: Evaluates architecture decisions and system design. Use for complex design questions or reviewing structural changes.
+capabilities: ["architecture review", "design patterns", "system design"]
+tools: Read, Grep, Glob
+model: opus
+memory: project
+permissionMode: plan
+skills: design-patterns
+---
+
+# Architecture Advisor
+
+## Role
+Senior architect providing guidance on system design, patterns, and structural decisions.
+
+## Capabilities
+- Evaluate architectural trade-offs
+- Recommend design patterns
+- Review system boundaries and interfaces
+- Assess scalability implications
+
+## Decision Criteria
+Consider:
+1. Maintainability and complexity
+2. Performance and scalability
+3. Team conventions and existing patterns
+4. Long-term evolution of the codebase
 ```
 
 ## Testing Agent Delegation

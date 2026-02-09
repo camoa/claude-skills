@@ -1,6 +1,8 @@
 ---
 name: brand-content-design
 description: Use when user says "create presentation", "make carousel", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations and carousels using a layered philosophy system.
+version: 1.11.3
+model: sonnet
 ---
 
 # Brand Content Design

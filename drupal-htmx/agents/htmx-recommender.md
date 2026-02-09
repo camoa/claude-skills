@@ -2,8 +2,10 @@
 name: htmx-recommender
 description: Recommends HTMX patterns for Drupal development. Use when user needs guidance on implementing dynamic content, forms, or interactions with HTMX.
 capabilities: ["pattern recommendation", "Htmx class configuration", "best practice guidance"]
-tools: Read, Glob
+version: 1.0.0
 model: sonnet
+tools: Read, Glob
+disallowedTools: Edit, Write, Bash
 ---
 
 # HTMX Recommender

@@ -1,6 +1,9 @@
 ---
 name: generating-infographics
 description: Use when creating infographics, data visualizations, process diagrams, timelines, or comparisons - generates branded infographics using @antv/infographic with 114 templates across 7 categories. Triggers on "create infographic", "make infographic", "visualize data", "timeline", "process diagram".
+version: 1.11.3
+model: sonnet
+user-invocable: false
 ---
 
 # Generating Infographics

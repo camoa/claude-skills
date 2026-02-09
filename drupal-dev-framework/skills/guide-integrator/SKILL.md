@@ -2,6 +2,7 @@
 name: guide-integrator
 description: Use when designing features - loads plugin references and optionally user's custom guides based on keywords
 version: 2.0.0
+user-invocable: false
 ---
 
 # Guide Integrator
