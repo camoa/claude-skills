@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-02-09
+
+### Added
+- **Tool restrictions**: All 3 agents have `disallowedTools` for read-only enforcement
+- **Version fields**: Added `version` to all agents and skill
+- **Model routing**: htmx-development skill set to `model: sonnet`
+- **CLAUDE.md**: Plugin conventions at plugin root
+- **Path-scoped rules**: `.claude/rules/` with agent, skill, and command conventions
+
 ## [1.0.0] - 2025-12-31
 
 ### Added
