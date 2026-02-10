@@ -18,7 +18,7 @@ Initialize a new development project with complete memory structure.
 ## What This Does
 
 1. Asks for project name (if not provided)
-2. Asks where to store project files (default: `~/workspace/claude_projects/{name}/`)
+2. Asks where to store project files (uses saved base path from registry, or asks on first run)
 3. Creates project folder structure:
    - `project_state.md`
    - `architecture/main.md`
@@ -43,16 +43,14 @@ Enter project name (lowercase, underscores only):
 > content_workflow
 
 Where should project files be stored?
-Default: ~/workspace/claude_projects/content_workflow/
+Default: ~/my/projects/content_workflow/    (from saved base path)
 Press Enter to accept or provide custom path:
 > [Enter]
 
 Creating project: content_workflow
-Location: ~/workspace/claude_projects/content_workflow/
+Location: ~/my/projects/content_workflow/
 
-✓ Directory structure created
-✓ Project registered
-✓ Initializing project...
+Structure created, project registered, initializing...
 
 Now gathering requirements...
 ```

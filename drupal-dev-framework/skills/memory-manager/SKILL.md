@@ -147,7 +147,6 @@ Update the registry at `~/.claude/drupal-dev-framework/active_projects.json`:
 2. Find this project by path
 3. Update:
    - `lastAccessed`: today's date
-   - `phase`: current detected phase
    - `status`: "active" or "archived" if all tasks complete
 4. Write the updated registry
 

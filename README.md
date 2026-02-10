@@ -82,7 +82,7 @@ Create an agent that reviews code for security issues
 
 The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
 
-### drupal-dev-framework (v3.1.0)
+### drupal-dev-framework (v3.2.0)
 
 Systematic Drupal development workflow. Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
 
