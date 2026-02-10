@@ -2,13 +2,66 @@
 
 Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects with Semgrep, Trivy, and Gitleaks.
 
-## Installation
+## Quick Start
+
+### 1. Install Plugin
 
 ```bash
 /plugin install code-quality-tools@camoa-skills
 ```
 
-## What Claude Can Do
+### 2. Install Tools
+
+**Drupal (via DDEV):**
+```bash
+ddev composer require --dev \
+  phpstan/phpstan \
+  phpmd/phpmd \
+  sebastian/phpcpd \
+  vimeo/psalm \
+  drupal/coder \
+  drupal/security_review \
+  roave/security-advisories
+```
+
+System tools (install once):
+- [Semgrep](https://semgrep.dev/docs/getting-started/) - `pip install semgrep`
+- [Trivy](https://trivy.dev/latest/getting-started/installation/) - Platform-specific
+- [Gitleaks](https://github.com/gitleaks/gitleaks#installing) - Platform-specific
+
+**Next.js:**
+```bash
+npm install --save-dev \
+  eslint \
+  @typescript-eslint/parser \
+  @typescript-eslint/eslint-plugin \
+  eslint-plugin-security \
+  jest \
+  @testing-library/react \
+  @testing-library/jest-dom \
+  jscpd \
+  madge
+```
+
+System tools: Semgrep, Trivy, Gitleaks (same as above)
+
+### 3. Run Commands
+
+| Command | Purpose | Example Use |
+|---------|---------|-------------|
+| `/code-quality:audit` | Full audit (all checks) | Before commits/releases |
+| `/code-quality:coverage` | Test coverage | During TDD |
+| `/code-quality:security` | Security scan | Pre-deployment |
+| `/code-quality:lint` | Code standards | PR reviews |
+| `/code-quality:solid` | Architecture check | Refactoring |
+| `/code-quality:dry` | Find duplication | Code cleanup |
+| `/code-quality:tdd` | TDD workflow | Development |
+
+**Troubleshooting?** See [Troubleshooting Guide](skills/code-quality-audit/references/troubleshooting.md)
+
+---
+
+## What Claude Can Do (Conversational)
 
 Once installed, Claude handles these requests:
 
@@ -144,6 +197,15 @@ For **pre-production and staging environments**, optional DAST (Dynamic Applicat
 See `references/operations/dast-tools.md` for installation and usage.
 
 ## Version
+
+**v2.3.0** (Current) - Plugin conventions and model routing
+- Model routing (`sonnet`) on skill for cost optimization
+- CLAUDE.md and `.claude/rules/` conventions
+
+**v2.2.0** - Commands for direct access + improved discoverability
+- 8 new slash commands for direct operation access
+- Project auto-detection (Drupal/Next.js)
+- Intelligent error handling with recovery guidance
 
 **v2.1.0** - Optional DAST tools (OWASP ZAP + Nuclei) for pre-production security testing
 

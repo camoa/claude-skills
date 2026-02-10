@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-09
+
+### Added
+- `model: sonnet` routing on code-quality-audit skill for cost optimization
+- `CLAUDE.md` plugin conventions file
+- `.claude/rules/skill-conventions.md` for path-scoped skill standards
+- `.claude/rules/command-conventions.md` for path-scoped command standards
+
+### Changed
+- Aligned with camoa-skills plugin standards (model routing, rules, conventions)
+- Version bumped to 2.3.0 across plugin.json, marketplace.json, SKILL.md
+
+---
+
+## [2.2.0] - 2026-01-15
+
+### Added
+- **8 Slash Commands** for direct operation access
+  - `/code-quality:setup` - Install and configure tools
+  - `/code-quality:audit` - Run full audit (all 22 operations)
+  - `/code-quality:coverage` - Test coverage analysis
+  - `/code-quality:security` - Security scan (10 Drupal layers, 7 Next.js layers)
+  - `/code-quality:lint` - Code standards check
+  - `/code-quality:solid` - SOLID principles check
+  - `/code-quality:dry` - Code duplication detection
+  - `/code-quality:tdd` - TDD workflow (test watcher mode)
+- **Project Auto-Detection** - Automatically detects Drupal vs Next.js projects
+- **Intelligent Error Handling** - Contextual error messages with recovery guidance
+- **Troubleshooting Guide** - Common issues and solutions (`references/troubleshooting.md`)
+- **marketplace.json** - Enable marketplace distribution
+
+### Changed
+- **SKILL.md** - Enhanced description for better auto-discovery
+- **SKILL.md** - Added "Quick Commands" section referencing slash commands
+- **SKILL.md** - Version updated to 2.2.0
+- **README.md** - Added "Quick Start" section with installation and commands table
+- **plugin.json** - Version updated to 2.2.0, registered commands directory
+
+### Fixed
+- **Discoverability Issue** - Users can now invoke operations via commands without relying on skill auto-discovery
+- **Setup Clarity** - Clear installation instructions in README Quick Start section
+
+### Technical
+- New scripts: `detect-project.sh`, `error-handler.sh`
+- Commands registered in `plugin.json`
+- All changes non-breaking - v2.1.0 workflows continue unchanged
+
 ## [2.1.0] - 2025-12-19
 
 ### Added
