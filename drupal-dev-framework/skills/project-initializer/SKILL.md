@@ -1,7 +1,7 @@
 ---
 name: project-initializer
 description: Use when starting a new development project - creates memory folder structure with project_state.md, architecture scaffolding, and registers project
-version: 1.2.0
+version: 1.3.0
 ---
 
 # Project Initializer
@@ -29,12 +29,13 @@ Validate the name matches pattern `^[a-z][a-z0-9_]*$`. If invalid, ask again.
 
 ### 2. Get Storage Location
 
-Ask:
+Read the registry at `~/.claude/drupal-dev-framework/active_projects.json`. Check if `projectsBase` is set.
+
+**If `projectsBase` exists** — use it as default:
 ```
 Where should project files be stored?
 
-Default: ../claude_projects/{project_name}/
-(relative to current working directory)
+Default: {projectsBase}/{project_name}/
 
 Options:
 1. Accept default
@@ -42,6 +43,16 @@ Options:
 
 Your choice:
 ```
+
+**If `projectsBase` is NOT set** (first-time setup) — ask:
+```
+Where do you keep your project memory files?
+This folder will store architecture docs, task files, and project state.
+
+Enter the base path (all projects will be created as subfolders here):
+```
+
+Save the chosen base path as `projectsBase` in the registry (see Step 7).
 
 Convert relative paths to absolute. Store the full path.
 
@@ -130,23 +141,27 @@ Then read existing registry (or create new if doesn't exist) and add the project
 **Registry Schema:**
 ```json
 {
-  "version": "1.0",
+  "version": "1.1",
+  "projectsBase": "{user's chosen base path for all projects}",
   "projects": [
     {
       "name": "{project_name}",
       "path": "{full_path_to_project}",
       "created": "{YYYY-MM-DD}",
       "lastAccessed": "{YYYY-MM-DD}",
-      "phase": 1,
       "status": "active"
     }
   ]
 }
 ```
 
+- `projectsBase` — set once on first project creation, reused as default for all future projects
+- `path` — always the full absolute path to the specific project folder
+- No `phase` field — phase is tracked per-task in task files, not per-project
+
 Use `Read` to load existing registry, then `Write` to save updated version with new project appended.
 
-If registry doesn't exist, create it with just this project.
+If registry doesn't exist, create it with `projectsBase` and this project.
 
 ### 8. Invoke Requirements Gatherer
 

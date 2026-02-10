@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-02-10
+
+### Changed
+- **Project storage**: Registry now stores `projectsBase` — user's preferred base path for all projects, asked once on first run
+- **Default path**: Removed hardcoded `../claude_projects/` default; new projects use saved `projectsBase/{name}/`
+- **Registry schema v1.1**: Removed `phase` field (phase is per-task, not per-project). Added `projectsBase` field
+- **project-initializer** v1.3.0: Reads `projectsBase` from registry, asks user on first run instead of assuming a path
+- **memory-manager**: No longer writes `phase` to registry
+
 ## [3.1.0] - 2026-02-07
 
 ### Added

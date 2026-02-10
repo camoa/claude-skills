@@ -295,7 +295,11 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 3.1.0 (Current)
+### 3.2.0 (Current)
+- User-configured project storage: `projectsBase` saved in registry on first run, no hardcoded defaults
+- Registry schema v1.1: removed stale `phase` field (phase is per-task)
+
+### 3.1.0
 - Agent memory, model routing, tool restrictions across all agents and skills
 - Dynamic context injection, `.claude/rules/`, CLAUDE.md, PreCompact hook
 - Lean documentation: pruned v2.x migration content, condensed output templates
