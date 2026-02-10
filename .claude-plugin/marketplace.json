@@ -91,7 +91,7 @@
       "name": "figma-to-sdc",
       "source": "./figma-to-sdc",
       "description": "Convert Figma designs to Drupal components (SDC or Canvas). AI-assisted analysis identifies props, slots, and static elements. Supports both traditional Twig SDCs and Canvas JSX components.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "camoa"
       },

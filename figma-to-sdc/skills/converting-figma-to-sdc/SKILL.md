@@ -1,6 +1,8 @@
 ---
 name: converting-figma-to-sdc
 description: Convert Figma designs to Drupal components. Use when user provides a Figma URL and wants to create an SDC (Twig) or Canvas (JSX) component. Extracts design data, identifies props/slots/static elements, and generates component files.
+version: 0.2.0
+model: sonnet
 ---
 
 # Converting Figma to Drupal Components

@@ -1,6 +1,6 @@
 {
   "name": "figma-to-sdc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Convert Figma designs to Drupal components (SDC or Canvas). Extracts design structure, uses AI to identify props/slots/static elements, and generates production-ready components.",
   "author": {
     "name": "camoa"

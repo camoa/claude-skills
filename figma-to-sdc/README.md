@@ -91,6 +91,10 @@ The skill includes detailed reference guides:
 - [Canvas Module](https://www.drupal.org/project/canvas)
 - [Figma API](https://www.figma.com/developers/api)
 
+## Version
+
+0.2.0
+
 ## License
 
 MIT
