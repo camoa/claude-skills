@@ -77,14 +77,14 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded visual content (presentations, carousels, infographics) with 114 templates, 13 visual styles, visual components (cards, icons, gradients), 17 color palettes, and Presentation Zen principles",
-      "version": "2.0.0",
+      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, design systems, HTML components, 114 infographic templates, visual components, 17 color palettes, and Presentation Zen principles",
+      "version": "2.1.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["brand", "presentations", "carousels", "infographics", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"],
+      "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"],
       "strict": false
     }
   ]
