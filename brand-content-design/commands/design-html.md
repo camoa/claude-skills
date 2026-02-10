@@ -234,7 +234,26 @@ Create `design-system.md` with:
 |-------|-------|
 | `--max-width` | 1200px |
 | `--border-radius` | {style-appropriate}px |
-| `--transition` | 0.3s ease |
+| `--min-tap-target` | 48px |
+
+### Interaction
+| Token | Value | Notes |
+|-------|-------|-------|
+| `--timing-fast` | {80-150ms} | Hovers, color shifts |
+| `--timing-base` | {200-350ms} | Transitions, reveals |
+| `--timing-slow` | {400-600ms} | Page-level animations |
+| `--easing-default` | {curve} | e.g. ease, cubic-bezier(...) |
+| Hover behavior | {describe} | e.g. "lift + shadow" / "color swap" / "underline slide" |
+| Focus style | {describe} | e.g. "2px offset outline in accent" / "ring" |
+
+### Forms (if page will include forms)
+| Token | Value |
+|-------|-------|
+| `--color-error` | #hex |
+| `--color-success` | #hex |
+| Label placement | {top / left / floating} |
+| Error placement | {below field / inline} |
+| Field border | {describe} | e.g. "1px solid --color-text-muted, accent on focus" |
 
 ## Component Catalog
 

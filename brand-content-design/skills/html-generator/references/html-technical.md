@@ -32,40 +32,18 @@ Every generated page starts with:
     input, button, textarea, select { font: inherit; }
     p, h1, h2, h3, h4, h5, h6 { overflow-wrap: break-word; }
 
-    /* === Design Tokens === */
+    /* === Design Tokens (from design-system.md) === */
     :root {
-      /* Colors */
-      --color-primary: #value;
-      --color-secondary: #value;
-      --color-accent: #value;
-      --color-bg: #value;
-      --color-bg-alt: #value;
-      --color-text: #value;
-      --color-text-muted: #value;
+      /* All values below come from the project's design-system.md.
+         Do not hardcode — read token values from that file. */
 
-      /* Typography */
-      --font-heading: 'Heading Font', Georgia, serif;
-      --font-body: 'Body Font', system-ui, sans-serif;
-      --font-size-base: 1rem;
-      --font-size-sm: 0.875rem;
-      --font-size-lg: 1.25rem;
-      --font-size-xl: 1.5rem;
-      --font-size-2xl: 2rem;
-      --font-size-3xl: 3rem;
-      --font-size-4xl: 4rem;
-
-      /* Spacing */
-      --space-xs: 0.5rem;
-      --space-sm: 1rem;
-      --space-md: 2rem;
-      --space-lg: 4rem;
-      --space-xl: 6rem;
-      --space-2xl: 8rem;
-
-      /* Layout */
-      --max-width: 1200px;
-      --border-radius: 8px;
-      --transition: 0.3s ease;
+      /* Colors: --color-primary, --color-secondary, --color-accent,
+         --color-bg, --color-bg-alt, --color-text, --color-text-muted */
+      /* Typography: --font-heading, --font-body, --font-size-* scale */
+      /* Spacing: --space-xs through --space-2xl */
+      /* Layout: --max-width, --border-radius, --min-tap-target */
+      /* Interaction: --timing-fast, --timing-base, --timing-slow, --easing-default */
+      /* Forms (if needed): --color-error, --color-success */
     }
 
     /* === Base Typography === */
@@ -84,8 +62,9 @@ Every generated page starts with:
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border-width: 0; }
     .skip-link { position: absolute; top: -100%; left: 50%; transform: translateX(-50%); background: var(--color-primary); color: #fff; padding: var(--space-xs) var(--space-sm); border-radius: var(--border-radius); z-index: 999; }
     .skip-link:focus { top: var(--space-xs); }
-    .btn { display: inline-block; padding: var(--space-xs) var(--space-md); border-radius: var(--border-radius); font-weight: 600; text-decoration: none; transition: transform var(--transition), box-shadow var(--transition); cursor: pointer; border: none; }
+    .btn { display: inline-block; padding: var(--space-xs) var(--space-md); min-height: var(--min-tap-target, 48px); border-radius: var(--border-radius); font-weight: 600; text-decoration: none; transition: transform var(--timing-fast, 150ms) var(--easing-default, ease), box-shadow var(--timing-fast, 150ms) var(--easing-default, ease); cursor: pointer; border: none; }
     .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn:focus-visible { outline: 2px solid var(--color-accent, var(--color-primary)); outline-offset: 2px; }
     .btn--primary { background: var(--color-primary); color: #fff; }
     .btn--secondary { background: transparent; border: 2px solid var(--color-primary); color: var(--color-primary); }
 

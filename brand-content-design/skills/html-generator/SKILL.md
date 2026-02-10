@@ -80,44 +80,16 @@ Before generating, ask: "Could this page belong to any brand?" If yes, push hard
 
 ### Design Tokens → CSS Custom Properties
 
-Map design-system.md tokens to CSS custom properties:
+Read the project's `design-system.md` and map ALL token sections to `:root` custom properties. This includes:
 
-```css
-:root {
-  /* Colors */
-  --color-primary: #value;
-  --color-secondary: #value;
-  --color-accent: #value;
-  --color-bg: #value;
-  --color-bg-alt: #value;
-  --color-text: #value;
-  --color-text-muted: #value;
+- **Colors** — `--color-primary`, `--color-secondary`, `--color-accent`, `--color-bg`, `--color-bg-alt`, `--color-text`, `--color-text-muted`
+- **Typography** — `--font-heading`, `--font-body`, `--font-size-*` scale
+- **Spacing** — `--space-xs` through `--space-2xl`
+- **Layout** — `--max-width`, `--border-radius`, `--min-tap-target`
+- **Interaction** — `--timing-fast`, `--timing-base`, `--timing-slow`, `--easing-default`
+- **Forms** (if page has forms) — `--color-error`, `--color-success`, field/label/error styling
 
-  /* Typography */
-  --font-heading: 'Font Name', system-fallback;
-  --font-body: 'Font Name', system-fallback;
-  --font-size-base: 1rem;
-  --font-size-sm: 0.875rem;
-  --font-size-lg: 1.25rem;
-  --font-size-xl: 1.5rem;
-  --font-size-2xl: 2rem;
-  --font-size-3xl: 3rem;
-  --font-size-4xl: 4rem;
-
-  /* Spacing */
-  --space-xs: 0.5rem;
-  --space-sm: 1rem;
-  --space-md: 2rem;
-  --space-lg: 4rem;
-  --space-xl: 6rem;
-  --space-2xl: 8rem;
-
-  /* Layout */
-  --max-width: 1200px;
-  --border-radius: 8px;
-  --transition: 0.3s ease;
-}
-```
+The design-system.md is the single source of truth for all token values. Do not hardcode values — read them from the file.
 
 ### Font Loading
 
@@ -142,6 +114,8 @@ Choose DISTINCTIVE fonts — never default to Inter, Roboto, or Arial. Every des
 4. **Prop/slot metadata** — HTML comments marking content insertion points
 5. **Responsive** — mobile-first, works at all 3 breakpoints
 6. **Accessible** — semantic HTML, ARIA labels where needed, focus management
+7. **Interactive states** — every clickable/tappable element must define hover, focus, and active styles using the interaction tokens from design-system.md
+8. **Touch-ready** — interactive elements meet `--min-tap-target` size with adequate spacing
 
 ### Metadata Comments Format
 
