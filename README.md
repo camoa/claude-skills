@@ -1,6 +1,6 @@
 # Claude Skills
 
-Custom skills and tools for Claude Code.
+Custom plugins and tools for Claude Code.
 
 ## Background
 
@@ -34,6 +34,8 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin install drupal-dev-framework@camoa-skills
 /plugin install brand-content-design@camoa-skills
 /plugin install code-quality-tools@camoa-skills
+/plugin install drupal-htmx@camoa-skills
+/plugin install code-paper-test@camoa-skills
 ```
 
 ## Known Issues
@@ -53,25 +55,14 @@ Skills still work when invoked via the `Skill` tool (e.g., typing the skill name
 
 ## Plugins
 
-### skill-creation-tools [DEPRECATED]
-
-> **Deprecated**: Use `plugin-creation-tools` instead for comprehensive plugin development.
-
-Skills-only guide for creating Claude Code skills. Does not cover commands, agents, hooks, or MCP servers.
-
-| Component | Name |
-|-----------|------|
-| Skill | `skill-creation` |
-
-### plugin-creation-tools [BETA]
+### plugin-creation-tools (v2.1.0)
 
 Complete guide for creating Claude Code plugins. Covers skills, commands, agents, hooks, MCP servers, settings, and output configuration.
 
-| Component | Name |
-|-----------|------|
-| Skill | `plugin-creation` |
-
-**Status:** Beta - comprehensive but still being tested.
+| Component | Contents |
+|-----------|----------|
+| Skills | 1 skill (`plugin-creation`) |
+| Commands | 3 commands (`/create`, `/add-component`, `/validate`) |
 
 **Usage:**
 
@@ -91,20 +82,7 @@ Create an agent that reviews code for security issues
 
 The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
 
-**Migration from skill-creation-tools:**
-
-If you have `skill-creation-tools` installed and want to try the beta:
-
-```bash
-# Option 1: Keep both (recommended during beta)
-/plugin install plugin-creation-tools@camoa-skills
-
-# Option 2: Replace deprecated with beta
-/plugin uninstall skill-creation-tools@camoa-skills
-/plugin install plugin-creation-tools@camoa-skills
-```
-
-### drupal-dev-framework
+### drupal-dev-framework (v3.1.0)
 
 Systematic Drupal development workflow based on the [Claude Code Drupal Development Framework v3.0](https://adrupalcouple.us). Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
 
@@ -131,75 +109,100 @@ Step 3: Task Phases (each task cycles through):
 Task Complete (5 Quality Gates) → Back to Step 2
 ```
 
-**Key Concepts:**
-- Projects have requirements (gathered once)
-- Projects contain multiple tasks
-- Each task goes through 3 phases independently
-- No code until Phase 3 (research and design first)
-- SOLID, TDD, DRY, security, and code purposefulness enforced
-- 5 quality gates at task completion
-
-**Built-in References:**
-- SOLID principles (Drupal-specific)
-- TDD workflow (Red-Green-Refactor)
-- DRY patterns (Service, Trait, Component)
-- Library-First & CLI-First development
-- Security checklist (OWASP)
-- Frontend standards (BEM, mobile-first)
-- Code Purposefulness (Gate 5)
-
 | Component | Contents |
 |-----------|----------|
 | Skills | 15 skills (phase-detector, requirements-gatherer, tdd-companion, etc.) |
-| Commands | 9 commands (/new, /next, /research, /design, /implement, /complete, /status, /validate, /pattern) |
+| Commands | 9 commands (`/new`, `/next`, `/research`, `/design`, `/implement`, `/complete`, `/status`, `/validate`, `/pattern`) |
 | Agents | 5 agents (project-orchestrator, architecture-drafter, contrib-researcher, pattern-recommender, architecture-validator) |
 | References | 8 reference docs (SOLID, TDD, DRY, Library-First, Quality Gates, Security, Frontend, Code Purposefulness) |
 
 See [WORKFLOW.md](drupal-dev-framework/WORKFLOW.md) for complete documentation.
 
-### brand-content-design
+### brand-content-design (v2.1.0)
 
-Create branded presentations and carousels with consistent visual identity. Uses a three-layer system: Brand Philosophy → Templates → Content.
+Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity. Uses a three-layer system: Brand Philosophy → Templates / Design Systems → Content.
 
 **Quick Start:**
 ```
 /brand-content-design:brand-init
 ```
 
-**The Flow:**
-```
-Brand Guidelines → Templates → Content
-```
+**Content Types:**
 
-1. **Brand Guidelines** - Extract visual & verbal identity once (`/brand-init`)
-2. **Templates** - Create reusable slide/card structures (`/template-presentation`, `/template-carousel`)
-3. **Content** - Generate presentations/carousels using templates (`/presentation`, `/carousel`)
+| Type | Flow | Output |
+|------|------|--------|
+| Presentations | Template → Content | PDF + PPTX |
+| Carousels | Template → Content | Multi-page PDF |
+| Infographics | Template → Content | PNG / SVG |
+| HTML Pages | Design System → Components → Page | Standalone `.html` |
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 1 skill (`brand-content-design`) |
-| Commands | 11 commands (`/brand-init`, `/brand`, `/brand-palette`, `/template-presentation`, `/template-carousel`, `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`, `/outline`, etc.) |
-| Agents | 1 agent (`brand-analyst`) |
+| Skills | 4 skills (`brand-content-design`, `visual-content`, `infographic-generator`, `html-generator`) |
+| Commands | 19 commands (`/brand-init`, `/brand`, `/brand-extract`, `/brand-assets`, `/brand-palette`, `/template-presentation`, `/template-carousel`, `/template-infographic`, `/outline`, `/presentation`, `/presentation-quick`, `/carousel`, `/carousel-quick`, `/infographic`, `/infographic-quick`, `/design-html`, `/html-page`, `/html-page-quick`, `/content-type-new`) |
+| Agents | 1 agent (`brand-analyst` with project memory) |
 
 **Features:**
-- 13 visual styles across 4 aesthetic families (Japanese Zen, Scandinavian, European, East Asian)
-- 10 color palette types (harmony-based + tonal variations + custom)
-- Wizard-guided template creation
-- Quick mode for fast content generation
-- Outline templates for content preparation in Claude Projects
-- PDF output via `canvas-design` skill
-- Editable PPTX via `pptx` skill
-- LinkedIn and Instagram carousel support
+- 21 visual styles across 5 aesthetic families (Japanese Zen, Scandinavian, European, East Asian, Digital Native)
+- 114 infographic templates (sequence, list, hierarchy, compare, quadrant, relation, chart)
+- HTML design systems with 15 component types and 10 page category presets
+- 17 color palette types (10 derived + 7 alternative)
+- Visual components (cards, icons, gradients) — style-dependent
+- Wizard-guided and quick modes for all content types
+- PDF output via `canvas-design` skill, editable PPTX via `pptx` skill
 
 See [brand-content-design/README.md](brand-content-design/README.md) for complete documentation.
 
-### code-quality-tools
+### code-quality-tools (v2.3.0)
 
-Code quality auditing tools for TDD, SOLID, and DRY principles via DDEV.
+Code quality and security auditing for **Drupal** (via DDEV) and **Next.js** projects. Supports TDD, SOLID, DRY, and OWASP security checks with Semgrep, Trivy, Gitleaks, and more.
 
-| Component | Name |
-|-----------|------|
-| Skill | `code-quality-audit` |
+| Component | Contents |
+|-----------|----------|
+| Skills | 1 skill (`code-quality-audit`) |
+| Commands | 8 commands (`/setup`, `/audit`, `/coverage`, `/security`, `/lint`, `/solid`, `/dry`, `/tdd`) |
+| Scripts | Drupal + Next.js shell scripts, templates, decision guides |
+
+**Security Coverage:**
+- Drupal: 10 layers (PHPStan, Psalm taint, PHPMD, Semgrep, Trivy, Gitleaks, Roave, Drush, Composer audit, Security Review)
+- Next.js: 7 layers (npm audit, ESLint security, Semgrep, Trivy, Gitleaks, Socket CLI, custom patterns)
+- Optional DAST: OWASP ZAP + Nuclei for pre-production
+
+See [code-quality-tools/README.md](code-quality-tools/README.md) for complete documentation.
+
+### drupal-htmx (v1.1.0)
+
+HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
+
+| Component | Contents |
+|-----------|----------|
+| Skills | 1 skill (`htmx-development`) |
+| Commands | 5 commands (`/htmx`, `/htmx-analyze`, `/htmx-migrate`, `/htmx-pattern`, `/htmx-validate`) |
+| Agents | 3 agents (`ajax-analyzer`, `htmx-recommender`, `htmx-validator`) |
+| References | 4 reference docs (quick-reference, htmx-implementation, migration-patterns, ajax-reference) |
+
+See [drupal-htmx/README.md](drupal-htmx/README.md) for complete documentation.
+
+### code-paper-test (v0.2.0)
+
+Systematically test code through mental execution — trace code line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment.
+
+| Component | Contents |
+|-----------|----------|
+| Skills | 1 skill (`paper-test`) |
+| References | 7 reference docs (core-method, dependency-verification, contract-patterns, ai-code-auditing, hybrid-testing, common-flaws, advanced-techniques) |
+
+See [code-paper-test/README.md](code-paper-test/README.md) for complete documentation.
+
+## Plugin Conventions
+
+All plugins in this marketplace follow these conventions:
+
+- **CLAUDE.md** at plugin root — defines plugin-specific rules and conventions
+- **`.claude/rules/`** — path-scoped convention files (skill-conventions.md, command-conventions.md, agent-conventions.md)
+- **Frontmatter standards** — `version`, `model` routing (haiku/sonnet/opus), `disallowedTools` on read-only agents
+- **Progressive disclosure** — SKILL.md stays under 500 lines; detailed content goes in `references/`
+- **Imperative voice** — skills and commands give instructions, not documentation
 
 ## Official Documentation
 
