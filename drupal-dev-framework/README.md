@@ -63,7 +63,7 @@ The plugin includes reference documents that are enforced at each phase:
 | `references/library-first.md` | Library-First & CLI-First | Design |
 | `references/tdd-workflow.md` | Test-Driven Development | Implementation |
 | `references/dry-patterns.md` | Don't Repeat Yourself | Implementation |
-| `references/quality-gates.md` | 4 Quality Gates | Completion |
+| `references/quality-gates.md` | 5 Quality Gates | Completion |
 | `references/security-checklist.md` | OWASP security | Completion |
 | `references/frontend-standards.md` | CSS/JS standards | Implementation |
 
@@ -83,6 +83,10 @@ These references are self-contained - no external guides required.
 # Install the plugin
 /plugin install drupal-dev-framework@camoa-skills
 ```
+
+## Upgrading from v2.x
+
+v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-detects and migrates old tasks. Or run `/drupal-dev-framework:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md) for details.
 
 ## Configuration
 
@@ -199,25 +203,31 @@ Back to task selection
 | `/drupal-dev-framework:complete <task>` | Mark task done, run quality gates, move to completed |
 | `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations for a use case |
 | `/drupal-dev-framework:validate [component]` | Validate implementation against architecture/standards |
+| `/drupal-dev-framework:migrate-tasks` | Manually migrate v2.x tasks to v3.0.0 folder structure (with confirmation) |
 
 ## Components
 
 ### Agents (5)
-Agents handle complex multi-step tasks:
-- `contrib-researcher` - Searches drupal.org, analyzes contrib modules
-- `architecture-drafter` - Creates architecture documents
-- `pattern-recommender` - Recommends Drupal patterns for use cases
-- `architecture-validator` - Validates implementation against architecture
-- `project-orchestrator` - Coordinates project state and workflow
+Agents handle complex multi-step tasks with model routing and tool restrictions:
 
-### Skills (15)
-Skills are auto-invoked based on context:
-- **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder`
-- **Phase 2:** `component-designer`, `diagram-generator`, `guide-integrator`
-- **Phase 3:** `task-context-loader`, `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
-- **Cross-Phase:** `memory-manager`, `phase-detector`, `guide-loader`, `session-resume`
+| Agent | Model | Features |
+|-------|-------|----------|
+| `project-orchestrator` | sonnet | `memory: project`, dynamic context injection |
+| `architecture-drafter` | opus | `memory: project`, preloads guide-integrator |
+| `architecture-validator` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write`), scoped PreToolUse hook |
+| `pattern-recommender` | sonnet | Read-only (`disallowedTools: Edit, Write, Bash`) |
+| `contrib-researcher` | haiku | Read-only (`disallowedTools: Edit, Write, Bash`), returns findings to main window |
 
-## Project Structure
+### Skills (16)
+Skills are auto-invoked based on context, with model routing and invocation control:
+- **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder` (haiku, internal)
+- **Phase 2:** `component-designer` (opus), `diagram-generator` (sonnet), `guide-integrator` (internal)
+- **Phase 3:** `task-context-loader` (internal, context injection), `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
+- **Cross-Phase:** `memory-manager` (internal), `phase-detector` (haiku, internal), `guide-loader` (haiku, internal), `session-resume` (context injection), `task-folder-migrator`
+
+*Internal skills (`user-invocable: false`) are called by other skills/agents only — not visible in the `/` menu.*
+
+## Project Structure (v3.0.0)
 
 When you create a project, this structure is created in your chosen location:
 
@@ -229,9 +239,33 @@ When you create a project, this structure is created in your chosen location:
 │   ├── research_*.md         # Research findings
 │   └── component_name.md     # Component-specific designs
 └── implementation_process/
-    ├── in_progress/          # Current tasks
-    └── completed/            # Finished tasks
+    ├── in_progress/
+    │   └── task_name/        # Task folder (v3.0.0)
+    │       ├── task.md              # Tracker with links
+    │       ├── research.md          # Phase 1 content
+    │       ├── architecture.md      # Phase 2 content
+    │       └── implementation.md    # Phase 3 content
+    └── completed/
+        └── task_name/        # Completed task (same structure)
+            ├── task.md
+            ├── research.md
+            ├── architecture.md
+            └── implementation.md
 ```
+
+### v3.0.0 Task Structure
+
+Each task gets its own folder with files separated by phase:
+- **task.md** - Lightweight tracker with links, status, acceptance criteria
+- **research.md** - Phase 1 research findings
+- **architecture.md** - Phase 2 design
+- **implementation.md** - Phase 3 implementation notes
+
+Benefits:
+- ✅ Separates content by phase
+- ✅ Keeps files small and focused
+- ✅ Easy to navigate (max 4 files per task)
+- ✅ Simple flat structure (no nested folders)
 
 ## Integration
 
@@ -261,18 +295,16 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 2.0.0 (Current)
-- **Self-contained references**: 7 built-in reference documents for TDD, SOLID, DRY, Library-First, Security, Quality Gates, Frontend
-- **Enforced principles**: Each phase has blocking checks (SOLID at design, TDD at implementation, Quality Gates at completion)
-- **No hardcoded paths**: Removed dependency on external guide files - works out-of-box
-- Updated agents (v2.0.0) and 4 key skills with enforcement
+### 3.1.0 (Current)
+- Agent memory, model routing, tool restrictions across all agents and skills
+- Dynamic context injection, `.claude/rules/`, CLAUDE.md, PreCompact hook
+- Lean documentation: pruned v2.x migration content, condensed output templates
 
-### 1.3.1
-- Fixed task creation flow after requirements gathering
+### 3.0.0-beta.1
+- Folder-based task structure, task-folder-migrator skill, auto-migration via `/next`
 
-### 1.3.0
-- Phases now apply to TASKS, not projects
-- Each task independently cycles through Research → Architecture → Implementation
+### 2.x
+- Self-contained references, enforced principles, Gate 5, `/new` command
 
 ### 1.0.0
 - Initial release with 5 agents, 15 skills, 9 commands

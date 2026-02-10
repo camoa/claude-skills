@@ -1,7 +1,8 @@
 ---
 name: paper-test
 description: Use when testing code through mental execution - trace code line-by-line with concrete input values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment
-version: 0.1.0
+version: 0.2.0
+model: sonnet
 ---
 
 # Paper Test

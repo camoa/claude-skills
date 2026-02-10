@@ -14,13 +14,13 @@ Mark a task as complete and move it to the completed folder.
 /drupal-dev-framework:complete <task-name>
 ```
 
-## What This Does
+## What This Does (v3.0.0)
 
 1. Invokes `task-completer` skill
-2. Loads task file from `implementation_process/in_progress/{task_name}.md`
+2. Loads task from `implementation_process/in_progress/{task_name}/`
 3. Verifies acceptance criteria are met
-4. Updates task file with completion notes
-5. Moves task file to `implementation_process/completed/`
+4. Updates `task.md` with completion notes
+5. Moves entire task directory to `implementation_process/completed/{task_name}/`
 6. Updates `project_state.md`
 7. Suggests next task (if any)
 
@@ -52,13 +52,17 @@ Pre-completion check:
 Please confirm tests pass to complete this task.
 ```
 
-After user confirms:
+After user confirms (v3.0.0):
 
 ```
 Task completed: settings_form
 
 Updated files:
-- Moved to: implementation_process/completed/settings_form.md
+- Moved: implementation_process/in_progress/settings_form/ → completed/settings_form/
+  - task.md
+  - research.md
+  - architecture.md
+  - implementation.md
 - Updated: project_state.md
 
 Up Next:

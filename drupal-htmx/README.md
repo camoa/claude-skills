@@ -28,11 +28,11 @@ HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 
 ## Agents
 
-| Agent | Purpose |
-|-------|---------|
-| `ajax-analyzer` | Scans modules for AJAX patterns, assesses complexity |
-| `htmx-recommender` | Recommends HTMX patterns for use cases |
-| `htmx-validator` | Validates HTMX implementations |
+| Agent | Model | Features |
+|-------|-------|----------|
+| `ajax-analyzer` | sonnet | Read-only (`disallowedTools: Edit, Write`), scans AJAX patterns |
+| `htmx-recommender` | sonnet | Read-only (`disallowedTools: Edit, Write, Bash`), recommends patterns |
+| `htmx-validator` | sonnet | Read-only (`disallowedTools: Edit, Write`), validates implementations |
 
 ## Skill
 

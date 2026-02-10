@@ -8,6 +8,9 @@ version: 1.2.0
 
 Restore context when starting a new session on an existing project.
 
+## Current Branch
+!`git branch --show-current 2>/dev/null`
+
 ## Activation
 
 Activate when:

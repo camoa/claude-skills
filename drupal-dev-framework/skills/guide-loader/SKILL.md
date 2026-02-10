@@ -2,6 +2,8 @@
 name: guide-loader
 description: Use when needing specialized guide content - loads guides from configured path based on current task
 version: 1.1.0
+model: haiku
+user-invocable: false
 ---
 
 # Guide Loader

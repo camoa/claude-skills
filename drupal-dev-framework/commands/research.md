@@ -14,13 +14,15 @@ Research existing solutions for a specific task (Phase 1 of a task).
 /drupal-dev-framework:research <task-name>
 ```
 
-## What This Does
+## What This Does (v3.0.0)
 
-1. Creates/updates task file in `implementation_process/in_progress/{task_name}.md`
-2. Invokes `contrib-researcher` agent for drupal.org/contrib search
-3. Invokes `core-pattern-finder` skill for core examples
-4. Stores findings in the task file's Research section
-5. Updates `project_state.md` with current task
+1. Creates task directory: `implementation_process/in_progress/{task_name}/`
+2. Creates `task.md` (tracker with links and acceptance criteria)
+3. Invokes `contrib-researcher` agent for drupal.org/contrib search
+4. Invokes `core-pattern-finder` skill for core examples
+5. Stores findings in `research.md` file
+6. Updates `task.md` to mark Phase 1 as in progress
+7. Updates `project_state.md` with current task
 
 ## Task-Based Workflow
 
@@ -39,47 +41,67 @@ Each task goes through:
 /drupal-dev-framework:research field_formatter
 ```
 
-## Output
+## Output (v3.0.0)
 
-Creates/updates `implementation_process/in_progress/{task_name}.md`:
+Creates folder structure:
+```
+implementation_process/in_progress/{task_name}/
+├── task.md         # Tracker
+└── research.md     # Phase 1 findings
+```
 
+**task.md** (tracker):
 ```markdown
 # Task: {task_name}
 
 **Created:** {date}
-**Phase:** 1 - Research
-**Status:** In Progress
+**Current Phase:** Phase 1 - Research
 
-## Description
+## Goal
 {What this task accomplishes}
 
-## Research
+## Phase Status
+- [🔄] Phase 1: Research → See [research.md](research.md)
+- [ ] Phase 2: Architecture → See [architecture.md](architecture.md)
+- [ ] Phase 3: Implementation → See [implementation.md](implementation.md)
 
-### Problem Statement
+## Acceptance Criteria
+- [ ] {criterion 1}
+- [ ] {criterion 2}
+
+## Related Tasks
+None
+
+## Notes
+{Any additional notes}
+```
+
+**research.md** (Phase 1 findings):
+```markdown
+# Research: {task_name}
+
+## Problem Statement
 What we're trying to solve.
 
-### Existing Solutions
+## Existing Solutions
 | Solution | Type | Fit | Notes |
 |----------|------|-----|-------|
 | {module/pattern} | Contrib/Core | Good/Partial/Poor | {notes} |
 
-### Core Patterns Found
+## Core Patterns Found
 | Pattern | Location | Applicability |
 |---------|----------|---------------|
 | {pattern} | {path} | {notes} |
 
-### Recommendation
+## Recommendation
 Use / Extend / Build from scratch
 
-### Key Patterns to Apply
+## Key Patterns to Apply
 - Pattern 1: {description}
 - Pattern 2: {description}
 
-## Architecture
-{To be completed in Phase 2}
-
-## Implementation
-{To be completed in Phase 3}
+## Decision Log
+{Research decisions made}
 ```
 
 ## Next Steps

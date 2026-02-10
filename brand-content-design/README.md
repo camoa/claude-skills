@@ -170,6 +170,20 @@ Generates two files for your template:
 | `/infographic-quick` | Create infographic (quick) |
 | `/content-type-new` | Add new content type |
 
+## Components
+
+### Agent
+| Agent | Model | Features |
+|-------|-------|----------|
+| `brand-analyst` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write, Bash`) |
+
+### Skills (3)
+| Skill | Model | Invocation |
+|-------|-------|------------|
+| `brand-content-design` | sonnet | User + Claude (main router) |
+| `visual-content` | opus | Claude only (`user-invocable: false`) — artistic output |
+| `infographic-generator` | sonnet | Claude only (`user-invocable: false`) — template generation |
+
 ## Visual Style System
 
 Choose from **13 distinct visual styles** across 4 aesthetic families when creating templates:

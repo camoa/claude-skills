@@ -13,10 +13,23 @@ This skill activates when you say:
 - "Configure plugin" / "Setup plugin.json"
 - "Package for marketplace"
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/plugin-creation-tools:create` | Create a new plugin with selected components |
+| `/plugin-creation-tools:validate` | Validate plugin structure and best practices |
+| `/plugin-creation-tools:add-component` | Add a skill, command, agent, or hook to an existing plugin |
+
 ## Quick Start
 
 ### Create a New Plugin
 
+```
+/plugin-creation-tools:create my-tools --skill --command
+```
+
+Or describe what you need:
 ```
 Create a plugin called "my-tools" with a command and a skill
 ```
@@ -31,11 +44,18 @@ The skill will guide you through:
 ### Add Components to Existing Plugin
 
 ```
-Add a new command to my plugin that deploys to staging
+/plugin-creation-tools:add-component agent security-reviewer
 ```
 
+Or describe what you need:
 ```
 Add a hook that formats code after every write
+```
+
+### Validate a Plugin
+
+```
+/plugin-creation-tools:validate ./my-plugin
 ```
 
 ## What This Skill Covers
@@ -45,7 +65,7 @@ Add a hook that formats code after every write
 | **Skills** | Model-invoked workflows with supporting files |
 | **Commands** | User-invoked slash commands (`/command`) |
 | **Agents** | Specialized assistants with own context |
-| **Hooks** | Event-triggered automation (10 event types) |
+| **Hooks** | Event-triggered automation (14 event types, 3 handler types) |
 | **MCP Servers** | External tool integration |
 | **Settings** | Configuration hierarchy and permissions |
 | **Output** | Directory setup and logging patterns |
@@ -62,7 +82,7 @@ plugin-creation/
 │   ├── agent/
 │   ├── hooks/
 │   └── *.template
-├── references/        # Detailed guides (37 files)
+├── references/        # Detailed guides (38 files)
 │   ├── 01-overview/   # What each component is
 │   ├── 02-philosophy/ # Design principles
 │   ├── 03-skills/     # Skill-specific guides

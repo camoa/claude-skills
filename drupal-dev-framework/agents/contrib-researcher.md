@@ -2,6 +2,9 @@
 name: contrib-researcher
 description: Use when researching Drupal contrib modules or existing solutions - analyzes drupal.org and contrib code to identify reusable patterns and integration points
 capabilities: ["drupal-org-search", "contrib-analysis", "pattern-extraction", "integration-discovery"]
+version: 1.0.0
+model: haiku
+disallowedTools: Edit, Write, Bash
 ---
 
 # Contrib Researcher
@@ -30,11 +33,11 @@ Research existing contrib modules to:
 3. **Analyze top candidates** - Read module code, documentation, issue queues
 4. **Extract patterns** - Document reusable approaches found
 5. **Assess fit** - Recommend use, extend, or build from scratch
-6. **Store findings** - Save research to project's architecture/ folder
+6. **Return findings** - Return structured research to caller (main agent writes to files)
 
 ## Output Format
 
-Store findings in `{project_path}/architecture/research_{topic}.md`:
+Return findings in this format (caller writes to `{project_path}/architecture/research_{topic}.md`):
 
 ```markdown
 # Research: {Topic}

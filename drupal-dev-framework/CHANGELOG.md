@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-02-07
+
+### Added
+- **Agent memory** on 3 agents: project-orchestrator, architecture-validator, architecture-drafter (`memory: project`)
+- **Model routing** on 5 agents: opus (drafter), sonnet (orchestrator, validator, recommender), haiku (researcher)
+- **Model routing** on 5 skills: opus (component-designer), sonnet (diagram-generator), haiku (guide-loader, core-pattern-finder, phase-detector)
+- **Tool restrictions** on 3 agents: contrib-researcher and pattern-recommender (`disallowedTools: Edit, Write, Bash`), architecture-validator (`disallowedTools: Edit, Write`)
+- **Invocation control** on 6 skills: guide-loader, core-pattern-finder, phase-detector, task-context-loader, memory-manager, guide-integrator (`user-invocable: false`)
+- **Dynamic context injection** on 3 files: project-orchestrator (project state), session-resume (git branch), task-context-loader (active tasks)
+- **Agent-scoped hooks**: architecture-validator PreToolUse prompt hook to block write attempts
+- **Skills preloading**: architecture-drafter preloads guide-integrator
+- **PreCompact hook** (`hooks/pre-compact.sh`) to preserve project context before compaction
+- **CLAUDE.md** at plugin root with project conventions
+- **`.claude/rules/`** with 3 path-scoped rule files: agent-conventions, skill-conventions, command-conventions
+
+### Changed
+- Exited beta — version 3.0.0-beta.1 → 3.1.0
+- **Lean documentation**: pruned v2.x migration content and redundant output examples from project-orchestrator (~25% reduction)
+- **Lean documentation**: condensed architecture-drafter output template (70 → 10 lines)
+- Added missing `version` field to pattern-recommender and contrib-researcher
+
+## [3.0.0-beta.1] - 2026-01-14
+
+### Added
+- **NEW: task-folder-migrator skill (v3.0.0)** - Migrate v2.x single-file tasks to v3.0.0 folder structure
+  - Scans for old `.md` files
+  - Creates folder structure with separate phase files
+  - Preserves all content with automatic backups
+  - Idempotent and safe to run multiple times
+  - **Automatic mode** - No confirmation when invoked by `/next`
+  - **Manual mode** - Shows plan and waits for confirmation when invoked by `/migrate-tasks`
+- **NEW: /migrate-tasks command** - Manual migration command
+  - Shows full migration plan
+  - Waits for user confirmation
+  - Full control over migration process
+- **NEW: Folder-based task structure** - Each task gets own folder with organized files:
+  - `task.md` - Lightweight tracker with links, status, acceptance criteria
+  - `research.md` - Phase 1 research findings
+  - `architecture.md` - Phase 2 architecture design
+  - `implementation.md` - Phase 3 implementation notes
+- **NEW: MIGRATION.md guide** - Complete migration guide for v2.x → v3.0.0
+  - Step-by-step migration instructions
+  - Troubleshooting section
+  - Rollback procedures
+  - FAQ for common questions
+
+### Changed
+- **BREAKING**: Task structure changed from single file to folder-based organization
+- **memory-manager (v3.0.0)** - Updated to scan directories instead of files
+  - Detects old v2.x format and warns users
+  - Supports both v2.x (backward compat) and v3.0.0 structures
+- **phase-detector (v3.0.0)** - Updated to read from folder structure
+  - Checks for phase files (research.md, architecture.md, implementation.md)
+  - Backward compatible with v2.x single files
+- **task-context-loader (v3.0.0)** - Updated to load phase files separately
+  - Loads task.md for main info
+  - Loads research.md, architecture.md, implementation.md as needed
+  - Full context loading from all phase files
+- **task-completer (v1.1.0)** - Updated to move entire directory instead of single file
+- **project-orchestrator (v3.0.0)** - Updated to scan directories and auto-migrate old format
+  - Scans for task directories (v3.0.0)
+  - Detects old `.md` files (v2.x)
+  - **Automatically migrates** old format when detected via `/next` command
+  - Updated task phase detection for folder structure
+  - Seamless upgrade experience - one command does everything
+- **/research command** - Now writes to `research.md` instead of section in single file
+  - Creates task folder structure
+  - Updates task.md with phase status
+- **/design command** - Now writes to `architecture.md` instead of section
+  - Updates task.md to mark Phase 2 in progress
+- **/implement command** - Now writes to `implementation.md` instead of section
+  - Updates task.md to mark Phase 3 in progress
+- **/complete command** - Now moves entire task directory to completed/
+- **README.md** - Updated with v3.0.0 structure, migration instructions, benefits
+
+### Migration Path
+
+Upgrading from v2.x:
+1. Backup projects before upgrading
+2. Install v3.0.0-beta.1
+3. Run `/drupal-dev-framework:next` - **automatically migrates old tasks**
+4. Or run `/drupal-dev-framework:migrate-tasks` manually if preferred
+5. Verify migration results
+6. Delete `.bak` files when confident
+
+**Note:** The `/next` command automatically detects old v2.x format and migrates tasks before continuing. No manual intervention needed!
+
+See [MIGRATION.md](./MIGRATION.md) for detailed guide.
+
+### Benefits
+
+**Why This Change:**
+- ✅ Separates content by phase
+- ✅ Keeps files small and focused (no more huge single files)
+- ✅ Easy to navigate (max 4 files per task)
+- ✅ Simple flat structure (no nested folders)
+- ✅ Better organization and maintainability
+
+**What Stays The Same:**
+- All 16 skills available (1 new: task-folder-migrator, 4 updated)
+- All 10 commands work (1 new: /migrate-tasks, 4 updated for new structure)
+- 5 agents (1 updated: project-orchestrator)
+- All 8 reference documents preserved
+- Same 3-phase workflow (Research → Architecture → Implementation)
+
+### Breaking Changes
+
+- v2.x single-file tasks (`task.md`) must be migrated to folder structure (`task/`)
+- Migration tool provided: `/drupal-dev-framework:migrate-tasks`
+- Backward compatibility: Updated skills detect old format and warn users
+- v2.x support: Security fixes only after v3.0.0 stable release
+
 ## [2.1.0] - 2025-12-18
 
 ### Added

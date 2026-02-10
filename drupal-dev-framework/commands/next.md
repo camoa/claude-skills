@@ -96,23 +96,53 @@ When user enters a new project name (not a number):
 
 ### Step 2: Task Selection (like /start command)
 
-**Always list existing tasks and offer to create new:**
+**v3.0.0: Scan for task directories and detect old format:**
 
+```bash
+# Check for v3.0.0 task directories
+ls -d implementation_process/in_progress/*/ 2>/dev/null
+
+# Check for old v2.x .md files
+ls implementation_process/in_progress/*.md 2>/dev/null
+```
+
+**If old v2.x format detected:**
+
+Automatically migrate tasks, then continue:
+
+```
+## ⚠️ Old Task Format Detected
+
+Found {N} task(s) in v2.x format (.md files).
+
+Migrating to v3.0.0 folder structure automatically...
+
+[Migration runs via task-folder-migrator skill]
+
+✓ Migration complete!
+
+Migrated {N} task(s) to folder structure.
+Backups saved as .md.bak files.
+
+[Continues to task selection with new folder structure]
+```
+
+**If v3.0.0 tasks found:**
 ```
 ## Tasks in Progress
 
 Found {N} task(s) in implementation_process/in_progress/:
 
-1. settings_form (Phase 2 - Architecture)
-2. content_entity (Phase 1 - Research)
-3. field_formatter (Phase 3 - Implementation)
+1. settings_form/ (Phase 2 - Architecture)
+2. content_entity/ (Phase 1 - Research)
+3. field_formatter/ (Phase 3 - Implementation)
 
 Which task do you want to work on?
 - Enter a number (1-3) to continue an existing task
 - Enter a new task name to start something new
 ```
 
-If no tasks exist:
+**If no tasks exist:**
 ```
 ## No Tasks Yet
 
@@ -123,12 +153,22 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 ```
 
 ### Step 3: Task Phase Action
+
+**v3.0.0: Check task folder structure:**
+```bash
+# Check which phase files exist in task directory
+[ -f "{task_name}/task.md" ] && echo "tracker"
+[ -f "{task_name}/research.md" ] && echo "research"
+[ -f "{task_name}/architecture.md" ] && echo "architecture"
+[ -f "{task_name}/implementation.md" ] && echo "implementation"
+```
+
 | Task Phase | Next Action |
 |------------|-------------|
-| New task (no file) | Create task file, start Phase 1: `/research <task>` |
-| Phase 1 (Research incomplete) | Continue research: `/research <task>` |
-| Phase 2 (Architecture incomplete) | Continue design: `/design <task>` |
-| Phase 3 (Implementation incomplete) | Continue implementation: `/implement <task>` |
+| New task (no folder) | Create task folder, start Phase 1: `/research <task>` |
+| Phase 1 (research.md missing/incomplete) | Continue research: `/research <task>` |
+| Phase 2 (architecture.md missing/incomplete) | Continue design: `/design <task>` |
+| Phase 3 (implementation.md missing/incomplete) | Continue implementation: `/implement <task>` |
 | All criteria complete | Complete task: `/complete <task>` |
 
 ## Examples
@@ -159,8 +199,8 @@ Requirements: Complete ✓
 
 Found 2 task(s) in implementation_process/in_progress/:
 
-1. settings_form (Phase 3 - Implementation, 3/5 criteria done)
-2. content_entity (Phase 1 - Research)
+1. settings_form/ (Phase 3 - Implementation, 3/5 criteria done)
+2. content_entity/ (Phase 1 - Research)
 
 Which task do you want to work on?
 - Enter 1 or 2 to continue an existing task
@@ -171,7 +211,13 @@ Which task do you want to work on?
 ```
 User: 1
 
-Loading: settings_form (Phase 3 - Implementation)
+Loading: settings_form/ (Phase 3 - Implementation)
+
+Files found:
+- task.md (tracker)
+- research.md (Phase 1 complete)
+- architecture.md (Phase 2 complete)
+- implementation.md (Phase 3 in progress)
 
 Progress: 3/5 acceptance criteria complete
 - [x] Form class created
@@ -192,9 +238,10 @@ Creating new task: admin_dashboard
 
 Command: /drupal-dev-framework:research admin_dashboard
 This will:
-1. Create task file: implementation_process/in_progress/admin_dashboard.md
-2. Research existing solutions and patterns
-3. Populate the Research section
+1. Create task folder: implementation_process/in_progress/admin_dashboard/
+2. Create task.md (tracker with phase status)
+3. Research existing solutions and patterns
+4. Create research.md with findings
 ```
 
 ## Related Commands

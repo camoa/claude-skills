@@ -111,6 +111,8 @@ description: Use when [triggers] - [what it does]
 ---
 name: processing-pdfs
 description: Extracts text and tables from PDF files, fills forms. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
+model: sonnet
+context: fork
 ---
 ```
 
@@ -118,11 +120,56 @@ description: Extracts text and tables from PDF files, fills forms. Use when work
 |-------|----------|-------------|
 | `name` | Yes | Lowercase, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude". |
 | `description` | Yes | Max 1024 chars. Must include WHAT and WHEN. Third person only. |
-| `allowed-tools` | No | Restricts available tools when skill active |
-| `license` | No | License for the skill |
-| `metadata` | No | Custom key-value pairs |
+| `model` | No | Override model for this skill. Values: `haiku`, `sonnet`, `opus`. Use for cost optimization -- `haiku` for simple/repetitive tasks, `opus` for complex reasoning. |
+| `allowed-tools` | No | Restricts available tools when skill is active. |
+| `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
+| `agent` | No | When `context: fork`, specify agent type for the forked context. |
+| `disable-model-invocation` | No | Set to `true` to prevent Claude from auto-invoking. User must call explicitly via `/name`. Reduces context cost to zero for triggered-only skills. |
+| `user-invocable` | No | Set to `false` to hide from `/` menu. Claude can still invoke via Skill tool. For background knowledge users shouldn't invoke directly. Default is `true`. |
+| `license` | No | License for the skill. |
+| `metadata` | No | Custom key-value pairs. |
 
-**Do not add other fields.** Only these are recognized.
+### Model Selection Guidelines
+
+| Model | Use When |
+|-------|----------|
+| `haiku` | Simple formatting, file listing, repetitive transforms, boilerplate generation |
+| `sonnet` | Standard coding tasks, most skills (default behavior) |
+| `opus` | Complex multi-step reasoning, architecture decisions, nuanced analysis |
+
+### Context and Invocation Examples
+
+**Forked context** -- prevents heavy skill output from consuming main context:
+```yaml
+---
+name: analyzing-codebase
+description: Deep analysis of codebase architecture. Use when asked to audit or analyze overall code structure.
+context: fork
+agent: researcher
+---
+```
+
+**Triggered-only skill** -- zero context cost until explicitly called:
+```yaml
+---
+name: resetting-environment
+description: Resets development environment to clean state.
+disable-model-invocation: true
+---
+```
+
+**Auto-only skill** -- hidden from `/` menu, Claude decides when to invoke:
+```yaml
+---
+name: formatting-output
+description: Formats command output for readability. Use when command output exceeds 50 lines.
+user-invocable: false
+---
+```
+
+> **Note:** `user-invocable: false` only controls `/` menu visibility. Claude can still invoke via the Skill tool. To block Claude from auto-invoking, use `disable-model-invocation: true` instead. These serve opposite purposes:
+> - `user-invocable: false` — user cannot call, Claude can
+> - `disable-model-invocation: true` — Claude cannot call, user can
 
 ### Naming Convention
 
@@ -135,6 +182,63 @@ description: Extracts text and tables from PDF files, fills forms. Use when work
 | `managing-git` | `git-manager` | `tools` |
 
 Reserved words not allowed: `anthropic`, `claude`
+
+## Dynamic Context Injection
+
+Skill body text supports dynamic context injection using the exclamation mark prefix with backtick-wrapped commands. Lines using this syntax run the command at invocation time and inject the output into the skill context.
+
+### Syntax
+
+A line starting with exclamation mark followed by a backtick-wrapped command:
+```
+!`command here`
+```
+
+### Examples
+
+Inject current git status when the skill loads:
+```
+!`git status`
+```
+
+Inject file contents at runtime:
+```
+!`cat .env.example`
+```
+
+Inject project structure:
+```
+!`ls -la src/`
+```
+
+### When to Use
+
+- Skill needs awareness of current project state (git status, branch, changed files)
+- Skill references configuration that varies per project
+- Skill needs to adapt behavior based on runtime environment
+
+### Guidelines
+
+- Keep injected commands fast -- slow commands delay skill loading
+- Avoid commands with large output; they consume context unnecessarily
+- Use targeted commands (`git diff --stat` over `git diff`) to minimize output size
+
+## Extended Thinking with Ultrathink
+
+Skills can include the word "ultrathink" in their body text to encourage Claude to use extended thinking on complex tasks. This is particularly useful for skills that involve:
+
+- Multi-step architectural reasoning
+- Complex code refactoring decisions
+- Weighing multiple trade-offs before acting
+- Tasks where getting it right the first time matters
+
+Place "ultrathink" in a natural instruction, such as:
+```markdown
+## Workflow
+Before making changes, ultrathink about the implications across the codebase.
+```
+
+This signals Claude to engage deeper reasoning before responding, which improves quality on complex tasks at the cost of slightly longer response times.
 
 ## Section Guidelines
 
@@ -300,6 +404,7 @@ Build at least 3 test scenarios before finalizing:
 - [ ] No unnecessary content
 - [ ] No time-sensitive information
 - [ ] Consistent terminology throughout
+- [ ] Current state only -- no historical narratives. Replace outdated content, don't keep it alongside new.
 
 ### Frontmatter
 - [ ] Name uses gerund form (preferred)

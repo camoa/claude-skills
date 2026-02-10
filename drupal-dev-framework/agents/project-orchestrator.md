@@ -2,12 +2,17 @@
 name: project-orchestrator
 description: Use when checking project status or deciding next steps - reads memory files, manages tasks, suggests actions, routes to appropriate agents/skills
 capabilities: ["project-status", "task-management", "workflow-routing", "next-action-suggestion"]
-version: 1.2.0
+version: 3.1.0
+model: sonnet
+memory: project
 ---
 
 # Project Orchestrator
 
 Central coordinator agent for managing project state and task workflow progression.
+
+## Current Project State
+!`cat project_state.md 2>/dev/null || echo "No project_state.md found in current directory"`
 
 ## Purpose
 
@@ -112,10 +117,12 @@ Requirements gathered?
 
 **Always scan `implementation_process/in_progress/` and present options:**
 
+```bash
+# Scan for task directories
+Use Bash: ls -d {project_path}/implementation_process/in_progress/*/ 2>/dev/null
 ```
-Use Glob to find: {project_path}/implementation_process/in_progress/*.md
 
-If tasks found:
+**If tasks found (directories):**
 ┌─────────────────────────────────────────────┐
 │ ## Tasks in Progress                        │
 │                                             │
@@ -130,7 +137,7 @@ If tasks found:
 │ - Enter a new task name to start new        │
 └─────────────────────────────────────────────┘
 
-If no tasks found:
+**If no tasks found:**
 ┌─────────────────────────────────────────────┐
 │ ## No Tasks Yet                             │
 │                                             │
@@ -152,14 +159,15 @@ User selected existing task?
 ```
 
 ### Step 4: Task Phase Detection
-For the selected task, check `implementation_process/in_progress/{task_name}.md`:
 
-| Task File Contains | Phase | Next Action |
-|-------------------|-------|-------------|
-| Only task description | Phase 1 - Research | `/research {task}` |
-| Research section complete | Phase 2 - Architecture | `/design {task}` |
-| Architecture section complete | Phase 3 - Implementation | `/implement {task}` |
-| Implementation complete | Done | `/complete {task}` |
+Check `implementation_process/in_progress/{task_name}/` directory:
+
+| Files Present | Phase | Next Action |
+|--------------|-------|-------------|
+| Only task.md | Phase 1 - Research | `/research {task}` |
+| task.md + research.md | Phase 2 - Architecture | `/design {task}` |
+| + architecture.md | Phase 3 - Implementation | `/implement {task}` |
+| + implementation.md | Done | `/complete {task}` |
 
 ## Output Format
 
@@ -186,45 +194,6 @@ Phase: {1-Research / 2-Architecture / 3-Implementation}
 ### Alternative Actions
 1. {Alternative 1}
 2. {Alternative 2}
-```
-
-## Output: Task Selection
-
-### When Tasks Exist
-```markdown
-## Project: {Project Name}
-
-Requirements: Complete ✓
-
-## Tasks in Progress
-
-Found 3 task(s) in implementation_process/in_progress/:
-
-1. settings_form (Phase 3 - Implementation, 3/5 done)
-2. content_entity (Phase 1 - Research)
-3. field_formatter (Phase 2 - Architecture)
-
-## Completed Tasks
-- ✅ user_service
-- ✅ config_schema
-
-Which task do you want to work on?
-- Enter a number (1-3) to continue an existing task
-- Enter a new task name to start something new
-```
-
-### When No Tasks Exist
-```markdown
-## Project: {Project Name}
-
-Requirements: Complete ✓
-
-## No Tasks Yet
-
-No tasks found in implementation_process/in_progress/
-
-What task do you want to work on?
-Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 ```
 
 ## Routing Table

@@ -1,6 +1,8 @@
 ---
 name: htmx-development
 description: Use when developing HTMX features in Drupal 11.3+ or migrating AJAX to HTMX. Covers Htmx class usage, form patterns, migration strategies, and validation. Triggers on "htmx", "ajax to htmx", "dynamic form", "dependent dropdown".
+version: 1.0.0
+model: sonnet
 ---
 
 # HTMX Development
