@@ -1,18 +1,20 @@
 ---
 name: brand-content-design
-description: Use when user says "create presentation", "make carousel", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations and carousels using a layered philosophy system.
-version: 1.11.3
+description: Use when user says "create presentation", "make carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations, carousels, and HTML pages using a layered philosophy system.
+version: 2.1.0
 model: sonnet
 ---
 
 # Brand Content Design
 
-Create branded visual content (presentations, LinkedIn carousels) with consistent brand identity.
+Create branded visual content (presentations, LinkedIn carousels, HTML pages) with consistent brand identity.
 
 ## Trigger Phrases
 
 - "create presentation" / "make slides"
 - "create carousel" / "LinkedIn carousel"
+- "create HTML page" / "make landing page" / "build web page"
+- "html design system" / "design system"
 - "setup brand" / "brand init" / "extract brand"
 - "create template" / "new template"
 - "get outline" / "outline for template" / "prepare content"
@@ -39,13 +41,19 @@ Before ANY operation, find the PROJECT_PATH using this search order:
 │   │       ├── template.md
 │   │       ├── canvas-philosophy.md
 │   │       └── sample.pptx
-│   └── carousels/
-│       └── {template-name}/
-│           ├── template.md
+│   ├── carousels/
+│   │   └── {template-name}/
+│   │       ├── template.md
+│   │       ├── canvas-philosophy.md
+│   │       └── sample.pdf
+│   └── html/
+│       └── {design-system-name}/
 │           ├── canvas-philosophy.md
-│           └── sample.pdf
+│           ├── design-system.md
+│           └── components/      # Reusable HTML components
 ├── presentations/               # Output folder
 ├── carousels/                   # Output folder
+├── html-pages/                  # Output folder (HTML pages)
 └── assets/                      # Brand assets
 ```
 
@@ -87,6 +95,9 @@ Route user requests to the appropriate command:
 | Create presentation (quick) | `/presentation-quick` |
 | Create carousel (guided) | `/carousel` |
 | Create carousel (quick) | `/carousel-quick` |
+| Create HTML design system | `/design-html` |
+| Create HTML page (guided) | `/html-page` |
+| Create HTML page (quick) | `/html-page-quick` |
 | Add new content type | `/content-type-new` |
 
 ## Underlying Skills
@@ -96,6 +107,7 @@ Use these skills during content generation:
 | Skill | When to Use |
 |-------|-------------|
 | **visual-content** | Generate visual output from canvas philosophy (bundled) |
+| **html-generator** | Generate HTML pages and components from design system (bundled) |
 | **pptx** | Convert presentation PDFs to PowerPoint |
 | **pdf** | Create multi-page carousel PDFs |
 

@@ -5,6 +5,44 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-09
+
+### Added
+- **HTML Design System**: New content type for creating branded HTML pages
+  - Design-system-based approach (vs template-based for presentations/carousels)
+  - Component library grows organically as pages are created
+  - 15 reusable component types (nav, hero, feature-grid, testimonials, CTA, pricing, FAQ, etc.)
+  - Each component is standalone (viewable independently) + composable into full pages
+  - Convertibility-ready structure: prop/slot metadata, semantic HTML, CSS custom properties
+- **Digital Native style family**: 8 new web-specific visual styles (21 total)
+  - Neobrutalist, Glassmorphism, Dark Mode, Bento Grid, Retro/Y2K, Kinetic, Neumorphism, 3D/Immersive
+  - Each with web-adapted enforcement blocks (per-section constraints)
+- **`html-generator` skill**: Generates standalone HTML components and composed pages
+  - Single-file output with embedded CSS + minimal vanilla JS
+  - Mobile-first responsive (375px → 768px → 1200px)
+  - CSS-first interactivity (CSS-only accordions, scroll-snap, transitions)
+  - WCAG AA accessibility (semantic HTML, skip-nav, contrast, reduced-motion)
+  - Image placeholders using CSS gradients with replacement comments
+- **`/design-html` command**: Guided wizard for creating HTML design systems
+  - Project context gathering (audience, goals, tone)
+  - Brand relationship model (main brand, sub-identity, independent)
+  - Style selection from 5 families, 21 styles
+  - Design token generation (CSS custom properties)
+  - Canvas philosophy + design-system.md generation
+- **`/html-page` command**: Guided page creation with component selection
+  - 10 page category presets (landing, about, portfolio, pricing, etc.)
+  - Component reuse from existing library
+  - Section-by-section or paste-all content input
+- **`/html-page-quick` command**: Quick page creation with minimal questions
+- **Web style constraints**: 21 enforcement blocks adapted for web (per-section word limits, padding, layout rules)
+- **Component catalog reference**: 15 component types with HTML/CSS patterns and variants
+- **Technical specs reference**: Boilerplate, responsive breakpoints, font loading, accessibility checklist
+
+### Changed
+- **SKILL.md**: Added HTML trigger phrases and command routing
+- **`/brand-init`**: Creates `templates/html/` and `html-pages/` directories
+- Style system expanded from 13 → 21 styles (4 → 5 families)
+
 ## [2.0.0] - 2026-02-09
 
 ### Added

@@ -1,7 +1,7 @@
 {
   "name": "brand-content-design",
-  "version": "2.0.0",
-  "description": "Create branded visual content (presentations, carousels, infographics) with visual components (cards, icons, gradients) using a layered philosophy system with Presentation Zen principles",
+  "version": "2.1.0",
+  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with visual components, 21 visual styles, design systems, and Presentation Zen principles",
   "author": {
     "name": "camoa"
   },
@@ -12,6 +12,10 @@
     "presentations",
     "carousels",
     "infographics",
+    "html",
+    "landing-page",
+    "web-design",
+    "design-system",
     "data-visualization",
     "timeline",
     "process-diagram",

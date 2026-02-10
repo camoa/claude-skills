@@ -1,16 +1,16 @@
 # Brand Content Design Plugin
 
-Create branded presentations, LinkedIn carousels, and infographics with consistent visual identity.
+Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
 ## The Flow
 
 ```
-Brand Guidelines → Templates → Content
+Brand Guidelines → Templates / Design Systems → Content
 ```
 
 1. **Brand Guidelines** - Extract your visual & verbal identity once
-2. **Templates** - Create reusable slide/card/infographic structures (create once, use many times)
-3. **Content** - Generate presentations/carousels/infographics using your templates
+2. **Templates / Design Systems** - Create reusable structures (templates for slides/cards/infographics, design systems for HTML pages)
+3. **Content** - Generate presentations/carousels/infographics/HTML pages from your templates and design systems
 
 ## Installation
 
@@ -32,6 +32,7 @@ claude plugins:add brand-content-design@camoa-skills
 /template-presentation    # 4. Create your first presentation template
 /template-carousel        # 5. Create your first carousel template
 /template-infographic     # 6. Create your first infographic template
+/design-html              # 7. Create an HTML design system for web pages
 ```
 
 ### Creating Content (repeat as needed)
@@ -40,6 +41,8 @@ claude plugins:add brand-content-design@camoa-skills
 /presentation             # Create presentation from template
 /carousel                 # Create carousel from template
 /infographic              # Create infographic from template
+/html-page                # Create HTML page from design system
+/html-page-quick          # Quick HTML page creation
 ```
 
 ### Managing Your Brand
@@ -65,10 +68,12 @@ Creates a project folder with this structure:
 ├── templates/
 │   ├── presentations/    # Reusable presentation templates
 │   ├── carousels/        # Reusable carousel templates
-│   └── infographics/     # Reusable infographic templates
+│   ├── infographics/     # Reusable infographic templates
+│   └── html/             # HTML design systems (with component libraries)
 ├── presentations/        # Generated presentations
 ├── carousels/            # Generated carousels
 ├── infographics/         # Generated infographics
+├── html-pages/           # Generated HTML pages
 └── input/                # Source files
     ├── logos/            # Logo files (SVG, PNG, AI, EPS)
     ├── icons/            # Icon sets, favicons
@@ -168,6 +173,9 @@ Generates two files for your template:
 | `/carousel-quick` | Create carousel (quick) |
 | `/infographic` | Create infographic (guided) |
 | `/infographic-quick` | Create infographic (quick) |
+| `/design-html` | Create or edit an HTML design system |
+| `/html-page` | Create HTML page from design system (guided) |
+| `/html-page-quick` | Create HTML page from design system (quick) |
 | `/content-type-new` | Add new content type |
 
 ## Components
@@ -183,10 +191,11 @@ Generates two files for your template:
 | `brand-content-design` | sonnet | User + Claude (main router) |
 | `visual-content` | opus | Claude only (`user-invocable: false`) — artistic output |
 | `infographic-generator` | sonnet | Claude only (`user-invocable: false`) — template generation |
+| `html-generator` | opus | Claude only (`user-invocable: false`) — HTML page generation |
 
 ## Visual Style System
 
-Choose from **13 distinct visual styles** across 4 aesthetic families when creating templates:
+Choose from **21 distinct visual styles** across 5 aesthetic families when creating templates and design systems:
 
 ### Japanese Zen (7 styles)
 | Style | Character | Best For |
@@ -217,7 +226,19 @@ Choose from **13 distinct visual styles** across 4 aesthetic families when creat
 | **Yeo-baek** | Extreme emptiness, Korean purity | Premium, meditation |
 | **Feng Shui** | Yin-Yang balance, energy flow | Wellness, harmony |
 
-Each style has enforced constraints (whitespace %, word limits, element counts) to ensure authentic visual output.
+### Digital Native (8 styles — web-specific, new in v2.1.0)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Neobrutalist** | Raw, thick borders, hard shadows | Creative, dev portfolios |
+| **Glassmorphism** | Frosted glass, translucent, blur | SaaS, premium tech |
+| **Dark Mode** | Layered darkness, elevated surfaces | Tech, dashboards |
+| **Bento Grid** | Asymmetric card grid, modular | SaaS features, portfolios |
+| **Retro / Y2K** | Neon gradients, chrome, pixel | Creative, music, gaming |
+| **Kinetic** | Motion-driven, animated reveals | Storytelling, launches |
+| **Neumorphism** | Soft UI, extruded elements | Dashboards, tools |
+| **3D / Immersive** | Perspective, parallax, depth | Premium products |
+
+Each style has enforced constraints (whitespace/padding, word limits, element counts) to ensure authentic visual output.
 
 ## Visual Components
 
@@ -377,6 +398,47 @@ Or quick mode:
 - **Formats**: PNG (recommended), SVG (vector)
 - **Location**: `infographics/{date}-{name}/`
 
+## HTML Design System
+
+Create branded HTML pages using a **design-system-based** approach. Unlike templates (fixed structure → fill content), a design system defines visual identity + reusable components → compose unlimited page types.
+
+### Key Differences from Presentations/Carousels
+
+| Aspect | Presentation/Carousel | HTML Pages |
+|--------|----------------------|------------|
+| Structure | Fixed slide/card sequence | Flexible component selection |
+| Reuse | One template → one structure | One design system → unlimited pages |
+| Output | PDF / PPTX | Single standalone `.html` file |
+| Growth | Static templates | Component library grows over time |
+
+### How It Works
+
+```
+1. /design-html         # Create a design system (tokens + component catalog)
+2. /html-page           # Select components, provide content, generate page
+3. Components saved     # Each new component added to library for reuse
+4. Next page            # Reuse existing components + generate new ones
+```
+
+### Output Format
+
+Single standalone `.html` file with:
+- Embedded CSS (no external stylesheets)
+- CSS custom properties for brand tokens
+- Mobile-first responsive (375px → 768px → 1200px)
+- CSS-first interactivity + minimal vanilla JS when needed
+- WCAG AA accessibility
+- Google Fonts with system font fallbacks
+- Convertibility-ready structure (prop/slot metadata for future SDC, React, etc.)
+
+### 15 Component Types
+
+Navigation, Hero, Feature Grid, Content Block, Testimonials, CTA, Stats Bar, Team Grid, FAQ Accordion, Pricing Cards, Gallery, Process Steps, Contact, Footer, Logo Bar — each with multiple variants.
+
+### 10 Page Category Presets
+
+Landing Page, About/Company, Portfolio, Event, Pricing, Blog/Article, Documentation, Coming Soon, Contact, Custom.
+
 ## Three-Layer Philosophy System
 
 ```
@@ -435,12 +497,15 @@ This plugin uses these skills for visual output:
 |-------|---------|--------|
 | **visual-content** | Generate presentations/carousels from canvas philosophy | Bundled (no install needed) |
 | **infographic-generator** | Generate infographics from @antv/infographic | Bundled (no install needed) |
+| **html-generator** | Generate HTML pages and components from design system | Bundled (no install needed) |
 | **pptx** | Convert PDF to editable PowerPoint | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
 | **pdf** | Create multi-page PDFs | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
 
 The `visual-content` skill is bundled with this plugin - it uses artistic philosophy language to create museum-quality visual output following your brand and template constraints.
 
 The `infographic-generator` skill provides 114 data visualization templates with brand theming and custom backgrounds.
+
+The `html-generator` skill creates standalone HTML components and composed pages using design tokens, responsive CSS, and WCAG AA accessibility.
 
 ## Tips
 

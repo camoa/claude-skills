@@ -23,9 +23,11 @@ Initialize a new brand project with the required folder structure.
    │   └── (other files copied here by /brand-extract or /brand-assets)
    ├── templates/
    │   ├── presentations/
-   │   └── carousels/
+   │   ├── carousels/
+   │   └── html/               # HTML design systems
    ├── presentations/
    ├── carousels/
+   ├── html-pages/             # Generated HTML pages
    └── input/                  # Raw source files
        ├── logos/              # Logo files (SVG, PNG, AI, EPS)
        ├── icons/              # Icon sets, favicons
@@ -57,6 +59,7 @@ Initialize a new brand project with the required folder structure.
      2. Run `/brand-extract` to analyze and generate brand philosophy
      3. Run `/brand-palette` (optional) to generate alternative color palettes
      4. Run `/template-presentation` or `/template-carousel` to create your first template
+     5. Run `/design-html` to create an HTML design system for web pages
 
 ## Output
 
