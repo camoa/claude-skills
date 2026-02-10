@@ -84,7 +84,7 @@ The skill triggers automatically when you mention creating plugins, skills, comm
 
 ### drupal-dev-framework (v3.1.0)
 
-Systematic Drupal development workflow based on the [Claude Code Drupal Development Framework v3.0](https://adrupalcouple.us). Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
+Systematic Drupal development workflow. Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
 
 **Quick Start:**
 ```
