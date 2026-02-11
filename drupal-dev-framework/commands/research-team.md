@@ -84,9 +84,9 @@ Stop here if not available.
 
 Spawn 3 teammates using the appropriate prompt templates below. After spawning:
 
-1. Enable **delegate mode** (Shift+Tab) to prevent doing research yourself
-2. Tell the user: "Team spawned. Enable delegate mode (Shift+Tab) to let teammates work. I'll synthesize when they finish."
-3. Wait for all teammates to complete before proceeding
+1. Tell the user: "Team spawned. Teammates are working — I'll synthesize when they finish."
+2. If running inside tmux, teammates appear in split panes (visible output). Otherwise they run in-process (background).
+3. Do NOT perform research yourself — wait for all teammates to complete before proceeding
 
 ### Step 6 — Synthesize
 
