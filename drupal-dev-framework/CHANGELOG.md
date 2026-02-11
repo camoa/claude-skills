@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-02-10
+
+### Added
+- **NEW: `/research-team` command** — Phase 1 research using agent teams with 3 competing perspectives
+  - **Feature mode**: Contrib Scout (haiku) + Core Pattern Finder (haiku) + Devil's Advocate (sonnet) debate Build vs Use vs Extend
+  - **Bug mode**: 3 Hypothesis Investigators (sonnet) with competing theories challenge each other to find root cause
+  - Auto-detects task type from goal keywords; user can override
+  - Each teammate writes own findings file (persists for future reference and session recovery)
+  - Lead synthesizes final `research.md` (feature) or `investigation.md` (bug)
+  - Falls back to standard `/research` when agent teams not available
+  - Requires experimental flag: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+
 ## [3.2.0] - 2026-02-10
 
 ### Changed

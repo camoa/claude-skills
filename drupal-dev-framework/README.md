@@ -198,6 +198,7 @@ Back to task selection
 | `/drupal-dev-framework:next [project]` | Continue existing work - select project/task and suggest next action |
 | `/drupal-dev-framework:status [project]` | Show current project state and phase |
 | `/drupal-dev-framework:research <task>` | Phase 1 - Research a task, store findings |
+| `/drupal-dev-framework:research-team <task>` | Phase 1 - Research with agent team (3 competing perspectives + debate) |
 | `/drupal-dev-framework:design <task>` | Phase 2 - Design architecture for a task |
 | `/drupal-dev-framework:implement <task>` | Phase 3 - Load context, start implementing |
 | `/drupal-dev-framework:complete <task>` | Mark task done, run quality gates, move to completed |
@@ -295,7 +296,11 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 3.2.0 (Current)
+### 3.3.0 (Current)
+- `/research-team` command: Phase 1 research with agent teams — feature mode (Build/Use/Extend debate) and bug mode (competing hypothesis investigation)
+- Requires experimental flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+
+### 3.2.0
 - User-configured project storage: `projectsBase` saved in registry on first run, no hardcoded defaults
 - Registry schema v1.1: removed stale `phase` field (phase is per-task)
 
