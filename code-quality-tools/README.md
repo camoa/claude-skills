@@ -56,6 +56,7 @@ System tools: Semgrep, Trivy, Gitleaks (same as above)
 | `/code-quality:solid` | Architecture check | Refactoring |
 | `/code-quality:dry` | Find duplication | Code cleanup |
 | `/code-quality:tdd` | TDD workflow | Development |
+| `/code-quality:security-debate` | Multi-perspective security debate (agent teams) | Post-audit deep analysis |
 
 **Troubleshooting?** See [Troubleshooting Guide](skills/code-quality-audit/references/troubleshooting.md)
 
@@ -198,7 +199,12 @@ See `references/operations/dast-tools.md` for installation and usage.
 
 ## Version
 
-**v2.3.0** (Current) - Plugin conventions and model routing
+**v2.4.0** (Current) - Security Debate Team (agent teams)
+- `/code-quality:security-debate` — 3-agent debate over security audit findings
+- Defender + Red Team + Compliance Checker with cross-challenge synthesis
+- Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+
+**v2.3.0** - Plugin conventions and model routing
 - Model routing (`sonnet`) on skill for cost optimization
 - CLAUDE.md and `.claude/rules/` conventions
 

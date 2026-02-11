@@ -11,6 +11,7 @@
 - Use `argument-hint:` when command accepts arguments
 - Restrict `allowed-tools` to minimum needed
 - Commands wrap existing scripts — no logic duplication
+- Agent team commands orchestrate debate workflows — these are a new category alongside script wrappers
 
 ## General
 - Reference files instead of reproducing content

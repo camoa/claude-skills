@@ -54,7 +54,7 @@ Based on detection result, executes:
 
 ## Output
 
-- JSON report: `.reports/security.json`
+- JSON report: `.reports/security-report.json`
 - Markdown summary: `.reports/security-summary.md`
 - Grouped by severity (critical → low)
 
@@ -83,3 +83,4 @@ See: `references/troubleshooting.md#security-scan-issues`
 
 - `/code-quality:audit` - Full audit (includes security)
 - `/code-quality:setup` - Install security tools
+- `/code-quality:security-debate` - Multi-perspective debate analysis of security findings (requires agent teams)
