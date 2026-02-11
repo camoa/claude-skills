@@ -158,6 +158,70 @@ Components reference design tokens (not hardcoded values):
 
 ---
 
+## Part 3.5: Icon Integration
+
+Lucide icons (1,500+ icons) are available as inline SVG via a CLI script.
+
+### Fetching Icons
+
+```bash
+# Get inline SVG for one or more icons
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" get rocket lightbulb shield
+
+# Search by keyword
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" search chart
+
+# List icons in a category
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" category business
+
+# List all categories
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" categories
+```
+
+The `get` command outputs each SVG on its own line prefixed with `<!-- icon: {name} -->`.
+
+### Embedding Pattern
+
+Icons use `currentColor` for stroke and inherit size from the parent container:
+
+```html
+<div class="feature-grid__icon" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- paths from script output -->
+  </svg>
+</div>
+```
+
+### CSS Styling
+
+Control icon size and color through the container:
+
+```css
+.feature-grid__icon {
+  width: 48px;
+  height: 48px;
+  color: var(--color-primary);
+}
+.feature-grid__icon svg {
+  width: 100%;
+  height: 100%;
+}
+```
+
+### When to Use Icons
+
+- Use icons when a clear visual metaphor exists (rocket for launch, shield for security)
+- Pair icons with text labels — never use icons alone for meaning
+- Skip icons when no good match exists; forced icons weaken the design
+
+### Accessibility
+
+- **Decorative icons** (paired with text): `aria-hidden="true"` on the SVG
+- **Meaningful icons** (convey info alone): `role="img" aria-label="Description"` on the SVG
+
+---
+
 ## Part 4: Style Enforcement
 
 Read `references/web-style-constraints.md` for the selected style and enforce:
@@ -395,7 +459,7 @@ Design components for future conversion to other frameworks:
 <!-- prop: section-title type: string -->
 <!-- prop: section-subtitle type: string -->
 <!-- slot: features -->
-  <!-- prop: feature-icon type: string -->
+  <!-- prop: feature-icon type: string (Lucide icon name) -->
   <!-- prop: feature-title type: string -->
   <!-- prop: feature-description type: string -->
 <!-- /slot: features -->

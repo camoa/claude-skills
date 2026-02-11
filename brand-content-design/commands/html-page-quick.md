@@ -1,6 +1,6 @@
 ---
 description: Create a branded HTML page quickly with minimal questions
-allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, Skill
 ---
 
 # HTML Page Quick Command

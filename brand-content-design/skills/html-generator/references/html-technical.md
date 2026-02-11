@@ -199,6 +199,68 @@ Since Claude cannot generate actual images, create visual placeholders:
 
 ---
 
+## Icon Integration
+
+Lucide icons are available as inline SVG via a CLI script. Use Bash to fetch icons during generation.
+
+### Fetching Icons
+
+```bash
+# Get SVG for specific icons
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" get rocket shield lightbulb
+
+# Search by keyword
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" search chart
+
+# List icons in a category
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" category business
+
+# List all categories
+node "$BRAND_CONTENT_DESIGN_DIR/scripts/html-icons.js" categories
+```
+
+### Inline SVG Embedding
+
+Paste the SVG output directly into the HTML. Icons use `currentColor` for stroke, so they inherit color from CSS:
+
+```html
+<div class="feature-grid__icon" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- SVG paths from script output -->
+  </svg>
+</div>
+```
+
+### Icon Container CSS
+
+Control size and color through the parent element:
+
+```css
+.feature-grid__icon {
+  width: 48px;
+  height: 48px;
+  color: var(--color-primary);
+}
+.feature-grid__icon svg {
+  width: 100%;
+  height: 100%;
+}
+```
+
+### Accessibility
+
+| Context | Attribute |
+|---------|-----------|
+| Decorative (next to text label) | `aria-hidden="true"` on `<svg>` |
+| Meaningful (conveys info alone) | `role="img" aria-label="Description"` on `<svg>` |
+
+### Available Categories
+
+Categories are defined in `skills/infographic-generator/lib/icons.js` — `ICON_CATEGORIES` object. Run `categories` command to list them. Common ones: business, growth, technology, security, actions, misc.
+
+---
+
 ## Vanilla JS Patterns
 
 Use only when CSS cannot achieve the desired effect. Always progressive enhancement.

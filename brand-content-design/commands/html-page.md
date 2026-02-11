@@ -1,6 +1,6 @@
 ---
 description: Create a branded HTML page by selecting components from a design system
-allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, Skill
 ---
 
 # HTML Page Command

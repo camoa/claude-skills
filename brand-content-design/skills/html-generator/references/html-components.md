@@ -164,7 +164,7 @@ Feature or benefit showcase in a grid layout.
 <!-- prop: section-title type: string -->
 <!-- prop: section-subtitle type: string (optional) -->
 <!-- slot: features -->
-  <!-- prop: feature-icon type: string (CSS class or emoji) -->
+  <!-- prop: feature-icon type: string (Lucide icon name, e.g. "rocket") -->
   <!-- prop: feature-title type: string -->
   <!-- prop: feature-description type: string -->
 <!-- /slot: features -->
@@ -178,7 +178,9 @@ Feature or benefit showcase in a grid layout.
     <p class="feature-grid__subtitle">Section subtitle</p>
     <div class="feature-grid__grid">
       <div class="feature-grid__item">
-        <div class="feature-grid__icon">Icon</div>
+        <div class="feature-grid__icon" aria-hidden="true">
+          <!-- inline SVG from html-icons.js -->
+        </div>
         <h3 class="feature-grid__item-title">Feature</h3>
         <p class="feature-grid__item-desc">Description</p>
       </div>
@@ -300,7 +302,7 @@ Key numbers or metrics displayed prominently.
 <!-- slot: stats -->
   <!-- prop: stat-value type: string -->
   <!-- prop: stat-label type: string -->
-  <!-- prop: stat-icon type: string (optional) -->
+  <!-- prop: stat-icon type: string (optional, Lucide icon name) -->
 <!-- /slot: stats -->
 ```
 
@@ -478,7 +480,7 @@ Step-by-step flow showing a process, timeline, or journey.
   <!-- prop: step-number type: string -->
   <!-- prop: step-title type: string -->
   <!-- prop: step-description type: string -->
-  <!-- prop: step-icon type: string (optional) -->
+  <!-- prop: step-icon type: string (optional, Lucide icon name) -->
 <!-- /slot: steps -->
 ```
 
