@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Three-part description structure** from Anthropic guide — `[What] + [When] + [Capabilities]`
 - **Examples and Troubleshooting sections** in SKILL.md template
 - **XML tag validation**, examples check, error handling check, compatibility check in validate command
+- **Agent team patterns** in agent-patterns.md — competing perspectives (debate), competing hypotheses (investigation), parallel task execution, team composition guidelines, implementation guidance
 
 ### Fixed
 - Removed README.md from inside skill directory (violated own rules and Anthropic standards)
