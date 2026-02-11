@@ -5,6 +5,27 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-02-11
+
+### Added
+- **HTML-to-Drupal Radix/SDC Converter**: Metadata-driven converter that parses HTML component comments to generate Drupal themes
+  - `/convert-to-radix` command: Guided 7-phase wizard with 6 AskUserQuestion points for full control
+  - `/convert-to-radix-quick` command: Quick mode with 3 questions and auto-resolved ambiguities
+  - `html-to-radix-analyzer` skill: Shared analysis layer (HTML metadata parsing, pattern classification, design token extraction, Drupal backend inventory, atomic classification)
+  - `radix-sdc-generator` skill: Generates complete Radix 6.0.2 sub-theme with SDC components, Bootstrap SCSS mapping, Layout Builder config, and icon packs
+  - `scripts/extract-icons.js`: CLI tool to extract inline SVGs from HTML for Drupal Icon API
+  - 7 reference files: pattern-classification, atomic-classification, drupal-backend-inventory, radix-theme-scaffold, token-to-bootstrap-mapping, sdc-patterns, layout-builder-config
+- **Architecture**: Shared analysis layer + target-specific generators (Radix first, Canvas and Node.js future)
+- **Metadata-driven**: Parses `<!-- component: -->` / `<!-- prop: -->` / `<!-- slot: -->` comments dynamically, not hardcoded to 15 component types
+- **6px threshold framework**: Design token to Bootstrap SCSS variable mapping (Accommodate/Extend/Customize/Create)
+- **Drupal backend inventory**: Scans `config/sync/` for content types, views, block types, menus to maximize reuse
+- **Atomic classification**: Dynamic atom/molecule/organism heuristics with Radix base component reuse detection
+- **Per-project config**: `converter/radix-sdc.yml` stores all conversion decisions for reproducibility
+
+### Changed
+- **SKILL.md**: Added converter trigger phrases and command routing
+- **plugin.json**: Version bump to 2.2.0, added Drupal/Radix/SDC keywords
+
 ## [2.1.0] - 2026-02-09
 
 ### Added

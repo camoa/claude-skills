@@ -1,7 +1,7 @@
 ---
 name: brand-content-design
-description: Use when user says "create presentation", "make carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations, carousels, and HTML pages using a layered philosophy system.
-version: 2.1.0
+description: Use when user says "create presentation", "make carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", "convert to drupal", "convert to radix", "html to drupal", "generate theme", or wants to create visual content with consistent branding. Creates branded presentations, carousels, and HTML pages using a layered philosophy system, with conversion to Drupal Radix sub-themes.
+version: 2.2.0
 model: sonnet
 ---
 
@@ -19,6 +19,8 @@ Create branded visual content (presentations, LinkedIn carousels, HTML pages) wi
 - "create template" / "new template"
 - "get outline" / "outline for template" / "prepare content"
 - "color palette" / "generate palette" / "alternative colors"
+- "convert to drupal" / "convert to radix" / "html to drupal" / "generate theme"
+- "convert html" / "radix theme" / "SDC components" / "layout builder"
 - NOT for: General design questions, non-branded content
 
 ## Project Detection
@@ -98,6 +100,8 @@ Route user requests to the appropriate command:
 | Create HTML design system | `/design-html` |
 | Create HTML page (guided) | `/html-page` |
 | Create HTML page (quick) | `/html-page-quick` |
+| Convert HTML to Drupal Radix (guided) | `/convert-to-radix` |
+| Convert HTML to Drupal Radix (quick) | `/convert-to-radix-quick` |
 | Add new content type | `/content-type-new` |
 
 ## Underlying Skills
@@ -108,6 +112,8 @@ Use these skills during content generation:
 |-------|-------------|
 | **visual-content** | Generate visual output from canvas philosophy (bundled) |
 | **html-generator** | Generate HTML pages and components from design system (bundled) |
+| **html-to-radix-analyzer** | Analyze HTML metadata for Drupal conversion (bundled) |
+| **radix-sdc-generator** | Generate Radix sub-theme with SDC components (bundled) |
 | **pptx** | Convert presentation PDFs to PowerPoint |
 | **pdf** | Create multi-page carousel PDFs |
 
