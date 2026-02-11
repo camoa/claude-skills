@@ -2,6 +2,19 @@
 
 Technical reference for HTML page generation: boilerplate, file format, responsive breakpoints, font loading, image handling, JS patterns, accessibility, and convertibility metadata.
 
+## Contents
+- HTML Boilerplate
+- Responsive Breakpoints
+- Font Loading Strategy
+- Image Placeholder Approach
+- Icon Integration
+- Vanilla JS Patterns
+- Accessibility Checklist
+- Component File Format
+- Page Composition Format (includes Metadata Preservation)
+- Convertibility Metadata Format
+- File Naming Conventions
+
 ---
 
 ## HTML Boilerplate
@@ -396,6 +409,48 @@ Full page assembles components with shared CSS root:
 4. **Component styles** — each component's CSS, deduplicated
 5. **HTML body** — skip link → nav → `<main>` → components → footer
 6. **Script** — minimal JS at end of body (if style requires)
+
+### Metadata Preservation (CRITICAL)
+
+Preserve all metadata comments when composing pages. Every component section in the assembled page must retain its metadata:
+
+```html
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <!-- component: nav variant: simple -->
+  <header class="nav" role="banner">...</header>
+  <!-- /component: nav -->
+
+  <main id="main">
+    <!-- component: hero variant: centered -->
+    <!-- prop: headline type: string -->
+    <h1 class="hero__headline">...</h1>
+    <!-- prop: subheadline type: string -->
+    <p class="hero__subheadline">...</p>
+    <!-- /component: hero -->
+
+    <!-- component: blog-card-grid variant: 3-col -->
+    <!-- slot: cards -->
+    <div class="blog-grid__list">...</div>
+    <!-- /slot: cards -->
+    <!-- /component: blog-card-grid -->
+  </main>
+
+  <!-- component: footer variant: with-social -->
+  <footer class="footer">...</footer>
+  <!-- /component: footer -->
+</body>
+```
+
+Rules:
+- Copy metadata comments verbatim from standalone component files
+- Place `<!-- component: type variant: variant -->` before the component's outermost HTML element
+- Place `<!-- /component: type -->` after the component's closing tag
+- Include all `<!-- prop: name type: type -->` comments immediately before the element they annotate
+- Include `<!-- slot: name -->` / `<!-- /slot: name -->` around slot content areas
+- Do NOT strip, summarize, or simplify metadata during page assembly
+- These comments enable conversion to Drupal SDC, React, and other frameworks
 
 ---
 
