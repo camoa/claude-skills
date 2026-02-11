@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-11
+
+### Added
+- `/code-quality:security-debate` command — multi-perspective security debate using agent teams
+  - Defender agent validates findings, identifies false positives and exploitability
+  - Red Team agent constructs attack scenarios, finds gaps audit missed
+  - Compliance Checker agent maps to OWASP Top 10 / CWE standards with coverage matrix
+  - Cross-challenge debate phase resolves severity disagreements
+  - Synthesized output: `.reports/security-debate.md`
+- Agent team command convention in CLAUDE.md and command-conventions.md
+
+### Fixed
+- `commands/security.md` — corrected report filename from `.reports/security.json` to `.reports/security-report.json`
+- `commands/security.md` — added discoverability link to `/code-quality:security-debate`
+
+---
+
 ## [2.3.0] - 2026-02-09
 
 ### Added
