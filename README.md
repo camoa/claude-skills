@@ -82,7 +82,7 @@ Create an agent that reviews code for security issues
 
 The skill triggers automatically when you mention creating plugins, skills, commands, agents, or hooks.
 
-### drupal-dev-framework (v3.2.0)
+### drupal-dev-framework (v3.3.0)
 
 Systematic Drupal development workflow. Enforces SOLID, TDD, DRY, security, and code purposefulness principles through 5 quality gates.
 
@@ -111,8 +111,8 @@ Task Complete (5 Quality Gates) → Back to Step 2
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 15 skills (phase-detector, requirements-gatherer, tdd-companion, etc.) |
-| Commands | 9 commands (`/new`, `/next`, `/research`, `/design`, `/implement`, `/complete`, `/status`, `/validate`, `/pattern`) |
+| Skills | 16 skills (phase-detector, requirements-gatherer, tdd-companion, etc.) |
+| Commands | 11 commands (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/status`, `/validate`, `/pattern`, `/migrate-tasks`) |
 | Agents | 5 agents (project-orchestrator, architecture-drafter, contrib-researcher, pattern-recommender, architecture-validator) |
 | References | 8 reference docs (SOLID, TDD, DRY, Library-First, Quality Gates, Security, Frontend, Code Purposefulness) |
 
