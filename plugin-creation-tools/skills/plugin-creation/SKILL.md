@@ -236,6 +236,8 @@ Before creating a component, verify it's the right choice:
 - `references/02-philosophy/anti-patterns.md` - What to avoid
 
 ### Components
+- `references/03-skills/anthropic-skill-standards.md` - Official Anthropic skill standards and checklist
+- `references/03-skills/skill-patterns.md` - Five skill patterns (Sequential, Multi-MCP, Iterative, Context-Aware, Domain-Specific)
 - `references/03-skills/` - Skill creation guides
 - `references/04-commands/` - Command creation guides
 - `references/05-agents/` - Agent creation guides

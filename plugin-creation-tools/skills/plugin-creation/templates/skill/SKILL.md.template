@@ -39,6 +39,29 @@ When user says "[trigger]":
 1. [Step 1]
 2. [Step 2]
 
+## Examples
+
+### Example 1: [Common scenario]
+**User says:** "[trigger phrase]"
+**Actions:**
+1. [Step 1]
+2. [Step 2]
+**Result:** [Expected outcome]
+
+### Example 2: [Edge case or alternative]
+**User says:** "[trigger phrase]"
+**Actions:**
+1. [Step 1]
+2. [Step 2]
+**Result:** [Expected outcome]
+
+## Troubleshooting
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| [Common error message] | [Why it happens] | [How to fix] |
+| [Another error] | [Cause] | [Fix] |
+
 ## References
 
 - `references/file1.md` - [Description]

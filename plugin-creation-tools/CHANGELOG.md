@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-02-11
+
+### Added
+- **Anthropic official skill standards** reference (`references/03-skills/anthropic-skill-standards.md`) — distilled from "The Complete Guide to Building Skills for Claude" (Jan 2026)
+- **Five skill patterns** reference (`references/03-skills/skill-patterns.md`) — Sequential Workflow, Multi-MCP Coordination, Iterative Refinement, Context-Aware Tool Selection, Domain-Specific Intelligence
+- **Triggering test methodology** in testing.md — should-trigger / should-NOT-trigger framework with 90% trigger rate target
+- **Quantitative success metrics** in testing.md — tool call targets, 0 failed API calls goal, consistency benchmarks
+- **Use case categories** in creation workflow Step 1 — Document & Asset Creation, Workflow Automation, MCP Enhancement
+- **Structured iteration signals** in creation workflow Step 6 — undertriggering, overtriggering, execution issue diagnosis
+- **MCP + Skills synergy** section in mcp-overview.md — value proposition for MCP builders
+- **API and organization-level distribution** paths in packaging.md
+- **`compatibility` frontmatter field** documentation (1-500 chars, environment requirements)
+- **`metadata` suggested keys** (author, version, mcp-server, category, tags, documentation, support)
+- **Negative trigger pattern** in description-patterns.md — "Do NOT use for" scope boundaries
+- **Three-part description structure** from Anthropic guide — `[What] + [When] + [Capabilities]`
+- **Examples and Troubleshooting sections** in SKILL.md template
+- **XML tag validation**, examples check, error handling check, compatibility check in validate command
+
+### Fixed
+- Removed README.md from inside skill directory (violated own rules and Anthropic standards)
+
+### Changed
+- Description pattern formula now shows both trigger-first and three-part structures
+- Validate command expanded with 6 additional checks
+- `allowed-tools` field now includes syntax example
+
 ## [2.1.0] - 2026-02-07
 
 ### Added

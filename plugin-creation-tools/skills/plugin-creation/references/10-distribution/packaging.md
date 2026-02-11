@@ -217,6 +217,31 @@ MIT License
    - Test with invalid inputs
    - Verify graceful failures
 
+## API & Organization Distribution
+
+Beyond GitHub and marketplace distribution, skills can be deployed programmatically.
+
+### Organization-Level Deployment (since Dec 2025)
+- Admins deploy skills workspace-wide for all users
+- Automatic updates when skill is updated
+- Centralized management via Claude Console
+
+### Skills API
+- `/v1/skills` endpoint for listing and managing skills
+- Add skills to Messages API requests via `container.skills` parameter
+- Version control and management through Claude Console
+- Works with Claude Agent SDK for building custom agents
+
+| Use Case | Best Surface |
+|----------|-------------|
+| End users interacting directly | Claude.ai / Claude Code |
+| Manual testing and iteration | Claude.ai / Claude Code |
+| Applications using skills programmatically | API |
+| Production deployments at scale | API |
+| Automated pipelines and agent systems | API |
+
+**Note:** Skills in the API require the Code Execution Tool beta.
+
 ## See Also
 
 - `marketplace.md` - marketplace distribution

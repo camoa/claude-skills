@@ -4,9 +4,19 @@ The description field is the most critical part of a skill - it determines wheth
 
 ## The Formula
 
+Two valid structures (per Anthropic's official guide):
+
+**Pattern A — Trigger-first** (best for technique/discipline skills):
 ```
 Use when [specific triggers/symptoms] - [what it does, third person]
 ```
+
+**Pattern B — Three-part** (best for toolkit/reference skills):
+```
+[What it does] + [When to use it] + [Key capabilities]
+```
+
+Both patterns must answer: "Should Claude load this skill right now?"
 
 ## Templates by Type
 
@@ -50,14 +60,31 @@ For skills that provide utilities and tools.
 **Example:**
 > Knowledge and utilities for creating animated GIFs optimized for Slack. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack"
 
+### Negative Triggers (Scope Boundaries)
+
+For skills that may overtrigger, add explicit exclusions in the description itself:
+
+```
+description: Advanced data analysis for CSV files. Use for statistical
+modeling, regression, clustering. Do NOT use for simple data exploration
+(use data-viz skill instead).
+```
+
+```
+description: PayFlow payment processing for e-commerce. Use specifically
+for online payment workflows, not for general financial queries.
+```
+
 ## Checklist
 
-- [ ] Starts with "Use when..." or action-focused opener
+- [ ] Starts with "Use when..." or action-focused opener, OR uses three-part structure
 - [ ] Written in third person (not "you should")
 - [ ] Includes specific symptoms/triggers
 - [ ] Includes relevant keywords users might search
 - [ ] Under 1024 characters (ideal: 200-500)
 - [ ] Answers: "Should Claude load this skill right now?"
+- [ ] Includes scope boundaries / negative triggers if skill could overtrigger
+- [ ] Mentions file types if relevant (.pdf, .docx, etc.)
 
 ## Keywords to Include
 

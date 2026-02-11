@@ -1,7 +1,7 @@
 {
   "name": "plugin-creation-tools",
   "description": "Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, and configuration. Supersedes skill-creation-tools.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": {
     "name": "camoa"
   },

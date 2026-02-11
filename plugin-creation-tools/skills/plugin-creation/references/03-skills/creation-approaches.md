@@ -14,6 +14,14 @@ When creating skills manually (recommended for custom workflows and domain exper
 
 Skip this step only when usage patterns are already crystal clear.
 
+**Identify the use case category** (per Anthropic's official guide):
+
+| Category | Description | Key Techniques |
+|----------|-------------|----------------|
+| **Document & Asset Creation** | Consistent output (docs, presentations, code, designs) | Embedded style guides, template structures, quality checklists |
+| **Workflow Automation** | Multi-step processes with consistent methodology | Step-by-step with validation gates, iterative refinement loops |
+| **MCP Enhancement** | Workflow guidance on top of MCP tool access | Coordinate MCP calls in sequence, embed domain expertise |
+
 **Actions**:
 - Gather concrete examples from users or create validated examples
 - Ask clarifying questions:
@@ -168,6 +176,14 @@ After testing the skill on real tasks:
 | Missing edge cases | Add to references/troubleshooting.md |
 | Confusing instructions | Simplify SKILL.md, add examples |
 | Too verbose, loads slowly | Move details to references/, use progressive disclosure |
+
+**Structured iteration signals** (per Anthropic's official guide):
+
+| Signal | Symptoms | Fix |
+|--------|----------|-----|
+| **Undertriggering** | Skill doesn't load when it should; users manually enabling it; support questions about when to use it | Add more detail and keywords to description; include technical terms, file types, synonyms |
+| **Overtriggering** | Skill loads for irrelevant queries; users disabling it; confusion about purpose | Add negative triggers ("Do NOT use for..."); be more specific about scope |
+| **Execution issues** | Inconsistent results; API/tool call failures; user corrections needed | Improve instructions; add error handling; make steps more explicit |
 
 ### See Also: Anthropic's skill-creator
 

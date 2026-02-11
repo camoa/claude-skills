@@ -446,16 +446,68 @@ python scripts/validate_skill.py .
 | Individual reference | <1000 lines | 10k words |
 | Total skill files | <50 files | No limit |
 
+## Triggering Test Methodology
+
+Per Anthropic's official guide, triggering tests verify your skill loads at the right times. Create a test suite with three categories:
+
+### Should Trigger (obvious tasks)
+```
+- "[Direct request matching skill purpose]"
+- "[Paraphrased version of the same request]"
+- "[Request using alternative terminology]"
+```
+
+### Should Trigger (paraphrased/indirect)
+```
+- "[Indirect request that implies skill purpose]"
+- "[Request using synonyms or related terms]"
+- "[Request that mentions relevant file types or tools]"
+```
+
+### Should NOT Trigger
+```
+- "[Unrelated request in different domain]"
+- "[Similar-sounding but different purpose]"
+- "[Request that a different skill should handle]"
+```
+
+**Target**: Skill triggers on 90% of relevant queries from the first two categories, and 0% from the third.
+
+**Debugging approach**: Ask Claude: "When would you use the [skill name] skill?" Claude will quote the description back. Adjust based on what's missing.
+
+### Example Triggering Test Suite
+
+For a `pdf-processing` skill:
+
+**Should trigger:**
+- "Extract text from this PDF"
+- "I need to pull data from a PDF file"
+- "Help me fill out this PDF form"
+
+**Should NOT trigger:**
+- "What's the weather today?"
+- "Help me write Python code"
+- "Create a spreadsheet" (unless skill handles this)
+
 ## Success Criteria
 
 A skill is ready when:
 
+### Qualitative
 1. **Triggers correctly** - Loads for intended tasks, not unrelated ones
 2. **Workflow works** - Claude follows the process correctly
 3. **Output matches** - Results meet expectations
 4. **No rationalization** - Claude doesn't skip or shortcut the skill
 5. **Scripts execute** - All bundled scripts run without errors
 6. **References exist** - All referenced files are present
+
+### Quantitative Benchmarks (Anthropic recommended)
+- Skill triggers on **90%** of relevant queries
+- Completes workflow in **X tool calls** (measure and set target)
+- **0 failed API calls** per workflow run
+- Users don't need to prompt Claude about next steps
+- Workflows complete without user correction
+- Consistent results across sessions (run same request 3-5 times)
 
 ## Example Test Scenarios
 
