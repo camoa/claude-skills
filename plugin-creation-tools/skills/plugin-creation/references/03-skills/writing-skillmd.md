@@ -121,13 +121,14 @@ context: fork
 | `name` | Yes | Lowercase, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude". |
 | `description` | Yes | Max 1024 chars. Must include WHAT and WHEN. Third person only. |
 | `model` | No | Override model for this skill. Values: `haiku`, `sonnet`, `opus`. Use for cost optimization -- `haiku` for simple/repetitive tasks, `opus` for complex reasoning. |
-| `allowed-tools` | No | Restricts available tools when skill is active. |
+| `allowed-tools` | No | Restricts available tools when skill is active. Syntax: `"Bash(python:*) Bash(npm:*) WebFetch"` |
 | `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
 | `agent` | No | When `context: fork`, specify agent type for the forked context. |
 | `disable-model-invocation` | No | Set to `true` to prevent Claude from auto-invoking. User must call explicitly via `/name`. Reduces context cost to zero for triggered-only skills. |
 | `user-invocable` | No | Set to `false` to hide from `/` menu. Claude can still invoke via Skill tool. For background knowledge users shouldn't invoke directly. Default is `true`. |
-| `license` | No | License for the skill. |
-| `metadata` | No | Custom key-value pairs. |
+| `license` | No | License for the skill (e.g., MIT, Apache-2.0). |
+| `compatibility` | No | Environment requirements (1-500 chars). Intended product, required system packages, network access needs. Example: `"Requires Python 3.10+, Claude Code only"` |
+| `metadata` | No | Custom key-value pairs. Suggested keys: `author`, `version`, `mcp-server`, `category`, `tags`, `documentation`, `support`. |
 
 ### Model Selection Guidelines
 

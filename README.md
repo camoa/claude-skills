@@ -55,7 +55,7 @@ Skills still work when invoked via the `Skill` tool (e.g., typing the skill name
 
 ## Plugins
 
-### plugin-creation-tools (v2.1.0)
+### plugin-creation-tools (v2.2.0)
 
 Complete guide for creating Claude Code plugins. Covers skills, commands, agents, hooks, MCP servers, settings, and output configuration.
 

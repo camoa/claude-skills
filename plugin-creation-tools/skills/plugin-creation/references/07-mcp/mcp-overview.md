@@ -110,6 +110,22 @@ Use environment variables for configuration:
 }
 ```
 
+## MCP + Skills Synergy
+
+MCP provides **connectivity** (what Claude can do). Skills provide **knowledge** (how Claude should do it).
+
+| | MCP (Connectivity) | Skills (Knowledge) |
+|---|---|---|
+| **Role** | Connects Claude to services | Teaches Claude how to use services |
+| **Provides** | Real-time data access, tool invocation | Workflows, best practices, domain expertise |
+| **Answers** | What Claude **can** do | How Claude **should** do it |
+
+**Without skills:** Users connect MCP but don't know what to do next. Each conversation starts from scratch. Inconsistent results because users prompt differently each time.
+
+**With skills:** Pre-built workflows activate automatically. Consistent, reliable tool usage. Best practices embedded in every interaction. Lower learning curve.
+
+When building an MCP integration, consider shipping a companion skill that captures your top 2-3 workflows. This turns raw tool access into guided, reliable experiences.
+
 ## When to Use MCP
 
 | Use Case | MCP Appropriate? |

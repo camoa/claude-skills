@@ -28,10 +28,15 @@ Validate a plugin's structure and components against best practices.
 ### Skills (for each skill in `skills/*/`)
 - [ ] `SKILL.md` exists with valid YAML frontmatter
 - [ ] Frontmatter has `name` (hyphen-case, max 64 chars)
-- [ ] Frontmatter has `description` (starts with "Use when", max 1024 chars)
+- [ ] Frontmatter has `description` (starts with "Use when" or three-part structure, max 1024 chars)
+- [ ] Description includes WHAT it does AND WHEN to use it (trigger conditions)
 - [ ] Description uses third person (no "you")
+- [ ] No XML angle brackets (< >) in frontmatter (security restriction)
+- [ ] `compatibility` field valid if present (1-500 chars)
 - [ ] Body is instructions, not documentation (imperative voice)
 - [ ] Body under 500 lines
+- [ ] Body includes examples section with user scenarios (warning if missing)
+- [ ] Body includes troubleshooting/error handling section (warning if missing)
 - [ ] Referenced files in `references/` exist
 - [ ] Referenced scripts in `scripts/` exist
 - [ ] No README.md inside skill directories (belongs at plugin root)
@@ -58,9 +63,11 @@ Validate a plugin's structure and components against best practices.
 
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)
+- [ ] Skills include scope boundaries / negative triggers in description if broad
 - [ ] Agents specify `model:` for cost optimization
 - [ ] Skills consider `model:` field
 - [ ] Hook scripts are executable (chmod +x)
+- [ ] Skills cross-checked against `references/03-skills/anthropic-skill-standards.md`
 
 ## Output Format
 

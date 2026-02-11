@@ -136,6 +136,8 @@ When user says "add agent", "create agent", "make agent":
 - `disallowedTools` to block specific tools (e.g., `Edit`, `Write` for read-only agents)
 - `hooks` in agent frontmatter for scoped validation (runs only when that agent is active)
 
+**Agent teams**: For tasks benefiting from multiple perspectives or parallel research, consider agent teams (competing perspectives, hypothesis investigation, parallel tasks). See `references/05-agents/agent-patterns.md` for team patterns. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
 ## Creating Hooks
 
 When user says "add hooks", "setup hooks", "event handlers":
@@ -236,6 +238,8 @@ Before creating a component, verify it's the right choice:
 - `references/02-philosophy/anti-patterns.md` - What to avoid
 
 ### Components
+- `references/03-skills/anthropic-skill-standards.md` - Official Anthropic skill standards and checklist
+- `references/03-skills/skill-patterns.md` - Five skill patterns (Sequential, Multi-MCP, Iterative, Context-Aware, Domain-Specific)
 - `references/03-skills/` - Skill creation guides
 - `references/04-commands/` - Command creation guides
 - `references/05-agents/` - Agent creation guides
