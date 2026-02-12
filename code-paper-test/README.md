@@ -73,6 +73,16 @@ Or use it explicitly:
 - Auditing AI-generated code
 - Validating complex logic (loops, conditionals, recursion)
 
+### Competing Testers (Agent Team)
+
+For complex or security-critical code, use the agent team command:
+
+```
+/code-paper:test-team src/Service/PaymentService.php
+```
+
+Spawns 3 competing testers — Happy Path Validator, Edge Case Hunter, and Red Team Attacker — who independently analyze the code and then debate findings. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
 ## How It Works
 
 The skill guides you through a systematic workflow:
@@ -196,7 +206,11 @@ Specific checks for AI-generated code:
 
 ## Version
 
-0.2.0
+**0.3.0** (Current) - Competing Testers agent team command
+- `/code-paper:test-team` — 3-agent team paper testing (Happy Path + Edge Case + Red Team)
+- Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+
+**0.2.0** - Plugin conventions and model routing
 
 ## License
 

@@ -5,6 +5,24 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-11
+
+### Added
+- **NEW: `/test-team` command** — paper test code with competing agent team (3 perspectives)
+  - **Happy Path Validator** (sonnet) — traces correct flow with ideal inputs, verifies dependencies and contracts
+  - **Edge Case Hunter** (sonnet) — probes boundaries: nulls, empty, zero, large values, type mismatches
+  - **Red Team Attacker** (sonnet) — adversarial inputs: injection, path traversal, race conditions, resource exhaustion
+  - Cross-challenge debate resolves flaw severity and disputes false findings
+  - Lead synthesizes prioritized flaw report next to target code
+  - Scope gate: suggests standard paper test for <50 lines
+  - Falls back to standard paper test skill when agent teams not available
+  - Requires experimental flag: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+- `commands/` directory — first command in this plugin
+- `.claude/rules/command-conventions.md` for path-scoped command standards
+- Command conventions section in `CLAUDE.md`
+
+---
+
 ## [0.2.0] - 2026-02-09
 
 ### Added
