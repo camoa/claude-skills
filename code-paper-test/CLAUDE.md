@@ -6,6 +6,11 @@
 - Body uses imperative voice — instructions, not documentation
 - Under 500 lines per SKILL.md
 
+## Commands
+- Frontmatter must include: description, allowed-tools
+- Use `argument-hint:` when command accepts arguments
+- Agent team commands orchestrate AI debate workflows rather than wrapping scripts
+
 ## General
 - Reference files instead of reproducing content
 - Current state only — no historical narratives
