@@ -442,3 +442,66 @@ display:
     display_plugin: block
     position: 1
 ```
+
+---
+
+## Layout Composition Instructions
+
+Instead of generating entity view display YAML (fragile: UUIDs, style enumeration, deeply nested config), generate human-readable instructions in the conversion report. Config YAML is still generated for block types, fields, views, LB style groups, and LB styles.
+
+### Instruction Format
+
+Include a "Layout Composition Instructions" section in the conversion report with these sub-sections:
+
+#### Prerequisites
+
+```markdown
+### Prerequisites
+
+1. Import config exports: `drush config:import --partial --source=config/converter-exports/`
+2. Enable Layout Builder on the target content type (e.g., Basic page)
+3. Set the theme as default: `drush config:set system.theme default {THEME_NAME}`
+4. Clear cache: `drush cr`
+```
+
+#### Section-by-Section Table
+
+For each page section, provide a table row:
+
+```markdown
+### Page Layout: {page_name}
+
+| Section | Layout | Background | Padding | Block | Region |
+|---------|--------|------------|---------|-------|--------|
+| 1 | One column | Primary (bg-primary) | Large (py-6) | Hero block | Content |
+| 2 | One column | White | Medium (py-5) | Features block | Content |
+| 3 | Two column | Light (bg-light) | Medium (py-5) | About image / About text | First / Second |
+| 4 | One column | White | Large (py-6) | Blog listing (view block) | Content |
+| 5 | One column | Dark (bg-dark) | Medium (py-5) | CTA block | Content |
+```
+
+#### Navigation and Footer (Outside LB)
+
+```markdown
+### Theme Region Blocks
+
+These blocks are placed in theme regions, NOT in Layout Builder sections:
+
+| Block | Region | Notes |
+|-------|--------|-------|
+| Navbar component | navbar_branding + navbar_left | Main navigation menu |
+| Footer component | footer | Footer menu + copyright |
+```
+
+#### Post-Setup Checklist
+
+```markdown
+### Post-Setup Checklist
+
+- [ ] Verify each section has correct background color applied via LB Styles
+- [ ] Verify padding levels match the design
+- [ ] Test responsive behavior at mobile, tablet, desktop breakpoints
+- [ ] Verify navigation menu links are correct
+- [ ] Check footer content and links
+- [ ] Run Lighthouse accessibility audit
+```

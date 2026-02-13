@@ -12,7 +12,7 @@ Use these rules to classify each component as atom, molecule, or organism, and t
   - Edge Cases
 - Radix Base Component Reuse Table
   - Reuse Workflow
-  - SDC Directory Convention
+  - SDC Directory Convention (Flat)
   - Classification Output Format
 
 ## Classification Heuristics
@@ -119,37 +119,34 @@ When Radix has a matching component, extend it instead of creating from scratch:
 
 When no Radix match exists, create a new SDC:
 
-1. Place in the appropriate atomic directory
+1. Place in `components/{name}/` (flat directory)
 2. Follow Radix component.yml conventions for schema
 3. Use Bootstrap utility classes as the base styling layer
 
-### SDC Directory Convention
+### SDC Directory Convention (Flat)
+
+Radix uses a flat `components/` directory. All SDC components go in `components/{name}/` -- no atomic subdirectories. Record the atomic level in the `component.yml` description and the conversion report, but do NOT create `atoms/`, `molecules/`, or `organisms/` subdirectories.
 
 ```
 components/
-  atoms/
-    heading/
-      heading.component.yml
-      heading.twig
-      heading.css
-    button/
-    icon/
-    image/
-  molecules/
-    card/
-      card.component.yml
-      card.twig
-      card.css
-    stat-item/
-    section-heading/
-  organisms/
-    navbar/
-      navbar.component.yml
-      navbar.twig
-      navbar.css
-    hero/
-    feature-grid/
-    footer/
+  heading/
+    heading.component.yml
+    heading.twig
+    heading.scss
+  button/
+  icon/
+  card/
+    card.component.yml
+    card.twig
+    card.scss
+  stat-item/
+  navbar/
+    navbar.component.yml
+    navbar.twig
+    navbar.scss
+  hero/
+  feature-grid/
+  footer/
 ```
 
 ### Classification Output Format
@@ -160,12 +157,15 @@ Return atomic level per component:
 atomicLevels:
   - component: hero
     level: organism
+    directory: components/hero
     reasoning: "Has heading slot, CTA slot, organizes page section"
   - component: card
     level: molecule
+    directory: components/card
     reasoning: "Combines image, heading, text -- self-contained group"
   - component: button
     level: atom
+    directory: components/button
     reasoning: "Single element, 2 props (label, url), no slots"
 
 radixReuse:

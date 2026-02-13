@@ -131,9 +131,9 @@ analysis:
 
   # Part 6: Atomic levels and Radix reuse
   atomicLevels:
-    - { component: hero, level: organism, directory: "components/organisms/hero" }
-    - { component: card, level: molecule, directory: "components/molecules/card" }
-    - { component: button, level: atom, directory: "components/atoms/button" }
+    - { component: hero, level: organism, directory: "components/hero" }
+    - { component: card, level: molecule, directory: "components/card" }
+    - { component: button, level: atom, directory: "components/button" }
 
   radixReuse:
     - { component: card, radixBase: card, action: extend, changes: "Add brand variants" }

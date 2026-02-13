@@ -222,19 +222,17 @@ The first argument is a unique string identifier. Use descriptive names: `'scrol
 Theme global library MUST declare:
 
 ```yaml
-global:
+style:
   css:
     theme:
       build/css/main.style.css: {}
   js:
     build/js/main.script.js: {}
   dependencies:
-    - radix/bootstrap
     - core/drupal
-    - core/once
 ```
 
-`core/once` is required whenever JavaScript uses the `once()` function.
+Add `core/once` as a dependency if JavaScript uses the `once()` function.
 
 ## Icon API Pack Configuration
 
@@ -382,7 +380,7 @@ $spacers: (
 SDC components cannot be extended or inherited. To customize a Radix base component:
 
 1. Copy the entire component directory from Radix to your sub-theme.
-2. Place it in the appropriate atomic directory (`atoms/`, `molecules/`, `organisms/`).
+2. Place it in `components/{name}/` (flat directory -- no atomic subdirs).
 3. Modify the template, SCSS, and schema as needed.
 4. Drupal's SDC discovery automatically uses the sub-theme version.
 
