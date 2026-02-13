@@ -34,8 +34,8 @@ Complete directory structure and file templates for a Radix sub-theme generated 
 │       └── main.script.js           # Theme JS entry
 ├── templates/
 │   └── layout/                      # Layout Builder section overrides
-├── includes/
-│   └── {THEME_NAME}.theme           # Preprocess functions
+├── includes/                        # Only if preprocess functions needed
+│   └── {THEME_NAME}.theme           # Preprocess functions (skip if empty)
 └── build/                           # Compiled output (gitignored)
 ```
 
@@ -80,6 +80,7 @@ global:
   dependencies:
     - radix/bootstrap
     - core/drupal
+    - core/once
 ```
 
 ### {THEME_NAME}.icons.yml
@@ -319,8 +320,9 @@ mix.browserSync({
 
 :root {
   // Custom properties for tokens with no Bootstrap equivalent
-  // --transition-duration: CONVERTER_VALUE;
-  // --transition-easing: CONVERTER_VALUE;
+  // --transition-base: CONVERTER_VALUE;    // e.g., 300ms
+  // --transition-fast: CONVERTER_VALUE;    // e.g., 150ms
+  // --easing-default: CONVERTER_VALUE;     // e.g., cubic-bezier(0.4, 0, 0.2, 1)
   // --min-tap-target: CONVERTER_VALUE;
 }
 
@@ -330,7 +332,7 @@ body {
 }
 
 a {
-  transition: color var(--transition-duration, 0.2s) var(--transition-easing, ease);
+  transition: color var(--transition-base, 300ms) var(--easing-default, ease);
 
   &:hover {
     text-decoration-thickness: 2px;
@@ -349,7 +351,7 @@ img {
 
 button,
 .btn {
-  transition: all var(--transition-duration, 0.2s) var(--transition-easing, ease);
+  transition: all var(--transition-base, 300ms) var(--easing-default, ease);
 }
 
 section {
@@ -405,7 +407,7 @@ h1, h2, h3, h4, h5, h6,
  * Theme JS entry point.
  */
 
-(function (Drupal) {
+(function (Drupal, once) {
   'use strict';
 
   /**
@@ -416,30 +418,30 @@ h1, h2, h3, h4, h5, h6,
    */
   Drupal.behaviors.scrollReveal = {
     attach: function (context) {
-      const elements = context.querySelectorAll('[data-reveal]:not(.is-revealed)');
-      if (!elements.length || !('IntersectionObserver' in window)) {
-        return;
-      }
+      once('scroll-reveal', '[data-reveal]', context).forEach(function (element) {
+        if (!('IntersectionObserver' in window)) {
+          element.classList.add('is-revealed');
+          return;
+        }
 
-      const observer = new IntersectionObserver(
-        function (entries) {
-          entries.forEach(function (entry) {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('is-revealed');
-              observer.unobserve(entry.target);
-            }
-          });
-        },
-        { threshold: 0.15 }
-      );
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-revealed');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.15 }
+        );
 
-      elements.forEach(function (el) {
-        observer.observe(el);
+        observer.observe(element);
       });
     },
   };
 
-})(Drupal);
+})(Drupal, once);
 ```
 
 ### templates/layout/layout--onecol.html.twig
@@ -522,6 +524,10 @@ h1, h2, h3, h4, h5, h6,
 
 ### includes/{THEME_NAME}.theme
 
+Only create this file when the theme needs preprocess functions. Do NOT generate an empty stub with placeholder comments. If no preprocessing is needed at generation time, skip this file entirely.
+
+When preprocessing IS needed, follow this pattern:
+
 ```php
 <?php
 
@@ -534,14 +540,7 @@ h1, h2, h3, h4, h5, h6,
  * Implements hook_preprocess_HOOK() for page templates.
  */
 function {THEME_NAME}_preprocess_page(array &$variables): void {
-  // Add theme-specific variables to page template.
-}
-
-/**
- * Implements hook_preprocess_HOOK() for node templates.
- */
-function {THEME_NAME}_preprocess_node(array &$variables): void {
-  // Add node-level preprocessing.
+  // Actual preprocessing logic here.
 }
 ```
 

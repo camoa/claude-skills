@@ -169,9 +169,9 @@ props:
 .btn {
   // Brand overrides applied via _variables.scss.
   // Only add custom styles that go beyond Bootstrap's .btn here.
-  font-weight: 600;
+  font-weight: $font-weight-semibold;
   letter-spacing: 0.01em;
-  transition: all var(--transition-duration, 0.2s) var(--transition-easing, ease);
+  transition: all var(--transition-base, 300ms) var(--easing-default, ease);
 
   &:focus-visible {
     outline: var(--focus-ring-width, 2px) solid var(--focus-ring-color, rgba($primary, 0.5));
@@ -287,8 +287,8 @@ slots:
   border-radius: $border-radius-lg;
   box-shadow: $box-shadow-sm;
   overflow: hidden;
-  transition: transform var(--transition-duration, 0.2s) var(--transition-easing, ease),
-              box-shadow var(--transition-duration, 0.2s) var(--transition-easing, ease);
+  transition: transform var(--transition-base, 300ms) var(--easing-default, ease),
+              box-shadow var(--transition-base, 300ms) var(--easing-default, ease);
 
   &:hover {
     transform: translateY(-2px);
@@ -524,6 +524,8 @@ Use Block-Element-Modifier naming:
 
 ### Use Bootstrap Variables and Mixins
 
+**MANDATORY**: See `references/drupal-best-practices.md` for the complete list of allowed variables and forbidden patterns. Every generated SCSS file must follow these rules.
+
 Reference Bootstrap SCSS variables (which include brand overrides from `_variables.scss`) and mixins instead of hardcoding values:
 
 ```scss
@@ -532,12 +534,18 @@ Reference Bootstrap SCSS variables (which include brand overrides from `_variabl
   border-radius: $border-radius-lg;
   color: $body-color;
   background-color: $gray-100;
+  font-family: $font-family-base;       // NEVER 'FontName', sans-serif
+  font-size: $font-size-base;           // NEVER 1.125rem
+  font-weight: $font-weight-semibold;   // NEVER 600
+  transition: all var(--transition-base) var(--easing-default);  // NEVER 0.3s ease
 
   @include media-breakpoint-up(md) {
     padding: $spacer * 3;
   }
 }
 ```
+
+**Never use**: hex colors, font-family string literals, hardcoded `font-size`/`font-weight` numbers, inline transition durations, or theme-prefixed variables (`$mytheme-color`). See the best practices reference for the full rules.
 
 ## Radix-Specific Conventions
 

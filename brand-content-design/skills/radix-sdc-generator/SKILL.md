@@ -57,13 +57,19 @@ Create the complete Radix sub-theme directory structure using `references/radix-
    - `src/scss/base/_elements.scss`
    - `src/scss/base/_typography.scss` (placeholder -- populated in Part 2)
    - `src/js/main.script.js`
-   - `includes/{THEME_NAME}.theme`
    - `.gitignore`
+   - `includes/{THEME_NAME}.theme` -- only if preprocess functions are needed. Do NOT create an empty stub.
 
 3. Write section template overrides from the scaffold reference:
    - `templates/layout/layout--onecol.html.twig`
    - `templates/layout/layout--twocol-section.html.twig`
    - `templates/layout/layout--threecol-section.html.twig`
+
+4. Install new modules via composer (when `DRUPAL_PATH` is provided):
+   - Read `{DRUPAL_PATH}/composer.json` and check the `require` section.
+   - For each module in the analysis `modules.new_required` list, check if it is already present.
+   - Run `composer require {missing_packages}` from `DRUPAL_PATH` for any that are missing. Example: `composer require drupal/radix drupal/ui_icons`.
+   - If `DRUPAL_PATH` is not set, list the `composer require` command in the conversion report manual steps instead.
 
 Verify all files exist after writing.
 
@@ -101,7 +107,9 @@ Apply the 6px threshold framework from `references/token-to-bootstrap-mapping.md
 
 ## Part 3: SDC Component Generation
 
-For each component in the analysis output, generate a complete SDC directory. Follow patterns from `references/sdc-patterns.md`.
+For each component in the analysis output, generate a complete SDC directory. Follow patterns from `references/sdc-patterns.md` and mandatory rules from `references/drupal-best-practices.md`.
+
+**CRITICAL**: Before generating any component files, read `references/drupal-best-practices.md` for mandatory SCSS variable discipline rules. Every generated SCSS file MUST use Bootstrap variables -- never hardcode hex colors, font-family names, font-size values, font-weight numbers, or transition durations.
 
 1. Determine output directory from `atomicLevel`:
    - atom: `{THEME_DIR}/components/atoms/{component-name}/`
@@ -113,7 +121,7 @@ For each component in the analysis output, generate a complete SDC directory. Fo
    - If `radixBase` is null, create the component from scratch.
 
 3. Generate `{component-name}.component.yml`:
-   - Set `$schema` to the Drupal core metadata schema URL.
+   - Set `$schema` to the Drupal 11 stable URL: `https://git.drupalcode.org/project/drupal/-/raw/HEAD/core/assets/schemas/v1/metadata.schema.json`. Do NOT use the old `core/modules/sdc/src/component.schema.json` path.
    - Set `name` to the human-readable component name.
    - Set `status` to `experimental`.
    - Set `group` to `{THEME_NAME}`.
@@ -137,6 +145,7 @@ For each component in the analysis output, generate a complete SDC directory. Fo
    - Import `_init.scss` at the top.
    - Write BEM-structured styles using Bootstrap variables and mixins.
    - Include responsive breakpoints where the component needs layout changes.
+   - **MANDATORY**: Use Bootstrap SCSS variables for ALL values -- see `references/drupal-best-practices.md` for the complete allowed variables list. Never use hex colors, font-family literals, hardcoded font-size/font-weight values, or inline transition durations.
    - Reference CSS custom properties for transitions and interactions.
 
 ---
@@ -381,6 +390,7 @@ Include any issues encountered during generation:
 
 ## References
 
+- `references/drupal-best-practices.md` -- **MANDATORY rules** for SCSS variable discipline, SDC schema conventions, JS patterns, Icon API, and Bootstrap architecture. Read before generating any files.
 - `references/radix-theme-scaffold.md` -- Complete theme directory template and file contents.
 - `references/token-to-bootstrap-mapping.md` -- 6px threshold framework and mapping tables.
 - `references/sdc-patterns.md` -- component.yml, Twig, and SCSS templates with examples.

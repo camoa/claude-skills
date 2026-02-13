@@ -62,7 +62,7 @@ Examples:
 Define a new SCSS variable or CSS custom property for tokens with no Bootstrap counterpart.
 
 Examples:
-- `--transition-duration` -- no Bootstrap variable, create as CSS custom property.
+- `--transition-base`, `--transition-fast`, `--easing-default` -- no Bootstrap variable, create as CSS custom properties.
 - `--min-tap-target` -- accessibility token, create as CSS custom property.
 
 ## Color Token Mapping
@@ -188,8 +188,9 @@ Timing and easing tokens have no direct Bootstrap SCSS variable. Map them to CSS
 
 | HTML Token | CSS Custom Property | Example Value |
 |---|---|---|
-| `--transition-duration` | `--transition-duration` | `0.2s` |
-| `--transition-easing` | `--transition-easing` | `cubic-bezier(0.4, 0, 0.2, 1)` |
+| `--timing-normal` | `--transition-base` | `300ms` |
+| `--timing-fast` | `--transition-fast` | `150ms` |
+| `--easing-default` | `--easing-default` | `cubic-bezier(0.4, 0, 0.2, 1)` |
 | `--min-tap-target` | `--min-tap-target` | `44px` |
 | `--focus-ring-width` | `--focus-ring-width` | `2px` |
 | `--focus-ring-color` | `--focus-ring-color` | `rgba(37, 99, 235, 0.5)` |
@@ -223,10 +224,10 @@ tokenMapping:
     action: extend
     reasoning: "Added as spacer key 6"
 
-  - token: "--transition-duration"
-    value: "0.2s"
+  - token: "--timing-normal"
+    value: "300ms"
     bootstrapVar: "N/A"
     bootstrapDefault: "N/A"
     action: create
-    reasoning: "No Bootstrap SCSS equivalent, added as CSS custom property"
+    reasoning: "No Bootstrap SCSS equivalent, mapped to --transition-base CSS custom property"
 ```
