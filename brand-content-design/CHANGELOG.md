@@ -5,6 +5,11 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-02-14
+
+### Fixed
+- Removed explicit `hooks` declaration from plugin.json — `hooks/hooks.json` is auto-loaded by Claude Code, duplicate declaration caused plugin load failure
+
 ## [2.3.0] - 2026-02-13
 
 ### Changed
