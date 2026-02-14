@@ -86,6 +86,19 @@
       "repository": "https://github.com/camoa/claude-skills",
       "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"],
       "strict": false
+    },
+    {
+      "name": "figma-to-sdc",
+      "source": "./figma-to-sdc",
+      "description": "Convert Figma designs to Drupal components (SDC or Canvas). AI-assisted analysis identifies props, slots, and static elements. Supports both traditional Twig SDCs and Canvas JSX components.",
+      "version": "0.2.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": ["figma", "drupal", "sdc", "canvas", "components", "design-to-code", "ai", "twig", "jsx"],
+      "strict": false
     }
   ]
 }
