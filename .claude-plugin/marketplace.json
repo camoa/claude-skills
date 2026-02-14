@@ -5,8 +5,8 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for Drupal development (HTMX, AJAX migration), brand content creation (presentations, carousels, infographics), design system conversion, code quality auditing, and plugin development",
-    "version": "1.4.0"
+    "description": "Claude Code plugins for Drupal development (HTMX, AJAX migration), brand content creation (presentations, carousels, infographics), code quality auditing, and plugin development",
+    "version": "1.3.0"
   },
   "plugins": [
     {
@@ -80,18 +80,6 @@
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
       "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"]
-    },
-    {
-      "name": "design-system-converter",
-      "source": "./design-system-converter",
-      "description": "Convert design systems (HTML with metadata, future: Figma) to production code. Radix/SDC target with Layout Builder composition, template overrides, and icon packs.",
-      "version": "1.0.0",
-      "author": {
-        "name": "camoa"
-      },
-      "license": "MIT",
-      "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["design-system", "converter", "drupal", "radix", "sdc", "layout-builder", "theme", "bootstrap", "scss", "components"]
     }
   ]
 }
