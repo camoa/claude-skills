@@ -1,7 +1,7 @@
 ---
 name: task-completer
 description: Use when finishing a task - moves task to completed/, updates project_state.md, suggests next task
-version: 2.0.0
+version: 2.1.0
 ---
 
 # Task Completer
@@ -15,7 +15,7 @@ Finalize tasks and update project memory.
 | Reference | Enforces |
 |-----------|----------|
 | `references/quality-gates.md` | Gates 2, 3, 4 (must ALL pass) |
-| `references/security-checklist.md` | Gate 4 security review |
+| dev-guides: https://camoa.github.io/dev-guides/drupal/security/ | Gate 4 security review |
 
 ## Activation
 
@@ -85,7 +85,7 @@ Check against architecture/main.md:
 - [ ] DRY - no code duplication (references/dry-patterns.md)
 - [ ] Library-First pattern used (references/library-first.md)
 
-#### Gate 4: Security (references/security-checklist.md)
+#### Gate 4: Security — WebFetch `https://camoa.github.io/dev-guides/drupal/security/` for detailed security guidance
 - [ ] Input validated via Form API
 - [ ] Output escaped properly
 - [ ] No raw SQL with user input
