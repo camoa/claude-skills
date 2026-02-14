@@ -6,7 +6,6 @@
     "name": "camoa"
   },
   "license": "MIT",
-  "hooks": "./hooks/hooks.json",
   "keywords": [
     "brand",
     "presentations",
