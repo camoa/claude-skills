@@ -64,10 +64,9 @@ The plugin includes reference documents that are enforced at each phase:
 | `references/tdd-workflow.md` | Test-Driven Development | Implementation |
 | `references/dry-patterns.md` | Don't Repeat Yourself | Implementation |
 | `references/quality-gates.md` | 5 Quality Gates | Completion |
-| `references/security-checklist.md` | OWASP security | Completion |
-| `references/frontend-standards.md` | CSS/JS standards | Implementation |
+| Online dev-guides | Drupal domain decisions (security, SDC, JS, forms, entities, 20+ topics) | All phases |
 
-These references are self-contained - no external guides required.
+References combine built-in methodology docs with [online dev-guides](https://camoa.github.io/dev-guides/) for Drupal domain knowledge.
 
 ## Prerequisites
 
@@ -296,7 +295,12 @@ This plugin builds on patterns and integrates with:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
 
-### 3.3.0 (Current)
+### 3.4.0 (Current)
+- Online dev-guides integration: skills and agents WebFetch Drupal decision guides from https://camoa.github.io/dev-guides/
+- Removed bundled `security-checklist.md` and `frontend-standards.md` — replaced by 60+ online guides
+- guide-integrator v3.0.0: three-source model (plugin refs + online dev-guides + user custom guides)
+
+### 3.3.0
 - `/research-team` command: Phase 1 research with agent teams — feature mode (Build/Use/Extend debate) and bug mode (competing hypothesis investigation)
 - Requires experimental flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
 

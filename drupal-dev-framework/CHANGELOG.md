@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-02-14
+
+### Added
+- **Online dev-guides integration**: Skills and agents now WebFetch decision guides from https://camoa.github.io/dev-guides/ for Drupal domain knowledge (forms, entities, plugins, routing, services, caching, security, SDC, JS, and 20+ more topics)
+- **guide-integrator v3.0.0**: Three-source model — plugin methodology refs, online dev-guides, user's custom guides
+- **guide-loader v2.0.0**: Falls back to online dev-guides when no local guides configured
+- **architecture-drafter**: Consults dev-guides for Drupal-specific architecture decisions
+- **architecture-validator**: Uses online dev-guides for security and frontend validation
+
+### Removed
+- **references/security-checklist.md**: Replaced by dev-guides `drupal/security/` (22 online guides)
+- **references/frontend-standards.md**: Replaced by dev-guides `drupal/sdc/` + `drupal/js-development/` (38 online guides)
+
+### Changed
+- **code-pattern-checker**: References online dev-guides for security and frontend checks
+- **task-completer**: Gate 4 security references online dev-guides
+- **quality-gates.md**: Updated security and frontend references to point to online guides
+- **WORKFLOW.md**: Updated reference table
+
 ## [3.3.0] - 2026-02-10
 
 ### Added

@@ -105,7 +105,7 @@ Before deployment:
 - [ ] No passwords/PII in logs
 - [ ] No `unserialize()` on untrusted data
 
-**Reference**: `references/security-checklist.md` for detailed guidance.
+**Reference**: WebFetch `https://camoa.github.io/dev-guides/drupal/security/` for detailed guidance.
 
 ## Gate 5: Code Purposefulness
 
@@ -174,6 +174,7 @@ Before `/complete` succeeds:
 - [ ] File uploads secure
 - [ ] Secrets in $settings
 - [ ] No sensitive data in logs
+Reference: https://camoa.github.io/dev-guides/drupal/security/
 
 ### Gate 5: Code Purposefulness
 - [ ] No unnecessary try-catch blocks
