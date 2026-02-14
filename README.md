@@ -36,6 +36,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin install code-quality-tools@camoa-skills
 /plugin install drupal-htmx@camoa-skills
 /plugin install code-paper-test@camoa-skills
+/plugin install design-system-converter@camoa-skills
 ```
 
 ## Known Issues
@@ -118,7 +119,7 @@ Task Complete (5 Quality Gates) → Back to Step 2
 
 See [WORKFLOW.md](drupal-dev-framework/WORKFLOW.md) for complete documentation.
 
-### brand-content-design (v2.1.0)
+### brand-content-design (v2.3.0)
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity. Uses a three-layer system: Brand Philosophy → Templates / Design Systems → Content.
 
@@ -152,6 +153,40 @@ Create branded presentations, LinkedIn carousels, infographics, and HTML pages w
 - PDF output via `canvas-design` skill, editable PPTX via `pptx` skill
 
 See [brand-content-design/README.md](brand-content-design/README.md) for complete documentation.
+
+### design-system-converter (v1.0.0)
+
+Convert design systems to production code. Currently supports HTML pages with metadata comments as input and Drupal Radix sub-themes with SDC components as output. Future targets: Canvas, Next.js. Future inputs: Figma.
+
+**Quick Start:**
+```
+/convert-to-radix
+```
+
+**Workflow:**
+
+| Phase | Action |
+|-------|--------|
+| Discovery | Find HTML pages and design system |
+| Analysis | Parse metadata, classify patterns, extract tokens, inventory Drupal backend |
+| Review | Present plan with Drupal opinions, resolve ambiguities |
+| Generation | Create Radix sub-theme, SDC components, template overrides, LB config |
+| Report | File manifest, module requirements, composition instructions |
+
+| Component | Contents |
+|-----------|----------|
+| Skills | 3 skills (`design-system-converter`, `html-to-radix-analyzer`, `radix-sdc-generator`) |
+| Commands | 2 commands (`/convert-to-radix`, `/convert-to-radix-quick`) |
+| Scripts | 1 script (`extract-icons.js`) |
+| References | 7 reference docs (pattern-classification, atomic-classification, drupal-backend-inventory, analysis-output-schema, radix-theme-scaffold, template-matching-patterns, layout-builder-config, drupal-best-practices) |
+
+**Features:**
+- Metadata-driven — parses HTML comments, not hardcoded to component types
+- 6px threshold framework for Bootstrap SCSS variable mapping
+- Drupal backend inventory with reuse matching (80%+ field match = reuse)
+- Layout Builder composition instructions in conversion report
+- Drupal Icon API pack generation from inline SVGs
+- External guide ecosystem at `https://camoa.github.io/dev-guides/`
 
 ### code-quality-tools (v2.3.0)
 
