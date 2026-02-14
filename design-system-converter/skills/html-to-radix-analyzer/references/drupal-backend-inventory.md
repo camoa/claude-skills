@@ -1,6 +1,10 @@
 # Drupal Backend Inventory
 
-Rules for scanning `config/sync/` to build an inventory of existing Drupal backend entities and matching HTML components to them.
+Rules for scanning the config sync directory to build an inventory of existing Drupal backend entities and matching HTML components to them.
+
+## Inputs
+
+- `CONFIG_SYNC_DIR` -- absolute path to the config sync directory. Discovered by the command from `settings.php` (`$settings['config_sync_directory']`) or by checking common locations: `config/sync/`, `sites/default/sync/`, `../config/sync/`. Do NOT hardcode `config/sync/`.
 
 ## Contents
 
@@ -13,6 +17,7 @@ Rules for scanning `config/sync/` to build an inventory of existing Drupal backe
   - Enabled Modules
   - Image Styles
   - Responsive Image Styles
+- Existing Theme Inventory
 - Matching Algorithm
   - Step 1: Direct Name Match
   - Step 2: Field Structure Match
@@ -24,7 +29,7 @@ Rules for scanning `config/sync/` to build an inventory of existing Drupal backe
 
 ## Config Scan Rules
 
-Scan `{DRUPAL_PATH}/config/sync/` for these YAML file patterns.
+Scan `{CONFIG_SYNC_DIR}` for these YAML file patterns.
 
 ### Content Types
 
@@ -112,13 +117,97 @@ Extract the `module:` key to get the full enabled module list.
 
 **Files:** `image.style.*.yml`
 
-Extract available image styles (thumbnail, medium, large, custom). Useful for mapping image props to appropriate responsive image handling.
+Extract available image styles with their effects:
+- Machine name (id field)
+- Label
+- Effects list: each effect has `plugin: image_scale_and_crop` (or `image_scale`, `image_resize`), `width`, `height`
+- Compute the aspect ratio from width/height for comparison with design needs
+
+Build a map of existing styles by aspect ratio and size:
+```yaml
+image_styles:
+  - { name: thumbnail, width: 100, height: 100, ratio: "1:1", effect: scale_and_crop }
+  - { name: medium, width: 220, height: 220, ratio: "1:1", effect: scale_and_crop }
+  - { name: large, width: 480, height: null, ratio: null, effect: scale }
+  - { name: hero_wide, width: 1440, height: 500, ratio: "2.88:1", effect: scale_and_crop }
+```
 
 ### Responsive Image Styles
 
 **Files:** `responsive_image.styles.*.yml`
 
-Extract responsive image style sets if available.
+Extract responsive image style sets:
+- Machine name (id field)
+- Breakpoint group (e.g., `responsive_image`)
+- Mapping of breakpoints to image style(s) and sizes attributes
+
+```yaml
+responsive_image_styles:
+  - name: hero_responsive
+    breakpoint_group: responsive_image
+    mappings:
+      - { breakpoint: xs, style: hero_sm, multiplier: "1x" }
+      - { breakpoint: md, style: hero_md, multiplier: "1x" }
+      - { breakpoint: xl, style: hero_xl, multiplier: "1x" }
+```
+
+### Image Style Comparison
+
+When the analyzer produces `imageContexts` with `suggestedStyles`, compare each suggested style against existing image styles:
+- **Matching ratio and similar size** (within 50px): reuse existing style, record `{ action: "reuse", existingStyle: "..." }`
+- **Matching ratio but different size**: suggest a new style, record `{ action: "create_new" }`
+- **No matching ratio**: suggest a new style, record `{ action: "create_new" }`
+- **Responsive image style exists for this context**: reuse it, otherwise suggest creating one
+
+## Existing Theme Inventory
+
+When an existing Drupal site is detected, inventory the current theme before making any decisions.
+
+### Current Theme Settings
+
+Read `{CONFIG_SYNC_DIR}/{current_theme}.settings.yml` for:
+- Logo path and settings (use_default, path)
+- Favicon path and settings
+- Enabled theme features (node_user_picture, comment_user_picture, etc.)
+
+### Existing Templates
+
+List all `.html.twig` files in the current theme directory:
+```
+{DRUPAL_PATH}/themes/custom/{current_theme}/templates/**/*.html.twig
+```
+
+Record each template path and its type (block, node, views, layout, etc.). Components that already have matching templates should be marked `existingTemplate: true` so the generator skips regenerating them.
+
+### Existing Views
+
+Get enabled views from `drush views:list --status=enabled` output or scan `{CONFIG_SYNC_DIR}/views.view.*.yml`. Record:
+- View ID, label, base table, content type filter, display types
+- Do NOT regenerate view templates for views that already exist
+
+### Enabled Modules
+
+Get from `drush pm:list --status=enabled --type=module` output or scan `{CONFIG_SYNC_DIR}/core.extension.yml`. Check module availability before generating config that depends on specific modules (e.g., `layout_builder_styles`, `webform`, `media_library`).
+
+### Inventory Output
+
+Include in the analysis output:
+
+```yaml
+existingTheme:
+  name: {current_theme}
+  templates:
+    - templates/block/block--system-menu-block--main.html.twig
+    - templates/node/node--article--teaser.html.twig
+  settings:
+    logo_path: themes/custom/{theme}/logo.svg
+    favicon_path: null
+    features: [logo, name, slogan, node_user_picture]
+  views:
+    - { id: frontpage, label: Frontpage, content_type: article }
+    - { id: blog, label: Blog listing, content_type: blog_post }
+  modules: [layout_builder, layout_builder_styles, views, media_library, webform]
+```
 
 ## Matching Algorithm
 
@@ -232,7 +321,12 @@ inventory:
     - name: tags
       label: Tags
       used_by: [article]
-  image_styles: [thumbnail, medium, large, wide]
+  image_styles:
+    - { name: thumbnail, width: 100, height: 100, ratio: "1:1", effect: scale_and_crop }
+    - { name: medium, width: 220, height: 220, ratio: "1:1", effect: scale_and_crop }
+    - { name: large, width: 480, height: null, ratio: null, effect: scale }
+    - { name: wide, width: 1090, height: 0, ratio: null, effect: scale }
+  responsive_image_styles: []
 
 matches:
   - component: hero
@@ -265,7 +359,7 @@ matches:
 
 ## Green-Field Mode
 
-When no `DRUPAL_PATH` is provided or `config/sync/` does not exist:
+When no `DRUPAL_PATH` is provided or `CONFIG_SYNC_DIR` does not exist:
 
 - Skip the entire inventory scan
 - Set `greenField: true` in the output

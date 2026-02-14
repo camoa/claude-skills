@@ -373,6 +373,93 @@ $spacers: (
 // The actual merge happens after Bootstrap maps are loaded (in _init.scss or a post-map partial)
 ```
 
+## Entity Access by Template Type
+
+Template overrides MUST use entity-level field access, not fragile render array patterns.
+
+### Block Content Templates
+
+Block content templates receive the entity via `content['#block_content']`. Assign it to a variable at the top of every template:
+
+```twig
+{% set block_entity = content['#block_content'] %}
+```
+
+Access fields via `block_entity.field_name.value` for scalar values, `block_entity.field_image.entity.uri.value` for file fields.
+
+### Node Templates
+
+Node templates receive the entity via `node`:
+
+```twig
+{{ node.field_name.value }}
+{{ file_url(node.field_image.entity.uri.value) }}
+```
+
+### Forbidden Patterns
+
+NEVER use these patterns -- they are fragile and break across Drupal versions:
+
+| Forbidden | Use Instead |
+|---|---|
+| `content.field_image['#items'].entity.uri.value` | `block_entity.field_image.entity.uri.value` or `node.field_image.entity.uri.value` |
+| `content.field_image['#items'].entity.alt` | `block_entity.field_image.alt` or `node.field_image.alt` |
+| `content.field_variant['#items'].value` | `block_entity.field_variant.value` or `node.field_variant.value` |
+| `content.field_toggle['#items'].value` | `block_entity.field_toggle.value` or `node.field_toggle.value` |
+
+### Link Fields Exception
+
+Link fields are the one exception -- they use render array access because the link URL object is only available there:
+
+```twig
+{{ content.field_link[0]['#url']|default('') }}
+{{ content.field_link[0]['#title']|default('') }}
+```
+
+## radix:block Wrapper Rule
+
+**MANDATORY**: ALL block content templates MUST embed `radix:block` as the outer wrapper. No exceptions.
+
+```twig
+{% set block_entity = content['#block_content'] %}
+{% embed 'radix:block' with {
+  provider: plugin_id|clean_class,
+  label: label,
+  content: TRUE,
+} %}
+  {% block content %}
+    {# SDC include or embed goes here #}
+  {% endblock %}
+{% endembed %}
+```
+
+This is required for:
+- Layout Builder contextual links to work
+- Block title/label display
+- Consistent block chrome across the site
+
+Even full-width sections that seem standalone MUST use this wrapper.
+
+## Content Images Rule
+
+Content images (photos, illustrations, media) come from Drupal fields, NOT from the theme's `src/assets/` directory.
+
+- `src/assets/images/` is for theme-level assets only: background patterns, decorative elements, placeholder images
+- Content images are managed through Drupal's media system or image fields
+- NEVER copy content images from the HTML source into the theme `src/assets/images/` directory
+- Logo and favicon come from theme settings config (`{theme_name}.settings`), not from `src/assets/`
+
+## Paragraphs is Last Resort
+
+Do NOT default to Paragraphs module for structured multi-value content. Prefer these alternatives in order:
+
+1. **Multi-value fields on a custom block type** -- for curated content with uniform structure (features, stats, pricing tiers)
+2. **Content type + View** -- for dynamic listings that grow over time (testimonials, team members, portfolio)
+3. **Layout Builder sections** -- for flexible page composition
+4. **Paragraphs** -- only when the content editor genuinely needs to mix different content structures in a single field (rare)
+
+When the analysis flags a component for Paragraphs, always verify that one of the above alternatives wouldn't work better.
+
 ## Radix SDC Conventions
 
 ### Component Replacement (Not Extension)

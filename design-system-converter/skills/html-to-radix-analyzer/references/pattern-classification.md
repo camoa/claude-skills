@@ -93,6 +93,8 @@ Use this decision tree to map each HTML component to its Drupal implementation p
 - Content unlikely to grow: feature highlights, pricing tiers, key benefits
 - Small fixed collection, editorially curated
 
+**Key question**: Does this section appear on all/most pages of this content type, or only on specific pages? Cross-page appearance suggests a reusable block type in Layout Builder. Single-page appearance might suggest fields on the content type itself.
+
 **Drupal mapping:**
 - Custom block type with multi-value fields (one field per prop, cardinality unlimited)
 - Placed in Layout Builder section
@@ -133,7 +135,7 @@ Use this decision tree to map each HTML component to its Drupal implementation p
 **Config output:**
 - `block_content.type.{name}.yml`
 - Multi-value field group with question (string) + answer (text_long) sub-fields
-- OR: Paragraphs type if paragraphs module is enabled
+- Alternative: Content type + View if FAQ items need individual management (e.g., cross-referencing, tagging, reuse across pages)
 
 ## 8. Statistics / Metrics
 
@@ -162,7 +164,16 @@ Flag a component as `ambiguous: true` when the pattern classification is uncerta
 - **Mixed grids** combining what looks like curated and dynamic content
 - **Items with 3 slots** where structure partially overlaps with existing content types
 
-When `ambiguous: true`, include both possible classifications in the output so the generator can prompt the user.
+When `ambiguous: true`, include both possible classifications in the output so the command can prompt the user.
+
+**Valid resolution options** (presented to user):
+- **Custom block type** -- Static curated content, managed per-block in Layout Builder
+- **Fields on content type** -- Directly on the node type (when content appears on all pages of that type)
+- **View + content type** -- Dynamic listing, each item is a separate content node
+- **Taxonomy + view** -- Categorized items with vocabulary-based filtering
+- **Skip** -- Do not convert this component
+
+**NOT a valid option**: "Hardcoded in template" is never acceptable. All content MUST be editable through Drupal's admin interface.
 
 ## Quick-Mode Auto-Resolution Rules
 

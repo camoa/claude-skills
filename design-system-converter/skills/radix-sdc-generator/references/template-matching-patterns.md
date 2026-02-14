@@ -42,9 +42,13 @@ Use `{{ kint() }}` or Twig debug mode (`twig.config.debug: true` in `services.ym
 
 Path: `templates/block/block--block-content--type--{block-type-name}.html.twig`
 
+**CRITICAL**: Block content templates access the entity via `content['#block_content']`, NOT `node`. All field access MUST use entity-level access: `content['#block_content'].field_name.value` for scalar values, `content['#block_content'].field_image.entity.uri.value` for file fields. NEVER use `content.field_*['#items']` — this fragile render array pattern breaks across Drupal versions.
+
+**MANDATORY**: ALL block content templates MUST embed `radix:block` as the outer wrapper. No exceptions — even full-width sections need the block chrome for Layout Builder compatibility.
+
 ### Hybrid Pattern (embed + include)
 
-Wrap the SDC inside Radix's base block component. Use for most block types:
+Wrap the SDC inside Radix's base block component. Use for ALL block types:
 
 ```twig
 {#
@@ -53,6 +57,7 @@ Wrap the SDC inside Radix's base block component. Use for most block types:
  * Template for Hero block.
  */
 #}
+{% set block_entity = content['#block_content'] %}
 {% embed 'radix:block' with {
   provider: plugin_id|clean_class,
   label: label,
@@ -60,10 +65,10 @@ Wrap the SDC inside Radix's base block component. Use for most block types:
 } %}
   {% block content %}
     {{ include('{theme_name}:hero', {
-      heading: content.field_heading|render|striptags|trim,
+      heading: block_entity.field_heading.value,
       body: content.field_body,
-      image: file_url(content.field_image['#items'].entity.uri.value),
-      image_alt: content.field_image['#items'].entity.alt,
+      image: file_url(block_entity.field_image.entity.uri.value),
+      image_alt: block_entity.field_image.alt,
       cta_url: content.field_link[0]['#url']|default(''),
       cta_text: content.field_link[0]['#title']|default(''),
       attributes: create_attribute(),
@@ -72,19 +77,28 @@ Wrap the SDC inside Radix's base block component. Use for most block types:
 {% endembed %}
 ```
 
-### Props-Only Pattern
+### Props-Only Pattern (still wrapped in radix:block)
 
-Use when no slots are needed and no Radix block chrome is wanted (e.g., full-width sections):
+Even when no slots are needed, ALWAYS wrap in `radix:block` for Layout Builder compatibility:
 
 ```twig
-{{ include('{theme_name}:cta-banner', {
-  heading: content.field_heading|render|striptags|trim,
-  body: content.field_body,
-  cta_url: content.field_link[0]['#url']|default(''),
-  cta_text: content.field_link[0]['#title']|default(''),
-  background_variant: content.field_variant['#items'].value|default('primary'),
-  attributes: create_attribute(),
-}, with_context = false) }}
+{% set block_entity = content['#block_content'] %}
+{% embed 'radix:block' with {
+  provider: plugin_id|clean_class,
+  label: label,
+  content: TRUE,
+} %}
+  {% block content %}
+    {{ include('{theme_name}:cta-banner', {
+      heading: block_entity.field_heading.value,
+      body: content.field_body,
+      cta_url: content.field_link[0]['#url']|default(''),
+      cta_text: content.field_link[0]['#title']|default(''),
+      background_variant: block_entity.field_variant.value|default('primary'),
+      attributes: create_attribute(),
+    }, with_context = false) }}
+  {% endblock %}
+{% endembed %}
 ```
 
 ### Slots Pattern
@@ -92,13 +106,22 @@ Use when no slots are needed and no Radix block chrome is wanted (e.g., full-wid
 Use when the component has slots that receive rendered Drupal content:
 
 ```twig
-{% embed '{theme_name}:feature-grid' with {
-  heading: content.field_heading|render|striptags|trim,
-  columns: content.field_columns['#items'].value|default(3),
-  attributes: create_attribute(),
-} only %}
-  {% block items %}
-    {{ content.field_features }}
+{% set block_entity = content['#block_content'] %}
+{% embed 'radix:block' with {
+  provider: plugin_id|clean_class,
+  label: label,
+  content: TRUE,
+} %}
+  {% block content %}
+    {% embed '{theme_name}:feature-grid' with {
+      heading: block_entity.field_heading.value,
+      columns: block_entity.field_columns.value|default(3),
+      attributes: create_attribute(),
+    } only %}
+      {% block items %}
+        {{ content.field_features }}
+      {% endblock %}
+    {% endembed %}
   {% endblock %}
 {% endembed %}
 ```
@@ -144,6 +167,8 @@ Wrap each row in a grid column so the view wrapper's `.row` produces a responsiv
 
 ## Content Type Templates
 
+**CRITICAL**: Node templates access the entity via `node`, NOT `content['#block_content']`. Use entity-level access: `node.field_name.value` for scalar values, `node.field_image.entity.uri.value` for file fields. NEVER use `content.field_*['#items']` — always use entity-level access.
+
 ### Teaser View Mode
 
 Path: `templates/node/node--{type}--teaser.html.twig`
@@ -153,9 +178,9 @@ Map node fields to a card SDC. Used by Views when displaying nodes in a listing:
 ```twig
 {{ include('{theme_name}:card', {
   heading: label|render|striptags|trim,
-  body: content.field_summary|render|striptags|trim,
-  image: file_url(content.field_image['#items'].entity.uri.value),
-  image_alt: content.field_image['#items'].entity.alt,
+  body: node.field_summary.value,
+  image: file_url(node.field_image.entity.uri.value),
+  image_alt: node.field_image.alt,
   url: url,
   attributes: create_attribute(),
 }, with_context = false) }}
@@ -171,8 +196,8 @@ Use `embed` when the layout component has slots for rendered content:
 {% embed '{theme_name}:article-layout' with {
   heading: label|render|striptags|trim,
   date: node.created.value|date('F j, Y'),
-  image: file_url(content.field_image['#items'].entity.uri.value),
-  image_alt: content.field_image['#items'].entity.alt,
+  image: file_url(node.field_image.entity.uri.value),
+  image_alt: node.field_image.alt,
   attributes: create_attribute(),
 } only %}
   {% block body %}
@@ -223,20 +248,42 @@ Path: `templates/block/block--system-menu-block--footer.html.twig`
 
 ## Field Access Patterns
 
-Extract field values from Drupal's render arrays. Match the pattern to the field type from config exports.
+Use entity-level access for all field values. The entity variable differs by template type:
+- **Block content templates**: entity is `content['#block_content']` (assign to `block_entity` at top of template)
+- **Node templates**: entity is `node`
+
+NEVER use `content.field_*['#items']` — this fragile render array pattern breaks across Drupal versions.
+
+### Block Content Entity Access
 
 | Field Type | Access Pattern | Notes |
 |---|---|---|
-| Plain text (`string`) | `content.field_name\|render\|striptags\|trim` | Strip formatter HTML |
-| Formatted text (`text_long`) | `content.field_body` | Keeps text format filter |
-| Link URL | `content.field_link[0]['#url']` | First delta |
-| Link title | `content.field_link[0]['#title']` | First delta |
+| Plain text (`string`) | `block_entity.field_name.value` | Direct entity access |
+| Formatted text (`text_long`) | `content.field_body` | Rendered: keeps text format filter |
+| Link URL | `content.field_link[0]['#url']` | First delta, from render array |
+| Link title | `content.field_link[0]['#title']` | First delta, from render array |
 | Image (rendered) | `content.field_image` | Full img tag |
-| Image URL | `file_url(content.field_image['#items'].entity.uri.value)` | Raw URL for `src` props |
-| Image alt | `content.field_image['#items'].entity.alt` | Accessibility text |
+| Image URL | `file_url(block_entity.field_image.entity.uri.value)` | Entity-level file access |
+| Image alt | `block_entity.field_image.alt` | Entity-level alt access |
+| Boolean | `block_entity.field_toggle.value` | Raw 0 or 1 |
+| List (select) | `block_entity.field_variant.value` | Machine name |
+| Multi-value (all) | `content.field_items` | All deltas rendered |
+| Multi-value (loop) | `for item in block_entity.field_items` | Custom per-item rendering |
+
+### Node Entity Access
+
+| Field Type | Access Pattern | Notes |
+|---|---|---|
+| Plain text (`string`) | `node.field_name.value` | Direct entity access |
+| Formatted text (`text_long`) | `content.field_body` | Rendered: keeps text format filter |
+| Link URL | `content.field_link[0]['#url']` | First delta, from render array |
+| Link title | `content.field_link[0]['#title']` | First delta, from render array |
+| Image (rendered) | `content.field_image` | Full img tag |
+| Image URL | `file_url(node.field_image.entity.uri.value)` | Entity-level file access |
+| Image alt | `node.field_image.alt` | Entity-level alt access |
 | Entity reference | `content.field_ref` | Renders in its view mode |
-| Boolean | `content.field_toggle['#items'].value` | Raw 0 or 1 |
-| List (select) | `content.field_variant['#items'].value` | Machine name |
+| Boolean | `node.field_toggle.value` | Raw 0 or 1 |
+| List (select) | `node.field_variant.value` | Machine name |
 | Multi-value (all) | `content.field_items` | All deltas rendered |
 | Multi-value (loop) | `for item in node.field_items` | Custom per-item rendering |
 | Date | `node.created.value\|date('F j, Y')` | Twig date filter |
@@ -248,17 +295,31 @@ Extract field values from Drupal's render arrays. Match the pattern to the field
 Provide fallback values for optional fields to prevent Twig errors:
 
 ```twig
+{# Link fields use render array access (no entity-level equivalent) #}
 {{ content.field_link[0]['#url']|default('') }}
 {{ content.field_link[0]['#title']|default('Learn more') }}
-{{ content.field_variant['#items'].value|default('primary') }}
+{# Scalar fields use entity-level access with default filter #}
+{{ block_entity.field_variant.value|default('primary') }}
+{{ node.field_variant.value|default('primary') }}
 ```
 
 ### Multi-Value Field Loop
 
-Loop over entity fields to render each item as an SDC component:
+Loop over entity fields to render each item as an SDC component. Use the appropriate entity variable (`node` for node templates, `block_entity` for block content templates):
 
 ```twig
+{# Node template example #}
 {% for item in node.field_features %}
+  {{ include('{theme_name}:feature-card', {
+    heading: item.entity.field_heading.value,
+    body: item.entity.field_body.value,
+    icon_id: item.entity.field_icon.value|default(''),
+    attributes: create_attribute(),
+  }, with_context = false) }}
+{% endfor %}
+
+{# Block content template example #}
+{% for item in block_entity.field_features %}
   {{ include('{theme_name}:feature-card', {
     heading: item.entity.field_heading.value,
     body: item.entity.field_body.value,

@@ -1,7 +1,7 @@
 ---
 name: design-system-converter
 description: Use when user says "convert design system", "convert to drupal", "convert to radix", "html to drupal", "generate theme", "design to code", "convert html", "radix theme", "SDC components", "layout builder", or wants to convert a design system into production code. Routes to the appropriate converter target.
-version: 1.0.0
+version: 1.1.0
 model: sonnet
 ---
 
@@ -28,10 +28,13 @@ Route design system conversion requests to the appropriate target-specific workf
 
 ## Architecture
 
-The converter uses a two-layer architecture:
+The converter uses a design-system-first flow with two-layer architecture:
 
-1. **Shared analyzer** (`html-to-radix-analyzer`): Parses HTML metadata comments, classifies patterns, extracts design tokens, inventories Drupal backend. Target-agnostic output.
-2. **Target-specific generators** (e.g., `radix-sdc-generator`): Consumes analysis output and generates code for a specific platform.
+1. **Site inventory** (existing theme, views, content types, settings) -- overlay mode for existing sites
+2. **Shared analyzer** (`html-to-radix-analyzer`): Parses HTML metadata comments, classifies patterns, extracts design tokens, inventories Drupal backend. Target-agnostic output.
+3. **Target-specific generators** (e.g., `radix-sdc-generator`): Consumes analysis output and generates code per page in atomic order (tokens → atoms → molecules → organisms). Uses Radix CLI for scaffolding when available.
+
+**v1.1.0 key changes**: Radix CLI scaffolding, existing site inventory, competing agents for ambiguous classifications, page-by-page generation, entity-level field access, two-pass config imports, no Paragraphs defaults.
 
 ## External Guide Ecosystem
 
@@ -73,3 +76,26 @@ Currently supported:
 Planned:
 - **Figma designs**: Direct Figma-to-code conversion
 - **Raw HTML**: Inference-based analysis without metadata comments
+
+## Examples
+
+### Full conversion with existing Drupal site
+User: "Convert my design system to a Radix theme for my Drupal site at ~/projects/mysite"
+Route to: `/convert-to-radix` -- guided mode discovers existing theme, content types, and views before generating.
+
+### Quick conversion for a new project
+User: "Quick-convert these HTML pages to Drupal"
+Route to: `/convert-to-radix-quick` -- auto-resolves all ambiguities, generates complete green-field theme.
+
+### Ambiguous request
+User: "Generate SDC components from my design"
+Route to: `/convert-to-radix` -- default to guided mode when the user hasn't specified quick.
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| No HTML pages found | Missing metadata comments | Generate pages with `/html-page` or `/html-page-quick` first |
+| No brand-philosophy.md | Brand project not initialized | Run `/brand-init` to set up the project |
+| WebFetch fails for guides | Network issue or guides site down | Check connectivity; the converter cannot proceed without external guides |
+| Wrong command routed | Ambiguous user intent | Ask user: "Would you like guided mode (more control) or quick mode (automatic)?" |

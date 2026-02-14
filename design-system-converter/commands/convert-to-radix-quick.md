@@ -44,7 +44,12 @@ Store as `SELECTED_PAGES`.
 
 **AskUserQuestion**: "Drupal codebase path?"
 - **None -- green-field** -- "Generate complete structure from scratch"
-- **Provide path** -- "I'll scan config/sync/ for existing backend to reuse"
+- **Provide path** -- "I'll scan for existing themes, content types, views, and modules to reuse"
+
+If path provided:
+1. Discover config sync directory from `settings.php` (`$settings['config_sync_directory']`) or fall back to `config/sync/`, `sites/default/sync/`, `../config/sync/`
+2. Run existing site inventory: theme settings, templates, views, modules
+3. Store as `CONFIG_SYNC_DIR` and `SITE_INVENTORY`
 
 Store as `DRUPAL_PATH`.
 
@@ -65,15 +70,21 @@ Store as `THEME_NAME`.
 
 Read all required files (HTML pages, design system, canvas philosophy, brand philosophy).
 
-Invoke the `html-to-radix-analyzer` skill with quick mode enabled.
+Invoke the `html-to-radix-analyzer` skill with quick mode enabled, `CONFIG_SYNC_DIR`, and `DRUPAL_PATH`.
 
 Apply auto-resolution rules:
 - **Ambiguous components with 1-3 instances** -- classify as `block_type`
 - **Ambiguous components with 4+ instances** -- classify as `view_content_type`
 - **Icons** -- always generate a pack
 - **Modules** -- accept all recommended
+- **No paragraphs** -- never default to Paragraphs module
 
-Invoke the `radix-sdc-generator` skill with auto-resolved analysis.
+Invoke the `radix-sdc-generator` skill with:
+- Auto-resolved analysis (including `pageLayouts` from Part 1b)
+- `SITE_INVENTORY` (when available)
+- `PAGE_ORDER` -- home page first, remaining pages in order
+- Instruct to follow the layered flow: scaffold → tokens → foundation → layouts → components → templates → config → report
+- Each layer generates its output AND its styleguide include
 
 Save conversion config to `{PROJECT_PATH}/converter/radix-sdc.yml`.
 
@@ -87,18 +98,25 @@ Location: {output_path}
 
 Components: {count} ({atoms} atoms, {molecules} molecules, {organisms} organisms)
 Template overrides: {count}
-Config exports: {count}
+Config exports: {count} (pass1: {n}, pass2: {n})
 Icons: {count}
 
 Commands to run:
+  composer require drupal/layout_builder_styles drupal/radix {other_missing}
   cd {theme_path} && npm install && npm run build
-  drush config:import --partial --source={config_path}
+  drush config:import --partial --source={config_path}/pass1/
+  drush config:import --partial --source={config_path}/pass2/
   drush theme:enable {THEME_NAME}
+  drush config:set system.theme default {THEME_NAME}
+  drush cr
 
 Next steps:
-  1. Follow Layout Composition Instructions in conversion-report.md
-  2. Configure Layout Builder on target content types
-  3. Verify responsive behavior
+  1. Create a basic page at /styleguide (empty body)
+  2. Rename node--styleguide.html.twig to node--{nid}.html.twig
+  3. Visit /styleguide to verify tokens, foundation, and components
+  4. Follow Layout Composition Instructions in conversion-report.md
+  5. Configure Layout Builder on target content types
+  6. Verify responsive behavior
 
 Conversion report: {output_path}/conversion-report.md
 ```

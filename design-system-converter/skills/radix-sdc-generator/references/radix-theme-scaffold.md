@@ -1,5 +1,7 @@
 # Radix 6.0.2 Sub-Theme Scaffold
 
+> **Note**: This reference is for understanding the structure. When `DRUPAL_PATH` is available, use `drush --include="themes/contrib/radix" radix:create {THEME_NAME} "{THEME_LABEL}"` instead of generating the scaffold manually. Only overlay customizations (variables, typography, elements) on top of the CLI-generated scaffold.
+
 Complete file templates matching the real Radix 6.0.2 starterkit. Replace `{THEME_NAME}` with the machine name (lowercase, underscores) and `{THEME_LABEL}` with the human-readable label.
 
 ## 1. Directory Structure
@@ -169,9 +171,8 @@ mix.browserSync({
   stream: true,
 });
 
-if (mix.inProduction()) {
-  mix.version();
-}
+// Note: Do NOT use mix.version() -- it breaks asset paths in Drupal.
+// Drupal handles cache busting via ?v= query strings on aggregated CSS/JS.
 ```
 
 ### package.json
@@ -239,6 +240,10 @@ Custom variables load BEFORE Bootstrap functions. This is the real Radix 6.0.2 i
 
 // 5. Include remainder of required parts
 @import "~bootstrap/scss/maps";
+
+// Merge custom colors into $theme-colors AFTER maps are loaded
+$theme-colors: map-merge($theme-colors, $custom-colors);
+
 @import "~bootstrap/scss/utilities";
 @import "~bootstrap/scss/mixins";
 @import "~bootstrap/scss/root";
@@ -255,9 +260,9 @@ Custom variables load BEFORE Bootstrap functions. This is the real Radix 6.0.2 i
 
 Placeholders commented out (buggy with Drupal). Helpers and utilities/api at end.
 
+Note: Do NOT import `~bootstrap/scss/utilities` or `~bootstrap/scss/root` here -- they are already imported in `_init.scss`. Duplicating them causes compilation errors.
+
 ```scss
-@import "~bootstrap/scss/utilities";
-@import "~bootstrap/scss/root";
 @import "~bootstrap/scss/reboot";
 @import "~bootstrap/scss/type";
 @import "~bootstrap/scss/images";
