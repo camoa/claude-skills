@@ -19,8 +19,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["plugins", "skills", "commands", "agents", "hooks", "mcp", "development", "best-practices"],
-      "strict": false
+      "keywords": ["plugins", "skills", "commands", "agents", "hooks", "mcp", "development", "best-practices"]
     },
     {
       "name": "drupal-dev-framework",
@@ -32,8 +31,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["drupal", "development", "workflow", "architecture", "tdd", "solid", "dry", "security", "agent-teams"],
-      "strict": false
+      "keywords": ["drupal", "development", "workflow", "architecture", "tdd", "solid", "dry", "security", "agent-teams"]
     },
     {
       "name": "drupal-htmx",
@@ -45,8 +43,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["drupal", "htmx", "ajax", "migration", "forms", "dynamic-content"],
-      "strict": false
+      "keywords": ["drupal", "htmx", "ajax", "migration", "forms", "dynamic-content"]
     },
     {
       "name": "code-quality-tools",
@@ -58,8 +55,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks", "roave", "socket", "dast", "zap", "nuclei"],
-      "strict": false
+      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks", "roave", "socket", "dast", "zap", "nuclei"]
     },
     {
       "name": "code-paper-test",
@@ -71,8 +67,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["testing", "debugging", "code-review", "paper-testing", "mental-execution", "bug-detection", "ai-code-auditing", "contract-verification", "dependency-verification"],
-      "strict": false
+      "keywords": ["testing", "debugging", "code-review", "paper-testing", "mental-execution", "bug-detection", "ai-code-auditing", "contract-verification", "dependency-verification"]
     },
     {
       "name": "brand-content-design",
@@ -84,8 +79,7 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"],
-      "strict": false
+      "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"]
     }
   ]
 }
