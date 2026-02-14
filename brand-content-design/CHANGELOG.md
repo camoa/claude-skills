@@ -5,6 +5,17 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-13
+
+### Changed
+- **Converter extracted**: HTML-to-Drupal Radix/SDC converter moved to standalone `design-system-converter` plugin
+  - Removed `html-to-radix-analyzer` and `radix-sdc-generator` skills
+  - Removed `/convert-to-radix` and `/convert-to-radix-quick` commands
+  - Removed converter references (radix-theme-scaffold, sdc-patterns, token-to-bootstrap-mapping, layout-builder-config)
+  - Removed `scripts/extract-icons.js`
+- **SKILL.md**: Removed converter trigger phrases and command routing
+- **plugin.json**: Removed Drupal/Radix/SDC/converter keywords, version bump to 2.3.0
+
 ## [2.2.0] - 2026-02-11
 
 ### Added

@@ -1,7 +1,7 @@
 {
   "name": "brand-content-design",
-  "version": "2.2.0",
-  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with visual components, 21 visual styles, design systems, Presentation Zen principles, and HTML-to-Drupal Radix/SDC converter",
+  "version": "2.3.0",
+  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with visual components, 21 visual styles, design systems, and Presentation Zen principles",
   "author": {
     "name": "camoa"
   },
@@ -27,11 +27,6 @@
     "cards",
     "icons",
     "gradients",
-    "drupal",
-    "radix",
-    "sdc",
-    "layout-builder",
-    "converter",
-    "theme"
+    "design"
   ]
 }

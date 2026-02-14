@@ -119,22 +119,7 @@ Choose DISTINCTIVE fonts — never default to Inter, Roboto, or Arial. Every des
 
 ### Metadata Comments Format
 
-Every component includes conversion-ready metadata:
-
-```html
-<!-- component: hero variant: centered -->
-<!-- prop: headline type: string -->
-<h1>The Headline</h1>
-<!-- prop: subheadline type: string -->
-<p>The subheadline text</p>
-<!-- slot: cta -->
-<div class="hero__cta">
-  <!-- prop: cta-text type: string -->
-  <a href="#" class="btn btn--primary">Get Started</a>
-</div>
-<!-- /slot: cta -->
-<!-- /component: hero -->
-```
+Every component includes conversion-ready metadata comments (`<!-- component: -->`, `<!-- prop: -->`, `<!-- slot: -->`). See Part 10 for the full format and preservation rules. These comments MUST appear in both standalone components AND composed pages.
 
 ### Component CSS Pattern
 
@@ -374,37 +359,11 @@ When using Neumorphism style, DOUBLE-CHECK contrast ratios. Soft shadows on simi
 
 When assembling components into a full page:
 
-### Structure
+See `references/html-technical.md` → "HTML Boilerplate" for the full page template and "Page Composition Format" for assembly rules.
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Page Title</title>
-  <meta name="description" content="Page description">
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=...&display=swap" rel="stylesheet">
-  <style>
-    /* Reset + Design Tokens + All Component Styles */
-  </style>
-</head>
-<body>
-  <a href="#main" class="skip-link">Skip to main content</a>
-  <!-- nav component -->
-  <main id="main">
-    <!-- content components in order -->
-  </main>
-  <!-- footer component -->
-  <script>
-    /* Minimal JS if needed by style */
-  </script>
-</body>
-</html>
-```
+### Metadata Preservation (CRITICAL)
+
+Preserve all `<!-- component: -->`, `<!-- prop: -->`, and `<!-- slot: -->` metadata comments when composing pages. Copy them verbatim from standalone components into the assembled page. See `references/html-technical.md` → "Metadata Preservation" for the full format and rules.
 
 ### CSS Organization in Composed Page
 
@@ -450,21 +409,7 @@ Since Claude cannot generate actual images, use smart placeholders:
 
 ## Part 12: Convertibility Structure
 
-Design components for future conversion to other frameworks:
-
-### HTML Comments as Metadata
-
-```html
-<!-- component: feature-grid variant: 3-col -->
-<!-- prop: section-title type: string -->
-<!-- prop: section-subtitle type: string -->
-<!-- slot: features -->
-  <!-- prop: feature-icon type: string (Lucide icon name) -->
-  <!-- prop: feature-title type: string -->
-  <!-- prop: feature-description type: string -->
-<!-- /slot: features -->
-<!-- /component: feature-grid -->
-```
+Design components for future conversion to Drupal SDC, React, Canvas, and other frameworks. Apply the metadata format from Part 10 to both standalone components AND composed pages.
 
 ### Naming Conventions
 
@@ -472,12 +417,6 @@ Design components for future conversion to other frameworks:
 - CSS classes use BEM: `.hero__title`, `.feature-grid__item`
 - CSS custom properties for all brand values (map to SCSS variables, CSS modules)
 - Data attributes for behavioral hooks: `data-reveal`, `data-parallax`
-
-This structure maps to:
-- **Twig**: Props → variables, slots → blocks, HTML → template
-- **SDC**: Props → component schema, slots → component slots
-- **React**: Props → component props, slots → children/render props
-- **Canvas**: Props → component config, HTML → JSX
 
 ---
 
