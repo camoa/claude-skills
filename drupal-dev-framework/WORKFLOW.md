@@ -320,8 +320,8 @@ The plugin includes built-in reference documents that are **enforced** at each p
 |-------|---------------------|-----------------|
 | **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md` |
 | **Implementation** | TDD (Red-Green-Refactor), DRY | `references/tdd-workflow.md`, `references/dry-patterns.md` |
-| **Completion** | Quality Gates, Security | `references/quality-gates.md`, `references/security-checklist.md` |
-| **Frontend** | BEM, Mobile-First, Behaviors | `references/frontend-standards.md` |
+| **Completion** | Quality Gates, Security | `references/quality-gates.md`, dev-guides `drupal/security/` |
+| **Frontend** | SDC, BEM, Mobile-First, Behaviors | dev-guides `drupal/sdc/` + `drupal/js-development/` |
 
 ### Blocking vs Warning
 

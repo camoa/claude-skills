@@ -2,7 +2,7 @@
 name: architecture-drafter
 description: Use when designing project architecture - creates architecture/main.md with component breakdown, service dependencies, and pattern references
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping", "solid-enforcement", "library-first"]
-version: 3.1.0
+version: 2.0.0
 model: opus
 memory: project
 skills: guide-integrator
@@ -38,9 +38,31 @@ Before drafting, read these reference files from the plugin's `references/` fold
 | `library-first.md` | Library-First and CLI-First patterns |
 | `dry-patterns.md` | Extraction patterns to avoid duplication |
 
+### Online Dev-Guides (Drupal Domain)
+
+For Drupal-specific architecture decisions, WebFetch the relevant topic from `https://camoa.github.io/dev-guides/`:
+
+1. Match the task's Drupal concepts to a topic (forms, entities, plugins, routing, services, caching, etc.)
+2. WebFetch `https://camoa.github.io/dev-guides/drupal/{topic}/` for the topic index
+3. Identify and WebFetch the specific atomic guide for the decision needed
+
+Common architecture decisions and their dev-guides topics:
+
+| Decision | Topic |
+|----------|-------|
+| Which form base class? | `drupal/forms/` or `drupal/config-forms/` |
+| Content entity vs config entity? | `drupal/entities/` |
+| Which plugin pattern? | `drupal/plugins/` |
+| Route access approach? | `drupal/routing/` |
+| Service design? | `drupal/services/` |
+| Cache strategy? | `drupal/caching/` |
+| Config schema design? | `drupal/config-management/` |
+| Render approach? | `drupal/render-api/` |
+| Component structure? | `drupal/sdc/` |
+
 ## Process
 
-1. **Load references** - Read plugin's `references/solid-drupal.md`, `references/library-first.md`
+1. **Load references** - Read plugin's `references/solid-drupal.md`, `references/library-first.md`. For Drupal domain decisions, also WebFetch the relevant dev-guides topic.
 2. **Review research** - Read existing research from architecture/ folder
 3. **Identify components** - List services, forms, entities, plugins needed
 4. **Apply Library-First** - Ensure services designed BEFORE UI components

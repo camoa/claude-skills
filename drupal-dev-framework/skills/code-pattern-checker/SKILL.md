@@ -1,7 +1,7 @@
 ---
 name: code-pattern-checker
 description: Use before committing code - validates Drupal coding standards, SOLID/DRY principles, security practices, and CSS standards
-version: 2.0.0
+version: 2.1.0
 ---
 
 # Code Pattern Checker
@@ -16,9 +16,11 @@ Validate code against Drupal standards and best practices.
 |-----------|--------|
 | `references/solid-drupal.md` | SOLID principles |
 | `references/dry-patterns.md` | DRY patterns |
-| `references/security-checklist.md` | Security practices |
-| `references/frontend-standards.md` | CSS/JS standards |
+| `dev-guides: drupal/security/` | Security practices (online) |
+| `dev-guides: drupal/sdc/ + drupal/js-development/` | CSS/JS/SDC standards (online) |
 | `references/quality-gates.md` | Gate 1 requirements |
+
+> For security and frontend checks, WebFetch from `https://camoa.github.io/dev-guides/` instead of reading bundled files.
 
 ## Activation
 
@@ -72,14 +74,14 @@ Use `Read` on each file. For each, check:
 - [ ] Shared logic in services/traits
 - [ ] Leverages Drupal base classes
 
-**Security (references/security-checklist.md):**
+**Security (dev-guides drupal/security/):**
 - [ ] No raw SQL with user input (BLOCKING)
 - [ ] Output escaped (Twig auto, Html::escape)
 - [ ] Form tokens present (Form API handles)
 - [ ] Access checks on routes (BLOCKING)
 - [ ] Input validated via Form API
 
-**CSS/SCSS (references/frontend-standards.md):**
+**CSS/SCSS (dev-guides drupal/sdc/ + drupal/js-development/):**
 - [ ] Mobile-first media queries
 - [ ] No `!important` (BLOCKING)
 - [ ] No `@extend` (BLOCKING)

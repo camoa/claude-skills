@@ -2,7 +2,7 @@
 name: architecture-validator
 description: Use when validating implementation against architecture - checks approach matches documented patterns, dependencies, architecture principles (Library-First, CLI-First), and SOLID/DRY principles
 capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles", "security-validation"]
-version: 3.1.0
+version: 3.2.0
 model: sonnet
 memory: project
 disallowedTools: Edit, Write
@@ -43,9 +43,14 @@ Load these from the plugin's `references/` folder:
 | `solid-drupal.md` | SOLID principles |
 | `dry-patterns.md` | DRY patterns |
 | `library-first.md` | Library-First and CLI-First |
-| `security-checklist.md` | Security patterns |
 | `purposeful-code.md` | Code purposefulness |
 | `quality-gates.md` | Gate requirements |
+
+### Online Dev-Guides
+
+For security and frontend validation, WebFetch from `https://camoa.github.io/dev-guides/`:
+- Security checks: WebFetch `drupal/security/` topic
+- Frontend/SDC checks: WebFetch `drupal/sdc/` and `drupal/js-development/` topics
 
 ## Process
 
@@ -113,7 +118,7 @@ Load these from the plugin's `references/` folder:
 | Leveraging traits for shared behavior | NO |
 | No copy-paste code blocks | YES |
 
-### Security Check (references/security-checklist.md)
+### Security Check (dev-guides: https://camoa.github.io/dev-guides/drupal/security/)
 
 | Check | Blocking? |
 |-------|-----------|
@@ -201,7 +206,7 @@ Load these from the plugin's `references/` folder:
 - Duplicate detection: {result}
 - Recommendation: {if any}
 
-### Security Check (references/security-checklist.md)
+### Security Check (dev-guides: https://camoa.github.io/dev-guides/drupal/security/)
 | Area | Status | Notes |
 |------|--------|-------|
 | Input validation | PASS/FAIL | {details} |
