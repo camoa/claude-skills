@@ -6,5 +6,6 @@
     "name": "camoa"
   },
   "license": "MIT",
-  "repository": "https://github.com/camoa/claude-skills"
+  "repository": "https://github.com/camoa/claude-skills",
+  "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks", "roave", "socket", "dast", "zap", "nuclei"]
 }
