@@ -2,6 +2,8 @@
 
 Test coverage measurement and interpretation for Drupal projects.
 
+> **Online Dev-Guides:** For coverage strategy, quality gates, and metrics interpretation beyond tool configuration, see https://camoa.github.io/dev-guides/drupal/tdd/coverage-metrics-strategy/ and https://camoa.github.io/dev-guides/drupal/tdd/quality-gates-audit-checklist/.
+
 ## Coverage Types
 
 | Type | What It Measures | Tool Support |

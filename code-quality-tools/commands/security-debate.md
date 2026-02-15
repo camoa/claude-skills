@@ -57,6 +57,19 @@ If fewer than 10 findings:
 
 Continue if user confirms or if 10+ findings.
 
+### Step 3b — Enrich with Online Dev-Guides (Drupal only)
+
+If the project is Drupal, WebFetch relevant security guides to provide richer context for the debate team:
+
+1. **Always fetch:** `https://camoa.github.io/dev-guides/drupal/security/owasp-top-10-in-drupal/index.md` — OWASP mapping to Drupal
+2. **If findings include XSS:** `https://camoa.github.io/dev-guides/drupal/security/xss-prevention/index.md`
+3. **If findings include SQLi:** `https://camoa.github.io/dev-guides/drupal/security/sql-injection-prevention/index.md`
+4. **If findings include access control:** `https://camoa.github.io/dev-guides/drupal/security/entity-access-control/index.md`
+5. **If findings include CSRF:** `https://camoa.github.io/dev-guides/drupal/security/csrf-protection/index.md`
+6. **If findings include input validation:** `https://camoa.github.io/dev-guides/drupal/security/input-validation-and-sanitization/index.md`
+
+Save fetched content to `.reports/security-context.md` and include its path in the spawn prompts so teammates can reference it.
+
 ### Step 4 — Create Shared Task List
 
 Create a team and these tasks:
@@ -98,6 +111,9 @@ You are the Defender for a security audit debate team.
 
 REPORT LOCATION:
 {project_path}/.reports/security-report.json
+
+DRUPAL SECURITY CONTEXT (if available):
+{project_path}/.reports/security-context.md
 
 YOUR MISSION:
 Validate each audit finding and identify false positives. Your lens: "Is this finding actually exploitable in context?"
@@ -151,6 +167,9 @@ You are the Red Team Attacker for a security audit debate team.
 
 REPORT LOCATION:
 {project_path}/.reports/security-report.json
+
+DRUPAL SECURITY CONTEXT (if available):
+{project_path}/.reports/security-context.md
 
 YOUR MISSION:
 Construct attack scenarios and find what the audit missed. Your lens: "What attack chains exist and what's missing?"
@@ -208,6 +227,9 @@ You are the Compliance Checker for a security audit debate team.
 
 REPORT LOCATION:
 {project_path}/.reports/security-report.json
+
+DRUPAL SECURITY CONTEXT (if available):
+{project_path}/.reports/security-context.md
 
 YOUR MISSION:
 Map findings to OWASP Top 10 and CWE standards. Your lens: "Where are we uncovered against standards?"

@@ -2,6 +2,8 @@
 
 "Don't Repeat Yourself" principle detection and measurement.
 
+> **Online Dev-Guides:** For comprehensive Drupal DRY patterns, refactoring strategies, and reuse techniques beyond tool detection, see https://camoa.github.io/dev-guides/drupal/dry-principles/ (17 guides covering services, traits, base classes, plugin reuse, config patterns, over-DRY anti-patterns, and decision frameworks).
+
 ## Core Philosophy
 
 **DRY is about knowledge duplication, not code duplication.**
