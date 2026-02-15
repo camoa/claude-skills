@@ -5,6 +5,18 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-15
+
+### Fixed
+- **html-generator metadata**: Inlined full metadata format (component/prop/slot) in SKILL.md Parts 3, 10, 12 — previously only referenced an unreachable external file, causing generated HTML pages to lack converter-compatible annotations
+- **html-page command**: Step 9 now explicitly loads all 4 reference files before invoking html-generator skill
+- **html-page-quick command**: Step 5 now explicitly loads all 4 reference files before invoking html-generator skill
+
+### Added
+- Framework mapping table in Part 12 showing how HTML metadata maps to Drupal SDC, React, and Twig
+- Complete composed page example in Part 10 with all metadata markers
+- Explicit anti-pattern: "Do NOT replace metadata with section divider comments"
+
 ## [2.3.1] - 2026-02-14
 
 ### Fixed

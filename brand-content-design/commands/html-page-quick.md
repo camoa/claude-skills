@@ -57,13 +57,25 @@ Parse the pasted content and automatically:
 
 ### Step 5: Generate
 
+**Before invoking the skill, read these reference files** from the html-generator skill directory (`$BRAND_CONTENT_DESIGN_DIR/skills/html-generator/references/`):
+
+1. `references/html-technical.md` — Boilerplate, metadata format, file structure
+2. `references/html-components.md` — 15 component types with HTML/CSS patterns
+3. `references/html-design-guide.md` — Design philosophy and content type guide
+4. `references/web-style-constraints.md` — Style enforcement blocks
+
+If `$BRAND_CONTENT_DESIGN_DIR` is not set, find it:
+```bash
+find ~/.claude -path "*/brand-content-design/skills/html-generator/references" -type d 2>/dev/null | head -1
+```
+
 Invoke the `html-generator` skill with:
 - Design system files
 - Brand philosophy
 - Auto-selected components + variants
 - Existing reusable components from library
 - Mapped content
-- Style constraints
+- The 4 reference files read above (pass their content to the skill)
 
 ### Step 6: Save and Confirm
 

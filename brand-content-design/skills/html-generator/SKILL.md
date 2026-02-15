@@ -117,9 +117,50 @@ Choose DISTINCTIVE fonts — never default to Inter, Roboto, or Arial. Every des
 7. **Interactive states** — every clickable/tappable element must define hover, focus, and active styles using the interaction tokens from design-system.md
 8. **Touch-ready** — interactive elements meet `--min-tap-target` size with adequate spacing
 
-### Metadata Comments Format
+### Metadata Comments Format (MANDATORY)
 
-Every component includes conversion-ready metadata comments (`<!-- component: -->`, `<!-- prop: -->`, `<!-- slot: -->`). See Part 10 for the full format and preservation rules. These comments MUST appear in both standalone components AND composed pages.
+Every component MUST include conversion-ready metadata comments. These enable automated conversion to Drupal SDC, React, and other frameworks. Without them, the design-system-converter cannot identify components, props, or slots.
+
+**Component boundaries** — wrap the entire component:
+```html
+<!-- component: hero variant: centered -->
+<section class="hero">
+  ...
+</section>
+<!-- /component: hero -->
+```
+
+**Props** — place immediately BEFORE the element they annotate:
+```html
+<!-- prop: headline type: string -->
+<h1 class="hero__title">Your Headline</h1>
+
+<!-- prop: show-badge type: boolean -->
+```
+
+**Slots** — wrap repeating or insertable content areas:
+```html
+<!-- slot: features -->
+<div class="feature-grid__list">
+  <div class="feature-grid__item">
+    <!-- prop: feature-title type: string -->
+    <h3>Feature Title</h3>
+    <!-- prop: feature-description type: string -->
+    <p>Description</p>
+  </div>
+</div>
+<!-- /slot: features -->
+```
+
+**Icons** — place before SVG elements:
+```html
+<!-- icon: rocket -->
+<svg>...</svg>
+```
+
+**Supported prop types:** `string`, `boolean`
+
+These comments MUST appear in both standalone components AND composed pages. See Part 10 for preservation rules during page composition.
 
 ### Component CSS Pattern
 
@@ -357,13 +398,78 @@ When using Neumorphism style, DOUBLE-CHECK contrast ratios. Soft shadows on simi
 
 ## Part 10: Page Composition
 
-When assembling components into a full page:
+When assembling components into a full page, every component section MUST retain its metadata comments. This is the **most critical requirement** for framework convertibility.
 
-See `references/html-technical.md` → "HTML Boilerplate" for the full page template and "Page Composition Format" for assembly rules.
+### Metadata Preservation (CRITICAL — ENFORCE STRICTLY)
 
-### Metadata Preservation (CRITICAL)
+**Rules:**
+- Place `<!-- component: type variant: variant -->` BEFORE the component's outermost HTML element
+- Place `<!-- /component: type -->` AFTER the component's closing tag
+- Place `<!-- prop: name type: type -->` immediately BEFORE the element it annotates
+- Place `<!-- slot: name -->` / `<!-- /slot: name -->` around slot content areas
+- Do NOT strip, summarize, or simplify metadata during page assembly
+- Do NOT replace metadata with section divider comments like `<!-- Navigation -->` or `<!-- ====== HERO ====== -->`
 
-Preserve all `<!-- component: -->`, `<!-- prop: -->`, and `<!-- slot: -->` metadata comments when composing pages. Copy them verbatim from standalone components into the assembled page. See `references/html-technical.md` → "Metadata Preservation" for the full format and rules.
+**Complete composed page structure:**
+
+```html
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <!-- component: nav variant: sticky -->
+  <header class="nav" role="banner">
+    <!-- prop: site-name type: string -->
+    <span class="nav__name">Site Name</span>
+    <!-- slot: menu -->
+    <nav role="navigation" aria-label="Main navigation">
+      <a href="#">Home</a>
+    </nav>
+    <!-- /slot: menu -->
+  </header>
+  <!-- /component: nav -->
+
+  <main id="main">
+    <!-- component: hero variant: centered -->
+    <section class="hero">
+      <!-- prop: headline type: string -->
+      <h1 class="hero__title">Page Title</h1>
+      <!-- prop: subheadline type: string -->
+      <p class="hero__subtitle">Subtitle text</p>
+    </section>
+    <!-- /component: hero -->
+
+    <!-- component: article-card-grid variant: 3-col -->
+    <section class="card-grid">
+      <!-- prop: section-title type: string -->
+      <h2>Latest Articles</h2>
+      <!-- slot: cards -->
+      <div class="card-grid__list">
+        <article class="card">
+          <!-- prop: card-image type: string -->
+          <img src="image.jpg" alt="Article">
+          <!-- prop: card-title type: string -->
+          <h3>Card Title</h3>
+          <!-- prop: card-excerpt type: string -->
+          <p>Excerpt text</p>
+        </article>
+      </div>
+      <!-- /slot: cards -->
+    </section>
+    <!-- /component: article-card-grid -->
+  </main>
+
+  <!-- component: footer variant: simple -->
+  <footer class="footer" role="contentinfo">
+    <!-- prop: copyright type: string -->
+    <p>&copy; 2026 Brand Name</p>
+  </footer>
+  <!-- /component: footer -->
+</body>
+```
+
+**Every component in the page must have opening and closing component markers.** No exceptions.
+
+Also see `references/html-technical.md` for the full HTML boilerplate and additional technical specs.
 
 ### CSS Organization in Composed Page
 
@@ -409,7 +515,18 @@ Since Claude cannot generate actual images, use smart placeholders:
 
 ## Part 12: Convertibility Structure
 
-Design components for future conversion to Drupal SDC, React, Canvas, and other frameworks. Apply the metadata format from Part 10 to both standalone components AND composed pages.
+Design components for future conversion to Drupal SDC, React, Canvas, and other frameworks. The metadata comments from Part 3 and Part 10 are what make conversion possible.
+
+### How Metadata Maps to Frameworks
+
+| HTML Metadata | Drupal SDC | React | Twig |
+|---|---|---|---|
+| `<!-- component: hero -->` | Component directory name | Component file name | Template name |
+| `<!-- prop: headline type: string -->` | `props.headline` in schema | `props.headline` | `{{ headline }}` |
+| `<!-- prop: featured type: boolean -->` | Boolean prop | Conditional render | `{% if featured %}` |
+| `<!-- slot: content -->` | `{% block content %}` | `children` | `{% block content %}` |
+| `<!-- /component: hero -->` | Template boundary | Component boundary | Template boundary |
+| CSS custom properties | SCSS variables | Theme tokens | Twig with attach_library |
 
 ### Naming Conventions
 

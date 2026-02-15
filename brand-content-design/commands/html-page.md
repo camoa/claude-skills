@@ -121,17 +121,29 @@ If **section by section**: for each selected component, ask for the specific con
 
 ### Step 9: Generate
 
+**Before invoking the skill, read these reference files** from the html-generator skill directory (`$BRAND_CONTENT_DESIGN_DIR/skills/html-generator/references/`):
+
+1. `references/html-technical.md` — Boilerplate, metadata format, file structure
+2. `references/html-components.md` — 15 component types with HTML/CSS patterns
+3. `references/html-design-guide.md` — Design philosophy and content type guide
+4. `references/web-style-constraints.md` — Style enforcement blocks
+
+If `$BRAND_CONTENT_DESIGN_DIR` is not set, find it:
+```bash
+find ~/.claude -path "*/brand-content-design/skills/html-generator/references" -type d 2>/dev/null | head -1
+```
+
 Invoke the `html-generator` skill via Skill tool with:
 - Design system files (canvas-philosophy.md + design-system.md)
 - Brand philosophy (or sub-identity)
 - Selected components (type + variant for each)
 - Existing components to reuse (read their HTML from components/)
 - Content mapped to each component
-- Style constraints from `references/web-style-constraints.md`
+- The 4 reference files read above (pass their content to the skill)
 
 The html-generator skill will:
-1. Generate any NEW components as standalone HTML
-2. Compose all components into a single page
+1. Generate any NEW components as standalone HTML with metadata annotations
+2. Compose all components into a single page preserving all `<!-- component: -->`, `<!-- prop: -->`, `<!-- slot: -->` metadata
 
 ### Step 10: Save Components
 
