@@ -81,6 +81,8 @@ The plugin includes condensed reference guides from comprehensive source documen
 - `migration-patterns.md` - 7 detailed migration patterns
 - `ajax-reference.md` - AJAX commands reference for understanding existing code
 
+Online dev-guides from https://camoa.github.io/dev-guides/ provide supplementary Drupal domain context (AJAX architecture, forms, routing, render API, JS behaviors).
+
 ## Requirements
 
 - Drupal 11.3+ (native HTMX support)
