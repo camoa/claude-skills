@@ -2,7 +2,7 @@
 
 When to run which checks and how to interpret results.
 
-> **Online Dev-Guides:** For comprehensive quality gates and audit checklist patterns, see https://camoa.github.io/dev-guides/drupal/tdd/quality-gates-audit-checklist/.
+> **Online Dev-Guides:** For quality gates, audit checklists, and testing best practices beyond tool-specific commands, see https://camoa.github.io/dev-guides/drupal/tdd/quality-gates-audit-checklist/ and https://camoa.github.io/dev-guides/drupal/testing/best-practices-anti-patterns/.
 
 ## Pre-Commit Checks (Fast)
 

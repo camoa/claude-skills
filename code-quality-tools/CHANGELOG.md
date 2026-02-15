@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.5.0] - 2026-02-15
 
 ### Added
-- Online dev-guides integration for Drupal domain knowledge
+- Online dev-guides integration for Drupal domain knowledge (SOLID, DRY, security, testing, TDD)
   - SKILL.md: 45-entry keyword→URL mapping table for WebFetch from https://camoa.github.io/dev-guides/
-  - Topics: SOLID principles (12 guides), DRY principles (17 guides), Security (20 guides), TDD (26 guides), Testing (12 guides), JS, CI/CD
+  - Topics: SOLID principles (19 guides), DRY principles (16 guides), Security (20 guides), Testing (11 guides), TDD (25 guides), JS testing/security, CI/CD
 - Security debate enrichment: Step 3b fetches relevant online security guides (OWASP, XSS, SQLi, CSRF, access control) before spawning debate team
 - "See also" pointers in solid-detection.md, dry-detection.md, drupal-security.md, tdd-workflow.md, coverage-metrics.md, test-type-selection.md, quality-audit-checklist.md linking to online guides
 

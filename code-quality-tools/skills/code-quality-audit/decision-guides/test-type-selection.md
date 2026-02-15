@@ -2,7 +2,7 @@
 
 Decision tree for choosing the right test type in Drupal.
 
-> **Online Dev-Guides:** For comprehensive test type decision matrix with Drupal-specific patterns, see https://camoa.github.io/dev-guides/drupal/tdd/test-type-decision-matrix/. For PHPUnit test framework details, see https://camoa.github.io/dev-guides/drupal/testing/.
+> **Online Dev-Guides:** For comprehensive test framework selection and progressive testing strategies, see https://camoa.github.io/dev-guides/drupal/testing/framework-selection-decision-matrix/ and https://camoa.github.io/dev-guides/drupal/testing/ (11 guides covering all PHPUnit test types, performance testing, and infrastructure setup).
 
 ## Quick Decision Matrix
 

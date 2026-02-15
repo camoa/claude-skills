@@ -252,26 +252,23 @@ For deeper Drupal-specific patterns beyond tool commands, WebFetch from https://
 | Access control | `drupal/security/entity-access-control/` | Access control findings |
 | Route access checks | `drupal/security/route-access-checks/` | Route security findings |
 | Twig autoescape | `drupal/security/twig-autoescape-and-safe-markup/` | Template security findings |
-| TDD overview | `drupal/tdd/` | TDD workflow, test types, coverage strategy |
-| RED-GREEN-REFACTOR | `drupal/tdd/tdd-workflow-red-green-refactor/` | TDD cycle patterns and practices |
-| Test type decision matrix | `drupal/tdd/test-type-decision-matrix/` | Unit vs Kernel vs Functional selection |
-| Coverage metrics | `drupal/tdd/coverage-metrics-strategy/` | Coverage targets, PCOV vs Xdebug |
-| Quality gates | `drupal/tdd/quality-gates-audit-checklist/` | Pre-commit/push/merge gate strategy |
-| Kernel tests | `drupal/tdd/kernel-tests/` | Kernel test patterns and when to use |
-| Unit tests | `drupal/tdd/unit-tests/` | Unit test patterns and when to use |
-| Browser tests | `drupal/tdd/browser-tests/` | Functional/FunctionalJavascript tests |
+| Testing overview | `drupal/testing/` | Test frameworks, setup, progressive strategy |
+| Test type selection | `drupal/testing/framework-selection-decision-matrix/` | Unit vs Kernel vs Functional decision |
+| Unit tests | `drupal/testing/phpunit-unit-tests/` | PHPUnit unit test patterns |
+| Kernel tests | `drupal/testing/phpunit-kernel-tests/` | Kernel test patterns with services/DB |
+| Functional tests | `drupal/testing/phpunit-functional-tests/` | Browser test patterns |
+| Progressive testing | `drupal/testing/progressive-testing-strategy/` | Test coverage planning for new modules |
+| Testing best practices | `drupal/testing/best-practices-anti-patterns/` | Testing anti-patterns and standards |
+| TDD overview | `drupal/tdd/` | RED-GREEN-REFACTOR, spec-driven development |
+| TDD workflow | `drupal/tdd/tdd-workflow-red-green-refactor/` | RED-GREEN-REFACTOR cycle details |
+| Coverage metrics | `drupal/tdd/coverage-metrics-strategy/` | Coverage targets, metrics interpretation |
+| Quality gates | `drupal/tdd/quality-gates-audit-checklist/` | Pre-commit/push/merge gate definitions |
+| Test type decision | `drupal/tdd/test-type-decision-matrix/` | When to use which test type |
+| Spec-driven dev | `drupal/tdd/spec-driven-drupal-development/` | Writing specs before code |
 | Testing services | `drupal/tdd/testing-services/` | Service testing patterns |
 | Testing forms | `drupal/tdd/testing-forms/` | Form testing patterns |
 | Testing entities | `drupal/tdd/testing-entities/` | Entity testing patterns |
 | Testing plugins | `drupal/tdd/testing-plugins/` | Plugin testing patterns |
-| Testing routes | `drupal/tdd/testing-routes-controllers/` | Route and controller testing |
-| Test anti-patterns | `drupal/tdd/anti-patterns-common-mistakes/` | Common testing mistakes |
-| Spec-driven development | `drupal/tdd/spec-driven-drupal-development/` | Specification-driven approach |
-| Testing overview | `drupal/testing/` | PHPUnit framework, test infrastructure |
-| PHPUnit unit tests | `drupal/testing/phpunit-unit-tests/` | PHPUnit unit test setup |
-| PHPUnit kernel tests | `drupal/testing/phpunit-kernel-tests/` | PHPUnit kernel test setup |
-| PHPUnit functional tests | `drupal/testing/phpunit-functional-tests/` | PHPUnit functional test setup |
-| Progressive testing | `drupal/testing/progressive-testing-strategy/` | Incremental testing approach |
 | Testing (GitHub Actions) | `drupal/github-actions/` | CI/CD quality pipeline context |
 | JS security | `drupal/js-development/security/` | JavaScript security findings |
 | JS testing | `drupal/js-development/testing-javascript/` | JavaScript testing context |
