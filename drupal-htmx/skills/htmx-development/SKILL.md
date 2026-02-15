@@ -1,7 +1,7 @@
 ---
 name: htmx-development
 description: Use when developing HTMX features in Drupal 11.3+ or migrating AJAX to HTMX. Covers Htmx class usage, form patterns, migration strategies, and validation. Triggers on "htmx", "ajax to htmx", "dynamic form", "dependent dropdown".
-version: 1.0.0
+version: 1.2.0
 model: sonnet
 ---
 
@@ -222,10 +222,32 @@ When reviewing HTMX implementations:
 
 ## References
 
+### Bundled (HTMX-Specific)
 - `references/quick-reference.md` - Command equivalents, method tables
 - `references/htmx-implementation.md` - Full Htmx class API, detection, JS
 - `references/migration-patterns.md` - 7 patterns with before/after code
 - `references/ajax-reference.md` - AJAX commands for understanding existing code
+
+### Online Dev-Guides (Drupal Domain)
+
+For Drupal domain context when analyzing, recommending, or validating HTMX patterns, WebFetch from https://camoa.github.io/dev-guides/.
+
+| Topic | URL | Use when |
+|-------|-----|----------|
+| AJAX form architecture | `drupal/forms/ajax-architecture/` | Understanding existing AJAX before migration |
+| AJAX security | `drupal/forms/ajax-security/` | Security review of AJAX patterns |
+| JS AJAX integration | `drupal/js-development/ajax-integration/` | JS-level AJAX patterns to migrate |
+| Drupal.behaviors | `drupal/js-development/drupal-behaviors-pattern/` | HTMX JS event integration context |
+| Multi-step forms | `drupal/forms/multi-step-forms/` | Wizard pattern migration context |
+| Form #states | `drupal/forms/form-states-system/` | When #states is better than HTMX |
+| Form alter system | `drupal/forms/form-alter-system/` | Altering forms with HTMX elements |
+| Routing | `drupal/routing/` | HTMX route configuration context |
+| Render API | `drupal/render-api/` | Render arrays for HTMX responses |
+| Render array patterns | `drupal/render-api/render-array-patterns/` | Progressive enhancement patterns |
+| Security best practices | `drupal/forms/security-best-practices/` | Form security for HTMX endpoints |
+| JS testing | `drupal/js-development/testing-javascript/` | Testing HTMX JS interactions |
+
+**How to use:** Prefix URLs with `https://camoa.github.io/dev-guides/` and WebFetch for Drupal-specific patterns when the bundled HTMX references don't cover the underlying Drupal concept.
 
 ## Key Files in Drupal Core
 

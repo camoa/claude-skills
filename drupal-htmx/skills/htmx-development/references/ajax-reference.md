@@ -2,6 +2,8 @@
 
 Drupal AJAX system reference for understanding existing patterns before migration.
 
+> **Online Dev-Guides:** For comprehensive Drupal AJAX architecture, security patterns, and JS integration beyond this migration-focused reference, see https://camoa.github.io/dev-guides/drupal/forms/ajax-architecture/ and https://camoa.github.io/dev-guides/drupal/js-development/ajax-integration/.
+
 ## AJAX Configuration
 
 ### Form Element AJAX Settings

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-02-15
+
+### Added
+- Online dev-guides integration for Drupal domain context
+  - SKILL.md: 12-entry keyword→URL mapping table for WebFetch from https://camoa.github.io/dev-guides/
+  - Topics: AJAX architecture, JS behaviors, forms (#states, multi-step, alter, security), routing, render API
+- "See also" pointer in ajax-reference.md linking to online AJAX architecture and JS integration guides
+
+---
+
 ## [1.1.0] - 2026-02-09
 
 ### Added
