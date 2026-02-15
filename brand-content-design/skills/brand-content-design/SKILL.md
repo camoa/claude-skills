@@ -116,6 +116,7 @@ The `visual-content` skill is bundled with this plugin. For HTML-to-Drupal conve
 
 ## References
 
+### Bundled (Plugin-Specific)
 - `references/brand-philosophy-template.md` - Template for brand philosophy
 - `references/template-structure.md` - Template for template.md files
 - `references/canvas-philosophy-template.md` - Template for canvas philosophy
@@ -124,3 +125,18 @@ The `visual-content` skill is bundled with this plugin. For HTML-to-Drupal conve
 - `references/style-constraints.md` - 13 visual styles with enforcement blocks
 - `references/color-palettes.md` - Color theory and palette types
 - `references/output-specs.md` - Dimensions, formats, file sizes
+
+### Online Dev-Guides (Design Systems)
+
+For design system recognition and analysis methodology, WebFetch from https://camoa.github.io/dev-guides/.
+
+| Topic | URL | Use when |
+|-------|-----|----------|
+| Design system recognition | `design-systems/recognition/` | Analyzing existing brand assets systematically |
+| Design tokens | `design-systems/recognition/design-tokens/` | Extracting color, typography, spacing tokens |
+| Screenshot analysis | `design-systems/recognition/screenshot-analysis/` | Identifying patterns from visual samples |
+| Figma analysis | `design-systems/recognition/figma-analysis/` | Extracting from Figma design files |
+| Validation checklist | `design-systems/recognition/validation-checklist/` | Ensuring analysis completeness |
+| Reference design systems | `design-systems/recognition/reference-design-systems/` | Comparing against industry standards |
+
+**How to use:** Prefix URLs with `https://camoa.github.io/dev-guides/` and WebFetch when extracting brand elements or analyzing design systems.

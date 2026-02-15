@@ -5,6 +5,16 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-02-15
+
+### Added
+- Online dev-guides integration for design system fundamentals
+  - html-generator SKILL.md: 11-entry keyword→URL mapping table for design tokens, component classification, Bootstrap patterns, SCSS, accessibility, progressive enhancement
+  - brand-content-design SKILL.md: 6-entry keyword→URL mapping table for design system recognition, analysis methodology, screenshot/Figma analysis
+- "See also" pointers in html-components.md, html-technical.md, html-design-guide.md, color-palettes.md linking to online design system guides
+
+---
+
 ## [2.4.0] - 2026-02-15
 
 ### Fixed

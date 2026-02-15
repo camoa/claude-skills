@@ -2,6 +2,8 @@
 
 15 reusable component types for HTML page composition. Each component is standalone, responsive, and uses design tokens via CSS custom properties.
 
+> **Online Dev-Guides:** For component classification methodology (atomic design) and Bootstrap component mapping patterns, see https://camoa.github.io/dev-guides/design-systems/recognition/component-classification-framework/ and https://camoa.github.io/dev-guides/design-systems/bootstrap/.
+
 ---
 
 ## Component Conventions
