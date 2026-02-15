@@ -2,6 +2,8 @@
 
 Reference for generating alternative color palettes from brand colors.
 
+> **Online Dev-Guides:** For design token extraction methodology including color tokens, contrast validation, and accessibility standards, see https://camoa.github.io/dev-guides/design-systems/recognition/design-tokens/.
+
 ---
 
 ## Palette Categories

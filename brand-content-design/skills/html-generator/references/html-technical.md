@@ -2,6 +2,8 @@
 
 Technical reference for HTML page generation: boilerplate, file format, responsive breakpoints, font loading, image handling, JS patterns, accessibility, and convertibility metadata.
 
+> **Online Dev-Guides:** For WCAG 2.2 AA accessibility patterns and progressive enhancement techniques, see https://camoa.github.io/dev-guides/design-systems/radix-components/accessibility-best-practices/ and https://camoa.github.io/dev-guides/design-systems/bootstrap/progressive-enhancement-guidelines/.
+
 ## Contents
 - HTML Boilerplate
 - Responsive Breakpoints

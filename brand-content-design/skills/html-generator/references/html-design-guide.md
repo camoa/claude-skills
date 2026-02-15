@@ -2,6 +2,8 @@
 
 Design system philosophy for branded HTML pages. This is the content type guide for the HTML generation system.
 
+> **Online Dev-Guides:** For design system analysis best practices and reference design systems to compare against, see https://camoa.github.io/dev-guides/design-systems/recognition/design-system-analysis-best-practices/ and https://camoa.github.io/dev-guides/design-systems/recognition/reference-design-systems/.
+
 ---
 
 ## Why Design System (Not Template)
