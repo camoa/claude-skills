@@ -2,6 +2,8 @@
 
 Test coverage measurement and interpretation for Drupal projects.
 
+> **Online Dev-Guides:** For comprehensive coverage strategy, targets by code type, and PCOV vs Xdebug tradeoffs, see https://camoa.github.io/dev-guides/drupal/tdd/coverage-metrics-strategy/.
+
 ## Coverage Types
 
 | Type | What It Measures | Tool Support |

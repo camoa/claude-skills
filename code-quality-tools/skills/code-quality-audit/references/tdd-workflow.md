@@ -2,6 +2,8 @@
 
 Test-Driven Development guidance for Drupal projects.
 
+> **Online Dev-Guides:** For comprehensive TDD patterns, test naming, spec-driven development, and testing anti-patterns, see https://camoa.github.io/dev-guides/drupal/tdd/ (26 guides covering RED-GREEN-REFACTOR, test types, coverage strategy, and testing every Drupal component type).
+
 ## RED-GREEN-REFACTOR Cycle
 
 ### RED Phase
