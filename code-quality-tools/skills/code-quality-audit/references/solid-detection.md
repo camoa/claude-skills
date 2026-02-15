@@ -2,6 +2,8 @@
 
 How each SOLID principle is detected and measured in Drupal projects.
 
+> **Online Dev-Guides:** For comprehensive Drupal SOLID patterns, examples, and best practices beyond tool detection, see https://camoa.github.io/dev-guides/drupal/solid-principles/ (12 guides covering SRP, OCP, LSP, ISP, DIP with Drupal-specific patterns, anti-patterns, and code reference maps).
+
 ## S - Single Responsibility Principle
 
 **Definition:** A class should have only one reason to change.

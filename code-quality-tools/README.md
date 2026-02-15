@@ -199,7 +199,12 @@ See `references/operations/dast-tools.md` for installation and usage.
 
 ## Version
 
-**v2.4.0** (Current) - Security Debate Team (agent teams)
+**v2.5.0** (Current) - Online dev-guides integration
+- SOLID, DRY, Security topics from https://camoa.github.io/dev-guides/ for deeper Drupal context
+- Security debate enrichment with WebFetch of relevant OWASP/XSS/SQLi/CSRF guides
+- 28-entry keyword→URL mapping in SKILL.md for Drupal domain knowledge
+
+**v2.4.0** - Security Debate Team (agent teams)
 - `/code-quality:security-debate` — 3-agent debate over security audit findings
 - Defender + Red Team + Compliance Checker with cross-challenge synthesis
 - Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`

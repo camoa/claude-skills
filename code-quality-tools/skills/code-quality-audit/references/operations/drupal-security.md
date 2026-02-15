@@ -2,6 +2,8 @@
 
 Comprehensive security audit for Drupal projects with 10 security layers.
 
+> **Online Dev-Guides:** For Drupal security patterns, OWASP Top 10 mapping, access control, XSS/CSRF/SQLi prevention, and input validation beyond tool scanning, see https://camoa.github.io/dev-guides/drupal/security/ (20 guides covering access system architecture, authentication, entity access control, route access checks, input validation, and more).
+
 ## Contents
 
 - [Overview](#overview)

@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding violations, or setting up quality tools - supports Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects with TDD, SOLID, DRY, and OWASP security checks
-version: 2.4.0
+version: 2.5.0
 model: sonnet
 ---
 
@@ -220,6 +220,43 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/operations/nextjs-audits.md` - Next.js quality audit operations
 - `references/operations/nextjs-security.md` - **Next.js security (7 layers, v2.0.0)**
 - `references/operations/nextjs-tdd.md` - Next.js TDD workflow
+
+### Online Dev-Guides (Drupal Domain)
+
+For deeper Drupal-specific patterns beyond tool commands, WebFetch from https://camoa.github.io/dev-guides/. Use when explaining violations, suggesting fixes, or providing architectural context.
+
+| Topic | URL | Use when |
+|-------|-----|----------|
+| SOLID principles | `drupal/solid-principles/` | Explaining SOLID violations with Drupal patterns |
+| SRP — controllers & forms | `drupal/solid-principles/controllers-srp/` | SRP violations in controllers or forms |
+| OCP — config overrides | `drupal/solid-principles/config-overrides-ocp/` | OCP violations in configuration |
+| LSP — entity hierarchy | `drupal/solid-principles/entity-hierarchy-lsp/` | LSP violations in entity types |
+| ISP — entity interfaces | `drupal/solid-principles/entity-interfaces-isp/` | ISP violations in interfaces |
+| DIP — dependency injection | `drupal/solid-principles/dependency-injection-patterns-dip/` | DIP violations, static calls |
+| DIP — anti-patterns | `drupal/solid-principles/anti-patterns-dip/` | Common DI anti-patterns |
+| SOLID common mistakes | `drupal/solid-principles/common-mistakes/` | Recurring SOLID violation patterns |
+| SOLID best practices | `drupal/solid-principles/best-practices-checklist/` | Checklist for SOLID compliance |
+| DRY principles | `drupal/dry-principles/` | Explaining DRY violations with Drupal patterns |
+| Services for shared logic | `drupal/dry-principles/services-shared-logic/` | Extracting duplicated logic to services |
+| Traits for cross-cutting | `drupal/dry-principles/traits-cross-cutting/` | Using traits to reduce duplication |
+| Base classes | `drupal/dry-principles/base-classes-inheritance/` | Extracting common base classes |
+| Plugin reuse | `drupal/dry-principles/plugin-reuse/` | DRY patterns in plugin system |
+| Over-DRY anti-patterns | `drupal/dry-principles/over-dry-anti-patterns/` | When NOT to DRY (wrong abstraction) |
+| DRY decision framework | `drupal/dry-principles/best-practices-decision-framework/` | When to extract vs duplicate |
+| Security overview | `drupal/security/` | Drupal security patterns and practices |
+| OWASP Top 10 in Drupal | `drupal/security/owasp-top-10-in-drupal/` | OWASP mapping to Drupal context |
+| XSS prevention | `drupal/security/xss-prevention/` | XSS findings context |
+| SQL injection prevention | `drupal/security/sql-injection-prevention/` | SQLi findings context |
+| CSRF protection | `drupal/security/csrf-protection/` | CSRF findings context |
+| Input validation | `drupal/security/input-validation-and-sanitization/` | Input validation findings |
+| Access control | `drupal/security/entity-access-control/` | Access control findings |
+| Route access checks | `drupal/security/route-access-checks/` | Route security findings |
+| Twig autoescape | `drupal/security/twig-autoescape-and-safe-markup/` | Template security findings |
+| Testing (GitHub Actions) | `drupal/github-actions/` | CI/CD quality pipeline context |
+| JS security | `drupal/js-development/security/` | JavaScript security findings |
+| JS testing | `drupal/js-development/testing-javascript/` | JavaScript testing context |
+
+**How to use:** When analyzing violations or providing remediation guidance for Drupal projects, WebFetch the relevant topic URL (prefix with `https://camoa.github.io/dev-guides/`) to get comprehensive Drupal-specific patterns and examples.
 
 ## Decision Guides
 
