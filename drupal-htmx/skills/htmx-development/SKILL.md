@@ -230,24 +230,13 @@ When reviewing HTMX implementations:
 
 ### Online Dev-Guides (Drupal Domain)
 
-For Drupal domain context when analyzing, recommending, or validating HTMX patterns, WebFetch from https://camoa.github.io/dev-guides/.
+For Drupal domain context when analyzing, recommending, or validating HTMX patterns, fetch the guide index:
 
-| Topic | URL | Use when |
-|-------|-----|----------|
-| AJAX form architecture | `drupal/forms/ajax-architecture/` | Understanding existing AJAX before migration |
-| AJAX security | `drupal/forms/ajax-security/` | Security review of AJAX patterns |
-| JS AJAX integration | `drupal/js-development/ajax-integration/` | JS-level AJAX patterns to migrate |
-| Drupal.behaviors | `drupal/js-development/drupal-behaviors-pattern/` | HTMX JS event integration context |
-| Multi-step forms | `drupal/forms/multi-step-forms/` | Wizard pattern migration context |
-| Form #states | `drupal/forms/form-states-system/` | When #states is better than HTMX |
-| Form alter system | `drupal/forms/form-alter-system/` | Altering forms with HTMX elements |
-| Routing | `drupal/routing/` | HTMX route configuration context |
-| Render API | `drupal/render-api/` | Render arrays for HTMX responses |
-| Render array patterns | `drupal/render-api/render-array-patterns/` | Progressive enhancement patterns |
-| Security best practices | `drupal/forms/security-best-practices/` | Form security for HTMX endpoints |
-| JS testing | `drupal/js-development/testing-javascript/` | Testing HTMX JS interactions |
+**Index:** `https://camoa.github.io/dev-guides/llms.txt`
 
-**How to use:** Prefix URLs with `https://camoa.github.io/dev-guides/` and WebFetch for Drupal-specific patterns when the bundled HTMX references don't cover the underlying Drupal concept.
+Likely relevant topics: forms, routing, js-development, render-api
+
+Usage: WebFetch the index to discover available topics, then fetch specific topic pages for Drupal patterns when the bundled HTMX references don't cover the underlying Drupal concept.
 
 ## Key Files in Drupal Core
 

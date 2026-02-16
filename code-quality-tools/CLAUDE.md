@@ -13,6 +13,12 @@
 - Commands wrap existing scripts — no logic duplication
 - Agent team commands orchestrate debate workflows — these are a new category alongside script wrappers
 
+## Online Dev-Guides
+For Drupal-specific patterns when explaining violations or suggesting fixes, fetch the guide index:
+- **Index:** `https://camoa.github.io/dev-guides/llms.txt`
+- WebFetch the index to discover available topics, then fetch specific topic pages
+- Likely relevant topics: solid-principles, dry-principles, security, testing, tdd, js-development, github-actions
+
 ## General
 - Reference files instead of reproducing content
 - Current state only — no historical narratives

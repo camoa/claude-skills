@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
 description: Use when designing features - loads plugin methodology refs, fetches online dev-guides for Drupal domain knowledge, and optionally loads user's custom guides
-version: 3.0.0
+version: 3.1.0
 user-invocable: false
 ---
 
@@ -20,39 +20,15 @@ Load development references and integrate into architecture documents. Three sou
 | Quality Gates | `references/quality-gates.md` |
 | Purposeful Code | `references/purposeful-code.md` |
 
-## Online Dev-Guides (Drupal Domain)
+## Online Dev-Guides
 
-Decision guides at `https://camoa.github.io/dev-guides/`. WebFetch the topic index, then fetch the specific atomic guide needed.
+For Drupal domain knowledge beyond bundled references, fetch the guide index:
 
-| Keywords Detected | Topic URL |
-|-------------------|-----------|
-| "form", "validation", "form alter" | `drupal/forms/` |
-| "config form", "settings form", "ConfigFormBase" | `drupal/config-forms/` |
-| "entity", "field", "content type", "bundle" | `drupal/entities/` |
-| "plugin", "plugin type", "annotation", "attribute" | `drupal/plugins/` |
-| "route", "access check", "permission", "controller" | `drupal/routing/` |
-| "service", "dependency injection", "container" | `drupal/services/` |
-| "cache", "cache tag", "cache context", "max-age" | `drupal/caching/` |
-| "config", "config schema", "config entity" | `drupal/config-management/` |
-| "render", "render array", "#theme", "lazy builder" | `drupal/render-api/` |
-| "security", "XSS", "SQL injection", "CSRF" | `drupal/security/` |
-| "SDC", "component", "single directory" | `drupal/sdc/` |
-| "JavaScript", "behaviors", "once", "library" | `drupal/js-development/` |
-| "view", "views", "display", "filter" | `drupal/views/` |
-| "block", "block plugin", "block type" | `drupal/blocks/` |
-| "layout builder", "section", "inline block" | `drupal/layout-builder/` |
-| "migration", "migrate", "D7 to D11" | `drupal/migration/` |
-| "recipe", "config action" | `drupal/recipes/` |
-| "taxonomy", "vocabulary", "term" | `drupal/taxonomy/` |
-| "media", "media type", "oembed" | `drupal/media/` |
-| "image style", "responsive image" | `drupal/image-styles/` |
-| "test", "PHPUnit", "kernel test" | `drupal/testing/` |
-| "JSON:API", "jsonapi", "REST" | `drupal/jsonapi/` |
-| "icon", "icon pack", "icon API" | `drupal/icon-api/` |
-| "ECA", "event condition action" | `drupal/eca/` |
-| "GitHub Actions", "CI/CD" | `drupal/github-actions/` |
-| "CSS", "SCSS", "BEM", "Bootstrap" | `design-systems/bootstrap/` |
-| "Radix", "sub-theme" | `design-systems/radix-sdc/` |
+**Index:** `https://camoa.github.io/dev-guides/llms.txt`
+
+Likely relevant topics: forms, config-forms, entities, plugins, routing, services, caching, config-management, render-api, security, sdc, js-development, views, blocks, layout-builder, media, migration, recipes, taxonomy, jsonapi, image-styles, icon-api, eca, github-actions, ai-content, custom-field, klaro, testing, tdd, solid-principles, dry-principles
+
+Usage: WebFetch the index to discover available topics, then fetch specific topic pages for decision guides, patterns, and best practices.
 
 ## Activation
 
@@ -89,13 +65,13 @@ Based on detected keywords in the task:
 2. Read each applicable reference file
 3. Extract patterns relevant to current task
 
-### 2. Fetch Online Dev-Guides (Drupal Domain)
+### 2. Fetch Online Dev-Guides
 
 For Drupal-specific architecture decisions:
-1. Match task keywords to the Online Dev-Guides table
-2. WebFetch `https://camoa.github.io/dev-guides/{topic_url}` for the topic index
-3. Identify the specific atomic guide from the index
-4. WebFetch that atomic guide for the decision pattern
+1. WebFetch `https://camoa.github.io/dev-guides/llms.txt` to discover available topics
+2. Match task keywords against the topic list and the likely relevant topics hint
+3. WebFetch the relevant topic page for the decision guide index
+4. WebFetch specific atomic guides for patterns and best practices
 
 Only fetch topics relevant to the current task — not all topics.
 

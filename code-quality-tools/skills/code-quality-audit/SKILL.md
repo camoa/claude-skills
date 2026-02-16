@@ -223,57 +223,13 @@ All reports must follow `schemas/audit-report.schema.json`:
 
 ### Online Dev-Guides (Drupal Domain)
 
-For deeper Drupal-specific patterns beyond tool commands, WebFetch from https://camoa.github.io/dev-guides/. Use when explaining violations, suggesting fixes, or providing architectural context.
+For deeper Drupal-specific patterns beyond tool commands, fetch the guide index:
 
-| Topic | URL | Use when |
-|-------|-----|----------|
-| SOLID principles | `drupal/solid-principles/` | Explaining SOLID violations with Drupal patterns |
-| SRP — controllers & forms | `drupal/solid-principles/controllers-srp/` | SRP violations in controllers or forms |
-| OCP — config overrides | `drupal/solid-principles/config-overrides-ocp/` | OCP violations in configuration |
-| LSP — entity hierarchy | `drupal/solid-principles/entity-hierarchy-lsp/` | LSP violations in entity types |
-| ISP — entity interfaces | `drupal/solid-principles/entity-interfaces-isp/` | ISP violations in interfaces |
-| DIP — dependency injection | `drupal/solid-principles/dependency-injection-patterns-dip/` | DIP violations, static calls |
-| DIP — anti-patterns | `drupal/solid-principles/anti-patterns-dip/` | Common DI anti-patterns |
-| SOLID common mistakes | `drupal/solid-principles/common-mistakes/` | Recurring SOLID violation patterns |
-| SOLID best practices | `drupal/solid-principles/best-practices-checklist/` | Checklist for SOLID compliance |
-| DRY principles | `drupal/dry-principles/` | Explaining DRY violations with Drupal patterns |
-| Services for shared logic | `drupal/dry-principles/services-shared-logic/` | Extracting duplicated logic to services |
-| Traits for cross-cutting | `drupal/dry-principles/traits-cross-cutting/` | Using traits to reduce duplication |
-| Base classes | `drupal/dry-principles/base-classes-inheritance/` | Extracting common base classes |
-| Plugin reuse | `drupal/dry-principles/plugin-reuse/` | DRY patterns in plugin system |
-| Over-DRY anti-patterns | `drupal/dry-principles/over-dry-anti-patterns/` | When NOT to DRY (wrong abstraction) |
-| DRY decision framework | `drupal/dry-principles/best-practices-decision-framework/` | When to extract vs duplicate |
-| Security overview | `drupal/security/` | Drupal security patterns and practices |
-| OWASP Top 10 in Drupal | `drupal/security/owasp-top-10-in-drupal/` | OWASP mapping to Drupal context |
-| XSS prevention | `drupal/security/xss-prevention/` | XSS findings context |
-| SQL injection prevention | `drupal/security/sql-injection-prevention/` | SQLi findings context |
-| CSRF protection | `drupal/security/csrf-protection/` | CSRF findings context |
-| Input validation | `drupal/security/input-validation-and-sanitization/` | Input validation findings |
-| Access control | `drupal/security/entity-access-control/` | Access control findings |
-| Route access checks | `drupal/security/route-access-checks/` | Route security findings |
-| Twig autoescape | `drupal/security/twig-autoescape-and-safe-markup/` | Template security findings |
-| Testing overview | `drupal/testing/` | Test frameworks, setup, progressive strategy |
-| Test type selection | `drupal/testing/framework-selection-decision-matrix/` | Unit vs Kernel vs Functional decision |
-| Unit tests | `drupal/testing/phpunit-unit-tests/` | PHPUnit unit test patterns |
-| Kernel tests | `drupal/testing/phpunit-kernel-tests/` | Kernel test patterns with services/DB |
-| Functional tests | `drupal/testing/phpunit-functional-tests/` | Browser test patterns |
-| Progressive testing | `drupal/testing/progressive-testing-strategy/` | Test coverage planning for new modules |
-| Testing best practices | `drupal/testing/best-practices-anti-patterns/` | Testing anti-patterns and standards |
-| TDD overview | `drupal/tdd/` | RED-GREEN-REFACTOR, spec-driven development |
-| TDD workflow | `drupal/tdd/tdd-workflow-red-green-refactor/` | RED-GREEN-REFACTOR cycle details |
-| Coverage metrics | `drupal/tdd/coverage-metrics-strategy/` | Coverage targets, metrics interpretation |
-| Quality gates | `drupal/tdd/quality-gates-audit-checklist/` | Pre-commit/push/merge gate definitions |
-| Test type decision | `drupal/tdd/test-type-decision-matrix/` | When to use which test type |
-| Spec-driven dev | `drupal/tdd/spec-driven-drupal-development/` | Writing specs before code |
-| Testing services | `drupal/tdd/testing-services/` | Service testing patterns |
-| Testing forms | `drupal/tdd/testing-forms/` | Form testing patterns |
-| Testing entities | `drupal/tdd/testing-entities/` | Entity testing patterns |
-| Testing plugins | `drupal/tdd/testing-plugins/` | Plugin testing patterns |
-| Testing (GitHub Actions) | `drupal/github-actions/` | CI/CD quality pipeline context |
-| JS security | `drupal/js-development/security/` | JavaScript security findings |
-| JS testing | `drupal/js-development/testing-javascript/` | JavaScript testing context |
+**Index:** `https://camoa.github.io/dev-guides/llms.txt`
 
-**How to use:** When analyzing violations or providing remediation guidance for Drupal projects, WebFetch the relevant topic URL (prefix with `https://camoa.github.io/dev-guides/`) to get comprehensive Drupal-specific patterns and examples.
+Likely relevant topics: solid-principles, dry-principles, security, testing, tdd, js-development, github-actions
+
+Usage: WebFetch the index to discover available topics, then fetch specific topic pages when explaining violations, suggesting fixes, or providing architectural context.
 
 ## Decision Guides
 
