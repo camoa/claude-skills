@@ -18,6 +18,12 @@
 - Use `argument-hint:` for discoverability
 - Restrict `allowed-tools` to minimum needed
 
+## Online Dev-Guides
+For Drupal domain knowledge beyond bundled references, fetch the guide index:
+- **Index:** `https://camoa.github.io/dev-guides/llms.txt`
+- WebFetch the index to discover available topics, then fetch specific topic pages for decision guides, patterns, and best practices
+- Likely relevant topics: forms, config-forms, entities, plugins, routing, services, caching, config-management, render-api, security, sdc, js-development, views, blocks, layout-builder, media, migration, recipes, taxonomy, jsonapi, image-styles, icon-api, eca, github-actions, ai-content, custom-field, klaro, testing, tdd, solid-principles, dry-principles
+
 ## General
 - Current state only — no historical narratives
 - Replace outdated content, don't keep alongside new

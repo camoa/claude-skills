@@ -19,6 +19,12 @@
 - Restrict `allowed-tools` to minimum needed
 - Interactive commands use AskUserQuestion for user input
 
+## Online Dev-Guides
+For design system fundamentals beyond bundled references, fetch the guide index:
+- **Index:** `https://camoa.github.io/dev-guides/llms.txt`
+- WebFetch the index to discover available topics, then fetch specific topic pages
+- Likely relevant topics: design-systems/recognition, design-systems/bootstrap, design-systems/radix-sdc, design-systems/radix-components, drupal/sdc
+
 ## General
 - Accessibility (WCAG AA) is mandatory — never skip contrast validation
 - Three-layer philosophy: brand → content type → template

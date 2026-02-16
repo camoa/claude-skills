@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-02-16
+
+### Changed
+- **Dev-guides integration v2**: Replaced 12-entry keyword→URL mapping table in SKILL.md with lightweight `llms.txt` discovery + topic hints
+- **CLAUDE.md**: Added Online Dev-Guides section with `llms.txt` index URL and topic hints for session-wide awareness
+
 ## [1.2.0] - 2026-02-15
 
 ### Added

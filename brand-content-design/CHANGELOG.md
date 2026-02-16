@@ -5,6 +5,12 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-02-16
+
+### Changed
+- **Dev-guides integration v2**: Replaced keyword→URL mapping tables (11-entry in html-generator, 6-entry in brand-content-design) with lightweight `llms.txt` discovery + topic hints
+- **CLAUDE.md**: Added Online Dev-Guides section with `llms.txt` index URL and topic hints for session-wide awareness
+
 ## [2.5.0] - 2026-02-15
 
 ### Added

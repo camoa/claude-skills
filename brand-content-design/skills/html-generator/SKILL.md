@@ -563,20 +563,10 @@ Load these reference files when generating:
 
 ### Online Dev-Guides (Design Systems)
 
-For design system fundamentals beyond this plugin's visual styles, WebFetch from https://camoa.github.io/dev-guides/.
+For design system fundamentals beyond this plugin's visual styles, fetch the guide index:
 
-| Topic | URL | Use when |
-|-------|-----|----------|
-| Design tokens | `design-systems/recognition/design-tokens/` | Mapping brand tokens to CSS custom properties |
-| Component classification | `design-systems/recognition/component-classification-framework/` | Atomic design methodology for components |
-| HTML/CSS analysis | `design-systems/recognition/html-css-analysis/` | Analyzing existing HTML for design patterns |
-| Bootstrap component mapping | `design-systems/bootstrap/` | Bootstrap-based layout and component patterns |
-| Atoms → components | `design-systems/bootstrap/atoms-bootstrap-components/` | Button, input, badge patterns |
-| Molecules → combinations | `design-systems/bootstrap/molecules-component-combinations/` | Input groups, card content patterns |
-| Organisms → layouts | `design-systems/bootstrap/organisms-layout-components/` | Navbar, card, form layout patterns |
-| SCSS best practices | `design-systems/bootstrap/scss-best-practices/` | SCSS variable overrides, mixins |
-| Progressive enhancement | `design-systems/bootstrap/progressive-enhancement-guidelines/` | Modern CSS, responsive patterns |
-| Accessibility (WCAG) | `design-systems/radix-components/accessibility-best-practices/` | WCAG 2.2 AA compliance patterns |
-| SDC CSS patterns | `drupal/sdc/scss-css-in-sdcs/` | BEM scoping, CSS custom properties |
+**Index:** `https://camoa.github.io/dev-guides/llms.txt`
 
-**How to use:** Prefix URLs with `https://camoa.github.io/dev-guides/` and WebFetch when needing design system fundamentals that complement the bundled 21-style system.
+Likely relevant topics: design-systems/recognition, design-systems/bootstrap, design-systems/radix-sdc, design-systems/radix-components, drupal/sdc
+
+Usage: WebFetch the index to discover available topics, then fetch specific topic pages for design system fundamentals that complement the bundled 21-style system.
