@@ -142,8 +142,13 @@ Invoke the `html-generator` skill via Skill tool with:
 - The 4 reference files read above (pass their content to the skill)
 
 The html-generator skill will:
-1. Generate any NEW components as standalone HTML with metadata annotations
-2. Compose all components into a single page preserving all `<!-- component: -->`, `<!-- prop: -->`, `<!-- slot: -->` metadata
+1. Generate any NEW components as standalone HTML with full convertibility metadata
+2. Compose all components into a single page with all metadata comments
+
+**Convertibility metadata is MANDATORY for every component:**
+- `<!-- component: type variant: variant -->` / `<!-- /component: type -->` — component boundaries
+- `<!-- prop: name type: type -->` — before EVERY dynamic content element (headlines, text, images, links, labels, dates)
+- `<!-- slot: name -->` / `<!-- /slot: name -->` — around repeatable/swappable content areas (nav links, list items, grid entries, footer columns)
 
 ### Step 10: Save Components
 
@@ -153,15 +158,18 @@ For each newly generated component:
 
 ### Step 11: Save Page
 
-Create output directory and save the composed page:
+Create output directory namespaced by design system name and save the composed page:
+```bash
+mkdir -p {PROJECT_PATH}/html-pages/{DESIGN_SYSTEM_NAME}/{page-name}
 ```
-{PROJECT_PATH}/html-pages/{YYYY-MM-DD}-{page-name}/{page-name}.html
-```
+Save to: `{PROJECT_PATH}/html-pages/{DESIGN_SYSTEM_NAME}/{page-name}/{page-name}.html`
+
+On first page for this design system, copy images from `templates/html/{name}/images/` to `html-pages/{DESIGN_SYSTEM_NAME}/images/` so pages use clean relative paths (`../images/`).
 
 ### Step 12: Confirm
 
 Tell user:
-- Page saved to: `html-pages/{date}-{page-name}/{page-name}.html`
+- Page saved to: `html-pages/{DESIGN_SYSTEM_NAME}/{page-name}/{page-name}.html`
 - New components generated: list any new components saved to the library
 - Total components in library: count
 - Open the HTML file in a browser to preview
@@ -174,6 +182,6 @@ Suggest:
 
 ## Output
 
-- Created: `html-pages/{YYYY-MM-DD}-{page-name}/{page-name}.html`
+- Created: `html-pages/{DESIGN_SYSTEM_NAME}/{page-name}/{page-name}.html`
 - Created (if new): `templates/html/{name}/components/{type}-{variant}.html` for each new component
 - Updated: `templates/html/{name}/design-system.md` (Generated Components section)

@@ -490,9 +490,15 @@ templates/html/{design-system-name}/
 ### Output Pages
 ```
 html-pages/
-└── {YYYY-MM-DD}-{page-name}/
-    └── {page-name}.html
+└── {design-system-name}/
+    ├── images/              ← copied from templates on first page
+    ├── {page-name}/
+    │   └── {page-name}.html
+    └── {another-page}/
+        └── {another-page}.html
 ```
+
+Pages are namespaced by design system name (not date) so multiple design systems stay separate and pages can be regenerated without creating duplicates.
 
 ### Naming Rules
 - All lowercase
@@ -500,4 +506,3 @@ html-pages/
 - Design system names: descriptive (e.g., `acme-corp`, `product-launch`, `developer-portal`)
 - Page names: descriptive (e.g., `landing-page`, `about-us`, `pricing`)
 - Component files: `{type}-{variant}.html` (e.g., `hero-centered.html`, `nav-simple.html`)
-- Date format: ISO 8601 (`YYYY-MM-DD`)

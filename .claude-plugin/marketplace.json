@@ -73,7 +73,7 @@
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, design systems, HTML components, 114 infographic templates, visual components, 17 color palettes, and Presentation Zen principles",
-      "version": "2.7.0",
+      "version": "2.7.1",
       "author": {
         "name": "camoa"
       },
