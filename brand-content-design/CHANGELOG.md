@@ -5,6 +5,13 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-02-17
+
+### Fixed
+- **html-page command**: Output path changed from `html-pages/{date}-{page-name}/` to `html-pages/{design-system-name}/{page-name}/` — prevents cross-design-system mixing and duplicate directories on regeneration
+- **html-page command**: Added explicit convertibility metadata instruction — generator now mandated to include `<!-- prop: -->` and `<!-- slot: -->` annotations, not just component boundaries
+- **html-technical.md**: Updated Output Pages structure to match new design-system-namespaced path, added images directory documentation
+
 ## [2.7.0] - 2026-02-17
 
 ### Changed
