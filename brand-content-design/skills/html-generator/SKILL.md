@@ -1,7 +1,7 @@
 ---
 name: html-generator
 description: Use when generating branded HTML pages and components from a design system. Creates standalone HTML components and composes them into full pages with embedded CSS, responsive design, and brand integration.
-version: 2.5.0
+version: 2.6.0
 model: opus
 user-invocable: false
 ---
@@ -67,12 +67,18 @@ Before writing any HTML, internalize the design system:
 
 ### The Differentiation Test
 
-Before generating, ask: "Could this page belong to any brand?" If yes, push harder. Incorporate:
+Before generating, ask: "Could this page belong to any brand?" If yes, push harder. Then ask: **"What is the ONE thing someone will remember about this page?"** — a dramatic type scale, a surprising color moment, an unexpected layout break. If you cannot name it, the design is not distinctive enough.
+
+Incorporate:
 - The canvas philosophy's unique movement name and spirit
 - Unexpected layout choices (asymmetry, overlap, grid-breaking)
 - Typography as art (size contrasts, weight mixing, letter-spacing play)
 - Atmosphere (gradient meshes, noise textures, patterns, shadows with depth)
 - The brand's personality expressed through micro-interactions (hover states, transitions)
+
+### Intentionality Over Intensity
+
+**Match implementation complexity to the aesthetic vision.** Maximalist designs need elaborate code with extensive animations and layered effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. The key is intentionality, not intensity — a Swiss design executed with mathematical precision is as powerful as a Memphis design executed with wild energy. Never apply "bold" uniformly; calibrate to the style.
 
 ---
 
@@ -90,6 +96,10 @@ Read the project's `design-system.md` and map ALL token sections to `:root` cust
 - **Forms** (if page has forms) — `--color-error`, `--color-success`, field/label/error styling
 
 The design-system.md is the single source of truth for all token values. Do not hardcode values — read them from the file.
+
+### Color Dominance Principle
+
+Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Use `--color-primary` as the dominant voice (headings, CTAs, navigation active states), `--color-accent` as the sharp punctuation (links, hover states, highlights), and let `--color-bg` and `--color-text` do the quiet structural work. If the palette feels "even" — one color is not leading — push the primary harder or pull the secondary back.
 
 ### Font Loading
 
@@ -298,6 +308,10 @@ Mobile-first approach with 3 breakpoints:
 
 Prefer CSS solutions. Use JS only when CSS cannot achieve the effect.
 
+### Motion Hierarchy
+
+Focus the motion budget on **one high-impact moment** per page. One well-orchestrated page load with staggered reveals (`animation-delay`) creates more delight than scattered micro-interactions on every element. Decide: is it the hero entrance, the stats counting up, or the card grid cascading in? Pick one, make it great, and keep the rest subtle.
+
 ### CSS-Only Patterns
 
 - **Hover effects**: `transform`, `box-shadow`, `opacity` transitions
@@ -346,10 +360,14 @@ Typography is the primary design tool for HTML pages. Make bold choices:
 
 ### Never Use
 
-- Inter, Roboto, Arial, Helvetica (unless the brand specifically uses them)
+- Inter, Roboto, Arial, Helvetica (unless the brand specifically uses them or the style's Visual DNA specifies them)
 - System font stack alone (always include a distinctive Google Font)
 - Single weight throughout (exploit the full weight range)
 - Uniform sizing (create dramatic scale contrast)
+
+### Anti-Convergence
+
+NEVER converge on the same font choices across different page generations. If you generated a page with Space Grotesk last time, pick a different font this time. Each design system and page should feel independently designed. Vary display fonts, body fonts, weight distributions, and size scales between projects. The goal: if someone lined up 10 generated pages, they should look like they came from 10 different designers.
 
 ---
 

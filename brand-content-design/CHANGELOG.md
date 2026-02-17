@@ -5,6 +5,17 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-02-17
+
+### Changed
+- **html-generator skill**: Enhanced with 6 aesthetic principles inspired by Anthropic's frontend-design skill
+  - **"The one memorable thing"** — differentiation test now requires naming the ONE distinctive element per page
+  - **Intentionality over intensity** — calibrate design complexity to match the style (restraint for minimal, elaborate for maximalist)
+  - **Color dominance** — dominant primary with sharp accent outperforms evenly-distributed palettes
+  - **Motion hierarchy** — focus animation budget on one high-impact page load moment, keep the rest subtle
+  - **Anti-convergence** — never reuse the same font choices across different page generations
+  - **Match complexity to aesthetic** — Swiss precision ≠ Memphis energy; each style demands its own execution approach
+
 ## [2.6.0] - 2026-02-16
 
 ### Changed

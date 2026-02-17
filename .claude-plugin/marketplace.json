@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development (HTMX, AJAX migration), brand content creation (presentations, carousels, infographics), code quality auditing, paper testing (mental code execution), and plugin development",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
@@ -73,7 +73,7 @@
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, design systems, HTML components, 114 infographic templates, visual components, 17 color palettes, and Presentation Zen principles",
-      "version": "2.6.0",
+      "version": "2.7.0",
       "author": {
         "name": "camoa"
       },
