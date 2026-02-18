@@ -1,6 +1,6 @@
 ---
 description: Suggest next action based on project state
-allowed-tools: Read, Glob, Task
+allowed-tools: Read, Write, Glob, Bash, Task
 argument-hint: [project-name]
 ---
 
