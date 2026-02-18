@@ -1,6 +1,6 @@
 ---
 description: Show current project state and task progress
-allowed-tools: Read, Glob
+allowed-tools: Read, Write, Glob, Bash
 argument-hint: [project-name]
 ---
 

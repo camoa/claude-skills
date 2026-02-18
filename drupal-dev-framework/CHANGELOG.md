@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-02-18
+
+### Fixed
+- **Session context survives compaction**: Commands now write `session_context.json` with active project/task so pre-compact hook can inject accurate context instead of guessing from `lastAccessed`
+- **pre-compact.sh**: Reads session context first, outputs task.md content for active task; falls back to registry-based guess only when no session context exists
+- **next.md, status.md**: Added `Write` and `Bash` to allowed-tools so they can write session context
+- **command-conventions.md**: Added session context tracking convention — all commands that resolve a project/task must write the context file
+
 ## [3.5.0] - 2026-02-16
 
 ### Changed
