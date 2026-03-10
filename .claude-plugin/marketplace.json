@@ -10,6 +10,18 @@
   },
   "plugins": [
     {
+      "name": "dev-guides-navigator",
+      "source": "./dev-guides-navigator",
+      "description": "Smart guide discovery and routing for dev-guides. Uses manifest with KG metadata (concepts, disambiguation, relationships) and hash-based caching to route AI to the correct guide.",
+      "version": "0.1.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": ["guides", "dev-guides", "llms-txt", "knowledge-graph", "caching", "routing", "disambiguation", "drupal", "nextjs", "design-system"]
+    },
+    {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
       "description": "Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, and configuration",
