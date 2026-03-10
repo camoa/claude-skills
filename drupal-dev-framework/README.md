@@ -81,6 +81,21 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 
+### Research Teams (`/research-team`)
+
+Instead of a single research pass, `/research-team` launches 3 competing AI agents that research independently, then debate to synthesize findings:
+
+**Feature mode** — when building something new:
+- **Build agent** — argues for custom implementation, finds core patterns
+- **Use agent** — argues for existing contrib solutions
+- **Extend agent** — argues for extending/composing existing modules
+
+**Bug mode** — when investigating issues:
+- 3 agents each form competing hypotheses about the root cause
+- Each investigates independently, then they debate evidence
+
+The debate produces a synthesized recommendation with dissenting opinions noted. Useful for complex decisions where a single perspective might miss options.
+
 ## What's Inside
 
 ### Agents (5)
