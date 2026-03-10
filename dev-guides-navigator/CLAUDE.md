@@ -23,6 +23,14 @@ This applies to: Drupal development, theming, frontend/CSS, design systems, desi
 - Next.js integration: next-drupal, DeepChat, Tiptap
 - Any task where you're unsure of the correct pattern
 
+## Fetching Rule
+
+**Never use WebFetch for dev-guides.** Always use `curl -s` via Bash:
+- `llms.hash` / `llms.txt` → `curl -s https://camoa.github.io/dev-guides/...`
+- `index.md` / guides → `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic}/{file}.md`
+
+WebFetch returns AI summaries or 400KB+ MkDocs HTML shells — neither is usable. Guides are atomic and fit in context via curl.
+
 ## When NOT to Check
 
 - Simple file edits unrelated to development patterns
