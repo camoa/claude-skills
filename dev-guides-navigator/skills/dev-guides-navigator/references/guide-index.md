@@ -1,7 +1,7 @@
 # Guide Index (Fallback)
 
-Use this keyword-to-URL mapping when the `llms-manifest.json` is not yet available.
-Once the manifest is deployed, prefer it for routing (it includes disambiguation and relationships).
+Use this keyword-to-URL mapping as a built-in fallback when `llms.hash` / `llms.txt` cannot be fetched.
+When online, prefer the live `llms.txt` + topic `index.md` flow (includes disambiguation via guide-meta).
 
 ## Discovery
 

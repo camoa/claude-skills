@@ -18,11 +18,11 @@
 ## Flow
 
 **First time (no cache):**
-1. WebFetch `llms.txt` + `llms.hash`
+1. `curl -s` both `llms.hash` and `llms.txt`
 2. Save both to cache file
 
 **Subsequent times (cache exists):**
-1. WebFetch `llms.hash` (tiny file)
+1. `curl -s` `llms.hash` (tiny file)
 2. Compare with cached hash
    - Same → use cached `llms.txt`
    - Different → re-fetch `llms.txt`, update cache
