@@ -36,24 +36,36 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 ## Quick Start
 
+### New Project
+
 ```bash
-# Start a new project
-/drupal-dev-framework:new my_module
-
-# Answer requirements questions (scope, integrations, constraints)
-# Then use /next to pick your first task and get a recommendation
-/drupal-dev-framework:next
+/drupal-dev-framework:new my_module     # Create project, answer requirements questions
+/drupal-dev-framework:next              # Pick your first task → auto-starts research
+/drupal-dev-framework:design my_task    # Design architecture after research
+/drupal-dev-framework:implement my_task # Build with TDD
+/drupal-dev-framework:complete my_task  # Run quality gates, mark done
 ```
 
-`/next` is your main entry point. It:
-1. Lists your projects (or picks the only one)
-2. Shows tasks and their current phase
-3. Recommends the next command to run
+### Returning to Work
 
+```bash
+/drupal-dev-framework:next              # That's it — picks up where you left off
 ```
-/next
-  → "Found 2 projects..." → Select project
-  → "Task: settings_form (Phase 2)" → Recommended: /design settings_form
+
+`/next` is your main command. It selects your project, shows tasks with their current phase, and tells you exactly what to run next. Use it at the start of every session.
+
+### Adding More Tasks
+
+```bash
+/drupal-dev-framework:next              # Select project → "Create new task"
+# Enter task name (e.g., "api_integration")
+# Research starts automatically
+```
+
+### Checking Status
+
+```bash
+/drupal-dev-framework:status            # See all projects and task progress
 ```
 
 ## Commands
