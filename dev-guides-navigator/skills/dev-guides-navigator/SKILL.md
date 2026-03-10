@@ -21,7 +21,10 @@ Route to the correct online guide and enforce guide application.
 
 Check for cache at `~/.claude/projects/{project-hash}/memory/dev-guides-cache.json`.
 
-**IMPORTANT:** Use `curl` (via Bash) for `llms.hash` and `llms.txt` — these are plain text files that must be stored raw. WebFetch summarizes content through an AI model, which destroys the structured line-by-line format needed for topic matching.
+**NEVER use WebFetch in this workflow.** All fetches use `curl -s` via Bash:
+- WebFetch summarizes content through AI, destroying structured formats needed for matching
+- MkDocs GitHub Pages URLs return 400KB+ HTML navigation shells, not guide content
+- Guides are atomic and small enough for `curl` — no summarization needed
 
 **No cache (first time):**
 1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` — save the hash
@@ -34,15 +37,23 @@ Check for cache at `~/.claude/projects/{project-hash}/memory/dev-guides-cache.js
    - **Same** → use cached `llms.txt`, skip re-fetch
    - **Different** → Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt`, update cache
 
-**Note:** WebFetch is fine for topic `index.md` pages and individual guides (steps 3+5) — AI summarization helps extract routing tables and metadata from those pages.
-
 ### 2. Match Task to Topic
 
 Scan `llms.txt` for the topic that matches the current task. Each line has a topic title, URL, guide count, and description.
 
+The URL in `llms.txt` is a GitHub Pages URL like `https://camoa.github.io/dev-guides/drupal/forms/`. Extract the **topic path** (e.g., `drupal/forms`) from this URL for use in raw GitHub fetches below.
+
 ### 3. Fetch Topic Index
 
-WebFetch the matched topic's URL (e.g., `https://camoa.github.io/dev-guides/drupal/forms/`). This returns the topic's `index.md` containing:
+**IMPORTANT:** Do NOT use WebFetch on GitHub Pages URLs — MkDocs renders them into 400KB+ HTML pages with navigation shells, hiding the actual content. Use `curl` with raw GitHub URLs instead.
+
+```bash
+curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic-path}/index.md
+```
+
+Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/index.md`
+
+This returns the raw markdown containing:
 
 - **"I need to..." routing table** — maps user intent to specific guide
 - **`guide-meta:` frontmatter** — KG metadata for disambiguation and relationships
@@ -62,9 +73,17 @@ The `guide-meta:` in the topic's frontmatter provides:
 | stories.yml preview | drupal/storybook | drupal/ui-patterns | reverse |
 | inline blocks | drupal/layout-builder | drupal/blocks | "inline blocks" in blocks' not |
 
-### 5. Pick Specific Guide
+### 5. Fetch Specific Guide
 
-From the "I need to..." routing table, select the guide that matches the task. WebFetch that individual guide `.md`.
+From the "I need to..." routing table, select the guide that matches the task. The routing table lists guide filenames. Fetch the raw markdown:
+
+```bash
+curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic-path}/{guide-filename}.md
+```
+
+Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/form-validation.md`
+
+**Do NOT use WebFetch on GitHub Pages URLs** — you'll get rendered HTML, not the guide content.
 
 ### 6. Apply the Guide (Critical)
 
@@ -81,15 +100,16 @@ From the "I need to..." routing table, select the guide that matches the task. W
 |------|--------|
 | Cache check | `curl -s` llms.hash, compare with cached hash |
 | Find topic | Match task keywords in cached `llms.txt` |
-| Get routing table | WebFetch topic `index.md` |
+| Get routing table | `curl -s` raw GitHub URL for topic `index.md` |
 | Disambiguate | Check `guide-meta:` concepts/not fields |
-| Get guide | WebFetch specific guide from routing table |
+| Get guide | `curl -s` raw GitHub URL for specific guide `.md` |
 | Apply | Extract patterns and implement, don't summarize |
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
+| Using WebFetch instead of curl | **Always use `curl -s`** — WebFetch returns AI summaries or 400KB HTML shells |
 | Reading guide and only summarizing | Extract patterns and apply to current task |
 | Grabbing first keyword match | Check guide-meta `not` fields for disambiguation |
 | Fetching llms.txt every time | Check llms.hash first, use cache |
@@ -112,7 +132,6 @@ From the "I need to..." routing table, select the guide that matches the task. W
 | `curl` fails (network error) | Fall back to `references/guide-index.md` for keyword-to-URL lookup |
 | No topic matches the task | Broaden keywords, check category sections in llms.txt, or task may not need a guide |
 | Cache file path unknown | Use Bash: `echo ~/.claude/projects/*/memory/` to find the project memory directory |
-| WebFetch returns truncated index.md | Ask for specific sections: "Return the guide-meta frontmatter and routing table" |
 | Guide content too large for context | Request only the specific section from the routing table, not the entire guide |
 
 ## See Also
