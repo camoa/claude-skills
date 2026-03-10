@@ -183,4 +183,4 @@ MIT
 ## Acknowledgments
 
 - [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent — TDD, brainstorming, verification workflows
-- [drupal-dev-tools](https://github.com/camoa/drupal-dev-tools) — Drupal/DDEV operations
+- `drupal-dev-tools` — Drupal/DDEV operations
