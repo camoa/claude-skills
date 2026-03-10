@@ -1,327 +1,213 @@
 # Drupal Development Framework
 
-A Claude Code plugin implementing a systematic 3-phase Drupal development workflow with human control at every step.
+A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow for Drupal projects. It prevents common AI pitfalls — jumping to code without understanding requirements, missing contrib solutions, creating inconsistent architecture, or skipping tests.
 
-## The Problem
+## How It Works
 
-AI coding assistants are powerful but can be unpredictable. Without structure, they might:
-- Jump straight to coding without understanding requirements
-- Miss existing solutions in contrib
-- Create inconsistent architectures
-- Implement features without tests
+You create a **project** (a Drupal module, theme, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:
 
-This plugin enforces a disciplined workflow: **Research → Architecture → Implementation**, ensuring you understand what you're building before writing code.
+```
+/new my_module → /next → /research → /design → /implement → /complete
+```
 
-## Concepts
+| Phase | Command | What Happens |
+|-------|---------|--------------|
+| **1. Research** | `/research <task>` | Search contrib, find core patterns, study existing solutions |
+| **2. Architecture** | `/design <task>` | Design approach, choose patterns, set acceptance criteria |
+| **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step |
 
-### Projects
-A **project** is a collection of related development tasks. It might include:
-- A single Drupal module
-- Multiple related modules
-- A theme and its components
-- A mix of modules, themes, and configuration
-- Any cohesive set of development work
-
-Projects are organized by **goal**, not by file type. The plugin tracks each project in a dedicated folder with requirements, architecture documents, and implementation tasks.
-
-### Tasks
-A **task** is a single implementable unit of work (e.g., "create settings form", "build entity type"). Tasks are created after requirements gathering - you define what you want to work on, and the framework guides you through building it.
-
-Each task independently cycles through **three phases**:
-
-| Phase | Command | What Happens | Code Written? |
-|-------|---------|--------------|---------------|
-| **1. Research** | `/research <task>` | Study contrib modules, find core patterns | No |
-| **2. Architecture** | `/design <task>` | Design approach, choose patterns, set criteria | No |
-| **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step | Yes |
-
-**Key insight:** Phases apply to TASKS, not projects. A project can have multiple tasks, each at different phases. You don't write code until a task reaches Phase 3.
-
-Task files are stored in `implementation_process/in_progress/` and moved to `completed/` when done.
-
-### Memory
-The plugin stores project state in markdown files, allowing:
-- Context restoration across Claude sessions
-- Progress tracking
-- Decision history
-
-## Design Principles
-
-1. **AI prepares, Human decides** - Agents gather information and present options, you make decisions
-2. **Interactive implementation** - AI writes code piece-by-piece with your approval, not autonomously
-3. **Memory-driven continuity** - Project state persists across sessions
-4. **Integration over reinvention** - Leverages existing tools (superpowers, drupal-dev-tools)
-5. **Principles are enforced, not just documented** - SOLID, TDD, DRY are checked at each phase
-
-## Built-in References
-
-The plugin includes reference documents that are enforced at each phase:
-
-| Reference | Enforces | Phase |
-|-----------|----------|-------|
-| `references/solid-drupal.md` | SOLID principles | Design |
-| `references/library-first.md` | Library-First & CLI-First | Design |
-| `references/tdd-workflow.md` | Test-Driven Development | Implementation |
-| `references/dry-patterns.md` | Don't Repeat Yourself | Implementation |
-| `references/quality-gates.md` | 5 Quality Gates | Completion |
-| Online dev-guides | Drupal domain decisions (security, SDC, JS, forms, entities, 20+ topics) | All phases |
-
-References combine built-in methodology docs with [online dev-guides](https://camoa.github.io/dev-guides/) for Drupal domain knowledge.
-
-## Prerequisites
-
-- Claude Code with [superpowers plugin](https://github.com/obra/superpowers-marketplace) installed
-- [drupal-dev-tools](https://github.com/camoa/drupal-dev-tools) plugin (optional, for DDEV integration)
+Phases apply per task, not per project. A project can have tasks at different phases simultaneously.
 
 ## Installation
 
 ```bash
-# Add marketplace (if not already added)
+# Add marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
 
-# Install the plugin
+# Install
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
-## Upgrading from v2.x
-
-v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-detects and migrates old tasks. Or run `/drupal-dev-framework:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md) for details.
-
-## Configuration
-
-When you create a new project, the plugin asks where to store project files:
-
-```
-Where should project files be stored?
-
-Default: ../claude_projects/my_project/
-(relative to current working directory)
-
-Options:
-1. Accept default
-2. Enter custom path
-```
-
-The path is saved in `project_state.md`, so the plugin remembers it across sessions. You can store projects anywhere - no special folder structure required.
+**Recommended companion plugins:**
+- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides)
+- `superpowers` — TDD enforcement, brainstorming, verification workflows
+- `drupal-dev-tools` — DDEV integration, Drupal audits
+- `code-quality-tools` — PHPStan, security scanning, SOLID/DRY analysis
 
 ## Quick Start
 
-### Starting a New Project
+### New Project
 
 ```bash
-# 1. Create a new project
-/drupal-dev-framework:new my_project_name
-# Or interactive mode:
-/drupal-dev-framework:new
-
-# 2. Answer requirements questions (scope, integrations, constraints)
-
-# 3. Use /next to start your first task
-/drupal-dev-framework:next
-
-# 4. Enter your first task name when prompted
-#    Example: "settings_form" or "content_entity"
-
-# 5. The framework automatically starts research for your task
+/drupal-dev-framework:new my_module     # Create project, answer requirements questions
+/drupal-dev-framework:next              # Pick your first task → auto-starts research
+/drupal-dev-framework:design my_task    # Design architecture after research
+/drupal-dev-framework:implement my_task # Build with TDD
+/drupal-dev-framework:complete my_task  # Run quality gates, mark done
 ```
 
-### Continuing Existing Work
+### Returning to Work
 
 ```bash
-# Continue where you left off
-/drupal-dev-framework:next
-
-# View project status
-/drupal-dev-framework:status
+/drupal-dev-framework:next              # That's it — picks up where you left off
 ```
 
-### Working on Tasks
+`/next` is your main command. It selects your project, shows tasks with their current phase, and tells you exactly what to run next. Use it at the start of every session.
 
-Each task goes through 3 phases:
+### Adding More Tasks
 
 ```bash
-# Phase 1: Research (automatic after task creation)
-# - Searches contrib modules, finds core patterns
-# - Review findings, then proceed to design
-
-# Phase 2: Design architecture
-/drupal-dev-framework:design settings_form
-
-# Phase 3: Implement with TDD
-/drupal-dev-framework:implement settings_form
-
-# Mark complete when done
-/drupal-dev-framework:complete settings_form
-
-# Start next task
-/drupal-dev-framework:research api_integration
+/drupal-dev-framework:next              # Select project → "Create new task"
+# Enter task name (e.g., "api_integration")
+# Research starts automatically
 ```
 
-### Resuming Work
+### Checking Status
 
 ```bash
-# Get intelligent recommendation for next action
-/drupal-dev-framework:next
-
-# Or check current status
-/drupal-dev-framework:status
-```
-
-### Typical Session Flow
-
-```
-/next (no argument)
-     │
-     ▼
-"Found 2 projects..."  →  Select project
-     │
-     ▼
-"Found 2 tasks..."     →  Select task or create new
-     │
-     ▼
-"Task: settings_form (Phase 2)"
-"Recommended: /design settings_form"
-     │
-     ▼
-Work on task through phases → /complete when done
-     │
-     ▼
-Back to task selection
+/drupal-dev-framework:status            # See all projects and task progress
 ```
 
 ## Commands
 
+### Core Workflow
+
 | Command | Description |
 |---------|-------------|
-| `/drupal-dev-framework:new [name]` | Start a new project with requirements gathering |
-| `/drupal-dev-framework:next [project]` | Continue existing work - select project/task and suggest next action |
-| `/drupal-dev-framework:status [project]` | Show current project state and phase |
-| `/drupal-dev-framework:research <task>` | Phase 1 - Research a task, store findings |
-| `/drupal-dev-framework:research-team <task>` | Phase 1 - Research with agent team (3 competing perspectives + debate) |
-| `/drupal-dev-framework:design <task>` | Phase 2 - Design architecture for a task |
-| `/drupal-dev-framework:implement <task>` | Phase 3 - Load context, start implementing |
-| `/drupal-dev-framework:complete <task>` | Mark task done, run quality gates, move to completed |
-| `/drupal-dev-framework:pattern <use-case>` | Get pattern recommendations for a use case |
-| `/drupal-dev-framework:validate [component]` | Validate implementation against architecture/standards |
-| `/drupal-dev-framework:migrate-tasks` | Manually migrate v2.x tasks to v3.0.0 folder structure (with confirmation) |
+| `/new [name]` | Create a project and gather requirements |
+| `/next [project]` | Continue work — select project/task, get next action |
+| `/status [project]` | View project state and task progress |
+| `/research <task>` | Phase 1 — research contrib, core patterns, existing solutions |
+| `/research-team <task>` | Phase 1 — research with 3 competing AI perspectives + debate |
+| `/design <task>` | Phase 2 — design architecture, choose patterns |
+| `/implement <task>` | Phase 3 — build with TDD, step-by-step approval |
+| `/complete <task>` | Finish task — run quality gates, move to completed |
 
-## Components
+### Utilities
+
+| Command | Description |
+|---------|-------------|
+| `/validate [file]` | Check implementation against architecture and standards |
+| `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
+| `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
+
+All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
+
+### Research Teams (`/research-team`)
+
+Instead of a single research pass, `/research-team` launches 3 competing AI agents that research independently, then debate to synthesize findings:
+
+**Feature mode** — when building something new:
+- **Build agent** — argues for custom implementation, finds core patterns
+- **Use agent** — argues for existing contrib solutions
+- **Extend agent** — argues for extending/composing existing modules
+
+**Bug mode** — when investigating issues:
+- 3 agents each form competing hypotheses about the root cause
+- Each investigates independently, then they debate evidence
+
+The debate produces a synthesized recommendation with dissenting opinions noted. Useful for complex decisions where a single perspective might miss options.
+
+## What's Inside
 
 ### Agents (5)
-Agents handle complex multi-step tasks with model routing and tool restrictions:
 
-| Agent | Model | Features |
-|-------|-------|----------|
-| `project-orchestrator` | sonnet | `memory: project`, dynamic context injection |
-| `architecture-drafter` | opus | `memory: project`, preloads guide-integrator |
-| `architecture-validator` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write`), scoped PreToolUse hook |
-| `pattern-recommender` | sonnet | Read-only (`disallowedTools: Edit, Write, Bash`) |
-| `contrib-researcher` | haiku | Read-only (`disallowedTools: Edit, Write, Bash`), returns findings to main window |
+Agents handle complex multi-step tasks with appropriate model routing:
+
+| Agent | Model | Role |
+|-------|-------|------|
+| `project-orchestrator` | sonnet | Routes workflow, manages projects and tasks |
+| `architecture-drafter` | opus | Designs architecture with SOLID/Library-First enforcement |
+| `architecture-validator` | sonnet | Read-only validation against architecture and standards |
+| `pattern-recommender` | sonnet | Recommends Drupal patterns with core/contrib references |
+| `contrib-researcher` | haiku | Searches drupal.org and contrib code for existing solutions |
 
 ### Skills (16)
-Skills are auto-invoked based on context, with model routing and invocation control:
-- **Phase 1:** `project-initializer`, `requirements-gatherer`, `core-pattern-finder` (haiku, internal)
-- **Phase 2:** `component-designer` (opus), `diagram-generator` (sonnet), `guide-integrator` (internal)
-- **Phase 3:** `task-context-loader` (internal, context injection), `implementation-task-creator`, `tdd-companion`, `task-completer`, `code-pattern-checker`
-- **Cross-Phase:** `memory-manager` (internal), `phase-detector` (haiku, internal), `guide-loader` (haiku, internal), `session-resume` (context injection), `task-folder-migrator`
 
-*Internal skills (`user-invocable: false`) are called by other skills/agents only — not visible in the `/` menu.*
+Skills are invoked automatically by commands and agents — 10 are user-invocable, 6 are internal:
 
-## Project Structure (v3.0.0)
+| Category | Skills |
+|----------|--------|
+| **Research** | `core-pattern-finder` |
+| **Architecture** | `component-designer`, `diagram-generator`, `guide-integrator`, `guide-loader` |
+| **Implementation** | `tdd-companion`, `code-pattern-checker`, `task-completer` |
+| **Utility** | `project-initializer`, `requirements-gatherer`, `session-resume`, `implementation-task-creator`, `task-folder-migrator` |
+| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader` |
 
-When you create a project, this structure is created in your chosen location:
+### Methodology References (6)
+
+Built-in docs enforced at specific phases:
+
+| Reference | Enforces | When |
+|-----------|----------|------|
+| `solid-drupal.md` | SOLID principles (Drupal examples) | Architecture phase |
+| `library-first.md` | Library-First & CLI-First patterns | Architecture phase |
+| `tdd-workflow.md` | Red-Green-Refactor cycle | Implementation phase |
+| `dry-patterns.md` | DRY extraction patterns | Implementation phase |
+| `quality-gates.md` | 5 quality gates | Task completion |
+| `purposeful-code.md` | Every line has a purpose | Task completion |
+
+### Online Dev-Guides (60+ topics)
+
+For Drupal domain knowledge (forms, entities, security, SDC, views, caching, etc.), the plugin delegates to the `dev-guides-navigator` plugin which provides:
+- Hash-based caching so guides aren't re-fetched every session
+- KG metadata for disambiguation (e.g., "story.yml" → UI Patterns, not Storybook)
+- 1200+ atomic decision guides at [camoa.github.io/dev-guides](https://camoa.github.io/dev-guides/)
+
+## Project Structure
 
 ```
-{your_chosen_path}/my_project/
-├── project_state.md           # Current status, phase, path, decisions
+{your_path}/my_project/
+├── project_state.md              # Requirements, status, decisions
 ├── architecture/
-│   ├── main.md               # High-level architecture
-│   ├── research_*.md         # Research findings
-│   └── component_name.md     # Component-specific designs
+│   ├── main.md                   # High-level architecture
+│   └── {component}.md            # Component designs
 └── implementation_process/
     ├── in_progress/
-    │   └── task_name/        # Task folder (v3.0.0)
-    │       ├── task.md              # Tracker with links
-    │       ├── research.md          # Phase 1 content
-    │       ├── architecture.md      # Phase 2 content
-    │       └── implementation.md    # Phase 3 content
+    │   └── {task_name}/          # One folder per task
+    │       ├── task.md           # Status, links, acceptance criteria
+    │       ├── research.md       # Phase 1 findings
+    │       ├── architecture.md   # Phase 2 design
+    │       └── implementation.md # Phase 3 notes
     └── completed/
-        └── task_name/        # Completed task (same structure)
-            ├── task.md
-            ├── research.md
-            ├── architecture.md
-            └── implementation.md
+        └── {task_name}/          # Same structure, moved on /complete
 ```
 
-### v3.0.0 Task Structure
+## Enforced Principles
 
-Each task gets its own folder with files separated by phase:
-- **task.md** - Lightweight tracker with links, status, acceptance criteria
-- **research.md** - Phase 1 research findings
-- **architecture.md** - Phase 2 design
-- **implementation.md** - Phase 3 implementation notes
+The framework doesn't just document best practices — it enforces them:
 
-Benefits:
-- ✅ Separates content by phase
-- ✅ Keeps files small and focused
-- ✅ Easy to navigate (max 4 files per task)
-- ✅ Simple flat structure (no nested folders)
+| Principle | How It's Enforced |
+|-----------|-------------------|
+| **Research first** | `/design` requires research findings; `/implement` requires architecture |
+| **SOLID** | Architecture drafter and validator check for violations |
+| **Library-First** | Services before forms, business logic out of controllers |
+| **TDD** | `tdd-companion` blocks writing code before tests |
+| **DRY** | `code-pattern-checker` flags duplication |
+| **Security** | Quality gate checks input validation, access control, CSRF, SQL injection |
+| **Quality gates** | `/complete` runs 5 gates — all must pass before task is marked done |
 
-## Integration
+### Always Blocked
 
-Works with these plugins (automatically when installed):
-- `superpowers:brainstorming` - Design discussions
-- `superpowers:test-driven-development` - TDD enforcement
-- `superpowers:verification-before-completion` - Final checks
-- `drupal-dev-tools:drupal` - Drupal audits, DDEV operations
+- `\Drupal::service()` in new code (use dependency injection)
+- Business logic in forms or controllers
+- Missing access checks on routes
+- Raw SQL with user input
+- Writing implementation before tests
 
-## Background
+## Upgrading from v2.x
 
-This plugin automates a development methodology that evolved from real-world Drupal projects. The 3-phase approach prevents common AI-assisted development pitfalls:
-
-- **Phase 1** ensures you don't reinvent the wheel (check contrib first)
-- **Phase 2** ensures you have a plan before coding
-- **Phase 3** ensures code is written incrementally with human oversight
-
-The methodology prioritizes understanding over speed, and human control over AI autonomy.
-
-## Acknowledgments
-
-This plugin builds on patterns and integrates with:
-- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent - TDD, brainstorming, verification workflows
-- [drupal-dev-tools](https://github.com/camoa/drupal-dev-tools) - Drupal/DDEV operations
+v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-detects and offers to migrate old tasks. Or run `/drupal-dev-framework:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md).
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history.
-
-### 3.4.0 (Current)
-- Online dev-guides integration: skills and agents WebFetch Drupal decision guides from https://camoa.github.io/dev-guides/
-- Removed bundled `security-checklist.md` and `frontend-standards.md` — replaced by 60+ online guides
-- guide-integrator v3.0.0: three-source model (plugin refs + online dev-guides + user custom guides)
-
-### 3.3.0
-- `/research-team` command: Phase 1 research with agent teams — feature mode (Build/Use/Extend debate) and bug mode (competing hypothesis investigation)
-- Requires experimental flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
-
-### 3.2.0
-- User-configured project storage: `projectsBase` saved in registry on first run, no hardcoded defaults
-- Registry schema v1.1: removed stale `phase` field (phase is per-task)
-
-### 3.1.0
-- Agent memory, model routing, tool restrictions across all agents and skills
-- Dynamic context injection, `.claude/rules/`, CLAUDE.md, PreCompact hook
-- Lean documentation: pruned v2.x migration content, condensed output templates
-
-### 3.0.0-beta.1
-- Folder-based task structure, task-folder-migrator skill, auto-migration via `/next`
-
-### 2.x
-- Self-contained references, enforced principles, Gate 5, `/new` command
-
-### 1.0.0
-- Initial release with 5 agents, 15 skills, 9 commands
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **3.5.1**.
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent — TDD, brainstorming, verification workflows
+- `drupal-dev-tools` — Drupal/DDEV operations

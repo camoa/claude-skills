@@ -5,14 +5,14 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for Drupal development (HTMX, AJAX migration), brand content creation (presentations, carousels, infographics), code quality auditing, paper testing (mental code execution), and plugin development",
-    "version": "1.4.0"
+    "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
+    "version": "1.5.0"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Uses manifest with KG metadata (concepts, disambiguation, relationships) and hash-based caching to route AI to the correct guide.",
+      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) in topic index pages to route AI to the correct guide.",
       "version": "0.1.0",
       "author": {
         "name": "camoa"

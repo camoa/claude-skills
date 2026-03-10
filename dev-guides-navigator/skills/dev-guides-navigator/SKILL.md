@@ -21,16 +21,20 @@ Route to the correct online guide and enforce guide application.
 
 Check for cache at `~/.claude/projects/{project-hash}/memory/dev-guides-cache.json`.
 
+**IMPORTANT:** Use `curl` (via Bash) for `llms.hash` and `llms.txt` — these are plain text files that must be stored raw. WebFetch summarizes content through an AI model, which destroys the structured line-by-line format needed for topic matching.
+
 **No cache (first time):**
-1. WebFetch `https://camoa.github.io/dev-guides/llms.hash` — save the hash
-2. WebFetch `https://camoa.github.io/dev-guides/llms.txt` — save the content
+1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` — save the hash
+2. Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt` — save the content
 3. Write both to cache file
 
 **Cache exists:**
-1. WebFetch `https://camoa.github.io/dev-guides/llms.hash` (tiny, fast)
+1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` (tiny, fast)
 2. Compare with cached hash
    - **Same** → use cached `llms.txt`, skip re-fetch
-   - **Different** → re-fetch `llms.txt`, update cache
+   - **Different** → Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt`, update cache
+
+**Note:** WebFetch is fine for topic `index.md` pages and individual guides (steps 3+5) — AI summarization helps extract routing tables and metadata from those pages.
 
 ### 2. Match Task to Topic
 
@@ -75,8 +79,8 @@ From the "I need to..." routing table, select the guide that matches the task. W
 
 | Step | Action |
 |------|--------|
-| Cache check | Compare `llms.hash` with cached hash |
-| Find topic | Match task keywords in `llms.txt` |
+| Cache check | `curl -s` llms.hash, compare with cached hash |
+| Find topic | Match task keywords in cached `llms.txt` |
 | Get routing table | WebFetch topic `index.md` |
 | Disambiguate | Check `guide-meta:` concepts/not fields |
 | Get guide | WebFetch specific guide from routing table |
@@ -91,8 +95,28 @@ From the "I need to..." routing table, select the guide that matches the task. W
 | Fetching llms.txt every time | Check llms.hash first, use cache |
 | Ignoring `requires` | Load prerequisites first |
 
+## Examples
+
+| User says | Action |
+|-----------|--------|
+| "I need to create a Drupal form" | Match "form" → `drupal/forms/` → fetch index.md → pick guide for form creation |
+| "Add a story.yml for my component" | Match "story.yml" → check guide-meta → `drupal/ui-patterns/` (NOT storybook) |
+| "Set up responsive images" | Match "responsive image" → `drupal/image-styles/` (NOT drupal/media) |
+| "How do I use Config Split?" | Match "Config Split" → `drupal/config-management/` |
+| "I need SOLID architecture for my module" | Drupal context → `drupal/solid/` (NOT generic dev-solid-principles) |
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `curl` fails (network error) | Fall back to `references/guide-index.md` for keyword-to-URL lookup |
+| No topic matches the task | Broaden keywords, check category sections in llms.txt, or task may not need a guide |
+| Cache file path unknown | Use Bash: `echo ~/.claude/projects/*/memory/` to find the project memory directory |
+| WebFetch returns truncated index.md | Ask for specific sections: "Return the guide-meta frontmatter and routing table" |
+| Guide content too large for context | Request only the specific section from the routing table, not the entire guide |
+
 ## See Also
 
 - `references/cache-format.md` — cache file format
 - `references/manifest-schema.md` — build output (llms.txt + llms.hash)
-- `references/guide-index.md` — fallback keyword table (if llms.hash not yet deployed)
+- `references/guide-index.md` — fallback keyword table (offline/network failure)
