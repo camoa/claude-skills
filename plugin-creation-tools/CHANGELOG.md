@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-12
+
+### Added
+- **2 new shipped agents** for plugin quality assurance:
+  - `agents/skill-quality-reviewer.md` — reviews SKILL.md description, structure, and progressive disclosure with A/B/C/D scoring
+  - `agents/plugin-structure-auditor.md` — deep structural audit covering architecture, consistency, distribution readiness, security, and performance
+- **4 new hook events** documented: `InstructionsLoaded`, `ConfigChange`, `WorktreeCreate`, `WorktreeRemove` (total now 18 events)
+- **HTTP hook type** documentation (`type: "http"`) — POST event JSON to a URL with header env var interpolation
+- **Hook fields**: `statusMessage` (TUI display), `once` (fire once per session), `"ask"` decision value for PreToolUse
+- **Agent frontmatter fields**: `isolation: worktree`, `background: true`, `maxTurns`, `mcpServers`, `Agent(type)` tool syntax
+- **Full model IDs** in agent docs: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5`
+- **Skill frontmatter fields**: `hooks` (skill-scoped lifecycle), `argument-hint` (autocomplete hints)
+- **String substitutions**: `$ARGUMENTS[N]`/`$N`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_SESSION_ID}`
+- **Context budget** documentation: 2% of context window / 16K-char fallback, `SLASH_COMMAND_TOOL_CHAR_BUDGET` override
+- **Skills hot-reload** from `--add-dir` directories
+- **Marketplace source types**: `git-subdir` (monorepo sparse clone), `npm`, `pip`
+- **Marketplace fields**: `ref`/`sha` pinning, `strict` mode, `tags`, `metadata.pluginRoot`
+- **Private repository authentication** docs (GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_TOKEN)
+- **Official marketplace submission URLs**: `claude.ai/settings/plugins/submit`, `platform.claude.com/plugins/submit`
+- **Release channels pattern** (stable/latest with different marketplace files)
+- **`strictKnownMarketplaces`** managed setting documentation
+- **`settings.json`** at plugin root documentation (agent key)
+- **`/reload-plugins`** command for hot-reloading plugins during development
+- **Pushy descriptions** guidance — Anthropic insight on combating undertriggering
+- **Degrees of freedom** concept in skill patterns — high/medium/low freedom levels
+- **Eval-driven development** approach in creation-approaches.md
+- **Agent team operations**: display modes, plan approval, task dependencies, quality gates, `/batch` skill
+- **Grader/comparator agent patterns** from Anthropic's skill-creator
+
+### Changed
+- SKILL.md description made "pushier" with more trigger phrases and negative scope
+- SKILL.md now injects dynamic context: `!ls .claude-plugin/ 2>/dev/null`
+- Command descriptions (create, add-component, validate) updated with trigger phrases
+- Validate command now runs with `context: fork` to isolate output
+- Hook event count updated from 14 to 18 throughout
+- Default command hook timeout corrected from 30s to 600s
+- Hook input fields expanded: `agent_id`, `agent_type`, `last_assistant_message`, `agent_transcript_path`
+- Core philosophy updated with specific context budget numbers (2%/16K)
+- Full-featured example updated to showcase hooks frontmatter, model routing, and context fork
+
+### Updated Templates
+- Agent template: added isolation/background/maxTurns/mcpServers fields
+- Hooks template: added HTTP hook type, new events, statusMessage/once
+- Marketplace template: added git-subdir/npm/pip sources, tags, ref/sha pinning
+- Plugin.json template: added settings.json reference
+
 ## [2.2.0] - 2026-02-11
 
 ### Added

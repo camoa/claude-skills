@@ -1,7 +1,8 @@
 ---
-description: Validate plugin structure, frontmatter, and best practices
+description: Validate plugin structure, frontmatter, and best practices. Use when user says "validate plugin", "check plugin", "audit plugin", "verify plugin", "is my plugin correct", or before distributing/publishing a plugin.
 allowed-tools: Read, Glob, Grep
 argument-hint: [plugin-path]
+context: fork
 ---
 
 # Validate Plugin

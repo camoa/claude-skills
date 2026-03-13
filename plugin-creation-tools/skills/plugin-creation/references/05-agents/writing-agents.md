@@ -30,6 +30,9 @@ hooks:
   preToolCall:
     - matcher: Write
       command: echo "Write operation triggered"
+isolation: worktree
+background: true
+maxTurns: 25
 ---
 
 # Agent Name
@@ -63,6 +66,10 @@ How this agent decides what to focus on. Any constraints or special consideratio
 | permissionMode | string | No | Permission handling mode |
 | skills | string | No | Skills to preload into agent context |
 | hooks | object | No | Hooks scoped to this agent (same format as hooks.json) |
+| isolation | string | No | `worktree` -- run in a temporary git worktree for isolated repo copy |
+| background | boolean | No | `true` -- declarative background execution |
+| maxTurns | number | No | Maximum agentic turns for cost control |
+| mcpServers | object/array | No | MCP servers scoped to this agent (inline definitions or string references) |
 
 ## The Description Field
 
@@ -96,6 +103,8 @@ Choose the model based on task complexity and cost:
 | sonnet | Balanced tasks (code review, documentation, refactoring) | Medium |
 | opus | Complex reasoning (architecture decisions, security analysis) | Highest |
 | inherit | Use whatever model the parent session uses | Varies |
+
+Full model IDs are also supported: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5`. The short aliases (`sonnet`, `opus`, `haiku`) resolve to the latest version of each model.
 
 ```yaml
 # Cost-efficient: simple file lookups
@@ -289,6 +298,71 @@ Consider:
 3. Team conventions and existing patterns
 4. Long-term evolution of the codebase
 ```
+
+## Isolation: Worktree Mode
+
+Set `isolation: worktree` to run the agent in a temporary git worktree, giving it an isolated copy of the repository.
+
+```yaml
+isolation: worktree
+```
+
+**Behavior**:
+- A new git worktree is created for the agent's execution
+- The agent operates on its own copy of the repo, preventing conflicts with other agents or the main session
+- If the agent makes no changes, the worktree is automatically cleaned up
+- If changes are made, they remain in the worktree for review or merging
+
+**Use cases**: Parallel code modifications, experimental changes, agent teams working on different files simultaneously.
+
+## Background Execution
+
+Set `background: true` to run the agent in the background without blocking the main session.
+
+```yaml
+background: true
+```
+
+The agent runs independently and its results are available when it completes.
+
+## Cost Control with maxTurns
+
+Limit the number of agentic turns to control cost and prevent runaway agents.
+
+```yaml
+maxTurns: 25
+```
+
+When the agent reaches the turn limit, it stops and returns its current results.
+
+## Scoped MCP Servers
+
+Use `mcpServers` to scope MCP servers to a specific agent. Supports inline definitions or string references to servers defined elsewhere.
+
+```yaml
+# Inline definition
+mcpServers:
+  memory:
+    command: npx
+    args: ["-y", "@anthropic/memory-server"]
+
+# String reference to existing server
+mcpServers:
+  - memory
+  - github
+```
+
+This limits which MCP servers the agent can access, improving security and reducing context.
+
+## Tool Restrictions with Agent(type) Syntax
+
+Use `Agent(type)` in the `tools` field to restrict which subagent types an agent can spawn:
+
+```yaml
+tools: Read, Grep, Glob, Agent(code-reviewer), Agent(quick-lookup)
+```
+
+This prevents the agent from spawning arbitrary subagents, limiting it to only the specified agent types.
 
 ## Testing Agent Delegation
 

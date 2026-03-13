@@ -1,6 +1,12 @@
 ---
 name: code-helper
-description: Assists with code quality tasks. Use when reviewing code, checking for issues, or improving code quality.
+description: Assists with code quality tasks. Use when reviewing code, checking for issues, or improving code quality. NOT for: writing new features from scratch.
+model: sonnet
+hooks:
+  PreToolUse:
+    - matcher: Write|Edit
+      type: prompt
+      prompt: "Verify the proposed edit follows the code patterns in references/patterns.md before allowing."
 ---
 
 # Code Helper

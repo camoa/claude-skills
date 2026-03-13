@@ -150,6 +150,30 @@ ELSE:
 
 **Example:** Payment processing with compliance (sanctions check → jurisdiction verification → risk assessment → process or flag).
 
+## Degrees of Freedom
+
+Match the specificity of your skill instructions to how fragile the task is. This concept (from Anthropic's skill-creator) helps decide HOW to write instructions within any pattern above.
+
+- **High freedom** (text instructions): Multiple approaches are valid, and heuristics guide the choice. Like an open field with many paths — Claude can pick the best route based on context.
+- **Medium freedom** (pseudocode/scripts): A preferred pattern exists, but some variation is OK. Provide a template or pseudocode that Claude can adapt.
+- **Low freedom** (specific scripts): Operations are fragile and consistency is critical. Like a narrow bridge with cliffs — Claude needs exact guardrails to avoid errors.
+
+**Metaphor**: A narrow bridge with cliffs needs guardrails (low freedom), while an open field allows many routes (high freedom).
+
+### Applying Degrees of Freedom to Patterns
+
+| Pattern | Typical Freedom | Why |
+|---------|----------------|-----|
+| Sequential Workflow | Low-Medium | Step order matters, but individual steps may vary |
+| Multi-MCP Coordination | Low | Cross-service calls are fragile, need exact sequences |
+| Iterative Refinement | Medium-High | Quality criteria are fixed, but approach is flexible |
+| Context-Aware Selection | Medium | Decision tree is fixed, execution varies |
+| Domain-Specific Intelligence | Low | Compliance/security rules must be exact |
+
+Use this table alongside the pattern choice to decide whether your SKILL.md instructions should be text guidelines, pseudocode, or exact scripts.
+
+**See also**: `core-philosophy.md` — Degrees of Freedom section for examples by freedom level.
+
 ## Choosing a Pattern
 
 | Pattern | Best For | Complexity |

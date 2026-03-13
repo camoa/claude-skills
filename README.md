@@ -76,19 +76,24 @@ Features competing agent research (`/research-team`) with Build/Use/Extend debat
 
 See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for full documentation.
 
-### plugin-creation-tools (v2.2.0)
+### plugin-creation-tools (v2.3.0)
 
-Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration.
+Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types (command/prompt/agent/HTTP), agent isolation and cost control, marketplace distribution with 6 source types, and pushy description optimization.
 
 ```bash
 # Just describe what you want:
 Create a plugin called "my-tools" with a deploy command
+
+# Or use specific commands:
+/plugin-creation-tools:create my-tools --skill --agent --hook
+/plugin-creation-tools:validate ./my-tools
 ```
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 1 (`plugin-creation`) |
+| Skills | 1 (`plugin-creation` — 30+ reference docs, templates, examples) |
 | Commands | 3 (`/create`, `/add-component`, `/validate`) |
+| Agents | 2 (`skill-quality-reviewer`, `plugin-structure-auditor`) |
 
 ### brand-content-design (v2.7.1)
 

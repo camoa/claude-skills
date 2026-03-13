@@ -208,6 +208,54 @@ For an alternative approach to skill creation, see Anthropic's official `skill-c
 
 ---
 
+## Eval-Driven Development
+
+An advanced creation approach from Anthropic's skill-creator for skills where quantitative comparison matters.
+
+### How It Works
+
+1. **Define test cases** in `evals/evals.json` with prompts, expected outputs, and assertions
+2. **Run skill vs baseline** in parallel for each test case
+3. **Grader agent** checks assertions with evidence (pass/fail per assertion)
+4. **Benchmark aggregation**: pass_rate, time, tokens across all test cases
+5. **Feedback loop**: user reviews results, writes `feedback.json`, skill is improved, repeat
+
+### Example `evals/evals.json` Structure
+
+```json
+{
+  "evals": [
+    {
+      "prompt": "Create a Python CLI that accepts --name and --output flags",
+      "expected": "Argparse-based CLI with both flags",
+      "assertions": [
+        "Uses argparse or click for flag parsing",
+        "Includes --name and --output flags",
+        "Has error handling for missing flags"
+      ]
+    }
+  ]
+}
+```
+
+### When to Use
+
+- **Best for**: Technique and reference skills where you can define measurable quality criteria
+- **Less suited for**: Discipline/rules skills where behavior is binary (TDD pressure testing works better for those)
+- **Contrasts with**: TDD pressure testing (superpowers framework), which focuses on adversarial prompts that test rule adherence
+
+### Eval vs TDD Comparison
+
+| Aspect | Eval-Driven | TDD Pressure Testing |
+|--------|-------------|---------------------|
+| Focus | Output quality metrics | Rule adherence under pressure |
+| Test format | Prompts + assertions | Adversarial prompts |
+| Measurement | pass_rate, time, tokens | Pass/fail per rule |
+| Best for | Technique/reference skills | Discipline/rules skills |
+| Iteration signal | Benchmark scores | Failure patterns |
+
+---
+
 ## Approach Comparison
 
 | Approach | Best For | Speed | Quality |

@@ -9,4 +9,8 @@
   "license": "MIT",
   "repository": "https://github.com/username/repo",
   "keywords": ["keyword1", "keyword2"]
+
+  // Note: A separate settings.json file at the plugin root can set the
+  // "agent" key to configure agent behavior for this plugin.
+  // See the agent template for available agent configuration fields.
 }

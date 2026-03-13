@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", etc.
+description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
 ---
 
 # Plugin Creation
@@ -143,7 +143,7 @@ When user says "add agent", "create agent", "make agent":
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for all 14 events
+2. Read `references/06-hooks/hook-events.md` for all 18 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
    - `PreToolUse` - before tool execution (can block)

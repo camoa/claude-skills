@@ -344,6 +344,41 @@ cat .claude-plugin/plugin.json | jq .
 node -e "require('./.claude-plugin/plugin.json')"
 ```
 
+## settings.json
+
+A `settings.json` file can be placed at the plugin root (alongside `.claude-plugin/`) to provide plugin-level settings:
+
+```
+plugin-name/
+├── .claude-plugin/
+│   └── plugin.json
+├── settings.json          # Plugin settings
+├── commands/
+└── skills/
+```
+
+### Supported Keys
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `agent` | string | Activates one of the plugin's agents as the main thread agent |
+
+### Behavior
+
+- Settings from `settings.json` take priority over `plugin.json` when both define the same configuration
+- Unknown keys are silently ignored (forward-compatible)
+- Currently only the `agent` key is supported; more keys may be added in future releases
+
+### Example
+
+```json
+{
+  "agent": "code-reviewer"
+}
+```
+
+This activates the `code-reviewer` agent (defined in `agents/code-reviewer.md`) as the main thread agent for the plugin.
+
 ## See Also
 
 - `marketplace-json.md` - marketplace configuration
