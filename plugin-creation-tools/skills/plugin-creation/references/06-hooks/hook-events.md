@@ -1,6 +1,6 @@
 # Hook Events
 
-Complete reference for all 14 hook events in Claude Code.
+Complete reference for all 18 hook events in Claude Code.
 
 ## Event Reference Table
 
@@ -20,6 +20,10 @@ Complete reference for all 14 hook events in Claude Code.
 | TaskCompleted | Task marked complete | Yes | No |
 | PreCompact | Before context compaction | No | Yes (manual, auto) |
 | SessionEnd | Session terminates | No | Yes (clear, logout, prompt_input_exit) |
+| InstructionsLoaded | CLAUDE.md/instructions loaded | No | No |
+| ConfigChange | Configuration changes during session | No | No |
+| WorktreeCreate | Worktree created for agent | No | No |
+| WorktreeRemove | Worktree removed after agent completion | No | No |
 
 ## MCP Tool Matcher Syntax
 
@@ -31,6 +35,16 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
 | `mcp__.*__write.*` | Any write tool from any server |
 | `mcp__github__create_issue` | Specific MCP tool |
 | `Write\|Edit\|mcp__fs__write` | Built-in and MCP tools combined |
+
+## Common Input Fields
+
+All hook events receive JSON input with the following common fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hook_event_name` | string | The event that triggered the hook |
+| `agent_id` | string | Identifier of the agent (or main session) running the hook |
+| `agent_type` | string | Type of agent (e.g., the agent name, or `main` for the primary session) |
 
 ## Event Details
 
@@ -133,6 +147,7 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
 - Exit non-zero: Block execution
 - Stdout `approve`: Bypass permission check
 - Stdout `deny`: Block with denial message
+- Stdout `ask`: Escalate the decision to the user
 
 ### PermissionRequest
 
@@ -300,6 +315,10 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
 
 **Can Block**: Yes -- can request continuation
 
+**Input Fields**: In addition to common fields, SubagentStop receives:
+- `last_assistant_message` -- the final assistant message from the subagent
+- `agent_transcript_path` -- path to the subagent's full transcript file
+
 **Use Cases**:
 - Verify subagent task completion
 - Chain subagent operations
@@ -333,6 +352,9 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
 **Matcher**: Not supported
 
 **Can Block**: Yes -- can force continuation
+
+**Input Fields**: In addition to common fields, Stop receives:
+- `last_assistant_message` -- the final assistant message content before stopping
 
 **Use Cases**:
 - Intelligent continuation decisions
@@ -459,9 +481,11 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
 
 **Trigger**: When the session terminates
 
-**Matcher**: Termination type -- `clear`, `logout`, `prompt_input_exit`
+**Matcher**: Termination type -- `clear`, `logout`, `prompt_input_exit` (expanded reason values available)
 
 **Can Block**: No
+
+**Timeout**: 1.5 seconds (hooks must complete quickly as the session is ending)
 
 **Use Cases**:
 - Cleanup temporary files
@@ -478,6 +502,122 @@ For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRe
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### InstructionsLoaded
+
+**Trigger**: When CLAUDE.md or other instruction files are loaded
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- React to instruction changes
+- Log which instructions were loaded
+- Validate instruction content
+
+**Example**:
+```json
+{
+  "InstructionsLoaded": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-instructions-loaded.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### ConfigChange
+
+**Trigger**: When configuration changes during a session
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- React to runtime configuration changes
+- Log config modifications
+- Refresh cached configuration state
+
+**Example**:
+```json
+{
+  "ConfigChange": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-config-change.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### WorktreeCreate
+
+**Trigger**: When a worktree is created for an agent
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- Initialize worktree-specific resources
+- Log worktree creation for tracking
+- Set up environment in the new worktree
+
+**Example**:
+```json
+{
+  "WorktreeCreate": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-worktree-create.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### WorktreeRemove
+
+**Trigger**: When a worktree is removed after agent completion
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- Clean up worktree-specific resources
+- Archive worktree results
+- Log worktree lifecycle completion
+
+**Example**:
+```json
+{
+  "WorktreeRemove": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-worktree-remove.sh"
         }
       ]
     }

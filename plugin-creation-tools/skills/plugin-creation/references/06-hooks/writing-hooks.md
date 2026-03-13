@@ -49,15 +49,17 @@ Or inline in `plugin.json`:
 |-------|------|----------|-------------|
 | matcher | string | No | Pattern to match (regex, exact, or `*`) |
 | hooks | array | **Yes** | Array of hook actions |
-| type | string | **Yes** | Hook handler type: `command`, `prompt`, or `agent` |
+| type | string | **Yes** | Hook handler type: `command`, `prompt`, `agent`, or `http` |
 | command | string | For command | Shell command to execute |
 | prompt | string | For prompt/agent | LLM prompt (`$ARGUMENTS` for context) |
 | timeout | number | No | Timeout in seconds (default varies by type) |
 | async | boolean | No | Run in background (command type only) |
+| statusMessage | string | No | Message shown in the TUI while the hook runs |
+| once | boolean | No | Hook fires only once per session |
 
 ## Hook Handler Types
 
-Three handler types are available. Each serves a different complexity level.
+Four handler types are available. Each serves a different complexity level.
 
 ### 1. Command Hook
 
@@ -110,6 +112,32 @@ Multi-turn subagent with access to tools (Read, Grep, Glob). Up to 50 turns of a
 **Turns**: Up to 50 turns of tool use and reasoning.
 
 **When to use**: When a prompt hook cannot answer without reading files -- e.g., verifying code changes, checking file existence, validating cross-file consistency.
+
+### 4. HTTP Hook
+
+Send event JSON as an HTTP POST to a URL. Configure via settings JSON only (not in hooks.json files).
+
+```json
+{
+  "type": "http",
+  "url": "https://example.com/hooks/post-tool",
+  "headers": {
+    "Authorization": "Bearer $API_TOKEN",
+    "X-Custom-Header": "value"
+  }
+}
+```
+
+**Configuration**:
+- `url` (required) -- the endpoint to receive the POST request
+- `headers` (optional) -- custom headers; supports env var interpolation via `$ENV_VAR` syntax
+- `allowedEnvVars` (optional) -- whitelist of environment variables that can be interpolated in headers
+
+**Behavior**:
+- Event JSON is sent as the POST body
+- Non-2xx responses are treated as non-blocking errors (the action proceeds)
+- To block an action, return a 2xx response with a decision JSON body (e.g., `{"decision": "deny"}`)
+- Only configurable through settings JSON, not hooks.json files
 
 ## Async Hooks
 
@@ -302,7 +330,7 @@ sys.exit(0)
 
 | Handler Type | Default | Recommended Range |
 |-------------|---------|-------------------|
-| command | 30s | 10-60s |
+| command | 600s | 10-600s |
 | command (async) | 120s | 30-300s |
 | prompt | 30s | 10-60s |
 | agent | 120s | 60-300s |
@@ -320,5 +348,5 @@ sys.exit(0)
 
 ## See Also
 
-- `hook-events.md` -- all 14 available events with return values
+- `hook-events.md` -- all 18 available events with return values
 - `hook-patterns.md` -- common patterns and examples

@@ -1,5 +1,5 @@
 ---
-description: Add a skill, command, agent, or hook to an existing plugin
+description: Add a skill, command, agent, or hook to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "new component", or wants to extend an existing plugin with additional functionality.
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 argument-hint: <component-type> <name>
 ---

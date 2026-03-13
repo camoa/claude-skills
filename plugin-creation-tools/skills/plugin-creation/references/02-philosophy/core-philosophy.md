@@ -79,6 +79,19 @@ Do not modify the script without testing.
 | Multiple skills need same info | Create shared reference, link from both |
 | Code exists in codebase | Reference file path, don't copy |
 
+## Context Window Budget
+
+The "context window as public good" principle has specific budget numbers:
+
+- **Skill descriptions**: 2% of context window, with a **16,000-character fallback**
+- Skills exceeding the budget are **silently excluded** from the context
+- Run `/context` to check which skills are loaded and which are excluded
+- Override the default budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable
+
+**Frame every addition as**: "Only add context Claude doesn't already have. Challenge each piece: Does Claude really need this?"
+
+This budget applies to skill descriptions specifically. SKILL.md body content is loaded on demand (when the skill triggers), so the description is the critical gatekeeper — it must be informative enough to trigger correctly, but concise enough to fit the budget.
+
 ## Challenge Every Token
 
 Before including content, ask:

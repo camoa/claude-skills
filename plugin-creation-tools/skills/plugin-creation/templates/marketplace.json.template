@@ -6,7 +6,8 @@
   },
   "metadata": {
     "description": "Marketplace description",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "pluginRoot": "plugins/"
   },
   "plugins": [
     {
@@ -14,7 +15,38 @@
       "source": "./plugin-directory",
       "description": "Plugin description",
       "version": "1.0.0",
-      "keywords": ["keyword1", "keyword2"]
+      "keywords": ["keyword1", "keyword2"],
+      "tags": ["category1", "category2"]
+    },
+    {
+      "name": "git-hosted-plugin",
+      "source": "git-subdir",
+      "url": "https://github.com/owner/repo",
+      "ref": "v2.0.0",
+      "sha": "abc123def456",
+      "path": "plugins/my-plugin",
+      "description": "Plugin sourced from a subdirectory of a git repo",
+      "version": "2.0.0",
+      "keywords": ["keyword1"],
+      "tags": ["category1"]
+    },
+    {
+      "name": "npm-plugin",
+      "source": "npm",
+      "package": "@scope/plugin-name",
+      "description": "Plugin installed from npm registry",
+      "version": "1.2.0",
+      "keywords": ["keyword1"],
+      "tags": ["category1"]
+    },
+    {
+      "name": "pip-plugin",
+      "source": "pip",
+      "package": "plugin-name",
+      "description": "Plugin installed from PyPI",
+      "version": "0.5.0",
+      "keywords": ["keyword1"],
+      "tags": ["category1"]
     }
   ]
 }

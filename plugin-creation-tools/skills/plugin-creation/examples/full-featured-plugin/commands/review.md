@@ -2,6 +2,7 @@
 description: Review a file or recent changes for code quality issues
 allowed-tools: Bash, Read, Grep, Glob
 argument-hint: [file-path]
+context: fork
 ---
 
 # Code Review

@@ -1,5 +1,5 @@
 ---
-description: Create a new Claude Code plugin or standalone skill with selected components
+description: Create a new Claude Code plugin or standalone skill with selected components. Use when user says "create plugin", "new plugin", "initialize plugin", "start a plugin", "make a skill plugin", "scaffold plugin", or wants to package any reusable Claude Code behavior.
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 argument-hint: <plugin-name> [--skill|--command|--agent|--hook|--mcp]
 ---

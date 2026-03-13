@@ -129,6 +129,8 @@ context: fork
 | `license` | No | License for the skill (e.g., MIT, Apache-2.0). |
 | `compatibility` | No | Environment requirements (1-500 chars). Intended product, required system packages, network access needs. Example: `"Requires Python 3.10+, Claude Code only"` |
 | `metadata` | No | Custom key-value pairs. Suggested keys: `author`, `version`, `mcp-server`, `category`, `tags`, `documentation`, `support`. |
+| `hooks` | No | Skill-scoped lifecycle hooks. These hooks are active only while the skill is running and are automatically cleaned up when the skill finishes. Uses the same hook format as plugin hooks. |
+| `argument-hint` | No | Hint shown during autocomplete to indicate expected arguments. Example: `argument-hint: "[issue-number]"` shows `/skill-name [issue-number]` in the autocomplete menu. |
 
 ### Model Selection Guidelines
 
@@ -183,6 +185,35 @@ user-invocable: false
 | `managing-git` | `git-manager` | `tools` |
 
 Reserved words not allowed: `anthropic`, `claude`
+
+## String Substitutions
+
+Skill body text supports variable substitutions that are resolved at invocation time:
+
+| Variable | Description |
+|----------|-------------|
+| `$ARGUMENTS` | Full argument string passed after the skill name |
+| `$ARGUMENTS[N]` / `$N` | 0-based positional argument (e.g., `$ARGUMENTS[0]` or `$0` is the first argument) |
+| `${CLAUDE_SKILL_DIR}` | Absolute path to the directory containing the SKILL.md file |
+| `${CLAUDE_SESSION_ID}` | Current session ID |
+
+Example usage in SKILL.md body:
+```markdown
+Look up issue $0 and summarize it.
+Store results in ${CLAUDE_SKILL_DIR}/output/.
+```
+
+## Context Budget
+
+Each skill consumes context when loaded. The budget defaults to **2% of the context window** with a **16,000-character fallback** if the window size is unknown. This includes the SKILL.md content and any dynamically injected output.
+
+- Run `/context` to check current context usage and remaining budget
+- Override the default budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable (value in characters)
+- Keep skills concise to leave room for conversation context
+
+## Hot-Reload
+
+Skills in directories added via `--add-dir` support **live change detection**. Edits to SKILL.md files in these directories are picked up automatically without restarting Claude Code. This is useful during skill development — edit, save, and invoke immediately.
 
 ## Dynamic Context Injection
 

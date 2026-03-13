@@ -34,6 +34,61 @@
           }
         ]
       }
+    ],
+
+    "// HTTP hook example": "Use type: http to call a webhook instead of a local command",
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://example.com/webhook/instructions-loaded",
+            "headers": {
+              "Authorization": "Bearer ${API_TOKEN}",
+              "Content-Type": "application/json"
+            },
+            "timeout": 10,
+            "statusMessage": "Notifying external service...",
+            "once": true
+          }
+        ]
+      }
+    ],
+
+    "// Additional events": "ConfigChange, WorktreeCreate, WorktreeRemove are also available",
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on_config_change.sh",
+            "timeout": 15,
+            "statusMessage": "Reloading configuration..."
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_cleanup.sh",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

@@ -41,6 +41,7 @@ plugin-name/
 ├── scripts/                  # Optional
 │   └── *.sh
 ├── .mcp.json                # Optional
+├── settings.json            # Optional
 ├── README.md                # Recommended
 ├── CHANGELOG.md             # Recommended
 └── LICENSE                  # Recommended
@@ -199,6 +200,16 @@ Any configuration options...
 
 MIT License
 ```
+
+## Reloading Plugins During Development
+
+Use the `/reload-plugins` command to reload all installed plugins without restarting Claude Code:
+
+```bash
+/reload-plugins
+```
+
+This picks up changes to plugin.json, commands, agents, skills, hooks, and settings.json. A major DX improvement over restarting — edit any plugin file and reload immediately.
 
 ## Testing Before Distribution
 

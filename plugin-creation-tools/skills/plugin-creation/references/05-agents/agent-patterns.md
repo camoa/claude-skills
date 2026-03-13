@@ -314,6 +314,72 @@ Teams are orchestrated via commands or skills, not agent definitions:
 
 Agent definitions (in `agents/`) define what each team member knows. The command/skill defines how they coordinate.
 
+## Agent Team Operations
+
+### Display Modes
+
+Agent teams support two display modes:
+
+| Mode | Description | Configuration |
+|------|-------------|---------------|
+| `in-process` | Default. All agents share one terminal, output interleaved. | `teammateMode: "in-process"` in settings or `--teammate-mode in-process` CLI flag |
+| `split-panes` | Each agent gets its own pane (tmux or iTerm2 required). | `teammateMode: "split-panes"` in settings or `--teammate-mode split-panes` CLI flag |
+
+Split-panes mode provides better visibility into what each agent is doing but requires a compatible terminal multiplexer.
+
+### Plan Approval
+
+Require teammates to plan before implementing. When enabled, teammates operate in read-only mode during planning — they can read files and analyze code but cannot make changes. The lead must approve the plan before implementation begins. This prevents wasted work from misunderstood tasks.
+
+### Task Dependencies
+
+Tasks in the shared task list can declare dependencies on other tasks:
+
+- A task with unresolved dependencies stays in `pending` state and cannot be claimed by any teammate
+- Once all dependency tasks are completed, the dependent task becomes available for claiming
+- This enables ordered execution within a parallel team (e.g., "write tests" depends on "implement feature")
+
+### Quality Gate Hooks
+
+Two hook events provide quality gates for agent teams:
+
+| Hook | Trigger | Exit Code Behavior |
+|------|---------|-------------------|
+| `TeammateIdle` | A teammate finishes its current task and has no more tasks to claim | Exit 2 keeps the teammate working (e.g., assign more tasks). Other exits allow idle. |
+| `TaskCompleted` | A teammate marks a task as complete | Exit 2 prevents completion (e.g., task fails quality check, sent back for rework). Other exits allow completion. |
+
+These hooks enable automated quality enforcement — a `TaskCompleted` hook can run tests or linting and reject incomplete work.
+
+### The /batch Skill
+
+The built-in `/batch` skill orchestrates large-scale parallel changes across worktrees:
+
+1. **Research** — Analyzes scope of the requested change across the codebase
+2. **Decompose** — Breaks work into 5-30 independent units
+3. **Execute** — Each agent works in an isolated worktree
+4. **Deliver** — Opens individual PRs for each unit of work
+
+Use `/batch` for large refactors, migrations, or repetitive changes that span many files or modules. Each agent operates in its own worktree, avoiding merge conflicts.
+
+### Grader/Comparator Agent Pattern
+
+For structured evaluation tasks, use a grader agent that compares outputs against criteria:
+
+```
+Lead (orchestrator)
+├── Agent A: Generate solution variant 1
+├── Agent B: Generate solution variant 2
+└── Grader (sonnet/opus): Compare variants against rubric, score, recommend
+```
+
+The grader agent receives all outputs and evaluates them against predefined criteria. This pattern is useful for:
+- Comparing implementation approaches
+- Evaluating content quality
+- A/B testing different prompting strategies
+- Benchmarking agent outputs
+
+The grader should have a structured rubric in its agent definition with specific dimensions and scoring criteria.
+
 ## Context Management
 
 ### Fresh Context Advantage

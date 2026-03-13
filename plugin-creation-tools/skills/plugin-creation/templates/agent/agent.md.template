@@ -5,6 +5,11 @@ capabilities: ["capability1", "capability2", "capability3"]
 tools: Read, Grep, Glob, Bash
 model: sonnet
 permissionMode: default
+# isolation: worktree          # Run in isolated git worktree (prevents file conflicts)
+# background: true             # Always run in background (returns immediately)
+# maxTurns: 25                 # Maximum agentic turns before stopping
+# mcpServers:                  # Scope specific MCP servers to this agent
+#   - server-name
 ---
 
 # Agent Name

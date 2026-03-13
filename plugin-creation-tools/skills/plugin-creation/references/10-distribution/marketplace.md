@@ -235,6 +235,83 @@ Users can then:
 /plugin update plugin-name@marketplace
 ```
 
+## Official Submission
+
+Submit plugins to the official Anthropic marketplace:
+
+- **Claude.ai**: `claude.ai/settings/plugins/submit`
+- **Platform**: `platform.claude.com/plugins/submit`
+
+## Private Repository Authentication
+
+For marketplaces and plugins hosted in private repositories, set the appropriate environment variable:
+
+| Variable | Service |
+|----------|---------|
+| `GITHUB_TOKEN` or `GH_TOKEN` | GitHub |
+| `GITLAB_TOKEN` or `GL_TOKEN` | GitLab |
+| `BITBUCKET_TOKEN` | Bitbucket |
+
+## Release Channels
+
+Use separate marketplace files pointing to different refs or SHAs to create release channels:
+
+```
+marketplace-repo/
+├── .claude-plugin/
+│   └── marketplace.json           # stable channel (pinned SHAs)
+├── .claude-plugin-latest/
+│   └── marketplace.json           # latest channel (branch refs)
+```
+
+**Stable channel** — pin to specific SHAs for reproducibility:
+```json
+{
+  "name": "team-tools",
+  "plugins": [{
+    "name": "code-quality",
+    "source": {
+      "source": "github",
+      "repo": "company/code-quality",
+      "sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    }
+  }]
+}
+```
+
+**Latest channel** — track a branch for bleeding-edge updates:
+```json
+{
+  "name": "team-tools-latest",
+  "plugins": [{
+    "name": "code-quality",
+    "source": {
+      "source": "github",
+      "repo": "company/code-quality",
+      "ref": "main"
+    }
+  }]
+}
+```
+
+## Restricting Marketplaces
+
+Use the `strictKnownMarketplaces` managed setting to control which marketplaces users can add:
+
+```json
+{
+  "strictKnownMarketplaces": ["https://github.com/company/*"]
+}
+```
+
+| Value | Behavior |
+|-------|----------|
+| Not set | Users can add any marketplace |
+| Empty array `[]` | Lock down all marketplace additions |
+| Array of URLs/patterns | Allow only matching marketplaces |
+
+This is a managed (organization-level) setting, not a project-level one.
+
 ## Best Practices
 
 1. **Clear naming**: Use descriptive plugin names

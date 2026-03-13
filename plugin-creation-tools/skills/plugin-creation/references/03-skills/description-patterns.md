@@ -75,6 +75,36 @@ description: PayFlow payment processing for e-commerce. Use specifically
 for online payment workflows, not for general financial queries.
 ```
 
+## Pushy Descriptions
+
+Claude tends to undertrigger skills — it errs on the side of NOT loading a skill when unsure. Combat this by making descriptions slightly "pushy" with more trigger phrases and explicit keywords.
+
+Key insight from Anthropic: **"If Claude isn't triggering your skill enough, make the description pushier."**
+
+### Before/After Example
+
+**BEFORE** (too conservative):
+```
+Use when creating new skills, editing existing skills
+```
+
+**AFTER** (pushy, with broad trigger coverage):
+```
+Use when creating new skills, editing existing skills, or verifying skills work before deployment. Make sure to use this skill whenever the user mentions skills, SKILL.md, skill authoring, plugin components, or wants to package any reusable behavior, even if they don't explicitly say "skill"
+```
+
+The "after" version explicitly tells Claude to trigger in edge cases and includes keywords the user might use without directly requesting the skill.
+
+### Context Budget Awareness
+
+Pushy descriptions must be balanced against the context budget. Skill descriptions consume part of the context window:
+
+- **Budget**: 2% of context window, with a 16,000-character fallback
+- Long descriptions eat into this budget and can cause other skills to be excluded
+- Balance pushiness with brevity — add trigger phrases, but don't pad with filler
+
+Run `/context` to check if skills are being excluded due to budget limits. Override the budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable if needed.
+
 ## Checklist
 
 - [ ] Starts with "Use when..." or action-focused opener, OR uses three-part structure
