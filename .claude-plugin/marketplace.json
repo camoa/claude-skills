@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.7.0"
+    "version": "1.8.0"
   },
   "plugins": [
     {
@@ -19,31 +19,61 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["guides", "dev-guides", "llms-txt", "knowledge-graph", "caching", "routing", "disambiguation", "drupal", "nextjs", "design-system"]
+      "keywords": [
+        "guides",
+        "dev-guides",
+        "llms-txt",
+        "knowledge-graph",
+        "caching",
+        "routing",
+        "disambiguation",
+        "drupal",
+        "nextjs",
+        "design-system"
+      ]
     },
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, agent isolation and cost control, marketplace distribution, and pushy description optimization.",
+      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, agent isolation and cost control, marketplace distribution, and pushy description optimization.",
       "version": "2.3.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["plugins", "skills", "commands", "agents", "hooks", "mcp", "development", "best-practices"]
+      "keywords": [
+        "plugins",
+        "skills",
+        "commands",
+        "agents",
+        "hooks",
+        "mcp",
+        "development",
+        "best-practices"
+      ]
     },
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with enforced SOLID, TDD, DRY, and security principles. Requires: dev-guides-navigator.",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Requires: dev-guides-navigator.",
       "version": "3.6.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["drupal", "development", "workflow", "architecture", "tdd", "solid", "dry", "security", "agent-teams"]
+      "keywords": [
+        "drupal",
+        "development",
+        "workflow",
+        "architecture",
+        "tdd",
+        "solid",
+        "dry",
+        "security",
+        "agent-teams"
+      ]
     },
     {
       "name": "drupal-htmx",
@@ -55,19 +85,46 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["drupal", "htmx", "ajax", "migration", "forms", "dynamic-content"]
+      "keywords": [
+        "drupal",
+        "htmx",
+        "ajax",
+        "migration",
+        "forms",
+        "dynamic-content"
+      ]
     },
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks, Socket CLI) projects - TDD, SOLID, DRY, OWASP security",
-      "version": "2.6.0",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
+      "version": "2.7.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["code-quality", "security", "tdd", "solid", "dry", "owasp", "drupal", "nextjs", "testing", "phpstan", "psalm", "semgrep", "trivy", "gitleaks", "roave", "socket", "dast", "zap", "nuclei"]
+      "keywords": [
+        "code-quality",
+        "security",
+        "tdd",
+        "solid",
+        "dry",
+        "owasp",
+        "drupal",
+        "nextjs",
+        "testing",
+        "phpstan",
+        "psalm",
+        "semgrep",
+        "trivy",
+        "gitleaks",
+        "roave",
+        "socket",
+        "dast",
+        "zap",
+        "nuclei"
+      ]
     },
     {
       "name": "code-paper-test",
@@ -91,7 +148,24 @@
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
-      "keywords": ["brand", "presentations", "carousels", "infographics", "html", "landing-page", "web-design", "design-system", "data-visualization", "timeline", "process-diagram", "linkedin", "instagram", "design", "canvas", "zen"]
+      "keywords": [
+        "brand",
+        "presentations",
+        "carousels",
+        "infographics",
+        "html",
+        "landing-page",
+        "web-design",
+        "design-system",
+        "data-visualization",
+        "timeline",
+        "process-diagram",
+        "linkedin",
+        "instagram",
+        "design",
+        "canvas",
+        "zen"
+      ]
     }
   ]
 }

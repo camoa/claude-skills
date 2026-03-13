@@ -1,5 +1,5 @@
 ---
-description: Interactive setup wizard to install and configure code quality tools for Drupal/Next.js projects
+description: Interactive setup wizard to install and configure code quality tools for Drupal/Next.js projects. Use when user says "install quality tools", "set up PHPStan", "configure linting", "add code quality", "first time setup", "install ESLint", "setup security tools". Detects project type and installs recommended tools.
 allowed-tools: Read, Bash, Grep, Glob, AskUserQuestion, Write
 argument-hint: optional|project-path
 ---
@@ -239,5 +239,5 @@ See: `references/troubleshooting.md#setup-issues`
 
 ## Implementation Note
 
-This command will invoke `scripts/core/setup-wizard.sh` (to be created in Phase B).
-For now, setup must be done manually following README instructions.
+This command guides setup interactively through Claude — no external script needed.
+Follow the steps above to detect project type, present options, and install tools.

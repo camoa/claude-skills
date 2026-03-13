@@ -1,8 +1,10 @@
 ---
 name: code-quality-audit
-description: Use when checking code quality, running security audits, testing coverage, finding violations, or setting up quality tools - supports Drupal (PHPStan, PHPMD, PHPCPD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, jscpd, madge, Semgrep, Trivy, Gitleaks) projects with TDD, SOLID, DRY, and OWASP security checks
-version: 2.5.0
+description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
+version: 2.7.0
 model: sonnet
+allowed-tools: Read, Bash, Grep, Glob
+user-invocable: true
 ---
 
 # Code Quality Audit
@@ -20,6 +22,8 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 - `/code-quality:solid` - Architecture and SOLID principles check
 - `/code-quality:dry` - Find code duplication
 - `/code-quality:tdd` - Start TDD workflow (test watcher mode)
+- `/code-quality:review` - Rubric-scored code review (/50 scale with quality gate)
+- `/code-quality:architecture-debate` - Architecture debate (Pragmatist + Purist + Maintainer)
 
 **For conversational workflows, continue reading...**
 

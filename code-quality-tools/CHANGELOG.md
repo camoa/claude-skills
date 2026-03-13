@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-03-13
+
+### Added
+
+**Track A — Approach Improvements**
+- **`/code-quality:review`** — Rubric-scored code review with 10-category assessment (Content + Structure), /50 scale, quality gate (PASS 35+/FAIL)
+- **`/code-quality:architecture-debate`** — 3-agent architecture debate (Pragmatist + Purist + Maintainer) with isolated worktrees and quality gate enforcement
+- **Cross-audit synthesis** in `/audit` — correlates findings across tools into hot spots, cross-category risks, and prioritized action plan (`.reports/audit-synthesis.md`)
+
+**Track B — Agent Team Enhancement**
+- `maxTurns: 10` on all security-debate agents (cost control)
+- `isolation: worktree` on all security-debate agents (independent analysis)
+- Scoped tool access per agent (Defender: read-only, Red Team: +WebSearch, Compliance: +WebFetch)
+- Quality gate enforcement on debate agents (must address ALL findings)
+
+### Changed
+- Removed experimental agent teams flag — agent teams are now GA
+- SKILL.md version 2.5.0 → 2.7.0 (aligned with plugin), added `allowed-tools`, `user-invocable`
+- Pushy descriptions with comprehensive trigger phrases on skill and all 11 commands
+- `/setup` implementation note updated (Claude-driven, no external script dependency)
+- CLAUDE.md expanded with capabilities list and updated conventions
+
+---
+
 ## [2.6.0] - 2026-02-16
 
 ### Changed

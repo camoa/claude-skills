@@ -1,5 +1,5 @@
 ---
-description: Start Test-Driven Development workflow for Drupal/Next.js projects
+description: Start Test-Driven Development workflow for Drupal/Next.js projects. Use when user says "test first", "TDD", "write tests", "Red Green Refactor", "test driven", "start TDD", "PHPUnit watch", "Jest watch". Guides through RED-GREEN-REFACTOR cycle with test scaffolding.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---

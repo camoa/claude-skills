@@ -1,5 +1,5 @@
 ---
-description: Check SOLID principles and architecture quality for Drupal/Next.js projects
+description: Check SOLID principles and architecture quality for Drupal/Next.js projects. Use when user says "SOLID check", "single responsibility", "architecture quality", "dependency inversion", "check principles", "code complexity", "find violations". For debated analysis, use /code-quality:architecture-debate.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---

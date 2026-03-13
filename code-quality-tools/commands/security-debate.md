@@ -1,5 +1,5 @@
 ---
-description: Debate security audit findings with competing agent team (Defender + Red Team + Compliance)
+description: Debate security audit findings with competing agent team (Defender + Red Team + Compliance). Use when user says "debate security", "security from 3 perspectives", "is this vulnerability real", "security team review", "red team this", "challenge security findings", "false positive check". Best for 10+ findings where severity needs validation. Each agent runs in isolated worktree.
 allowed-tools: Read, Write, Glob, Grep, WebSearch, WebFetch
 argument-hint: optional|project-path
 ---
@@ -34,14 +34,9 @@ Stop here if not found.
 
 ### Step 2 — Check Prerequisites
 
-Verify agent teams are available. If not:
+Verify agent teams are available by attempting to create a team. If creation fails:
 
-> Agent teams require the experimental flag:
-> ```json
-> // Add to ~/.claude/settings.json
-> { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-> ```
-> Or: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+> Agent teams are not available in this environment.
 >
 > **Fallback:** Your security audit results are in `.reports/security-report.json`. Run `/code-quality:security` for standard single-pass analysis.
 
@@ -82,6 +77,8 @@ Create a team and these tasks:
 | 4 | Cross-challenge — debate severity, exploitability, priorities | All three | 1, 2, 3 |
 | 5 | Synthesize challenged security assessment | Lead | 4 |
 
+**Quality Gate:** Each agent must address ALL findings in the report. If an agent skips findings (e.g., Defender only validates 5 of 20 findings), the lead flags incomplete analysis and notes which findings were not reviewed.
+
 ### Step 5 — Spawn Teammates
 
 Spawn 3 teammates using the prompt templates below. After spawning:
@@ -105,6 +102,9 @@ When all teammates finish:
 ### Teammate 1: Defender
 
 **Model:** sonnet
+**MaxTurns:** 10
+**Isolation:** worktree
+**Tools:** Read, Glob, Grep
 
 ```
 You are the Defender for a security audit debate team.
@@ -161,6 +161,9 @@ Mark your task as completed.
 ### Teammate 2: Red Team Attacker
 
 **Model:** sonnet
+**MaxTurns:** 10
+**Isolation:** worktree
+**Tools:** Read, Glob, Grep, WebSearch
 
 ```
 You are the Red Team Attacker for a security audit debate team.
@@ -221,6 +224,9 @@ Mark your task as completed.
 ### Teammate 3: Compliance Checker
 
 **Model:** sonnet
+**MaxTurns:** 10
+**Isolation:** worktree
+**Tools:** Read, Glob, Grep, WebFetch
 
 ```
 You are the Compliance Checker for a security audit debate team.
@@ -333,3 +339,5 @@ The lead synthesizes into `.reports/security-debate.md`:
 
 - `/code-quality:security` - Run security audit (prerequisite — generates the report this command debates)
 - `/code-quality:audit` - Full audit (includes security)
+- `/code-quality:architecture-debate` - Architecture and SOLID debate (Pragmatist + Purist + Maintainer)
+- `/code-quality:review` - Rubric-scored code review
