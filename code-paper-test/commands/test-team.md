@@ -1,5 +1,5 @@
 ---
-description: Paper test code with competing agent team (Happy Path + Edge Case + Red Team)
+description: Paper test code or skills with competing agent team (Happy Path + Edge Case + Red Team). Use when user says "test team", "3 perspectives", "competing testers", "thorough paper test", "security review", "deep code analysis", "test this skill with team". Best for complex code (50+ lines) or security-critical paths. Each tester runs in isolated worktree.
 allowed-tools: Read, Write, Glob, Grep, WebSearch
 argument-hint: <file-path> [file-path...]
 ---
@@ -44,14 +44,9 @@ Determine the **target directory** for output:
 
 ### Step 2 — Check Prerequisites
 
-Verify agent teams are available. If not:
+Verify agent teams are available by attempting to create a team. If creation fails:
 
-> Agent teams require the experimental flag:
-> ```json
-> // Add to ~/.claude/settings.json
-> { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-> ```
-> Or: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+> Agent teams are not available in this environment.
 >
 > **Fallback:** Use the standard paper test skill instead — ask Claude to "paper test {file}".
 
@@ -67,6 +62,15 @@ If fewer than 50 lines total:
 
 Continue if user confirms or if 50+ lines.
 
+**Skill/Config Detection:**
+
+If target files have YAML frontmatter (`---` delimiters) and contain step-by-step instructions rather than code:
+> Target appears to be a skill/command/agent definition, not code.
+> Switching to instruction tracing mode — will trace Claude's execution of these instructions rather than code execution.
+> See `references/skill-and-config-testing.md` for methodology.
+
+Continue with skill-aware spawn prompts below.
+
 ### Step 4 — Create Shared Task List
 
 Create a team and these tasks:
@@ -78,6 +82,8 @@ Create a team and these tasks:
 | 3 | Attack with adversarial inputs — injection, malformed data, race conditions | Red Team Attacker | — |
 | 4 | Cross-challenge — debate flaw severity, dispute false findings, identify blind spots | All three | 1, 2, 3 |
 | 5 | Synthesize prioritized flaw report | Lead | 4 |
+
+**Quality Gate:** Each tester must complete ALL assigned categories before marking their task done. If a tester skips categories (e.g., Edge Case Hunter tests 3 of 6 categories), the lead should flag incomplete analysis in the final report and note which categories were untested.
 
 ### Step 5 — Spawn Teammates
 
@@ -102,6 +108,8 @@ When all teammates finish:
 ### Teammate 1: Happy Path Validator
 
 **Model:** sonnet
+**MaxTurns:** 15
+**Isolation:** worktree
 
 ```
 You are the Happy Path Validator for a paper testing team.
@@ -171,6 +179,15 @@ OUTPUT: {return value, side effects}
 - Contracts checked: {N}
 - Flaws found: {N}
 
+SKILL MODE:
+If target files are skills, commands, or agents (.md with frontmatter):
+- Instead of line-by-line code tracing, trace step-by-step INSTRUCTIONS
+- Design 2-3 scenarios with different user messages
+- Trace what Claude would do at each step
+- Verify all tool/file/skill references exist
+- Check frontmatter completeness and consistency
+- Test trigger phrases (will Claude invoke this?)
+
 WHEN DONE:
 Message the other teammates: "Happy path analysis complete. Review happy-path-analysis.md"
 Mark your task as completed.
@@ -179,6 +196,8 @@ Mark your task as completed.
 ### Teammate 2: Edge Case Hunter
 
 **Model:** sonnet
+**MaxTurns:** 15
+**Isolation:** worktree
 
 ```
 You are the Edge Case Hunter for a paper testing team.
@@ -241,6 +260,15 @@ Line [N]: [code]
 - Flaws found: {N}
 - Critical: {N}
 
+SKILL MODE:
+If target files are skills, commands, or agents (.md with frontmatter):
+- Test with ambiguous user messages that might or might not trigger the skill
+- Test with missing $ARGUMENTS, empty arguments, wrong argument types
+- Test with non-existent file paths referenced in instructions
+- Test what happens when a tool call returns empty results mid-workflow
+- Check context budget — will the skill fit when context is 80% full?
+- Check instruction fidelity — will Claude follow step 7 after a long step 3?
+
 WHEN DONE:
 Message the other teammates: "Edge case analysis complete. Review edge-case-analysis.md"
 Mark your task as completed.
@@ -249,6 +277,9 @@ Mark your task as completed.
 ### Teammate 3: Red Team Attacker
 
 **Model:** sonnet
+**MaxTurns:** 15
+**Isolation:** worktree
+**Note:** For complex security analysis, consider using `model: opus` for deeper reasoning.
 
 ```
 You are the Red Team Attacker for a paper testing team.
@@ -322,6 +353,15 @@ RESULT: EXPLOITABLE / BLOCKED at line {N} by {mechanism}
 - Blocked: {N}
 - Critical: {N}
 
+SKILL MODE:
+If target files are skills, commands, or agents (.md with frontmatter):
+- Test if skill can be tricked into running unintended tools
+- Test if instructions leak sensitive info in error messages
+- Test if agent team coordination can be disrupted (conflicting outputs, race conditions)
+- Test if allowed-tools are too permissive (does the skill need Write access?)
+- Test if description is so broad it steals triggers from other skills
+- Check for prompt injection vectors in user-provided arguments
+
 WHEN DONE:
 Message the other teammates: "Red team analysis complete. Review red-team-analysis.md"
 Mark your task as completed.
@@ -378,3 +418,4 @@ Source files: [happy-path-analysis.md] | [edge-case-analysis.md] | [red-team-ana
 ## Related Commands
 
 - Standard paper test: ask Claude to "paper test {file}" (single-agent, no debate)
+- Skill/config testing: ask Claude to "paper test {skill}" (traces instructions, not code)

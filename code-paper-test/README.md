@@ -1,6 +1,6 @@
 # Paper Test
 
-Systematically test code through mental execution - trace code line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment.
+Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, AI hallucinations, and contract violations before deployment.
 
 ## What is Paper Testing?
 
@@ -10,6 +10,17 @@ Paper testing is the practice of mentally executing code with concrete test case
 2. **Missing code** - Edge cases not handled, error paths missing
 3. **Contract violations** - Mismatched interfaces, missing abstract methods
 4. **Dependency issues** - Wrong method names, incorrect return types
+5. **AI hallucinations** - Invented methods, mixed API versions, wrong assumptions
+
+### Beyond Code: Testing Skills and Configs
+
+Paper testing extends naturally to non-code artifacts. When you "paper test" a skill, you trace **instructions through Claude** instead of code through a CPU:
+
+- **Skills/Commands** — Will Claude invoke this? Does it follow all steps? Do tool references exist?
+- **Agent configs** — Are spawn parameters correct? Do agents coordinate without conflicts?
+- **Config files** — Do YAML/JSON values match what code expects? Are required keys present?
+
+See `references/skill-and-config-testing.md` for the full methodology.
 
 ## Why Paper Testing Now? The AI-Enabled Renaissance
 
@@ -23,10 +34,10 @@ Paper testing is the practice of mentally executing code with concrete test case
 
 **AI changes everything** in 2025. What was impossible for humans is trivial for AI:
 
-✅ **Verify external dependencies instantly** - Check if methods exist, signatures match, return types correct
-✅ **Navigate OOP complexity** - Trace inheritance chains, verify interfaces, validate DI
-✅ **Detect AI-generated bugs** - Spot hallucinated methods, mixed API versions, wrong assumptions
-✅ **Mental execution at scale** - Follow state through complex object graphs and middleware chains
+- **Verify external dependencies instantly** - Check if methods exist, signatures match, return types correct
+- **Navigate OOP complexity** - Trace inheritance chains, verify interfaces, validate DI
+- **Detect AI-generated bugs** - Spot hallucinated methods, mixed API versions, wrong assumptions
+- **Mental execution at scale** - Follow state through complex object graphs and middleware chains
 
 ### The Problem: AI Code Generation
 
@@ -58,19 +69,18 @@ claude plugins add camoa-skills/code-paper-test
 
 The skill is automatically invoked when you ask questions like:
 
-- "Paper test this code"
-- "Trace this code"
-- "Test without running"
-- "Find bugs in this code"
-- "Check for edge cases"
-- "Validate this implementation"
+- "Paper test this code" / "Trace this code" / "Test without running"
+- "Find bugs in this code" / "Check for edge cases"
+- "Validate this implementation" / "Review this logic"
+- "Paper test this skill" / "Test this command" / "Validate this agent"
+- "Check this config" / "Verify this YAML"
 
 Or use it explicitly:
 
 - Before deploying changes
 - Debugging without a debugger
-- Reviewing unfamiliar code
-- Auditing AI-generated code
+- Reviewing unfamiliar or AI-generated code
+- Reviewing skills, commands, agents, or plugin configs
 - Validating complex logic (loops, conditionals, recursion)
 
 ### Competing Testers (Agent Team)
@@ -81,7 +91,15 @@ For complex or security-critical code, use the agent team command:
 /code-paper:test-team src/Service/PaymentService.php
 ```
 
-Spawns 3 competing testers — Happy Path Validator, Edge Case Hunter, and Red Team Attacker — who independently analyze the code and then debate findings. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+Spawns 3 competing testers — Happy Path Validator, Edge Case Hunter, and Red Team Attacker — who independently analyze the code in isolated worktrees and then debate findings. Each tester has a 15-turn limit for cost control.
+
+Also works with skills and configs:
+
+```
+/code-paper:test-team skills/paper-test/SKILL.md
+```
+
+Auto-detects skill files and switches to instruction tracing mode.
 
 ## How It Works
 
@@ -89,11 +107,15 @@ The skill guides you through a systematic workflow:
 
 ### 1. Define Test Scenarios
 
-Pick concrete input values - happy path, edge cases, error cases.
+Pick concrete input values — happy path, edge cases, error cases.
 
 ### 2. Trace Line by Line
 
 Follow each line, writing variable state after execution.
+
+### 2b. Track Data Flow
+
+At function boundaries, track type transformations and coercions.
 
 ### 3. Verify External Dependencies
 
@@ -102,6 +124,7 @@ For every external call, verify:
 - Parameters are correct
 - Return type matches usage
 - Error cases handled
+- Config values match expectations
 
 ### 4. Verify Code Contracts
 
@@ -113,7 +136,11 @@ For classes with relationships (extends, implements, uses, injects):
 
 ### 5. Document Flaws
 
-Report bugs found with line numbers and fixes.
+Report bugs found with line numbers, severity scores, and fixes.
+
+### 6. Analyze Untested Paths
+
+Identify code paths that were never exercised and assess risk.
 
 ## Features
 
@@ -121,13 +148,19 @@ Report bugs found with line numbers and fixes.
 
 The main SKILL.md provides the workflow. Detailed guides in `references/`:
 
-- **core-method.md** - Complete paper testing methodology
-- **dependency-verification.md** - How to verify external calls
-- **contract-patterns.md** - All code contract verification patterns (8 types)
-- **ai-code-auditing.md** - Specific checks for AI-generated code
-- **hybrid-testing.md** - Module-level testing strategy
-- **common-flaws.md** - Catalog of frequent bugs
-- **advanced-techniques.md** - Progressive injects, red team testing, attack surface analysis, scenario-based workflows, AAR format
+| Guide | Purpose |
+|-------|---------|
+| **core-method.md** | Complete paper testing methodology |
+| **dependency-verification.md** | How to verify external calls |
+| **contract-patterns.md** | All code contract verification patterns (8 types) |
+| **ai-code-auditing.md** | Specific checks for AI-generated code |
+| **hybrid-testing.md** | Module-level testing strategy |
+| **common-flaws.md** | Catalog of frequent bugs |
+| **advanced-techniques.md** | Progressive injects, red team, attack surface, scenario workflows, state machine validation, AAR format |
+| **severity-scoring.md** | Consistent severity rubric for flaw prioritization |
+| **blind-ab-comparison.md** | Comparing two implementations side by side |
+| **rubric-scoring.md** | Structured grading for code quality assessment |
+| **skill-and-config-testing.md** | Testing skills, commands, agents, and configs |
 
 ### Contract Pattern Coverage
 
@@ -149,6 +182,17 @@ For modules with multiple components:
 - **Flow-based testing** - Real user workflows end-to-end
 - **Component testing** - Each component with edge cases
 - **Coverage-driven** - Every component in at least one flow + edge cases
+
+### Skill/Config Testing
+
+For non-code artifacts:
+
+- **Trigger analysis** — Will Claude invoke this skill? Test multiple phrasings
+- **Instruction tracing** — Follow steps through Claude's execution
+- **Frontmatter verification** — All fields present and consistent?
+- **Context budget** — Does the skill fit in the context window?
+- **Instruction fidelity** — Will Claude follow all steps or drift?
+- **Agent team coordination** — Do spawned agents conflict?
 
 ## Example
 
@@ -184,6 +228,7 @@ Line 8: return $discount
 
 FLAW FOUND:
   Line 8: Returns undefined variable when no coupon matches
+  Severity: HIGH (Reach: 2, Impact: 2, Reversibility: 1, Exploitability: 2 = 7)
   FIX: Initialize $discount = 0 at start of function
 ```
 
@@ -201,14 +246,21 @@ Specific checks for AI-generated code:
 - **Find bugs before deployment** - Catch issues in development
 - **No test setup required** - Pure mental execution
 - **Works on any code** - Legacy, new, AI-generated
+- **Works on skills and configs** - Test Claude instructions, not just code
 - **Catches contract violations** - Verifies all relationships
+- **Consistent severity scoring** - Prioritize fixes objectively
 - **Fast** - Paper test in minutes vs hours of debugging
 
 ## Version
 
-**0.3.0** (Current) - Competing Testers agent team command
-- `/code-paper:test-team` — 3-agent team paper testing (Happy Path + Edge Case + Red Team)
-- Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+**0.4.0** (Current) - Methodology depth + skill/config testing + infrastructure
+- 6 new methodology steps: data flow tracking, error propagation, config validation, performance patterns, untested path analysis, state machine validation
+- 4 new reference guides: severity scoring, blind A/B comparison, rubric scoring, skill/config testing
+- Skill/config testing: trace instructions through Claude, not just code
+- Agent team: `maxTurns: 15`, `isolation: worktree`, removed experimental flag
+- Pushy descriptions with comprehensive trigger phrases
+
+**0.3.0** - Competing Testers agent team command
 
 **0.2.0** - Plugin conventions and model routing
 

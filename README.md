@@ -148,15 +148,17 @@ HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 
 See [drupal-htmx/README.md](drupal-htmx/README.md) for full documentation.
 
-### code-paper-test (v0.3.0)
+### code-paper-test (v0.4.0)
 
-Systematically test code through mental execution — trace code line-by-line with concrete values to find bugs, logic errors, edge cases, and contract violations before deployment.
+Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations before deployment.
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 1 (`paper-test`) |
-| Commands | 1 (`/test-team` — competing agent team: Happy Path + Edge Case + Red Team) |
-| References | 7 (core method, dependency verification, contract patterns, AI code auditing, hybrid testing, common flaws, advanced techniques) |
+| Skills | 1 (`paper-test` — with data flow tracking, error propagation, config validation, severity scoring) |
+| Commands | 1 (`/test-team` — competing agent team with isolated worktrees: Happy Path + Edge Case + Red Team) |
+| References | 11 (core method, dependencies, contracts, AI auditing, hybrid testing, common flaws, advanced techniques + state machines, severity scoring, blind A/B comparison, rubric scoring, skill/config testing) |
+
+Tests code AND non-code artifacts: skills, commands, agents, YAML configs. Auto-detects skill files and switches to instruction tracing mode.
 
 See [code-paper-test/README.md](code-paper-test/README.md) for full documentation.
 

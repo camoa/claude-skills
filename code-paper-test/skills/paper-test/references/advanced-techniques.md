@@ -10,6 +10,7 @@ Decision-focused techniques adapted from security tabletop exercises for complex
 - [Attack Surface Analysis](#attack-surface-analysis)
 - [Scenario-Based Workflow Testing](#scenario-based-workflow-testing)
 - [After-Action Report Format](#after-action-report-format)
+- [State Machine Validation](#state-machine-validation)
 
 ---
 
@@ -925,6 +926,159 @@ FOLLOW-UP ACTIONS:
 
 ---
 
+---
+
+## State Machine Validation
+
+### Concept
+
+For code with defined states (entity status, workflow stages, order lifecycle), verify that all transitions are valid, reachable, and that invalid transitions are blocked.
+
+Adapted from formal verification of finite state machines.
+
+### When to Use
+
+- **Entity status fields** — published/unpublished/archived, order lifecycle
+- **Workflow systems** — content moderation, approval chains
+- **Multi-step processes** — wizards, onboarding, checkout flows
+- **Connection/session states** — connected/disconnected/reconnecting
+
+### Process
+
+```
+STATE MACHINE: [System name]
+
+STATES IDENTIFIED:
+  1. [state_1] — [description]
+  2. [state_2] — [description]
+  3. [state_3] — [description]
+  ...
+
+VALID TRANSITIONS:
+  [state_1] → [state_2]: [what triggers this]
+  [state_2] → [state_3]: [what triggers this]
+  [state_2] → [state_1]: [what triggers this — rollback?]
+  ...
+
+TRANSITION VERIFICATION:
+  For each valid transition, trace the code that performs it:
+
+  Transition: [from] → [to]
+    Code: [file:line]
+    Guard: [what condition must be true?]
+    Traced: [does the code check the guard?]
+    Side effects: [what else happens during transition?]
+
+INVALID TRANSITION CHECK:
+  Can the code reach these (it shouldn't):
+  - [state_3] → [state_1]: Should be impossible
+    Code check: Line [N] — $entity->setStatus($newStatus) ← NO validation!
+    FLAW: Any status transition allowed, no guard clause
+
+ORPHAN STATE CHECK:
+  - [state_X]: Can reach but no exit transitions defined
+    Risk: Entity stuck in this state forever
+
+MISSING STATE CHECK:
+  - Real-world scenario [description] has no corresponding state
+    Risk: System can't represent this valid situation
+```
+
+### Example: Order Lifecycle
+
+```
+STATE MACHINE: Order Status
+
+STATES:
+  1. draft       — order created, not submitted
+  2. pending     — submitted, awaiting payment
+  3. processing  — payment received, preparing shipment
+  4. shipped     — handed to carrier
+  5. delivered   — confirmed receipt
+  6. cancelled   — order cancelled
+  7. refunded    — payment returned
+
+VALID TRANSITIONS:
+  draft      → pending:    user submits order
+  draft      → cancelled:  user abandons
+  pending    → processing: payment confirmed
+  pending    → cancelled:  user cancels before payment
+  processing → shipped:    carrier picks up
+  processing → cancelled:  merchant cancels (with refund)
+  shipped    → delivered:  carrier confirms delivery
+  shipped    → refunded:   lost in transit
+  delivered  → refunded:   customer returns item
+  cancelled  → draft:      user reopens cancelled order (business decision)
+
+TRANSITION VERIFICATION:
+
+  Transition: pending → processing
+    Code: OrderService.php:45
+    Guard: $payment->isConfirmed() must be true
+    Traced:
+      Line 45: if ($payment->isConfirmed())
+      Line 46:   $order->setStatus('processing')
+    Result: Guard exists ✓
+
+  Transition: processing → cancelled
+    Code: OrderService.php:78
+    Guard: $order->canCancel() — checks shipment not dispatched
+    Traced:
+      Line 78: $order->setStatus('cancelled')
+      Line 79: $this->refundService->process($order)
+    Result: Guard exists, refund triggered ✓
+
+INVALID TRANSITION CHECK:
+
+  Can delivered → draft happen?
+    Code: OrderService.php:92
+      Line 92: public function setStatus($status) {
+      Line 93:   $this->status = $status;  // NO VALIDATION
+      Line 94: }
+    FLAW: setStatus() accepts ANY status string!
+      $deliveredOrder->setStatus('draft') would succeed
+      No guard, no validation, no transition check
+
+  FIX: Add transition guard:
+    private const VALID_TRANSITIONS = [
+      'draft' => ['pending', 'cancelled'],
+      'pending' => ['processing', 'cancelled'],
+      // ...
+    ];
+
+    public function setStatus($newStatus) {
+      if (!in_array($newStatus, self::VALID_TRANSITIONS[$this->status])) {
+        throw new InvalidTransitionException();
+      }
+      $this->status = $newStatus;
+    }
+
+ORPHAN STATE CHECK:
+  None found — all states have at least one exit
+
+MISSING STATE CHECK:
+  Scenario: "Payment pending but expired" — order left in 'pending' indefinitely
+  Risk: No timeout mechanism, no auto-cancellation
+  Missing state: 'expired' (or missing cron job to cancel stale pending orders)
+
+RESULT:
+  FLAW 1: setStatus() has no transition validation (CRITICAL)
+  FLAW 2: No timeout for pending orders (MEDIUM)
+```
+
+### Summary of State Machine Checks
+
+| Check | Question |
+|-------|----------|
+| Valid transitions | Does code enforce transition rules? |
+| Invalid transitions | Can code reach states it shouldn't? |
+| Guard clauses | Are preconditions checked before transition? |
+| Orphan states | Can entity get stuck with no way out? |
+| Missing states | Does the model cover all real-world scenarios? |
+| Side effects | Are the right actions triggered on each transition? |
+
+---
+
 ## Summary
 
 These advanced techniques complement standard paper testing for complex scenarios:
@@ -934,5 +1088,6 @@ These advanced techniques complement standard paper testing for complex scenario
 **Attack Surface**: Prioritize testing effort on highest-risk entry points
 **Scenario Workflows**: Test end-to-end integration, not isolated components
 **AAR Format**: Structure findings for team review and improvement tracking
+**State Machine Validation**: Verify all state transitions are valid, reachable, and that invalid transitions are blocked
 
 Use when code complexity, security criticality, or multi-component integration demands more rigorous analysis than standard paper testing provides.
