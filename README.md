@@ -56,11 +56,14 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 /dev-guides-navigator style guide
 ```
 
-### drupal-dev-framework (v3.5.1)
+### drupal-dev-framework (v3.6.0)
 
-Systematic 3-phase Drupal development workflow: **Research → Architecture → Implementation**. Enforces SOLID, TDD, DRY, security, and code purposefulness through 5 quality gates.
+Systematic 3-phase Drupal development workflow: **Research → Architecture → Implementation**. Enforces SOLID, TDD, DRY, security, and code purposefulness through 5 quality gates. **Requires `dev-guides-navigator`** — loads Drupal domain guides proactively at every phase.
 
 ```bash
+/plugin install dev-guides-navigator@camoa-skills   # Required dependency
+/plugin install drupal-dev-framework@camoa-skills
+
 /drupal-dev-framework:new my_module     # Create project
 /drupal-dev-framework:next              # Continue work (main entry point)
 ```
@@ -68,9 +71,10 @@ Systematic 3-phase Drupal development workflow: **Research → Architecture → 
 | Component | Contents |
 |-----------|----------|
 | Commands | 11 (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/status`, `/validate`, `/pattern`, `/migrate-tasks`) |
-| Agents | 5 (project-orchestrator, architecture-drafter, architecture-validator, pattern-recommender, contrib-researcher) |
+| Agents | 5 with cost control (`maxTurns`) — project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher |
 | Skills | 16 (phase management, TDD companion, guide integration, context loading) |
 | References | 6 methodology docs (SOLID, TDD, DRY, Library-First, Quality Gates, Purposeful Code) |
+| Hooks | SessionStart (dependency check + project context), PreCompact (context preservation) |
 
 Features competing agent research (`/research-team`) with Build/Use/Extend debate for features and competing hypothesis investigation for bugs.
 

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.5.0"
+    "version": "1.6.0"
   },
   "plugins": [
     {
@@ -24,8 +24,8 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins - skills, commands, agents, hooks, MCP servers, and configuration",
-      "version": "2.2.0",
+      "description": "Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, agent isolation and cost control, marketplace distribution, and pushy description optimization.",
+      "version": "2.3.0",
       "author": {
         "name": "camoa"
       },
@@ -36,8 +36,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with enforced SOLID, TDD, DRY, and security principles.",
-      "version": "3.5.1",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research → Architecture → Implementation phases with enforced SOLID, TDD, DRY, and security principles. Requires: dev-guides-navigator.",
+      "version": "3.6.0",
       "author": {
         "name": "camoa"
       },

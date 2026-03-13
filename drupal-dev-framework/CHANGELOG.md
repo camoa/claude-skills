@@ -13,8 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tool restrictions**: `allowed-tools` on 3 skills — phase-detector (Read, Glob), session-resume (Read, Glob, Bash), requirements-gatherer (Read, Write, Glob)
 - **Context forking**: `context: fork` on validate and status commands — preserves main context window from heavy output
 - **Proactive dev-guides integration**: guide-integrator now activates at the START of every phase, not just when explicitly requested. Research, design, and implement commands all load relevant dev-guides before proceeding (skips if already loaded in session)
+- **Dependency check**: SessionStart hook now warns if `dev-guides-navigator` plugin is not installed, with install instructions
 
 ### Changed
+- **WORKFLOW.md**: Full rewrite — v3.0.0 folder structure, 5 quality gates (was 4), proactive dev-guides per phase, agent maxTurns/isolation details, research-team in flow diagrams, SessionStart dependency check in session flow
+- **README.md**: `dev-guides-navigator` listed as required (not just recommended), agents table with maxTurns column, dev-guides section shows per-phase loading table
+- **marketplace.json**: Version bumped, description notes `dev-guides-navigator` requirement
 - **Agent descriptions**: All 5 agents now include trigger phrases and enforcement reminders — Claude auto-delegates more reliably and respects quality gates mid-conversation
 - **Command descriptions**: All 11 commands now include trigger phrases and workflow enforcement language
 - **Skill descriptions**: 6 key skills updated with trigger phrases and enforcement (code-pattern-checker, tdd-companion, session-resume, diagram-generator, task-completer, guide-integrator)
