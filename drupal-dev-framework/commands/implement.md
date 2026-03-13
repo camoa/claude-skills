@@ -1,5 +1,5 @@
 ---
-description: Load context and start implementing a task
+description: "Load context and start implementing a task. Trigger: 'start coding', 'implement task', 'begin implementation', 'Phase 3', 'write code'. REQUIRES completed architecture. Enforces TDD (test-first)."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
 argument-hint: <task-name>
 ---
@@ -20,11 +20,12 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 2. Loads architecture from `architecture.md`
 3. Loads research context from `research.md`
 4. Loads referenced patterns from core/contrib
-5. Loads relevant guides (via `guide-integrator`)
-6. Creates/updates `implementation.md` for progress tracking
-7. Updates `task.md` to mark Phase 3 as in progress
-8. Activates `tdd-companion` for TDD discipline
-9. Prepares for interactive development
+5. **Loads dev-guides** for security, SDC, JS patterns via `guide-integrator` (unless already loaded this session)
+6. Loads methodology refs (via `guide-integrator`)
+7. Creates/updates `implementation.md` for progress tracking
+8. Updates `task.md` to mark Phase 3 as in progress
+9. Activates `tdd-companion` for TDD discipline
+10. Prepares for interactive development
 
 ## Task-Based Workflow
 

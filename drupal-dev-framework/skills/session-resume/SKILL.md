@@ -1,7 +1,8 @@
 ---
 name: session-resume
-description: Use when resuming work on existing project - lists registered projects, reads project_state.md, summarizes current state, identifies where to continue
+description: "Use when resuming work on existing project - lists registered projects, reads project_state.md, summarizes current state, identifies where to continue. Trigger: 'pick up where I left off', 'continue project', 'what was I working on', 'resume session'."
 version: 1.2.0
+allowed-tools: Read, Glob, Bash
 ---
 
 # Session Resume

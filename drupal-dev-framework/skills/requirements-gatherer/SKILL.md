@@ -2,6 +2,7 @@
 name: requirements-gatherer
 description: Use when gathering project requirements - asks structured questions about project type, scope, integrations, and constraints to populate project_state.md
 version: 1.3.1
+allowed-tools: Read, Write, Glob
 ---
 
 # Requirements Gatherer

@@ -1,10 +1,11 @@
 ---
 name: contrib-researcher
-description: Use when researching Drupal contrib modules or existing solutions - analyzes drupal.org and contrib code to identify reusable patterns and integration points
+description: "Use when researching Drupal contrib modules or existing solutions - analyzes drupal.org and contrib code to identify reusable patterns and integration points. Trigger: 'find existing module', 'is there a contrib for this', 'search drupal.org', 'existing solutions', 'before building'. Use proactively at the START of Phase 1 — ALWAYS check contrib before building custom. Never let user skip contrib research."
 capabilities: ["drupal-org-search", "contrib-analysis", "pattern-extraction", "integration-discovery"]
 version: 1.0.0
 model: haiku
 disallowedTools: Edit, Write, Bash
+maxTurns: 15
 ---
 
 # Contrib Researcher

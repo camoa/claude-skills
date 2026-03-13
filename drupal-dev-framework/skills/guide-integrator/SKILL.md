@@ -1,6 +1,6 @@
 ---
 name: guide-integrator
-description: Use when designing features - loads plugin methodology refs and delegates to dev-guides-navigator for online Drupal domain knowledge
+description: "Use when designing features - loads plugin methodology refs and delegates to dev-guides-navigator for online Drupal domain knowledge. Trigger: 'load guides', 'get reference docs', 'methodology references'. Use proactively during Phase 2 design — loads SOLID, Library-First, DRY, TDD, Security guides."
 version: 4.0.0
 user-invocable: false
 ---
@@ -22,11 +22,18 @@ Load development references and integrate into architecture documents. Two sourc
 
 ## Activation
 
+**PROACTIVE:** Activate at the START of every phase activity — do not wait for explicit request.
+
 Activate when:
+- **Any Phase 1 activity** — load guides for the task's Drupal domain before research
+- **Any Phase 2 activity** — load architecture decision guides before design
+- **Any Phase 3 activity** — load security, SDC, JS guides before implementation
 - Designing features that match reference topics
 - User mentions specific patterns (TDD, SOLID, DRY)
 - Architecture drafting for any feature
 - Auto-triggered by `architecture-drafter` agent
+
+**Skip if:** The relevant guide was already loaded earlier in this session (check conversation context).
 
 ## Auto-Load Rules (Plugin References)
 

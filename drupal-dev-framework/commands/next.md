@@ -1,5 +1,5 @@
 ---
-description: Suggest next action based on project state
+description: "Suggest next action based on project state. Trigger: 'what's next', 'continue working', 'resume', 'suggest action', 'what should I do'. ALWAYS use this when resuming work — it enforces phase order and quality gates."
 allowed-tools: Read, Write, Glob, Bash, Task
 argument-hint: [project-name]
 ---

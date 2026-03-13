@@ -1,5 +1,5 @@
 ---
-description: Mark a task as done and move to completed
+description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 5 quality gates before allowing completion."
 allowed-tools: Read, Write, Bash(mv:*), Glob
 argument-hint: <task-name>
 ---

@@ -1,6 +1,28 @@
 #!/bin/bash
 # Session start hook for drupal-dev-framework
-# Checks for registered projects and outputs context
+# Checks required plugins and registered projects
+
+# Check required plugin: dev-guides-navigator
+SETTINGS_FILES=("$HOME/.claude/settings.json" ".claude/settings.json")
+DEV_GUIDES_FOUND=false
+
+for settings in "${SETTINGS_FILES[@]}"; do
+  if [ -f "$settings" ] && jq -e '.plugins // .installedPlugins // empty' "$settings" 2>/dev/null | grep -q "dev-guides-navigator"; then
+    DEV_GUIDES_FOUND=true
+    break
+  fi
+done
+
+if [ "$DEV_GUIDES_FOUND" = false ]; then
+  # Check if loaded as a plugin directory
+  if [ -z "$(find "$HOME/.claude" -path "*/dev-guides-navigator/.claude-plugin/plugin.json" 2>/dev/null | head -1)" ]; then
+    echo "⚠️ **Required plugin missing: dev-guides-navigator**"
+    echo ""
+    echo "drupal-dev-framework requires dev-guides-navigator for Drupal domain knowledge."
+    echo "Install: \`/plugin install dev-guides-navigator@camoa-skills\`"
+    echo ""
+  fi
+fi
 
 REGISTRY="$HOME/.claude/drupal-dev-framework/active_projects.json"
 

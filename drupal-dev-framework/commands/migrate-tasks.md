@@ -1,5 +1,5 @@
 ---
-description: Migrate v2.x single-file tasks to v3.0.0 folder structure
+description: "Migrate v2.x single-file tasks to v3.0.0 folder structure. Trigger: 'upgrade tasks', 'convert task format', 'v2 to v3 migration'."
 allowed-tools: Read, Write, Bash, Glob, Skill
 argument-hint: none
 ---
