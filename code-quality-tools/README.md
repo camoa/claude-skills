@@ -2,6 +2,21 @@
 
 Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects with Semgrep, Trivy, and Gitleaks.
 
+## How Detection Works
+
+**All commands are the same for both project types.** When you run any command, the plugin auto-detects your project by checking:
+
+| Signal | Detected As |
+|--------|-------------|
+| `composer.json` with `drupal/core` | Drupal |
+| `web/core/` or `docroot/core/` directory | Drupal |
+| `.ddev/config.yaml` with `type: drupal` | Drupal |
+| `next.config.js` / `.mjs` / `.ts` | Next.js |
+| `package.json` with `"next"` dependency | Next.js |
+| Both present | Monorepo (runs both toolchains) |
+
+Then it routes to the correct toolchain — PHPStan/PHPMD/Psalm for Drupal, ESLint/Jest/madge for Next.js. You never need to specify which type.
+
 ## Quick Start
 
 ### 1. Install Plugin
@@ -12,7 +27,7 @@ Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, 
 
 ### 2. First-Time Setup
 
-Run the interactive setup wizard — it detects your project type and installs recommended tools:
+Run the interactive setup wizard — it detects your project type and installs the right tools:
 
 ```
 /code-quality:setup
