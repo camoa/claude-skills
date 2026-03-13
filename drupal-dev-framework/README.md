@@ -24,12 +24,15 @@ Phases apply per task, not per project. A project can have tasks at different ph
 # Add marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
 
-# Install
+# Install (both required)
+/plugin install dev-guides-navigator@camoa-skills
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
+**Required plugin:**
+- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides). The framework loads these proactively at every phase.
+
 **Recommended companion plugins:**
-- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides)
 - `superpowers` — TDD enforcement, brainstorming, verification workflows
 - `drupal-dev-tools` — DDEV integration, Drupal audits
 - `code-quality-tools` — PHPStan, security scanning, SOLID/DRY analysis
@@ -112,15 +115,15 @@ The debate produces a synthesized recommendation with dissenting opinions noted.
 
 ### Agents (5)
 
-Agents handle complex multi-step tasks with appropriate model routing:
+Agents handle complex multi-step tasks with model routing and cost control (`maxTurns` prevents runaway loops):
 
-| Agent | Model | Role |
-|-------|-------|------|
-| `project-orchestrator` | sonnet | Routes workflow, manages projects and tasks |
-| `architecture-drafter` | opus | Designs architecture with SOLID/Library-First enforcement |
-| `architecture-validator` | sonnet | Read-only validation against architecture and standards |
-| `pattern-recommender` | sonnet | Recommends Drupal patterns with core/contrib references |
-| `contrib-researcher` | haiku | Searches drupal.org and contrib code for existing solutions |
+| Agent | Model | Max Turns | Role |
+|-------|-------|-----------|------|
+| `project-orchestrator` | sonnet | 25 | Routes workflow, manages projects and tasks |
+| `architecture-drafter` | opus | 30 | Designs architecture with SOLID/Library-First enforcement |
+| `architecture-validator` | sonnet | 20 | Read-only validation in isolated worktree |
+| `pattern-recommender` | sonnet | 15 | Recommends Drupal patterns with core/contrib references |
+| `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
 
 ### Skills (16)
 
@@ -147,9 +150,17 @@ Built-in docs enforced at specific phases:
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
 
-### Online Dev-Guides (60+ topics)
+### Online Dev-Guides (60+ topics) — Required
 
-For Drupal domain knowledge (forms, entities, security, SDC, views, caching, etc.), the plugin delegates to the `dev-guides-navigator` plugin which provides:
+The framework **proactively loads** Drupal domain guides at the start of every phase via the required `dev-guides-navigator` plugin:
+
+| Phase | What Gets Loaded |
+|-------|-----------------|
+| Research | Guides for the task's Drupal domain (forms, entities, plugins, etc.) |
+| Architecture | Guides for design decisions (services, routing, caching, config) |
+| Implementation | Guides for security, SDC, JS patterns |
+
+Guides are loaded automatically — no manual invocation needed. Already-loaded guides are skipped (session-aware). The navigator provides:
 - Hash-based caching so guides aren't re-fetched every session
 - KG metadata for disambiguation (e.g., "story.yml" → UI Patterns, not Storybook)
 - 1200+ atomic decision guides at [camoa.github.io/dev-guides](https://camoa.github.io/dev-guides/)
