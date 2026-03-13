@@ -1,5 +1,5 @@
 ---
-description: Research or investigate a task with competing agent team (3 perspectives + debate)
+description: "Research or investigate a task with competing agent team (3 perspectives + debate). Trigger: 'team research', 'debate', 'competing perspectives', 'deep research', '3 perspectives'. Better than /research for complex decisions."
 allowed-tools: Read, Write, Glob, Grep, WebSearch, WebFetch
 argument-hint: <task-name>
 ---
@@ -45,15 +45,9 @@ Tell the user which mode was detected:
 
 ### Step 3 — Check Prerequisites
 
-Verify agent teams are available. If not:
+Verify agent teams are available (requires Claude Code with agent team support). If not available:
 
-> Agent teams require the experimental flag:
-> ```json
-> // Add to ~/.claude/settings.json
-> { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-> ```
-> Or: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
->
+> Agent teams not supported in this environment.
 > **Fallback:** Run `/research $ARGUMENTS` for standard single-agent research.
 
 Stop here if not available.
@@ -86,7 +80,8 @@ Spawn 3 teammates using the appropriate prompt templates below. After spawning:
 
 1. Enable **delegate mode** (Shift+Tab) to prevent doing research yourself
 2. Tell the user: "Team spawned. Enable delegate mode (Shift+Tab) to let teammates work. I'll synthesize when they finish."
-3. Wait for all teammates to complete before proceeding
+3. Optional: suggest `teammateMode: split-panes` for visual monitoring of all teammates
+4. Wait for all teammates to complete before proceeding
 
 ### Step 6 — Synthesize
 

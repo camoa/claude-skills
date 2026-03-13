@@ -1,6 +1,6 @@
 ---
 name: task-completer
-description: Use when finishing a task - moves task to completed/, updates project_state.md, suggests next task
+description: "Use when finishing a task - moves task to completed/, updates project_state.md, suggests next task. Trigger: 'finish task', 'done with task', 'move to completed'. MUST run ALL 5 quality gates. BLOCK completion if gates fail. Never skip gates."
 version: 2.1.0
 ---
 

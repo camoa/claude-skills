@@ -1,5 +1,5 @@
 ---
-description: Get pattern recommendations for a use case
+description: "Get pattern recommendations for a use case. Trigger: 'recommend pattern', 'which approach', 'Drupal pattern for', 'how should I implement'."
 allowed-tools: Read, Glob, Grep, Task
 argument-hint: <use-case>
 ---

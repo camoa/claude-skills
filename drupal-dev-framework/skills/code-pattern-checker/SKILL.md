@@ -1,6 +1,6 @@
 ---
 name: code-pattern-checker
-description: Use before committing code - validates Drupal coding standards, SOLID/DRY principles, security practices, and CSS standards
+description: "Use before committing code - validates Drupal coding standards, SOLID/DRY principles, security practices, and CSS standards. Trigger: 'check code quality', 'pre-commit check', 'lint Drupal code', 'validate standards'. Use proactively before ANY commit. Checks SOLID, DRY, security, and Drupal coding standards."
 version: 2.1.0
 ---
 

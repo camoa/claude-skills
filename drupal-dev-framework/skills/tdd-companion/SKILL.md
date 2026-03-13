@@ -1,6 +1,6 @@
 ---
 name: tdd-companion
-description: Use during implementation to enforce TDD - reminds test-first, validates Red-Green-Refactor cycle, integrates with superpowers:test-driven-development
+description: "Use during implementation to enforce TDD - reminds test-first, validates Red-Green-Refactor cycle, integrates with superpowers:test-driven-development. Trigger: 'test first', 'write tests', 'Red Green Refactor', 'TDD workflow'. MUST be active during all Phase 3 implementation. NEVER write implementation code before tests."
 version: 2.0.0
 ---
 

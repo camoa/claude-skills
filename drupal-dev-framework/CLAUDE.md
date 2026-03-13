@@ -18,11 +18,15 @@
 - Use `argument-hint:` for discoverability
 - Restrict `allowed-tools` to minimum needed
 
-## Online Dev-Guides
-For Drupal domain knowledge beyond bundled methodology references, use the `dev-guides-navigator` skill.
-- The navigator handles caching, topic matching, and disambiguation
+## Online Dev-Guides — Proactive Usage
+**ALWAYS consult dev-guides before making Drupal development decisions** unless the relevant guide was already loaded in this session.
+- Use the `dev-guides-navigator` skill for topic discovery, caching, and disambiguation
 - Do NOT fetch `llms.txt` or dev-guides URLs directly — invoke the navigator skill instead
-- The `guide-integrator` and `guide-loader` skills already delegate to the navigator
+- The `guide-integrator` and `guide-loader` skills delegate to the navigator
+- **Phase 1 (Research):** Load guides for the task's Drupal domain (forms, entities, plugins, etc.)
+- **Phase 2 (Design):** Load guides for architecture decisions (services, routing, caching, config)
+- **Phase 3 (Implementation):** Load guides for security, SDC, JS patterns before writing code
+- If a guide was loaded earlier in the session, do not re-fetch — use the cached content
 
 ## General
 - Current state only — no historical narratives

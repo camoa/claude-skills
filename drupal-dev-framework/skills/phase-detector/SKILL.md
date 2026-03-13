@@ -4,6 +4,7 @@ description: Use when determining task phase - analyzes task file to identify Ph
 version: 3.0.0
 model: haiku
 user-invocable: false
+allowed-tools: Read, Glob
 ---
 
 # Phase Detector

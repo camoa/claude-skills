@@ -1,5 +1,5 @@
 ---
-description: Design architecture for a specific task
+description: "Design architecture for a specific task. Trigger: 'architecture', 'design task', 'plan component', 'Phase 2'. REQUIRES completed research. Enforces Library-First, CLI-First, SOLID, DRY."
 allowed-tools: Read, Write, Glob, Grep, Task
 argument-hint: <task-name>
 ---
@@ -18,8 +18,9 @@ Design architecture for a specific task (Phase 2 of a task).
 
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Reviews research findings in `research.md`
-3. Invokes `architecture-drafter` agent
-4. Invokes `guide-integrator` for relevant guides
+3. **Loads dev-guides** for architecture decisions via `guide-integrator` (unless already loaded this session)
+4. Invokes `architecture-drafter` agent
+5. Invokes `guide-integrator` for methodology refs
 5. Creates/updates `architecture.md` with design
 6. Updates `task.md` to mark Phase 2 as in progress
 7. Optionally creates component file in `architecture/{component}.md`

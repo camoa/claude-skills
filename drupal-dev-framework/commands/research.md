@@ -1,5 +1,5 @@
 ---
-description: Research a task topic and store findings in task file
+description: "Research a task topic and store findings in task file. Trigger: 'investigate', 'find patterns', 'research task', 'Phase 1', 'look into'. MUST be done before /design. Never skip research."
 allowed-tools: Read, Write, WebSearch, WebFetch, Grep, Glob, Task
 argument-hint: <task-name>
 ---
@@ -18,11 +18,12 @@ Research existing solutions for a specific task (Phase 1 of a task).
 
 1. Creates task directory: `implementation_process/in_progress/{task_name}/`
 2. Creates `task.md` (tracker with links and acceptance criteria)
-3. Invokes `contrib-researcher` agent for drupal.org/contrib search
-4. Invokes `core-pattern-finder` skill for core examples
-5. Stores findings in `research.md` file
-6. Updates `task.md` to mark Phase 1 as in progress
-7. Updates `project_state.md` with current task
+3. **Loads dev-guides** for the task's Drupal domain via `guide-integrator` (unless already loaded this session)
+4. Invokes `contrib-researcher` agent for drupal.org/contrib search
+5. Invokes `core-pattern-finder` skill for core examples
+6. Stores findings in `research.md` file
+7. Updates `task.md` to mark Phase 1 as in progress
+8. Updates `project_state.md` with current task
 
 ## Task-Based Workflow
 

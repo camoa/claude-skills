@@ -1,6 +1,7 @@
 ---
-description: Validate implementation against architecture and standards
+description: "Validate implementation against architecture and standards. Trigger: 'check code', 'verify implementation', 'run validation', 'does this follow architecture'. Use proactively during Phase 3."
 allowed-tools: Read, Glob, Grep, Task
+context: fork
 argument-hint: [component-or-file]
 ---
 
