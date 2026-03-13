@@ -117,23 +117,28 @@ Features 21 visual styles, 114 infographic templates, HTML design systems with 1
 
 See [brand-content-design/README.md](brand-content-design/README.md) for full documentation.
 
-### code-quality-tools (v2.6.0)
+### code-quality-tools (v2.7.0)
 
 Code quality and security auditing for **Drupal** (via DDEV) and **Next.js** projects.
 
 ```bash
-/code-quality-tools:audit               # Full audit
-/code-quality-tools:security            # Security-focused
+/code-quality-tools:audit               # Full audit with synthesis
+/code-quality-tools:review              # Rubric-scored code review
+/code-quality-tools:security-debate     # 3-agent security debate
+/code-quality-tools:architecture-debate # 3-agent architecture debate
 ```
 
 | Component | Contents |
 |-----------|----------|
-| Commands | 9 (`/setup`, `/audit`, `/coverage`, `/security`, `/security-debate`, `/lint`, `/solid`, `/dry`, `/tdd`) |
+| Commands | 11 (`/setup`, `/audit`, `/review`, `/coverage`, `/security`, `/security-debate`, `/architecture-debate`, `/lint`, `/solid`, `/dry`, `/tdd`) |
 | Skills | 1 (`code-quality-audit`) |
 
 Security coverage: Drupal (10 layers — PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave, Drush, Composer audit, Security Review) and Next.js (7 layers). Optional DAST with OWASP ZAP + Nuclei.
 
+Features rubric-scored code review (/50 with quality gate), cross-audit correlation with prioritized action plans, and two 3-agent debate commands with isolated worktrees.
+
 See [code-quality-tools/README.md](code-quality-tools/README.md) for full documentation.
+
 
 ### drupal-htmx (v1.3.0)
 

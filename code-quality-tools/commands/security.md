@@ -1,5 +1,5 @@
 ---
-description: Run comprehensive security audit for Drupal/Next.js projects
+description: Run comprehensive security audit for Drupal/Next.js projects. Use when user says "security audit", "check vulnerabilities", "OWASP check", "is this secure", "find security issues", "Semgrep scan", "Trivy scan", "Gitleaks check". Runs 10 Drupal layers or 7 Next.js layers. For multi-perspective analysis, use /code-quality:security-debate after this.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---

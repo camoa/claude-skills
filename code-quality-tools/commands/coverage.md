@@ -1,5 +1,5 @@
 ---
-description: Check test coverage for Drupal/Next.js projects
+description: Check test coverage for Drupal/Next.js projects. Use when user says "test coverage", "what's untested", "coverage report", "missing tests", "how much is covered", "PHPUnit coverage", "Jest coverage". Shows coverage percentage and identifies uncovered code.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---

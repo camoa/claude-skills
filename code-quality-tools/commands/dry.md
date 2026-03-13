@@ -1,5 +1,5 @@
 ---
-description: Check code duplication (DRY principle) for Drupal/Next.js projects
+description: Check code duplication (DRY principle) for Drupal/Next.js projects. Use when user says "find duplicates", "DRY check", "copy paste detection", "code duplication", "repeated code", "PHPCPD", "jscpd". Identifies duplicated code blocks and suggests consolidation.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---

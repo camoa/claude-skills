@@ -1,5 +1,5 @@
 ---
-description: Check code standards and linting for Drupal/Next.js projects
+description: Check code standards and linting for Drupal/Next.js projects. Use when user says "lint this", "check standards", "coding standards", "PHPCS", "ESLint", "code style", "Drupal Coder", "Prettier". Validates code against project coding standards.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---
