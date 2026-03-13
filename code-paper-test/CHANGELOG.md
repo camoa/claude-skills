@@ -5,6 +5,45 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-13
+
+### Added
+
+**Track A — Methodology Depth**
+- **Data flow tracking** (Step 2b) — track type transformations across function boundaries
+- **Error propagation tracing** — follow exceptions up the call stack, check for partial state
+- **Untested path analysis** (Step 8) — identify code paths never exercised, assess risk
+- **N+1 and performance pattern detection** — flag N+1 queries, nested loops, missing cache
+- **Config validation** — verify YAML/JSON/services values match what code expects
+- **State machine validation** — verify all state transitions valid, reachable, guarded (in advanced-techniques.md)
+- **`references/severity-scoring.md`** — consistent severity rubric with 4-factor scoring (Reach, Impact, Reversibility, Exploitability)
+- **`references/blind-ab-comparison.md`** — compare two implementations with shared scenarios and blind protocol
+- **`references/rubric-scoring.md`** — structured grading system (Content + Structure, 50-point scale) with quality gate support
+
+**Track B — Plugin Infrastructure**
+- `maxTurns: 15` on all 3 test-team agents (cost control)
+- `isolation: worktree` on all 3 test-team agents (independent repo access)
+- `allowed-tools: Read, Glob, Grep, Bash` on paper-test skill
+- `user-invocable: true` on paper-test skill
+- Pushy descriptions with comprehensive trigger phrases on skill and command
+- Quality gate enforcement on test-team agents (must complete ALL assigned categories)
+- Model routing note: opus option for Red Team Attacker on complex security analysis
+
+**Track C — Skill/Config Testing**
+- **`references/skill-and-config-testing.md`** — extend paper testing to non-code artifacts
+  - Trigger analysis, instruction tracing, frontmatter verification, context budget, fidelity testing, agent team coordination, config file testing
+- Skill-mode auto-detection in test-team command (frontmatter → instruction tracing)
+- Updated "When to Use" to include skills, commands, agents, configs
+
+### Changed
+- Removed experimental agent teams flag — agent teams are now GA
+- SKILL.md version 0.2.0 → 0.4.0 (aligned with plugin)
+- plugin.json description and keywords updated for skill/config testing
+- CLAUDE.md expanded with "What This Plugin Tests" section
+- README.md rewritten for v0.4.0
+
+---
+
 ## [0.3.0] - 2026-02-11
 
 ### Added

@@ -1,8 +1,10 @@
 ---
 name: paper-test
-description: Use when testing code through mental execution - trace code line-by-line with concrete input values to find bugs, logic errors, missing code, edge cases, and contract violations before deployment
-version: 0.2.0
+description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "validate this implementation", "review this logic", "check dependencies", "check this config". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
+version: 0.4.0
 model: sonnet
+allowed-tools: Read, Glob, Grep, Bash
+user-invocable: true
 ---
 
 # Paper Test
@@ -14,10 +16,13 @@ Systematically test code by mentally executing it line-by-line with concrete val
 - "Paper test this code" / "Trace this code" / "Test without running"
 - "Find bugs in this code" / "Check for edge cases"
 - "Validate this implementation" / "Review this logic"
+- "Paper test this skill" / "Test this command" / "Validate this agent"
+- "Check this config" / "Verify this YAML" / "Trace this prompt"
 - Before deploying changes
 - Debugging without a debugger
 - Reviewing unfamiliar or AI-generated code
 - Validating complex logic (loops, conditionals, recursion)
+- Reviewing skills, commands, agents, or plugin configs
 
 ## Method
 
@@ -95,6 +100,26 @@ DEPENDENCY CHECK: $externalApi->fetchData()
 
 Mark as risk - don't assume it works.
 
+### Verifying Configuration Dependencies
+
+When code reads config values (YAML, JSON, .env, services):
+
+1. **Find the config source** — Read the actual file
+2. **Verify key exists** — Does the key the code reads actually exist?
+3. **Verify value type** — Does the value match what code expects?
+4. **Verify defaults** — If config missing, is there a sensible fallback?
+
+```
+CONFIG CHECK: $this->config('my_module.settings')->get('api_timeout')
+  Source: config/install/my_module.settings.yml
+  Key exists?  YES / NO
+  Value:       30
+  Type match:  integer (code expects int) — MATCH / MISMATCH
+  Default:     NULL if missing — RISK: no fallback
+```
+
+Also check: services.yml (service IDs, arguments), routing.yml (route names), schema.yml (structure matches config).
+
 ---
 
 ## Quick Reference
@@ -133,6 +158,24 @@ Line [N]: [code statement]
          → [variable] = [new value]
          → [state change description]
 ```
+
+### Step 2b: Track Data Flow Across Boundaries
+
+At every function call, method return, or data handoff, track type transformations:
+
+```
+DATA FLOW: [source] → [destination]
+  Input type:  [what was passed]
+  Output type: [what was returned]
+  Coercion:    [any implicit type change]
+  Risk:        [what breaks if type is wrong]
+```
+
+Watch for:
+- **Implicit coercion** — string "30" used as int, null used as empty string
+- **Container types** — method returns array but code treats as single object
+- **Serialization boundaries** — object → JSON → object (properties may change case, nulls may disappear)
+- **Framework wrapping** — raw value wrapped in Response, FieldItemList, Result objects
 
 ### Step 3: Follow Every Branch
 
@@ -230,6 +273,20 @@ FLAWS FOUND:
     FIX: [how to resolve]
 ```
 
+### Step 8: Untested Path Analysis
+
+After all scenarios, review for paths NOT exercised:
+
+```
+UNTESTED PATHS:
+  - Line [N]-[M]: [else branch / catch block / default case] — never triggered
+    Risk: [what this path handles]
+    Scenario needed: [input that would trigger it]
+
+Coverage: [X of Y branches exercised]
+Recommendation: [add scenario for critical untested paths / accept risk]
+```
+
 ---
 
 ## What to Look For
@@ -260,6 +317,20 @@ FLAWS FOUND:
 - Unreachable code
 - Missing return statement
 - Early return skips cleanup
+
+### Error Propagation
+- Exception thrown but caught too high (wrong handler)
+- Exception swallowed silently (empty catch block)
+- Partial state left behind (DB row inserted, email not sent)
+- Wrong error code/status returned to caller
+- User retries after error — causes duplicates?
+
+### Performance Patterns
+- N+1 query — database call inside a loop
+- Nested loops on collections — O(n²) or worse
+- Same expensive call repeated — missing cache/variable
+- Unbounded collection growth — no size limit in loop
+- Missing pagination — loads entire table into memory
 
 ### AI Code Issues
 - Invented methods that don't exist
@@ -365,6 +436,10 @@ All detailed guides are in `references/` directory:
 - `references/hybrid-testing.md` - Module-level testing strategy
 - `references/common-flaws.md` - Catalog of frequent bugs
 - `references/advanced-techniques.md` - Progressive injects, red team testing, attack surface analysis, AAR format
+- `references/severity-scoring.md` - Consistent severity rubric for flaw prioritization
+- `references/blind-ab-comparison.md` - Comparing two implementations side by side
+- `references/rubric-scoring.md` - Structured grading for code quality assessment
+- `references/skill-and-config-testing.md` - Testing skills, commands, agents, and configs
 
 ---
 
