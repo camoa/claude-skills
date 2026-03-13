@@ -35,14 +35,11 @@ This single command handles everything - it will guide you through project selec
 │   │                                                             │               │
 │   │ Found 3 project(s):                                         │               │
 │   │                                                             │               │
-│   │ 1. my_module (last accessed: 2025-12-06)                    │               │
+│   │ 1. my_module (last accessed: 2026-03-10)                    │               │
 │   │    Path: /home/user/workspace/my_module                     │               │
 │   │                                                             │               │
-│   │ 2. another_project (last accessed: 2025-12-05)              │               │
+│   │ 2. another_project (last accessed: 2026-03-08)              │               │
 │   │    Path: /home/user/workspace/another_project               │               │
-│   │                                                             │               │
-│   │ 3. old_project (last accessed: 2025-11-20)                  │               │
-│   │    Path: /home/user/workspace/old_project                   │               │
 │   │                                                             │               │
 │   │ Which project? (enter number or "new")                      │               │
 │   └─────────────────────────────────────────────────────────────┘               │
@@ -78,7 +75,7 @@ This single command handles everything - it will guide you through project selec
 │                      STEP 2: TASK SELECTION                                      │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
-│   Scan: implementation_process/in_progress/*.md                                 │
+│   Scan: implementation_process/in_progress/*/task.md                            │
 │         │                                                                        │
 │   ┌─────┴─────────────────────────────────────────────────────────┐             │
 │   │                                                               │             │
@@ -89,8 +86,8 @@ This single command handles everything - it will guide you through project selec
 │   │                                 │     │                                 │   │
 │   │ Found 2 task(s):                │     │ What task do you want to        │   │
 │   │                                 │     │ work on?                        │   │
-│   │ 1. settings_form (Phase 3)      │     │                                 │   │
-│   │ 2. content_entity (Phase 1)     │     │ Enter a task name               │   │
+│   │ 1. settings_form/ (Phase 3)     │     │                                 │   │
+│   │ 2. content_entity/ (Phase 1)    │     │ Enter a task name               │   │
 │   │                                 │     │ (e.g., "settings_form")         │   │
 │   │ Which task?                     │     │                                 │   │
 │   │ - Enter 1-2 for existing        │     └─────────────────────────────────┘   │
@@ -99,7 +96,7 @@ This single command handles everything - it will guide you through project selec
 │         │                                                                        │
 │   User response:                                                                │
 │         │                                                                        │
-│         ├── Number (existing) ──▶ Load task file, detect phase, suggest command │
+│         ├── Number (existing) ──▶ Load task folder, detect phase, suggest cmd   │
 │         │                                                                        │
 │         └── New name ──▶ /research <task_name> (creates task, starts Phase 1)  │
 │                                                                                  │
@@ -115,11 +112,14 @@ This single command handles everything - it will guide you through project selec
 │   │                         PHASE 1: RESEARCH                                │   │
 │   │                     /research <task-name>                                │   │
 │   │                                                                          │   │
-│   │   • Creates task file in implementation_process/in_progress/            │   │
-│   │   • Searches drupal.org and contrib modules                             │   │
-│   │   • Finds core patterns and examples                                    │   │
-│   │   • Populates ## Research section                                       │   │
-│   │   • NO CODE in this phase                                               │   │
+│   │   • Creates task folder in implementation_process/in_progress/           │   │
+│   │   • Loads dev-guides for the task's Drupal domain (proactive)            │   │
+│   │   • Searches drupal.org and contrib modules                              │   │
+│   │   • Finds core patterns and examples                                     │   │
+│   │   • Writes research.md                                                   │   │
+│   │   • NO CODE in this phase                                                │   │
+│   │                                                                          │   │
+│   │   Alternative: /research-team <task> for 3 competing perspectives        │   │
 │   │                                                                          │   │
 │   └──────────────────────────────┬──────────────────────────────────────────┘   │
 │                                  │                                               │
@@ -128,12 +128,13 @@ This single command handles everything - it will guide you through project selec
 │   │                       PHASE 2: ARCHITECTURE                              │   │
 │   │                      /design <task-name>                                 │   │
 │   │                                                                          │   │
-│   │   • Designs approach based on research                                  │   │
-│   │   • Loads relevant guides automatically                                 │   │
-│   │   • Defines components, dependencies, patterns                          │   │
-│   │   • Sets acceptance criteria                                            │   │
-│   │   • Populates ## Architecture section                                   │   │
-│   │   • NO CODE in this phase                                               │   │
+│   │   • Loads dev-guides for architecture decisions (proactive)              │   │
+│   │   • Designs approach based on research                                   │   │
+│   │   • Enforces: SOLID, Library-First, CLI-First, DRY                       │   │
+│   │   • Defines components, dependencies, patterns                           │   │
+│   │   • Sets acceptance criteria                                             │   │
+│   │   • Writes architecture.md                                               │   │
+│   │   • NO CODE in this phase                                                │   │
 │   │                                                                          │   │
 │   └──────────────────────────────┬──────────────────────────────────────────┘   │
 │                                  │                                               │
@@ -142,12 +143,13 @@ This single command handles everything - it will guide you through project selec
 │   │                      PHASE 3: IMPLEMENTATION                             │   │
 │   │                     /implement <task-name>                               │   │
 │   │                                                                          │   │
-│   │   • Loads full context (research + architecture)                        │   │
-│   │   • TDD: Write test first, then implementation                          │   │
-│   │   • User guides each step                                               │   │
-│   │   • User runs tests (Claude does NOT auto-run)                          │   │
-│   │   • Updates ## Implementation section                                   │   │
-│   │   • CODE is written in this phase                                       │   │
+│   │   • Loads dev-guides for security, SDC, JS patterns (proactive)          │   │
+│   │   • Loads full context (research + architecture)                         │   │
+│   │   • TDD: Write test first, then implementation                           │   │
+│   │   • User guides each step                                                │   │
+│   │   • User runs tests (Claude does NOT auto-run)                           │   │
+│   │   • Writes implementation.md                                             │   │
+│   │   • CODE is written in this phase                                        │   │
 │   │                                                                          │   │
 │   └──────────────────────────────┬──────────────────────────────────────────┘   │
 │                                  │                                               │
@@ -156,16 +158,17 @@ This single command handles everything - it will guide you through project selec
 │   │                         TASK COMPLETION                                  │   │
 │   │                     /complete <task-name>                                │   │
 │   │                                                                          │   │
-│   │   Pre-checks:                                                            │   │
-│   │   ✓ All acceptance criteria marked done                                 │   │
-│   │   ? Tests pass (user confirms)                                          │   │
-│   │   ✓ No blocking issues noted                                            │   │
+│   │   Quality Gates (ALL 5 must pass):                                       │   │
+│   │   ✓ Gate 1: Code standards (PHPCS, PSR-12)                              │   │
+│   │   ✓ Gate 2: Tests pass (user confirms)                                  │   │
+│   │   ✓ Gate 3: Architecture compliance (SOLID, Library-First, DRY)         │   │
+│   │   ✓ Gate 4: Security review                                             │   │
+│   │   ✓ Gate 5: Code purposefulness                                         │   │
 │   │                                                                          │   │
 │   │   Actions:                                                               │   │
-│   │   • Adds completion notes to task file                                  │   │
-│   │   • Moves file to implementation_process/completed/                     │   │
-│   │   • Updates project_state.md                                            │   │
-│   │   • Suggests next task                                                  │   │
+│   │   • Moves task folder to implementation_process/completed/               │   │
+│   │   • Updates project_state.md                                             │   │
+│   │   • Suggests next task                                                   │   │
 │   │                                                                          │   │
 │   └──────────────────────────────┬──────────────────────────────────────────┘   │
 │                                  │                                               │
@@ -192,11 +195,13 @@ This single command handles everything - it will guide you through project selec
 │   └── {component}.md
 └── implementation_process/
     ├── in_progress/              # Active tasks (Step 2 scans here)
-    │   ├── settings_form.md
-    │   ├── content_entity.md
-    │   └── field_formatter.md
+    │   └── {task_name}/          # One folder per task (v3.0.0+)
+    │       ├── task.md           # Status, links, acceptance criteria
+    │       ├── research.md       # Phase 1 findings
+    │       ├── architecture.md   # Phase 2 design
+    │       └── implementation.md # Phase 3 notes
     └── completed/                # Finished tasks
-        └── user_service.md
+        └── {task_name}/
 
 ~/.claude/drupal-dev-framework/
 └── active_projects.json          # Project registry (Step 0 reads here)
@@ -204,38 +209,16 @@ This single command handles everything - it will guide you through project selec
 
 ---
 
-## Task File Structure
+## Task Folder Structure
 
-Each task file in `in_progress/` contains:
+Each task in `in_progress/` is a folder with separate phase files:
 
-```markdown
-# Task: {task_name}
-
-**Created:** {date}
-**Phase:** {1-Research / 2-Architecture / 3-Implementation}
-**Status:** In Progress
-
-## Description
-{What this task accomplishes}
-
-## Research
-{Populated in Phase 1}
-- Existing Solutions
-- Core Patterns Found
-- Recommendation
-
-## Architecture
-{Populated in Phase 2}
-- Approach
-- Components
-- Dependencies
-- Acceptance Criteria
-
-## Implementation
-{Populated in Phase 3}
-- Progress checkboxes
-- Files Created/Modified
-- Notes
+```
+implementation_process/in_progress/{task_name}/
+├── task.md              # Tracker with phase status and acceptance criteria
+├── research.md          # Phase 1 findings (contrib, core patterns, recommendation)
+├── architecture.md      # Phase 2 design (components, dependencies, patterns)
+└── implementation.md    # Phase 3 progress (files created, TDD log, blockers)
 ```
 
 ---
@@ -244,14 +227,17 @@ Each task file in `in_progress/` contains:
 
 | Command | Purpose |
 |---------|---------|
+| `/new [name]` | Create project and gather requirements |
 | `/next [project]` | Smart routing - handles all steps including project creation |
 | `/status [project]` | Show project and task status |
 | `/research <task>` | Start/continue Phase 1 |
+| `/research-team <task>` | Phase 1 with 3 competing AI perspectives + debate |
 | `/design <task>` | Start/continue Phase 2 |
 | `/implement <task>` | Start/continue Phase 3 |
-| `/complete <task>` | Mark task as done |
-| `/validate <task>` | Validate against architecture |
-| `/pattern <use-case>` | Get pattern recommendations |
+| `/complete <task>` | Run 5 quality gates, mark task done |
+| `/validate <task>` | Validate against architecture (anytime) |
+| `/pattern <use-case>` | Get pattern recommendations (anytime) |
+| `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folders |
 
 ---
 
@@ -261,12 +247,17 @@ Each task file in `in_progress/` contains:
 Session Start
      │
      ▼
+SessionStart hook checks:
+  ✓ dev-guides-navigator installed?
+  ✓ Projects registered?
+     │
+     ▼
 /next
      │
      ▼
 "Found 2 projects:
- 1. my_module (2025-12-06)
- 2. old_project (2025-12-05)
+ 1. my_module (2026-03-10)
+ 2. old_project (2026-03-08)
  Which project?"
      │
      ▼
@@ -274,8 +265,8 @@ User: "1"
      │
      ▼
 "Found 2 tasks in progress:
- 1. settings_form (Phase 3, 3/5 done)
- 2. content_entity (Phase 1)
+ 1. settings_form/ (Phase 3, 3/5 done)
+ 2. content_entity/ (Phase 1)
  Which task?"
      │
      ▼
@@ -283,19 +274,27 @@ User: "1"
      │
      ▼
 "Loading settings_form...
+ Dev-guides loaded: drupal/forms/, drupal/security/
  Recommended: /implement settings_form"
      │
      ▼
 /implement settings_form
      │
      ▼
-... work on implementation ...
+... work on implementation (TDD enforced) ...
      │
      ▼
 /complete settings_form
      │
      ▼
-"Task complete! Which task next?"
+"Running 5 quality gates...
+ Gate 1: Code standards ✓
+ Gate 2: Tests pass? (confirm)
+ Gate 3: Architecture compliance ✓
+ Gate 4: Security ✓
+ Gate 5: Purposefulness ✓
+
+ Task complete! Which task next?"
 ```
 
 ---
@@ -306,22 +305,24 @@ User: "1"
 2. **Projects contain tasks** (multiple tasks possible)
 3. **Each task has 3 phases** (Research → Architecture → Implementation)
 4. **No code until Phase 3** (research and design first)
-5. **TDD in Phase 3** (test first, then implement)
-6. **User runs tests** (Claude suggests, user executes)
-7. **Memory provides context** (across sessions)
+5. **Dev-guides loaded proactively** at every phase (skips if already loaded)
+6. **TDD in Phase 3** (test first, then implement)
+7. **User runs tests** (Claude suggests, user executes)
+8. **5 quality gates** must pass before task completion
+9. **Memory provides context** (across sessions via project_state.md)
 
 ---
 
 ## Enforced Principles
 
-The plugin includes built-in reference documents that are **enforced** at each phase:
+The plugin includes built-in references and online dev-guides that are **enforced** at each phase:
 
-| Phase | Principles Enforced | Reference Files |
-|-------|---------------------|-----------------|
-| **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md` |
-| **Implementation** | TDD (Red-Green-Refactor), DRY | `references/tdd-workflow.md`, `references/dry-patterns.md` |
-| **Completion** | Quality Gates, Security | `references/quality-gates.md`, dev-guides `drupal/security/` |
-| **Frontend** | SDC, BEM, Mobile-First, Behaviors | dev-guides `drupal/sdc/` + `drupal/js-development/` |
+| Phase | Principles Enforced | Sources |
+|-------|---------------------|---------|
+| **Research** | Drupal domain knowledge | dev-guides (proactive), contrib-researcher |
+| **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md`, dev-guides |
+| **Implementation** | TDD (Red-Green-Refactor), DRY, Security | `references/tdd-workflow.md`, `references/dry-patterns.md`, dev-guides |
+| **Completion** | 5 Quality Gates, Purposefulness | `references/quality-gates.md`, `references/purposeful-code.md`, dev-guides `drupal/security/` |
 
 ### Blocking vs Warning
 
@@ -347,7 +348,7 @@ This plugin includes skills and agents that activate automatically at each phase
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `project-orchestrator` | Agent | Central coordinator - routes to correct phase/command |
+| `project-orchestrator` | Agent (sonnet, 25 turns) | Central coordinator - routes to correct phase/command |
 | `project-initializer` | Skill | Creates project folder structure and memory files |
 | `requirements-gatherer` | Skill | Collects requirements across 7 categories |
 | `memory-manager` | Skill | Manages project memory files |
@@ -357,23 +358,24 @@ This plugin includes skills and agents that activate automatically at each phase
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `phase-detector` | Skill | Analyzes task file to determine current phase |
+| `phase-detector` | Skill (read-only) | Analyzes task folder to determine current phase |
 
 ### Phase 1: Research
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `contrib-researcher` | Agent | Searches drupal.org and contrib modules |
+| `contrib-researcher` | Agent (haiku, 15 turns) | Searches drupal.org and contrib modules |
 | `core-pattern-finder` | Skill | Finds patterns in Drupal core |
+| `guide-integrator` | Skill | Loads dev-guides for the task's Drupal domain |
 
 ### Phase 2: Architecture
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `architecture-drafter` | Agent | Designs task architecture, **enforces SOLID + Library-First** |
-| `architecture-validator` | Agent | Validates against principles, **blocking vs warning** |
-| `pattern-recommender` | Agent | Recommends Drupal patterns for use cases |
-| `guide-integrator` | Skill | Loads built-in references + optional custom guides |
+| `architecture-drafter` | Agent (opus, 30 turns) | Designs task architecture, **enforces SOLID + Library-First** |
+| `architecture-validator` | Agent (sonnet, 20 turns, isolated worktree) | Validates against principles, **blocking vs warning** |
+| `pattern-recommender` | Agent (sonnet, 15 turns) | Recommends Drupal patterns for use cases |
+| `guide-integrator` | Skill | Loads dev-guides for architecture decisions + methodology refs |
 | `guide-loader` | Skill | Loads specific guide files |
 | `component-designer` | Skill | Designs individual components |
 | `diagram-generator` | Skill | Creates Mermaid diagrams for architecture |
@@ -384,6 +386,7 @@ This plugin includes skills and agents that activate automatically at each phase
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `task-context-loader` | Skill | Loads full context for implementation |
+| `guide-integrator` | Skill | Loads dev-guides for security, SDC, JS patterns |
 | `tdd-companion` | Skill | **Enforces TDD** - blocks code before tests |
 | `code-pattern-checker` | Skill | Validates SOLID, DRY, Security, CSS standards |
 
@@ -391,29 +394,13 @@ This plugin includes skills and agents that activate automatically at each phase
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `task-completer` | Skill | **Runs 4 quality gates**, moves task to completed |
-
----
-
-## Utility Commands
-
-These commands can be used anytime during development:
-
-| Command | Purpose | Uses |
-|---------|---------|------|
-| `/validate <task>` | Check implementation against architecture | `architecture-validator` |
-| `/pattern <use-case>` | Get pattern recommendations | `pattern-recommender` |
-| `/status [project]` | Full project and task overview | `project-orchestrator`, `phase-detector` |
+| `task-completer` | Skill | **Runs 5 quality gates**, moves task to completed |
 
 ---
 
 ## Component Flow Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           COMPONENT ACTIVATION                                   │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
 /next (no project)
      │
      └──▶ project-orchestrator ──▶ memory-manager ──▶ List projects
@@ -423,25 +410,29 @@ These commands can be used anytime during development:
 
 /research <task>
      │
-     └──▶ contrib-researcher ──▶ core-pattern-finder ──▶ memory-manager
+     └──▶ guide-integrator (dev-guides) ──▶ contrib-researcher ──▶ core-pattern-finder
+
+/research-team <task>
+     │
+     └──▶ guide-integrator (dev-guides) ──▶ 3 competing agents ──▶ synthesize
 
 /design <task>
      │
-     └──▶ architecture-drafter ──▶ guide-integrator ──▶ pattern-recommender
+     └──▶ guide-integrator (dev-guides + refs) ──▶ architecture-drafter ──▶ pattern-recommender
                 │
                 └──▶ component-designer ──▶ diagram-generator (optional)
 
 /implement <task>
      │
-     └──▶ task-context-loader ──▶ tdd-companion ──▶ code-pattern-checker
+     └──▶ guide-integrator (dev-guides) ──▶ task-context-loader ──▶ tdd-companion ──▶ code-pattern-checker
 
 /complete <task>
      │
-     └──▶ task-completer ──▶ memory-manager
+     └──▶ task-completer (5 quality gates) ──▶ memory-manager
 
 /validate <task>
      │
-     └──▶ architecture-validator
+     └──▶ architecture-validator (isolated worktree)
 
 /pattern <use-case>
      │
