@@ -1,7 +1,10 @@
 ---
 name: dev-guides-navigator
-description: Smart guide discovery and routing for dev-guides site. Use when any development task might benefit from a guide — Drupal, Next.js, design systems, CSS, testing, security, SOLID, DRY, TDD. Caches llms.txt with hash-based freshness check. Reads topic index.md for KG metadata (concepts, disambiguation, relationships) to prevent wrong-guide selection. Keywords: guide, dev-guides, llms.txt, reference, pattern, best practice.
-model: haiku
+description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
+version: 0.2.0
+model: sonnet
+allowed-tools: Read, Bash, Glob, Grep, Write
+user-invocable: true
 ---
 
 # Dev-Guides Navigator
