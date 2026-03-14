@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-14
+
+### Fixed
+- **Agent frontmatter**: All 3 agents changed from `tools`/`disallowedTools` to `allowed-tools` (current standard)
+- **Version alignment**: Skill version now matches plugin version (was 1.2.0 vs 1.3.0)
+- **Dev-guides reference**: Replaced direct llms.txt URL with dev-guides-navigator delegation
+
+### Changed
+- Pushy descriptions with trigger phrases on all 5 commands and main skill
+- Added `allowed-tools` and `user-invocable: true` to skill frontmatter
+- Enhanced dev-guides integration section with relevant Drupal topics for HTMX context
+
 ## [1.3.0] - 2026-02-16
 
 ### Changed
