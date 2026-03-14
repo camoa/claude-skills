@@ -1,5 +1,5 @@
 ---
-description: Create a branded HTML page by selecting components from a design system
+description: Create a branded HTML page by selecting components from a design system. Use when user says "create HTML page", "make landing page", "build web page", "html page from design system", "compose page".
 allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, Skill
 ---
 

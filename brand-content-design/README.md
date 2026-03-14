@@ -1,5 +1,7 @@
 # Brand Content Design Plugin
 
+> **Current version: v2.8.0**
+
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
 ## The Flow
@@ -107,7 +109,7 @@ Generates `brand-philosophy.md` with your visual identity, voice, and core princ
 
 Templates define:
 - Slide/card/infographic structure and sequence
-- Visual style (from 13 styles across 4 aesthetic families for presentations/carousels)
+- Visual style (from 21 styles across 5 aesthetic families for presentations/carousels)
 - Color palette (brand colors or saved alternative palette)
 - Visual design philosophy (canvas-philosophy.md)
 - Sample PPTX/PDF/PNG for reference
@@ -185,7 +187,7 @@ Generates two files for your template:
 |-------|-------|----------|
 | `brand-analyst` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write, Bash`) |
 
-### Skills (3)
+### Skills (4)
 | Skill | Model | Invocation |
 |-------|-------|------------|
 | `brand-content-design` | sonnet | User + Claude (main router) |
@@ -450,7 +452,7 @@ Layer 1: BRAND PHILOSOPHY (brand-philosophy.md)
 Layer 2: CONTENT TYPE GUIDES (plugin references)
 ├── Presentation Zen principles
 ├── Carousel best practices
-├── 13 visual styles with constraints
+├── 21 visual styles with constraints
 └── Automatically updated with plugin
 
 Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)

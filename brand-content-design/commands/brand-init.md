@@ -1,5 +1,5 @@
 ---
-description: Initialize a new brand project folder structure for branded content creation
+description: Initialize a new brand project folder structure for branded content creation. Use when user says "start brand project", "new brand", "setup brand", "initialize brand", "brand init".
 allowed-tools: Write, Bash, Read, Glob
 ---
 

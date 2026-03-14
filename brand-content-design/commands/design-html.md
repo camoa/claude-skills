@@ -1,5 +1,5 @@
 ---
-description: Create or edit an HTML design system through guided wizard
+description: Create or edit an HTML design system through guided wizard. Use when user says "html design system", "create design system", "web design system", "design tokens", "component library".
 allowed-tools: Read, Write, Glob, Grep, AskUserQuestion
 ---
 

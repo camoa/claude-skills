@@ -1,5 +1,5 @@
 ---
-description: Main entry point - show project status, switch projects, or start new one
+description: Main entry point - show project status, switch projects, or start new one. Use when user says "brand status", "switch brand", "which brand", "show projects", "brand dashboard".
 allowed-tools: Read, Glob, AskUserQuestion
 ---
 

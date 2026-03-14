@@ -1,5 +1,5 @@
 ---
-description: Create a branded HTML page quickly with minimal questions
+description: Create a branded HTML page quickly with minimal questions. Use when user says "quick HTML page", "fast landing page", "html page now", "quick web page".
 allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, Skill
 ---
 

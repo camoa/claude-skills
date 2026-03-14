@@ -1,5 +1,5 @@
 ---
-description: Create an infographic using an existing template (detailed, guided mode)
+description: Create an infographic using an existing template (detailed, guided mode). Use when user says "create infographic", "make infographic", "guided infographic", "data visualization".
 allowed-tools: Bash, Read, Write, Glob, AskUserQuestion
 ---
 

@@ -1,8 +1,10 @@
 ---
 name: brand-content-design
-description: Use when user says "create presentation", "make carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", or wants to create visual content with consistent branding. Creates branded presentations, carousels, and HTML pages using a layered philosophy system.
-version: 2.3.0
+description: Use when user says "create presentation", "make slides", "make carousel", "LinkedIn carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", "color palette", "alternative colors", "infographic", "brand assets", "brand project". Use PROACTIVELY when user wants to create any visual content with consistent branding. MUST be invoked for branded content — routes to the correct command for presentations, carousels, infographics, and HTML pages.
+version: 2.8.0
 model: sonnet
+allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion, Skill
+user-invocable: true
 ---
 
 # Brand Content Design
@@ -128,10 +130,6 @@ The `visual-content` skill is bundled with this plugin. For HTML-to-Drupal conve
 
 ### Online Dev-Guides (Design Systems)
 
-For design system recognition and analysis methodology, fetch the guide index:
+For design system recognition and analysis methodology, use the dev-guides-navigator plugin:
 
-**Index:** `https://camoa.github.io/dev-guides/llms.txt`
-
-Likely relevant topics: design-systems/recognition
-
-Usage: WebFetch the index to discover available topics, then fetch specific topic pages when extracting brand elements or analyzing design systems.
+Invoke `/dev-guides-navigator` with keywords like "design system recognition", "Bootstrap mapping", or "component analysis". The navigator handles caching and disambiguation — never fetch dev-guides URLs directly.

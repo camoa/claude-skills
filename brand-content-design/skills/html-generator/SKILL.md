@@ -1,8 +1,9 @@
 ---
 name: html-generator
 description: Use when generating branded HTML pages and components from a design system. Creates standalone HTML components and composes them into full pages with embedded CSS, responsive design, and brand integration.
-version: 2.6.0
+version: 2.8.0
 model: opus
+allowed-tools: Read, Write, Glob, Grep, Bash
 user-invocable: false
 ---
 
@@ -581,10 +582,6 @@ Load these reference files when generating:
 
 ### Online Dev-Guides (Design Systems)
 
-For design system fundamentals beyond this plugin's visual styles, fetch the guide index:
+For design system fundamentals beyond this plugin's visual styles, use the dev-guides-navigator plugin:
 
-**Index:** `https://camoa.github.io/dev-guides/llms.txt`
-
-Likely relevant topics: design-systems/recognition, design-systems/bootstrap, design-systems/radix-sdc, design-systems/radix-components, drupal/sdc
-
-Usage: WebFetch the index to discover available topics, then fetch specific topic pages for design system fundamentals that complement the bundled 21-style system.
+Invoke `/dev-guides-navigator` with keywords like "design system recognition", "Bootstrap mapping", "Radix SDC", or "component classification". The navigator handles caching and disambiguation — never fetch dev-guides URLs directly.

@@ -1,5 +1,5 @@
 ---
-description: Extract brand elements from multiple sources and generate brand-philosophy.md
+description: Extract brand elements from multiple sources and generate brand-philosophy.md. Use when user says "extract brand", "analyze brand", "brand from website", "brand from logo", "brand from screenshot", "get brand colors", "brand philosophy".
 allowed-tools: Read, Glob, Write, WebFetch, AskUserQuestion, Task
 ---
 

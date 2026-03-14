@@ -1,5 +1,5 @@
 ---
-description: Create or edit an infographic template through guided wizard
+description: Create or edit an infographic template through guided wizard. Use when user says "create infographic template", "new infographic template", "infographic template wizard".
 allowed-tools: Bash, Read, Write, Glob, AskUserQuestion
 ---
 

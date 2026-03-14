@@ -1,5 +1,5 @@
 ---
-description: Create an infographic quickly with minimal questions
+description: Create an infographic quickly with minimal questions. Use when user says "quick infographic", "fast infographic", "infographic now", "visualize this data quickly".
 allowed-tools: Bash, Read, Write, Glob, AskUserQuestion
 ---
 

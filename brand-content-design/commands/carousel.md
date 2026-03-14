@@ -1,5 +1,5 @@
 ---
-description: Create a carousel using an existing template (detailed, guided mode)
+description: Create a carousel using an existing template (detailed, guided mode). Use when user says "create carousel", "LinkedIn carousel", "make carousel", "guided carousel".
 allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 ---
 

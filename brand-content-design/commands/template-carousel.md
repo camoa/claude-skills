@@ -1,5 +1,5 @@
 ---
-description: Create or edit a carousel template through guided wizard
+description: Create or edit a carousel template through guided wizard. Use when user says "create carousel template", "new carousel template", "carousel template wizard".
 allowed-tools: Bash, Read, Write, Glob, AskUserQuestion, Skill
 ---
 

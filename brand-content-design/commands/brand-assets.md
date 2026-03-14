@@ -1,5 +1,5 @@
 ---
-description: Manage brand assets - add, review, and copy assets to the project without re-running full extraction
+description: Manage brand assets - add, review, and copy assets to the project without re-running full extraction. Use when user says "add logo", "update fonts", "brand assets", "add brand image", "manage assets".
 allowed-tools: Read, Write, Glob, Bash, AskUserQuestion
 ---
 
