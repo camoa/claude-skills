@@ -29,7 +29,9 @@
 
 **Finding a guide:**
 1. Match task keywords against cached `llms.txt` topics
-2. WebFetch the topic's `index.md` (routing table)
+2. `curl -s` the topic's raw GitHub `index.md` (routing table)
 3. Pick the specific guide from "I need to..." table
-4. WebFetch that individual guide `.md`
+4. `curl -s` the raw GitHub URL for that guide `.md`
 5. Apply the guide content to the task
+
+**NEVER use WebFetch** — it summarizes content through AI, destroying the structured formats needed for matching and routing.

@@ -12,8 +12,8 @@
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) in topic index pages to route AI to the correct guide.",
-      "version": "0.1.0",
+      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content.",
+      "version": "0.2.0",
       "author": {
         "name": "camoa"
       },

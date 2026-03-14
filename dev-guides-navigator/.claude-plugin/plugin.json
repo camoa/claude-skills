@@ -1,7 +1,7 @@
 {
   "name": "dev-guides-navigator",
-  "version": "0.1.0",
-  "description": "Smart guide discovery and routing for dev-guides. Uses a manifest with Knowledge Graph metadata (concepts, disambiguation, relationships) and hash-based caching to route AI to the correct guide and enforce application of patterns.",
+  "version": "0.2.0",
+  "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content.",
   "author": {
     "name": "camoa"
   },
