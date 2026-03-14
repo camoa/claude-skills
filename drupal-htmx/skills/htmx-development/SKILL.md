@@ -1,8 +1,10 @@
 ---
 name: htmx-development
-description: Use when developing HTMX features in Drupal 11.3+ or migrating AJAX to HTMX. Covers Htmx class usage, form patterns, migration strategies, and validation. Triggers on "htmx", "ajax to htmx", "dynamic form", "dependent dropdown".
-version: 1.2.0
+description: Use when implementing HTMX in Drupal, migrating from AJAX to HTMX, building dynamic forms, dependent dropdowns, infinite scroll, real-time validation, or multi-step wizards. Use when user says "HTMX", "migrate AJAX", "dependent dropdown", "dynamic form", "infinite scroll", "load more", "real-time validation", "multi-step wizard", "hx-get", "hx-post", "Htmx class". Use PROACTIVELY for any Drupal 11.3+ dynamic interaction that could use HTMX instead of AJAX. MUST check HTMX patterns before implementing AJAX callbacks.
+version: 1.4.0
 model: sonnet
+allowed-tools: Read, Glob, Grep
+user-invocable: true
 ---
 
 # HTMX Development
@@ -228,15 +230,13 @@ When reviewing HTMX implementations:
 - `references/migration-patterns.md` - 7 patterns with before/after code
 - `references/ajax-reference.md` - AJAX commands for understanding existing code
 
-### Online Dev-Guides (Drupal Domain)
+### Online Dev-Guides
 
-For Drupal domain context when analyzing, recommending, or validating HTMX patterns, fetch the guide index:
+For deeper Drupal context beyond bundled references, use the dev-guides-navigator plugin:
 
-**Index:** `https://camoa.github.io/dev-guides/llms.txt`
+Invoke `/dev-guides-navigator` with keywords like "Drupal forms", "routing", "JS development", or "render API". The navigator handles caching and disambiguation — never fetch dev-guides URLs directly.
 
-Likely relevant topics: forms, routing, js-development, render-api
-
-Usage: WebFetch the index to discover available topics, then fetch specific topic pages for Drupal patterns when the bundled HTMX references don't cover the underlying Drupal concept.
+Relevant topics: drupal/forms (FAPI with HTMX), drupal/routing (HTMX routes), drupal/js-development (behaviors + HTMX events), drupal/render-api (render arrays for HTMX responses).
 
 ## Key Files in Drupal Core
 

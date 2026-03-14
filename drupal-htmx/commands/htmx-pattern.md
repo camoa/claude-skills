@@ -1,5 +1,5 @@
 ---
-description: Get HTMX pattern recommendation for a specific use case in Drupal
+description: Get HTMX pattern recommendation for specific use case with code examples. Use when user says "HTMX pattern for", "how to do X with HTMX", "best HTMX approach", "recommend HTMX pattern", "dependent dropdown HTMX".
 allowed-tools: Read, Glob, Task
 argument-hint: <use-case>
 ---

@@ -2,10 +2,9 @@
 name: htmx-validator
 description: Validates HTMX implementations in Drupal modules against best practices. Use after implementing HTMX to check for issues, accessibility, and progressive enhancement.
 capabilities: ["code validation", "best practice checking", "accessibility audit"]
-version: 1.0.0
+version: 1.4.0
 model: sonnet
-tools: Read, Grep, Glob
-disallowedTools: Edit, Write
+allowed-tools: Read, Grep, Glob
 ---
 
 # HTMX Validator

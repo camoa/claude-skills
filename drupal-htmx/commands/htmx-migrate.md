@@ -1,5 +1,5 @@
 ---
-description: Guide migration of a specific AJAX pattern to HTMX with step-by-step instructions
+description: Guided migration of specific AJAX pattern to HTMX with before/after code. Use when user says "migrate to HTMX", "convert AJAX", "replace AJAX callback", "HTMX migration", "migrate this form".
 allowed-tools: Read, Edit, Glob, Grep
 argument-hint: <file-path> [pattern-type]
 ---
