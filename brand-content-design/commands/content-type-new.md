@@ -1,5 +1,5 @@
 ---
-description: Research and add a new content type to the brand project
+description: Research and add a new content type to the brand project. Use when user says "add content type", "new content type", "extend brand", "add format".
 allowed-tools: Read, Write, WebSearch, WebFetch, AskUserQuestion
 ---
 

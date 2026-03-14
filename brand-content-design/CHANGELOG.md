@@ -5,6 +5,20 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-03-14
+
+### Fixed
+- **WebFetch contradiction**: CLAUDE.md, brand-content-design SKILL.md, and html-generator SKILL.md said "WebFetch the llms.txt index" — replaced with dev-guides-navigator delegation (which enforces curl-only)
+- **Version alignment**: All 4 skills and agent now match plugin version (was: SKILL 2.3.0, html-generator 2.6.0, visual-content 1.11.3, infographic 1.11.3)
+- **Agent frontmatter**: brand-analyst changed from `tools`/`disallowedTools` to `allowed-tools` (current standard)
+
+### Changed
+- Pushy descriptions with trigger phrases on all 19 commands
+- Added `allowed-tools` to all 4 skills (explicit tool scoping)
+- Added `user-invocable: true` to main brand-content-design skill
+- Model upgraded from haiku to sonnet for brand-content-design skill (was already sonnet, confirmed)
+- Plugin keywords expanded for better discoverability
+
 ## [2.7.1] - 2026-02-17
 
 ### Fixed

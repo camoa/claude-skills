@@ -1,5 +1,5 @@
 ---
-description: Generate alternative color palettes from brand colors
+description: Generate alternative color palettes from brand colors using color theory. Use when user says "color palette", "alternative colors", "generate palette", "brand palette", "color harmony", "tints and shades", "monochromatic palette".
 allowed-tools: Read, Write, Glob, Bash, AskUserQuestion
 ---
 

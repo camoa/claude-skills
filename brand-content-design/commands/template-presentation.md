@@ -1,5 +1,5 @@
 ---
-description: Create or edit a presentation template through guided wizard
+description: Create or edit a presentation template through guided wizard. Use when user says "create presentation template", "new slide template", "presentation template wizard", "edit template".
 allowed-tools: Bash, Read, Write, Glob, AskUserQuestion, Skill
 ---
 

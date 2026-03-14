@@ -20,9 +20,9 @@
 - Interactive commands use AskUserQuestion for user input
 
 ## Online Dev-Guides
-For design system fundamentals beyond bundled references, fetch the guide index:
-- **Index:** `https://camoa.github.io/dev-guides/llms.txt`
-- WebFetch the index to discover available topics, then fetch specific topic pages
+For design system fundamentals beyond bundled references, use the dev-guides-navigator plugin:
+- Invoke `/dev-guides-navigator` with task keywords (e.g., "design system recognition", "Bootstrap mapping")
+- The navigator handles caching and disambiguation — never fetch dev-guides URLs directly via WebFetch or curl
 - Likely relevant topics: design-systems/recognition, design-systems/bootstrap, design-systems/radix-sdc, design-systems/radix-components, drupal/sdc
 
 ## General

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.8.0"
+    "version": "1.9.0"
   },
   "plugins": [
     {
@@ -141,8 +141,8 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, design systems, HTML components, 114 infographic templates, visual components, 17 color palettes, and Presentation Zen principles",
-      "version": "2.7.1",
+      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering.",
+      "version": "2.8.0",
       "author": {
         "name": "camoa"
       },

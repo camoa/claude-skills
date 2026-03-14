@@ -1,5 +1,5 @@
 ---
-description: Create a presentation quickly with minimal questions
+description: Create a presentation quickly with minimal questions. Use when user says "quick presentation", "fast slides", "presentation now", "make slides quickly".
 allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 ---
 

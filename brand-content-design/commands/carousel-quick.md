@@ -1,5 +1,5 @@
 ---
-description: Create a carousel quickly with minimal questions
+description: Create a carousel quickly with minimal questions. Use when user says "quick carousel", "fast carousel", "carousel now", "LinkedIn post quickly".
 allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 ---
 

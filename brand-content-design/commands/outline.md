@@ -1,5 +1,5 @@
 ---
-description: Generate an outline template and prompt for a presentation or carousel template
+description: Generate an outline template and prompt for a presentation or carousel template. Use when user says "get outline", "outline for template", "prepare content", "content outline", "AI prompt for slides".
 allowed-tools: Read, Write, Glob, AskUserQuestion
 argument-hint: <template-name>
 ---

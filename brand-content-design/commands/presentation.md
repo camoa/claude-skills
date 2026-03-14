@@ -1,5 +1,5 @@
 ---
-description: Create a presentation using an existing template (detailed, guided mode)
+description: Create a presentation using an existing template (detailed, guided mode). Use when user says "create presentation", "make slides", "presentation from template", "guided presentation".
 allowed-tools: Read, Write, Glob, AskUserQuestion, Skill
 ---
 
