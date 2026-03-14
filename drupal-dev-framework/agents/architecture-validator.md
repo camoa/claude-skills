@@ -13,7 +13,6 @@ hooks:
         - type: prompt
           prompt: "The architecture-validator agent is read-only and should not modify files. It attempted to use a write tool. Return 'block' to prevent this action."
 maxTurns: 20
-isolation: worktree
 ---
 
 # Architecture Validator
