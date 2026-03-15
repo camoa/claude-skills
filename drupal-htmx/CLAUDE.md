@@ -17,9 +17,9 @@
 - Restrict `allowed-tools` to minimum needed
 
 ## Online Dev-Guides
-For Drupal domain context when analyzing or validating HTMX patterns, fetch the guide index:
-- **Index:** `https://camoa.github.io/dev-guides/llms.txt`
-- WebFetch the index to discover available topics, then fetch specific topic pages
+For Drupal domain context when analyzing or validating HTMX patterns, delegate to the dev-guides-navigator skill:
+- Invoke `/dev-guides-navigator` with relevant keywords (e.g., "forms", "routing", "js-development", "render-api")
+- Do NOT fetch llms.txt or dev-guides URLs directly — the navigator handles caching and disambiguation
 - Likely relevant topics: forms, routing, js-development, render-api
 
 ## General

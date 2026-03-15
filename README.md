@@ -140,7 +140,7 @@ Features rubric-scored code review (/50 with quality gate), cross-audit correlat
 See [code-quality-tools/README.md](code-quality-tools/README.md) for full documentation.
 
 
-### drupal-htmx (v1.3.0)
+### drupal-htmx (v1.4.0)
 
 HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 

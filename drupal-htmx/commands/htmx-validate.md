@@ -1,5 +1,5 @@
 ---
-description: Validate HTMX implementation in Drupal module against best practices
+description: Validate HTMX implementation against best practices and accessibility requirements. Use when user says "validate HTMX", "check HTMX code", "HTMX best practices", "is my HTMX correct", "HTMX accessibility check".
 allowed-tools: Read, Glob, Grep, Task
 argument-hint: <module-path>
 ---

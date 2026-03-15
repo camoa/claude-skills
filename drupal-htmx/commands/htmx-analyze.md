@@ -1,5 +1,5 @@
 ---
-description: Analyze Drupal module for AJAX patterns and identify HTMX migration candidates
+description: Analyze Drupal module for AJAX patterns and identify HTMX migration candidates. Use when user says "analyze AJAX", "find AJAX patterns", "migration candidates", "what can I migrate", "scan for AJAX".
 allowed-tools: Read, Glob, Grep, Task
 argument-hint: <module-path>
 ---
