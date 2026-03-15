@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-03-15
+
+### Added
+- **PreCompact hook**: Preserves HTMX migration context (modules using HTMX, AJAX migration candidates, in-progress migrations) before conversation compaction
+
 ## [1.4.0] - 2026-03-14
 
 ### Fixed

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2026-03-15)
+
+### Added
+- **PreCompact hook**: Preserves cache state (location, hash, topic count) before conversation compaction
+
 ## 0.2.0 (2026-03-13)
 
 ### Fixed
