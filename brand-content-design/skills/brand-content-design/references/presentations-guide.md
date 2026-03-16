@@ -221,7 +221,7 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 
 ## Visual Styles
 
-13 distinct styles across 4 aesthetic families. See `style-constraints.md` for full details and enforcement blocks.
+18 distinct styles across 5 aesthetic families. See `style-constraints.md` for full details and enforcement blocks.
 
 ### Japanese Zen (7 styles)
 | Style | Character | Best For | Learn More |
@@ -252,6 +252,15 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 | **Yeo-baek** | Extreme emptiness, Korean purity | Premium | [Korean Design](https://adorno.design/editorial/why-korean-design-is-the-next-global-obsession/) |
 | **Feng Shui** | Yin-Yang balance, energy flow | Wellness | [Feng Shui](https://en.wikipedia.org/wiki/Feng_shui) |
 
+### Contemporary Professional (5 styles)
+| Style | Character | Best For | Learn More |
+|-------|-----------|----------|------------|
+| **Tech-Modern** | Clean, systematic, data-aware | SaaS, product demos | Inspired by Apple/Stripe/Linear |
+| **Data-Forward** | Numbers as visual anchors | Quarterly reviews, analytics | Inspired by NYT/Bloomberg |
+| **Corporate-Confident** | Authoritative, polished, trustworthy | Board presentations, annual reports | Inspired by McKinsey/Deloitte |
+| **Pitch-Velocity** | High-energy, momentum-driven | Fundraising, sales pitches | Inspired by Sequoia deck format |
+| **Narrative-Clean** | Story-driven, editorial clarity | Case studies, thought leadership | Inspired by TED/editorial |
+
 ### Quick Reference
 
 | Style | Whitespace | Words | Elements | Layout |
@@ -269,6 +278,11 @@ Content type guide for creating presentations. Based on Presentation Zen princip
 | Memphis | 25-35% | ≤15 | ≤7 | Playful |
 | Yeo-baek | 65-75% | ≤6 | ≤2 | Empty |
 | Feng Shui | 50-60% | ≤10 | ≤4 | Balanced |
+| Tech-Modern | 45-55% | ≤12 | ≤5 | Grid |
+| Data-Forward | 40-50% | ≤15 | ≤6 | Data-center |
+| Corporate-Confident | 50-60% | ≤10 | ≤4 | Centered |
+| Pitch-Velocity | 35-45% | ≤12 | ≤5 | Asymmetric |
+| Narrative-Clean | 50-60% | ≤12 | ≤4 | Left-aligned |
 
 ---
 

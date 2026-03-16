@@ -73,19 +73,83 @@ Create a new presentation template or edit an existing one.
 
    - Jump to appropriate step based on selection
 
-5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
+5. **Ask template purpose** (CREATE MODE only)
+   Ask user directly (not AskUserQuestion):
+   "What is this template for? (2-4 words)
+   Examples: sales pitch, product demo, quarterly update, team training, investor deck, tech overview"
 
-   **Step 5a: Choose aesthetic family**
+   User provides short description like "sales pitch" or "product launch"
+
+5b. **Ask audience** (CREATE MODE only)
    Use AskUserQuestion:
+   - Header: "Audience"
+   - Question: "Who is the primary audience for this presentation?"
+   - Options:
+     - **C-suite / Board** - Executive leadership, board members
+     - **Technical** - Engineers, developers, technical staff
+     - **General** - All-hands, mixed audiences
+     - **More audiences...** - See additional options
+
+   *If "More audiences..." selected:*
+   - Header: "Audience"
+   - Question: "Which audience?"
+   - Options:
+     - **Creative** - Designers, creatives, marketing
+     - **Investors** - VCs, angel investors, fundraising
+     - **Customers / External** - Clients, prospects, partners
+
+6. **Style recommendation** (CREATE MODE, or if changing style in EDIT MODE)
+
+   Load `references/style-recommendation-engine.md` and run the scoring algorithm:
+
+   **Step 6a: Extract brand personality**
+   - Read voice traits from brand-philosophy.md
+   - Map to Aaker dimensions using the engine's Section 1
+
+   **Step 6b: Score all 18 styles**
+   - Brand match: from Section 2 (Aaker → Style Affinity)
+   - Purpose match: from Section 3 (using purpose from step 5)
+   - Audience adjustment: from Section 4 (using audience from step 5b)
+   - Calculate total score per style
+
+   **Step 6c: Present top 3 recommendations**
+   Use AskUserQuestion:
+   - Header: "Style"
+   - Question: "Based on your brand, purpose, and audience, here are the recommended styles:"
+   - Options (build dynamically from top 3 scores):
+     - **{Style 1}** - {reasoning sentence from engine}
+     - **{Style 2}** - {reasoning sentence from engine}
+     - **{Style 3}** - {reasoning sentence from engine}
+     - **Browse all 18 styles** - See the full style catalog
+
+   **If "Browse all 18 styles" selected:**
+   Fall back to the existing family → style selection flow (Step 6d below).
+
+   **Step 6d: Manual style selection (fallback)**
+   Same as the existing step 5 flow — choose aesthetic family first, then specific style.
+
+   **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
+
+   **Step 6d-a: Choose aesthetic family**
+   Use AskUserQuestion (split into 2 questions due to 5 families):
+
+   *Question 1:*
    - Header: "Aesthetic"
-   - Question: "Which design aesthetic for this template?"
+   - Question: "Which design aesthetic for this template? (1/2)"
    - Options:
      - **Japanese Zen** - Restraint, intentionality, essence (7 styles)
      - **Scandinavian Nordic** - Warmth, balance, functionality (2 styles)
      - **European Modernist** - Precision or playfulness (2 styles)
-     - **East Asian Harmony** - Space, balance, energy (2 styles)
+     - **More families...** - See additional options
 
-   **Step 5b: Choose specific style** (based on family selected)
+   *Question 2 (if "More families..." selected):*
+   - Header: "Aesthetic"
+   - Question: "Which design aesthetic? (2/2)"
+   - Options:
+     - **East Asian Harmony** - Space, balance, energy (2 styles)
+     - **Contemporary Professional** - Clean, data-aware, business-forward (5 styles)
+
+   **Step 6d-b: Choose specific style** (based on family selected)
    Use AskUserQuestion - options vary by family (max 4 options per question):
 
    **Japanese Zen** (split into 2 questions due to 7 styles):
@@ -129,9 +193,27 @@ Create a new presentation template or edit an existing one.
      - **Yeo-baek** - Extreme emptiness, Korean purity (premium, meditation)
      - **Feng Shui** - Yin-Yang balance, energy flow (wellness, harmony)
 
+   **Contemporary Professional** (5 styles - split into 2 questions due to 5 styles):
+
+   *Question 1:*
+   - Header: "Style"
+   - Question: "Which Contemporary Professional style? (1/2)"
+   - Options:
+     - **Tech-Modern** - Clean, systematic, data-aware (SaaS, product demos)
+     - **Data-Forward** - Numbers as visual anchors (quarterly reviews, analytics)
+     - **Corporate-Confident** - Authoritative, polished, trustworthy (board, company comms)
+     - **More styles...** - See additional options
+
+   *Question 2 (if "More styles..." selected):*
+   - Header: "Style"
+   - Question: "Which Contemporary Professional style? (2/2)"
+   - Options:
+     - **Pitch-Velocity** - High-energy, momentum-driven (fundraising, sales pitches)
+     - **Narrative-Clean** - Story-driven, editorial clarity (case studies, thought leadership)
+
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-6. **Visual Components (style-dependent)** (CREATE MODE, or if changing style in EDIT MODE)
+7. **Visual Components (style-dependent)** (CREATE MODE, or if changing style in EDIT MODE)
 
    After selecting a style, check `references/style-constraints.md` for which visual components the style supports:
    - **Cards**: ✓ Full, ◐ Subtle only, ✗ None
@@ -157,9 +239,11 @@ Create a new presentation template or edit an existing one.
 
    **For Cards (if selected):**
    - Card style: based on selected aesthetic
-     - Minimal/Shibui: thin border only, no fill
-     - Dramatic/Hygge/Memphis: solid fills allowed
-     - Swiss: grid-aligned, precise borders
+     - Minimal/Shibui/Narrative-Clean: thin border only, no fill
+     - Dramatic/Hygge/Memphis/Pitch-Velocity: solid fills allowed
+     - Swiss/Tech-Modern: grid-aligned, precise borders
+     - Data-Forward: stat cards (large number + label)
+     - Corporate-Confident: clean borders, white fills
    - Corner radius: [8 | 16 | 24]px (suggest based on style)
 
    **For Icons (if selected):**
@@ -175,7 +259,7 @@ Create a new presentation template or edit an existing one.
 
    **Store component selections** for use in canvas-philosophy.md generation.
 
-7. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+8. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
 
    First, check brand-philosophy.md for `## Alternative Palettes` section.
    Count total palettes available (1 brand + N alternatives).
@@ -210,13 +294,6 @@ Create a new presentation template or edit an existing one.
 
    **Store selected palette** including text colors for use in canvas-philosophy.md generation.
 
-8. **Ask template purpose** (CREATE MODE only)
-   Ask user directly (not AskUserQuestion):
-   "What is this template for? (2-4 words)
-   Examples: sales pitch, product demo, quarterly update, team training, investor deck, tech overview"
-
-   User provides short description like "sales pitch" or "product launch"
-
 9. **Load presentations guide**
    - Read plugin `references/presentations-guide.md` for slide type options
 
@@ -236,9 +313,9 @@ Create a new presentation template or edit an existing one.
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
-    - **Selected color palette** (brand colors or alternative palette from step 7)
+    - **Selected color palette** (brand colors or alternative palette from step 8)
     - **Text colors from palette** (`Text (light bg)` and `Text (dark bg)`)
-    - **Visual component selections from step 6** (cards, icons, gradients)
+    - **Visual component selections from step 7** (cards, icons, gradients)
 
     **Include the style's HARD LIMITS in the philosophy:**
     - Word count limits per slide
@@ -255,7 +332,7 @@ Create a new presentation template or edit an existing one.
     - Description/secondary text: Use text color at 70% opacity
     ```
 
-    **Include Visual Components section (if enabled in step 6):**
+    **Include Visual Components section (if enabled in step 7):**
     ```
     ## Visual Components
 
@@ -273,6 +350,15 @@ Create a new presentation template or edit an existing one.
     - Gradient: {direction}, {color1} → {color2}
     - Intensity: {subtle | moderate | bold}
     ```
+
+    **Include Composition Rules section (populated from slide-composition-rules.md):**
+    - Read `references/slide-composition-rules.md`
+    - Look up the selected style in Section 3 (Style-Aware Layout Modifiers)
+    - Apply the style's modifier to base positions from Section 2
+    - Set grid system, headline zone, supporting zone based on style
+    - Set component frequency limits from Section 4 (adapted for total slide count)
+    - Set image treatment from Section 5
+    - Write the adapted rules into the Composition Rules section of canvas-philosophy.md
 
 13. **Create/update template.md**
     Using template-structure.md from references:
@@ -297,7 +383,7 @@ Create a new presentation template or edit an existing one.
       - Logo on every slide (bottom-right, subtle, max 150px)
       - Primary brand color as accent on every slide
       - Brand heading font (mandatory — no fallback)
-    - **Apply visual components** (if enabled in step 6):
+    - **Apply visual components** (if enabled in step 7):
       - Use `scripts/icons.py` for icon rendering
       - Apply card patterns from `technical-implementation.md`
       - Use gradient functions for background treatment

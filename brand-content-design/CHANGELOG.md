@@ -5,6 +5,25 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-03-16
+
+### Added
+- **Contemporary Professional style family**: 5 new business-focused styles (Tech-Modern, Data-Forward, Corporate-Confident, Pitch-Velocity, Narrative-Clean) — total styles now 18 across 5 families
+- **Style recommendation engine** (`references/style-recommendation-engine.md`): Scores all 18 styles based on brand personality (Aaker dimensions), presentation purpose, and target audience — presents top 3 with reasoning
+- **Slide composition rules** (`references/slide-composition-rules.md`): Per-slide-type focal point maps, style-aware layout modifiers, component frequency limits, image treatment specs, and composition blueprints for 8 slide types
+- **Composition Rules section** in canvas-philosophy-template.md: Structural grounding populated during template creation from composition rules — covers focal points, element positioning, component frequency, image treatment, and density control
+- **Component decision gates** in visual-content SKILL.md: 4-gate system (Style Permission → Content Justification → Frequency Budget → Density Check) replaces vague "use components intelligently" guidance
+- **Audience question** in template-presentation wizard: New step asking target audience (C-suite, Technical, General, Creative, Investors, Customers)
+
+### Changed
+- **Template-presentation wizard**: Reordered steps — purpose and audience now asked BEFORE style selection to enable recommendation engine
+- **Style selection**: Now presents scored top-3 recommendations first, with "Browse all 18" fallback to manual family→style selection
+- **Presentation command**: Now loads and passes slide-composition-rules.md as fallback for legacy templates without Composition Rules
+- **visual-content skill**: Part 3 now requires composition rules check before every slide; Part 7 enforces component decision gates instead of suggestions
+- **presentations-guide.md**: Added Contemporary Professional family table with 5 styles
+- **visual-components.md**: Added 5 styles to Card Style Variations, Style Compatibility Matrix, and Gradient Style Variations
+- **style-constraints.md**: Added Contemporary Professional family section with full enforcement blocks for all 5 styles
+
 ## [2.9.0] - 2026-03-16
 
 ### Changed
