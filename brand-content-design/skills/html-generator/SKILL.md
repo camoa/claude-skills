@@ -59,6 +59,7 @@ Assemble components into a single `.html` file:
 
 Before writing any HTML, internalize the design system:
 
+0. **Verify brand exists** — if no `design-system.md` in the project, STOP and suggest `/design-html` first. If no `brand-philosophy.md`, suggest `/brand-extract` first. Never proceed with default/example values.
 1. **Read the canvas philosophy** — absorb its aesthetic movement, not just rules
 2. **Load design tokens** — colors, fonts, spacing become CSS custom properties
 3. **Understand the style** — read enforcement blocks from `references/web-style-constraints.md`
@@ -96,6 +97,21 @@ Read the project's `design-system.md` and map ALL token sections to `:root` cust
 - **Forms** (if page has forms) — `--color-error`, `--color-success`, field/label/error styling
 
 The design-system.md is the single source of truth for all token values. Do not hardcode values — read them from the file.
+
+### Brand Bias Prevention
+
+Before generating any HTML, verify:
+
+```
+□ All colors use CSS custom properties from design-system.md (--color-primary, etc.)
+□ No hardcoded hex values except #FFFFFF/#000000 for universal black/white
+□ font-family from design-system.md, never "Inter", "Roboto", or "Arial" as defaults
+□ If no design-system.md exists: STOP, suggest /design-html first
+□ Background colors, accent colors, text colors all traced to design tokens
+```
+
+**Never copy hex codes or font names from reference file examples into generated HTML.**
+All visual values must flow from: design-system.md → CSS custom properties → component styles.
 
 ### Color Dominance Principle
 

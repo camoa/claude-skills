@@ -381,6 +381,24 @@ When invoking this skill, provide:
 6. **Dimensions** (based on content type)
 7. **Visual components config** (optional - from canvas-philosophy.md Visual Components section)
 
+### No-Brand Safeguard
+
+If `brand-philosophy.md` is not found OR contains no `## Color Palette` section:
+- **STOP generation** — inform user: "No brand colors found. Run `/brand-extract` first to analyze your brand."
+- If user insists on proceeding: use deliberately bland neutrals (#1a1a1a, #666, #f5f5f5, system fonts)
+- Never fall back to any recognizable brand colors
+
+### Pre-Output Brand Bias Check
+
+Before finalizing any presentation or carousel:
+```
+□ All colors derived from brand-philosophy.md color table
+□ All fonts loaded from project assets/fonts/ or brand-philosophy.md
+□ Colors traced to brand-philosophy.md (not copied from reference docs or runtime fallbacks)
+□ No generic font defaults (unless brand actually uses them)
+□ Text colors WCAG-validated against actual background
+```
+
 ---
 
 ## Part 11: The Ultimate Test

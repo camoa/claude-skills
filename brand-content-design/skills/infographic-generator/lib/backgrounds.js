@@ -130,11 +130,11 @@ function applyPattern(svg, defs, bg, getOrCreateBgRect, document) {
   const patternBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   patternBg.setAttribute('width', bg.size || 20);
   patternBg.setAttribute('height', bg.size || 20);
-  patternBg.setAttribute('fill', bg.backgroundColor || '#0D2B5C');
+  patternBg.setAttribute('fill', bg.backgroundColor || '#333333');
   pattern.appendChild(patternBg);
 
   const size = bg.size || 20;
-  const fgColor = bg.foregroundColor || '#194582';
+  const fgColor = bg.foregroundColor || '#666666';
 
   switch (bg.pattern) {
     case 'dots':
@@ -218,10 +218,10 @@ function applyPattern(svg, defs, bg, getOrCreateBgRect, document) {
  * @returns {Object} Background configuration
  */
 function createBackgroundPreset(preset, brandColors = {}) {
-  const primary = brandColors.primary || '#194582';
-  const dark = brandColors.dark || '#0D2B5C';
-  const darker = brandColors.darker || '#061120';
-  const accent = brandColors.accent || '#00f3ff';
+  const primary = brandColors.primary || '#444444';
+  const dark = brandColors.dark || '#333333';
+  const darker = brandColors.darker || '#1a1a1a';
+  const accent = brandColors.accent || '#888888';
 
   const presets = {
     'spotlight': {
@@ -480,10 +480,10 @@ function applyLayeredBackground(svg, layeredConfig, dom) {
  * @returns {Object} Layered background configuration
  */
 function createLayeredPreset(preset, brandColors = {}) {
-  const primary = brandColors.primary || '#194582';
-  const dark = brandColors.dark || '#0D2B5C';
-  const darker = brandColors.darker || '#061120';
-  const accent = brandColors.accent || '#00f3ff';
+  const primary = brandColors.primary || '#444444';
+  const dark = brandColors.dark || '#333333';
+  const darker = brandColors.darker || '#1a1a1a';
+  const accent = brandColors.accent || '#888888';
 
   const presets = {
     'spotlight-dots': {

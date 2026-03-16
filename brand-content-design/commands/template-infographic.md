@@ -372,11 +372,11 @@ Create a new infographic template or edit an existing one.
 
    | # | Palette         | Colors                                    | Text Colors |
    |---|-----------------|-------------------------------------------|-------------|
-   | 1 | Brand (default) | Primary: #194582, Accent: #00f3ff         | ✓           |
-   | 2 | Monochromatic   | #0C2341, #194582, #3773B4, #78A5D7        | ✓           |
-   | 3 | Complementary   | #194582, #825A19, #B47D23, #D7A041        | ✓           |
-   | 4 | Pastel          | #E0E7FF, #FCE7F3, #D1FAE5                 | ⚠️ derived  |
-   | ... (list all from brand-philosophy.md)
+   | 1 | Brand (default) | Primary: {from brand-philosophy.md}       | ✓           |
+   | 2 | Monochromatic   | {derived from brand primary}              | ✓           |
+   | 3 | Complementary   | {derived from brand palette}              | ✓           |
+   | 4 | Pastel          | {lightened from brand colors}             | ⚠️ derived  |
+   | ... (list all palettes found in brand-philosophy.md)
 
    **Which palette?** (enter number or name, default: 1)
    ```

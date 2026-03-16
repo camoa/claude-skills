@@ -165,13 +165,13 @@ Based on **Shizen** (naturalness) and **Yugen** (hidden depth).
 | Section padding | 60-80px vertical | HARD LIMIT |
 | Max words/section body | 50 | HARD LIMIT |
 | Max content blocks/section | 4 | HARD LIMIT |
-| Colors | 5-6 warm tones | Warm spectrum only |
+| Colors | 5-6 from brand, softened | Reduce saturation 20-30% for natural feel |
 
 ### CSS Patterns
 - Rounded elements: `border-radius: 16px` to `24px`
 - Soft shadows: `box-shadow: 0 4px 20px rgba(0,0,0,0.08)`
 - Flowing layouts: asymmetric flex/grid, not rigid
-- Warm gradient backgrounds: subtle warm-tone gradients
+- Subtle gradient backgrounds between softened brand tones
 
 ### Typography
 - Weight: 400-600 (Medium)
@@ -184,11 +184,11 @@ Based on **Shizen** (naturalness) and **Yugen** (hidden depth).
 STYLE: Organic (Japanese Zen) — Web
 - HARD LIMIT: Max 50 words per section body.
 - HARD LIMIT: Max 4 content blocks per section.
-- HARD LIMIT: Warm colors only (no cold blues, pure grays).
+- HARD LIMIT: Brand palette softened (reduce saturation 20-30%). No stark black or pure white.
 - Layout: Flowing, rounded, soft. No sharp angles.
 - Typography: Medium weights, serif or rounded sans-serif.
-- CSS: border-radius 16-24px, soft shadows, warm gradients.
-- NEVER: Sharp corners, cold palette, rigid grid, industrial feel.
+- CSS: border-radius 16-24px, soft shadows, subtle brand-tone gradients.
+- NEVER: Sharp corners, rigid grid, industrial feel, neon/fully saturated colors.
 - JS: Not needed.
 ```
 
@@ -207,7 +207,7 @@ Beauty in imperfection, transience, and incompleteness.
 | Section padding | 60-80px vertical | HARD LIMIT |
 | Max words/section body | 50 | HARD LIMIT |
 | Max content blocks/section | 4 | HARD LIMIT |
-| Colors | 4-5 muted/earthy | Natural palette only |
+| Colors | 4-5 from brand, heavily muted | Desaturate brand palette 30-40% for aged feel |
 
 ### CSS Patterns
 - Textured backgrounds: subtle noise overlays, grain effects
@@ -226,7 +226,7 @@ Beauty in imperfection, transience, and incompleteness.
 STYLE: Wabi-Sabi (Japanese Zen) — Web
 - HARD LIMIT: Max 50 words per section body.
 - HARD LIMIT: Max 4 content blocks per section.
-- HARD LIMIT: Natural/earthy palette only.
+- HARD LIMIT: Brand palette desaturated 30-40%. Muted, low-chroma versions of brand colors.
 - Layout: Slightly imperfect, humanistic. Avoid mathematical precision.
 - Typography: Serif or humanist sans. Medium weight.
 - CSS: Texture overlays, irregular border-radius, muted shadows.
@@ -384,13 +384,13 @@ Cozy, warm, inviting — like a warm drink by a fire.
 | Section padding | 60-80px vertical | HARD LIMIT |
 | Max words/section body | 60 | HARD LIMIT |
 | Max content blocks/section | 5 | HARD LIMIT |
-| Colors | 5-6 warm | No cold tones |
+| Colors | 5-6 from brand, softened | Reduce saturation 15-25%, lighten for cozy feel |
 
 ### CSS Patterns
-- Warm backgrounds: soft cream, warm gray, blush
+- Soft backgrounds: lightest brand color or tinted off-white from brand primary
 - Rounded cards: `border-radius: 16px` with subtle shadow
 - Cozy grid: `gap: var(--space-md)` with comfortable spacing
-- Soft gradients: warm-tone linear gradients
+- Soft gradients: subtle transitions between softened brand tones
 
 ### Typography
 - Weight: 400-500 (Medium)
@@ -403,11 +403,11 @@ Cozy, warm, inviting — like a warm drink by a fire.
 STYLE: Hygge (Scandinavian Nordic) — Web
 - HARD LIMIT: Max 60 words per section body.
 - HARD LIMIT: Max 5 content blocks per section.
-- HARD LIMIT: Warm palette only (no cold blues, stark blacks).
+- HARD LIMIT: Brand palette softened (reduce saturation 15-25%, lighten). Slight warmth shift OK if brand allows.
 - Layout: Cozy grid with comfortable spacing. Rounded elements.
 - Typography: Rounded/friendly fonts, medium weight, generous line-height.
-- CSS: border-radius 16px, warm backgrounds, soft shadows.
-- NEVER: Cold colors, sharp corners, industrial feel, stark contrast.
+- CSS: border-radius 16px, soft brand-tinted backgrounds, soft shadows.
+- NEVER: Sharp corners, industrial feel, neon colors, stark contrast.
 - JS: Not needed.
 ```
 

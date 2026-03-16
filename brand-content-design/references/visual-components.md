@@ -43,8 +43,8 @@ Rounded rectangle containers that group related content.
 |--------------|----------------|
 | **Minimal** | Thin border only, no fill |
 | **Dramatic** | Bold fill, high contrast |
-| **Organic** | Soft fill, warm tones |
-| **Hygge** | Warm fill, large radius |
+| **Organic** | Soft fill, muted brand tones |
+| **Hygge** | Softened brand fill, large radius |
 | **Swiss** | Precise borders, grid-aligned |
 | **Memphis** | Colorful fills, geometric |
 

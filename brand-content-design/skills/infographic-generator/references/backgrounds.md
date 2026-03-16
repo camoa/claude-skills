@@ -1,5 +1,9 @@
 # Custom Background Reference
 
+> **⚠️ BIAS WARNING:** All color values below are **illustrative**. Never copy hex codes into generated output.
+> Derive colors from `brand-philosophy.md` using the palette derivation pattern:
+> `darkenColor(brandColors.primary, 0.3)` for dark shades, `darkenColor(brandColors.primary, 0.6)` for darker shades.
+
 ## Contents
 - Background Limitations
 - Simple Backgrounds
@@ -44,9 +48,9 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   cy: '40%',    // Center Y
   r: '80%',     // Radius
   stops: [
-    { offset: '0%', color: '#194582' },
-    { offset: '50%', color: '#0D2B5C' },
-    { offset: '100%', color: '#020810' }
+    { offset: '0%', color: brandColors.primary },
+    { offset: '50%', color: brandColors.dark },
+    { offset: '100%', color: brandColors.darker }
   ]
 }
 ```
@@ -59,8 +63,8 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   x1: '0%', y1: '0%',     // Start point
   x2: '100%', y2: '100%', // End point
   stops: [
-    { offset: '0%', color: '#194582' },
-    { offset: '100%', color: '#020810' }
+    { offset: '0%', color: brandColors.primary },
+    { offset: '100%', color: brandColors.darker }
   ]
 }
 ```
@@ -74,7 +78,7 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   pattern: 'dots',
   size: 20,           // Grid size
   dotSize: 1,         // Dot radius
-  foregroundColor: '#00f3ff',
+  foregroundColor: brandColors.accent,
   backgroundColor: 'transparent',
   opacity: 0.08
 }
@@ -87,7 +91,7 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   pattern: 'grid',
   size: 30,
   strokeWidth: 0.5,
-  foregroundColor: '#00f3ff',
+  foregroundColor: brandColors.accent,
   opacity: 0.06
 }
 ```
@@ -99,7 +103,7 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   pattern: 'diagonal',
   size: 15,
   strokeWidth: 1,
-  foregroundColor: '#00f3ff',
+  foregroundColor: brandColors.accent,
   opacity: 0.08
 }
 ```
@@ -111,7 +115,7 @@ const svgBuffer = renderer.extractSVGBuffer(dom, { customBackground: bg });
   pattern: 'crosshatch',
   size: 15,
   strokeWidth: 0.5,
-  foregroundColor: '#00f3ff',
+  foregroundColor: brandColors.accent,
   opacity: 0.06
 }
 ```
@@ -122,10 +126,10 @@ Combine gradient base + pattern overlay:
 
 ```javascript
 const layered = renderer.createLayeredPreset('spotlight-dots', {
-  primary: '#194582',
-  dark: '#0D2B5C',
-  darker: '#061120',
-  accent: '#00f3ff'
+  primary: brandColors.primary,
+  dark: brandColors.dark,
+  darker: brandColors.darker,
+  accent: brandColors.accent
 });
 
 const svgBuffer = renderer.extractSVGBuffer(dom, {
@@ -148,10 +152,10 @@ const svgBuffer = renderer.extractSVGBuffer(dom, {
 
 ```javascript
 const brandColors = {
-  primary: '#194582',   // Main brand blue
-  dark: '#0D2B5C',      // Dark blue
-  darker: '#061120',    // Darkest (near black)
-  accent: '#00f3ff'     // Cyan accent
+  primary: brandPalette.primary,         // From brand-philosophy.md
+  dark: darkenColor(brandPalette.primary, 0.3),    // Derived darker shade
+  darker: darkenColor(brandPalette.primary, 0.6),  // Derived darkest shade
+  accent: brandPalette.accent            // From brand-philosophy.md
 };
 ```
 
@@ -179,16 +183,16 @@ const custom = {
     cy: '30%',
     r: '90%',
     stops: [
-      { offset: '0%', color: '#194582' },
-      { offset: '40%', color: '#0D2B5C' },
-      { offset: '100%', color: '#020810' }
+      { offset: '0%', color: brandColors.primary },
+      { offset: '40%', color: brandColors.dark },
+      { offset: '100%', color: brandColors.darker }
     ]
   },
   pattern: {
     pattern: 'dots',
     size: 16,
     dotSize: 1.2,
-    foregroundColor: '#00f3ff',
+    foregroundColor: brandColors.accent,
     opacity: 0.12
   }
 };
@@ -214,8 +218,8 @@ const patternOnly = {
   pattern: 'dots',
   size: 20,
   dotSize: 1,
-  foregroundColor: '#00f3ff',
-  backgroundColor: '#0D2B5C',  // Solid base
+  foregroundColor: brandColors.accent,
+  backgroundColor: brandColors.dark,  // Solid base
   opacity: 0.1
 };
 

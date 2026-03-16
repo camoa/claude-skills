@@ -43,12 +43,12 @@ Components available per style. See `references/visual-components.md` for full d
 |-------|:-----:|:-----:|:---------:|-------|
 | Minimal | ◐ | ✗ | ✗ | Cards: thin border only, no fill |
 | Dramatic | ✓ | ✓ | ✓ | Bold fills, high contrast |
-| Organic | ✓ | ✓ | ✓ | Warm, soft, natural |
+| Organic | ✓ | ✓ | ✓ | Soft, natural, brand colors muted |
 | Wabi-Sabi | ◐ | ✗ | ✗ | Cards: textured, imperfect edges |
 | Shibui | ◐ | ✗ | ✗ | Cards: hairline borders only |
 | Iki | ✓ | ✓ | ✗ | B&W cards + pop color |
 | Ma | ✗ | ✗ | ✗ | No components - emptiness only |
-| Hygge | ✓ | ✓ | ✓ | Warm, cozy, soft corners |
+| Hygge | ✓ | ✓ | ✓ | Cozy, soft corners, brand colors softened |
 | Lagom | ✓ | ✓ | ✗ | Functional, balanced |
 | Swiss | ✓ | ✓ | ✗ | Grid-aligned, precise |
 | Memphis | ✓ | ✓ | ✓ | Colorful, playful, geometric |
@@ -183,7 +183,7 @@ STYLE: Dramatic (Japanese Zen)
 
 ## Organic
 
-Based on **Shizen** (naturalness) and **Yugen** (hidden depth). Warmth and humanity over precision.
+Based on **Shizen** (naturalness) and **Yugen** (hidden depth). Humanity and approachability over precision.
 
 **Learn more**: [Yugen](https://en.wikipedia.org/wiki/Y%C5%ABgen) | [Shizen](https://en.wikipedia.org/wiki/Japanese_aesthetics#Shizen)
 
@@ -196,7 +196,7 @@ Based on **Shizen** (naturalness) and **Yugen** (hidden depth). Warmth and human
 | Whitespace | 50-60% | HARD LIMIT |
 | Max words/slide | 10 | HARD LIMIT |
 | Max elements | 4 | HARD LIMIT |
-| Colors | 5-6 warm tones | Warm spectrum only |
+| Colors | 5-6 from brand, muted/softened | Soften brand palette — reduce saturation, not change hue |
 
 ### Layout Rules
 - Natural groupings, organic flow
@@ -211,23 +211,21 @@ Based on **Shizen** (naturalness) and **Yugen** (hidden depth). Warmth and human
 
 ### Texture
 - Subtle paper/linen background at 3-5% opacity
-- Warm filters on images
 - Soft, organic borders
 
 ### Anti-Patterns (NEVER)
 - Stark black/white contrast
 - Rigid grid alignment
-- Cold colors
 - Sharp geometric shapes
 - Pure white backgrounds
 
 ### Example
-> Warm cream slide with subtle paper texture. Headline in warm charcoal, naturally off-center. Documentary image integrates with text. Everything feels connected, human.
+> Soft-toned slide with subtle paper texture. Headline in muted brand primary, naturally off-center. Documentary image integrates with text. Everything feels connected, human. Colors drawn from brand palette, softened to feel natural.
 
 ### Visual Components
-- **Cards**: Full support - soft fills in warm tones, large radius (16-24px), no sharp corners
-- **Icons**: Allowed - warm colors, organic feel
-- **Gradients**: Allowed - warm, subtle transitions (earth tones)
+- **Cards**: Full support - soft fills from brand palette (muted), large radius (16-24px), no sharp corners
+- **Icons**: Allowed - brand colors, organic feel
+- **Gradients**: Allowed - subtle transitions between brand palette tones
 
 ### Enforcement Block
 ```
@@ -237,11 +235,13 @@ STYLE: Organic (Japanese Zen)
 - HARD LIMIT: Max 4 elements.
 - Layout: Natural groupings, organic flow.
 - Typography: Medium weights (400-600), headlines 48-60pt.
-- Color: Warm palette only. No stark black or white.
+- Color: Brand palette softened (reduce saturation 20-30%). No stark black or pure white.
 - Texture: Subtle background texture (3-5% opacity).
-- Components: Soft cards (warm fills, large radius), warm icons, subtle gradients.
-- NEVER: Stark contrast, rigid grids, cold colors, sharp-cornered cards.
+- Components: Soft cards (muted brand fills, large radius), brand-colored icons, subtle gradients.
+- NEVER: Stark contrast, rigid grids, sharp-cornered cards.
 ```
+
+---
 
 ---
 
@@ -260,7 +260,7 @@ Beauty in imperfection, impermanence, and incompleteness. Embraces texture, age,
 | Whitespace | 45-55% | HARD LIMIT |
 | Max words/slide | 10 | HARD LIMIT |
 | Max elements | 4 | HARD LIMIT |
-| Colors | 4-5 earth tones | Muted, natural only |
+| Colors | 4-5 from brand, heavily muted | Desaturate brand palette 30-40% for aged feel |
 
 ### Layout Rules
 - Intentionally imperfect alignment
@@ -283,15 +283,15 @@ Beauty in imperfection, impermanence, and incompleteness. Embraces texture, age,
 ### Anti-Patterns (NEVER)
 - Perfect geometry
 - Pristine, polished surfaces
-- Synthetic colors
+- Neon or saturated colors (desaturate first)
 - Machine-precision alignment
 - Glossy finishes
 
 ### Example
-> Textured paper background with visible grain. Headline slightly off-axis in humanist typeface. Muted earth colors. Image with natural grain, edges soft and imperfect. Beauty in the imperfect.
+> Textured paper background with visible grain. Headline slightly off-axis in humanist typeface. Brand colors heavily muted to feel aged and natural. Image with natural grain, edges soft and imperfect. Beauty in the imperfect.
 
 ### Visual Components
-- **Cards**: Limited - textured/rough edges, imperfect corners, muted earth fills
+- **Cards**: Limited - textured/rough edges, imperfect corners, muted brand palette fills
 - **Icons**: Not allowed (too precise/synthetic)
 - **Gradients**: Not allowed (too smooth/perfect)
 
@@ -303,10 +303,10 @@ STYLE: Wabi-Sabi (Japanese Zen)
 - HARD LIMIT: Max 4 elements.
 - Layout: Intentionally imperfect. Visible texture.
 - Typography: Medium (400-500), humanist fonts, 44-54pt headlines.
-- Color: Earth tones only. Muted, natural.
+- Color: Brand palette desaturated 30-40%. Muted, low-chroma versions of brand colors.
 - Texture: Paper/cloth texture 5-10% opacity.
 - Components: Textured cards only (rough edges), no icons, no gradients.
-- NEVER: Perfect geometry, synthetic colors, glossy finishes, precise icons.
+- NEVER: Perfect geometry, neon/saturated colors, glossy finishes, precise icons.
 ```
 
 ---
@@ -516,7 +516,7 @@ Two styles based on Nordic design philosophy emphasizing warmth, balance, and in
 
 ## Hygge
 
-Danish concept of cozy togetherness and contentment. Warm, inviting, comfortable.
+Danish concept of cozy togetherness and contentment. Inviting, comfortable, approachable.
 
 **Learn more**: [Hygge (Wikipedia)](https://en.wikipedia.org/wiki/Hygge)
 
@@ -529,7 +529,7 @@ Danish concept of cozy togetherness and contentment. Warm, inviting, comfortable
 | Whitespace | 40-50% | HARD LIMIT |
 | Max words/slide | 12 | HARD LIMIT |
 | Max elements | 5 | HARD LIMIT |
-| Colors | 5-6 warm | Cozy palette |
+| Colors | 5-6 from brand, softened | Reduce saturation 15-25%, lighten for cozy feel |
 
 ### Layout Rules
 - Comfortable, inviting arrangement
@@ -540,35 +540,35 @@ Danish concept of cozy togetherness and contentment. Warm, inviting, comfortable
 ### Typography
 - Weight: Medium (400-500)
 - Headlines: 44-56pt
-- Style: Friendly, rounded sans or warm serif
+- Style: Friendly, rounded sans or brand serif
 - Comfortable reading
 
 ### Color
-- Warm candlelight palette
-- Soft oranges, warm browns, cream
-- Muted reds, gentle yellows
-- Nothing cold or harsh
+- Brand palette softened and lightened for cozy feel
+- Add slight warmth shift if brand allows (shift hue 5-10° toward amber)
+- Background: lightest brand color or tinted off-white from brand primary
+- Nothing harsh or high-saturation
 
 ### Texture
 - Soft textures (wool, knit, wood grain)
-- Warm gradients allowed
+- Soft gradients between brand tones allowed
 - Inviting surfaces
 - Tactile feel
 
 ### Anti-Patterns (NEVER)
-- Cold colors (blue, gray, white)
 - Sharp edges
 - Clinical layouts
 - Distant, corporate feel
 - High contrast
+- Neon or fully saturated colors
 
 ### Example
-> Soft cream background with subtle warmth. Friendly headline in warm brown. Image of cozy scene with soft focus. Warm orange accent. Everything invites you in like a warm blanket.
+> Soft background tinted with lightest brand color. Friendly headline in muted brand primary. Image of welcoming scene with soft focus. Brand accent softened. Everything invites you in — cozy, approachable.
 
 ### Visual Components
-- **Cards**: Full support - warm fills, large radius (20-24px), soft shadows allowed
-- **Icons**: Allowed - warm colors, friendly/rounded icons
-- **Gradients**: Allowed - warm tones only (cream → amber, peach → coral)
+- **Cards**: Full support - soft brand fills, large radius (20-24px), soft shadows allowed
+- **Icons**: Allowed - brand colors (softened), friendly/rounded icons
+- **Gradients**: Allowed - subtle transitions between softened brand colors
 
 ### Enforcement Block
 ```
@@ -578,10 +578,10 @@ STYLE: Hygge (Scandinavian)
 - HARD LIMIT: Max 5 elements.
 - Layout: Comfortable, intimate arrangement.
 - Typography: Medium (400-500), friendly fonts, 44-56pt headlines.
-- Color: Warm candlelight palette. No cold colors.
+- Color: Brand palette softened (reduce saturation 15-25%, lighten). Slight warmth shift OK if brand allows.
 - Texture: Soft, tactile (wool, wood grain).
-- Components: Warm cards (large radius, soft shadows), friendly icons, warm gradients.
-- NEVER: Cold colors, sharp edges, clinical feel, sharp-cornered cards.
+- Components: Soft cards (large radius, soft shadows), friendly icons, subtle gradients.
+- NEVER: Sharp edges, clinical feel, neon colors, sharp-cornered cards.
 ```
 
 ---
@@ -683,7 +683,7 @@ International Typographic Style. Mathematical precision, objective clarity, grid
 ### Typography
 - Weight: Medium (400-500)
 - Headlines: 48-60pt
-- Style: Helvetica, Univers, or similar grotesque
+- Style: Grotesque sans-serif (brand's heading font if grotesque, or Helvetica-family)
 - Flush left, ragged right
 
 ### Color
@@ -881,7 +881,7 @@ Chinese Yin-Yang balance. Harmonious energy flow through balanced opposing force
 | Whitespace | 50-60% | HARD LIMIT |
 | Max words/slide | 10 | HARD LIMIT |
 | Max elements | 4 | HARD LIMIT |
-| Colors | 5 (Five Elements) | Earth, Fire, Water, Wood, Metal |
+| Colors | 5 from brand palette | Map brand colors to Five Element roles |
 
 ### Layout Rules
 - Balance curved and angular
@@ -895,12 +895,14 @@ Chinese Yin-Yang balance. Harmonious energy flow through balanced opposing force
 - Mix of curved and angular letterforms
 - Balanced sizing
 
-### Color (Five Elements)
-- Earth: Yellow, brown, beige
-- Fire: Red, orange, pink
-- Water: Blue, black
-- Wood: Green, teal
-- Metal: White, gray, metallic
+### Color (Five Elements — mapped from brand)
+- Map brand palette to Element roles by hue proximity:
+  - Earth role: warm brand colors (yellows, browns, oranges)
+  - Fire role: energetic brand colors (reds, oranges)
+  - Water role: cool brand colors (blues, blacks)
+  - Wood role: growth brand colors (greens, teals)
+  - Metal role: neutral brand colors (whites, grays, silvers)
+- Not all Elements required — use 3-5 from brand palette as available
 
 ### Anti-Patterns (NEVER)
 - All angular or all curved
@@ -910,11 +912,11 @@ Chinese Yin-Yang balance. Harmonious energy flow through balanced opposing force
 - Sharp, aggressive shapes
 
 ### Example
-> Soft earth-tone background. Headline balances curved and angular forms. Circular image element balanced by rectangular text block. Colors from complementary elements. Energy flows naturally through the composition.
+> Soft background in lightest brand color. Headline balances curved and angular forms. Circular image element balanced by rectangular text block. Brand colors mapped to complementary Element roles. Energy flows naturally through the composition.
 
 ### Visual Components
 - **Cards**: Full support - mix curved and angular shapes, balanced fills
-- **Icons**: Allowed - balanced placement, Five Elements colors
+- **Icons**: Allowed - balanced placement, brand colors
 - **Gradients**: Allowed - harmonious transitions, balanced Yin-Yang
 
 ### Enforcement Block
@@ -925,7 +927,7 @@ STYLE: Feng Shui (East Asian)
 - HARD LIMIT: Max 4 elements.
 - Layout: Balance Yin (curved/soft) and Yang (angular/strong).
 - Typography: Medium (400-500), 46-56pt headlines.
-- Color: Five Elements palette (earth, fire, water, wood, metal).
+- Color: Brand palette mapped to Five Element roles by hue proximity.
 - Energy: Natural eye flow. No blocked corners.
 - Components: Balanced cards (curved + angular), icons, harmonious gradients.
 - NEVER: All angular or curved, imbalanced, cluttered, one-sided designs.

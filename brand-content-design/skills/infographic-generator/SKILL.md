@@ -1,7 +1,7 @@
 ---
 name: generating-infographics
 description: Use when creating infographics, data visualizations, process diagrams, timelines, or comparisons - generates branded infographics using @antv/infographic with 114 templates across 7 categories. Triggers on "create infographic", "make infographic", "visualize data", "timeline", "process diagram".
-version: 2.8.0
+version: 2.9.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
@@ -15,6 +15,13 @@ Generate branded infographics with custom themes and backgrounds using @antv/inf
 1. Run `/brand-init` to create project structure
 2. Run `/brand-extract` to generate brand-philosophy.md
 3. Run `/template-infographic` to create an infographic template
+
+### No-Brand Safeguard
+
+If `brand-philosophy.md` is not found OR contains no `## Color Palette` section:
+- **STOP generation** — inform user: "No brand colors found. Run `/brand-extract` first to analyze your brand."
+- If user insists on proceeding: use deliberately bland neutrals (#1a1a1a, #666, #f5f5f5, system fonts)
+- Never fall back to any recognizable brand colors
 
 ## When to Use
 
@@ -134,8 +141,8 @@ Select template → paste content → name → get PNG
 
 | Background Type | Title Fill | Description Fill | Label Fill |
 |-----------------|------------|------------------|------------|
-| **Dark** (spotlight-dots, tech-matrix) | `#FFFFFF` | `rgba(255,255,255,0.85)` | `#FFFFFF` |
-| **Light** (solid, subtle-dots) | `#1A202C` | `#4A5568` | `#1A202C` |
+| **Dark** (spotlight-dots, tech-matrix) | White or near-white (WCAG >= 4.5:1) | White at ~85% opacity | White or near-white |
+| **Light** (solid, subtle-dots) | Near-black (WCAG >= 4.5:1) | Dark gray | Near-black |
 
 **Never use palette colors for text** - they're for decorative shapes only.
 
@@ -157,6 +164,11 @@ Select template → paste content → name → get PNG
 □ Content fits template capacity (check item limits)
 □ Dark bg → white text, Light bg → dark text
 □ No text touching edges
+□ colorBg derived from brand-philosophy.md, not from skill defaults
+□ colorPrimary derived from brand-philosophy.md, not from skill defaults
+□ Colors traced to brand-philosophy.md (not copied from reference docs or runtime fallbacks)
+□ font-family from brand-philosophy.md, not a generic default
+□ Text colors WCAG-validated against actual background
 ```
 
 **If ANY check fails, DO NOT generate. Fix the content or config first.**
@@ -166,8 +178,8 @@ Select template → paste content → name → get PNG
 **Dark Backgrounds (spotlight-dots, tech-matrix, etc.)**
 ```json
 {
-  "colorBg": "#0D2B5C",
-  "colorPrimary": "#60A5FA",
+  "colorBg": "{brand-bg-dark}",
+  "colorPrimary": "{brand-primary}",
   "title": { "fill": "#FFFFFF" },
   "desc": { "fill": "rgba(255,255,255,0.85)" },
   "item": {
@@ -181,7 +193,7 @@ Select template → paste content → name → get PNG
 ```json
 {
   "colorBg": "#FFFFFF",
-  "colorPrimary": "#3B82F6",
+  "colorPrimary": "{brand-primary}",
   "title": { "fill": "#1A202C" },
   "desc": { "fill": "#4A5568" },
   "item": {
@@ -194,6 +206,9 @@ Select template → paste content → name → get PNG
 **Common mistake:** Using pastel palette colors for text on light backgrounds. Pastels are for decorative shapes only.
 
 See template-infographic.md for complete config examples.
+
+> **Note:** The `/template-infographic` command generates correct configs from your brand-philosophy.md.
+> Never copy hex values from the examples above — they are illustrative placeholders only.
 
 ## Data Structure by Type
 
