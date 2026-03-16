@@ -1,6 +1,6 @@
 # Style Constraints
 
-13 distinct visual styles across 4 aesthetic families. Each produces fundamentally different visual results.
+18 distinct visual styles across 5 aesthetic families. Each produces fundamentally different visual results.
 
 ---
 
@@ -12,6 +12,7 @@
 | **Scandinavian Nordic** | Denmark/Sweden | Warmth, balance, functionality | Hygge, Lagom |
 | **European Modernist** | Germany/Switzerland/Italy | Grid, clarity, expression | Swiss, Memphis |
 | **East Asian Harmony** | Korea/China | Space, balance, energy | Yeo-baek, Feng Shui |
+| **Contemporary Professional** | Global | Clean, data-aware, business-forward | Tech-Modern, Data-Forward, Corporate-Confident, Pitch-Velocity, Narrative-Clean |
 
 ---
 
@@ -32,6 +33,11 @@
 | Memphis | European | 25-35% | ≤15 | ≤7 | Playful | Bold 600-800 |
 | Yeo-baek | East Asian | 65-75% | ≤6 | ≤2 | Empty | Light 300-400 |
 | Feng Shui | East Asian | 50-60% | ≤10 | ≤4 | Balanced | Medium 400-500 |
+| Tech-Modern | Contemporary | 45-55% | ≤12 | ≤5 | Grid | Medium 400-600 |
+| Data-Forward | Contemporary | 40-50% | ≤15 | ≤6 | Data-center | Bold/Regular 400-800 |
+| Corporate-Confident | Contemporary | 50-60% | ≤10 | ≤4 | Centered | Medium 500-700 |
+| Pitch-Velocity | Contemporary | 35-45% | ≤12 | ≤5 | Asymmetric | Bold 700-900 |
+| Narrative-Clean | Contemporary | 50-60% | ≤12 | ≤4 | Left-aligned | Regular 400-500 |
 
 ---
 
@@ -54,6 +60,11 @@ Components available per style. See `references/visual-components.md` for full d
 | Memphis | ✓ | ✓ | ✓ | Colorful, playful, geometric |
 | Yeo-baek | ✗ | ✗ | ✗ | No components - void is design |
 | Feng Shui | ✓ | ✓ | ✓ | Balanced, harmonious |
+| Tech-Modern | ✓ | ✓ | ◐ | Subtle fills, outline icons, subtle gradients (max 1) |
+| Data-Forward | ✓ | ◐ | ✗ | Stat cards, trend icons only |
+| Corporate-Confident | ✓ | ✗ | ✗ | Clean bordered cards, no icons/gradients |
+| Pitch-Velocity | ✓ | ✓ | ✓ | Bold cards, bold icons, energetic gradients |
+| Narrative-Clean | ◐ | ✗ | ✗ | Thin border editorial cards only |
 
 **Legend:** ✓ = Full support | ◐ = Limited/subtle | ✗ = Not allowed
 
@@ -935,6 +946,327 @@ STYLE: Feng Shui (East Asian)
 
 ---
 
+# Contemporary Professional Family
+
+Five styles covering the modern business landscape—from tech keynotes to investor pitches. Clean, systematic, grounded in data-forward and narrative-driven design.
+
+---
+
+## Tech-Modern
+
+Clean, systematic, data-aware design inspired by Apple, Stripe, and Linear keynote aesthetics. Cards with subtle fills, icons allowed, subtle gradients. Sharp and precise.
+
+**Best for**: SaaS decks, product launches, tech keynotes, developer conferences
+
+### Constraints
+
+| Parameter | Value | Enforcement |
+|-----------|-------|-------------|
+| Whitespace | 45-55% | HARD LIMIT |
+| Max words/slide | 12 | HARD LIMIT |
+| Max elements | 5 | HARD LIMIT |
+| Colors | 3-4 from brand | Systematic, functional use |
+
+### Layout Rules
+- Modular grid (12-column or 8pt)
+- Clean alignment, snapped elements
+- Cards as primary content containers
+- Consistent spacing between sections
+
+### Typography
+- Weight: Medium to SemiBold (400-600)
+- Headlines: 48-60pt
+- Style: Clean sans-serif (brand's heading font)
+- Monospace accent for code/data elements
+
+### Color
+- Brand palette at full saturation for primaries
+- Light gray backgrounds for cards (brand tint at 5-8%)
+- High contrast text
+- Accent for interactive/highlight elements only
+
+### Anti-Patterns (NEVER)
+- Decorative flourishes or ornamental elements
+- Serif fonts for headlines
+- More than one gradient per slide
+- Drop shadows heavier than 2px blur
+- Centered body text
+
+### Example
+> Clean white slide with subtle grid structure. Sharp sans-serif headline top-left. Two feature cards below with light brand-tinted fills, each with a small icon and 2-line description. Single accent color highlights the key metric. Everything snaps to grid—systematic, precise, modern.
+
+### Visual Components
+- **Cards**: Full support - subtle brand-tinted fills (5-8%), sharp corners (4-8px), thin borders optional
+- **Icons**: Allowed - outline style, brand colors, functional placement
+- **Gradients**: Allowed - subtle only (brand primary to near-white), max 1 per slide
+
+### Enforcement Block
+```
+STYLE: Tech-Modern (Contemporary Professional)
+- HARD LIMIT: Max 12 words/slide.
+- HARD LIMIT: Min 45% whitespace.
+- HARD LIMIT: Max 5 elements.
+- Layout: Modular grid. Snapped alignment. Cards as containers.
+- Typography: Medium/SemiBold (400-600), clean sans, 48-60pt headlines.
+- Color: 3-4 brand colors. Systematic functional use. Accent for highlights only.
+- Components: Subtle cards (light fills, sharp corners), outline icons, subtle gradients (max 1).
+- NEVER: Decorative elements, serif headlines, heavy shadows, centered body text.
+```
+
+---
+
+## Data-Forward
+
+Numbers as visual anchors, inspired by data journalism (NYT, Bloomberg). Large number heroes (72-96pt), supporting context small. Cards for stat grouping, no gradients (compete with data).
+
+**Best for**: Quarterly reviews, investor updates, analytics dashboards, annual reports
+
+### Constraints
+
+| Parameter | Value | Enforcement |
+|-----------|-------|-------------|
+| Whitespace | 40-50% | HARD LIMIT |
+| Max words/slide | 15 | HARD LIMIT |
+| Max elements | 6 | HARD LIMIT |
+| Colors | 3-4 | Data-functional (encode meaning) |
+
+### Layout Rules
+- Data occupies center 60% width
+- Headline top 20% for context
+- Insight callout bottom-left for interpretation
+- Charts simplified—direct labeling, no legends when possible
+
+### Typography
+- Weight: Bold for numbers (700-800), Regular for context (400)
+- Headlines: 44-54pt
+- Numbers/stats: 72-96pt (hero treatment)
+- Labels: 16-20pt, subtle
+
+### Color
+- Encode data meaning (green=up, red=down, blue=neutral)
+- Background: white or very light gray
+- Minimal accent—data IS the visual interest
+- Chart colors from brand palette
+
+### Anti-Patterns (NEVER)
+- Gradients (compete with data readability)
+- Decorative elements on data slides
+- More than one chart per slide
+- 3D chart effects
+- Legends when direct labeling works
+
+### Example
+> White slide, clean structure. Large "47%" in bold brand primary dominates center. Below: small context line "increase in user retention." Simple bar chart right-side showing trend. Bottom-left: insight callout "Best quarter since launch." Data speaks—everything else whispers.
+
+### Visual Components
+- **Cards**: Full support - stat cards (large number + label), grouped metrics, thin borders
+- **Icons**: Allowed - sparingly, for trend indicators (arrow-up, trending-up) only
+- **Gradients**: Not allowed (distracts from data)
+
+### Enforcement Block
+```
+STYLE: Data-Forward (Contemporary Professional)
+- HARD LIMIT: Max 15 words/slide.
+- HARD LIMIT: Min 40% whitespace.
+- HARD LIMIT: Max 6 elements.
+- Layout: Data center (60% width). Headline top. Insight bottom-left.
+- Typography: Bold numbers (700-800, 72-96pt hero), regular context (400, 44-54pt).
+- Color: Data-functional. Encode meaning. Minimal decoration.
+- Components: Stat cards (large numbers), trend icons only, NO gradients.
+- NEVER: Gradients, decorative elements, 3D charts, multiple charts per slide, legends.
+```
+
+---
+
+## Corporate-Confident
+
+Authoritative, polished, trustworthy. Inspired by McKinsey/Deloitte presentation standards. Centered headlines, structured grids, premium spacing. Muted professional palette.
+
+**Best for**: Board presentations, annual reports, company communications, stakeholder updates
+
+### Constraints
+
+| Parameter | Value | Enforcement |
+|-----------|-------|-------------|
+| Whitespace | 50-60% | HARD LIMIT |
+| Max words/slide | 10 | HARD LIMIT |
+| Max elements | 4 | HARD LIMIT |
+| Colors | 3 from brand | Muted, authoritative |
+
+### Layout Rules
+- Centered primary elements
+- Structured grid with generous margins (10%+)
+- Clear hierarchy: headline → supporting point → evidence
+- Consistent positioning across all slides
+
+### Typography
+- Weight: Medium to Bold (500-700)
+- Headlines: 48-60pt
+- Style: Premium sans-serif or refined serif (brand font)
+- Consistent capitalization (title case or sentence case)
+
+### Color
+- Muted brand palette (reduce saturation 10-15%)
+- Navy, charcoal, or deep brand primary for text
+- Background: white or very light neutral
+- Accent: one brand color at controlled intensity
+
+### Anti-Patterns (NEVER)
+- Playful or casual design elements
+- Bright or neon colors
+- Asymmetric layouts
+- More than 2 font sizes per slide
+- Informal icons or illustrations
+
+### Example
+> Clean white slide with generous margins. Centered headline in medium-weight brand navy: "Operational Excellence." Below: three aligned text blocks showing key metrics with subtle brand accent dividers. Bottom-right: discreet logo. Authority radiates from restraint and precision.
+
+### Visual Components
+- **Cards**: Full support - clean borders (1-2px), white or very light fills, consistent radius (8px)
+- **Icons**: Not allowed (too casual for corporate authority)
+- **Gradients**: Not allowed (too flashy)
+
+### Enforcement Block
+```
+STYLE: Corporate-Confident (Contemporary Professional)
+- HARD LIMIT: Max 10 words/slide.
+- HARD LIMIT: Min 50% whitespace.
+- HARD LIMIT: Max 4 elements.
+- Layout: Centered. Structured grid. Generous margins (10%+).
+- Typography: Medium/Bold (500-700), premium fonts, 48-60pt headlines.
+- Color: 3 muted brand colors. Authoritative. Controlled accent.
+- Components: Clean cards (thin borders, light fills), no icons, no gradients.
+- NEVER: Playful elements, bright colors, asymmetry, informal icons.
+```
+
+---
+
+## Pitch-Velocity
+
+High-energy, momentum-driven design. Inspired by Sequoia deck format energy. Asymmetric with forward momentum. Bold cards, icons, gradients all allowed. High contrast.
+
+**Best for**: Fundraising decks, sales pitches, launch announcements, competitive positioning
+
+### Constraints
+
+| Parameter | Value | Enforcement |
+|-----------|-------|-------------|
+| Whitespace | 35-45% | HARD LIMIT |
+| Max words/slide | 12 | HARD LIMIT |
+| Max elements | 5 | HARD LIMIT |
+| Colors | 4-5 | High contrast, energetic |
+
+### Layout Rules
+- Asymmetric with forward momentum (left-to-right energy)
+- Bold focal points with supporting evidence
+- Headlines large and commanding
+- Content builds toward a conclusion
+
+### Typography
+- Weight: Bold to Black (700-900)
+- Headlines: 52-68pt
+- Style: Bold sans-serif, commanding
+- Numbers large and prominent (64-80pt for key stats)
+
+### Color
+- Full saturation brand palette
+- High contrast (dark backgrounds with bright text acceptable)
+- Gradient accent for energy (diagonal preferred)
+- Bold card fills
+
+### Anti-Patterns (NEVER)
+- Passive or quiet layouts
+- Light font weights
+- Centered, symmetrical compositions
+- Muted or desaturated colors
+- Small, understated typography
+
+### Example
+> Dark brand-primary background with diagonal gradient accent. Bold white headline high-left: "10x Faster." Large number "147%" in brand accent below. Supporting stat cards right-side with bold fills. Energy flows left to right—momentum, confidence, urgency.
+
+### Visual Components
+- **Cards**: Full support - bold brand fills, medium radius (8-12px), can overlap slightly
+- **Icons**: Allowed - bold, brand accent colors, larger sizes (48-64px)
+- **Gradients**: Allowed - bold diagonal transitions, high energy
+
+### Enforcement Block
+```
+STYLE: Pitch-Velocity (Contemporary Professional)
+- HARD LIMIT: Max 12 words/slide.
+- HARD LIMIT: Min 35% whitespace.
+- HARD LIMIT: Max 5 elements.
+- Layout: Asymmetric. Forward momentum (left → right energy).
+- Typography: Bold/Black (700-900), commanding sans, 52-68pt headlines.
+- Color: 4-5 colors. Full saturation. High contrast. Dark backgrounds OK.
+- Components: Bold cards (brand fills), bold icons (48-64px), energetic gradients.
+- NEVER: Passive layouts, light fonts, symmetry, muted colors, small type.
+```
+
+---
+
+## Narrative-Clean
+
+Story-driven, editorial clarity inspired by TED talks and long-form editorial. Left-aligned text blocks, generous right margins for imagery. Serif option. Warm neutrals + one accent.
+
+**Best for**: Case studies, thought leadership, keynote stories, brand narratives
+
+### Constraints
+
+| Parameter | Value | Enforcement |
+|-----------|-------|-------------|
+| Whitespace | 50-60% | HARD LIMIT |
+| Max words/slide | 12 | HARD LIMIT |
+| Max elements | 4 | HARD LIMIT |
+| Colors | 3-4 | Warm neutrals + one accent |
+
+### Layout Rules
+- Left-aligned text with generous right margin (30-40% for imagery)
+- Story flow: each slide advances the narrative
+- Single focal point per slide
+- Editorial pacing—some slides are pause moments (minimal content)
+
+### Typography
+- Weight: Regular to Medium (400-500)
+- Headlines: 44-56pt
+- Style: Refined serif OR clean sans (brand's heading font)—serif option for editorial warmth
+- Body text allowed in small amounts (24-28pt) for narrative flow
+
+### Color
+- Warm neutral base (off-white, cream, light warm gray)
+- One strong accent color from brand palette
+- Dark warm text (charcoal, not pure black)
+- Accent used sparingly for emphasis
+
+### Anti-Patterns (NEVER)
+- Bullet point lists
+- Multiple accent colors
+- Dense data without narrative context
+- Aggressive or high-energy layouts
+- Pure white or pure black backgrounds
+
+### Example
+> Warm off-white slide. Left-aligned serif headline: "The moment everything changed." Below: two lines of body text (24pt) advancing the story. Right 35%: evocative image with soft edges. Single brand accent underline beneath headline. Editorial. Intentional. Every word matters.
+
+### Visual Components
+- **Cards**: Limited - thin border only (1px), warm neutral fill, editorial feel
+- **Icons**: Not allowed (break narrative flow)
+- **Gradients**: Not allowed (too flashy for editorial)
+
+### Enforcement Block
+```
+STYLE: Narrative-Clean (Contemporary Professional)
+- HARD LIMIT: Max 12 words/slide.
+- HARD LIMIT: Min 50% whitespace.
+- HARD LIMIT: Max 4 elements.
+- Layout: Left-aligned. Generous right margin (30-40%). Editorial pacing.
+- Typography: Regular/Medium (400-500), serif or clean sans, 44-56pt headlines.
+- Color: Warm neutrals + one brand accent. Dark warm text (not pure black).
+- Components: Subtle cards (thin border, warm fill), no icons, no gradients.
+- NEVER: Bullet points, multiple accents, dense data, aggressive layouts, pure B&W.
+```
+
+---
+
 ## Style Selection Workflow
 
 ### Step 1: Choose Aesthetic Family
@@ -947,10 +1279,21 @@ STYLE: Feng Shui (East Asian)
 | **Scandinavian Nordic** | Warmth, balance, functionality |
 | **European Modernist** | Precision or playfulness |
 | **East Asian Harmony** | Space, balance, energy |
+| **Contemporary Professional** | Clean, data-aware, business-forward |
 
 ### Step 2: Choose Specific Style
 
 Based on family selection, present relevant options with "Best for" guidance.
+
+#### Contemporary Professional
+
+| Style | Best for |
+|-------|----------|
+| Tech-Modern | SaaS decks, product launches, tech keynotes, developer conferences |
+| Data-Forward | Quarterly reviews, investor updates, analytics dashboards, annual reports |
+| Corporate-Confident | Board presentations, annual reports, company communications, stakeholder updates |
+| Pitch-Velocity | Fundraising decks, sales pitches, launch announcements, competitive positioning |
+| Narrative-Clean | Case studies, thought leadership, keynote stories, brand narratives |
 
 ---
 

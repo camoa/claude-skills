@@ -1,7 +1,7 @@
 ---
 name: visual-content
 description: Use when creating branded presentations or carousels. Generates museum-quality visual output from canvas philosophy, enforcing style constraints. Outputs PDF first, then converts to PPTX for editability.
-version: 2.9.0
+version: 3.0.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
@@ -67,6 +67,19 @@ The canvas philosophy provides the aesthetic language. The content provides the 
 ## Part 3: Visual Expression
 
 With philosophy internalized and conceptual thread identified, create the visual artifacts.
+
+### Composition Rules Application (MANDATORY)
+
+Before laying out ANY slide, follow this structural process:
+
+1. **Identify slide type** — Title, Content, Image, Data/Chart, Quote, CTA, or Transition
+2. **Look up focal point** — From the Composition Rules section of canvas-philosophy.md (or from `references/slide-composition-rules.md` if missing)
+3. **Place focal element FIRST** — The primary visual anchor goes in position before anything else
+4. **Apply style modifier** — Adjust position based on the style's layout rules (centered, asymmetric, grid, flowing)
+5. **Check component frequency** — Before adding cards/icons/gradients, check if within budget across all slides
+6. **Verify density** — Max 3 visual layers. No element collisions. 24px minimum spacing.
+
+**Fallback**: If the canvas-philosophy.md does not include a Composition Rules section (legacy templates), use the defaults from `references/slide-composition-rules.md` with the style's modifiers applied.
 
 ### The Craftsmanship Standard
 
@@ -261,14 +274,42 @@ When text appears on gradients:
 
 Some styles support visual components that enhance the design. **Components are opt-in** (user enables during template creation) **but should be used intelligently** based on content—not on every slide just because they're enabled.
 
-### The Golden Rule
+### Component Decision Gates (MANDATORY)
 
-**Don't use components everywhere.** Use them where they genuinely help:
-- **Cards** → Only when grouping multiple related points (features, tips, steps)
-- **Icons** → Only when a clear visual metaphor exists (don't force it)
-- **Gradients** → Only on 2-3 slides max (hook, transition, CTA)
+Before using ANY visual component on a slide, pass through these gates IN ORDER:
 
-See `references/visual-components.md` → "Intelligent Usage Guidelines" for detailed decision framework.
+**Gate 1: Style Permission**
+Does the selected style allow this component? (Check style-constraints.md or enforcement block)
+- If NO → skip component entirely
+- If YES → proceed to Gate 2
+
+**Gate 2: Content Justification**
+Does the slide's content warrant this component?
+- **Cards**: Does the slide have 2+ related points that benefit from grouping? If single message → no cards.
+- **Icons**: Is there a clear, unforced visual metaphor? If you have to think about it → no icon.
+- **Gradients**: Is this a hook, transition, or CTA slide? If content slide → no gradient.
+- If NO justification → skip component
+- If YES → proceed to Gate 3
+
+**Gate 3: Frequency Budget**
+Is this component within its presentation-wide budget?
+- Cards: used on ≤60% of slides so far?
+- Icons: used on ≤50% of slides so far?
+- Gradients: used on ≤3 slides total?
+- If OVER budget → skip component, use alternative treatment
+- If WITHIN budget → proceed to Gate 4
+
+**Gate 4: Density Check**
+Will adding this component exceed 3 visual layers on this slide?
+- Background + content + this component = 3 layers max
+- Cards + gradient on same slide = usually too dense (exception: Pitch-Velocity, Memphis)
+- If TOO dense → skip component
+- If OK → use component
+
+**When a component fails a gate**, use these alternatives:
+- Instead of a card → bold text with accent underline or increased font size
+- Instead of an icon → typographic emphasis, a number, or additional whitespace
+- Instead of a gradient → solid brand-tinted background color
 
 ### Component Availability by Style
 
@@ -276,9 +317,9 @@ Before using components, verify the style supports them (see `style-constraints.
 
 | Component | Supported Styles | Not Allowed |
 |-----------|-----------------|-------------|
-| **Cards** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki | Ma, Yeo-baek |
-| **Icons** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki | Minimal, Wabi-Sabi, Shibui, Ma, Yeo-baek |
-| **Gradients** | Dramatic, Organic, Hygge, Memphis, Feng Shui | Minimal, Swiss, Ma, Yeo-baek, Lagom |
+| **Cards** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki, Tech-Modern, Data-Forward, Corporate-Confident, Pitch-Velocity, Narrative-Clean (subtle) | Ma, Yeo-baek |
+| **Icons** | Dramatic, Organic, Hygge, Lagom, Swiss, Memphis, Feng Shui, Iki, Tech-Modern, Pitch-Velocity, Data-Forward (trend only) | Minimal, Wabi-Sabi, Shibui, Ma, Yeo-baek, Corporate-Confident, Narrative-Clean |
+| **Gradients** | Dramatic, Organic, Hygge, Memphis, Feng Shui, Pitch-Velocity, Tech-Modern (subtle only) | Minimal, Swiss, Ma, Yeo-baek, Lagom, Data-Forward, Corporate-Confident, Narrative-Clean |
 
 ### Using Cards
 

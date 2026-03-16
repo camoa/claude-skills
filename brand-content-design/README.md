@@ -1,6 +1,6 @@
 # Brand Content Design Plugin
 
-> **Current version: v2.9.0**
+> **Current version: v3.0.0**
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
@@ -109,7 +109,7 @@ Generates `brand-philosophy.md` with your visual identity, voice, and core princ
 
 Templates define:
 - Slide/card/infographic structure and sequence
-- Visual style (from 21 styles across 5 aesthetic families for presentations/carousels)
+- Visual style (from 26 styles across 6 aesthetic families for presentations/carousels)
 - Color palette (brand colors or saved alternative palette)
 - Visual design philosophy (canvas-philosophy.md)
 - Sample PPTX/PDF/PNG for reference
@@ -197,7 +197,7 @@ Generates two files for your template:
 
 ## Visual Style System
 
-Choose from **21 distinct visual styles** across 5 aesthetic families when creating templates and design systems:
+Choose from **26 distinct visual styles** across 6 aesthetic families when creating templates and design systems:
 
 ### Japanese Zen (7 styles)
 | Style | Character | Best For |
@@ -227,6 +227,15 @@ Choose from **21 distinct visual styles** across 5 aesthetic families when creat
 |-------|-----------|----------|
 | **Yeo-baek** | Extreme emptiness, Korean purity | Premium, meditation |
 | **Feng Shui** | Yin-Yang balance, energy flow | Wellness, harmony |
+
+### Contemporary Professional (5 styles — new in v3.0.0)
+| Style | Character | Best For |
+|-------|-----------|----------|
+| **Tech-Modern** | Clean, systematic, data-aware | SaaS decks, product demos |
+| **Data-Forward** | Numbers as visual anchors | Quarterly reviews, analytics |
+| **Corporate-Confident** | Authoritative, polished | Board presentations, annual reports |
+| **Pitch-Velocity** | High-energy, momentum-driven | Fundraising, sales pitches |
+| **Narrative-Clean** | Story-driven, editorial clarity | Case studies, thought leadership |
 
 ### Digital Native (8 styles — web-specific, new in v2.1.0)
 | Style | Character | Best For |
@@ -261,6 +270,11 @@ Enhance carousels and presentations with **visual components** - available based
 | Hygge | ✓ | ✓ | ✓ |
 | Memphis | ✓ | ✓ | ✓ |
 | Feng Shui | ✓ | ✓ | ✓ |
+| Tech-Modern | ✓ | ✓ | ◐ |
+| Data-Forward | ✓ | ◐ | ✗ |
+| Corporate-Confident | ✓ | ✗ | ✗ |
+| Pitch-Velocity | ✓ | ✓ | ✓ |
+| Narrative-Clean | ◐ | ✗ | ✗ |
 | Iki | ✓ | ✓ | ✗ |
 | Lagom | ✓ | ✓ | ✗ |
 | Swiss | ✓ | ✓ | ✗ |
@@ -452,7 +466,7 @@ Layer 1: BRAND PHILOSOPHY (brand-philosophy.md)
 Layer 2: CONTENT TYPE GUIDES (plugin references)
 ├── Presentation Zen principles
 ├── Carousel best practices
-├── 21 visual styles with constraints
+├── 26 visual styles with constraints
 └── Automatically updated with plugin
 
 Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)

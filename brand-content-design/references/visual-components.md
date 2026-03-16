@@ -47,6 +47,11 @@ Rounded rectangle containers that group related content.
 | **Hygge** | Softened brand fill, large radius |
 | **Swiss** | Precise borders, grid-aligned |
 | **Memphis** | Colorful fills, geometric |
+| **Tech-Modern** | Subtle brand-tinted fills (5-8%), sharp corners (4-8px) |
+| **Data-Forward** | Stat cards, large numbers, thin borders |
+| **Corporate-Confident** | Clean borders (1-2px), white fills, consistent 8px radius |
+| **Pitch-Velocity** | Bold brand fills, medium radius (8-12px) |
+| **Narrative-Clean** | Thin border only (1px), warm neutral fill |
 
 ### reportlab Implementation
 
@@ -177,6 +182,8 @@ Background color transitions for depth and visual interest.
 | **Hygge** | Warm candlelight tones |
 | **Memphis** | Vibrant, playful colors |
 | **Feng Shui** | Harmonious, balanced |
+| **Pitch-Velocity** | Bold diagonal, high energy |
+| **Tech-Modern** | Subtle, brand primary to near-white |
 
 ### reportlab Implementation
 
@@ -227,6 +234,11 @@ Quick reference for which components each style supports:
 | **Memphis** | ✓ | ✓ | ✓ | Colorful, playful |
 | **Yeo-baek** | ✗ | ✗ | ✗ | Korean purity |
 | **Feng Shui** | ✓ | ✓ | ✓ | Balanced, harmonious |
+| **Tech-Modern** | ✓ | ✓ | ◐ | Subtle fills, outline icons, subtle gradients (max 1) |
+| **Data-Forward** | ✓ | ◐ | ✗ | Stat cards, trend icons only |
+| **Corporate-Confident** | ✓ | ✗ | ✗ | Clean borders, no icons/gradients |
+| **Pitch-Velocity** | ✓ | ✓ | ✓ | Bold fills, bold icons, energetic gradients |
+| **Narrative-Clean** | ◐ | ✗ | ✗ | Thin border editorial cards only |
 
 **Legend:** ✓ = Full support | ◐ = Limited/subtle | ✗ = Not allowed
 

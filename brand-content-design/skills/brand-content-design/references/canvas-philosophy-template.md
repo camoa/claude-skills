@@ -16,8 +16,9 @@ Use this template when creating canvas-philosophy.md files for templates. This g
 | **Scandinavian Nordic** | Warmth, balance, functionality | Hygge, Lagom |
 | **European Modernist** | Precision or playfulness | Swiss, Memphis |
 | **East Asian Harmony** | Space, balance, energy | Yeo-baek, Feng Shui |
+| **Contemporary Professional** | Clean, data-aware, business-forward | Tech-Modern, Data-Forward, Corporate-Confident, Pitch-Velocity, Narrative-Clean |
 
-**Selected Family**: [japanese-zen / scandinavian / european / east-asian]
+**Selected Family**: [japanese-zen / scandinavian / european / east-asian / contemporary-professional]
 
 ### Step 2: Choose Specific Style
 
@@ -38,6 +39,11 @@ See `style-constraints.md` for full details on each style, or use quick referenc
 | Memphis | Bold colors, playful chaos | Creative |
 | Yeo-baek | Extreme emptiness, purity | Premium |
 | Feng Shui | Yin-Yang balance | Wellness |
+| Tech-Modern | Clean, systematic, data-aware | SaaS, product demo |
+| Data-Forward | Numbers as visual anchors | Quarterly reviews |
+| Corporate-Confident | Authoritative, polished | Board, company comms |
+| Pitch-Velocity | High-energy momentum | Fundraising, sales |
+| Narrative-Clean | Story-driven editorial | Case studies, keynotes |
 
 **Selected Style**: [style-name]
 
@@ -53,6 +59,7 @@ Example names by family:
 - Scandinavian: "Warm Balance", "Cozy Clarity"
 - European: "Grid Logic", "Playful Bold"
 - East Asian: "Empty Resonance", "Balanced Flow"
+- Contemporary Professional: "Systematic Clarity", "Data Precision", "Forward Momentum"
 
 ## Philosophy Statement
 
@@ -108,6 +115,39 @@ Example names by family:
 - [What to avoid - e.g., "Walls of text or bullet points"]
 - [What to avoid - e.g., "Decorative elements that don't communicate"]
 - [What to avoid - e.g., "Low-contrast or hard-to-read text"]
+
+## Composition Rules (Structural Grounding)
+
+Populated during template creation from `references/slide-composition-rules.md`, adapted for the selected style.
+
+### Focal Point Rules
+- Position: [from composition rules Section 2, adapted for selected style via Section 3]
+- Single focus: every slide has ONE focal point
+- Eye path: [F-pattern | Z-pattern | Center-out] based on style
+
+### Element Positioning
+- Grid system: [8pt | 12-column modular | organic flow] — based on style
+- Headline zone: [Top 25% | Optical center | Upper-left] — from slide blueprints
+- Supporting zone: [Below | Right of headline | Bottom half] — from slide blueprints
+- Brand anchor: Bottom-right logo, accent color on every slide
+
+### Component Frequency
+- Cards: max [N] slides out of [total] (from composition rules Section 4)
+- Icons: max [N] slides
+- Gradients: exactly [N] slides (specify which: hook, transition, CTA)
+- Images: [N] slides, treatment per slide type
+
+### Image Treatment
+- Per slide type: [from composition rules Section 5]
+- Full-bleed: darken 30-40% for text overlay
+- Split: image right 55-65%, text left 35-45%
+- Supporting: 30-50% of slide area
+
+### Density Control
+- Max 3 visual layers per slide (background + content + accent)
+- Never combine: cards + gradient on same slide (unless style explicitly allows)
+- Minimum 24px between any two elements
+- 48px between logical sections
 
 ## Visual Components (Style-Dependent)
 

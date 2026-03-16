@@ -40,6 +40,7 @@ Create a presentation from an existing template with user-provided content.
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
    - Read plugin `references/presentations-guide.md` for Zen principles
    - Read plugin `references/style-constraints.md` for style enforcement
+   - Read plugin `references/slide-composition-rules.md` for composition defaults (fallback if template lacks Composition Rules)
    - Note the slide structure (types, purposes, content elements)
    - **Identify the template's style** from canvas-philosophy.md (look for "Style:" at bottom or enforcement block)
 
@@ -106,11 +107,18 @@ Create a presentation from an existing template with user-provided content.
    - NEVER: [Anti-patterns]
    ```
 
-   **All 13 styles have enforcement blocks in style-constraints.md:**
+   **All 18 styles have enforcement blocks in style-constraints.md:**
    - Japanese Zen: Minimal, Dramatic, Organic, Wabi-Sabi, Shibui, Iki, Ma
    - Scandinavian: Hygge, Lagom
    - European: Swiss, Memphis
    - East Asian: Yeo-baek, Feng Shui
+   - Contemporary Professional: Tech-Modern, Data-Forward, Corporate-Confident, Pitch-Velocity, Narrative-Clean
+
+   **PASS COMPOSITION RULES to visual-content:**
+
+   - If canvas-philosophy.md has a "## Composition Rules" section → use it (already style-adapted)
+   - If canvas-philosophy.md LACKS Composition Rules (legacy template) → load defaults from `references/slide-composition-rules.md` and apply the style's modifiers from Section 3
+   - For each slide: identify type → look up blueprint → apply composition rules → then generate
 
    - For each slide in the template structure:
      - Describe the slide type and purpose
