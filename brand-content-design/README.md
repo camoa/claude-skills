@@ -1,6 +1,6 @@
 # Brand Content Design Plugin
 
-> **Current version: v2.8.0**
+> **Current version: v2.9.0**
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 

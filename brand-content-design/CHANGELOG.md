@@ -5,6 +5,31 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-03-16
+
+### Changed
+- Remove brand bias from runtime JS fallbacks — Palcera colors (#0D2B5C, #194582, #00f3ff) replaced with neutral grays
+- Replace hardcoded hex values in reference docs (theming.md, backgrounds.md) with {brand-*} placeholders
+- Remove warm/earth color temperature prescriptions from Organic, Wabi-Sabi, Hygge, Feng Shui styles — styles now define color relationships, not temperature
+- Replace Helvetica defaults in technical-implementation.md with brand_fonts.get() pattern
+- Fix accent color search bug that caused invisible overlays on light-background brands
+- Fix draw_feature_card crash from None font defaults
+
+### Added
+- Brand Anchors section in canvas-philosophy-template.md (logo placement, primary color requirement, font mandate)
+- bias-prevention.md shared reference with Value Derivation Hierarchy
+- No-brand safeguard on infographic, visual-content, and html-generator skills
+- Pre-output validation checklists on all generation skills
+- Auto-download Google Fonts in brand-extract command
+- Brand anchor rule: derived/alternative palettes must include primary brand color
+
+### Fixed
+- brand-extract.md font examples used hardcoded "Inter" — now uses {detected heading font}
+- template-infographic.md palette display showed Palcera hex — now uses {from brand-philosophy.md}
+- style-constraints.md Swiss typography referenced "Helvetica" by name
+- web-style-constraints.md Organic/Wabi-Sabi/Hygge enforcement blocks prescribed warm-only colors
+- visual-components.md card style table referenced "warm tones"
+
 ## [2.8.0] - 2026-03-14
 
 ### Fixed

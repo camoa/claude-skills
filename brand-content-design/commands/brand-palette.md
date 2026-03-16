@@ -118,6 +118,8 @@ If user selected "Derived":
     - Label results: "Complementary (from Primary)", "Complementary (from Secondary)"
     - Remove duplicates if colors are very similar (< 5% difference)
 
+    **Brand anchor rule:** Every derived palette MUST include the brand's primary color as one entry. This ensures brand recognition across all palette variations. If the harmony calculation doesn't naturally include it, add it as the first or last entry.
+
     → Continue to step 10
 
 ---
@@ -173,6 +175,8 @@ If user selected "Alternative":
        - Keep relative contrast between colors
        - Preserve warm/cool balance
        - Maintain hierarchy (primary still dominant, accent still pop)
+
+    **Brand anchor rule:** Every alternative palette MUST include the brand's primary color (original or mood-transformed version). This ensures brand recognition across all palette variations.
 
     → Continue to step 10
 
