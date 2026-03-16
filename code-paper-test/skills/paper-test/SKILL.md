@@ -2,7 +2,6 @@
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "validate this implementation", "review this logic", "check dependencies", "check this config". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
 version: 0.4.0
-model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
 ---

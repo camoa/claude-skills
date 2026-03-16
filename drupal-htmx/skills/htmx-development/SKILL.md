@@ -2,7 +2,6 @@
 name: htmx-development
 description: Use when implementing HTMX in Drupal, migrating from AJAX to HTMX, building dynamic forms, dependent dropdowns, infinite scroll, real-time validation, or multi-step wizards. Use when user says "HTMX", "migrate AJAX", "dependent dropdown", "dynamic form", "infinite scroll", "load more", "real-time validation", "multi-step wizard", "hx-get", "hx-post", "Htmx class". Use PROACTIVELY for any Drupal 11.3+ dynamic interaction that could use HTMX instead of AJAX. MUST check HTMX patterns before implementing AJAX callbacks.
 version: 1.4.0
-model: sonnet
 allowed-tools: Read, Glob, Grep
 user-invocable: true
 ---
