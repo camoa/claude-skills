@@ -158,8 +158,8 @@ When analyzing a website, the brand-analyst agent should:
 
 3. **Recommend font upload** - If custom/web fonts detected:
    > "I detected these fonts on your website:
-   > - **Heading**: Inter (Google Fonts)
-   > - **Body**: Source Sans Pro (Google Fonts)
+   > - **Heading**: {detected heading font} (Google Fonts)
+   > - **Body**: {detected body font} (Google Fonts)
    >
    > For best results, download these fonts and add them to `input/fonts/`:
    > - [Download Inter](https://fonts.google.com/specimen/Inter)

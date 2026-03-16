@@ -317,17 +317,19 @@ async function main() {
       const brandColors = {};
       if (config.themeConfig) {
         // Use colorBg as primary background color (for dark backgrounds, this is the dark base)
-        const bgColor = config.themeConfig.colorBg || '#0D2B5C';
+        const bgColor = config.themeConfig.colorBg || '#333333';
         brandColors.primary = bgColor;
         // Derive darker shades from the background color
         brandColors.dark = darkenColor(bgColor, 0.3);
         brandColors.darker = darkenColor(bgColor, 0.6);
         // Accent comes from colorPrimary (for patterns) or palette
-        brandColors.accent = config.themeConfig.colorPrimary || '#00f3ff';
+        brandColors.accent = config.themeConfig.colorPrimary || '#888888';
         if (config.themeConfig.palette && config.themeConfig.palette.length > 1) {
           // If palette has accent color, use it (typically second light color for dark themes)
+          // Exclude white and the background color itself to avoid invisible overlays
           const potentialAccent = config.themeConfig.palette.find(c =>
             isLightColor(c) && c !== '#FFFFFF' && c !== '#ffffff'
+            && c.toUpperCase() !== bgColor.toUpperCase()
           );
           if (potentialAccent) brandColors.accent = potentialAccent;
         }

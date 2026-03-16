@@ -1,5 +1,8 @@
 # Theme Configuration Reference
 
+> **⚠️ BIAS WARNING:** All color and font values in this file are **illustrative placeholders**.
+> Derive actual values from the project's `brand-philosophy.md`. Never copy hex codes or font names from these examples.
+
 ## Contents
 - Theme Basics
 - Color Configuration
@@ -26,8 +29,8 @@ await createInfographic({
 
 ```javascript
 themeConfig: {
-  colorPrimary: '#00f3ff',  // Main accent color (titles, highlights)
-  colorBg: '#0D2B5C',       // Background color (solid only)
+  colorPrimary: '{brand-primary}',  // Main accent color (titles, highlights) — Illustrative — derive from brand-philosophy.md
+  colorBg: '{brand-bg}',            // Background color (solid only) — Illustrative — derive from brand-philosophy.md
 }
 ```
 
@@ -37,8 +40,8 @@ The `palette` array cycles through colors for items:
 
 ```javascript
 themeConfig: {
-  palette: ['#00f3ff', '#78A5D7', '#3773B4', '#B9D2F0'],
-  // Item 1: #00f3ff, Item 2: #78A5D7, etc.
+  palette: ['{brand-primary}', '{brand-palette-2}', '{brand-palette-3}', '{brand-palette-4}'],
+  // Illustrative — derive from brand-philosophy.md. Items cycle through palette colors.
 }
 ```
 
@@ -50,7 +53,7 @@ themeConfig: {
 themeConfig: {
   base: {
     text: {
-      'font-family': 'Inter, sans-serif',
+      'font-family': '{brand-heading-font}, sans-serif',  // Illustrative — derive from brand-philosophy.md
       'fill': '#FFFFFF',
       'font-size': 14
     }
@@ -63,15 +66,15 @@ themeConfig: {
 ```javascript
 themeConfig: {
   title: {
-    'fill': '#00f3ff',
+    'fill': '{brand-primary}',  // Illustrative — derive from brand-philosophy.md
     'font-weight': 'bold',
     'font-size': 28,
-    'font-family': 'Inter, sans-serif'
+    'font-family': '{brand-heading-font}, sans-serif'  // Illustrative — derive from brand-philosophy.md
   },
   desc: {
-    'fill': '#B9D2F0',
+    'fill': '{brand-palette-4}',  // Illustrative — derive from brand-philosophy.md
     'font-size': 16,
-    'font-family': 'Inter, sans-serif'
+    'font-family': '{brand-heading-font}, sans-serif'  // Illustrative — derive from brand-philosophy.md
   }
 }
 ```
@@ -82,12 +85,12 @@ themeConfig: {
 themeConfig: {
   item: {
     label: {
-      'fill': '#00f3ff',
+      'fill': '{brand-primary}',  // Illustrative — derive from brand-philosophy.md
       'font-weight': 'bold',
       'font-size': 18
     },
     desc: {
-      'fill': '#B9D2F0',
+      'fill': '{brand-palette-4}',  // Illustrative — derive from brand-philosophy.md
       'font-size': 14
     }
   }
@@ -102,7 +105,7 @@ themeConfig: {
 themeConfig: {
   base: {
     shape: {
-      'stroke': '#00f3ff',
+      'stroke': '{brand-primary}',  // Illustrative — derive from brand-philosophy.md
       'stroke-width': 2,
       'fill': 'transparent'
     }
@@ -139,47 +142,47 @@ themeConfig: {
 themeConfig: {
   stylize: {
     type: 'linear-gradient',
-    colors: ['#00f3ff', '#194582']
+    colors: ['{brand-primary}', '{brand-dark}']  // Illustrative — derive from brand-philosophy.md
   }
 }
 ```
 
 ## Complete Example
 
-Palcera brand theme:
+Brand theme (all values illustrative — derive from brand-philosophy.md):
 
 ```javascript
-const palceraTheme = {
-  colorPrimary: '#00f3ff',
-  colorBg: '#0D2B5C',
-  palette: ['#00f3ff', '#78A5D7', '#3773B4', '#B9D2F0'],
+const brandTheme = {
+  colorPrimary: '{brand-primary}',
+  colorBg: '{brand-bg}',
+  palette: ['{brand-primary}', '{brand-palette-2}', '{brand-palette-3}', '{brand-palette-4}'],
   base: {
     text: {
-      'font-family': 'Inter, sans-serif',
+      'font-family': '{brand-heading-font}, sans-serif',
       'fill': '#FFFFFF'
     },
     shape: {
-      'stroke': '#00f3ff',
+      'stroke': '{brand-primary}',
       'stroke-width': 1
     }
   },
   title: {
-    'fill': '#00f3ff',
+    'fill': '{brand-primary}',
     'font-weight': 'bold',
     'font-size': 28
   },
   desc: {
-    'fill': '#B9D2F0',
+    'fill': '{brand-palette-4}',
     'font-size': 16
   },
   item: {
     label: {
-      'fill': '#00f3ff',
+      'fill': '{brand-primary}',
       'font-weight': 'bold',
       'font-size': 18
     },
     desc: {
-      'fill': '#B9D2F0',
+      'fill': '{brand-palette-4}',
       'font-size': 14
     }
   }

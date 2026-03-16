@@ -1,5 +1,8 @@
 # Technical Implementation
 
+> **⚠️ BIAS WARNING:** Font names and hex colors in code examples below are **illustrative**.
+> Always derive fonts from `brand_fonts` and colors from `brand_colors` parsed from brand-philosophy.md.
+
 Code patterns for PDF generation with reportlab.
 
 ## Contents
@@ -113,7 +116,7 @@ def create_presentation_pdf(output_path, slides_content, brand_colors, logo_path
 
         # Headline (positioned in top third)
         c.setFillColor(text_color)
-        c.setFont("Helvetica-Bold", 72)
+        c.setFont(brand_fonts.get('heading', 'Helvetica-Bold'), 72)
         c.drawString(safe_left, safe_top - 100, slide['headline'])
 
         # Logo (bottom right, respecting safe zone)
@@ -155,10 +158,10 @@ def create_carousel_pdf(output_path, cards_content, brand_colors, logo_path):
 
         # Headline (large, bold, thumb-stopping)
         c.setFillColor(text_color)
-        c.setFont("Helvetica-Bold", 64)
+        c.setFont(brand_fonts.get('heading', 'Helvetica-Bold'), 64)
 
         # Center text horizontally
-        text_width = c.stringWidth(card['headline'], "Helvetica-Bold", 64)
+        text_width = c.stringWidth(card['headline'], brand_fonts.get('heading', 'Helvetica-Bold'), 64)
         x = (CARD_WIDTH - text_width) / 2
         c.drawString(x, CARD_HEIGHT * 0.6, card['headline'])
 
@@ -314,8 +317,10 @@ def draw_icon_card(canvas, x, y, size, icon_path,
 def draw_feature_card(canvas, x, y, width, height,
                       icon_path, title, description,
                       fill_color, text_color,
-                      title_font="Helvetica-Bold", title_size=24,
-                      desc_font="Helvetica", desc_size=16,
+                      title_font=None,  # Pass brand_fonts.get('heading', 'Helvetica-Bold')
+                      title_size=24,
+                      desc_font=None,  # Pass brand_fonts.get('body', 'Helvetica')
+                      desc_size=16,
                       icon_size=48, radius=16, padding=24):
     """
     Draw a feature card with icon, title, and description.
@@ -328,6 +333,10 @@ def draw_feature_card(canvas, x, y, width, height,
     +------------------------+
     """
     canvas.saveState()
+
+    # Resolve font defaults from brand (None means caller didn't specify)
+    title_font = title_font or brand_fonts.get('heading', 'Helvetica-Bold')
+    desc_font = desc_font or brand_fonts.get('body', 'Helvetica')
 
     # Draw card background
     if fill_color:
@@ -494,7 +503,7 @@ else:
 **Note:** The code tries multiple fallback paths if the environment variable isn't set. Ensure `cairosvg` is installed (`pip install cairosvg`).
 
 ```python
-def draw_icon(canvas, name, x, y, color='#000000', size=48):
+def draw_icon(canvas, name, x, y, color=None, size=48):
     """
     Draw a Lucide icon on canvas.
 
@@ -502,12 +511,14 @@ def draw_icon(canvas, name, x, y, color='#000000', size=48):
         canvas: reportlab canvas
         name: Icon name (e.g., 'lightbulb', 'rocket', 'check-circle')
         x, y: Position (bottom-left of icon)
-        color: Icon stroke color (hex)
+        color: Icon stroke color (hex) — defaults to brand_colors['text']
         size: Icon dimensions in pixels
 
     Returns:
         True if icon was drawn, False if not found
     """
+    if color is None:
+        color = brand_colors.get('text', '#000000')
     icon_path = get_icon_png(name, color=color, size=size)
 
     if icon_path:
@@ -519,7 +530,7 @@ def draw_icon(canvas, name, x, y, color='#000000', size=48):
 # Usage examples:
 
 # Draw single icon
-draw_icon(canvas, 'rocket', x=100, y=500, color='#3B82F6', size=64)
+draw_icon(canvas, 'rocket', x=100, y=500, color=brand_colors['primary'], size=64)
 
 # Search for icons
 chart_icons = search_icons('chart')  # ['chart-bar', 'chart-line', 'chart-pie', ...]
@@ -529,7 +540,7 @@ business_icons = ICON_CATEGORIES['business']  # ['briefcase', 'building', ...]
 
 # Draw row of category icons
 for i, icon_name in enumerate(ICON_CATEGORIES['growth'][:4]):
-    draw_icon(canvas, icon_name, x=100 + i*80, y=400, color='#10B981', size=48)
+    draw_icon(canvas, icon_name, x=100 + i*80, y=400, color=brand_colors['accent'], size=48)
 ```
 
 ### Combined Example: Feature Card with Gradient
@@ -556,8 +567,8 @@ def draw_feature_slide(canvas, title, features, brand_colors):
     )
 
     # Title at top
-    canvas.setFillColor(HexColor('#FFFFFF'))
-    canvas.setFont("Helvetica-Bold", 48)
+    canvas.setFillColor(HexColor(brand_colors.get('text_on_dark', '#FFFFFF')))
+    canvas.setFont(brand_fonts.get('heading', 'Helvetica-Bold'), 48)
     canvas.drawCentredString(width/2, height - 120, title)
 
     # Feature cards
@@ -578,7 +589,7 @@ def draw_feature_slide(canvas, title, features, brand_colors):
             icon_path=icon_path,
             title=feature['title'],
             description=feature['description'],
-            fill_color='#FFFFFF',
+            fill_color=brand_colors.get('card_bg', '#FFFFFF'),
             text_color=brand_colors['text'],
             radius=16
         )
@@ -813,6 +824,30 @@ def pre_render_checks(slide_content, canvas_width, canvas_height, margin, bg_col
 
     can_render = len(issues) == 0
     return can_render, issues
+
+
+def validate_no_default_bias(brand_colors, brand_fonts):
+    """
+    Verify no Palcera/default brand values leaked into output.
+    Run before finalizing any visual content.
+
+    Returns: (is_clean, issues_list)
+    """
+    issues = []
+
+    # Known biased defaults that should never appear in output
+    BIASED_COLORS = {'#0D2B5C', '#194582', '#00f3ff', '#061120', '#60A5FA'}
+    BIASED_FONTS = {'Inter', 'Inter, sans-serif'}
+
+    for key, value in brand_colors.items():
+        if isinstance(value, str) and value.upper() in {c.upper() for c in BIASED_COLORS}:
+            issues.append(f"Biased color detected: {key}={value}. Derive from brand-philosophy.md")
+
+    for key, value in brand_fonts.items():
+        if isinstance(value, str) and value in BIASED_FONTS:
+            issues.append(f"Default font detected: {key}={value}. Use brand's actual font")
+
+    return len(issues) == 0, issues
 ```
 
 ### 5. Gradient Text Safety
