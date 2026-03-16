@@ -2,7 +2,6 @@
 name: guide-loader
 description: Use when needing specialized guide content - delegates to dev-guides-navigator plugin for online guide discovery with caching and disambiguation
 version: 3.0.0
-model: haiku
 user-invocable: false
 ---
 
