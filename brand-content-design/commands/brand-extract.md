@@ -156,19 +156,38 @@ When analyzing a website, the brand-analyst agent should:
    - Body font(s)
    - Any accent/special fonts
 
-3. **Recommend font upload** - If custom/web fonts detected:
-   > "I detected these fonts on your website:
-   > - **Heading**: {detected heading font} (Google Fonts)
-   > - **Body**: {detected body font} (Google Fonts)
-   >
-   > For best results, download these fonts and add them to `input/fonts/`:
-   > - [Download Inter](https://fonts.google.com/specimen/Inter)
-   > - [Download Source Sans Pro](https://fonts.google.com/specimen/Source+Sans+Pro)
-   >
-   > This ensures your presentations and carousels match your website typography."
+3. **Auto-download Google Fonts** - If Google Fonts detected:
+   - Download TTF files directly using the Google Fonts API:
+     ```bash
+     # Download font family (all weights)
+     mkdir -p "{PROJECT_PATH}/assets/fonts"
+     curl -L "https://fonts.google.com/download?family={Font+Name}" -o /tmp/{font-name}.zip
+     unzip -o /tmp/{font-name}.zip -d /tmp/{font-name}/
+     cp /tmp/{font-name}/*.ttf "{PROJECT_PATH}/assets/fonts/" 2>/dev/null
+     cp /tmp/{font-name}/static/*.ttf "{PROJECT_PATH}/assets/fonts/" 2>/dev/null
+     ```
+   - Report what was downloaded:
+     > "Downloaded brand fonts to `assets/fonts/`:
+     > - **Heading**: {font name} ({N} weights)
+     > - **Body**: {font name} ({N} weights)
+     >
+     > These will be used automatically in presentations, carousels, and infographics."
 
-4. **Fallback recommendation** - If fonts cannot be identified or are proprietary:
-   > "I couldn't identify the exact fonts. Please add your brand fonts to `input/fonts/` or specify them manually."
+4. **Non-Google fonts** - If Adobe Fonts, custom @font-face, or proprietary:
+   > "I detected these fonts but cannot auto-download them:
+   > - **Heading**: {font name} ({source})
+   > - **Body**: {font name} ({source})
+   >
+   > Please add the TTF/OTF files to `input/fonts/` manually.
+   > Without brand fonts, generated content will fall back to system fonts."
+
+5. **Verify fonts were loaded** - After extraction, check:
+   ```bash
+   ls "{PROJECT_PATH}/assets/fonts/"/*.ttf "{PROJECT_PATH}/assets/fonts/"/*.otf 2>/dev/null
+   ```
+   - If no font files found: warn prominently
+     > "⚠️ No brand fonts in assets/fonts/. Generated content will use system font fallbacks.
+     > Run `/brand-assets` to add fonts, or download from Google Fonts."
 
 ## Notes
 

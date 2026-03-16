@@ -1,7 +1,7 @@
 ---
 name: visual-content
 description: Use when creating branded presentations or carousels. Generates museum-quality visual output from canvas philosophy, enforcing style constraints. Outputs PDF first, then converts to PPTX for editability.
-version: 2.8.0
+version: 2.9.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---

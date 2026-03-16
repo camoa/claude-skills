@@ -156,6 +156,17 @@ Example: Feature Highlights with Icon Cards
 - Icons: lightbulb, zap, shield (from 'misc' and 'security' categories)
 ```
 
+## Brand Anchors (Always Present)
+
+Regardless of style, these brand elements appear on every slide/card:
+
+- **Logo**: Placed in a consistent position across all slides/cards
+  - Presentations: bottom-right of every slide (subtle, small — max 150px wide)
+  - Carousels: top-left of first card, bottom-center of last card (CTA)
+  - Infographics: not applicable (too small)
+- **Primary brand color**: Appears at least once per slide/card — as an accent line, icon color, card border, or text highlight. Even when using derived/special palettes, the primary brand color anchors brand recognition.
+- **Brand font**: Heading font from brand-philosophy.md is mandatory. If font files are not in `assets/fonts/`, STOP and instruct user to run `/brand-extract` again or add fonts manually. Never silently fall back to system fonts.
+
 ## Quality Standards
 
 - This work must appear as if created by a master craftsman

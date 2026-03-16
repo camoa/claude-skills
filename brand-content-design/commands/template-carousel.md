@@ -298,7 +298,12 @@ Create a new carousel template or edit an existing one.
     - **Load brand assets**:
       - Read logo file from brand-philosophy.md Brand Assets section
       - If logo is SVG, convert to PNG first (visual-content handles this)
-      - Load fonts from `{PROJECT_PATH}/assets/fonts/` if present
+      - Load fonts from `{PROJECT_PATH}/assets/fonts/`
+      - **If no font files found**: STOP and warn — do not silently fall back to system fonts
+    - **Apply Brand Anchors** (from canvas-philosophy-template.md):
+      - Logo on first card (top-left) and last/CTA card (bottom-center)
+      - Primary brand color as accent on every card
+      - Brand heading font (mandatory — no fallback)
     - **Apply visual components** (if enabled in step 6):
       - Use `scripts/icons.py` for icon rendering
       - Apply card patterns from `technical-implementation.md`

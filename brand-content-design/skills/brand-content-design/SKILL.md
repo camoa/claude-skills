@@ -1,7 +1,7 @@
 ---
 name: brand-content-design
 description: Use when user says "create presentation", "make slides", "make carousel", "LinkedIn carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", "color palette", "alternative colors", "infographic", "brand assets", "brand project". Use PROACTIVELY when user wants to create any visual content with consistent branding. MUST be invoked for branded content — routes to the correct command for presentations, carousels, infographics, and HTML pages.
-version: 2.8.0
+version: 2.9.0
 allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion, Skill
 user-invocable: true
 ---
@@ -126,6 +126,7 @@ The `visual-content` skill is bundled with this plugin. For HTML-to-Drupal conve
 - `references/style-constraints.md` - 13 visual styles with enforcement blocks
 - `references/color-palettes.md` - Color theory and palette types
 - `references/output-specs.md` - Dimensions, formats, file sizes
+- `references/bias-prevention.md` - Brand bias prevention checks
 
 ### Online Dev-Guides (Design Systems)
 
