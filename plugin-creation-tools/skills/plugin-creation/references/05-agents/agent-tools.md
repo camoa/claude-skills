@@ -142,9 +142,9 @@ permissionMode: default
 |------|----------|----------|
 | default | Normal prompting | Most agents |
 | acceptEdits | Auto-accept edits | Trusted formatters |
+| dontAsk | Auto-deny all permission prompts | Non-interactive agents |
 | bypassPermissions | Skip all prompts | Automation scripts |
 | plan | Read-only mode | Planning agents |
-| ignore | Ignore permission system | Testing |
 
 ### Default Mode
 
@@ -161,6 +161,14 @@ permissionMode: acceptEdits
 ```
 
 Automatically accepts edit operations. Use for trusted refactoring agents.
+
+### Don't Ask Mode
+
+```yaml
+permissionMode: dontAsk
+```
+
+Auto-deny all permission prompts. The agent can only use tools in its `allowed-tools` list without prompting. Useful for non-interactive background agents that should never block waiting for user input.
 
 ### Bypass Permissions
 

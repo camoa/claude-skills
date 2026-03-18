@@ -288,6 +288,36 @@ Control tool permissions:
 - Secrets and credentials
 - Development-only configs
 
+## Enterprise: Restricting Marketplaces
+
+Managed settings can restrict which marketplaces users can add using `strictKnownMarketplaces`:
+
+```json
+{
+  "strictKnownMarketplaces": []
+}
+```
+
+**Empty array**: Locks down all marketplace additions — users cannot add any new marketplaces.
+
+**With entries**: Only the listed marketplaces are allowed:
+
+```json
+{
+  "strictKnownMarketplaces": [
+    "https://github.com/org/approved-marketplace.git",
+    {
+      "hostPattern": "^github\\.com$",
+      "pathPattern": "^our-org/"
+    }
+  ]
+}
+```
+
+Pattern objects support `hostPattern` and `pathPattern` regex for flexible matching (e.g., allow any repo under your GitHub org).
+
+This setting is typically configured in managed policies (enterprise level) and cannot be overridden by user or project settings.
+
 ## See Also
 
 - `plugin-json.md` - plugin manifest

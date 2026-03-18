@@ -346,6 +346,114 @@ Multiple hooks for the same event:
 
 Both hooks run (in parallel) for matching operations.
 
+## Status Message Pattern
+
+Show custom status text during tool execution:
+
+### hooks.json
+
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/status-message.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/status-message.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# Set status message based on command type
+if echo "$COMMAND" | grep -q "npm test"; then
+  echo '{"decision": "approve", "statusMessage": "Running tests..."}'
+elif echo "$COMMAND" | grep -q "npm run build"; then
+  echo '{"decision": "approve", "statusMessage": "Building project..."}'
+else
+  echo "approve"
+fi
+
+exit 0
+```
+
+## One-Time Hook Pattern
+
+Fire a hook only once per session using `once: true`:
+
+```json
+{
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/first-modification-alert.sh",
+          "once": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+The hook fires on the first matching event, then is skipped for the rest of the session.
+
+## Three-Way Decision Pattern
+
+Use `ask` to escalate uncertain decisions to the user:
+
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/risk-assessment.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/risk-assessment.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# Known safe commands — auto-approve
+if echo "$COMMAND" | grep -qE '^(ls|cat|echo|git status|git log)'; then
+  echo "approve"
+  exit 0
+fi
+
+# Known dangerous — auto-deny
+if echo "$COMMAND" | grep -qE '(rm -rf /|DROP TABLE|format)'; then
+  echo "deny"
+  exit 2
+fi
+
+# Uncertain — let the user decide
+echo "ask"
+exit 0
+```
+
 ## Best Practices
 
 1. **Fast hooks**: Keep execution time minimal

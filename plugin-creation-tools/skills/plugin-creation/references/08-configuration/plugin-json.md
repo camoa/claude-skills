@@ -87,9 +87,12 @@ Or simple string:
 |-------|------|-------------|
 | commands | string/array | Custom command file paths |
 | agents | string/array | Custom agent file paths |
+| skills | string/array | Custom skill directory paths |
 | hooks | string/object | Hook config path or inline config |
 | mcpServers | string/object | MCP config path or inline config |
 | lspServers | string/object | LSP config path or inline config |
+| outputStyles | string/array | Custom output style paths |
+| settings | string | Path to settings.json (only `agent` key supported) |
 
 ### Path Patterns
 

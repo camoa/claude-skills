@@ -35,8 +35,8 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, agent isolation and cost control, marketplace distribution, and pushy description optimization.",
-      "version": "2.3.1",
+      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, statusMessage/once fields, 5 permission modes, agent isolation and cost control, outputStyles, marketplace distribution, and pushy description optimization.",
+      "version": "2.4.0",
       "author": {
         "name": "camoa"
       },
