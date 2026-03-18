@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.10.0"
+    "version": "1.11.0"
   },
   "plugins": [
     {
@@ -154,8 +154,8 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with 21 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering.",
-      "version": "2.8.0",
+      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering.",
+      "version": "3.1.0",
       "author": {
         "name": "camoa"
       },
@@ -177,7 +177,10 @@
         "instagram",
         "design",
         "canvas",
-        "zen"
+        "zen",
+        "aaker",
+        "brand-personality",
+        "brand-depth"
       ]
     }
   ]

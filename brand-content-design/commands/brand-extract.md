@@ -81,7 +81,13 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
    Return analysis in brand-philosophy-template.md format with:
    - Visual Identity (colors with hex, typography, imagery style)
    - Verbal Identity (voice traits, tone, vocabulary)
-   - Core Principles (always/never patterns)"
+   - Core Principles (always/never patterns)
+   - Brand Depth sections:
+     - Aaker Personality scores (0-5) with evidence per dimension
+     - Color Profile (harmony type, temperature, saturation)
+     - Emotional Profile (emotion words, visual mood)
+     - Spatial & Surface Profile (spacing, radius, shadows, density)
+     - Brand Maturity (growing/established/iconic)"
    ```
 
 6. **Receive agent results**
@@ -114,6 +120,9 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
 
 9. **Present for review**
    Show generated brand philosophy.
+   Highlight the Aaker personality scores specifically — these are the most subjective part:
+   > "Here are the personality scores I derived from your brand assets. Do these feel right?"
+   Show the Aaker table and primary/secondary dimensions.
    Ask: "Does this capture your brand accurately? What would you like to adjust?"
 
 10. **Refine if needed**

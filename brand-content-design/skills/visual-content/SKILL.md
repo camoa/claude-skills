@@ -1,7 +1,7 @@
 ---
 name: visual-content
 description: Use when creating branded presentations or carousels. Generates museum-quality visual output from canvas philosophy, enforcing style constraints. Outputs PDF first, then converts to PPTX for editability.
-version: 3.0.0
+version: 3.1.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
@@ -61,6 +61,23 @@ The topic becomes a **subtle, niche reference embedded within the design itself*
 Think like a jazz musician quoting another song—only those who know will catch it, but everyone appreciates the music.
 
 The canvas philosophy provides the aesthetic language. The content provides the soul—the quiet conceptual DNA woven invisibly into form, color, and composition.
+
+---
+
+## Part 2b: Brand Personality Loading
+
+Before creating visuals, check `brand-philosophy.md` for `## Brand Depth` > `### Personality (Aaker Framework)`:
+
+**If present and populated**: Read the Aaker scores and primary/secondary dimensions. Store in working context — these inform component decisions (Part 7), color intensity (Part 4), and spatial choices throughout.
+
+**If not present**: Read voice traits from `## Verbal Identity` > `### Voice Personality`. Map to Aaker dimensions using proximity:
+- precise, reliable, expert, professional → **Competence**
+- warm, friendly, approachable, genuine → **Sincerity**
+- bold, innovative, daring, creative → **Excitement**
+- elegant, refined, luxurious, polished → **Sophistication**
+- rugged, authentic, tough, adventurous → **Ruggedness**
+
+Also check for `### Spatial & Surface Profile` — if present, use its values (spacing rhythm, border radius, shadow style, layout density) to inform element placement and styling decisions.
 
 ---
 
@@ -162,6 +179,13 @@ Each piece must respect its style's **hard constraints**:
 - Accent: 10% for emphasis only—the punctuation
 - Never introduce off-brand colors—consistency builds trust
 ```
+
+**Personality-informed intensity** (from Part 2b):
+- **Excitement** → Push toward vibrant saturation, bolder color blocks, higher contrast accents
+- **Sophistication** → Pull toward muted/desaturated application, restrained accent use
+- **Sincerity** → Favor warm, accessible mid-saturation tones
+- **Competence** → Clean, systematic color application with clear hierarchy
+- **Ruggedness** → Deep earthy values, textured color application
 
 ### Spatial Communication
 
@@ -283,11 +307,11 @@ Does the selected style allow this component? (Check style-constraints.md or enf
 - If NO → skip component entirely
 - If YES → proceed to Gate 2
 
-**Gate 2: Content Justification**
-Does the slide's content warrant this component?
-- **Cards**: Does the slide have 2+ related points that benefit from grouping? If single message → no cards.
-- **Icons**: Is there a clear, unforced visual metaphor? If you have to think about it → no icon.
-- **Gradients**: Is this a hook, transition, or CTA slide? If content slide → no gradient.
+**Gate 2: Content + Personality Justification**
+Does the slide's content warrant this component? Also consider the brand's primary Aaker dimension (from Part 2b):
+- **Cards**: Does the slide have 2+ related points that benefit from grouping? If single message → no cards. *Personality modifier: Excitement brands → lower threshold (use cards more freely for visual energy); Sophistication brands → higher threshold (use cards sparingly, prefer negative space).*
+- **Icons**: Is there a clear, unforced visual metaphor? If you have to think about it → no icon. *Personality modifier: Sincerity/Excitement brands → icons add warmth/energy; Sophistication brands → icons risk feeling casual, prefer typographic emphasis.*
+- **Gradients**: Is this a hook, transition, or CTA slide? If content slide → no gradient. *Personality modifier: Excitement brands → gradients add dynamism; Competence brands → solid colors communicate precision.*
 - If NO justification → skip component
 - If YES → proceed to Gate 3
 

@@ -5,6 +5,26 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-03-17
+
+### Added
+- **Brand Depth extraction**: `/brand-extract` now captures Aaker personality scores (0-5 with evidence), color profile (harmony/temperature/saturation), emotional profile, spatial & surface profile (spacing/radius/shadows/density), and brand maturity assessment
+- **Brand Depth template sections**: `brand-philosophy-template.md` has 5 new sections under `## Brand Depth` — purely additive, existing sections unchanged
+- **Pre-populated Aaker reading**: Style recommendation engine reads scores from `## Brand Depth` when available, skips voice-trait derivation (backward compatible fallback)
+- **Post-selection personality guidance** (`style-recommendation-engine.md` Section 7): Component selection weighting (7A), canvas philosophy tone modulation (7B), and color intensity weighting (7C) — all keyed by Aaker dimension
+- **Personality-informed template creation**: `template-presentation`, `template-carousel`, and `template-infographic` now load Aaker scores and use them for component suggestions, palette guidance, background presets, and canvas philosophy tone
+- **Infographic personality integration**: Category recommendations and background presets weighted by primary Aaker dimension
+- **Visual-content personality awareness**: Part 2b loads Aaker scores + spatial profile; Part 4 adds personality-informed color intensity; Part 7 Gate 2 factors personality into component decisions
+
+### Changed
+- **brand-analyst agent** (v3.1.0): 5 new analysis steps (Aaker scoring, color profile, emotional profile, spatial & surface profile, brand maturity) — output section updated to include Brand Depth
+- **brand-extract command**: Agent delegation prompt requests Brand Depth sections; review step highlights Aaker scores for user validation
+- **style-recommendation-engine**: Section 1 restructured — checks for pre-populated scores first (Step 1), voice-trait derivation is now Step 2 (fallback)
+- **template-presentation**: Steps 7, 8, 12 reference personality guidance from Section 7A/7B/7C
+- **template-carousel**: Steps 6, 7, 13 reference personality guidance; new step 4b loads personality
+- **template-infographic**: New Phase 1b loads personality; step 4 suggests categories by dimension; step 8 suggests backgrounds by dimension
+- **visual-content skill** (v3.1.0): New Part 2b, enhanced Part 4, personality-aware Gate 2
+
 ## [3.0.0] - 2026-03-16
 
 ### Added
