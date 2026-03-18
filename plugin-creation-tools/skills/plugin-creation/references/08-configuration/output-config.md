@@ -2,6 +2,26 @@
 
 Plugins often need to write logs, artifacts, and reports. This guide covers best practices for output management.
 
+## Output Styles
+
+Plugins can provide custom output styles via the `outputStyles` field in `plugin.json`. Output styles customize how Claude Code renders output (e.g., custom formatting, themes). Configure as a path or array of paths:
+
+```json
+{
+  "outputStyles": "./styles/"
+}
+```
+
+Or multiple paths:
+
+```json
+{
+  "outputStyles": ["./styles/dark.css", "./styles/compact.css"]
+}
+```
+
+Paths are relative to plugin root and follow the same rules as other component paths.
+
 ## Standard Environment Variables
 
 | Variable | Purpose | Availability |

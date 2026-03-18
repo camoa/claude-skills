@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-03-17
+
+### Added
+- **`statusMessage` return field** in hook-events.md PreToolUse — custom status text displayed in Claude Code status line during tool execution, with JSON return format example
+- **`once` field** in hook-events.md — fire a hook only once per session; documented with use cases and example
+- **Hook execution order** clarification — hooks within a matcher group run in parallel, not sequentially
+- **Hook timeout behavior** — what happens when hooks time out (process killed, treated as exit 0)
+- **3 new hook patterns** in hook-patterns.md: Status Message Pattern, One-Time Hook Pattern, Three-Way Decision Pattern (`approve`/`deny`/`ask`)
+- **`dontAsk` permission mode** in agent-tools.md — auto-deny all permission prompts for non-interactive agents
+- **`outputStyles` field** in plugin-json.md and output-config.md — custom output style paths in plugin.json
+- **`skills` and `settings` fields** in plugin-json.md Component Path Fields table
+- **`strictKnownMarketplaces`** in settings.md — enterprise managed setting to restrict marketplace additions with host/path pattern matching
+- **Reserved marketplace names** in marketplace-json.md — 7 names reserved by Anthropic that cannot be used
+
+### Fixed
+- **agent-tools.md**: Replaced invalid `ignore` permission mode with correct `dontAsk` mode (5 modes: default, acceptEdits, dontAsk, bypassPermissions, plan)
+- **hook-events.md**: Expanded `ask` decision value from 1-line mention to full explanation of user escalation UX
+
 ## [2.3.1] - 2026-03-15
 
 ### Added
@@ -18,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `agents/plugin-structure-auditor.md` — deep structural audit covering architecture, consistency, distribution readiness, security, and performance
 - **4 new hook events** documented: `InstructionsLoaded`, `ConfigChange`, `WorktreeCreate`, `WorktreeRemove` (total now 18 events)
 - **HTTP hook type** documentation (`type: "http"`) — POST event JSON to a URL with header env var interpolation
-- **Hook fields**: `statusMessage` (TUI display), `once` (fire once per session), `"ask"` decision value for PreToolUse
+- **Hook fields**: `"ask"` decision value for PreToolUse (note: `statusMessage` and `once` were identified but not added to reference files until v2.4.0)
 - **Agent frontmatter fields**: `isolation: worktree`, `background: true`, `maxTurns`, `mcpServers`, `Agent(type)` tool syntax
 - **Full model IDs** in agent docs: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5`
 - **Skill frontmatter fields**: `hooks` (skill-scoped lifecycle), `argument-hint` (autocomplete hints)

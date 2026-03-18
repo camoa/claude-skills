@@ -147,7 +147,27 @@ All hook events receive JSON input with the following common fields:
 - Exit non-zero: Block execution
 - Stdout `approve`: Bypass permission check
 - Stdout `deny`: Block with denial message
-- Stdout `ask`: Escalate the decision to the user
+- Stdout `ask`: Escalate the decision to the user — shows the normal permission prompt to the user, letting them decide instead of the hook. Useful when a hook can't determine safety on its own.
+
+**Return Fields** (JSON stdout, optional):
+- `statusMessage`: Custom status text displayed in the Claude Code status line while the tool runs. Useful for showing progress like "Running linter..." or "Validating schema...".
+
+**Example with statusMessage**:
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo '{\"decision\": \"approve\", \"statusMessage\": \"Running validated bash...\"}'"
+        }
+      ]
+    }
+  ]
+}
+```
 
 ### PermissionRequest
 
@@ -624,6 +644,42 @@ All hook events receive JSON input with the following common fields:
   ]
 }
 ```
+
+## Hook Configuration Fields
+
+### The `once` Field
+
+Set `once: true` on a hook to fire it only once per session, regardless of how many times the event triggers. After the first execution, the hook is skipped for subsequent events.
+
+```json
+{
+  "PostToolUse": [
+    {
+      "matcher": "Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/first-write-notification.sh",
+          "once": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Use cases**: One-time initialization that shouldn't repeat (e.g., "first file written" notification), license check on first tool use, session-start-like logic triggered by first tool use rather than session start.
+
+### Hook Execution Order
+
+When multiple hooks match the same event, they run **in parallel** (not sequentially). If you need ordered execution, combine logic into a single script. Within a matcher group, all hooks fire simultaneously.
+
+### Hook Timeout Behavior
+
+Hooks have configurable timeouts (via `timeout` field, in seconds). When a hook times out:
+- **Command hooks**: Process is killed, treated as exit 0 (non-blocking)
+- **SessionEnd hooks**: Fixed 1.5-second timeout (cannot be overridden)
+- Best practice: keep hooks fast; use `timeout` field for safety
 
 ## Multiple Hooks per Event
 

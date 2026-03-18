@@ -334,6 +334,20 @@ For team-wide availability, add to project settings:
 
 Team members are prompted to install when they trust the folder.
 
+## Reserved Marketplace Names
+
+The following names are reserved by Anthropic and cannot be used for custom marketplaces:
+
+- `claude-code-marketplace`
+- `claude-code-plugins`
+- `claude-plugins-official`
+- `anthropic-marketplace`
+- `anthropic-plugins`
+- `agent-skills`
+- `life-sciences`
+
+Using a reserved name will cause marketplace registration to fail.
+
 ## See Also
 
 - `plugin-json.md` - plugin manifest
