@@ -1,7 +1,7 @@
 {
   "name": "brand-content-design",
-  "version": "3.0.0",
-  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with style recommendation engine, visual components, 26 visual styles, design systems, and Presentation Zen principles",
+  "version": "3.1.0",
+  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, visual components, 26 visual styles, design systems, and Presentation Zen principles",
   "author": {
     "name": "camoa"
   },
@@ -34,6 +34,9 @@
     "branding",
     "style-recommendation",
     "composition-rules",
-    "contemporary-professional"
+    "contemporary-professional",
+    "aaker",
+    "brand-personality",
+    "brand-depth"
   ]
 }

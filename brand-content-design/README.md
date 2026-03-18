@@ -1,6 +1,6 @@
 # Brand Content Design Plugin
 
-> **Current version: v3.0.0**
+> **Current version: v3.1.0**
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
@@ -97,7 +97,7 @@ Analyzes your brand from multiple sources:
 - **Verbal description** - describe your brand in chat
 - **Existing guidelines** - paste brand docs directly
 
-Generates `brand-philosophy.md` with your visual identity, voice, and core principles.
+Generates `brand-philosophy.md` with your visual identity, voice, core principles, and **Brand Depth** (Aaker personality scores, color profile, emotional profile, spatial profile, brand maturity).
 
 ### 3. Create Templates (Required before creating content)
 
@@ -454,6 +454,26 @@ Navigation, Hero, Feature Grid, Content Block, Testimonials, CTA, Stats Bar, Tea
 ### 10 Page Category Presets
 
 Landing Page, About/Company, Portfolio, Event, Pricing, Blog/Article, Documentation, Coming Soon, Contact, Custom.
+
+## Brand Depth (Aaker Personality)
+
+`/brand-extract` now captures deep brand data beyond visual identity:
+
+| Section | What It Captures | How It's Used |
+|---------|-----------------|---------------|
+| **Personality (Aaker)** | 5-dimension scores (0-5) with evidence | Style recommendation, component weighting, color intensity, canvas philosophy tone |
+| **Color Profile** | Harmony type, temperature, saturation | Design system token derivation |
+| **Emotional Profile** | Emotion words, visual mood | Canvas philosophy manifesto writing |
+| **Spatial & Surface** | Spacing rhythm, border radius, shadows, density | Design system element placement |
+| **Brand Maturity** | Growing / Established / Iconic | Brand signal preservation corridor |
+
+Personality flows through the entire creation pipeline:
+- **Style recommendation** reads pre-populated Aaker scores (skips voice-trait derivation)
+- **Template creators** weight component suggestions, color intensity, and background presets by personality
+- **Canvas philosophy** tone is modulated by primary dimension (Minimal + Competence = precision; Minimal + Sincerity = warmth)
+- **Visual-content skill** uses personality in component decision gates and color application
+
+All personality integration is backward-compatible: brand-philosophy.md files without Brand Depth still work (fallback to voice-trait derivation).
 
 ## Three-Layer Philosophy System
 

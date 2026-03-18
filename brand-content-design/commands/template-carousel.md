@@ -73,6 +73,12 @@ Create a new carousel template or edit an existing one.
 
    - Jump to appropriate step based on selection
 
+4b. **Load brand personality**
+   Check brand-philosophy.md for `## Brand Depth` > `### Personality (Aaker Framework)`:
+   - **If present and populated**: Read Aaker scores, note primary and secondary dimensions
+   - **If not present**: Read voice traits from `## Verbal Identity` > `### Voice Personality` and derive Aaker dimensions using the mapping from `style-recommendation-engine.md` Section 1
+   - Store personality context for use in component weighting (step 6), palette selection (step 7), and canvas philosophy (step 13)
+
 5. **Ask design aesthetic FIRST** (CREATE MODE, or if changing style in EDIT MODE)
 
    **Step 5a: Choose aesthetic family**
@@ -131,9 +137,11 @@ Create a new carousel template or edit an existing one.
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-6. **Visual Components (style-dependent)** (CREATE MODE, or if changing style in EDIT MODE)
+6. **Visual Components (style-dependent, personality-weighted)** (CREATE MODE, or if changing style in EDIT MODE)
 
-   After selecting a style, check `references/style-constraints.md` for which visual components the style supports:
+   After selecting a style, apply personality-informed component weighting from `style-recommendation-engine.md` Section 7A to suggest which components best match the brand personality. For example, suggest icons + gradients for Excitement brands, or minimal components for Sophistication brands.
+
+   Then check `references/style-constraints.md` for which visual components the style supports:
    - **Cards**: ✓ Full, ◐ Subtle only, ✗ None
    - **Icons**: ✓ Allowed, ✗ Not allowed
    - **Gradients**: ✓ Allowed, ✗ Not allowed
@@ -175,7 +183,9 @@ Create a new carousel template or edit an existing one.
 
    **Store component selections** for use in canvas-philosophy.md generation.
 
-7. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+7. **Ask color palette (personality-informed)** (CREATE MODE, or if changing style in EDIT MODE)
+
+   Apply personality-informed color intensity guidance from `style-recommendation-engine.md` Section 7C when presenting palette options. For example, note that Excitement brands benefit from vibrant palettes, while Sophistication brands suit muted palettes.
 
    First, check brand-philosophy.md for `## Alternative Palettes` section.
    Count total palettes available (1 brand + N alternatives).
@@ -237,7 +247,7 @@ Create a new carousel template or edit an existing one.
     - Show proposed structure (5-10 cards)
     - Ask user to confirm or modify
 
-13. **Create/update canvas philosophy** (or skip if "Regenerate sample only")
+13. **Create/update canvas philosophy (personality-toned)** (or skip if "Regenerate sample only")
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
@@ -245,6 +255,7 @@ Create a new carousel template or edit an existing one.
     - **Text colors from palette** (`Text (light bg)` and `Text (dark bg)`)
     - **Visual component selections from step 6** (cards, icons, gradients)
     - Platform-specific considerations (mobile-first)
+    - **Personality tone modulation** from `style-recommendation-engine.md` Section 7B — use the brand's primary Aaker dimension to set the manifesto tone (e.g., Dramatic + Excitement = bold energy language, Dramatic + Sophistication = refined tension language)
 
     **Include the style's HARD LIMITS in the philosophy:**
     - Word count limits per card

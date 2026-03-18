@@ -93,6 +93,48 @@ The brand voice is: **[Trait 1]**, **[Trait 2]**, **[Trait 3]**
 ## Brand Story (Optional)
 [Brief narrative about the brand's mission, origin, or purpose. 2-3 sentences.]
 
+## Brand Depth
+
+> These sections enrich AI design decisions. They are auto-populated by `/brand-extract`
+> and consumed by `/design-intelligence:design-html` for design system creation.
+> Presentation, carousel, and infographic commands do not use these sections.
+
+### Personality (Aaker Framework)
+
+| Dimension | Score (0-5) | Evidence |
+|-----------|-------------|----------|
+| Sincerity | | |
+| Excitement | | |
+| Competence | | |
+| Sophistication | | |
+| Ruggedness | | |
+
+**Primary dimension:** [highest scoring]
+**Secondary dimension:** [second highest, if ≥3]
+
+### Color Profile
+
+**Harmony type:** [Monochromatic / Analogous / Complementary / Split-Complementary / Triadic / Tetradic]
+**Temperature:** [Warm / Cool / Neutral]
+**Saturation profile:** [Vibrant / Muted / Mixed]
+
+### Emotional Profile
+
+**We make people feel:** [3-4 emotion words]
+**Visual mood:** [2-sentence description]
+
+### Spatial & Surface Profile
+
+**Spacing rhythm:** [Tight / Standard / Generous]
+**Border radius:** [Sharp (0px) / Subtle (4-8px) / Rounded (12-20px) / Pill]
+**Shadow style:** [None / Subtle / Elevated / Dramatic]
+**Layout density:** [Dense / Balanced / Breathing]
+
+### Brand Maturity
+
+**Stage:** [Growing / Established / Iconic]
+**Corridor width:** [Wide / Standard / Narrow]
+
 ---
 
 *Generated for [Brand Name] brand project*

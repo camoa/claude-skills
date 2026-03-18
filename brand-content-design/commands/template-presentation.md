@@ -213,9 +213,11 @@ Create a new presentation template or edit an existing one.
 
    **Load style constraints** from plugin `references/style-constraints.md` for the selected style.
 
-7. **Visual Components (style-dependent)** (CREATE MODE, or if changing style in EDIT MODE)
+7. **Visual Components (style-dependent, personality-weighted)** (CREATE MODE, or if changing style in EDIT MODE)
 
-   After selecting a style, check `references/style-constraints.md` for which visual components the style supports:
+   After selecting a style, read Aaker personality scores from working context (set during style recommendation in step 6). Apply personality-informed component weighting from `style-recommendation-engine.md` Section 7A to suggest which components best match the brand personality. For example, suggest icons + gradients for Excitement brands, or minimal components for Sophistication brands.
+
+   Then check `references/style-constraints.md` for which visual components the style supports:
    - **Cards**: ✓ Full, ◐ Subtle only, ✗ None
    - **Icons**: ✓ Allowed, ✗ Not allowed
    - **Gradients**: ✓ Allowed, ✗ Not allowed
@@ -259,7 +261,9 @@ Create a new presentation template or edit an existing one.
 
    **Store component selections** for use in canvas-philosophy.md generation.
 
-8. **Ask color palette** (CREATE MODE, or if changing style in EDIT MODE)
+8. **Ask color palette (personality-informed)** (CREATE MODE, or if changing style in EDIT MODE)
+
+   Apply personality-informed color intensity guidance from `style-recommendation-engine.md` Section 7C when presenting palette options. For example, note that Excitement brands benefit from vibrant palettes, while Sophistication brands suit muted palettes.
 
    First, check brand-philosophy.md for `## Alternative Palettes` section.
    Count total palettes available (1 brand + N alternatives).
@@ -309,13 +313,14 @@ Create a new presentation template or edit an existing one.
     - Show proposed structure
     - Ask user to confirm or modify
 
-12. **Create/update canvas philosophy** (or skip if "Regenerate samples only")
+12. **Create/update canvas philosophy (personality-toned)** (or skip if "Regenerate samples only")
     Generate canvas-philosophy.md using:
     - canvas-philosophy-template.md from references
     - **Selected style constraints from style-constraints.md**
     - **Selected color palette** (brand colors or alternative palette from step 8)
     - **Text colors from palette** (`Text (light bg)` and `Text (dark bg)`)
     - **Visual component selections from step 7** (cards, icons, gradients)
+    - **Personality tone modulation** from `style-recommendation-engine.md` Section 7B — use the brand's primary Aaker dimension to set the manifesto tone (e.g., Minimal + Competence = precision language, Minimal + Sincerity = warmth language)
 
     **Include the style's HARD LIMITS in the philosophy:**
     - Word count limits per slide

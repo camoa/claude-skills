@@ -1,7 +1,7 @@
 ---
 name: brand-analyst
 description: Analyze brand assets (screenshots, documents, logos, websites) to extract brand elements including color palettes with color theory analysis. Use proactively when user provides assets for brand analysis.
-version: 2.9.0
+version: 3.1.0
 model: sonnet
 maxTurns: 25
 memory: project
@@ -76,6 +76,43 @@ Receive from caller:
    - Always patterns (consistent behaviors observed)
    - Never patterns (things consistently avoided)
 
+5. **Aaker Personality Scoring:**
+   Score the brand 0–5 on each dimension using evidence from visual assets + copy:
+   - **Sincerity** — warm colors, friendly copy, rounded shapes, casual imagery
+   - **Excitement** — bold/saturated colors, dynamic language, sharp angles, action imagery
+   - **Competence** — blues/grays, precise language, clean layout, professional imagery
+   - **Sophistication** — muted/dark palette, refined vocabulary, elegant typography, curated imagery
+   - **Ruggedness** — earthy colors, direct language, heavy weights, outdoor/textured imagery
+
+   Each score must cite evidence: "Competence: 4 — blue primary (#2563EB), precise technical copy, structured grid layout"
+
+   Identify primary dimension (highest score) and secondary (second highest, if ≥3).
+
+6. **Color Profile** (computed from extracted hex colors):
+   - Harmony type: monochromatic / analogous / complementary / split-complementary / triadic / tetradic
+   - Temperature: warm / cool / neutral (from primary hue position on color wheel)
+   - Saturation profile: vibrant / muted / mixed
+   - These are pure math on hex values — no subjective judgment needed
+
+7. **Emotional Profile** (derived from Aaker scores + color psychology + copy analysis):
+   - "We make people feel:" — 3-4 emotion words
+   - Visual mood: 2-sentence description
+   - Color temperature alignment: does palette temperature match personality?
+
+8. **Spatial & Surface Profile** (extracted from website CSS/HTML):
+   - Spacing rhythm: section padding, component gaps — detect tight / standard / generous
+   - Border radius patterns: sharp (0px) / subtle (4-8px) / rounded (12-20px) / pill
+   - Shadow usage: none / subtle / elevated / dramatic
+   - Layout density: content-dense / balanced / breathing
+
+   These feed directly into design-system token derivation downstream.
+
+9. **Brand Maturity Assessment** (inferred from asset consistency):
+   - **Growing** — inconsistent colors/fonts across pages, no clear system
+   - **Established** — consistent palette + typography, clear patterns
+   - **Iconic** — highly recognizable, distinctive visual language
+   - Output as corridor width: Growing = Wide, Established = Standard, Iconic = Narrow
+
 ## Quality Standards
 
 - **Hex codes required**: "#2563EB" not "blue"
@@ -91,5 +128,13 @@ Include in the Colors section:
 - Color table with Role, Name, Hex, Usage
 - Color harmony type identified
 - Temperature and saturation notes
+
+Include in the Brand Depth sections:
+- Aaker Personality table with scores (0-5) and evidence citations per dimension
+- Primary and secondary dimensions identified
+- Color Profile (harmony type, temperature, saturation profile)
+- Emotional Profile (emotion words, visual mood)
+- Spatial & Surface Profile (spacing, radius, shadows, density)
+- Brand Maturity (stage and corridor width)
 
 The caller will merge your analysis with any additional user input and generate the final brand-philosophy.md.

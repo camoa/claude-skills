@@ -6,9 +6,21 @@ Intelligent style selection based on brand personality, presentation purpose, an
 
 ## Section 1: Brand Personality Extraction
 
-Extract brand personality from `brand-philosophy.md` voice traits, then map to Aaker's Brand Personality Dimensions.
+Extract brand personality from `brand-philosophy.md`, preferring pre-populated Aaker scores when available.
 
-### Voice Trait → Aaker Dimension Mapping
+### Step 1: Check for Pre-Populated Aaker Scores
+
+Look for `## Brand Depth` > `### Personality (Aaker Framework)` in brand-philosophy.md.
+
+**If present and populated** (scores filled in, not blank):
+- Read scores directly from the table
+- Read primary and secondary dimensions
+- Skip voice-trait derivation (Step 2) — go directly to Section 2
+- Store Aaker scores in working context for use in post-selection decisions (Section 7)
+
+**If not present or blank**: Fall back to voice-trait derivation (Step 2 below).
+
+### Step 2: Voice Trait → Aaker Dimension Mapping (Fallback)
 
 | Voice Adjectives | Aaker Dimension |
 |-----------------|-----------------|
@@ -142,6 +154,51 @@ The recommendation engine **recommends, never decides**. Users always have the f
 - User says "I want [specific style]" → go directly to that style
 - User is editing an existing template → keep current style unless they ask to change
 - Quick commands (`/presentation-quick`) → use template's existing style
+
+---
+
+## Section 7: Personality-Informed Post-Selection Guidance
+
+After a style is selected, carry the Aaker personality scores forward to inform design decisions. These modifiers apply on top of the selected style's constraints.
+
+### 7A. Component Selection Weighting
+
+When choosing visual components (Step 7 of template-presentation), weight recommendations by primary personality dimension:
+
+| Primary Dimension | Prioritize | De-prioritize |
+|-------------------|-----------|--------------|
+| **Excitement** | Cards + icons + gradients (visual energy) | Minimal text-only layouts |
+| **Competence** | Grid-aligned cards only (precision, restraint) | Decorative elements, gradients |
+| **Sincerity** | Soft cards + icons, fewer gradients (warmth) | Sharp edges, dramatic effects |
+| **Sophistication** | Minimal components, thin borders (refined) | Heavy cards, bold gradients |
+| **Ruggedness** | Textured fills, heavy borders (grounded) | Delicate, thin elements |
+
+### 7B. Canvas Philosophy Tone Modulation
+
+Same style, different personality → different tone in the manifesto paragraph of canvas-philosophy.md. Use these modifier words when writing the philosophy:
+
+| Dimension | Tone Modifier Words |
+|-----------|-------------------|
+| **Sincerity** | warmth, invitation, openness, comfort, trust, breathing |
+| **Excitement** | energy, momentum, boldness, dynamism, impact, surprise |
+| **Competence** | precision, clarity, system, structure, authority, evidence |
+| **Sophistication** | restraint, refinement, elegance, curation, quiet luxury |
+| **Ruggedness** | rawness, texture, weight, grounding, authenticity, craft |
+
+Example: Minimal + Competence = "Mathematical precision, calculated emptiness"
+Example: Minimal + Sincerity = "Inviting simplicity, space that breathes with warmth"
+
+### 7C. Color Intensity Weighting
+
+When choosing between palette variants or adjusting color application:
+
+| Dimension | Color Guidance |
+|-----------|---------------|
+| **Excitement** | Vibrant saturation, bold color blocks, high contrast accents |
+| **Sophistication** | Muted/desaturated, restrained use, subtle gradients |
+| **Sincerity** | Warm, accessible tones, medium saturation |
+| **Competence** | Clean, clear colors, systematic application |
+| **Ruggedness** | Earthy, natural tones, deep values |
 
 ---
 

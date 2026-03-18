@@ -46,9 +46,26 @@ Create a new infographic template or edit an existing one.
    - If no templates exist: skip to CREATE MODE (step 4)
    - If templates exist: Ask "Create new or edit existing?" with options
 
+### Phase 1b: Personality Loading
+
+3b. **Load brand personality**
+   Check brand-philosophy.md for `## Brand Depth` > `### Personality (Aaker Framework)`:
+   - **If present and populated**: Read Aaker scores, note primary and secondary dimensions
+   - **If not present**: Read voice traits from `## Verbal Identity` > `### Voice Personality` and derive Aaker dimensions using the mapping from `style-recommendation-engine.md` Section 1
+   - Store personality context for use in category recommendation (step 4) and background selection (step 8)
+
 ### Phase 2: Type & Design Selection (Two-Step)
 
 4. **Step 1: Choose Category**
+
+   **Personality-informed suggestion**: Before showing the full table, suggest 2-3 categories based on primary Aaker dimension:
+   - **Competence** → Hierarchy, Chart, Compare (structured, data-clear)
+   - **Excitement** → Sequence, Process (energy, flow)
+   - **Sincerity** → List, Relation (approachable, connecting)
+   - **Sophistication** → List (minimal), Quadrant (curated)
+   - **Ruggedness** → Sequence, Compare (direct, bold)
+
+   Show: "Based on your brand personality ({primary dimension}), these categories work well: {suggestions}. But all categories are available:"
 
    Display this table:
    ```
@@ -383,7 +400,16 @@ Create a new infographic template or edit an existing one.
 
    **Store selected palette** including text colors for config generation.
 
-8. **Choose Background**
+8. **Choose Background (personality-informed)**
+
+   **Personality-informed default**: Suggest a background preset based on primary Aaker dimension:
+   - **Sophistication** → spotlight or diagonal-fade (refined, restrained)
+   - **Excitement** → tech-matrix or spotlight-grid (energetic, dynamic)
+   - **Competence** → spotlight-dots or tech-grid (structured, clean)
+   - **Sincerity** → subtle-dots or solid (warm, approachable)
+   - **Ruggedness** → diagonal-crosshatch or crosshatch (textured, grounded)
+
+   Show: "Suggested for your brand: {preset} ({reason}). All options:"
 
    Display options:
    ```
@@ -408,7 +434,7 @@ Create a new infographic template or edit an existing one.
    | 10| crosshatch    | Diagonal crosshatch       |
    | 11| solid         | Plain solid color         |
 
-   **Which background?** (enter number or name, default: 1)
+   **Which background?** (enter number or name, default: {personality-suggested})
    ```
 
 9. **Choose Shape Style** (optional)
