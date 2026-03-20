@@ -1,5 +1,15 @@
 # Code Paper Test - Plugin Conventions
 
+## Routing
+
+| Target | Approach |
+|--------|----------|
+| < 50 lines code | `/paper-test` quick trace |
+| 50–300 lines code | `/paper-test` structured 3-phase (single agent, all perspectives) |
+| 300+ lines code | `/test-team` (3 agents, cross-challenge debate) |
+| Security-critical | `/test-team` regardless of size |
+| Skills/commands/agents | `/test-team` (perspective diversity matters for instruction testing) |
+
 ## What This Plugin Tests
 
 - **Code** — PHP, JavaScript, Python, etc. (trace execution with concrete values)

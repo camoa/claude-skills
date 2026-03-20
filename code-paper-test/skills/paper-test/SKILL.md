@@ -1,7 +1,7 @@
 ---
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "validate this implementation", "review this logic", "check dependencies", "check this config". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
-version: 0.4.0
+version: 0.5.0
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
 ---
@@ -9,6 +9,101 @@ user-invocable: true
 # Paper Test
 
 Systematically test code by mentally executing it line-by-line with concrete values.
+
+## Routing — Choose the Right Approach
+
+| Target Size | Approach | Why |
+|-------------|----------|-----|
+| **< 50 lines** | Quick trace (Steps 1–7 below) | Fast, inline, sufficient for small code |
+| **50–300 lines** | Structured 3-phase (below) | One agent, all 3 perspectives, sequential — thorough without coordination overhead |
+| **300+ lines or security-critical** | `/code-paper:test-team` (3 agents) | Context pressure justifies splitting. Cross-challenge debate catches what one agent misses. |
+| **Skill/command/agent files** | `/code-paper:test-team` | Different lenses genuinely find different things for instruction-based testing |
+
+If the user asks for "paper test" without specifying, read the target files, count lines, and recommend the appropriate approach. For 50–300 lines, use the Structured 3-Phase mode below. Only recommend `/test-team` for 300+ lines, explicit "test team" requests, or security-critical code.
+
+## Structured 3-Phase Mode (50–300 lines)
+
+Run all 3 phases sequentially in a single agent. Each phase uses a different lens to force perspective diversity — the same diversity that 3 separate agents would provide, without the coordination overhead.
+
+### Phase A: Happy Path (verify correct flow)
+
+Design 2–3 scenarios with ideal inputs. For each:
+1. Trace line-by-line recording variable state
+2. At each conditional, note which branch and why
+3. For loops, trace EACH iteration
+4. Verify EVERY external call (Read the actual source — never assume)
+5. Verify code contracts (extends, implements, injects)
+6. Document expected outputs and side effects
+
+### Phase B: Edge Cases (probe boundaries)
+
+Design scenarios for EACH category:
+1. Null/undefined — missing parameters
+2. Empty — empty string, empty array, zero-length
+3. Zero and negative — 0, -1, negative amounts
+4. Boundary values — MAX_INT, very long strings, Unicode
+5. Type mismatches — string where int expected
+6. Missing keys — config values, array keys that don't exist
+
+For each: trace line-by-line with the adversarial input, note the exact line where failure occurs.
+
+### Phase C: Adversarial (security and reliability)
+
+Design attack scenarios for EACH relevant category:
+1. SQL injection / XSS / command injection
+2. Path traversal
+3. Malformed data — invalid JSON, oversized payloads
+4. Race conditions — concurrent access, TOCTOU
+5. Resource exhaustion — unbounded loops, memory
+
+For each: trace the malicious input from entry point to dangerous operation. Check if framework protections actually apply to THIS code path.
+
+### Phase D: Self-Review
+
+After all 3 phases, review your own findings:
+- Any false positives? Remove them.
+- Any blind spots? All 3 perspectives covered, or did you unconsciously skip categories?
+- Which findings are confirmed by multiple phases? (Higher confidence)
+- Prioritize: Critical → High → Medium → Low
+
+### Output for Structured 3-Phase
+
+```
+# Paper Test Report — [File/Function]
+
+## Target
+[File paths, line counts]
+
+## Method
+Structured 3-phase (single agent, all perspectives)
+
+## Phase A: Happy Path
+[Scenarios, traces, dependency/contract verification]
+
+## Phase B: Edge Cases
+| # | Category | Input | Line | Result | Severity |
+[Table of findings]
+
+## Phase C: Adversarial
+| # | Category | Payload | Entry | Reaches Danger? | Blocked By |
+[Table of findings]
+
+## Prioritized Flaws
+| # | Line | Flaw | Found In Phase | Severity | Fix |
+[Merged, deduplicated, prioritized]
+
+## Summary
+- Happy path scenarios: [N]
+- Edge case categories: [N]/6
+- Adversarial categories: [N]/5
+- Total flaws: [N] (Critical: [N], High: [N], Medium: [N])
+```
+
+---
+
+## Quick Trace Mode (< 50 lines)
+
+For small code, skip the structured phases. Just trace with concrete values.
 
 ## When to Use
 

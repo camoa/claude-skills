@@ -1,7 +1,7 @@
 {
   "name": "code-paper-test",
   "description": "Systematic testing through mental execution - trace code, skills, commands, and configs line-by-line with concrete values to find bugs, missing logic, edge cases, and AI hallucinations",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "author": {
     "name": "camoa"
   },
