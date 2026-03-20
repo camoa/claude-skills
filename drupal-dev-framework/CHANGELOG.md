@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-03-20
+
+### Added
+- **`/visual-check` command** — Compare rendered Drupal page against Figma design comp using Chrome + optional Figma MCP. Opens DDEV site in Chrome, extracts computed CSS, compares against Figma specs or reference screenshot. Reports discrepancies by severity (Critical/Major/Minor) with CSS-level fixes. Multi-breakpoint (1280px, 768px, 375px). Can integrate as optional Gate 6 in `/complete` for front-end tasks.
+- **`/loop` patterns** documented in CLAUDE.md — Deploy polling (`/loop 5m check drush cr`), config import monitoring, status dashboard refresh.
+- **Sandbox + DDEV configuration** documented in CLAUDE.md — `ddev` must be in `excludedCommands`, Docker socket access requires exclusion from sandbox.
+- **Path-specific rules guidance** documented in CLAUDE.md — Recommended `.claude/rules/` scoped to `*.php`, `*.twig`, `*.scss` for Drupal conventions.
+
 ## [3.6.3] - 2026-03-20
 
 ### Added

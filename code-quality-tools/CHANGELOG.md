@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-03-20
+
+### Added
+- **`/code-quality:generate-review-md` command** — Analyzes codebase patterns (linter configs, CLAUDE.md rules, CI config, git history) and generates a `REVIEW.md` for Claude Code's managed Code Review service. Supports Drupal, Next.js, React, Python, and general projects. Detects existing conventions to avoid duplication. Produces Always Check, Style, Security, and Skip sections.
+- **`/loop` patterns documented** in CLAUDE.md — Shows how to use Claude Code's built-in `/loop` for recurring quality checks: `/loop 30m /code-quality:lint`, `/loop 1h /code-quality:security`. Session-scoped, 3-day auto-expiry.
+- **SKILL.md** updated with `/code-quality:generate-review-md` in Quick Commands list.
+
 ## [2.8.0] - 2026-03-20
 
 ### Added

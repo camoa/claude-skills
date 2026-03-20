@@ -237,6 +237,7 @@ implementation_process/in_progress/{task_name}/
 | `/complete <task>` | Run 5 quality gates, mark task done |
 | `/validate <task>` | Validate against architecture (anytime) |
 | `/pattern <use-case>` | Get pattern recommendations (anytime) |
+| `/visual-check [path]` | Compare rendered Drupal page against Figma comp (requires Chrome) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folders |
 
 ---

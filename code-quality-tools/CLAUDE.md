@@ -52,6 +52,20 @@ For users running audits in CI, the `StopFailure` hook event fires when a Claude
 
 Users can add this to their project's `.claude/hooks.json` (not this plugin's hooks.json) to receive failure alerts when `/code-quality:audit` or `/code-quality:security` exits with errors in CI.
 
+## Recurring Checks with /loop
+
+Users can run quality checks on a schedule during long coding sessions using Claude Code's built-in `/loop` skill:
+
+```
+/loop 30m /code-quality:lint
+/loop 1h /code-quality:security
+/loop 20m /code-quality:solid src/
+```
+
+Session-scoped — checks stop when the session exits. 3-day auto-expiry prevents forgotten loops. Up to 50 concurrent tasks.
+
+For CI-based recurring checks, use GitHub Actions or GitLab CI instead of `/loop`.
+
 ## Online Dev-Guides
 For Drupal-specific patterns when explaining violations or suggesting fixes, fetch the guide index:
 - **Index:** `https://camoa.github.io/dev-guides/llms.txt`
