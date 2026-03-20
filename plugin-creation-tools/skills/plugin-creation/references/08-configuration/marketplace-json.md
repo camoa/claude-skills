@@ -53,7 +53,7 @@ marketplace-repo/
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | name | string | **Yes** | Marketplace identifier |
-| owner | object | No | Marketplace owner info |
+| owner | object | **Yes** | Marketplace owner info |
 | metadata | object | No | Marketplace metadata |
 | plugins | array | **Yes** | List of available plugins |
 | tags | array | No | Marketplace-level categorization tags for filtering and discovery |
@@ -78,6 +78,14 @@ marketplace-repo/
 | author | object | No | Plugin author |
 | keywords | array | No | Search tags |
 | category | string | No | Plugin category |
+| homepage | string | No | Plugin homepage URL; overrides value from plugin.json |
+| repository | string | No | Plugin repository URL; overrides value from plugin.json |
+| license | string | No | Plugin license identifier; overrides value from plugin.json |
+| commands | array/string | No | Command paths; overrides value from plugin.json |
+| agents | array/string | No | Agent paths; overrides value from plugin.json |
+| hooks | string | No | Hooks file path; overrides value from plugin.json |
+| mcpServers | string | No | MCP servers file path; overrides value from plugin.json |
+| lspServers | string | No | LSP servers file path; overrides value from plugin.json |
 
 ## Plugin Source Types
 
@@ -345,6 +353,7 @@ The following names are reserved by Anthropic and cannot be used for custom mark
 - `anthropic-plugins`
 - `agent-skills`
 - `life-sciences`
+- `knowledge-work-plugins`
 
 Using a reserved name will cause marketplace registration to fail.
 

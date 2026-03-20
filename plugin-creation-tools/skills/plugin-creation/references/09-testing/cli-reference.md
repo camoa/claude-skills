@@ -44,8 +44,21 @@ Complete reference for plugin-related CLI commands.
 # Uninstall a plugin
 /plugin uninstall plugin-name@marketplace-name
 
+# Aliases for uninstall
+/plugin remove plugin-name@marketplace-name
+/plugin rm plugin-name@marketplace-name
+
+# Uninstall but keep persistent data (${CLAUDE_PLUGIN_DATA})
+/plugin uninstall plugin-name@marketplace-name --keep-data
+
 # Get plugin details
 /plugin info plugin-name@marketplace-name
+
+# Update a plugin
+/plugin update plugin-name@marketplace-name
+
+# Update all plugins in a scope (including managed/org-deployed plugins)
+/plugin update --scope managed
 ```
 
 ## Command Line Flags
@@ -187,6 +200,7 @@ These are available during plugin execution:
 | Variable | Description |
 |----------|-------------|
 | `CLAUDE_PLUGIN_ROOT` | Plugin installation directory |
+| `CLAUDE_PLUGIN_DATA` | Persistent data directory (`~/.claude/plugins/data/{plugin-id}/`). Survives plugin updates. |
 | `CLAUDE_PROJECT_DIR` | Current project root |
 | `CLAUDE_ENV_FILE` | Session env file (SessionStart) |
 | `CLAUDE_CONFIG_DIR` | Claude config directory |

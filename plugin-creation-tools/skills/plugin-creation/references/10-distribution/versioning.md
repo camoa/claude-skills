@@ -42,7 +42,10 @@ Format: `MAJOR.MINOR.PATCH`
 
 ## Version Locations
 
-Update version in all relevant files:
+Set version in **one place only** — do not set it in both plugin.json and the marketplace.json entry.
+
+- **Relative-path plugins** (local/monorepo): set version in the marketplace.json entry, omit from plugin.json.
+- **External source plugins** (GitHub, npm, pip): set version in plugin.json manifest, omit from the marketplace.json entry.
 
 ### plugin.json
 
@@ -165,13 +168,15 @@ For breaking changes, provide migration guide in CHANGELOG:
 
 ## Pre-Release Versions
 
-For testing before stable release:
+For testing before stable release, append a hyphenated label:
 
 ```
 2.0.0-alpha.1
 2.0.0-beta.1
 2.0.0-rc.1
 ```
+
+Example: `2.0.0-beta.1` indicates the first beta build of the upcoming 2.0.0 release. Pre-release versions sort before the stable release and signal opt-in testing status.
 
 ## Version Display
 

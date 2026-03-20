@@ -21,13 +21,21 @@ Validate a plugin's structure and components against best practices.
 ### Plugin Structure
 - [ ] `.claude-plugin/plugin.json` exists and is valid JSON
 - [ ] `name` field present in plugin.json
+- [ ] `name` is kebab-case — if not, warn: "Plugin name '[X]' is not kebab-case. Claude.ai marketplace sync requires kebab-case names."
 - [ ] `version` follows semver
 - [ ] `description` present and not placeholder text
 - [ ] README.md exists at plugin root
 - [ ] CHANGELOG.md exists at plugin root
 
+### Marketplace (`marketplace.json` if present)
+- [ ] `owner` field is present and non-empty (error if missing)
+- [ ] Marketplace `name` is not in the reserved list: `claude-code-marketplace`, `claude-code-plugins`, `claude-plugins-official`, `anthropic-marketplace`, `anthropic-plugins`, `agent-skills`, `life-sciences`, `knowledge-work-plugins`
+- [ ] Plugin source objects use `"source"` as the discriminator key — flag `"type"` as an error (e.g., `{"source": "github", ...}` not `{"type": "github", ...}`)
+- [ ] No `..` path traversal in source paths (error if found)
+- [ ] No duplicate plugin names within the plugins array (error if found)
+
 ### Skills (for each skill in `skills/*/`)
-- [ ] `SKILL.md` exists with valid YAML frontmatter
+- [ ] `SKILL.md` exists with valid YAML frontmatter — invalid frontmatter causes skill to load with no metadata at runtime
 - [ ] Frontmatter has `name` (hyphen-case, max 64 chars)
 - [ ] Frontmatter has `description` (starts with "Use when" or three-part structure, max 1024 chars)
 - [ ] Description includes WHAT it does AND WHEN to use it (trigger conditions)
@@ -43,22 +51,23 @@ Validate a plugin's structure and components against best practices.
 - [ ] No README.md inside skill directories (belongs at plugin root)
 
 ### Commands (for each `commands/*.md`)
-- [ ] Valid YAML frontmatter
+- [ ] Valid YAML frontmatter — invalid frontmatter causes command to load with no metadata at runtime
 - [ ] `description` field present
 - [ ] `allowed-tools` field present
 - [ ] No inline code with backtick+exclamation or backtick+at-sign that could trigger execution
 
 ### Agents (for each `agents/*.md`)
-- [ ] Valid YAML frontmatter
+- [ ] Valid YAML frontmatter — invalid frontmatter causes agent to load with no metadata at runtime
 - [ ] `name` field present
 - [ ] `description` field present (includes delegation triggers)
 - [ ] `tools` field present
 - [ ] `model` field present (haiku, sonnet, opus, or inherit)
 
 ### Hooks (`hooks/hooks.json`)
-- [ ] Valid JSON structure
+- [ ] Valid JSON structure — **Note:** malformed hooks.json prevents the entire plugin from loading
 - [ ] Each event name is a recognized event
 - [ ] Each hook entry has `type` (command, prompt, or agent) and matching field
+- [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
 - [ ] Command hooks reference executable files
 - [ ] Timeouts are reasonable (< 120s for sync hooks)
 

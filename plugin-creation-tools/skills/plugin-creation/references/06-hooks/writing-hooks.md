@@ -117,6 +117,8 @@ Multi-turn subagent with access to tools (Read, Grep, Glob). Up to 50 turns of a
 
 Send event JSON as an HTTP POST to a URL. Configure via settings JSON only (not in hooks.json files).
 
+> **Important:** `http` type hooks can only be configured in `settings.json` files. They cannot be placed in `hooks.json` — they will be silently ignored.
+
 ```json
 {
   "type": "http",
@@ -204,6 +206,7 @@ Available in hook scripts:
 | Variable | Description |
 |----------|-------------|
 | `${CLAUDE_PLUGIN_ROOT}` | Plugin installation directory |
+| `${CLAUDE_PLUGIN_DATA}` | Persistent data directory (`~/.claude/plugins/data/{plugin-id}/`). Survives plugin updates. |
 | `${CLAUDE_PROJECT_DIR}` | Project root directory |
 | `${CLAUDE_ENV_FILE}` | Env file path (SessionStart only) |
 
@@ -335,6 +338,29 @@ sys.exit(0)
 | prompt | 30s | 10-60s |
 | agent | 120s | 60-300s |
 
+## Persistent Dependencies Pattern
+
+Use `${CLAUDE_PLUGIN_DATA}` with a `SessionStart` hook to install dependencies once and reuse them across plugin updates. Because `${CLAUDE_PLUGIN_ROOT}` is wiped on update, dependencies installed there are lost. `${CLAUDE_PLUGIN_DATA}` persists.
+
+```json
+{
+  "SessionStart": [
+    {
+      "matcher": "startup",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "[ -d \"${CLAUDE_PLUGIN_DATA}/node_modules\" ] || npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" \"${CLAUDE_PLUGIN_ROOT}/package.json\"",
+          "timeout": 60
+        }
+      ]
+    }
+  ]
+}
+```
+
+This pattern checks if `node_modules` exists in the persistent data directory and only runs `npm install` if it is missing. Use the same approach for Python venvs (`[ -d \"${CLAUDE_PLUGIN_DATA}/venv\" ] || python3 -m venv ...`).
+
 ## Best Practices
 
 1. **Use specific matchers** -- avoid `*` for performance
@@ -348,5 +374,5 @@ sys.exit(0)
 
 ## See Also
 
-- `hook-events.md` -- all 18 available events with return values
+- `hook-events.md` -- all 22 available events with return values
 - `hook-patterns.md` -- common patterns and examples

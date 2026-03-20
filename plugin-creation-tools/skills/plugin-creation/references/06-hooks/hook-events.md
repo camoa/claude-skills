@@ -1,6 +1,6 @@
 # Hook Events
 
-Complete reference for all 18 hook events in Claude Code.
+Complete reference for all 22 hook events in Claude Code.
 
 ## Event Reference Table
 
@@ -24,6 +24,10 @@ Complete reference for all 18 hook events in Claude Code.
 | ConfigChange | Configuration changes during session | No | No |
 | WorktreeCreate | Worktree created for agent | No | No |
 | WorktreeRemove | Worktree removed after agent completion | No | No |
+| StopFailure | Turn ends due to an API error | No | No |
+| PostCompact | After context compaction completes | No | No |
+| Elicitation | MCP server requests user input via elicitation | No | No |
+| ElicitationResult | User responds to MCP elicitation, before response sent to server | No | No |
 
 ## MCP Tool Matcher Syntax
 
@@ -645,6 +649,124 @@ All hook events receive JSON input with the following common fields:
 }
 ```
 
+### StopFailure
+
+**Trigger**: When a turn ends due to an API error
+
+**Matcher**: Not supported
+
+**Can Block**: No (notification-only event — output and exit code are ignored)
+
+**Use Cases**:
+- Log API errors for debugging
+- Alert on repeated failures
+- Track error rates
+
+**Example**:
+```json
+{
+  "StopFailure": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-api-error.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### PostCompact
+
+**Trigger**: After context compaction completes
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- Re-inject important context lost during compaction
+- Log compaction events
+- Post-compaction state restoration
+
+**Example**:
+```json
+{
+  "PostCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/restore-context.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Note**: Pairs with the `PreCompact` event. Use `PreCompact` to save state and `PostCompact` to restore it.
+
+### Elicitation
+
+**Trigger**: When an MCP server requests user input via an elicitation
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- Intercept and log MCP user prompts
+- Validate elicitation content before it reaches the user
+- Audit MCP server interactions
+
+**Example**:
+```json
+{
+  "Elicitation": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### ElicitationResult
+
+**Trigger**: After the user responds to an MCP elicitation, before the response is sent to the server
+
+**Matcher**: Not supported
+
+**Can Block**: No
+
+**Use Cases**:
+- Log user responses to MCP prompts
+- Audit the full elicitation lifecycle
+- Track user interaction patterns with MCP servers
+
+**Example**:
+```json
+{
+  "ElicitationResult": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation-result.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Hook Configuration Fields
 
 ### The `once` Field
@@ -713,5 +835,5 @@ Multiple matcher groups and multiple hooks per group:
 
 ## See Also
 
-- `writing-hooks.md` -- hook configuration and handler types
+- `writing-hooks.md` -- hook configuration and handler types (references all 22 events)
 - `hook-patterns.md` -- common implementation patterns

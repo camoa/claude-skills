@@ -131,6 +131,7 @@ context: fork
 | `metadata` | No | Custom key-value pairs. Suggested keys: `author`, `version`, `mcp-server`, `category`, `tags`, `documentation`, `support`. |
 | `hooks` | No | Skill-scoped lifecycle hooks. These hooks are active only while the skill is running and are automatically cleaned up when the skill finishes. Uses the same hook format as plugin hooks. |
 | `argument-hint` | No | Hint shown during autocomplete to indicate expected arguments. Example: `argument-hint: "[issue-number]"` shows `/skill-name [issue-number]` in the autocomplete menu. |
+| `effort` | No | Sets the reasoning effort level for the skill. Values: `low`, `medium`, `high`. Default: inherits from session. |
 
 ### Model Selection Guidelines
 

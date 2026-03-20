@@ -187,19 +187,134 @@ def validate_skill(skill_path):
     return not has_errors, messages
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: validate_skill.py <skill-directory>")
-        print("\nExample:")
-        print("  validate_skill.py ./my-skill")
-        sys.exit(1)
+def validate_marketplace(marketplace_path):
+    """
+    Validate a marketplace.json file.
 
-    skill_path = sys.argv[1]
-    print(f"🔍 Validating: {skill_path}\n")
+    Args:
+        marketplace_path: Path to marketplace.json file
 
-    valid, messages = validate_skill(skill_path)
+    Returns:
+        Tuple of (is_valid, messages) where messages is list of (level, message)
+    """
+    marketplace_path = Path(marketplace_path).resolve()
+    messages = []
 
-    # Print messages by level
+    def error(msg):
+        messages.append(('ERROR', msg))
+
+    def warn(msg):
+        messages.append(('WARN', msg))
+
+    def info(msg):
+        messages.append(('INFO', msg))
+
+    if not marketplace_path.exists():
+        error(f"marketplace.json not found: {marketplace_path}")
+        return False, messages
+
+    # Parse JSON
+    try:
+        import json
+        data = json.loads(marketplace_path.read_text())
+    except Exception as e:
+        error(f"Invalid JSON in marketplace.json: {e}")
+        return False, messages
+
+    # owner is required
+    if not data.get('owner'):
+        error("Missing 'owner' field in marketplace.json")
+
+    # kebab-case name check
+    name = data.get('name', '')
+    if name and not re.match(r'^[a-z0-9-]+$', name):
+        warn(f"Plugin name '{name}' is not kebab-case. Claude.ai marketplace sync requires kebab-case names.")
+
+    # Reserved marketplace names
+    RESERVED_NAMES = {
+        'claude-code-marketplace', 'claude-code-plugins', 'claude-plugins-official',
+        'anthropic-marketplace', 'anthropic-plugins', 'agent-skills',
+        'life-sciences', 'knowledge-work-plugins',
+    }
+    if name in RESERVED_NAMES:
+        error(f"Marketplace name '{name}' is reserved by Anthropic and cannot be used")
+
+    # Plugin entry checks
+    plugins = data.get('plugins', [])
+    seen_names = set()
+    for plugin in plugins:
+        plugin_name = plugin.get('name', '')
+
+        # Duplicate plugin names
+        if plugin_name in seen_names:
+            error(f"Duplicate plugin name '{plugin_name}' in marketplace.json")
+        seen_names.add(plugin_name)
+
+        source = plugin.get('source')
+        if isinstance(source, dict):
+            # "source" key is the discriminator, not "type"
+            if 'type' in source and 'source' not in source:
+                error(
+                    f"Plugin '{plugin_name}': source object uses 'type' as discriminator key — "
+                    f"use 'source' instead (e.g., {{\"source\": \"github\", ...}})"
+                )
+            # Path traversal check
+            source_str = str(source)
+            if '..' in source_str:
+                error(f"Plugin '{plugin_name}': path traversal ('..') detected in source")
+        elif isinstance(source, str):
+            if '..' in source:
+                error(f"Plugin '{plugin_name}': path traversal ('..') detected in source path '{source}'")
+
+    has_errors = any(level == 'ERROR' for level, _ in messages)
+    return not has_errors, messages
+
+
+def validate_hooks(hooks_path):
+    """
+    Validate a hooks.json file.
+
+    Args:
+        hooks_path: Path to hooks.json file
+
+    Returns:
+        Tuple of (is_valid, messages) where messages is list of (level, message)
+    """
+    hooks_path = Path(hooks_path).resolve()
+    messages = []
+
+    def error(msg):
+        messages.append(('ERROR', msg))
+
+    if not hooks_path.exists():
+        error(f"hooks.json not found: {hooks_path}")
+        return False, messages
+
+    try:
+        import json
+        data = json.loads(hooks_path.read_text())
+    except Exception as e:
+        error(f"Invalid JSON in hooks.json: {e}")
+        return False, messages
+
+    # Check for http hook type — only valid in settings.json, not hooks.json
+    hooks_by_event = data.get('hooks', {})
+    for event, matchers in hooks_by_event.items():
+        if not isinstance(matchers, list):
+            continue
+        for matcher in matchers:
+            for hook in matcher.get('hooks', []):
+                if hook.get('type') == 'http':
+                    error(
+                        f"Event '{event}': 'http' hook type is not supported in hooks.json — "
+                        f"http hooks only work in settings.json"
+                    )
+
+    has_errors = any(level == 'ERROR' for level, _ in messages)
+    return not has_errors, messages
+
+
+def _print_messages(messages):
     for level, msg in messages:
         if level == 'ERROR':
             print(f"❌ {msg}")
@@ -208,13 +323,59 @@ def main():
         else:
             print(f"ℹ️  {msg}")
 
-    print()
-    if valid:
-        print("✅ Skill is valid!")
-    else:
-        print("❌ Validation failed - fix errors above")
 
-    sys.exit(0 if valid else 1)
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: validate_skill.py <skill-directory>")
+        print("       validate_skill.py --marketplace <marketplace.json>")
+        print("       validate_skill.py --hooks <hooks.json>")
+        print("\nExamples:")
+        print("  validate_skill.py ./my-skill")
+        print("  validate_skill.py --marketplace ./.claude-plugin/marketplace.json")
+        print("  validate_skill.py --hooks ./hooks/hooks.json")
+        sys.exit(1)
+
+    if sys.argv[1] == '--marketplace' and len(sys.argv) == 3:
+        target = sys.argv[2]
+        print(f"🔍 Validating marketplace: {target}\n")
+        valid, messages = validate_marketplace(target)
+        _print_messages(messages)
+        print()
+        if valid:
+            print("✅ marketplace.json is valid!")
+        else:
+            print("❌ Validation failed - fix errors above")
+        sys.exit(0 if valid else 1)
+
+    elif sys.argv[1] == '--hooks' and len(sys.argv) == 3:
+        target = sys.argv[2]
+        print(f"🔍 Validating hooks: {target}\n")
+        valid, messages = validate_hooks(target)
+        _print_messages(messages)
+        print()
+        if valid:
+            print("✅ hooks.json is valid!")
+        else:
+            print("❌ Validation failed - fix errors above")
+        sys.exit(0 if valid else 1)
+
+    elif len(sys.argv) == 2:
+        skill_path = sys.argv[1]
+        print(f"🔍 Validating: {skill_path}\n")
+        valid, messages = validate_skill(skill_path)
+        _print_messages(messages)
+        print()
+        if valid:
+            print("✅ Skill is valid!")
+        else:
+            print("❌ Validation failed - fix errors above")
+        sys.exit(0 if valid else 1)
+
+    else:
+        print("Usage: validate_skill.py <skill-directory>")
+        print("       validate_skill.py --marketplace <marketplace.json>")
+        print("       validate_skill.py --hooks <hooks.json>")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

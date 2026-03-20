@@ -50,6 +50,8 @@ marketplace-repo/
 └── README.md
 ```
 
+> **Warning:** If your `marketplace.json` is hosted at a plain URL (not a git repository), relative path plugin sources (e.g., `"./plugins/my-plugin"`) will not work — there is no repository to resolve them against. Use git-based sources (`"source": "github"` or `"source": "git-subdir"`) or absolute URL sources (`"source": "url"`) instead.
+
 ### marketplace.json
 
 ```json
@@ -254,7 +256,17 @@ For marketplaces and plugins hosted in private repositories, set the appropriate
 
 ## Release Channels
 
-Use separate marketplace files pointing to different refs or SHAs to create release channels:
+The recommended approach for release channels is **separate marketplace repositories** — one for stable, one for latest. This gives each channel an independent name, version history, and access control.
+
+```
+# Stable channel
+org/claude-plugins-stable
+
+# Latest channel
+org/claude-plugins-latest
+```
+
+An alternative (single-repo) approach uses separate directories within one repository, but this requires users to add the marketplace twice with different paths and is harder to maintain:
 
 ```
 marketplace-repo/
