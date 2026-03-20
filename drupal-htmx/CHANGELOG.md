@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.3] - 2026-03-20
+
+### Changed
+- Maintenance audit: verified CLAUDE.md (28 lines, within limit), agent frontmatter clean (no ignored fields)
+- Version bump: 1.4.2 → 1.4.3
+
 ## [1.4.1] - 2026-03-15
 
 ### Added

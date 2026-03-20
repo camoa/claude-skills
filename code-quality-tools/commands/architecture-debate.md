@@ -94,6 +94,7 @@ When all teammates finish:
 **Model:** sonnet
 **MaxTurns:** 10
 **Isolation:** worktree
+**Effort:** high
 
 ```
 You are the Pragmatist for an architecture debate team.
@@ -155,6 +156,7 @@ Mark your task as completed.
 **Model:** sonnet
 **MaxTurns:** 10
 **Isolation:** worktree
+**Effort:** high
 
 ```
 You are the Purist for an architecture debate team.
@@ -235,6 +237,7 @@ Mark your task as completed.
 **Model:** sonnet
 **MaxTurns:** 10
 **Isolation:** worktree
+**Effort:** high
 
 ```
 You are the Maintainer for an architecture debate team.

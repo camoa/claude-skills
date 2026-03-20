@@ -5,6 +5,12 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-03-20
+
+### Changed
+- CLAUDE.md reviewed against 200-line size guidance — at 33 lines, no changes needed
+- Agent frontmatter reviewed for `hooks`/`mcpServers`/`permissionMode` — none present in brand-analyst agent
+
 ## [3.1.0] - 2026-03-17
 
 ### Added

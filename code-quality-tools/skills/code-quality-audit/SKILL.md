@@ -26,6 +26,8 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 
 **For conversational workflows, continue reading...**
 
+> **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
+
 ## When to Use
 
 **Drupal projects:**
@@ -86,6 +88,8 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 **Next.js:**
 1. Verify npm: `npm --version`
 2. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
+
+> **Sandbox users:** If Claude Code sandbox mode is enabled, bash scripts that invoke linters (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) require their binary paths to be whitelisted. Add the tool binaries to your `allowedPaths` in `claude_code_config.json` (e.g., `vendor/bin/phpstan`, `/usr/local/bin/semgrep`). DDEV-proxied commands run inside the container and are unaffected.
 
 ## When to Run What
 

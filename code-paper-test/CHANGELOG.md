@@ -5,6 +5,18 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-03-20
+
+### Changed
+- **`commands/test-team.md`**: Added `effort: high` to Edge Case Hunter and Red Team Attacker spawn specs — these agents perform exhaustive boundary and adversarial analysis and benefit from extended reasoning
+- **`commands/test-team.md`**: Added dual-control completion pattern to all three teammate "WHEN DONE" blocks — agents can exit with code 2 (feedback loop) or output `{"continue": false}` (hard stop) to signal task completion to the lead
+- **`hooks/pre-compact.sh`**: Fixed filename mismatch — hook was looking for `paper-test-synthesis.md` but the command writes `paper-test-team-report.md`; now correctly preserves the synthesis report on compaction
+
+### Notes
+- Frontmatter fields `hooks`, `mcpServers`, and `permissionMode` are silently ignored for plugin-packaged agents; spawn specs in this plugin use prose format only — no such fields are present
+
+---
+
 ## [0.4.1] - 2026-03-15
 
 ### Added

@@ -23,6 +23,35 @@
 - Agent team commands include `maxTurns` (cost control) and `isolation: worktree` (independence)
 - Agent team commands orchestrate debate workflows with quality gate enforcement
 
+## Agent Frontmatter Limitations
+Agent spawn prompts in this plugin document `effort`, `model`, `maxTurns`, and `isolation` as intent markers inside Markdown. These are NOT evaluated as YAML frontmatter — they are instructions to Claude on how to configure the spawned agent. The actual agent launch mechanism (TeamCreate/TaskCreate) is what enforces model routing and isolation. Do not add `hooks`, `mcpServers`, or `permissionMode` to agent spawn prompt blocks — those fields are not processed in the agent spawning context and will be silently ignored.
+
+## Hooks
+The plugin registers one hook in `hooks/hooks.json`:
+- **PreCompact** — `hooks/pre-compact.sh` — Preserves audit context before conversation compaction
+
+### StopFailure Hook (CI pipelines)
+For users running audits in CI, the `StopFailure` hook event fires when a Claude Code session exits with a non-zero status. This is useful for error alerting. Example pattern to document for CI-integrated projects:
+
+```json
+{
+  "hooks": {
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -X POST $SLACK_WEBHOOK -d '{\"text\":\"Code quality audit failed in CI\"}'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Users can add this to their project's `.claude/hooks.json` (not this plugin's hooks.json) to receive failure alerts when `/code-quality:audit` or `/code-quality:security` exits with errors in CI.
+
 ## Online Dev-Guides
 For Drupal-specific patterns when explaining violations or suggesting fixes, fetch the guide index:
 - **Index:** `https://camoa.github.io/dev-guides/llms.txt`
