@@ -5,6 +5,15 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2026-03-20
+
+### Fixed
+- **brand-analyst agent resume failure** — Agent now writes findings to `brand-analysis-results.md` before returning. If the agent resume fails (concurrency error, API issue), the command reads the file as fallback. Previously, a resume failure lost all analysis data since the agent had no Write access.
+- **brand-extract command** — Now reads agent results from `brand-analysis-results.md` file instead of depending solely on the agent's return message. Deletes the intermediate file after successful brand-philosophy.md generation.
+
+### Changed
+- `brand-analyst` agent: added `Write` to allowed-tools (was: Read, Glob, WebFetch)
+
 ## [3.1.1] - 2026-03-20
 
 ### Changed
