@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. PostCompact state recovery, StopFailure logging. Requires: dev-guides-navigator.",
-      "version": "3.6.3",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging. Requires: dev-guides-navigator.",
+      "version": "3.7.0",
       "author": {
         "name": "camoa"
       },
