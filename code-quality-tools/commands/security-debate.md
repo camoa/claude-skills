@@ -105,6 +105,7 @@ When all teammates finish:
 **MaxTurns:** 10
 **Isolation:** worktree
 **Tools:** Read, Glob, Grep
+**Effort:** high
 
 ```
 You are the Defender for a security audit debate team.
@@ -164,6 +165,7 @@ Mark your task as completed.
 **MaxTurns:** 10
 **Isolation:** worktree
 **Tools:** Read, Glob, Grep, WebSearch
+**Effort:** high
 
 ```
 You are the Red Team Attacker for a security audit debate team.
@@ -227,6 +229,7 @@ Mark your task as completed.
 **MaxTurns:** 10
 **Isolation:** worktree
 **Tools:** Read, Glob, Grep, WebFetch
+**Effort:** high
 
 ```
 You are the Compliance Checker for a security audit debate team.

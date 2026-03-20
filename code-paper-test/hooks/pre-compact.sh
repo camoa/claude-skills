@@ -15,7 +15,7 @@ fi
 if [ -n "$REPORTS_DIR" ] && [ -d "$REPORTS_DIR" ]; then
   FOUND_REPORTS=false
 
-  for report in happy-path-analysis.md edge-case-analysis.md red-team-analysis.md paper-test-synthesis.md; do
+  for report in happy-path-analysis.md edge-case-analysis.md red-team-analysis.md paper-test-team-report.md; do
     if [ -f "$REPORTS_DIR/$report" ]; then
       if [ "$FOUND_REPORTS" = false ]; then
         echo "### Test Team Reports in $REPORTS_DIR"

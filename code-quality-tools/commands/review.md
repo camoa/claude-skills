@@ -153,6 +153,10 @@ Write to `.reports/code-review-{filename-or-dirname}.md`:
 > Report saved to `.reports/code-review-{name}.md`
 > {if FAIL: "Quality gate FAILED. See action items for required fixes."}
 
+## REVIEW.md Convention
+
+Claude Code's Code Review feature supports a `REVIEW.md` file at the project root to customize review behavior. If `REVIEW.md` exists in the project, Claude will read it before scoring to apply project-specific standards (e.g., required patterns, team conventions, framework-specific rules). Create a `REVIEW.md` to tailor the rubric to your project's needs.
+
 ## Related Commands
 
 - `/code-quality:audit` — Full automated audit (tools only, no rubric)

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-03-20
+
+### Added
+- **PostCompact hook** (`hooks/post-compact.sh`): Re-injects active project/task context after compaction — reads `session_context.json` and outputs project state + task details so Claude can continue without manual re-orientation
+- **StopFailure hook** (`hooks/stop-failure.sh`): Logs task failures caused by API errors to `~/.claude/drupal-dev-framework/logs/failures.log`, with project/task name from session context, so the next session can detect unclean exits
+- **`hooks.json`**: Added `PostCompact` and `StopFailure` event registrations for the two new hook scripts
+
+### Changed
+- **agent-conventions.md**: Added "Agent Frontmatter Limitations" section — documents that `hooks`, `mcpServers`, and `permissionMode` in agent frontmatter are ignored when agents run as sub-agents via the Agent SDK. Notes that `architecture-validator`'s PreToolUse hook frontmatter is interactive-only; `disallowedTools` remains the reliable write-block
+
 ## [3.6.1] - 2026-03-15
 
 ### Fixed

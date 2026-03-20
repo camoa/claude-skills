@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 (2026-03-20)
+
+### Changed
+- Maintenance: confirmed CLAUDE.md under 200-line limit (38 lines), no content to move
+- Confirmed `user-invocable: true` is correct — no internal routing sub-skills requiring `false`
+
 ## 0.2.1 (2026-03-15)
 
 ### Added

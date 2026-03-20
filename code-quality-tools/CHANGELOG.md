@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-03-20
+
+### Added
+- **`/simplify` distinction note** in SKILL.md: Documents how Claude Code's built-in `/simplify` differs from `/code-quality:review` (rubric scoring, quality gate, persisted report vs quick ad-hoc feedback)
+- **`effort: high` on all debate agents**: All 6 agent spawn prompts in `security-debate.md` and `architecture-debate.md` now declare `effort: high` for deeper analysis
+- **`StopFailure` hook guidance** in CLAUDE.md: Documents how users can configure the `StopFailure` event in their project's `.claude/hooks.json` for CI failure alerting (e.g., Slack webhook on audit failure)
+- **`REVIEW.md` convention** in `commands/review.md`: Documents that a `REVIEW.md` file at project root customizes Claude's review behavior, consistent with Claude Code's Code Review feature
+- **Sandbox path whitelisting note** in SKILL.md: Guidance for users with sandbox mode enabled — linter binaries (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) must be whitelisted; DDEV-proxied commands are unaffected
+- **Agent frontmatter limitations note** in CLAUDE.md: Clarifies that `hooks`, `mcpServers`, and `permissionMode` are not valid in agent spawn prompt blocks and will be silently ignored
+
 ## [2.7.1] - 2026-03-15
 
 ### Added

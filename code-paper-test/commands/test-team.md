@@ -191,6 +191,10 @@ If target files are skills, commands, or agents (.md with frontmatter):
 WHEN DONE:
 Message the other teammates: "Happy path analysis complete. Review happy-path-analysis.md"
 Mark your task as completed.
+
+To signal completion to the lead, either:
+- Exit with code 2 to trigger a feedback loop (the lead reviews and may ask for more)
+- Or output JSON: {"continue": false} to hard-stop your turn immediately
 ```
 
 ### Teammate 2: Edge Case Hunter
@@ -198,6 +202,7 @@ Mark your task as completed.
 **Model:** sonnet
 **MaxTurns:** 15
 **Isolation:** worktree
+**Effort:** high
 
 ```
 You are the Edge Case Hunter for a paper testing team.
@@ -272,6 +277,10 @@ If target files are skills, commands, or agents (.md with frontmatter):
 WHEN DONE:
 Message the other teammates: "Edge case analysis complete. Review edge-case-analysis.md"
 Mark your task as completed.
+
+To signal completion to the lead, either:
+- Exit with code 2 to trigger a feedback loop (the lead reviews and may ask for more)
+- Or output JSON: {"continue": false} to hard-stop your turn immediately
 ```
 
 ### Teammate 3: Red Team Attacker
@@ -279,6 +288,7 @@ Mark your task as completed.
 **Model:** sonnet
 **MaxTurns:** 15
 **Isolation:** worktree
+**Effort:** high
 **Note:** For complex security analysis, consider using `model: opus` for deeper reasoning.
 
 ```
@@ -365,6 +375,10 @@ If target files are skills, commands, or agents (.md with frontmatter):
 WHEN DONE:
 Message the other teammates: "Red team analysis complete. Review red-team-analysis.md"
 Mark your task as completed.
+
+To signal completion to the lead, either:
+- Exit with code 2 to trigger a feedback loop (the lead reviews and may ask for more)
+- Or output JSON: {"continue": false} to hard-stop your turn immediately
 ```
 
 ---
