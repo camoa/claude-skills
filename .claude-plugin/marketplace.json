@@ -97,8 +97,8 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review with REVIEW.md convention, /simplify distinction, effort:high debate agents, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
-      "version": "2.8.0",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review with REVIEW.md generation and convention, /simplify distinction, effort:high debate agents, /loop recurring checks, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
+      "version": "2.9.0",
       "author": {
         "name": "camoa"
       },
