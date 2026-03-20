@@ -253,6 +253,33 @@ Beyond GitHub and marketplace distribution, skills can be deployed programmatica
 
 **Note:** Skills in the API require the Code Execution Tool beta.
 
+## Container/CI Pre-seeding
+
+For Docker or CI environments where runtime git clones are impractical, use `CLAUDE_CODE_PLUGIN_SEED_DIR` to pre-populate plugins:
+
+```dockerfile
+ENV CLAUDE_CODE_PLUGIN_SEED_DIR=/opt/claude-plugins
+```
+
+The seed directory structure mirrors `~/.claude/plugins/`:
+
+```
+/opt/claude-plugins/
+  marketplace-name/
+    plugin-name/
+      .claude-plugin/plugin.json
+      skills/...
+      agents/...
+```
+
+Multiple seed directories can be separated with `:` on Unix:
+
+```dockerfile
+ENV CLAUDE_CODE_PLUGIN_SEED_DIR=/opt/base-plugins:/opt/team-plugins
+```
+
+Claude Code checks seed directories before attempting network fetches. Plugins found in seed directories are treated as installed, so no marketplace or internet access is required at runtime.
+
 ## See Also
 
 - `marketplace.md` - marketplace distribution

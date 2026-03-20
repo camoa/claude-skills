@@ -1,5 +1,9 @@
 {
   "name": "full-featured-dev",
+  "owner": {
+    "name": "Your Name",
+    "email": "you@example.com"
+  },
   "plugins": [
     {
       "name": "full-featured-example",

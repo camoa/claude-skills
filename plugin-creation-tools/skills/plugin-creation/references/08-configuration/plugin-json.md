@@ -242,6 +242,7 @@ Available in all path fields including mcpServers and lspServers command, args, 
 | Variable | Description |
 |----------|-------------|
 | `${CLAUDE_PLUGIN_ROOT}` | Plugin installation directory |
+| `${CLAUDE_PLUGIN_DATA}` | Persistent data directory at `~/.claude/plugins/data/{plugin-id}/`. Survives plugin updates (unlike `${CLAUDE_PLUGIN_ROOT}` which is wiped). Use for installed dependencies (node_modules, venvs), caches, and generated data. |
 
 Example:
 ```json
@@ -381,6 +382,14 @@ plugin-name/
 ```
 
 This activates the `code-reviewer` agent (defined in `agents/code-reviewer.md`) as the main thread agent for the plugin.
+
+## Runtime Environment Variables
+
+These environment variables control plugin runtime behavior:
+
+| Variable | Description |
+|----------|-------------|
+| `FORCE_AUTOUPDATE_PLUGINS=true` | Keeps plugin auto-updates enabled even when `DISABLE_AUTOUPDATER` disables Claude Code self-updates. Useful in CI or managed environments where you want plugins to stay current without updating Claude Code itself. |
 
 ## See Also
 

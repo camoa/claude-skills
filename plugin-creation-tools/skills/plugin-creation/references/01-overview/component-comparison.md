@@ -6,7 +6,7 @@
 |-----------|----------|------------|----------|
 | CLAUDE.md | `.claude/CLAUDE.md` | Always loaded | Project conventions, always-on rules |
 | Skills | `skills/name/SKILL.md` | Model-invoked (auto) | Complex workflows with resources |
-| Commands | `commands/name.md` | User (`/command`) | Quick, frequently used prompts |
+| Commands | `commands/name.md` | User (`/command`) | Quick prompts — **legacy approach** (use `skills/` for new plugins) |
 | Agents | `agents/name.md` | Auto + Manual | Task-specific expertise (subagents) |
 | Agent Teams | Multiple agents | Parallel sessions | Independent parallel workstreams (experimental) |
 | Hooks | `hooks/hooks.json` | Event-triggered | Automation and validation |
@@ -76,6 +76,8 @@ Understanding when each feature loads and its context cost helps you choose the 
 - No supporting resources needed
 - Explicit trigger is important
 
+> **Note:** The `commands/` directory is supported for backward compatibility but is the legacy approach. For new plugins, use `skills/<name>/SKILL.md` instead. Skills offer more features: frontmatter control, subagent execution, model selection, and `context: fork` isolation.
+
 **Use an AGENT (Subagent) when:**
 - Task requires specialized expertise
 - Benefits from fresh context window
@@ -111,7 +113,7 @@ Understanding when each feature loads and its context cost helps you choose the 
 | Loading | Every session, always | On-demand when matched |
 | Context cost | Constant, every turn | Only when triggered |
 | Best for | Short rules, conventions | Complex workflows, references |
-| Size guidance | Keep small (< 200 lines) | Can be large with references |
+| Size guidance | Keep under 200 lines for reliable adherence; files up to 500 lines load but instructions beyond 200 lines may be followed less consistently | Can be large with references |
 | Flexibility | One file, flat | Directory with supporting files |
 | Trigger | Automatic, always | Model decides based on description |
 

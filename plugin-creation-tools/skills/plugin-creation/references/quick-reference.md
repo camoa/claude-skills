@@ -183,8 +183,11 @@ Use when [triggers] - [what it does, third person]
 | `${CLAUDE_PLUGIN_ROOT}` | Plugin directory |
 | `${CLAUDE_PROJECT_DIR}` | Project root |
 | `${CLAUDE_ENV_FILE}` | Session env file |
+| `${CLAUDE_PLUGIN_DATA}` | Persistent data directory (`~/.claude/plugins/data/{id}/`), survives updates |
 
 ## Hook Events
+
+22 total events. Key events:
 
 | Event | Use Case | Matcher |
 |-------|----------|---------|
@@ -196,8 +199,12 @@ Use when [triggers] - [what it does, third person]
 | PermissionRequest | Auto-approve/deny | Tool name regex |
 | Notification | Handle alerts | Optional |
 | Stop | Intelligent continuation | No |
+| StopFailure | API error notification | No |
 | SubagentStop | Subagent completion | No |
 | PreCompact | Before compaction | Optional |
+| PostCompact | After compaction | Optional |
+| Elicitation | MCP user input interception | No |
+| ElicitationResult | After user responds to MCP elicitation | No |
 
 ## Validation Checklist
 

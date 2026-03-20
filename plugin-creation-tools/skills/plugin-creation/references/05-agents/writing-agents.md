@@ -70,6 +70,14 @@ How this agent decides what to focus on. Any constraints or special consideratio
 | background | boolean | No | `true` -- declarative background execution |
 | maxTurns | number | No | Maximum agentic turns for cost control |
 | mcpServers | object/array | No | MCP servers scoped to this agent (inline definitions or string references) |
+| effort | string | No | Reasoning effort level: `low`, `medium`, `high`. Default: inherits from session. |
+
+> **Plugin Agent Restriction:** When an agent is packaged inside a plugin, these frontmatter fields are silently ignored for security reasons:
+> - `hooks` — Plugin agents cannot define their own hooks
+> - `mcpServers` — Plugin agents cannot load additional MCP servers
+> - `permissionMode` — Plugin agents inherit the session's permission mode
+>
+> These fields work normally for project-local agents (in `.claude/agents/`), but are stripped when the agent is distributed via a plugin.
 
 ## The Description Field
 

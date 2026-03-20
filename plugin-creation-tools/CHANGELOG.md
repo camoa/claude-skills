@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-03-20
+
+### Breaking Changes
+- **`"type"` → `"source"` in marketplace source objects** — All source type discriminators changed from `"type"` to `"source"`. Affects marketplace.json plugin entries. Old: `{"type": "github", ...}`. New: `{"source": "github", ...}`.
+- **GitHub source format combined** — Old: `{"owner": "org", "repo": "plugin-repo"}`. New: `{"repo": "org/plugin-repo"}`. The `owner` field is removed.
+
+### Added
+- **4 new hook events**: `StopFailure` (API error notification), `PostCompact` (after compaction), `Elicitation` (MCP user input interception), `ElicitationResult` (after user responds to MCP elicitation). Total hook events: 22 (was 18).
+- **`${CLAUDE_PLUGIN_DATA}` environment variable**: Persistent data directory surviving plugin updates (`~/.claude/plugins/data/{id}/`). Added to plugin-json.md, writing-hooks.md with Persistent Dependencies Pattern.
+- **`effort` frontmatter field**: Optional field for skills and agents — values: `low`, `medium`, `high`. Controls reasoning effort.
+- **`CLAUDE_CODE_PLUGIN_SEED_DIR`**: Container/CI pre-seeding for plugins without runtime git clones. Added to packaging.md.
+- **`FORCE_AUTOUPDATE_PLUGINS` env var**: Keep plugin auto-updates enabled while disabling Claude Code self-updates.
+- **Plugin agent security restriction** documented: `hooks`, `mcpServers`, `permissionMode` silently ignored in plugin-packaged agents.
+- **`hostPattern` and `pathPattern`** in `strictKnownMarketplaces` — regex-based allowlist entries.
+- **9 new validation rules**: source key, http hook restriction, marketplace owner required, kebab-case names, reserved names update, path traversal, duplicate names, YAML frontmatter, hooks.json hard-blocking.
+- **CLI additions**: `--keep-data` flag on uninstall, `remove`/`rm` aliases, `--scope managed` for update.
+- **Reserved marketplace name**: `knowledge-work-plugins` added.
+- **Marketplace plugin entry passthrough fields**: `homepage`, `repository`, `license`, `commands`, `agents`, `hooks`, `mcpServers`, `lspServers`.
+
+### Fixed
+- **`marketplace.json` `owner` field** marked as required (was incorrectly optional)
+- **`plugin.json` manifest** documented as optional (was incorrectly required)
+- **`http` hooks restriction** — cannot be placed in `hooks.json`, settings-only
+- **`commands/` directory** labeled as legacy — `skills/` recommended for all new work
+- **`settings.json`** added to standard plugin directory structure
+- **URL-based marketplace limitation** warning added — relative paths don't work
+
+### Changed
+- All examples and templates updated for `"source"` key and combined GitHub repo format
+- validate command updated with 9 new rules
+- init_plugin.py, package_skill.py, validate_skill.py updated for new schemas
+
 ## [2.4.0] - 2026-03-17
 
 ### Added

@@ -17,7 +17,7 @@ Plugins can contain up to 5 core component types:
 
 | Component | Location | Format | Invocation | Best For |
 |-----------|----------|--------|-----------|----------|
-| Commands | `commands/` | Markdown | User (`/command`) | Quick, frequently used prompts |
+| Commands | `commands/` | Markdown | User (`/command`) | Quick prompts — **legacy**, prefer `skills/` for new plugins |
 | Agents | `agents/` | Markdown | Auto + Manual | Task-specific expertise |
 | Skills | `skills/` | Directory + SKILL.md | Model-invoked | Complex workflows with files |
 | Hooks | `hooks/hooks.json` | JSON | Event-triggered | Automation and validation |
@@ -28,15 +28,16 @@ Plugins can contain up to 5 core component types:
 ```
 plugin-name/
 ├── .claude-plugin/
-│   └── plugin.json          # REQUIRED - plugin manifest
-├── commands/                 # Slash commands (optional)
+│   └── plugin.json          # Optional - plugin manifest (adds metadata, not required to load)
+├── commands/                 # Slash commands — legacy approach (optional)
 ├── agents/                   # Custom agents (optional)
-├── skills/                   # Agent skills (optional)
+├── skills/                   # Agent skills (optional, preferred over commands/)
 │   └── skill-name/
 │       └── SKILL.md
 ├── hooks/                    # Event hooks (optional)
 │   └── hooks.json
 ├── .mcp.json                 # MCP servers (optional)
+├── settings.json             # Plugin-level settings, permissions, and http hooks (optional)
 ├── scripts/                  # Utility scripts
 ├── README.md
 └── CHANGELOG.md
@@ -45,10 +46,11 @@ plugin-name/
 ## Required vs Optional
 
 **Required**:
-- `.claude-plugin/plugin.json` - the plugin manifest
+- Nothing — Claude auto-discovers plugin components from the directory structure.
 
-**Optional (at least one recommended)**:
-- Commands, Agents, Skills, Hooks, or MCP servers
+**Optional**:
+- `.claude-plugin/plugin.json` — adds metadata (name, version, description) but is not required for the plugin to load. Commands, agents, skills, hooks, and MCP servers are discovered automatically from their standard directories.
+- Commands, Agents, Skills, Hooks, MCP servers, or `settings.json`
 
 ## Plugin vs Other Extension Methods
 
@@ -66,6 +68,10 @@ plugin-name/
 - Can be hosted on GitHub, GitLab, or any git hosting
 - **Enterprise policy management** available for organizations
 - Full **CLI control** for automation
+
+## Official plugin-dev Plugin
+
+The official Anthropic marketplace (`claude-plugins-official`) includes a `plugin-dev` plugin with a toolkit for creating plugins. plugin-creation-tools provides a more comprehensive alternative with validation, examples, and distribution guidance.
 
 ## See Also
 

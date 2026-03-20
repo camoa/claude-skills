@@ -1,5 +1,9 @@
 {
   "name": "greeter-dev",
+  "owner": {
+    "name": "Your Name",
+    "email": "you@example.com"
+  },
   "plugins": [
     {
       "name": "simple-greeter",

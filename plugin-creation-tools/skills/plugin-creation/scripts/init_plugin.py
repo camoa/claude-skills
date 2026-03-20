@@ -142,6 +142,7 @@ HOOKS_TEMPLATE = """{
   }
 }
 """
+# Note: 'http' hook type is NOT supported in hooks.json — http hooks only work in settings.json.
 
 SETUP_OUTPUT_SCRIPT = """#!/bin/bash
 # SessionStart hook - Create output directories and set env vars
@@ -189,11 +190,36 @@ HOOK_SCRIPT_TEMPLATE = """#!/bin/bash
 # Access tool information via stdin (JSON)
 # input=$(cat)
 
+# Plugin data directory (persistent across sessions, set by Claude Code)
+# DATA_DIR="${CLAUDE_PLUGIN_DATA}"
+
 # Example: Log the operation
 OUTPUT_DIR="${PLUGIN_OUTPUT_DIR:-./claude-outputs}"
 echo "[$(date)] PostToolUse hook executed" >> "${OUTPUT_DIR}/logs/operations.log"
 
 exit 0
+"""
+
+MARKETPLACE_JSON_TEMPLATE = """{
+  "name": "%s-dev",
+  "owner": {
+    "name": "Your Name",
+    "email": "you@example.com"
+  },
+  "plugins": [
+    {
+      "name": "%s",
+      "source": "./"
+    }
+  ]
+}
+"""
+
+SETTINGS_JSON_TEMPLATE = """{
+  "enabledPlugins": {
+    "%s@%s-dev": true
+  }
+}
 """
 
 MCP_TEMPLATE = """{
@@ -301,7 +327,7 @@ def init_plugin(plugin_name, path, components=None):
         print(f"Error creating directory: {e}")
         return None
 
-    # Create .claude-plugin/plugin.json (required)
+    # Create .claude-plugin/plugin.json and marketplace.json (required)
     try:
         claude_plugin_dir = plugin_dir / '.claude-plugin'
         claude_plugin_dir.mkdir()
@@ -309,9 +335,22 @@ def init_plugin(plugin_name, path, components=None):
             PLUGIN_JSON_TEMPLATE % plugin_name
         )
         print("Created .claude-plugin/plugin.json")
+        (claude_plugin_dir / 'marketplace.json').write_text(
+            MARKETPLACE_JSON_TEMPLATE % (plugin_name, plugin_name)
+        )
+        print("Created .claude-plugin/marketplace.json")
     except Exception as e:
-        print(f"Error creating plugin.json: {e}")
+        print(f"Error creating plugin files: {e}")
         return None
+
+    # Create settings.json for local development
+    try:
+        (plugin_dir / 'settings.json').write_text(
+            SETTINGS_JSON_TEMPLATE % (plugin_name, plugin_name)
+        )
+        print("Created settings.json")
+    except Exception as e:
+        print(f"Error creating settings.json: {e}")
 
     plugin_title = title_case(plugin_name)
     component_list = []
