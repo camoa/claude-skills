@@ -1,7 +1,7 @@
 ---
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "validate this implementation", "review this logic", "check dependencies", "check this config". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
-version: 0.4.0
+version: 0.5.0
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
 ---
@@ -9,6 +9,27 @@ user-invocable: true
 # Paper Test
 
 Systematically test code by mentally executing it line-by-line with concrete values.
+
+## Routing — Choose the Right Approach
+
+| Target Size | Approach | Why |
+|-------------|----------|-----|
+| **< 50 lines** | Quick trace (Steps 1–7 below) | Fast, inline, sufficient for small code |
+| **50–300 lines** | Structured 3-phase (below) | One agent, all 3 perspectives, sequential — thorough without coordination overhead |
+| **300+ lines or security-critical** | `/code-paper:test-team` (3 agents) | Context pressure justifies splitting. Cross-challenge debate catches what one agent misses. |
+| **Skill/command/agent files** | `/code-paper:test-team` | Different lenses genuinely find different things for instruction-based testing |
+
+If the user asks for "paper test" without specifying, read the target files, count lines, and recommend the appropriate approach. For 50–300 lines, use the Structured 3-Phase mode below. Only recommend `/test-team` for 300+ lines, explicit "test team" requests, or security-critical code.
+
+## Structured 3-Phase Mode (50–300 lines)
+
+Read `references/structured-3-phase.md` for the full methodology. It runs Phase A (happy path), Phase B (edge cases, 6 categories), Phase C (adversarial, 5 categories), and Phase D (self-review) sequentially in one agent.
+
+---
+
+## Quick Trace Mode (< 50 lines)
+
+For small code, skip the structured phases. Just trace with concrete values.
 
 ## When to Use
 
@@ -439,48 +460,6 @@ All detailed guides are in `references/` directory:
 - `references/blind-ab-comparison.md` - Comparing two implementations side by side
 - `references/rubric-scoring.md` - Structured grading for code quality assessment
 - `references/skill-and-config-testing.md` - Testing skills, commands, agents, and configs
-
----
-
-## Example
-
-```php
-function getDiscount($total, $coupon) {
-  if ($coupon == 'SAVE10') {
-    $discount = $total * 0.10;
-  }
-  if ($coupon == 'SAVE20') {
-    $discount = $total * 0.20;
-  }
-  return $discount;
-}
-```
-
-Paper test:
-
-```
-SCENARIO: No coupon provided
-INPUT: $total = 100, $coupon = null
-
-TRACE:
-Line 2: if ($coupon == 'SAVE10')
-        → null == 'SAVE10' = false
-        → SKIP
-
-Line 5: if ($coupon == 'SAVE20')
-        → null == 'SAVE20' = false
-        → SKIP
-
-Line 8: return $discount
-        → $discount is UNDEFINED
-
-OUTPUT:
-  Return: PHP Warning - undefined variable
-
-FLAWS FOUND:
-  - Line 8: Returns undefined variable when no coupon matches
-    FIX: Initialize $discount = 0 at start of function
-```
 
 ---
 

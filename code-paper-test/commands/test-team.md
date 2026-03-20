@@ -1,5 +1,5 @@
 ---
-description: Paper test code or skills with competing agent team (Happy Path + Edge Case + Red Team). Use when user says "test team", "3 perspectives", "competing testers", "thorough paper test", "security review", "deep code analysis", "test this skill with team". Best for complex code (50+ lines) or security-critical paths. Each tester runs in isolated worktree.
+description: Paper test code or skills with competing agent team (Happy Path + Edge Case + Red Team). Use when user says "test team", "3 perspectives", "competing testers", "thorough paper test", "security review", "deep code analysis", "test this skill with team". Best for large code (300+ lines), security-critical paths, or skill/command testing where perspective diversity matters most. For 50-300 line files, the single-agent structured 3-phase mode in /paper-test is more cost-effective. Each tester runs in isolated worktree.
 allowed-tools: Read, Write, Glob, Grep, WebSearch
 argument-hint: <file-path> [file-path...]
 ---
@@ -56,17 +56,30 @@ Stop here if not available.
 
 Read target files and count total lines.
 
-If fewer than 50 lines total:
-> Target is {N} lines. For small code, standard paper testing may be sufficient.
-> Continue with the 3-agent team? (The team adds most value with complex code.)
+**Routing by size:**
 
-Continue if user confirms or if 50+ lines.
+If fewer than 50 lines total:
+> Target is {N} lines. For small code, use `/paper-test` (single-agent quick trace) instead.
+> The 3-agent team adds overhead that isn't justified for small targets.
+
+Stop here and suggest `/paper-test` unless user insists.
+
+If 50–300 lines total and NOT skill/command files:
+> Target is {N} lines. The single-agent structured 3-phase mode (`/paper-test`) covers all 3 perspectives (happy path, edge cases, adversarial) at 1/3 the cost of the agent team.
+> Use the team anyway? (Best for security-critical code or when you want the cross-challenge debate.)
+
+Continue only if user confirms. Otherwise redirect to `/paper-test`.
+
+If 300+ lines total:
+> Target is {N} lines. The 3-agent team is recommended — context pressure benefits from splitting, and cross-challenge catches what one agent misses.
+
+Continue.
 
 **Skill/Config Detection:**
 
 If target files have YAML frontmatter (`---` delimiters) and contain step-by-step instructions rather than code:
 > Target appears to be a skill/command/agent definition, not code.
-> Switching to instruction tracing mode — will trace Claude's execution of these instructions rather than code execution.
+> Switching to instruction tracing mode — the 3-agent team adds most value here because happy path, edge case, and red team perspectives genuinely find different things for instruction-based testing.
 > See `references/skill-and-config-testing.md` for methodology.
 
 Continue with skill-aware spawn prompts below.

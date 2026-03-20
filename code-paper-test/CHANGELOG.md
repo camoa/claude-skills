@@ -5,6 +5,17 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-20
+
+### Added
+- **Structured 3-Phase mode** in `/paper-test` for 50–300 line files — runs all 3 perspectives (happy path, edge cases, adversarial) sequentially in a single agent instead of spawning 3 separate agents. Same coverage, 1/3 the cost, no coordination overhead.
+- **Smart routing** in `/paper-test` — reads target files, counts lines, and recommends the appropriate approach: quick trace (<50), structured 3-phase (50–300), or `/test-team` (300+ / security-critical / skills).
+- **Self-review phase (Phase D)** in structured mode — after all 3 phases, the agent reviews its own findings for false positives, blind spots, and cross-phase confirmation.
+
+### Changed
+- **`/test-team` threshold raised** — now recommends itself for 300+ lines, security-critical code, or skill/command testing. For 50–300 lines, redirects to `/paper-test` structured 3-phase with explanation of cost savings. Under 50 lines, stops and redirects to `/paper-test` quick trace.
+- **Skill/command routing preserved** in `/test-team` — the 3-agent team is still recommended for skill/command files regardless of line count, because perspective diversity (happy path vs edge case vs red team) genuinely finds different things for instruction-based testing.
+
 ## [0.4.3] - 2026-03-20
 
 ### Changed

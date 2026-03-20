@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.11.0"
+    "version": "1.12.0"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content.",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "author": {
         "name": "camoa"
       },
@@ -35,8 +35,8 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types, statusMessage/once fields, 5 permission modes, agent isolation and cost control, outputStyles, marketplace distribution, and pushy description optimization.",
-      "version": "2.4.0",
+      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 22 hook events, 4 hook types, effort field, ${CLAUDE_PLUGIN_DATA} persistence, plugin agent restrictions, CLAUDE_CODE_PLUGIN_SEED_DIR, 9 validation rules, marketplace distribution, and pushy description optimization.",
+      "version": "3.0.0",
       "author": {
         "name": "camoa"
       },
@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Requires: dev-guides-navigator.",
-      "version": "3.6.1",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. PostCompact state recovery, StopFailure logging. Requires: dev-guides-navigator.",
+      "version": "3.6.3",
       "author": {
         "name": "camoa"
       },
@@ -79,7 +79,7 @@
       "name": "drupal-htmx",
       "source": "./drupal-htmx",
       "description": "HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+. Includes analyzers, pattern recommendations, and validation.",
-      "version": "1.4.1",
+      "version": "1.4.3",
       "author": {
         "name": "camoa"
       },
@@ -97,8 +97,8 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
-      "version": "2.7.1",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review with REVIEW.md convention, /simplify distinction, effort:high debate agents, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
+      "version": "2.8.0",
       "author": {
         "name": "camoa"
       },
@@ -129,8 +129,8 @@
     {
       "name": "code-paper-test",
       "source": "./code-paper-test",
-      "description": "Systematically test code, skills, commands, and configs through mental execution \u2014 trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Includes 3-agent competing testers with isolated worktrees.",
-      "version": "0.4.1",
+      "description": "Systematically test code, skills, commands, and configs through mental execution \u2014 trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50\u2013300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills).",
+      "version": "0.5.0",
       "author": {
         "name": "camoa"
       },
@@ -155,7 +155,7 @@
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering.",
-      "version": "3.1.0",
+      "version": "3.1.2",
       "author": {
         "name": "camoa"
       },

@@ -90,8 +90,12 @@ Analyze brand from multiple sources (files, website, verbal description, pasted 
      - Brand Maturity (growing/established/iconic)"
    ```
 
-6. **Receive agent results**
-   Agent returns structured brand elements matching `references/brand-philosophy-template.md` format.
+6. **Read agent results from file**
+   The agent writes its findings to `brand-analysis-results.md` in the brand project root. Read this file to get the structured brand elements.
+
+   **Fallback:** If the agent resume fails (concurrency error, API issue), the file still exists. Read it directly — don't depend on the agent's return message.
+
+   After successfully generating brand-philosophy.md, delete `brand-analysis-results.md` — it's an intermediate artifact.
 
 7. **Copy brand assets to assets/ folder**
    - Copy logo files from `input/logos/` to `assets/`
