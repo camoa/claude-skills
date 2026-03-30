@@ -1,6 +1,6 @@
 ---
 name: dev-guides-navigator
-description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
+description: "Use when looking up development guides, best practices, or reference documentation for Drupal, theming, design systems, Next.js, SOLID, DRY, TDD, or security tasks. Fetches guides from camoa.github.io/dev-guides with hash-based caching, matches tasks to topics using KG metadata disambiguation, and returns actionable patterns and code examples. Use when user says 'how do I', 'best practice', 'pattern for', 'guide for', 'Drupal form', 'entity type', 'routing', 'caching', 'SDC component', or 'design system'. Invoke proactively before design, architecture, or implementation work touching Drupal APIs, theming, or security."
 version: 0.2.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 user-invocable: true
@@ -8,25 +8,17 @@ user-invocable: true
 
 # Dev-Guides Navigator
 
-Route to the correct online guide and enforce guide application.
+Route to the correct online guide, fetch it, and apply its patterns to the current task.
 
-## When to Use
+**CRITICAL: NEVER use WebFetch in this workflow.** All fetches use `curl -s` via Bash — WebFetch returns AI summaries or 400KB+ MkDocs HTML shells, destroying the structured content needed for matching. Guides are atomic and small enough for `curl`.
 
-- Any Drupal, Next.js, design system, or dev-practice task where a guide might help
-- When another skill or agent needs domain knowledge beyond its bundled references
-- When the user mentions a specific guide topic
-- NOT for: plugin methodology references (those are in drupal-dev-framework/references/)
+Not for: plugin methodology references (those are in drupal-dev-framework/references/).
 
 ## Core Workflow
 
 ### 1. Get llms.txt (with caching)
 
 Check for cache at `~/.claude/projects/{project-hash}/memory/dev-guides-cache.json`.
-
-**NEVER use WebFetch in this workflow.** All fetches use `curl -s` via Bash:
-- WebFetch summarizes content through AI, destroying structured formats needed for matching
-- MkDocs GitHub Pages URLs return 400KB+ HTML navigation shells, not guide content
-- Guides are atomic and small enough for `curl` — no summarization needed
 
 **No cache (first time):**
 1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` — save the hash
@@ -47,13 +39,9 @@ The URL in `llms.txt` is a GitHub Pages URL like `https://camoa.github.io/dev-gu
 
 ### 3. Fetch Topic Index
 
-**IMPORTANT:** Do NOT use WebFetch on GitHub Pages URLs — MkDocs renders them into 400KB+ HTML pages with navigation shells, hiding the actual content. Use `curl` with raw GitHub URLs instead.
-
 ```bash
 curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic-path}/index.md
 ```
-
-Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/index.md`
 
 This returns the raw markdown containing:
 
@@ -85,8 +73,6 @@ curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/{topic-path
 
 Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/form-validation.md`
 
-**Do NOT use WebFetch on GitHub Pages URLs** — you'll get rendered HTML, not the guide content.
-
 ### 6. Apply the Guide (Critical)
 
 **Do NOT just read and summarize.** Extract and apply:
@@ -107,16 +93,6 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 | Get guide | `curl -s` raw GitHub URL for specific guide `.md` |
 | Apply | Extract patterns and implement, don't summarize |
 
-## Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Using WebFetch instead of curl | **Always use `curl -s`** — WebFetch returns AI summaries or 400KB HTML shells |
-| Reading guide and only summarizing | Extract patterns and apply to current task |
-| Grabbing first keyword match | Check guide-meta `not` fields for disambiguation |
-| Fetching llms.txt every time | Check llms.hash first, use cache |
-| Ignoring `requires` | Load prerequisites first |
-
 ## Examples
 
 | User says | Action |
@@ -125,16 +101,16 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 | "Add a story.yml for my component" | Match "story.yml" → check guide-meta → `drupal/ui-patterns/` (NOT storybook) |
 | "Set up responsive images" | Match "responsive image" → `drupal/image-styles/` (NOT drupal/media) |
 | "How do I use Config Split?" | Match "Config Split" → `drupal/config-management/` |
-| "I need SOLID architecture for my module" | Drupal context → `drupal/solid/` (NOT generic dev-solid-principles) |
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
 | `curl` fails (network error) | Fall back to `references/guide-index.md` for keyword-to-URL lookup |
-| No topic matches the task | Broaden keywords, check category sections in llms.txt, or task may not need a guide |
-| Cache file path unknown | Use Bash: `echo ~/.claude/projects/*/memory/` to find the project memory directory |
-| Guide content too large for context | Request only the specific section from the routing table, not the entire guide |
+| No topic matches the task | Broaden keywords, check category sections in llms.txt |
+| Guide content too large for context | Request only the specific section from the routing table |
+| First keyword match is wrong topic | Check guide-meta `not` fields for disambiguation |
+| Cache file path unknown | Use Bash: `echo ~/.claude/projects/*/memory/` |
 
 ## See Also
 

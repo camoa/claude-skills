@@ -1,7 +1,7 @@
 ---
 name: plugin-creation
 version: 3.0.0
-description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
+description: "Use when creating Claude Code plugins — covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Scaffolds plugin directories, generates SKILL.md files, creates command and agent definitions, configures hooks, and packages plugins for marketplace distribution. Use when user says 'create plugin', 'make a skill', 'add command', 'add hooks', 'skill authoring', 'plugin components', 'scaffold plugin', 'plugin structure', or 'write a skill description'. Not for using existing plugins, installing plugins, or marketplace browsing."
 ---
 
 # Plugin Creation

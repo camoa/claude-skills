@@ -1,52 +1,56 @@
 ---
 name: guide-loader
-description: Use when needing specialized guide content - delegates to dev-guides-navigator plugin for online guide discovery with caching and disambiguation
+description: "Use when loading development guide content into context for Drupal, theming, design systems, or dev-practice tasks. Checks local project guides first, then delegates to dev-guides-navigator for online guide discovery with hash-based caching and KG metadata disambiguation. Returns actionable patterns, decision criteria, and code examples from matched guides. Use when user says 'load guide', 'get documentation', 'find best practice', 'how-to guide', or 'reference guide'."
 version: 3.0.0
 user-invocable: false
 ---
 
 # Guide Loader
 
-Load development guides into context when needed. Delegates to the `dev-guides-navigator` plugin for online guide discovery.
-
-## Activation
-
-Activate when:
-- Designing or implementing features that match guide topics
-- User requests a specific guide
-- Invoked by other skills (guide-integrator, task-context-loader)
-- "Load the ECA guide" or "What does my guide say about..."
+Load development guides into context and extract actionable patterns for the current task.
 
 ## Workflow
 
-### 1. Check for Local Guides Path (Legacy)
+### 1. Check Local Guides Path
 
-Read `{project_path}/project_state.md` and look for `**Guides Path:** {path}`.
+Read `{project_path}/project_state.md` and extract `**Guides Path:** {path}`.
 
-If found and specific guide requested by filename, read it directly. Otherwise, proceed to step 2.
+If found and a specific guide is requested by filename:
+```
+Read {guides_path}/{requested_guide}.md
+```
+If the file exists, skip to step 3. Otherwise, proceed to step 2.
 
 ### 2. Delegate to Navigator
 
-Invoke the `dev-guides-navigator` skill with the task keywords. The navigator handles:
-- Hash-based caching of `llms.txt` (no redundant fetches)
-- Topic matching with KG metadata disambiguation
-- Routing to the correct guide via topic `index.md`
-- Fetching the specific guide content
+Invoke the `dev-guides-navigator` skill with task keywords. Pass specific terms (e.g., "Drupal forms validation", "SDC component", "config management") rather than broad queries.
 
-### 3. Integrate with Current Work
+The navigator returns raw guide markdown via `curl -s` from raw GitHub URLs — never use WebFetch.
 
-Based on guide content returned by the navigator, suggest:
+### 3. Extract and Apply
+
+From the guide content, extract and present:
+
 ```
-Apply to current task:
-- {Specific recommendation from guide}
-- {Pattern to follow}
-- {Thing to avoid}
+Relevant patterns for current task:
+- {Decision criteria from guide}
+- {Code pattern or API usage to follow}
+- {Anti-pattern to avoid}
 
-Add these to architecture/implementation? (yes/no)
+Recommended approach: {specific recommendation}
+
+Add to architecture/implementation docs? (yes/no)
 ```
+
+Apply patterns directly to the current implementation — do not merely summarize the guide.
+
+### 4. Cross-Reference Prerequisites
+
+Check the guide's `requires` metadata. If prerequisites exist, load those guides first before applying the current guide's patterns.
 
 ## Stop Points
 
 STOP and wait for user:
 - If requested guide not found locally or via navigator
-- After presenting guide content (ask if need more)
+- After presenting guide recommendations (ask if user needs more detail)
+- If guide conflicts with existing project architecture decisions
