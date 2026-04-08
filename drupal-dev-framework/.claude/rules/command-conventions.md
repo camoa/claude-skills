@@ -19,22 +19,10 @@ paths:
 
 ## Session Context Tracking
 
-When a command resolves which project and/or task the user is working on, **write the session context file** so it survives context compaction:
+When a command resolves which project and/or task the user is working on, **invoke the `session-context-writer` skill** so compaction hooks can guide Claude to restore context from live project state files.
 
-```bash
-mkdir -p ~/.claude/drupal-dev-framework
-cat > ~/.claude/drupal-dev-framework/session_context.json << EOF
-{
-  "project": "{project_name}",
-  "projectPath": "{project_path}",
-  "task": "{task_name_or_null}",
-  "taskPath": "{task_path_or_null}",
-  "updatedAt": "$(date -I)"
-}
-EOF
-```
-
-- Write after the user selects/confirms a project and task (not before)
-- Set `task` and `taskPath` to `null` if only the project is known
-- On `/complete`, clear `task` and `taskPath` (set to `null`) since the task moved to completed
-- The pre-compact hook reads this file to inject accurate context into the compacted prompt
+- Invoke after the user selects/confirms a project and task (not before)
+- Pass `null` for task/taskPath if only the project is known
+- On `/complete`, invoke with task set to `null` since the task moved to completed
+- Session context is per-workspace (keyed by `$PWD` hash) — multiple Claude windows don't conflict
+- The pre/post-compact hooks read the workspace-specific session file to point Claude at the right `project_state.md`

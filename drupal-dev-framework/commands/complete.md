@@ -23,6 +23,7 @@ Mark a task as complete and move it to the completed folder.
 5. Moves entire task directory to `implementation_process/completed/{task_name}/`
 6. Updates `project_state.md`
 7. Suggests next task (if any)
+8. **Invokes `session-context-writer` skill with project and task set to `null` (task is now completed)**
 
 ## Pre-Completion Checks
 

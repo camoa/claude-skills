@@ -2,7 +2,6 @@
 # StopFailure hook: Log task failures caused by API errors
 # Writes a failure record so the next session can detect and recover
 
-SESSION_CONTEXT="$HOME/.claude/drupal-dev-framework/session_context.json"
 LOG_DIR="$HOME/.claude/drupal-dev-framework/logs"
 LOG_FILE="$LOG_DIR/failures.log"
 
@@ -12,9 +11,12 @@ TIMESTAMP=$(date -Iseconds)
 PROJECT_NAME=""
 TASK_NAME=""
 
-if [ -f "$SESSION_CONTEXT" ]; then
-  PROJECT_NAME=$(jq -r '.project // empty' "$SESSION_CONTEXT" 2>/dev/null)
-  TASK_NAME=$(jq -r '.task // empty' "$SESSION_CONTEXT" 2>/dev/null)
+WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+SESSION_FILE="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
+
+if [ -f "$SESSION_FILE" ]; then
+  PROJECT_NAME=$(jq -r '.project // empty' "$SESSION_FILE" 2>/dev/null)
+  TASK_NAME=$(jq -r '.task // empty' "$SESSION_FILE" 2>/dev/null)
 fi
 
 # Log the failure

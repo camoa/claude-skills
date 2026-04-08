@@ -22,6 +22,10 @@ Spawns a 3-teammate agent team for Phase 1 research. Detects whether the task is
 
 When this command is invoked with `$ARGUMENTS`:
 
+### Step 0 — Update Session Context
+
+After resolving the project and task, **invoke `session-context-writer` skill** with the resolved project and task values.
+
 ### Step 1 — Locate Task
 
 Read the project's `implementation_process/in_progress/$ARGUMENTS/task.md`.
