@@ -1,6 +1,6 @@
 ---
 name: visual-content
-description: Use when creating branded presentations or carousels. Generates museum-quality visual output from canvas philosophy, enforcing style constraints. Outputs PDF first, then converts to PPTX for editability.
+description: "Use when creating branded presentations, slide decks, or LinkedIn/Instagram carousels. Applies canvas philosophy and brand colors to generate slides with consistent visual hierarchy, typography, and layout. Outputs PDF first, then converts to PPTX for editability. Enforces WCAG AA contrast, safe zones, and style constraints from design system. Use when user says 'create presentation', 'make slides', 'slide deck', 'LinkedIn carousel', or 'branded deck'."
 version: 3.1.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
@@ -8,59 +8,18 @@ user-invocable: false
 
 # Visual Content Skill
 
-Create gallery-quality branded presentations and carousels through artistic design philosophy.
+Create branded presentations and carousels driven by canvas philosophy and brand identity.
 
-## The Critical Understanding
+## Part 1: Canvas Philosophy
 
-Visual content creation is an act of **artistic expression**, not template filling. Every slide or card should appear as if crafted by a designer at the absolute top of their field—meticulous, intentional, worthy of display.
+Read `canvas-philosophy.md` and extract:
+- **Movement name** — defines the aesthetic tone (e.g., "Chromatic Silence" = restraint, "Brutalist Joy" = boldness)
+- **Philosophy paragraphs** — how ideas manifest through form, space, color, composition
+- **Constraints** — hard boundaries that define the style's character (whitespace %, word limits, element count)
 
-**What you receive**: A canvas philosophy and brand DNA—use these as foundation, not constraint.
-**What you create**: Visual artifacts that are 90% design, 10% essential text.
-**The standard**: Work that looks like it took countless hours, labored over with painstaking care.
+## Part 2: Conceptual Thread
 
----
-
-## Part 1: Understanding Canvas Philosophy
-
-A canvas philosophy is not a layout specification—it's an **aesthetic movement**, a manifesto for how ideas become visual form.
-
-### How to Read a Canvas Philosophy
-
-When you receive a `canvas-philosophy.md`, internalize its spirit:
-
-- **The movement name** tells you the soul: "Chromatic Silence" demands restraint; "Brutalist Joy" permits boldness
-- **The philosophy paragraphs** describe how ideas manifest through form, space, color, composition
-- **The constraints** are sacred boundaries that define the style's character
-
-**Read it as an artist reads a creative brief—absorb the worldview, then express it.**
-
-### Philosophy Examples (for reference)
-
-These illustrate the language and depth expected in a canvas philosophy:
-
-**"Concrete Poetry"**
-Communication through monumental form and bold geometry. Massive color blocks, sculptural typography (huge single words, tiny labels), Brutalist spatial divisions. Ideas expressed through visual weight and spatial tension, not explanation. Text as rare, powerful gesture—never paragraphs, only essential words integrated into visual architecture. Every element placed with the precision of a master craftsman who has labored over each decision.
-
-**"Chromatic Language"**
-Color as the primary information system. Geometric precision where color zones create meaning. Typography minimal—small sans-serif labels letting chromatic fields communicate. Information encoded spatially and chromatically. Words only anchor what color already shows. The result of painstaking chromatic calibration by someone at the top of their field.
-
-**"Analog Meditation"**
-Quiet visual contemplation through texture and breathing room. Paper grain, ink bleeds, vast negative space. Photography and illustration dominate. Typography whispered (small, restrained, serving the visual). Images breathe across pages. Text appears sparingly—short phrases, never explanatory blocks. Each composition balanced with the care of a meditation practice, meticulously crafted over countless hours.
-
-**"Geometric Silence"**
-Pure order and restraint. Grid-based precision, bold photography or stark graphics, dramatic negative space. Typography precise but minimal—small essential text, large quiet zones. Swiss formalism meets Brutalist material honesty. Structure communicates, not words. Every alignment the work of countless refinements by an expert hand.
-
----
-
-## Part 2: The Subtle Reference
-
-**CRITICAL STEP**: Before creating visuals, identify the conceptual thread from the content.
-
-The topic becomes a **subtle, niche reference embedded within the design itself**—not literal, always sophisticated. Someone familiar with the subject should feel it intuitively, while others simply experience a masterful composition.
-
-Think like a jazz musician quoting another song—only those who know will catch it, but everyone appreciates the music.
-
-The canvas philosophy provides the aesthetic language. The content provides the soul—the quiet conceptual DNA woven invisibly into form, color, and composition.
+Before creating visuals, identify a subtle conceptual reference from the content topic. Embed it into the design through color choices, spatial relationships, or compositional decisions — never literally.
 
 ---
 
@@ -83,33 +42,15 @@ Also check for `### Spatial & Surface Profile` — if present, use its values (s
 
 ## Part 3: Visual Expression
 
-With philosophy internalized and conceptual thread identified, create the visual artifacts.
+### Composition Rules (MANDATORY)
 
-### Composition Rules Application (MANDATORY)
-
-Before laying out ANY slide, follow this structural process:
-
+For every slide:
 1. **Identify slide type** — Title, Content, Image, Data/Chart, Quote, CTA, or Transition
-2. **Look up focal point** — From the Composition Rules section of canvas-philosophy.md (or from `references/slide-composition-rules.md` if missing)
-3. **Place focal element FIRST** — The primary visual anchor goes in position before anything else
-4. **Apply style modifier** — Adjust position based on the style's layout rules (centered, asymmetric, grid, flowing)
-5. **Check component frequency** — Before adding cards/icons/gradients, check if within budget across all slides
-6. **Verify density** — Max 3 visual layers. No element collisions. 24px minimum spacing.
-
-**Fallback**: If the canvas-philosophy.md does not include a Composition Rules section (legacy templates), use the defaults from `references/slide-composition-rules.md` with the style's modifiers applied.
-
-### The Craftsmanship Standard
-
-**CRITICAL**: To achieve human-crafted quality (not AI-generated), create work that looks like it took countless hours. Make it appear as though someone at the absolute top of their field labored over every detail with painstaking care.
-
-Ensure the composition, spacing, color choices, typography—everything screams **expert-level craftsmanship**. This is non-negotiable.
-
-Repeat this mantra:
-- Meticulously crafted
-- The product of deep expertise
-- Painstaking attention to detail
-- Master-level execution
-- Labored over with care
+2. **Look up focal point** — from canvas-philosophy.md Composition Rules (fallback: `references/slide-composition-rules.md`)
+3. **Place focal element FIRST** — primary visual anchor before anything else
+4. **Apply style modifier** — centered, asymmetric, grid, or flowing per style
+5. **Check component frequency** — within budget across all slides (see Part 7)
+6. **Verify density** — max 3 visual layers, no collisions, 24px minimum spacing
 
 ### Creating Presentations (16:9)
 
@@ -148,85 +89,38 @@ Each piece must respect its style's **hard constraints**:
 
 ---
 
-## Part 4: Execution Principles
+## Part 4: Design Rules
 
 ### Visual Hierarchy
+- Single focal point per slide/card
+- Clear reading order (F-pattern or Z-pattern)
+- Contrast guides attention to primary message
 
-```
-1. Single focal point per slide/card—the eye knows where to land
-2. Clear reading order (F-pattern or Z-pattern)—the journey is intuitive
-3. Contrast guides attention—importance is visible
-4. Nothing competes with the message—supporting elements support
-```
-
-### Typography as Visual Element
-
-```
-- Headlines: Bold, commanding, minimal—a single powerful statement
-- Body: Avoid entirely when possible—if you must, keep it whispered
-- Numbers: Large, prominent, contextualized—let data be visual
-- Labels: Small, quiet, supportive—they annotate, not explain
-```
-
-**Text is always minimal and visual-first.** Let context guide whether that means whisper-quiet labels or bold typographic gestures. A pitch deck might have larger, more aggressive type than a meditation app. Regardless of approach, sophistication is non-negotiable.
+### Typography
+| Element | Treatment |
+|---------|-----------|
+| Headlines | Bold, commanding, minimal — single powerful statement |
+| Body | Avoid when possible; if needed, keep minimal |
+| Numbers | Large, prominent, contextualized |
+| Labels | Small, quiet, supportive |
 
 ### Color Application
+- Primary: 60% of usage, Secondary: 30%, Accent: 10%
+- Use brand palette exclusively — never introduce off-brand colors
+- **Personality modifiers** (from Part 2b): Excitement → vibrant saturation; Sophistication → muted/desaturated; Sincerity → warm mid-tones; Competence → clean systematic hierarchy; Ruggedness → deep earthy values
 
-```
-- Use brand palette or selected alternative palette exclusively
-- Primary: 60% of color usage—the dominant voice
-- Secondary: 30% of color usage—the supporting harmony
-- Accent: 10% for emphasis only—the punctuation
-- Never introduce off-brand colors—consistency builds trust
-```
-
-**Personality-informed intensity** (from Part 2b):
-- **Excitement** → Push toward vibrant saturation, bolder color blocks, higher contrast accents
-- **Sophistication** → Pull toward muted/desaturated application, restrained accent use
-- **Sincerity** → Favor warm, accessible mid-saturation tones
-- **Competence** → Clean, systematic color application with clear hierarchy
-- **Ruggedness** → Deep earthy values, textured color application
-
-### Spatial Communication
-
-```
-- Whitespace is not empty—it's active, meaningful silence
-- Placement carries meaning—center = importance, edges = supporting
-- Proportion creates rhythm—vary scale intentionally
-- Margins are sacred—nothing touches edges, nothing overlaps
-```
+### Anti-Patterns
+Avoid: bullet point lists on slides, walls of text, clip art, competing focal points, decoration without purpose, exceeding word/whitespace limits.
 
 ---
 
-## Part 5: Anti-Patterns (Death to These)
+## Part 5: Final Polish
 
-- **Bullet point lists**: The death of visual communication
-- **Wall of text**: Violates the 3-second rule, breaks the visual contract
-- **Clip art or stock clichés**: Instant amateur signal
-- **Competing focal points**: Confusion disguised as richness
-- **Decoration without purpose**: If it doesn't serve the message, delete it
-- **Violating whitespace minimums**: Cramped = desperate
-- **Exceeding word limits**: Discipline defines mastery
-- **Generic template feel**: The opposite of everything we're doing
+Before finalizing, take a second pass: verify alignment, spacing, no overlaps, breathing room between elements. Refine what exists rather than adding more elements.
 
 ---
 
-## Part 6: The Final Polish
-
-**IMPORTANT**: Before declaring done, assume the user already said: "It isn't perfect enough. It must be pristine, a masterpiece of craftsmanship, as if it were about to be displayed in a museum."
-
-**CRITICAL**: To refine the work, avoid adding more elements. Instead, refine what exists and make it extremely crisp. Rather than adding a new graphic or changing a font, ask: **"How can I make what's already here more of a piece of art?"**
-
-Take a second pass:
-- Check every alignment
-- Verify every spacing decision
-- Confirm nothing overlaps
-- Ensure breathing room between all elements
-- Polish until it gleams
-
----
-
-## Part 6b: Accessibility & Safety (MANDATORY)
+## Part 6: Accessibility & Safety (MANDATORY)
 
 **These checks are NON-NEGOTIABLE before any output is finalized.**
 
@@ -294,46 +188,18 @@ When text appears on gradients:
 
 ---
 
-## Part 7: Visual Components (Optional)
+## Part 7: Visual Components
 
-Some styles support visual components that enhance the design. **Components are opt-in** (user enables during template creation) **but should be used intelligently** based on content—not on every slide just because they're enabled.
+Components are opt-in (user enables during template creation). Before using any component, pass these gates in order:
 
-### Component Decision Gates (MANDATORY)
+| Gate | Check | Fail Action |
+|------|-------|-------------|
+| 1. Style Permission | Does style allow this component? (Check style-constraints.md) | Skip component |
+| 2. Content Justification | Does content warrant it? Cards: 2+ related points; Icons: clear metaphor; Gradients: hook/CTA slides only | Skip component |
+| 3. Frequency Budget | Cards ≤60% of slides, Icons ≤50%, Gradients ≤3 total | Use alternative |
+| 4. Density Check | ≤3 visual layers per slide | Skip component |
 
-Before using ANY visual component on a slide, pass through these gates IN ORDER:
-
-**Gate 1: Style Permission**
-Does the selected style allow this component? (Check style-constraints.md or enforcement block)
-- If NO → skip component entirely
-- If YES → proceed to Gate 2
-
-**Gate 2: Content + Personality Justification**
-Does the slide's content warrant this component? Also consider the brand's primary Aaker dimension (from Part 2b):
-- **Cards**: Does the slide have 2+ related points that benefit from grouping? If single message → no cards. *Personality modifier: Excitement brands → lower threshold (use cards more freely for visual energy); Sophistication brands → higher threshold (use cards sparingly, prefer negative space).*
-- **Icons**: Is there a clear, unforced visual metaphor? If you have to think about it → no icon. *Personality modifier: Sincerity/Excitement brands → icons add warmth/energy; Sophistication brands → icons risk feeling casual, prefer typographic emphasis.*
-- **Gradients**: Is this a hook, transition, or CTA slide? If content slide → no gradient. *Personality modifier: Excitement brands → gradients add dynamism; Competence brands → solid colors communicate precision.*
-- If NO justification → skip component
-- If YES → proceed to Gate 3
-
-**Gate 3: Frequency Budget**
-Is this component within its presentation-wide budget?
-- Cards: used on ≤60% of slides so far?
-- Icons: used on ≤50% of slides so far?
-- Gradients: used on ≤3 slides total?
-- If OVER budget → skip component, use alternative treatment
-- If WITHIN budget → proceed to Gate 4
-
-**Gate 4: Density Check**
-Will adding this component exceed 3 visual layers on this slide?
-- Background + content + this component = 3 layers max
-- Cards + gradient on same slide = usually too dense (exception: Pitch-Velocity, Memphis)
-- If TOO dense → skip component
-- If OK → use component
-
-**When a component fails a gate**, use these alternatives:
-- Instead of a card → bold text with accent underline or increased font size
-- Instead of an icon → typographic emphasis, a number, or additional whitespace
-- Instead of a gradient → solid brand-tinted background color
+**Alternatives when gated out:** card → bold text with accent underline; icon → typographic emphasis; gradient → solid brand-tinted background.
 
 ### Component Availability by Style
 
@@ -397,7 +263,7 @@ Background transitions for depth:
 
 ---
 
-## Part 8: Technical Implementation
+## Part 8: Technical Implementation (Reference)
 
 For PDF generation code patterns, see `references/technical-implementation.md`:
 - Asset preparation (SVG→PNG conversion, font loading)
@@ -466,15 +332,13 @@ Before finalizing any presentation or carousel:
 
 ---
 
-## Part 11: The Ultimate Test
+## Validation Checklist
 
-Before finalizing, ask:
+Before finalizing, verify:
+- [ ] Every pixel serves the message — no decorative noise
+- [ ] Composition quality matches premium client standards
+- [ ] All accessibility checks pass (Part 6)
+- [ ] Component gates respected (Part 7)
+- [ ] Style constraints enforced throughout
 
-> Would this work hang in a design museum?
-> Would a creative director approve this for a premium client?
-> Does every pixel serve the message?
-> Does it look like someone labored over it with painstaking care?
-
-If yes to all four, the work is ready.
-
-If no to any, return to Part 6 and polish until it gleams.
+If any check fails, return to Part 5 and refine.
