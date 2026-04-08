@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Post-compact hook: Re-inject active project/task context after compaction
-# Reads session_context.json to restore task state Claude needs to continue
+# Post-compact hook: Instruct Claude to reload project context after compaction
+# Outputs instructions for Claude — Claude reads live state, not cached data
 
 SESSION_CONTEXT="$HOME/.claude/drupal-dev-framework/session_context.json"
 
+# Only output if a framework command was used this session
 if [ ! -f "$SESSION_CONTEXT" ]; then
   exit 0
 fi
@@ -17,31 +18,21 @@ if [ -z "$PROJECT_NAME" ] || [ ! -d "$PROJECT_PATH" ]; then
   exit 0
 fi
 
-echo "## Session Restored After Compaction"
+echo "## Session Restored — Drupal Dev Framework"
 echo ""
-echo "**Project:** $PROJECT_NAME"
-echo "**Path:** $PROJECT_PATH"
+echo "You were working on project **$PROJECT_NAME**."
 
-# Re-inject project_state.md if present
-STATE_FILE="$PROJECT_PATH/project_state.md"
-if [ -f "$STATE_FILE" ]; then
-  echo ""
-  echo "### Project State"
-  head -40 "$STATE_FILE"
-fi
-
-# Re-inject active task context
-if [ -n "$TASK_NAME" ] && [ -d "$TASK_PATH" ]; then
-  echo ""
-  echo "**Active Task:** $TASK_NAME"
-
-  TASK_FILE="$TASK_PATH/task.md"
-  if [ -f "$TASK_FILE" ]; then
-    echo ""
-    echo "### Task Details"
-    head -30 "$TASK_FILE"
-  fi
+if [ -n "$TASK_NAME" ] && [ "$TASK_NAME" != "null" ]; then
+  echo "Active task: **$TASK_NAME**"
 fi
 
 echo ""
-echo "_Context restored by PostCompact hook. Continue from where you left off._"
+echo "To restore full context:"
+echo "1. Read \`$PROJECT_PATH/project_state.md\` for current project state"
+
+if [ -n "$TASK_PATH" ] && [ "$TASK_PATH" != "null" ] && [ -d "$TASK_PATH" ]; then
+  echo "2. Read \`$TASK_PATH/task.md\` for active task details and progress"
+fi
+
+echo ""
+echo "Continue from where you left off."
