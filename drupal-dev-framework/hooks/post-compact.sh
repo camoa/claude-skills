@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # Post-compact hook: Instruct Claude to reload project context after compaction
-# Outputs instructions for Claude — Claude reads live state, not cached data
+# Reads per-workspace session file to find the active project
 
-SESSION_CONTEXT="$HOME/.claude/drupal-dev-framework/session_context.json"
+WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+SESSION_FILE="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
-# Only output if a framework command was used this session
-if [ ! -f "$SESSION_CONTEXT" ]; then
+# Only output if a framework command was used in this workspace this session
+if [ ! -f "$SESSION_FILE" ]; then
   exit 0
 fi
 
-PROJECT_NAME=$(jq -r '.project // empty' "$SESSION_CONTEXT" 2>/dev/null)
-PROJECT_PATH=$(jq -r '.projectPath // empty' "$SESSION_CONTEXT" 2>/dev/null)
-TASK_NAME=$(jq -r '.task // empty' "$SESSION_CONTEXT" 2>/dev/null)
-TASK_PATH=$(jq -r '.taskPath // empty' "$SESSION_CONTEXT" 2>/dev/null)
+PROJECT_NAME=$(jq -r '.project // empty' "$SESSION_FILE" 2>/dev/null)
+PROJECT_PATH=$(jq -r '.projectPath // empty' "$SESSION_FILE" 2>/dev/null)
+TASK_NAME=$(jq -r '.task // empty' "$SESSION_FILE" 2>/dev/null)
+TASK_PATH=$(jq -r '.taskPath // empty' "$SESSION_FILE" 2>/dev/null)
 
 if [ -z "$PROJECT_NAME" ] || [ ! -d "$PROJECT_PATH" ]; then
   exit 0

@@ -24,4 +24,5 @@ When a command resolves which project and/or task the user is working on, **invo
 - Invoke after the user selects/confirms a project and task (not before)
 - Pass `null` for task/taskPath if only the project is known
 - On `/complete`, invoke with task set to `null` since the task moved to completed
-- The pre/post-compact hooks read `session_context.json` to point Claude at the right `project_state.md`
+- Session context is per-workspace (keyed by `$PWD` hash) — multiple Claude windows don't conflict
+- The pre/post-compact hooks read the workspace-specific session file to point Claude at the right `project_state.md`

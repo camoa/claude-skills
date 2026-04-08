@@ -2,9 +2,9 @@
 # Session start hook for drupal-dev-framework
 # Checks required plugins and registered projects
 
-# Clear stale session context from previous sessions
-# Commands write fresh context when user selects a project/task
-rm -f "$HOME/.claude/drupal-dev-framework/session_context.json"
+# Clear stale session context for THIS workspace only
+WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+rm -f "$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
 # Check required plugin: dev-guides-navigator
 SETTINGS_FILES=("$HOME/.claude/settings.json" ".claude/settings.json")
