@@ -26,6 +26,7 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 8. Updates `task.md` to mark Phase 3 as in progress
 9. Activates `tdd-companion` for TDD discipline
 10. Prepares for interactive development
+11. **Invokes `session-context-writer` skill with the resolved project and task**
 
 ## Task-Based Workflow
 

@@ -24,6 +24,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 6. Stores findings in `research.md` file
 7. Updates `task.md` to mark Phase 1 as in progress
 8. Updates `project_state.md` with current task
+9. **Invokes `session-context-writer` skill with the resolved project and task**
 
 ## Task-Based Workflow
 

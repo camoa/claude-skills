@@ -27,6 +27,7 @@ Initialize a new development project with complete memory structure.
 4. Registers project in `~/.claude/drupal-dev-framework/active_projects.json`
 5. Invokes `project-initializer` skill
 6. Invokes `requirements-gatherer` skill
+7. **Invokes `session-context-writer` skill with the new project name and path**
 
 ## Project Name Requirements
 
