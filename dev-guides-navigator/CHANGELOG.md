@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 (2026-04-08)
+
+### Changed
+- **PreCompact hook** — Simplified to output only cache location pointer. No longer dumps hash or topic count metadata into compaction.
+
 ## 0.2.3 (2026-03-20)
 
 ### Changed

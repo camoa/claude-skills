@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Pre-compact hook: Preserve active audit context before compaction
-# Outputs report paths, last command run, and key findings
-
-echo "## Pre-Compaction Context (code-quality-tools)"
-echo ""
+# Pre-compact hook: Instruct Claude to read audit reports instead of dumping content
 
 # Find .reports directory
 REPORTS_DIR=".reports"
@@ -12,45 +8,27 @@ if [ ! -d "$REPORTS_DIR" ]; then
 fi
 
 if [ -z "$REPORTS_DIR" ] || [ ! -d "$REPORTS_DIR" ]; then
-  echo "No .reports/ directory found. No active audit session."
   exit 0
 fi
 
-echo "### Reports Directory: $REPORTS_DIR"
+echo "## Pre-Compaction Context (code-quality-tools)"
 echo ""
-
-# List available reports with timestamps
-echo "### Available Reports"
-ls -lt "$REPORTS_DIR"/*.{json,md} 2>/dev/null | head -10 | while read -r line; do
-  echo "- $line"
-done
+echo "Reports directory found: \`$REPORTS_DIR\`"
 echo ""
+echo "To restore context after compaction:"
+echo "1. List \`$REPORTS_DIR/\` for available reports"
 
-# Show synthesis if it exists (most valuable for context)
-if [ -f "$REPORTS_DIR/audit-synthesis.md" ]; then
-  echo "### Audit Synthesis (summary)"
-  head -30 "$REPORTS_DIR/audit-synthesis.md"
-  echo "..."
-  echo ""
-fi
+[ -f "$REPORTS_DIR/audit-synthesis.md" ] && echo "2. Read \`$REPORTS_DIR/audit-synthesis.md\` for audit synthesis"
 
-# Show code review if it exists
 for review in "$REPORTS_DIR"/code-review-*.md; do
   if [ -f "$review" ]; then
-    echo "### Code Review: $(basename "$review")"
-    head -20 "$review"
-    echo "..."
-    echo ""
-    break  # Only show most recent
+    echo "3. Read \`$review\` for code review results"
+    break
   fi
 done
 
-# Show debate results if they exist
 for debate in security-debate.md architecture-debate.md; do
   if [ -f "$REPORTS_DIR/$debate" ]; then
-    echo "### Debate: $debate"
-    head -15 "$REPORTS_DIR/$debate"
-    echo "..."
-    echo ""
+    echo "4. Read \`$REPORTS_DIR/$debate\` for debate results"
   fi
 done

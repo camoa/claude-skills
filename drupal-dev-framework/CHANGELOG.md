@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-04-08
+
+### Fixed
+- **Compaction hooks leaking stale project context** — `session_context.json` persisted across sessions, injecting wrong project context (e.g., `camoa_skills`) regardless of actual project. Registry fallback also guessed incorrectly.
+
+### Added
+- **`session-context-writer` skill** (internal) — Writes per-workspace session context keyed by `$PWD` hash. Multiple Claude windows working on different projects no longer conflict.
+- All project-aware commands (`/next`, `/new`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/status`) now invoke `session-context-writer` after resolving project/task.
+
+### Changed
+- **Session-start hook** — Clears stale session context for the current workspace on every new session.
+- **Pre/PostCompact hooks** — No longer dump cached content. Now output instructions for Claude to read live `project_state.md` and `task.md` on demand.
+- **StopFailure hook** — Reads per-workspace session file instead of global `session_context.json`.
+- Session context stored under `~/.claude/drupal-dev-framework/sessions/<workspace-hash>.json` (was single global file).
+
 ## [3.7.0] - 2026-03-20
 
 ### Added

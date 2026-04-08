@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-04-08
+
+### Changed
+- **PreCompact hook** — No longer runs grep scans and dumps HTMX/AJAX module listings into compaction. Now outputs instructions for Claude to scan custom modules on demand, reducing compaction bloat.
+
 ## [1.4.3] - 2026-03-20
 
 ### Changed

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Pre-compact hook: Preserve active plugin development context before compaction
-# Outputs plugin being built/edited, its components, and validation state
-
-echo "## Pre-Compaction Context (plugin-creation-tools)"
-echo ""
+# Pre-compact hook: Instruct Claude to read plugin state instead of dumping content
 
 # Find plugin.json in current directory or subdirectories
 PLUGIN_JSON=""
@@ -16,7 +12,6 @@ else
 fi
 
 if [ -z "$PLUGIN_JSON" ]; then
-  echo "No plugin.json found. Not currently in a plugin project."
   exit 0
 fi
 
@@ -24,27 +19,13 @@ PLUGIN_DIR=$(dirname "$(dirname "$PLUGIN_JSON")")
 PLUGIN_NAME=$(jq -r '.name // "unknown"' "$PLUGIN_JSON" 2>/dev/null)
 PLUGIN_VERSION=$(jq -r '.version // "unknown"' "$PLUGIN_JSON" 2>/dev/null)
 
-echo "### Active Plugin: $PLUGIN_NAME v$PLUGIN_VERSION"
-echo "### Location: $PLUGIN_DIR"
+echo "## Pre-Compaction Context (plugin-creation-tools)"
 echo ""
-
-# List components
-echo "### Components"
-SKILLS=$(find "$PLUGIN_DIR/skills" -name "SKILL.md" 2>/dev/null | wc -l)
-COMMANDS=$(find "$PLUGIN_DIR/commands" -name "*.md" 2>/dev/null | wc -l)
-AGENTS=$(find "$PLUGIN_DIR/agents" -name "*.md" 2>/dev/null | wc -l)
-HOOKS_COUNT=0
-[ -f "$PLUGIN_DIR/hooks/hooks.json" ] && HOOKS_COUNT=$(jq '[.hooks | to_entries[].value[].hooks | length] | add // 0' "$PLUGIN_DIR/hooks/hooks.json" 2>/dev/null)
-
-echo "- Skills: $SKILLS"
-echo "- Commands: $COMMANDS"
-echo "- Agents: $AGENTS"
-echo "- Hooks: $HOOKS_COUNT"
+echo "Active plugin: **$PLUGIN_NAME v$PLUGIN_VERSION** at \`$PLUGIN_DIR\`"
 echo ""
-
-# Show CLAUDE.md if it exists (plugin conventions)
+echo "To restore context after compaction:"
+echo "1. Read \`$PLUGIN_JSON\` for plugin metadata"
+echo "2. List \`$PLUGIN_DIR/skills/\`, \`$PLUGIN_DIR/commands/\`, \`$PLUGIN_DIR/agents/\` for components"
 if [ -f "$PLUGIN_DIR/CLAUDE.md" ]; then
-  echo "### Plugin Conventions"
-  head -15 "$PLUGIN_DIR/CLAUDE.md"
-  echo "..."
+  echo "3. Read \`$PLUGIN_DIR/CLAUDE.md\` for plugin conventions"
 fi
