@@ -8,7 +8,15 @@ user-invocable: false
 
 # HTML Generator Skill
 
-Create branded HTML pages and standalone components from a design system. Each component works independently AND as part of a composed page.
+Create distinctive, branded HTML pages and standalone components from a design system.
+
+## The Critical Understanding
+
+HTML page creation is **design-system-driven composition**, not template filling. Each component is a standalone design artifact that works independently AND as part of a composed page. Every section should feel crafted by a senior designer — intentional, distinctive, unforgettable.
+
+**What you receive**: A design system (canvas-philosophy.md + design-system.md) with design tokens, component catalog, and brand identity.
+**What you create**: Standalone HTML components + a composed single-file HTML page.
+**The standard**: Work that makes the viewer stop scrolling. Bold, distinctive, never generic.
 
 ---
 
@@ -47,13 +55,31 @@ Assemble components into a single `.html` file:
 
 ---
 
-## Part 1: Pre-Generation Checks
+## Part 1: Design Thinking Process
 
-1. **Verify brand exists** — if no `design-system.md`, STOP and suggest `/design-html`. If no `brand-philosophy.md`, suggest `/brand-extract`. Never use default values.
-2. **Read canvas philosophy** — extract the aesthetic movement and constraints
-3. **Load design tokens** — map to CSS custom properties
-4. **Read style enforcement** — from `references/web-style-constraints.md`
-5. **Plan differentiation** — identify ONE memorable visual element (dramatic type scale, unexpected layout, color moment). If the page could belong to any brand, push harder.
+Before writing any HTML, internalize the design system:
+
+0. **Verify brand exists** — if no `design-system.md` in the project, STOP and suggest `/design-html` first. If no `brand-philosophy.md`, suggest `/brand-extract` first. Never proceed with default/example values.
+1. **Read the canvas philosophy** — absorb its aesthetic movement, not just rules
+2. **Load design tokens** — colors, fonts, spacing become CSS custom properties
+3. **Understand the style** — read enforcement blocks from `references/web-style-constraints.md`
+4. **Consider the content** — what is the page's purpose? Who sees it? What should they feel?
+5. **Plan differentiation** — what makes THIS page visually memorable vs. generic?
+
+### The Differentiation Test
+
+Before generating, ask: "Could this page belong to any brand?" If yes, push harder. Then ask: **"What is the ONE thing someone will remember about this page?"** — a dramatic type scale, a surprising color moment, an unexpected layout break. If you cannot name it, the design is not distinctive enough.
+
+Incorporate:
+- The canvas philosophy's unique movement name and spirit
+- Unexpected layout choices (asymmetry, overlap, grid-breaking)
+- Typography as art (size contrasts, weight mixing, letter-spacing play)
+- Atmosphere (gradient meshes, noise textures, patterns, shadows with depth)
+- The brand's personality expressed through micro-interactions (hover states, transitions)
+
+### Intentionality Over Intensity
+
+**Match implementation complexity to the aesthetic vision.** Maximalist designs need elaborate code with extensive animations and layered effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. The key is intentionality, not intensity — a Swiss design executed with mathematical precision is as powerful as a Memphis design executed with wild energy. Never apply "bold" uniformly; calibrate to the style.
 
 ---
 
@@ -336,20 +362,48 @@ Rules for JS:
 
 ---
 
-## Part 7: Typography & Layout
+## Part 7: Typography as Art
 
-### Typography Rules
-- **Font pairing**: Contrasting heading + body (serif + sans or vice versa), full weight range (300-900)
-- **Size contrast**: Headlines 3x-6x larger than body; letter-spacing loose for uppercase, tight for display
-- **Line-height**: Body 1.6-1.8, headlines 1.0-1.2
-- **Never use** Inter, Roboto, Arial unless the brand specifies them. Always include a distinctive Google Font.
-- **Anti-convergence**: Vary font choices between projects — each page should feel independently designed
+Typography is the primary design tool for HTML pages. Make bold choices:
 
-### Layout Principles
-- Controlled asymmetry over symmetry; establish a grid, then break it for key moments
-- Generous negative space with `var(--space-xl)` to `var(--space-2xl)` padding
-- Full-bleed sections to break out of max-width container
-- Atmosphere via gradient meshes, noise textures, geometric patterns, layered shadows
+### Font Pairing Strategy
+
+- **Heading + Body**: Contrasting but harmonious (serif heading + sans body, or vice versa)
+- **Weight contrast**: Use the full weight range (300-900) for hierarchy
+- **Size contrast**: Headlines should be DRAMATICALLY larger than body (3x-6x)
+- **Letter-spacing**: Loose for uppercase headings, tight for large display text
+- **Line-height**: Generous for body (1.6-1.8), tighter for headlines (1.0-1.2)
+
+### Never Use
+
+- Inter, Roboto, Arial, Helvetica (unless the brand specifically uses them or the style's Visual DNA specifies them)
+- System font stack alone (always include a distinctive Google Font)
+- Single weight throughout (exploit the full weight range)
+- Uniform sizing (create dramatic scale contrast)
+
+### Anti-Convergence
+
+NEVER converge on the same font choices across different page generations. If you generated a page with Space Grotesk last time, pick a different font this time. Each design system and page should feel independently designed. Vary display fonts, body fonts, weight distributions, and size scales between projects. The goal: if someone lined up 10 generated pages, they should look like they came from 10 different designers.
+
+---
+
+## Part 8: Spatial Composition
+
+### Layout Philosophy
+
+- **Asymmetry over symmetry** — perfect symmetry is boring; controlled asymmetry creates energy
+- **Overlap and layering** — elements can overlap (images behind text, decorative shapes)
+- **Grid-breaking** — establish a grid, then intentionally break it for key moments
+- **Generous negative space** — sections breathe with `var(--space-xl)` to `var(--space-2xl)` padding
+- **Full-bleed moments** — some sections should break out of the max-width container
+
+### Background & Atmosphere
+
+- **Gradient meshes** — multi-stop gradients for depth (`background: linear-gradient(135deg, ...)`)
+- **Noise/grain textures** — subtle SVG noise for tactile quality
+- **Geometric patterns** — CSS-generated shapes, clip-paths for visual interest
+- **Depth through shadow** — layered `box-shadow` for elevation
+- **Color blocking** — alternating section backgrounds for rhythm
 
 ---
 
