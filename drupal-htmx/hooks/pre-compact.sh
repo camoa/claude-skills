@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Pre-compact hook: Preserve HTMX migration context before compaction
-# Outputs analyzed modules, migration progress, and pattern recommendations
-
-echo "## Pre-Compaction Context (drupal-htmx)"
-echo ""
+# Pre-compact hook: Instruct Claude to scan for HTMX/AJAX state instead of dumping content
 
 # Find custom modules directory
 MODULES_PATH=""
@@ -15,42 +11,14 @@ for path in web/modules/custom modules/custom docroot/modules/custom; do
 done
 
 if [ -z "$MODULES_PATH" ]; then
-  echo "No custom modules directory found."
   exit 0
 fi
 
-echo "### Custom Modules: $MODULES_PATH"
+echo "## Pre-Compaction Context (drupal-htmx)"
 echo ""
-
-# Scan for HTMX usage (modules already migrated)
-HTMX_MODULES=$(grep -rl "Htmx\|hx-get\|hx-post\|hx-swap" "$MODULES_PATH" --include="*.php" 2>/dev/null | sed 's|/[^/]*$||' | sort -u)
-if [ -n "$HTMX_MODULES" ]; then
-  echo "### Modules Using HTMX"
-  echo "$HTMX_MODULES" | while read -r mod; do
-    echo "- $(basename "$mod")"
-  done
-  echo ""
-fi
-
-# Scan for remaining AJAX patterns (migration candidates)
-AJAX_MODULES=$(grep -rl "'#ajax'" "$MODULES_PATH" --include="*.php" 2>/dev/null | sed 's|/[^/]*$||' | sort -u)
-if [ -n "$AJAX_MODULES" ]; then
-  echo "### Modules With AJAX (Migration Candidates)"
-  echo "$AJAX_MODULES" | while read -r mod; do
-    count=$(grep -c "'#ajax'" "$mod"/*.php 2>/dev/null | awk -F: '{s+=$2} END{print s}')
-    echo "- $(basename "$mod") ($count AJAX patterns)"
-  done
-  echo ""
-fi
-
-# Check for mixed modules (both HTMX and AJAX — in-progress migration)
-if [ -n "$HTMX_MODULES" ] && [ -n "$AJAX_MODULES" ]; then
-  MIXED=$(comm -12 <(echo "$HTMX_MODULES" | sort) <(echo "$AJAX_MODULES" | sort))
-  if [ -n "$MIXED" ]; then
-    echo "### In-Progress Migrations (Both HTMX + AJAX)"
-    echo "$MIXED" | while read -r mod; do
-      echo "- $(basename "$mod")"
-    done
-    echo ""
-  fi
-fi
+echo "Custom modules found at \`$MODULES_PATH\`."
+echo ""
+echo "To restore HTMX migration context after compaction:"
+echo "1. Grep \`$MODULES_PATH\` for \`hx-get\`, \`hx-post\`, \`hx-swap\` to find modules already using HTMX"
+echo "2. Grep \`$MODULES_PATH\` for \`'#ajax'\` to find migration candidates"
+echo "3. Modules with both patterns are in-progress migrations"

@@ -23,6 +23,7 @@ Show current project status and task progress.
 3. Scans `implementation_process/` for task files
 4. Invokes `phase-detector` for each task
 5. Presents comprehensive status
+6. **Invokes `session-context-writer` skill with the resolved project (and task if one is active)**
 
 ## Output Format
 

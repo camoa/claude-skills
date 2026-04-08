@@ -20,6 +20,7 @@ Get recommendation for what to do next based on project state.
 1. Invokes `project-orchestrator` agent
 2. Analyzes current state (project requirements + active tasks)
 3. Suggests prioritized next actions
+4. **After resolving project and task, invoke `session-context-writer` skill with the resolved values**
 
 ## Output Format
 

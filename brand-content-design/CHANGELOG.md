@@ -5,6 +5,11 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-04-08
+
+### Changed
+- **PreCompact hook** — No longer dumps brand-philosophy.md content into compaction. Now outputs instructions for Claude to read live project files on demand, reducing compaction bloat.
+
 ## [3.1.2] - 2026-03-20
 
 ### Fixed

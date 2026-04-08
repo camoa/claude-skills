@@ -24,6 +24,7 @@ Design architecture for a specific task (Phase 2 of a task).
 5. Creates/updates `architecture.md` with design
 6. Updates `task.md` to mark Phase 2 as in progress
 7. Optionally creates component file in `architecture/{component}.md`
+8. **Invokes `session-context-writer` skill with the resolved project and task**
 
 ## Task-Based Workflow
 
