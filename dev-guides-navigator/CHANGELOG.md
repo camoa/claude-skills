@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-04-09)
+
+### Changed
+- Improved skill description for `dev-guides-navigator` with better trigger phrases and concrete action words (community contribution by @rohan-tessl, PR #104)
+
 ## 0.3.0 (2026-04-08)
 
 ### Changed
