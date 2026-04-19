@@ -24,6 +24,20 @@
         ]
       }
     ],
+
+    "// if field example": "Use 'if' for cheap per-handler pre-spawn filtering on tool events. Avoids spawning a process just to check and exit 0.",
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(rm *)",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-destructive-rm.sh"
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [

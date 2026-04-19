@@ -47,15 +47,17 @@ Or inline in `plugin.json`:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| matcher | string | No | Pattern to match (regex, exact, or `*`) |
-| hooks | array | **Yes** | Array of hook actions |
-| type | string | **Yes** | Hook handler type: `command`, `prompt`, `agent`, or `http` |
+| matcher | string | No | Pattern to filter when the matcher group fires (see Matcher Patterns) |
+| hooks | array | **Yes** | Array of hook handlers |
+| type | string | **Yes** | Handler type: `command`, `prompt`, `agent`, or `http` |
 | command | string | For command | Shell command to execute |
 | prompt | string | For prompt/agent | LLM prompt (`$ARGUMENTS` for context) |
+| if | string | No | Permission-rule syntax (e.g. `"Bash(git *)"`, `"Edit(*.ts)"`) to pre-filter tool events before spawning the handler. See [The `if` Field](#the-if-field). |
 | timeout | number | No | Timeout in seconds (default varies by type) |
 | async | boolean | No | Run in background (command type only) |
+| asyncRewake | boolean | No | Like `async` but wakes Claude on exit-code 2 with stderr as a system reminder. Implies `async`. |
 | statusMessage | string | No | Message shown in the TUI while the hook runs |
-| once | boolean | No | Hook fires only once per session |
+| once | boolean | No | Fires once per session then is removed. Only honored in skill frontmatter; ignored in settings/agent frontmatter. |
 
 ## Hook Handler Types
 
@@ -164,40 +166,123 @@ Command hooks can run asynchronously in the background.
 
 ## Matcher Patterns
 
-| Pattern | Behavior | Example |
-|---------|----------|---------|
-| Exact match | Matches tool name exactly | `Write` |
-| Regex | Pattern match on tool name | `Write\|Edit` |
-| Wildcard | Matches all | `*` |
-| Path pattern | Tool + path constraint | `Read(./docs/**)` |
-| MCP tool | Server + tool pattern | `mcp__memory__.*` |
-| MCP wildcard | Any server, matching tool | `mcp__.*__write.*` |
-| Compound | Multiple patterns combined | `Write\|Edit\|mcp__fs__write` |
-| Omitted | No filter (fires for all) | Don't include the field |
+The `matcher` evaluation mode is determined by the **characters the matcher contains**, not by a flag:
 
-Examples:
+| Matcher value | Evaluated as | Example |
+|---------------|--------------|---------|
+| `"*"`, `""`, or omitted | Match all | Fires on every occurrence of the event |
+| Only letters, digits, `_`, and `\|` | Exact string, or `\|`-separated list of exact strings | `Bash` matches only Bash; `Edit\|Write` matches either tool exactly |
+| Contains any other character | JavaScript regular expression | `^Notebook` matches any tool starting with Notebook; `mcp__memory__.*` matches every tool from the `memory` server |
+
+**Important:** A value like `mcp__memory` contains only letters and underscores, so it is evaluated as an exact string and matches **no** tool. To match all tools from a server you must append `.*` (e.g. `mcp__memory__.*`) so the matcher contains a non-alphanumeric character and is treated as a regex.
+
+### Matcher field per event
+
+Each event matches on a different field. Tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) match on the tool name. Other events match on the value documented in their [hook-events.md](hook-events.md) entry — e.g. `SessionStart` matches `startup|resume|clear|compact`, `Notification` matches `permission_prompt|idle_prompt|auth_success|elicitation_dialog`, `StopFailure` matches error types.
+
+Events with **no matcher support** (`UserPromptSubmit`, `Stop`, `TeammateIdle`, `TaskCreated`, `TaskCompleted`, `WorktreeCreate`, `WorktreeRemove`, `CwdChanged`) silently ignore a `matcher` field.
+
+### Examples
+
 ```json
-// Match Write tool only
+// Exact match — no regex chars
 "matcher": "Write"
 
-// Match Write OR Edit
+// Alternation of exact strings — only | is allowed before it's a regex
 "matcher": "Write|Edit"
 
-// Match Bash commands starting with git
-"matcher": "Bash(git:*)"
-
-// Match all tools from memory MCP server
+// Regex — the period forces regex evaluation
 "matcher": "mcp__memory__.*"
 
-// Match any write tool from any MCP server
+// Regex — any server, any write tool
 "matcher": "mcp__.*__write.*"
 
-// Built-in and MCP tools together
-"matcher": "Write|Edit|mcp__fs__write_file"
-
-// Read tool scoped to docs directory
-"matcher": "Read(./docs/**)"
+// Regex — starts-with anchor
+"matcher": "^Notebook"
 ```
+
+To filter more narrowly than the matcher allows — for example, "only `Bash` calls that run `git`" — use the `if` field on the handler. The `matcher` is a coarse event-level filter; `if` is a cheap per-handler pre-spawn filter.
+
+## The `if` Field
+
+The `if` field on a hook handler is a **pre-spawn filter** evaluated before the handler runs. It uses [permission-rule syntax](../08-configuration/permission-modes.md) (same as Claude Code's permission rules), so it can match the tool name and arguments together.
+
+**Only evaluated on tool events**: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`. On any other event, a hook with `if` set never runs.
+
+### Why it matters
+
+The `if` field avoids the "spawn a process just to check and exit 0" anti-pattern. Declare hooks against broad matchers, then filter cheaply with `if`:
+
+**Before (spawns on every Bash call):**
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+The script itself checks whether the command is `rm *` and exits 0 otherwise. Every `Bash` call spawns the process.
+
+**After (spawns only on `rm *`):**
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "if": "Bash(rm *)",
+          "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+Claude Code evaluates `Bash(rm *)` against the tool input and only spawns `block-rm.sh` when it matches.
+
+### Common `if` patterns
+
+```json
+// Only Edit calls on TypeScript files
+"if": "Edit(*.ts)"
+
+// Only git subcommands
+"if": "Bash(git *)"
+
+// Only writes under a specific path
+"if": "Write(src/**)"
+
+// Compound: multiple rules
+"if": "Bash(npm *) || Bash(yarn *)"
+```
+
+See [`../08-configuration/permission-modes.md`](../08-configuration/permission-modes.md) for the full permission-rule syntax.
+
+## Permission Mode Interaction
+
+Hooks behave differently depending on the active [permission mode](../08-configuration/permission-modes.md):
+
+| Mode | Hook behavior |
+|------|---------------|
+| `default` | All hook return values honored. `PreToolUse` `deny`/`ask` are both respected; `PermissionRequest` hooks run before the user sees a dialog. |
+| `auto` | The classifier may deny tool calls **without ever showing a dialog**. `PermissionDenied` fires for classifier denials. `PreToolUse` still runs and can block. `PermissionRequest` hooks do **not** fire unless a dialog is actually shown. |
+| `dontAsk` | Existing permission rules are honored, but no new dialogs appear. Hook `ask` return values fall back to the configured default. |
+| `bypassPermissions` | All permission checks bypassed. **Hooks still run** — they are the only guardrail. Do not assume the user is reviewing tool calls. |
+
+**Security callout:** In `auto` and `bypassPermissions` modes, a `PreToolUse` hook that silently approves is the primary safety barrier. Write hook scripts defensively:
+- Never assume the user will see or review the tool call
+- Log denied attempts for later audit (PostToolUseFailure / PermissionDenied)
+- Treat broad matchers + `auto` mode as requiring an `if` filter that narrows to known-safe patterns
 
 ## Environment Variables
 
@@ -374,5 +459,5 @@ This pattern checks if `node_modules` exists in the persistent data directory an
 
 ## See Also
 
-- `hook-events.md` -- all 22 available events with return values
+- `hook-events.md` -- all 26 available events with return values
 - `hook-patterns.md` -- common patterns and examples

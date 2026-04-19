@@ -144,7 +144,7 @@ When user says "add agent", "create agent", "make agent":
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for all 18 events
+2. Read `references/06-hooks/hook-events.md` for all 26 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
    - `PreToolUse` - before tool execution (can block)
