@@ -14,17 +14,18 @@ Design architecture for a specific task (Phase 2 of a task).
 /drupal-dev-framework:design <task-name>
 ```
 
-## What This Does (v3.0.0)
+## What This Does (v3.9.0)
 
+0. **Invokes `checkpoint-gate` skill** with `target_phase=2` — blocks if Phase 1 checkpoints (or legacy Phase Status) are not complete. If gate returns `block`, stop and show the gate's guidance to the user. Do not proceed.
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Reviews research findings in `research.md`
 3. **Loads dev-guides** for architecture decisions via `guide-integrator` (unless already loaded this session)
 4. Invokes `architecture-drafter` agent
 5. Invokes `guide-integrator` for methodology refs
-5. Creates/updates `architecture.md` with design
-6. Updates `task.md` to mark Phase 2 as in progress
-7. Optionally creates component file in `architecture/{component}.md`
-8. **Invokes `session-context-writer` skill with the resolved project and task**
+6. Creates/updates `architecture.md` with design
+7. Updates `task.md` to mark Phase 2 as in progress (both legacy checklist AND checkpoint frontmatter when present)
+8. Optionally creates component file in `architecture/{component}.md`
+9. **Invokes `session-context-writer` skill with the resolved project and task**
 
 ## Task-Based Workflow
 

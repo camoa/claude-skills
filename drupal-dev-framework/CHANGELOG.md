@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-04-19
+
+### Added
+- **Phase checkpoints MVP** — expanded Research/Architecture/Implementation into 7/6/8 named checkpoints with explicit entry conditions. Catalog at `references/checkpoint-catalog.md`.
+- **`checkpoint-gate` skill** (`skills/checkpoint-gate/`) — internal skill invoked by `/design` and `/implement` at start. Enforces phase entry via checkpoint status (or legacy Phase Status checklist in grandfather mode). Blocks with actionable guidance when prior-phase checkpoints incomplete.
+- **`/step` command** — show current checkpoint state, mark-done, skip (with required justification), or reset. Human-first readable output; all mutations use `Edit` for concurrent-safety.
+- **Checkpoint frontmatter schema** in task.md — YAML `checkpoints` key tracks per-checkpoint status (`pending`/`in_progress`/`done`/`skipped`). `skipped` requires non-empty `justification` to count.
+- **Case-insensitive status comparison** + explicit conflict rule (checkpoint frontmatter wins over legacy `## Phase Status` checklist).
+
+### Changed
+- **`/design` and `/implement`** — now invoke `checkpoint-gate` as step 0 before any other work. Updates task.md both legacy checklist and checkpoint frontmatter when present.
+- **`phase-detector` skill** — reads checkpoint frontmatter when present, falls back to Phase Status checklist + phase-file existence heuristic for grandfather tasks.
+- **`.claude/rules/command-conventions.md`** — documents the checkpoint frontmatter schema.
+
+### Backward compatible
+Tasks without `checkpoints` key in frontmatter continue to work unchanged via grandfather mode. Existing completed tasks are not affected.
+
 ## [3.8.0] - 2026-04-08
 
 ### Fixed

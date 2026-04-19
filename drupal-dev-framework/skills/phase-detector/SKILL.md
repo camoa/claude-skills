@@ -1,7 +1,7 @@
 ---
 name: phase-detector
-description: Use when determining task phase - analyzes task file to identify Phase 1, 2, or 3 for a specific task
-version: 3.0.0
+description: Use when determining task phase - analyzes task file to identify Phase 1, 2, or 3 for a specific task. Reads checkpoint frontmatter (v3.9.0+) when present, falls back to Phase Status checklist + phase files for grandfather tasks.
+version: 3.9.0
 user-invocable: false
 allowed-tools: Read, Glob
 ---
@@ -60,6 +60,23 @@ If neither exists, check for **v2.x single file** (backward compatibility):
 If nothing found, task hasn't started yet → Phase 0 (Not Started)
 
 ### 3. Analyze Task Content
+
+**v3.9.0+: Checkpoint Frontmatter (preferred)**
+
+Read `{task_name}/task.md` frontmatter. If a `checkpoints` key is present, use it as the authoritative phase signal. Normalize all `status` values to lowercase before comparing. Treat `skipped` entries WITHOUT a non-empty `justification` as `pending` (do not count them as complete):
+
+- **Phase 1 complete** = every `phase_1` checkpoint's normalized status is `done` OR (`skipped` with justification). Empty `phase_1` array → phase NOT complete (not started).
+- **Phase 2 complete** = Phase 1 complete AND every `phase_2` checkpoint satisfies the same rule. Empty `phase_2` array → phase NOT complete.
+- **Phase 3 in progress** = Phase 1 and Phase 2 complete; any `phase_3` checkpoint is `in_progress` or further
+- **Phase 3 complete** = every `phase_3` checkpoint satisfies the rule AND all acceptance criteria in task.md body marked done
+
+When checkpoint frontmatter drives the phase decision, include the checkpoint progress in the result (e.g., "Phase 2 — 3/6 checkpoints done, 1 skipped").
+
+If the task has BOTH checkpoint frontmatter AND a legacy `## Phase Status` checklist, **checkpoint frontmatter wins.**
+
+**Grandfather mode (no checkpoint frontmatter):**
+
+Fall back to the legacy signals below.
 
 **v3.0.0 Folder Structure:**
 

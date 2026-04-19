@@ -14,8 +14,9 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 /drupal-dev-framework:implement <task-name>
 ```
 
-## What This Does (v3.0.0)
+## What This Does (v3.9.0)
 
+0. **Invokes `checkpoint-gate` skill** with `target_phase=3` — blocks if Phase 1 OR Phase 2 checkpoints (or legacy Phase Status) are not complete. If gate returns `block`, stop and show the gate's guidance to the user. Do not proceed.
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Loads architecture from `architecture.md`
 3. Loads research context from `research.md`
@@ -23,7 +24,7 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 5. **Loads dev-guides** for security, SDC, JS patterns via `guide-integrator` (unless already loaded this session)
 6. Loads methodology refs (via `guide-integrator`)
 7. Creates/updates `implementation.md` for progress tracking
-8. Updates `task.md` to mark Phase 3 as in progress
+8. Updates `task.md` to mark Phase 3 as in progress (both legacy checklist AND checkpoint frontmatter when present)
 9. Activates `tdd-companion` for TDD discipline
 10. Prepares for interactive development
 11. **Invokes `session-context-writer` skill with the resolved project and task**
