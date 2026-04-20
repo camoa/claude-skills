@@ -155,10 +155,21 @@ Write to `.reports/code-review-{filename-or-dirname}.md`:
 
 ## REVIEW.md Convention
 
-Claude Code's Code Review feature supports a `REVIEW.md` file at the project root to customize review behavior. If `REVIEW.md` exists in the project, Claude will read it before scoring to apply project-specific standards (e.g., required patterns, team conventions, framework-specific rules). Create a `REVIEW.md` to tailor the rubric to your project's needs.
+Claude Code's managed Code Review service injects `REVIEW.md` verbatim as the highest-priority instruction block into every review agent. If `REVIEW.md` exists at the project root, read it before scoring and apply its severity overrides, skip directives, and mandatory checks.
 
-## Related Commands
+Severity labels: 🔴 **Important** (blocks merge), 🟡 **Nit**, 🟣 **Pre-existing**. The JSON check-run output keys Important findings as `normal` for backwards compatibility — see `skills/code-quality-audit/references/check-run-json.md` for CI gating.
+
+For authoring REVIEW.md, see `skills/code-quality-audit/references/review-md-v2.md` — covers severity overrides, nit caps, skip directives, verification bars, and starter templates for Drupal and Next.js. Generate one with `/code-quality:generate-review-md`.
+
+## CI Integration
+
+To gate merges on Code Review findings, parse the **Claude Code Review** check run's JSON output with `gh` + `jq`. A non-zero `normal` count means at least one Important finding was posted. See `skills/code-quality-audit/references/check-run-json.md` for the `gh api` command and a starter GitHub Actions workflow.
+
+## See also
 
 - `/code-quality:audit` — Full automated audit (tools only, no rubric)
 - `/code-quality:solid` — SOLID principles check only
 - `/code-quality:security` — Security audit only
+- `/code-quality:generate-review-md` — generate a v2 REVIEW.md tailored to the project
+- `/code-quality:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
+- `@claude review once` — one-off GitHub-side review on a PR without subscribing to push-triggered reviews (useful for long-running PRs with frequent rebases)
