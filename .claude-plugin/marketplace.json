@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.0"
+    "version": "1.15.0"
   },
   "plugins": [
     {
@@ -97,8 +97,8 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks) projects. Includes rubric-scored code review with REVIEW.md generation and convention, /simplify distinction, effort:high debate agents, /loop recurring checks, security debate (Defender + Red Team + Compliance), architecture debate (Pragmatist + Purist + Maintainer), and cross-audit synthesis.",
-      "version": "2.10.0",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). v3.0.0 ships REVIEW.md v2 injection-model generator, /ultrareview wrapper with platform pre-flight, skill-scoped watch-mode linting via FileChanged hook, scheduled quality sweeps (Desktop + Cloud Routine + /loop), API-triggered pre-merge CI gate, check-run JSON parsing for gh+jq, and --json mode on /audit /review /security with a stable schema v1.0 for CI gating.",
+      "version": "3.0.0",
       "author": {
         "name": "camoa"
       },

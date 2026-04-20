@@ -67,9 +67,11 @@ npm install --save-dev \
 
 | Command | Purpose | When to Use |
 |---------|---------|-------------|
-| `/code-quality:audit` | Full audit (all checks + synthesis) | Before commits/releases |
-| `/code-quality:review` | Rubric-scored code review (/50 scale) | PR reviews, code assessment |
-| `/code-quality:security` | Security scan (10 layers Drupal, 7 Next.js) | Pre-deployment |
+| `/code-quality:audit` | Full audit + cross-tool synthesis (`--json` for CI) | Before commits/releases |
+| `/code-quality:review` | Rubric-scored code review (/50 scale, `--json` for CI) | PR reviews, code assessment |
+| `/code-quality:ultrareview` | Cloud multi-agent deep review (paid after free quota) | Pre-merge on substantial changes |
+| `/code-quality:security` | Security scan (10 Drupal, 7 Next.js; `--json` for CI) | Pre-deployment |
+| `/code-quality:generate-review-md` | Generate v2 REVIEW.md (injection model) | One-time per project |
 | `/code-quality:coverage` | Test coverage | During TDD |
 | `/code-quality:lint` | Code standards | Quick checks |
 | `/code-quality:solid` | Architecture check | Refactoring |
@@ -224,22 +226,16 @@ All results save to `.reports/` (git-ignored):
 
 See `references/operations/dast-tools.md` for setup.
 
+## Watch-mode & Scheduled Sweeps
+
+- **Watch-mode linting** activates while the `code-quality-audit` skill is loaded — edits to `composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, or `tsconfig.json` re-run the lint. Disable mid-session: `export CLAUDE_CODE_QUALITY_WATCH=0`.
+- **Scheduled sweeps** — pick a surface (Desktop / Cloud Routine / `/loop`) based on whether the audit needs local file access, machine-off reliability, or in-session polling. Templates in `skills/code-quality-audit/references/scheduled-sweeps.md`, `desktop-sweep-template.md`, `cloud-routine-sweep.md`.
+- **Pre-merge CI gate** — Cloud Routine with API trigger callable from GitHub Actions / GitLab CI. Full template in `skills/code-quality-audit/references/premerge-gate-routine.md`.
+- **Check-run JSON** — parse the managed Code Review check run with `gh`+`jq` to block merge on Important findings. See `skills/code-quality-audit/references/check-run-json.md`.
+
 ## Version
 
-**v2.7.0** (Current)
-- Rubric-scored code review (`/review`) with /50 scale and quality gate
-- Architecture debate (`/architecture-debate`) — Pragmatist + Purist + Maintainer
-- Cross-audit synthesis in `/audit` — hot spots, cross-category risks, action plan
-- Agent team enhancements: maxTurns, isolated worktrees, scoped tools, quality gates
-- Removed experimental agent teams flag (now GA)
-
-**v2.5.0** — Online dev-guides integration for deeper Drupal context
-
-**v2.4.0** — Security debate team (Defender + Red Team + Compliance)
-
-**v2.1.0** — Optional DAST tools (OWASP ZAP + Nuclei)
-
-**v2.0.0** — Major security expansion: Semgrep, Trivy, Gitleaks, Roave, Socket CLI
+See `CHANGELOG.md` for the full history.
 
 ## License
 
