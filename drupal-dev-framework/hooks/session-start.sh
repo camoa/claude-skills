@@ -6,27 +6,10 @@
 WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
 rm -f "$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
-# Check required plugin: dev-guides-navigator
-SETTINGS_FILES=("$HOME/.claude/settings.json" ".claude/settings.json")
-DEV_GUIDES_FOUND=false
-
-for settings in "${SETTINGS_FILES[@]}"; do
-  if [ -f "$settings" ] && jq -e '.plugins // .installedPlugins // empty' "$settings" 2>/dev/null | grep -q "dev-guides-navigator"; then
-    DEV_GUIDES_FOUND=true
-    break
-  fi
-done
-
-if [ "$DEV_GUIDES_FOUND" = false ]; then
-  # Check if loaded as a plugin directory
-  if [ -z "$(find "$HOME/.claude" -path "*/dev-guides-navigator/.claude-plugin/plugin.json" 2>/dev/null | head -1)" ]; then
-    echo "⚠️ **Required plugin missing: dev-guides-navigator**"
-    echo ""
-    echo "drupal-dev-framework requires dev-guides-navigator for Drupal domain knowledge."
-    echo "Install: \`/plugin install dev-guides-navigator@camoa-skills\`"
-    echo ""
-  fi
-fi
+# Note: dev-guides-navigator presence is now enforced at install time via the
+# `dependencies` field in .claude-plugin/plugin.json. The former soft runtime
+# check was removed once that declaration landed — install-time enforcement
+# supersedes it and makes missing-dependency failures loud instead of silent.
 
 REGISTRY="$HOME/.claude/drupal-dev-framework/active_projects.json"
 

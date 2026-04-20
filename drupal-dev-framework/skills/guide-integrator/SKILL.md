@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
-description: "Use when designing features - loads plugin methodology refs and delegates to dev-guides-navigator for online Drupal domain knowledge. Trigger: 'load guides', 'get reference docs', 'methodology references'. Use proactively during Phase 2 design — loads SOLID, Library-First, DRY, TDD, Security guides."
-version: 4.0.0
+description: "Use when designing features - loads plugin methodology refs and delegates to dev-guides-navigator for online Drupal domain knowledge. Records each loaded guide into session_context.json loadedGuides[] so the context-reminder hook can surface them and re-loads are skipped. Trigger: 'load guides', 'get reference docs', 'methodology references'. Use proactively during Phase 2 design — loads SOLID, Library-First, DRY, TDD, Security guides."
+version: 4.1.0
 user-invocable: false
 ---
 
@@ -33,7 +33,7 @@ Activate when:
 - Architecture drafting for any feature
 - Auto-triggered by `architecture-drafter` agent
 
-**Skip if:** The relevant guide was already loaded earlier in this session (check conversation context).
+**Skip if:** The relevant guide is already listed in `loadedGuides[]` of the per-workspace `session_context.json` (see "Record Loaded Guide" below). The conversation context is an unreliable fallback; the file is the source of truth.
 
 ## Auto-Load Rules (Plugin References)
 
@@ -50,19 +50,49 @@ Activate when:
 ### 1. Load Plugin References (Methodology)
 
 Based on detected keywords in the task:
-1. Identify which methodology references apply (see Auto-Load Rules)
-2. Read each applicable reference file
-3. Extract patterns relevant to current task
+1. Check `loadedGuides[]` (see "Record Loaded Guide" below). If the ID (e.g. `plugin:solid-drupal`) is already present, skip.
+2. Identify which methodology references apply (see Auto-Load Rules)
+3. Read each applicable reference file
+4. Record the guide ID via the snippet in "Record Loaded Guide"
+5. Extract patterns relevant to current task
 
 ### 2. Delegate Online Guides to Navigator
 
-For Drupal-specific architecture decisions, invoke the `dev-guides-navigator` skill with the task keywords. The navigator handles:
+For Drupal-specific architecture decisions, invoke the `dev-guides-navigator` skill with the task keywords. For each topic the navigator returns:
+1. Check `loadedGuides[]`. If the topic ID (e.g. `drupal/forms/form-validation`) is already present, skip re-fetching.
+2. Fetch via the navigator (which handles its own content caching of `llms.txt`).
+3. Record the topic ID via the snippet in "Record Loaded Guide".
+
+The navigator handles:
 - Hash-based caching of `llms.txt` (no redundant fetches)
 - Topic matching with KG metadata disambiguation
 - Routing to the correct guide via topic `index.md`
 - Fetching the specific guide content
 
 Do NOT fetch `llms.txt` or dev-guides URLs directly — the navigator does this with caching and disambiguation.
+
+### 2b. Record Loaded Guide
+
+For every guide actually loaded (methodology or dev-guide), append its ID to the per-workspace `session_context.json` `loadedGuides[]`. Idempotent — skip if already present.
+
+Guide ID conventions:
+- Plugin methodology refs: `plugin:<basename>` (e.g. `plugin:solid-drupal`, `plugin:tdd-workflow`)
+- Dev-guides topics: the topic path as returned by `dev-guides-navigator` (e.g. `drupal/forms/form-validation`, `design-systems/radix-sdc`)
+
+Run this after each successful load, substituting `{GUIDE_ID}`:
+
+```bash
+GUIDE_ID="{GUIDE_ID}"
+[ -n "$GUIDE_ID" ] || exit 0   # guard against empty IDs polluting the list
+WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+SESS_FILE=~/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json
+[ -s "$SESS_FILE" ] || exit 0
+jq --arg g "$GUIDE_ID" \
+  'if (.loadedGuides // []) | index($g) then . else .loadedGuides = ((.loadedGuides // []) + [$g]) end' \
+  "$SESS_FILE" > "$SESS_FILE.tmp" && mv "$SESS_FILE.tmp" "$SESS_FILE"
+```
+
+If `session_context.json` does not yet exist, skip silently — the next framework command will create it via `session-context-writer` and future loads will be recorded.
 
 ### 3. Extract Applicable Patterns
 

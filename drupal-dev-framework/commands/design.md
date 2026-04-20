@@ -14,6 +14,20 @@ Design architecture for a specific task (Phase 2 of a task).
 /drupal-dev-framework:design <task-name>
 ```
 
+## Phase Transition Check (run FIRST, before any other step)
+
+Before doing anything else for this command, verify the prior phase is marked complete.
+
+1. Read `implementation_process/in_progress/{task_name}/task.md`.
+2. Locate the `## Phase Status` section.
+3. If the **Phase 1: Research** checkbox is not `[x]`, print this soft-nudge line to the user with `{task_name}` replaced by the actual task name passed to this command:
+
+   > ⚠ Phase 1 (Research) is not marked complete in `task.md`. Continuing with `/design` anyway. If research is incomplete, consider `/drupal-dev-framework:research {task_name}` first. (This is a nudge, not a block.)
+
+4. If Phase 1 is `[x]`, proceed silently.
+
+Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
+
 ## What This Does (v3.0.0)
 
 1. Loads task from `implementation_process/in_progress/{task_name}/`
