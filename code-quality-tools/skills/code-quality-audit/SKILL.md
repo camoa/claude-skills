@@ -22,8 +22,10 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 - `/code-quality:dry` - Find code duplication
 - `/code-quality:tdd` - Start TDD workflow (test watcher mode)
 - `/code-quality:review` - Rubric-scored code review (/50 scale with quality gate)
-- `/code-quality:generate-review-md` - Generate REVIEW.md for Claude Code's managed Code Review
+- `/code-quality:ultrareview` - Cloud multi-agent deep review with pre-flight checks (5-10min, paid after free quota)
+- `/code-quality:generate-review-md` - Generate v2 REVIEW.md for Claude Code's managed Code Review
 - `/code-quality:architecture-debate` - Architecture debate (Pragmatist + Purist + Maintainer)
+- `/code-quality:security-debate` - Security debate (Defender + Red Team + Compliance)
 
 **For conversational workflows, continue reading...**
 
