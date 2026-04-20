@@ -1,7 +1,7 @@
 ---
 description: Run complete code quality and security audit for Drupal/Next.js projects. Use when user says "full audit", "check everything", "code quality report", "run all checks", "audit this project", "pre-merge check", "quality gate". Runs lint + security + SOLID + DRY + coverage, then synthesizes findings into prioritized action plan with cross-tool correlation.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: optional|project-path
+argument-hint: [--json] [project-path]
 ---
 
 # Code Quality Audit
@@ -11,8 +11,36 @@ Run a comprehensive code quality and security audit on your project.
 ## Usage
 
 ```
-/code-quality:audit [project-path]
+/code-quality:audit [project-path]           # interactive, writes .reports/*.md + chat summary
+/code-quality:audit --json [project-path]    # CI mode — emits a single stable JSON document on stdout
 ```
+
+## CI Mode (--json)
+
+When invoked with `--json`, emit a single stable JSON document on stdout (schema `v1.0`) and suppress the chat summary. The document envelope:
+
+```json
+{
+  "schema_version": "1.0",
+  "command": "audit",
+  "project_type": "drupal|nextjs|unknown",
+  "timestamp": "ISO-8601",
+  "target": "path",
+  "status": "pass|warning|fail",
+  "summary": { "overall": "...", "coverage": "...", "solid": "...", "dry": "...", "security": "..." },
+  "findings": [ ... ],
+  "metrics": { ... }
+}
+```
+
+Gate a pipeline on overall status:
+
+```bash
+result=$(/code-quality:audit --json "$TARGET")
+echo "$result" | jq -e '.status != "fail"' >/dev/null || { echo "$result" | jq; exit 1; }
+```
+
+Full schema + field definitions: `skills/code-quality-audit/references/json-schemas.md`.
 
 ## What This Does
 

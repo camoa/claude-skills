@@ -1,7 +1,7 @@
 ---
 description: Review code quality with structured rubric scoring (Content + Structure grades, /50 scale). Use when user says "review this code", "grade this module", "code review", "quality score", "is this production ready", "rate this code", "code assessment". Produces scored report with quality gate (PASS 35+/FAIL) and prioritized action items.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: <file-or-directory-path>
+argument-hint: [--json] <file-or-directory-path>
 ---
 
 # Code Review
@@ -11,8 +11,26 @@ Structured code review with rubric-based scoring. Produces a graded assessment w
 ## Usage
 
 ```
-/code-quality:review <file-or-directory-path>
+/code-quality:review <file-or-directory-path>            # writes scored markdown report
+/code-quality:review --json <file-or-directory-path>     # CI mode — single stable JSON on stdout
 ```
+
+## CI Mode (--json)
+
+When invoked with `--json`, emit schema `v1.0` JSON on stdout and skip writing the markdown report. Fields include:
+
+- `summary.total` (0-50), `summary.grade`, `summary.gate` (`PASS` / `FAIL`)
+- `findings[]` with per-category score, severity, file:line, message, fix
+- `action_items[]` with priority and resolves-findings references
+
+Gate on `.summary.gate`:
+
+```bash
+result=$(/code-quality:review --json "$TARGET")
+echo "$result" | jq -e '.summary.gate == "PASS"' >/dev/null || exit 1
+```
+
+Schema: `skills/code-quality-audit/references/json-schemas.md`.
 
 ## What This Does
 
