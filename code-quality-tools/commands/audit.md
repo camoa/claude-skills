@@ -84,9 +84,24 @@ Tools that couldn't run or had no findings — may indicate missing config, not 
 - Top fix resolves: {N} findings
 ```
 
+## Schedule this
+
+For recurring sweeps (daily, weekly, hourly security watch), pick a surface based on what the audit needs:
+
+- **Desktop Scheduled Task** (primary) — access to DDEV, composer cache, uncommitted work. See `skills/code-quality-audit/references/desktop-sweep-template.md`.
+- **Cloud Routine** (fallback) — machine-off reliability, GitHub event triggers. See `skills/code-quality-audit/references/cloud-routine-sweep.md`.
+- `/loop` — in-session polling only.
+
+Surface comparison and decision tree: `skills/code-quality-audit/references/scheduled-sweeps.md`.
+
+## Wire to CI
+
+For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `skills/code-quality-audit/references/premerge-gate-routine.md`.
+
 ## Related Commands
 
 - `/code-quality:review` - Rubric-scored code review (/50 scale)
+- `/code-quality:ultrareview` - Cloud multi-agent deep review (pre-merge, paid after free quota)
 - `/code-quality:coverage` - Test coverage only
 - `/code-quality:security` - Security audit only
 - `/code-quality:security-debate` - Debate security findings with 3-agent team
