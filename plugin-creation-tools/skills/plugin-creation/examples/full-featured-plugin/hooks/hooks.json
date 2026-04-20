@@ -23,6 +23,21 @@
           }
         ]
       }
+    ],
+
+    "_comment_if_field": "The 'if' field pre-filters tool-event handlers before spawn — avoids running the hook on every Bash call.",
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(rm *)",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" guard-rm.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

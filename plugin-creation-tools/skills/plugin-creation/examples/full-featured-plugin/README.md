@@ -85,7 +85,18 @@ Review my code for quality issues
 3. **Cross-platform hooks** - The polyglot `.cmd` wrapper
 4. **Output directory setup** - SessionStart hook pattern
 5. **Operation logging** - PostToolUse hook pattern
-6. **Local development** - marketplace.json for testing
+6. **`if` pre-spawn filter** - A `PreToolUse` handler with `if: "Bash(rm *)"` that only spawns when Claude runs a destructive `rm` command. See `references/06-hooks/writing-hooks.md#the-if-field` for the pattern.
+7. **Plugin dependency** - Declares a trivial constrained dependency on `simple-greeter` via `dependencies` in `plugin.json`. See `references/08-configuration/plugin-json.md#dependencies-version-constrained`.
+8. **Local development** - marketplace.json for testing
+
+## Building SDK-driven companion code
+
+If you later build an SDK companion app for this plugin (test harness, CI runner, programmatic driver), start with the Agent SDK directory at `references/11-agent-sdk/`:
+
+- `overview.md` — when to use the SDK
+- `migration.md` — if you were on the old Claude Code SDK
+- `structured-outputs.md` — how to make CI-consumable output
+- `permissions.md` — how permission modes interact with your plugin's hooks
 
 ## Extending This Example
 

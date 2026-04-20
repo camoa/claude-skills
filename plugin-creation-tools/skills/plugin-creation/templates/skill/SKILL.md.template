@@ -1,7 +1,23 @@
 ---
 name: skill-name
-description: Use when [specific triggers] - [what it does in third person]. Use when user says "[trigger phrase]".
+description: "[Action verb phrase — what the skill produces or does, third person]. Use when user says '[phrase 1]', '[phrase 2]', '[phrase 3]'. [Optional negative trigger: Do NOT use for X.]"
 ---
+
+<!--
+  Description tips:
+  - Quoted YAML form is safer for multi-sentence descriptions.
+  - Enumerate 3-6 literal user utterances after "Use when user says".
+  - Use concrete action verbs + artifacts, not domain labels.
+  - Combined description + when_to_use is capped at 1,536 characters
+    in the skill listing — front-load the key use case.
+  - Preserve PROACTIVELY / MUST / NEVER imperatives if your skill
+    genuinely needs strong activation. Don't strip them to hit a
+    "conciseness" score.
+  - If you use !`command` dynamic injections, keep them — they are
+    a documented Claude Code feature.
+  See references/03-skills/description-patterns.md for details.
+-->
+
 
 # Skill Name
 

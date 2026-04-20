@@ -141,10 +141,13 @@ permissionMode: default
 | Mode | Behavior | Use Case |
 |------|----------|----------|
 | default | Normal prompting | Most agents |
-| acceptEdits | Auto-accept edits | Trusted formatters |
-| dontAsk | Auto-deny all permission prompts | Non-interactive agents |
-| bypassPermissions | Skip all prompts | Automation scripts |
+| acceptEdits | Auto-accept edits + common fs commands | Trusted formatters |
 | plan | Read-only mode | Planning agents |
+| auto | Classifier-gated auto-approval (see note below) | Long tasks on supported plans |
+| dontAsk | Only pre-approved tools; `ask` rules auto-deny | Non-interactive agents, CI |
+| bypassPermissions | Skip all prompts | Automation scripts, isolated envs only |
+
+> **Plugin agent caveat:** `permissionMode` in plugin-packaged agents is silently ignored as a security measure. It works in user/project agents but not in agents shipped inside a plugin. For the full behavior table and auto-mode specifics, see [`../08-configuration/permission-modes.md`](../08-configuration/permission-modes.md).
 
 ### Default Mode
 

@@ -156,9 +156,12 @@ If omitted, the agent has no persistent memory.
 |------|----------|
 | default | Normal permission handling |
 | acceptEdits | Auto-accept edit suggestions |
-| bypassPermissions | Skip permission prompts |
-| plan | Read-only mode |
-| ignore | Ignore permission system |
+| plan | Read-only planning mode |
+| auto | Classifier-gated auto-approval (subagent frontmatter `permissionMode` is ignored in auto mode) |
+| dontAsk | Only pre-approved tools run; `ask` rules auto-deny |
+| bypassPermissions | Skip permission prompts — isolated environments only |
+
+See [`../08-configuration/permission-modes.md`](../08-configuration/permission-modes.md) for the full behavior table, auto-mode classifier rules, and plugin-packaged-agent caveats.
 
 ## Hooks
 

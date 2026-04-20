@@ -99,22 +99,88 @@ The "after" version explicitly tells Claude to trigger in edge cases and include
 
 Pushy descriptions must be balanced against the context budget. Skill descriptions consume part of the context window:
 
-- **Budget**: 2% of context window, with a 16,000-character fallback
-- Long descriptions eat into this budget and can cause other skills to be excluded
-- Balance pushiness with brevity — add trigger phrases, but don't pad with filler
+- **Dynamic budget**: 1% of context window across all skill descriptions combined, with an **8,000-character fallback**
+- **Per-entry cap**: Each skill's `description` + `when_to_use` combined is truncated at **1,536 characters** in the skill listing, regardless of budget
+- **Truncation keeps the start**, so **front-load** the key use case — text at the end is first to go
+- Override the global limit with `SLASH_COMMAND_TOOL_CHAR_BUDGET`
 
-Run `/context` to check if skills are being excluded due to budget limits. Override the budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable if needed.
+Run `/context` to check if skills are being excluded due to budget limits.
+
+## Trigger Phrase Enumeration
+
+Explicitly listing the user utterances that should trigger a skill measurably improves activation. Use the `Use when user says 'X', 'Y', 'Z'` pattern.
+
+**Before** (implicit triggers, relies on Claude inferring):
+```
+description: Audit code quality and security across Drupal and Next.js projects.
+```
+
+**After** (explicit trigger enumeration):
+```
+description: "Run a full code quality and security audit across Drupal and
+Next.js projects. Use when user says 'full audit', 'check everything', 'quality
+report', 'is this production ready', 'pre-merge check', 'audit this plugin'."
+```
+
+The enumerated phrases are the literal utterances users have been observed to say. They don't have to exhaustively cover every phrasing — 3 to 6 phrases that span the common ways of asking are enough.
+
+## Action Verbs + Artifacts
+
+Describe what the skill **produces** or **does**, not the domain it relates to.
+
+| Weak (domain-framed) | Strong (action + artifact) |
+|----------------------|----------------------------|
+| "for design system work" | "scaffolds SDC component directories, generates Twig templates, wires up UI Patterns" |
+| "helps with plugin development" | "creates plugin scaffolding, generates SKILL.md files, configures hooks.json, validates structure before packaging" |
+| "brand content creation" | "generates branded HTML pages, PDFs, and carousels from a brand-philosophy.md using design tokens" |
+
+## Synonym Coverage
+
+Users ask for the same thing in multiple ways. Cover adjacent terms:
+
+- A skill that creates HTML pages should mention **"landing page"**, **"web page"**, **"website"**, and **"UI components"** — not just "HTML page"
+- A skill that authors skills should mention **"skill"**, **"SKILL.md"**, **"skill authoring"**, **"plugin component"**
+- A skill that works with a specific file format should mention both the extension and the common noun (**".docx"** + **"Word document"**)
+
+## Quoted YAML Form
+
+Wrap multi-sentence descriptions in `"..."` to avoid YAML parsing edge cases on colons and commas:
+
+```yaml
+# Unquoted — safe but risky if the string contains a `:` or a leading special char
+description: Run a full audit. Use when user says 'audit'.
+
+# Quoted — always parses correctly
+description: "Run a full audit. Use when user says 'audit', 'check everything'."
+```
+
+Both forms are valid. Quoted is safer as descriptions grow.
+
+## Don't Let Scoring Tools Strip Intent
+
+Automated "description quality" scoring tools sometimes flag intentional activation-strength modifiers as noise. **Preserve these when they're deliberate:**
+
+- **`PROACTIVELY`, `MUST`, `NEVER`** — activation-strength modifiers. A scoring tool that strips `MUST use this skill before design work` to a milder phrasing has **reduced** accuracy, not improved it. If CLAUDE.md says a skill must fire before a class of task, the description should say so — even when a linter calls it "pushy".
+- **`` !`command` `` dynamic-context injections** — these are a documented Claude Code skill feature that executes the command and injects its output into the description. A "simplifier" that deletes `!`... `` treats real functionality as syntax noise.
+- **Domain-intelligence body prose** — creative/design/artistic skills encode quality bars in prose (art movements, craftsmanship mantras, anti-convergence rules). Generic "verbose = bad" scoring degrades output quality for these skills. The length is doing work.
+
+If you review a description and the change is "shorter and milder" without a clear reason, check whether the skill relied on that exact phrasing.
 
 ## Checklist
 
 - [ ] Starts with "Use when..." or action-focused opener, OR uses three-part structure
 - [ ] Written in third person (not "you should")
 - [ ] Includes specific symptoms/triggers
-- [ ] Includes relevant keywords users might search
-- [ ] Under 1024 characters (ideal: 200-500)
+- [ ] Includes enumerated trigger phrases (`Use when user says 'X', 'Y', 'Z'`) where activation needs a boost
+- [ ] Uses concrete action verbs describing what the skill produces
+- [ ] Covers synonyms for the core concept
+- [ ] Quoted YAML form for multi-sentence descriptions
+- [ ] Combined description + `when_to_use` under **1,536 characters** (per-entry cap)
 - [ ] Answers: "Should Claude load this skill right now?"
 - [ ] Includes scope boundaries / negative triggers if skill could overtrigger
 - [ ] Mentions file types if relevant (.pdf, .docx, etc.)
+- [ ] Preserves `PROACTIVELY` / `MUST` / `NEVER` when deliberately present
+- [ ] Preserves `` !`command` `` injections when deliberately present
 
 ## Keywords to Include
 

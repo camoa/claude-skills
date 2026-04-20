@@ -1,6 +1,6 @@
 # Hook Events
 
-Complete reference for all 22 hook events in Claude Code.
+Complete reference for all 26 hook events in Claude Code.
 
 ## Event Reference Table
 
@@ -8,30 +8,34 @@ Complete reference for all 22 hook events in Claude Code.
 |-------|---------|-----------|-----------------|
 | SessionStart | Session begins or resumes | No | Yes (startup, resume, clear, compact) |
 | UserPromptSubmit | User submits prompt | Yes | No |
-| PreToolUse | Before tool execution | Yes | Yes (tool name regex) |
+| PreToolUse | Before tool execution | Yes | Yes (tool name) |
 | PermissionRequest | Permission dialog shown | Yes | Yes (tool name) |
-| PostToolUse | After tool succeeds | No | Yes (tool name regex) |
-| PostToolUseFailure | After tool fails | No | Yes (tool name regex) |
+| PermissionDenied | Auto-mode classifier denies a tool call | No (can request retry) | Yes (tool name) |
+| PostToolUse | After tool succeeds | No | Yes (tool name) |
+| PostToolUseFailure | After tool fails | No | Yes (tool name) |
 | Notification | Alert sent | No | Yes (notification type) |
 | SubagentStart | Subagent spawned | No | Yes (agent type) |
 | SubagentStop | Subagent finishes | Yes | Yes (agent type) |
-| Stop | Claude finishes responding | Yes | No |
-| TeammateIdle | Agent team teammate going idle | Yes | No |
+| TaskCreated | Task being created via TaskCreate | Yes | No |
 | TaskCompleted | Task marked complete | Yes | No |
-| PreCompact | Before context compaction | No | Yes (manual, auto) |
-| SessionEnd | Session terminates | No | Yes (clear, logout, prompt_input_exit) |
-| InstructionsLoaded | CLAUDE.md/instructions loaded | No | No |
-| ConfigChange | Configuration changes during session | No | No |
+| Stop | Claude finishes responding | Yes | No |
+| StopFailure | Turn ends due to an API error | No | Yes (error type) |
+| TeammateIdle | Agent team teammate going idle | Yes | No |
+| InstructionsLoaded | CLAUDE.md/instructions loaded | No | Yes (load reason) |
+| ConfigChange | Configuration changes during session | No | Yes (config source) |
+| CwdChanged | Working directory changes (e.g. `cd`) | No | No |
+| FileChanged | Watched file changes on disk | No | Yes (literal filenames) |
 | WorktreeCreate | Worktree created for agent | No | No |
 | WorktreeRemove | Worktree removed after agent completion | No | No |
-| StopFailure | Turn ends due to an API error | No | No |
-| PostCompact | After context compaction completes | No | No |
-| Elicitation | MCP server requests user input via elicitation | No | No |
-| ElicitationResult | User responds to MCP elicitation, before response sent to server | No | No |
+| PreCompact | Before context compaction | No | Yes (manual, auto) |
+| PostCompact | After context compaction completes | No | Yes (manual, auto) |
+| Elicitation | MCP server requests user input via elicitation | No | Yes (MCP server name) |
+| ElicitationResult | User responds to MCP elicitation, before response sent to server | No | Yes (MCP server name) |
+| SessionEnd | Session terminates | No | Yes (reason) |
 
 ## MCP Tool Matcher Syntax
 
-For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest), MCP tools use the `mcp__server__tool` pattern:
+For tool-based events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, PermissionDenied), MCP tools use the `mcp__server__tool` pattern:
 
 | Pattern | Matches |
 |---------|---------|
@@ -271,6 +275,50 @@ All hook events receive JSON input with the following common fields:
 }
 ```
 
+### PermissionDenied
+
+**Trigger**: When the [auto-mode](../08-configuration/permission-modes.md) classifier denies a tool call. Does **not** fire when a user manually denies a dialog, when a `PreToolUse` hook blocks a call, or when a `deny` rule matches — only for classifier denials in auto mode.
+
+**Matcher**: Tool name (same rules as PreToolUse)
+
+**Can Block**: No — the denial already happened. The hook can tell the model it may retry by returning `{retry: true}`.
+
+**Input Fields**: In addition to common fields, PermissionDenied hooks receive `tool_name`, `tool_input`, `tool_use_id`, and `reason` (the classifier's explanation).
+
+**Use Cases**:
+- Log classifier denials for tuning auto-mode rules
+- Tell the model it may retry with a different approach
+- Escalate repeated denials to monitoring
+
+**Example**:
+```json
+{
+  "PermissionDenied": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-denial-and-retry.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Retry return value** (JSON stdout):
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionDenied",
+    "retry": true
+  }
+}
+```
+
+When `retry: true`, Claude Code adds a message telling the model it may retry the tool call. The denial itself is not reversed. Returning no JSON or `retry: false` leaves the denial in place.
+
 ### Notification
 
 **Trigger**: When Claude sends a notification/alert
@@ -438,6 +486,43 @@ All hook events receive JSON input with the following common fields:
 - Stdout with task description: Assign new work
 - Empty: Allow teammate to go idle
 
+### TaskCreated
+
+**Trigger**: When a task is being created via the `TaskCreate` tool.
+
+**Matcher**: Not supported (fires for every task)
+
+**Can Block**: Yes — exit code 2 rejects task creation; `{"continue": false, "stopReason": "..."}` stops the teammate entirely.
+
+**Input Fields**: In addition to common fields, TaskCreated hooks receive `task_id`, `task_subject`, and optionally `task_description`, `teammate_name`, and `team_name`.
+
+**Use Cases**:
+- Enforce naming conventions on task subjects
+- Require non-empty task descriptions
+- Prevent certain task types from being created
+- Track task creation across teammates for observability
+
+**Example**:
+```json
+{
+  "TaskCreated": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-task.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Values**:
+- Exit 0: Accept task creation
+- Exit 2: Reject; stderr is fed back to the model as feedback
+- JSON `{"continue": false, "stopReason": "..."}`: Stop the teammate entirely (matches Stop hook behavior)
+
 ### TaskCompleted
 
 **Trigger**: When a task is marked as complete
@@ -590,6 +675,85 @@ All hook events receive JSON input with the following common fields:
   ]
 }
 ```
+
+### CwdChanged
+
+**Trigger**: When the working directory changes during a session (e.g. Claude runs `cd`). Pairs with `FileChanged` for reactive environment management (direnv-style).
+
+**Matcher**: Not supported (fires on every directory change)
+
+**Can Block**: No
+
+**Handler Types**: Only `type: "command"` is supported.
+
+**Input Fields**: In addition to common fields, CwdChanged hooks receive `old_cwd` and `new_cwd`.
+
+**Special**: Access to `${CLAUDE_ENV_FILE}` — variables written here persist into subsequent Bash commands for the session.
+
+**Use Cases**:
+- Reload environment variables on directory change (direnv integration)
+- Activate project-specific toolchains (pyenv, nvm)
+- Update `FileChanged` watch list dynamically via `watchPaths` output
+
+**Example**:
+```json
+{
+  "CwdChanged": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-cwd-change.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Output** (optional JSON stdout):
+- `watchPaths`: Array of absolute paths. Replaces the dynamic watch list for `FileChanged`. Empty array clears it (typical when entering a new directory).
+
+### FileChanged
+
+**Trigger**: When a watched file changes on disk. Useful for reloading env vars when project configuration files are modified.
+
+**Matcher**: Serves two roles:
+1. **Watch list**: The matcher value is split on `|` and each segment is registered as a **literal filename** in the working directory (`.envrc|.env` watches those two files). Regex patterns are **not** useful here — `^\.env` would watch a file literally named `^\.env`.
+2. **Filter**: When a watched file changes, the same value filters which hook groups run, using standard matcher rules against the changed file's basename.
+
+**Can Block**: No (the change already happened on disk)
+
+**Handler Types**: Only `type: "command"` is supported.
+
+**Input Fields**: In addition to common fields, FileChanged hooks receive `file_path` (absolute) and `event` (`"change"`, `"add"`, or `"unlink"`).
+
+**Special**: Access to `${CLAUDE_ENV_FILE}` — variables written here persist into subsequent Bash commands for the session.
+
+**Use Cases**:
+- Reload environment variables when `.envrc`, `.env`, or config files change
+- Run watch-mode linters/formatters on specific file types
+- Re-read cached data when its source file changes
+
+**Example**:
+```json
+{
+  "FileChanged": [
+    {
+      "matcher": ".envrc|.env",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/reload-env.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Output** (optional JSON stdout):
+- `watchPaths`: Array of absolute paths to add to the dynamic watch list. Paths from the `matcher` are always watched in addition.
 
 ### WorktreeCreate
 
@@ -835,5 +999,5 @@ Multiple matcher groups and multiple hooks per group:
 
 ## See Also
 
-- `writing-hooks.md` -- hook configuration and handler types (references all 22 events)
+- `writing-hooks.md` -- hook configuration and handler types (references all 26 events)
 - `hook-patterns.md` -- common implementation patterns

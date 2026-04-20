@@ -342,6 +342,64 @@ For team-wide availability, add to project settings:
 
 Team members are prompted to install when they trust the folder.
 
+## Plugin Dependencies — Marketplace Author Responsibilities
+
+When a plugin in your marketplace declares [dependencies](plugin-json.md#dependencies-version-constrained), your marketplace must support the resolution model:
+
+### 1. Tag releases for version resolution
+
+Version constraints resolve against git tags on the marketplace repository. Each plugin release must be tagged as `{plugin-name}--v{version}`:
+
+```bash
+git tag secrets-vault--v2.1.0
+git tag deploy-kit--v3.1.0
+git push origin --tags
+```
+
+The `{plugin-name}--v` prefix lets one repository host multiple plugins with independent version lines. The `version` tagged must match the `version` field in that commit's `plugin.json`.
+
+**Without matching tags**, dependents fail with `no-matching-tag` and are disabled.
+
+### 2. Allowlist cross-marketplace dependencies
+
+A plugin in your marketplace can depend on a plugin in a different marketplace by setting `"marketplace"` in its dependency entry. Cross-marketplace resolution is **blocked by default** — you must allowlist the target marketplace in your root marketplace's `marketplace.json`.
+
+Allowlist entries can use exact matches or regex-based `hostPattern` and `pathPattern`:
+
+```json
+{
+  "name": "internal-plugins",
+  "strictKnownMarketplaces": {
+    "trusted-upstream": {
+      "source": {
+        "source": "github",
+        "repo": "partner-org/plugin-catalog"
+      }
+    },
+    "all-partner-repos": {
+      "source": {
+        "source": "github",
+        "hostPattern": "^github\\.com$",
+        "pathPattern": "^partner-org/.*"
+      }
+    }
+  }
+}
+```
+
+Dependents that reference a non-allowlisted marketplace are rejected at install time.
+
+### 3. Validator behavior
+
+When a plugin is installed, Claude Code:
+
+1. Reads its `dependencies` array from `plugin.json`
+2. Resolves each entry against the marketplace's tag list (tag-based sources) or declared version (npm/pip)
+3. Intersects the resolved range with constraints from other installed plugins
+4. Fails the install if any error fires (`range-conflict`, `no-matching-tag`, `dependency-version-unsatisfied`)
+
+Surfaced in `claude plugin list`, `/plugin`, and `/doctor`. The affected plugin is disabled until resolved. See [`plugin-json.md`](plugin-json.md#common-dependency-errors) for the full error table.
+
 ## Reserved Marketplace Names
 
 The following names are reserved by Anthropic and cannot be used for custom marketplaces:

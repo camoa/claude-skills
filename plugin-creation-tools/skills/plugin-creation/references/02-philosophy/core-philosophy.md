@@ -81,16 +81,38 @@ Do not modify the script without testing.
 
 ## Context Window Budget
 
-The "context window as public good" principle has specific budget numbers:
+The "context window as public good" principle has specific, upstream-documented budget numbers. Plugin authors should design around all of them:
 
-- **Skill descriptions**: 2% of context window, with a **16,000-character fallback**
-- Skills exceeding the budget are **silently excluded** from the context
-- Run `/context` to check which skills are loaded and which are excluded
-- Override the default budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable
+### Skill-description budget (at session start)
+
+- **Dynamic budget**: 1% of context window, with an **8,000-character fallback**
+- Claude Code shortens descriptions to fit this budget. Descriptions that get trimmed lose the keywords Claude uses to match your request.
+- **Per-entry cap**: Each skill's combined `description` + `when_to_use` is truncated at **1,536 characters** regardless of the overall budget.
+- **Override**: `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable raises the global limit.
+
+Front-load your skill description: the first sentence matters most because it's what survives trimming.
+
+### Skill-body budget (at invocation)
+
+- **`SKILL.md` soft cap**: Keep under **500 lines**. Move detailed reference material to separate files.
+- **Post-compaction cap**: Invoked skill bodies are re-injected at **5,000 tokens per skill** and **25,000 tokens total**. The oldest invoked skills are dropped first.
+- **Truncation keeps the start**: Put the most important instructions at the top of `SKILL.md` — if the body is truncated, the tail is lost.
+
+### What survives compaction
+
+| Mechanism | After compaction |
+|-----------|------------------|
+| System prompt + output style | Unchanged |
+| Project-root CLAUDE.md, unscoped rules | Re-injected from disk |
+| Auto memory | Re-injected from disk |
+| Path-scoped rules (`paths:` frontmatter) | Lost until a matching file is read again |
+| Nested CLAUDE.md in subdirectories | Lost until a file in that subdirectory is read again |
+| Invoked skill bodies | Re-injected (subject to the caps above) |
+| Hooks | Not applicable — hooks run as code, not context |
+
+**Design implication:** If your plugin ships a rule that must persist across compaction, do **not** use `paths:` frontmatter. Either drop the scope or move it into the project-root CLAUDE.md.
 
 **Frame every addition as**: "Only add context Claude doesn't already have. Challenge each piece: Does Claude really need this?"
-
-This budget applies to skill descriptions specifically. SKILL.md body content is loaded on demand (when the skill triggers), so the description is the critical gatekeeper — it must be informative enough to trigger correctly, but concise enough to fit the budget.
 
 ## Challenge Every Token
 

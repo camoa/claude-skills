@@ -454,6 +454,156 @@ echo "ask"
 exit 0
 ```
 
+## FileChanged Watch-Mode Lint Pattern
+
+Run a linter automatically when specific config files change on disk:
+
+### hooks.json
+
+```json
+{
+  "FileChanged": [
+    {
+      "matcher": ".eslintrc.json|.prettierrc",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/relint-on-config-change.sh",
+          "async": true,
+          "timeout": 60
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/relint-on-config-change.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.file_path')
+EVENT=$(echo "$INPUT" | jq -r '.event')
+
+# Only react to modifications, not deletions
+[ "$EVENT" = "change" ] || exit 0
+
+# Re-run lint across the project when config changes
+cd "$CLAUDE_PROJECT_DIR" || exit 0
+npx eslint . --quiet 2>&1 | tee -a claude-outputs/logs/lint-reloads.log
+
+exit 0
+```
+
+**Why `async: true`:** Full-project lint can take seconds; `async` keeps Claude responsive and surfaces the result on the next turn.
+
+**Matcher note:** Values in the `matcher` are treated as **literal filenames** for `FileChanged`, not regex. Use `|` to list multiple watched files.
+
+## PermissionDenied Retry Pattern
+
+In auto mode, log classifier denials and tell the model it may retry when appropriate:
+
+### hooks.json
+
+```json
+{
+  "PermissionDenied": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bash-denial-handler.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/bash-denial-handler.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+REASON=$(echo "$INPUT" | jq -r '.reason // empty')
+
+# Log every denial for audit
+LOG_DIR="$CLAUDE_PROJECT_DIR/claude-outputs/logs"
+mkdir -p "$LOG_DIR"
+jq -n --arg cmd "$COMMAND" --arg reason "$REASON" \
+  '{ts: now, command: $cmd, reason: $reason}' \
+  >> "$LOG_DIR/permission-denials.jsonl"
+
+# For known-safe patterns, tell the model it may retry
+if echo "$COMMAND" | grep -qE '^(git status|git log|ls|cat)'; then
+  jq -n '{
+    hookSpecificOutput: {
+      hookEventName: "PermissionDenied",
+      retry: true
+    }
+  }'
+fi
+
+exit 0
+```
+
+**Retry caveat:** `retry: true` does **not** reverse the denial. It adds a message telling the model it may retry with a different approach. If the tool input is identical, the classifier will deny again.
+
+## TaskCreated Tracking Pattern
+
+Enforce task-subject conventions and log created tasks for observability:
+
+### hooks.json
+
+```json
+{
+  "TaskCreated": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/track-task-creation.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/track-task-creation.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+TASK_ID=$(echo "$INPUT" | jq -r '.task_id')
+SUBJECT=$(echo "$INPUT" | jq -r '.task_subject')
+DESCRIPTION=$(echo "$INPUT" | jq -r '.task_description // empty')
+
+# Require non-empty descriptions
+if [ -z "$DESCRIPTION" ]; then
+  echo "Task '$SUBJECT' is missing a description. Add one before creating the task." >&2
+  exit 2  # rejects task creation, feedback goes to the model
+fi
+
+# Require subject to start with a verb (convention)
+if ! echo "$SUBJECT" | grep -qiE '^(add|fix|update|refactor|remove|implement|document)'; then
+  echo "Task subject must start with a verb (add, fix, update, refactor, remove, implement, document)." >&2
+  exit 2
+fi
+
+# Log accepted tasks
+LOG_DIR="$CLAUDE_PROJECT_DIR/claude-outputs/logs"
+mkdir -p "$LOG_DIR"
+echo "$(date -u +%FT%TZ) created $TASK_ID: $SUBJECT" >> "$LOG_DIR/tasks.log"
+
+exit 0
+```
+
+**Strong reject:** Exit 2 with stderr both rejects the task creation and feeds the stderr back to the model as guidance. Return `{"continue": false, "stopReason": "..."}` instead to stop the teammate entirely.
+
 ## Best Practices
 
 1. **Fast hooks**: Keep execution time minimal
