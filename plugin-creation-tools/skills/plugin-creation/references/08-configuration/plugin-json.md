@@ -261,6 +261,70 @@ Example:
 
 `${CLAUDE_PLUGIN_ROOT}` is substituted at runtime in all path-accepting fields, including nested values in mcpServers and lspServers configurations.
 
+## Dependencies (Version-Constrained)
+
+> **Requires Claude Code v2.1.110 or later.**
+
+A plugin can declare other plugins as dependencies. Without a version constraint, a dependency tracks the latest version shipped in its marketplace, so an upstream breaking change can silently break dependents. Version constraints hold a dependency at a tested range until you choose to move.
+
+### Declaring dependencies
+
+```json
+{
+  "name": "deploy-kit",
+  "version": "3.1.0",
+  "dependencies": [
+    "audit-logger",
+    { "name": "secrets-vault", "version": "~2.1.0" }
+  ]
+}
+```
+
+Each entry is either:
+- A **bare string** (plugin name) — tracks whatever version its marketplace ships
+- An **object** with these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string (required) | Plugin name. Resolves within the same marketplace as the declaring plugin. |
+| `version` | string | A [semver range](https://github.com/npm/node-semver#ranges): `~2.1.0`, `^2.0`, `>=1.4`, `=2.1.0`. The dependency is fetched at the highest tagged version that satisfies the range. |
+| `marketplace` | string | Resolve `name` in a different marketplace. Cross-marketplace dependencies are blocked unless the target marketplace is allowlisted in the root marketplace's `marketplace.json`. |
+
+Pre-release versions like `2.0.0-beta.1` are excluded unless the range opts in with a pre-release suffix (e.g. `^2.0.0-0`).
+
+### How constraints resolve
+
+Version constraints resolve against **git tags on the marketplace repository**. Each release must be tagged using the convention `{plugin-name}--v{version}`:
+
+```bash
+git tag secrets-vault--v2.1.0
+git push origin secrets-vault--v2.1.0
+```
+
+The plugin-name prefix lets one repository host multiple plugins with independent version lines.
+
+When multiple installed plugins constrain the same dependency, Claude Code intersects the ranges and picks the highest satisfying tag:
+
+| Plugin A requires | Plugin B requires | Result |
+|-------------------|-------------------|--------|
+| `^2.0` | `>=2.1` | One install at the highest `2.x` tag ≥ `2.1.0`. Both plugins load. |
+| `~2.1` | `~3.0` | Plugin B install fails with `range-conflict`. Plugin A unchanged. |
+| `=2.1.0` | none | Dependency pinned to `2.1.0`; auto-update skips newer versions. |
+
+Auto-update skips any upstream release that falls outside an active constraint. When the last constraining plugin is uninstalled, the dependency resumes tracking its marketplace entry.
+
+### Common dependency errors
+
+| Error | Meaning | Fix |
+|-------|---------|-----|
+| `range-conflict` | Combined ranges have no common satisfying version, or syntax is invalid. | Uninstall one plugin, widen an upstream range, or fix invalid semver syntax. |
+| `dependency-version-unsatisfied` | Installed version is outside the declared range. | `claude plugin install <dependency>@<marketplace>` to re-resolve. |
+| `no-matching-tag` | Marketplace has no `{name}--v*` tag satisfying the range. | Tag releases using the convention, or relax the range. |
+
+Surfaced in `claude plugin list`, `/plugin`, and `/doctor`. The affected plugin is **disabled** until resolved. For machine-readable output: `claude plugin list --json` (read the `errors` field per plugin).
+
+**npm marketplace sources:** Tag-based resolution does not apply. The constraint is still checked at load time; mismatches disable the plugin with `dependency-version-unsatisfied`.
+
 ## Installation Scopes
 
 Plugins can be installed with different scopes:
