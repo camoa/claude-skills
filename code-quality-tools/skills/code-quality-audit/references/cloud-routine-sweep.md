@@ -43,6 +43,9 @@ Run a code-quality sweep on this repository.
 
 4. Post the summary to Slack channel #eng-quality. Prefix the message with
    "REGRESSION" if any Critical or High severity findings are new.
+   REDACT secrets-type findings: Gitleaks findings include the matched secret
+   in the body — strip or mask before posting. Format as "secret of type X
+   detected in file.ext:line (value redacted)".
 
 5. If any finding is actionable (specific file:line), create a PR on a
    claude/quality-sweep-YYYY-WW branch with a minimal fix. Link the PR

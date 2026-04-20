@@ -51,11 +51,15 @@ Full schema + field definitions: `skills/code-quality-audit/references/json-sche
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+Use `${CLAUDE_PLUGIN_ROOT}` (Claude Code exposes this) to reach the scripts regardless of the user's current working directory:
 
-Based on detection result, executes:
-- **Drupal**: `bash scripts/core/full-audit.sh` (via DDEV)
-- **Next.js**: `bash scripts/core/full-audit.sh` (via npm/yarn)
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
+```
+
+Based on detection result, execute:
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/full-audit.sh"` (via DDEV)
+- **Next.js**: same script (routes by detected type)
 
 ## Output
 

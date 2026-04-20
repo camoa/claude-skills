@@ -18,11 +18,25 @@ A non-zero `normal` count means Claude found at least one bug worth fixing befor
 
 ## Fetch and parse
 
-One-liner (current PR check-run):
+One-liner (current PR check-run). Use `[-1]` (last occurrence) to defend against the slim-but-real risk that PR content quoted back into the Details text contains a literal `bughunter-severity:` marker earlier in the output:
 
 ```bash
 gh api repos/OWNER/REPO/check-runs/CHECK_RUN_ID \
-  --jq '.output.text | split("bughunter-severity: ")[1] | split(" -->")[0] | fromjson'
+  --jq '.output.text | split("bughunter-severity: ") | last | split(" -->")[0] | fromjson'
+```
+
+**Defensive pattern** (recommended for CI gates — fails safely on missing marker or malformed JSON):
+
+```bash
+JSON=$(gh api "repos/$REPO/check-runs/$CHECK_RUN_ID" \
+  --jq '.output.text | split("bughunter-severity: ") | last | split(" -->")[0] | fromjson' \
+  2>/dev/null || echo '{}')
+# Treat absent marker OR malformed JSON as "gate indeterminate — block merge"
+NORMAL=$(echo "$JSON" | jq -r '.normal // null')
+if [ "$NORMAL" = "null" ]; then
+  echo "::error::Could not parse Claude Code Review severity — blocking merge out of caution"
+  exit 1
+fi
 ```
 
 Discover the check-run ID for a PR:
@@ -70,6 +84,10 @@ jobs:
             fi
             sleep 30
           done
+          if [ "${{ steps.wait.outputs.done }}" != "1" ]; then
+            echo "::error::Claude Code Review did not complete within 30 min — gate indeterminate, blocking merge"
+            exit 1
+          fi
 
       - name: Parse severity counts
         if: steps.wait.outputs.done == '1'
@@ -81,10 +99,20 @@ jobs:
           CHECK_ID=$(gh api "repos/$REPO/commits/$SHA/check-runs" \
             --jq '.check_runs[] | select(.name=="Claude Code Review") | .id' \
             | tail -1)
+          if [ -z "$CHECK_ID" ]; then
+            echo "::error::No Claude Code Review check run found — gate indeterminate, blocking merge"
+            exit 1
+          fi
+          # `last` defends against PR content echoing a fake marker earlier in the output
           JSON=$(gh api "repos/$REPO/check-runs/$CHECK_ID" \
-            --jq '.output.text | split("bughunter-severity: ")[1] | split(" -->")[0] | fromjson')
+            --jq '.output.text | split("bughunter-severity: ") | last | split(" -->")[0] | fromjson' \
+            2>/dev/null || echo '{}')
+          NORMAL=$(echo "$JSON" | jq -r '.normal // null')
+          if [ "$NORMAL" = "null" ]; then
+            echo "::error::Could not parse check-run severity marker — blocking merge"
+            exit 1
+          fi
           echo "Severity counts: $JSON"
-          NORMAL=$(echo "$JSON" | jq -r '.normal')
           if [ "$NORMAL" -gt 0 ]; then
             echo "::error::Claude Code Review found $NORMAL Important finding(s). Block merge."
             exit 1

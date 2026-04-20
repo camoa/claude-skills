@@ -30,24 +30,28 @@ PR mode requires a `github.com` remote on the repository. If the repo is too lar
 
 Ultrareview is NOT available on:
 
-- Amazon Bedrock (`ANTHROPIC_BEDROCK_BASE_URL` set or `/model` shows Bedrock)
-- Google Cloud Vertex AI (`ANTHROPIC_VERTEX_BASE_URL` set)
+- Amazon Bedrock
+- Google Cloud Vertex AI
 - Microsoft Foundry
 - Organizations with Zero Data Retention (ZDR) enabled
-- API-key-only authentication (requires Claude.ai login)
+- API-key-only authentication (requires Claude.ai login via `/login`)
 
-Check environment:
+Only Bedrock and Vertex expose local env vars. **Foundry, ZDR, and API-only cannot be reliably detected from the shell** — for those, the built-in `/ultrareview` itself will refuse with a platform error when the session tries to launch. Warn the user accordingly.
+
+Check the env-var-detectable platforms. Treat only truthy values as "set" (empty, `0`, `false`, `no` mean disabled even if the variable exists):
 
 ```bash
-if [ -n "$ANTHROPIC_BEDROCK_BASE_URL" ] || [ -n "$CLAUDE_CODE_USE_BEDROCK" ]; then
+PLATFORM=""
+is_truthy() { case "${1:-}" in ""|0|false|no|off|FALSE|NO|OFF) return 1 ;; *) return 0 ;; esac; }
+if is_truthy "${ANTHROPIC_BEDROCK_BASE_URL:-}" || is_truthy "${CLAUDE_CODE_USE_BEDROCK:-}"; then
   PLATFORM="Bedrock"
 fi
-if [ -n "$ANTHROPIC_VERTEX_BASE_URL" ] || [ -n "$CLAUDE_CODE_USE_VERTEX" ]; then
+if is_truthy "${ANTHROPIC_VERTEX_BASE_URL:-}" || is_truthy "${CLAUDE_CODE_USE_VERTEX:-}"; then
   PLATFORM="Vertex"
 fi
 ```
 
-If any unsupported platform is detected, STOP and respond:
+If an env-detectable platform matches, STOP and respond:
 
 > `/ultrareview` is not available on {platform}. It runs on Claude Code on the web infrastructure, which is not reachable from Bedrock/Vertex/Foundry and is unavailable to organizations with Zero Data Retention enabled.
 >
@@ -55,6 +59,10 @@ If any unsupported platform is detected, STOP and respond:
 > - `/code-quality:review <path>` — local single-pass rubric review
 > - `@claude review once` — one-off GitHub-side review (requires managed Code Review enabled on the repo)
 > - `/code-quality:audit` — full local audit (PHPStan/ESLint + security scans)
+
+If no env var matched, proceed — but tell the user:
+
+> Pre-flight only detects Bedrock and Vertex locally. If you're on Foundry, a ZDR organization, or authenticated with an API key only, the built-in `/ultrareview` will refuse at session launch. If that happens, run `/login` and sign in with Claude.ai, or fall back to `/code-quality:review`.
 
 ### Step 2 — Cost Transparency
 

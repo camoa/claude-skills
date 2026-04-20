@@ -13,7 +13,7 @@ In Claude Code Desktop: **Schedule → New task → New local task**. Or ask Cla
 | **Frequency** | Daily, 7:00 AM (or Weekdays if you don't want weekend runs) |
 | **Working folder** | Project root |
 | **Worktree toggle** | Off for audits against working tree; On for isolated dry-runs |
-| **Permission mode** | `acceptEdits` for read-only audits; `auto` if the sweep should fix auto-fixable findings |
+| **Permission mode** | **Never use `Ask` for scheduled tasks** — the run stalls at the first permission prompt with no human present. Use `acceptEdits` for read-only audits; `auto` if the sweep should fix auto-fixable findings |
 | **Model** | Sonnet (audits don't need Opus) |
 
 Click **Run now** once after creating — any permission prompt that fires during the first run can be "always allowed" so future runs don't stall.

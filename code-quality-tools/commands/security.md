@@ -65,11 +65,15 @@ Schema: `skills/code-quality-audit/references/json-schemas.md`.
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+Use `${CLAUDE_PLUGIN_ROOT}` to reach the scripts regardless of cwd:
 
-Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/security-check.sh`
-- **Next.js**: `bash scripts/nextjs/security-check.sh`
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
+```
+
+Based on detection result, execute:
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"`
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"`
 
 ## Output
 

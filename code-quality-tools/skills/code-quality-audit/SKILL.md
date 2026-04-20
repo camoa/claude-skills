@@ -7,7 +7,7 @@ allowed-tools: Read, Bash, Grep, Glob
 user-invocable: true
 hooks:
   FileChanged:
-    - matcher: "composer.json|package.json|phpstan.neon|phpstan.neon.dist|psalm.xml|eslint.config.js|eslint.config.mjs|.eslintrc.json|tsconfig.json"
+    - matcher: "composer.json|package.json|phpstan.neon|phpstan.neon.dist|phpstan.dist.neon|phpcs.xml|phpcs.xml.dist|.phpcs.xml|psalm.xml|psalm.xml.dist|eslint.config.js|eslint.config.mjs|eslint.config.cjs|.eslintrc.js|.eslintrc.json|.eslintrc.yml|.eslintrc.yaml|tsconfig.json"
       hooks:
         - type: command
           command: "${CLAUDE_PLUGIN_ROOT}/hooks/lint-changed.sh"
@@ -49,7 +49,7 @@ This skill declares two skill-scoped hooks in its frontmatter — active ONLY wh
 
 | Event | When | What |
 |---|---|---|
-| `FileChanged` | Linter config changes — exact filenames: `composer.json`, `package.json`, `phpstan.neon`, `phpstan.neon.dist`, `psalm.xml`, `eslint.config.js`, `eslint.config.mjs`, `.eslintrc.json`, `tsconfig.json` | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
+| `FileChanged` | Linter config changes — exact filenames for common variants: `composer.json`, `package.json`, `phpstan.neon*` (3 variants), `phpcs.xml*` (3 variants), `psalm.xml*` (2 variants), `eslint.config.{js,mjs,cjs}`, `.eslintrc.{js,json,yml,yaml}`, `tsconfig.json` | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
 | `PermissionDenied` | `Read`, `Grep`, `Glob` denied in auto mode | Returns `{retry: true}` — retries non-destructive classifier denials during audits |
 
 **Scope discipline:** both hooks auto-disable when the skill isn't active. A `FileChanged` handler at plugin scope would fire on every file change across every conversation — noise, not value. Audit-contextual behaviors belong here.
