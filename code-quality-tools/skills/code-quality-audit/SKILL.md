@@ -1,9 +1,23 @@
 ---
 name: code-quality-audit
-description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 2.7.0
+description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
+version: 3.0.0
+model: sonnet
 allowed-tools: Read, Bash, Grep, Glob
 user-invocable: true
+hooks:
+  FileChanged:
+    - matcher: "composer.json|package.json|phpstan.neon|phpstan.neon.dist|psalm.xml|eslint.config.js|eslint.config.mjs|.eslintrc.json|tsconfig.json"
+      hooks:
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/hooks/lint-changed.sh"
+          timeout: 30
+  PermissionDenied:
+    - matcher: "Read|Grep|Glob"
+      hooks:
+        - type: command
+          command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionDenied\",\"retry\":true}}'"
+          timeout: 2
 ---
 
 # Code Quality Audit
@@ -28,6 +42,29 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 - `/code-quality:security-debate` - Security debate (Defender + Red Team + Compliance)
 
 **For conversational workflows, continue reading...**
+
+## Watch-mode Linting (skill-scoped)
+
+This skill declares two skill-scoped hooks in its frontmatter — active ONLY while the skill is loaded, NOT plugin-wide:
+
+| Event | When | What |
+|---|---|---|
+| `FileChanged` | Linter config changes (`composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, `.eslintrc.json`, `tsconfig.json`) | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
+| `PermissionDenied` | `Read`, `Grep`, `Glob` denied in auto mode | Returns `{retry: true}` — retries non-destructive classifier denials during audits |
+
+**Scope discipline:** both hooks auto-disable when the skill isn't active. A `FileChanged` handler at plugin scope would fire on every file change across every conversation — noise, not value. Audit-contextual behaviors belong here.
+
+**FileChanged matcher is literal, not glob.** Per the Hooks Reference, `FileChanged` matcher values are split on `|` and registered as **literal filenames** — not globs. To watch arbitrary source files (`*.php`, `*.tsx`), populate `watchPaths` dynamically from a `CwdChanged` hook, or add specific absolute paths to your project's `.claude/settings.json`. The default watch list here covers linter-config churn; broaden it in your settings if you want per-file watch on source edits.
+
+**Force-disable mid-session:**
+
+```bash
+export CLAUDE_CODE_QUALITY_WATCH=0
+```
+
+Unset the variable (or set to anything other than `0`) to re-enable.
+
+**Why this isn't in `hooks/hooks.json`:** session-global hooks stay at plugin scope (only `PreCompact` there). Audit behaviors scoped to skill-active sessions avoid polluting unrelated work.
 
 > **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
 
