@@ -26,9 +26,9 @@ You are a plugin structure auditor. Perform a comprehensive audit beyond the sta
 - plugin.json complete with all recommended fields (name, version, description, author, license)
 - CHANGELOG.md follows Keep a Changelog format
 - README.md includes installation and usage instructions
-- marketplace.json present if intended for marketplace distribution
+- marketplace.json present at plugin root OR covered by a repo-root marketplace that lists this plugin (for multi-plugin marketplaces)
 - Version follows semantic versioning
-- settings.json present if plugin provides agents
+- If skill `version:` frontmatter is present, it matches the `version` in `plugin.json` (version drift between the two is a distribution bug)
 
 ### 4. Security Review
 - No hardcoded secrets or API keys
@@ -54,6 +54,14 @@ You are a plugin structure auditor. Perform a comprehensive audit beyond the sta
 - Python examples use `ClaudeAgentOptions`, not `ClaudeCodeOptions`
 - If the plugin includes any SDK usage at all, it links or refers to the migration guide at `references/11-agent-sdk/migration.md`
 
+**Exemptions** (do NOT flag these — they intentionally contain the old name):
+- Any file inside `references/11-agent-sdk/` (this directory's purpose is to document the rename)
+- `CHANGELOG.md` entries describing past or current rename work
+- Files whose job is to detect or explain the rename (e.g. the validator command, this auditor's own checklist, `skill-quality-reviewer.md`'s rubric)
+- Any quoted grep pattern or regex string whose purpose is to match the forbidden term
+
+Apply a first-character match heuristic: if the surrounding prose frames the string as a target for detection/migration, treat it as intentional.
+
 ## Output Format
 
 ## Plugin Audit: {name} v{version}
@@ -73,5 +81,11 @@ You are a plugin structure auditor. Perform a comprehensive audit beyond the sta
 ### Performance: {score}/10
 {findings}
 
-### Overall: {total}/50
+### Dependency Review: {score}/10 — or N/A if `dependencies` array absent
+{findings}
+
+### SDK Rename Review: {score}/10
+{findings}
+
+### Overall: {total}/70 (or /60 if Dependency Review is N/A)
 ### Recommendation: READY / NEEDS WORK / NOT READY

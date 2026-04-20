@@ -88,7 +88,7 @@ options: { settingSources: ["user", "project", "local"] }
 ClaudeAgentOptions(setting_sources=["user", "project", "local"])
 ```
 
-> **Caveat:** Current SDK releases have reverted this default for `query()` — omitting the option once again loads user/project/local to match the CLI. Pass `settingSources: []` (TS) or `setting_sources=[]` (Python) if you explicitly need isolated behavior. Python 0.1.59 and earlier treated empty list as omitted; upgrade before relying on it.
+> **Caveat:** Current SDK releases have reverted this default for `query()` — omitting the option once again loads user/project/local to match the CLI. Pass `settingSources: []` (TS) or `setting_sources=[]` (Python) if you explicitly need isolated behavior. Early Python SDK releases treated an empty list the same as omitting the option; upgrade before relying on `setting_sources=[]`.
 
 ## What plugin authors should update
 

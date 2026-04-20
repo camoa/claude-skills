@@ -77,7 +77,7 @@ query({
 ClaudeAgentOptions(setting_sources=["user", "project", "local"])
 ```
 
-> **Caveat:** Current SDK releases have partially reverted this — omitting the option loads `user`/`project`/`local` for `query()` to match CLI behavior. Pass an empty list explicitly if you need the isolated behavior. Python SDK 0.1.59 and earlier treated empty list as omitted; upgrade before relying on it.
+> **Caveat:** Current SDK releases have partially reverted this — omitting the option loads `user`/`project`/`local` for `query()` to match CLI behavior. Pass an empty list explicitly if you need the isolated behavior. Early Python SDK releases treated an empty list the same as omitting the option; upgrade before relying on `setting_sources=[]`.
 
 ## System prompt
 
