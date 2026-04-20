@@ -79,7 +79,7 @@ Validate a plugin's structure and components against best practices.
 - [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
 - [ ] Command hooks reference executable files
 - [ ] Timeouts are reasonable (< 120s for sync hooks)
-- [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` usage is quoted in all command strings (paths with spaces break otherwise)
+- [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` / `$CLAUDE_PLUGIN_ROOT` / `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_DATA` / `${CLAUDE_PLUGIN_DATA}` usage is quoted in all command strings (paths with spaces break otherwise)
 - [ ] **Warning**: hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with a broad matcher (`*`, `""`, omitted, or `.*`) should include an `if` field to pre-filter. Emit a **suggestion** (not error): "Consider adding an `if` field to this handler to avoid spawning a process on every tool call."
 - [ ] `if` field is only valid on tool events — flag as warning if set on non-tool events (silently ignored at runtime)
 
@@ -89,7 +89,7 @@ Validate a plugin's structure and components against best practices.
 - [ ] Agents specify `model:` for cost optimization
 - [ ] Skills consider `model:` field
 - [ ] Hook scripts are executable (chmod +x)
-- [ ] Skills cross-checked against `references/03-skills/anthropic-skill-standards.md`
+- [ ] (plugin-creation-tools repo only) Skills cross-checked against `references/03-skills/anthropic-skill-standards.md` — skip this item when validating external plugins that don't ship that reference file
 - [ ] No stale `Claude Code SDK` / `claude-code-sdk` / `@anthropic-ai/claude-code` references — the SDK was renamed to Agent SDK (`claude-agent-sdk` / `@anthropic-ai/claude-agent-sdk`). Flag any hit as a warning pointing to `references/11-agent-sdk/migration.md`.
 - [ ] Skill descriptions preserve `PROACTIVELY`, `MUST`, and `NEVER` imperatives from prior versions when present (do not auto-strip)
 - [ ] Skill descriptions preserve `` !`command` `` dynamic-context injections when present (these are a documented Claude Code feature — do not treat as noise)
