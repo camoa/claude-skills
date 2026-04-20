@@ -284,4 +284,6 @@ Claude Code checks seed directories before attempting network fetches. Plugins f
 
 - `marketplace.md` - marketplace distribution
 - `versioning.md` - version management
-- `debugging.md` - troubleshooting
+- `review-md-v2.md` - scope code reviews to plugin-specific concerns via REVIEW.md
+- `routines-auto-validate.md` - auto-run `/plugin-creation-tools:validate` on every PR via a Routine
+- `../09-testing/debugging.md` - troubleshooting
