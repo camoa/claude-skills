@@ -41,6 +41,18 @@ You are a plugin structure auditor. Perform a comprehensive audit beyond the sta
 - Agents have appropriate maxTurns limits
 - Heavy operations use `context: fork` or `isolation: worktree`
 - Hook timeouts are reasonable
+- **Broad hook matchers use the `if` field** — handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with `matcher: "*"`, `""`, omitted, or `.*` should use `if` to pre-filter. Flag every broad-matcher handler without `if` as a suggestion: "Add `if: \"Tool(pattern)\"` to avoid spawning a process on every tool call." Reference `references/06-hooks/writing-hooks.md#the-if-field`.
+
+### 6. Dependency Review
+- `plugin.json` `dependencies` array (if present) uses valid semver-range syntax (`~`, `^`, `>=`, `=`, hyphen, `||`)
+- Cross-marketplace dependencies (entries with a `marketplace` field) are allowlisted in the root marketplace's `strictKnownMarketplaces`
+- Each declared dependency's marketplace uses the `{name}--v{version}` tag convention
+- Error names used in docs/comments match the official list: `range-conflict`, `dependency-version-unsatisfied`, `no-matching-tag`
+
+### 7. SDK Rename Review
+- No stale `Claude Code SDK` / `claude-code-sdk` / `@anthropic-ai/claude-code` (not followed by `-`) references anywhere in the plugin
+- Python examples use `ClaudeAgentOptions`, not `ClaudeCodeOptions`
+- If the plugin includes any SDK usage at all, it links or refers to the migration guide at `references/11-agent-sdk/migration.md`
 
 ## Output Format
 

@@ -33,6 +33,15 @@ Validate a plugin's structure and components against best practices.
 - [ ] Plugin source objects use `"source"` as the discriminator key — flag `"type"` as an error (e.g., `{"source": "github", ...}` not `{"type": "github", ...}`)
 - [ ] No `..` path traversal in source paths (error if found)
 - [ ] No duplicate plugin names within the plugins array (error if found)
+- [ ] Each plugin's `version` in the marketplace entry matches the `version` in its `.claude-plugin/plugin.json` (error if drifted — reference `feedback_marketplace_json`)
+
+### Plugin Dependencies (if `dependencies` is declared in `plugin.json`)
+- [ ] `dependencies` is an array
+- [ ] Each entry is either a bare string (plugin name) or an object with a required `name` field
+- [ ] Object entries with a `version` field use valid semver-range syntax (`~2.1.0`, `^2.0`, `>=1.4`, `=2.1.0`, hyphen ranges, `||` unions) — flag `range-conflict` on invalid syntax
+- [ ] Object entries with a `marketplace` field: flag as error if the referenced marketplace is not in the root marketplace's `strictKnownMarketplaces` allowlist
+- [ ] Pre-release ranges are only matched when the range opts in with a pre-release suffix (e.g. `^2.0.0-0`)
+- [ ] Use official error names when reporting: `range-conflict`, `dependency-version-unsatisfied`, `no-matching-tag` (align with `claude plugin list` output)
 
 ### Skills (for each skill in `skills/*/`)
 - [ ] `SKILL.md` exists with valid YAML frontmatter — invalid frontmatter causes skill to load with no metadata at runtime
@@ -65,11 +74,14 @@ Validate a plugin's structure and components against best practices.
 
 ### Hooks (`hooks/hooks.json`)
 - [ ] Valid JSON structure — **Note:** malformed hooks.json prevents the entire plugin from loading
-- [ ] Each event name is a recognized event
+- [ ] Each event name is one of the 26 recognized events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
 - [ ] Each hook entry has `type` (command, prompt, or agent) and matching field
 - [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
 - [ ] Command hooks reference executable files
 - [ ] Timeouts are reasonable (< 120s for sync hooks)
+- [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` usage is quoted in all command strings (paths with spaces break otherwise)
+- [ ] **Warning**: hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with a broad matcher (`*`, `""`, omitted, or `.*`) should include an `if` field to pre-filter. Emit a **suggestion** (not error): "Consider adding an `if` field to this handler to avoid spawning a process on every tool call."
+- [ ] `if` field is only valid on tool events — flag as warning if set on non-tool events (silently ignored at runtime)
 
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)
@@ -78,6 +90,9 @@ Validate a plugin's structure and components against best practices.
 - [ ] Skills consider `model:` field
 - [ ] Hook scripts are executable (chmod +x)
 - [ ] Skills cross-checked against `references/03-skills/anthropic-skill-standards.md`
+- [ ] No stale `Claude Code SDK` / `claude-code-sdk` / `@anthropic-ai/claude-code` references — the SDK was renamed to Agent SDK (`claude-agent-sdk` / `@anthropic-ai/claude-agent-sdk`). Flag any hit as a warning pointing to `references/11-agent-sdk/migration.md`.
+- [ ] Skill descriptions preserve `PROACTIVELY`, `MUST`, and `NEVER` imperatives from prior versions when present (do not auto-strip)
+- [ ] Skill descriptions preserve `` !`command` `` dynamic-context injections when present (these are a documented Claude Code feature — do not treat as noise)
 
 ## Output Format
 

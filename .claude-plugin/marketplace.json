@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.13.0"
+    "version": "1.14.0"
   },
   "plugins": [
     {
@@ -35,8 +35,8 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 22 hook events, 4 hook types, effort field, ${CLAUDE_PLUGIN_DATA} persistence, plugin agent restrictions, CLAUDE_CODE_PLUGIN_SEED_DIR, 9 validation rules, marketplace distribution, and pushy description optimization.",
-      "version": "3.1.0",
+      "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 26 hook events, the if pre-spawn filter, Agent SDK (overview/migration/custom-tools/subagents/permissions/structured-outputs/tool-search/observability/agent-loop), plugin dependencies, permission modes, claude directory layout, REVIEW.md v2, Routines-based auto-validate, and skill-description quality patterns.",
+      "version": "3.2.0",
       "author": {
         "name": "camoa"
       },

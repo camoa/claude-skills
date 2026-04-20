@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-04-20
+
+### Added — Hooks (Track B)
+- **4 new hook events** documented: `PermissionDenied`, `CwdChanged`, `FileChanged`, `TaskCreated` (total now 26).
+- **`if` pre-spawn filter** section in `writing-hooks.md` — avoids the "spawn a process just to check and exit 0" anti-pattern on tool events.
+- **Permission Mode Interaction** section in `writing-hooks.md` covering `default`/`acceptEdits`/`plan`/`auto`/`dontAsk`/`bypassPermissions`.
+- New hook patterns: FileChanged watch-mode lint, PermissionDenied retry/escalate, TaskCreated tracking.
+- `asyncRewake` handler field and `once` frontmatter-scoping caveat.
+- `hooks.json.template` demonstrates the `if` field.
+
+### Added — Configuration (Track C)
+- **Plugin Dependencies** (`08-configuration/plugin-json.md`): `dependencies` array, semver ranges, `{name}--v{version}` tag convention, intersection resolution, and the three official error codes (`range-conflict`, `dependency-version-unsatisfied`, `no-matching-tag`).
+- **Marketplace-author responsibilities** (`08-configuration/marketplace-json.md`): tagging releases, allowlisting cross-marketplace dependencies via `hostPattern`/`pathPattern`, validator behavior.
+- **NEW `08-configuration/permission-modes.md`**: full reference for the six permission modes, hook-behavior-per-mode table, auto-mode classifier rules, subagent inheritance, protected paths, plugin-author guidance.
+- Cross-links from `05-agents/writing-agents.md` and `05-agents/agent-tools.md` to `permission-modes.md`. Plugin-agent caveat noted (`permissionMode`/`hooks`/`mcpServers` silently ignored in plugin-packaged agents).
+
+### Added — Overview + Testing + Philosophy (Track D)
+- **NEW `01-overview/claude-directory.md`**: canonical layout for `~/.claude/` and `<project>/.claude/`, precedence tables (settings; skills/commands/hooks; subagents; MCP), and `--add-dir` interaction.
+- **NEW `09-testing/errors.md`**: plugin-loading errors (dependencies + manifest) and runtime errors plugin authors hit (auto mode, auth, usage limits, request errors). Validator-alignment checklist.
+- **`02-philosophy/core-philosophy.md`**: replaced the stale 2%/16K skill-description budget claim with upstream-documented numbers — **1% dynamic budget**, **8,000-char fallback**, **1,536-char per-entry cap**, **500-line SKILL.md soft cap**, **5,000-tokens-per-skill** and **25,000 tokens total** post-compaction. Added "what survives compaction" table.
+
+### Added — Agent SDK directory (Track A)
+New `references/11-agent-sdk/` directory (9 files):
+- `overview.md`: when to use SDK vs CLI vs Anthropic Client SDK; `.claude/` loading defaults; authentication; plugin-author testing pattern.
+- `migration.md`: Claude Code SDK → Agent SDK. Package/type renames, `ClaudeCodeOptions` → `ClaudeAgentOptions`, two breaking default changes (minimal system prompt, no `.claude/` auto-load), and a grep-checklist.
+- `custom-tools.md`: `tool()` / `@tool`, `createSdkMcpServer`, `mcp__{server}__{tool}` naming, optional parameters per language, `isError`, `readOnlyHint` for parallel execution, three plugin-author patterns.
+- `subagents-sdk.md`: field parity between Markdown frontmatter and `AgentDefinition`, what subagents inherit, automatic vs explicit invocation, dynamic factory pattern, sessions.
+- `permissions.md`: evaluation order (hooks → deny → mode → allow → canUseTool), `allowed_tools` vs `disallowed_tools` with `bypassPermissions` gotcha, `canUseTool` callback patterns.
+- `structured-outputs.md`: `output_format` with JSON Schema, Zod/Pydantic generation, validator-output-contract pattern, paper-test harness pattern.
+- `tool-search.md`: `ENABLE_TOOL_SEARCH` modes, 30–50 tool accuracy threshold, optimization guidance, the <10-tool opt-out case.
+- `observability.md`: OpenTelemetry-via-CLI-child-process model, three signals (metrics/logs/traces), env-merge-vs-replace semantics across languages, sensitive-data controls.
+- `agent-loop.md`: 5-step loop, 5 message types with Python/TS access patterns, budget caps, `effort` pass-through, context-window behavior through compaction.
+
+Global rename pass (`Claude Code SDK` → `Agent SDK`): no stale references existed outside of intentional historical mentions in `migration.md`.
+
+### Added — Distribution (Track E)
+- **NEW `10-distribution/review-md-v2.md`**: the two-file model (`CLAUDE.md` vs `REVIEW.md`), what to tune, 40-line starter `REVIEW.md` scoped to plugin-repo concerns, `/ultrareview` callout.
+- **NEW `10-distribution/routines-auto-validate.md`**: GitHub-triggered Routine that runs `/plugin-creation-tools:validate` on every PR — full creation walkthrough and footgun list. Closes the loop on the repeated "forgot to validate" feedback.
+- Cross-links from `packaging.md` to both new files; fixed broken relative path to `09-testing/debugging.md`.
+
+### Changed — Plugin self-improvement (Track F)
+- **`commands/validate.md`**: added Plugin Dependencies checks (dependencies array shape, semver syntax, cross-marketplace allowlist, official error names). Expanded hook-event recognition list to all 26 events. Added quoted-`$CLAUDE_PROJECT_DIR` check. Added best-practice suggestion: broad tool-event matchers should use the `if` field. Added version-drift check between `plugin.json` and root `marketplace.json`. Added SDK-rename checks (`Claude Code SDK`, `ClaudeCodeOptions`) and imperatives/`!`-injection preservation checks.
+- **`agents/skill-quality-reviewer.md`**: expanded rubric to include trigger-phrase enumeration, concrete action verbs, synonym coverage, quoted-YAML form, the 1,536-char per-entry cap. Added a "regression flags" section (stripped `PROACTIVELY`/`MUST`/`NEVER` imperatives; dropped `` !`command` `` dynamic-context injections; trimmed domain-intelligence prose; weakened triggers). Added "rename flags" for stale SDK references.
+- **`agents/plugin-structure-auditor.md`**: added Performance-Review item for broad hook matchers without `if`. Added new sections for Dependency Review and SDK Rename Review.
+
+### Notes
+- Plan deviation: upstream Skills guide states the dynamic skill-description budget is **1% / 8,000 chars** (per-entry cap **1,536 chars**), not the 2%/16K the planning doc initially listed. Used upstream numbers per the plan's "Upstream doc wins" rule.
+
 ## [3.1.0] - 2026-04-08
 
 ### Changed
