@@ -26,13 +26,19 @@ When this command is invoked:
 
 ### Step 1 — Detect Project Type
 
+Collect ALL matching signals — don't stop at first match. Drupal + Next.js is a common monorepo shape; React + Python is rare but possible (tooling script alongside frontend).
+
 | Signal | Project type |
 |---|---|
 | `composer.json` with `drupal/core` | Drupal |
 | `next.config.*` or `package.json` with `next` | Next.js |
 | `package.json` with `react` (no Next) | React |
 | `pyproject.toml` / `setup.py` / `requirements.txt` | Python |
-| (fallback) | General |
+| (no signals) | General |
+
+**Monorepo handling:** if two or more types match, ask the user which to target — or (if they say "both") emit a REVIEW.md that covers both with `## Always check` rules sectioned `### Drupal (web/, modules/)` vs `### Next.js (frontend/)`.
+
+**General fallback:** if no manifest files exist, use a minimal starter focused on `SECURITY`, `LOGGING`, and `DOCS` rules only — skip language-specific content. Tell the user REVIEW.md without a detected project type is best-effort and should be hand-tuned.
 
 ### Step 2 — Scan What's Already Enforced
 

@@ -27,17 +27,15 @@ fi
 
 INPUT=$(cat 2>/dev/null || true)
 
-# Tolerate malformed JSON: jq on parse failure returns non-zero and prints to
-# stderr; capture empty and move on. Same for sed fallback.
-if command -v jq >/dev/null 2>&1; then
-  FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.file_path // empty' 2>/dev/null || echo "")
-  EVENT=$(printf '%s'     "$INPUT" | jq -r '.event // empty'     2>/dev/null || echo "")
-  CWD=$(printf '%s'       "$INPUT" | jq -r '.cwd // empty'       2>/dev/null || echo "")
-else
-  FILE_PATH=$(printf '%s' "$INPUT" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-  EVENT=$(printf     '%s' "$INPUT" | sed -n 's/.*"event"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'     | head -1)
-  CWD=$(printf       '%s' "$INPUT" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'       | head -1)
+# Require jq. The sed-based fallback silently truncated on embedded quotes —
+# safer to do nothing than to lint the wrong target.
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
 fi
+
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.file_path // empty' 2>/dev/null || echo "")
+EVENT=$(printf     '%s' "$INPUT" | jq -r '.event // empty'     2>/dev/null || echo "")
+CWD=$(printf       '%s' "$INPUT" | jq -r '.cwd // empty'       2>/dev/null || echo "")
 
 FILE_PATH="${FILE_PATH:-}"
 EVENT="${EVENT:-}"
@@ -62,20 +60,43 @@ esac
 BASENAME=$(basename "$FILE_PATH")
 EXT="${FILE_PATH##*.}"
 
-# Detect project type. Drupal wins if both markers present and composer.json
-# names drupal/core; otherwise Next.js if package.json exists.
-PROJECT_TYPE=""
-if [ -f composer.json ] && grep -q 'drupal/core' composer.json 2>/dev/null; then
-  PROJECT_TYPE="drupal"
-elif [ -f package.json ]; then
-  PROJECT_TYPE="nextjs"
-fi
+# Detect which toolchains the repo has. A monorepo with both composer.json
+# (drupal/core) AND package.json uses each toolchain for its own files.
+HAS_DRUPAL=0
+HAS_NEXTJS=0
+[ -f composer.json ] && grep -q 'drupal/core' composer.json 2>/dev/null && HAS_DRUPAL=1
+[ -f package.json ] && HAS_NEXTJS=1
 
-[ -n "$PROJECT_TYPE" ] || exit 0
+[ "$HAS_DRUPAL" = "1" ] || [ "$HAS_NEXTJS" = "1" ] || exit 0
+
+# Route by file extension so monorepos lint the right side.
+# Config-file edits trigger whichever toolchain's config changed.
+route() {
+  case "$BASENAME" in
+    composer.json|phpstan.neon|phpstan.neon.dist|phpstan.dist.neon| \
+    phpcs.xml|phpcs.xml.dist|.phpcs.xml| \
+    psalm.xml|psalm.xml.dist)
+      echo "drupal"; return ;;
+    package.json| \
+    eslint.config.js|eslint.config.mjs|eslint.config.cjs| \
+    .eslintrc.js|.eslintrc.json|.eslintrc.yml|.eslintrc.yaml| \
+    tsconfig.json)
+      echo "nextjs"; return ;;
+  esac
+  case "$EXT" in
+    php|module|inc|install|theme|profile) echo "drupal"; return ;;
+    ts|tsx|js|jsx|mjs|cjs)                echo "nextjs"; return ;;
+  esac
+  echo ""
+}
+
+PROJECT_TYPE=$(route)
+# If routed to a toolchain the repo doesn't have, bail silently.
+{ [ "$PROJECT_TYPE" = "drupal" ] && [ "$HAS_DRUPAL" = "1" ]; } || \
+{ [ "$PROJECT_TYPE" = "nextjs" ] && [ "$HAS_NEXTJS" = "1" ]; } || exit 0
 
 # Linter-config files trigger a project-wide lint; source files lint just
-# themselves. The list here must stay aligned with SKILL.md frontmatter
-# matcher — FileChanged won't fire for basenames not in the matcher.
+# themselves. Aligned with SKILL.md frontmatter matcher.
 CONFIG_TRIGGERED=0
 case "$BASENAME" in
   composer.json|package.json| \

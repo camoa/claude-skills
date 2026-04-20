@@ -66,6 +66,13 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 
 **Why this isn't in `hooks/hooks.json`:** session-global hooks stay at plugin scope (only `PreCompact` there). Audit behaviors scoped to skill-active sessions avoid polluting unrelated work.
 
+### Known limitations
+
+- **`npx` inside a hostile clone.** If you load the skill in an attacker-controlled `package.json` repo and then edit a config file, the watch-mode dispatcher runs `npx --no-install eslint` from that tree. A trojaned `node_modules/.bin/eslint` would execute. Mitigation: the containment guard in `lint-changed.sh` refuses paths outside `cwd`, but cannot sandbox the linter itself. Don't load this skill in untrusted checkouts.
+- **`PermissionDenied` retry fires unconditionally for `Read|Grep|Glob`.** The matcher is the tightest available mechanism — there's no finer-grained filter on "only during audit tool invocations." Noise on unrelated read-only denials while the skill is loaded is accepted.
+- **`--json` output is model-generated.** The schema documents required shape + JSON-escape (`invariant 4` in `references/json-schemas.md`) but enforcement relies on the model following the contract. Consumers should `jq .` before trusting the document.
+- **`FileChanged` matcher is literal-filename.** Unlisted variants (e.g., `phpstan.local.neon`, custom names) won't fire — populate `watchPaths` dynamically from a `CwdChanged` hook if you need broader source-file watching.
+
 > **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
 
 ## When to Use

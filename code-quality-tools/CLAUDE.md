@@ -50,7 +50,7 @@ For users running audits in CI, the `StopFailure` hook event fires when a Claude
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST $SLACK_WEBHOOK -d '{\"text\":\"Code quality audit failed in CI\"}'"
+            "command": "curl -fsS -X POST \"$SLACK_WEBHOOK\" -d '{\"text\":\"Code quality audit failed in CI\"}'"
           }
         ]
       }

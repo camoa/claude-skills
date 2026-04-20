@@ -79,9 +79,22 @@ If no env var matched, proceed — but tell the user:
 >
 > A review takes 5–10 minutes and runs in the background — track it with `/tasks`.
 
-### Step 3 — GitHub Remote Check (PR Mode Only)
+### Step 3 — Argument Validation + GitHub Remote Check (PR Mode Only)
 
-If `$ARGUMENTS` looks like a PR number (integer), verify a `github.com` remote exists:
+If `$ARGUMENTS` is non-empty, validate it is a pure positive integer PR number — reject `#1234`, `PR-1234`, `https://github.com/owner/repo/pull/1234`, or anything with leading/trailing whitespace:
+
+```bash
+ARGS="${ARGUMENTS// /}"
+if [ -n "$ARGS" ] && ! printf '%s' "$ARGS" | grep -qE '^[1-9][0-9]{0,6}$'; then
+  INVALID=1
+fi
+```
+
+If `INVALID=1`, STOP:
+
+> PR mode expects a positive integer (e.g. `1234`). Got: `$ARGUMENTS`. Strip any `#`, `PR-`, or URL prefix and retry.
+
+If `$ARGS` is a valid integer, also verify a `github.com` remote exists:
 
 ```bash
 git remote -v | grep -q 'github.com' || echo "NO_GITHUB"

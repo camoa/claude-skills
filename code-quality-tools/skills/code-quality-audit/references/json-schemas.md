@@ -149,7 +149,12 @@ The commands `/code-quality:audit`, `/code-quality:review`, and `/code-quality:s
 
 1. **`findings` is always an array.** Zero findings = `[]`, never `null`, never omitted. Downstream `jq '.findings[]'` must never fail on "pass with no findings."
 2. **`status` is `warning` (NEVER `pass`) when no tools actually ran.** If the command fell back with every configured layer skipped (binaries missing, config absent), the gate result is **indeterminate** — `pass` on a zero-tool run is a CI false-green and is prohibited.
-3. **`schema_version` is semver on the schema itself**, independent of plugin version. Additive changes bump minor (`1.0` → `1.1`); breaking changes bump major (`1.0` → `2.0`). CI parsers should match `^1\.` not `1.0` exactly so minor bumps don't break them.
+3. **`schema_version` is semver on the schema itself**, independent of plugin version. Additive changes bump minor (`1.0` → `1.1`); breaking changes bump major (`1.0` → `2.0`).
+
+   > **CI pinning:** match `^1\.` (jq: `test("^1\\.")`), NOT `== "1.0"` exactly — additive minor bumps are back-compat and should not break your gate. Only pin major. Example:
+   > ```bash
+   > echo "$result" | jq -e '.schema_version | test("^1\\.")' >/dev/null || exit 1
+   > ```
 4. **String fields (`file`, `message`, `fix`) are JSON-escaped** — newlines, quotes, and backslashes must not corrupt the document. The command is responsible for emitting valid JSON; downstream `jq` consumers should never see parse errors. Validate with `echo "$OUTPUT" | jq .` before trusting `$OUTPUT` in a gate.
 
 ### Common envelope
@@ -190,7 +195,7 @@ All three share:
   },
   "findings": [
     {
-      "category": "solid|dry|coverage|security|lint",
+      "category": "solid|dry|coverage|security",
       "severity": "critical|high|medium|low|info",
       "file": "src/Service/MyService.php",
       "line": 45,

@@ -40,7 +40,7 @@ result=$(/code-quality:audit --json "$TARGET")
 echo "$result" | jq -e '.status != "fail"' >/dev/null || { echo "$result" | jq; exit 1; }
 ```
 
-Full schema + field definitions: `skills/code-quality-audit/references/json-schemas.md`.
+Full schema + field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/json-schemas.md`.
 
 ## What This Does
 
@@ -120,15 +120,15 @@ Tools that couldn't run or had no findings — may indicate missing config, not 
 
 For recurring sweeps (daily, weekly, hourly security watch), pick a surface based on what the audit needs:
 
-- **Desktop Scheduled Task** (primary) — access to DDEV, composer cache, uncommitted work. See `skills/code-quality-audit/references/desktop-sweep-template.md`.
-- **Cloud Routine** (fallback) — machine-off reliability, GitHub event triggers. See `skills/code-quality-audit/references/cloud-routine-sweep.md`.
+- **Desktop Scheduled Task** (primary) — access to DDEV, composer cache, uncommitted work. See `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/desktop-sweep-template.md`.
+- **Cloud Routine** (fallback) — machine-off reliability, GitHub event triggers. See `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/cloud-routine-sweep.md`.
 - `/loop` — in-session polling only.
 
-Surface comparison and decision tree: `skills/code-quality-audit/references/scheduled-sweeps.md`.
+Surface comparison and decision tree: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/scheduled-sweeps.md`.
 
 ## Wire to CI
 
-For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `skills/code-quality-audit/references/premerge-gate-routine.md`.
+For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/premerge-gate-routine.md`.
 
 ## Related Commands
 
