@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-04-20
+
+### Added
+- **REVIEW.md v2 injection-model generator** — `/code-quality:generate-review-md` now emits the injection-model structure (severity overrides, nit caps, skip directives, mandatory-check lists, verification bar, summary-format directives). Starter templates for Drupal and Next.js in `references/review-md-v2.md`.
+- **`/code-quality:ultrareview` command** — wrapper around the built-in `/ultrareview` with pre-flight platform compatibility check (fails cleanly on Bedrock/Vertex/Foundry/ZDR), cost transparency notice (Pro/Max 3 free one-time then $5–$20 per run; Team/Enterprise all paid as extra usage), and GitHub remote check for PR mode.
+- **Skill-scoped `FileChanged` hook** — watch-mode linting runs only when the `code-quality-audit` skill is active. Matcher covers common linter-config files (composer.json, package.json, phpstan.neon*, psalm.xml, eslint.config.*, tsconfig.json). Dispatches to `hooks/lint-changed.sh` which runs PHPStan (via DDEV) or ESLint per project type. Force-disable mid-session with `CLAUDE_CODE_QUALITY_WATCH=0`.
+- **Skill-scoped `PermissionDenied` hook** — returns `{retry: true}` scoped to `Read|Grep|Glob` (non-destructive) so audit flows don't stall on auto-mode classifier denials for read-only tools.
+- **Scheduled quality sweep templates** — Desktop Scheduled Task template (primary, local files + DDEV access, 1-min interval) in `references/desktop-sweep-template.md`; Cloud Routine fallback with full footgun list in `references/cloud-routine-sweep.md`; surface comparison with decision tree in `references/scheduled-sweeps.md`.
+- **API-triggered pre-merge gate** — Cloud Routine template with `curl` example, GitHub Actions and GitLab CI snippets, bearer-token lifecycle and daily-cap guidance in `references/premerge-gate-routine.md`.
+- **Check-run JSON consumption** — `gh`+`jq` parsing pattern with a starter GitHub Actions quality-gate workflow that fails merge when `normal > 0`. Documents that the JSON `normal` key corresponds to the UI's "Important" severity (backwards compat). See `references/check-run-json.md`.
+- **`--json` CI mode** on `/code-quality:audit`, `/code-quality:review`, and `/code-quality:security` — emits a stable schema v1.0 JSON document on stdout for CI gating. Schemas documented in `references/json-schemas.md`. Scoped to these three commands only; `/lint`, `/coverage` already emit tool-native JSON, `/solid`, `/dry`, `/tdd` are interactive.
+
+### Changed
+- **Severity label** — Code Review's human-facing "Normal" renamed to **"Important"** across `/review` and related docs. JSON key stays `normal` for backwards compatibility.
+- **`REVIEW.md` authoring model** — REVIEW.md is now the highest-priority system-prompt injection block, not additive guidance. The generator output structure has been rewritten; the previous additive format is semantically dead.
+- **SKILL.md `model: sonnet`** declared explicitly in frontmatter.
+- **Version drift fixed** — `skills/code-quality-audit/SKILL.md` was at 2.7.0 while `plugin.json` was at 2.10.0; both now at 3.0.0 along with marketplace.json.
+
+### Hardened (from cold-agent paper test — Happy Path + Edge Case + Red Team)
+- `hooks/lint-changed.sh` tolerant of malformed JSON and missing `jq` (dropped `set -e`; explicit fallbacks). Refuses to lint absolute paths outside `$cwd`.
+- `FileChanged` matcher expanded to common real-world variants (`phpstan.dist.neon`, `phpcs.xml*`, `.eslintrc.{js,yml,yaml}`, `eslint.config.cjs`, `psalm.xml.dist`) — matcher is literal per Hooks Reference, so unlisted variants silently failed to fire.
+- `/ultrareview` pre-flight uses `is_truthy` helper; explicit documentation that Foundry / ZDR / API-only auth are not locally detectable and fail at session launch.
+- `check-run-json.md` parser uses `split(…) | last` (not `[1]`) to defend against fake `bughunter-severity:` markers echoed earlier in check-run text. Workflow blocks merge on missing or malformed marker instead of failing-open.
+- `json-schemas.md` declares four CI invariants: `findings` always `[]` on zero findings; `status` is `warning` (never `pass`) when no tools ran; `schema_version` follows semver; string fields JSON-escaped.
+- `commands/audit.md` and `commands/security.md` use `${CLAUDE_PLUGIN_ROOT}` for script paths (CWD-independent).
+- `premerge-gate-routine.md` treats POST-body `text` as untrusted data (extract-digits-or-abort); shell snippets use `jq -nc --arg` to build request body safely; HTTP error-code recovery table added (429/401/404/5xx).
+- `generate-review-md.md` documents the REVIEW.md trust boundary — CLAUDE.md / rules files may come from hostile clones; never paste verbatim.
+- `desktop-sweep-template.md` flags `Ask` permission mode as a stall risk for scheduled runs.
+- `cloud-routine-sweep.md` prompt adds Gitleaks secret-redaction before Slack posting.
+
 ## [2.10.0] - 2026-04-08
 
 ### Changed

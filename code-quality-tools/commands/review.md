@@ -1,7 +1,7 @@
 ---
 description: Review code quality with structured rubric scoring (Content + Structure grades, /50 scale). Use when user says "review this code", "grade this module", "code review", "quality score", "is this production ready", "rate this code", "code assessment". Produces scored report with quality gate (PASS 35+/FAIL) and prioritized action items.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: <file-or-directory-path>
+argument-hint: [--json] <file-or-directory-path>
 ---
 
 # Code Review
@@ -11,8 +11,26 @@ Structured code review with rubric-based scoring. Produces a graded assessment w
 ## Usage
 
 ```
-/code-quality:review <file-or-directory-path>
+/code-quality:review <file-or-directory-path>            # writes scored markdown report
+/code-quality:review --json <file-or-directory-path>     # CI mode — single stable JSON on stdout
 ```
+
+## CI Mode (--json)
+
+When invoked with `--json`, emit schema `v1.0` JSON on stdout and skip writing the markdown report. Fields include:
+
+- `summary.total` (0-50), `summary.grade`, `summary.gate` (`PASS` / `FAIL`)
+- `findings[]` with per-category score, severity, file:line, message, fix
+- `action_items[]` with priority and resolves-findings references
+
+Gate on `.summary.gate`:
+
+```bash
+result=$(/code-quality:review --json "$TARGET")
+echo "$result" | jq -e '.summary.gate == "PASS"' >/dev/null || exit 1
+```
+
+Schema: `skills/code-quality-audit/references/json-schemas.md`.
 
 ## What This Does
 
@@ -155,10 +173,21 @@ Write to `.reports/code-review-{filename-or-dirname}.md`:
 
 ## REVIEW.md Convention
 
-Claude Code's Code Review feature supports a `REVIEW.md` file at the project root to customize review behavior. If `REVIEW.md` exists in the project, Claude will read it before scoring to apply project-specific standards (e.g., required patterns, team conventions, framework-specific rules). Create a `REVIEW.md` to tailor the rubric to your project's needs.
+Claude Code's managed Code Review service injects `REVIEW.md` verbatim as the highest-priority instruction block into every review agent. If `REVIEW.md` exists at the project root, read it before scoring and apply its severity overrides, skip directives, and mandatory checks.
 
-## Related Commands
+Severity labels: 🔴 **Important** (blocks merge), 🟡 **Nit**, 🟣 **Pre-existing**. The JSON check-run output keys Important findings as `normal` for backwards compatibility — see `skills/code-quality-audit/references/check-run-json.md` for CI gating.
+
+For authoring REVIEW.md, see `skills/code-quality-audit/references/review-md-v2.md` — covers severity overrides, nit caps, skip directives, verification bars, and starter templates for Drupal and Next.js. Generate one with `/code-quality:generate-review-md`.
+
+## CI Integration
+
+To gate merges on Code Review findings, parse the **Claude Code Review** check run's JSON output with `gh` + `jq`. A non-zero `normal` count means at least one Important finding was posted. See `skills/code-quality-audit/references/check-run-json.md` for the `gh api` command and a starter GitHub Actions workflow.
+
+## See also
 
 - `/code-quality:audit` — Full automated audit (tools only, no rubric)
 - `/code-quality:solid` — SOLID principles check only
 - `/code-quality:security` — Security audit only
+- `/code-quality:generate-review-md` — generate a v2 REVIEW.md tailored to the project
+- `/code-quality:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
+- `@claude review once` — GitHub PR comment that triggers one managed Code Review without subscribing the PR to future push-triggered reviews. Requires the managed Code Review service enabled on the repository. Useful for long-running PRs with frequent rebases.

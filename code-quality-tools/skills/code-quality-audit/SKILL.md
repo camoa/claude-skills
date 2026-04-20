@@ -1,9 +1,23 @@
 ---
 name: code-quality-audit
-description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 2.7.0
+description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
+version: 3.0.0
+model: sonnet
 allowed-tools: Read, Bash, Grep, Glob
 user-invocable: true
+hooks:
+  FileChanged:
+    - matcher: "composer.json|package.json|phpstan.neon|phpstan.neon.dist|phpstan.dist.neon|phpcs.xml|phpcs.xml.dist|.phpcs.xml|psalm.xml|psalm.xml.dist|eslint.config.js|eslint.config.mjs|eslint.config.cjs|.eslintrc.js|.eslintrc.json|.eslintrc.yml|.eslintrc.yaml|tsconfig.json"
+      hooks:
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/hooks/lint-changed.sh"
+          timeout: 30
+  PermissionDenied:
+    - matcher: "Read|Grep|Glob"
+      hooks:
+        - type: command
+          command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionDenied\",\"retry\":true}}'"
+          timeout: 2
 ---
 
 # Code Quality Audit
@@ -22,10 +36,42 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 - `/code-quality:dry` - Find code duplication
 - `/code-quality:tdd` - Start TDD workflow (test watcher mode)
 - `/code-quality:review` - Rubric-scored code review (/50 scale with quality gate)
-- `/code-quality:generate-review-md` - Generate REVIEW.md for Claude Code's managed Code Review
+- `/code-quality:ultrareview` - Cloud multi-agent deep review with pre-flight checks (5-10min, paid after free quota)
+- `/code-quality:generate-review-md` - Generate v2 REVIEW.md for Claude Code's managed Code Review
 - `/code-quality:architecture-debate` - Architecture debate (Pragmatist + Purist + Maintainer)
+- `/code-quality:security-debate` - Security debate (Defender + Red Team + Compliance)
 
 **For conversational workflows, continue reading...**
+
+## Watch-mode Linting (skill-scoped)
+
+This skill declares two skill-scoped hooks in its frontmatter — active ONLY while the skill is loaded, NOT plugin-wide:
+
+| Event | When | What |
+|---|---|---|
+| `FileChanged` | Linter config changes — exact filenames for common variants: `composer.json`, `package.json`, `phpstan.neon*` (3 variants), `phpcs.xml*` (3 variants), `psalm.xml*` (2 variants), `eslint.config.{js,mjs,cjs}`, `.eslintrc.{js,json,yml,yaml}`, `tsconfig.json` | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
+| `PermissionDenied` | `Read`, `Grep`, `Glob` denied in auto mode | Returns `{retry: true}` — retries non-destructive classifier denials during audits |
+
+**Scope discipline:** both hooks auto-disable when the skill isn't active. A `FileChanged` handler at plugin scope would fire on every file change across every conversation — noise, not value. Audit-contextual behaviors belong here.
+
+**FileChanged matcher is literal, not glob.** Per the Hooks Reference, `FileChanged` matcher values are split on `|` and registered as **literal filenames** — not globs. To watch arbitrary source files (`*.php`, `*.tsx`), populate `watchPaths` dynamically from a `CwdChanged` hook, or add specific absolute paths to your project's `.claude/settings.json`. The default watch list here covers linter-config churn; broaden it in your settings if you want per-file watch on source edits.
+
+**Force-disable mid-session:**
+
+```bash
+export CLAUDE_CODE_QUALITY_WATCH=0
+```
+
+Unset the variable (or set to anything other than `0`) to re-enable.
+
+**Why this isn't in `hooks/hooks.json`:** session-global hooks stay at plugin scope (only `PreCompact` there). Audit behaviors scoped to skill-active sessions avoid polluting unrelated work.
+
+### Known limitations
+
+- **`npx` inside a hostile clone.** If you load the skill in an attacker-controlled `package.json` repo and then edit a config file, the watch-mode dispatcher runs `npx --no-install eslint` from that tree. A trojaned `node_modules/.bin/eslint` would execute. Mitigation: the containment guard in `lint-changed.sh` refuses paths outside `cwd`, but cannot sandbox the linter itself. Don't load this skill in untrusted checkouts.
+- **`PermissionDenied` retry fires unconditionally for `Read|Grep|Glob`.** The matcher is the tightest available mechanism — there's no finer-grained filter on "only during audit tool invocations." Noise on unrelated read-only denials while the skill is loaded is accepted.
+- **`--json` output is model-generated.** The schema documents required shape + JSON-escape (`invariant 4` in `references/json-schemas.md`) but enforcement relies on the model following the contract. Consumers should `jq .` before trusting the document.
+- **`FileChanged` matcher is literal-filename.** Unlisted variants (e.g., `phpstan.local.neon`, custom names) won't fire — populate `watchPaths` dynamically from a `CwdChanged` hook if you need broader source-file watching.
 
 > **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
 
@@ -140,12 +186,12 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 10:** [TDD Workflow](references/operations/drupal-tdd.md) - RED-GREEN-REFACTOR cycle
 
 ### Security
-- **Operation 20:** [Security Audit](references/operations/drupal-security.md) - **10 security layers (v2.0.0)**
+- **Operation 20:** [Security Audit](references/operations/drupal-security.md) — 10 security layers
   - Drush pm:security, Composer audit
   - yousha/php-security-linter, Psalm taint analysis
   - Custom Drupal patterns, Security Review module
-  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
-  - **Roave Security Advisories** (v2.0.0)
+  - Semgrep SAST, Trivy scanner, Gitleaks
+  - Roave Security Advisories
 
 ## Next.js Operations
 
@@ -163,17 +209,17 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 18:** [TDD Workflow](references/operations/nextjs-tdd.md) - RED-GREEN-REFACTOR with Jest
 
 ### Security
-- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) - **7 security layers (v2.0.0)**
+- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) — 7 security layers
   - npm audit, ESLint security plugins
-  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
+  - Semgrep SAST, Trivy scanner, Gitleaks
   - Custom React/Next.js patterns (XSS, eval, navigation)
-  - **Socket CLI** (v2.0.0)
+  - Socket CLI
 
 ## Optional: DAST (Dynamic Testing)
 
 **Pre-production security testing for staging environments**
 
-- **Operation 22:** [DAST Tools](references/operations/dast-tools.md) - **Dynamic security testing (v2.1.0)**
+- **Operation 22:** [DAST Tools](references/operations/dast-tools.md) — Dynamic security testing
   - OWASP ZAP (full DAST scanner)
   - Nuclei (template-based CVE scanning)
   - Requires running application
@@ -217,7 +263,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/dry-detection.md` - Rule of Three, when duplication is OK
 - `references/solid-detection.md` - SOLID detection patterns and fixes
 - `references/composer-scripts.md` - Ready-to-use composer scripts
-- `references/scope-targeting.md` - **Target specific modules/components (NEW in v1.8.0)**
+- `references/scope-targeting.md` - Target specific modules/components
 
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations
@@ -258,45 +304,4 @@ Usage: WebFetch the index to discover available topics, then fetch specific topi
 - `templates/nextjs/jest.setup.js` - Jest setup with Testing Library
 - `templates/nextjs/.prettierrc` - Prettier config with Tailwind plugin
 
----
-
-## What's New in v2.1.0
-
-**Phase 3 - Optional DAST Tools (NEW!):**
-- ✅ OWASP ZAP (full DAST scanner for pre-production)
-- ✅ Nuclei (template-based CVE and misconfiguration scanning)
-- ✅ Comprehensive documentation with usage examples
-- ✅ CI/CD integration guides (GitHub Actions, GitLab)
-- ✅ Pre-release checklist script
-
-**DAST Coverage:**
-- Pre-production security testing
-- Runtime vulnerability detection
-- OWASP Top 10 dynamic testing
-- 1000+ CVE templates (Nuclei)
-
-See `references/operations/dast-tools.md` for full documentation.
-
----
-
-## What's New in v2.0.0
-
-**Progressive Disclosure Refactoring:**
-- ✅ SKILL.md: 632 → 234 lines (63% reduction)
-- ✅ 9 reference files created with full documentation
-- ✅ Plugin-creation-tools compliance (16/16 criteria)
-
-**Phase 1 - Cross-Stack Security Tools:**
-- ✅ Semgrep SAST (20,000+ security rules for PHP, React, JS, TS)
-- ✅ Trivy scanner (dependency/container/secret scanner)
-- ✅ Gitleaks (secret detection with 800+ patterns)
-
-**Phase 2 - Enhancement Tools:**
-- ✅ Roave Security Advisories (Drupal - Composer prevention layer)
-- ✅ Socket CLI (Next.js - supply chain attack detection)
-
-**Security Coverage:**
-- Drupal: 40% → **90%** (10 security layers)
-- Next.js: 0% → **85%** (7 security layers)
-
-See `.work-in-progress-v2.0.0.md` for full implementation details.
+See `CHANGELOG.md` for version history.

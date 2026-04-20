@@ -1,7 +1,7 @@
 ---
 description: Run complete code quality and security audit for Drupal/Next.js projects. Use when user says "full audit", "check everything", "code quality report", "run all checks", "audit this project", "pre-merge check", "quality gate". Runs lint + security + SOLID + DRY + coverage, then synthesizes findings into prioritized action plan with cross-tool correlation.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: optional|project-path
+argument-hint: [--json] [project-path]
 ---
 
 # Code Quality Audit
@@ -11,8 +11,36 @@ Run a comprehensive code quality and security audit on your project.
 ## Usage
 
 ```
-/code-quality:audit [project-path]
+/code-quality:audit [project-path]           # interactive, writes .reports/*.md + chat summary
+/code-quality:audit --json [project-path]    # CI mode — emits a single stable JSON document on stdout
 ```
+
+## CI Mode (--json)
+
+When invoked with `--json`, emit a single stable JSON document on stdout (schema `v1.0`) and suppress the chat summary. The document envelope:
+
+```json
+{
+  "schema_version": "1.0",
+  "command": "audit",
+  "project_type": "drupal|nextjs|unknown",
+  "timestamp": "ISO-8601",
+  "target": "path",
+  "status": "pass|warning|fail",
+  "summary": { "overall": "...", "coverage": "...", "solid": "...", "dry": "...", "security": "..." },
+  "findings": [ ... ],
+  "metrics": { ... }
+}
+```
+
+Gate a pipeline on overall status:
+
+```bash
+result=$(/code-quality:audit --json "$TARGET")
+echo "$result" | jq -e '.status != "fail"' >/dev/null || { echo "$result" | jq; exit 1; }
+```
+
+Full schema + field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/json-schemas.md`.
 
 ## What This Does
 
@@ -23,11 +51,15 @@ Run a comprehensive code quality and security audit on your project.
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+Use `${CLAUDE_PLUGIN_ROOT}` (Claude Code exposes this) to reach the scripts regardless of the user's current working directory:
 
-Based on detection result, executes:
-- **Drupal**: `bash scripts/core/full-audit.sh` (via DDEV)
-- **Next.js**: `bash scripts/core/full-audit.sh` (via npm/yarn)
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
+```
+
+Based on detection result, execute:
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/full-audit.sh"` (via DDEV)
+- **Next.js**: same script (routes by detected type)
 
 ## Output
 
@@ -84,9 +116,24 @@ Tools that couldn't run or had no findings — may indicate missing config, not 
 - Top fix resolves: {N} findings
 ```
 
+## Schedule this
+
+For recurring sweeps (daily, weekly, hourly security watch), pick a surface based on what the audit needs:
+
+- **Desktop Scheduled Task** (primary) — access to DDEV, composer cache, uncommitted work. See `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/desktop-sweep-template.md`.
+- **Cloud Routine** (fallback) — machine-off reliability, GitHub event triggers. See `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/cloud-routine-sweep.md`.
+- `/loop` — in-session polling only.
+
+Surface comparison and decision tree: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/scheduled-sweeps.md`.
+
+## Wire to CI
+
+For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/premerge-gate-routine.md`.
+
 ## Related Commands
 
 - `/code-quality:review` - Rubric-scored code review (/50 scale)
+- `/code-quality:ultrareview` - Cloud multi-agent deep review (pre-merge, paid after free quota)
 - `/code-quality:coverage` - Test coverage only
 - `/code-quality:security` - Security audit only
 - `/code-quality:security-debate` - Debate security findings with 3-agent team

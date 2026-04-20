@@ -27,8 +27,17 @@
 Agent spawn prompts in this plugin document `effort`, `model`, `maxTurns`, and `isolation` as intent markers inside Markdown. These are NOT evaluated as YAML frontmatter — they are instructions to Claude on how to configure the spawned agent. The actual agent launch mechanism (TeamCreate/TaskCreate) is what enforces model routing and isolation. Do not add `hooks`, `mcpServers`, or `permissionMode` to agent spawn prompt blocks — those fields are not processed in the agent spawning context and will be silently ignored.
 
 ## Hooks
-The plugin registers one hook in `hooks/hooks.json`:
+
+Two scopes in use:
+
+**Plugin-scoped** (`hooks/hooks.json` — session-global, always on when plugin enabled):
 - **PreCompact** — `hooks/pre-compact.sh` — Preserves audit context before conversation compaction
+
+**Skill-scoped** (declared in `skills/code-quality-audit/SKILL.md` frontmatter — active only while the skill is loaded):
+- **FileChanged** — `hooks/lint-changed.sh` — Watch-mode linting on linter-config edits. Matcher enumerates literal filenames (per Hooks Reference, FileChanged matcher values are literal filenames, NOT globs): `composer.json`, `package.json`, `phpstan.neon`, `phpstan.neon.dist`, `psalm.xml`, `eslint.config.js`, `eslint.config.mjs`, `.eslintrc.json`, `tsconfig.json`. Source-file watching requires populating `watchPaths` dynamically. Force-disable: `CLAUDE_CODE_QUALITY_WATCH=0`.
+- **PermissionDenied** — returns `{retry: true}` scoped to `Read|Grep|Glob` only. Prevents audit flows from stalling on auto-mode classifier denials for read-only tools.
+
+Reason for the split: audit-contextual hooks belong to the skill (noise when they fire across unrelated conversations). Session-global concerns (compaction) stay at plugin scope.
 
 ### StopFailure Hook (CI pipelines)
 For users running audits in CI, the `StopFailure` hook event fires when a Claude Code session exits with a non-zero status. This is useful for error alerting. Example pattern to document for CI-integrated projects:
@@ -41,7 +50,7 @@ For users running audits in CI, the `StopFailure` hook event fires when a Claude
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST $SLACK_WEBHOOK -d '{\"text\":\"Code quality audit failed in CI\"}'"
+            "command": "curl -fsS -X POST \"$SLACK_WEBHOOK\" -d '{\"text\":\"Code quality audit failed in CI\"}'"
           }
         ]
       }
