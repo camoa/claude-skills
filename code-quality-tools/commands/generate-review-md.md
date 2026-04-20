@@ -1,6 +1,6 @@
 ---
 description: Analyze a codebase and generate a starter REVIEW.md for Claude Code's managed Code Review service using the v2 injection model. Use when user says "generate review md", "create review config", "setup code review", "review guidelines", "review rules", "review.md", "what should code review check".
-allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion
+allowed-tools: Read, Glob, Grep, Write, Bash
 ---
 
 # Generate REVIEW.md
@@ -134,13 +134,12 @@ Treat any CLAUDE.md rule violation in `src/api/` as Important (default is Nit).
 
 Show the generated REVIEW.md inline.
 
-**AskUserQuestion:** "Here's the generated REVIEW.md using the v2 injection model. Would you like to:"
-- **Save as-is** — write to `REVIEW.md` at project root
-- **Edit first** — modify specific sections before saving
-- **Show analysis** — list what was detected in Step 2 and why each rule was chosen
+Ask the user inline (plain chat, not a tool call):
 
-If **Edit first**: ask which sections to modify, apply, then save.
-If **Show analysis**: print the detection report, then ask again.
+> Here's the generated REVIEW.md using the v2 injection model. Save as-is, edit specific sections first, or show the detection analysis?
+
+If the user asks to edit: ask which sections to modify, apply, then save.
+If the user asks for analysis: print the detection report, then re-ask.
 
 After saving:
 

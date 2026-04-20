@@ -49,7 +49,7 @@ This skill declares two skill-scoped hooks in its frontmatter — active ONLY wh
 
 | Event | When | What |
 |---|---|---|
-| `FileChanged` | Linter config changes (`composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, `.eslintrc.json`, `tsconfig.json`) | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
+| `FileChanged` | Linter config changes — exact filenames: `composer.json`, `package.json`, `phpstan.neon`, `phpstan.neon.dist`, `psalm.xml`, `eslint.config.js`, `eslint.config.mjs`, `.eslintrc.json`, `tsconfig.json` | Runs `hooks/lint-changed.sh` — re-lints on config change; lints single file on source-file change when watchPaths include it |
 | `PermissionDenied` | `Read`, `Grep`, `Glob` denied in auto mode | Returns `{retry: true}` — retries non-destructive classifier denials during audits |
 
 **Scope discipline:** both hooks auto-disable when the skill isn't active. A `FileChanged` handler at plugin scope would fire on every file change across every conversation — noise, not value. Audit-contextual behaviors belong here.
@@ -179,12 +179,12 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 10:** [TDD Workflow](references/operations/drupal-tdd.md) - RED-GREEN-REFACTOR cycle
 
 ### Security
-- **Operation 20:** [Security Audit](references/operations/drupal-security.md) - **10 security layers (v2.0.0)**
+- **Operation 20:** [Security Audit](references/operations/drupal-security.md) — 10 security layers
   - Drush pm:security, Composer audit
   - yousha/php-security-linter, Psalm taint analysis
   - Custom Drupal patterns, Security Review module
-  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
-  - **Roave Security Advisories** (v2.0.0)
+  - Semgrep SAST, Trivy scanner, Gitleaks
+  - Roave Security Advisories
 
 ## Next.js Operations
 
@@ -202,17 +202,17 @@ All detailed operation instructions have been moved to reference files for bette
 - **Operation 18:** [TDD Workflow](references/operations/nextjs-tdd.md) - RED-GREEN-REFACTOR with Jest
 
 ### Security
-- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) - **7 security layers (v2.0.0)**
+- **Operation 21:** [Security Audit](references/operations/nextjs-security.md) — 7 security layers
   - npm audit, ESLint security plugins
-  - **Semgrep SAST, Trivy scanner, Gitleaks** (v1.8.0)
+  - Semgrep SAST, Trivy scanner, Gitleaks
   - Custom React/Next.js patterns (XSS, eval, navigation)
-  - **Socket CLI** (v2.0.0)
+  - Socket CLI
 
 ## Optional: DAST (Dynamic Testing)
 
 **Pre-production security testing for staging environments**
 
-- **Operation 22:** [DAST Tools](references/operations/dast-tools.md) - **Dynamic security testing (v2.1.0)**
+- **Operation 22:** [DAST Tools](references/operations/dast-tools.md) — Dynamic security testing
   - OWASP ZAP (full DAST scanner)
   - Nuclei (template-based CVE scanning)
   - Requires running application
@@ -256,7 +256,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/dry-detection.md` - Rule of Three, when duplication is OK
 - `references/solid-detection.md` - SOLID detection patterns and fixes
 - `references/composer-scripts.md` - Ready-to-use composer scripts
-- `references/scope-targeting.md` - **Target specific modules/components (NEW in v1.8.0)**
+- `references/scope-targeting.md` - Target specific modules/components
 
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations

@@ -83,15 +83,13 @@ If missing, STOP:
 
 > PR mode requires a `github.com` remote. Either push your branch to GitHub and retry, or run `/code-quality:ultrareview` (no arguments) to review your local branch diff instead.
 
-### Step 4 — Invoke Built-in /ultrareview
+### Step 4 — Hand Off to the Built-in /ultrareview
 
-Tell the user the pre-flight passed, then have them run the built-in command:
+After the pre-flight passes, tell the user to run the built-in command themselves (a command body cannot invoke another slash command directly):
 
-> Pre-flight passed. Launching `/ultrareview`.
+> Pre-flight passed. Run `/ultrareview $ARGUMENTS` to start the review.
 >
-> Monitor progress with `/tasks`. The review runs in the background — you can keep coding, switch tasks, or close the terminal; findings appear as a notification when complete.
-
-Then instruct Claude to run `/ultrareview $ARGUMENTS` (the CLI-native command, not this wrapper). The built-in shows its own confirmation dialog with the file/line count, remaining free runs, and estimated cost before starting.
+> The built-in will show a confirmation dialog with the file/line count, remaining free runs, and estimated cost before the session launches. Monitor progress with `/tasks` — the review runs in the background, so you can keep coding or close the terminal.
 
 ## When to Use This vs `/code-quality:review`
 
