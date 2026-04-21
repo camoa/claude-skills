@@ -14,6 +14,26 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 /drupal-dev-framework:implement <task-name>
 ```
 
+## Phase Transition Check (run FIRST, before any other step)
+
+Before doing anything else for this command, verify the prior phases are marked complete.
+
+1. Read `implementation_process/in_progress/{task_name}/task.md`.
+2. Locate the `## Phase Status` section.
+3. Evaluate Phase 1 and Phase 2 independently. In each of the following lines, replace `{task_name}` with the actual task name passed to this command.
+
+4. If **Phase 2: Architecture** is not `[x]`, print this soft-nudge line:
+
+   > ⚠ Phase 2 (Architecture) is not marked complete in `task.md`. Continuing with `/implement` anyway. If architecture is incomplete, consider `/drupal-dev-framework:design {task_name}` first. (This is a nudge, not a block.)
+
+5. If **Phase 1: Research** is not `[x]`, also print this line (independent of whether Phase 2 was checked):
+
+   > ⚠ Phase 1 (Research) is not marked complete in `task.md`. Running `/implement` without research is unusual — consider `/drupal-dev-framework:research {task_name}` first. (Nudge, not a block.)
+
+6. If both phases are `[x]`, proceed silently (no output from this check).
+
+Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
+
 ## What This Does (v3.0.0)
 
 1. Loads task from `implementation_process/in_progress/{task_name}/`

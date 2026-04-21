@@ -20,17 +20,18 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 ## Installation
 
+**Requires Claude Code v2.1.110 or later** — the plugin declares `dev-guides-navigator` as a dependency in `plugin.json`, which is enforced at install time on CLI v2.1.110+. Earlier CLI versions will not resolve the dependency automatically; install `dev-guides-navigator` manually and upgrade the CLI.
+
 ```bash
 # Add marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
 
-# Install (both required)
-/plugin install dev-guides-navigator@camoa-skills
+# Install (installing drupal-dev-framework pulls dev-guides-navigator automatically on v2.1.110+)
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
-**Required plugin:**
-- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides). The framework loads these proactively at every phase.
+**Declared dependency:**
+- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides). Enforced via `plugin.json` `dependencies`. Missing-dependency failures surface at install time.
 
 **Recommended companion plugins:**
 - `superpowers` — TDD enforcement, brainstorming, verification workflows

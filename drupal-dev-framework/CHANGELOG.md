@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-04-20
+
+### Added — Task Phase Guidance (sub-task 1 of dev-framework improvements epic)
+
+- **`context-reminder` UserPromptSubmit hook** (`hooks/context-reminder.sh`) — injects a compact task-context block into Claude's context on every user prompt when a framework task is active in the current workspace. Emits structured `additionalContext` JSON per the `UserPromptSubmit` spec. Surfaces:
+  - Active task name and current phase
+  - Task folder path and the v3.0.0 file convention (`task.md` / `research.md` / `architecture.md` / `implementation.md`) with a `◀ current` marker on the active-phase line
+  - Session-loaded dev-guides (capped at 20 with "+N more" suffix)
+  - Next recommended command
+  - Directly addresses: (a) Claude drifting back to monolithic task docs instead of the folder convention, (b) loaded dev-guides being ignored as context decays, (c) users losing track of which phase command comes next.
+- **`loadedGuides[]` and `lastPhase`** fields added to per-workspace `session_context.json`. Managed by `guide-integrator` (append on load, idempotent) and read by the `context-reminder` hook. Never clobbered by `session-context-writer` on subsequent writes (jq-based merge preserves existing values).
+- **Phase-transition soft nudge** in `/design` and `/implement` commands — on command entry, reads `## Phase Status` in `task.md`; if the prior phase isn't `[x]`, prints a one-line warning that points the user at the missing command, then proceeds. Never blocks — users remain in control.
+- **Plugin Dependency on `dev-guides-navigator`** declared in `.claude-plugin/plugin.json` (`dependencies: ["dev-guides-navigator"]`). Missing-dependency failures now surface at install time instead of silently at runtime. **Requires Claude Code v2.1.110 or later.**
+
+### Changed
+
+- **`session-context-writer` skill v1.3.0** — now uses `jq`-based merge to preserve `loadedGuides[]` and `lastPhase` across writes. Seeds both fields on first-write.
+- **`guide-integrator` skill v4.1.0** — records each loaded guide into `loadedGuides[]` using stable IDs (`plugin:<basename>` for methodology refs, topic paths for dev-guides). Checks `loadedGuides[]` before fetching — skips re-loads. This is the source-of-truth for "already loaded," replacing conversation-context heuristics.
+
+### Removed
+
+- **SessionStart soft dependency check** in `hooks/session-start.sh` — removed the 21-line runtime check that warned when `dev-guides-navigator` wasn't installed. Superseded by install-time enforcement via the new `dependencies` field.
+
+### Hardening (post-paper-test)
+
+- **10K-char truncation guard** added in `context-reminder.sh` before emit — Claude Code caps `additionalContext` at 10,000 chars and replaces overflow with a file-preview pointer; the guard ensures the reminder text always reaches the model.
+- **Phase-matching regex hardened** in `context-reminder.sh` — anchored to list-item lines (`^- [x] Phase N`) and requires `Phase N[^0-9]` so `n=1` no longer spuriously matches "Phase 10"/"Phase 11". Also accepts uppercase `[X]` checkboxes (normalized to `[x]` internally) and rejects prose lines that happen to contain `[x]` near the word "Phase".
+- **Corrupt-session self-heal** in `session-context-writer` — if the existing `session_context.json` fails `jq -e .` validation, the skill now reseeds from scratch instead of failing silently every subsequent write.
+- **Empty-guide-ID guard** in `guide-integrator` — an empty `{GUIDE_ID}` now exits early instead of polluting `loadedGuides[]` with `""`.
+- **Phase-nudge clarification** in `/design` and `/implement` — `{task_name}` placeholder explicitly marked as a substitution target (was "print exactly as shown", which conflicted with interpolation intent). `/implement` now evaluates Phase 1 and Phase 2 independently so a user who somehow has Phase 2 done but Phase 1 skipped still gets the Phase 1 warning.
+
+### Notes
+
+- Hook performance measured in-workspace: ~3ms for the no-session gate, ~17ms for the no-task gate, ~43ms for a full active-task render. Payload target ≤500 tokens.
+- `UserPromptSubmit` does not support `matcher` or the `if` pre-spawn filter (non-tool event). Workspace-level gating lives inside the script, using the per-workspace `session_context.json` hash (`md5("$PWD")`) as the implicit scope marker.
+- **Concurrent-write safety** (deferred): `session-context-writer` and `guide-integrator` both follow the `jq FILE > FILE.tmp && mv FILE.tmp FILE` pattern. In a two-window-same-workspace scenario, a race could drop one update. `flock` would eliminate it; not added since (a) session files are keyed per-workspace (different windows typically → different workspaces → different files) and (b) within a single Claude Code turn the skills run sequentially. Flag for follow-up if observed.
+
 ## [3.8.0] - 2026-04-08
 
 ### Fixed
