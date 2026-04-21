@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.1"
+    "version": "1.14.3"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "camoa"
       },
@@ -36,7 +36,7 @@
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
       "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 26 hook events, the if pre-spawn filter, Agent SDK (overview/migration/custom-tools/subagents/permissions/structured-outputs/tool-search/observability/agent-loop), plugin dependencies, permission modes, claude directory layout, REVIEW.md v2, Routines-based auto-validate, and skill-description quality patterns.",
-      "version": "3.2.0",
+      "version": "3.2.1",
       "author": {
         "name": "camoa"
       },

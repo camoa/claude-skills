@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.2.0
+version: 0.4.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 user-invocable: true
 ---
@@ -75,7 +75,20 @@ The `guide-meta:` in the topic's frontmatter provides:
 | stories.yml preview | drupal/storybook | drupal/ui-patterns | reverse |
 | inline blocks | drupal/layout-builder | drupal/blocks | "inline blocks" in blocks' not |
 
-### 5. Fetch Specific Guide
+### 5. Pre-filter by Summary (NEW)
+
+The routing table in `index.md` now has 3 columns: **I need to... | Guide | Summary**.
+
+When the user's request maps to multiple candidate rows:
+- Read the Summary column for each candidate (already in the fetched `index.md` — no new fetch)
+- Pick the guide whose Summary best matches the user's specific need
+- Then fetch that one guide (step 6)
+
+When only one row matches: skip to step 6.
+
+**Do NOT fetch individual guides just to read their `tldr:`** — that's the same cost as fetching the full guide. The Summary column exists so you don't have to.
+
+### 6. Fetch Specific Guide
 
 From the "I need to..." routing table, select the guide that matches the task. The routing table lists guide filenames. Fetch the raw markdown:
 
@@ -87,7 +100,7 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 
 **Do NOT use WebFetch on GitHub Pages URLs** — you'll get rendered HTML, not the guide content.
 
-### 6. Apply the Guide (Critical)
+### 7. Apply the Guide (Critical)
 
 **Do NOT just read and summarize.** Extract and apply:
 
@@ -104,6 +117,7 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 | Find topic | Match task keywords in cached `llms.txt` |
 | Get routing table | `curl -s` raw GitHub URL for topic `index.md` |
 | Disambiguate | Check `guide-meta:` concepts/not fields |
+| Pre-filter | Read Summary column in routing table; pick best-match guide |
 | Get guide | `curl -s` raw GitHub URL for specific guide `.md` |
 | Apply | Extract patterns and implement, don't summarize |
 
@@ -125,7 +139,8 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 | "Add a story.yml for my component" | Match "story.yml" → check guide-meta → `drupal/ui-patterns/` (NOT storybook) |
 | "Set up responsive images" | Match "responsive image" → `drupal/image-styles/` (NOT drupal/media) |
 | "How do I use Config Split?" | Match "Config Split" → `drupal/config-management/` |
-| "I need SOLID architecture for my module" | Drupal context → `drupal/solid/` (NOT generic dev-solid-principles) |
+| "I need SOLID architecture for my module" | Drupal context → `drupal/solid-principles/` (NOT generic `development/solid-principles`) |
+| "Build a FormBase vs ConfigFormBase" | index.md routing table has both → read Summary column → FormBase Summary mentions entity forms, ConfigFormBase mentions config → pick based on user context |
 
 ## Troubleshooting
 

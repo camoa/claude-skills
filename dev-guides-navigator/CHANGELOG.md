@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-04-20)
+
+### Added
+- Awareness of `tldr:` frontmatter and Summary column in topic routing tables
+- Pre-filter workflow step to pick between candidate guides without fetching each
+
+### Fixed
+- SKILL.md frontmatter version was 0.2.0, out of sync with plugin.json 0.3.0
+- Example in SKILL.md referenced non-existent `drupal/solid/` topic (actual: `drupal/solid-principles/`); also corrected the "NOT" reference from `dev-solid-principles` to `development/solid-principles`
+
 ## 0.3.0 (2026-04-08)
 
 ### Changed
