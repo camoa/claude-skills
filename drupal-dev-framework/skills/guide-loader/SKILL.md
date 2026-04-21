@@ -1,8 +1,9 @@
 ---
 name: guide-loader
-description: Use when needing specialized guide content - delegates to dev-guides-navigator plugin for online guide discovery with caching and disambiguation
-version: 3.0.0
+description: Use when a framework task requires specialized guide content — delegates to the dev-guides-navigator plugin for online guide discovery with caching and disambiguation.
+version: 3.0.1
 user-invocable: false
+model: haiku
 ---
 
 # Guide Loader

@@ -3,7 +3,7 @@
 # Checks required plugins and registered projects
 
 # Clear stale session context for THIS workspace only
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
 rm -f "$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
 # Note: dev-guides-navigator presence is now enforced at install time via the

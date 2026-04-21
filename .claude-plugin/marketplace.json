@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.3"
+    "version": "1.14.4"
   },
   "plugins": [
     {
@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
-      "version": "3.9.0",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook with directive role-identity framing. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
+      "version": "3.9.1",
       "author": {
         "name": "camoa"
       },

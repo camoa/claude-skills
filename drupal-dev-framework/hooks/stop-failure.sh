@@ -11,7 +11,7 @@ TIMESTAMP=$(date -Iseconds)
 PROJECT_NAME=""
 TASK_NAME=""
 
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
 SESSION_FILE="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
 if [ -f "$SESSION_FILE" ]; then
