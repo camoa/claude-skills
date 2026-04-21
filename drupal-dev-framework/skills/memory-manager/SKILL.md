@@ -1,8 +1,9 @@
 ---
 name: memory-manager
 description: Use after completing any phase activity - updates project_state.md, project registry, ensures files are in correct locations, maintains lean memory
-version: 3.0.0
+version: 3.0.1
 user-invocable: false
+model: sonnet
 ---
 
 # Memory Manager

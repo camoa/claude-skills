@@ -1,8 +1,9 @@
 ---
 name: guide-integrator
-description: "Use when designing features - loads plugin methodology refs and delegates to dev-guides-navigator for online Drupal domain knowledge. Records each loaded guide into session_context.json loadedGuides[] so the context-reminder hook can surface them and re-loads are skipped. Trigger: 'load guides', 'get reference docs', 'methodology references'. Use proactively during Phase 2 design — loads SOLID, Library-First, DRY, TDD, Security guides."
-version: 4.1.0
+description: "Use when designing or researching features — loads plugin methodology refs (SOLID, DRY, TDD, Library-First, Quality Gates, Purposeful Code) and delegates to dev-guides-navigator for online Drupal domain knowledge. Records each loaded guide into session_context.json loadedGuides[] so re-loads are skipped and the context-reminder hook can surface them."
+version: 4.1.1
 user-invocable: false
+model: sonnet
 ---
 
 # Guide Integrator

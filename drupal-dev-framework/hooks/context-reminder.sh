@@ -93,19 +93,19 @@ else
 fi
 
 BLOCK=$(cat <<EOF
-**Drupal Dev Framework — Active Task Context**
+**drupal-dev-framework protocol is active on this task.** You are on \`$TASK\` — $CUR_LABEL. Phase sequencing applies (Research → Architecture → Implementation). Apply SOLID, TDD, and DRY to any code changes. Keep \`task.md\` \`## Phase Status\` checkboxes current as each phase progresses.
 
-- Task: \`$TASK\` — $CUR_LABEL
-- Project: \`$PROJECT\`
-- Task folder: \`$TASK_PATH/\`
-  - \`task.md\` (tracker)
+Task folder: \`$TASK_PATH/\`
+  - \`task.md\` (tracker — update checkboxes here as phases complete)
   - \`research.md\`       $P1 Phase 1 $(arrow 1)
   - \`architecture.md\`   $P2 Phase 2 $(arrow 2)
   - \`implementation.md\` $P3 Phase 3 $(arrow 3)
-- Loaded guides: $GUIDES_LINE
-- Next: \`$NEXT_CMD\`
 
-Write each phase's content to its own \`.md\` file in the task folder. Do not merge phases into a monolithic document.
+Project: \`$PROJECT\`
+Loaded guides: $GUIDES_LINE
+Next: \`$NEXT_CMD\`
+
+Write each phase's content to its own \`.md\` file. Do not merge phases into a monolithic document.
 EOF
 )
 

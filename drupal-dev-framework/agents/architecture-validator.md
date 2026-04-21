@@ -51,9 +51,9 @@ Load these from the plugin's `references/` folder:
 
 ### Online Dev-Guides
 
-For security and frontend validation, WebFetch from `https://camoa.github.io/dev-guides/`:
-- Security checks: WebFetch `drupal/security/` topic
-- Frontend/SDC checks: WebFetch `drupal/sdc/` and `drupal/js-development/` topics
+For security and frontend validation, invoke the `guide-integrator` skill (which delegates to `dev-guides-navigator` and records each loaded guide into `session_context.json`'s `loadedGuides[]`). Do NOT WebFetch dev-guides URLs directly — direct fetches bypass caching, disambiguation, and session tracking.
+- Security checks: invoke `guide-integrator` with topic `drupal/security/`
+- Frontend/SDC checks: invoke `guide-integrator` with topics `drupal/sdc/` and `drupal/js-development/`
 
 ## Process
 
