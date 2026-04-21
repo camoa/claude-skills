@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.1"
+    "version": "1.14.4"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "camoa"
       },
@@ -36,7 +36,7 @@
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
       "description": "Complete guide for creating Claude Code plugins \u2014 skills, commands, agents, hooks, MCP servers, and configuration. Covers 26 hook events, the if pre-spawn filter, Agent SDK (overview/migration/custom-tools/subagents/permissions/structured-outputs/tool-search/observability/agent-loop), plugin dependencies, permission modes, claude directory layout, REVIEW.md v2, Routines-based auto-validate, and skill-description quality patterns.",
-      "version": "3.2.0",
+      "version": "3.2.1",
       "author": {
         "name": "camoa"
       },
@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
-      "version": "3.9.0",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook with directive role-identity framing. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
+      "version": "3.9.1",
       "author": {
         "name": "camoa"
       },

@@ -43,13 +43,13 @@ Before drafting, read these reference files from the plugin's `references/` fold
 
 ### Online Dev-Guides (Drupal Domain)
 
-For Drupal-specific architecture decisions, WebFetch the relevant topic from `https://camoa.github.io/dev-guides/`:
+For Drupal-specific architecture decisions, delegate to `guide-integrator` (which invokes `dev-guides-navigator` internally and records each loaded guide into the session's `loadedGuides[]`). Do NOT WebFetch dev-guides URLs directly — direct fetches bypass caching, disambiguation, and session-level tracking.
 
 1. Match the task's Drupal concepts to a topic (forms, entities, plugins, routing, services, caching, etc.)
-2. WebFetch `https://camoa.github.io/dev-guides/drupal/{topic}/` for the topic index
-3. Identify and WebFetch the specific atomic guide for the decision needed
+2. Invoke the `guide-integrator` skill with the matched topic(s); it routes through the navigator, respects the per-workspace loaded-guides cache, and appends each loaded guide to `session_context.json`'s `loadedGuides[]` so the `context-reminder` hook can surface it.
+3. Read the guide content returned by the integrator and apply it.
 
-Common architecture decisions and their dev-guides topics:
+Common architecture decisions and their dev-guides topics (pass these topic paths to `guide-integrator`):
 
 | Decision | Topic |
 |----------|-------|
@@ -65,7 +65,7 @@ Common architecture decisions and their dev-guides topics:
 
 ## Process
 
-1. **Load references** - Read plugin's `references/solid-drupal.md`, `references/library-first.md`. For Drupal domain decisions, also WebFetch the relevant dev-guides topic.
+1. **Load references** - Read plugin's `references/solid-drupal.md`, `references/library-first.md`. For Drupal domain decisions, invoke the `guide-integrator` skill with the relevant topic (never WebFetch dev-guides URLs directly).
 2. **Review research** - Read existing research from architecture/ folder
 3. **Identify components** - List services, forms, entities, plugins needed
 4. **Apply Library-First** - Ensure services designed BEFORE UI components

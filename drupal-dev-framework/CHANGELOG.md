@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.1] - 2026-04-21
+
+### Changed — Task Process Adherence (sub-task 2 of dev-framework improvements epic)
+
+- **Context-reminder wording tuned toward role-identity framing.** The `UserPromptSubmit` reminder now opens with a directive statement ("**drupal-dev-framework protocol is active on this task.** You are on `<task>` — <phase>. Phase sequencing applies… Apply SOLID, TDD, and DRY… Keep `task.md` `## Phase Status` checkboxes current as each phase progresses") instead of a passive title ("Active Task Context"). The structured file-listing, loaded-guides line, next-command line, and monolith-prevention reminder below the opening are unchanged.
+
+### Fixed
+
+- **Workspace-hash consistency across hooks.** `context-reminder.sh` (new in v3.9.0) used `printf %s "$PWD"` for its workspace-hash computation, while the four pre-existing hooks (`session-start.sh`, `pre-compact.sh`, `post-compact.sh`, `stop-failure.sh`) used `echo -n "$PWD"`. For typical paths the two forms produce identical hashes, but `echo -n` has portability edge cases with backslashes and certain special characters. Aligned all five hooks to `printf %s` so the writer and reader of `sessions/<hash>.json` are guaranteed to use identical input across any shell/path combination. Caught by the `plugin-structure-auditor` agent's post-fix re-run.
+
+### Why this is a patch, not a minor
+
+No mechanism changes — same hook event, same JSON envelope shape, same data flow, same session-file gating. The revision is wording inside `additionalContext` plus the hash-consistency alignment. Payload size grows ~80 chars; still far below the 9500-char truncation guard.
+
+### Fixed — auditor fallout (batched in-band)
+
+The `plugin-structure-auditor` gate (newly required by the epic AC) surfaced five pre-existing issues. All are non-breaking and orthogonal to the wording tune, so batched into this patch rather than backlogged:
+
+- **Agents route guide-loading through `guide-integrator` instead of direct `WebFetch`.** `architecture-drafter` and `architecture-validator` previously instructed Claude to `WebFetch https://camoa.github.io/dev-guides/drupal/{topic}/` directly, bypassing the navigator's caching, disambiguation, and the `loadedGuides[]` tracking the v3.9.0 substrate depends on. Both agents now delegate to `guide-integrator`, which invokes `dev-guides-navigator` and records each loaded guide into `session_context.json`.
+- **`task-completer` migrated to v3.0.0 folder structure.** Step 4 previously did `mv` on a `{task}.md` file path and Step 6's glob scanned `*.md` files — both broken on v3 installs (tasks are folders, not single files). Step 4 now moves the task directory; Step 6 lists in-progress task folders via `ls -d`.
+- **`task-completer` now enforces all 5 quality gates.** The table previously listed 4 gates; Gate 5 (task-artifact completeness — acceptance criteria `[x]`, `## Phase Status` 1–3 all `[x]`, all three phase `.md` files present) is now explicit.
+- **`task-completer` Gate 4 security guidance routed through `guide-integrator`.** Was `WebFetch dev-guides/drupal/security/` directly; now delegates to the integrator.
+- **`model:` frontmatter declared across 6 skills.** `session-resume` (sonnet), `memory-manager` (sonnet), `task-completer` (sonnet), `implementation-task-creator` (sonnet), `component-designer` (sonnet), `diagram-generator` (haiku). Previously these skills inherited the invoking context's model, which could be under- or over-powered for their workload.
+- **Skill descriptions re-anchored.** `guide-loader` description rephrased from gerund ("Use when needing…") to condition-clause form ("Use when a framework task requires…") per the plugin's own convention.
+- **`guide-integrator` description tightened** (v4.1.1) — from ~480 chars to ~380 chars by moving trigger phrases and "Use proactively" guidance to the body's Activation section per skill-quality-reviewer feedback.
+
+### Still tracked for follow-up (not in this patch)
+
+- **WARN-1: `/next` command and `project-orchestrator` agent duplicate routing logic.** Fix requires a design decision (which is source of truth) plus an integration test — `/next` is the primary entry point and regression is high-impact. Separate sub-task: `dev_framework_next_orchestrator_dedup`.
+
+### Dismissed (auditor false positive)
+
+- **WARN-5: README `@camoa-skills` install syntax.** Verified: `/plugin install <name>@<marketplace>` is the documented Claude Code install syntax, used consistently across every plugin in this marketplace. Not a deficiency.
+
+### Research-backed scope (from `dev_framework_task_process_adherence` research v3)
+
+Sub-task 2 originally contemplated a 5-layer enforcement scaffolding. That research was flagged as having unverified assumptions and rewritten from scratch. The fresh research (v3) rejected most speculative directions — cross-workspace lookup (parallel-work pattern confirmed functional today), skill-scoped identity hooks (speculative without observed drift), FileChanged/PermissionDenied enforcement (intentionally soft-nudge posture from v3.9.0 preserved) — and narrowed ship-now scope to H1 (wording tune). Checkbox-upkeep language added to the reminder probes the drift hypothesis without building a mechanism for it.
+
 ## [3.9.0] - 2026-04-20
 
 ### Added — Task Phase Guidance (sub-task 1 of dev-framework improvements epic)

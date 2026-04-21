@@ -2,7 +2,7 @@
 # Pre-compact hook: Instruct Claude to preserve active project context
 # Reads per-workspace session file to find the active project
 
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
 SESSION_FILE="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
 
 # Only output if a framework command was used in this workspace this session
