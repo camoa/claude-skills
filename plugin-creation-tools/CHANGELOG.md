@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-04-21
+
+### Changed
+- **`agents/plugin-structure-auditor.md`** — narrowed scope to three areas (Architecture, Cross-Component Consistency, Performance). Distribution Readiness, Dependency Review, and SDK Rename Review removed — those checks are handled by `/plugin-creation-tools:validate` and duplicating them caused output truncation (report ran past the response budget and got cut off mid-section in live runs).
+- Output format tightened: max 3 bullets per section, scoring now `/30` total, added explicit "do not split across turns" instruction and a "next step" line pointing to `/validate` for distribution checks.
+- Description updated to steer users to `/validate` for documentation-only or small content changes (the auditor is now reserved for structural changes — new agents, skills, hooks, or layout refactors).
+
+### Why
+Live run on a 15-line heredoc CHANGELOG change in another plugin produced two consecutive truncated reports. Root cause: 7 sections × verbose findings exceeded the single-response output budget. Fix splits responsibility cleanly — `/validate` owns distribution/syntax checks, auditor owns structural judgement.
+
 ## [3.2.0] - 2026-04-20
 
 ### Added — Hooks (Track B)
