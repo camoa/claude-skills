@@ -44,6 +44,31 @@ abort() {
   exit 1
 }
 
+# Validate a task/child name. Must match ^[A-Za-z0-9_][A-Za-z0-9._-]*$ and must
+# not be ".", "..", or start with "-". Rejects path separators, traversal, and
+# shell-flag-lookalike names. Paper-test finding CRITICAL (Flaw 1) 2026-04-22.
+validate_name() {
+  local label="$1"
+  local name="$2"
+  [ -n "$name" ] || abort "$label is empty"
+  case "$name" in
+    .|..) abort "$label is '.' or '..' — path traversal rejected" ;;
+    /*|*/*|*\\*) abort "$label '$name' contains path separator — rejected" ;;
+    -*) abort "$label '$name' starts with '-' — flag-like name rejected" ;;
+  esac
+  case "$name" in
+    *[!A-Za-z0-9._-]*) abort "$label '$name' contains invalid characters (allow A-Z a-z 0-9 . _ -)" ;;
+  esac
+}
+
+# Name validation (Paper-test Flaw 1 — CRITICAL fix)
+validate_name "task name" "$TASK_NAME"
+if [ ${#CHILDREN[@]} -gt 0 ]; then
+  for c in "${CHILDREN[@]}"; do
+    validate_name "child name" "$c"
+  done
+fi
+
 TASK_DIR="$PROJECT_PATH/implementation_process/in_progress/$TASK_NAME"
 COMPLETED_DIR="$PROJECT_PATH/implementation_process/completed/$TASK_NAME"
 TEMP_ROOT="$PROJECT_PATH/implementation_process/in_progress/.migration-tmp"
@@ -53,7 +78,9 @@ TEMP_ROOT="$PROJECT_PATH/implementation_process/in_progress/.migration-tmp"
 # ---------------------------------------------------------------------------
 echo "[1/8] Preflight"
 [ -d "$TASK_DIR" ] || abort "task folder not found: $TASK_DIR"
+[ ! -L "$TASK_DIR" ] || abort "task folder is a symlink — rejected (Paper-test Flaw 3 security hardening)"
 [ -f "$TASK_DIR/task.md" ] || abort "task.md not found in folder"
+[ ! -L "$TASK_DIR/task.md" ] || abort "task.md is a symlink — rejected (Paper-test Flaw 3 security hardening)"
 [ ! -d "$COMPLETED_DIR" ] || abort "task already in completed/"
 
 READER=$(fm_read "$TASK_DIR")
@@ -83,11 +110,19 @@ echo "  OK — kind=$CURRENT_KIND status=$CURRENT_STATUS children=${#CHILDREN[@]
 # Step 2 — Classify children (parallel array)
 # ---------------------------------------------------------------------------
 echo "[2/8] Classify children"
+# Three classes:
+#   move_existing     — child is an in-progress peer folder; migrate copies it into the epic
+#   already_completed — child lives in completed/; epic references it by id but does NOT copy
+#   create_stub       — child name has no folder anywhere; epic creates an empty stub
+# Paper-test Integration-Bug-1 (2026-04-22) fix: distinguish completed children to avoid
+# creating empty duplicate folders inside the epic when dog-fooding this migration.
 CHILD_KINDS=()
 if [ ${#CHILDREN[@]} -gt 0 ]; then
   for child in "${CHILDREN[@]}"; do
     if [ -d "$PROJECT_PATH/implementation_process/in_progress/$child" ]; then
       CHILD_KINDS+=("move_existing")
+    elif [ -d "$PROJECT_PATH/implementation_process/completed/$child" ]; then
+      CHILD_KINDS+=("already_completed")
     else
       CHILD_KINDS+=("create_stub")
     fi
@@ -160,6 +195,11 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
         mkdir "$TEMP_ROOT/$TASK_NAME/$child"
         write_stub_task_md "$TEMP_ROOT/$TASK_NAME/$child/task.md" "$child" "$TASK_NAME"
         ;;
+      already_completed)
+        # Do NOT create a folder inside the epic for completed children.
+        # The epic's children[] list references them by id; they physically stay in completed/.
+        # /status will resolve their location when rendering.
+        ;;
       *)
         rm -rf "$TEMP_ROOT/$TASK_NAME"
         abort "unknown kind '$kind' for child '$child' — shell-array indexing bug"
@@ -199,8 +239,10 @@ mv "$TASK_DIR" "$TEMP_ROOT/.old-$TASK_NAME" \
   || abort "failed to move original aside"
 
 mv "$TEMP_ROOT/$TASK_NAME" "$TASK_DIR" || {
+  # Paper-test Flaw 2 (MAJOR) fix: also clean up partial temp if the mv left it.
   mv "$TEMP_ROOT/.old-$TASK_NAME" "$TASK_DIR"
-  abort "failed to swap in new structure; restored original"
+  rm -rf "$TEMP_ROOT/$TASK_NAME"
+  abort "failed to swap in new structure; restored original and cleaned temp"
 }
 
 # Delete original peer folders for move_existing children.
