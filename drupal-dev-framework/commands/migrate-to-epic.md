@@ -1,6 +1,6 @@
 ---
 description: "Use when the user wants to convert a flat task into an epic folder with child sub-tasks — manual, one-task-at-a-time, transactional. Runs the 8-step migration via the epic-migrator skill. Flat tasks remain a valid permanent choice; this command is opt-in."
-allowed-tools: Read, Write, Edit, Bash, Glob, Task
+allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
 argument-hint: <task-name> [--children "name1,name2,..."] [--dry-run]
 ---
 
@@ -34,12 +34,13 @@ Convert a single flat task into an epic folder containing child sub-tasks. Manua
 
 ## Behavior
 
-This command is a **thin orchestrator**. All file surgery and schema writing lives in the `epic-migrator` skill. This command is responsible only for:
+This command is a **thin orchestrator**. All file surgery lives in a real bash script (`${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`) invoked via the `epic-migrator` skill. This command is responsible only for:
 
 - Argument parsing and validation
 - User interaction (interactive prompt when `--children` absent)
-- Invoking `epic-migrator` with correctly-classified inputs
-- Surfacing `epic-migrator`'s output to the user
+- Invoking the script (through the skill) with correctly-classified inputs
+- Surfacing the script's output to the user
+- Invoking `session-context-writer` with the case-analysis result the script emits on stderr
 
 ## Invocation steps
 
@@ -57,11 +58,12 @@ Follow these exactly:
    >
    > Leave blank to create an epic shell with no children yet.
 
-3. **Invoke `epic-migrator` skill** with the resolved arguments:
-   - `task_name`
-   - `children` (parsed list; may be empty)
-   - `dry_run` (true/false)
-   - `project_path` — resolve from session context (`session_context.json` `projectPath`) or from `pwd` if no project is active
+3. **Invoke `epic-migrator` skill** (which calls `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`). The script takes positional arguments:
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh" "$PROJECT_PATH" "$TASK_NAME" [--dry-run] [<child1> <child2> ...]
+   ```
+
+   Resolve `$PROJECT_PATH` from session context (`session_context.json` `projectPath`) or from `pwd` if no project is active. The script handles all file surgery; this command does not touch disk directly.
 
 4. **If dry-run**, print the skill's plan output verbatim and stop.
 
@@ -70,7 +72,18 @@ Follow these exactly:
    - On success, print the summary the skill emits
    - On failure, print the skill's abort message and stop — the skill has already cleaned up any temp state
 
-6. **Post-success**, suggest the next command:
+6. **Post-success**, parse the three `KEY=VALUE` lines the script emits on stderr:
+   ```
+   SESSION_CONTEXT_CASE=<A|B|C>
+   EPIC_FOR_CTX=<value>           # literal string "{CURRENT_EPIC_OR_NULL}" for Case A; "null" for Case B; task_name for Case C
+   NEW_TASK_PATH=<path or empty>  # non-empty only for Case C
+   ```
+   Invoke `session-context-writer` accordingly:
+   - **Case A**: pass `{CURRENT_EPIC_OR_NULL}` literal → preserves existing `currentEpic`
+   - **Case B**: pass `currentEpic=null`; keep `taskPath` unchanged
+   - **Case C**: pass `currentEpic=<task_name>`; also update `taskPath` to `NEW_TASK_PATH`
+
+7. **Suggest the next command**:
    - If the migrated epic has children: `/drupal-dev-framework:next` to continue with a child
    - If the migrated epic has no children (shell): `/drupal-dev-framework:migrate-to-epic <task> --children "..."` to add children, OR proceed with the epic's own phases
 
