@@ -38,7 +38,6 @@ Always-present fields:
 | Frontmatter YAML malformed | `malformed_yaml` |
 | python3 / yaml unavailable | `parser_unavailable` |
 
-Warning codes reserved for v1.1.0+ but not currently emitted: `wrong_type`, `dangling_reference`, `orphaned_subtask`, `nested_sub_epic_disallowed`. Do not rely on them in v2.0.x.
 
 ## Invocation
 

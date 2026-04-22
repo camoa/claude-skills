@@ -1,9 +1,10 @@
 ---
 name: session-context-writer
-description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[], lastPhase, and currentEpic across writes via jq-based merge.
+description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[], lastPhase, and currentEpic across writes.
 user-invocable: false
 version: 1.4.0
 model: haiku
+allowed-tools: Bash
 ---
 
 # Session Context Writer

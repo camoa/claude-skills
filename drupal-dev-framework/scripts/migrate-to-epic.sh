@@ -11,6 +11,46 @@
 #   0  success
 #   1  abort (preflight failed, validation failed, or mid-migration error — nothing committed)
 #   2  bad usage
+#
+# Invariants this script upholds:
+#   1. Atomicity. Filesystem is either pre- or post-migration; never partial.
+#      Any abort before the atomic swap rolls back cleanly.
+#   2. 24h rollback window. The .old-<task>/ directory persists in .migration-tmp/
+#      with a .migration-completed-at timestamp; manual rm -rf to reclaim.
+#   3. Read-before-write. Step 4 validates every generated task.md via fm_read
+#      (from fm-helpers.sh). Blocking warnings abort before the atomic swap.
+#   4. No silent overwrites. Atomic `mkdir "$TEMP_ROOT/$TASK_NAME"` (without -p)
+#      fails fast if a concurrent migration is in flight.
+#   5. Deterministic children classification. move_existing iff folder exists in
+#      in_progress/; already_completed iff folder exists in completed/; else
+#      create_stub. No judgment calls.
+#   6. Status preservation. Epic inherits the original task's status.
+#      move_existing children keep their own pre-migration status.
+#      create_stub children start at draft.
+#   7. Canonical frontmatter. All frontmatter emitted via
+#      yaml.safe_dump(..., sort_keys=False) — byte-deterministic across runs.
+#
+# Preflight rejections (exit 1 with ABORT:... message on stderr):
+#   - Task folder not found in in_progress/
+#   - task.md missing inside the folder
+#   - Task folder is a symlink (security hardening — paper-test finding)
+#   - task.md is a symlink (security hardening — paper-test finding)
+#   - Task already in completed/
+#   - Task is already an epic or sub_epic
+#   - Task is a subtask of another epic
+#   - In-flight migration at .migration-tmp/<task>/ or .old-<task>/
+#   - Any child name equals the task name
+#   - Duplicate child names
+#   - Any task or child name contains /, \, .., ., or non-[A-Za-z0-9._-] chars
+#     (security hardening — paper-test finding)
+#
+# Rationale for script form (not embedded instructions):
+#   Earlier drafts embedded migration logic in SKILL.md as bash pseudo-code with
+#   undefined helper-function references. A paper-test (2026-04-22) flagged 3
+#   blockers and 5 majors — all products of instruction-as-implementation drift.
+#   Real scripts run deterministically, test in isolation, and eliminate that
+#   entire bug class. See architecture decision 3.1-D2 in the sub-task's
+#   architecture.md.
 
 set -uo pipefail
 
