@@ -1,8 +1,8 @@
 ---
 name: session-context-writer
-description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[] and lastPhase across writes via jq-based merge.
+description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[], lastPhase, and currentEpic across writes via jq-based merge.
 user-invocable: false
-version: 1.3.0
+version: 1.4.0
 model: haiku
 ---
 
@@ -23,13 +23,16 @@ You receive the resolved project and task values from the calling command. Write
   "projectPath": "/abs/path/to/project",
   "task": "my_task",
   "taskPath": "/abs/path/to/task",
-  "updatedAt": "2026-04-20",
+  "updatedAt": "2026-04-22",
   "loadedGuides": ["drupal/forms/form-validation"],
-  "lastPhase": "research"
+  "lastPhase": "research",
+  "currentEpic": "dev_framework_improvements_epic"
 }
 ```
 
-`loadedGuides` and `lastPhase` are managed by other components (`guide-integrator`, the `context-reminder` hook) — this skill must not clobber them.
+`loadedGuides`, `lastPhase`, and `currentEpic` are managed by other components (`guide-integrator`, `task-frontmatter-reader`, the `context-reminder` hook) — this skill must not clobber them.
+
+`currentEpic`, added in v1.4.0, is the folder name (not URI) of the epic that contains the active task, or `null` if the task is `kind: flat` or is itself the top-level epic. Callers set this value when they've resolved the epic ancestor via `task-frontmatter-reader`.
 
 ## Action
 
@@ -57,14 +60,29 @@ NEW_CORE=$(jq -n \
     updatedAt: $updatedAt
   }')
 
+NEW_EPIC_ARG='{CURRENT_EPIC_OR_NULL}'
+
 if [ -s "$SESS_FILE" ] && jq -e . "$SESS_FILE" >/dev/null 2>&1; then
-  # Preserve loadedGuides and lastPhase; overwrite core fields.
-  jq --argjson new "$NEW_CORE" \
-    '. * $new | .loadedGuides = (.loadedGuides // []) | .lastPhase = (.lastPhase // null)' \
+  # Preserve loadedGuides, lastPhase, and currentEpic; overwrite core fields.
+  # currentEpic behavior: if the caller passed an explicit value (not the literal "{CURRENT_EPIC_OR_NULL}" placeholder), use it; otherwise preserve existing.
+  jq --argjson new "$NEW_CORE" --arg epic "$NEW_EPIC_ARG" \
+    '. * $new
+     | .loadedGuides = (.loadedGuides // [])
+     | .lastPhase = (.lastPhase // null)
+     | .currentEpic = (
+         if $epic == "{CURRENT_EPIC_OR_NULL}" then (.currentEpic // null)
+         elif $epic == "null" or $epic == "" then null
+         else $epic
+         end
+       )' \
     "$SESS_FILE" > "$SESS_FILE.tmp" && mv "$SESS_FILE.tmp" "$SESS_FILE"
 else
   # First write, empty, or corrupt JSON — reseed from scratch with fresh core + preserved-field defaults.
-  echo "$NEW_CORE" | jq '. + {loadedGuides: [], lastPhase: null}' > "$SESS_FILE"
+  echo "$NEW_CORE" | jq --arg epic "$NEW_EPIC_ARG" '. + {
+    loadedGuides: [],
+    lastPhase: null,
+    currentEpic: (if $epic == "{CURRENT_EPIC_OR_NULL}" or $epic == "null" or $epic == "" then null else $epic end)
+  }' > "$SESS_FILE"
 fi
 ```
 
@@ -73,5 +91,6 @@ Replace placeholders:
 - `{PROJECT_PATH}` — absolute project path
 - `{TASK_NAME_OR_NULL}` — task name if known, or the literal string `null`
 - `{TASK_PATH_OR_NULL}` — absolute task path if known, or the literal string `null`
+- `{CURRENT_EPIC_OR_NULL}` — (added v1.4.0) epic folder name if the task is inside an epic, `null` if not, or leave as the literal string `{CURRENT_EPIC_OR_NULL}` to preserve whatever was there before (i.e., caller doesn't know or doesn't want to change it).
 
 Do not output anything to the user. This is a silent background operation.
