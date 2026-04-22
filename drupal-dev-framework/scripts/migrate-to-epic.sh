@@ -179,6 +179,19 @@ for artifact in research.md architecture.md implementation.md; do
   [ -f "$TASK_DIR/$artifact" ] && cp "$TASK_DIR/$artifact" "$TEMP_ROOT/$TASK_NAME/$artifact"
 done
 
+# Preserve any OTHER top-level files from the original (e.g. mechanisms-map.md,
+# decision logs, planning docs). They are epic-wide cross-cutting artifacts →
+# destination is shared/. Paper-test integration finding 2026-04-22: the
+# earlier version lost these files into the 24h rollback dir.
+for srcfile in "$TASK_DIR"/*; do
+  [ -f "$srcfile" ] || continue
+  name=$(basename "$srcfile")
+  case "$name" in
+    task.md|research.md|architecture.md|implementation.md) ;;  # already handled
+    *) cp "$srcfile" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
+  esac
+done
+
 if [ ${#CHILDREN[@]} -gt 0 ]; then
   idx=0
   for child in "${CHILDREN[@]}"; do
