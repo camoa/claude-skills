@@ -5,6 +5,23 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-22
+
+### Added
+- **`--json` output mode** on both `/paper-test` and `/code-paper:test-team` for CI integration and programmatic consumption. Versioned schema (`schema_version: "1.0"`) matching the camoa-skills ecosystem convention established by code-quality-tools. Severity rubric preserved (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`) — no new terms introduced.
+- **New reference:** `skills/paper-test/references/json-output-schema.md` — full schema, finding-object shape, team-report extensions, skill/config category vocabulary, optional `rubric_score` block, CI gate patterns, and schema-versioning contract (match `^1\.`, never exact).
+- **Deterministic + Agentic pairing section** in `skill-and-config-testing.md` — documents running `plugin-creation-tools:skill-quality-reviewer` before paper-test when testing skills/commands/agents, so mechanical issues (stale SDK refs, missing imperatives, frontmatter gaps) clear cheaply before semantic analysis.
+- **SKILL.md trigger phrases** expanded: `"test this agent"`, `"walk through this code"`, `"step through this"`, `"dry run"`, `"sanity check"`, `"red team this"`, `"poke holes in this"` — cover natural phrasings the prior list missed.
+
+### Changed
+- **`/code-paper:test-team` command** — new `--json` argument handling. Each teammate writes `{role}-analysis.json` alongside the markdown report when the flag is set; the lead aggregates per the schema into `paper-test-team-report.json` with per-teammate breakdowns (`team.happy_path` / `team.edge_case` / `team.red_team`), cross-challenge outcomes (`confirmed_by_multiple`, `disputed`, `unanimous_clean_areas`), and per-finding `found_by` / `disputed` fields.
+- **PreCompact hook** now surfaces both `.md` and `.json` reports in `.reports/`.
+- **SKILL.md** frontmatter `version: 0.5.0` → `0.7.0` (corrects the intentional drift left during the v0.6.0 hook-only bump).
+
+### Fixed
+- SKILL.md / plugin.json version drift — both now `0.7.0`.
+- SKILL.md frontmatter gained `model: sonnet` to match the plugin's own convention (`CLAUDE.md` lists `model` as required; previously missing).
+
 ## [0.6.0] - 2026-04-08
 
 ### Changed
