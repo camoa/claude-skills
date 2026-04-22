@@ -1,5 +1,24 @@
 # Drupal Dev Framework - Plugin Conventions
 
+## Task Hierarchy (v3.10.0+)
+
+The plugin supports **opt-in epic/sub-task hierarchy** on top of flat tasks (which remain first-class). Concepts:
+
+- **Flat task** — default. No frontmatter needed. Behaves exactly as v3.0.0+.
+- **Epic** — a task folder containing child subtask folders plus `shared/` for cross-cutting artifacts. Declared via `task.md` frontmatter (`kind: epic`, `children: [local:<id>, ...]`).
+- **Sub-epic** — a subtask that is itself an epic (second and final nesting level; no sub-sub-epics).
+- **Subtask** — a task nested inside an epic.
+
+**Key commands:**
+- **`/drupal-dev-framework:migrate-to-epic <task>`** — convert a flat task into an epic. Manual, per-task, transactional. Supports `--dry-run` and `--children "a,b,c"`.
+- `/status` is hierarchy-aware — renders a tree for epics, flat list for flat tasks.
+- `/next` biases toward sibling subtasks inside the active epic; surfaces `/migrate-to-epic` when a task looks epic-sized.
+- `/complete` enforces epic-completion gates (all children done before the epic itself completes).
+
+**When to promote a task to epic:** many heterogeneous acceptance criteria, long-in-progress without phase progression, or user signals "this is too big." Most tasks should stay flat — epic-ification is additive, not aspirational.
+
+**Automated epic proposal (`/propose-epics`) and alignment-step (P7) land in sub-tasks 3.2 / 3.3.** In v3.10.0, the primitive is manual.
+
 ## Agents
 - Frontmatter must include: name, description, capabilities, version, model
 - Description starts with "Use when..." for auto-delegation

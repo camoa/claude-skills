@@ -94,6 +94,7 @@ Phases apply per task, not per project. A project can have tasks at different ph
 | `/validate [file]` | Check implementation against architecture and standards |
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
+| `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 

@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-04-22
+
+### Added — Task Hierarchy Foundation (sub-task 3.1 of dev-framework improvements epic)
+
+Ships the structural foundation for epic/sub-task hierarchy. Flat tasks remain a first-class, permanent option; hierarchy is additive and opt-in per task.
+
+**Frontmatter schema on `task.md`** — new optional YAML block with `id` (URI-style, e.g. `local:<folder>`), `kind` (`flat` | `epic` | `sub_epic` | `subtask`), `parent`, `children[]`, `blocks[]`, `blocked_by[]`, `external_ids` (reserved for future tracker integration), and a derived `status` field. Missing frontmatter defaults to `kind: flat` with zero behavior change.
+
+**Folder nesting up to 2 epic levels** — epic folders may contain subtask folders and a `shared/` directory for cross-cutting artifacts (decision logs, planning matrices, mechanisms maps — each epic decides its own). The `kind` taxonomy enforces the depth cap (no sub-sub-epics).
+
+**New command `/drupal-dev-framework:migrate-to-epic <task>`** — converts a single flat task into an epic folder with children. Supports `--dry-run` and `--children "a,b,c"`. Transactional via a temp directory + atomic swap; the filesystem is either fully pre-migration or fully post-migration state, never partial. 24h rollback window at `.migration-tmp/.old-<task>/`.
+
+**New skills:**
+- **`task-frontmatter-reader` v2.0.0** (haiku, user-invocable: false) — defensive YAML frontmatter parser. Never throws; always emits structured JSON with a `warnings[]` array. Thin wrapper around `scripts/fm-read.sh`.
+- **`epic-migrator` v2.0.0** (sonnet, user-invocable: false) — runs the 8-step transactional migration. Thin wrapper around `scripts/migrate-to-epic.sh`.
+
+**New scripts** (real executables, not embedded instructions):
+- `scripts/fm-helpers.sh` — sourced helpers (fm_read, write_epic_frontmatter, write_subtask_frontmatter, apply_frontmatter, write_stub_task_md). Portable bash 4+ / zsh 5+.
+- `scripts/fm-read.sh` — entry point for the reader skill.
+- `scripts/migrate-to-epic.sh` — entry point for the migrator skill. Emits session-context case analysis (A / B / C) on stderr as `KEY=VALUE` lines.
+
+**Hierarchy-aware updates (minor) to existing commands:**
+- `/status` — tree rendering for epics with completed-child resolution across `in_progress/` and `completed/`, dangling-reference markers.
+- `/next` — biases suggestions toward sibling subtasks within the active epic; surfaces `/migrate-to-epic` when current task looks epic-sized.
+- `/complete` — subtask completion moves the child out of the epic folder (to `completed/<name>/`); epic completion gated on ALL children being completed.
+
+**`session-context-writer` v1.4.0** — added `currentEpic` field with placeholder-sentinel preserve semantics. Caller passes the literal string `{CURRENT_EPIC_OR_NULL}` to preserve, `"null"` to clear, or an epic folder name to set. Backwards-compatible for pre-v1.4.0 callers.
+
+### Security hardened (from paper-test rounds)
+
+- **Name validation** — task and child names rejected if they contain `/`, `\`, `..`, `.`, or non-`[A-Za-z0-9._-]` characters. Prevents path traversal via child name (CRITICAL finding).
+- **Symlink rejection** — migration refuses to proceed if the task folder or its `task.md` is a symlink. Prevents information disclosure via symlink-target copying.
+- **Atomic swap recovery** — swap-failure branch now also cleans up the partial temp directory (not just restoring the original).
+- **Concurrent migration lock** — atomic `mkdir` on the task-specific temp dir fails fast if another migration is in flight.
+- **Completed-children classification** — `already_completed` is a distinct classification; completed children get their id added to the epic's `children[]` but are NOT copied or stubbed (stays in `completed/`). Integration-bug fix caught by paper-test before dog-food.
+- **Cross-cutting artifact preservation** — top-level files in the original task folder (other than `task.md` and phase artifacts) are relocated to the new epic's `shared/` folder during migration.
+
+### Dog-food validation
+
+v3.10.0 was validated by migrating `dev_framework_improvements_epic` itself using the shipped command. 10 children classified correctly (7 move_existing + 2 already_completed + 1 create_stub). `mechanisms-map.md` relocated to `shared/`. Completed children preserved in `completed/` without duplicates. Session context correctly updated via Case C (active subtask's path followed into the new nested location). The framework now operates on its own hierarchy — proof by dog-food.
+
+### Notes
+
+- **`/migrate-to-epic` is the atomic primitive only.** Automated epic detection (`/propose-epics`), guided granularity via an analysis agent, P7 alignment step, phase-sub-granularity, and graph-aware `/next` are all deferred to sub-tasks 3.2 and 3.3.
+- **Rollback auto-cleanup not implemented.** `.migration-tmp/.old-<task>/` persists until manual `rm -rf`. Tracked as a future enhancement.
+- Shell portability verified on zsh (the user's shell); earlier drafts hit a zsh-specific parameter-modifier bug with `$var:c` unbraced, fixed via parallel arrays.
+
 ## [3.9.1] - 2026-04-21
 
 ### Changed — Task Process Adherence (sub-task 2 of dev-framework improvements epic)
