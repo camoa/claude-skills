@@ -22,7 +22,27 @@ Show current project status and task progress.
 2. Loads `project_state.md` from project path
 3. Scans `implementation_process/` for task files
 4. Invokes `phase-detector` for each task
-5. Presents comprehensive status
+5. **For each task folder, invoke `task-frontmatter-reader` skill (v1.0.0+) to determine `kind`** — flat/epic/sub_epic/subtask — so the rendering below knows whether to show a flat line or a tree.
+6. Presents comprehensive status with hierarchy-aware rendering
+
+## Hierarchy-aware rendering (added v3.10.0)
+
+For each top-level task folder in `implementation_process/in_progress/`:
+
+- **`kind: flat`** (or no frontmatter) — one line: `<name> (Phase N: <phase-name>)`. Current behavior, unchanged.
+- **`kind: epic`** or **`kind: sub_epic`** — tree:
+  ```
+  <epic-name> (Epic — N children, M in progress)
+    ├─ <child-1> (Phase N: <phase-name>)
+    ├─ <child-2> (Phase N: <phase-name>)
+    └─ ...
+  ```
+  Children listed in frontmatter order. One line per child, no recursion into sub-epic grandchildren (future enhancement).
+- **Completed children** inside an epic: `├─ <name> ✓` (phase omitted).
+- **Dangling children** (frontmatter references `local:foo` but folder missing): `├─ <name> ⚠ folder missing`.
+- Mixed output: flat tasks appear separately from trees for readability.
+
+Do NOT walk dependency graphs here — that's `/next`'s (future) responsibility.
 6. **Invokes `session-context-writer` skill with the resolved project (and task if one is active)**
 
 ## Output Format
