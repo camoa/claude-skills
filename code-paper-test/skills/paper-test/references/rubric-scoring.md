@@ -115,3 +115,37 @@ QUALITY GATE: FAIL
   Below-minimum: Edge cases (2), Error handling (2)
   Action: Fix edge case handling and error messages before deployment
 ```
+
+---
+
+## JSON Output (`--json` mode)
+
+When rubric-scoring runs under `--json`, the envelope gains a `rubric_score` block alongside `summary` and `findings`:
+
+```json
+{
+  "rubric_score": {
+    "content_total": 20,
+    "structure_total": 18,
+    "overall": 38,
+    "grade": "Good",
+    "quality_gate": "PASS",
+    "content_breakdown": {
+      "correctness": 5,
+      "completeness": 4,
+      "edge_cases": 3,
+      "error_handling": 4,
+      "security": 4
+    },
+    "structure_breakdown": {
+      "readability": 4,
+      "separation": 3,
+      "dry": 4,
+      "testability": 4,
+      "extensibility": 3
+    }
+  }
+}
+```
+
+`quality_gate` values: `"PASS"` (overall ≥ 35) | `"FAIL"` (< 35). Full schema: `references/json-output-schema.md`.

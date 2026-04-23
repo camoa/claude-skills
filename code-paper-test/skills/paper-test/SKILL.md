@@ -1,7 +1,8 @@
 ---
 name: paper-test
-description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "validate this implementation", "review this logic", "check dependencies", "check this config". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
-version: 0.5.0
+description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "test this agent", "validate this implementation", "review this logic", "check dependencies", "check this config", "walk through this code", "step through this", "dry run", "sanity check", "red team this", "poke holes in this". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
+version: 0.7.0
+model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
 ---
@@ -445,6 +446,35 @@ EDGE CASES TO TEST:
 
 ---
 
+## JSON Output Mode (`--json`)
+
+For CI integration, aggregation, or programmatic consumption, invoke with `--json` to emit a stable, versioned JSON document instead of the markdown report.
+
+- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper:test-team` (lead synthesis).
+- Schema is pinned at `schema_version: "1.0"` with an additive-only minor-version contract. CI should pin `^1\.`, not exact match.
+- Severity values match the existing rubric exactly: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`.
+- `findings` is always an array — `[]` when clean, never `null` or omitted.
+- `status` is the overall gate verdict: `pass` / `warning` / `fail`. Use `pass` only when no MEDIUM-or-higher findings exist and the run completed fully.
+
+**Use JSON mode for:** CI gates, dashboards, pipelines chaining into `jq` or monitoring. **Stay in markdown for:** interactive analysis and educational traces. Full schema, finding-object shape, team-report extensions, skill/config categories, optional `rubric_score` block, and CI gate patterns: see `references/json-output-schema.md`.
+
+Invocation:
+
+```
+/paper-test --json src/Service/UserService.php
+/code-paper:test-team --json src/Service/PaymentService.php
+```
+
+The team command writes `{target_dir}/paper-test-team-report.json` alongside the existing `.md`; each teammate also emits `{role}-analysis.json` so the lead aggregates without re-parsing markdown.
+
+---
+
+## Pairing with `skill-quality-reviewer` for Skill Testing
+
+When paper-testing a skill, command, or agent file, run `plugin-creation-tools:skill-quality-reviewer` first (deterministic: stale SDK refs, dropped imperatives, frontmatter gaps) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing".
+
+---
+
 ## References
 
 All detailed guides are in `references/` directory:
@@ -460,15 +490,5 @@ All detailed guides are in `references/` directory:
 - `references/blind-ab-comparison.md` - Comparing two implementations side by side
 - `references/rubric-scoring.md` - Structured grading for code quality assessment
 - `references/skill-and-config-testing.md` - Testing skills, commands, agents, and configs
+- `references/json-output-schema.md` - Stable JSON schema for `--json` mode (CI integration)
 
----
-
-## Progressive Disclosure
-
-The SKILL.md provides the core workflow. For detailed guidance:
-
-- Complete methodology → `references/core-method.md`
-- Dependency verification patterns → `references/dependency-verification.md`
-- Contract verification (extends, implements, DI, plugins, etc.) → `references/contract-patterns.md`
-- AI code specific checks → `references/ai-code-auditing.md`
-- Module testing strategy → `references/hybrid-testing.md`

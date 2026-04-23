@@ -2,6 +2,29 @@
 
 Extend paper testing to non-code artifacts by tracing instructions through Claude instead of code through a CPU.
 
+## Deterministic + Agentic Pairing (Recommended Order)
+
+Before paper-testing a skill, command, or agent file, run the deterministic reviewer from `plugin-creation-tools` — it catches mechanical issues in seconds that would otherwise burn paper-test cycles.
+
+**Order:**
+
+1. **`plugin-creation-tools:skill-quality-reviewer` (deterministic, fast)** — grep-level checks: stale `claude-code-sdk` / `ClaudeCodeOptions` references, missing trigger phrases, dropped `MUST` / `PROACTIVELY` imperatives, removed `!`-backtick injections, frontmatter field gaps, broken internal links.
+2. **`paper-test` (semantic, deeper)** — trace the instructions as Claude would execute them: does step 5 reference a file step 2 never wrote? Is the context budget realistic? Do trigger phrases actually cover the intended user phrasings? Can adversarial `$ARGUMENTS` derail the workflow?
+
+Invocation:
+
+```
+# Step 1 — deterministic pass
+Use the plugin-creation-tools:skill-quality-reviewer agent on <skill/command/agent file>
+
+# Step 2 — semantic pass
+/paper-test <skill/command/agent file>
+# or for skills ≥ 300 lines or agent definitions:
+/code-paper:test-team <skill/command/agent file>
+```
+
+The reviewer typically clears within a single turn; paper-test then focuses on the harder semantic problems it cannot detect. Skipping step 1 means paper-test wastes effort flagging things a grep could have caught.
+
 ## The Mapping
 
 | Code Concept | Skill/Config Equivalent |
@@ -363,3 +386,20 @@ FLAWS FOUND:
   2. No reliable way to detect "already loaded" state
   3. Missing allowed-tools in frontmatter
 ```
+
+---
+
+## JSON Output (`--json` mode)
+
+When paper-testing a skill/command/agent/config with `--json`, the schema's `target_type` is `"skill"` or `"config"` and `findings[].category` uses instruction-testing vocabulary instead of code-testing vocabulary:
+
+| Category | What it covers |
+|----------|---------------|
+| `trigger-analysis` | Undertriggers/overtriggers, competing-skill conflicts, phrasing coverage (§1 above) |
+| `instruction-fidelity` | Steps that silently drop, reference unset state, or depend on prior-turn memory (§2) |
+| `frontmatter-verification` | `allowed-tools` / `model` / `description` match the body's actual claims (§3) |
+| `context-budget` | Skill + references vs. likely window size at invocation (§5) |
+| `tool-reference-existence` | Does every tool, file, skill, or agent named in the body exist? (§4) |
+| `dependency-verification` | For configs: do keys the consuming code reads exist with expected types? |
+
+Severity stays on the same `CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO` rubric. Full schema: `references/json-output-schema.md`.
