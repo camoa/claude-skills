@@ -6,7 +6,7 @@ argument-hint: <task-name> [--children "name1,name2,..."] [--dry-run]
 
 # Migrate To Epic
 
-Convert a single flat task into an epic folder containing child sub-tasks. Manual and explicit — this command is the atomic primitive for the hierarchy feature. Automated epic detection (`/propose-epics`) lands in sub-task 3.2 and will call this command under the hood; today, the user invokes it directly.
+Convert a single flat task into an epic folder containing child sub-tasks. Manual and explicit — this command is the atomic primitive for the hierarchy feature. For automated epic detection across many tasks, see `/propose-epics` (v3.11.0+), which calls this command under the hood when the user accepts a proposal.
 
 ## Usage
 
@@ -165,8 +165,8 @@ Next: work on the epic's own phases, or add children when ready.
 
 ## What this command does NOT do
 
-- **Does not propose which tasks should be epics.** That's `/drupal-dev-framework:propose-epics` (sub-task 3.2, not yet shipped).
-- **Does not migrate multiple tasks at once.** One invocation = one task. Bulk migration is a 3.2 concern.
+- **Does not propose which tasks should be epics.** That's `/drupal-dev-framework:propose-epics` (v3.11.0+).
+- **Does not migrate multiple tasks at once.** One invocation = one task. Bulk review is a `/propose-epics` concern.
 - **Does not migrate completed tasks.** Preflight refuses.
 - **Does not promote a subtask to a sub_epic.** That's a different flow (candidate for a later command). Today, sub-epics are created by running this command on a task whose parent is already an epic — which the preflight currently refuses. If you need nested decomposition, contact the framework maintainers (mechanism pending).
 - **Does not cross project boundaries.** A task in project A cannot have children in project B.
@@ -187,4 +187,4 @@ Next: work on the epic's own phases, or add children when ready.
 - `/drupal-dev-framework:status` — shows the new tree view after migration
 - `/drupal-dev-framework:next` — honors the new parent/child relationship when suggesting next action
 - `/drupal-dev-framework:complete` — epic completion awareness
-- `/drupal-dev-framework:propose-epics` — **future (sub-task 3.2)** — calls this command under the hood when the user accepts an agent's proposal
+- `/drupal-dev-framework:propose-epics` (v3.11.0+) — calls this command under the hood when the user accepts an agent's proposal

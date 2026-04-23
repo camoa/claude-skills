@@ -27,7 +27,7 @@ You receive the resolved project and task values from the calling command. Write
   "updatedAt": "2026-04-22",
   "loadedGuides": ["drupal/forms/form-validation"],
   "lastPhase": "research",
-  "currentEpic": "dev_framework_improvements_epic"
+  "currentEpic": "my_epic_name"
 }
 ```
 

@@ -12,7 +12,7 @@ You create a **project** (a Drupal module, theme, or set of related work), then 
 
 | Phase | Command | What Happens |
 |-------|---------|--------------|
-| **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | P7 scope contract — Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
+| **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | scope contract — Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
 | **1. Research** | `/research <task>` | Search contrib, find core patterns, study existing solutions |
 | **2. Architecture** | `/design <task>` | Design approach, choose patterns, set acceptance criteria |
 | **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step |
@@ -102,7 +102,7 @@ Phases apply per task, not per project. A project can have tasks at different ph
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
 | `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
 | `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks — analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
-| `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's P7 scope contract (`alignment.md`) — 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
+| `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's scope contract (`alignment.md`) — 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 

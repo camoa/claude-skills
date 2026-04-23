@@ -32,9 +32,9 @@ When choosing what to recommend next, apply these preferences in order:
 3. **If the current task is an epic** with children — suggest starting/continuing the first child whose prerequisites are met. If children don't yet exist, suggest `/drupal-dev-framework:migrate-to-epic <epic> --children "..."` to expand.
 4. **Otherwise** — existing flat-task behavior applies unchanged.
 
-**Surfacing `/migrate-to-epic`:** if the current task OR any active task looks epic-sized (signals: many heterogeneous acceptance criteria, long-in-progress without phase progression, user-mentioned "this is getting too big"), mention `/drupal-dev-framework:migrate-to-epic <task>` as an option in the output. Conservative — only suggest when signals are clear. A richer detection agent lands in sub-task 3.2.
+**Surfacing `/migrate-to-epic`:** if the current task OR any active task looks epic-sized (signals: many heterogeneous acceptance criteria, long-in-progress without phase progression, user-mentioned "this is getting too big"), mention `/drupal-dev-framework:migrate-to-epic <task>` as an option in the output. Conservative — only suggest when signals are clear. For bulk review, see `/propose-epics` (v3.11.0+).
 
-Do NOT walk `blocks`/`blocked_by` graph transitively here — direct relationships only (v3.10.0 scope per sub-task 3.1 research). A full dependency-aware `/next` lands in 3.2.
+Do NOT walk `blocks`/`blocked_by` graph transitively here — direct relationships only. A full dependency-aware `/next` is tracked for a future release.
 
 ## Output Format
 

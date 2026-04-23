@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.1] - 2026-04-23
+
+### Fixed — Private reference scrub (no behavior change)
+
+Documentation-only patch removing internal/private references that leaked into the shipped plugin during v3.10.0–v3.12.0 development.
+
+- **"P7" terminology removed** — 18 references across 7 files. "P7" was private pain-point numbering from internal epic planning; it was undefined in plugin docs and confusing to marketplace users. Replaced with clear terms: "scope contract", "alignment step", "alignment conversation". No user-visible behavior change.
+- **Stale sub-task numbering removed** — `/migrate-to-epic`, `/next`, `/complete`, `/propose-epics` command bodies contained "sub-task 3.1", "sub-task 3.2" references to internal roadmap items. Some (like `/propose-epics`) were documented as "future" despite having shipped in v3.11.0. Replaced with concrete version numbers or removed.
+- **Private project-file paths removed** — `alignment-reader`, `project-state-reader`, `analysis-agent`, `alignment-contract.md` each pointed at files like `dev_framework_task_contract/architecture.md` in the maintainer's private memory directory that marketplace users will never have. Dropped.
+- **Example JSON using private names replaced** — `session-context-writer` SKILL had `"currentEpic": "dev_framework_improvements_epic"` as the example value; `alignment-contract.md` used `"task_name": "dev_framework_task_contract"` in the reader-output example. Both replaced with generic placeholders.
+- **CHANGELOG future-task name redacted** — v3.10.0 entry named a specific-future-task (`dev_framework_next_orchestrator_dedup`) that was private roadmap. Generalized to "tracked for a future release".
+- **Minor grammar fixes** — article/spacing artifacts from automated replacement cleaned up.
+
+No command, skill, agent, or script behavior changes. Schema stays v1.0; no migrations needed.
+
 ## [3.12.0] - 2026-04-23
 
 ### Added — Task Contract / P7 Alignment Step (sub-task 3.3 of dev-framework improvements epic)
@@ -152,7 +167,7 @@ The `plugin-structure-auditor` gate (newly required by the epic AC) surfaced fiv
 
 ### Still tracked for follow-up (not in this patch)
 
-- **WARN-1: `/next` command and `project-orchestrator` agent duplicate routing logic.** Fix requires a design decision (which is source of truth) plus an integration test — `/next` is the primary entry point and regression is high-impact. Separate sub-task: `dev_framework_next_orchestrator_dedup`.
+- **WARN-1: `/next` command and `project-orchestrator` agent duplicate routing logic.** Fix requires a design decision (which is source of truth) plus an integration test — `/next` is the primary entry point and regression is high-impact. Tracked for a separate future release.
 
 ### Dismissed (auditor false positive)
 

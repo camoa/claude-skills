@@ -1,6 +1,6 @@
 ---
 name: alignment-reader
-description: Use when a framework command needs to parse a task's alignment.md (the P7 scope contract — Goal / Expected result / Success criteria / Non-goals per section). Reads defensively via scripts/alignment-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
+description: Use when a framework command needs to parse a task's alignment.md (the scope contract — Goal / Expected result / Success criteria / Non-goals per section). Reads defensively via scripts/alignment-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
 version: 1.0.0
 user-invocable: false
 model: haiku
@@ -86,4 +86,3 @@ Future consumers needing scope-contract data should call this skill rather than 
 - `references/alignment-contract.md` — canonical grammar, warning codes, JSON output contract
 - `project-state-reader` skill (v1.0.0) — same design pattern, project-level metadata
 - `task-frontmatter-reader` skill (v2.0.0) — same design pattern, task frontmatter
-- Architecture decisions §3.2 / §3.3 in `dev_framework_task_contract/architecture.md`

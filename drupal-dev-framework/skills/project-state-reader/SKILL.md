@@ -75,4 +75,3 @@ Future consumers that need project-level metadata should call this skill rather 
 
 - `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh` — the script
 - `task-frontmatter-reader` skill (v2.0.0) — same design pattern, task-level metadata instead of project-level
-- Architecture decision Q5a in `dev_framework_project_code_path_and_analysis_agent/architecture.md`

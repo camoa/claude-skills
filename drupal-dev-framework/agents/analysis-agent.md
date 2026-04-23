@@ -113,13 +113,13 @@ For each signal code that is ✓ in the current mode, determine whether it fires
 - `multiple_code_areas` (requires `code_read: true`) — task's concerns touch ≥2 distinct module/package boundaries per code read
 - `description_length_and_conjunction` — task description > 500 chars AND contains explicit "and also" / "plus" / "as well as" conjunctions
 - `bullet_count_clustering` — description has ≥3 bullets that group into distinct topics
-- `scope_contract_recommended` **(v3.12.0+)** — task would benefit from an up-front P7 scope contract. Fires when ANY of:
+- `scope_contract_recommended` **(v3.12.0+)** — task would benefit from an up-front scope contract. Fires when ANY of:
   - Description describes ≥2 distinct outcome dimensions (e.g., "faster AND more secure", separable deliverables)
   - Description contains conjunctive phrasing: `and also`, `plus`, `as well as`, `in addition to`
   - ≥3 acceptance criteria already listed in task.md (folder mode only)
   - AND not trivially small: word count > 60 in description OR > 3 distinct action verbs in goal statement
   
-  Orthogonal to `epic_candidate` — evaluate independently. A task MAY fire both, one, or neither. Consumers use this signal to offer/suggest the `/scope` P7 step; never forces.
+  Orthogonal to `epic_candidate` — evaluate independently. A task MAY fire both, one, or neither. Consumers use this signal to offer/suggest the `/scope` alignment step; never forces.
 
 Record all fired signals in `signals_used[]`.
 
@@ -190,4 +190,3 @@ If any invariant would be violated, adjust the decision/output rather than emitt
 - `project-state-reader` skill v1.0.0 — read project metadata (caller provides codePath; agent doesn't call this itself)
 - `/drupal-dev-framework:propose-epics` command — primary consumer
 - `/drupal-dev-framework:research` command — pre-analysis hook consumer
-- Architecture decisions Q7, Q8, Q9, Q10 in `dev_framework_project_code_path_and_analysis_agent/architecture.md`

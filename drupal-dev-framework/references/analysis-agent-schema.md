@@ -49,7 +49,7 @@ Signals evaluated in description mode: `description_length_and_conjunction`, `bu
 |---|---|---|
 | `schema_version` | string | Follows semver. `"1.0"` for v3.11.0. Consumers match on major version for compat. **MUST be a JSON string** (quoted `"1.0"`), never a number — `1.0` (unquoted) becomes `1` in JSON and breaks semver parsing. |
 | `analyzed_at` | string | ISO-8601 UTC timestamp of analysis completion. |
-| `task_id` | string | URI-style `local:<folder_name>`. Matches 3.1's task-frontmatter-reader `id` field. |
+| `task_id` | string | URI-style `local:<folder_name>`. Matches the `task-frontmatter-reader` skill's `id` field. |
 | `task_folder` | string | Absolute path to the task folder at analysis time. |
 | `decision` | enum | One of `"epic_candidate"`, `"keep_flat"`, `"insufficient_info"`. |
 | `confidence` | enum | One of `"high"`, `"medium"`, `"low"`. |
@@ -82,7 +82,7 @@ Signals the agent cites in `signals_used` when it reaches `epic_candidate`:
 | `multiple_code_areas` | (requires `code_read: true`) Task touches multiple distinct module/package boundaries in the codebase |
 | `description_length_and_conjunction` | Task description has both length > threshold AND explicit conjunction phrasing ("and also", "plus", "as well as") — typical trigger for the `/research` pre-analysis hook |
 | `bullet_count_clustering` | Task description's bullet list has ≥3 bullets that group into distinct topics |
-| `scope_contract_recommended` | **(v3.12.0+)** Task's scope is non-trivial enough to warrant a P7 alignment contract (`alignment.md`). Fires when ANY of: (a) task description has ≥2 distinct outcome dimensions; (b) description contains conjunctive phrasing (`and also`, `plus`, `as well as`, `in addition to`); (c) **(folder mode only — requires task.md on disk)** ≥3 acceptance criteria listed in `task.md` AND description word count > 60. Orthogonal to `epic_candidate` — a task can be both, either, or neither. Description-mode compatible via triggers (a) and (b) only; trigger (c) is skipped in description mode. Consumed by `/research` pre-analysis hook and `/scope` to suggest the P7 step. |
+| `scope_contract_recommended` | **(v3.12.0+)** Task's scope is non-trivial enough to warrant an alignment contract (`alignment.md`). Fires when ANY of: (a) task description has ≥2 distinct outcome dimensions; (b) description contains conjunctive phrasing (`and also`, `plus`, `as well as`, `in addition to`); (c) **(folder mode only — requires task.md on disk)** ≥3 acceptance criteria listed in `task.md` AND description word count > 60. Orthogonal to `epic_candidate` — a task can be both, either, or neither. Description-mode compatible via triggers (a) and (b) only; trigger (c) is skipped in description mode. Consumed by `/research` pre-analysis hook and `/scope` to suggest the alignment step. |
 
 **Signal extensibility:** new codes can be added at v1.x without breaking consumers. Consumers should treat unknown codes as informational (display them; don't error).
 
@@ -118,10 +118,10 @@ At new-task creation time, consumers branch in two orthogonal steps:
 - `decision: insufficient_info` → proceed with flat task research; agent didn't have enough to decide.
 
 **Step B — inspect `signals_used[]` for `scope_contract_recommended` (v3.12.0+, orthogonal to decision):**
-- If the array contains `scope_contract_recommended` → soft-nudge the user to author a P7 scope contract (`alignment.md`) before research begins. The signal can fire with ANY decision (including `keep_flat`) because it's an orthogonal judgment about scope contract warrant, not decomposition.
+- If the array contains `scope_contract_recommended` → soft-nudge the user to author a scope contract (`alignment.md`) before research begins. The signal can fire with ANY decision (including `keep_flat`) because it's an orthogonal judgment about scope contract warrant, not decomposition.
 - If absent → no nudge; proceed.
 
-Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common P7 case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See §"Signal independence" above.
+Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common alignment case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See §"Signal independence" above.
 
 ## Example outputs
 

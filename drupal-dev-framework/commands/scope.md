@@ -1,12 +1,12 @@
 ---
-description: "Author or retrofit a task's P7 scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. Soft-nudge posture: never blocks the task lifecycle. Introduced v3.12.0."
+description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. Soft-nudge posture: never blocks the task lifecycle. Introduced v3.12.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
 argument-hint: <task-name> [--phase 1|2|3]
 ---
 
 # Scope
 
-Author the P7 alignment contract for a task. Produces `alignment.md` in the task folder per `references/alignment-contract.md` v1.0.
+Author the alignment contract for a task. Produces `alignment.md` in the task folder per `references/alignment-contract.md` v1.0.
 
 ## Usage
 
@@ -24,7 +24,7 @@ Without `--phase`, authors the `## Task-Level` section. With `--phase N`, author
 1. Resolves `<task-name>` to a task folder using the usual resolver (in-progress folder, epic subfolder, etc.).
 2. Invokes `alignment-reader` skill to read the current state of `alignment.md` (if any).
 3. **Overwrite guard** — if the target section already exists, asks before overwriting.
-4. Runs the P7 conversation — **one question at a time**, author-authored, never auto-generated.
+4. Runs the alignment conversation — **one question at a time**, author-authored, never auto-generated.
 5. Writes the section to `alignment.md` (creates the file with H1 + metadata if absent).
 6. Invokes `session-context-writer` skill with resolved project + task.
 7. Prints next-step hint.
@@ -48,13 +48,13 @@ Invoke `alignment-reader` at start. Behavior:
 | File exists, target section `present: false` | any section | Proceed to conversation; write appends the section |
 | File exists, target section `present: true` | any section | **Prompt:** "`alignment.md` already has a `<Section>` section. [o]verwrite / [e]dit / [c]ancel?" |
 
-- `[o]` — discard existing section, run full P7 conversation, overwrite
+- `[o]` — discard existing section, run full alignment conversation, overwrite
 - `[e]` — show the existing section; loop user into per-field prompts; write back only the fields they touched
 - `[c]` — exit without changes; report "No change."
 
 Default answer: `[c]` (cancel). Never overwrite without explicit confirmation.
 
-## P7 conversation — Task-Level
+## alignment conversation — Task-Level
 
 Follow brainstorming convention: **one question at a time**. The user's reply is the source of truth. You MAY draft a Goal or Non-goals suggestion after gathering context, but mark it as "Here's a draft — please edit or replace" — never silently accept your own suggestion.
 
@@ -87,7 +87,7 @@ Prompts, in order:
    - `[e]` — ask which field to edit (Goal / Expected result / Success criteria / Non-goals), re-run that prompt, re-assemble, re-confirm
    - `[c]` — abort cleanly; no write
 
-## P7 conversation — Phase-level (`--phase N`)
+## alignment conversation — Phase-level (`--phase N`)
 
 Same 4 fields, scope-adjusted wording. Use "this phase's <research|architecture|implementation>" in place of "this task" throughout.
 
@@ -183,7 +183,7 @@ After a successful write, print:
 - README Commands table
 - Command frontmatter `description` (this file)
 - `/drupal-dev-framework:next` mentions `/scope` as a retrofit option when the selected task has no `alignment.md`
-- CLAUDE.md P7 section
+- CLAUDE.md alignment section
 
 ## Do NOT
 
