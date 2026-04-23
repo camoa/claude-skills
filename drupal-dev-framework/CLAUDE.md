@@ -35,6 +35,18 @@ Consumers distinguish states via warnings, not the null value: `code_path_unknow
 
 `analysis-agent` is read-only (Read/Grep/Glob + Bash with mutation-subcommand denylist). Consumed by `/propose-epics` (folder mode, bulk review) and `/research` pre-analysis hook (description mode, pre-folder-creation). Emits structured JSON per `references/analysis-agent-schema.md` v1.0 — never modifies state, never chats with user. Output is consumed programmatically by the calling command.
 
+**Signal orthogonality:** `signals_used[]` contains BOTH epic-decomposition signals (used for the `decision` branch) AND orthogonal signals like `scope_contract_recommended` (v3.12.0+). Consumers branch on `decision` for decomposition and separately inspect `signals_used[]` for scope-contract warrant. The two judgments are independent.
+
+## P7 Alignment Step (v3.12.0+)
+
+Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `alignment.md` with H2 sections (`## Task-Level`, `## Phase 1 — Research`, `## Phase 2 — Architecture`, `## Phase 3 — Implementation`), each carrying the same 4-field shape: Goal / Expected result / Success criteria / Non-goals. See `references/alignment-contract.md` for grammar v1.0.
+
+**When warranted:** analysis-agent emits `scope_contract_recommended` signal when the task has conjunctive phrasing, ≥2 distinct outcome dimensions, or (folder mode) ≥3 acceptance criteria plus description > 60 words. Warranted tasks get a soft-nudge prompt in `/research`, `/design`, `/implement`. User always retains the option to skip — never blocks.
+
+**Conversation convention:** one question at a time, author-authored, never auto-generated. Claude MAY propose a draft, but the user's reply is the final text. Follows superpowers `brainstorming` precedent.
+
+**Reader:** `alignment-reader` skill (haiku, user-invocable: false) parses `alignment.md` into structured JSON via `scripts/alignment-read.sh`. Defensive — never throws; emits `warnings[]` on malformed sections. Mirrors `project-state-reader` (v3.11.0) and `task-frontmatter-reader` (v3.10.0).
+
 ## Agents
 - Frontmatter must include: name, description, capabilities, version, model
 - Description starts with "Use when..." for auto-delegation

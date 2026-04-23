@@ -7,16 +7,21 @@ A Claude Code plugin that guides AI through a disciplined **Research → Archite
 You create a **project** (a Drupal module, theme, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:
 
 ```
-/new my_module → /next → /research → /design → /implement → /complete
+/new my_module → /next → [/scope] → /research → /design → /implement → /complete
 ```
 
 | Phase | Command | What Happens |
 |-------|---------|--------------|
+| **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | P7 scope contract — Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
 | **1. Research** | `/research <task>` | Search contrib, find core patterns, study existing solutions |
 | **2. Architecture** | `/design <task>` | Design approach, choose patterns, set acceptance criteria |
 | **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step |
 
 Phases apply per task, not per project. A project can have tasks at different phases simultaneously.
+
+**Task hierarchy (v3.10.0+):** large tasks can be promoted to epics with sub-tasks via `/migrate-to-epic`. Flat tasks remain first-class — hierarchy is additive and opt-in.
+
+**Project codePath metadata (v3.11.0+):** projects declare where their code lives (distinct from the memory folder) via `/set-code-path` or during `/new`. Used by the analysis-agent and future code-aware features.
 
 ## Installation
 
@@ -97,6 +102,7 @@ Phases apply per task, not per project. A project can have tasks at different ph
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
 | `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
 | `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks — analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
+| `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's P7 scope contract (`alignment.md`) — 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 
@@ -130,9 +136,9 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
 | `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer — proposes epic decomposition as JSON per schema v1.0 |
 
-### Skills (20)
+### Skills (21)
 
-Skills are invoked automatically by commands and agents — 10 are user-invocable, 10 are internal:
+Skills are invoked automatically by commands and agents — 10 are user-invocable, 11 are internal:
 
 | Category | Skills |
 |----------|--------|
@@ -140,7 +146,7 @@ Skills are invoked automatically by commands and agents — 10 are user-invocabl
 | **Architecture** | `component-designer`, `diagram-generator`, `guide-integrator`, `guide-loader` |
 | **Implementation** | `tdd-companion`, `code-pattern-checker`, `task-completer` |
 | **Utility** | `project-initializer`, `requirements-gatherer`, `session-resume`, `implementation-task-creator`, `task-folder-migrator` |
-| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0) |
+| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0), `alignment-reader` (v3.12.0) |
 
 ### Methodology References (6)
 
@@ -154,6 +160,16 @@ Built-in docs enforced at specific phases:
 | `dry-patterns.md` | DRY extraction patterns | Implementation phase |
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
+
+### Technical Contract References (3)
+
+Machine-readable contracts consumed by skills and commands. These pin schemas and invariants so consumers don't drift:
+
+| Reference | Owner | What it pins |
+|-----------|-------|--------------|
+| `analysis-agent-schema.md` **(v3.11.0)** | `analysis-agent` | JSON output schema v1.0, 8 signal codes, 7 invariants, consumer guidance for `/research` + `/propose-epics` |
+| `code-path-detection.md` **(v3.11.0)** | `/set-code-path`, `/new` | Detection strategies in priority order, three-null-states table (`unknown` / `docs-only` / `set`), safety filter (hard-reject list for system roots) |
+| `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
 
 ### Online Dev-Guides (60+ topics) — Required
 
