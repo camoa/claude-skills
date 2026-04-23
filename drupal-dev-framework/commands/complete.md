@@ -31,9 +31,7 @@ Mark a task as complete and move it to the completed folder.
 - **`kind: flat`** — unchanged v3.0.0 behavior. Target: project-level `completed/<name>/`.
 - **`kind: subtask`** — completion moves the folder from `<epic>/in_progress/<subtask>/` to `<epic>/completed/<subtask>/`. **The child stays inside the epic.** The epic's `children[]` list still references the subtask by id. Spatial association with the parent epic is preserved — you can always browse the epic folder to see its full history.
 - **`kind: epic`** or **`kind: sub_epic`** — pre-completion gate enforces that `<epic>/in_progress/` is empty (all children have already moved to `<epic>/completed/`). If any child is still in progress, abort listing them. When the gate passes, the whole epic folder (including its internal `in_progress/`=empty and `completed/`=full) moves to project-level `completed/<epic>/`. History stays intact in one move.
-- **Dog-food note for v3.10.0 release:** the first epic completed under these rules will be sub-task 3.1's dog-food test. Verify the flow end-to-end before declaring 3.1 shipped.
-
-Do NOT touch dependency graphs (`blocks`/`blocked_by`) here — those are a 3.2 `/next` concern.
+Do NOT touch dependency graphs (`blocks`/`blocked_by`) here — dependency-aware routing is the concern of `/next`, not completion.
 8. **Invokes `session-context-writer` skill with project and task set to `null` (task is now completed)**
 
 ## Pre-Completion Checks

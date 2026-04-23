@@ -130,13 +130,13 @@ If a signal fires:
    - `insufficient_info` → proceed with flat-task research; the task description alone wasn't sufficient for decomposition judgment (makes sense at creation time — usually the description IS minimal here).
 
 5. **(v3.12.0+)** After the `decision` branch completes (regardless of outcome unless the task became an epic), inspect `signals_used[]` for `scope_contract_recommended`. If present, print soft-nudge:
-   > "Analysis recommends authoring a scope contract before research (P7). Start now? [y]es / [n]o / [later]"
+   > "Analysis recommends authoring a scope contract before research. Start now? [y]es / [n]o / [later]"
 
-   On `[y]` → execute the P7 conversation + write flow as documented in `commands/scope.md` (task-level prompt sequence + "Writing alignment.md") within this command's context. Do NOT try to shell out to a sibling slash command. After the write completes, continue with the standard research flow.
+   On `[y]` → execute the alignment conversation + write flow as documented in `commands/scope.md` (task-level prompt sequence + "Writing alignment.md") within this command's context. Do NOT try to shell out to a sibling slash command. After the write completes, continue with the standard research flow.
    On `[n]` → proceed without writing `alignment.md`. No nag.
    On `[later]` → same as `[n]` for this run; user can run `/scope <task>` anytime.
 
-Conservative by design: pre-analysis only fires on strong signals, and even then the default choice presented to the user is to proceed as a flat task. Never creates an epic without explicit confirmation. The P7 nudge is soft; `[n]` is always respected.
+Conservative by design: pre-analysis only fires on strong signals, and even then the default choice presented to the user is to proceed as a flat task. Never creates an epic without explicit confirmation. The alignment nudge is soft; `[n]` is always respected.
 
 ## Phase 1 alignment sub-step (v3.12.0+)
 
@@ -146,7 +146,7 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 2. Decide whether to offer the Phase 1 alignment section:
    - If `sections.phase_1.present: true` → print: `"Phase 1 alignment already authored. Using existing section."` and proceed.
    - Else if `sections.task_level.present: true` → ask: `"Author the Phase 1 — Research section of alignment.md now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
-   - Else if pre-analysis hook emitted `scope_contract_recommended` and user declined task-level P7 earlier → re-offer as lighter-touch: `"Author a Phase 1 — Research alignment section (just this phase)? [y]es / [n]o"`. Default: `[n]`.
+   - Else if pre-analysis hook emitted `scope_contract_recommended` and user declined task-level alignment earlier → re-offer as lighter-touch: `"Author a Phase 1 — Research alignment section (just this phase)? [y]es / [n]o"`. Default: `[n]`.
    - Otherwise → proceed silently (no nag).
 3. If user says `[y]`, execute the `--phase 1` flow from `commands/scope.md` (phase-level prompt sequence + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research.
 4. If user says `[n]` / `[skip]`, proceed with research. Never block.

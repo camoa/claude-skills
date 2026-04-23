@@ -4,7 +4,7 @@
 **Owner:** `skills/alignment-reader/SKILL.md` + `scripts/alignment-read.sh`
 **Consumers (as of v3.12.0):** `commands/scope.md`, `commands/research.md`, `commands/design.md`, `commands/implement.md`, `agents/analysis-agent.md` (via `scope_contract_recommended` signal evaluation)
 
-The P7 alignment step produces a single per-task artifact at `implementation_process/in_progress/<task>/alignment.md` (or the equivalent inside an epic's `in_progress/`). The file has a strict grammar so it can be parsed defensively by `alignment-read.sh` into structured JSON, while remaining hand-authorable in conversation and diff-friendly.
+The alignment step produces a single per-task artifact at `implementation_process/in_progress/<task>/alignment.md` (or the equivalent inside an epic's `in_progress/`). The file has a strict grammar so it can be parsed defensively by `alignment-read.sh` into structured JSON, while remaining hand-authorable in conversation and diff-friendly.
 
 ## 1. File location
 
@@ -135,20 +135,20 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 {
   "file_exists": true,
   "file_path": "/abs/path/to/alignment.md",
-  "task_name": "dev_framework_task_contract",
+  "task_name": "my_task",
   "created": "2026-04-23",
   "schema_version": "1.0",
   "sections": {
     "task_level": {
       "present": true,
-      "goal": "Add an explicit P7 alignment step…",
-      "expected_result": "After 3.3 ships, every new task…",
+      "goal": "Implement the feature …",
+      "expected_result": "After this ships, users can …",
       "success_criteria": [
-        { "text": "P7 alignment command/hook produces…", "checked": false }
+        { "text": "Primary deliverable is live", "checked": false }
       ],
       "non_goals": [
-        "Not changing /design or /implement contracts",
-        "Not auto-generating alignment from description"
+        "Not refactoring adjacent components",
+        "Not changing the public API shape"
       ],
       "extras": [],
       "fields_missing": []
@@ -228,4 +228,3 @@ Research note citing 2–3 core examples and one contrib pattern if relevant.
 - `scripts/alignment-read.sh` — parser
 - `references/analysis-agent-schema.md` §Signal codes — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
 - `commands/scope.md` — primary authoring command
-- Architecture decisions §3.2 / §4 in `dev_framework_task_contract/architecture.md`

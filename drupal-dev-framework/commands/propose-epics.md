@@ -6,7 +6,7 @@ argument-hint: [--only-in-progress]
 
 # Propose Epics
 
-Run the analysis agent over all candidate flat tasks in the active project and present per-task proposals for epic-ification. User accepts or rejects each; accepted proposals invoke `/migrate-to-epic` (from 3.1) to do the file surgery.
+Run the analysis agent over all candidate flat tasks in the active project and present per-task proposals for epic-ification. User accepts or rejects each; accepted proposals invoke `/migrate-to-epic` to do the file surgery.
 
 This is the bulk-review counterpart to the inline pre-analysis hook in `/research` (which runs at new-task creation). Both consume the same `analysis-agent` with the same JSON Schema v1.0.
 

@@ -40,7 +40,7 @@ Never block the command on this check — the user is in control. The nudge exis
 3. If user says `[y]`, execute the `--phase 2` flow from `commands/scope.md` (phase-level prompt sequence + "Writing alignment.md" for the `## Phase 2 — Architecture` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with architecture work.
 4. If user says `[n]` / `[skip]`, proceed. Never block.
 
-**Note:** There is no "re-offer for lighter-touch" branch here (unlike `/research`'s Phase 1 sub-step). If the user declined task-level P7 at task creation, that decision is considered final by the time they reach Phase 2 — the task is already underway.
+**Note:** There is no "re-offer for lighter-touch" branch here (unlike `/research`'s Phase 1 sub-step). If the user declined task-level alignment at task creation, that decision is considered final by the time they reach Phase 2 — the task is already underway.
 
 ## What This Does (v3.0.0)
 
