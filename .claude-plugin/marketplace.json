@@ -129,8 +129,8 @@
     {
       "name": "code-paper-test",
       "source": "./code-paper-test",
-      "description": "Systematically test code, skills, commands, and configs through mental execution \u2014 trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50\u2013300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills).",
-      "version": "0.6.0",
+      "description": "Systematically test code, skills, commands, and configs through mental execution \u2014 trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50\u2013300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration.",
+      "version": "0.7.0",
       "author": {
         "name": "camoa"
       },

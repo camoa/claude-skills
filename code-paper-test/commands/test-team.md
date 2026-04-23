@@ -1,7 +1,7 @@
 ---
 description: Paper test code or skills with competing agent team (Happy Path + Edge Case + Red Team). Use when user says "test team", "3 perspectives", "competing testers", "thorough paper test", "security review", "deep code analysis", "test this skill with team". Best for large code (300+ lines), security-critical paths, or skill/command testing where perspective diversity matters most. For 50-300 line files, the single-agent structured 3-phase mode in /paper-test is more cost-effective. Each tester runs in isolated worktree.
 allowed-tools: Read, Write, Glob, Grep, WebSearch
-argument-hint: <file-path> [file-path...]
+argument-hint: [--json] <file-path> [file-path...]
 ---
 
 # Test Team
@@ -11,8 +11,10 @@ Paper test code from 3 competing perspectives using an agent team. A Happy Path 
 ## Usage
 
 ```
-/code-paper:test-team <file-path> [file-path...]
+/code-paper:test-team [--json] <file-path> [file-path...]
 ```
+
+Pass `--json` to emit a CI-consumable JSON report alongside the markdown report. Schema: `skills/paper-test/references/json-output-schema.md` (`schema_version: "1.0"`).
 
 ## What This Does
 
@@ -22,9 +24,14 @@ Spawns a 3-teammate agent team that paper-tests the specified code files from co
 
 When this command is invoked with `$ARGUMENTS`:
 
-### Step 1 — Check Target Exists
+### Step 1 — Parse Arguments and Check Target Exists
 
-Parse `$ARGUMENTS` as one or more file paths. Verify each file exists using the Read tool.
+Parse `$ARGUMENTS`:
+
+- If the first token is `--json`, set `JSON_MODE=true` and consume it. Remaining tokens are file paths.
+- Otherwise `JSON_MODE=false`. All tokens are file paths.
+
+Verify each file exists using the Read tool.
 
 If no arguments provided:
 > What code should the team test? Provide one or more file paths:
@@ -100,7 +107,7 @@ Create a team and these tasks:
 
 ### Step 5 — Spawn Teammates
 
-Spawn 3 teammates using the prompt templates below. After spawning:
+Spawn 3 teammates using the prompt templates below. Substitute `{target_dir}` with the directory computed in Step 1, `{list each file path}` with the validated targets, and interpolate `JSON_MODE={true|false}` near the top of each spawn prompt (so the teammate knows whether to emit the parallel `.json` report). After spawning:
 
 1. Tell the user: "Team spawned. Teammates are working — I'll synthesize when they finish."
 2. If running inside tmux, teammates appear in split panes (visible output). Otherwise they run in-process (background).
@@ -112,7 +119,8 @@ When all teammates finish:
 
 - Read `{target_dir}/happy-path-analysis.md`, `{target_dir}/edge-case-analysis.md`, `{target_dir}/red-team-analysis.md`
 - Write `{target_dir}/paper-test-team-report.md` using the Output Format below
-- Tell the user: "Paper test team complete. Report saved to `{target_dir}/paper-test-team-report.md`"
+- **If `JSON_MODE=true`:** also read `{target_dir}/happy-path-analysis.json`, `{target_dir}/edge-case-analysis.json`, `{target_dir}/red-team-analysis.json` (each teammate writes both markdown and JSON when `--json` is passed — see spawn prompts). Aggregate per the schema in `skills/paper-test/references/json-output-schema.md` and write `{target_dir}/paper-test-team-report.json`. Honor the invariants: `findings` is always an array, severity values are uppercase (`CRITICAL` etc.), `status` is `fail` if any CRITICAL or HIGH finding exists, `warning` if only MEDIUM/LOW findings, `pass` only if no MEDIUM-or-higher findings. Each aggregated finding includes `found_by` (union of teammate roles whose per-teammate JSON reported the same file + line span + category) and `disputed` (boolean — `true` iff the cross-challenge markdown report lists this finding in its "Disputed Findings" table). See the schema's "Team-specific finding fields" section for the precise field contract.
+- Tell the user: "Paper test team complete. Report saved to `{target_dir}/paper-test-team-report.md`" (append "and `paper-test-team-report.json`" when `JSON_MODE=true`).
 
 ---
 
@@ -151,6 +159,15 @@ Trace the code with ideal inputs and document expected behavior. Your lens: "Doe
 
 WRITE your analysis to:
   {target_dir}/happy-path-analysis.md
+
+If JSON_MODE=true (the lead will pass this in the spawn prompt), ALSO write a parallel structured report to:
+  {target_dir}/happy-path-analysis.json
+
+JSON shape — match `skills/paper-test/references/json-output-schema.md` exactly:
+- `schema_version: "1.0"`, `tool: "test-team"`, `mode: "test-team"`, `target_type` per target type, `target_files`, `timestamp` (ISO 8601 UTC)
+- `summary` with counts by severity (CRITICAL/HIGH/MEDIUM/LOW/INFO — uppercase), `total_findings`, `scenarios_traced`, `dependencies_verified`, `contracts_verified`
+- `findings` is always an array; each finding has `severity`, `category`, `file`, `line_start`, `line_end`, `title`, `description`, `fix_suggestion`, `scoring_factors {reach, impact, reversibility, exploitability}` (1-3 each; omit only for INFO), and `found_by: ["happy_path"]`
+- Do NOT include `disputed`, `team`, or cross-challenge data — the lead aggregates those later
 
 Use this format:
 
@@ -243,6 +260,11 @@ For each scenario:
 WRITE your analysis to:
   {target_dir}/edge-case-analysis.md
 
+If JSON_MODE=true, ALSO write the structured report to:
+  {target_dir}/edge-case-analysis.json
+
+Match `skills/paper-test/references/json-output-schema.md`. Use `found_by: ["edge_case"]` on each finding. `summary` should also include `categories_tested` (int 0-6). Omit `disputed`/`team`/cross-challenge.
+
 Use this format:
 
 # Edge Case Analysis
@@ -331,6 +353,11 @@ For each attack:
 
 WRITE your analysis to:
   {target_dir}/red-team-analysis.md
+
+If JSON_MODE=true, ALSO write the structured report to:
+  {target_dir}/red-team-analysis.json
+
+Match `skills/paper-test/references/json-output-schema.md`. Use `found_by: ["red_team"]` on each finding. `summary` should also include `attack_categories_tested` (int 0-7), `exploitable` (int), `blocked` (int). Omit `disputed`/`team`/cross-challenge.
 
 Use this format:
 
