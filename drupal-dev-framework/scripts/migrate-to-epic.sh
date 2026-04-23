@@ -210,6 +210,11 @@ mkdir -p "$TEMP_ROOT" || abort "cannot create temp root"
 # Atomic lock: mkdir without -p fails fast if dir exists (concurrent migration).
 mkdir "$TEMP_ROOT/$TASK_NAME" || abort "concurrent migration detected"
 mkdir "$TEMP_ROOT/$TASK_NAME/shared"
+# Nested per-epic progress folders — consistent with project-level in_progress/completed
+# convention. Design fix 2026-04-22: keeps completed children spatially associated with
+# their parent epic. Subtasks live in $EPIC/in_progress/ or $EPIC/completed/ by status.
+mkdir "$TEMP_ROOT/$TASK_NAME/in_progress"
+mkdir "$TEMP_ROOT/$TASK_NAME/completed"
 
 cp "$TASK_DIR/task.md" "$TEMP_ROOT/$TASK_NAME/task.md"
 EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
@@ -238,20 +243,27 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
     kind=$(child_kind_at $idx)
     case "$kind" in
       move_existing)
-        cp -r "$PROJECT_PATH/implementation_process/in_progress/$child" "$TEMP_ROOT/$TASK_NAME/$child"
-        CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/$child")
+        # Child is in progress → land in epic's in_progress/
+        cp -r "$PROJECT_PATH/implementation_process/in_progress/$child" "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
+        CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/in_progress/$child")
         CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
         SUB_FM=$(write_subtask_frontmatter "$child" "$TASK_NAME" "$CHILD_STATUS")
-        apply_frontmatter "$TEMP_ROOT/$TASK_NAME/$child/task.md" "$SUB_FM"
+        apply_frontmatter "$TEMP_ROOT/$TASK_NAME/in_progress/$child/task.md" "$SUB_FM"
         ;;
       create_stub)
-        mkdir "$TEMP_ROOT/$TASK_NAME/$child"
-        write_stub_task_md "$TEMP_ROOT/$TASK_NAME/$child/task.md" "$child" "$TASK_NAME"
+        # New stub → land in epic's in_progress/ (status=draft)
+        mkdir "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
+        write_stub_task_md "$TEMP_ROOT/$TASK_NAME/in_progress/$child/task.md" "$child" "$TASK_NAME"
         ;;
       already_completed)
-        # Do NOT create a folder inside the epic for completed children.
-        # The epic's children[] list references them by id; they physically stay in completed/.
-        # /status will resolve their location when rendering.
+        # Child is completed → copy from project-level completed/ into epic's completed/
+        # Preserves spatial association with the parent epic.
+        cp -r "$PROJECT_PATH/implementation_process/completed/$child" "$TEMP_ROOT/$TASK_NAME/completed/$child"
+        CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/completed/$child")
+        CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
+        # Force status=completed regardless of what frontmatter said (authoritative by location)
+        SUB_FM=$(write_subtask_frontmatter "$child" "$TASK_NAME" "completed")
+        apply_frontmatter "$TEMP_ROOT/$TASK_NAME/completed/$child/task.md" "$SUB_FM"
         ;;
       *)
         rm -rf "$TEMP_ROOT/$TASK_NAME"
@@ -276,7 +288,7 @@ while IFS= read -r -d '' taskmd; do
     echo "  BLOCKING at $folder: $(jq '.warnings' <<<"$OUT")"
     VALIDATION_FAILED=true
   fi
-done < <(find "$TEMP_ROOT/$TASK_NAME" -maxdepth 2 -name task.md -print0)
+done < <(find "$TEMP_ROOT/$TASK_NAME" -maxdepth 3 -name task.md -print0)
 
 if [ "$VALIDATION_FAILED" = "true" ]; then
   rm -rf "$TEMP_ROOT/$TASK_NAME"
@@ -298,14 +310,21 @@ mv "$TEMP_ROOT/$TASK_NAME" "$TASK_DIR" || {
   abort "failed to swap in new structure; restored original and cleaned temp"
 }
 
-# Delete original peer folders for move_existing children.
+# Delete original peer folders for both move_existing (from in_progress/) and
+# already_completed (from project-level completed/) children. Both are now
+# spatially inside the epic.
 if [ ${#CHILDREN[@]} -gt 0 ]; then
   idx=0
   for child in "${CHILDREN[@]}"; do
     kind=$(child_kind_at $idx)
-    if [ "$kind" = "move_existing" ]; then
-      rm -rf "$PROJECT_PATH/implementation_process/in_progress/$child"
-    fi
+    case "$kind" in
+      move_existing)
+        rm -rf "$PROJECT_PATH/implementation_process/in_progress/$child"
+        ;;
+      already_completed)
+        rm -rf "$PROJECT_PATH/implementation_process/completed/$child"
+        ;;
+    esac
     idx=$((idx + 1))
   done
 fi
@@ -339,7 +358,7 @@ if [ -s "$SESS_FILE" ]; then
       if [ "$kind" = "move_existing" ] && [ "$child" = "$ACTIVE_TASK" ]; then
         CASE="C"
         EPIC_FOR_CTX="$TASK_NAME"
-        NEW_TASK_PATH="$TASK_DIR/$child"
+        NEW_TASK_PATH="$TASK_DIR/in_progress/$child"
         break
       fi
       idx=$((idx + 1))
@@ -357,7 +376,7 @@ echo ""
 echo "Migrated $TASK_NAME to epic with ${#CHILDREN[@]} children."
 echo ""
 echo "Structure:"
-cd "$TASK_DIR" && find . -maxdepth 2 -type f | sort | sed 's|^\./|  |'
+cd "$TASK_DIR" && find . -maxdepth 3 -type f | sort | sed 's|^\./|  |'
 echo ""
 echo "Rollback: $TEMP_ROOT/.old-$TASK_NAME/ (manual rm -rf; no auto-cleanup yet)"
 

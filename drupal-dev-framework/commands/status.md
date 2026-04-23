@@ -32,14 +32,16 @@ For each top-level task folder in `implementation_process/in_progress/`:
 - **`kind: flat`** (or no frontmatter) — one line: `<name> (Phase N: <phase-name>)`. Current behavior, unchanged.
 - **`kind: epic`** or **`kind: sub_epic`** — tree:
   ```
-  <epic-name> (Epic — N children, M in progress)
-    ├─ <child-1> (Phase N: <phase-name>)
-    ├─ <child-2> (Phase N: <phase-name>)
+  <epic-name> (Epic — N total, M in progress, K completed)
+    ├─ <child-1> (Phase N: <phase-name>)    ← in-progress subtask
+    ├─ <child-2> ✓                            ← completed subtask
     └─ ...
   ```
   Children listed in frontmatter order. One line per child, no recursion into sub-epic grandchildren (future enhancement).
-- **Completed children** inside an epic: `├─ <name> ✓` (phase omitted).
-- **Dangling children** (frontmatter references `local:foo` but folder missing): `├─ <name> ⚠ folder missing`.
+- **Location rule for subtask children:** children live inside the epic folder, split by status:
+  1. `<epic>/in_progress/<child>/` exists → render with phase indicator
+  2. `<epic>/completed/<child>/` exists → render with `✓` marker (phase omitted)
+  3. Neither exists → render `├─ <child> ⚠ folder missing` (dangling)
 - Mixed output: flat tasks appear separately from trees for readability.
 
 Do NOT walk dependency graphs here — that's `/next`'s (future) responsibility.

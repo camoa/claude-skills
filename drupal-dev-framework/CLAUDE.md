@@ -5,9 +5,9 @@
 The plugin supports **opt-in epic/sub-task hierarchy** on top of flat tasks (which remain first-class). Concepts:
 
 - **Flat task** — default. No frontmatter needed. Behaves exactly as v3.0.0+.
-- **Epic** — a task folder containing child subtask folders plus `shared/` for cross-cutting artifacts. Declared via `task.md` frontmatter (`kind: epic`, `children: [local:<id>, ...]`).
+- **Epic** — a task folder containing `task.md`, `shared/`, `in_progress/<subtasks>/`, and `completed/<subtasks>/`. Declared via `task.md` frontmatter (`kind: epic`, `children: [local:<id>, ...]`).
 - **Sub-epic** — a subtask that is itself an epic (second and final nesting level; no sub-sub-epics).
-- **Subtask** — a task nested inside an epic.
+- **Subtask** — a task nested inside an epic's `in_progress/` (while active) or `completed/` (when done). Completion never removes a subtask from its parent epic.
 
 **Key commands:**
 - **`/drupal-dev-framework:migrate-to-epic <task>`** — convert a flat task into an epic. Manual, per-task, transactional. Supports `--dry-run` and `--children "a,b,c"`.

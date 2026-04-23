@@ -13,7 +13,13 @@ Ships the structural foundation for epic/sub-task hierarchy. Flat tasks remain a
 
 **Frontmatter schema on `task.md`** — new optional YAML block with `id` (URI-style, e.g. `local:<folder>`), `kind` (`flat` | `epic` | `sub_epic` | `subtask`), `parent`, `children[]`, `blocks[]`, `blocked_by[]`, `external_ids` (reserved for future tracker integration), and a derived `status` field. Missing frontmatter defaults to `kind: flat` with zero behavior change.
 
-**Folder nesting up to 2 epic levels** — epic folders may contain subtask folders and a `shared/` directory for cross-cutting artifacts (decision logs, planning matrices, mechanisms maps — each epic decides its own). The `kind` taxonomy enforces the depth cap (no sub-sub-epics).
+**Folder nesting with per-epic `in_progress/` and `completed/`** — up to 2 epic levels. Each epic folder contains:
+- `task.md` — the epic's own tracker
+- `shared/` — cross-cutting artifacts (decision logs, planning matrices, mechanisms maps — each epic decides its own)
+- `in_progress/` — subtask folders currently being worked on
+- `completed/` — subtask folders that finished (they STAY inside the epic; spatial association preserved)
+
+This mirrors the project-level `in_progress/`/`completed/` convention — same rule at a different scope. When `/complete` runs on a subtask, it moves from `<epic>/in_progress/<child>/` to `<epic>/completed/<child>/` without leaving the epic. When the epic itself completes, the whole folder (with its internal in_progress-empty and completed-full) moves to project-level `completed/<epic>/` as one unit. History stays intact.
 
 **New command `/drupal-dev-framework:migrate-to-epic <task>`** — converts a single flat task into an epic folder with children. Supports `--dry-run` and `--children "a,b,c"`. Transactional via a temp directory + atomic swap; the filesystem is either fully pre-migration or fully post-migration state, never partial. 24h rollback window at `.migration-tmp/.old-<task>/`.
 

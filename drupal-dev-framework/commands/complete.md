@@ -28,9 +28,9 @@ Mark a task as complete and move it to the completed folder.
 
 ## Hierarchy-aware completion rules (v3.10.0)
 
-- **`kind: flat`** — unchanged v3.0.0 behavior.
-- **`kind: subtask`** — standard completion, plus the step-8 sibling check. The task folder moves from `<epic>/<subtask>/` to `completed/<subtask>/` — **child leaves the epic folder on completion**. The epic's frontmatter `children[]` still references the subtask by id (resolves via id, not location), so the reference stays valid.
-- **`kind: epic`** or **`kind: sub_epic`** — pre-completion gate enforces that ALL children are in `completed/`. If any child is still `in_progress`, abort with a message listing the outstanding children. When the gate passes, the epic folder itself moves to `completed/<epic>/` (with all still-nested children remaining inside — they're already completed, but physically still nested at their last pre-completion location).
+- **`kind: flat`** — unchanged v3.0.0 behavior. Target: project-level `completed/<name>/`.
+- **`kind: subtask`** — completion moves the folder from `<epic>/in_progress/<subtask>/` to `<epic>/completed/<subtask>/`. **The child stays inside the epic.** The epic's `children[]` list still references the subtask by id. Spatial association with the parent epic is preserved — you can always browse the epic folder to see its full history.
+- **`kind: epic`** or **`kind: sub_epic`** — pre-completion gate enforces that `<epic>/in_progress/` is empty (all children have already moved to `<epic>/completed/`). If any child is still in progress, abort listing them. When the gate passes, the whole epic folder (including its internal `in_progress/`=empty and `completed/`=full) moves to project-level `completed/<epic>/`. History stays intact in one move.
 - **Dog-food note for v3.10.0 release:** the first epic completed under these rules will be sub-task 3.1's dog-food test. Verify the flow end-to-end before declaring 3.1 shipped.
 
 Do NOT touch dependency graphs (`blocks`/`blocked_by`) here — those are a 3.2 `/next` concern.
