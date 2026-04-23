@@ -1,6 +1,6 @@
 ---
 description: "Load context and start implementing a task. Trigger: 'start coding', 'implement task', 'begin implementation', 'Phase 3', 'write code'. REQUIRES completed architecture. Enforces TDD (test-first)."
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, Task
 argument-hint: <task-name>
 ---
 
@@ -33,6 +33,18 @@ Before doing anything else for this command, verify the prior phases are marked 
 6. If both phases are `[x]`, proceed silently (no output from this check).
 
 Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
+
+## Phase 3 alignment sub-step (v3.12.0+)
+
+**Run after the Phase Transition Check, before loading implementation context.** Same pattern as `/research`'s Phase 1 sub-step:
+
+1. Invoke `alignment-reader` skill against the task folder.
+2. Decide whether to offer the Phase 3 alignment section:
+   - If `sections.phase_3.present: true` → print: `"Phase 3 alignment already authored. Using existing section."` and proceed.
+   - Else if `sections.task_level.present: true` → ask: `"Author the Phase 3 — Implementation section of alignment.md now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
+   - Otherwise → proceed silently (no nag; task never authored any alignment).
+3. If user says `[y]`, invoke `/drupal-dev-framework:scope <task_name> --phase 3` inline. After it returns, continue with implementation context loading.
+4. If user says `[n]` / `[skip]`, proceed. Never block.
 
 ## What This Does (v3.0.0)
 

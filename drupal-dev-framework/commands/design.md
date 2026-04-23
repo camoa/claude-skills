@@ -1,6 +1,6 @@
 ---
 description: "Design architecture for a specific task. Trigger: 'architecture', 'design task', 'plan component', 'Phase 2'. REQUIRES completed research. Enforces Library-First, CLI-First, SOLID, DRY."
-allowed-tools: Read, Write, Glob, Grep, Task
+allowed-tools: Read, Write, Glob, Grep, Bash, Skill, Task
 argument-hint: <task-name>
 ---
 
@@ -27,6 +27,18 @@ Before doing anything else for this command, verify the prior phase is marked co
 4. If Phase 1 is `[x]`, proceed silently.
 
 Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
+
+## Phase 2 alignment sub-step (v3.12.0+)
+
+**Run after the Phase Transition Check, before any other Phase 2 work.** Same pattern as `/research`'s Phase 1 sub-step:
+
+1. Invoke `alignment-reader` skill against the task folder.
+2. Decide whether to offer the Phase 2 alignment section:
+   - If `sections.phase_2.present: true` → print: `"Phase 2 alignment already authored. Using existing section."` and proceed.
+   - Else if `sections.task_level.present: true` → ask: `"Author the Phase 2 — Architecture section of alignment.md now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
+   - Otherwise → proceed silently (no nag; task never authored any alignment).
+3. If user says `[y]`, invoke `/drupal-dev-framework:scope <task_name> --phase 2` inline. After it returns, continue with architecture work.
+4. If user says `[n]` / `[skip]`, proceed. Never block.
 
 ## What This Does (v3.0.0)
 

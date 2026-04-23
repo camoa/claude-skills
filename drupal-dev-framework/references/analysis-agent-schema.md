@@ -82,8 +82,11 @@ Signals the agent cites in `signals_used` when it reaches `epic_candidate`:
 | `multiple_code_areas` | (requires `code_read: true`) Task touches multiple distinct module/package boundaries in the codebase |
 | `description_length_and_conjunction` | Task description has both length > threshold AND explicit conjunction phrasing ("and also", "plus", "as well as") — typical trigger for the `/research` pre-analysis hook |
 | `bullet_count_clustering` | Task description's bullet list has ≥3 bullets that group into distinct topics |
+| `scope_contract_recommended` | **(v3.12.0+)** Task's scope is non-trivial enough to warrant a P7 alignment contract (`alignment.md`). Fires when ANY of: (a) task description has ≥2 distinct outcome dimensions; (b) description contains conjunctive phrasing (`and also`, `plus`, `as well as`, `in addition to`); (c) ≥3 acceptance criteria AND word count > 60. Orthogonal to `epic_candidate` — a task can be both, either, or neither. Description-mode compatible (evaluable from `task_description_text` alone). Consumed by `/research` pre-analysis hook and `/scope` to suggest the P7 step. |
 
 **Signal extensibility:** new codes can be added at v1.x without breaking consumers. Consumers should treat unknown codes as informational (display them; don't error).
+
+**Signal independence:** signals are orthogonal axes of scope judgment. A single task may fire signals associated with `epic_candidate` AND `scope_contract_recommended` simultaneously — they address different questions ("should this be decomposed?" vs "does this need an up-front contract?"). Consumers branch on the decision, not on specific signals.
 
 ## Decision reasoning (how the agent chooses)
 
