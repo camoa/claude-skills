@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.2] - 2026-04-23
+
+### Fixed — `/research` retrofit-aware scope offer
+
+**Bug:** `/research` silently skipped the task-level alignment nudge when invoked on a pre-existing task that never went through the pre-analysis hook (e.g., tasks created before v3.11.0, or tasks that existed when their scope contract was omitted). The feature effectively did nothing for retrofit flows.
+
+**Fix:** `/research` Phase 1 alignment sub-step now runs a task-level retrofit check when ALL of the following are true:
+- Task folder existed before this `/research` invocation (not a fresh creation)
+- No `## Task-Level` section in `alignment.md` (or file missing)
+- Pre-analysis hook did NOT run this session
+
+When those conditions hold, the command invokes `analysis-agent` in folder mode to check scope warrant and, if `scope_contract_recommended` fires, offers task-level authoring before continuing to Phase 1 alignment. Failure modes (agent timeout / error) proceed silently — never blocks.
+
+Fresh-task and already-authored flows are unchanged (skip the new check entirely). `/design` and `/implement` retain their existing "task-level decline is final post-creation" posture — only `/research` needs to handle retrofit.
+
+No schema change. No new artifacts. `analysis-agent`, `alignment-reader`, and `scope` command unchanged. Behavior change isolated to `commands/research.md`.
+
 ## [3.12.1] - 2026-04-23
 
 ### Fixed — Private reference scrub (no behavior change)
