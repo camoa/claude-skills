@@ -100,17 +100,28 @@ This is guidance for the agent, not a consumer-visible field:
 
 ### How `/propose-epics` consumes this
 
-For each task analyzed:
+For each task analyzed, branch on `decision` only (decomposition is `/propose-epics`'s sole concern):
+
 - `decision: epic_candidate` → render proposed children + rationale to user; collect accept/reject/edit; on accept, call `/migrate-to-epic`.
 - `decision: keep_flat` → report "no change recommended" with brief rationale.
 - `decision: insufficient_info` → report and ask user for context; skip.
 
+`/propose-epics` does NOT branch on `signals_used[]`. The `scope_contract_recommended` signal is consumed by `/research`'s pre-analysis hook and `/scope` — not by bulk epic review.
+
 ### How `/research` pre-analysis hook consumes this
 
-At new-task creation time:
+At new-task creation time, consumers branch in two orthogonal steps:
+
+**Step A — branch on `decision` (epic-decomposition judgment):**
 - `decision: epic_candidate` → ask user "create as epic with children? (y/n)" and branch accordingly.
 - `decision: keep_flat` → proceed with flat task research silently.
 - `decision: insufficient_info` → proceed with flat task research; agent didn't have enough to decide.
+
+**Step B — inspect `signals_used[]` for `scope_contract_recommended` (v3.12.0+, orthogonal to decision):**
+- If the array contains `scope_contract_recommended` → soft-nudge the user to author a P7 scope contract (`alignment.md`) before research begins. The signal can fire with ANY decision (including `keep_flat`) because it's an orthogonal judgment about scope contract warrant, not decomposition.
+- If absent → no nudge; proceed.
+
+Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common P7 case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See §"Signal independence" above.
 
 ## Example outputs
 
