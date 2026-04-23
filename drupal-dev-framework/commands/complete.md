@@ -14,15 +14,26 @@ Mark a task as complete and move it to the completed folder.
 /drupal-dev-framework:complete <task-name>
 ```
 
-## What This Does (v3.0.0)
+## What This Does (v3.0.0 + v3.10.0 epic awareness)
 
 1. Invokes `task-completer` skill
 2. Loads task from `implementation_process/in_progress/{task_name}/`
-3. Verifies acceptance criteria are met
-4. Updates `task.md` with completion notes
-5. Moves entire task directory to `implementation_process/completed/{task_name}/`
-6. Updates `project_state.md`
-7. Suggests next task (if any)
+3. **Invoke `task-frontmatter-reader` (v1.0.0+) to learn the task's `kind` and parent.** Different completion rules apply per kind (see below).
+4. Verifies acceptance criteria are met
+5. Updates `task.md` with completion notes
+6. Moves entire task directory to `implementation_process/completed/{task_name}/`
+7. Updates `project_state.md`
+8. **If the completed task is a subtask**, check its parent epic's `children[]`: if all siblings are now completed, print a "epic ready for completion" hint to the user (don't auto-complete the epic — the user owns that decision).
+9. Suggests next task (if any)
+
+## Hierarchy-aware completion rules (v3.10.0)
+
+- **`kind: flat`** — unchanged v3.0.0 behavior. Target: project-level `completed/<name>/`.
+- **`kind: subtask`** — completion moves the folder from `<epic>/in_progress/<subtask>/` to `<epic>/completed/<subtask>/`. **The child stays inside the epic.** The epic's `children[]` list still references the subtask by id. Spatial association with the parent epic is preserved — you can always browse the epic folder to see its full history.
+- **`kind: epic`** or **`kind: sub_epic`** — pre-completion gate enforces that `<epic>/in_progress/` is empty (all children have already moved to `<epic>/completed/`). If any child is still in progress, abort listing them. When the gate passes, the whole epic folder (including its internal `in_progress/`=empty and `completed/`=full) moves to project-level `completed/<epic>/`. History stays intact in one move.
+- **Dog-food note for v3.10.0 release:** the first epic completed under these rules will be sub-task 3.1's dog-food test. Verify the flow end-to-end before declaring 3.1 shipped.
+
+Do NOT touch dependency graphs (`blocks`/`blocked_by`) here — those are a 3.2 `/next` concern.
 8. **Invokes `session-context-writer` skill with project and task set to `null` (task is now completed)**
 
 ## Pre-Completion Checks

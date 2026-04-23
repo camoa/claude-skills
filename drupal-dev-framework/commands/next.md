@@ -19,8 +19,22 @@ Get recommendation for what to do next based on project state.
 
 1. Invokes `project-orchestrator` agent
 2. Analyzes current state (project requirements + active tasks)
-3. Suggests prioritized next actions
-4. **After resolving project and task, invoke `session-context-writer` skill with the resolved values**
+3. **For each in-progress task folder, invoke `task-frontmatter-reader` skill (v1.0.0+) to learn its `kind` and any `parent`/`children` relationships** — so the suggestion below can prefer "continue a subtask in the active epic" over "start an unrelated flat task."
+4. Suggests prioritized next actions using the rules below
+5. **After resolving project and task, invoke `session-context-writer` skill with the resolved values**; pass `currentEpic` = the parent epic's folder name if the chosen task is a subtask, or `null` otherwise.
+
+## Hierarchy-aware suggestion rules (added v3.10.0)
+
+When choosing what to recommend next, apply these preferences in order:
+
+1. **If session context has an active `currentEpic`** — prefer suggesting the next unblocked subtask within that epic (over starting work elsewhere). Surface sibling subtasks by reading the epic's `children[]` and filtering out ones that are `completed`.
+2. **If the current task is a subtask** (kind per reader) — suggest phase action on the current subtask first; fall back to sibling subtasks of the same parent epic.
+3. **If the current task is an epic** with children — suggest starting/continuing the first child whose prerequisites are met. If children don't yet exist, suggest `/drupal-dev-framework:migrate-to-epic <epic> --children "..."` to expand.
+4. **Otherwise** — existing flat-task behavior applies unchanged.
+
+**Surfacing `/migrate-to-epic`:** if the current task OR any active task looks epic-sized (signals: many heterogeneous acceptance criteria, long-in-progress without phase progression, user-mentioned "this is getting too big"), mention `/drupal-dev-framework:migrate-to-epic <task>` as an option in the output. Conservative — only suggest when signals are clear. A richer detection agent lands in sub-task 3.2.
+
+Do NOT walk `blocks`/`blocked_by` graph transitively here — direct relationships only (v3.10.0 scope per sub-task 3.1 research). A full dependency-aware `/next` lands in 3.2.
 
 ## Output Format
 
