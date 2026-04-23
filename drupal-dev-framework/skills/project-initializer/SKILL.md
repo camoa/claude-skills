@@ -1,7 +1,9 @@
 ---
 name: project-initializer
-description: Use when starting a new development project - creates memory folder structure with project_state.md, architecture scaffolding, and registers project
-version: 1.3.0
+description: Use when starting a new development project — creates memory folder structure with project_state.md (including codePath), architecture scaffolding, and registers project. Accepts optional code_path argument.
+version: 1.4.0
+model: sonnet
+user-invocable: false
 ---
 
 # Project Initializer
@@ -84,6 +86,7 @@ Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 **Created:** {YYYY-MM-DD}
 **Status:** Initializing
 **Path:** {full_path_to_project_folder}
+**Code path:** {absolute_code_path OR (docs-only) OR omit-entirely-if-caller-did-not-provide}
 
 ## Overview
 {To be filled during requirements gathering}
@@ -147,6 +150,7 @@ Then read existing registry (or create new if doesn't exist) and add the project
     {
       "name": "{project_name}",
       "path": "{full_path_to_project}",
+      "codePath": "{absolute path to code OR null}",
       "created": "{YYYY-MM-DD}",
       "lastAccessed": "{YYYY-MM-DD}",
       "status": "active"
@@ -156,7 +160,8 @@ Then read existing registry (or create new if doesn't exist) and add the project
 ```
 
 - `projectsBase` — set once on first project creation, reused as default for all future projects
-- `path` — always the full absolute path to the specific project folder
+- `path` — always the full absolute path to the specific project folder (memory folder)
+- `codePath` — **(added v3.11.0)** absolute path to the code being worked on. `null` for docs-only projects. Optional; pre-v3.11.0 entries without it treated as "unknown" and trigger the first-use detect+confirm flow when a feature needs code. Source of truth is `project_state.md`; this is the cache.
 - No `phase` field — phase is tracked per-task in task files, not per-project
 
 Use `Read` to load existing registry, then `Write` to save updated version with new project appended.
