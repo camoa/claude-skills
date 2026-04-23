@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-04-23
+
+### Added — Project codePath + Analysis Agent (sub-task 3.2 of dev-framework improvements epic)
+
+Two coupled additions: project-level `codePath` metadata infrastructure, and a read-only analysis agent that proposes epic decompositions for flat tasks. All additive; flat tasks and existing commands behave unchanged when these features aren't used.
+
+**Project `codePath` metadata** — projects can now declare where their code lives (distinct from the memory folder). Supports three states: **unknown** (never set — triggers detect+confirm on first use), **docs-only** (intentionally no code — null at runtime, no warnings), **set** (`/abs/path` — validated).
+
+- **`project-state-reader` skill v1.0.0** (haiku, user-invocable: false) — defensive reader for `project_state.md`'s `**Code path:**` line. Emits structured JSON `{project_name, codePath, folder, warnings[]}`. Thin wrapper around `scripts/project-state-read.sh`. Five warning codes: `folder_missing`, `project_state_md_missing`, `code_path_unknown`, `code_path_missing`, `malformed_header`.
+- **`scripts/project-state-read.sh`** — portable bash. `realpath -m` normalization, `(docs-only)` sentinel handling. Never throws.
+- **New command `/drupal-dev-framework:set-code-path [<path>|--docs-only]`** — three invocation modes: explicit path, `--docs-only` sentinel, or interactive detect+confirm. Writes `project_state.md` as source of truth and syncs `active_projects.json` cache. Path-safety filter hard-rejects system roots (`/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/var`, `/opt`, `/root`, `$HOME` ancestors) and warns-but-allows paths outside `$HOME`.
+- **`/new` updated** — new Step 3 captures codePath at project creation time with 4 user options (Y/path/d/s). Detection strategies in `references/code-path-detection.md`.
+- **`project-initializer` v1.4.0** (sonnet) — accepts `code_path` arg; `project_state.md` template emits `**Code path:**` line (or omits if not provided).
+
+**`analysis-agent` v1.0.0** (sonnet, read-only) — assesses whether a flat task is epic-sized and proposes 3-5 children. Tools: `Read`, `Grep`, `Glob`, `Bash` (read-only with mutation-subcommand denylist: `rm`, `mv`, `cp`, `sed`, `tee`, `dd`, `chmod`, `chown`). Never mutates state; never emits user-facing chat. Two input modes:
+
+- **Folder mode** — `task_folder` input; reads task.md / research.md / architecture.md / implementation.md via `task-frontmatter-reader` + Read; full 7-signal evaluation. Used by `/propose-epics`.
+- **Description mode** — `task_description_text` input (folder doesn't exist yet); restricted 3-signal evaluation (`description_length_and_conjunction`, `bullet_count_clustering`, `multiple_code_areas` if code_read). Used by `/research` pre-analysis hook.
+
+Emits structured JSON per `references/analysis-agent-schema.md` v1.0. Seven invariants enforced before emit (proposed_children iff epic_candidate; `confidence: low` REQUIRED when `code_read: false`; signals non-empty on epic_candidate; `schema_version` is a JSON string; child names match `^[A-Za-z0-9_][A-Za-z0-9._-]*$`; rationale ≤400 chars; no literal newlines in string fields).
+
+**New command `/drupal-dev-framework:propose-epics`** — bulk-reviews all flat in-progress tasks. Spawns `analysis-agent` subagents in parallel (one per candidate) via the Task tool. Presents per-task decisions (epic_candidate / keep_flat / insufficient_info) with accept / edit / reject / skip options. Accepted proposals invoke `/migrate-to-epic` under the hood. Summary reports counts including partial failures (invalid JSON, subagent crash, schema mismatch) — no silent drops.
+
+**`/research` pre-analysis hook** — on new-task creation, evaluates three strong signals in the task name + description: length > 500 chars, ≥3 bullets, explicit conjunctions (`and also`, `plus`, `as well as`, `in addition to`). If any fires, invokes `analysis-agent` in description mode BEFORE creating the task directory. On `epic_candidate`, prompts user to create as epic / flat / standard. Conservative — default answer is flat; never creates an epic without explicit confirmation.
+
+**New references:**
+- `references/analysis-agent-schema.md` — canonical JSON Schema v1.0, 7 field contracts, 7 invariants, 7 signal codes, 3 example outputs, versioning policy, input-modes contract.
+- `references/code-path-detection.md` — 2 shipped strategies (`$PWD` markers, sibling-of-memory-folder), priority order, confirm-prompt UI, fallback cold prompt, three-null-states table, safety filter (shared with `/set-code-path`).
+
 ## [3.10.0] - 2026-04-22
 
 ### Added — Task Hierarchy Foundation (sub-task 3.1 of dev-framework improvements epic)

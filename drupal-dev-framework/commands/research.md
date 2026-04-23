@@ -122,8 +122,8 @@ If no signal fires: skip pre-analysis entirely and proceed with the standard 8-s
 If a signal fires:
 
 1. Resolve `codePath` via `project-state-reader` on the active project. If unknown, skip detect+confirm here (too intrusive at task-creation time); agent runs with `code_read: false` / `confidence: low`.
-2. Invoke `analysis-agent` (via Task tool) with the task_folder placeholder path, the codePath (or null), and `schema_version: "1.0"`.
-3. Parse the agent's JSON output per `references/analysis-agent-schema.md` v1.0.
+2. Invoke `analysis-agent` (via Task tool) in **description mode** — pass `task_description_text` (the task name + full description as typed by the user), the codePath (or null), and `schema_version: "1.0"`. **Do NOT pass a task_folder** — the folder does not exist yet at pre-analysis time. See `references/analysis-agent-schema.md` §"Input modes".
+3. Parse the agent's JSON output per `references/analysis-agent-schema.md` v1.0. Expect `task_folder: "(pre-creation)"` in the output.
 4. Branch on `decision`:
    - `epic_candidate` → ask the user: *"This task's scope looks like it might warrant being an epic. Agent proposed N children: [list]. Create as epic with these children? [y/n/standard flat task]"*. On `y`, invoke `/drupal-dev-framework:migrate-to-epic <task_name> --children "<proposed names>"` (which will create the epic directly — no flat task created first). On `n` or `standard`, proceed with flat-task research.
    - `keep_flat` → proceed silently with flat-task research.

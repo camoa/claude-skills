@@ -30,12 +30,9 @@ Set or update the `codePath` metadata for the active drupal-dev-framework projec
 
 ## Detect + confirm flow (no arg provided)
 
-When called without arguments, propose a candidate via detection strategies in `references/code-path-detection.md`:
+When called without arguments, propose a candidate via the strategies and priority order defined in `references/code-path-detection.md`. **That reference is the single source of truth** — do not re-enumerate strategies here; consult it for markers, ordering, and acceptance rules.
 
-1. `$PWD` if it contains a git repo marker (`.git/`) or Drupal/Node marker (`composer.json`, `package.json`, `sites/default/`)
-2. Sibling-of-memory-folder check (memory at `~/workspace/claude_memory/projects/foo/` → check `~/workspace/foo/`)
-
-First match wins. If any candidate found:
+Summary: first match wins across the reference's strategy list; if no strategy matches, fall back to the reference's cold-prompt form. If any candidate found, present the confirm prompt:
 
 ```
 Detected codePath candidate: /absolute/path
@@ -73,7 +70,11 @@ Read, modify, write. For the matching project entry, set `codePath` to the resol
 ## Acceptance / rejection rules
 
 - **Path accepted:** must be absolute after `realpath -m`. If the path does not currently exist, warn but allow — user may be declaring a future-work path. Warning: `"Note: /path does not currently exist. Saved anyway; /drupal-dev-framework:set-code-path again when it exists to clear the warning."`
-- **Path rejected:** contains newlines, null bytes, or cannot be normalized. Abort with error.
+- **Path rejected (hard):** any of the following aborts with an error:
+  - Contains newlines or null bytes
+  - Cannot be normalized by `realpath -m`
+  - **Is a dangerous system root:** `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/var`, `/opt`, `/root`, or any ancestor of `$HOME` (e.g., `/home`). These are never valid code paths and always indicate user error or malicious input.
+- **Path warn-but-allow:** resolves outside `$HOME` but not in the hard-reject list (e.g., `/srv/myapp`, `/mnt/code`). Show: `"Warning: <path> is outside your home directory. Proceed? [y/N]"`. Default no. User must type `y` to accept.
 - **`--docs-only`:** always accepted.
 - **Cancel (user chooses [n]):** no change; exit 0 with "No change."
 

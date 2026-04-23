@@ -69,9 +69,35 @@ Where does the code for this project live?
 - Must still exist on disk at the moment of detection (if not, skip that strategy and try the next).
 - User's explicit path override is accepted even if the path does not currently exist (with a warning — see `/set-code-path` for the "future-path" handling).
 
+### Safety filter on detected + user-entered paths
+
+Regardless of source (detection, explicit arg, or interactive prompt), the following paths are **hard-rejected** before accept:
+
+- `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/var`, `/opt`, `/root`
+- Any ancestor of `$HOME` (e.g., `/home`, `/Users`)
+
+Paths outside `$HOME` but not in the hard-reject list (e.g., `/srv/myapp`, `/mnt/code`) are **warn-but-allow**: prompt for explicit confirmation (default no). See `/set-code-path` §"Acceptance / rejection rules" for the canonical rule set — all consumers of this reference MUST apply the same filter.
+
 ## Ordering is intentional
 
 `$PWD` > sibling. In doubt, prefer the cwd that the user explicitly launched Claude from. Keeps the detection predictable: "Claude suggests where I am, unless I'm clearly in a docs/knowledge location that has a sibling code repo."
+
+## Three distinct null-like states
+
+Consumers MUST distinguish these — they look similar at runtime but have different semantics:
+
+| State | `codePath` (runtime) | `project_state.md` line | `active_projects.json` | Warnings | Meaning | Action |
+|---|---|---|---|---|---|---|
+| **unknown** | `null` | line absent OR value blank | `codePath: null` | `code_path_unknown` | Never set. First-use flow must detect+confirm. | Run detect+confirm |
+| **docs-only** | `null` | `**Code path:** (docs-only)` | `codePath: null` | (none) | User intentionally declared no code. | Skip code-requiring features silently |
+| **set** | `/abs/path` | `**Code path:** /abs/path` | `codePath: "/abs/path"` | `code_path_missing` iff dir absent at read time | Normal case. | Use the path |
+
+Key distinction: both "unknown" and "docs-only" produce `codePath: null` at runtime, but **only "unknown" emits the `code_path_unknown` warning**. Consumers branch on the warning, not on the null value itself:
+
+- `warnings[] contains "code_path_unknown"` → trigger detect+confirm flow
+- `codePath: null` AND no `code_path_unknown` warning → docs-only; skip code read silently
+
+The `project-state-reader` skill's contract guarantees this. Do not guess from `codePath` alone.
 
 ## Extension points
 

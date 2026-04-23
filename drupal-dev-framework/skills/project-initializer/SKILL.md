@@ -4,6 +4,7 @@ description: Use when starting a new development project — creates memory fold
 version: 1.4.0
 model: sonnet
 user-invocable: false
+allowed-tools: Bash, Read, Write
 ---
 
 # Project Initializer

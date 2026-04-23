@@ -6,6 +6,19 @@
 
 The analysis agent emits a single JSON object per analyzed task. Schema is versioned via `schema_version`. Future fields may be added at v1.x without breaking v1.0 consumers.
 
+## Input modes
+
+The agent accepts one of two mutually exclusive input modes (caller picks):
+
+| Mode | Input | When used |
+|---|---|---|
+| **folder mode** | `task_folder` (absolute path to an existing task directory) | `/propose-epics` — task folders exist on disk |
+| **description mode** | `task_description_text` (raw text: task name + description, no folder) | `/research` pre-analysis hook — task folder has not been created yet |
+
+Both modes also accept `codePath` (abs path or null) and `schema_version` (expected version). In description mode: `task_folder` in the output is set to the string `"(pre-creation)"`, and `task_id` to `local:(pre-creation)`. The agent cannot read `task.md` / `research.md` / `architecture.md` / `implementation.md` in description mode — it only evaluates signals from the description text + optional code read.
+
+Signals evaluated in description mode: `description_length_and_conjunction`, `bullet_count_clustering`, `multiple_code_areas` (if code_read). Signals that require on-disk phase artifacts (`many_heterogeneous_criteria` from task.md's AC section, `long_in_progress`, `research_architecture_fragmented`, `explicit_user_signal`) are skipped in description mode — the agent notes `"description mode: phase-artifact signals unavailable"` in `notes[]`.
+
 ## Schema
 
 ```json
@@ -34,7 +47,7 @@ The analysis agent emits a single JSON object per analyzed task. Schema is versi
 
 | Field | Type | Values / constraints |
 |---|---|---|
-| `schema_version` | string | Follows semver. `"1.0"` for v3.11.0. Consumers match on major version for compat. |
+| `schema_version` | string | Follows semver. `"1.0"` for v3.11.0. Consumers match on major version for compat. **MUST be a JSON string** (quoted `"1.0"`), never a number — `1.0` (unquoted) becomes `1` in JSON and breaks semver parsing. |
 | `analyzed_at` | string | ISO-8601 UTC timestamp of analysis completion. |
 | `task_id` | string | URI-style `local:<folder_name>`. Matches 3.1's task-frontmatter-reader `id` field. |
 | `task_folder` | string | Absolute path to the task folder at analysis time. |

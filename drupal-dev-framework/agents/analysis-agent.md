@@ -4,7 +4,7 @@ description: "Use when a framework flow needs to assess whether a task looks epi
 capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-decomposition"]
 version: 1.0.0
 model: sonnet
-disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*)
+disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
 maxTurns: 10
 ---
 
@@ -14,32 +14,56 @@ Read-only agent that assesses task scope and proposes decomposition. Consumed by
 
 ## Contract
 
-Input (provided by the caller at invocation):
+Input (provided by the caller at invocation). Exactly ONE of the two input modes:
 
-- `task_folder` — absolute path to the task folder being analyzed
+**Folder mode** (used by `/propose-epics`):
+- `task_folder` — absolute path to an existing task folder
 - `codePath` — absolute path to the project's code, OR `null` for docs-only
-- `schema_version` — expected output schema version; agent rejects mismatches with a clear error (currently `"1.0"`)
+- `schema_version` — expected output schema version (currently `"1.0"`, JSON string)
 
-Output: single JSON object per `references/analysis-agent-schema.md` v1.0. Written to stdout. No file modifications. No user-facing chat — the agent's output is consumed programmatically by the calling command.
+**Description mode** (used by `/research` pre-analysis hook, before task folder exists):
+- `task_description_text` — raw text: task name + full description as typed by user
+- `codePath` — absolute path to the project's code, OR `null` for docs-only
+- `schema_version` — expected output schema version (currently `"1.0"`, JSON string)
+
+See `references/analysis-agent-schema.md` §"Input modes" for the full contract.
+
+Output: single JSON object per `references/analysis-agent-schema.md` v1.0. Written to stdout. `schema_version` MUST be a JSON string (`"1.0"` quoted), never a number. No file modifications. No user-facing chat — the agent's output is consumed programmatically by the calling command.
 
 ## Tools
 
-- `Read` — task.md, research.md, architecture.md, implementation.md at the task folder; `.md` files under `codePath` when present
+- `Read` — task.md, research.md, architecture.md, implementation.md at the task folder (folder mode only); `.md` files under `codePath` when present
 - `Grep` — search within code for module/package boundaries, test directories, etc.
 - `Glob` — enumerate files under `codePath`
+- `Bash` — **read-only only**, with a denylist on mutating subcommands (see frontmatter `disallowedTools`). Required because `task-frontmatter-reader` skill invokes `fm-read.sh` via Bash. NEVER use Bash for file mutation, redirects to files (`>`, `>>`, `tee`), in-place edits (`sed -i`, `awk` with output redirect), or system changes (`chmod`, `chown`, `rm`, `mv`, `cp`, `dd`). If the denylist doesn't cover a mutation you're considering, STOP — the policy is read-only, the denylist is a backstop.
 
-Explicitly NO Edit, Write, or destructive Bash. The agent never mutates state. If it needs to write its proposal, the caller does that (by accepting the proposal and invoking `/migrate-to-epic`).
+Explicitly NO `Edit` or `Write`. The agent never mutates state. If it needs to write its proposal, the caller does that (by accepting the proposal and invoking `/migrate-to-epic`).
 
 ## Workflow
 
-### 1. Read the task
+### 0. Validate input and detect mode
+
+**Validate exactly one of `{task_description_text, task_folder}` is present:**
+
+- Both present → emit `decision: insufficient_info`, `notes: ["input validation failed: pass exactly one of task_description_text or task_folder, not both"]`, exit.
+- Neither present → emit `decision: insufficient_info`, `notes: ["input validation failed: exactly one of task_description_text/task_folder required"]`, exit.
+
+If `task_description_text` was provided (and `task_folder` absent): **description mode**. Skip steps 1-2; go to step 3 with:
+- `task_folder` output field set to `"(pre-creation)"`
+- `task_id` output field set to `"local:(pre-creation)"`
+- Signal evaluation limited to: `description_length_and_conjunction`, `bullet_count_clustering`, `multiple_code_areas` (if code_read)
+- Add to `notes[]`: `"description mode: phase-artifact signals unavailable"`
+
+Otherwise: **folder mode**. Proceed with steps 1-2.
+
+### 1. Read the task (folder mode only)
 
 Invoke `task-frontmatter-reader` skill on `task_folder`. Capture `kind`, `status`, `task_id`.
 
 - If `kind != flat`: abort with `decision: keep_flat`, `notes: ["task is not kind=flat; analysis skipped"]`. Agent only proposes decomposition for flat tasks. (Already-epics and subtasks are not candidates.)
 - If `status == completed`: abort with `decision: keep_flat`, `notes: ["task already completed; no change"]`.
 
-### 2. Read phase artifacts
+### 2. Read phase artifacts (folder mode only)
 
 Read `task.md`, and `research.md` / `architecture.md` / `implementation.md` if present.
 
@@ -65,7 +89,21 @@ If `codePath` is null:
 
 ### 4. Evaluate signals
 
-For each signal code in `references/analysis-agent-schema.md` §Signal codes, determine whether it fires:
+**Mode gate first.** Description mode SKIPS folder-only signals. The evaluable set per mode:
+
+| Signal | Folder mode | Description mode |
+|---|---|---|
+| `many_heterogeneous_criteria` | ✓ (reads task.md AC) | ✗ SKIP (no task.md) |
+| `long_in_progress` | ✓ (file timestamps) | ✗ SKIP (folder doesn't exist) |
+| `research_architecture_fragmented` | ✓ (reads phase artifacts) | ✗ SKIP (no artifacts) |
+| `explicit_user_signal` | ✓ (reads task.md body) | ✗ SKIP (no task.md) |
+| `multiple_code_areas` | ✓ if `code_read: true` | ✓ if `code_read: true` |
+| `description_length_and_conjunction` | ✓ (reads `## Goal` / description section) | ✓ (evaluates `task_description_text`) |
+| `bullet_count_clustering` | ✓ (reads description) | ✓ (evaluates `task_description_text`) |
+
+In description mode, do NOT cite a ✗-SKIP signal in `signals_used[]` — those signals are unevaluable without the task folder. Citing them would be hallucination.
+
+For each signal code that is ✓ in the current mode, determine whether it fires:
 
 - `many_heterogeneous_criteria` — ≥5 acceptance criteria that cluster into distinct groups (by topic, not similarity)
 - `long_in_progress` — task has been `in_progress` ≥21 days without phase progression (check file timestamps; skip if unknown)

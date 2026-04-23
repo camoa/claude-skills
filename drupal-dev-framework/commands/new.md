@@ -40,13 +40,11 @@ Before creating the project structure, ask the user:
 >   [d] mark this project docs-only (no code base)
 >   [s] skip for now — set later with `/drupal-dev-framework:set-code-path`
 
-Detection strategies (in order, first match wins):
-1. `$PWD` — if it contains `.git/`, `composer.json`, `package.json`, or Drupal markers
-2. Sibling-of-memory-folder — e.g., memory at `~/workspace/claude_memory/projects/foo/` → check `~/workspace/foo/`
+Detection strategies, priority order, markers, and acceptance/safety rules are defined in `references/code-path-detection.md` — **that is the single source of truth**. Do not re-implement or re-enumerate strategies here; consult the reference.
 
 If the user skips, the project starts with `codePath` absent — the first framework feature that needs code will trigger detect+confirm again.
 
-Pass the captured value to `project-initializer` as the `code_path` argument.
+Pass the captured value to `project-initializer` as the `code_path` argument (absolute path, or the literal string `(docs-only)` for docs-only, or omit for skip).
 
 ## Project Name Requirements
 

@@ -1,6 +1,6 @@
 ---
 name: project-state-reader
-description: Use when a framework command needs project-level metadata (currently codePath, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input. Companion to task-frontmatter-reader (v3.10.0) — same design, different scope (project vs task).
+description: Use when a framework command needs project-level metadata (currently codePath, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
 version: 1.0.0
 user-invocable: false
 model: haiku

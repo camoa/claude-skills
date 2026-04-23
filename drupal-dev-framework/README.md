@@ -95,6 +95,8 @@ Phases apply per task, not per project. A project can have tasks at different ph
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
+| `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
+| `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks — analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 
@@ -115,7 +117,7 @@ The debate produces a synthesized recommendation with dissenting opinions noted.
 
 ## What's Inside
 
-### Agents (5)
+### Agents (6)
 
 Agents handle complex multi-step tasks with model routing and cost control (`maxTurns` prevents runaway loops):
 
@@ -126,10 +128,11 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `architecture-validator` | sonnet | 20 | Read-only validation in isolated worktree |
 | `pattern-recommender` | sonnet | 15 | Recommends Drupal patterns with core/contrib references |
 | `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
+| `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer — proposes epic decomposition as JSON per schema v1.0 |
 
-### Skills (16)
+### Skills (20)
 
-Skills are invoked automatically by commands and agents — 10 are user-invocable, 6 are internal:
+Skills are invoked automatically by commands and agents — 10 are user-invocable, 10 are internal:
 
 | Category | Skills |
 |----------|--------|
@@ -137,7 +140,7 @@ Skills are invoked automatically by commands and agents — 10 are user-invocabl
 | **Architecture** | `component-designer`, `diagram-generator`, `guide-integrator`, `guide-loader` |
 | **Implementation** | `tdd-companion`, `code-pattern-checker`, `task-completer` |
 | **Utility** | `project-initializer`, `requirements-gatherer`, `session-resume`, `implementation-task-creator`, `task-folder-migrator` |
-| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader` |
+| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0) |
 
 ### Methodology References (6)
 

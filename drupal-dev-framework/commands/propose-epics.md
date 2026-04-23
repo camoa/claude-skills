@@ -32,7 +32,7 @@ This is the bulk-review counterpart to the inline pre-analysis hook in `/researc
    - `keep_flat` — brief "no change recommended" note; move on
    - `insufficient_info` — ask user for context; skip
 6. **Accepted proposals** → invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<proposed names>"` under the hood. Reports result.
-7. **Summary** — `N analyzed, M accepted+migrated, K kept flat, L deferred/skipped`.
+7. **Summary** — `N analyzed, M accepted+migrated, K kept flat, L deferred/skipped, F failed`. Failed tasks (invalid JSON, schema mismatch, agent timeout, or subagent error) are reported explicitly at the end with the task name + failure reason — they are not silently dropped. Example final line: `Analyzed 7 of 8 (1 failed: settings_form_refactor — invalid JSON). 2 migrated, 4 kept flat, 1 skipped.`
 
 ## User interaction per epic candidate
 
@@ -70,7 +70,7 @@ Options:
 3. **Accept flow** — on accept, build the child-names string (comma-separated) and invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<csv>"`. The migration command handles the transactional work; this command only surfaces the proposal and relays the decision.
 4. **Edit flow** — on edit, show the proposed children as an editable list; user can rename, remove, add. Validate names match `^[A-Za-z0-9_][A-Za-z0-9._-]*$` before passing to `/migrate-to-epic`.
 5. **Reject / skip** — record decision silently; do NOT write to the task. Summary at the end shows counts.
-6. **Schema version check** — parse `schema_version` field from each agent response. If major version differs from the expected `"1.0"`, skip that task with an error note and continue. Don't block the whole run.
+6. **Schema version check** — parse `schema_version` field from each agent response. **Must be a JSON string** (e.g., `"1.0"`) — reject non-string types (number, null, missing) with an error note for that task and continue. If string but major version differs from the expected `"1.0"`, skip that task with an error note and continue. Don't block the whole run.
 
 ## Errors & edge cases
 
@@ -79,7 +79,8 @@ Options:
 | No active project | Prompt to run `/next` first; exit without running analysis |
 | No candidate tasks found | Report "no flat in-progress tasks found" and exit |
 | `codePath` unknown at run time | Trigger detect+confirm flow (shared with `/set-code-path`); persist; resume |
-| Agent returns invalid JSON | Report error for that task; skip; continue with others |
+| Agent returns invalid JSON | Report error for that task; skip; continue with others; count in `F failed` in final summary |
+| Subagent crashes or times out | Report error for that task (with reason); skip; continue; count in `F failed` |
 | Agent returns `decision: insufficient_info` | Report; ask user for context (optional); skip |
 | User rejects mid-review (Ctrl-C) | Save any already-migrated tasks' state; exit cleanly |
 | Task name matches another task's proposed child name | Accept but warn; `/migrate-to-epic` will abort if it would collide |

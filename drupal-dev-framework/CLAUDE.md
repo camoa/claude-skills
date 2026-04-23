@@ -17,7 +17,23 @@ The plugin supports **opt-in epic/sub-task hierarchy** on top of flat tasks (whi
 
 **When to promote a task to epic:** many heterogeneous acceptance criteria, long-in-progress without phase progression, or user signals "this is too big." Most tasks should stay flat — epic-ification is additive, not aspirational.
 
-**Automated epic proposal (`/propose-epics`) and alignment-step (P7) land in sub-tasks 3.2 / 3.3.** In v3.10.0, the primitive is manual.
+**Automated epic proposal (`/propose-epics`) landed in v3.11.0** — bulk-review of flat in-progress tasks via `analysis-agent` (read-only, sonnet), per-task accept/edit/reject/skip, accepted proposals invoke `/migrate-to-epic`. Plus `/research` pre-analysis hook that fires on strong signals (description > 500 chars, ≥3 bullets, explicit conjunctions) at new-task creation time. Goal-alignment step (P7) lands in sub-task 3.3.
+
+## Project codePath Metadata (v3.11.0+)
+
+Projects can declare where their code lives, distinct from the memory folder. Three states:
+
+- **unknown** — never set. Features needing code trigger first-use detect+confirm.
+- **docs-only** — user declared no code base. Features needing code skip silently.
+- **set** — `/abs/path`. Used by code-aware features.
+
+Commands: `/set-code-path [<path>|--docs-only]` (explicit/sentinel/interactive), `/new` (captures at project creation).
+
+Consumers distinguish states via warnings, not the null value: `code_path_unknown` warning → trigger detect+confirm; `codePath: null` with no warning → docs-only. See `references/code-path-detection.md` for the three-null-states table and the safety filter (hard-rejects `/`, `/etc`, `/usr`, `$HOME` ancestors, etc.).
+
+## Analysis Agent (v3.11.0+)
+
+`analysis-agent` is read-only (Read/Grep/Glob + Bash with mutation-subcommand denylist). Consumed by `/propose-epics` (folder mode, bulk review) and `/research` pre-analysis hook (description mode, pre-folder-creation). Emits structured JSON per `references/analysis-agent-schema.md` v1.0 — never modifies state, never chats with user. Output is consumed programmatically by the calling command.
 
 ## Agents
 - Frontmatter must include: name, description, capabilities, version, model
