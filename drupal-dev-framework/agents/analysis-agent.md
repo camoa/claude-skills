@@ -60,8 +60,15 @@ Otherwise: **folder mode**. Proceed with steps 1-2.
 
 Invoke `task-frontmatter-reader` skill on `task_folder`. Capture `kind`, `status`, `task_id`.
 
-- If `kind != flat`: abort with `decision: keep_flat`, `notes: ["task is not kind=flat; analysis skipped"]`. Agent only proposes decomposition for flat tasks. (Already-epics and subtasks are not candidates.)
-- If `status == completed`: abort with `decision: keep_flat`, `notes: ["task already completed; no change"]`.
+Compute two gates (v3.12.3+):
+
+- **Decomposition gate** — controls whether the agent may emit `decision: epic_candidate` and `proposed_children[]`. Open only when `kind == flat` AND `status != completed`. When closed, the agent MUST NOT propose decomposition; the decision falls back to `keep_flat` (or `insufficient_info`).
+- **Orthogonal-signal gate** — controls whether orthogonal signals like `scope_contract_recommended` are evaluated. Open for any `kind` (including `subtask`, `epic`, `sub_epic`) and any non-completed status. Subtasks and epics still have scope that might warrant an alignment contract.
+
+Apply:
+- If `status == completed`: abort with `decision: keep_flat`, `notes: ["task already completed; no change"]`. (Both gates closed.)
+- If `kind != flat` (and not completed): close the decomposition gate, but proceed through steps 2-5 to evaluate orthogonal signals. Add `notes: ["kind=<value>; decomposition signals skipped, orthogonal signals evaluated"]`. The final decision will be `keep_flat` with whatever orthogonal signals fired.
+- Otherwise: both gates open; full evaluation.
 
 ### 2. Read phase artifacts (folder mode only)
 
@@ -100,7 +107,7 @@ If `codePath` is null:
 | `multiple_code_areas` | ✓ if `code_read: true` | ✓ if `code_read: true` |
 | `description_length_and_conjunction` | ✓ (reads `## Goal` / description section) | ✓ (evaluates `task_description_text`) |
 | `bullet_count_clustering` | ✓ (reads description) | ✓ (evaluates `task_description_text`) |
-| `scope_contract_recommended` **(v3.12.0)** | ✓ (reads description + task.md AC if present) | ✓ (evaluates `task_description_text`) |
+| `scope_contract_recommended` **(v3.12.0, v3.12.3+ on any kind)** | ✓ (reads description + task.md AC if present; evaluates on flat/subtask/epic) | ✓ (evaluates `task_description_text`) |
 
 In description mode, do NOT cite a ✗-SKIP signal in `signals_used[]` — those signals are unevaluable without the task folder. Citing them would be hallucination.
 
@@ -113,13 +120,17 @@ For each signal code that is ✓ in the current mode, determine whether it fires
 - `multiple_code_areas` (requires `code_read: true`) — task's concerns touch ≥2 distinct module/package boundaries per code read
 - `description_length_and_conjunction` — task description > 500 chars AND contains explicit "and also" / "plus" / "as well as" conjunctions
 - `bullet_count_clustering` — description has ≥3 bullets that group into distinct topics
-- `scope_contract_recommended` **(v3.12.0+)** — task would benefit from an up-front scope contract. Fires when ANY of:
-  - Description describes ≥2 distinct outcome dimensions (e.g., "faster AND more secure", separable deliverables)
-  - Description contains conjunctive phrasing: `and also`, `plus`, `as well as`, `in addition to`
-  - ≥3 acceptance criteria already listed in task.md (folder mode only)
-  - AND not trivially small: word count > 60 in description OR > 3 distinct action verbs in goal statement
+- `scope_contract_recommended` **(v3.12.0+, extended v3.12.3+)** — task would benefit from an up-front scope contract. Evaluated on ANY kind (flat, subtask, epic) — subtasks and epics still have scope worth contracting. Fires when ANY of:
+  - **(a) Multi-dimension** — Description describes ≥2 distinct outcome dimensions (e.g., "faster AND more secure", separable deliverables). Evaluable in both modes.
+  - **(b) Conjunctive phrasing** — Description contains `and also`, `plus`, `as well as`, `in addition to`. Evaluable in both modes.
+  - **(c) Rich criteria** — (folder mode only) ≥3 acceptance criteria listed in task.md AND description word count > 60.
+  - **(d) Thin content (v3.12.3+)** — the task has insufficient articulated scope, so authoring one would help rather than codify what's already there. Fires when ANY of:
+      * Folder mode: task.md `## Goal` section is empty/placeholder AND task.md body word count (Goal + AC + description combined) < 40 words
+      * Folder mode: task.md has ≤1 acceptance criterion AND description < 40 words
+      * Description mode: `task_description_text` word count < 40
+    Rationale: brand-new tasks and stubs are exactly the case where a scope conversation helps most — the agent can't find evidence of scope warrant because scope hasn't been articulated yet. Trigger (d) catches that.
   
-  Orthogonal to `epic_candidate` — evaluate independently. A task MAY fire both, one, or neither. Consumers use this signal to offer/suggest the `/scope` alignment step; never forces.
+  Orthogonal to `epic_candidate` — evaluate independently. A task MAY fire both, one, or neither. Consumers use this signal to offer/suggest the `/scope` alignment step; never forces. Triggers (a), (b), (c), (d) are independently sufficient — ANY firing emits the signal.
 
 Record all fired signals in `signals_used[]`.
 
