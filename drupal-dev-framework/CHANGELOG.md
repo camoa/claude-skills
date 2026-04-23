@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.3] - 2026-04-23
+
+### Fixed — `scope_contract_recommended` signal coverage (two gaps)
+
+**Gap 1 — subtask/epic blindness.** `analysis-agent`'s step 1 aborted with `decision: keep_flat` when `kind != flat`, which silently suppressed ALL signal evaluation — including the orthogonal `scope_contract_recommended` signal added in v3.12.0. Net effect: subtasks and epics got no scope-contract nudge from `/research` even when warrant was obvious. Since every subtask of an epic is `kind: subtask`, the feature was effectively blind to the most common hierarchy-aware scope case.
+
+**Fix:** Split step 1 into two independent gates:
+- **Decomposition gate** — open only on `kind: flat` + non-completed. Controls `epic_candidate` + `proposed_children[]` emission. Unchanged semantics.
+- **Orthogonal-signal gate (new)** — open on ANY non-completed kind. Controls `scope_contract_recommended` (and future orthogonal signals) evaluation.
+
+Non-flat tasks now proceed through steps 2-5 and emit `signals_used[]` including `scope_contract_recommended` when triggers fire. The decision stays `keep_flat` (never `epic_candidate`) for subtasks/epics.
+
+**Gap 2 — thin-content / stub-task circularity.** The three existing `scope_contract_recommended` triggers (a, b, c) all required existing content to fire: outcome dimensions, conjunctive phrasing, or ≥3 ACs + >60 words. Brand-new or stub tasks have none of that — which is exactly the case where a scope contract helps most. The agent returned `insufficient_info` or `keep_flat` with empty signals; no nudge fired.
+
+**Fix:** New trigger (d) — fires on thin content:
+- Folder mode: task.md Goal empty/placeholder AND combined body (Goal + AC + description) < 40 words, OR ≤1 AC AND description < 40 words
+- Description mode: `task_description_text` < 40 words
+
+Covers brand-new tasks (description-mode pre-analysis hook), stub tasks opened with `/research`, and short-description subtasks created during epic decomposition.
+
+**Combined effect on `/research` UX:** every non-completed task now gets the scope-contract offer when warranted:
+- Rich existing task with conjunctive scope → triggers (a), (b), or (c) fire
+- Brand-new task or stub → trigger (d) fires
+- Subtask of an epic → orthogonal-signal gate opens and any trigger (a-d) fires
+
+No schema bump (additive per v1.x policy). No command/skill/script behavior changes — only `agents/analysis-agent.md` (step 1 gate split + trigger (d) added) and `references/analysis-agent-schema.md` (docs match).
+
 ## [3.12.2] - 2026-04-23
 
 ### Fixed — `/research` retrofit-aware scope offer
