@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.7"
+    "version": "1.14.8"
   },
   "plugins": [
     {
@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook with directive role-identity framing. v3.10.0 adds epic/sub-task hierarchy: task.md frontmatter schema, nested folder layout (max 2 epic levels), shared/ folder, /migrate-to-epic command, task-frontmatter-reader skill, hierarchy-aware /status /next /complete. v3.11.0 adds project codePath metadata (/set-code-path, /new detect+confirm, project-state-reader skill) and the analysis-agent (read-only, sonnet) with structured-output JSON schema v1.0 consumed by /propose-epics (bulk review of flat tasks for epic-ification) and /research pre-analysis hook (description-mode on strong signals). Flat tasks remain first-class. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
-      "version": "3.11.0",
+      "description": "Systematic 3-phase Drupal development workflow with agents, skills, and commands. Implements Research \u2192 Architecture \u2192 Implementation phases with enforced SOLID, TDD, DRY, and security principles. Chrome-based visual parity checks against Figma comps, PostCompact state recovery, StopFailure logging, continuous task-context reminder via UserPromptSubmit hook. v3.10.0 adds epic/sub-task hierarchy (/migrate-to-epic, task-frontmatter-reader, hierarchy-aware /status /next /complete). v3.11.0 adds project codePath metadata (/set-code-path, /new detect+confirm, project-state-reader) and the analysis-agent (read-only, sonnet) with JSON schema v1.0 consumed by /propose-epics and /research pre-analysis hook. v3.12.0 adds the P7 alignment step: /scope command, alignment-reader skill, alignment.md grammar v1.0, scope_contract_recommended signal (orthogonal to epic_candidate), and phase-alignment sub-steps in /research /design /implement. Soft-nudge throughout; flat tasks and tasks without alignment.md remain first-class. Depends on: dev-guides-navigator (declared via Plugin Dependencies).",
+      "version": "3.12.0",
       "author": {
         "name": "camoa"
       },

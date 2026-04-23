@@ -100,6 +100,7 @@ If `codePath` is null:
 | `multiple_code_areas` | ✓ if `code_read: true` | ✓ if `code_read: true` |
 | `description_length_and_conjunction` | ✓ (reads `## Goal` / description section) | ✓ (evaluates `task_description_text`) |
 | `bullet_count_clustering` | ✓ (reads description) | ✓ (evaluates `task_description_text`) |
+| `scope_contract_recommended` **(v3.12.0)** | ✓ (reads description + task.md AC if present) | ✓ (evaluates `task_description_text`) |
 
 In description mode, do NOT cite a ✗-SKIP signal in `signals_used[]` — those signals are unevaluable without the task folder. Citing them would be hallucination.
 
@@ -112,18 +113,32 @@ For each signal code that is ✓ in the current mode, determine whether it fires
 - `multiple_code_areas` (requires `code_read: true`) — task's concerns touch ≥2 distinct module/package boundaries per code read
 - `description_length_and_conjunction` — task description > 500 chars AND contains explicit "and also" / "plus" / "as well as" conjunctions
 - `bullet_count_clustering` — description has ≥3 bullets that group into distinct topics
+- `scope_contract_recommended` **(v3.12.0+)** — task would benefit from an up-front P7 scope contract. Fires when ANY of:
+  - Description describes ≥2 distinct outcome dimensions (e.g., "faster AND more secure", separable deliverables)
+  - Description contains conjunctive phrasing: `and also`, `plus`, `as well as`, `in addition to`
+  - ≥3 acceptance criteria already listed in task.md (folder mode only)
+  - AND not trivially small: word count > 60 in description OR > 3 distinct action verbs in goal statement
+  
+  Orthogonal to `epic_candidate` — evaluate independently. A task MAY fire both, one, or neither. Consumers use this signal to offer/suggest the `/scope` P7 step; never forces.
 
 Record all fired signals in `signals_used[]`.
 
 ### 5. Decide
 
-Apply decision rules from `references/analysis-agent-schema.md` §"Decision reasoning":
+Apply decision rules from `references/analysis-agent-schema.md` §"Decision reasoning". **Epic-decomposition signals are a specific subset — `scope_contract_recommended` is orthogonal and does NOT count toward `epic_candidate`.**
 
-- ≥1 signal fires → `decision: epic_candidate`. Confidence:
-  - ≥3 signals + code_read: `"high"`
-  - 1-2 signals + code_read: `"medium"`
+**Epic-decomposition signals** (count these for the `epic_candidate` decision):
+- `many_heterogeneous_criteria`, `long_in_progress`, `research_architecture_fragmented`, `explicit_user_signal`, `multiple_code_areas`, `description_length_and_conjunction`, `bullet_count_clustering`
+
+**Orthogonal signals** (recorded in `signals_used[]` but do NOT trigger `epic_candidate`):
+- `scope_contract_recommended`
+
+Decision rules:
+- ≥1 **epic-decomposition signal** fires → `decision: epic_candidate`. Confidence:
+  - ≥3 epic signals + code_read: `"high"`
+  - 1-2 epic signals + code_read: `"medium"`
   - any signals + `code_read: false`: `"low"` (per invariant)
-- 0 signals fire → `decision: keep_flat`, `confidence: "high"` (or `"medium"` if analysis material was thin)
+- 0 epic-decomposition signals fire → `decision: keep_flat`, `confidence: "high"` (or `"medium"` if analysis material was thin). NOTE: `scope_contract_recommended` may still fire here — the signal is recorded in `signals_used[]` even though the decision stays flat. Consumers of this agent branch on BOTH the decision and the presence of `scope_contract_recommended` in `signals_used[]`.
 - task.md/phase artifacts empty or corrupt → `decision: insufficient_info`, notes specify what's missing
 
 ### 6. For epic_candidate: propose children

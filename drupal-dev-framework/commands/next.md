@@ -186,6 +186,14 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 | Phase 3 (implementation.md missing/incomplete) | Continue implementation: `/implement <task>` |
 | All criteria complete | Complete task: `/complete <task>` |
 
+### Alignment retrofit suggestion (v3.12.0+)
+
+After resolving the selected task, check whether `alignment.md` exists in the task folder. If it does NOT exist AND the task has already progressed past initial creation (task.md exists):
+
+> 💡 This task has no scope contract (`alignment.md`). If scope has drifted or is unclear, consider running `/drupal-dev-framework:scope <task>` to retrofit a task-level alignment contract before continuing. (Optional — this is a one-line nudge, not a block.)
+
+Print once, at the end of the task-selection output, before the "recommended command" line. Never block. If `alignment.md` already exists, skip the suggestion silently.
+
 ## Examples
 
 ### No Tasks Yet

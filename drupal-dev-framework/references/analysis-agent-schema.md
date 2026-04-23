@@ -82,8 +82,11 @@ Signals the agent cites in `signals_used` when it reaches `epic_candidate`:
 | `multiple_code_areas` | (requires `code_read: true`) Task touches multiple distinct module/package boundaries in the codebase |
 | `description_length_and_conjunction` | Task description has both length > threshold AND explicit conjunction phrasing ("and also", "plus", "as well as") — typical trigger for the `/research` pre-analysis hook |
 | `bullet_count_clustering` | Task description's bullet list has ≥3 bullets that group into distinct topics |
+| `scope_contract_recommended` | **(v3.12.0+)** Task's scope is non-trivial enough to warrant a P7 alignment contract (`alignment.md`). Fires when ANY of: (a) task description has ≥2 distinct outcome dimensions; (b) description contains conjunctive phrasing (`and also`, `plus`, `as well as`, `in addition to`); (c) **(folder mode only — requires task.md on disk)** ≥3 acceptance criteria listed in `task.md` AND description word count > 60. Orthogonal to `epic_candidate` — a task can be both, either, or neither. Description-mode compatible via triggers (a) and (b) only; trigger (c) is skipped in description mode. Consumed by `/research` pre-analysis hook and `/scope` to suggest the P7 step. |
 
 **Signal extensibility:** new codes can be added at v1.x without breaking consumers. Consumers should treat unknown codes as informational (display them; don't error).
+
+**Signal independence:** signals are orthogonal axes of scope judgment. A single task may fire signals associated with `epic_candidate` AND `scope_contract_recommended` simultaneously — they address different questions ("should this be decomposed?" vs "does this need an up-front contract?"). Consumers branch on the decision, not on specific signals.
 
 ## Decision reasoning (how the agent chooses)
 
@@ -97,17 +100,28 @@ This is guidance for the agent, not a consumer-visible field:
 
 ### How `/propose-epics` consumes this
 
-For each task analyzed:
+For each task analyzed, branch on `decision` only (decomposition is `/propose-epics`'s sole concern):
+
 - `decision: epic_candidate` → render proposed children + rationale to user; collect accept/reject/edit; on accept, call `/migrate-to-epic`.
 - `decision: keep_flat` → report "no change recommended" with brief rationale.
 - `decision: insufficient_info` → report and ask user for context; skip.
 
+`/propose-epics` does NOT branch on `signals_used[]`. The `scope_contract_recommended` signal is consumed by `/research`'s pre-analysis hook and `/scope` — not by bulk epic review.
+
 ### How `/research` pre-analysis hook consumes this
 
-At new-task creation time:
+At new-task creation time, consumers branch in two orthogonal steps:
+
+**Step A — branch on `decision` (epic-decomposition judgment):**
 - `decision: epic_candidate` → ask user "create as epic with children? (y/n)" and branch accordingly.
 - `decision: keep_flat` → proceed with flat task research silently.
 - `decision: insufficient_info` → proceed with flat task research; agent didn't have enough to decide.
+
+**Step B — inspect `signals_used[]` for `scope_contract_recommended` (v3.12.0+, orthogonal to decision):**
+- If the array contains `scope_contract_recommended` → soft-nudge the user to author a P7 scope contract (`alignment.md`) before research begins. The signal can fire with ANY decision (including `keep_flat`) because it's an orthogonal judgment about scope contract warrant, not decomposition.
+- If absent → no nudge; proceed.
+
+Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common P7 case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See §"Signal independence" above.
 
 ## Example outputs
 

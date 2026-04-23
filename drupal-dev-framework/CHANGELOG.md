@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-04-23
+
+### Added — Task Contract / P7 Alignment Step (sub-task 3.3 of dev-framework improvements epic)
+
+An optional, author-driven scope contract authored before research begins, plus per-phase alignment as the first sub-step of each phase. The whole feature is soft-nudge; never blocks the task lifecycle. Existing tasks without `alignment.md` work unchanged.
+
+**New command `/drupal-dev-framework:scope <task-name> [--phase 1|2|3]`** — authors or retrofits `alignment.md` via a 4-field P7 conversation: Goal / Expected result / Success criteria / Non-goals. Without `--phase`, writes the `## Task-Level` section. With `--phase N`, writes the corresponding phase section. Same code path covers new-task authoring and retrofit of existing tasks. Overwrite guard: `[o]verwrite / [e]dit / [c]ancel` with default cancel. Conversation follows the superpowers `brainstorming` convention — one question at a time, author-authored, never auto-generated.
+
+**New `references/alignment-contract.md`** — canonical grammar v1.0 for `alignment.md`:
+- H2 sections: `## Task-Level`, `## Phase 1 — Research`, `## Phase 2 — Architecture`, `## Phase 3 — Implementation` (em-dash canonical; hyphen and en-dash tolerated on read, rewritten to em-dash on any write)
+- H3 fields: `### Goal`, `### Expected result`, `### Success criteria` (task-list), `### Non-goals` (bullet list)
+- 8 defensive warning codes: `file_missing`, `unknown_section`, `missing_field`, `unknown_field`, `empty_field`, `success_criteria_not_checklist`, `non_goals_not_bulleted`, `error`
+- JSON output contract + versioning policy (additive fields at v1.x; major bump only on semantics change)
+
+**New `alignment-reader` skill v1.0.0** (haiku, user-invocable: false) — defensive parser wrapper around `scripts/alignment-read.sh`. Structured JSON output with `sections.{task_level, phase_1, phase_2, phase_3}` and a `warnings[]` array. Never throws except on unrecoverable IO errors. Mirrors `project-state-reader` and `task-frontmatter-reader` patterns.
+
+**`analysis-agent` extension** — new signal code `scope_contract_recommended` in `references/analysis-agent-schema.md`. Fires when the task would benefit from an up-front P7 scope contract:
+- (a) description has ≥2 distinct outcome dimensions
+- (b) description contains conjunctive phrasing (`and also`, `plus`, `as well as`, `in addition to`)
+- (c) (folder mode only) ≥3 acceptance criteria already in task.md AND description word count > 60
+
+Orthogonal to `epic_candidate` — a task may fire both, one, or neither. Decide step split into epic-decomposition signals (drive the `decision` branch) vs orthogonal signals (recorded in `signals_used[]` but do not force `epic_candidate`). Schema stays `"1.0"` (additive per v1.x extensibility policy).
+
+**Phase-alignment sub-steps in `/research`, `/design`, `/implement`** — each command offers to author the corresponding phase section as its first sub-step (after Phase Transition Check). Decision tree reads `alignment-reader` JSON: if section already present → reuse; else if task-level present → offer `[y/n/skip]`; else proceed silently. Never blocks. `/research` also has a "re-offer for lighter-touch" branch after the pre-analysis hook — `/design` and `/implement` intentionally do NOT (that decline is considered final post-creation).
+
+**`/research` pre-analysis hook extended** — step 5 inspects `signals_used[]` for `scope_contract_recommended` and soft-nudges the user to author a task-level scope contract before research begins. Default answer: `[later]` / `[n]` proceeds without writing.
+
+**`/next` retrofit suggestion** — when selected task has no `alignment.md`, prints a one-line nudge pointing at `/scope <task>`. One-time nudge, never blocks.
+
+### Validated
+
+- Grammar spec written before parser (Step 1 of 14)
+- Parser smoke-tested on 5 fixtures (missing / minimal / prose-criteria / unknown sections / full with hyphen+em-dash variants) before wiring into commands
+- Structured 3-phase paper test found 1 BLOCKER (research.md missing `Skill` + sibling-command invocation pattern), 2 MAJOR (parser `fields_missing` conflation; schema consumer guidance stale), 4 MINOR (folder-mode clarification, insertion order precision, overwrite-guard warning surface, `/next` retrofit promise)
+- All 7 findings applied; parser fix re-smoke-tested on 3 new fixtures (prose / empty / truly-missing) — all 3 warning states now distinct
+- 3-validator gate: skill-quality-reviewer A, plugin-structure-auditor 44/50 (consumer guidance gap fixed), metadata pre-check 10/10 PASS
+
 ## [3.11.0] - 2026-04-23
 
 ### Added — Project codePath + Analysis Agent (sub-task 3.2 of dev-framework improvements epic)
