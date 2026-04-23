@@ -119,13 +119,35 @@ Where `<section>` is the H2 block you just authored.
 
 **File exists, target section doesn't:**
 
-Append the new section at the end of the file, preceded by a blank line. Stable order is `## Task-Level`, `## Phase 1 — Research`, `## Phase 2 — Architecture`, `## Phase 3 — Implementation` — if later phases exist but the new section should come earlier, insert in order, not at the end. Reader is section-order agnostic, but humans expect chronological.
+Insert the new section preceded by a blank line, positioned in chronological order:
+
+| Target | Insertion rule |
+|---|---|
+| `## Task-Level` | Insert immediately after the `**Created:**` metadata line (or after the H1 if metadata absent). If any `## Phase N` already exists, the new Task-Level MUST still precede it. |
+| `## Phase 1 — Research` | Insert before the first later phase H2 (Phase 2 or Phase 3). If no later phase H2 exists, append at EOF. If only Task-Level exists, append at EOF. |
+| `## Phase 2 — Architecture` | Insert before `## Phase 3 — Implementation` if present, else append at EOF. |
+| `## Phase 3 — Implementation` | Always append at EOF. |
+
+Rule of thumb: scan the file for `## Phase` headers in order; insert the new section immediately before the first header whose phase number is higher than the one being written.
 
 **File exists, target section exists (overwrite case):**
 
 Delete the existing H2 block (from `## <Section>` up to but not including the next `## ` or EOF). Insert the new section in the same position.
 
-**Always use em-dash `—` (U+2014)** in phase H2 headers. The reader accepts hyphen/en-dash variants, but writes emit em-dash canonically.
+**Em-dash canonicalization on every write pass.**
+
+Always emit `—` (U+2014) in phase H2 headers (`## Phase 1 — Research`, etc.). Additionally, on ANY write pass (create, append, or overwrite), scan the file for phase H2 headers that use hyphen (`-`) or en-dash (`–`) and rewrite them to em-dash. The reader accepts all three variants, but writes standardize on em-dash so diffs stay clean over time.
+
+**File exists, reader returned `unknown_section` or other structural warnings:**
+
+Before appending, surface the warnings to the user:
+
+> `alignment.md` has structural warnings from the reader:
+>   - unknown_section: `Custom Heading`
+>   - success_criteria_not_checklist (task_level)
+> Continue writing the new section? [y]es / [n]o
+
+Default answer: `[y]` (the warnings don't block; the user may have intentionally authored extra content). Record this decision in the session; don't re-prompt on the same run.
 
 ## Session context
 

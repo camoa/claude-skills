@@ -268,18 +268,27 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     else . end
   )) as $with_content |
 
-  # Compute fields_missing per present section
+  # Compute per-section H3 presence: a field is "present" if ANY record type
+  # for that field appeared in the stream (body, empty_field, criterion,
+  # non_goal, criteria_prose, non_goals_prose). An H3 that was never written
+  # is the only "missing" case.
   (["goal", "expected_result", "success_criteria", "non_goals"]) as $canonical_fields |
+  (reduce .[] as $r (
+    {task_level: [], phase_1: [], phase_2: [], phase_3: []};
+    if ($r.section // "" | IN("task_level","phase_1","phase_2","phase_3")) then
+      if ($r.kind == "field" or $r.kind == "empty_field") then
+        .[$r.section] += [$r.field]
+      elif ($r.kind == "criterion" or $r.kind == "criteria_prose") then
+        .[$r.section] += ["success_criteria"]
+      elif ($r.kind == "non_goal" or $r.kind == "non_goals_prose") then
+        .[$r.section] += ["non_goals"]
+      else . end
+    else . end
+  )) as $h3_seen |
+
   ($with_content | to_entries | map(
     if .value.present then
-      .value.fields_missing = ($canonical_fields - (
-        [.value | to_entries[] | select(
-          (.key == "goal" and .value != null) or
-          (.key == "expected_result" and .value != null) or
-          (.key == "success_criteria" and (.value | length) > 0) or
-          (.key == "non_goals" and (.value | length) > 0)
-        ) | .key])
-      )
+      .value.fields_missing = ($canonical_fields - ($h3_seen[.key] | unique))
     else . end
   ) | from_entries) as $sections_final |
 
@@ -290,13 +299,7 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "criteria_prose"))  | map({code: "success_criteria_not_checklist", section: .section})) as $w_crit_prose |
   (map(select(.kind == "non_goals_prose")) | map({code: "non_goals_not_bulleted", section: .section})) as $w_ngoal_prose |
 
-  # missing_field warnings from sections_final.fields_missing
-  ($sections_final | to_entries | map(
-    if .value.present then
-      .value.fields_missing | map({code: "missing_field", section: (.. | select(false)), field: .}) | [.[] | . + {section: $sections_final | to_entries[] | select(.value.present) | .key}]
-    else [] end
-  ) | map(select(. != null)) | add // []) as $_dummy |
-  # Simpler: rebuild missing_field warnings directly
+  # missing_field warnings from sections_final.fields_missing (truly absent H3s)
   ([$sections_final | to_entries[] | select(.value.present) | {sk: .key, fm: .value.fields_missing}]
     | map(.sk as $sk | .fm | map({code: "missing_field", section: $sk, field: .})) | add // []) as $w_missing |
 

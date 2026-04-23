@@ -43,8 +43,10 @@ Never block the command on this check — the user is in control. The nudge exis
    - If `sections.phase_3.present: true` → print: `"Phase 3 alignment already authored. Using existing section."` and proceed.
    - Else if `sections.task_level.present: true` → ask: `"Author the Phase 3 — Implementation section of alignment.md now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
    - Otherwise → proceed silently (no nag; task never authored any alignment).
-3. If user says `[y]`, invoke `/drupal-dev-framework:scope <task_name> --phase 3` inline. After it returns, continue with implementation context loading.
+3. If user says `[y]`, execute the `--phase 3` flow from `commands/scope.md` (phase-level prompt sequence + "Writing alignment.md" for the `## Phase 3 — Implementation` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with implementation context loading.
 4. If user says `[n]` / `[skip]`, proceed. Never block.
+
+**Note:** There is no "re-offer for lighter-touch" branch here (unlike `/research`'s Phase 1 sub-step). If the user declined task-level P7 at task creation, that decision is considered final — the task is already in Phase 3.
 
 ## What This Does (v3.0.0)
 
