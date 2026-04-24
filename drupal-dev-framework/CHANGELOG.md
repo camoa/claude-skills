@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.2] - 2026-04-24
+
+### Fixed — `/validate:guides` applicability auto-skip for non-Drupal tasks
+
+Surfaced by the v3.14.0 dog-food run on `dev_framework_isolated_validators`: `/validate:guides` returned `fail` because neither `research.md` nor `architecture.md` cited a dev-guides-navigator guide. But the task is non-Drupal plugin-framework work (agent-teams orchestration), so guide citations weren't expected — the dev-guides catalog covers Drupal/Next.js/frontend, not this domain. The verdict was technically correct against the rule but a false positive against intent.
+
+The v1 gate's "Why this gate exists" prose already acknowledged the limitation: *"Not relevant for trivial config changes, test-only tasks, or documentation-only work. v1 has no auto-skip; user decides when to invoke."* That worked when humans invoked the gate manually but breaks when `/validate:all` or `/validate:team` invokes it autonomously.
+
+**Fix:** new Step 2 "Applicability check" in `validate-guides.md`. Before inspecting phase artifacts:
+
+- If `codePathState` is `docs-only` or `unset` → emit `verdict: "skipped"` with reason
+- If `codePathState == "set"` → quick-scan codePath for domain markers:
+  - **Drupal:** `*.info.yml`, `*.module`, `composer.json` containing `"drupal/core"`, or `*.theme` directory
+  - **Next.js:** `package.json` with `"next"` dep, or `next.config.{js,ts,mjs}`
+  - **Frontend/CSS:** `*.scss`, `*.css`, `tailwind.config.*`, or `package.json` with `"react"`/`"vue"`/`"svelte"`
+- At least one marker → applicable; continue to citation check
+- No markers → emit `verdict: "skipped"` with reason
+
+Detection is shallow (top-level + 1-deep) and intentionally generous. False positives (running citation check on a marginally-Drupal task) are cheaper than false negatives.
+
+`details.applicability` field added to the envelope so consumers can see what fired:
+
+```json
+"applicability": {
+  "decision": "applicable | skipped",
+  "reason": "<one-line explanation>",
+  "markers_found": ["drupal", "frontend"]
+}
+```
+
+### Files changed
+
+- `commands/validate-guides.md` — new Step 2 (applicability check); Steps 3-8 renumbered; envelope details adds `applicability` field; verdict-messages section adds skipped-applicability example; "Why this gate exists" prose updated to describe the auto-skip
+- `.claude-plugin/plugin.json` — `3.14.1` → `3.14.2`
+- root `marketplace.json` — plugin version + `metadata.version` `1.14.20` → `1.14.21`
+
+### Not changed
+
+- Envelope schema v1.0 (just adds an optional `details.applicability` sub-field; existing consumers ignore it)
+- Citation-extraction logic (Step 4) and verdict rules (Step 5) — both unchanged
+- `/validate:team` command body — `/validate:guides` semantics shifted underneath, but the team-mode wrapper is agnostic to per-gate verdict logic
+
+### Why patch, not minor
+
+Bug fix for a false-positive verdict surfaced by the v3.14.0 dog-food. No new behavior the user explicitly opts into — the auto-skip kicks in transparently. Existing Drupal tasks see no change (markers match, citation check runs as before). Patch per versioning policy.
+
+### Re-dog-food on this fix
+
+`/validate:team dev_framework_isolated_validators` is expected to now return `skipped` for the `guides` gate (codePath is `/home/camoa/workspace/claude_memory/marketplaces/camoa-skills` — Claude Code plugin marketplace, no Drupal/Next.js/frontend markers).
+
 ## [3.14.1] - 2026-04-24
 
 ### Fixed — Two `/validate:team` doc gaps surfaced by post-merge goal review
