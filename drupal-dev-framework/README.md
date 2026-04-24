@@ -27,6 +27,8 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 **Requires Claude Code v2.1.110 or later** — the plugin declares `dev-guides-navigator` as a dependency in `plugin.json`, which is enforced at install time on CLI v2.1.110+. Earlier CLI versions will not resolve the dependency automatically; install `dev-guides-navigator` manually and upgrade the CLI.
 
+**For `/validate:team` (v3.14.0+) specifically:** Claude Code CLI v2.1.32+ is the agent-teams minimum, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set. When unavailable, `/validate:team` gracefully falls back to `/validate:all`.
+
 ```bash
 # Add marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
@@ -105,6 +107,7 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 | `/validate:visual-regression <component> <viewport>` | **(v3.13.0)** Capture + diff against stored baseline. On diff, user classifies regression / intentional / cancel; intentional rotates baseline inline |
 | `/validate:visual-parity <component> <viewport> <reference>` | **(v3.13.0)** Compare built output against design comp (PNG/JPG, Figma URL, HTML file). Shared infrastructure with visual-regression |
 | `/validate:all` | **(v3.13.0)** Run all 7 gates sequentially; aggregate summary; discoverability hint for unwrapped `/code-quality:*` capabilities |
+| `/validate:team` | **(v3.14.0)** Sibling to `/validate:all` — runs the 7 gates in **isolated Claude Code agent teams** (4 teammates) for honest validation free of main-session bias. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (agent-teams CLI v2.1.32+); gracefully falls back to `/validate:all` when unavailable. `--no-fallback` opts out of fallback for CI team-or-nothing runs. See `references/team-manifest-schema.md` v1.0 for the minimum-context contract. |
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
@@ -169,7 +172,7 @@ Built-in docs enforced at specific phases:
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
 
-### Technical Contract References (5)
+### Technical Contract References (6)
 
 Machine-readable contracts consumed by skills and commands. These pin schemas and invariants so consumers don't drift:
 
@@ -180,6 +183,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
 | `screenshot-store-schema.md` **(v3.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0, directory layout with `.previous` rotation (1-deep), 6 warning codes, `role` enum (`baseline` / `parity_reference` / `previous`), `captured_by` + `source` provenance fields |
 | `validation-gate-result.md` **(v3.13.0)** | All `/validate:*` commands | Shared JSON envelope v1.0 emitted by every gate; 4-value verdict (`pass` / `warning` / `fail` / `skipped`); per-gate `details` shapes; aggregate envelope for `/validate:all` |
+| `team-manifest-schema.md` **(v3.14.0)** | `/validate:team` + 4 teammates | Minimum-context package v1.0 written by lead before team spawn; absolute-path invariant; `visual_fanout[]` presence rule; write-once contract; fallback behavior hints; gate enum excludes `visual-parity` (deferred to v2 Set B5) |
 
 ### Online Dev-Guides (60+ topics) — Required
 
