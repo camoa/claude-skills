@@ -134,8 +134,58 @@ Default: `[c]`.
 8. Updates `task.md` to mark Phase 3 as in progress
 9. Activates `tdd-companion` for TDD discipline
 10. Prepares for interactive development
-11. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
-12. **Invokes `session-context-writer` skill with the resolved project and task**
+11. **(v3.13.5+)** Post-plan epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with full task context (`task.md` + `alignment.md` + `research.md` + `architecture.md` + `implementation.md`) and surfaces `epic_candidate` if the step-plan surfaced separable work. **Runs BEFORE any code is written** — mid-implementation epic migration is prohibitively expensive
+12. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
+13. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Post-phase epic check (v3.13.5+)
+
+**Run after `implementation.md` has been created with the step plan but BEFORE interactive development begins.** This is the last safe moment to migrate to an epic — once code starts, partitioning implementation across children becomes expensive.
+
+Purpose: the `implementation.md` step plan sometimes reveals that the task's work naturally partitions into 3+ independent tracks (e.g., "Step 1-4 build component A, Step 5-8 build component B, Step 9-12 build component C"). When that pattern surfaces at plan time, an epic is almost always the right shape. This step catches it before code lock-in.
+
+### Step 1 — Re-invoke analysis-agent in folder mode
+
+Invoke `analysis-agent` via Task tool with:
+
+- `task_folder` = absolute path to the task folder (maximum context: task+alignment+research+architecture+implementation all present)
+- `codePath` = resolved via `project-state-reader`
+- `schema_version: "1.0"`
+
+### Step 2 — Branch on `decision`
+
+- `epic_candidate` → continue to Step 3
+- `keep_flat` → proceed silently to traceability walkthrough
+- `insufficient_info` → proceed silently
+
+### Step 3 — Surface epic offer (only if `epic_candidate`)
+
+Print:
+
+> **Last epic check before coding starts:** the implementation step plan reveals this task partitions naturally. Once code starts, migrating to an epic is much harder. Worth pausing to decide now.
+>
+> Proposed children (from `analysis-agent.proposed_decomposition`):
+>   • `<child_1>` — <short rationale>
+>   • `<child_2>` — <short rationale>
+>   • …
+>
+> **[y]es** — convert to epic now via `/migrate-to-epic <task> --children "<list>"`. All Phase 1-2 artifacts stay on the parent epic; each child re-runs `/research` → `/design` → `/implement` on its slice. Step plan in `implementation.md` is discarded (children rebuild theirs).
+> **[n]o** — keep flat; proceed to traceability walkthrough and interactive dev. Migration after code starts is significantly more disruptive.
+> **[d]iscuss** — show agent's `rationale` + `signals_used[]` before deciding
+
+Default: `[n]`.
+
+### Step 4 — Act on the answer
+
+- `[y]` → invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<list>"`. Stop this `/implement` invocation. User re-enters lifecycle at `/research` for each child.
+- `[n]` → proceed to traceability walkthrough and interactive dev.
+- `[d]` → print rationale + signals_used, re-ask Step 3.
+
+### Notes
+
+- **Never blocks.** `[n]` always proceeds.
+- **Stronger "stop-and-migrate" framing than research/design.** Because mid-implementation migration is expensive, the prompt explicitly flags the cost-of-delay. User can still proceed flat — it's just more informed.
+- **Cumulative authority.** This is the final epic check in the lifecycle. Agent has complete phase context.
 
 ## Traceability walkthrough sub-step (v3.13.4+)
 

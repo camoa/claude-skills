@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.5] - 2026-04-24
+
+### Added — Post-phase epic check in `/research`, `/design`, `/implement`
+
+Pre-analysis hook (v3.11.0+) decides epic-vs-flat **before** task creation based on very thin signals — just the task name + sometimes a short user description. In practice this fires a false-negative often: the real scope only emerges after `/scope` authors `alignment.md`, after research surfaces sub-problems, and after architecture commits to a component breakdown. By the time the task is obviously epic-shaped, the framework has no mechanism to surface the offer — v3.12.2's alignment retrofit in `/research` checks for `scope_contract_recommended` but explicitly ignores `epic_candidate`.
+
+Concrete live example: a 4-area Drupal homepage redesign (Video + Trending + Trust Bar + Footer) created via `/next` → "Create new task" → `/research` flow. Task name alone didn't fire pre-analysis signals. Alignment conversation revealed 4 clear deliverables. No epic offer ever surfaced. User had to invoke `/propose-epics` or `/migrate-to-epic` manually AFTER-the-fact.
+
+**Fix:** add a **post-phase epic check** step to each of the three phase commands. Runs at end-of-phase, before the traceability walkthrough. Invokes `analysis-agent` in **folder mode** with full-to-date task context:
+
+- `/research` — checks with `task.md` + `alignment.md` + `research.md`
+- `/design` — checks with everything above + `architecture.md`
+- `/implement` — checks with everything above + `implementation.md`, **BEFORE any code is written** (last safe migration moment)
+
+If `analysis-agent` returns `epic_candidate`, surface a 3-way offer: `[y]es` migrate via `/migrate-to-epic`, `[n]o` keep flat (default), `[d]iscuss` show rationale + `signals_used[]` and re-ask. If `keep_flat` or `insufficient_info`, proceed silently — agent has full context and its judgment is authoritative.
+
+**Design principle:** **research is when epic-vs-flat is actually decidable.** Pre-analysis stays as an early hint for very obvious cases, but the authoritative check moves to each phase boundary. Later checks have strictly more context than earlier ones — if `/design`'s post-check says `epic_candidate` and pre-analysis said `keep_flat`, trust the later call.
+
+**Per-phase framing differences:**
+
+- `/research` post-check — "pre-analysis couldn't see this shape — research is where it became clear"
+- `/design` post-check — "the architecture surfaced decomposition that pre-analysis + post-research checks hadn't caught"
+- `/implement` post-check — **stronger wording** acknowledging the cost-of-delay: "Once code starts, migrating to an epic is much harder. Worth pausing to decide now."
+
+### Files changed
+
+- `commands/research.md` — new "Post-phase epic check (v3.13.5+)" section after research writes, before traceability walkthrough. "What This Does" list updated (11 steps, new step 9)
+- `commands/design.md` — same pattern for Phase 2 context. "What This Does" list updated (10 steps, new step 8)
+- `commands/implement.md` — same pattern for Phase 3 context, with explicit BEFORE-CODE-STARTS positioning. "What This Does" list updated (13 steps, new step 11)
+
+### Not changed
+
+- `analysis-agent` — unchanged (already supports folder mode per v3.11.0 `references/analysis-agent-schema.md`; we just invoke it at new times)
+- Pre-analysis hook in `/research` — unchanged (still fires pre-task-creation; v3.13.5 adds a complementary post-phase check, doesn't replace pre-analysis)
+- `/migrate-to-epic` — unchanged (consumed as-is)
+- `/propose-epics` — unchanged (still useful for batch review of tasks that missed all three post-phase checks, e.g. pre-v3.13.5 tasks)
+
+### Philosophy
+
+When a fix has a narrow version (one command) vs a fuller version (all affected surfaces), the fuller version is the right default. The root cause — "epic check uses weak signals and ignores richer post-phase context" — was symmetric across all three phase commands. Shipping to just one would leave the same latent bug on the other two.
+
 ## [3.13.4] - 2026-04-24
 
 Two phase-command UX fixes discovered during live use of `/design` on a non-Drupal plugin-framework task. Both bundled here as a single quick-fix release.
