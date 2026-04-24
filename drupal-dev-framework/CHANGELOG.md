@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.0] - 2026-04-24
+
+### Added — `/validate:team` command for isolated validation
+
+New `/drupal-dev-framework:validate-team` command runs the 7 v3.13.0 `/validate:*` gates in **independent Claude Code agent-team sessions** so each gate is assessed by a fresh context free of the main session's prior reasoning. Primary driver: **honest validation** — the validator cannot be anchored on what the main session just built. Secondary benefits: context-window economy, parallel throughput for code gates.
+
+**Sibling to `/validate:all`, not a replacement.** Users on machines without `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` keep using `/validate:all` with no downgrade path. `/validate:team` automatically falls back to `/validate:all` when the experimental flag is unset, when `TeamCreate` fails, or when a team is already resident in the session (cleanup required in that last case — command refuses rather than auto-cleans).
+
+**4-teammate roster:**
+
+| Teammate | Gates | Model | Isolation |
+|---|---|---|---|
+| `validator-code-1` | `tdd`, `solid` | sonnet | worktree |
+| `validator-code-2` | `dry`, `security` | sonnet | worktree |
+| `validator-docs` | `guides` | haiku | worktree |
+| `validator-visual` | `visual-regression` (fanned out) | sonnet | none |
+
+`validate-visual-parity` is NOT in the roster — inherits `/validate:all`'s limitation requiring an explicit `<reference>` arg. Users who need parity run `/drupal-dev-framework:validate-visual-parity` manually.
+
+### Added — `team-manifest-schema.md` v1.0
+
+Canonical schema for `team-manifest.json` — the minimum-context package the lead writes before spawn. Lives at `<task>/validations/tmp/team-manifest.json`, written once, read by teammates, deleted by lead at cleanup.
+
+Key invariants:
+- All paths absolute (teammates in worktrees can't resolve relatives back to main)
+- `visual_fanout[]` present only on visual-regression gate entries (omitted, not empty, for code gates)
+- `gates[]` non-empty
+- `assigned_to` is a suggestion — file-lock task claiming (agent-teams runtime) decides actual ownership
+- Write-once; teammates treat it read-only; mid-run state flows through envelopes + mailbox
+
+### Fallback behavior
+
+Automatic and silent-of-failure:
+- Env var unset → print fallback message + auto-run `/validate:all`
+- `TeamCreate` fails → same fallback
+- `--no-fallback` flag → refuse rather than fall back (for CI users who want team-or-nothing)
+
+User never has to re-invoke manually.
+
+### Files changed
+
+**New files:**
+- `commands/validate-team.md` — lead-side orchestration (Steps 1-9: resolve task, detect availability, read context, write manifest, spawn 4 teammates, stream progress, aggregate, cleanup, persist)
+- `references/team-manifest-schema.md` — canonical `team-manifest.json` v1.0 spec (13 sections covering shape, field contracts, invariants, absolute-path rationale, lifecycle, versioning)
+
+**Updated files:**
+- `.claude-plugin/plugin.json` — `3.13.5` → `3.14.0`
+- `README.md` — commands table gains `/validate:team` row; Technical Contract References 5 → 6; CLI-version note acknowledges agent-teams v2.1.32+
+- `CLAUDE.md` — new `## Validation Team Mode (v3.14.0+)` sub-section in Validation Gates block
+- root `.claude-plugin/marketplace.json` — plugin entry version `3.13.5` → `3.14.0` + `metadata.version` patch `1.14.18` → `1.14.19`
+
+### Not changed
+
+- Validation envelope schema (`references/validation-gate-result.md` v1.0) — teammates write the same shape v3.13.0 gates produce; aggregate adds only a `source: "validate:team"` marker
+- Screenshot store schema (`references/screenshot-store-schema.md` v1.0)
+- Skills: `alignment-reader`, `screenshot-store-reader`, `project-state-reader`, `task-frontmatter-reader` — all consumed unchanged
+- `/validate:*` per-gate commands — siblings; `/validate:team` invokes them by running their flows in spawned teammate sessions
+- `/validate:all` — strictly unchanged; `/validate:team` is a sibling orchestrator
+
+### Deferred to v2
+
+- Set B1 — parallel visual gate execution (blocked on A2 deferred visual approvals)
+- Set B2 — `TaskCompleted` hook for streaming per-gate results
+- Set B3 — `--json` output mode on `/validate:team` itself
+- Set B4 — `/validate:team --cleanup` subcommand for crash recovery
+- Set B5 — `validate-visual-parity` in team mode (inherits `/validate:all`'s `<reference>`-arg limitation)
+
+All five tracked at epic level in `dev_framework_improvements_epic/shared/v2-candidates.md` Set B.
+
+### Dependency note
+
+Hard dependencies unchanged: `dev-guides-navigator`, `code-quality-tools` (both present since v3.13.0). Runtime dependency on Claude Code CLI v2.1.32+ (agent-teams minimum) is a soft requirement — gracefully degrades to `/validate:all` when teams are unavailable.
+
+### Philosophy
+
+Ship the honest-validation primitive with a narrow, provable contract. Defer every optimization and every ergonomic until real pain surfaces. Dog-food on self before calling it done — v3.14.0 merges only after `/validate:team dev_framework_isolated_validators` returns `pass` on `/validate:guides` from a fresh session.
+
 ## [3.13.5] - 2026-04-24
 
 ### Added — Post-phase epic check in `/research`, `/design`, `/implement`

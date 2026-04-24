@@ -58,6 +58,29 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 
 **NOT wrapped** (keep invoking directly via `/code-quality:*` namespace): `lint`, `coverage`, `review`, `audit`, `ultrareview`, `architecture-debate`, `security-debate`. `/validate:all` surfaces them as discoverability hint.
 
+### Validation Team Mode (v3.14.0+)
+
+`/validate:team` is a **sibling** to `/validate:all` — NOT a replacement. It runs the 7 v3.13.0 gates in **isolated Claude Code agent teams** (4 teammates) so each gate is assessed in a fresh context window free of the main session's prior reasoning. Primary driver: **honest validation** (no self-review bias). Secondary benefits: context-window economy, parallel code-gate throughput.
+
+**4-teammate roster:**
+- `validator-code-1` (sonnet, worktree) — owns `tdd`, `solid`
+- `validator-code-2` (sonnet, worktree) — owns `dry`, `security`
+- `validator-docs` (haiku, worktree) — owns `guides`
+- `validator-visual` (sonnet, none) — owns `visual-regression` (fanned out per `<component>/<viewport>`)
+
+`validate-visual-parity` is NOT in the roster (deferred to v2 Set B5 — inherits `/validate:all`'s `<reference>`-arg limitation).
+
+**Manifest contract** (per `references/team-manifest-schema.md` v1.0): lead writes `<task>/validations/tmp/team-manifest.json` before spawn. All paths absolute; `visual_fanout[]` present only on visual gates; write-once; teammates treat it read-only.
+
+**Fallback chain:**
+1. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != "1"` → auto-run `/validate:all` (unless `--no-fallback`)
+2. `TeamCreate` fails → same fallback
+3. Team already resident in session → REFUSE with cleanup guidance (do NOT auto-cleanup)
+
+**Envelope compatibility:** per-gate envelopes stay at v3.13.0 v1.0 unchanged. Aggregate `_all.json` adds only a `source: "validate:team"` marker — same shape `/validate:all` produces.
+
+**When to use:** pre-PR / pre-merge / pre-release honest-validation moments, long conversations where context economy matters. Prefer `/validate:all` for routine use.
+
 ## Alignment Step (v3.12.0+)
 
 Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `alignment.md` with H2 sections (`## Task-Level`, `## Phase 1 — Research`, `## Phase 2 — Architecture`, `## Phase 3 — Implementation`), each carrying the same 4-field shape: Goal / Expected result / Success criteria / Non-goals. See `references/alignment-contract.md` for grammar v1.0.
