@@ -37,6 +37,27 @@ Consumers distinguish states via warnings, not the null value: `code_path_unknow
 
 **Signal orthogonality:** `signals_used[]` contains BOTH epic-decomposition signals (used for the `decision` branch) AND orthogonal signals like `scope_contract_recommended` (v3.12.0+). Consumers branch on `decision` for decomposition and separately inspect `signals_used[]` for scope-contract warrant. The two judgments are independent.
 
+## Validation Gates (v3.13.0+)
+
+Individual `/validate:*` commands for on-demand quality gates. Replaces `/complete`-only all-or-nothing gating with per-aspect, per-moment validation.
+
+**7 gates + 1 orchestrator:**
+- `validate-tdd` / `validate-solid` / `validate-dry` / `validate-security` — thin wrappers over `code-quality-tools` skills; add task context + persistence + shared envelope
+- `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides
+- `validate-visual-regression <component> <viewport>` — captures via Playwright MCP, diffs via `odiff`/`pixelmatch`, prompts regression/intentional/cancel on diff. Intentional approval rotates baseline inline (no deferred approval in v1)
+- `validate-visual-parity <component> <viewport> <reference>` — compares against design comp (PNG/JPG, Figma URL via MCP, HTML file headless-rendered). React/PSD/Sketch deferred to v2
+- `validate-all` — sequential orchestrator; non-interactive CI mode skips visual gates
+
+**Shared result envelope** (per `references/validation-gate-result.md` v1.0): every gate emits `{schema_version, gate, task, run_at, verdict, details, messages}`. Verdicts: `pass | warning | fail | skipped`. Persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append).
+
+**Screenshot store** (per `references/screenshot-store-schema.md` v1.0) at `<memory_project>/.screenshots/<component>/<viewport>.{png,meta.json}`. 9-field `.meta.json` with `role`, `captured_by` enum, `prior_hash` chain, `source` for parity refs. 1-deep `.previous` history.
+
+**Soft-nudge posture:** `fail` signals but never blocks; visual diffs require explicit user classification; `/validate:all` CI mode explicitly skips prompts rather than silent-defaulting.
+
+**Hard dependency:** `code-quality-tools` (v3.0.0+) added to `plugin.json`. Second hard dep alongside `dev-guides-navigator`.
+
+**NOT wrapped** (keep invoking directly via `/code-quality:*` namespace): `lint`, `coverage`, `review`, `audit`, `ultrareview`, `architecture-debate`, `security-debate`. `/validate:all` surfaces them as discoverability hint.
+
 ## Alignment Step (v3.12.0+)
 
 Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `alignment.md` with H2 sections (`## Task-Level`, `## Phase 1 — Research`, `## Phase 2 — Architecture`, `## Phase 3 — Implementation`), each carrying the same 4-field shape: Goal / Expected result / Success criteria / Non-goals. See `references/alignment-contract.md` for grammar v1.0.

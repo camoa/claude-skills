@@ -1,6 +1,6 @@
 ---
 description: "Verify that the task's phase artifacts cite dev-guides-navigator guides appropriate to the domain. Framework-owned gate — not a wrapper. Reads research.md + architecture.md for guide citations, surfaces gaps. Soft-nudge posture; never blocks. Introduced v3.13.0."
-allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
+allowed-tools: Read, Write, Bash, Glob, Skill
 argument-hint: [<task-name>]
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: "Run the TDD quality gate on demand and persist the result to the current task folder. Thin wrapper around /code-quality:tdd — adds task context, persistence, and the shared result envelope. Soft-nudge: reports fail verdict but never blocks. Introduced v3.13.0."
-allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
+allowed-tools: Read, Write, Bash, Glob, Skill
 argument-hint: [<task-name>]
 ---
 
@@ -24,7 +24,7 @@ Run the TDD (Red-Green-Refactor discipline) quality gate against the current tas
 
    Then resolve the task folder: if `<task-name>` arg is given, locate it under `<project>/implementation_process/in_progress/**/<task-name>/` (glob handles both flat and sub-epic nesting). If no arg, use the task from `session_context.json`. If the task doesn't resolve, abort with candidate suggestions.
 
-2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. If missing, abort with install instructions.
+2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. Minimum supported version: **3.0.0** (earlier versions may work but are untested against this wrapper). If missing, abort with install instructions.
 
 3. **Invoke the check** — execute the `/code-quality:tdd` flow as documented in the `code-quality-tools` plugin's `commands/tdd.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. Follow its instructions (auto-detect project type, run the TDD check, surface findings), then capture the output for envelope construction in step 4.
 

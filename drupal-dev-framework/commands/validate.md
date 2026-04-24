@@ -9,6 +9,8 @@ argument-hint: [component-or-file]
 
 Validate implementation against architecture and coding standards.
 
+> **Note (v3.13.0+):** this is the **architecture-fit** validator — it checks whether code matches the task's architecture.md decisions. For granular **quality gates** (TDD discipline, SOLID, DRY, security, visual regression, etc.), use the `/validate:*` family introduced in v3.13.0: `/validate:tdd`, `/validate:solid`, `/validate:dry`, `/validate:security`, `/validate:guides`, `/validate:visual-regression`, `/validate:visual-parity`, `/validate:all`. The two are complementary: `/validate` asks "does the code match the design?"; `/validate:*` asks "does the code meet quality bars?".
+
 ## Usage
 
 ```

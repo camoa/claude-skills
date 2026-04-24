@@ -65,6 +65,8 @@ Every baseline OR parity reference MAY have an optional `.previous.png` + `.prev
 
 Consumers wanting to verify the rotation chain can cross-reference `meta.prior_hash` against `previous_meta.sha256`.
 
+**Validation asymmetry (v1):** the reader performs full schema validation + hash verification on the CURRENT meta but NOT on `.previous.meta.json`. Rationale: `.previous` is opportunistic historical state (may be edited or deleted by the user without concern; not a source of truth). If a consumer needs full integrity on the previous tier, it should re-invoke the reader's validation logic OR treat `previous_meta` as best-effort. v2 candidate: symmetric validation if real use-cases surface.
+
 ## Consumers (v3.13.0+)
 
 - `/drupal-dev-framework:validate-visual-regression` — reads current baseline; checks `has_current` before running; reads `meta.sha256` for integrity

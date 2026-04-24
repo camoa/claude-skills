@@ -1,6 +1,6 @@
 ---
 description: "Run the Security quality gate on demand and persist the result to the current task folder. Thin wrapper around /code-quality:security — adds task context, persistence, and the shared result envelope. Soft-nudge: reports fail verdict but never blocks. Introduced v3.13.0."
-allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
+allowed-tools: Read, Write, Bash, Glob, Skill
 argument-hint: [<task-name>]
 ---
 
@@ -24,13 +24,13 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-sp
 
    Then resolve the task folder: if `<task-name>` arg is given, locate it under `<project>/implementation_process/in_progress/**/<task-name>/` (glob handles both flat and sub-epic nesting). If no arg, use the task from `session_context.json`. If the task doesn't resolve, abort with candidate suggestions.
 
-2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. If missing, abort with install instructions.
+2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. Minimum supported version: **3.0.0** (earlier versions may work but are untested against this wrapper). If missing, abort with install instructions.
 
-3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/tdd.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. Follow its instructions (auto-detect project type, run the TDD check, surface findings), then capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. Follow its instructions (auto-detect project type, run the security check, surface findings), then capture the output for envelope construction in step 4.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per §"Verdict interpretation" below. Extract any actionable findings into `messages[]`. If `/code-quality:security` wrote a JSON report to `.reports/security.json` (disk-read fallback), capture its path.
 
-5. **Emit the shared envelope** — produce a JSON object matching `references/validation-gate-result.md` v1.0 for the tdd gate.
+5. **Emit the shared envelope** — produce a JSON object matching `references/validation-gate-result.md` v1.0 for the security gate.
 
 6. **Persist** — write the envelope to TWO locations:
    - `<task_folder>/validations/latest/security.json` — overwrite (most-recent-run lookup)

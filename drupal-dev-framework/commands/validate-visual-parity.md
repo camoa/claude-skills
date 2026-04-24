@@ -69,7 +69,7 @@ Example:
    >   [c] Cancel"
 
    - `[g]` → emit `verdict: fail`. Messages include diff %, diff path, recommendation to update implementation. Set `classification: "build-gap"`, `baseline_updated: false`.
-   - `[i]` → re-import the current capture as the new parity reference: `screenshots-store-write.sh write-parity-reference` with source set to the user's own built output (`source_type: "image"`, `source_uri: <capture-path>`). This is unusual — the user is saying "the comp is wrong; the build is correct." Rare but legitimate. Set `classification: "intentional"`, `baseline_updated: true`.
+   - `[i]` → re-import the current capture as the new parity reference. The user is saying "the comp is wrong; the build is correct." Rare but legitimate. Use **a stable URL** for `source_uri` — either the `<url>` arg the user passed (if a live URL) OR — if that's not available — generate `source_type: "url"` with the site URL the capture came from. Do NOT record `source_uri` pointing at the ephemeral `<task_folder>/validations/tmp/` capture path; that path gets cleaned up and the meta would become dangling. Invocation: `screenshot-store-write.sh write-parity-reference <project> <component> <viewport> <capture-path> <captured_by> <task> url <stable-url>`. Set `classification: "intentional"`, `baseline_updated: true`.
    - `[c]` → emit `verdict: skipped`, `classification: "cancelled"`.
 
 10. **Emit the shared envelope** with visual-parity-specific details:

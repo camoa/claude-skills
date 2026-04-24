@@ -38,6 +38,13 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
 4. **Run visual-regression for each stored baseline** (step 2 gate): if the store has components, iterate. For each `<component>/<viewport>` pair, invoke the visual-regression flow with the stored baseline. The user may get a diff-classification prompt per component if any diffs are found — that's expected. Sequence matters: let the user classify each before moving to the next (do NOT batch the prompts).
 
+   **Per-component result aggregation:** multiple per-baseline runs collapse into a SINGLE entry in the aggregate `gates[]` with `gate: "visual-regression"`. Verdict is the worst across all runs (`fail` if any failed > `warning` if any warned > `pass` if all passed; `skipped` only if ALL runs skipped). Per-component details go into `messages[]`:
+   > `["home-hero/1920x1080: pass", "article-card/375x812: fail (4.2% diff, classified regression)", "admin-toolbar/1920x1080: pass (intentional change accepted, baseline rotated)"]`
+
+   This keeps the aggregate envelope's `gates[]` closed to the 7 known IDs; per-component fan-out lives in `messages[]`.
+
+   **Non-interactive (CI) mode:** when `/validate:all` runs without a TTY or with an env flag indicating CI (detect via `[ -t 0 ] || [ -n "$CI" ]`), visual-regression is ENTIRELY SKIPPED with a single entry: `{"gate": "visual-regression", "verdict": "skipped", "messages": ["non-interactive mode: visual regression requires interactive classification; run /validate:visual-regression manually or in interactive session"]}`. Rationale: the classification prompt has no sensible non-interactive default — defaulting to `regression` would fail every diff (noisy); defaulting to `intentional` would silently rotate baselines (dangerous). Explicit skip is honest.
+
 5. **Aggregate into the `_all.json` envelope** (per `references/validation-gate-result.md` §6):
 
    ```json
