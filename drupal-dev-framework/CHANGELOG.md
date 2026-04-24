@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.1] - 2026-04-24
+
+### Fixed — Two `/validate:team` doc gaps surfaced by post-merge goal review
+
+Reviewing the v3.14.0 PR against the task's original pain points + alignment success criteria surfaced two documentation gaps the paper-test didn't catch. Both are documentation-level; no contract change.
+
+**1. Worktree-creation-failure fallback.** Architecture §15 Risk #4 specified that if a teammate's worktree creation fails, the lead should retry that teammate with `isolation: "none"` and print a warning. This behavior was in architecture but missing from the command body's error-cases table. Added to `validate-team.md` with explicit warning string format and a note that absolute-path writes reach the lead regardless of isolation mode.
+
+**2. Visual teammate mailbox fan-out contract.** v3.14.0's Step 6 specified one mailbox line per gate — but the visual teammate fans out over N × (`<component>`, `<viewport>`) pairs. The command didn't say whether it emits per-component lines, one aggregate line, or both. Clarified: the visual teammate emits **both** — per-component progress lines in format `"visual-regression:<component>/<viewport> complete, verdict: <verdict>"`, then one aggregate line `"visual-regression complete, verdict: <worst-verdict>"` matching the format other teammates use. Spawn prompt contract updated to specify this explicitly.
+
+### Files changed
+
+- `commands/validate-team.md` — Step 5 spawn prompt adds visual-specific fan-out mailbox contract; Step 6 adds "Visual teammate fan-out" paragraph; error-cases table adds worktree-creation-failure row
+- `.claude-plugin/plugin.json` — `3.14.0` → `3.14.1`
+- root `.claude-plugin/marketplace.json` — plugin entry `3.14.0` → `3.14.1` + `metadata.version` `1.14.19` → `1.14.20`
+
+### Not changed
+
+- `team-manifest-schema.md` — manifest contract is unchanged (both gaps are command-body / spawn-prompt concerns, not manifest fields)
+- Envelope schema
+- Roster, fallback chain, or any other v3.14.0 contract
+
+### Why patch, not minor
+
+Both changes are additive documentation clarifications of previously-undefined behavior. No consumer could have relied on the prior (silent) behavior for either case — v3.14.0 shipped less than 24 hours ago with zero recorded runs. Patch bump per the versioning policy.
+
 ## [3.14.0] - 2026-04-24
 
 ### Added — `/validate:team` command for isolated validation

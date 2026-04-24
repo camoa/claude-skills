@@ -110,6 +110,10 @@ Each spawn prompt MUST include the progress-message contract:
 
 > When a gate completes, send a mailbox message to the lead in this exact format: `"<gate> complete, verdict: <verdict>"` where `<verdict>` is one of `pass | warning | fail | skipped`. Do not vary the format — the lead parses it.
 
+The visual teammate's spawn prompt additionally specifies the fan-out mailbox contract:
+
+> For each `<component>/<viewport>` in `manifest.gates[visual-regression].visual_fanout[]`, send a per-component progress line in this exact format: `"visual-regression:<component>/<viewport> complete, verdict: <verdict>"`. After all fan-out items complete, send ONE aggregate line: `"visual-regression complete, verdict: <worst-verdict>"` (the same format other teammates use). Both line shapes are required — the lead uses per-component lines for progress and the aggregate line for the "all gates done" signal.
+
 ### Step 6 — Stream progress
 
 Receive mailbox messages from teammates. Print one CLI line per message:
@@ -124,6 +128,8 @@ Receive mailbox messages from teammates. Print one CLI line per message:
 ```
 
 Do NOT wait on `TaskCompleted` hook events (deferred to v2 Set B2). The mailbox stream is the progress signal.
+
+**Visual teammate fan-out.** The visual teammate runs N × (`<component>`, `<viewport>`) pairs from `manifest.gates[visual-regression].visual_fanout[]`. It sends **one mailbox message per component** as each completes — format `"visual-regression:<component>/<viewport> complete, verdict: <verdict>"` — so the lead can stream progress during long visual runs. After all fan-out items complete, it sends **one aggregate line** — format `"visual-regression complete, verdict: <worst-verdict>"` — matching the format the other teammates use. The aggregate envelope at `<latest>/visual-regression.json` collapses all fan-out runs into a single entry with per-component detail in `messages[]` (same shape `/validate:all` emits; see `validate-all.md` Step 4 "Per-component result aggregation"). Lead parses both per-component and aggregate lines; per-component lines are for progress, the aggregate line is for the "all gates done" signal.
 
 ### Step 7 — Aggregate
 
@@ -204,6 +210,7 @@ This separation is what makes `/validate:team` honest where `/validate:all` is e
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset | Fallback (§Step 2) unless `--no-fallback` |
 | `TeamCreate` fails | Fallback (§Step 2) unless `--no-fallback` |
 | Team already resident | Refuse with cleanup guidance; do NOT auto-cleanup |
+| Teammate worktree creation fails (disk space, repo state, permissions) | Lead retries the spawn for that teammate with `isolation: "none"` and prints a warning: `"<teammate> worktree creation failed; spawning with isolation: none. Code-gate honest-validation is weaker for this teammate (can see uncommitted edits)."` The teammate still runs — absolute-path writes via `manifest.envelope.*` reach the lead regardless of isolation mode |
 | Teammate dies mid-run | Manifest + any partial envelopes remain; manual recovery (see `--cleanup` in v2 Set B4) |
 | Teammate writes invalid envelope (schema mismatch) | Aggregate step logs the mismatch in the `_all.json` `messages[]` for that gate; overall verdict reflects fail |
 | `--no-fallback` with env unset | Print reason; exit 2; NO fallback |
