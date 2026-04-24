@@ -42,7 +42,19 @@ Never block the command on this check — the user is in control. The nudge exis
 
 1. Invoke `alignment-reader` skill against the task folder.
 2. If `sections.task_level.present: false` → offer task-level retrofit with soft, phase-aware phrasing:
-   > "Heads up — this task doesn't have a task-level scope recorded yet (`alignment.md` is missing or has no `## Task-Level` section). A short scope contract (goal / expected result / success criteria / non-goals) helps implementation stay on-track. Want 2 minutes to pin it down now, or skip and continue? [y]es / [n]o"
+   > **Before I start coding:** this task has no task-level scope recorded yet. Want to pin down what the whole task is trying to deliver first, so implementation stays on-target?
+   >
+   > You'd answer 4 short questions, one at a time. Shape of the result:
+   >
+   > ```
+   > Goal: <what this task is really about>
+   > Expected result: <what exists when it's done>
+   > Done when: <observable checks>
+   > Won't do here: <related work we're skipping>
+   > ```
+   >
+   > **[y]es** — 4 questions now
+   > **[n]o** — start coding as-is (can always add this later)
 3. On `[y]` → execute the **task-level** flow from `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so Step 3b sees the new section.
 4. On `[n]` / `[skip]` → proceed. Decision is final for this command invocation — no re-nag. Do NOT offer task-level retrofit again in the same `/implement` run.
 5. If `sections.task_level.present: true` → proceed silently to Step 3b (no prompt, no nag).
@@ -52,7 +64,20 @@ Never block the command on this check — the user is in control. The nudge exis
 1. Decide whether to offer an implementation-specific scope. Plain-language prompts:
    - If `sections.phase_3.present: true` → print: `"You already scoped this phase earlier. Using that scope."` and proceed.
    - Else if `sections.task_level.present: true` (either pre-existing, or just authored by Step 3a) → ask:
-     > "You've scoped the whole task. Want to also scope just this implementation phase — what exactly gets built in this pass, what's deferred to follow-up — or skip and start coding now? [y]es / [n]o"
+     > **Before I start coding:** you've already scoped the task. Want to also pin down what *just this implementation pass* builds (vs deferring to follow-up work)?
+     >
+     > Useful for scope-heavy implementations or when several follow-ups are already implied. Shape of the result:
+     >
+     > ```
+     > Phase 3 — Implementation
+     > Goal: <what this build pass is delivering>
+     > Expected result: <concrete files / behavior live after this pass>
+     > Done when: <observable check, e.g., "tests pass + manual smoke path works">
+     > Won't build here: <explicitly pushed to a follow-up task>
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — start coding (can always add this later)
      Default: `[n]`.
    - Otherwise (user declined task-level retrofit in Step 3a) → proceed silently. No phase-level offer when there's no task-level foundation.
 2. If user says `[y]`, execute the `--phase 3` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 3 — Implementation` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with implementation context loading.

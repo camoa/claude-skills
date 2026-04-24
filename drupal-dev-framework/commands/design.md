@@ -36,7 +36,19 @@ Never block the command on this check — the user is in control. The nudge exis
 
 1. Invoke `alignment-reader` skill against the task folder.
 2. If `sections.task_level.present: false` → offer task-level retrofit with soft, phase-aware phrasing:
-   > "Heads up — this task doesn't have a task-level scope recorded yet (`alignment.md` is missing or has no `## Task-Level` section). A short scope contract (goal / expected result / success criteria / non-goals) helps design stay on-track. Want 2 minutes to pin it down now, or skip and continue? [y]es / [n]o"
+   > **Before I dive into design:** this task has no task-level scope recorded yet. Want to pin down what the whole task is trying to deliver first, so design doesn't wander?
+   >
+   > You'd answer 4 short questions, one at a time. Shape of the result:
+   >
+   > ```
+   > Goal: <what this task is really about>
+   > Expected result: <what exists when it's done>
+   > Done when: <observable checks>
+   > Won't do here: <related work we're skipping>
+   > ```
+   >
+   > **[y]es** — 4 questions now
+   > **[n]o** — start designing as-is (can always add this later)
 3. On `[y]` → execute the **task-level** flow from `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so Step 2b sees the new section.
 4. On `[n]` / `[skip]` → proceed. Decision is final for this command invocation — no re-nag. Do NOT offer task-level retrofit again in the same `/design` run.
 5. If `sections.task_level.present: true` → proceed silently to Step 2b (no prompt, no nag).
@@ -46,7 +58,20 @@ Never block the command on this check — the user is in control. The nudge exis
 1. Decide whether to offer an architecture-specific scope. Plain-language prompts:
    - If `sections.phase_2.present: true` → print: `"You already scoped this phase earlier. Using that scope."` and proceed.
    - Else if `sections.task_level.present: true` (either pre-existing, or just authored by Step 2a) → ask:
-     > "You've scoped the whole task. Want to also scope just this architecture phase — what design decisions this phase commits to, what's deferred to implementation — or skip and start design now? [y]es / [n]o"
+     > **Before I start designing:** you've already scoped the task. Want to also pin down what *just this design pass* is deciding (vs leaving for implementation)?
+     >
+     > Useful when architecture has many threads. Shape of the result:
+     >
+     > ```
+     > Phase 2 — Architecture
+     > Goal: <what this design pass is deciding>
+     > Expected result: <e.g., "a doc naming the pieces and how they fit">
+     > Done when: <observable signal, e.g., "someone else could hand this off to implementation">
+     > Won't decide here: <pushed to Phase 3, e.g., "actual code / prose">
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — start designing (can always add this later)
      Default: `[n]`.
    - Otherwise (user declined task-level retrofit in Step 2a) → proceed silently. No phase-level offer when there's no task-level foundation.
 2. If user says `[y]`, execute the `--phase 2` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 2 — Architecture` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with architecture work.

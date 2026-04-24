@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.3] - 2026-04-24
+
+### Changed — Alignment-related prompt wording in `/research`, `/design`, `/implement`
+
+v3.12.4 already rewrote alignment prompts in plain language, but live use kept surfacing them as too jargon-heavy: "scope the task," "phase-level scope contract," "what X phase commits to," "deferred to implementation" — all framework vocabulary that assumes the user already understands the alignment system. Users who didn't read the framework docs were unsure whether to say yes.
+
+**Fix:** rewrite all 8 alignment prompts across the three phase commands using a consistent **example-driven** pattern:
+
+- **Lead with the phase action** — "Before I dig into research," "Before I start designing," "Before I start coding"
+- **One-sentence question** in the user's vocabulary — no "scope contract," no "phase commits to," no "deferred"
+- **Concrete example block** showing the shape of the output (4 fields with placeholder hints), so the user can see what "yes" produces before deciding
+- **Option labels with low-friction tails** — `[n]` carries `(can always add this later)` instead of an implied nag
+
+**Prompts rewritten:**
+
+- `commands/research.md`:
+  - Pre-analysis task-level nudge (L133)
+  - Task-level retrofit prompt (v3.12.2 retrofit check, L150)
+  - Phase 1 phase-level offer (L162)
+  - Phase 1 lighter-touch re-offer after declined task-level (L165)
+- `commands/design.md`:
+  - Step 2a task-level retrofit (v3.13.1)
+  - Step 2b Phase 2 phase-level offer (v3.12.0)
+- `commands/implement.md`:
+  - Step 3a task-level retrofit (v3.13.1)
+  - Step 3b Phase 3 phase-level offer (v3.12.0)
+
+**No logic changes** — all decision branches, defaults, and option semantics (`[y]` / `[n]` / `[later]` / `[skip]`) are unchanged. Pure UX / plain-language pass.
+
+**No consumer-facing artifact changes** — `alignment.md` schema unchanged; reader output unchanged; `/scope` flow unchanged.
+
+**Why example-driven beats description-driven:** the user can see a 4-line concrete template of what's being offered, decide in seconds whether that's worth 2 minutes of Q&A, and skip it with no ambiguity. Removes the common failure mode where jargon-heavy prompts prompt a clarifying question before the user can even answer.
+
 ## [3.13.2] - 2026-04-24
 
 ### Fixed — `alignment-reader` reported stub H2 sections as `present: true`
