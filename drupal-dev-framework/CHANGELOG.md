@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.0] - 2026-04-24
+
+### Added — Granular Validation Commands (sub-task granular_validation of dev-framework improvements epic)
+
+Individual quality-gate commands invokable on demand, plus two new visual gates and an orchestrator. Replaces the all-or-nothing `/complete`-only gating with a per-aspect, per-moment validation surface.
+
+**7 new gate commands + 1 orchestrator:**
+
+- `/drupal-dev-framework:validate-tdd` — wraps `/code-quality:tdd`
+- `/drupal-dev-framework:validate-solid` — wraps `/code-quality:solid`
+- `/drupal-dev-framework:validate-dry` — wraps `/code-quality:dry`
+- `/drupal-dev-framework:validate-security` — wraps `/code-quality:security`
+- `/drupal-dev-framework:validate-guides` — **new, framework-owned.** Verifies research.md + architecture.md cite `dev-guides-navigator` guides
+- `/drupal-dev-framework:validate-visual-regression` — **new, framework-owned.** Captures screenshot via Playwright MCP (fallback: claude-in-chrome), diffs against stored baseline via `odiff` (fallback: `pixelmatch`), prompts on diff: regression / intentional (baseline rotates inline) / cancel
+- `/drupal-dev-framework:validate-visual-parity` — **new, framework-owned.** Same infrastructure; reference is an external design comp (PNG/JPG passthrough, Figma URL via MCP, HTML file rendered headless). v1 explicitly defers React / PSD / Sketch / Adobe XD
+- `/drupal-dev-framework:validate-all` — sequential orchestrator. Runs 5 non-visual gates + visual-regression for every stored baseline (collapsing into one `gates[]` entry with worst verdict); visual-parity always skipped (requires explicit reference arg). Aggregate envelope with `summary` counts and discoverability hint pointing to unwrapped `code-quality-tools:*` capabilities (`lint`, `coverage`, `review`, `audit`, `ultrareview`). CI-mode (non-interactive TTY or `$CI` env var) skips visual gates entirely — explicit-skip rather than silent-defaults
+
+Each gate emits a shared JSON envelope (`references/validation-gate-result.md` v1.0, schema_version `"1.0"`) persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append). Verdict vocabulary: `pass | warning | fail | skipped`.
+
+**Screenshot store — new project-scoped resource.** Located at `<memory_project>/.screenshots/<component>/<viewport>.{png,meta.json}`. Stores regression baselines AND parity references with 9-field `.meta.json` (schema_version, role, viewport, captured_at, sha256, originating_task, captured_by enum, prior_hash, source — populated for parity refs only with `{type, uri}`). 1-deep history via `.previous.png` + `.previous.meta.json` siblings; unconditional drop on next update. Hash integrity checks at every write.
+
+**New skill + scripts:**
+
+- `screenshot-store-reader` (v1.0.0, haiku, user-invocable: false) — defensive wrapper over `scripts/screenshot-store-read.sh`. Mirrors `alignment-reader` / `project-state-reader` / `task-frontmatter-reader` pattern
+- `scripts/screenshot-store-read.sh` — inspects store state; 6 warning codes (`store_missing`, `component_missing_meta`, `meta_schema_mismatch`, `hash_mismatch`, `orphan_meta`, `error`); never throws except on IO errors
+- `scripts/screenshot-store-write.sh` — `write-baseline` + `write-parity-reference` modes; 6-step atomic rotation with sha256 verification and rollback on failure; input-validation regexes on component names, viewports, enum values
+
+**New references:**
+
+- `references/screenshot-store-schema.md` — canonical `.meta.json` v1.0 + directory layout + rotation rules + 6 warning codes + 3 example metas + versioning policy
+- `references/validation-gate-result.md` — shared result envelope v1.0 for all `/validate:*` commands; per-gate `details` shapes (wrappers vs framework-owned vs visual); aggregate envelope spec; 4 full example envelopes
+
+**Plugin dependencies:** `code-quality-tools` added to `.claude-plugin/plugin.json` `dependencies[]`. Now two hard deps (alongside `dev-guides-navigator`). Minimum supported code-quality-tools version: 3.0.0 (runtime preflight in each wrapper).
+
+**`/validate` (existing, unchanged) vs `/validate-*` (new)** — documented disambiguation in `commands/validate.md`. Original `/validate` checks architecture-fit; new `/validate-*` family checks quality gates. Complementary, not conflicting.
+
+### v1 explicit non-goals (v2 candidates documented)
+
+Tracked in the task's `v2-candidates.md`:
+
+- AI-driven gate applicability judgment (auto-skip inapplicable gates)
+- Deferred visual-change approvals via `/complete` batch hook (`.candidate` staging)
+- Extended `.meta.json` fields (ignore regions, DPR, capture-engine version, etc.)
+- Parallel `/validate:all` execution
+- Per-component visual coverage manifest for `/validate:all`
+
+### Validated
+
+- Scripts smoke-tested on 7 fixtures (first baseline, rotation, 1-deep enforcement, parity with provenance, 3 input-validation errors). prior_hash chain integrity verified across 3 rotations
+- Quick-trace paper test on pattern-validating wrapper (`validate-tdd`) found 3 MAJOR pattern issues BEFORE replication (task-root ambiguity, sibling-command invocation pattern, exit-code semantics) — all fixed before replicating to solid/dry/security
+- Structured 3-phase paper test across the cross-artifact integration found 3 MAJOR + 5 MINOR + 3 NIT, no BLOCKERs: sed-replica drift in solid/dry/security (stale "tdd.md" refs), `/validate:all` per-component aggregation rule undefined, `/validate:all` CI-mode handling undefined. All 3 MAJORs + 3 of 5 MINORs applied
+- Plugin-structure auditor: 24/30. 2 MAJORs fixed (over-granted `Edit`/`Task` on wrappers tightened; `/validate` vs `/validate-*` disambiguation documented)
+
 ## [3.12.4] - 2026-04-24
 
 ### Fixed — alignment conversation UX (two gaps)

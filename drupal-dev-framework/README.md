@@ -35,8 +35,11 @@ Phases apply per task, not per project. A project can have tasks at different ph
 /plugin install drupal-dev-framework@camoa-skills
 ```
 
-**Declared dependency:**
-- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides). Enforced via `plugin.json` `dependencies`. Missing-dependency failures surface at install time.
+**Declared dependencies (2 as of v3.13.0):**
+- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides)
+- `code-quality-tools` (v3.13.0+) — powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0)
+
+Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surface at install time (CLI v2.1.110+).
 
 **Recommended companion plugins:**
 - `superpowers` — TDD enforcement, brainstorming, verification workflows
@@ -96,7 +99,12 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 | Command | Description |
 |---------|-------------|
-| `/validate [file]` | Check implementation against architecture and standards |
+| `/validate [file]` | Check implementation against architecture decisions (architecture-fit validator) |
+| `/validate:tdd` / `:solid` / `:dry` / `:security` | **(v3.13.0)** Individual quality gates wrapping `code-quality-tools` skills with task context + persistence |
+| `/validate:guides` | **(v3.13.0)** Verify research.md + architecture.md cite `dev-guides-navigator` guides |
+| `/validate:visual-regression <component> <viewport>` | **(v3.13.0)** Capture + diff against stored baseline. On diff, user classifies regression / intentional / cancel; intentional rotates baseline inline |
+| `/validate:visual-parity <component> <viewport> <reference>` | **(v3.13.0)** Compare built output against design comp (PNG/JPG, Figma URL, HTML file). Shared infrastructure with visual-regression |
+| `/validate:all` | **(v3.13.0)** Run all 7 gates sequentially; aggregate summary; discoverability hint for unwrapped `/code-quality:*` capabilities |
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
@@ -136,9 +144,9 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
 | `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer — proposes epic decomposition as JSON per schema v1.0 |
 
-### Skills (21)
+### Skills (22)
 
-Skills are invoked automatically by commands and agents — 10 are user-invocable, 11 are internal:
+Skills are invoked automatically by commands and agents — 10 are user-invocable, 12 are internal:
 
 | Category | Skills |
 |----------|--------|
@@ -146,7 +154,7 @@ Skills are invoked automatically by commands and agents — 10 are user-invocabl
 | **Architecture** | `component-designer`, `diagram-generator`, `guide-integrator`, `guide-loader` |
 | **Implementation** | `tdd-companion`, `code-pattern-checker`, `task-completer` |
 | **Utility** | `project-initializer`, `requirements-gatherer`, `session-resume`, `implementation-task-creator`, `task-folder-migrator` |
-| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0), `alignment-reader` (v3.12.0) |
+| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0), `alignment-reader` (v3.12.0), `screenshot-store-reader` (v3.13.0) |
 
 ### Methodology References (6)
 
@@ -161,7 +169,7 @@ Built-in docs enforced at specific phases:
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
 
-### Technical Contract References (3)
+### Technical Contract References (5)
 
 Machine-readable contracts consumed by skills and commands. These pin schemas and invariants so consumers don't drift:
 
@@ -170,6 +178,8 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `analysis-agent-schema.md` **(v3.11.0)** | `analysis-agent` | JSON output schema v1.0, 8 signal codes, 7 invariants, consumer guidance for `/research` + `/propose-epics` |
 | `code-path-detection.md` **(v3.11.0)** | `/set-code-path`, `/new` | Detection strategies in priority order, three-null-states table (`unknown` / `docs-only` / `set`), safety filter (hard-reject list for system roots) |
 | `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
+| `screenshot-store-schema.md` **(v3.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0, directory layout with `.previous` rotation (1-deep), 6 warning codes, `role` enum (`baseline` / `parity_reference` / `previous`), `captured_by` + `source` provenance fields |
+| `validation-gate-result.md` **(v3.13.0)** | All `/validate:*` commands | Shared JSON envelope v1.0 emitted by every gate; 4-value verdict (`pass` / `warning` / `fail` / `skipped`); per-gate `details` shapes; aggregate envelope for `/validate:all` |
 
 ### Online Dev-Guides (60+ topics) — Required
 
