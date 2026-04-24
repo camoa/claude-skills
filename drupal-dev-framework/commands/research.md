@@ -129,10 +129,10 @@ If a signal fires:
    - `keep_flat` → proceed silently with flat-task research.
    - `insufficient_info` → proceed with flat-task research; the task description alone wasn't sufficient for decomposition judgment (makes sense at creation time — usually the description IS minimal here).
 
-5. **(v3.12.0+)** After the `decision` branch completes (regardless of outcome unless the task became an epic), inspect `signals_used[]` for `scope_contract_recommended`. If present, print soft-nudge:
-   > "Analysis recommends authoring a scope contract before research. Start now? [y]es / [n]o / [later]"
+5. **(v3.12.0+)** After the `decision` branch completes (regardless of outcome unless the task became an epic), inspect `signals_used[]` for `scope_contract_recommended`. If present, print soft-nudge in plain language — explain WHY before asking:
+   > "Before diving into research: this task looks scope-heavy (multiple deliverables or complex criteria). Want to pin down the scope first in a short conversation — goal, what success looks like, what's explicitly out of scope — so research doesn't drift? [y]es / [n]o / [later]"
 
-   On `[y]` → execute the alignment conversation + write flow as documented in `commands/scope.md` (task-level prompt sequence + "Writing alignment.md") within this command's context. Do NOT try to shell out to a sibling slash command. After the write completes, continue with the standard research flow.
+   On `[y]` → execute the alignment conversation + write flow as documented in `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md") within this command's context. Do NOT try to shell out to a sibling slash command. After the write completes, continue with the standard research flow.
    On `[n]` → proceed without writing `alignment.md`. No nag.
    On `[later]` → same as `[n]` for this run; user can run `/scope <task>` anytime.
 
@@ -146,21 +146,27 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 
 2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`). Inspect the returned `signals_used[]` for `scope_contract_recommended`.
 
-   - If present → print soft-nudge: `"This task has no scope contract yet, and analysis suggests one would help. Author task-level alignment (Goal / Expected result / Success criteria / Non-goals) now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
-     - On `[y]` → execute the task-level flow from `commands/scope.md` (5-prompt task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so subsequent steps see the new section.
+   - If present → print soft-nudge in plain language:
+     > "This task doesn't have a declared scope yet, and I'm picking up signals that scope might drift during research (multiple distinct deliverables, or a description that could be interpreted several ways). Want to spend a minute nailing down the goal and success criteria before we dig in? [y]es / [n]o / [skip]"
+     Default: `[skip]`.
+     - On `[y]` → execute the task-level flow from `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so subsequent steps see the new section.
      - On `[n]` / `[skip]` → proceed; record "task-level retrofit declined" for this run.
    - If absent → proceed silently (no warrant — task is self-contained).
    - If analysis-agent fails or times out → proceed silently; do NOT nag the user.
 
    Skip this check entirely on fresh tasks where the pre-analysis hook fired (redundant) or where `task_level.present` is already `true` (already authored).
 
-3. Decide whether to offer the Phase 1 alignment section:
-   - If `sections.phase_1.present: true` → print: `"Phase 1 alignment already authored. Using existing section."` and proceed.
-   - Else if `sections.task_level.present: true` (including freshly authored in step 2) → ask: `"Author the Phase 1 — Research section of alignment.md now? [y]es / [n]o / [skip]"`. Default: `[skip]`.
-   - Else if pre-analysis hook emitted `scope_contract_recommended` and user declined task-level alignment earlier → re-offer as lighter-touch: `"Author a Phase 1 — Research alignment section (just this phase)? [y]es / [n]o"`. Default: `[n]`.
+3. Decide whether to offer a research-specific scope. All prompts use plain language that explains WHAT the choice means:
+   - If `sections.phase_1.present: true` → print: `"You already scoped this phase earlier. Using that scope."` and proceed.
+   - Else if `sections.task_level.present: true` (including freshly authored in step 2) → ask:
+     > "You've scoped the whole task. Want to also scope just this research phase specifically — what questions research needs to answer, what's out of scope for research — or skip and start research now? [y]es / [n]o"
+     Default: `[n]` (most tasks don't need a separate research sub-scope).
+   - Else if pre-analysis hook emitted `scope_contract_recommended` and user declined task-level scope earlier → re-offer lighter-touch:
+     > "You skipped the task-level scope earlier. Want to at least scope just this research phase (lighter — only what research is trying to answer)? [y]es / [n]o"
+     Default: `[n]`.
    - Otherwise → proceed silently (no nag).
 
-4. If user says `[y]`, execute the `--phase 1` flow from `commands/scope.md` (phase-level prompt sequence + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research.
+4. If user says `[y]`, execute the `--phase 1` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research.
 
 5. If user says `[n]` / `[skip]`, proceed with research. Never block.
 

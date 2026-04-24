@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.4] - 2026-04-24
+
+### Fixed — alignment conversation UX (two gaps)
+
+Surfaced during live use of `/research granular_validation` in the camoa-skills repo: the scope-contract conversation was noisy on existing-content tasks and its sub-step prompts were framework-jargon rather than plain language. Both were pure UX defects in v3.12.0-3.12.3.
+
+**Gap 1 — `/scope` was interrogative, not conversational.** The task-level flow asked 5 rigid prompts ("What is the single-sentence Goal of `<task>`? Start with a verb.") even when `task.md` already had substantive Goal / Acceptance Criteria / Current State content. Users ended up restating what they'd already written.
+
+**Fix:** `/scope` now reads existing context first (task-frontmatter-reader + task.md body + current alignment.md), picks a conversation mode based on what's already there, and starts from reflection rather than interrogation:
+
+| task.md state | Conversation mode |
+|---|---|
+| Substantive Goal + ACs (≥40 words) | **Reflect-and-refine** — paraphrase what's there, ask if the paraphrase captures the real driver |
+| Partial content | **Draft-and-confirm** — propose a draft from available context, ask what's missing or wrong |
+| Stub / empty | **Open exploration** — ask openly; multi-sentence answers welcome |
+
+Phase-level (`--phase 1|2|3`) uses the same three modes, scoped to one phase. The 4 fields (Goal / Expected result / Success criteria / Non-goals) are still the output contract — but they surface from conversation, not from a rigid prompt script.
+
+**Gap 2 — phase-alignment sub-step prompts were framework-jargon.** `/research`, `/design`, `/implement` asked "Author the Phase N — <Phase> section of alignment.md now? [y]es / [n]o / [skip]" — which assumes the user reads framework docs and knows what "alignment.md" and "Phase N sections" mean.
+
+**Fix:** all phase-alignment prompts rewritten in plain language that explains what the choice means BEFORE asking:
+
+- `/research` pre-analysis scope nudge: now says "Before diving into research: this task looks scope-heavy (multiple deliverables or complex criteria). Want to pin down the scope first in a short conversation — goal, what success looks like, what's explicitly out of scope — so research doesn't drift?"
+- `/research` retrofit-check nudge: now says "This task doesn't have a declared scope yet, and I'm picking up signals that scope might drift during research..."
+- `/research` / `/design` / `/implement` phase sub-step prompts: "You've scoped the whole task. Want to also scope just this phase — what research/design/implementation does in this pass — or skip and start?"
+
+No schema, agent, skill, or script changes. Pure command-body rewrites. `commands/scope.md`, `commands/research.md`, `commands/design.md`, `commands/implement.md`. plugin.json 3.12.3 → 3.12.4; marketplace plugin entry synced; metadata 1.14.11 → 1.14.12.
+
 ## [3.12.3] - 2026-04-23
 
 ### Fixed — `scope_contract_recommended` signal coverage (two gaps)
