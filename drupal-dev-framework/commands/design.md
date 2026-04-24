@@ -126,8 +126,58 @@ Default: `[c]`.
 5. Creates/updates `architecture.md` with design
 6. Updates `task.md` to mark Phase 2 as in progress
 7. Optionally creates component file in `architecture/{component}.md`
-8. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see next section) mapping `architecture.md` sections to the task's acceptance criteria
-9. **Invokes `session-context-writer` skill with the resolved project and task**
+8. **(v3.13.5+)** Post-design epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with `task.md` + `alignment.md` + `research.md` + `architecture.md` and surfaces `epic_candidate` if architecture-level decomposition revealed epic-shaped work
+9. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `architecture.md` sections to the task's acceptance criteria
+10. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Post-phase epic check (v3.13.5+)
+
+**Run after `architecture.md` has been authored (and optional component file written), before the traceability walkthrough.**
+
+Purpose: epic-shape sometimes only becomes obvious at architecture time when you see the component breakdown. Research might have missed it; architecture might reveal that what looked like one task is actually 3 loosely-coupled components that belong as separate sub-tasks. This step catches that case.
+
+### Step 1 — Re-invoke analysis-agent in folder mode
+
+Invoke `analysis-agent` via Task tool with:
+
+- `task_folder` = absolute path to the task folder (now contains `task.md` + `alignment.md` + `research.md` + `architecture.md` — strictly more context than at research time)
+- `codePath` = resolved via `project-state-reader`
+- `schema_version: "1.0"`
+
+### Step 2 — Branch on `decision`
+
+- `epic_candidate` → continue to Step 3
+- `keep_flat` → proceed silently to traceability walkthrough
+- `insufficient_info` → proceed silently
+
+### Step 3 — Surface epic offer (only if `epic_candidate`)
+
+Print:
+
+> **Before locking in architecture:** looking at the design you just authored, this task might be cleaner as an epic. The architecture surfaced decomposition that pre-analysis + post-research checks hadn't caught.
+>
+> Proposed children (from `analysis-agent.proposed_decomposition`):
+>   • `<child_1>` — <short rationale>
+>   • `<child_2>` — <short rationale>
+>   • …
+>
+> **[y]es** — convert to epic now via `/migrate-to-epic <task> --children "<list>"`. `research.md` + `architecture.md` stay on the parent epic; each child re-runs `/research` → `/design` on its slice.
+> **[n]o** — keep flat; proceed to traceability walkthrough (can always migrate later)
+> **[d]iscuss** — show agent's `rationale` + `signals_used[]` before deciding
+
+Default: `[n]`.
+
+### Step 4 — Act on the answer
+
+- `[y]` → invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<comma-separated proposed names>"`. Stop this `/design` invocation after migration.
+- `[n]` → proceed to traceability walkthrough.
+- `[d]` → print rationale + signals_used, re-ask Step 3.
+
+### Notes
+
+- **Never blocks.** `[n]` always proceeds.
+- **Cumulative authority.** Post-design check has the MOST context of any epic check in the framework (task+alignment+research+architecture). If it fires `epic_candidate`, that's the strongest signal the framework can emit.
+- **Mid-design migration is heavier than post-research migration** — architecture.md won't be automatically partitioned across children. User must rebuild design per child. Worth doing anyway if the signal is real.
 
 ## Traceability walkthrough sub-step (v3.13.4+)
 

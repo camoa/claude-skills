@@ -25,8 +25,62 @@ Research existing solutions for a specific task (Phase 1 of a task).
 7. Stores findings in `research.md` file
 8. Updates `task.md` to mark Phase 1 as in progress
 8. Updates `project_state.md` with current task
-9. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `research.md` sections to the task's research questions + acceptance criteria
-10. **Invokes `session-context-writer` skill with the resolved project and task**
+9. **(v3.13.5+)** Post-research epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with the now-complete task context and surfaces `epic_candidate` if the research revealed epic-shaped work that pre-analysis couldn't see at task-creation time
+10. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `research.md` sections to the task's research questions + acceptance criteria
+11. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Post-phase epic check (v3.13.5+)
+
+**Run after `research.md` has been authored and `task.md` / `project_state.md` updated, before the traceability walkthrough.**
+
+Purpose: pre-analysis at task-creation time has very thin signal (just the task name, sometimes a short description). The real scope-shape only emerges during research — `alignment.md` pins down what the task is about, and `research.md` surfaces sub-problems, dependencies, and natural decomposition seams. **Research is the moment epic-vs-flat is actually decidable.**
+
+This step catches the "task started flat, research revealed it's actually an epic" case that the v3.11.0 pre-analysis hook + v3.12.2 alignment retrofit both miss.
+
+### Step 1 — Re-invoke analysis-agent in folder mode
+
+Invoke `analysis-agent` via Task tool with:
+
+- `task_folder` = absolute path to the task folder (the folder now contains `task.md` + `alignment.md` + `research.md` — maximum context the agent has ever had for this task)
+- `codePath` = resolved via `project-state-reader` on the active project
+- `schema_version: "1.0"`
+
+### Step 2 — Branch on `decision`
+
+- `epic_candidate` → continue to Step 3 (surface offer)
+- `keep_flat` → proceed silently to traceability walkthrough. Agent saw full context and decided this task is correctly flat. Trust it.
+- `insufficient_info` → proceed silently. Unusual at this stage (research.md exists) but possible if artifacts are very thin. No nag.
+
+### Step 3 — Surface epic offer (only if `epic_candidate`)
+
+Print:
+
+> **Before locking in research:** based on what research found, this task looks like it'd be cleaner as an epic with sub-tasks. Pre-analysis at task-creation couldn't see this shape — research is where it became clear.
+>
+> Proposed children (from `analysis-agent.proposed_decomposition`):
+>   • `<child_1>` — <short rationale>
+>   • `<child_2>` — <short rationale>
+>   • …
+>
+> **[y]es** — convert to epic now via `/migrate-to-epic <task> --children "<list>"`. `research.md` stays on the parent epic; children inherit no research yet and will each get their own `/research` pass.
+> **[n]o** — keep flat; proceed to traceability walkthrough (can always migrate later via `/propose-epics` or `/migrate-to-epic`)
+> **[d]iscuss** — show agent's full `rationale` + `signals_used[]` before deciding
+
+Default: `[n]`.
+
+### Step 4 — Act on the answer
+
+- `[y]` → invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<comma-separated proposed names>"`. After successful migration, **stop** — the flat-task lifecycle ends here. User re-invokes `/research <child_name>` on each child when ready.
+- `[n]` → proceed to traceability walkthrough.
+- `[d]` → print agent's rationale + signals_used. Re-ask Step 3.
+
+### Notes
+
+- **Never blocks.** `[n]` (default) always proceeds to traceability walkthrough.
+- **Authoritative over pre-analysis.** If pre-analysis said "keep flat" and end-of-research says "epic_candidate," trust the later call — it has strictly more context.
+- **Migration is transactional.** `/migrate-to-epic` is atomic with 24h rollback; safe to opt into.
+
+## Traceability walkthrough sub-step (v3.13.4+)
 
 ## Traceability walkthrough sub-step (v3.13.4+)
 
