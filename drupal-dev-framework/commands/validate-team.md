@@ -83,6 +83,8 @@ Write the manifest **before** spawn so every teammate can read it regardless of 
 
 ### Step 5 — Spawn 4 teammates
 
+The roster covers **6 of the 7 v3.13.0 gates** — `validate-visual-parity` is excluded from the v1 roster (deferred to v2 Set B5 — requires an explicit `<reference>` arg that `/validate:all` can't supply either).
+
 Spawn each teammate with `TeamCreate`. Spawn prompts are ≤40 lines each, reference the manifest by absolute path, and declare the teammate's role + gate assignments + isolation mode in a header block:
 
 ```
