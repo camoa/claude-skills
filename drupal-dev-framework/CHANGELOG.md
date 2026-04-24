@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.1] - 2026-04-24
+
+### Fixed — Task-level alignment retrofit in `/design` and `/implement`
+
+Before v3.13.1, only `/research` offered task-level alignment retrofit (v3.12.2+). `/design` and `/implement` had an explicit `**Note:**` stating "that decision is considered final by the time they reach Phase 2/3 — the task is already underway." In practice that justification didn't hold for two real scenarios:
+
+1. **Phase executed outside the plugin command** — `research.md` authored manually (plan-mode handoff, staged-file rewrite, pre-v3.12.0 tasks). The user never had a chance to be offered task-level alignment because `/research` never ran.
+2. **Tasks jumping directly to Phase 2/3** — pre-existing flat tasks where the user reaches `/design` without ever running `/research`.
+
+In both cases, users who don't know the alignment feature exists had no path to discover it at Phase 2 or Phase 3 entry.
+
+**Fix:** `/design` and `/implement` now run the same task-level retrofit branch that `/research` ships — adapted for phase-aware phrasing:
+
+- New **Step 2a** (design) / **Step 3a** (implement) runs BEFORE the existing phase-level scope offer
+- Invokes `alignment-reader`. If `sections.task_level.present: false`, soft-prompts the user to author a task-level contract in 2 minutes
+- `[y]` → executes the task-level flow from `scope.md` inline, then refreshes `alignment-reader` so the phase-level step sees the new section
+- `[n]` / `[skip]` → final for this command invocation, no re-nag
+- `sections.task_level.present: true` → skip silently
+
+Deliberately simpler than `/research`'s Phase 1 retrofit: **skips the `analysis-agent` folder-mode warrant check**. By Phase 2/3 the task has concrete `research.md`/`architecture.md` content; re-running the analysis-agent for a warrant signal would be redundant. Offer unconditionally on missing task-level, soft phrasing, skippable — never blocks.
+
+**Phase-level offer flow unchanged** except for one conditional: when the user declines task-level retrofit in Step 2a/3a (i.e., task_level still not present), the phase-level offer is also skipped (no phase-level foundation without task-level, matching existing "otherwise proceed silently" branch).
+
+**Rationale:** discoverability. Task-level alignment is a first-class feature; users who don't know it exists should be **offered** it at every phase entry, not required to already-know-and-invoke `/scope`. Single-shot per command invocation, fully skippable, never blocking. Matches v3.12.0's soft-nudge posture.
+
+### Files changed
+
+- `commands/design.md` — replaced single-step Phase 2 alignment sub-step with Step 2a (task-level retrofit, new) + Step 2b (phase-level offer, existing). Removed `**Note:**` justifying asymmetric behavior
+- `commands/implement.md` — same pattern: Step 3a (retrofit) + Step 3b (phase-level). Same `**Note:**` removal
+
+### Not changed
+
+- `commands/research.md` — already had task-level retrofit (v3.12.2+). No change
+- `alignment-reader` skill — no change
+- `commands/scope.md` — no change (retrofit flows call it inline the same way)
+- No version bump to any hard dependency
+
 ## [3.13.0] - 2026-04-24
 
 ### Added — Granular Validation Commands (sub-task granular_validation of dev-framework improvements epic)

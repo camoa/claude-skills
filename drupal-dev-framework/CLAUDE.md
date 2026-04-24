@@ -66,6 +66,8 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 **Conversation convention:** one question at a time, author-authored, never auto-generated. Claude MAY propose a draft, but the user's reply is the final text. Follows superpowers `brainstorming` precedent.
 
+**Task-level retrofit (v3.12.2 in `/research`, v3.13.1 in `/design` + `/implement`):** at every phase entry, commands invoke `alignment-reader` first; if `sections.task_level.present: false`, soft-prompt the user to author task-level scope inline (2-minute conversation) before the phase-level offer. Skippable, single-shot per command invocation, never blocking. Discoverability for users who didn't know `/scope` exists.
+
 **Reader:** `alignment-reader` skill (haiku, user-invocable: false) parses `alignment.md` into structured JSON via `scripts/alignment-read.sh`. Defensive — never throws; emits `warnings[]` on malformed sections. Mirrors `project-state-reader` (v3.11.0) and `task-frontmatter-reader` (v3.10.0).
 
 ## Agents

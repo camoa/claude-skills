@@ -34,21 +34,31 @@ Before doing anything else for this command, verify the prior phases are marked 
 
 Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
 
-## Phase 3 alignment sub-step (v3.12.0+)
+## Phase 3 alignment sub-step (v3.12.0+, task-level retrofit in v3.13.1+)
 
-**Run after the Phase Transition Check, before loading implementation context.** Same pattern as `/research`'s Phase 1 sub-step:
+**Run after the Phase Transition Check, before loading implementation context.** Same pattern as `/research`'s Phase 1 sub-step.
+
+### Step 3a — Task-level retrofit (v3.13.1+)
 
 1. Invoke `alignment-reader` skill against the task folder.
-2. Decide whether to offer an implementation-specific scope. Plain-language prompts:
+2. If `sections.task_level.present: false` → offer task-level retrofit with soft, phase-aware phrasing:
+   > "Heads up — this task doesn't have a task-level scope recorded yet (`alignment.md` is missing or has no `## Task-Level` section). A short scope contract (goal / expected result / success criteria / non-goals) helps implementation stay on-track. Want 2 minutes to pin it down now, or skip and continue? [y]es / [n]o"
+3. On `[y]` → execute the **task-level** flow from `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so Step 3b sees the new section.
+4. On `[n]` / `[skip]` → proceed. Decision is final for this command invocation — no re-nag. Do NOT offer task-level retrofit again in the same `/implement` run.
+5. If `sections.task_level.present: true` → proceed silently to Step 3b (no prompt, no nag).
+
+### Step 3b — Phase-level scope offer
+
+1. Decide whether to offer an implementation-specific scope. Plain-language prompts:
    - If `sections.phase_3.present: true` → print: `"You already scoped this phase earlier. Using that scope."` and proceed.
-   - Else if `sections.task_level.present: true` → ask:
+   - Else if `sections.task_level.present: true` (either pre-existing, or just authored by Step 3a) → ask:
      > "You've scoped the whole task. Want to also scope just this implementation phase — what exactly gets built in this pass, what's deferred to follow-up — or skip and start coding now? [y]es / [n]o"
      Default: `[n]`.
-   - Otherwise → proceed silently (no nag; task never authored any alignment).
-3. If user says `[y]`, execute the `--phase 3` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 3 — Implementation` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with implementation context loading.
-4. If user says `[n]` / `[skip]`, proceed. Never block.
+   - Otherwise (user declined task-level retrofit in Step 3a) → proceed silently. No phase-level offer when there's no task-level foundation.
+2. If user says `[y]`, execute the `--phase 3` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 3 — Implementation` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with implementation context loading.
+3. If user says `[n]` / `[skip]`, proceed. Never block.
 
-**Note:** There is no "re-offer for lighter-touch" branch here (unlike `/research`'s Phase 1 sub-step). If the user declined task-level alignment at task creation, that decision is considered final — the task is already in Phase 3.
+**Why task-level retrofit lives here (v3.13.1 rationale):** Before v3.13.1, only `/research` offered task-level retrofit. Tasks that completed Phases 1-2 outside the plugin commands (plan-mode handoffs, manually-authored `research.md`/`architecture.md`, pre-v3.12.0 tasks) reached `/implement` with no task-level scope and no chance to opt in. The v3.13.1 retrofit makes task-level alignment **discoverable** at every phase entry for users who don't know the feature exists — soft prompt, single-shot per invocation, fully skippable.
 
 ## What This Does (v3.0.0)
 
