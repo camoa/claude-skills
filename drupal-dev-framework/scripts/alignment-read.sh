@@ -243,8 +243,21 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "meta" and .task_name_alt)) | last // {}) as $meta_alt |
   (map(select(.kind == "meta" and .created)) | last // {}) as $meta_created |
 
-  # Start with all four sections as empty, then upgrade any that appeared
-  (map(select(.kind == "section_start") | .section) | unique) as $present_keys |
+  # H2 existence (raw) — any section with a section_start record
+  (map(select(.kind == "section_start") | .section) | unique) as $h2_keys |
+
+  # Content existence — a section has content only if it has at least one
+  # record that represents an actual populated field: field, criterion,
+  # non_goal, criteria_prose, non_goals_prose. NOT empty_field (blank H3),
+  # NOT section_start alone (H2 with no H3s or all H3s empty).
+  (map(select(
+    (.kind == "field" or .kind == "criterion" or .kind == "non_goal"
+      or .kind == "criteria_prose" or .kind == "non_goals_prose")
+    and (.section // "" | IN("task_level","phase_1","phase_2","phase_3"))
+  ) | .section) | unique) as $present_keys |
+
+  # Empty-stub detection: H2 exists but zero content records
+  ($h2_keys - $present_keys) as $empty_stub_keys |
 
   (reduce $present_keys[] as $k (
     {task_level: empty_section, phase_1: empty_section, phase_2: empty_section, phase_3: empty_section};
@@ -299,6 +312,9 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "criteria_prose"))  | map({code: "success_criteria_not_checklist", section: .section})) as $w_crit_prose |
   (map(select(.kind == "non_goals_prose")) | map({code: "non_goals_not_bulleted", section: .section})) as $w_ngoal_prose |
 
+  # section_empty_stub warnings: H2 exists but zero content records
+  ($empty_stub_keys | map({code: "section_empty_stub", section: .})) as $w_empty_stub |
+
   # missing_field warnings from sections_final.fields_missing (truly absent H3s)
   ([$sections_final | to_entries[] | select(.value.present) | {sk: .key, fm: .value.fields_missing}]
     | map(.sk as $sk | .fm | map({code: "missing_field", section: $sk, field: .})) | add // []) as $w_missing |
@@ -310,6 +326,6 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     created: ($meta_created.created // null),
     schema_version: "1.0",
     sections: $sections_final,
-    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_crit_prose + $w_ngoal_prose + $w_missing)
+    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_missing)
   }
 '

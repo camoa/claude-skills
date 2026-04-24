@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.2] - 2026-04-24
+
+### Fixed — `alignment-reader` reported stub H2 sections as `present: true`
+
+Discovered while running v3.13.1 `/design` against a task with a placeholder `alignment.md` (Task-Level populated; Phase 1/2/3 H2 headers present but only a "to be authored later" stub under each).
+
+**Bug:** `alignment-read.sh` computed `sections.<key>.present` purely from the presence of the H2 heading. A stub like:
+
+```markdown
+## Phase 2 — Architecture
+
+_To be authored inline when `/design` is invoked._
+```
+
+...parsed as `phase_2.present: true` even though no H3 fields carried content. Downstream, the v3.12.0 phase-alignment sub-step in `/design` (and `/implement`, and `/research`) interprets `present: true` as "scope exists, skip the offer" — so stubbed sections silently suppressed legitimate alignment offers. Exactly the `/design` false-positive path.
+
+**Fix:** tighten the `present` semantics in the reader to require **H2 exists AND at least one field carries non-empty content** (populated prose body, ≥1 task-list criterion, ≥1 non-goal bullet, or fallback prose body). Empty stubs now return `present: false` plus a new `section_empty_stub` warning — surfaced to consumers who want to know the H2 was seen but contained nothing.
+
+Spec updated: `references/alignment-contract.md` §2 (section-presence semantics paragraph) + §6 (warning code table).
+
+**Consumer impact:** `/research` / `/design` / `/implement` now correctly skip-or-offer based on real content. Stub sections no longer silently suppress the phase-level alignment offer. No command-file changes required — the commands already check `present`; they just now get an honest answer.
+
+**Verified against:**
+- `dev_framework_isolated_validators/alignment.md` (Task-Level populated, Phase 1/2/3 stubs) → `task_level.present: true`, phase_N `present: false`, 3 `section_empty_stub` warnings
+- `completed/dev_framework_granular_validation/alignment.md` (Task-Level only, no phase sections at all) → `task_level.present: true`, no phase warnings (true absence vs stub correctly distinguished)
+
+### Files changed
+
+- `scripts/alignment-read.sh` — `$present_keys` now derived from content-bearing records (`field`, `criterion`, `non_goal`, `criteria_prose`, `non_goals_prose`), not `section_start` alone. New `$empty_stub_keys` derives from the set difference. New `$w_empty_stub` warning stream
+- `references/alignment-contract.md` — section-presence semantics paragraph added to §2; new `section_empty_stub` row in §6 warning code table
+
+### Not changed
+
+- `alignment-reader` skill wrapper — unchanged (delegates to the script)
+- `commands/research.md`, `commands/design.md`, `commands/implement.md` — no changes needed; fix is isolated to the reader
+- Public JSON envelope shape — unchanged (only the semantics of `present` tightened)
+
 ## [3.13.1] - 2026-04-24
 
 ### Fixed — Task-level alignment retrofit in `/design` and `/implement`

@@ -61,6 +61,8 @@ Sibling to `task.md`, `research.md`, `architecture.md`, `implementation.md` in t
 
 Phase sections are OPTIONAL — a brand-new task's `alignment.md` may contain only `## Task-Level`; phase sections are appended as the task enters each phase.
 
+**Section presence semantics (v3.13.2+):** a section is `present: true` in the parsed output **only when the H2 heading exists AND at least one of its four canonical fields carries non-empty content** (populated prose body, ≥1 task-list criterion, ≥1 non-goal bullet, or any fallback prose body). An H2 with no H3s, or with all H3s empty, is a **stub** — the parser emits `present: false` for that section and adds a `section_empty_stub` warning. This matches consumer intent: `/research`, `/design`, `/implement` use `present: true` to decide "scope exists, skip the offer" — a stub H2 shouldn't satisfy that check. Before v3.13.2 the reader reported `present: true` for stub H2s, causing phase commands to silently skip legitimate alignment offers.
+
 ## 3. Recognized H2 section headings
 
 | Canonical heading | Maps to JSON key | Notes |
@@ -125,6 +127,7 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 | `missing_field` | Expected H3 not found inside a recognized H2 |
 | `unknown_field` | H3 present but not one of the 4 canonical field names |
 | `empty_field` | Recognized H3 present but body is blank |
+| `section_empty_stub` | **(v3.13.2+)** H2 section heading exists but no H3 fields carry any content — the section is a stub. `sections.<key>.present` is `false` in this case. |
 | `success_criteria_not_checklist` | `Success criteria` body is prose instead of `- [ ]` task-list |
 | `non_goals_not_bulleted` | `Non-goals` body is prose instead of `- …` bulleted list |
 | `error` | Unrecoverable read failure (permission denied, invalid UTF-8). Only case producing non-zero exit. |
