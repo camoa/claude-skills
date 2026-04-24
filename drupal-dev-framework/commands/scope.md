@@ -56,49 +56,68 @@ Default answer: `[c]` (cancel). Never overwrite without explicit confirmation.
 
 ## alignment conversation — Task-Level
 
-Follow brainstorming convention: **one question at a time**. The user's reply is the source of truth. You MAY draft a Goal or Non-goals suggestion after gathering context, but mark it as "Here's a draft — please edit or replace" — never silently accept your own suggestion.
+The conversation produces a 4-field contract (Goal / Expected result / Success criteria / Non-goals). It is author-driven — the user's words are the source of truth — but the agent starts from any existing content rather than asking from a blank slate.
 
-Prompts, in order:
+**Follow brainstorming convention:** one real question at a time. Never force the user to restate something they've already written. Never silently accept the agent's own draft.
 
-1. **Goal.** Ask:
-   > "What is the single-sentence Goal of `<task>`? (What problem does this solve? Start with a verb.)"
+### Step 1 — Read existing context first
 
-   Append reply verbatim to the `### Goal` field body.
+Before asking anything, read the task's current content:
 
-2. **Expected result.** Ask:
-   > "What Expected Result will be observable when this task ships? Describe the after-state in 1–3 sentences."
+1. Invoke `task-frontmatter-reader` on the task folder to get `kind`, `status`, description, dependencies.
+2. Read `task.md` body (Goal, Current State, Acceptance Criteria, Research Questions, Notes — whatever exists).
+3. Read `alignment.md` via `alignment-reader` (should be missing or have no Task-Level section, since this command path only runs when we intend to author).
 
-   Append reply to `### Expected result`.
+### Step 2 — Decide the conversation mode
 
-3. **Success criteria.** Ask:
-   > "List the Success Criteria — falsifiable statements, each one checkable. One per line. Hit enter on an empty line when done."
+Based on what Step 1 surfaced:
 
-   Collect lines until blank line. Format each as `- [ ] <text>`. Append under `### Success criteria`.
+| task.md state | Mode | Opening move |
+|---|---|---|
+| Substantive Goal + ACs (≥40 words of content) | **Reflect-and-refine** | Paraphrase what's there, ask if the paraphrase captures the real driver or if something else is the point |
+| Partial content (Goal only, or just a title) | **Draft-and-confirm** | Propose a draft Goal + expected result from available context, ask what's missing or wrong |
+| Stub / empty | **Open exploration** | Ask openly what the user wants to achieve; multi-sentence answers welcome; refine iteratively |
 
-4. **Non-goals.** Ask:
-   > "Any explicit Non-Goals? Things people might assume are in scope but aren't. One per line; empty line to finish."
+The mode determines tone, not script. The agent MUST NOT fall into "ask 5 rigid questions in order" regardless of mode.
 
-   Collect lines until blank line. Format each as `- <text>`. Append under `### Non-goals`.
+### Step 3 — Converse to surface the 4 fields
 
-5. **Confirm and write.** Show the assembled Task-Level section and ask:
-   > "Write this `## Task-Level` section to `alignment.md`? [y]es / [e]dit / [c]ancel"
+Operate conversationally. Over however many turns feel natural:
 
-   - `[y]` — write the file (see "Writing alignment.md" below)
-   - `[e]` — ask which field to edit (Goal / Expected result / Success criteria / Non-goals), re-run that prompt, re-assemble, re-confirm
-   - `[c]` — abort cleanly; no write
+- **Goal** — what problem this solves, why it matters. One to three sentences is fine.
+- **Expected result** — what's observable/different when the task ships.
+- **Success criteria** — the falsifiable checklist. Propose items as they surface in conversation; confirm at the end.
+- **Non-goals** — push proactively. Common drift sources: "Are we also doing X?" / "Is adjacent thing Y in scope?" / "Does this include migrating the existing data?". Non-goals prevent scope creep later — worth pulling a few out explicitly even if the user didn't mention them.
+
+The agent MAY propose drafts for any field after gathering enough context, but always marks them as drafts and asks for correction.
+
+### Step 4 — Assemble a draft and show it
+
+When the 4 fields feel substantively covered, assemble the full `## Task-Level` section and show it verbatim to the user. Not a summary — the actual markdown that would be written.
+
+### Step 5 — Confirm, edit, or cancel
+
+> "Here's the task-level scope as I understood it (shown above). Write it to `alignment.md` as-is, edit a specific field, or cancel? [y]es / [e]dit / [c]ancel"
+
+- `[y]` — write the file (see "Writing alignment.md" below).
+- `[e]` — ask which field needs revision (Goal / Expected result / Success criteria / Non-goals), loop back to Step 3 for just that field, reassemble, re-confirm.
+- `[c]` — abort; no write.
 
 ## alignment conversation — Phase-level (`--phase N`)
 
-Same 4 fields, scope-adjusted wording. Use "this phase's <research|architecture|implementation>" in place of "this task" throughout.
+Same 4 fields, scope-adjusted to one phase. Same conversation modes (reflect-and-refine / draft-and-confirm / open exploration) based on what's already in `task.md`, `research.md`, or `architecture.md` for that phase.
 
-Phase 1 example:
-1. "Goal of **this phase's research**: what question(s) must this research answer?"
-2. "Expected Result of research: what will `research.md` contain when done?"
-3. "Success Criteria for research — falsifiable statements. One per line; empty line to finish."
-4. "Non-Goals for research — investigations explicitly out of scope. One per line; empty line to finish."
-5. "Write this `## Phase 1 — Research` section to `alignment.md`? [y]es / [e]dit / [c]ancel"
+Scope-adjusted wording:
 
-Phase 2 and Phase 3 substitute "architecture"/"implementation" (and `## Phase 2 — Architecture` / `## Phase 3 — Implementation` in the H2 header and confirm prompt).
+- **Goal** — for research: what question(s) must research answer? For architecture: what design decisions does this phase commit to? For implementation: what will this phase actually build?
+- **Expected result** — what will `research.md` / `architecture.md` / `implementation.md` contain when the phase is done?
+- **Success criteria** — falsifiable per-phase criteria, not task-level ones
+- **Non-goals** — investigations / design decisions / implementation scope explicitly deferred to a later phase or task
+
+The phase-level agent MUST assume task-level scope already exists and NOT re-ask task-level questions. Phase-level is narrower: "given the task-level contract, what does THIS phase alone deliver?"
+
+Confirm prompt:
+> "Here's the Phase N scope (shown above). Write it to `alignment.md` as a `## Phase N — <Research|Architecture|Implementation>` section, edit a specific field, or cancel? [y]es / [e]dit / [c]ancel"
 
 ## Writing `alignment.md`
 
