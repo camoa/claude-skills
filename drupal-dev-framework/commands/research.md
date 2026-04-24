@@ -19,13 +19,81 @@ Research existing solutions for a specific task (Phase 1 of a task).
 1. **Pre-analysis hook** (v3.11.0+, before anything else) — if strong signals fire in the task name + description, invoke `analysis-agent` to assess whether this should be an epic. See "Pre-analysis hook" section below.
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
 3. Creates `task.md` (tracker with links and acceptance criteria)
-4. **Loads dev-guides** for the task's Drupal domain via `guide-integrator` (unless already loaded this session)
+4. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
 5. Invokes `contrib-researcher` agent for drupal.org/contrib search
 6. Invokes `core-pattern-finder` skill for core examples
 7. Stores findings in `research.md` file
 8. Updates `task.md` to mark Phase 1 as in progress
 8. Updates `project_state.md` with current task
-9. **Invokes `session-context-writer` skill with the resolved project and task**
+9. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `research.md` sections to the task's research questions + acceptance criteria
+10. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Traceability walkthrough sub-step (v3.13.4+)
+
+**Run after `research.md` has been authored and `task.md` / `project_state.md` updated, before `session-context-writer` is invoked.**
+
+Purpose: let the user see, at a glance, how each research question (and each task-level acceptance criterion, if one exists) is addressed by the freshly-authored research — without having to read the whole artifact and cross-reference by hand.
+
+### Step 1 — Ask (opt-in)
+
+Print the one-line prompt:
+
+> **Walk through how this research answers the task's questions and acceptance criteria?** [y]es / [n]o
+
+Default: `[n]`.
+
+If `[n]` → skip the walkthrough; proceed to session-context-writer.
+
+### Step 2 — Build the mapping
+
+On `[y]`:
+
+1. **Pull the traceability sources** using this priority:
+   - `task.md` → Research Questions list (extract `- ...` bullets under that heading, if present)
+   - `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked}`)
+   - If both sources are empty → "This task has no research questions or acceptance criteria declared. Walkthrough can't map without them; consider `/scope <task>` to add task-level criteria."
+2. **For each item (question or criterion)**, scan `research.md` and identify the section(s) that address it. Look for:
+   - Q-headings that match (e.g., `### Q1 — Playwright MCP concurrency` ↔ a Research Question about MCP concurrency)
+   - Decision-log entries
+   - Cross-cutting pattern numbers
+   - Evidence index references
+3. **Honest mapping.** If a question or criterion has no clear section in `research.md`, mark it **"NOT YET ADDRESSED"** — do not invent a reference. Flag it for the discussion step.
+
+### Step 3 — Print the table
+
+Format:
+
+```
+Research addresses these questions and criteria:
+
+  Q1 "<first 60 chars>…"  →  research.md §4 Q1 + decision log #1
+  Q2 "<first 60 chars>…"  →  research.md §4 Q2 + §5 pattern 1
+  AC #1 "<first 60 chars>…"  →  research.md §6 decision #7
+  AC #2 "<first 60 chars>…"  →  — NOT YET ADDRESSED — raise in Phase 2?
+  …
+```
+
+Separate Q-rows from AC-rows. Section references are lightweight — just enough to jump to the right place.
+
+### Step 4 — Three-way prompt
+
+After the table, ask:
+
+> **[c]ontinue** — looks right, proceed to session-context-writer
+> **[r]evise** — something's wrong or missing; let's edit `research.md` before continuing
+> **[d]iscuss** — not sure, let's talk through one or more rows before deciding
+
+Default: `[c]`.
+
+- `[c]` → proceed.
+- `[r]` → ask the user which row(s) need revision. Make the edit to `research.md` inline. Re-print the table, re-ask Step 4.
+- `[d]` → talk through selected rows one at a time; re-ask Step 4 after discussion.
+
+### Notes
+
+- **Never blocks.** `[n]` in Step 1 or `[c]` in Step 4 always proceeds.
+- **No schema writes.** Print-and-optionally-edit flow. Only persists edits the user approves under `[r]`.
+- **Opt-in by design.** Skip for routine work; use for complex tasks or sanity-checks before locking Phase 1.
 
 ## Task-Based Workflow
 
@@ -150,6 +218,43 @@ If a signal fires:
    On `[later]` → same as `[n]` for this run; user can run `/scope <task>` anytime.
 
 Conservative by design: pre-analysis only fires on strong signals, and even then the default choice presented to the user is to proceed as a flat task. Never creates an epic without explicit confirmation. The alignment nudge is soft; `[n]` is always respected.
+
+## Dev-guides pre-flight (v3.13.4+)
+
+**Run after the Pre-analysis hook, before the Phase 1 alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover Drupal, Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across Drupal AND non-Drupal (plugin framework, docs-only, Claude Code) tasks.
+
+### Step 1 — Invoke guide-integrator explicitly
+
+Do NOT rely on proactive skill detection. Directly invoke the `guide-integrator` skill against the task context. Record which guides (if any) were auto-loaded via its keyword-detection rules + `dev-guides-navigator` delegation.
+
+### Step 2 — ALWAYS prompt the user (never silent-skip)
+
+Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
+
+> **Dev-guides pre-flight for `<task_name>` (Phase 1 — Research):**
+>
+> Auto-loaded based on task keywords:
+>   <bulleted list of loaded guides, OR "  — none auto-matched —">
+>
+> Dev-guides cover Drupal (forms, entities, plugins, services, caching, views, JSON:API, etc.), Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Loading relevant guides before research keeps findings grounded in existing knowledge and prevents re-research of known patterns.
+>
+> **[c]ontinue** — auto-loaded set is fine, start research
+> **[a]dd** — scan the `dev-guides-navigator` catalog for more topics before I research
+> **[n]one** — skip dev-guides entirely (override any auto-loaded); I'll rely on you
+
+Default: `[c]`.
+
+### Step 3 — Act on the answer
+
+- `[c]` → proceed to the alignment sub-step with the auto-loaded guides (possibly empty).
+- `[a]` → invoke `dev-guides-navigator` interactively with task keywords the user supplies. Let the user select 0 or more additional guides. Load them via `guide-integrator`. After the user says "done," proceed to alignment.
+- `[n]` → clear any auto-loaded guides from the session context (do NOT persist them to `loadedGuides[]`). Note "dev-guides declined" in session. Proceed to alignment.
+
+### Notes
+
+- **Never blocks.** `[c]` (default) always proceeds.
+- **Discoverability > compliance.** `[n]` is a first-class choice.
+- **Works for non-Drupal tasks.** Plugin/framework/docs tasks can still find applicable methodology or design-system guides via `[a]`.
 
 ## Phase 1 alignment sub-step (v3.12.0+, retrofit-aware in v3.12.2+)
 

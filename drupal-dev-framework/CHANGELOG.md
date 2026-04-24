@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.4] - 2026-04-24
+
+Two phase-command UX fixes discovered during live use of `/design` on a non-Drupal plugin-framework task. Both bundled here as a single quick-fix release.
+
+### Added — Traceability walkthrough sub-step in `/research`, `/design`, `/implement`
+
+Users had no in-command way to see how the newly-authored `research.md` / `architecture.md` / `implementation.md` addresses the task's research questions + acceptance criteria — they had to read the whole artifact and cross-reference by hand.
+
+**Fix:** after each phase command authors its artifact, offer an opt-in walkthrough that maps acceptance criteria (pulled from `alignment.md` Success criteria, falling back to `task.md` Acceptance Criteria) to the artifact's sections. User picks `[c]ontinue` / `[r]evise` / `[d]iscuss` and can inline-edit or discuss any row.
+
+**Pattern:**
+- Step 1: single-line `[y]es / [n]o` opt-in prompt. Default `[n]`.
+- Step 2 (on `[y]`): map each criterion → artifact section reference (honest — unaddressed criteria marked `— NOT YET ADDRESSED —`, never invented).
+- Step 3: print the table.
+- Step 4: 3-way prompt (`[c]` / `[r]` / `[d]`) with inline revise + discuss paths.
+
+**Never blocks.** Opt-in twice (`[n]` in Step 1 or `[c]` in Step 4) always proceeds. No persistence except edits the user approves under `[r]`.
+
+**Per-phase adaptations:**
+- `/research` — maps research questions (from `task.md`) AND task-level ACs (from `alignment.md`) to `research.md` sections.
+- `/design` — maps task-level ACs to `architecture.md` sections (+ optional `architecture/{component}.md` files).
+- `/implement` — maps task-level ACs to `implementation.md` progress status (`[complete]` / `[in-progress]` / `(planned)` / `— NOT YET ADDRESSED —`). Particularly useful mid-flight as a sanity check.
+
+### Added — Dev-guides pre-flight sub-step in `/research`, `/design`, `/implement`
+
+Before v3.13.4, each phase command's "What This Does" list said *"Loads dev-guides via `guide-integrator` (unless already loaded this session)"* — but that was documentation-of-intent, not an explicit directive to Claude to invoke the skill. The skill fired only via proactive-skill-detection, which is unreliable on non-Drupal tasks (plugin framework, docs-only, Claude Code work). Result: live observation on `dev_framework_isolated_validators` showed dev-guides were never consulted, even though applicable methodology guides (TDD, SOLID, DRY, security, quality-gates) and cross-cutting guides (Next.js, design systems, CSS) existed.
+
+**Fix:** new explicit "Dev-guides pre-flight" sub-step runs after Phase Transition Check, BEFORE the alignment sub-step. Two-part structure:
+
+1. **Explicit invocation** of `guide-integrator` (no reliance on proactive detection).
+2. **Always-prompt** the user — NEVER silent-skip — with the current auto-loaded set displayed, then `[c]ontinue` / `[a]dd (scan dev-guides-navigator catalog)` / `[n]one (decline all)`.
+
+**Why "never silent-skip":** dev-guides cover material beyond Drupal (methodology, Next.js, design systems, CSS). Even when auto-detection finds N guides, the user may want to `[a]dd` more. When auto-detection finds zero (common on non-Drupal tasks), the user would have had no signal that guides exist. Silent-skip was hiding the catalog.
+
+**Discoverability > compliance.** `[n]` is a first-class choice — users who explicitly don't want guides can decline without guilt. The fix is about surfacing the option, not mandating use.
+
+### Files changed
+
+- `commands/research.md` — new "Dev-guides pre-flight" section (runs after pre-analysis hook, before Phase 1 alignment). New "Traceability walkthrough sub-step" section (runs after `research.md` authoring, before session-context-writer). Both referenced from updated "What This Does" list
+- `commands/design.md` — same pair of sections, adapted for Phase 2 context. Updated "What This Does" list
+- `commands/implement.md` — same pair of sections, adapted for Phase 3 context (including mid-flight re-invocation note for the walkthrough). Updated "What This Does" list
+
+### Not changed
+
+- `guide-integrator` skill — unchanged (auto-load rules preserved; v3.13.4 just invokes it explicitly and adds the user prompt layer above it)
+- `dev-guides-navigator` plugin — unchanged (consumed unchanged by `[a]dd` branch)
+- `alignment-reader` skill — unchanged
+- Phase-alignment sub-steps (v3.12.0/v3.12.2/v3.13.1 work) — unchanged in logic; dev-guides pre-flight runs just ahead of them
+
 ## [3.13.3] - 2026-04-24
 
 ### Changed — Alignment-related prompt wording in `/research`, `/design`, `/implement`

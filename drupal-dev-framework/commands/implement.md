@@ -34,6 +34,43 @@ Before doing anything else for this command, verify the prior phases are marked 
 
 Never block the command on this check — the user is in control. The nudge exists so they notice out-of-order invocations without being fought by the tool.
 
+## Dev-guides pre-flight (v3.13.4+)
+
+**Run after the Phase Transition Check, before the alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover Drupal, Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across Drupal AND non-Drupal (plugin framework, docs-only, Claude Code) tasks.
+
+### Step 1 — Invoke guide-integrator explicitly
+
+Do NOT rely on proactive skill detection. Directly invoke the `guide-integrator` skill against the task context. Record which guides (if any) were auto-loaded via its keyword-detection rules + `dev-guides-navigator` delegation.
+
+### Step 2 — ALWAYS prompt the user (never silent-skip)
+
+Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
+
+> **Dev-guides pre-flight for `<task_name>` (Phase 3 — Implementation):**
+>
+> Auto-loaded based on task keywords:
+>   <bulleted list of loaded guides, OR "  — none auto-matched —">
+>
+> Dev-guides cover Drupal (forms, entities, plugins, services, security, testing, etc.), Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Implementation-phase guides are especially useful for security, SDC, JS, and testing patterns.
+>
+> **[c]ontinue** — auto-loaded set is fine, start coding
+> **[a]dd** — scan the `dev-guides-navigator` catalog for more topics before I implement
+> **[n]one** — skip dev-guides entirely (override any auto-loaded); I'll rely on you
+
+Default: `[c]`.
+
+### Step 3 — Act on the answer
+
+- `[c]` → proceed to the alignment sub-step with the auto-loaded guides (possibly empty).
+- `[a]` → invoke `dev-guides-navigator` interactively with task keywords the user supplies. Let the user select 0 or more additional guides. Load them via `guide-integrator`. After the user says "done," proceed to alignment.
+- `[n]` → clear any auto-loaded guides from the session context (do NOT persist them to `loadedGuides[]`). Note "dev-guides declined" in session. Proceed to alignment.
+
+### Notes
+
+- **Never blocks.** `[c]` (default) always proceeds.
+- **Discoverability > compliance.** `[n]` is a first-class choice.
+- **Works for non-Drupal tasks.** Plugin/framework tasks can still find applicable methodology guides via `[a]`.
+
 ## Phase 3 alignment sub-step (v3.12.0+, task-level retrofit in v3.13.1+)
 
 **Run after the Phase Transition Check, before loading implementation context.** Same pattern as `/research`'s Phase 1 sub-step.
@@ -91,13 +128,83 @@ Never block the command on this check — the user is in control. The nudge exis
 2. Loads architecture from `architecture.md`
 3. Loads research context from `research.md`
 4. Loads referenced patterns from core/contrib
-5. **Loads dev-guides** for security, SDC, JS patterns via `guide-integrator` (unless already loaded this session)
+5. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
 6. Loads methodology refs (via `guide-integrator`)
 7. Creates/updates `implementation.md` for progress tracking
 8. Updates `task.md` to mark Phase 3 as in progress
 9. Activates `tdd-companion` for TDD discipline
 10. Prepares for interactive development
-11. **Invokes `session-context-writer` skill with the resolved project and task**
+11. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
+12. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Traceability walkthrough sub-step (v3.13.4+)
+
+**Run after `implementation.md` has been created / updated and the interactive-development prep is complete, before `session-context-writer` is invoked.** Can also be re-invoked at any point during implementation as a mid-flight sanity check by prompting the user.
+
+Purpose: let the user see, at a glance, how each acceptance criterion from the task is addressed by the implementation plan (for an initial run) or by the implementation progress so far (for a mid-flight run) — without having to read the whole artifact and cross-reference by hand.
+
+### Step 1 — Ask (opt-in)
+
+Print the one-line prompt:
+
+> **Walk through how the implementation plan addresses the task's acceptance criteria?** [y]es / [n]o
+
+Default: `[n]`.
+
+If `[n]` → skip the walkthrough; proceed to session-context-writer (or resume interactive development on mid-flight re-invocation).
+
+### Step 2 — Build the mapping
+
+On `[y]`:
+
+1. **Pull acceptance criteria** using this priority:
+   - Primary: `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked}`)
+   - Fallback: `task.md` → Acceptance Criteria list (`- [ ] ...` bullets)
+   - Final fallback: "This task has no declared acceptance criteria. Walkthrough can't map without them; consider `/scope <task>` to add them."
+2. **For each criterion**, identify where it's addressed using this priority of sources:
+   - `implementation.md` → Progress section entries, Files Created/Modified list
+   - `architecture.md` → section references that dictate the implementation approach for this AC
+   - `research.md` → decision log references if the AC is driven by a research recommendation
+3. **Honest mapping.** If a criterion has no clear source, mark **"NOT YET ADDRESSED"** — do not invent a reference. Specifically flag:
+   - ACs that have **no implementation plan** (no `implementation.md` entry)
+   - ACs that are **in-progress** (partial implementation)
+   - ACs that are **complete** (all planned files written, tests passing)
+
+### Step 3 — Print the table
+
+Format:
+
+```
+Implementation addresses these acceptance criteria:
+
+  AC #1 "<first 60 chars>…"  →  implementation.md §Progress step 2 [complete]
+  AC #2 "<first 60 chars>…"  →  implementation.md §Progress step 5 [in-progress]
+  AC #3 "<first 60 chars>…"  →  architecture.md §6 (planned, not yet started)
+  AC #4 "<first 60 chars>…"  →  — NOT YET ADDRESSED — add to implementation.md?
+  …
+```
+
+Status annotation (`[complete]`, `[in-progress]`, `(planned)`, `— NOT YET ADDRESSED —`) is mandatory for mid-flight runs; optional for initial runs where everything is planned.
+
+### Step 4 — Three-way prompt
+
+After the table:
+
+> **[c]ontinue** — looks right, proceed to session-context-writer (or resume dev)
+> **[r]evise** — something's wrong or missing; let's edit `implementation.md` before continuing
+> **[d]iscuss** — not sure, let's talk through one or more rows before deciding
+
+Default: `[c]`.
+
+- `[c]` → proceed.
+- `[r]` → ask which row(s) need revision. Edit `implementation.md` inline. Re-print table, re-ask Step 4.
+- `[d]` → talk through selected rows one at a time; re-ask Step 4.
+
+### Notes
+
+- **Never blocks.** Opt-in twice (`[n]` in Step 1 or `[c]` in Step 4) always proceeds.
+- **No schema writes.** Print-and-optionally-edit. Only persists edits the user approves under `[r]`.
+- **Particularly useful mid-flight** — call this on a partial implementation to see what's done vs planned vs missing before committing a checkpoint or opening a PR.
 
 ## Task-Based Workflow
 
