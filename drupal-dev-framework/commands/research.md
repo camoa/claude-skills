@@ -130,7 +130,20 @@ If a signal fires:
    - `insufficient_info` → proceed with flat-task research; the task description alone wasn't sufficient for decomposition judgment (makes sense at creation time — usually the description IS minimal here).
 
 5. **(v3.12.0+)** After the `decision` branch completes (regardless of outcome unless the task became an epic), inspect `signals_used[]` for `scope_contract_recommended`. If present, print soft-nudge in plain language — explain WHY before asking:
-   > "Before diving into research: this task looks scope-heavy (multiple deliverables or complex criteria). Want to pin down the scope first in a short conversation — goal, what success looks like, what's explicitly out of scope — so research doesn't drift? [y]es / [n]o / [later]"
+   > **Before I dig into research:** this task looks scope-heavy (multiple deliverables, or details that can be read several ways). Want to pin down what it's really trying to deliver first?
+   >
+   > You'd answer 4 short questions, one at a time. Shape of the result:
+   >
+   > ```
+   > Goal: <what this task is really about>
+   > Expected result: <what exists when it's done>
+   > Done when: <observable checks>
+   > Won't do here: <related work we're skipping>
+   > ```
+   >
+   > **[y]es** — 4 questions now
+   > **[n]o** — research as-is (we can always add this later)
+   > **[later]** — skip for now; `/scope <task>` anytime
 
    On `[y]` → execute the alignment conversation + write flow as documented in `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md") within this command's context. Do NOT try to shell out to a sibling slash command. After the write completes, continue with the standard research flow.
    On `[n]` → proceed without writing `alignment.md`. No nag.
@@ -147,7 +160,20 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`). Inspect the returned `signals_used[]` for `scope_contract_recommended`.
 
    - If present → print soft-nudge in plain language:
-     > "This task doesn't have a declared scope yet, and I'm picking up signals that scope might drift during research (multiple distinct deliverables, or a description that could be interpreted several ways). Want to spend a minute nailing down the goal and success criteria before we dig in? [y]es / [n]o / [skip]"
+     > **Before I dig into research:** this task has no task-level scope recorded yet, and I'm seeing signals that scope could drift (multiple distinct deliverables, or a description that reads several ways). Want to pin down what it's really trying to deliver first?
+     >
+     > You'd answer 4 short questions, one at a time. Shape of the result:
+     >
+     > ```
+     > Goal: <what this task is really about>
+     > Expected result: <what exists when it's done>
+     > Done when: <observable checks>
+     > Won't do here: <related work we're skipping>
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — research as-is (we can always add this later)
+     > **[skip]** — same as no, but quieter about it
      Default: `[skip]`.
      - On `[y]` → execute the task-level flow from `commands/scope.md` (context-aware task-level conversation + "Writing alignment.md" for the `## Task-Level` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, refresh `alignment-reader` output so subsequent steps see the new section.
      - On `[n]` / `[skip]` → proceed; record "task-level retrofit declined" for this run.
@@ -159,10 +185,36 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 3. Decide whether to offer a research-specific scope. All prompts use plain language that explains WHAT the choice means:
    - If `sections.phase_1.present: true` → print: `"You already scoped this phase earlier. Using that scope."` and proceed.
    - Else if `sections.task_level.present: true` (including freshly authored in step 2) → ask:
-     > "You've scoped the whole task. Want to also scope just this research phase specifically — what questions research needs to answer, what's out of scope for research — or skip and start research now? [y]es / [n]o"
+     > **Before I start research:** you've already scoped the task. Want to also scope *just this research pass* — what it's trying to answer vs what it's leaving for later?
+     >
+     > Useful when research has many threads; often not needed. Shape of the result:
+     >
+     > ```
+     > Phase 1 — Research
+     > Goal: <what this research pass is answering>
+     > Expected result: <e.g., "a research.md recommending one option with citations">
+     > Done when: <observable signal, e.g., "≥2 concrete code references">
+     > Won't decide here: <pushed to Phase 2, e.g., "which option to actually build">
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — start research (can always add this later)
      Default: `[n]` (most tasks don't need a separate research sub-scope).
    - Else if pre-analysis hook emitted `scope_contract_recommended` and user declined task-level scope earlier → re-offer lighter-touch:
-     > "You skipped the task-level scope earlier. Want to at least scope just this research phase (lighter — only what research is trying to answer)? [y]es / [n]o"
+     > **Before I start research:** you skipped the full task-level scope earlier. Want to scope *just this research pass* instead? (Lighter — only what research is trying to answer.)
+     >
+     > Shape of the result:
+     >
+     > ```
+     > Phase 1 — Research
+     > Goal: <what this research pass is answering>
+     > Expected result: <e.g., "a research.md recommending one option with citations">
+     > Done when: <observable signal>
+     > Won't decide here: <pushed to Phase 2>
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — start research as-is
      Default: `[n]`.
    - Otherwise → proceed silently (no nag).
 
