@@ -12,6 +12,11 @@
 #     "project_name": "<name or folder basename>",
 #     "codePath": "<absolute path or null>",
 #     "folder": "<abs path to project folder>",
+#     "playbookSets": ["<set-id>", ...],
+#     "playbookSetsSource": "explicit" | "explicit-none" | "default",
+#     "userPlaybook": "<absolute path or null>",
+#     "userPlaybookState": "unset" | "docs-only-no-playbook" | "set",
+#     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
@@ -37,22 +42,49 @@ PROJECT_STATE="$PROJECT_DIR/project_state.md"
 
 emit_json() {
   # $1 = project_name, $2 = codePath (string "null" literal for null), $3 = folder, $4 = warnings JSON array
-  jq -nc --arg n "$1" --arg cp "$2" --arg d "$3" --argjson w "$4" '
+  # $5 = playbookSets JSON array, $6 = playbookSetsSource string,
+  # $7 = userPlaybook (string "null" literal for null), $8 = userPlaybookState string,
+  # $9 = playbookResolutions JSON array
+  jq -nc \
+    --arg n "$1" --arg cp "$2" --arg d "$3" \
+    --argjson w "$4" \
+    --argjson ps "${5:-[]}" --arg pss "${6:-default}" \
+    --arg up "${7:-null}" --arg ups "${8:-unset}" \
+    --argjson pr "${9:-[]}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
       folder: $d,
+      playbookSets: $ps,
+      playbookSetsSource: $pss,
+      userPlaybook: (if $up == "null" then null else $up end),
+      userPlaybookState: $ups,
+      playbookResolutions: $pr,
       warnings: $w
     }'
 }
 
+# Resolve framework default playbook sets from plugin.json
+PLUGIN_JSON_PATH="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")/.claude-plugin/plugin.json"
+get_default_playbook_sets() {
+  if [ -f "$PLUGIN_JSON_PATH" ]; then
+    jq -c '.defaults.playbookSets // []' "$PLUGIN_JSON_PATH" 2>/dev/null || echo "[]"
+  else
+    echo "[]"
+  fi
+}
+
+DEFAULT_PB_SETS=$(get_default_playbook_sets)
+
 if [ ! -d "$PROJECT_DIR" ]; then
-  emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]'
+  emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]"
   exit 0
 fi
 
 if [ ! -f "$PROJECT_STATE" ]; then
-  emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]'
+  emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]' \
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]"
   exit 0
 fi
 
@@ -91,4 +123,86 @@ else
   CODE_PATH_OUT="$CODE_PATH_NORM"
 fi
 
-emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS"
+# === Playbook Sets parsing ===
+PB_SETS_RAW=$(awk '
+  BEGIN { IGNORECASE=1 }
+  /^\*\*Playbook Sets:\*\*/ {
+    sub(/^\*\*Playbook Sets:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+if [ -z "$PB_SETS_RAW" ]; then
+  PB_SETS_OUT="$DEFAULT_PB_SETS"
+  PB_SETS_SOURCE="default"
+elif [ "$PB_SETS_RAW" = "none" ]; then
+  PB_SETS_OUT="[]"
+  PB_SETS_SOURCE="explicit-none"
+else
+  # Comma-split, trim, JSON-encode
+  PB_SETS_OUT=$(echo "$PB_SETS_RAW" | jq -R -c 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+  PB_SETS_SOURCE="explicit"
+fi
+
+# === User Playbook + State parsing ===
+UP_RAW=$(awk '
+  BEGIN { IGNORECASE=1 }
+  /^\*\*User Playbook:\*\*/ {
+    sub(/^\*\*User Playbook:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+UPS_RAW=$(awk '
+  BEGIN { IGNORECASE=1 }
+  /^\*\*User Playbook State:\*\*/ {
+    sub(/^\*\*User Playbook State:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+if [ -n "$UPS_RAW" ]; then
+  UP_STATE="$UPS_RAW"
+elif [ -z "$UP_RAW" ]; then
+  UP_STATE="unset"
+elif [ "$UP_RAW" = "(docs-only-no-playbook)" ] || [ "$UP_RAW" = "docs-only-no-playbook" ]; then
+  UP_STATE="docs-only-no-playbook"
+else
+  UP_STATE="set"
+fi
+
+if [ "$UP_STATE" = "set" ] && [ -n "$UP_RAW" ]; then
+  UP_OUT="$UP_RAW"
+else
+  UP_OUT="null"
+fi
+
+# === Playbook Resolutions parsing ===
+# Format: multi-line list under **Playbook Resolutions:** heading
+#   - topic1 → set-id-1
+#   - topic2 → set-id-2
+PB_RESOLUTIONS=$(awk '
+  BEGIN { in_block = 0 }
+  /^\*\*Playbook Resolutions:\*\*/ { in_block = 1; next }
+  in_block && /^\*\*[A-Z]/ { in_block = 0 }
+  in_block && /^- / {
+    line = $0
+    sub(/^- */, "", line)
+    # Split on → or ->
+    if (match(line, / *(→|->|=) */)) {
+      topic = substr(line, 1, RSTART-1)
+      set = substr(line, RSTART+RLENGTH)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", topic)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", set)
+      printf("{\"topic\":\"%s\",\"set\":\"%s\"}\n", topic, set)
+    }
+  }
+' "$PROJECT_STATE" | jq -s -c .)
+
+[ -z "$PB_RESOLUTIONS" ] && PB_RESOLUTIONS="[]"
+
+emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
+  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS"

@@ -1,7 +1,7 @@
 ---
 name: project-state-reader
-description: Use when a framework command needs project-level metadata (currently codePath, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.0.0
+description: Use when a framework command needs project-level metadata (codePath, playbookSets, userPlaybook, playbookResolutions, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
+version: 1.1.0
 user-invocable: false
 model: haiku
 allowed-tools: Bash
@@ -21,6 +21,11 @@ Fields:
 - `project_name` — from the H1 line in `project_state.md`, or folder basename fallback
 - `codePath` — absolute path (string) if declared and resolves, or `null` if docs-only / unknown
 - `folder` — the absolute path passed in
+- `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["drupal/best-practices/camoa"]`). Falls back to plugin.json `defaults.playbookSets` when field absent. Empty array when explicit `none`.
+- `playbookSetsSource` — *(v1.1+)* `"explicit"` (field present with values) \| `"explicit-none"` (field is literal `none`) \| `"default"` (field absent, defaults applied)
+- `userPlaybook` — *(v1.1+)* absolute path to project-local playbook file, or `null` when state is `unset` or `docs-only-no-playbook`
+- `userPlaybookState` — *(v1.1+)* `"unset"` \| `"docs-only-no-playbook"` \| `"set"`
+- `playbookResolutions` — *(v1.1+)* array of `{topic, set}` entries recording per-topic multi-set contradiction resolutions
 - `warnings` — array of `{code, detail}` entries
 
 ## Defensive posture (never throws)
@@ -41,6 +46,27 @@ Accepted on the one-line `**Code path:**` metadata entry:
 - (line absent) — null; first-use prompt should fire
 
 Case-insensitive match on the label.
+
+## Playbook fields in `project_state.md` (v1.1+)
+
+```markdown
+**Playbook Sets:** drupal/best-practices/camoa, drupal/best-practices/lullabot
+**User Playbook:** /home/me/projects/idexx/docs/playbook.md
+**User Playbook State:** set
+
+**Playbook Resolutions:**
+- font-sizing → drupal/best-practices/camoa
+- bem-methodology → drupal/best-practices/lullabot
+```
+
+| Line | Semantics |
+|---|---|
+| `**Playbook Sets:** <ids,...>` | Comma-separated set IDs |
+| `**Playbook Sets:** none` | Explicit opt-out — empty list, source `explicit-none` |
+| (line absent) | Use plugin.json `defaults.playbookSets`; source `default` |
+| `**User Playbook:** <abs path>` | Project-local playbook file |
+| `**User Playbook State:** unset \| docs-only-no-playbook \| set` | 3-state field; mirrors `Code Path State` precedent |
+| `**Playbook Resolutions:**` (multi-line list) | Per-topic multi-set choices |
 
 ## Invocation
 

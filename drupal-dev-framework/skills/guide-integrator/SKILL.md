@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
-description: "Use when designing or researching features — loads plugin methodology refs (SOLID, DRY, TDD, Library-First, Quality Gates, Purposeful Code) and delegates to dev-guides-navigator for online Drupal domain knowledge. Records each loaded guide into session_context.json loadedGuides[] so re-loads are skipped and the context-reminder hook can surface them."
-version: 4.1.1
+description: "Use when designing or researching features — loads plugin methodology refs (SOLID, DRY, TDD, Library-First, Quality Gates, Purposeful Code), delegates to dev-guides-navigator for online Drupal domain knowledge, AND loads active playbook sets + project-local user playbook (v3.15.0+). Cross-references plays-by-topic and emits conflicts[]. Records each loaded guide into session_context.json loadedGuides[] so re-loads are skipped."
+version: 5.0.0
 user-invocable: false
 model: sonnet
 ---
@@ -138,6 +138,79 @@ Use `Edit` to add references section to architecture file:
 ### 5. Summarize
 
 Tell user what was integrated from each source: plugin methodology and dev-guides topics.
+
+### 6. Load Playbook (v3.15.0+)
+
+After loading methodology refs and dev-guides topics, load the project's playbook layers:
+
+#### 6a. Read project state
+
+Invoke `project-state-reader` skill to get `playbookSets[]`, `userPlaybook`, `userPlaybookState`, and `playbookResolutions[]`.
+
+#### 6b. Load shipped playbook sets
+
+For each set ID in `playbookSets[]` (e.g., `drupal/best-practices/camoa`):
+
+- Delegate to `dev-guides-navigator` to fetch the set's index.md and individual guide pages relevant to the current task domain.
+- Record each loaded guide ID via the snippet in §2b.
+- Track loaded guide titles + summaries for cross-reference.
+
+When `playbookSets` is empty (`playbookSetsSource: "explicit-none"` or `"default"` with empty default), skip this step silently.
+
+#### 6c. Load local playbook
+
+If `userPlaybookState == "set"`, invoke:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/playbook-read.sh" "<userPlaybook absolute path>"
+```
+
+Parse the JSON. Each play is `{title, section, what, rationale, when_it_applies, applicability, ...}`. Track titles + sections + topics for cross-reference.
+
+If `userPlaybookState != "set"`, skip silently.
+
+#### 6d. Detect conflicts
+
+Cross-reference local plays vs shipped guides AND multi-set vs multi-set:
+
+- **Local-vs-shipped:** when a local play's `title` or `section` topic matches a shipped guide's topic AND their normative content differs → emit a conflict (winner: `local`).
+- **Multi-set contradiction:** when 2+ shipped sets address the same topic with different normative content → emit a conflict (winner determined by `playbookResolutions[]` if present, else `null` and surface to user).
+
+Emit `conflicts[]` in the return JSON:
+
+```json
+{
+  "loaded_guides": ["plugin:solid-drupal", "drupal/forms/config-forms"],
+  "loaded_playbook_sets": ["drupal/best-practices/camoa"],
+  "loaded_local_playbook": { "path": "/abs/path", "play_count": 19 },
+  "conflicts": [
+    {
+      "topic": "font-sizing",
+      "type": "local-vs-shipped",
+      "playbook_set_citation": {...},
+      "local_citation": {...},
+      "winner": "local"
+    }
+  ]
+}
+```
+
+#### 6e. Surface conflicts once per session per topic
+
+For each conflict in `conflicts[]`:
+
+1. Check session-context state (a per-session "surfaced topics" set) to see if this topic was already surfaced.
+2. If not surfaced: print one-line surface to the user (e.g. `"Playbook conflict on `font-sizing`: shipped says X, local says Y. Local wins."`).
+3. Record to `<project>/.claude/playbook-conflicts.log` via `playbook-conflicts-write.sh`.
+4. Mark topic surfaced for this session.
+
+For multi-set contradictions WITHOUT a stored resolution: prompt the user to pick (1/2/cancel); on choice, persist to `project_state.md` `**Playbook Resolutions:**` map.
+
+For local-vs-shipped: no prompt; precedence rule applies; just announce.
+
+#### 6f. Record loaded playbook IDs
+
+Record each loaded shipped-set guide and the local playbook into `loadedGuides[]` per §2b. Local playbook ID convention: `local:userPlaybook:<basename>`.
 
 ## Reference Locations
 
