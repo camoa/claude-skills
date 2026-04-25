@@ -1,6 +1,6 @@
 ---
 name: analysis-agent
-description: "Use when a framework flow needs to assess whether a task looks epic-sized and propose a decomposition. Reads task docs (task.md + phase artifacts) and optionally the project's codePath to reason about scope. Emits structured JSON per references/analysis-agent-schema.md v1.0. Invoked by /propose-epics for bulk review and by /research pre-analysis hook at new-task creation. Never modifies files."
+description: "Use when a framework flow needs to assess task scope or propose decomposition. Reads task docs (task.md + phase artifacts) and optionally codePath; emits structured JSON per references/analysis-agent-schema.md. Three modes: folder mode (/propose-epics bulk review + post-phase epic checks), description mode (/research **always-on** pre-analysis at new-task creation, v4.0.0+ — fires regardless of strong signals), and play_candidates mode (/complete candidate-play surface, v1.1.0+ — surfaces repeated decisions worth capturing as plays). Never modifies files."
 capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-decomposition"]
 version: 1.1.0
 model: sonnet
