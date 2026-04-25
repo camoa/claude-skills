@@ -58,6 +58,29 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 
 **NOT wrapped** (keep invoking directly via `/code-quality:*` namespace): `lint`, `coverage`, `review`, `audit`, `ultrareview`, `architecture-debate`, `security-debate`. `/validate:all` surfaces them as discoverability hint.
 
+## Worktree Workflow (v3.16.0+)
+
+Two Claude Code sessions on the same project workspace collide on `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` (last-writer-wins) and on the git working tree itself. Solution: the second session runs in a worktree at `.worktrees/<task_name>/`. Distinct `$PWD` → distinct hash → independent session-context. **No changes to `session-context-writer` — the existing hash naturally separates worktree sessions.**
+
+**Commands:**
+- `/worktree <task>` — create a worktree on `feature/<task>` from current HEAD; runs auto-detect setup; pre-seeds session-context. Refuses to double-wrap (refuses when already in a worktree). Drupal/DDEV-aware: warns about `.ddev/config.yaml` `name:` key conflict.
+- `/worktree-prune` — list and selectively remove worktrees; per-worktree confirm; honors git's refusal on uncommitted changes; force-remove requires explicit per-worktree confirmation.
+
+**Detection:** `/implement <task>` invokes `worktree-signals.sh` BEFORE Phase Transition Check. Signals (HIGH-strength only trigger): `another_task_active` (recent commits to another task's tracked files within 2 hours), `dirty_tree` (uncommitted changes matching another task), `multi_session` (medium-high; informational), `--worktree` flag, `worktreeByDefault: true` in `project_state.md`. Suppressed when already in a worktree. Soft-nudge — never blocks.
+
+**Lifecycle at `/complete`:** when current task is on a worktree, prompts 3 paths (default 3 — skip):
+1. Merge back to main + remove worktree
+2. Push branch + open PR (worktree stays)
+3. Skip — leave as-is
+
+Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intact for manual resolution.
+
+**`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
+
+**Conventions:** `references/worktree-conventions.md` v1.0 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases.
+
+**Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle + Drupal/DDEV awareness. Not a hard dependency; replicated in command body.
+
 ## Playbook System (v3.15.0+)
 
 Two-layer Drupal best-practices system:

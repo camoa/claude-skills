@@ -17,6 +17,7 @@
 #     "userPlaybook": "<absolute path or null>",
 #     "userPlaybookState": "unset" | "docs-only-no-playbook" | "set",
 #     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
+#     "worktreeByDefault": bool,
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
@@ -50,7 +51,8 @@ emit_json() {
     --argjson w "$4" \
     --argjson ps "${5:-[]}" --arg pss "${6:-default}" \
     --arg up "${7:-null}" --arg ups "${8:-unset}" \
-    --argjson pr "${9:-[]}" '
+    --argjson pr "${9:-[]}" \
+    --argjson wbd "${10:-false}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -60,6 +62,7 @@ emit_json() {
       userPlaybook: (if $up == "null" then null else $up end),
       userPlaybookState: $ups,
       playbookResolutions: $pr,
+      worktreeByDefault: $wbd,
       warnings: $w
     }'
 }
@@ -78,13 +81,13 @@ DEFAULT_PB_SETS=$(get_default_playbook_sets)
 
 if [ ! -d "$PROJECT_DIR" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
   exit 0
 fi
 
 if [ ! -f "$PROJECT_STATE" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
   exit 0
 fi
 
@@ -204,5 +207,20 @@ PB_RESOLUTIONS=$(awk '
 
 [ -z "$PB_RESOLUTIONS" ] && PB_RESOLUTIONS="[]"
 
+# === Worktree By Default parsing ===
+WBD_RAW=$(awk '
+  BEGIN { IGNORECASE=1 }
+  /^\*\*Worktree By Default:\*\*/ {
+    sub(/^\*\*Worktree By Default:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+if [ "$WBD_RAW" = "true" ]; then
+  WBD_OUT="true"
+else
+  WBD_OUT="false"
+fi
+
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
-  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS"
+  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT"

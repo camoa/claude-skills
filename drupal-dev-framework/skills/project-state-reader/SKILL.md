@@ -1,7 +1,7 @@
 ---
 name: project-state-reader
 description: Use when a framework command needs project-level metadata (codePath, playbookSets, userPlaybook, playbookResolutions, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.1.0
+version: 1.2.0
 user-invocable: false
 model: haiku
 allowed-tools: Bash
@@ -26,6 +26,7 @@ Fields:
 - `userPlaybook` — *(v1.1+)* absolute path to project-local playbook file, or `null` when state is `unset` or `docs-only-no-playbook`
 - `userPlaybookState` — *(v1.1+)* `"unset"` \| `"docs-only-no-playbook"` \| `"set"`
 - `playbookResolutions` — *(v1.1+)* array of `{topic, set}` entries recording per-topic multi-set contradiction resolutions
+- `worktreeByDefault` — *(v1.2+)* boolean. When `true`, `/implement` always recommends a worktree. Defaults to `false` when field absent.
 - `warnings` — array of `{code, detail}` entries
 
 ## Defensive posture (never throws)

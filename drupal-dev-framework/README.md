@@ -113,6 +113,8 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 | `/playbook-review` | **(v3.15.0)** Walk every play in the local user playbook with `[k]eep / [u]pdate / [r]emove / [q]uit`. Immediate-write semantics; `/loop`-able for periodic review. |
 | `/set-playbook-sets` | **(v3.15.0)** Set or clear active playbook sets (e.g., `drupal/best-practices/camoa`). Validates each via `dev-guides-navigator`. Default subscription comes from plugin.json `defaults.playbookSets`. |
 | `/set-user-playbook` | **(v3.15.0)** Set/clear the project-local user playbook file. Three modes: explicit path, `--docs-only`, or interactive detect-and-confirm. |
+| `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
+| `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
@@ -177,7 +179,7 @@ Built-in docs enforced at specific phases:
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
 
-### Technical Contract References (8)
+### Technical Contract References (9)
 
 Machine-readable contracts consumed by skills and commands. These pin schemas and invariants so consumers don't drift:
 
@@ -191,6 +193,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `team-manifest-schema.md` **(v3.14.0)** | `/validate:team` + 4 teammates | Minimum-context package v1.0 written by lead before team spawn; absolute-path invariant; `visual_fanout[]` presence rule; write-once contract; fallback behavior hints; gate enum excludes `visual-parity` (deferred to v2 Set B5) |
 | `playbook-schema.md` **(v3.15.0)** | `/playbook-capture`, `/playbook-review`, `scripts/playbook-read.sh` | Recommended local playbook structure v1.0: H3-per-play with What / Rationale / When it applies / Example fields; freeform fallback; defensive parser contract |
 | `playbook-conflict-schema.md` **(v3.15.0)** | `scripts/playbook-conflicts-write.sh`, `/playbook-active` | JSONL log line v1.0 for `<project>/.claude/playbook-conflicts.log`; per-conflict citation shape (local-vs-shipped + multi-set-contradiction types); append-only contract |
+| `worktree-conventions.md` **(v3.16.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.0: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
 
 ### Online Dev-Guides (60+ topics) — Required
 

@@ -47,6 +47,37 @@ If checks fail:
 - Does NOT complete task
 - Offers to continue working
 
+## Worktree merge prompt (v3.16.0+)
+
+**Run AFTER the 5 quality gates pass and BEFORE the candidate-play surface.** Soft-nudge — default skip; never blocks.
+
+Invoke `scripts/worktree-detect.sh "$PWD"`. If `in_worktree: false` → skip; continue to candidate-play surface.
+
+If `in_worktree: true`:
+
+> Print: "This task is on worktree `<worktree_path>` (branch `<branch>`). Choose:
+> 1. Merge back to main + remove worktree
+> 2. Push branch + open PR (worktree stays)
+> 3. Skip — leave everything as-is
+>
+> Pick [1/2/3] (default 3):"
+
+On `1`:
+- `cd <main_path>` (from worktree-detect output)
+- `git checkout main`
+- `git merge --no-ff <branch>`
+- If merge conflicts: abort merge; print conflict files; instruct user to resolve manually; do NOT remove worktree
+- If clean: `git worktree remove "<worktree_path>"`; print "Merged `<branch>` to main; worktree removed. Run `git push` when ready."
+
+On `2`:
+- `cd "<worktree_path>"`
+- `git push -u origin <branch>`
+- If `gh` CLI available: ask "Open PR via `gh pr create`? [y/n]"; on `y`, run `gh pr create`
+- Leave worktree in place; print "Branch pushed; worktree kept at `<worktree_path>`."
+
+On `3`:
+- No-op. Continue to candidate-play surface.
+
 ## Candidate-play surface (v3.15.0+)
 
 After the 5 quality gates pass and before the task moves to `completed/`, surface 0-N candidate plays the framework detected during this task. Skipped if `--no-play-candidates` flag is passed OR if the project has `userPlaybookState != "set"` (no playbook to capture into).

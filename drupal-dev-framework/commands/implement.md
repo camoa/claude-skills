@@ -14,6 +14,30 @@ Start implementing a specific task with full context loaded (Phase 3 of a task).
 /drupal-dev-framework:implement <task-name>
 ```
 
+## Worktree recommendation pre-step (v3.16.0+)
+
+**Run BEFORE the Phase Transition Check.** Soft-nudge — never blocks.
+
+Invoke `scripts/worktree-signals.sh <project_folder> <task_name>`:
+
+- If `already_in_worktree: true` → skip recommendation entirely; proceed silently.
+- If `--in-main-tree` flag passed → skip; proceed silently.
+- If `--worktree` flag passed → chain to `/drupal-dev-framework:worktree <task>` and halt this `/implement` invocation; user re-runs `/implement` from the worktree.
+- If `strength == "high"` OR `project_opt_in == true`:
+  > Print recommendation:
+  > "A worktree is recommended for this task. Reasons: `<signals_fired>`. Run:
+  >  `/drupal-dev-framework:worktree <task>` then re-run `/implement` from the worktree.
+  >  Or pass `--in-main-tree` to override and proceed in the main tree."
+  >
+  > Ask: `[c]reate worktree / [m]ain tree / [a]bort` — default `[m]`.
+  > On `[c]` → chain to `/worktree`, halt this run.
+  > On `[m]` → continue silently to Phase Transition Check.
+  > On `[a]` → exit 0.
+
+- Otherwise → proceed silently.
+
+See `references/worktree-conventions.md` for the full signal taxonomy.
+
 ## Phase Transition Check (run FIRST, before any other step)
 
 Before doing anything else for this command, verify the prior phases are marked complete.
