@@ -81,8 +81,39 @@ for IMPL in $IN_PROGRESS_DIRS; do
   OTHER_TASK_NAME=$(basename "$OTHER_TASK_DIR")
   [ "$OTHER_TASK_NAME" = "$TASK_NAME" ] && continue
 
-  # Heuristic: count recent commits whose committed paths intersect with files referenced in implementation.md
-  RECENT_COMMITS=$(git -C "$GIT_DIR" log --since="2 hours" --pretty=format:'%H' 2>/dev/null | wc -l)
+  # Heuristic: extract paths from the other task's "## Files Created/Modified" section
+  # of implementation.md, then check if any recent commit (2hr window) touched those paths.
+  # Uses git log --name-only --since="2 hours" -- <paths>.
+  OTHER_PATHS=$(awk '
+    BEGIN { in_block = 0 }
+    /^## Files Created\/Modified/ { in_block = 1; next }
+    in_block && /^## / { in_block = 0 }
+    in_block && /^- `/ {
+      # Extract the backticked path on lines like: - `path/to/file` - description
+      if (match($0, /`[^`]+`/)) {
+        p = substr($0, RSTART+1, RLENGTH-2)
+        print p
+      }
+    }
+  ' "$IMPL")
+
+  if [ -z "$OTHER_PATHS" ]; then
+    # No path list to intersect; skip this task — can't make a HIGH signal claim
+    continue
+  fi
+
+  # Run git log with these paths as filter; -- <path1> <path2> ... limits to commits touching them.
+  # Convert OTHER_PATHS (newline-separated) into a series of -- args.
+  PATH_ARGS=()
+  while IFS= read -r p; do
+    [ -n "$p" ] && PATH_ARGS+=("$p")
+  done <<< "$OTHER_PATHS"
+
+  if [ "${#PATH_ARGS[@]}" -eq 0 ]; then
+    continue
+  fi
+
+  RECENT_COMMITS=$(git -C "$GIT_DIR" log --since="2 hours" --pretty=format:'%H' -- "${PATH_ARGS[@]}" 2>/dev/null | wc -l)
   if [ "$RECENT_COMMITS" -ge 1 ]; then
     ANOTHER_TASK_FIRED=true
     ANOTHER_TASK_NAME="$OTHER_TASK_NAME"

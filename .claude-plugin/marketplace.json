@@ -72,7 +72,9 @@
         "solid",
         "dry",
         "security",
-        "agent-teams"
+        "agent-teams",
+        "playbook",
+        "worktree"
       ]
     },
     {
