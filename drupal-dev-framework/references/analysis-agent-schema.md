@@ -8,14 +8,17 @@ The analysis agent emits a single JSON object per analyzed task. Schema is versi
 
 ## Input modes
 
-The agent accepts one of two mutually exclusive input modes (caller picks):
+The agent accepts one of three mutually exclusive input modes (caller picks):
 
 | Mode | Input | When used |
 |---|---|---|
-| **folder mode** | `task_folder` (absolute path to an existing task directory) | `/propose-epics` — task folders exist on disk |
+| **folder mode** | `task_folder` (absolute path to an existing task directory) | `/propose-epics`, `/research` post-phase epic check, `/design` post-phase epic check, `/implement` post-phase epic check — task folders exist on disk |
 | **description mode** | `task_description_text` (raw text: task name + description, no folder) | `/research` pre-analysis hook — task folder has not been created yet |
+| **play_candidates mode** *(v1.1+)* | `task_folder` + `code_path` + `git_diff_since` (commit SHA) + `active_playbook_sets[]` + `user_playbook_path` (or null) | `/complete` candidate-play surface — analyzes task work for repeated decisions worth capturing as plays in the local playbook |
 
-Both modes also accept `codePath` (abs path or null) and `schema_version` (expected version). In description mode: `task_folder` in the output is set to the string `"(pre-creation)"`, and `task_id` to `local:(pre-creation)`. The agent cannot read `task.md` / `research.md` / `architecture.md` / `implementation.md` in description mode — it only evaluates signals from the description text + optional code read.
+Folder + description modes also accept `codePath` (abs path or null) and `schema_version` (expected version). In description mode: `task_folder` in the output is set to the string `"(pre-creation)"`, and `task_id` to `local:(pre-creation)`. The agent cannot read `task.md` / `research.md` / `architecture.md` / `implementation.md` in description mode — it only evaluates signals from the description text + optional code read.
+
+`play_candidates` mode is documented separately in §"play_candidates mode (v1.1+)" below — it has a different output schema (`candidates[]` instead of `decision` + `proposed_children[]`).
 
 Signals evaluated in description mode: `description_length_and_conjunction`, `bullet_count_clustering`, `multiple_code_areas` (if code_read). Signals that require on-disk phase artifacts (`many_heterogeneous_criteria` from task.md's AC section, `long_in_progress`, `research_architecture_fragmented`, `explicit_user_signal`) are skipped in description mode — the agent notes `"description mode: phase-artifact signals unavailable"` in `notes[]`.
 
@@ -189,8 +192,101 @@ Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_r
 }
 ```
 
+## play_candidates mode (v1.1+)
+
+**Introduced:** drupal-dev-framework v3.15.0 (alongside the Playbook System).
+**Consumer:** `commands/complete.md` candidate-play surface step.
+
+A different output shape than the epic-decomposition modes — emits `candidates[]` instead of `decision` + `proposed_children[]`. Used by `/complete` to surface repeated decisions made during a task that might be worth capturing as plays in the user's local playbook.
+
+### Input
+
+```json
+{
+  "mode": "play_candidates",
+  "task_folder": "/abs/path/to/task",
+  "code_path": "/abs/path/to/code",
+  "git_diff_since": "<commit-sha>",
+  "active_playbook_sets": ["drupal/best-practices/camoa"],
+  "user_playbook_path": "/abs/path/to/local/playbook.md",
+  "schema_version": "1.1"
+}
+```
+
+| Field | Type | Required? |
+|---|---|---|
+| `mode` | string | Required. Literal `"play_candidates"` |
+| `task_folder` | string | Required. Absolute path |
+| `code_path` | string \| null | Required. Null when codePath is `docs-only` or `unset` — agent skips code-derived candidates |
+| `git_diff_since` | string | Required. SHA of the commit at task-start, or `"HEAD~1"` as a fallback |
+| `active_playbook_sets` | array of string | Required. Set IDs the agent should NOT re-suggest (already shipped) |
+| `user_playbook_path` | string \| null | Required. Null when userPlaybook unset; agent doesn't read it but uses path-presence to decide whether candidate suggestions are worth surfacing at all |
+| `schema_version` | string | Required. `"1.1"` |
+
+### Output
+
+```json
+{
+  "schema_version": "1.1",
+  "mode": "play_candidates",
+  "analyzed_at": "2026-04-24T23:45:00Z",
+  "task_folder": "/abs/path/to/task",
+  "candidates": [
+    {
+      "title": "Use BEM with mod-* prefix for utility-only files",
+      "evidence": [
+        { "file": "themes/.../navbar.scss", "line": 42, "snippet": ".navbar.mod-sticky { ... }" },
+        { "file": "themes/.../footer.scss", "line": 18, "snippet": ".footer.mod-condensed { ... }" }
+      ],
+      "confidence": "high",
+      "rationale": "Pattern appears 2+ times in modified files; not in active playbook sets",
+      "suggested_section": "CSS / SCSS"
+    }
+  ],
+  "warnings": [],
+  "notes": []
+}
+```
+
+### Field contracts (output)
+
+| Field | Type | Constraints |
+|---|---|---|
+| `schema_version` | string | `"1.1"` for play_candidates mode outputs |
+| `mode` | string | Literal `"play_candidates"` (echoed from input) |
+| `analyzed_at` | string | ISO-8601 UTC |
+| `task_folder` | string | Echo of input |
+| `candidates` | array of object | 0 or more candidates. May be empty when nothing meets threshold |
+| `warnings` | array of string | Informational; never fatal |
+| `notes` | array of string | Optional explanatory notes |
+
+### Candidate sub-object
+
+| Field | Type | Required? |
+|---|---|---|
+| `title` | string | Required. Short rule statement |
+| `evidence` | array of object | Required. **Minimum 2 entries** (single occurrence isn't a pattern; threshold enforced by agent) |
+| `evidence[].file` | string | Absolute or codePath-relative file path |
+| `evidence[].line` | integer | Line number |
+| `evidence[].snippet` | string | Short code excerpt (≤200 chars) |
+| `confidence` | enum | `"high"` \| `"medium"` \| `"low"` |
+| `rationale` | string | One-line explanation |
+| `suggested_section` | string | Suggested H2 section in the local playbook |
+
+### Backward compatibility
+
+The v1.0 → v1.1 bump is **purely additive**:
+
+- Existing modes (`folder`, `description`) continue to emit v1.0-shape outputs unchanged. The `schema_version` they emit stays `"1.0"`.
+- Existing consumers (`/research` pre-analysis hook, `/propose-epics`, post-phase epic checks) call the agent without `mode: "play_candidates"` and parse v1.0 output exactly as before — no code change required.
+- The new mode is a separate code path: callers who explicitly set `mode: "play_candidates"` get v1.1 output with `candidates[]`. They never see v1.0 fields.
+- Any consumer that hard-codes `schema_version === "1.0"` keeps working — their invocations don't trigger the new mode.
+
+The bump is at the schema-doc level, not the per-output level. Different modes emit different versions, both documented under one schema reference.
+
 ## Versioning policy
 
 - **Adding fields at v1.x** — consumers that don't know about them ignore them. No schema bump needed if field is optional.
-- **Changing field semantics** — schema bump to v1.1 with a migration note. Consumers version-check.
+- **Adding new MODES at v1.x** — schema bump to v1.x with separate documentation for the new mode. Existing modes' shape unchanged. (v1.1 follows this — `play_candidates` is new mode, folder/description unchanged.)
+- **Changing field semantics** — schema bump to v1.x with a migration note. Consumers version-check.
 - **Removing fields** — major bump to v2.0. Old consumers fail fast on missing expected fields.
