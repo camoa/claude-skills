@@ -5,6 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-04-24
+
+### ⚠️ BREAKING CHANGES
+
+v4.0.0 converts 7 framework surfaces from soft-prompt to hard-gate. Users on the soft posture will experience a behavior change:
+
+- **Pre-analysis epic gate** at `/research` is now **always-on** — invokes `analysis-agent` regardless of whether strong signals fire. Previously: signal-conditional. Bypass via `--skip-pre-analysis [reason]` flag.
+- **Coverage-mapping requirement** in research.md is now **enforced** — `## Coverage Mapping` H2 mandatory; refuses Phase 1 `[x]` on fail. Previously: optional traceability walkthrough only. Bypass via `--skip-coverage-check [reason]`.
+- **`skill-quality-reviewer`** (from plugin-creation-tools) is **invoked at `/complete`** when staged/branched changes include `skills/*/SKILL.md`. Previously: never invoked automatically. Bypass via `--skip-skill-review [reason]`.
+- **`/plugin-creation-tools:validate`** is **invoked at `/complete`** when staged/branched changes include any plugin file. Previously: never invoked automatically. Bypass via `--skip-plugin-validate [reason]`.
+- **Phase-command-bypass** detected via PreToolUse hook on Write to phase artifacts. Direct Write to `research.md` / `architecture.md` / `implementation.md` without an active phase command writes a non-blocking audit. Previously: silent.
+- **Dev-guides preflight** uses **deterministic detection** (`scripts/dev-guides-detect.sh`) instead of agent-mediated keyword matching. Eliminates bypass-by-declaration ("agent claimed loaded but didn't").
+- **Playbook loading** uses **deterministic load** (`scripts/playbook-load-deterministic.sh`) for the same reason.
+
+### Grandfathering
+
+v3.x in-flight tasks (those past Phase 1 at v4.0.0 install) keep their original soft contract. Heuristic: `research.md present && _pre-analysis.json absent` → grandfathered. New tasks created after v4.0.0 install get the hardened gates.
+
+### Added — 5-mechanism pattern (uniform across all 7 surfaces)
+
+From the original critique in `dev_framework_gate_hardening` task.md:
+
+1. **Anti-bypass clause** — literal block in command body listing rationalization patterns NOT valid as skip reasons
+2. **Show-not-summarize** — verbatim agent output before user prompt
+3. **Audit on disk** — `<task>/_<gate>.json` per fired gate
+4. **Mandate exact prompt wording** — literal templates from `references/gate-hardening-prompts.md` v1.0
+5. **Refactor "if X, do Y" → "validation gate, always evaluated"** — the if-condition is what the gate DOES, not whether it RUNS
+
+### Added — 5 deferred surfaces (NOT hardened in v4.0.0)
+
+Tracked in `dev_framework_improvements_epic/shared/v2-candidates.md` Set D with "documented bypass causing harm" promotion trigger:
+
+- Phase transition checks (no documented incident)
+- Playbook conflict acknowledgment (already minimal one-liner)
+- Worktree recommendation (medium-medium tie; false-positive cost real)
+- `/complete` candidate-play surface (auto-extract rejected on hallucination grounds)
+- `/validate:*` exit codes (deliberate v3.13.0 soft-nudge design)
+
+### New files (10)
+
+**References (2):**
+- `references/gate-audit-schema.md` v1.0 — unified schema for 7 audit file types
+- `references/gate-hardening-prompts.md` v1.0 — literal mandated wording for 5 user-prompt surfaces
+
+**Scripts (5):**
+- `scripts/gate-audit-write.sh` — atomic JSON-validated audit writer
+- `scripts/coverage-mapping-check.sh` — deterministic `## Coverage Mapping` check
+- `scripts/dev-guides-detect.sh` — deterministic auto-load keyword detection
+- `scripts/playbook-load-deterministic.sh` — deterministic playbook load
+- `scripts/phase-command-bypass-detect.sh` — PreToolUse hook helper
+
+**Hooks (2):**
+- `hooks/phase-command-bypass.sh` — PreToolUse hook on Write
+- `hooks/loaded-context-summary.sh` — UserPromptSubmit hook
+
+**Commands (1):**
+- `commands/audit-status.md` — read-only audit-state view
+
+### Updated files (10)
+
+- `commands/research.md` — pre-analysis always-on + coverage-mapping check + deterministic dev-guides preflight
+- `commands/design.md` — deterministic dev-guides preflight
+- `commands/implement.md` — deterministic dev-guides preflight
+- `commands/complete.md` — skill-review + plugin-validate gates
+- `commands/status.md` — Unaudited gates section
+- `skills/guide-integrator` v5.0.0 → 5.1.0 — delegates to deterministic scripts
+- `agents/analysis-agent` v1.0.0 → 1.1.0 — documents always-on invocation pattern
+- `.claude-plugin/plugin.json` — `3.16.0` → `4.0.0`; new `recommended: ["plugin-creation-tools"]`; new `"hardening"` keyword; 2 new hooks registered (PreToolUse Write matcher + UserPromptSubmit second hook)
+- `CLAUDE.md` — new `## Hardened Gates (v4.0.0+)` section before Worktree Workflow
+- `README.md` — `/audit-status` row in commands table; Tech Refs 9 → 11 (adds gate-audit-schema + gate-hardening-prompts)
+
+### Why major
+
+The contract change is real: users who relied on agent-judgment-based gate skipping (e.g., "I'm sure this task is flat, signals don't apply") have that path removed. They must use explicit `--skip-*` flags now. That's a breaking change for users on the soft posture per semver.
+
+### Philosophy
+
+Hardening earns its place when (a) there's documented evidence of bypass causing harm (not "in theory"), (b) the bypass mechanism is rationalization-prone (the AI talks itself out of running it), and (c) the hardening cost is smaller than the bypass cost. v4.0.0 ships hardening for 7 surfaces that pass all three filters; defers 5 surfaces that don't.
+
 ## [3.16.0] - 2026-04-24
 
 ### Added — Worktree Awareness
