@@ -281,6 +281,8 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 
 Do NOT rely on proactive skill detection. Directly invoke the `guide-integrator` skill against the task context. Record which guides (if any) were auto-loaded via its keyword-detection rules + `dev-guides-navigator` delegation.
 
+**(v3.15.0+)** `guide-integrator` v5.0.0+ ALSO loads the project's active playbook sets (per `Playbook Sets` in `project_state.md`) and the local user playbook (per `User Playbook`) at this step. The skill emits `loaded_playbook_sets[]`, `loaded_local_playbook`, and `conflicts[]` in its return JSON. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log` via `scripts/playbook-conflicts-write.sh`. See `references/playbook-schema.md` and `references/playbook-conflict-schema.md`.
+
 ### Step 2 — ALWAYS prompt the user (never silent-skip)
 
 Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
