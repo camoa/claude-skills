@@ -183,7 +183,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 
 | Reference | Owner | What it pins |
 |-----------|-------|--------------|
-| `analysis-agent-schema.md` **(v3.11.0)** | `analysis-agent` | JSON output schema v1.0, 8 signal codes, 7 invariants, consumer guidance for `/research` + `/propose-epics` |
+| `analysis-agent-schema.md` **(v3.11.0; v1.1 since v3.15.0)** | `analysis-agent` | JSON output schema (v1.0 base + v1.1 adds `play_candidates` mode for `/complete`); 8 signal codes, 7 invariants, three input modes (`folder`, `description`, `play_candidates`); backward-compatible — existing `folder` and `description` modes unchanged |
 | `code-path-detection.md` **(v3.11.0)** | `/set-code-path`, `/new` | Detection strategies in priority order, three-null-states table (`unknown` / `docs-only` / `set`), safety filter (hard-reject list for system roots) |
 | `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
 | `screenshot-store-schema.md` **(v3.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0, directory layout with `.previous` rotation (1-deep), 6 warning codes, `role` enum (`baseline` / `parity_reference` / `previous`), `captured_by` + `source` provenance fields |

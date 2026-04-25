@@ -178,9 +178,9 @@ END {
 
   if (total_h3 == 0) {
     # Freeform fallback — entire file as one synthetic play
-    printf("{\"freeform\": true, \"plays\": [{\"title\": \"%s\", \"section\": \"<root>\", \"applicability\": \"free-form\"}]}\n", file_path)
+    printf("{\"freeform\": true, \"plays\": [{\"title\": \"%s\", \"section\": \"<root>\", \"applicability\": \"free-form\", \"source_lines\": {\"start\": 1, \"end\": NR}, \"example_blocks\": []}]}\n", file_path)
   } else {
-    # Structured emit — one play per H3
+    # Structured emit — one play per H3, schema per references/playbook-schema.md §6
     printf("{\"freeform\": false, \"plays\": [")
     for (i = 1; i <= play_count; i++) {
       if (i > 1) printf(",")
@@ -191,8 +191,27 @@ END {
       what = plays_what[i]; gsub(/\\/, "\\\\", what); gsub(/"/, "\\\"", what)
       rat = plays_rationale[i]; gsub(/\\/, "\\\\", rat); gsub(/"/, "\\\"", rat)
       whn = plays_when[i]; gsub(/\\/, "\\\\", whn); gsub(/"/, "\\\"", whn)
-      printf("{\"title\":\"%s\",\"section\":\"%s\",\"what\":\"%s\",\"rationale\":\"%s\",\"when_it_applies\":\"%s\",\"start\":%d,\"end\":%d,\"applicability\":\"structured\"}",
+
+      # Build example_blocks[] JSON array from plays_examples buffer (split on ---SEPARATOR---)
+      printf("{\"title\":\"%s\",\"section\":\"%s\",\"what\":\"%s\",\"rationale\":\"%s\",\"when_it_applies\":\"%s\",\"source_lines\":{\"start\":%d,\"end\":%d},\"example_blocks\":[",
              title, section, what, rat, whn, plays_start[i], plays_end[i])
+
+      ex_buffer = plays_examples[i]
+      if (ex_buffer != "") {
+        # Split on the separator and emit each non-empty chunk as a JSON string
+        block_count = split(ex_buffer, ex_blocks, /\n---SEPARATOR---\n/)
+        emitted = 0
+        for (b = 1; b <= block_count; b++) {
+          if (ex_blocks[b] != "") {
+            blk = ex_blocks[b]
+            gsub(/\\/, "\\\\", blk); gsub(/"/, "\\\"", blk); gsub(/\n/, "\\n", blk); gsub(/\r/, "", blk); gsub(/\t/, "\\t", blk)
+            if (emitted > 0) printf(",")
+            printf("\"%s\"", blk)
+            emitted++
+          }
+        }
+      }
+      printf("],\"applicability\":\"structured\"}")
     }
     printf("]}\n")
   }
