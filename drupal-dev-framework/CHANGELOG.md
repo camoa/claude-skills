@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] - 2026-04-25
+
+### Token efficiency — 3 plugin-level cuts (additive; no contract change)
+
+After v4.0.0 hardened gates shipped, post-release meta-analysis surfaced ~80K tokens/session of avoidable runtime cost. v4.0.2 ships three independent additive cuts.
+
+#### Cut 1 — Phase command body split
+
+`commands/research.md`, `design.md`, `implement.md`, `complete.md` were reloaded into context on every Skill invocation. Bodies compressed from 455/358/384/268 lines to 76/51/72/66 lines (1465 → 265 total, ~82% reduction). Tutorial-depth content moved to new `references/<phase>-walkthrough.md` files (loaded only when explicitly read; no hook or skill auto-loads).
+
+- Added `scripts/command-body-lengths.sh` — enforces runtime budgets (research ≤100, design ≤80, implement ≤120, complete ≤100). Exits non-zero on overrun. `--json` mode for CI.
+- Added `references/research-walkthrough.md`, `references/design-walkthrough.md`, `references/implement-walkthrough.md`, `references/complete-walkthrough.md` (full prose preserved verbatim from v4.0.1 command bodies).
+
+#### Cut 2 — Conditional UserPromptSubmit hook output
+
+`hooks/context-reminder.sh` and `hooks/loaded-context-summary.sh` now md5-hash their rendered output, cache it under `~/.claude/drupal-dev-framework/sessions/<workspace_hash>.last-<hook>.md5`, and emit empty `{}` envelopes when state is unchanged turn-over-turn. Cache invalidates automatically on any state change (task.md edits, loadedGuides[] growth, project_state.md edits, active task switch). Cache write failures degrade silently to "always emit" — hooks remain best-effort.
+
+- New env var `DDF_HOOK_DEBUG=1` emits `<hook>: skipped (state unchanged)` / `<hook>: emit (state changed)` to stderr for verification.
+- Added `scripts/hook-cache-status.sh` — prints current cached hashes per hook for the active workspace.
+
+#### Cut 3 — gate-hardening-prompts.md v1.0 → v1.1
+
+Compressed presentation-only scaffolding (per-template intro paragraphs, repeated default annotations) into a single Templates index table at the top of the file. **Every literal block (the bytes inside ``` fences under each `## Template ID:` heading) preserved byte-for-byte from v1.0** — the rationalization-resistance contract is the literal-text guarantee, not the surrounding prose.
+
+- `pre-analysis-decision` template stays at 28 lines (3 conditional outcome blocks are essential to the contract — explicitly preserved per architecture decision).
+- 4 of 5 templates ≤12 lines each.
+- Added `tests/gate-prompts-literal.sh` — extracts each template's literal block from baseline (`main:references/gate-hardening-prompts.md`) and current file; cmp-diffs them; fails on any byte difference. Catches accidental literal drift in future PRs.
+
+### Files added
+
+- `references/research-walkthrough.md`
+- `references/design-walkthrough.md`
+- `references/implement-walkthrough.md`
+- `references/complete-walkthrough.md`
+- `scripts/command-body-lengths.sh`
+- `scripts/hook-cache-status.sh`
+- `tests/gate-prompts-literal.sh`
+
+### Files modified
+
+- `commands/{research,design,implement,complete}.md` — runtime bodies compressed
+- `hooks/context-reminder.sh` — md5-cache + DDF_HOOK_DEBUG instrumentation
+- `hooks/loaded-context-summary.sh` — same pattern
+- `references/gate-hardening-prompts.md` — v1.0 → v1.1 (additive)
+- `.claude-plugin/plugin.json` — version 4.0.1 → 4.0.2
+
+### No behavior change
+
+All v4.0.0 hardened gates still fire and produce identical audit output. Skip flags unchanged. Bypass-reason capture unchanged. No grandfathering rules change.
+
 ## [4.0.1] - 2026-04-25
 
 ### Fixed — 4 documentation drift bugs surfaced by post-epic plugin-creation-tools validation

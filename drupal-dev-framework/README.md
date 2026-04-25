@@ -198,7 +198,8 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `playbook-conflict-schema.md` **(v3.15.0)** | `scripts/playbook-conflicts-write.sh`, `/playbook-active` | JSONL log line v1.0 for `<project>/.claude/playbook-conflicts.log`; per-conflict citation shape (local-vs-shipped + multi-set-contradiction types); append-only contract |
 | `worktree-conventions.md` **(v3.16.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.0: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
 | `gate-audit-schema.md` **(v4.0.0)** | `scripts/gate-audit-write.sh` + 7 hardened gates | Unified schema v1.0 for the 7 v4.0.0 audit file types (`pre-analysis`, `coverage-mapping`, `skill-review`, `plugin-validate`, `phase-command-bypass`, `dev-guides-load`, `playbook-load`); `gate_type` discriminator; per-gate `gate_specific` payloads; overwrite-on-fire lifecycle |
-| `gate-hardening-prompts.md` **(v4.0.0)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md` | Literal mandated wording v1.0 for the 5 user-prompt surfaces (`pre-analysis-decision`, `coverage-mapping-fail`, `skill-review-decision`, `plugin-validate-decision`, `phase-command-bypass-acknowledge`); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture |
+| `gate-hardening-prompts.md` **(v4.0.0; v1.1 in v4.0.2)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md` | Literal mandated wording v1.1 for the 5 user-prompt surfaces (`pre-analysis-decision`, `coverage-mapping-fail`, `skill-review-decision`, `plugin-validate-decision`, `phase-command-bypass-acknowledge`); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture. v1.1 (additive) consolidates per-template defaults into a Templates index table; literal blocks byte-identical to v1.0 (verified by `tests/gate-prompts-literal.sh`) |
+| `<phase>-walkthrough.md` **(v4.0.2)** | Optional reference for phase commands | Tutorial-depth walkthrough of `/research`, `/design`, `/implement`, `/complete` — rationale, version history, worked examples. Loaded only when explicitly read; no hook or skill auto-loads |
 
 ### Online Dev-Guides (60+ topics) — Required
 
@@ -262,7 +263,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.0.1**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.0.2**.
 
 ## License
 

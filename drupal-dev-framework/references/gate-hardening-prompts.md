@@ -1,27 +1,33 @@
-# Gate Hardening Prompts v1.0
+# Gate Hardening Prompts v1.1
 
-**Introduced:** drupal-dev-framework v4.0.0
-**Owner:** This reference; consumed by command bodies
-**Consumers:** `commands/research.md` (pre-analysis + coverage-mapping prompts), `commands/complete.md` (skill-review + plugin-validate prompts), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment)
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive).
+**Owner:** This reference; consumed by command bodies.
+**Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
-The framework's hardened gates use **literal mandated wording** for user prompts. The literal-wording requirement IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "I'll soften this for the user" failure mode the original critique called out.
+The framework's hardened gates use **literal mandated wording** for user prompts. Literal-wording IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "soften this for the user" failure mode. Authoring rules (§"Template authoring rules") forbid paraphrase, reorder, pre-answer, and truncation.
 
-This reference defines all 5 user-prompt templates. Command bodies reference templates by ID (e.g., `prompt-template: pre-analysis-decision`); the framework refuses to deviate from the literal wording. Substitutions are limited to `{{placeholder}}` markers documented per template.
+The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prompts; no templates here.
 
-The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prompts and therefore NO templates here.
+## Templates index
+
+| ID | Fired by | Substitutions | Default option |
+|----|----------|--------------|----------------|
+| `pre-analysis-decision` | `/research` after `analysis-agent` | `decision`, `signals_used`, `reasoning`, `children_list` (epic_candidate only) | `[y]` for keep_flat / insufficient_info; **none** for epic_candidate |
+| `coverage-mapping-fail` | `/research` end-of-phase on `verdict: fail` | `missing_questions` (multi-line) | `[a]` |
+| `skill-review-decision` | `/complete` on `skills/*/SKILL.md` staged change | `skills_reviewed`, `findings` | **none** — user MUST pick |
+| `plugin-validate-decision` | `/complete` on plugin file staged change | `plugins_validated`, `findings` | **none** — user MUST pick |
+| `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 
 ## Template authoring rules
 
 1. **Literal text** — exactly as written, including punctuation, capitalization, line breaks
-2. **Placeholders** — only `{{snake_case_marker}}` substitutions allowed; documented per template
-3. **No paraphrase** — framework refuses to "translate" or "soften" the text
-4. **No pre-answer** — framework refuses to add "I think the answer is X" or similar before the prompt
+2. **Placeholders** — only `{{snake_case_marker}}` substitutions allowed
+3. **No paraphrase** — framework refuses to "translate" or "soften"
+4. **No pre-answer** — framework refuses to add "I think the answer is X" before the prompt
 5. **No reorder** — option lists ([y]/[n]/[s] etc.) preserve order
-6. **No truncate** — even on long content, the framework shows verbatim agent output (per the show-not-summarize mechanism)
+6. **No truncate** — even on long content, framework shows verbatim agent output (per show-not-summarize)
 
 ## Template ID: `pre-analysis-decision`
-
-Fired by `/research` after `analysis-agent` returns. Substitutions: `{{decision}}`, `{{signals_used}}`, `{{reasoning}}`, `{{children_list}}` (multi-line; only present when decision == "epic_candidate").
 
 ```
 Pre-analysis verdict: {{decision}}
@@ -53,11 +59,7 @@ Agent had insufficient context. Verdict recorded as insufficient_info. Proceed a
 {{/if}}
 ```
 
-Default for keep_flat / insufficient_info: `[y]`. For epic_candidate: no default — user MUST pick.
-
 ## Template ID: `coverage-mapping-fail`
-
-Fired by `/research` at end-of-phase when `coverage-mapping-check.sh` returns `verdict: fail`. Substitutions: `{{missing_questions}}` (multi-line list).
 
 ```
 Phase 1 incomplete: missing coverage mapping in research.md.
@@ -73,11 +75,7 @@ To complete Phase 1, add the section to research.md and re-run /research, OR pas
 [s]kip — bypass with reason (you'll be prompted for the reason)
 ```
 
-Default: `[a]`.
-
 ## Template ID: `skill-review-decision`
-
-Fired by `/complete` when `git diff --cached --name-only` shows `skills/*/SKILL.md` changes. Substitutions: `{{skills_reviewed}}` (comma-list), `{{findings}}` (multi-line agent output).
 
 ```
 Skill quality review for {{skills_reviewed}}:
@@ -89,11 +87,7 @@ Skill quality review for {{skills_reviewed}}:
 [b]ypass — skip with reason (you'll be prompted for the reason; recorded in audit)
 ```
 
-Default: no default — user MUST pick.
-
 ## Template ID: `plugin-validate-decision`
-
-Fired by `/complete` when `git diff --cached --name-only` shows plugin file changes. Substitutions: `{{plugins_validated}}` (comma-list), `{{findings}}` (multi-line slash-command output).
 
 ```
 Plugin validation for {{plugins_validated}}:
@@ -105,11 +99,7 @@ Plugin validation for {{plugins_validated}}:
 [b]ypass — skip with reason (you'll be prompted for the reason; recorded in audit)
 ```
 
-Default: no default — user MUST pick.
-
 ## Template ID: `phase-command-bypass-acknowledge`
-
-Fired post-hoc by `/audit-status` when listing tasks with `_phase-command-bypass.json` audit files. NOT fired at Write time (the hook is non-blocking; it just records). Substitutions: `{{artifact_written}}`, `{{phase_command_active}}`, `{{fired_at}}`.
 
 ```
 Phase-command bypass detected:
@@ -122,8 +112,6 @@ The framework expected a /research / /design / /implement slash command to be ac
 [a]cknowledge — note the bypass and continue (recorded in audit)
 [r]e-run — invoke the proper phase command now to retroactively fire the gates
 ```
-
-Default: `[a]` — non-blocking acknowledgment.
 
 ## Bypass-reason capture
 
@@ -138,13 +126,16 @@ The free-text is stored verbatim in the audit file's `bypass_reason` field. Empt
 ## Versioning policy
 
 - **Major bumps** are breaking: template ID rename, placeholder rename, option-list reorder.
-- **Minor bumps** are additive: new templates (e.g., when a new hardened surface ships), new optional placeholders. Existing template IDs and shape preserved.
-
-v1.0 covers all 5 v4.0.0 user-prompt surfaces.
+- **Minor bumps** are additive: new templates, new optional placeholders. Existing template IDs and shape preserved.
 
 ## Non-goals
 
 - **No i18n.** v1 ships English-only. Translating risks losing rationalization-resistance unless per-locale literal templates ship with their own anti-paraphrase guarantee.
-- **No template inheritance / composition.** Each template is standalone literal text. Reuse via DRY would obscure what the user actually sees.
-- **No conditional UX modes.** No "verbose" vs "compact" prompts. The literal wording is the wording.
-- **No template authoring tool.** Templates live in this markdown reference, hand-edited. No generator script in v1.
+- **No template inheritance / composition.** Each template is standalone literal text.
+- **No conditional UX modes** (no "verbose" vs "compact"). The literal wording is the wording.
+- **No template authoring tool.** Templates live in this markdown reference, hand-edited.
+
+## Changelog
+
+- **v1.1 (2026-04-25, v4.0.2):** additive; added Templates index table consolidating defaults + substitutions + fire conditions; trimmed per-template prose. ALL literal blocks preserved byte-for-byte (verified by `tests/gate-prompts-literal.sh`).
+- **v1.0 (2026-04-25, v4.0.0):** initial; 5 templates covering all v4.0.0 user-prompt surfaces.
