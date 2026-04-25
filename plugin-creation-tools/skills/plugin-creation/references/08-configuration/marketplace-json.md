@@ -58,6 +58,7 @@ marketplace-repo/
 | plugins | array | **Yes** | List of available plugins |
 | tags | array | No | Marketplace-level categorization tags for filtering and discovery |
 | strict | boolean | No | Default: `true`. When true, `plugin.json` in each plugin is the authority for plugin metadata. When false, the marketplace entry itself is the entire plugin definition (no separate `plugin.json` needed). |
+| allowCrossMarketplaceDependenciesOn | array | No | Names of other marketplaces whose plugins this marketplace's plugins are permitted to depend on. Without this allowlist, dependencies that name a different marketplace are blocked at install. See [Cross-marketplace dependencies](#allow-cross-marketplace-dependencies-allowcrossmarketplacedependencieson). |
 
 ### Metadata Object Fields
 
@@ -360,36 +361,58 @@ The `{plugin-name}--v` prefix lets one repository host multiple plugins with ind
 
 **Without matching tags**, dependents fail with `no-matching-tag` and are disabled.
 
-### 2. Allowlist cross-marketplace dependencies
+### 2. Allow cross-marketplace dependencies (`allowCrossMarketplaceDependenciesOn`)
 
-A plugin in your marketplace can depend on a plugin in a different marketplace by setting `"marketplace"` in its dependency entry. Cross-marketplace resolution is **blocked by default** — you must allowlist the target marketplace in your root marketplace's `marketplace.json`.
-
-Allowlist entries can use exact matches or regex-based `hostPattern` and `pathPattern`:
+A plugin in your marketplace can depend on a plugin in a **different** marketplace by setting `"marketplace": "<other-marketplace-name>"` in its dependency entry. This is **blocked by default**: name the trusted marketplaces in `allowCrossMarketplaceDependenciesOn` on the marketplace's root `marketplace.json`.
 
 ```json
 {
-  "name": "internal-plugins",
-  "strictKnownMarketplaces": {
-    "trusted-upstream": {
-      "source": {
-        "source": "github",
-        "repo": "partner-org/plugin-catalog"
-      }
-    },
-    "all-partner-repos": {
-      "source": {
-        "source": "github",
-        "hostPattern": "^github\\.com$",
-        "pathPattern": "^partner-org/.*"
-      }
+  "name": "camoa-skills",
+  "owner": {"name": "camoa"},
+  "allowCrossMarketplaceDependenciesOn": ["palcera_skills", "anthropic-tools"],
+  "plugins": [
+    {
+      "name": "design-toolkit",
+      "source": "./plugins/design-toolkit"
     }
-  }
+  ]
 }
 ```
 
-Dependents that reference a non-allowlisted marketplace are rejected at install time.
+With the entry above, `design-toolkit` may declare `{"name": "brand-engine", "marketplace": "palcera_skills"}` in its `dependencies`. Without the entry, the install fails with a clear cross-marketplace-dependency error.
 
-### 3. Validator behavior
+**Trust does not chain.** Only the **root** marketplace's allowlist is consulted — i.e., the marketplace the user installed the dependent plugin from. If `palcera_skills` itself allows `third-party-marketplace`, that does **not** transitively grant `camoa-skills` access; you must list `third-party-marketplace` in `camoa-skills`'s own `allowCrossMarketplaceDependenciesOn` if a `camoa-skills` plugin needs it.
+
+#### `allowCrossMarketplaceDependenciesOn` vs `hostPattern` / `pathPattern`
+
+These solve different problems. Don't confuse them:
+
+| Field | Lives in | Controls |
+|-------|----------|----------|
+| `allowCrossMarketplaceDependenciesOn` | Root `marketplace.json` (the marketplace you author) | Which **other marketplaces** your plugins are allowed to declare cross-marketplace dependencies on. |
+| `hostPattern` / `pathPattern` (inside `strictKnownMarketplaces` / `extraKnownMarketplaces` in managed/user `settings.json`) | User or admin `settings.json` | Which **sources** (host + path regex) the user's installation is allowed to add a marketplace from. Gates marketplace **install location**, not dependency trust. |
+
+A plugin install can fail for either reason: the marketplace the dependency lives in isn't allowlisted in your `allowCrossMarketplaceDependenciesOn` (your problem to fix), or the user's `strictKnownMarketplaces` doesn't permit the upstream marketplace's source (their admin's problem to fix).
+
+#### `blockedMarketplaces` enforcement points
+
+When admins configure `blockedMarketplaces` in managed settings, the block is checked at every entry point — `add`, `install`, **`update`**, **`refresh`**, and **`auto-update`** — not just at first install. A marketplace that gets added to the blocklist after install is denied on the next refresh/update cycle.
+
+### 3. Tag plugin releases (`claude plugin tag`)
+
+Use `claude plugin tag` (run from inside a plugin's folder) to create the `{plugin-name}--v{version}` git tag that version constraints resolve against. Pinned plugins (those whose dependents declare `version`) auto-update to the **highest satisfying tag** — without tags, dependents fail with `no-matching-tag` and stay disabled.
+
+```bash
+# From inside the plugin directory
+claude plugin tag             # create {plugin-name}--v{version} from plugin.json
+claude plugin tag --push      # also push the tag to origin
+claude plugin tag --dry-run   # show what would be tagged
+claude plugin tag --force     # tag even if working tree is dirty or tag exists
+```
+
+This replaces the manual `git tag {plugin-name}--v{version} && git push origin --tags` flow. The tag's `{version}` must match the `version` field in that commit's `plugin.json`.
+
+### 4. Validator behavior
 
 When a plugin is installed, Claude Code:
 

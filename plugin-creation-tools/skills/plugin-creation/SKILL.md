@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-version: 3.2.0
+version: 3.3.0
 description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
 ---
 
@@ -144,22 +144,26 @@ When user says "add agent", "create agent", "make agent":
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for all 26 events
+2. Read `references/06-hooks/hook-events.md` for all 28 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
    - `PreToolUse` - before tool execution (can block)
    - `PostToolUse` - after tool execution (formatting, logging)
+   - `PostToolBatch` - after a parallel batch resolves (one-shot summary)
    - `SessionStart` - setup, output directories
    - `SessionEnd` - cleanup
    - `UserPromptSubmit` - validation, context injection (can block)
+   - `UserPromptExpansion` - intercept direct `/skillname` invocations (can block)
    - `SubagentStart`/`SubagentStop` - agent lifecycle
    - `PreCompact` - inject context before compaction
    - `Notification`, `Stop`, `TaskCompleted`, `TeammateIdle`
 
-**Three handler types** — choose the right one:
+**Five handler types** — choose the right one:
 - `command` — shell script, fastest, no LLM cost. Use for logging, file ops, env setup.
+- `http` — POST event JSON to a webhook (settings.json only). Use for external services.
+- `mcp_tool` — call a tool on an already-connected MCP server, no shell. Use to file an issue, sync state, log to an external system without spawning a process.
 - `prompt` — single-turn LLM evaluation, zero script overhead. Use for lightweight validation.
-- `agent` — multi-turn subagent with tools (Read, Grep, Glob). Use for complex verification.
+- `agent` — multi-turn subagent with tools (Read, Grep, Glob). **Experimental** upstream — behavior may change.
 
 **Async execution**: Add `"async": true` on command hooks for background operations (logging, analytics) that shouldn't block the main flow.
 
@@ -249,9 +253,10 @@ Before creating a component, verify it's the right choice:
 - `references/07-mcp/` - MCP overview
 
 ### Configuration
-- `references/08-configuration/plugin-json.md` - Plugin manifest
-- `references/08-configuration/marketplace-json.md` - Marketplace config
-- `references/08-configuration/settings.md` - Settings hierarchy
+- `references/08-configuration/plugin-json.md` - Plugin manifest (incl. `userConfig` schema with `type`/`title` fields, `themes` component path)
+- `references/08-configuration/marketplace-json.md` - Marketplace config (incl. `allowCrossMarketplaceDependenciesOn`, `claude plugin tag`)
+- `references/08-configuration/themes.md` - Plugin themes (`themes/*.json`, base + overrides, `Ctrl+E` user-copy flow)
+- `references/08-configuration/settings.md` - Settings hierarchy (incl. `prUrlTemplate`)
 - `references/08-configuration/output-config.md` - Output configuration
 
 ### Testing & Distribution
@@ -262,6 +267,23 @@ Before creating a component, verify it's the right choice:
 - `references/10-distribution/marketplace.md` - Marketplace guide
 - `references/10-distribution/versioning.md` - Version strategy
 - `references/10-distribution/complete-examples.md` - Full plugin examples
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Plugin doesn't appear after install | Components placed inside `.claude-plugin/` instead of plugin root | Move `commands/` / `agents/` / `skills/` / `hooks/` to the plugin root. Only `plugin.json` belongs in `.claude-plugin/`. |
+| Skill exists but Claude never invokes it | Description missing trigger phrase or imperatives | Rewrite to start with "Use when…", include WHAT and WHEN, preserve any `PROACTIVELY` / `MUST` / `NEVER` markers from the prior version. Run `skill-quality-reviewer` agent to audit. |
+| Hook configured but never fires | Wrong event name (case-sensitive) or `http` handler in `hooks/hooks.json` | Verify event name is exactly one of the 28 documented in `references/06-hooks/hook-events.md`. `http` handlers only work in `settings.json` — they are silently ignored in `hooks.json`. Run `/plugin-creation-tools:validate`. |
+| Hook spawns on every Bash call but only acts on `rm` | Filtering inside the script instead of with `if` | Add `if: "Bash(rm *)"` to the handler. The matcher fires the event; `if` is a cheap pre-spawn filter that avoids the "spawn-and-exit-0" anti-pattern. See `references/06-hooks/writing-hooks.md#the-if-field`. |
+| `mcp_tool` hook returns "not connected" on first run | `SessionStart` / `Setup` typically fire before MCP servers finish connecting | Expected on first run. Either accept the non-blocking error, or move the call to a later event (`PostToolUse`, `Stop`, etc.) where the server is reliably connected. |
+| Plugin theme doesn't appear in `/theme` | `themes/*.json` missing `name` / `base` / `overrides`, or invalid JSON | Run `/plugin-creation-tools:validate`. See `references/08-configuration/themes.md` for the schema. |
+| Cross-marketplace dependency rejected at install | Root marketplace's `marketplace.json` is missing `allowCrossMarketplaceDependenciesOn` | Add the target marketplace name to the root marketplace's `allowCrossMarketplaceDependenciesOn` array. Trust does not chain — only the **root** marketplace's allowlist is consulted. See `references/08-configuration/marketplace-json.md`. |
+| Version mismatch errors after release | `version` drifted between `plugin.json` and the marketplace entry | Bump both. The validator enforces this. Use `claude plugin tag` (run from inside the plugin folder) to create the `{plugin-name}--v{version}` git tag dependents resolve against. |
+| Frontmatter `hooks` / `mcpServers` ignored on a plugin agent | Plugin-packaged agents silently strip `hooks` / `mcpServers` / `permissionMode` for security | Move the hooks to `hooks/hooks.json` at the plugin root, or scope them via SKILL.md frontmatter. (For agents launched via `--agent` from project-local `.claude/agents/`, those fields fire as of v2.1.117+.) |
+| `--debug` shows the plugin loading but components missing | Custom `commands` / `skills` / `agents` paths in `plugin.json` replace defaults — they don't supplement | When you set a custom path for a component, the default directory is no longer scanned. Either remove the override or include the default path in the array. |
+
+For a symptom-first walkthrough of "what state is the runtime actually in," see the upstream **Debug Your Config** guide (`/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`).
 
 ## Examples
 

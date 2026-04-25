@@ -194,6 +194,18 @@ Set these environment variables in `.claude/settings.json`:
 | `MYPLUGIN_FEATURE_X` | `false` | Enable experimental feature X |
 ```
 
+### prUrlTemplate
+
+Custom URL pattern for the PR link rendered in `/code-review` footers and similar review UIs. Useful when your remote isn't on github.com — `--from-pr` now also accepts GitLab, Bitbucket, and GHES URLs (release 2.1.119+), so the template lets you mirror the remote's URL shape.
+
+```json
+{
+  "prUrlTemplate": "https://gitlab.example.com/{owner}/{repo}/-/merge_requests/{number}"
+}
+```
+
+Available substitutions: `{owner}`, `{repo}`, `{number}`. If unset, Claude Code falls back to the GitHub URL shape.
+
 ### permissions
 
 Control tool permissions:

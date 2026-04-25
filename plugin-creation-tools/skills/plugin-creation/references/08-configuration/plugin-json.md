@@ -92,6 +92,8 @@ Or simple string:
 | mcpServers | string/object | MCP config path or inline config |
 | lspServers | string/object | LSP config path or inline config |
 | outputStyles | string/array | Custom output style paths |
+| themes | string/array | Color theme files/directories (replaces default `themes/`). Each file: `name`, `base`, `overrides`. See [`themes.md`](themes.md) for the full schema. |
+| userConfig | object | User-configurable values prompted at enable time. See [User configuration](#user-configuration) below. |
 | settings | string | Path to settings.json (only `agent` key supported) |
 
 ### Path Patterns
@@ -260,6 +262,55 @@ Example:
 ```
 
 `${CLAUDE_PLUGIN_ROOT}` is substituted at runtime in all path-accepting fields, including nested values in mcpServers and lspServers configurations.
+
+## User Configuration
+
+The `userConfig` field declares values that Claude Code prompts the user for when the plugin is enabled. Use this instead of asking users to hand-edit `settings.json`. Values are exported to plugin subprocesses as `CLAUDE_PLUGIN_OPTION_<KEY>` env vars and substituted as `${user_config.KEY}` in MCP and LSP server configs, hook commands, monitor commands, and (for non-sensitive values) skill and agent content.
+
+### Schema
+
+```json
+{
+  "userConfig": {
+    "api_endpoint": {
+      "type": "string",
+      "title": "API endpoint",
+      "description": "Your team's API endpoint"
+    },
+    "api_token": {
+      "type": "string",
+      "title": "API token",
+      "description": "API authentication token",
+      "sensitive": true
+    },
+    "max_retries": {
+      "type": "number",
+      "title": "Max retries",
+      "description": "How many times to retry a failed call",
+      "default": 3,
+      "min": 0,
+      "max": 10
+    }
+  }
+}
+```
+
+### Per-entry fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `type` | Yes | One of `string`, `number`, `boolean`, `directory`, `file`. |
+| `title` | Yes | Label shown in the configuration dialog. |
+| `description` | Yes | Help text shown beneath the field. |
+| `sensitive` | No | If `true`, masks input and stores the value in the system keychain (or `~/.claude/.credentials.json` where unavailable) instead of `settings.json`. Keychain has ~2 KB total budget shared with OAuth tokens — keep secrets small. |
+| `required` | No | If `true`, validation fails when the field is empty. |
+| `default` | No | Value used when the user provides nothing. |
+| `multiple` | No | For `string` type, allow an array of strings. |
+| `min` / `max` | No | Bounds for `number` type. |
+
+> **Additive change (2.1.118+):** `type` and `title` were added alongside the original `description`-only form. Description-only entries still work but are treated as legacy — `/plugin-creation-tools:validate` flags them at info level so you can opt into the richer schema when convenient.
+
+Non-sensitive values land in `settings.json` under `pluginConfigs[<plugin-id>].options`. Use `${user_config.KEY}` substitution in MCP/LSP/hook/monitor configs and in skill/agent body text (sensitive values are blocked from skill/agent substitution).
 
 ## Dependencies (Version-Constrained)
 

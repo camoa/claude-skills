@@ -61,6 +61,26 @@ Complete reference for plugin-related CLI commands.
 /plugin update --scope managed
 ```
 
+### Plugin Release Tagging (`claude plugin tag`)
+
+Create the `{plugin-name}--v{version}` git tag that dependency-version constraints resolve against. Run from inside the plugin's folder. Pinned dependents auto-update to the highest satisfying git tag.
+
+```bash
+# Create the tag from plugin.json's "version" field
+claude plugin tag
+
+# Create and push to the configured git remote
+claude plugin tag --push
+
+# Show what would be tagged without creating it
+claude plugin tag --dry-run
+
+# Tag anyway when the working tree is dirty or the tag exists
+claude plugin tag --force
+```
+
+Replaces the manual `git tag {plugin-name}--v{version} && git push --tags` flow. See [`../08-configuration/marketplace-json.md`](../08-configuration/marketplace-json.md#3-tag-plugin-releases-claude-plugin-tag) for the full release-tagging workflow.
+
 ## Command Line Flags
 
 ### Plugin Directory Loading

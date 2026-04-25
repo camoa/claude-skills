@@ -1,7 +1,7 @@
 {
   "name": "plugin-creation-tools",
-  "description": "Complete authoring guide for Claude Code plugins — skills, commands, agents, 26 hook events (with the `if` pre-spawn filter), MCP servers, plugin dependencies, permission modes, the Agent SDK, REVIEW.md v2, and Routines-based auto-validate.",
-  "version": "3.2.1",
+  "description": "Complete authoring guide for Claude Code plugins — skills, commands, agents, 28 hook events (with the `if` pre-spawn filter and the `mcp_tool` handler type), MCP servers, plugin dependencies, plugin themes, `userConfig` schema, cross-marketplace dependencies, permission modes, the Agent SDK, REVIEW.md v2, and Routines-based auto-validate.",
+  "version": "3.3.0",
   "author": {
     "name": "camoa"
   },

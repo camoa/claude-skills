@@ -1,7 +1,8 @@
 ---
-description: Add a skill, command, agent, or hook to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "new component", or wants to extend an existing plugin with additional functionality.
+description: Add a skill, command, agent, hook, MCP server, or theme to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "add theme", "new component", or wants to extend an existing plugin with additional functionality.
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 argument-hint: <component-type> <name>
+context: fork
 ---
 
 # Add Component
@@ -41,13 +42,19 @@ Add a new component to an existing Claude Code plugin.
 ### `hook`
 1. If `hooks/hooks.json` exists, add new event entry
 2. If not, create from `templates/hooks/hooks.json.template`
-3. Ask which event(s) to handle
-4. Consider all three handler types: `command`, `prompt`, `agent`
-5. For cross-platform support, use `templates/hooks/run-hook.cmd.template`
+3. Ask which event(s) to handle (28 available — see `references/06-hooks/hook-events.md`)
+4. Consider the five handler types: `command` (shell, fastest), `mcp_tool` (call an already-connected MCP server tool — no shell, cross-platform-safe), `prompt` (single-turn LLM), `agent` (multi-turn subagent — **experimental**), `http` (POST to webhook — **settings.json only**, will be silently ignored in `hooks.json`)
+5. For cross-platform support when shell logic is genuinely needed, use `templates/hooks/run-hook.cmd.template`. If the hook only calls an MCP server, use `type: "mcp_tool"` instead — it removes the cross-platform footgun.
 
 ### `mcp`
 1. Create or update `.mcp.json` from `templates/mcp.json.template`
 2. Guide user to configure server command and args
+
+### `theme`
+1. Create `themes/$2.json` with `name`, `base`, `overrides` fields (see `references/08-configuration/themes.md`)
+2. Default `base` to `"dark"`; keep `overrides` sparse (only the tokens you actually change)
+3. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$2` when the user selects it
+4. Remind: users press `Ctrl+E` to copy the plugin theme into `~/.claude/themes/` for editing — your bundled file is read-only in the picker
 
 ## After Adding
 
@@ -59,5 +66,5 @@ Add a new component to an existing Claude Code plugin.
 
 ## Arguments
 
-- `$1`: Component type (skill, command, agent, hook, mcp)
+- `$1`: Component type (skill, command, agent, hook, mcp, theme)
 - `$2`: Component name (hyphen-case)

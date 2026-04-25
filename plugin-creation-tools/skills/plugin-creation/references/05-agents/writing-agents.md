@@ -79,6 +79,8 @@ How this agent decides what to focus on. Any constraints or special consideratio
 >
 > These fields work normally for project-local agents (in `.claude/agents/`), but are stripped when the agent is distributed via a plugin.
 
+> **Behavior change (Claude Code v2.1.117+):** Frontmatter `hooks` and inline `mcpServers` in agent files now **fire and connect** when the agent runs as the **main session** via `claude --agent <name>` or the `agent` setting. Previously they were silently dropped in `--agent` mode. If your agent was relying on hooks-not-firing (or MCP servers not loading) when run as the main session, audit and adjust — those handlers will now run alongside any hooks defined in `settings.json`. (No change for plugin-packaged agents: `hooks`/`mcpServers`/`permissionMode` are still silently ignored there for security.)
+
 ## The Description Field
 
 The description is **critical** for auto-delegation. Claude uses it to decide when to delegate tasks.

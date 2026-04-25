@@ -2,6 +2,7 @@
   "hooks": {
     "PreCompact": [
       {
+        "matcher": "manual|auto",
         "hooks": [
           {
             "type": "command",

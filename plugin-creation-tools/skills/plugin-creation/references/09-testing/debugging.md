@@ -2,6 +2,10 @@
 
 Troubleshoot plugin loading, component discovery, and execution issues.
 
+> **For "what actually loaded?" debugging,** see the upstream **Debug Your Config** guide. It is the symptom-first walkthrough for the runtime-introspection slash commands plugin authors reach for first: `/context` (token usage by source), `/memory` (which CLAUDE.md files were merged), `/doctor` (overall health), `/hooks` (which hooks fired), `/mcp` (MCP server status), `/skills` (which skills are visible), `/permissions` (effective rules), and `/status` (mode, model, agent). Use this page for plugin-specific troubleshooting recipes; use Debug Your Config when you need to know what state the runtime is in.
+
+> **Privacy when sharing logs:** set `CLAUDE_CODE_HIDE_CWD=1` to mask the current working directory in UI output and screenshots before sharing repro logs in tickets, on Slack, or in plugin-author bug reports. Helpful when your project paths leak customer or internal-product names.
+
 ## Debug Mode
 
 Run Claude Code with debug output:

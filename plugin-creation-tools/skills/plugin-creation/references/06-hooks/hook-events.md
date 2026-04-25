@@ -1,6 +1,6 @@
 # Hook Events
 
-Complete reference for all 26 hook events in Claude Code.
+Complete reference for all 28 hook events in Claude Code.
 
 ## Event Reference Table
 
@@ -8,11 +8,13 @@ Complete reference for all 26 hook events in Claude Code.
 |-------|---------|-----------|-----------------|
 | SessionStart | Session begins or resumes | No | Yes (startup, resume, clear, compact) |
 | UserPromptSubmit | User submits prompt | Yes | No |
+| UserPromptExpansion | A user-typed slash command expands into a prompt | Yes (blocks expansion) | Yes (command name) |
 | PreToolUse | Before tool execution | Yes | Yes (tool name) |
 | PermissionRequest | Permission dialog shown | Yes | Yes (tool name) |
 | PermissionDenied | Auto-mode classifier denies a tool call | No (can request retry) | Yes (tool name) |
 | PostToolUse | After tool succeeds | No | Yes (tool name) |
 | PostToolUseFailure | After tool fails | No | Yes (tool name) |
+| PostToolBatch | After every tool call in a parallel batch resolves | Yes (stops the agentic loop) | No |
 | Notification | Alert sent | No | Yes (notification type) |
 | SubagentStart | Subagent spawned | No | Yes (agent type) |
 | SubagentStop | Subagent finishes | Yes | Yes (agent type) |
@@ -120,6 +122,47 @@ All hook events receive JSON input with the following common fields:
 - Exit 0 + stdout: Stdout content is added as context to the prompt
 - Exit non-zero: Prompt is blocked
 
+### UserPromptExpansion
+
+**Trigger**: A user-typed slash command (skill, custom command, or MCP prompt) expands into a prompt, before it reaches Claude. Distinct from `UserPromptSubmit`: this fires for the direct `/skillname` path that bypasses `PreToolUse` matching on the `Skill` tool.
+
+**Matcher**: `command_name` (e.g. `deploy`, `example-skill`). Empty matcher fires on every prompt-type slash command.
+
+**Can Block**: Yes — `decision: "block"` prevents the expansion.
+
+**Input Fields**: In addition to common fields, UserPromptExpansion hooks receive `expansion_type` (`slash_command` or `mcp_prompt`), `command_name`, `command_args`, `command_source`, and the original `prompt` string.
+
+**Use Cases**:
+- Block specific commands from direct invocation (e.g., require an approval file before `/deploy`)
+- Inject context for a particular skill via `additionalContext` (e.g., team review checklist)
+- Log which commands users invoke
+
+**Example**:
+```json
+{
+  "UserPromptExpansion": [
+    {
+      "matcher": "deploy",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Fields** (JSON stdout):
+| Field | Description |
+|-------|-------------|
+| `decision` | `"block"` prevents the slash command from expanding. Omit to allow it to proceed. |
+| `reason` | Shown to the user when `decision` is `"block"`. |
+| `additionalContext` | String added to Claude's context alongside the expanded prompt. |
+
+Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) is added to Claude's visible context — not just the debug log.
+
 ### PreToolUse
 
 **Trigger**: Before Claude executes any tool
@@ -220,6 +263,8 @@ All hook events receive JSON input with the following common fields:
 
 **Can Block**: No
 
+**Input Fields**: In addition to common fields and the tool's `tool_input` / `tool_response`, the payload includes `duration_ms` — tool execution time in milliseconds (excludes time spent in permission prompts and `PreToolUse` hooks). Same field is also included on `PostToolUseFailure`.
+
 **Use Cases**:
 - Format code after writes
 - Log completed operations
@@ -274,6 +319,43 @@ All hook events receive JSON input with the following common fields:
   ]
 }
 ```
+
+### PostToolBatch
+
+**Trigger**: Once after every tool call in a batch of parallel calls has resolved, before Claude Code sends the next request to the model. `PostToolUse` fires once per tool concurrently; `PostToolBatch` fires once with the full batch — the right place to act on the *set* of tools that ran.
+
+**Matcher**: Not supported.
+
+**Can Block**: Yes — `decision: "block"` or `continue: false` stops the agentic loop before the next model call.
+
+**Input Fields**: In addition to common fields, receives `tool_calls` — an array of `{tool_name, tool_input, tool_use_id, tool_response}` objects, one per tool in the batch. The `tool_response` shape is the **serialized `tool_result` content the model sees** (line-number-prefixed text for `Read`, etc.), not the structured Output object that `PostToolUse` receives.
+
+**Use Cases**:
+- Inject a single batch-summary context message instead of per-tool noise
+- Run cross-tool checks (e.g., "if Read touched files A and B together, remind to update C")
+- Synchronize external state once after parallel writes
+
+**Example**:
+```json
+{
+  "PostToolBatch": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Fields** (JSON stdout):
+| Field | Description |
+|-------|-------------|
+| `additionalContext` | Context string injected once before the next model call. Persisted to the transcript and replayed on `--resume`, so prefer static guidance over dynamic values. |
+| `decision` | `"block"` stops the agentic loop. |
 
 ### PermissionDenied
 
@@ -999,5 +1081,5 @@ Multiple matcher groups and multiple hooks per group:
 
 ## See Also
 
-- `writing-hooks.md` -- hook configuration and handler types (references all 26 events)
+- `writing-hooks.md` -- hook configuration and handler types (references all 28 events)
 - `hook-patterns.md` -- common implementation patterns

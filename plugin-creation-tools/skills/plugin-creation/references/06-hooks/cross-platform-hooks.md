@@ -17,6 +17,10 @@ This creates challenges:
 | Environment variables | `%VAR%` syntax | `$VAR` syntax |
 | bash availability | Not in PATH by default | Always available |
 
+## When you don't need a `.cmd` wrapper
+
+If the work the hook actually does is "call a tool on an MCP server I already ship," use a `mcp_tool` handler instead of a shell command. `mcp_tool` runs identically on every OS — no `bash.exe`, no path quoting, no polyglot script. See [`writing-hooks.md`](writing-hooks.md#5-mcp-tool-hook). Reach for the polyglot wrapper below only when the hook genuinely needs shell logic (file ops, subprocess calls, anything outside an MCP tool's surface).
+
 ## The Solution: Polyglot `.cmd` Wrapper
 
 A polyglot script is valid syntax in multiple languages simultaneously. This wrapper works in both CMD and bash:
