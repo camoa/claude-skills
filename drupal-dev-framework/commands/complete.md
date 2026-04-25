@@ -1,5 +1,5 @@
 ---
-description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 5 quality gates before allowing completion."
+description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 5 quality gates plus (v4.0.0+) skill-review + plugin-validate hardened gates when staged changes match before allowing completion. Surfaces candidate plays from the session via play_candidates mode (v3.15.0+)."
 allowed-tools: Read, Write, Bash(mv:*), Glob
 argument-hint: <task-name>
 ---
@@ -14,7 +14,7 @@ Mark a task as complete and move it to the completed folder.
 /drupal-dev-framework:complete <task-name>
 ```
 
-## What This Does (v3.0.0 + v3.10.0 epic awareness)
+## What This Does (v3.0.0 + v3.10.0 epic awareness + v4.0.0 hardened gates)
 
 1. Invokes `task-completer` skill
 2. Loads task from `implementation_process/in_progress/{task_name}/`

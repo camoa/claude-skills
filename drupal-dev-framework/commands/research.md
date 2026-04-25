@@ -14,7 +14,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 /drupal-dev-framework:research <task-name>
 ```
 
-## What This Does (v3.0.0, with v3.11.0 pre-analysis hook)
+## What This Does (v3.0.0, with v3.11.0 pre-analysis hook, v4.0.0 always-on validation gate + coverage-mapping requirement)
 
 1. **Pre-analysis hook** (v3.11.0+, before anything else) — if strong signals fire in the task name + description, invoke `analysis-agent` to assess whether this should be an epic. See "Pre-analysis hook" section below.
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
