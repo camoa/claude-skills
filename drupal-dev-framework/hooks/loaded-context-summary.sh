@@ -6,10 +6,10 @@
 # and prepends a one-line summary to the agent's next turn. Mirrors the existing
 # context-reminder hook's pattern.
 
-set -uo pipefail
+set -euo pipefail
 
 # Read session_context for the current workspace
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
 SESS_FILE="$HOME/.claude/drupal-dev-framework/sessions/$WORKSPACE_HASH.json"
 
 [[ -s "$SESS_FILE" ]] || { jq -nc '{}'; exit 0; }

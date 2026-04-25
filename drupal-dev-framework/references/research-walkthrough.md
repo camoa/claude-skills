@@ -18,7 +18,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 
 ## What This Does (v3.0.0, with v3.11.0 pre-analysis hook, v4.0.0 always-on validation gate + coverage-mapping requirement)
 
-1. **Pre-analysis hook** (v3.11.0+, before anything else) — if strong signals fire in the task name + description, invoke `analysis-agent` to assess whether this should be an epic. See "Pre-analysis hook" section below.
+1. **Pre-analysis validation gate** (v4.0.0+, always-on, non-bypassable) — `analysis-agent` is invoked unconditionally on every new-task `/research`; strong signals are informational only and recorded in `signals_used[]`. See "Pre-analysis validation gate" section below.
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
 3. Creates `task.md` (tracker with links and acceptance criteria)
 4. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
@@ -110,8 +110,6 @@ Whether pass, fail, or bypassed, write `<task>/_coverage-mapping.json` via `gate
 ### Skip flag
 
 `/research <task> --skip-coverage-check <reason>` skips the gate entirely; writes audit with `user_choice: "bypassed"` and the supplied reason. Recorded but not blocked.
-
-## Traceability walkthrough sub-step (v3.13.4+)
 
 ## Traceability walkthrough sub-step (v3.13.4+)
 

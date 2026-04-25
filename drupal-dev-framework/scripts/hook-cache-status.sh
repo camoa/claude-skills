@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # hook-cache-status.sh — diagnostic for v4.0.2 hook caches.
 #
-# For the current workspace, computes the rendered hash that each cached hook
-# WOULD emit on the next UserPromptSubmit, and compares with the cached hash.
-# Useful for confirming that "state unchanged → skip emit" is working OR for
-# debugging "why did the hook fire on the last turn."
+# For the current workspace, prints whether each hook has a cache file and
+# what hash it currently holds. Does NOT recompute the rendered hash (that
+# would require re-running each hook with full session/task state). Useful
+# for confirming that a cache exists after a hook fired, OR for spotting
+# when a cache was cleared between sessions.
 #
 # Usage:
 #   scripts/hook-cache-status.sh
