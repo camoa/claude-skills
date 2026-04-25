@@ -6,12 +6,13 @@ Usage:
     init_plugin.py <plugin-name> --path <path> [--components <components>]
 
 Components:
-    skill, command, agent, hook, mcp (comma-separated)
+    skill, command, agent, hook, mcp, theme (comma-separated)
 
 Examples:
     init_plugin.py my-tools --path ./plugins
     init_plugin.py enterprise-tools --path ./plugins --components command,agent,hook
     init_plugin.py doc-processor --path ./plugins --components skill
+    init_plugin.py brand-tools --path ./plugins --components skill,theme
 """
 
 import sys
@@ -218,6 +219,19 @@ MARKETPLACE_JSON_TEMPLATE = """{
 SETTINGS_JSON_TEMPLATE = """{
   "enabledPlugins": {
     "%s@%s-dev": true
+  }
+}
+"""
+
+THEME_TEMPLATE = """{
+  "name": "%s",
+  "base": "dark",
+  "overrides": {
+    "claude": "#bd93f9",
+    "error": "#ff5555",
+    "success": "#50fa7b",
+    "warning": "#f1fa8c",
+    "info": "#8be9fd"
   }
 }
 """
@@ -436,6 +450,19 @@ def init_plugin(plugin_name, path, components=None):
         except Exception as e:
             print(f"Error creating MCP config: {e}")
 
+    if 'theme' in components:
+        try:
+            themes_dir = plugin_dir / 'themes'
+            themes_dir.mkdir(exist_ok=True)
+            theme_display_name = plugin_title  # e.g. "My Brand"
+            (themes_dir / 'default.json').write_text(
+                THEME_TEMPLATE % theme_display_name
+            )
+            print("Created themes/default.json")
+            component_list.append("- **Theme**: `themes/default.json` (appears in /theme)")
+        except Exception as e:
+            print(f"Error creating theme: {e}")
+
     # Create README
     try:
         components_text = '\n'.join(component_list) if component_list else '- None'
@@ -465,6 +492,7 @@ def main():
         print("  agent   - Specialized assistant")
         print("  hook    - Event-triggered automation")
         print("  mcp     - MCP server configuration")
+        print("  theme   - Color theme JSON (appears in /theme)")
         print("\nExamples:")
         print("  init_plugin.py my-tools --path ./plugins")
         print("  init_plugin.py my-tools --path ./plugins --components command,hook")

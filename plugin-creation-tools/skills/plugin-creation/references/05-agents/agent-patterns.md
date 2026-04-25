@@ -380,6 +380,49 @@ The grader agent receives all outputs and evaluates them against predefined crit
 
 The grader should have a structured rubric in its agent definition with specific dimensions and scoring criteria.
 
+## Forked Subagents (experimental)
+
+> **Experimental, requires Claude Code v2.1.117+.** Opt in by setting the `CLAUDE_CODE_FORK_SUBAGENT=1` environment variable. Behavior may change.
+
+A **fork** is a subagent that inherits the entire current conversation instead of starting fresh — same system prompt, tools, model, and message history as the main session. The fork's tool calls stay out of your conversation; only its final result returns. Use a fork when re-explaining context to a named subagent would cost more than the work itself, or when you want to try several approaches in parallel from the same starting point.
+
+### Enabling fork mode changes Claude Code in three ways
+
+1. Claude spawns a fork whenever it would otherwise use the **`general-purpose`** subagent. Named subagents (e.g., `Explore`, your plugin's agents) still spawn as before.
+2. **Every** subagent spawn runs in the background, fork or named. Set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` to keep spawns synchronous.
+3. The `/fork` command spawns a fork instead of acting as an alias for `/branch`.
+
+### Manual fork
+
+```
+/fork draft unit tests for the parser changes so far
+```
+
+Claude names the fork from the first words of the directive. The fork appears in a panel below the prompt, runs in the background, and posts its result into your main conversation when it finishes.
+
+### When to use forks
+
+- Same context, different angle (try an alternative implementation, draft tests, explore a refactor)
+- Heavy context already loaded — re-explaining to a named subagent is the bottleneck
+- Cache-sensitive: a fork's first request reuses the parent's prompt cache, so it's cheaper than spawning a fresh subagent for the same context
+
+### When NOT to use forks
+
+- Clean-room investigation (you want a fresh perspective, not your own context echoed back)
+- Non-interactive / headless mode (Agent SDK and `-p`) — fork mode is interactive-only
+- Anything that needs to spawn further forks — forks cannot fork
+
+### Fork vs named subagent
+
+| | Fork | Named subagent |
+|---|---|---|
+| System prompt | Inherited | From its definition |
+| Tools | Inherited | From its definition |
+| Message history | Inherited | None |
+| Cache hit on first call | Yes (shares parent prompt) | No |
+| Available in headless / SDK | No | Yes |
+| Use when | Re-explaining context costs more than the task | Task has its own surface and rules |
+
 ## Context Management
 
 ### Fresh Context Advantage

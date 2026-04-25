@@ -35,6 +35,8 @@ This is the table plugin authors most need. A hook that's safe in `default` can 
 
 ## Auto mode specifics
 
+> For the full `autoMode` configuration schema (allow/deny categories, classifier model overrides, fallback thresholds), see the upstream **Auto Mode Config** guide — it was previously embedded in the Permissions doc and is now a standalone reference. This page covers what plugin authors need to *design around*; that page is the schema source of truth.
+
 `auto` is the riskiest mode for plugin authors to design around because it suppresses the prompts that normally surface unsafe actions.
 
 **How it decides** (in order):

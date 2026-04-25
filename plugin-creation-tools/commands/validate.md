@@ -39,7 +39,7 @@ Validate a plugin's structure and components against best practices.
 - [ ] `dependencies` is an array
 - [ ] Each entry is either a bare string (plugin name) or an object with a required `name` field
 - [ ] Object entries with a `version` field use valid semver-range syntax (`~2.1.0`, `^2.0`, `>=1.4`, `=2.1.0`, hyphen ranges, `||` unions) — flag `range-conflict` on invalid syntax
-- [ ] Object entries with a `marketplace` field: flag as error if the referenced marketplace is not in the root marketplace's `strictKnownMarketplaces` allowlist
+- [ ] Object entries with a `marketplace` field (cross-marketplace dependency): flag as **error** if the root marketplace's `marketplace.json` does not list the referenced marketplace name in `allowCrossMarketplaceDependenciesOn`. Error message: "Cross-marketplace dependency on `<marketplace-name>` requires the root marketplace.json to include `<marketplace-name>` in `allowCrossMarketplaceDependenciesOn`. Trust does not chain — only the root marketplace's allowlist is consulted." Distinct from `strictKnownMarketplaces` (which lives in user/managed `settings.json` and gates marketplace install location, not dependency trust).
 - [ ] Pre-release ranges are only matched when the range opts in with a pre-release suffix (e.g. `^2.0.0-0`)
 - [ ] Use official error names when reporting: `range-conflict`, `dependency-version-unsatisfied`, `no-matching-tag` (align with `claude plugin list` output)
 
@@ -72,10 +72,24 @@ Validate a plugin's structure and components against best practices.
 - [ ] `tools` field present
 - [ ] `model` field present (haiku, sonnet, opus, or inherit)
 
+### Themes (for each `themes/*.json`)
+- [ ] Valid JSON — invalid JSON is an **error** (theme will not load)
+- [ ] Required fields present: `name` (display label), `base` (preset name), `overrides` (color-token map). Missing any of the three → **warning** with the field name.
+- [ ] `overrides` is an object (not an array or string)
+- [ ] No nested directories — `themes/` is a flat folder of `.json` files
+
+### userConfig (in `plugin.json`, if declared)
+- [ ] Each entry is an object (not a string or array)
+- [ ] Each entry has `type`, `title`, `description` — **info-level** (not warning) when only `description` is present, marking it as the legacy form. Suggest: "Add `type` and `title` for the v2.1.118+ schema; the description-only form still works."
+- [ ] `type` value is one of `string`, `number`, `boolean`, `directory`, `file` — flag unknown values as warning
+- [ ] If `sensitive: true`, the value is referenced via `${user_config.KEY}` in MCP/LSP/hook configs only (not in skill/agent body — sensitive substitution is blocked there)
+- [ ] If `min`/`max` are set, `type` is `number`
+
 ### Hooks (`hooks/hooks.json`)
 - [ ] Valid JSON structure — **Note:** malformed hooks.json prevents the entire plugin from loading
-- [ ] Each event name is one of the 26 recognized events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
-- [ ] Each hook entry has `type` (command, prompt, or agent) and matching field
+- [ ] Each event name is one of the 28 recognized events: `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
+- [ ] Each hook entry has `type` — one of `command`, `prompt`, `agent`, or `mcp_tool` — plus the matching required fields for that type. `agent` is upstream-marked experimental; flag a one-line info note when used.
+- [ ] `mcp_tool` handlers: require `server` and `tool`; if `server` is not declared in the plugin's `mcpServers` (and isn't a known external server the user wires up themselves), emit a **warning**: "`mcp_tool` references server `<name>` not declared in this plugin's `mcpServers`. The handler will produce a non-blocking error if the server isn't already connected at runtime."
 - [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
 - [ ] Command hooks reference executable files
 - [ ] Timeouts are reasonable (< 120s for sync hooks)

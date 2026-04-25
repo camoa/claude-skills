@@ -69,6 +69,23 @@
       }
     ],
 
+    "// mcp_tool example": "Use type: mcp_tool to call an already-connected MCP server tool directly — no shell script, no .cmd shim. Useful for filing issues, syncing state, or logging to external services from a hook.",
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "linear",
+            "tool": "create_issue",
+            "input": {
+              "title": "Build failed in CI",
+              "description": "${tool_input.command}"
+            }
+          }
+        ]
+      }
+    ],
+
     "// Additional events": "ConfigChange, WorktreeCreate, WorktreeRemove are also available",
     "ConfigChange": [
       {

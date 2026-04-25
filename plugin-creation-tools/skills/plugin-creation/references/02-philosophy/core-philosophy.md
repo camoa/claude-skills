@@ -149,6 +149,19 @@ Documentation must reflect the current state of the system, not its history.
 
 Stale documentation is worse than no documentation. It teaches Claude wrong patterns, wastes context tokens on irrelevant history, and creates confusion about what is actually true. Keeping docs lean and current is not just style preference; it directly impacts Claude's ability to help effectively.
 
+## Env Vars Relevant to Plugin Authors
+
+A small set of environment variables affects how plugin code runs and how authors share repro logs. Most env-var documentation is end-user concerns; these four are worth knowing as a plugin author:
+
+| Variable | What it does | Why a plugin author cares |
+|----------|--------------|---------------------------|
+| `CLAUDE_CODE_HIDE_CWD` | Masks the working directory in UI output and screenshots | Set this before capturing logs/screenshots for tickets — prevents customer or internal-product paths from leaking. |
+| `DISABLE_UPDATES` | Blocks **all** Claude Code update paths, including manual `claude update` | Stricter than `DISABLE_AUTOUPDATER`. If your plugin's docs assume a specific Claude Code version, suggest `DISABLE_AUTOUPDATER` (lets users still update manually) rather than `DISABLE_UPDATES`. |
+| `DISABLE_AUTOUPDATER` | Disables automatic background updates only. `claude update` still works | Pair with `FORCE_AUTOUPDATE_PLUGINS=true` to keep plugins current while pinning Claude Code. |
+| `CLAUDE_CODE_FORK_SUBAGENT` | Opt in to the experimental forked-subagents feature (v2.1.117+) | Changes how `general-purpose` subagent spawns work and forces every spawn to background. If your plugin spawns the general-purpose subagent or relies on synchronous spawning, document that fork mode changes those guarantees. |
+
+Other env vars (terminal config, OTEL, voice, etc.) are end-user concerns and don't belong in plugin-author documentation.
+
 ## Summary
 
 The core philosophy is: **Minimum viable context for maximum effectiveness**.

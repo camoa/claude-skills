@@ -49,7 +49,7 @@ Or inline in `plugin.json`:
 |-------|------|----------|-------------|
 | matcher | string | No | Pattern to filter when the matcher group fires (see Matcher Patterns) |
 | hooks | array | **Yes** | Array of hook handlers |
-| type | string | **Yes** | Handler type: `command`, `prompt`, `agent`, or `http` |
+| type | string | **Yes** | Handler type: `command`, `http`, `mcp_tool`, `prompt`, or `agent` |
 | command | string | For command | Shell command to execute |
 | prompt | string | For prompt/agent | LLM prompt (`$ARGUMENTS` for context) |
 | if | string | No | Permission-rule syntax (e.g. `"Bash(git *)"`, `"Edit(*.ts)"`) to pre-filter tool events before spawning the handler. See [The `if` Field](#the-if-field). |
@@ -61,7 +61,7 @@ Or inline in `plugin.json`:
 
 ## Hook Handler Types
 
-Four handler types are available. Each serves a different complexity level.
+Five handler types are available. Each serves a different complexity level. (`agent` is upstream-marked **experimental** — behavior may change.)
 
 ### 1. Command Hook
 
@@ -143,6 +143,33 @@ Send event JSON as an HTTP POST to a URL. Configure via settings JSON only (not 
 - To block an action, return a 2xx response with a decision JSON body (e.g., `{"decision": "deny"}`)
 - Only configurable through settings JSON, not hooks.json files
 
+### 5. MCP Tool Hook
+
+Call a tool on an already-connected MCP server directly from a hook — no shell script, no `.cmd` shim. The tool's text output is treated like command-hook stdout: if it parses as a [JSON output](hook-events.md) decision it is honored, otherwise it is shown as plain text.
+
+```json
+{
+  "type": "mcp_tool",
+  "server": "linear",
+  "tool": "create_issue",
+  "input": {
+    "title": "Build failed in CI",
+    "description": "${tool_input.command}"
+  }
+}
+```
+
+**Configuration**:
+- `server` (required) — name of a configured MCP server. Must already be connected; the hook never triggers OAuth or connection flows.
+- `tool` (required) — name of the tool to call on that server.
+- `input` (optional) — arguments passed to the tool. String values support `${path}` substitution from the hook's [JSON input](hook-events.md) (e.g. `"${tool_input.file_path}"`).
+
+**Behavior**:
+- Available on every hook event once Claude Code has connected to the MCP servers. `SessionStart` and `Setup` typically fire before servers finish connecting, so expect a "not connected" non-blocking error on first run.
+- If the named server is not connected, or the tool returns `isError: true`, the hook produces a non-blocking error and execution continues.
+
+**Use cases**: file an issue from a `Stop` hook, sync state to a remote service from `PostToolUse`, log to an external system from `SessionEnd` — without spawning a shell or maintaining a separate webhook.
+
 ## Async Hooks
 
 Command hooks can run asynchronously in the background.
@@ -208,6 +235,8 @@ To filter more narrowly than the matcher allows — for example, "only `Bash` ca
 The `if` field on a hook handler is a **pre-spawn filter** evaluated before the handler runs. It uses [permission-rule syntax](../08-configuration/permission-modes.md) (same as Claude Code's permission rules), so it can match the tool name and arguments together.
 
 **Only evaluated on tool events**: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`. On any other event, a hook with `if` set never runs.
+
+**Bash subcommand semantics**: The rule matches each subcommand of the Bash input after leading `VAR=value` assignments are stripped. So `if: "Bash(rm *)"` matches **both** `FOO=bar rm file` and `npm test && rm file`. The hook also runs when the command is too complex to parse safely.
 
 ### Why it matters
 
@@ -459,5 +488,5 @@ This pattern checks if `node_modules` exists in the persistent data directory an
 
 ## See Also
 
-- `hook-events.md` -- all 26 available events with return values
+- `hook-events.md` -- all 28 available events with return values
 - `hook-patterns.md` -- common patterns and examples

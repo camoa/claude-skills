@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-04-25
+
+Doc-snapshot: upstream `claude_memory/guides/claude/` at commit `c142d14` (135 guides). Covers Claude Code releases **2.1.116 → 2.1.119**. Single PR, additive — no breaking changes.
+
+### Added — Hooks (Track A)
+- **2 new hook events** in `references/06-hooks/hook-events.md`: `UserPromptExpansion` (intercept direct `/skillname` invocations — covers the path `PreToolUse` on the `Skill` tool does not) and `PostToolBatch` (one-shot context injection after a parallel batch resolves). Total event count: **26 → 28**.
+- `duration_ms` field on `PostToolUse` and `PostToolUseFailure` payloads (release 2.1.119).
+- **5th hook handler type** `mcp_tool` in `references/06-hooks/writing-hooks.md` — call a tool on an already-connected MCP server directly from a hook with `server` / `tool` / `input` fields. Worked example: file a Linear issue from a `Stop` hook.
+- Note that the `agent` handler type is upstream-marked **experimental** in writing-hooks.md.
+- Re-confirmed `if`-field Bash-subcommand semantics: `if: "Bash(rm *)"` matches both `FOO=bar rm file` and `npm test && rm file` (after stripping leading `VAR=value` assignments and splitting on subcommands), and runs when the command is too complex to parse.
+- New patterns in `references/06-hooks/hook-patterns.md`: **UserPromptExpansion skill-invocation guard** (block `/deploy` until an approval file exists; inject team checklist) and **PostToolBatch summary** (single batch-summary message instead of per-tool noise).
+- `references/06-hooks/cross-platform-hooks.md`: leading note that `mcp_tool` removes the `.cmd` polyglot-wrapper need when the work is an MCP call.
+- `templates/hooks/hooks.json.template`: commented-out `mcp_tool` example block.
+
+### Added — Plugin Themes (Track B)
+- **NEW `references/08-configuration/themes.md`**: full reference for `themes/*.json` — `name` / `base` / `overrides` schema, the `Ctrl+E` user-customization-by-copy flow, `custom:<plugin-name>:<slug>` persistence naming, when to ship a theme, complete Dracula-style worked example.
+- `themes` added to the component-paths table in `references/08-configuration/plugin-json.md`, with a one-line schema teaser and link to `themes.md`.
+- `templates/plugin.json.template`: optional `themes` field, commented out, with a comment pointing at `themes.md`.
+- `scripts/init_plugin.py`: new `theme` component option (`--components ...,theme` scaffolds `themes/default.json` from `THEME_TEMPLATE`).
+- `commands/add-component.md`: `theme` component with the Ctrl+E read-only reminder.
+- `commands/validate.md`: themes block validates `name` / `base` / `overrides` (warning on missing fields, error on invalid JSON).
+- `agents/plugin-structure-auditor.md`: low-severity opportunity flag in Cross-Component Consistency for visual-identity-named plugins (`*-theme`, `*-design`, `brand-*`, names containing `theme`/`palette`/`color`) shipping no `themes/` directory.
+
+### Added — `userConfig` schema (Track C)
+- **`userConfig` section** added to `references/08-configuration/plugin-json.md` — full `type` / `title` / `description` schema, plus `sensitive` / `required` / `default` / `multiple` / `min` / `max`. Notes the additive change (description-only entries still load) and the keychain ~2 KB shared-with-OAuth budget.
+- `templates/plugin.json.template`: full-schema `userConfig` example, commented out.
+- `commands/validate.md`: per-entry `type` / `title` recommended (info-level message marking description-only as legacy form), `sensitive` substitution restriction noted.
+
+### Added — Marketplace deps + tagging (Track D)
+- **`allowCrossMarketplaceDependenciesOn`** documented in `references/08-configuration/marketplace-json.md`. Replaces the previously-conflated section that mixed this field with `strictKnownMarketplaces` (managed-settings-only). Now a clean table distinguishes the two: `allowCrossMarketplaceDependenciesOn` lives in root `marketplace.json` and gates **dependency trust**; `hostPattern` / `pathPattern` (in `strictKnownMarketplaces` / `extraKnownMarketplaces`) live in user/managed `settings.json` and gate **marketplace install location**. Adds explicit "trust does not chain" note (only the root marketplace's allowlist is consulted).
+- `blockedMarketplaces` enforcement-points list expanded: now also runs on `update`, `refresh`, and `auto-update` (not just `add` / `install`).
+- **`claude plugin tag`** documented in `references/08-configuration/marketplace-json.md` (release-tagging workflow) and `references/09-testing/cli-reference.md` (CLI-subcommand block with `--push`, `--dry-run`, `--force` flags). Pinned plugins auto-update to the highest satisfying git tag (release 2.1.119).
+- `commands/validate.md`: cross-marketplace dep check rewritten to consult the root marketplace's `allowCrossMarketplaceDependenciesOn` (was previously checking `strictKnownMarketplaces`, which is the wrong field for trust). Error message points to the correct field.
+
+### Added — Forked subagents + `--agent` behavior fix (Track E)
+- New **"Forked Subagents (experimental)"** subsection in `references/05-agents/agent-patterns.md`: `CLAUDE_CODE_FORK_SUBAGENT=1` opt-in, manual `/fork <directive>`, what's inherited (system prompt, tools, model, message history), three side effects of fork mode (general-purpose becomes a fork; all spawns background; `/fork` no longer aliases `/branch`), when to use vs when not, fork-vs-named-subagent comparison table.
+- **Behavior change callout** in `references/05-agents/writing-agents.md`: frontmatter `hooks` and inline `mcpServers` now fire/connect when an agent runs as the main session via `--agent` (previously dropped). Plugin-packaged agents are unchanged — `hooks` / `mcpServers` / `permissionMode` still silently ignored there for security.
+- **Skill preload caveat** in `references/03-skills/writing-skillmd.md`: skills with `disable-model-invocation: true` cannot be preloaded via a subagent's `skills:` frontmatter list (preload draws from the same set Claude is allowed to invoke; disabled skills are silently skipped with a debug-log warning).
+
+### Added — Settings, env vars, and cross-references (Track F)
+- `references/08-configuration/settings.md`: **`prUrlTemplate`** setting with `{owner}` / `{repo}` / `{number}` substitutions for non-GitHub remotes. Notes `--from-pr` now accepts GitLab/Bitbucket/GHES URLs (release 2.1.119+).
+- `references/09-testing/debugging.md`: leading cross-link to the upstream **Debug Your Config** guide as the primary reference for runtime-introspection slash commands (`/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`). Note about `CLAUDE_CODE_HIDE_CWD` for sharing terminal logs and screenshots without leaking customer/internal paths.
+- `references/08-configuration/permission-modes.md`: cross-link to upstream **Auto Mode Config** guide (the full `autoMode` schema is now standalone — was previously embedded in the Permissions doc).
+- `references/02-philosophy/core-philosophy.md`: new **"Env Vars Relevant to Plugin Authors"** callout — `CLAUDE_CODE_HIDE_CWD`, `DISABLE_UPDATES` vs `DISABLE_AUTOUPDATER`, `CLAUDE_CODE_FORK_SUBAGENT` (experimental). Explicitly out of scope: terminal config, OTEL, voice (end-user concerns).
+
+### Changed — Skill body, version, descriptions (Track G)
+- `skills/plugin-creation/SKILL.md`: hook-event count 26 → 28, hook handler types 3 → 5 (`command` / `http` / `mcp_tool` / `prompt` / `agent` with `agent` marked experimental). New key events listed: `PostToolBatch`, `UserPromptExpansion`. References block updated for new themes.md and the v3.3.0 deltas in plugin-json/marketplace-json/settings.
+- `.claude-plugin/plugin.json`: `version` 3.2.1 → **3.3.0**; description updated to mention the 28 events, `mcp_tool` handler, plugin themes, `userConfig`, cross-marketplace dependencies.
+- Root `marketplace.json`: `plugin-creation-tools` entry version 3.2.1 → **3.3.0** with synced description; `metadata.version` 1.14.25 → 1.14.26 (patch bump for plugin-version pointer update per `feedback_marketplace_version_bump`).
+- `agents/plugin-structure-auditor.md`: Architecture section gains the `mcp_tool` migration-candidate flag (shell handlers shelling out to call MCP tools — e.g., `claude mcp call …` — should switch to `type: "mcp_tool"`).
+
+### Deferred — out of scope for this cycle
+- **Voice / interactive-mode deltas** (Gap 9 in findings): `voiceEnabled` → `voice.enabled` / `voice.mode` schema change and voice tap mode are end-user terminal config, not plugin authoring. PCT does not document end-user voice settings — no change.
+- **Monitoring / OTEL span schema** (Gap 10 in findings): the +315 lines on the upstream Monitoring guide are useful reference, but PCT does not currently teach OTEL instrumentation for plugins. The Agent SDK observability page (`references/11-agent-sdk/observability.md`) was authored against the prior snapshot and remains consistent with the new schema (no contradicting facts). Defer until we add a "monitor your plugin" track.
+
+### Notes
+- Doc baseline: `~/workspace/claude_memory/guides/claude/` at commit `c142d14`. Plan + findings (now deleted from `claude_docs/improvements/`) lived alongside this PR for review.
+- Per `feedback_no_half_measures`: the `marketplace-json.md` cross-marketplace section was incorrect (used `strictKnownMarketplaces`, the wrong field). Replaced wholesale with the correct `allowCrossMarketplaceDependenciesOn` model rather than patching around the existing text.
+
 ## [3.2.1] - 2026-04-21
 
 ### Changed

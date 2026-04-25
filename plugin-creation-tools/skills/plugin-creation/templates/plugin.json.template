@@ -10,6 +10,31 @@
   "repository": "https://github.com/username/repo",
   "keywords": ["keyword1", "keyword2"]
 
+  // Optional: ship color themes alongside the plugin. Files in themes/*.json
+  // appear in /theme. Each file: {"name", "base", "overrides"}. See
+  // references/08-configuration/themes.md for the full schema and the
+  // Ctrl+E user-customization flow.
+  // "themes": "./themes/"
+
+  // Optional: prompt the user for configuration when the plugin is enabled.
+  // Each entry takes type, title, description (all required); add
+  // sensitive/required/default/min/max as needed. Reference values as
+  // ${user_config.KEY} in MCP/LSP/hook/monitor configs and (non-sensitive)
+  // in skill/agent body. Old description-only entries still load.
+  // "userConfig": {
+  //   "api_endpoint": {
+  //     "type": "string",
+  //     "title": "API endpoint",
+  //     "description": "Your team's API endpoint"
+  //   },
+  //   "api_token": {
+  //     "type": "string",
+  //     "title": "API token",
+  //     "description": "API authentication token",
+  //     "sensitive": true
+  //   }
+  // }
+
   // Note: A separate settings.json file at the plugin root can set the
   // "agent" key to configure agent behavior for this plugin.
   // See the agent template for available agent configuration fields.

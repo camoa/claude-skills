@@ -604,6 +604,103 @@ exit 0
 
 **Strong reject:** Exit 2 with stderr both rejects the task creation and feeds the stderr back to the model as guidance. Return `{"continue": false, "stopReason": "..."}` instead to stop the teammate entirely.
 
+## UserPromptExpansion Skill-Invocation Guard Pattern
+
+Block direct invocation of a skill or command unless a precondition is met. `PreToolUse` matching the `Skill` tool only fires when **Claude** invokes a skill — typing `/skillname` directly bypasses it. `UserPromptExpansion` covers that path.
+
+### hooks.json
+
+```json
+{
+  "UserPromptExpansion": [
+    {
+      "matcher": "deploy",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/guard-deploy.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+APPROVAL_FILE="$CLAUDE_PROJECT_DIR/.deploy-approved"
+
+if [ ! -f "$APPROVAL_FILE" ]; then
+  jq -n '{
+    decision: "block",
+    reason: "Create .deploy-approved in the project root before running /deploy."
+  }'
+  exit 0
+fi
+
+# Approval present — allow the expansion and inject the team's deploy checklist as context
+jq -n --arg checklist "$(cat "$CLAUDE_PROJECT_DIR/docs/deploy-checklist.md")" '{
+  hookSpecificOutput: {
+    hookEventName: "UserPromptExpansion",
+    additionalContext: $checklist
+  }
+}'
+
+exit 0
+```
+
+**Matcher note:** `command_name` matches the bare name without the leading `/` (e.g. `deploy`, not `/deploy`).
+
+## PostToolBatch Summary Pattern
+
+Inject one summary message after a batch of parallel tool calls instead of N per-tool messages. Useful when the tools share a topic (e.g., several `Read` calls that together touch a single module).
+
+### hooks.json
+
+```json
+{
+  "PostToolBatch": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### scripts/batch-summary.sh
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+
+# Count Read calls in the batch and list the unique directories touched
+DIRS=$(echo "$INPUT" | jq -r '
+  [.tool_calls[] | select(.tool_name == "Read") | .tool_input.file_path | sub("/[^/]+$"; "")]
+  | unique | join(", ")
+')
+
+[ -z "$DIRS" ] && exit 0
+
+jq -n --arg dirs "$DIRS" '{
+  hookSpecificOutput: {
+    hookEventName: "PostToolBatch",
+    additionalContext: ("Files in this batch span: " + $dirs + ". If a change touches more than one of these directories, run the cross-module test suite before completing the task.")
+  }
+}'
+
+exit 0
+```
+
+**Static-context note:** `additionalContext` from `PostToolBatch` is persisted to the transcript and replayed on `--resume`. Prefer durable framing ("these dirs require X") over dynamic values like timestamps or commit SHAs, which become misleading on resume.
+
 ## Best Practices
 
 1. **Fast hooks**: Keep execution time minimal

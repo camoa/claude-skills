@@ -72,15 +72,17 @@ description: Use when [triggers] - [what it does]
 ## Implementation
 [Step-by-step with examples]
 
-## Common Mistakes
-| Mistake | Fix |
-|---------|-----|
-| ... | ... |
+## Troubleshooting
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| ... | ... | ... |
 
 ## See Also
 - references/detailed-guide.md
 - scripts/helper.py
 ```
+
+> Section name follows the upstream Claude Code Skills guide, which uses `## Troubleshooting` (linked externally as the canonical anchor). Earlier templates used `## Common Mistakes`; that label only appears upstream as inline `**Common mistake**:` callouts inside Note blocks, never as a top-level section header.
 
 ## Word Count Targets
 
@@ -174,6 +176,8 @@ user-invocable: false
 > **Note:** `user-invocable: false` only controls `/` menu visibility. Claude can still invoke via the Skill tool. To block Claude from auto-invoking, use `disable-model-invocation: true` instead. These serve opposite purposes:
 > - `user-invocable: false` — user cannot call, Claude can
 > - `disable-model-invocation: true` — Claude cannot call, user can
+>
+> **Preload caveat:** A subagent with a `skills:` frontmatter list **cannot** preload a skill that sets `disable-model-invocation: true`. Preloading draws from the same set of skills Claude is allowed to invoke; a disabled-from-model skill is silently skipped (with a warning to the debug log). If you need a skill available to a specific subagent but not to the main session, use a different mechanism — don't combine `disable-model-invocation` with `skills:` preload.
 
 ### Naming Convention
 
@@ -300,10 +304,11 @@ This signals Claude to engage deeper reasoning before responding, which improves
 - Reference files, don't reproduce
 - Brief examples (5-15 lines max)
 
-### Common Mistakes
-- Table format: Mistake | Fix
-- Real issues, not hypothetical
+### Troubleshooting
+- Table format: Symptom | Likely Cause | Fix
+- Real issues users actually hit, not hypothetical
 - Brief, actionable fixes
+- Match the upstream Skills-guide section name (`## Troubleshooting`) so users searching upstream docs find the same anchor in your skill
 
 ### See Also
 - Link to references/ files
