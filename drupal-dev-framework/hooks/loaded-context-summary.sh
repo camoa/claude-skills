@@ -6,10 +6,10 @@
 # and prepends a one-line summary to the agent's next turn. Mirrors the existing
 # context-reminder hook's pattern.
 
-set -uo pipefail
+set -euo pipefail
 
 # Read session_context for the current workspace
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
+WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
 SESS_FILE="$HOME/.claude/drupal-dev-framework/sessions/$WORKSPACE_HASH.json"
 
 [[ -s "$SESS_FILE" ]] || { jq -nc '{}'; exit 0; }
@@ -50,6 +50,22 @@ CTX=""
 [[ -n "$PB_LINE" ]] && {
   [[ -n "$CTX" ]] && CTX="$CTX"$'\n'"$PB_LINE" || CTX="$PB_LINE"
 }
+
+# v4.0.2: skip-emit when state unchanged. Hash the rendered context; compare
+# with last-fired hash for this workspace. Identical → emit empty envelope so
+# the prefix cache stays warm. Invalidates when _dev-guides-load.json or
+# _playbook-load.json changes (both feed CTX).
+HASH=$(printf %s "$CTX" | md5sum | cut -d' ' -f1)
+CACHE_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+CACHE_FILE="$CACHE_DIR/${WORKSPACE_HASH}.last-loaded-context-summary.md5"
+if [[ -f "$CACHE_FILE" ]] && [[ "$(cat "$CACHE_FILE" 2>/dev/null)" = "$HASH" ]]; then
+  [[ -n "${DDF_HOOK_DEBUG:-}" ]] && printf 'loaded-context-summary: skipped (state unchanged)\n' >&2
+  jq -nc '{}'
+  exit 0
+fi
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+printf %s "$HASH" > "$CACHE_FILE" 2>/dev/null || true
+[[ -n "${DDF_HOOK_DEBUG:-}" ]] && printf 'loaded-context-summary: emit (state changed)\n' >&2
 
 jq -nc --arg ctx "$CTX" '{
   hookSpecificOutput: {

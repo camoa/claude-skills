@@ -136,6 +136,23 @@ EOF
 # which would drop the reminder text. 9500 leaves headroom for the JSON envelope.
 BLOCK=$(printf %s "$BLOCK" | head -c 9500)
 
+# v4.0.2: skip-emit when state unchanged. Hash the rendered block; compare
+# with last-fired hash for this workspace. Identical → emit empty envelope so
+# the prefix cache stays warm across turns. State-derived hash invalidates
+# automatically when task.md, loadedGuides[], project_state.md, or active task
+# changes (all those signals are folded into BLOCK).
+HASH=$(printf %s "$BLOCK" | md5sum | cut -d' ' -f1)
+CACHE_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+CACHE_FILE="$CACHE_DIR/${WORKSPACE_HASH}.last-context-reminder.md5"
+if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE" 2>/dev/null)" = "$HASH" ]; then
+  [ -n "${DDF_HOOK_DEBUG:-}" ] && printf 'context-reminder: skipped (state unchanged)\n' >&2
+  jq -nc '{}'
+  exit 0
+fi
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+printf %s "$HASH" > "$CACHE_FILE" 2>/dev/null || true
+[ -n "${DDF_HOOK_DEBUG:-}" ] && printf 'context-reminder: emit (state changed)\n' >&2
+
 # Emit the documented UserPromptSubmit JSON envelope.
 jq -nc --arg ctx "$BLOCK" '{
   hookSpecificOutput: {
