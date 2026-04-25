@@ -58,6 +58,43 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 
 **NOT wrapped** (keep invoking directly via `/code-quality:*` namespace): `lint`, `coverage`, `review`, `audit`, `ultrareview`, `architecture-debate`, `security-debate`. `/validate:all` surfaces them as discoverability hint.
 
+## Hardened Gates (v4.0.0+)
+
+v4.0.0 converts 7 framework surfaces from soft-prompt to hard-gate, applying the original critique's 5-mechanism pattern uniformly. **BREAKING CHANGE** for users on the soft posture: documented bypass paths are removed; explicit `--skip-*` flags required to skip. Bypass reasons are recorded on disk (`<task>/_<gate>.json`) for retrospective audit.
+
+The 7 hardened surfaces, by category:
+
+**User-prompt surfaces (5)** — fire user prompts with mandated wording from `references/gate-hardening-prompts.md` v1.0:
+
+1. **Pre-analysis epic gate** at `/research` — always-on (was: signal-conditional). Invokes `analysis-agent` regardless of signals; user sees verbatim agent output before pick.
+2. **Coverage-mapping requirement** at end-of-`/research` — `## Coverage Mapping` H2 mandatory in research.md; verified by `scripts/coverage-mapping-check.sh`; refuses Phase 1 `[x]` on fail.
+3. **Skill-review** at `/complete` — fires when staged/branched changes include `skills/*/SKILL.md`; invokes `plugin-creation-tools:skill-quality-reviewer`.
+4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate`.
+5. **Phase-command-bypass** detected by PreToolUse hook on Write to phase artifacts — non-blocking audit when no `/research` / `/design` / `/implement` slash command is active.
+
+**Deterministic surfaces (2)** — fire shell scripts that detect+act without user prompts; bypass-by-declaration is impossible:
+
+6. **Dev-guides preflight** — `scripts/dev-guides-detect.sh` greps task content for auto-load keywords; replaces agent-mediated detection.
+7. **Playbook loading** — `scripts/playbook-load-deterministic.sh` reads `project_state.md` and loads via `playbook-read.sh` + dev-guides-navigator; replaces agent-mediated load.
+
+**The 5-mechanism pattern** applied uniformly:
+
+1. Anti-bypass clause (literal block in command body)
+2. Show-not-summarize (verbatim agent output before user prompt)
+3. Audit on disk (`<task>/_<gate>.json` per fired gate)
+4. Mandate exact prompt wording (literal templates; no paraphrase)
+5. Refactor "if X, do Y" → "validation gate, always evaluated"
+
+**Audit shape:** unified schema in `references/gate-audit-schema.md` v1.0 with `gate_type` discriminator; per-gate `gate_specific` payload; overwrite-on-fire lifecycle.
+
+**Skip flags:** per-gate `--skip-pre-analysis`, `--skip-coverage-check`, `--skip-skill-review`, `--skip-plugin-validate`. Each writes the audit file with `bypass_reason` field populated. Visible later via `/audit-status` and `/status` "Unaudited gates" section.
+
+**Grandfathering:** v3.x in-flight tasks (those past Phase 1 at v4.0.0 install) keep their original soft contract. Heuristic: `research.md present && _pre-analysis.json absent` → grandfathered.
+
+**5 surfaces deferred to v2** (pending documented bypass evidence): phase transition checks, playbook conflict ack, worktree recommendation, candidate-play surface, `/validate:*` exit codes. Tracked in `dev_framework_improvements_epic/shared/v2-candidates.md` Set D.
+
+`/audit-status` provides per-task audit-state view; `--all` flag for project-wide rollup grouped by health.
+
 ## Worktree Workflow (v3.16.0+)
 
 Two Claude Code sessions on the same project workspace collide on `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` (last-writer-wins) and on the git working tree itself. Solution: the second session runs in a worktree at `.worktrees/<task_name>/`. Distinct `$PWD` → distinct hash → independent session-context. **No changes to `session-context-writer` — the existing hash naturally separates worktree sessions.**

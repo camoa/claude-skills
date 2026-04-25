@@ -115,6 +115,7 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 | `/set-user-playbook` | **(v3.15.0)** Set/clear the project-local user playbook file. Three modes: explicit path, `--docs-only`, or interactive detect-and-confirm. |
 | `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
 | `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
+| `/audit-status [<task>] [--all]` | **(v4.0.0)** Read-only display of v4.0.0 hardened-gate audit state per task — surfaces gate-fire timing, user choices, bypass reasons, and missing audits (= silent skip evidence). `--all` for project-wide rollup grouped by health. |
 | `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
@@ -179,7 +180,7 @@ Built-in docs enforced at specific phases:
 | `quality-gates.md` | 5 quality gates | Task completion |
 | `purposeful-code.md` | Every line has a purpose | Task completion |
 
-### Technical Contract References (9)
+### Technical Contract References (11)
 
 Machine-readable contracts consumed by skills and commands. These pin schemas and invariants so consumers don't drift:
 
@@ -194,6 +195,8 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `playbook-schema.md` **(v3.15.0)** | `/playbook-capture`, `/playbook-review`, `scripts/playbook-read.sh` | Recommended local playbook structure v1.0: H3-per-play with What / Rationale / When it applies / Example fields; freeform fallback; defensive parser contract |
 | `playbook-conflict-schema.md` **(v3.15.0)** | `scripts/playbook-conflicts-write.sh`, `/playbook-active` | JSONL log line v1.0 for `<project>/.claude/playbook-conflicts.log`; per-conflict citation shape (local-vs-shipped + multi-set-contradiction types); append-only contract |
 | `worktree-conventions.md` **(v3.16.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.0: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
+| `gate-audit-schema.md` **(v4.0.0)** | `scripts/gate-audit-write.sh` + 7 hardened gates | Unified schema v1.0 for the 7 v4.0.0 audit file types (`pre-analysis`, `coverage-mapping`, `skill-review`, `plugin-validate`, `phase-command-bypass`, `dev-guides-load`, `playbook-load`); `gate_type` discriminator; per-gate `gate_specific` payloads; overwrite-on-fire lifecycle |
+| `gate-hardening-prompts.md` **(v4.0.0)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md` | Literal mandated wording v1.0 for the 5 user-prompt surfaces (`pre-analysis-decision`, `coverage-mapping-fail`, `skill-review-decision`, `plugin-validate-decision`, `phase-command-bypass-acknowledge`); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture |
 
 ### Online Dev-Guides (60+ topics) — Required
 

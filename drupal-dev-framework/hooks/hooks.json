@@ -7,6 +7,23 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-reminder.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loaded-context-summary.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/phase-command-bypass.sh",
+            "timeout": 5
           }
         ]
       }

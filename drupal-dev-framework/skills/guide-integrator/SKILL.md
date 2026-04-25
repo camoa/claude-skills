@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
 description: "Use when designing or researching features — loads plugin methodology refs (SOLID, DRY, TDD, Library-First, Quality Gates, Purposeful Code), delegates to dev-guides-navigator for online Drupal domain knowledge, AND loads active playbook sets + project-local user playbook (v3.15.0+). Cross-references plays-by-topic and emits conflicts[]. Records each loaded guide into session_context.json loadedGuides[] so re-loads are skipped."
-version: 5.0.0
+version: 5.1.0
 user-invocable: false
 model: sonnet
 ---
@@ -45,6 +45,8 @@ Activate when:
 | "duplicate", "reuse", "DRY", "extract" | `references/dry-patterns.md` |
 | "form", "drush", "command", "service first" | `references/library-first.md` |
 | "complete", "done", "quality", "gate" | `references/quality-gates.md` |
+
+**v4.0.0+: deterministic detection.** As of v4.0.0, keyword detection runs via `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh` (not agent judgment). The script greps `task.md` + phase artifacts + alignment.md for the keywords above and returns a structured JSON of matched keywords + guide IDs. Phase commands invoke the script BEFORE prompting the user, populating the prompt's "Auto-loaded based on task keywords:" line from script output. This eliminates bypass-by-declaration (agent claiming "none matched" without running detection).
 
 ## Workflow
 
@@ -147,27 +149,17 @@ After loading methodology refs and dev-guides topics, load the project's playboo
 
 Invoke `project-state-reader` skill to get `playbookSets[]`, `userPlaybook`, `userPlaybookState`, and `playbookResolutions[]`.
 
-#### 6b. Load shipped playbook sets
+#### 6b-c. Deterministic load (v4.0.0+)
 
-For each set ID in `playbookSets[]` (e.g., `drupal/best-practices/camoa`):
-
-- Delegate to `dev-guides-navigator` to fetch the set's index.md and individual guide pages relevant to the current task domain.
-- Record each loaded guide ID via the snippet in §2b.
-- Track loaded guide titles + summaries for cross-reference.
-
-When `playbookSets` is empty (`playbookSetsSource: "explicit-none"` or `"default"` with empty default), skip this step silently.
-
-#### 6c. Load local playbook
-
-If `userPlaybookState == "set"`, invoke:
+As of v4.0.0, the playbook load step is delegated to a single deterministic script that handles both shipped sets AND local playbook in one invocation:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/playbook-read.sh" "<userPlaybook absolute path>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh" "<project_folder>"
 ```
 
-Parse the JSON. Each play is `{title, section, what, rationale, when_it_applies, applicability, ...}`. Track titles + sections + topics for cross-reference.
+The script reads `project_state.md` via `project-state-read.sh`, resolves `playbookSets[]` (records intent — actual fetch from dev-guides-navigator happens here in step 6b for guide CONTENT), loads `userPlaybook` via `playbook-read.sh`, and emits a structured JSON with `playbook_sets_loaded`, `user_playbook_loaded`, `plays_by_section` count map. The integrator stores the JSON as `<task>/_playbook-load.json` audit file (per `references/gate-audit-schema.md` v1.0). This replaces the previous agent-mediated load.
 
-If `userPlaybookState != "set"`, skip silently.
+For each set in `playbook_sets_loaded[]`: delegate to `dev-guides-navigator` to fetch individual guide pages relevant to the current task domain. Record each loaded guide ID via the snippet in §2b. Track loaded guide titles + summaries for cross-reference.
 
 #### 6d. Detect conflicts
 

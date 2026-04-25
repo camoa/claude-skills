@@ -119,8 +119,33 @@ If no project specified:
 2. If multiple, lists them for selection
 3. If none, asks for project path
 
+## Unaudited gates section (v4.0.0+)
+
+After listing tasks, scan each task folder for missing audit files (per `references/gate-audit-schema.md` v1.0). Tasks where the framework expected a hardened gate to fire but the audit file is absent are flagged.
+
+Detection per task:
+
+- `research.md` present but `_pre-analysis.json` absent → "pre-analysis bypassed (or grandfathered from pre-v4.0.0)"
+- `research.md` present + has `## Coverage Mapping` section but `_coverage-mapping.json` absent → "coverage-mapping check did not record"
+- `research.md` present + lacks `## Coverage Mapping` AND `_coverage-mapping.json` absent → "Phase 1 incomplete: missing coverage mapping (run /research)"
+- Phase artifacts written (any of research.md, architecture.md, implementation.md) but `_phase-command-bypass.json` exists → "phase-command bypass recorded; consider re-running through /research / /design / /implement"
+
+Format:
+
+```
+Unaudited gates:
+  <task_name_1>:
+    - pre-analysis: bypassed (no _pre-analysis.json; task pre-dates v4.0.0 → grandfathered)
+    - coverage-mapping: missing audit + missing section
+  <task_name_2>:
+    - phase-command-bypass: recorded for architecture.md (use /audit-status <task> for details)
+```
+
+Empty section if no audit gaps. Mentions `/audit-status <task>` for per-task drill-down.
+
 ## Related Commands
 
 - `/drupal-dev-framework:next` - Get recommended next action
 - `/drupal-dev-framework:research <task>` - Start research for a task
 - `/drupal-dev-framework:implement <task>` - Continue implementation
+- `/drupal-dev-framework:audit-status [<task>]` - **(v4.0.0+)** Detailed audit-state view; surfaces unaudited gates and bypass reasons

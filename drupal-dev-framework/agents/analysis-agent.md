@@ -2,7 +2,7 @@
 name: analysis-agent
 description: "Use when a framework flow needs to assess whether a task looks epic-sized and propose a decomposition. Reads task docs (task.md + phase artifacts) and optionally the project's codePath to reason about scope. Emits structured JSON per references/analysis-agent-schema.md v1.0. Invoked by /propose-epics for bulk review and by /research pre-analysis hook at new-task creation. Never modifies files."
 capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-decomposition"]
-version: 1.0.0
+version: 1.1.0
 model: sonnet
 disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
 maxTurns: 10
@@ -47,6 +47,8 @@ Explicitly NO `Edit` or `Write`. The agent never mutates state. If it needs to w
 
 - Both present → emit `decision: insufficient_info`, `notes: ["input validation failed: pass exactly one of task_description_text or task_folder, not both"]`, exit.
 - Neither present → emit `decision: insufficient_info`, `notes: ["input validation failed: exactly one of task_description_text/task_folder required"]`, exit.
+
+**v4.0.0+: always-on invocation pattern.** As of v4.0.0, `/research` invokes this agent on EVERY new-task creation regardless of whether strong signals fired. Caller responsibility: invoke with full description even when caller is "sure" no decomposition is warranted. The agent's `decision: keep_flat` becomes the recorded verdict — but the user still sees verbatim agent output before any structural decision is recorded. This removes the rationalization path "I'm sure this task is flat, signals don't apply." Schema unchanged (v1.1 already supports description mode); the always-on discipline is caller-side, not schema-side.
 
 If `task_description_text` was provided (and `task_folder` absent): **description mode**. Skip steps 1-2; go to step 3 with:
 - `task_folder` output field set to `"(pre-creation)"`

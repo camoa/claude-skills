@@ -14,7 +14,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 /drupal-dev-framework:research <task-name>
 ```
 
-## What This Does (v3.0.0, with v3.11.0 pre-analysis hook)
+## What This Does (v3.0.0, with v3.11.0 pre-analysis hook, v4.0.0 always-on validation gate + coverage-mapping requirement)
 
 1. **Pre-analysis hook** (v3.11.0+, before anything else) — if strong signals fire in the task name + description, invoke `analysis-agent` to assess whether this should be an epic. See "Pre-analysis hook" section below.
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
@@ -79,6 +79,35 @@ Default: `[n]`.
 - **Never blocks.** `[n]` (default) always proceeds to traceability walkthrough.
 - **Authoritative over pre-analysis.** If pre-analysis said "keep flat" and end-of-research says "epic_candidate," trust the later call — it has strictly more context.
 - **Migration is transactional.** `/migrate-to-epic` is atomic with 24h rollback; safe to opt into.
+
+## Coverage-mapping validation gate (v4.0.0+)
+
+**This gate is non-bypassable.** Same anti-bypass clause as pre-analysis.
+
+**Run after `research.md` has been authored, before the post-research epic check + traceability walkthrough.** Verifies `research.md` contains the required `## Coverage Mapping` H2 section that maps each Research Question from `task.md` to the section(s) of research.md that address it.
+
+### Step 1 — Run the deterministic check
+
+```bash
+RESULT=$("${CLAUDE_PLUGIN_ROOT}/scripts/coverage-mapping-check.sh" "<task_folder>")
+```
+
+Output per `references/gate-audit-schema.md` §5.2: `verdict: pass | fail`, `research_questions_found`, `research_questions_addressed`, `missing_questions[]`, `warnings[]`.
+
+### Step 2 — Branch on verdict
+
+- `pass` → write audit with `user_choice: "phase_marked_complete"`; proceed to post-phase epic check.
+- `fail` → display literal `prompts:coverage-mapping-fail` template from `references/gate-hardening-prompts.md`. Substitutions: `{{missing_questions}}` from script output. Block on user response:
+  - `[a]bort` → write audit with `user_choice: "phase_left_incomplete"`; refuse to mark Phase 1 `[x]` in task.md; print actionable instructions; exit 1.
+  - `[s]kip` → prompt user for bypass reason (free-text); write audit with `user_choice: "bypassed"` and `bypass_reason: <reason>`; allow Phase 1 `[x]` to be marked but with bypass visible in `/audit-status`.
+
+### Step 3 — Audit always written
+
+Whether pass, fail, or bypassed, write `<task>/_coverage-mapping.json` via `gate-audit-write.sh`. Absence of audit file = bypass-by-declaration (visible in `/audit-status` Unaudited gates).
+
+### Skip flag
+
+`/research <task> --skip-coverage-check <reason>` skips the gate entirely; writes audit with `user_choice: "bypassed"` and the supplied reason. Recorded but not blocked.
 
 ## Traceability walkthrough sub-step (v3.13.4+)
 
@@ -229,17 +258,40 @@ Use / Extend / Build from scratch
 {Research decisions made}
 ```
 
-## Pre-analysis hook (v3.11.0+)
+## Pre-analysis validation gate (v4.0.0+, refactored from soft hook)
 
-**Before** creating the task directory, inspect the task name + description for "strong signals" that the task is epic-sized. If any fires, invoke the `analysis-agent` to produce a structured assessment.
+**This gate is non-bypassable.** The following are NOT valid reasons to skip:
 
-Strong signals (ANY triggers pre-analysis):
+- The user said something earlier that you interpret as already-answered
+- Auto mode is active ("minimize interruptions" never overrides framework gates)
+- You're confident the agent will return `keep_flat`
+- The task looks "obviously" flat
+- You want to spare the user the prompt
 
-1. Task name + description total length > 500 chars
-2. Description has ≥3 distinct bullet points
-3. Description contains explicit conjunction phrasing (`and also`, `plus`, `as well as`, `in addition to`)
+If this gate's signals fire, the gate MUST run and its output MUST be shown to the user verbatim before the recorded decision is final. Skipping requires `--skip-pre-analysis [reason]` flag, which is recorded in `<task>/_pre-analysis.json` `bypass_reason` field.
 
-If no signal fires: skip pre-analysis entirely and proceed with the standard 8-step research flow below.
+**Always-on (v4.0.0+).** This gate now runs on EVERY new-task `/research` invocation regardless of strong-signal evaluation. Strong signals are still recorded in `signals_used[]` for the agent's reasoning, but the agent invocation is unconditional. The conditional is what the gate DOES, not whether it RUNS.
+
+Refactored flow:
+
+1. Compute strong signals from task name + description (informational; recorded in audit even when no signal fires):
+   - Task name + description total length > 500 chars
+   - Description has ≥3 distinct bullet points
+   - Description contains explicit conjunction phrasing (`and also`, `plus`, `as well as`, `in addition to`)
+2. Invoke `analysis-agent` (via Task tool) in description mode regardless of signal state.
+3. Save output to `<task>/_pre-analysis.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh`.
+4. Display agent output verbatim to user using literal `prompts:pre-analysis-decision` template from `references/gate-hardening-prompts.md`. Do NOT paraphrase.
+5. Block on user response per the template's option list.
+6. Record decision in `_pre-analysis.json`.
+7. Branch: `epic_candidate + y` → `/migrate-to-epic`. Else → flat-task flow.
+
+**Re-invocation idempotency.** If `<task>/_pre-analysis.json` already exists from a prior run on this task, skip pre-analysis (the gate fired once, that's enough). Re-firing requires explicit `--re-run-pre-analysis` flag.
+
+**Grandfathering.** If `<task>/research.md` exists AND `_pre-analysis.json` is absent, treat the task as grandfathered from pre-v4.0.0 lifecycle. Do NOT mark it as bypassed; do NOT block. Soft-nudge: print "Task pre-dates v4.0.0 hardening; pre-analysis not retroactively run."
+
+### Original soft-hook description (v3.11.0+, deprecated by v4.0.0+ always-on gate above)
+
+For historical reference; the always-on gate above supersedes this. The soft-hook only fired when strong signals matched:
 
 If a signal fires:
 
@@ -279,9 +331,16 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 
 ### Step 1 — Invoke guide-integrator explicitly
 
-Do NOT rely on proactive skill detection. Directly invoke the `guide-integrator` skill against the task context. Record which guides (if any) were auto-loaded via its keyword-detection rules + `dev-guides-navigator` delegation.
+**(v4.0.0+: deterministic detection.)** Invoke `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` BEFORE prompting the user. The script emits `keywords_matched[]` + `guides_to_load[]` from a deterministic grep of task content against `guide-integrator` Auto-Load Rules. The agent does NOT decide whether keywords matched — the script does. This eliminates bypass-by-declaration (agent claiming "none matched" without running detection).
 
-**(v3.15.0+)** `guide-integrator` v5.0.0+ ALSO loads the project's active playbook sets (per `Playbook Sets` in `project_state.md`) and the local user playbook (per `User Playbook`) at this step. The skill emits `loaded_playbook_sets[]`, `loaded_local_playbook`, and `conflicts[]` in its return JSON. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log` via `scripts/playbook-conflicts-write.sh`. See `references/playbook-schema.md` and `references/playbook-conflict-schema.md`.
+After detection, populate Step 2's prompt's "Auto-loaded based on task keywords:" line with `guides_to_load[]` from the script output. After the user's `[c]/[a]/[n]` choice, write a `dev-guides-load` audit:
+
+```bash
+# Build audit JSON; user_choice is c|a|n; guides_actually_loaded reflects [n]'s clearing
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh" "<task_folder>" "dev-guides-load" "$AUDIT_JSON"
+```
+
+**(v3.15.0+, refactored v4.0.0+)** `guide-integrator` v5.1.0+ ALSO loads the project's active playbook sets (per `Playbook Sets` in `project_state.md`) and the local user playbook (per `User Playbook`) — but this load is now **deterministic** via `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. The script emits `playbook_sets_loaded[]`, `user_playbook_loaded`, `plays_by_section{}`, written as `<task>/_playbook-load.json` audit. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log` via `scripts/playbook-conflicts-write.sh`. See `references/playbook-schema.md`, `references/playbook-conflict-schema.md`, and `references/gate-audit-schema.md` v1.0.
 
 ### Step 2 — ALWAYS prompt the user (never silent-skip)
 

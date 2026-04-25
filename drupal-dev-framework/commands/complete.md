@@ -1,5 +1,5 @@
 ---
-description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 5 quality gates before allowing completion."
+description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 5 quality gates plus (v4.0.0+) skill-review + plugin-validate hardened gates when staged changes match before allowing completion. Surfaces candidate plays from the session via play_candidates mode (v3.15.0+)."
 allowed-tools: Read, Write, Bash(mv:*), Glob
 argument-hint: <task-name>
 ---
@@ -14,7 +14,7 @@ Mark a task as complete and move it to the completed folder.
 /drupal-dev-framework:complete <task-name>
 ```
 
-## What This Does (v3.0.0 + v3.10.0 epic awareness)
+## What This Does (v3.0.0 + v3.10.0 epic awareness + v4.0.0 hardened gates)
 
 1. Invokes `task-completer` skill
 2. Loads task from `implementation_process/in_progress/{task_name}/`
@@ -77,6 +77,48 @@ On `2`:
 
 On `3`:
 - No-op. Continue to candidate-play surface.
+
+## Skill-review gate (v4.0.0+, hardened)
+
+**This gate is non-bypassable.** Same anti-bypass clause as pre-analysis. Skipping requires `--skip-skill-review <reason>` flag, recorded in `<task>/_skill-review.json` `bypass_reason`.
+
+**Trigger:** staged or branched changes include `skills/*/SKILL.md` files. Detection:
+
+```bash
+git diff --cached --name-only | grep -E "skills/.*/SKILL\.md" || \
+  git diff main...HEAD --name-only | grep -E "skills/.*/SKILL\.md"
+```
+
+If any matches → fire the gate. If none → skip silently (no audit; not a bypass).
+
+### Steps
+
+1. **Invoke** `plugin-creation-tools:skill-quality-reviewer` agent via Task tool against the project's `skills/` directory. Capture full agent output verbatim.
+2. **Display** the literal `prompts:skill-review-decision` template from `references/gate-hardening-prompts.md`. Substitutions: `{{skills_reviewed}}` (comma-list of skill names from the diff), `{{findings}}` (verbatim agent output).
+3. **Block** on user `[a]ccept / [r]emediate / [b]ypass` choice.
+4. **Write audit** to `<task>/_skill-review.json` via `gate-audit-write.sh`. `user_choice: "accepted"` for `[a]`, `"remediated"` for `[r]` (after the user has made remediation edits), `"bypassed"` for `[b]` (with `bypass_reason` from free-text prompt).
+5. **Refusal case:** if `plugin-creation-tools` is not installed, halt with: "Required gate `skill-quality-reviewer` (from plugin-creation-tools) not available. Install plugin-creation-tools or pass `--skip-skill-review <reason>` to bypass." Do NOT degrade silently.
+
+## Plugin-validate gate (v4.0.0+, hardened)
+
+**This gate is non-bypassable.** Same anti-bypass clause. Skipping requires `--skip-plugin-validate <reason>` flag.
+
+**Trigger:** staged or branched changes include any plugin file under `commands/`, `skills/`, `references/`, `hooks/`, `scripts/`, or `.claude-plugin/`. Detection:
+
+```bash
+git diff --cached --name-only | grep -E "(commands|skills|references|hooks|scripts|\.claude-plugin)/" || \
+  git diff main...HEAD --name-only | grep -E "(commands|skills|references|hooks|scripts|\.claude-plugin)/"
+```
+
+If any matches → fire the gate.
+
+### Steps
+
+1. **Invoke** `/plugin-creation-tools:validate` slash command. Capture full output verbatim.
+2. **Display** the literal `prompts:plugin-validate-decision` template. Substitutions: `{{plugins_validated}}` (comma-list), `{{findings}}` (verbatim slash-command output).
+3. **Block** on user `[a]ccept / [r]emediate / [b]ypass` choice.
+4. **Write audit** to `<task>/_plugin-validate.json` via `gate-audit-write.sh`.
+5. **Refusal case:** same as skill-review — halt if plugin-creation-tools not installed; explicit-skip-required.
 
 ## Candidate-play surface (v3.15.0+)
 
