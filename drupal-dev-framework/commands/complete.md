@@ -47,6 +47,58 @@ If checks fail:
 - Does NOT complete task
 - Offers to continue working
 
+## Candidate-play surface (v3.15.0+)
+
+After the 5 quality gates pass and before the task moves to `completed/`, surface 0-N candidate plays the framework detected during this task. Skipped if `--no-play-candidates` flag is passed OR if the project has `userPlaybookState != "set"` (no playbook to capture into).
+
+### Step 1 — Invoke analysis-agent in `play_candidates` mode
+
+Per `references/analysis-agent-schema.md` v1.1, invoke `analysis-agent` (Task tool) with:
+
+```json
+{
+  "mode": "play_candidates",
+  "task_folder": "<abs path>",
+  "code_path": "<abs path or null>",
+  "git_diff_since": "<commit SHA at task start>",
+  "active_playbook_sets": ["<from project-state-reader>"],
+  "user_playbook_path": "<from project-state-reader>",
+  "schema_version": "1.1"
+}
+```
+
+The agent emits `candidates[]` with each carrying file:line evidence (≥2 occurrences), confidence, rationale, suggested_section. Filter `confidence: low` by default unless user passes `--include-low-confidence`.
+
+### Step 2 — Per-candidate prompt
+
+For each remaining candidate, print:
+
+```
+Candidate play: "<title>"
+Section: <suggested_section>
+Confidence: <high|medium>
+Evidence:
+  - <file:line>: <snippet>
+  - <file:line>: <snippet>
+
+Capture? [y]es / [n]o / [d]etails — show full rationale
+```
+
+- `[y]` → hand off to `/playbook-capture` flow with the draft pre-filled (title + section + What suggested from rationale + Example pre-filled from evidence snippets).
+- `[n]` → skip silently, no record.
+- `[d]` → print full agent rationale + signals; re-ask y/n.
+
+### Step 3 — Continue to task move
+
+After all candidates handled, continue with the existing `/complete` flow (move task to `completed/`, update `project_state.md`, etc.).
+
+### Notes
+
+- **Never blocks.** All candidates can be declined; task completes regardless.
+- **Skip when `userPlaybookState != "set"`** — no destination for captured plays.
+- **Threshold ≥2 evidence** enforced agent-side per schema; consumers don't re-check.
+- **`--no-play-candidates`** opt-out for users who don't want this step.
+
 ## Example
 
 ```

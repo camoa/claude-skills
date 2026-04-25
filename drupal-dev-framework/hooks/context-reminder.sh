@@ -22,10 +22,11 @@ SESSION_TSV=$(jq -r '[
     .task        // "",
     .taskPath    // "",
     .project     // "",
+    .projectPath // "",
     ((.loadedGuides // []) | join(","))
   ] | @tsv' "$SESS" 2>/dev/null) || exit 0
 
-IFS=$'\t' read -r TASK TASK_PATH PROJECT GUIDES_CSV <<<"$SESSION_TSV"
+IFS=$'\t' read -r TASK TASK_PATH PROJECT PROJECT_PATH GUIDES_CSV <<<"$SESSION_TSV"
 
 # Fast gate — no active task.
 [ -n "$TASK" ] && [ -n "$TASK_PATH" ] && [ -d "$TASK_PATH" ] || exit 0
@@ -80,6 +81,26 @@ esac
 arrow() { [ "$CUR" = "$1" ] && printf '◀ current' || printf '' ; }
 
 # Truncate loaded-guides list to 20 entries to keep payload bounded.
+# (v3.15.0+) Compute Playbook line from project_state.md if project resolved.
+# Silent when neither field is set; one line otherwise.
+PLAYBOOK_LINE=""
+if [ -n "$PROJECT_PATH" ] && [ -f "$PROJECT_PATH/project_state.md" ]; then
+  PB_SETS_RAW=$(awk 'BEGIN{IGNORECASE=1} /^\*\*Playbook Sets:\*\*/ {sub(/^\*\*Playbook Sets:\*\*[[:space:]]*/,""); print; exit}' "$PROJECT_PATH/project_state.md")
+  UP_RAW=$(awk 'BEGIN{IGNORECASE=1} /^\*\*User Playbook:\*\*/ {sub(/^\*\*User Playbook:\*\*[[:space:]]*/,""); print; exit}' "$PROJECT_PATH/project_state.md")
+  UPS_RAW=$(awk 'BEGIN{IGNORECASE=1} /^\*\*User Playbook State:\*\*/ {sub(/^\*\*User Playbook State:\*\*[[:space:]]*/,""); print; exit}' "$PROJECT_PATH/project_state.md")
+  PB_SETS_DISPLAY=""
+  UP_DISPLAY=""
+  if [ -n "$PB_SETS_RAW" ] && [ "$PB_SETS_RAW" != "none" ]; then
+    PB_SETS_DISPLAY="$PB_SETS_RAW"
+  fi
+  if [ "$UPS_RAW" = "set" ] && [ -n "$UP_RAW" ]; then
+    UP_DISPLAY="$UP_RAW"
+  fi
+  if [ -n "$PB_SETS_DISPLAY" ] || [ -n "$UP_DISPLAY" ]; then
+    PLAYBOOK_LINE="Playbook: ${PB_SETS_DISPLAY:-(no sets)} + ${UP_DISPLAY:-(no local)}"
+  fi
+fi
+
 if [ -z "$GUIDES_CSV" ]; then
   GUIDES_LINE="(none loaded this session)"
 else
@@ -102,7 +123,8 @@ Task folder: \`$TASK_PATH/\`
   - \`implementation.md\` $P3 Phase 3 $(arrow 3)
 
 Project: \`$PROJECT\`
-Loaded guides: $GUIDES_LINE
+${PLAYBOOK_LINE:+$PLAYBOOK_LINE
+}Loaded guides: $GUIDES_LINE
 Next: \`$NEXT_CMD\`
 
 Write each phase's content to its own \`.md\` file. Do not merge phases into a monolithic document.

@@ -58,6 +58,35 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 
 **NOT wrapped** (keep invoking directly via `/code-quality:*` namespace): `lint`, `coverage`, `review`, `audit`, `ultrareview`, `architecture-debate`, `security-debate`. `/validate:all` surfaces them as discoverability hint.
 
+## Playbook System (v3.15.0+)
+
+Two-layer Drupal best-practices system:
+
+- **Published playbook sets** — namespaced dev-guides categories like `drupal/best-practices/camoa/*`. Each guide is one concrete "do it this way, not that way" rule. Multiple authors can ship parallel sets (`drupal/best-practices/<author>/*`); users subscribe per project.
+- **Project-local user playbook** — single markdown file the user maintains. Can OVERRIDE shipped opinions (replace) or EXTEND them (cover topics shipped doesn't). Local always wins on conflict.
+
+**`project_state.md` fields** (v3.15.0+):
+- `**Playbook Sets:** drupal/best-practices/camoa, ...` (comma-list) OR `none` (explicit opt-out) OR absent (uses plugin.json `defaults.playbookSets`)
+- `**User Playbook:** /abs/path/to/playbook.md` paired with `**User Playbook State:** unset | docs-only-no-playbook | set`
+- `**Playbook Resolutions:**` — multi-line list recording per-topic multi-set contradiction choices
+
+**Default voice:** `plugin.json` ships `defaults.playbookSets: ["drupal/best-practices/camoa"]` — opinionation by default. Forks of the plugin override this field to ship a different default.
+
+**Precedence at decision time:** project-local > active opinion-set(s) > generic dev-guides.
+
+**Conflict surface:** `guide-integrator` v5.0.0+ cross-references plays-by-topic at load time. Local-vs-shipped contradictions emit one-line surfaces (precedence rule applies, no prompt) and persist to `.claude/playbook-conflicts.log`. Multi-set contradictions prompt the user once and persist the choice in `**Playbook Resolutions:**`.
+
+**Maintenance commands** (all user-initiated, framework-drafted, user-approved with diff preview):
+- `/playbook-capture` — append a new play; framework drafts entry, shows diff
+- `/playbook-review` — walk plays one-at-a-time with `[k/u/r/q]`; immediate-write semantics
+- `/playbook-active` — read-only display of subscribed sets, local playbook, recent conflicts
+- `/set-playbook-sets` — set/clear active sets; validates each via dev-guides-navigator
+- `/set-user-playbook` — set/clear local playbook path; 3-state semantics
+
+**`/complete` candidate-play surface:** at task completion, `analysis-agent` `play_candidates` mode (v1.1+) analyzes task artifacts + `git diff` for repeated decisions worth capturing. Per-candidate `[y]/[n]/[d]` prompt; `[y]` hands off to `/playbook-capture`. `--no-play-candidates` opt-out.
+
+**Schemas:** `references/playbook-schema.md` v1.0 (recommended local playbook structure), `references/playbook-conflict-schema.md` v1.0 (JSONL log line), `references/analysis-agent-schema.md` v1.1 (adds `play_candidates` mode, additive/backward-compatible).
+
 ### Validation Team Mode (v3.14.0+)
 
 `/validate:team` is a **sibling** to `/validate:all` — NOT a replacement. It runs the 7 v3.13.0 gates in **isolated Claude Code agent teams** (4 teammates) so each gate is assessed in a fresh context window free of the main session's prior reasoning. Primary driver: **honest validation** (no self-review bias). Secondary benefits: context-window economy, parallel code-gate throughput.
