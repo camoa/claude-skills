@@ -64,9 +64,9 @@ Never block the command on this check — the user is in control. The nudge exis
 
 ### Step 1 — Invoke guide-integrator explicitly
 
-Do NOT rely on proactive skill detection. Directly invoke the `guide-integrator` skill against the task context. Record which guides (if any) were auto-loaded via its keyword-detection rules + `dev-guides-navigator` delegation.
+**(v4.0.0+: deterministic detection.)** Invoke `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` BEFORE prompting the user. Populate Step 2's prompt's "Auto-loaded based on task keywords:" line from `guides_to_load[]` script output. Write `<task>/_dev-guides-load.json` audit per `references/gate-audit-schema.md` v1.0 after user picks `[c]/[a]/[n]`. Eliminates bypass-by-declaration.
 
-**(v3.15.0+)** `guide-integrator` v5.0.0+ ALSO loads the project's active playbook sets and local user playbook at this step. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log`. See `references/playbook-schema.md` and `references/playbook-conflict-schema.md`.
+**(v3.15.0+, refactored v4.0.0+)** `guide-integrator` v5.1.0+ delegates the playbook load to `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`; emits `<task>/_playbook-load.json` audit. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log`.
 
 ### Step 2 — ALWAYS prompt the user (never silent-skip)
 
