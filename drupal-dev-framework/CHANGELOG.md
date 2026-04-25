@@ -5,6 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.0] - 2026-04-24
+
+### Added — Worktree Awareness
+
+Make git worktrees the standard mechanism for running parallel tasks on the same drupal-dev-framework project. Two Claude Code sessions on the same workspace collide on `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` and on the git working tree itself; a worktree at `.worktrees/<task_name>/` solves both — distinct `$PWD` → distinct hash → independent session. **No changes to `session-context-writer`.**
+
+### New commands (2)
+
+- `/drupal-dev-framework:worktree <task>` — 10-step creation: resolve task, refuse-if-in-worktree, directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), gitignore verify + commit if missing, DDEV `name:` warning (Drupal-specific), `git worktree add` with `feature/<task>` branch, auto-detect setup (`composer install` / `npm install`), optional `--with-baseline`, pre-seed session-context, summary
+- `/drupal-dev-framework:worktree-prune` — per-worktree `[y]/[n]/[q]` cleanup; lists state (branch merged? task completed?); honors git's refusal on uncommitted changes; force-remove requires explicit per-worktree confirmation
+
+### New reference (1)
+
+- `references/worktree-conventions.md` v1.0 — directory priority, branch naming, gitignore requirement, detection signal taxonomy (HIGH/MEDIUM-HIGH), 3-path lifecycle at `/complete`, DDEV compatibility, refusal cases, versioning policy
+
+### New scripts (2)
+
+- `scripts/worktree-detect.sh` — defensive in-worktree state check (uses `git rev-parse --git-dir` vs `--git-common-dir` difference); emits `{schema_version, in_git_repo, in_worktree, worktree_path, main_path, branch, warnings}`
+- `scripts/worktree-signals.sh` — computes detection signals for `/implement`: `another_task_active` (commits to other tasks' files within 2 hours), `dirty_tree` (uncommitted changes), `multi_session` (2+ session-context files for same project), `project_opt_in` (`Worktree By Default: true`); resolves codePath via `project-state-read.sh`; HIGH threshold: at least one HIGH signal or EXPLICIT user/project flag
+
+### `project_state.md` schema addition
+
+- `**Worktree By Default:** true` — opts project into worktree-always for `/implement` (otherwise signal-driven)
+
+### Updated artifacts
+
+- `commands/implement.md` — new "Worktree recommendation" pre-step BEFORE Phase Transition Check; soft-nudge with `[c]reate / [m]ain tree / [a]bort`; `--worktree` flag chains into `/worktree`; `--in-main-tree` flag suppresses
+- `commands/complete.md` — new "Worktree merge prompt" sub-step BETWEEN quality gates and candidate-play surface; 3-path (merge-back / push+PR / skip); default skip; merge-conflict path 1 aborts merge + leaves worktree for manual resolution
+- `scripts/project-state-read.sh` — parse new `Worktree By Default` field; emit `worktreeByDefault: bool`
+- `skills/project-state-reader` v1.1.0 → 1.2.0 — documents new field
+- `.claude-plugin/plugin.json` — `3.15.0` → `3.16.0`; new `worktree` keyword
+- `CLAUDE.md` — new `## Worktree Workflow (v3.16.0+)` section before Playbook System block
+- `README.md` — 2 new commands; Technical Contract References 8 → 9
+
+### Detection signals (HIGH-strength)
+
+| Signal | Evidence |
+|---|---|
+| `another_task_active` | Another task folder has `implementation.md` AND `git log --since="2 hours" --name-only` shows commits to its tracked files |
+| `dirty_tree` | `git status --porcelain` shows modified files matching another task's tracked files |
+| `multi_session` | (MEDIUM-HIGH) 2+ session-context files in `~/.claude/drupal-dev-framework/sessions/` reference the same project |
+| `--worktree` user flag | EXPLICIT |
+| `Worktree By Default: true` in `project_state.md` | EXPLICIT |
+
+Recommendation fires only on HIGH or EXPLICIT signals; suppressed when already in a worktree; printed only on `/implement` (not `/research` or `/design` — read-mostly phases).
+
+### DDEV compatibility
+
+DDEV explicitly supports worktrees ([DDEV Contributor Training, March 2026](https://ddev.com/blog/git-worktree-contributor-training/)) but requires the `name:` key removed from `.ddev/config.yaml`. Framework detects + warns; **never auto-edits** the config. User picks `[c]ontinue / [a]bort / [s]how-instructions`.
+
+### Why minor, not major
+
+Purely additive. Existing `/implement` works unchanged when no signals fire. Existing `/complete` works unchanged outside worktrees. `session-context-writer` and all `/validate:*` commands consumed unchanged. v3.15.0 Playbook System orthogonal — no integration needed.
+
+### Reused vs extended
+
+Reused: `superpowers:using-git-worktrees` core patterns (directory priority, gitignore verify, auto-detect setup). Replicated in command body — not a hard dependency.
+
+Extended with: task-aware lifecycle (`/implement` recommendation, `/complete` merge prompt), Drupal/DDEV awareness, session-context pre-seed, conservative HIGH-only signal threshold (false positives are worse than false negatives).
+
+### Deferred to v2
+
+- Configurable detection-window beyond 2 hours
+- Detection signals on `/research` and `/design`
+- `/migrate-to-worktree` for in-flight tasks
+- Refined heuristics from real-world false-positive reports
+- Multi-task worktree reuse (single worktree, multiple tasks)
+- Auto-edit `.ddev/config.yaml` (with backup + commit)
+- Test-baseline runs default-on for Drupal projects
+- Distributed / cross-machine worktree-equivalent
+
 ## [3.15.0] - 2026-04-24
 
 ### Added — Playbook System
