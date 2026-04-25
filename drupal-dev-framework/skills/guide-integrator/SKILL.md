@@ -1,6 +1,6 @@
 ---
 name: guide-integrator
-description: "Use when designing or researching features — loads plugin methodology refs (SOLID, DRY, TDD, Library-First, Quality Gates, Purposeful Code), delegates to dev-guides-navigator for online Drupal domain knowledge, AND loads active playbook sets + project-local user playbook (v3.15.0+). Cross-references plays-by-topic and emits conflicts[]. Records each loaded guide into session_context.json loadedGuides[] so re-loads are skipped."
+description: "Use when a phase command (research/design/implement) needs to load methodology references, online dev-guides, and project playbooks before task work begins. **v4.0.0+: deterministic detection** via scripts/dev-guides-detect.sh (replaces agent-mediated keyword detection). Delegates guide fetching to dev-guides-navigator. Loads playbook layers via scripts/playbook-load-deterministic.sh. Cross-references conflicts. Records loaded guide IDs into session_context.json loadedGuides[] to prevent re-loads."
 version: 5.1.0
 user-invocable: false
 model: sonnet

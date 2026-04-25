@@ -2,6 +2,8 @@
 
 A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow for Drupal projects. It prevents common AI pitfalls — jumping to code without understanding requirements, missing contrib solutions, creating inconsistent architecture, or skipping tests.
 
+> **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md) — a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
+
 ## How It Works
 
 You create a **project** (a Drupal module, theme, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:
@@ -260,7 +262,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **3.10.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.0.1**.
 
 ## License
 

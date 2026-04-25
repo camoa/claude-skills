@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-04-25
+
+### Fixed — 4 documentation drift bugs surfaced by post-epic plugin-creation-tools validation
+
+After `dev_framework_improvements_epic` completed (2026-04-25), running the full plugin-creation-tools validation suite (plugin-structure-auditor + skill-quality-reviewer + /plugin-creation-tools:validate) cumulatively across the v3.9.0 → v4.0.0 arc surfaced 4 epic-level drift bugs. Each is a doc/description that fell out of sync as releases shipped through the epic but the corresponding stale text was missed.
+
+1. **`README.md` line 263** — `Current version: **3.10.0**` was stale since v3.11.0 shipped. Updated to **4.0.1**.
+2. **`marketplace.json` plugin description** stopped at v3.14.0; missed v3.15.0 / v3.16.0 / v4.0.0 summary clauses. Extended to cover all three releases plus the `recommended: plugin-creation-tools` hint added in v4.0.0.
+3. **`skills/guide-integrator/SKILL.md`** v5.1.0 description said "delegates to dev-guides-navigator" without mentioning v4.0.0's deterministic detection (`scripts/dev-guides-detect.sh`). Updated to lead with the deterministic-detection mechanism.
+4. **`agents/analysis-agent.md`** v1.1.0 description said "Invoked by /research pre-analysis hook at new-task creation" without the v4.0.0 always-on qualifier; also omitted `play_candidates` mode (v1.1.0+) entirely. Updated to enumerate all 3 modes (folder / description / play_candidates) with their v3.x → v4.0.0 evolution noted.
+
+### Added — `GETTING_STARTED.md`
+
+Tight 5-minute walkthrough for new users. Covers install → first project → first task → 3-phase walkthrough → returning to work + common situations (status, epic migration, playbooks, worktrees). README's terse "Quick Start" section is for users who already know the workflow; `GETTING_STARTED.md` is for users who don't. README now opens with a prominent banner pointing to it.
+
+### Pre-existing tech debt NOT fixed in v4.0.1
+
+These predate the epic and are out of scope for this patch:
+- 7 skills missing `model:` frontmatter field (predate v3.10.0; framework still works without explicit model — falls back to inherit)
+- `guide-loader` description vague (predates this epic)
+- `plugin-creation-tools/README.md` missing (different plugin)
+- marketplace.json `owner.email` empty string
+
+### Why patch, not minor
+
+All 4 fixes are documentation drift — agent + skill + reference descriptions catching up to behavior that already shipped. No contract change, no feature change, no behavior change. Patch per versioning policy.
+
 ## [4.0.0] - 2026-04-24
 
 ### ⚠️ BREAKING CHANGES
