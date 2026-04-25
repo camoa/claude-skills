@@ -12,6 +12,34 @@ Guides Claude Code through a disciplined **Research → Architecture → Impleme
 
 You stay in control: Claude proposes, you approve.
 
+## Two things to know up front
+
+The framework is opinionated by default. Two systems power that:
+
+### Dev-guides — the published reference library
+
+A curated set of [Drupal/Next.js/CSS/methodology guides](https://camoa.github.io/dev-guides/) that Claude loads automatically when relevant. Examples: how to build a config form, when to use SDC vs Layout Builder blocks, BEM naming conventions, TDD discipline.
+
+The framework's `guide-integrator` skill auto-detects task keywords (`form`, `entity`, `service`, `gate`, etc.) and pulls in matching guides at every phase entry — so Claude consults authoritative references before deriving from scratch. v4.0.0+ uses deterministic shell-script keyword matching (not agent judgment) so this can't be silently skipped.
+
+You don't need to "load" guides yourself. They appear when Claude needs them; you'll see a prompt like:
+
+```
+Dev-guides pre-flight: auto-loaded plugin:quality-gates (matched on "gate")
+[c]ontinue / [a]dd more / [n]one
+```
+
+### Playbook — your project's opinions
+
+Where dev-guides are general, a **playbook** is opinionated: "do it THIS way, not that way." Two layers:
+
+- **Shipped playbook** — the framework defaults to [Carlos's Drupal best-practices](https://camoa.github.io/dev-guides/drupal/best-practices/camoa/) (20 plays covering RFS font sizing, Layout Builder selectors, SDC patterns, BEF over JS toggles, config-over-code, etc.). Subscribed automatically; opt out per project if you want.
+- **Local playbook** — your project-local file (`docs/playbook.md` or similar) that adds your team's rules OR overrides shipped opinions. Local always wins.
+
+The framework loads both layers at every phase entry and surfaces conflicts ("shipped says X, local says Y → local wins"). Configure when you start a project, or anytime via `/set-playbook-sets` and `/set-user-playbook`.
+
+**Why both matter:** dev-guides keeps Claude grounded in known patterns; playbook keeps Claude consistent with YOUR opinions. Together they reduce drift across sessions.
+
 ## Step 1 — Install
 
 ```
@@ -133,16 +161,16 @@ If a task is really 3-4 separable pieces of work, convert it to an **epic** with
 
 The framework also prompts you when it detects this automatically.
 
-### "I want to use my own conventions"
+### "I want to switch playbook or add my own rules"
 
-The framework ships with [Carlos's Drupal best-practices playbook](https://camoa.github.io/dev-guides/drupal/best-practices/camoa/) loaded by default. To use a different opinion-set OR add your own project-local rules:
+See the **Playbook** section above. Quick commands:
 
 ```
-/drupal-dev-framework:set-playbook-sets drupal/best-practices/<other>   # subscribe to a different set
-/drupal-dev-framework:set-user-playbook /path/to/your/playbook.md       # add your own rules
+/drupal-dev-framework:playbook-active                                   # see what's currently active
+/drupal-dev-framework:set-playbook-sets drupal/best-practices/<other>   # subscribe to a different shipped set
+/drupal-dev-framework:set-user-playbook /path/to/your/playbook.md       # declare a project-local playbook
+/drupal-dev-framework:playbook-capture                                  # capture a session decision into your local playbook
 ```
-
-Your local playbook always wins on conflict.
 
 ### "I need to run two Claude sessions on the same project"
 
