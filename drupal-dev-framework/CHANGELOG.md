@@ -5,6 +5,87 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.0] - 2026-04-24
+
+### Added — Playbook System
+
+Two-layer Drupal best-practices system: shipped playbook sets (namespaced dev-guides categories) + per-project local user playbook. **Opinionation by default** — `plugin.json` ships `defaults.playbookSets: ["drupal/best-practices/camoa"]`. Local playbook can OVERRIDE shipped opinions or EXTEND them with topics shipped doesn't cover; local always wins on conflict.
+
+The camoa playbook is **already published** at `https://camoa.github.io/dev-guides/drupal/best-practices/camoa/` (20 guides as of 2026-04-24). v3.15.0 ships the framework integration over the existing content.
+
+### New commands (5)
+
+- `/drupal-dev-framework:set-playbook-sets` — set/clear active sets; validates each via `dev-guides-navigator`. Accepts comma-list, literal `none`, or `default` (revert to plugin default).
+- `/drupal-dev-framework:set-user-playbook` — set/clear local playbook path; 3-state field (`unset` / `docs-only-no-playbook` / `set <path>`); explicit / `--docs-only` / interactive detect-and-confirm modes.
+- `/drupal-dev-framework:playbook-capture` — interactive draft + diff preview + append. User is the deterministic approval gate.
+- `/drupal-dev-framework:playbook-review` — per-play `[k]eep / [u]pdate / [r]emove / [q]uit` walk; immediate-write semantics; quit preserves committed work; `/loop`-able.
+- `/drupal-dev-framework:playbook-active` — read-only display of subscribed sets, local playbook, recent conflicts.
+
+### New references (2 + 1 schema bump)
+
+- `references/playbook-schema.md` v1.0 — recommended local playbook structure (H3-per-play with What/Rationale/When/Example), freeform fallback contract, defensive parser invariants
+- `references/playbook-conflict-schema.md` v1.0 — JSONL log line for `.claude/playbook-conflicts.log`; local-vs-shipped + multi-set-contradiction types
+- `references/analysis-agent-schema.md` v1.0 → v1.1 — adds `play_candidates` mode used by `/complete` candidate-play surface; existing `folder` and `description` modes unchanged (backward-compatible — additive only)
+
+### New scripts (2)
+
+- `scripts/playbook-read.sh` — defensive markdown parser; never throws; emits warnings on malformed plays; handles freeform fallback
+- `scripts/playbook-conflicts-write.sh` — atomic JSONL append with schema-version + required-field validation
+
+### `project_state.md` schema additions
+
+- `**Playbook Sets:** <comma-list>` OR `none` OR absent (defaults from plugin.json)
+- `**User Playbook:** <abs path>` paired with `**User Playbook State:** unset | docs-only-no-playbook | set`
+- `**Playbook Resolutions:**` — multi-line list recording per-topic multi-set contradiction choices
+
+### Updated artifacts
+
+- `skills/guide-integrator` v4.1.1 → 5.0.0 — loads playbook sets via `dev-guides-navigator` + local playbook via `playbook-read.sh`; cross-references plays-by-topic; emits `loaded_playbook_sets[]`, `loaded_local_playbook`, `conflicts[]`; surfaces conflicts once per session per topic with persistence.
+- `skills/project-state-reader` v1.0.0 → 1.1.0 — parses new fields; falls back to plugin.json `defaults.playbookSets` when `Playbook Sets` field absent; emits `playbookSetsSource: explicit | explicit-none | default`.
+- `scripts/project-state-read.sh` — extended with new field parsing + plugin.json default resolution.
+- `commands/research.md`, `design.md`, `implement.md` — dev-guides preflight Step 1 documents v3.15.0 guide-integrator behavior (loads playbook layers, surfaces conflicts).
+- `commands/complete.md` — new "Candidate-play surface" section between pre-completion checks and task move; invokes `analysis-agent` `play_candidates` mode; per-candidate `[y]/[n]/[d]` prompt; `--no-play-candidates` opt-out; skipped when `userPlaybookState != "set"`.
+- `hooks/context-reminder.sh` (UserPromptSubmit) — emits `Playbook: <sets> + <local>` line below Project line when at least one of `playbookSets` or `userPlaybook` is configured. Silent otherwise.
+- `.claude-plugin/plugin.json` — `3.14.2` → `3.15.0`; new top-level `defaults.playbookSets` field; new `playbook` keyword.
+- `README.md` — 5 new commands in commands table; Technical Contract References 6 → 8.
+- `CLAUDE.md` — new `## Playbook System (v3.15.0+)` section before Validation Team Mode block.
+
+### Precedence rule
+
+When the same topic is addressed by multiple layers:
+
+1. Project-local playbook (always wins when present)
+2. Active opinion-set(s) (winner determined by `**Playbook Resolutions:**` if multi-set; else `null` and prompt user)
+3. Generic dev-guides (lowest precedence)
+
+### Conflict handling
+
+- **Local-vs-shipped:** precedence rule applies silently; one-line surface once per session per topic; persisted to `.claude/playbook-conflicts.log`.
+- **Multi-set contradiction:** framework refuses silent pick; prompts user (`[1]/[2]/cancel`); persists choice in `**Playbook Resolutions:**` for future sessions.
+- **Local extending (no contradiction):** loads silently; no conflict event.
+
+### Why minor, not major
+
+Purely additive. No breaking changes:
+
+- Existing commands (`/research`, `/design`, `/implement`, `/complete`, `/validate:*`) work unchanged when no playbook is configured.
+- Existing skills (`alignment-reader`, `task-frontmatter-reader`, etc.) consumed unchanged.
+- `analysis-agent` v1.0 outputs unchanged for existing modes; new `play_candidates` mode is opt-in via explicit `mode` parameter.
+- `project_state.md` parsing is forward-compatible: projects without the new fields just get default behavior.
+- `dev-guides-navigator` plugin and `code-quality-tools` consumed unchanged.
+
+### Default voice (political note)
+
+`plugin.json` ships `defaults.playbookSets: ["drupal/best-practices/camoa"]`. Forks of the plugin (alternative opinion-curators) override this field to ship a different default. The choice is documented as a deliberate decision, not implicit.
+
+### Deferred to v2
+
+- `/validate:playbook` adherence gate — pattern adherence requires agentic judgment; needs machine-readable playbook format first
+- Global `~/.claude/rules/playbook.md` surface — not needed (dev-guides serves this via subscription); CC Issue #21858 (`globs:` ignored at user-level) is irrelevant to the design
+- Determinism measurement / before-after eval — anecdotal user judgment is the only signal in v3.15.0
+- Multi-set contradiction silent resolution beyond per-topic prompt
+- Migration tooling for existing patterns docs in non-standard locations
+
 ## [3.14.2] - 2026-04-24
 
 ### Fixed — `/validate:guides` applicability auto-skip for non-Drupal tasks
