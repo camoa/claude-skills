@@ -16,6 +16,10 @@ After `dev_framework_improvements_epic` completed (2026-04-25), running the full
 3. **`skills/guide-integrator/SKILL.md`** v5.1.0 description said "delegates to dev-guides-navigator" without mentioning v4.0.0's deterministic detection (`scripts/dev-guides-detect.sh`). Updated to lead with the deterministic-detection mechanism.
 4. **`agents/analysis-agent.md`** v1.1.0 description said "Invoked by /research pre-analysis hook at new-task creation" without the v4.0.0 always-on qualifier; also omitted `play_candidates` mode (v1.1.0+) entirely. Updated to enumerate all 3 modes (folder / description / play_candidates) with their v3.x → v4.0.0 evolution noted.
 
+### Added — `GETTING_STARTED.md`
+
+Tight 5-minute walkthrough for new users. Covers install → first project → first task → 3-phase walkthrough → returning to work + common situations (status, epic migration, playbooks, worktrees). README's terse "Quick Start" section is for users who already know the workflow; `GETTING_STARTED.md` is for users who don't. README now opens with a prominent banner pointing to it.
+
 ### Pre-existing tech debt NOT fixed in v4.0.1
 
 These predate the epic and are out of scope for this patch:
