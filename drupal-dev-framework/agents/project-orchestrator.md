@@ -4,6 +4,7 @@ description: "Use when checking project status or deciding next steps - reads me
 capabilities: ["project-status", "task-management", "workflow-routing", "next-action-suggestion"]
 version: 3.1.0
 model: sonnet
+tools: Read, Write, Edit, Glob, Grep, Bash, Skill
 memory: project
 maxTurns: 25
 ---

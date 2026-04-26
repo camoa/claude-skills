@@ -4,6 +4,7 @@ description: "Use when researching Drupal contrib modules or existing solutions 
 capabilities: ["drupal-org-search", "contrib-analysis", "pattern-extraction", "integration-discovery"]
 version: 1.0.0
 model: haiku
+tools: Read, Grep, Glob, WebFetch, WebSearch
 disallowedTools: Edit, Write, Bash
 maxTurns: 15
 ---

@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.0
+# Gate Audit Schema v1.1
 
-**Introduced:** drupal-dev-framework v4.0.0
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive).
 **Owner:** `scripts/gate-audit-write.sh`
-**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/audit-status.md`, `commands/status.md`, plus the 7 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
+**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
-A "gate audit" is a single JSON file written when one of the v4.0.0 hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
+A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 7 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 8 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -23,6 +23,7 @@ Where `<gate_type>` is one of:
 - `phase-command-bypass`
 - `dev-guides-load`
 - `playbook-load`
+- `review` (v1.1+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -50,8 +51,8 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 7 listed in §1. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for v4.1.0+ when `gate_type: "review"`. JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 8 listed in §1. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -146,6 +147,31 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 `user_choice`: always `null` (deterministic; no prompt).
 
+### 5.8 `review` (v1.1+)
+
+```json
+"gate_specific": {
+  "mode": "all | team | team-fallback-to-all",
+  "rerun_only_failed": false,
+  "dry_run": false,
+  "gates_run": [
+    {
+      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | visual-regression | visual-parity",
+      "kind": "hard-block | soft",
+      "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
+      "envelope_path": "<task>/validations/latest/<gate>.json or null",
+      "bypass_reason": "<string from --skip-<gate> flag> or null",
+      "messages": []
+    }
+  ],
+  "overall_verdict": "pass | fail | bypassed",
+  "pr_ready": true,
+  "pr_body_path": "<task>/PR_BODY.md or null"
+}
+```
+
+`user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+
 ## 6. Invariants
 
 - **One file per gate per task.** Overwrite-on-fire. No history kept in this file.
@@ -160,7 +186,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 - **Minor bumps** (`1.1`) are additive: new gate_type values, new optional top-level fields, new optional per-gate fields. Existing consumers ignore the new fields.
 - **Patch bumps** do not exist for schema versioning.
 
-v1.0 covers all 7 v4.0.0 gate_types. Future hardenings (v2 deferred surfaces) bump to 1.1 if/when they ship.
+v1.0 covers all 7 v4.0.0 gate_types. v1.1 (drupal-dev-framework v4.1.0) adds `review` gate_type — additive only, existing v1.0 consumers unaffected.
 
 ## 8. Non-goals
 

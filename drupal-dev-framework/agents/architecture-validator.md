@@ -4,6 +4,7 @@ description: "Use when validating implementation against architecture - checks a
 capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles", "security-validation"]
 version: 3.2.0
 model: sonnet
+tools: Read, Grep, Glob, Bash
 memory: project
 disallowedTools: Edit, Write
 hooks:

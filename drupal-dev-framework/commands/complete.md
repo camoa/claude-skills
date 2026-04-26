@@ -1,12 +1,12 @@
 ---
-description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Runs ALL 7 quality gates (5 standard + skill-review + plugin-validate when staged changes match) before allowing completion. Surfaces candidate plays from the session via play_candidates mode (v3.15.0+)."
+description: "Mark a task as done and move to completed. Trigger: 'finish task', 'mark done', 'task complete', 'close task'. Verifies /review ran (Phase 4 gates green per _review.json) when **Review Required:** true; legacy projects (Review Required: false) keep the v4.0.2 inline-gates posture. Surfaces candidate plays from the session via play_candidates mode (v3.15.0+). Slimmed v4.1.0+ — gates moved to /review."
 allowed-tools: Read, Write, Bash(mv:*), Bash, Glob, Skill, Task
 argument-hint: <task-name>
 ---
 
 # Complete
 
-Mark a task complete and move to `completed/`. Behavior current as of v4.0.2; full prose / examples / version history in `references/complete-walkthrough.md`.
+Mark a task complete and move to `completed/`. Behavior current as of v4.1.0; full prose / examples / version history in `references/complete-walkthrough.md`.
 
 ## Usage
 
@@ -26,41 +26,39 @@ Mark a task complete and move to `completed/`. Behavior current as of v4.0.2; fu
    - User confirms tests pass (Claude does NOT auto-run).
    - No blocking issues in `implementation.md` Blockers section.
    - `implementation.md` Progress section all `[x]`.
+   - Phase Status section: Phase 1, 2, 3 all `[x]`. Phase 4 status enforced by Step 3.
    On any fail: list remaining items, do NOT complete, offer to continue.
 
-3. **Skill-review hardened gate (v4.0.0+, conditional non-bypassable).** If `git diff --cached --name-only` (or branch diff vs main) shows `skills/*/SKILL.md` changes: invoke `plugin-creation-tools:skill-quality-reviewer` agent. Display findings using literal `prompts:skill-review-decision` template. Block on `[a]ccept/[r]emediate/[b]ypass` (no default — user MUST pick). Write `_skill-review.json` audit. Skip flag: `--skip-skill-review <reason>`.
+3. **Review Required check (v4.1.0+).** Read `**Review Required:**` field from `project_state.md`:
+   - **`true` OR (absent AND `completed/` empty):** Phase 4 must be `[x]`. Verify `<task>/_review.json` exists with `gate_specific.pr_ready: true` (or `overall_verdict: "bypassed"` with all `bypass_reason` populated). On missing/incomplete audit: print soft-warn ("`/review` did not run; gates not validated. Continue without `/review`? [y/N]") default `[N]`. User declines → exit; suggest `/drupal-dev-framework:review <task>`.
+   - **`false`:** legacy v4.0.2 posture. Run inline the gates that previously lived here: skill-review (conditional, see `references/complete-walkthrough.md`), plugin-validate (conditional), `/validate:all` standard gates. Soft-nudge / hard-block per existing v4.0.0 contract.
+   - **Absent AND `completed/` non-empty:** treat as `false` (project predates v4.1.0; legacy posture). Print one-time soft-nudge: "v4.1.0 introduced /review as the pre-PR gate phase. Run `/drupal-dev-framework:upgrade-project` to opt into the new posture." Then proceed inline as legacy.
 
-4. **Plugin-validate hardened gate (v4.0.0+, conditional non-bypassable).** If staged changes include any plugin file: invoke `/plugin-creation-tools:validate`. Display findings using literal `prompts:plugin-validate-decision` template. Block on `[a]ccept/[r]emediate/[b]ypass` (no default). Write `_plugin-validate.json` audit. Skip flag: `--skip-plugin-validate <reason>`.
+4. **Candidate-play surface (v3.15.0+).** Invoke `analysis-agent` in `play_candidates` mode (analyzes task artifacts + `git diff` for repeated decisions worth capturing). For each candidate, prompt `[y]/[n]/[d]`. `[y]` hands off to `/playbook-capture`. Opt-out: `--no-play-candidates`.
 
-5. **Standard quality gates** (5 from v3.13.0+ `code-quality-tools` skills). Run/verify TDD, SOLID, DRY, Security, Guides per usual `/validate:all` semantics. Soft-nudge on fail; never blocks.
+5. **Update `task.md`.** Add Completion section (date, status, files created/modified, summary, notes).
 
-6. **Candidate-play surface (v3.15.0+).** Invoke `analysis-agent` in `play_candidates` mode (analyzes task artifacts + `git diff` for repeated decisions worth capturing). For each candidate, prompt `[y]/[n]/[d]`. `[y]` hands off to `/playbook-capture`. Opt-out: `--no-play-candidates`.
+6. **Move task folder** per kind rules (Step 1) using `mv`.
 
-7. **Update `task.md`.** Add Completion section (date, status, files created/modified, summary, notes).
+7. **Update `project_state.md`.** Mark task completed; clear current-implementation-task field; if subtask completion empties `<epic>/in_progress/`, surface "epic ready for completion" hint to user (do NOT auto-complete the epic — user owns that decision).
 
-8. **Move task folder** per kind rules (Step 1) using `mv`.
+8. **Suggest next task.** Surface `/next` recommendation. If all tasks done: print summary + offer to mark project done.
 
-9. **Update `project_state.md`.** Mark task completed; clear current-implementation-task field; if subtask completion empties `<epic>/in_progress/`, surface "epic ready for completion" hint to user (do NOT auto-complete the epic — user owns that decision).
-
-10. **Suggest next task.** Surface `/next` recommendation. If all tasks done: print summary + offer to mark project done.
-
-11. **Invoke `session-context-writer`** with project resolved and task set to `null`.
-
-## Anti-bypass clause (applies to gates 3, 4)
-
-Skipping requires the documented `--skip-*` flag with free-text reason; bypass is recorded on disk and surfaced via `/audit-status` Unaudited gates.
+9. **Invoke `session-context-writer`** with project resolved and task set to `null`.
 
 ## Pointers
 
 - Full walkthrough: `references/complete-walkthrough.md`
 - Mandated wording: `references/gate-hardening-prompts.md`
-- Audit shape: `references/gate-audit-schema.md` v1.0
+- Audit shape: `references/gate-audit-schema.md`
 - Quality-gate methodology: `references/quality-gates.md`
+- Review phase (where gates moved to in v4.1.0): `references/review-phase-walkthrough.md`
 
 ## Related
 
 - `/drupal-dev-framework:implement <task>` — continue Phase 3
-- `/drupal-dev-framework:validate <task>` — validate before completing
+- `/drupal-dev-framework:review <task>` — run Phase 4 gates before completing (v4.1.0+)
+- `/drupal-dev-framework:upgrade-project` — set `**Review Required:**` explicitly on existing projects
 - `/drupal-dev-framework:next` — see what's next
 - `/drupal-dev-framework:status` — see all task statuses
 - `/drupal-dev-framework:audit-status` — see hardened-gate audit state
