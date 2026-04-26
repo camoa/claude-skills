@@ -13,11 +13,16 @@ This is a **framework-owned** gate — it does NOT wrap a `code-quality-tools` s
 ## Usage
 
 ```
-/drupal-dev-framework:validate-guides              # run against current task
+/drupal-dev-framework:validate-guides              # run against current task (soft-nudge)
 /drupal-dev-framework:validate-guides <task-name>  # run against a specific task
+/drupal-dev-framework:validate-guides <t> --hard-block  # /review-mode (warning→fail)
+/drupal-dev-framework:validate-guides <t> --strict      # CI escalation (warning→fail)
 ```
 
 ## What this does
+
+<!-- /review:hard-block -->
+This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge (existing v3.13.0 behavior); when invoked from `/drupal-dev-framework:review` with `--hard-block`, the gate promotes `warning` verdicts to `fail`. The HTML comment above is the **capability marker** read by `/review` Step 4 to assign `kind: "hard-block"` in `gates_run[]`.
 
 1. **Resolve task context** — same resolution as other `/validate:*` commands:
    (a) read `session_context.json` if present
@@ -60,6 +65,8 @@ This is a **framework-owned** gate — it does NOT wrap a `code-quality-tools` s
    - `skipped` → no phase artifacts exist yet (task hasn't progressed past creation)
 
    The 200-line substance threshold prevents false-positives on near-empty stub artifacts.
+
+   **Hard-block promotion (v4.1.0+):** if `--hard-block` flag is set (passed by `/review`) OR `--strict` flag is set (CI escalation), promote `warning` → `fail`. Soft-mode and standalone CLI invocation unchanged. The argv flag is the runtime mode selector; the HTML capability marker near the top of this file is what `/review` Step 4 reads to decide whether to invoke with `--hard-block`. Also write `details.invoked_by: "review" | "cli" | "validate-all" | "validate-team"` in the envelope for audit provenance.
 
 6. **Emit the shared envelope** (per `references/validation-gate-result.md`) with gate-specific details:
 
