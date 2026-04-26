@@ -4,6 +4,7 @@ description: "Use when designing project architecture - creates architecture/mai
 capabilities: ["architecture-design", "component-breakdown", "pattern-selection", "dependency-mapping", "solid-enforcement", "library-first"]
 version: 2.0.0
 model: opus
+tools: Read, Write, Edit, Glob, Grep, Bash, Skill
 memory: project
 skills: guide-integrator
 maxTurns: 30

@@ -21,12 +21,13 @@ JSON_MODE=0
 [ "${1:-}" = "--json" ] && JSON_MODE=1
 
 # Phase-command budgets. Keep in lockstep with task.md ACs in
-# dev_framework_token_efficiency.
+# dev_framework_token_efficiency (v4.0.2) and dev_framework_review_phase_and_adherence (v4.1.0).
 declare -A BUDGETS=(
   [research]=100
   [design]=80
   [implement]=120
   [complete]=100
+  [review]=120
 )
 
 # Body line count = total lines minus frontmatter (between first two --- lines, inclusive).
@@ -42,7 +43,7 @@ body_lines() {
 
 FAIL=0
 RESULTS=""
-for phase in research design implement complete; do
+for phase in research design implement complete review; do
   file="${PLUGIN_ROOT}/commands/${phase}.md"
   if [ ! -f "$file" ]; then
     if [ "$JSON_MODE" -eq 1 ]; then

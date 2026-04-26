@@ -218,6 +218,7 @@ implementation_process/in_progress/{task_name}/
 - [🔄] Phase 1: Research → See [research.md](research.md)
 - [ ] Phase 2: Architecture → See [architecture.md](architecture.md)
 - [ ] Phase 3: Implementation → See [implementation.md](implementation.md)
+- [ ] Phase 4: Review (_review.json) → run `/drupal-dev-framework:review <task>` (v4.1.0+)
 
 ## Acceptance Criteria
 - [ ] {criterion 1}

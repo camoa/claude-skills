@@ -169,5 +169,6 @@ $fm
 - [ ] Phase 1: Research
 - [ ] Phase 2: Architecture
 - [ ] Phase 3: Implementation
+- [ ] Phase 4: Review (_review.json)
 EOF
 }

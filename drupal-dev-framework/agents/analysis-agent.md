@@ -4,6 +4,7 @@ description: "Use when a framework flow needs to assess task scope or propose de
 capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-decomposition"]
 version: 1.1.0
 model: sonnet
+tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
 maxTurns: 10
 ---
