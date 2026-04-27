@@ -266,6 +266,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/solid-detection.md` - SOLID detection patterns and fixes
 - `references/composer-scripts.md` - Ready-to-use composer scripts
 - `references/scope-targeting.md` - Target specific modules/components
+- `references/post-batch-aggregation.md` - Optional `PostToolBatch` aggregation pattern (Claude Code 2.1.118+); not shipped by default
 
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations

@@ -17,7 +17,7 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 - `references/troubleshooting.md` — symptom-first framework triage table + cross-link to upstream `Debug Your Config` for Claude Code platform-level issues (`/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`).
 - Reading-strategy callouts in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md` — explicit Type-B (full-read, no grep-first) discipline, citing `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
 - `commands/validate-playbook-adherence.md` "Future hardening" section — `UserPromptExpansion` hook (Claude Code 2.1.118+) as a v2 candidate for platform-layer adherence enforcement at slash-command-expansion time.
-- `commands/review.md` "Reading strategy" callout includes a `PostToolBatch` future-avenue note for batch-summary aggregation across hard-block gates.
+- `PostToolBatch` future-avenue note (batch-summary aggregation) intentionally NOT inlined into `commands/review.md` — pattern is documented in detail in `code-quality-tools/skills/code-quality-audit/references/post-batch-aggregation.md` and cross-linked in `code-paper-test/commands/test-team.md`. Avoiding compound blockquotes in review.md preserves the one-liner consistency across phase commands.
 - CLAUDE.md gains `## Reading Strategy (v4.2.0+)`, `## Forked Subagents (v4.2.0+, experimental upstream)`, and `## Troubleshooting` sections.
 
 ### Changed
