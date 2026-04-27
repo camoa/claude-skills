@@ -194,13 +194,23 @@ After resolving the project (Step 1) but before recommending a task action, invo
 
 Print before the task-selection prompt (or before the "no tasks yet" message). Skip silently when both fields are explicit. Never block.
 
+### Scope offer for brand-new tasks (v4.2.3+)
+
+When the user names a NEW task (Step 2 "User Names New Task" path — no task folder yet), BEFORE recommending `/research <task>`, surface a one-line offer to author scope first:
+
+> 💡 Want to author a scope contract first (Goal / Expected result / Success criteria / Non-goals)? `/drupal-dev-framework:scope <task>` runs a 4-question conversation and creates `alignment.md`. Recommended for tasks with multiple outcome dimensions or unclear scope. `[y]` runs `/scope` now; `[n]` (default) proceeds to `/research`.
+
+Default `[n]` — soft-nudge per the v3.12.0+ contract; `/scope` is optional, never required. On `[y]`, hand off to `/drupal-dev-framework:scope <task>` and stop (the user re-runs `/next` after `/scope` completes). On `[n]` or empty input, proceed to the existing `/research <task>` recommendation.
+
+This is the highest-value moment for `/scope`: nothing has been written yet. The Alignment retrofit suggestion below covers the orthogonal case of an existing task that didn't get a scope contract earlier.
+
 ### Alignment retrofit suggestion (v3.12.0+)
 
-After resolving the selected task, check whether `alignment.md` exists in the task folder. If it does NOT exist AND the task has already progressed past initial creation (task.md exists):
+After resolving an EXISTING task (Step 2 "Tasks in Progress" path), check whether `alignment.md` exists in the task folder. If it does NOT exist AND the task has already progressed past initial creation (task.md exists):
 
 > 💡 This task has no scope contract (`alignment.md`). If scope has drifted or is unclear, consider running `/drupal-dev-framework:scope <task>` to retrofit a task-level alignment contract before continuing. (Optional — this is a one-line nudge, not a block.)
 
-Print once, at the end of the task-selection output, before the "recommended command" line. Never block. If `alignment.md` already exists, skip the suggestion silently.
+Print once, at the end of the task-selection output, before the "recommended command" line. Never block. If `alignment.md` already exists, skip the suggestion silently. The brand-new-task offer above covers tasks that don't yet have a folder.
 
 ## Examples
 
