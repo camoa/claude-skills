@@ -3,6 +3,7 @@ name: component-designer
 description: Use when designing a specific module component - creates architecture/component_name.md with purpose, interface, dependencies, and pattern references
 version: 1.1.1
 model: sonnet
+user-invocable: false
 ---
 
 # Component Designer

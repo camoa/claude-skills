@@ -3,6 +3,7 @@ name: diagram-generator
 description: "Use when visualizing architecture - generates Mermaid diagrams for data flow, service relationships, or entity structures. Trigger: 'draw diagram', 'visualize', 'show relationships', 'mermaid chart'."
 version: 1.1.1
 model: haiku
+user-invocable: false
 ---
 
 # Diagram Generator

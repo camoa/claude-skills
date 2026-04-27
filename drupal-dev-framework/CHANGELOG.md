@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.4] - 2026-04-27
+
+### Skill visibility hygiene (Tier 1 of multi-plugin command-naming research)
+
+User-reported: typing `/implement` surfaces both `/drupal-dev-framework:implement` AND the skill `drupal-dev-framework:implementation-task-creator` in the typeahead, because the skill defaults `user-invocable: true` and substring-matches.
+
+Per the research at `/tmp/command-naming-research.md`, plugin namespacing makes true identifier collisions impossible; the issue is purely typeahead substring matching. Fix per `Comprehensive Guide Skills in Claude Code.md` line 197 + 290 + 496: set `user-invocable: false` on internal skills. Hides them from the `/` menu without blocking parent-command Skill-tool invocation.
+
+### Changed
+
+Set `user-invocable: false` on 9 internal skills (frontmatter additions only — no renames, no behavior change, no version-frontmatter dependencies):
+
+- `skills/implementation-task-creator/SKILL.md` — called from `/implement`
+- `skills/code-pattern-checker/SKILL.md` — pre-commit helper
+- `skills/component-designer/SKILL.md` — called from `/design`
+- `skills/requirements-gatherer/SKILL.md` — called from `/new`
+- `skills/task-completer/SKILL.md` — called from `/complete`
+- `skills/task-folder-migrator/SKILL.md` — called from `/migrate-tasks`
+- `skills/tdd-companion/SKILL.md` — inline Phase 3 helper
+- `skills/diagram-generator/SKILL.md` — internal architecture viz
+- `skills/session-resume/SKILL.md` — `/next` is the public face
+
+These skills remain fully accessible to parent commands via the `Skill` tool — `user-invocable: false` controls menu visibility only (per docs line 290 + 496).
+
+### Skills already correctly hidden (no change needed)
+
+`alignment-reader`, `core-pattern-finder`, `epic-migrator`, `guide-integrator`, `guide-loader`, `memory-manager`, `phase-detector`, `project-initializer`, `project-state-reader`, `screenshot-store-reader`, `session-context-writer`, `task-context-loader`, `task-frontmatter-reader`.
+
 ## [4.2.3] - 2026-04-27
 
 ### Discoverability fixes (rolls v4.2.2 + new scope-offer for brand-new tasks)

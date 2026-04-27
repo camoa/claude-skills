@@ -4,7 +4,7 @@ description: Use when checking code quality, running security audits, testing co
 version: 3.0.0
 model: sonnet
 allowed-tools: Read, Bash, Grep, Glob
-user-invocable: true
+user-invocable: false
 hooks:
   FileChanged:
     - matcher: "composer.json|package.json|phpstan.neon|phpstan.neon.dist|phpstan.dist.neon|phpcs.xml|phpcs.xml.dist|.phpcs.xml|psalm.xml|psalm.xml.dist|eslint.config.js|eslint.config.mjs|eslint.config.cjs|.eslintrc.js|.eslintrc.json|.eslintrc.yml|.eslintrc.yaml|tsconfig.json"

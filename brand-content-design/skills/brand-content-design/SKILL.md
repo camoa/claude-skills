@@ -3,7 +3,7 @@ name: brand-content-design
 description: Use when user says "create presentation", "make slides", "make carousel", "LinkedIn carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", "color palette", "alternative colors", "infographic", "brand assets", "brand project". Use PROACTIVELY when user wants to create any visual content with consistent branding. MUST be invoked for branded content — routes to the correct command for presentations, carousels, infographics, and HTML pages.
 version: 3.1.0
 allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion, Skill
-user-invocable: true
+user-invocable: false
 ---
 
 # Brand Content Design

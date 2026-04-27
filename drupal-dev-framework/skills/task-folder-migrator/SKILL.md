@@ -2,6 +2,7 @@
 name: task-folder-migrator
 description: Use when migrating existing single-file tasks to folder-based structure - preserves content, creates organized folders, backs up originals
 version: 3.0.0
+user-invocable: false
 ---
 
 # Task Folder Migrator
