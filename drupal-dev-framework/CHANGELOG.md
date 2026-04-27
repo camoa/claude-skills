@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.3] - 2026-04-27
+
+### Discoverability fixes (rolls v4.2.2 + new scope-offer for brand-new tasks)
+
+Two complementary discoverability fixes shipped together. v4.2.2 was prepared in this branch but never released as a tag; v4.2.3 supersedes it.
+
+### Fix 1 — Relocate playbook nudge to `project-initializer` (single source of truth)
+
+v4.2.1 added the playbook-config nudge in two caller-layer surfaces — `commands/next.md` (any session) and `commands/new.md` (post-creation) — but missed `skills/project-initializer/SKILL.md` Step 10, the actual final-handoff for `/new`. Putting the nudge in the lowest layer makes it the single source of truth: every caller of `project-initializer` gets it for free, no duplication.
+
+- **`skills/project-initializer/SKILL.md` Step 10** — split into Step 10(a) Playbook-config nudge + Step 10(b) Final handoff. Step 10(a) is the canonical surface; explicit instruction: "Do NOT duplicate this text in caller commands."
+- **`commands/new.md` "After Creation" Step 2** — simplified to a one-line pointer at `project-initializer` Step 10(a). Removes two-place drift risk.
+- **`commands/next.md` "Playbook-config nudge" section** — unchanged. `/next` covers the orthogonal not-just-created case.
+
+### Fix 2 — Scope offer for brand-new tasks (`/next` discoverability gap)
+
+User-reported: `/next` did not offer `/scope` when a user named a brand-new task. The existing v3.12.0+ alignment-retrofit suggestion only fired when `task.md` already existed — for brand-new tasks (highest-value moment for `/scope`), it was silently skipped.
+
+- **`commands/next.md` "Scope offer for brand-new tasks" section (NEW)** — when user names a NEW task in the Step 2 "User Names New Task" path, surfaces a one-line `[y]/[n]` offer to run `/scope <task>` first. Default `[n]` per v3.12.0+ soft-nudge contract — never blocks, never forces (the alignment system is optional by design; many tasks legitimately don't need a scope contract).
+- **`commands/next.md` "Alignment retrofit suggestion" section** — clarified to only cover EXISTING tasks (the orthogonal case to the new-task offer above).
+
+**Why not force `/scope`?** The v3.12.0 alignment system is explicitly soft-nudge ("never blocks", "skippable"). Forcing would break the contract every existing task relies on, and many tasks don't need a scope contract. Discoverability is the right primitive here, not enforcement.
+
+### Coverage by entry point
+
+| Entry point | Surfaces playbook nudge? | Surfaces `/scope` offer? |
+|---|---|---|
+| `/new` (fresh project creation) | yes — `project-initializer` Step 10(a) | n/a (no task yet) |
+| `/next` "User Names New Task" (brand-new task) | n/a (project nudge already fired earlier) | **yes — v4.2.3 (this release)** |
+| `/next` "Tasks in Progress" (existing task without alignment.md) | n/a | yes — v3.12.0+ alignment retrofit |
+| `/next` (any session, any project, playbook implicit/unset) | yes — `commands/next.md` Playbook-config nudge | n/a |
+| `/upgrade-project` (retrofit existing project) | yes — v4.1.0 | n/a (project-level, not task-level) |
+| `/research`, `/design`, `/implement` (phase entry) | n/a | yes — task-level alignment retrofit (v3.12.2 / v3.13.1) |
+
 ## [4.2.1] - 2026-04-27
 
 ### Playbook configuration discoverability
