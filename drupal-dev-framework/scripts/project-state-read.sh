@@ -18,6 +18,7 @@
 #     "userPlaybookState": "unset" | "docs-only-no-playbook" | "set",
 #     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
 #     "worktreeByDefault": bool,
+#     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
@@ -52,7 +53,8 @@ emit_json() {
     --argjson ps "${5:-[]}" --arg pss "${6:-default}" \
     --arg up "${7:-null}" --arg ups "${8:-unset}" \
     --argjson pr "${9:-[]}" \
-    --argjson wbd "${10:-false}" '
+    --argjson wbd "${10:-false}" \
+    --arg rr "${11:-null}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -63,6 +65,7 @@ emit_json() {
       userPlaybookState: $ups,
       playbookResolutions: $pr,
       worktreeByDefault: $wbd,
+      reviewRequired: (if $rr == "null" then null elif $rr == "true" then true else false end),
       warnings: $w
     }'
 }
@@ -117,8 +120,10 @@ if [ -z "$CODE_PATH_RAW" ]; then
 elif [ "$CODE_PATH_RAW" = "(docs-only)" ] || [ "$CODE_PATH_RAW" = "docs-only" ]; then
   CODE_PATH_OUT="null"
 else
-  # Normalize: expand ~, realpath -m (doesn't require existence)
-  CODE_PATH_EXPANDED=$(eval echo "$CODE_PATH_RAW")
+  # Normalize: expand leading ~ via parameter expansion (NO eval — adversarial
+  # input like `$(rm -rf ~)` would execute under eval); realpath -m doesn't
+  # require existence.
+  CODE_PATH_EXPANDED="${CODE_PATH_RAW/#\~/$HOME}"
   CODE_PATH_NORM=$(realpath -m "$CODE_PATH_EXPANDED" 2>/dev/null || echo "$CODE_PATH_EXPANDED")
   if [ ! -d "$CODE_PATH_NORM" ]; then
     WARNINGS=$(jq -c -n --arg p "$CODE_PATH_NORM" '[{code: "code_path_missing", detail: ("directory does not exist: " + $p)}]')
@@ -222,5 +227,26 @@ else
   WBD_OUT="false"
 fi
 
+# === Review Required parsing (v4.1.0+) ===
+# Output: "true" | "false" | "null" (string sentinel; absent → null per emit_json)
+# Char-class pattern (NOT IGNORECASE — not all awk impls honor it).
+# Truthy variants: true | True | TRUE | yes | y | 1 | on (case-insensitive normalized via tr).
+RR_RAW=$(awk '
+  /^\*\*[Rr]eview [Rr]equired:\*\*/ {
+    sub(/^\*\*[Rr]eview [Rr]equired:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+if [ -z "$RR_RAW" ]; then
+  RR_OUT="null"
+else
+  RR_NORM=$(printf '%s' "$RR_RAW" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+  case "$RR_NORM" in
+    true|yes|y|1|on)  RR_OUT="true" ;;
+    *)                RR_OUT="false" ;;
+  esac
+fi
+
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
-  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT"
+  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT"
