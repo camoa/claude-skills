@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-04-27
+
+### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
+
+Set `user-invocable: false` on `skills/code-quality-audit/SKILL.md` (was explicit `true`). The umbrella skill was substring-matching `/audit` and `/code` in the typeahead, but the user-facing entry points are the slash commands (`/code-quality:audit`, `:review`, `:security`, `:solid`, `:dry`, `:tdd`, etc.) — the skill itself is plugin-internal context.
+
+Per `Comprehensive Guide Skills in Claude Code.md` line 290 + 496: `user-invocable: false` controls menu visibility only; Claude can still invoke the skill autonomously, and parent commands can still load it via the Skill tool. No behavior change.
+
 ## [3.1.0] - 2026-04-27
 
 ### 2026-04-25 doc-refresh deltas

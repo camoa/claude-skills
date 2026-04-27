@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-04-27
+
+### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
+
+Set `user-invocable: false` on `skills/plugin-creation/SKILL.md`. The umbrella skill was defaulting user-invocable and substring-matching `/plugin` in the typeahead, but the user-facing entry points are the commands (`/plugin-creation-tools:create`, `:add-component`, `:validate`). No behavior change — Claude and parent commands can still invoke the skill via the Skill tool per docs line 290 + 496.
+
 ## [3.3.0] - 2026-04-25
 
 Doc-snapshot: upstream `claude_memory/guides/claude/` at commit `c142d14` (135 guides). Covers Claude Code releases **2.1.116 → 2.1.119**. Single PR, additive — no breaking changes.

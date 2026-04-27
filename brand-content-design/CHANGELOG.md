@@ -5,6 +5,12 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-04-27
+
+### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
+
+Set `user-invocable: false` on `skills/brand-content-design/SKILL.md` (was explicit `true`). The umbrella skill was substring-matching `/brand` in the typeahead, but the user-facing entry point is the `/brand-content-design:brand` dashboard command (plus 18 specific verb commands like `/carousel`, `/presentation`, `/infographic`). No behavior change — the skill is still autonomously invocable by Claude and loadable via the Skill tool per docs line 290 + 496.
+
 ## [3.3.0] - 2026-04-27
 
 ### 2026-04-25 doc-refresh deltas

@@ -4,6 +4,7 @@ description: "Use when a user resumes work on an existing project — lists regi
 version: 1.2.1
 model: sonnet
 allowed-tools: Read, Glob, Bash
+user-invocable: false
 ---
 
 # Session Resume
