@@ -8,6 +8,8 @@ argument-hint: [--json] <file-or-directory-path>
 
 Structured code review with rubric-based scoring. Produces a graded assessment with per-category scores and prioritized action items.
 
+> **Reading strategy:** This is **Type B** work — read full source and config files; do NOT grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
 ## Usage
 
 ```

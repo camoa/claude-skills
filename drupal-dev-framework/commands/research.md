@@ -8,6 +8,8 @@ argument-hint: <task-name>
 
 Phase 1 of a task. Behavior current as of v4.0.2; full prose / examples / version history in `references/research-walkthrough.md`.
 
+> **Reading strategy:** Phase 1 is **Type B** work (audit / review / architecture analysis) — read full source and config files; do NOT grep-first. Inherited methods, annotations, and config-wired classes are invisible to grep. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
 ## Usage
 
 ```

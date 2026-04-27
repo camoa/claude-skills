@@ -24,6 +24,8 @@ hooks:
 
 Run quality and security audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
 
+> **Reading strategy:** Audit, review, security, SOLID, and DRY commands are **Type B** work (audit / review / architecture analysis) — agents must read full source and config files. Do NOT grep-first these flows. Inherited methods, annotations, and config-wired classes are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
 ## Quick Commands
 
 **For direct access, use these commands:**

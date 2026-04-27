@@ -8,6 +8,8 @@ argument-hint: <task-name>
 
 Phase 4 of a task — run all hard-blocking validation gates before PR creation. Behavior current as of v4.1.0; full prose / examples / version history in `references/review-phase-walkthrough.md`.
 
+> **Reading strategy:** Gates run **Type B** reads — full source and config files, no grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/`. **Future hardening:** `PostToolBatch` hook (Claude Code 2.1.118+) could aggregate per-gate findings into a single batch summary instead of firing per-gate; see `references/forked-subagents.md` for related epic-decomposition future work.
+
 ## Usage
 
 ```

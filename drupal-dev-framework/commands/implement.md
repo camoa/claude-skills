@@ -8,6 +8,8 @@ argument-hint: <task-name>
 
 Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / version history in `references/implement-walkthrough.md`.
 
+> **Reading strategy:** Implementation reads inherited classes, annotations, and config-wired services in full (**Type B**) — never grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
+
 ## Usage
 
 ```

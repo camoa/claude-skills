@@ -2,6 +2,18 @@
 
 AI (LLMs) generates code based on patterns, not actual knowledge of your codebase. This creates specific risks that paper testing helps catch.
 
+> **Reading strategy:** Paper-testing AI-generated code is **Type B** work (audit / review / architecture analysis) — read the full target file plus every file it references in full. Do NOT grep-first. Inherited methods, decorators, and config-wired classes that an AI hallucinated are exactly the surface that grep cannot see. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
+## Forked subagents (experimental upstream)
+
+Paper-test team mode (`/code-paper:test-team`) currently spawns 3 agents in fresh contexts. Claude Code 2.1.117+ ships **forked subagents** as an experimental opt-in (`CLAUDE_CODE_FORK_SUBAGENT=1`) — a subagent that inherits the full conversation history (system prompt, tools, model, messages) instead of starting fresh. For paper-test, this is a strong fit: the Happy Path Validator, Edge Case Hunter, and Red Team Attacker all benefit from the same loaded codebase context (the target file's dependencies, config, and contracts) without each one re-reading them.
+
+**Why not enabled by default in v0.8.0:**
+- Experimental upstream — schema and behavior may shift before stable.
+- The cross-challenge debate phase relies on each agent having reasoned independently from a fresh frame; forks would share too much. The current 3-agent fresh-context pattern is intentional, not a workaround.
+
+**Re-evaluation criteria when upstream stabilizes:** if forks gain a "share-context-but-isolate-reasoning" mode, switch the team-test spawn pattern. Until then, fresh-context spawns remain the right default. Upstream reference: Subagents guide → "Fork the current conversation".
+
 ## Contents
 
 - [Common AI Code Problems](#common-ai-code-problems)

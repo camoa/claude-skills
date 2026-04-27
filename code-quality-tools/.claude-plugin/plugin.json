@@ -1,7 +1,7 @@
 {
   "name": "code-quality-tools",
   "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks, Socket CLI). REVIEW.md v2 generator, /ultrareview wrapper, skill-scoped watch-mode linting, scheduled sweeps (Desktop + Cloud Routine), API-triggered pre-merge gate, check-run JSON gating, and --json mode on audit/review/security for CI pipelines.",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": {
     "name": "camoa"
   },

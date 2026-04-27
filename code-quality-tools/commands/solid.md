@@ -8,6 +8,8 @@ argument-hint: optional|project-path
 
 Analyze code architecture and adherence to SOLID principles.
 
+> **Reading strategy:** This is **Type B** work — read full class hierarchies, interfaces, and service definitions; do NOT grep-first. SOLID violations span inherited methods that grep cannot see. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
+
 ## Usage
 
 ```

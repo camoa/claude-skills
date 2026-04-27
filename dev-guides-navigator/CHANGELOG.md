@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 (2026-04-27)
+
+### 2026-04-25 doc-refresh deltas
+
+The 2026-04-25 Claude Code doc refresh promoted three new platform-level pages: `Admin Setup` (enterprise rollout), `Auto Mode Config` (auto-mode classifier reference, previously embedded in Permissions), and `Debug Your Config` (symptom-first triage via `/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`). Decision: this navigator routes to **project guides** at `camoa/dev-guides` only — it does NOT route to Claude Code platform docs at `code.claude.com`. No keyword/routing changes; the three pages are listed only as out-of-scope cross-links so calling code knows they exist.
+
+### Added
+- `references/guide-index.md` — new "Out of scope: Claude Code platform docs" section listing the three new upstream pages with direct URLs and a one-line scope explanation.
+
+### Verified
+- No stale references to the old auto-mode location (auto-mode config used to live inside Permissions; now standalone). Index has no auto-mode entries.
+
 ## 0.4.0 (2026-04-20)
 
 ### Added

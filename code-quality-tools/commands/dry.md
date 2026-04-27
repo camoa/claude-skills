@@ -8,6 +8,8 @@ argument-hint: optional|project-path
 
 Find duplicated code blocks that violate the DRY (Don't Repeat Yourself) principle.
 
+> **Reading strategy:** This is **Type B** work — duplicate detection often reveals near-duplicates that need full-file context to assess intent. Do NOT grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
+
 ## Usage
 
 ```

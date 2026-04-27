@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-04-27
+
+### 2026-04-25 doc-refresh deltas
+
+Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snapshot pinned at upstream commit `c142d14`, covers Claude Code releases 2.1.116–2.1.119). Additive throughout — no behavior change to existing audits, commands, or hooks.
+
+### Added
+- **`PostToolBatch` aggregation pattern reference** — new `skills/code-quality-audit/references/post-batch-aggregation.md` documents how to aggregate findings across a batch of parallel lint/audit tool calls into a single summary using the new `PostToolBatch` hook (Claude Code 2.1.118+, Hooks Reference). Includes worked example with a project-local `hooks.json` snippet + aggregator script. Plugin does **not** ship the hook by default — `PostToolBatch` lacks skill-scoping and a matcher field, so a plugin-scoped hook would fire across every conversation. Users copy the snippet into their own project's `hooks.json` if they want it. Tracked as a future avenue if upstream gains skill-scoping.
+- **Reading-strategy callouts** in `commands/audit.md`, `commands/review.md`, `commands/security.md`, `commands/solid.md`, `commands/dry.md` and the skill body (`skills/code-quality-audit/SKILL.md`) — explicit Type-B (full-read, no grep-first) discipline citing `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. Inherited methods, annotations, and config-wired classes are invisible to grep — audit/review/security/SOLID/DRY commands must read full files.
+- **Debug Your Config cross-link** in `skills/code-quality-audit/references/troubleshooting.md` — symptom-first reference to upstream `/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status` slash commands for diagnosing plugin/hook/MCP load issues. Plugin's own troubleshooting handles tool-installation issues; platform-level issues route upstream.
+- **`if`-Bash subcommand clarification** documented inline in `post-batch-aggregation.md` — `Bash(rm *)` matches `FOO=bar rm file` and `npm test && rm file` (per Hooks Reference 2026-04-25 clarification). There is no `&&`/`||` in `if` — register separate handlers for compound conditions.
+
+### Changed
+- `skills/code-quality-audit/SKILL.md` line count remains under the 500-line soft cap.
+
+### Out of scope (deferred)
+- **OTEL span instrumentation** — no current OTEL surface in this plugin. The 2026-04-25 Monitoring docs added a full span-attribute schema (gated behind `ENABLE_BETA_TRACING_DETAILED=1`); evaluating an instrumentation pass for `/code-quality:audit` and `/code-quality:security` deferred to a later cycle.
+- **JSON schema v2** — existing v1 contracts are stable; no breaking changes warranted by the doc refresh.
+- **Default-on `PostToolBatch` hook** — until upstream adds skill-scoping or a matcher field, plugin-scoped is too noisy. Documented optional pattern only.
+
 ## [3.0.0] - 2026-04-20
 
 ### Added

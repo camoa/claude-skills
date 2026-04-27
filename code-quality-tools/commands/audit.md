@@ -8,6 +8,8 @@ argument-hint: [--json] [project-path]
 
 Run a comprehensive code quality and security audit on your project.
 
+> **Reading strategy:** This is **Type B** work (audit / review / architecture analysis) — read full source and config files; do NOT grep-first. Inherited methods, annotations, and config-wired classes are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
 ## Usage
 
 ```
