@@ -41,9 +41,10 @@ Consumers distinguish states via warnings, not the null value: `code_path_unknow
 
 Individual `/validate:*` commands for on-demand quality gates. Replaces `/complete`-only all-or-nothing gating with per-aspect, per-moment validation.
 
-**7 gates + 1 orchestrator:**
+**8 gates + 1 orchestrator (v4.1.0+):**
 - `validate-tdd` / `validate-solid` / `validate-dry` / `validate-security` — thin wrappers over `code-quality-tools` skills; add task context + persistence + shared envelope
-- `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides
+- `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides. **Hardened in v4.1.0 to dual-mode** — soft-nudge standalone, hard-block-capable when invoked from `/review` (via `<!-- /review:hard-block -->` capability marker + `--hard-block` argv flag)
+- `validate-playbook-adherence` (**new in v4.1.0**) — heuristic cite-checker for loaded plays; literal-string match (`Grep -F`) per match-type; section-aware skip on `Rejected` / `Considered Alternatives` / `Out of Scope` headings; `--hard-block` / `--strict` / `--invoked-by` flags
 - `validate-visual-regression <component> <viewport>` — captures via Playwright MCP, diffs via `odiff`/`pixelmatch`, prompts regression/intentional/cancel on diff. Intentional approval rotates baseline inline (no deferred approval in v1)
 - `validate-visual-parity <component> <viewport> <reference>` — compares against design comp (PNG/JPG, Figma URL via MCP, HTML file headless-rendered). React/PSD/Sketch deferred to v2
 - `validate-all` — sequential orchestrator; non-interactive CI mode skips visual gates
@@ -94,6 +95,26 @@ The 7 hardened surfaces, by category:
 **5 surfaces deferred to v2** (pending documented bypass evidence): phase transition checks, playbook conflict ack, worktree recommendation, candidate-play surface, `/validate:*` exit codes. Tracked in `dev_framework_improvements_epic/shared/v2-candidates.md` Set D.
 
 `/audit-status` provides per-task audit-state view; `--all` flag for project-wide rollup grouped by health.
+
+## Review Phase (v4.1.0+)
+
+`/drupal-dev-framework:review <task>` is **Phase 4** — runs all hard-blocking validation gates between `/implement` and PR creation, with the v4.0.0 5-mechanism pattern. Driver: feedback memo `feedback_framework_phase_gates.md` ("sometimes your analysis forgets to follow the rules"); shipping framework changes without enforcement leaves the contract underspecified.
+
+**Components:**
+- `commands/review.md` (114/120 body lines) — orchestrator; delegates to `/validate:all` (default) or `/validate:team` (`--team`); flags `--dry-run` / `--rerun-failed` / `--no-pr-body` / `--skip-<gate> <reason>` / `--allow-dirty`
+- `references/gate-hardening-prompts.md` v1.2 — `review-gate-fail` + `review-summary` templates (byte-identical to inline literals; verified by `tests/gate-prompts-vs-inline.sh`)
+- `references/gate-audit-schema.md` v1.1 §5.8 — `_review.json` audit shape (`gate_type: "review"`)
+- `commands/complete.md` slimmed (11→9 steps); honors `**Review Required:**` for legacy posture
+
+**Cross-references:** `references/review-phase-walkthrough.md` (full prose); `references/feedback_framework_phase_gates.md` (driver memo).
+
+## Retrofit Tools (v4.1.0+)
+
+`/drupal-dev-framework:upgrade-project` retrofits the active project to current scaffolder parity — backfills missing fields onto `project_state.md` (Code Path, Playbook Sets, User Playbook + state, Worktree By Default, Review Required) AND iterates in-progress tasks for task-level gaps (frontmatter, Phase 4 line, missing audit JSONs). Active-project-only; never bulk across the registry.
+
+**Pattern:** wizard delegating to existing `/set-code-path`, `/set-playbook-sets`, `/set-user-playbook` for writes. Journal-backed atomic batch (`<project>/.upgrade-project-journal.json`) with `--resume`. Symlink rejection. Bounded $PWD walk-up. Charset validation. Glob filter excludes `.migration-tmp/*` + nested `completed/*`.
+
+**Cross-references:** `references/upgrade-walkthrough.md` (full prose).
 
 ## Worktree Workflow (v3.16.0+)
 

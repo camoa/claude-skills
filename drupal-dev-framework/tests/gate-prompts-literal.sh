@@ -66,6 +66,8 @@ TEMPLATE_IDS=(
   "skill-review-decision"
   "plugin-validate-decision"
   "phase-command-bypass-acknowledge"
+  "review-gate-fail"
+  "review-summary"
 )
 
 LB_TMP=$(mktemp)

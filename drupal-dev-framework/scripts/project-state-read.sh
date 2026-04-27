@@ -23,11 +23,11 @@
 #   }
 #
 # Warning codes:
+#   missing_arg               — script called without $1 (defensive; emit + exit 0)
 #   folder_missing            — project folder does not exist
 #   project_state_md_missing  — project_state.md not in folder
 #   code_path_unknown         — project_state.md has no Code path line (first-use case)
 #   code_path_missing         — Code path declares a directory that does not exist
-#   malformed_header          — metadata block could not be parsed
 #
 # codePath sentinels in project_state.md:
 #   **Code path:** /abs/path    → non-null string
@@ -38,9 +38,11 @@
 
 set -uo pipefail
 
-PROJECT_DIR="${1:?path to project folder required}"
-FOLDER_NAME=$(basename "$PROJECT_DIR")
-PROJECT_STATE="$PROJECT_DIR/project_state.md"
+# Defensive contract: emit JSON-stdout + exit 0 always, even on bad inputs.
+# Mirrors task-frontmatter-reader. Caller (e.g., upgrade-project.md) trusts exit 0.
+PROJECT_DIR="${1:-}"
+FOLDER_NAME=$(basename "${PROJECT_DIR:-(missing)}")
+PROJECT_STATE="${PROJECT_DIR}/project_state.md"
 
 emit_json() {
   # $1 = project_name, $2 = codePath (string "null" literal for null), $3 = folder, $4 = warnings JSON array
@@ -82,6 +84,26 @@ get_default_playbook_sets() {
 
 DEFAULT_PB_SETS=$(get_default_playbook_sets)
 
+# H1 fix (v4.1.0): missing arg → defensive emit, do NOT exit 1
+if [ -z "$PROJECT_DIR" ]; then
+  emit_json "(no project)" "null" "" '[{"code": "missing_arg", "detail": "path to project folder required as $1"}]' \
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
+  exit 0
+fi
+
+# Normalize bool string from project_state.md value (DRY — used by Worktree By Default + Review Required).
+# Truthy variants: true, True, TRUE, yes, y, 1, on (case-insensitive). Empty input → "null" sentinel
+# (caller decides how to treat absence). All other values → "false".
+parse_bool() {
+  local raw="$1" norm
+  norm=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+  case "$norm" in
+    true|yes|y|1|on)  echo "true" ;;
+    "")               echo "null" ;;
+    *)                echo "false" ;;
+  esac
+}
+
 if [ ! -d "$PROJECT_DIR" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
     "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
@@ -104,8 +126,7 @@ PROJECT_NAME=$(awk '/^# / {sub(/^# */,""); print; exit}' "$PROJECT_STATE")
 #   **code path:** /abs/path
 # Plus the (docs-only) sentinel.
 CODE_PATH_RAW=$(awk '
-  BEGIN { IGNORECASE=1 }
-  /^\*\*Code path:\*\*/ {
+  /^\*\*[Cc]ode [Pp]ath:\*\*/ {
     sub(/^\*\*[Cc]ode [Pp]ath:\*\*[[:space:]]*/, "")
     print
     exit
@@ -133,9 +154,8 @@ fi
 
 # === Playbook Sets parsing ===
 PB_SETS_RAW=$(awk '
-  BEGIN { IGNORECASE=1 }
-  /^\*\*Playbook Sets:\*\*/ {
-    sub(/^\*\*Playbook Sets:\*\*[[:space:]]*/, "")
+  /^\*\*[Pp]laybook [Ss]ets:\*\*/ {
+    sub(/^\*\*[Pp]laybook [Ss]ets:\*\*[[:space:]]*/, "")
     print
     exit
   }
@@ -148,25 +168,24 @@ elif [ "$PB_SETS_RAW" = "none" ]; then
   PB_SETS_OUT="[]"
   PB_SETS_SOURCE="explicit-none"
 else
-  # Comma-split, trim, JSON-encode
-  PB_SETS_OUT=$(echo "$PB_SETS_RAW" | jq -R -c 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+  # Comma-split, trim, drop empties, JSON-encode (M2 fix v4.1.0: filter empty strings)
+  PB_SETS_OUT=$(echo "$PB_SETS_RAW" | jq -R -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
+  [ -z "$PB_SETS_OUT" ] && PB_SETS_OUT="[]"
   PB_SETS_SOURCE="explicit"
 fi
 
 # === User Playbook + State parsing ===
 UP_RAW=$(awk '
-  BEGIN { IGNORECASE=1 }
-  /^\*\*User Playbook:\*\*/ {
-    sub(/^\*\*User Playbook:\*\*[[:space:]]*/, "")
+  /^\*\*[Uu]ser [Pp]laybook:\*\*/ {
+    sub(/^\*\*[Uu]ser [Pp]laybook:\*\*[[:space:]]*/, "")
     print
     exit
   }
 ' "$PROJECT_STATE")
 
 UPS_RAW=$(awk '
-  BEGIN { IGNORECASE=1 }
-  /^\*\*User Playbook State:\*\*/ {
-    sub(/^\*\*User Playbook State:\*\*[[:space:]]*/, "")
+  /^\*\*[Uu]ser [Pp]laybook [Ss]tate:\*\*/ {
+    sub(/^\*\*[Uu]ser [Pp]laybook [Ss]tate:\*\*[[:space:]]*/, "")
     print
     exit
   }
@@ -192,45 +211,43 @@ fi
 # Format: multi-line list under **Playbook Resolutions:** heading
 #   - topic1 → set-id-1
 #   - topic2 → set-id-2
-PB_RESOLUTIONS=$(awk '
+# H2 fix (v4.1.0): emit topic/set as TAB-separated plain text from awk (no JSON construction
+# in awk where backslash/quote escaping is fragile). Pipe to jq -R for safe JSON encoding.
+PB_RESOLUTIONS=$(awk -v FS='\t' '
   BEGIN { in_block = 0 }
-  /^\*\*Playbook Resolutions:\*\*/ { in_block = 1; next }
+  /^\*\*[Pp]laybook [Rr]esolutions:\*\*/ { in_block = 1; next }
   in_block && /^\*\*[A-Z]/ { in_block = 0 }
   in_block && /^- / {
     line = $0
     sub(/^- */, "", line)
-    # Split on → or ->
     if (match(line, / *(→|->|=) */)) {
       topic = substr(line, 1, RSTART-1)
       set = substr(line, RSTART+RLENGTH)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", topic)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", set)
-      printf("{\"topic\":\"%s\",\"set\":\"%s\"}\n", topic, set)
+      gsub(/\t/, " ", topic)
+      gsub(/\t/, " ", set)
+      printf("%s\t%s\n", topic, set)
     }
   }
-' "$PROJECT_STATE" | jq -s -c .)
+' "$PROJECT_STATE" | jq -R -s -c 'split("\n") | map(select(length > 0)) | map(split("\t")) | map({topic: .[0], set: .[1]})')
 
 [ -z "$PB_RESOLUTIONS" ] && PB_RESOLUTIONS="[]"
 
-# === Worktree By Default parsing ===
+# === Worktree By Default parsing (v3.16.0+; truthy-variant aware in v4.1.0+) ===
 WBD_RAW=$(awk '
-  BEGIN { IGNORECASE=1 }
-  /^\*\*Worktree By Default:\*\*/ {
-    sub(/^\*\*Worktree By Default:\*\*[[:space:]]*/, "")
+  /^\*\*[Ww]orktree [Bb]y [Dd]efault:\*\*/ {
+    sub(/^\*\*[Ww]orktree [Bb]y [Dd]efault:\*\*[[:space:]]*/, "")
     print
     exit
   }
 ' "$PROJECT_STATE")
-if [ "$WBD_RAW" = "true" ]; then
-  WBD_OUT="true"
-else
-  WBD_OUT="false"
-fi
+WBD_OUT=$(parse_bool "$WBD_RAW")
+# v3.16.0 contract: absent → false (not null) for boolean compatibility with consumers
+[ "$WBD_OUT" = "null" ] && WBD_OUT="false"
 
 # === Review Required parsing (v4.1.0+) ===
-# Output: "true" | "false" | "null" (string sentinel; absent → null per emit_json)
-# Char-class pattern (NOT IGNORECASE — not all awk impls honor it).
-# Truthy variants: true | True | TRUE | yes | y | 1 | on (case-insensitive normalized via tr).
+# Output: "true" | "false" | "null" (absent → null per emit_json; legacy default applied in /complete)
 RR_RAW=$(awk '
   /^\*\*[Rr]eview [Rr]equired:\*\*/ {
     sub(/^\*\*[Rr]eview [Rr]equired:\*\*[[:space:]]*/, "")
@@ -238,15 +255,7 @@ RR_RAW=$(awk '
     exit
   }
 ' "$PROJECT_STATE")
-if [ -z "$RR_RAW" ]; then
-  RR_OUT="null"
-else
-  RR_NORM=$(printf '%s' "$RR_RAW" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-  case "$RR_NORM" in
-    true|yes|y|1|on)  RR_OUT="true" ;;
-    *)                RR_OUT="false" ;;
-  esac
-fi
+RR_OUT=$(parse_bool "$RR_RAW")
 
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
   "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT"

@@ -61,6 +61,14 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 ## 5. Per-gate payload (`gate_specific`)
 
+**Optional additive flags (v4.1.0+, applicable to any gate):**
+
+- `gate_specific.retrofitted: bool` — set to `true` when the audit was written via `/upgrade-project --rerun-loaders` (deterministic loader re-fired against an old task). Distinguishes retrofit-fired audits from canonical phase-entry audits. Consumers (e.g., `/audit-status`) can surface differently if needed. Absent or `false` = canonical fire.
+- `gate_specific.replaced_corrupt: bool` — set to `true` when the audit JSON was rewritten over a previously-corrupt file (jq parse failed on prior content). Documents the rewrite cause for future debugging. Absent or `false` = first write or normal overwrite.
+- `gate_specific.grandfathered: bool` (with `bypass_reason: "grandfathered_retrofit"`) — set to `true` for `_pre-analysis.json` markers written by `/upgrade-project` on tasks that pre-date v4.0.0 and explicitly should NOT be re-run through analysis-agent. See §5.1.
+
+These are optional; existing v1.0/v1.1 audits without them are valid. No schema version bump (additive optional fields per §7 versioning policy).
+
 ### 5.1 `pre-analysis`
 
 ```json
