@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.2] - 2026-04-27
+
+### Relocate playbook nudge to project-initializer (single source of truth)
+
+v4.2.1 added the playbook-config nudge in two surfaces — `commands/next.md` (any session) and `commands/new.md` (post-creation). Caller-layer placement worked but missed `skills/project-initializer/SKILL.md` Step 10, which is the actual final-handoff for `/new` and any future caller (e.g., `/next`'s "Creating a New Project (inline)" path also invokes `project-initializer`). Putting the nudge in the lowest layer makes it the single source of truth: every caller gets it for free, no duplication.
+
+### Changed
+
+- **`skills/project-initializer/SKILL.md` Step 10** — split into Step 10(a) Playbook-config nudge + Step 10(b) Final handoff. Step 10(a) is now the canonical surface for new-project playbook discoverability. Explicit instruction: "Do NOT duplicate this text in caller commands."
+- **`commands/new.md` "After Creation" Step 2** — simplified to a one-line pointer at `project-initializer` Step 10(a) (was: full duplicated nudge text). Removes drift risk from two-place maintenance.
+- `commands/next.md` "Playbook-config nudge" section — unchanged. `/next` covers the not-just-created case (project resolved later, playbook never configured), which `project-initializer` cannot reach.
+
+### Coverage by entry point (unchanged)
+
+| Entry point | Surfaces playbook nudge when implicit/unset? |
+|---|---|
+| `/new` (fresh project creation) | yes — `project-initializer` Step 10(a) |
+| `/next` (any session, any project) | yes — `commands/next.md` "Playbook-config nudge" section |
+| `/upgrade-project` (retrofit existing) | yes — v4.1.0 (already shipped) |
+
 ## [4.2.1] - 2026-04-27
 
 ### Playbook configuration discoverability

@@ -190,7 +190,22 @@ Next: Answer requirements questions to complete Phase 1 setup.
 
 ### 10. After Requirements Gathered
 
-Once requirements-gatherer completes and user confirms, show:
+Once requirements-gatherer completes and user confirms, show — in order:
+
+**(a) Playbook-config nudge (v4.2.2+ — single source of truth).** Print one line before the `/next` hint:
+
+```
+💡 Optional next step: configure your playbook before the first task.
+   /drupal-dev-framework:set-playbook-sets — choose opinion-set(s) (default: drupal/best-practices/camoa)
+   /drupal-dev-framework:set-user-playbook — point at a project-local playbook.md
+   Playbook loads at every phase entry; configuring now means your first task gets the active opinion-set
+   from the start. Skip if you want plain dev-guides only — /next will re-surface this nudge.
+```
+
+This nudge is the canonical surface for new-project playbook discoverability — `/new` and `/next` (inline-create path) both invoke this skill, so the nudge fires for every caller. Do NOT duplicate this text in caller commands.
+
+**(b) Final handoff:**
+
 ```
 Requirements gathering complete.
 
