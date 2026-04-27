@@ -77,7 +77,11 @@ Now gathering requirements...
 
 The command automatically:
 1. Gathers project requirements
-2. You can then run `/drupal-dev-framework:next` to start your first task
+2. **Surfaces a playbook-config nudge (v4.2.1+).** After `requirements-gatherer` finishes, before printing the "next: `/next`" hint, print one line:
+
+   > 💡 Optional next step: configure your playbook before the first task. `/drupal-dev-framework:set-playbook-sets` chooses opinion-set(s) (default `drupal/best-practices/camoa`); `/drupal-dev-framework:set-user-playbook` points at a project-local `playbook.md`. Playbook loads at every phase entry, so configuring now means your first task gets the active opinion-set from the start. Skip if you want plain dev-guides only.
+
+3. You can then run `/drupal-dev-framework:next` to start your first task. (`/next` re-surfaces the playbook nudge if you skipped it.)
 
 ## Related Commands
 
