@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-04-26
+
+### Phase 4 review + adherence gates + retrofit + closing pass
+
+`dev_framework_review_phase_and_adherence` epic completes (4 subtasks shipped: review_phase_command, adherence_gates, retrofit_tools, plumbing_docs_tests). Driver: `feedback_framework_phase_gates.md` memo — gates exist but Claude treats them as a menu rather than mandatory. v4.1.0 extends the v4.0.0 5-mechanism hardening pattern to pre-PR validation + adherence checking + retrofit of old artifacts.
+
+### Added
+
+- `commands/review.md` (114/120 body lines) — Phase 4 orchestrator between `/implement` and PR creation. Runs `/validate:all` (default) or `/validate:team` (`--team`), plus the new adherence gates as hard-blocks. Flags: `--dry-run`, `--rerun-failed`, `--no-pr-body`, `--skip-<gate> <reason>`, `--allow-dirty`. Writes `_review.json` audit + `PR_BODY.md` on green. Inline literal templates for `review-gate-fail` + `review-summary` (rationalization-resistance).
+- `commands/validate-playbook-adherence.md` (85/100 body lines) — heuristic cite-checker for loaded plays. Literal-string match (Grep `-F`) per match-type to avoid regex injection. Section-aware skip (`Rejected` / `Considered Alternatives` / `Out of Scope` headings) blocks gaming. Defensive on missing/malformed `_playbook-load.json`.
+- `commands/upgrade-project.md` (114/120 body lines) — single retrofit command. Two passes: project-state field backfill (delegates to `/set-*` commands) + iterates in-progress tasks for task-level gaps via `--rerun-loaders`. Active-project-only. Journal-backed atomic batch with `--resume`. Symlink rejection. Bounded `$PWD` walk-up. Charset validation.
+- `references/review-phase-walkthrough.md` (174 lines) — full prose for `/review`.
+- `references/upgrade-walkthrough.md` (200 lines) — full prose for `/upgrade-project`.
+- `references/gate-hardening-prompts.md` v1.1 → v1.2 — additive bump adds `review-gate-fail` + `review-summary` templates byte-identical to inline literals.
+- `tests/gate-prompts-vs-inline.sh` — cross-file byte-equivalence between v1.2 templates and inline literals in `commands/review.md`.
+- `tests/review-command-spec.sh`, `tests/validate-playbook-adherence-spec.sh`, `tests/upgrade-project-spec.sh`, `tests/project-state-read-spec.sh` — invariant + RCE-regression test harnesses.
+- CLAUDE.md `## Review Phase (v4.1.0+)` + `## Retrofit Tools (v4.1.0+)` sections.
+
+### Changed
+
+- `commands/complete.md` slimmed (11→9 steps; 61→59 body lines). Removed Steps 3-5 (gates moved to `/review`). New Step 3 honors `**Review Required:**` field for legacy posture.
+- `commands/validate-guides.md` extended to dual-mode — `<!-- /review:hard-block -->` HTML capability marker + `--hard-block` / `--strict` argv flags promote `warning` → `fail`. Standalone soft-nudge behavior preserved.
+- `references/gate-audit-schema.md` v1.0 → v1.1 — adds `review` gate_type (§5.8 payload). v4.1.0 also documents additive optional flags `gate_specific.retrofitted` + `gate_specific.replaced_corrupt` + `gate_specific.grandfathered` (no version bump; additive optional fields per §7 versioning policy).
+- `scripts/gate-audit-write.sh` — accepts `gate_type: "review"` and `schema_version: "1.1"`.
+- `scripts/project-state-read.sh` — broader case-sensitivity audit: char-class header pattern applied to all 6 fields for case-insensitive header match without relying on awk's `IGNORECASE` (gawk-specific). Added `parse_bool()` shared bash function (DRY) used for both `Worktree By Default` + `Review Required`. New `**Review Required:**` field parsed; `reviewRequired: bool | null` added to emitted JSON.
+- `scripts/command-body-lengths.sh` — adds `review` budget (120); 5/5 phase commands within budget.
+- `scripts/fm-helpers.sh` `write_stub_task_md` + `references/research-walkthrough.md` task scaffold — Phase 4 line included by default.
+- `agents/*.md` (6 files) — added explicit `tools:` allowlist (resolves pre-existing `/plugin-creation-tools:validate` finding).
+
+### Fixed
+
+- **🔒 SECURITY (RCE)**: `scripts/project-state-read.sh:125` — replaced `eval echo "$CODE_PATH_RAW"` with bash parameter expansion `${CODE_PATH_RAW/#\~/$HOME}`. Pre-existing since v3.11.0 — adversarial `**Code path:** $(rm -rf ~)` would execute on every script invocation. Paper-test team caught + this PR fixes. Smoke-tested: `$(touch /tmp/RCE-MARKER)` payload no longer executes.
+
+### Honest caveats
+
+- v4.1.0 is **broad-but-shallow**: many small focused changes across docs/tests/scripts. Each subtask paper-test-reviewed pre-merge (3 PRs caught + fixed: review_phase_command 12 blockers; adherence_gates 14 blockers; retrofit_tools 21 blockers including the RCE).
+- The 5-mechanism v4.0.0 pattern was designed for **deterministic** gates. Adherence gates introduce **content-semantic interpretation** (heuristic cite-checking has inherent gaming surface). Section-aware skip mitigates the most obvious vector; defense-in-depth (LLM-grading citations) is a v2 candidate.
+- `homepage` field absent on `plugin.json` + `marketplace.json` (optional spec field) — deferred to a separate metadata-polish PR.
+- `--all` bulk mode for `/upgrade-project` across registry — explicit non-goal; v2 candidate.
+
 ## [4.0.2] - 2026-04-25
 
 ### Token efficiency — 3 plugin-level cuts (additive; no contract change)

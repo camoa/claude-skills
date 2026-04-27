@@ -19,7 +19,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
 /drupal-dev-framework:upgrade-project <n> --resume          # continue interrupted upgrade from journal
 ```
 
-`--dry-run` dominates `--rerun-loaders` (combination shows would-have-applied; nothing written).
+**Flag precedence (M7):** `--dry-run` > `--resume` > `--rerun-loaders`. Combinations: `--dry-run --rerun-loaders` shows would-have-applied; `--dry-run --resume` reads journal but writes nothing; `--rerun-loaders --resume` continues a prior auto-mode run.
 
 ## What this does
 
@@ -27,7 +27,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
 
 2. **Project-state pass — gap detection.** Run `bash scripts/project-state-read.sh <project>`. Inspect emitted JSON. For `**Review Required:**`, also direct-grep (`grep -i '^\*\*[Rr]eview [Rr]equired:\*\*'`) as fallback for older readers. Build `gaps[]` for: `**Code Path:**` (absent / `code_path_unknown`), `**Playbook Sets:**` (`playbook_sets_source: "default"` = implicit), `**User Playbook:**` + state (`unset`), `**Worktree By Default:**` (absent), `**Review Required:**` (absent).
 
-3. **Project-state pass — single batch prompt** (verbatim):
+3. **Project-state pass — single batch prompt** (verbatim; **H5 fix**: do NOT interpolate raw `project_state.md` content into the prompt — show field NAMES + a sanitized resolved-value summary only, max 60 chars per value, control-chars stripped, brackets escaped). Under `--dry-run`, the prompt becomes "would-have-applied" (M9): same content, header changed to "Found {N} project-state gaps (DRY RUN — no writes will occur):". Verbatim form:
    ```
    Found {N} project-state gaps in <project>:
      - Code Path:           absent → /set-code-path will detect+confirm
@@ -43,14 +43,14 @@ Bring the active project on par with what a fresh project would scaffold today. 
    ```
    No default; user MUST pick. On non-`a/s/n` input, re-display verbatim (do not infer).
 
-4. **Project-state pass — apply via journal-backed atomic batch.** Before any write, create `<project>/.upgrade-project-journal.json` with planned operations + per-op `done: false`. For each gap:
-   - `**Code Path:**` → invoke `/drupal-dev-framework:set-code-path` via `Skill`
-   - `**Playbook Sets:**` → invoke `/drupal-dev-framework:set-playbook-sets <currently-resolved>`
+4. **Project-state pass — apply via journal-backed atomic batch with file-lock (H4).** Before any write, acquire exclusive lock via `flock` on `<project>/.upgrade-project-journal.lock` (refuse with "another /upgrade-project run in progress" + exit 2 if held). Then create `<project>/.upgrade-project-journal.json` with planned operations + per-op `done: false`. For each gap:
+   - `**Code Path:**` → invoke `/drupal-dev-framework:set-code-path` via `Skill` (H6: dual-validation — set-code-path already validates internally)
+   - `**Playbook Sets:**` → invoke `/drupal-dev-framework:set-playbook-sets <validated-comma-list>`. **H6 fix**: BEFORE invocation, validate each comma-split element matches `^[a-z][a-z0-9/_.-]*$`; refuse with diagnostic on mismatch (defense-in-depth alongside `set-playbook-sets`'s own dev-guides-navigator validation)
    - `**User Playbook:**` → invoke `/drupal-dev-framework:set-user-playbook`
-   - `**Worktree By Default:**` → direct `Edit` insert `**Worktree By Default:** false` (no setter exists)
-   - `**Review Required:**` → direct `Edit` insert with computed legacy default
-   After each write, mark `done: true` in journal. On any failure: stop, leave journal, surface "partial state — run with `--resume` to continue from {next-undone-op}". On full success, delete journal. `--resume` reads journal and skips `done: true` entries.
-   Under `--dry-run`: emit "would invoke /set-X with args ..." per gap; do NOT write journal or invoke setters.
+   - `**Worktree By Default:**` → direct `Edit` insert `**Worktree By Default:** false` (no setter exists; literal value, no interpolation)
+   - `**Review Required:**` → direct `Edit` insert with computed legacy default (literal value)
+   After each write, mark `done: true` in journal. On any failure: stop, leave journal + lock, surface "partial state — run with `--resume` to continue from {next-undone-op}". On full success, delete journal + release lock. `--resume` re-acquires lock and skips `done: true` entries.
+   Under `--dry-run`: emit "would invoke /set-X with args ..." per gap; do NOT acquire lock, write journal, or invoke setters.
 
 5. **Task-level pass — discovery** (skip if `--skip-tasks` OR project-pass-aborted). `Glob <project>/implementation_process/in_progress/**/task.md`, then **filter** to exclude paths matching `*/.migration-tmp/*` or `*/completed/*` (anchored to /completed/, not the project's top-level completed/ which is already outside in_progress/**). Per task, `bash scripts/fm-helpers.sh` parses frontmatter; reject task on YAML parse failure with diagnostic. Build per-task `gaps[]`:
    - Missing v3.10.0 frontmatter keys (full set: `id`, `kind`, `parent`, `children`, `blocks`, `blocked_by`, `external_ids`, `status`)
@@ -58,7 +58,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
    - Missing audit JSONs for **completed** phases only: Phase 1 [x] expects `_dev-guides-load.json`, `_playbook-load.json`, `_coverage-mapping.json`. Validate existing audits with `jq empty <file>`; treat parse-failed as absent (annotate `replaced_corrupt: true` on rewrite).
    - `_pre-analysis.json` absent + `research.md` present → mark `grandfathered`
    - `alignment.md` absent → flag-only
-   - **Symlink rejection:** if any artifact in task folder is a symlink (`[ -L "<file>" ]`), skip task with warning "task contains symlinked artifacts; refusing to run loaders"
+   - **Symlink rejection (H3 — directory-aware, TOCTOU-safe):** resolve task folder via `realpath -e <task>`; assert canonical path is a prefix of `<project>/implementation_process/in_progress/`. Reject task if any of: (a) `<task>` itself is a symlink (`[ -L "<task>" ]`), (b) any directory component of `realpath` differs from the lexical path (catches symlink within hierarchy), (c) any artifact file is a symlink, (d) any descendant of `<task>/validations/` is a symlink. Skip task with diagnostic "symlinked path component detected; refusing for safety". Note: TOCTOU still possible between resolve and read; document as known limit (no full mitigation without OS-level isolation).
 
 6. **Task-level pass — single batch summary** (alphabetical task order):
    ```

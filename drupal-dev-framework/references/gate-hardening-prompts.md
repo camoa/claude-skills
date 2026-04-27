@@ -1,12 +1,14 @@
-# Gate Hardening Prompts v1.1
+# Gate Hardening Prompts v1.2
 
-**Introduced:** drupal-dev-framework v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive).
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command).
 **Owner:** This reference; consumed by command bodies.
-**Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
+**Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
 The framework's hardened gates use **literal mandated wording** for user prompts. Literal-wording IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "soften this for the user" failure mode. Authoring rules (§"Template authoring rules") forbid paraphrase, reorder, pre-answer, and truncation.
 
 The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prompts; no templates here.
+
+**Cross-file equivalence (v4.1.0+):** for templates also inlined in command bodies (`review-gate-fail`, `review-summary`), the literal block here MUST be byte-identical to the inline literal in the consuming command. Verified by `tests/gate-prompts-vs-inline.sh`.
 
 ## Templates index
 
@@ -17,6 +19,8 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `skill-review-decision` | `/complete` on `skills/*/SKILL.md` staged change | `skills_reviewed`, `findings` | **none** — user MUST pick |
 | `plugin-validate-decision` | `/complete` on plugin file staged change | `plugins_validated`, `findings` | **none** — user MUST pick |
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
+| `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
+| `review-summary` (v1.2+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
 
 ## Template authoring rules
 
@@ -135,7 +139,35 @@ The free-text is stored verbatim in the audit file's `bypass_reason` field. Empt
 - **No conditional UX modes** (no "verbose" vs "compact"). The literal wording is the wording.
 - **No template authoring tool.** Templates live in this markdown reference, hand-edited.
 
+## Template ID: `review-gate-fail`
+
+```
+Review failed: {{failed_count}} hard-block gate(s) reported fail.
+
+Per-gate findings (verbatim envelopes):
+{{gates_failed_verbatim}}
+
+How would you like to proceed?
+[r]emediate — exit /review; fix and re-run
+[s]kip — bypass each failed gate with explicit reason; sets overall_verdict: "bypassed", pr_ready: false
+[a]bort — exit /review without writing _review.json; no audit recorded
+
+No default. You MUST pick one.
+```
+
+## Template ID: `review-summary`
+
+```
+/review {{task_name}} complete.
+Mode: {{mode}}    Overall verdict: {{overall_verdict}}    PR ready: {{pr_ready}}
+Gates run:
+{{gates_run_table}}
+Audit: {{audit_path}}
+{{pr_body_line_or_empty}}
+```
+
 ## Changelog
 
+- **v1.2 (2026-04-26, v4.1.0):** additive; adds `review-gate-fail` + `review-summary` for `/review` Phase 4. Templates byte-identical to inline literals shipped in `commands/review.md` PR #138 (verified by `tests/gate-prompts-vs-inline.sh`). Existing 5 templates byte-identical to v1.1 baseline (verified by `tests/gate-prompts-literal.sh`).
 - **v1.1 (2026-04-25, v4.0.2):** additive; added Templates index table consolidating defaults + substitutions + fire conditions; trimmed per-template prose. ALL literal blocks preserved byte-for-byte (verified by `tests/gate-prompts-literal.sh`).
 - **v1.0 (2026-04-25, v4.0.0):** initial; 5 templates covering all v4.0.0 user-prompt surfaces.
