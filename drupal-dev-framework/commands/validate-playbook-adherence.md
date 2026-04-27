@@ -81,6 +81,10 @@ Cite-matching is approximate: any-of-three literal-string match. False negatives
 - Playbook structure: `references/playbook-schema.md` v1.0
 - Sibling: `/drupal-dev-framework:upgrade-project` (sets explicit `**Playbook Sets:**` per project)
 
+## Future hardening
+
+`UserPromptExpansion` hook (Claude Code 2.1.118+, Hooks Reference) fires when a slash command expands into a prompt and **can block the expansion**. A future v2 could intercept `/complete` and other PR-creating commands at expansion time, validate that `_review.json` + `_playbook-adherence.json` audits exist with acceptable verdicts, and hard-block at the platform layer instead of the command-body layer. Tracked as a v2 candidate; not a v4.2.0 deliverable.
+
 ## Related
 
 - `/drupal-dev-framework:review <task>` — invokes this gate at Phase 4 with `--hard-block --invoked-by review`

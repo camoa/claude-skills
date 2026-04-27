@@ -8,6 +8,8 @@ argument-hint: <task-name>
 
 Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / version history in `references/design-walkthrough.md`.
 
+> **Reading strategy:** Phase 2 is **Type B** work — read full architecture refs, service definitions, and pattern docs; do NOT grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
+
 ## Usage
 
 ```

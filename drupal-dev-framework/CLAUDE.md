@@ -221,6 +221,18 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 - Use `argument-hint:` for discoverability
 - Restrict `allowed-tools` to minimum needed
 
+## Reading Strategy (v4.2.0+)
+
+D-A-D phases (Research → Architecture → Design) are **Type B** work — audit / review / architecture analysis. Read full source and config files; do NOT grep-first. Inherited methods, annotations, config-wired classes, and docblock metadata are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. Cited inline in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md`.
+
+## Forked Subagents (v4.2.0+, experimental upstream)
+
+Claude Code 2.1.117+ ships forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`) — context-inheriting parallel work. Relevant to `/propose-epics` bulk review and parallel sub-task investigation where shared loaded context (research, dev-guides, playbook) avoids re-establishment cost. **Not enabled by default** — `/validate:team`'s honest-validation guarantee deliberately wants fresh context. See `references/forked-subagents.md` for the framework's evaluation criteria.
+
+## Troubleshooting
+
+Symptom-first triage at `references/troubleshooting.md`. For Claude Code platform-level issues (CLAUDE.md ignored, hooks not firing, MCP not connecting, plugin not loaded), the upstream `Debug Your Config` guide is the authoritative reference — uses `/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status` to inspect what actually loaded.
+
 ## Online Dev-Guides — Proactive Usage
 **ALWAYS consult dev-guides before making Drupal development decisions** unless the relevant guide was already loaded in this session.
 - Use the `dev-guides-navigator` skill for topic discovery, caching, and disambiguation

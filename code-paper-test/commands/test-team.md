@@ -20,6 +20,8 @@ Pass `--json` to emit a CI-consumable JSON report alongside the markdown report.
 
 Spawns a 3-teammate agent team that paper-tests the specified code files from competing perspectives. Each teammate traces the code with different input strategies, then they cross-challenge findings. The lead synthesizes a prioritized flaw report next to the target code.
 
+> **Aggregating across parallel teammates:** Claude Code 2.1.118+ ships a `PostToolBatch` hook that fires once after a batch of parallel tool calls resolves (Hooks Reference). For users who want to aggregate per-teammate JSON outputs into a single batch summary (e.g., posting one consolidated finding count to Slack instead of three), `PostToolBatch` is the right primitive. This plugin does not ship the hook — copy it into your project's `.claude/hooks.json` if needed. Reference, don't implement.
+
 ## Instructions
 
 When this command is invoked with `$ARGUMENTS`:

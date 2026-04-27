@@ -3,6 +3,16 @@
 Use this keyword-to-URL mapping as a built-in fallback when `llms.hash` / `llms.txt` cannot be fetched.
 When online, prefer the live `llms.txt` + topic `index.md` flow (includes disambiguation via guide-meta).
 
+## Out of scope: Claude Code platform docs
+
+This navigator routes to **project guides** at `https://camoa.github.io/dev-guides/` only — not to Claude Code platform documentation. For Claude Code platform debugging or configuration, see the upstream pages directly:
+
+- **Debug Your Config** — symptom-first triage using `/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`. `https://code.claude.com/docs/en/configuration/debug-your-config`
+- **Auto Mode Config** — full reference for the auto-mode classifier (`autoMode.environment`, `autoMode.allow/soft_deny`, scope precedence, `$defaults` sentinel, `claude auto-mode` subcommands). Was previously embedded in Permissions; promoted to a standalone page in the 2026-04-25 doc refresh.
+- **Admin Setup** — decision-map for organization administrators rolling out Claude Code (provider choice, managed settings, enforcement, usage visibility, data handling).
+
+These three pages live at `code.claude.com`, not in `camoa/dev-guides`. The navigator does not index or route to them — calling code should fetch them directly when relevant.
+
 ## Discovery
 
 Index URL: `https://camoa.github.io/dev-guides/llms.txt`

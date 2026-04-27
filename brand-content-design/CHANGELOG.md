@@ -5,6 +5,16 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-04-27
+
+### 2026-04-25 doc-refresh deltas
+
+Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snapshot pinned at upstream commit `c142d14`). No code or behavior changes — version-only bump aligning with the cross-plugin cycle.
+
+### Note
+
+- **Plugin themes** — Claude Code 2.1.118+ added a first-class plugin themes feature: plugins can ship a `themes/` directory of JSON theme files (`{ name, base, overrides }`) that appear in `/theme` alongside built-in presets. A branded `themes/default.json` for brand-content-design was scoped for this version but **deferred** — shipping a starter theme requires confident brand color tokens for the plugin's own visual identity, which were not authored in this cycle. Will land in a follow-up PR once tokens are decided. The feature itself is documented upstream (Plugins Reference, Terminal Configuration, Claude Directory) and available to users today; this plugin simply has no opinionated theme to ship yet.
+
 ## [3.2.0] - 2026-04-08
 
 ### Changed

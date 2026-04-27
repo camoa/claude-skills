@@ -2,6 +2,21 @@
 
 Common issues and solutions for code-quality-tools plugin.
 
+## Claude Code platform diagnostics
+
+If audits fail because the plugin or its hooks didn't load, settings didn't take effect, or MCP servers are unreachable, the upstream **Debug Your Config** guide is the authoritative reference. It documents the Claude Code introspection slash commands that show what actually loaded:
+
+- `/context` — current context contents
+- `/memory` — loaded CLAUDE.md / AGENTS.md
+- `/doctor` — installation, plugin load errors, environment
+- `/hooks` — registered hooks per event/matcher
+- `/mcp` — MCP server connection state
+- `/skills` — loaded skills and source plugin
+- `/permissions` — current allow/deny/ask ruleset
+- `/status` — session info (model, settings paths)
+
+Upstream guide: `https://code.claude.com/docs/en/configuration/debug-your-config`. Auto-mode classifier denials have a dedicated reference (`Auto Mode Config`); enterprise rollout has `Admin Setup`. None of those live in `camoa/dev-guides`.
+
 ## Installation Issues
 
 ### "Command not found: ddev" (Drupal)

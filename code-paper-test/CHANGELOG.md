@@ -5,6 +5,17 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-27
+
+### 2026-04-25 doc-refresh deltas
+
+Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snapshot pinned at upstream commit `c142d14`). Additive throughout — no behavior change.
+
+### Added
+- **Forked subagents (experimental)** documented in `skills/paper-test/references/ai-code-auditing.md` — Claude Code 2.1.117+'s `CLAUDE_CODE_FORK_SUBAGENT=1` opt-in is a strong fit for paper-test team mode (shared loaded codebase context across the 3 teammates). Marked experimental; **not enabled by default** — the cross-challenge debate phase relies on each agent reasoning independently from a fresh frame, so the current 3-agent fresh-context spawn is intentional, not a workaround. Re-evaluation criteria included.
+- **Reading-strategy citation** in `skills/paper-test/references/ai-code-auditing.md` — paper-testing AI-generated code is **Type B** (full-read, no grep-first); inherited methods, decorators, and config-wired classes that an AI hallucinated are exactly the surface grep cannot see. Cites `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+- **`PostToolBatch` cross-link** in `commands/test-team.md` — Claude Code 2.1.118+'s `PostToolBatch` hook is the right primitive for users who want to aggregate per-teammate JSON outputs into a single batch summary. Plugin does not ship the hook; users copy it into their own project hooks if needed.
+
 ## [0.7.0] - 2026-04-22
 
 ### Added

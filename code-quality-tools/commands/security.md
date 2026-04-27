@@ -8,6 +8,8 @@ argument-hint: [--json] [project-path]
 
 Run a comprehensive security scan across multiple layers.
 
+> **Reading strategy:** This is **Type B** work — read full source and config files; do NOT grep-first. Security audits especially must follow inheritance, decorators, and config-wired hooks. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+
 ## Usage
 
 ```

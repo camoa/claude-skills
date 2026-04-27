@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-04-27
+
+### 2026-04-25 doc-refresh deltas
+
+Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snapshot pinned at upstream commit `c142d14`, covers Claude Code releases 2.1.116–2.1.119). Additive throughout — no behavior change to existing gates or commands.
+
+### Added
+
+- `references/forked-subagents.md` — documents experimental forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`, Claude Code 2.1.117+), evaluation criteria for adopting in `/propose-epics` and parallel sub-task investigation, why v4.2.0 keeps `/validate:team`'s honest-validation guarantee on fresh-context spawns instead of forks.
+- `references/troubleshooting.md` — symptom-first framework triage table + cross-link to upstream `Debug Your Config` for Claude Code platform-level issues (`/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`).
+- Reading-strategy callouts in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md` — explicit Type-B (full-read, no grep-first) discipline, citing `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+- `commands/validate-playbook-adherence.md` "Future hardening" section — `UserPromptExpansion` hook (Claude Code 2.1.118+) as a v2 candidate for platform-layer adherence enforcement at slash-command-expansion time.
+- `PostToolBatch` future-avenue note (batch-summary aggregation) intentionally NOT inlined into `commands/review.md` — pattern is documented in detail in `code-quality-tools/skills/code-quality-audit/references/post-batch-aggregation.md` and cross-linked in `code-paper-test/commands/test-team.md`. Avoiding compound blockquotes in review.md preserves the one-liner consistency across phase commands.
+- CLAUDE.md gains `## Reading Strategy (v4.2.0+)`, `## Forked Subagents (v4.2.0+, experimental upstream)`, and `## Troubleshooting` sections.
+
+### Changed
+
+- Body line counts after additive callouts: research 73, design 48, implement 69, review 116, validate-playbook-adherence 89 — all within v4.0.2 budgets (research ≤100, design ≤80, implement ≤120, review ≤120, adherence ≤100).
+
+### Audit results — `--agent` frontmatter hooks behavior fix (Claude Code 2.1.117+)
+
+Re-audited all 6 frontmatter agents for inline `hooks` and `mcpServers` declarations. The upstream fix makes frontmatter hooks fire in `--agent` (main-session) mode — previously they did not. Result:
+
+- `analysis-agent`, `architecture-drafter`, `contrib-researcher`, `pattern-recommender`, `project-orchestrator` — **no inline hooks or mcpServers**. Fix is **additive benefit only** for these 5 agents.
+- `architecture-validator` — **HAS** a `PreToolUse` hook matching `Write|Edit` that returns `block` (enforces the agent's read-only design). The fix making this hook fire in `--agent` mode is **also additive benefit** — the read-only enforcement is desired in main-session mode, not a regression. No code change required.
+
+**Conclusion:** no agent depends on hooks NOT firing in `--agent` mode. Behavior fix is purely additive across the agent surface; no `--agent` invocation pattern needs to be revised.
+
+### Out of scope (deferred to a later cycle)
+
+- OTEL span instrumentation for framework-emitted spans — no framework surface currently emits OTEL.
+- Routine templates (nightly audit, PR auto-review, release verification) — defer to v4.3.0 once the v4.1.0 epic pattern stabilizes further.
+- Plugin Dependencies declaration on `dev-guides-navigator` — already declared at the `plugin.json` level (`dependencies: ["dev-guides-navigator", "code-quality-tools"]`); deeper dependency-constraints work deferred.
+- Linux package manager install docs — host-installation guidance lives in `dev-guides-navigator`/upstream, not this plugin.
+
 ## [4.1.0] - 2026-04-26
 
 ### Phase 4 review + adherence gates + retrofit + closing pass
