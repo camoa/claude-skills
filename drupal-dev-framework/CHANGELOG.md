@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - 2026-04-27
+
+### Playbook configuration discoverability
+
+User-reported gap: `/new` does not configure playbook by design (it's deliberately decoupled from `/set-playbook-sets` / `/set-user-playbook`), but the post-creation handoff jumped straight to "create your first task" without surfacing the option to configure playbook first. Fix lands the nudge in two complementary surfaces so it's visible "everywhere" — not just at project creation.
+
+### Added
+
+- **`commands/next.md` "Playbook-config nudge" section.** After resolving the project (Step 1), `/next` now invokes `project-state-reader` and inspects the `playbook` block. When `playbook_sets_source: "default"` (Playbook Sets line absent — implicit inheritance from `plugin.json` defaults) **OR** `user_playbook_state: "unset"`, prints a one-line soft-nudge before the task-selection prompt suggesting `/set-playbook-sets`, `/set-user-playbook`, or `/upgrade-project`. Skipped silently when both fields are explicit. Never blocks. Mirrors the existing v3.12.0+ alignment-retrofit pattern.
+- **`commands/new.md` "After Creation" Step 2 — playbook-config nudge.** After `requirements-gatherer` finishes, before printing the "next: `/next`" hint, prints a one-line suggestion to run `/set-playbook-sets` and `/set-user-playbook` before the first task. Notes that `/next` will re-surface the nudge if the user skips it.
+
+### Verified
+
+- `/upgrade-project` already retrofits playbook fields (Step 2 detects `playbook_sets_source: "default"` and `user_playbook_state: "unset"` as gaps; Step 4 invokes `/set-playbook-sets` and `/set-user-playbook` to fix them). No code change needed in the upgrader.
+
+### Coverage by entry point
+
+| Entry point | Surfaces playbook nudge when implicit/unset? |
+|---|---|
+| `/new` (fresh project creation) | yes — v4.2.1 (this release) |
+| `/next` (any session, any project) | yes — v4.2.1 (this release) |
+| `/upgrade-project` (retrofit existing project) | yes — v4.1.0 (already shipped) |
+
 ## [4.2.0] - 2026-04-27
 
 ### 2026-04-25 doc-refresh deltas

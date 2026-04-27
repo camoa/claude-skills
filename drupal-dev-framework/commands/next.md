@@ -186,6 +186,14 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 | Phase 3 (implementation.md missing/incomplete) | Continue implementation: `/implement <task>` |
 | All criteria complete | Complete task: `/complete <task>` |
 
+### Playbook-config nudge (v4.2.1+)
+
+After resolving the project (Step 1) but before recommending a task action, invoke `project-state-reader` and inspect the `playbook` block. If `playbook_sets_source: "default"` (Playbook Sets line absent — implicit inheritance from `plugin.json` defaults) **OR** `user_playbook_state: "unset"`, print this one-line soft-nudge once per `/next` invocation:
+
+> 💡 This project has not configured a playbook (`playbook_sets_source: default` and/or `user_playbook_state: unset`). Playbook loads at every phase entry. Consider `/drupal-dev-framework:set-playbook-sets` and `/drupal-dev-framework:set-user-playbook` before your first task. Or run `/drupal-dev-framework:upgrade-project` to retrofit all project-state fields at once. (Optional — never blocks.)
+
+Print before the task-selection prompt (or before the "no tasks yet" message). Skip silently when both fields are explicit. Never block.
+
 ### Alignment retrofit suggestion (v3.12.0+)
 
 After resolving the selected task, check whether `alignment.md` exists in the task folder. If it does NOT exist AND the task has already progressed past initial creation (task.md exists):
