@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-04-29
+
+### Catalog-grounded code-change inference + component-aware /implement preflight
+
+User-reported: `/validate:guides` verifies citations exist in `research.md` / `architecture.md`, but doesn't check whether those citations actually cover the catalog guides relevant to the actually-changed code. A task can cite form guides while the implementation modifies entity files, and the gate happily passes. Symmetric gap: `/implement` preflight greps task content for keywords but never inspects architecture.md's planned components, so guides for component-specific patterns (DI, render API, cache contexts) often miss the auto-load list.
+
+### Added
+
+- **`agents/guides-matcher.md`** v1.0.0 (haiku, read-only — `Read, Glob` only). Matches a list of files (changed or planned) against the cached `dev-guides-navigator` catalog. Catalog is the only taxonomy — agent never invents slugs, never carries a parallel hardcoded map. Two modes: `plan` (preflight) and `validation` (post-change).
+- **`references/guides-matcher-schema.md`** v1.0 — agent input/output JSON contract; field invariants; failure modes; per-caller integration notes.
+- **`/validate:guides` Step 5 — catalog-grounded inference.** Builds a deduped union of changed files from three sources (session edits, `implementation.md` Files Created/Modified, git working tree), locates the dev-guides cache, invokes `guides-matcher` in validation mode, computes `domain_coverage_gaps` via prefix-match against `guides_cited[]`. Works without git, without a worktree, without a feature branch — any subset of sources is sufficient.
+- **`/implement` Step 3 — component-aware preflight.** After the existing keyword-detect pass, parses `architecture.md` `## Components` / `## Files Created/Modified` / `## Files to Create`, invokes `guides-matcher` in plan mode, and augments the auto-load list with the agent's `matched_guides[].slug` (deduped). Skips silently when architecture.md has no parseable component list or the catalog cache is missing.
+- **`details.code_inference`** envelope field on guides-gate results: `source`, `sources_used[]`, `changed_files_count`, `matcher_output` (verbatim agent JSON for audit replay), `inferred_slugs[]`, `domain_coverage_gaps[]`. `source: "none"` when no files surfaced; `suppressed_by_flag: true` when `--no-code-inference` was passed; `warnings: ["catalog_cache_missing"]` when the cache isn't found (no penalty).
+- **`--no-code-inference` flag** to suppress the inference per-run.
+
+### Changed
+
+- **Verdict rules** demote `pass` → `warning` when `domain_coverage_gaps != []`. Domain-gap warnings promote to `fail` under `--hard-block` / `--strict` per existing rule. Tasks with no detected code changes (`source: "none"`) or no catalog cache still pass on phase coverage alone — additive enforcement, not a new fail mode.
+- **`commands/validate-guides.md`** allowed-tools gains `Agent` (subagent dispatch).
+- CLI summary surfaces `domain_coverage_gaps` and suggests `/dev-guides-navigator <slug>` per gap.
+- **`references/validation-gate-result.md`** §4 Guides gate envelope updated to document `code_inference`.
+- **`commands/implement.md`** Step 3 split into Pass A (keyword detect) and Pass B (component match) with `_dev-guides-load.json` audit recording both contributions.
+- **`CLAUDE.md`** Validation Gates section reflects v4.3.0 enhancement.
+
+### Why a subagent
+
+The matching judgment is ideal subagent shape: bounded inputs (catalog ~10–20KB JSON + path list), bounded output (slug list), no side effects, two callers want the exact same judgment, haiku is sufficient for structured-catalog reasoning. Mirrors the existing `alignment-reader` / `analysis-agent` read-only pattern.
+
+### Why now
+
+Tightens the v3.13.0 / v4.1.0 hardening contract one notch. Citation-presence proves "we consulted guides at all"; catalog-grounded coverage proves "we consulted the *right* guides for the work we actually did or plan to do." The gap was real — easy to satisfy the v4.1.0 hard-block check by citing any guide while the code drifts elsewhere. Component-aware preflight closes the symmetric planning-side hole.
+
+### Migration
+
+Backward-compatible. Existing tasks that pass under v4.2.x still pass under v4.3.0 unless their code change touches catalog guides not cited — then they'll see a `warning` (or `fail` under `/review` hard-block). Suppress with `--no-code-inference`. Tasks running `/implement` for the first time under v4.3.0 will see additional auto-load suggestions from Pass B; the existing `[c]/[a]/[n]` preflight prompt still defaults to `[c]` (continue).
+
+### Hard dependency
+
+`dev-guides-navigator` (already a hard dep) is required for the cache the matcher reads. No new dependency added.
+
 ## [4.2.4] - 2026-04-27
 
 ### Skill visibility hygiene (Tier 1 of multi-plugin command-naming research)
