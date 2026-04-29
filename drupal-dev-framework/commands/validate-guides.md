@@ -1,6 +1,6 @@
 ---
-description: "Verify that the task's phase artifacts cite dev-guides-navigator guides appropriate to the domain. Framework-owned gate — not a wrapper. Reads research.md + architecture.md for guide citations, surfaces gaps. Soft-nudge posture; never blocks. Introduced v3.13.0."
-allowed-tools: Read, Write, Bash, Glob, Skill
+description: "Verify that the task's phase artifacts cite dev-guides-navigator guides appropriate to the domain AND (v4.3.0+) that those citations cover the catalog guides relevant to the actually-changed code. Framework-owned gate — not a wrapper. Soft-nudge posture; never blocks. Introduced v3.13.0."
+allowed-tools: Read, Write, Bash, Glob, Skill, Agent
 argument-hint: [<task-name>]
 ---
 
@@ -15,8 +15,9 @@ This is a **framework-owned** gate — it does NOT wrap a `code-quality-tools` s
 ```
 /drupal-dev-framework:validate-guides              # run against current task (soft-nudge)
 /drupal-dev-framework:validate-guides <task-name>  # run against a specific task
-/drupal-dev-framework:validate-guides <t> --hard-block  # /review-mode (warning→fail)
-/drupal-dev-framework:validate-guides <t> --strict      # CI escalation (warning→fail)
+/drupal-dev-framework:validate-guides <t> --hard-block         # /review-mode (warning→fail)
+/drupal-dev-framework:validate-guides <t> --strict             # CI escalation (warning→fail)
+/drupal-dev-framework:validate-guides <t> --no-code-inference  # disable v4.3.0 catalog-grounded inference
 ```
 
 ## What this does
@@ -58,17 +59,38 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
    - Markdown reference links `[...](https://camoa.github.io/dev-guides/...)`
    - Explicit "Loaded guide: <slug>" annotations if the `dev-guides-navigator` skill wrote them
 
-5. **Judge adequacy** — apply verdict rules:
-   - `pass` → ≥1 guide citation found in research.md AND ≥1 in architecture.md (if architecture.md exists)
-   - `warning` → ≥1 citation found overall but phase coverage uneven (e.g., research cites guides but architecture doesn't)
-   - `fail` → no guide citations found in any phase artifact AND at least one artifact exists with ≥200 lines of content (substantive work without guide consultation)
+5. **Catalog-grounded code-change inference (v4.3.0+).** Skip with `--no-code-inference` (records `code_inference.suppressed_by_flag: true`).
+
+   **a) Build the changed-files union** — collect from three sources, dedupe by absolute path:
+   - **Session-known changes** — files Claude has edited or written in the current conversation against `codePath`. Enumerate from your own awareness of `Edit` / `Write` tool use.
+   - **`implementation.md` "Files Created/Modified" section** — parse listed paths; resolve relative paths against `codePath`.
+   - **Git working tree** (when codePath is a git repo): combine `git status --porcelain` and `git diff --name-only HEAD`. Skipped silently if not git.
+
+   If the union is empty → set `code_inference.source: "none"`, `sources_used: []`, skip to Step 6 with no domain-gap signal.
+
+   **b) Locate the dev-guides catalog cache.** It lives at `~/.claude/projects/<workspace_hash>/memory/dev-guides-cache.json`. The workspace hash is `md5($PWD)` matching `session-context-writer`. Find via:
+   ```bash
+   find ~/.claude/projects/*/memory/dev-guides-cache.json -type f 2>/dev/null
+   ```
+   If multiple workspace caches exist, prefer the one whose path component contains the current `$PWD` slug. If none exist → emit `code_inference.warnings: ["catalog_cache_missing"]`, set `inferred_slugs: []`, do NOT demote verdict (no signal == no penalty).
+
+   **Staleness check (caller-side, not agent-side):** `stat -c %Y "$catalog_path"` to read mtime; if older than 30 days (compare to `date +%s`), append `code_inference.warnings: ["catalog_cache_stale"]` AND proceed — staleness is informational, not blocking. Suggest in the CLI summary that the user run `/dev-guides-navigator --refresh` to update the cache.
+
+   **c) Invoke `guides-matcher` agent** in `validation` mode with the union, the catalog path, optional `context_excerpts[]` from `implementation.md` Files Created/Modified, and `already_cited[]` from Step 4. Per `references/guides-matcher-schema.md` v1.0.
+
+   **d) Compute `domain_coverage_gaps`** — agent's `matched_guides[].slug` MINUS prefix-match against `guides_cited[]`. Slugs the agent judged relevant but no artifact citation covers.
+
+6. **Judge adequacy** — apply verdict rules in this order:
    - `skipped` → no phase artifacts exist yet (task hasn't progressed past creation)
+   - `fail` → no guide citations found in any phase artifact AND at least one artifact exists with ≥200 lines of content (substantive work without guide consultation)
+   - `warning` → ≥1 citation found overall but phase coverage uneven (research cites but architecture doesn't), **OR** `domain_coverage_gaps != []` (code touched domains the agent matched to catalog guides not cited; v4.3.0+)
+   - `pass` → ≥1 citation in research.md AND ≥1 in architecture.md (if it exists) AND `domain_coverage_gaps == []`
 
-   The 200-line substance threshold prevents false-positives on near-empty stub artifacts.
+   The 200-line substance threshold prevents false-positives on near-empty stub artifacts. Domain-gap demotion only applies when `code_inference.source != "none"` AND no `catalog_cache_missing` warning fired — tasks with no detected changes or no catalog still pass on phase coverage alone.
 
-   **Hard-block promotion (v4.1.0+):** if `--hard-block` flag is set (passed by `/review`) OR `--strict` flag is set (CI escalation), promote `warning` → `fail`. Soft-mode and standalone CLI invocation unchanged. The argv flag is the runtime mode selector; the HTML capability marker near the top of this file is what `/review` Step 4 reads to decide whether to invoke with `--hard-block`. Also write `details.invoked_by: "review" | "cli" | "validate-all" | "validate-team"` in the envelope for audit provenance.
+   **Hard-block promotion (v4.1.0+):** if `--hard-block` is set (passed by `/review`) OR `--strict` is set (CI escalation), promote `warning` → `fail`. Soft-mode and standalone CLI invocation unchanged. The argv flag is the runtime mode selector; the HTML capability marker near the top of this file is what `/review` Step 4 reads to decide whether to invoke with `--hard-block`. Also write `details.invoked_by: "review" | "cli" | "validate-all" | "validate-team"` in the envelope for audit provenance.
 
-6. **Emit the shared envelope** (per `references/validation-gate-result.md`) with gate-specific details:
+7. **Emit the shared envelope** (per `references/validation-gate-result.md`) with gate-specific details:
 
    ```json
    "details": {
@@ -80,26 +102,36 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
      },
      "checked_artifacts": ["<abs path to each artifact examined>"],
      "guides_cited": ["<slug>", "<slug>"],
-     "guides_expected_min": 1
+     "guides_expected_min": 1,
+     "code_inference": {
+       "source": "session+implementation_md+git",
+       "sources_used": ["session", "implementation_md", "git"],
+       "changed_files_count": 12,
+       "matcher_output": {"matched_guides": [...], "unmatched_files": [...], "warnings": []},
+       "inferred_slugs": ["drupal/forms/config-forms", "drupal/services/dependency-injection"],
+       "domain_coverage_gaps": ["drupal/services/dependency-injection"]
+     }
    }
    ```
 
-   - `applicability` — populated by Step 2; for `skipped` runs, `checked_artifacts` and `guides_cited` may be omitted
-   - `guides_cited` — unique slugs found across all artifacts, deduplicated
-   - `guides_expected_min` — v1 hard-coded to 1 per substantive artifact; v2 candidate for per-task configuration
+   - `applicability` — populated by Step 2; for `skipped` runs `checked_artifacts` / `guides_cited` / `code_inference` may be omitted.
+   - `code_inference.matcher_output` — verbatim agent JSON, for audit replay.
+   - `code_inference.inferred_slugs` — flattened slug list extracted from `matcher_output.matched_guides[].slug`.
+   - `code_inference.source: "none"` when no files surfaced from any source; `suppressed_by_flag: true` when `--no-code-inference` was passed.
 
-7. **Persist** — write envelope to:
+8. **Persist** — write envelope to:
    - `<task_folder>/validations/latest/guides.json` (overwrite)
    - `<task_folder>/validations/history.jsonl` (append)
 
-8. **Print CLI summary** — show verdict, citations found, and per-artifact gaps. On `fail`, suggest running `/dev-guides-navigator` with domain keywords. On `skipped` due to applicability, print the applicability reason. Non-zero exit (1) only when invoked non-interactively.
+9. **Print CLI summary** — show verdict, citations found, per-artifact gaps, and (when present) `domain_coverage_gaps` with the catalog slugs the agent matched but no artifact cites. On `fail` or domain-gap `warning`, suggest `/dev-guides-navigator <slug>` for each gap. On `skipped` due to applicability, print the applicability reason. Non-zero exit (1) only when invoked non-interactively.
 
 ## Verdict messages
 
 Examples of what `messages[]` contains:
 
-- `pass`: `["3 guide citations found across research.md and architecture.md"]`
-- `warning`: `["2 citations in research.md but 0 in architecture.md — architecture may be under-grounded"]`
+- `pass`: `["3 guide citations found across research.md and architecture.md", "guides-matcher: all matched slugs covered"]`
+- `warning` (phase coverage): `["2 citations in research.md but 0 in architecture.md — architecture may be under-grounded"]`
+- `warning` (domain gap, v4.3.0+): `["guides-matcher matched drupal/services/dependency-injection from changed files; no artifact citation covers it. Try /dev-guides-navigator drupal/services/dependency-injection"]`
 - `skipped (applicability)`: `["codePath at /abs/path contains no Drupal/Next.js/frontend code; guide citation rule does not apply to this task type"]` or `["task has no code path declared (state: docs-only); guide citation rule does not apply"]`
 - `fail`: `["No guide citations found in any phase artifact", "Suggest: /dev-guides-navigator with keywords from task.md Goal"]`
 - `skipped`: `["No phase artifacts exist yet; run /research to begin"]`
@@ -125,11 +157,17 @@ The `dev-guides-navigator` plugin exists precisely because AI-generated Drupal w
 - `fail` verdict signals under-grounded work but never blocks downstream phases
 - The recommendation ("run `/dev-guides-navigator`") is a suggestion; user decides if it's worth the time
 
+## Catalog-grounded code-change inference (v4.3.0+)
+
+Catches "research cited form guides but the implementation modified entity files" — phase-artifact coverage alone misses domain mismatch. The `guides-matcher` agent (haiku, read-only) matches the changed-files union against the cached `dev-guides-navigator` catalog so the taxonomy is always the live catalog, not a parallel hardcoded map. Inputs: session edits + `implementation.md` Files Created/Modified + git working tree (any/all available). Output: catalog slugs the agent judges relevant. Compared against `guides_cited[]` via prefix-match; gaps demote `pass` → `warning` (or `fail` under `--hard-block`/`--strict`).
+
+See `references/guides-matcher-schema.md` for the agent's input/output contract and `agents/guides-matcher.md` for the agent itself.
+
 ## v2 candidates
 
 - Per-task configurable `guides_expected_min` (e.g., "this complex task should cite ≥3")
 - Detecting STALE citations (guide was updated since task cited it)
-- Detecting domain mismatch (task is about forms, cited guides are about entities)
+- Confidence-thresholded gap reporting (e.g., only demote on `confidence: high` matches)
 
 See `implementation_process/in_progress/<this-task>/v2-candidates.md` for the full deferred-features inventory.
 
@@ -139,4 +177,6 @@ See `implementation_process/in_progress/<this-task>/v2-candidates.md` for the fu
 - `/drupal-dev-framework:validate-visual-parity` / `:validate-visual-regression` — visual gates
 - `/drupal-dev-framework:validate-all` — sequential orchestrator
 - `references/validation-gate-result.md` — the shared envelope contract
+- `references/guides-matcher-schema.md` — agent I/O contract (v4.3.0+)
+- `agents/guides-matcher.md` — the catalog-match subagent (haiku, read-only)
 - `dev-guides-navigator` plugin — the guide discovery tool whose usage this gate verifies

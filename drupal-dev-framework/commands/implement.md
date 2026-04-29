@@ -26,7 +26,11 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 2. **Worktree signals (v3.16.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/worktree-signals.sh <task>`. On HIGH-strength signal (`another_task_active`, `dirty_tree`, `--worktree` flag, or `worktreeByDefault: true`), print soft-nudge offering `/worktree <task>`. Suppress when already inside a worktree. Never block.
 
-3. **Dev-guides preflight.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>`. Display literal preflight prompt; block on `[c]/[a]/[n]` (default `[c]`). Apply choice. Write `_dev-guides-load.json` audit.
+3. **Dev-guides preflight (v4.3.0+ component-aware).** Two passes — keyword detect first (existing v4.0.0 behavior), then component-aware augment:
+   - **Pass A (keyword detect).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` to grep task content for auto-load keywords; produces `keyword_matched_slugs[]`.
+   - **Pass B (component match, v4.3.0+).** If `architecture.md` exists, parse its `## Components`, `## Files Created/Modified`, and `## Files to Create` sections to extract planned file paths. Locate the dev-guides cache at `~/.claude/projects/<workspace_hash>/memory/dev-guides-cache.json` (`md5($PWD)` matching `session-context-writer`). Invoke `guides-matcher` agent in `mode: "plan"` per `references/guides-matcher-schema.md` v1.0. Augment `keyword_matched_slugs[]` with the agent's `matched_guides[].slug` (dedupe). Skip Pass B silently if the catalog cache is missing OR architecture.md has no parseable component list — record `component_match: { skipped: true, reason: "..." }` in the audit.
+   - Display literal preflight prompt with the unioned slug list; block on `[c]/[a]/[n]` (default `[c]`). Apply choice.
+   - Write `_dev-guides-load.json` audit including both passes' contributions and the agent's full output for replay.
 
 4. **Playbook load.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. Surface conflicts once-per-session per topic. Write `_playbook-load.json` audit.
 

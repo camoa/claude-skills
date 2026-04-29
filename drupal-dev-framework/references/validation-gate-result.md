@@ -77,7 +77,23 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
     "/abs/path/task/architecture.md"
   ],
   "guides_cited": ["drupal/forms/config-forms", "drupal/caching/cache-api"],
-  "guides_expected_min": 1
+  "guides_expected_min": 1,
+  "code_inference": {
+    "source": "session+implementation_md+git",
+    "sources_used": ["session", "implementation_md", "git"],
+    "changed_files_count": 12,
+    "matcher_output": {
+      "schema_version": "1.0",
+      "mode": "validation",
+      "matched_guides": [
+        {"slug": "drupal/services/dependency-injection", "reason": "...", "confidence": "high", "triggered_by": ["my_module.services.yml"]}
+      ],
+      "unmatched_files": [],
+      "warnings": []
+    },
+    "inferred_slugs": ["drupal/services/dependency-injection"],
+    "domain_coverage_gaps": ["drupal/services/dependency-injection"]
+  }
 }
 ```
 
@@ -85,6 +101,7 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 - `checked_artifacts` — files inspected for guide citations
 - `guides_cited` — guide slugs found in the artifacts (via dev-guides-navigator markers)
 - `guides_expected_min` — minimum guide count for the gate to pass (default 1; configurable)
+- `code_inference` — (v4.3.0+) catalog-grounded inference from `guides-matcher` agent. `source: "none"` when no files surfaced; `suppressed_by_flag: true` when `--no-code-inference` was passed; `matcher_output.warnings: ["catalog_cache_missing"]` when the dev-guides cache is unavailable (no penalty applied). `domain_coverage_gaps != []` demotes `pass` → `warning`. See `references/guides-matcher-schema.md` for the agent contract.
 
 ### Visual gates (visual-parity, visual-regression)
 
