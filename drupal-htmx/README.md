@@ -2,6 +2,8 @@
 
 HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
 ## Features
 
 - **Analyze** existing AJAX patterns for migration opportunities

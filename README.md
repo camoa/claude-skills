@@ -30,6 +30,10 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin install code-paper-test@camoa-skills
 ```
 
+## Using these plugins outside Claude Code
+
+Skills in this marketplace conform to the open [agentskills.io](https://agentskills.io/specification) standard and work in Cursor, Codex CLI, VS Code Copilot, Gemini CLI, Cline, OpenCode, and more. Commands, agents, and hooks are Claude-Code-specific by format but can be emulated. See **[PORTABILITY.md](PORTABILITY.md)** for the full guide and **[CURSOR.md](CURSOR.md)** for Cursor-specific notes.
+
 ## Known Issues
 
 ### Skills not auto-discovered on startup

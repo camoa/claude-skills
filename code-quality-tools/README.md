@@ -2,6 +2,8 @@
 
 Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects with Semgrep, Trivy, and Gitleaks.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
 ## How Detection Works
 
 **All commands are the same for both project types.** When you run any command, the plugin auto-detects your project by checking:

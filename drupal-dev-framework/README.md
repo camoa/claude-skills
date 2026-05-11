@@ -4,6 +4,8 @@ A Claude Code plugin that guides AI through a disciplined **Research → Archite
 
 > **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md) — a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
 
+> **Not using Claude Code?** This framework's value is its orchestration (commands + agents + hooks), most of which is Claude-Code-specific. See the marketplace [PORTABILITY.md](../PORTABILITY.md) for what ports + [CURSOR.md](../CURSOR.md) for the highest-fidelity option (~70-80% in Cursor 2.4+).
+
 ## How It Works
 
 You create a **project** (a Drupal module, theme, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:

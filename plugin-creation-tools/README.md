@@ -4,6 +4,8 @@ Complete authoring guide for Claude Code plugins — skills, commands, agents, h
 
 The plugin contains one large skill (`plugin-creation`) that progressively discloses references for every component type, plus three commands and two structural-audit agents. Aimed at plugin authors building or maintaining plugins for the public marketplace.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
 ## Installation
 
 ```bash

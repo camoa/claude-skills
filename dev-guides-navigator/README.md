@@ -2,6 +2,8 @@
 
 Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/dev-guides/) site. Routes AI to the correct guide using hash-based caching and KG metadata for disambiguation.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — this plugin is pure-skill and the highest-portability one in the marketplace.
+
 ## Installation
 
 ```bash
