@@ -16,6 +16,7 @@ plugin-name/
 
 ```json
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "enterprise-tools",
   "version": "3.0.0",
   "description": "Enterprise automation, security, and deployment tools",
@@ -38,7 +39,11 @@ plugin-name/
   ],
   "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json",
-  "lspServers": "./.lsp.json"
+  "lspServers": "./.lsp.json",
+  "experimental": {
+    "themes": "./themes/",
+    "monitors": "./monitors.json"
+  }
 }
 ```
 
@@ -54,6 +59,7 @@ The `name` field is the **only required field**.
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `$schema` | string | JSON Schema URL for editor autocomplete and validation (e.g., `"https://json.schemastore.org/claude-code-plugin-manifest.json"`). Ignored by Claude Code at load time — purely a developer-ergonomics hint. |
 | version | string | Semantic version (e.g., "2.1.0") |
 | description | string | Brief explanation of plugin purpose |
 | author | object/string | Author information |
@@ -85,16 +91,38 @@ Or simple string:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| commands | string/array | Custom command file paths |
-| agents | string/array | Custom agent file paths |
-| skills | string/array | Custom skill directory paths |
+| commands | array | Custom command file paths. The historical string form is being phased out — use an array, even for a single file (`["./custom/cmd.md"]`). |
+| agents | array | Custom agent file paths. Array-only — the string-path form no longer loads as of the current schema. |
+| skills | string/array | Custom skill directory paths (replaces default `skills/`) |
 | hooks | string/object | Hook config path or inline config |
 | mcpServers | string/object | MCP config path or inline config |
 | lspServers | string/object | LSP config path or inline config |
 | outputStyles | string/array | Custom output style paths |
-| themes | string/array | Color theme files/directories (replaces default `themes/`). Each file: `name`, `base`, `overrides`. See [`themes.md`](themes.md) for the full schema. |
+| `experimental.themes` | string/array | Color theme files/directories (replaces default `themes/`). Each file: `name`, `base`, `overrides`. See [`themes.md`](themes.md). **Was top-level `themes`** — see [Experimental components migration](#experimental-components-migration). |
+| `experimental.monitors` | string/array | Background [Monitor](https://docs.anthropic.com/en/tools-reference#monitor-tool) configurations that start automatically when the plugin is active. **Was top-level `monitors`** — see [Experimental components migration](#experimental-components-migration). |
 | userConfig | object | User-configurable values prompted at enable time. See [User configuration](#user-configuration) below. |
 | settings | string | Path to settings.json (only `agent` key supported) |
+
+### Experimental components migration
+
+`themes` and `monitors` belong under the `experimental` key. Their *manifest schema* is still stabilizing, but the *location migration* is independent and already underway:
+
+- Top-level `themes` / `monitors` still load.
+- `claude plugin validate` warns when they appear at the top level.
+- A future release will require them under `experimental.*`.
+
+Migrate now to silence the warning:
+
+```diff
+- "themes": "./themes/",
+- "monitors": "./monitors.json"
++ "experimental": {
++   "themes": "./themes/",
++   "monitors": "./monitors.json"
++ }
+```
+
+`/plugin-creation-tools:validate` mirrors the upstream warning and offers an auto-migration diff.
 
 ### Path Patterns
 

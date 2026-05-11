@@ -280,6 +280,32 @@ ENV CLAUDE_CODE_PLUGIN_SEED_DIR=/opt/base-plugins:/opt/team-plugins
 
 Claude Code checks seed directories before attempting network fetches. Plugins found in seed directories are treated as installed, so no marketplace or internet access is required at runtime.
 
+## Plugin Hints (CLI-driven install prompts)
+
+If you ship a CLI/SDK that pairs with your plugin, your CLI can prompt the user to install the plugin when it runs inside Claude Code. Mechanism:
+
+1. CLI checks the `CLAUDECODE=1` env var (set by Claude Code in Bash/PowerShell tool subprocesses).
+2. CLI emits `<claude-code-hint plugin="namespace/plugin-name" />` on its own line (stderr preferred).
+3. Claude Code **strips the hint line** before sending output to the model — the line never counts toward tokens.
+4. The user sees a one-time install prompt for the matching plugin.
+
+```bash
+#!/usr/bin/env bash
+if [ "${CLAUDECODE:-}" = "1" ]; then
+  echo '<claude-code-hint plugin="anthropic/my-plugin" />' >&2
+fi
+# ... rest of CLI ...
+```
+
+### Constraints
+
+- **Official Anthropic marketplace only.** The hint is matched against the official marketplace, so this mechanism is for first-party plugins. camoa-skills / palcera_skills plugins **cannot** use this directly — the prompt will not surface for plugins distributed through third-party marketplaces.
+- **Gate on `CLAUDECODE`.** Emitting outside Claude Code is harmless (no consumer strips it) but adds noise — gate on the env var.
+- **One line, no surrounding text.** The strip is line-based; splitting the tag across lines or appending content on the same line leaks the tag to the model.
+- **Stderr is preferred** so the CLI's normal output is unaffected for non-Claude consumers.
+
+Surface this only for users who also maintain a CLI; out of scope for pure-plugin distribution.
+
 ## See Also
 
 - `marketplace.md` - marketplace distribution

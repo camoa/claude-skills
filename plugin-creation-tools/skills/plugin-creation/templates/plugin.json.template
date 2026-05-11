@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "plugin-name",
   "version": "1.0.0",
   "description": "Brief description of plugin purpose",
@@ -10,11 +11,21 @@
   "repository": "https://github.com/username/repo",
   "keywords": ["keyword1", "keyword2"]
 
-  // Optional: ship color themes alongside the plugin. Files in themes/*.json
-  // appear in /theme. Each file: {"name", "base", "overrides"}. See
-  // references/08-configuration/themes.md for the full schema and the
-  // Ctrl+E user-customization flow.
-  // "themes": "./themes/"
+  // Optional: experimental components have a manifest schema that may change
+  // between releases while they stabilize. Top-level "themes" / "monitors"
+  // still load but `claude plugin validate` emits a warning, and a future
+  // release will require them under "experimental.*". Migrate proactively.
+  //
+  // "experimental": {
+  //   "themes": "./themes/",
+  //   "monitors": "./monitors.json"
+  // }
+
+  // Optional: prefer the array form for "commands", "agents", "skills" —
+  // the string-path form is being phased out. Examples:
+  //   "agents":   ["./agents/reviewer.md"],
+  //   "commands": ["./commands/deploy.md"],
+  //   "skills":   ["./skills/"]
 
   // Optional: prompt the user for configuration when the plugin is enabled.
   // Each entry takes type, title, description (all required); add

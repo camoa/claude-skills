@@ -123,7 +123,7 @@ context: fork
 | `name` | Yes | Lowercase, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude". |
 | `description` | Yes | Max 1024 chars. Must include WHAT and WHEN. Third person only. |
 | `model` | No | Override model for this skill. Values: `haiku`, `sonnet`, `opus`. Use for cost optimization -- `haiku` for simple/repetitive tasks, `opus` for complex reasoning. |
-| `allowed-tools` | No | Restricts available tools when skill is active. Syntax: `"Bash(python:*) Bash(npm:*) WebFetch"` |
+| `allowed-tools` | No | Grants permission for the listed tools while the skill is active (does not restrict — every tool remains callable, but listed tools skip the permission prompt). Syntax: `"Bash(python:*) Bash(npm:*) WebFetch"`. **Workspace-trust gating:** for skills checked into a project at `.claude/skills/`, `allowed-tools` only takes effect *after* the workspace trust dialog is accepted (same gate as permission rules in `.claude/settings.json`). Review project skills before trusting a repo — a hostile skill can grant itself broad tool access this way. Plugin-shipped skills are not subject to this gate (trust is established at install time). |
 | `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
 | `agent` | No | When `context: fork`, specify agent type for the forked context. |
 | `disable-model-invocation` | No | Set to `true` to prevent Claude from auto-invoking. User must call explicitly via `/name`. Reduces context cost to zero for triggered-only skills. |
@@ -201,6 +201,7 @@ Skill body text supports variable substitutions that are resolved at invocation 
 | `$ARGUMENTS[N]` / `$N` | 0-based positional argument (e.g., `$ARGUMENTS[0]` or `$0` is the first argument) |
 | `${CLAUDE_SKILL_DIR}` | Absolute path to the directory containing the SKILL.md file |
 | `${CLAUDE_SESSION_ID}` | Current session ID |
+| `${CLAUDE_EFFORT}` | Active [effort level](https://docs.anthropic.com/en/model-config#adjust-effort-level) for the current turn -- `low`, `medium`, `high`, `xhigh`, or `max`. Use it to adapt skill instructions to how much reasoning effort the user has dialed in (e.g. terser steps at `low`, fuller checklists at `high`+). Reflects the level the current model actually used (downgraded if requested effort exceeds support). |
 
 Example usage in SKILL.md body:
 ```markdown

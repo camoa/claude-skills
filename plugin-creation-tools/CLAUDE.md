@@ -31,9 +31,9 @@ Bump in **all** of: `.claude-plugin/plugin.json`, the root `marketplace.json` pl
 
 Every revision must keep these counts in sync between SKILL.md, `commands/validate.md`, and the relevant reference files:
 
-- Hook event count (currently **28**).
+- Hook event count (currently **29** — added `Setup` in the 2026-05-08 doc snapshot).
 - Hook handler types (currently **5** — `command`, `http`, `mcp_tool`, `prompt`, `agent` with `agent` marked experimental).
-- Plugin component types (currently 7 — skills, commands, agents, hooks, mcpServers, lspServers, monitors, themes, outputStyles — drift if any are added upstream).
+- Plugin component types (skills, commands, agents, hooks, mcpServers, lspServers, outputStyles, **`experimental.themes`**, **`experimental.monitors`** — themes and monitors are upstream-marked experimental and live under the `experimental.*` key; top-level still loads but `claude plugin validate` warns).
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
 

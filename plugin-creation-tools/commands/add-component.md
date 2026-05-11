@@ -42,7 +42,7 @@ Add a new component to an existing Claude Code plugin.
 ### `hook`
 1. If `hooks/hooks.json` exists, add new event entry
 2. If not, create from `templates/hooks/hooks.json.template`
-3. Ask which event(s) to handle (28 available — see `references/06-hooks/hook-events.md`)
+3. Ask which event(s) to handle (29 available — see `references/06-hooks/hook-events.md`). New events worth flagging: **`Setup`** (one-time `--init-only` / `--init -p` / `--maintenance -p` preparation, distinct from `SessionStart`), **`WorktreeCreate`** / **`WorktreeRemove`** (replace default git worktree behavior with custom VCS logic — useful for SVN/Perforce/Mercurial wrappers).
 4. Consider the five handler types: `command` (shell, fastest), `mcp_tool` (call an already-connected MCP server tool — no shell, cross-platform-safe), `prompt` (single-turn LLM), `agent` (multi-turn subagent — **experimental**), `http` (POST to webhook — **settings.json only**, will be silently ignored in `hooks.json`)
 5. For cross-platform support when shell logic is genuinely needed, use `templates/hooks/run-hook.cmd.template`. If the hook only calls an MCP server, use `type: "mcp_tool"` instead — it removes the cross-platform footgun.
 
@@ -53,8 +53,9 @@ Add a new component to an existing Claude Code plugin.
 ### `theme`
 1. Create `themes/$2.json` with `name`, `base`, `overrides` fields (see `references/08-configuration/themes.md`)
 2. Default `base` to `"dark"`; keep `overrides` sparse (only the tokens you actually change)
-3. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$2` when the user selects it
-4. Remind: users press `Ctrl+E` to copy the plugin theme into `~/.claude/themes/` for editing — your bundled file is read-only in the picker
+3. If the user is using a non-default theme directory, write the path under **`experimental.themes`** in `plugin.json` (not the top level — the top-level form warns under `claude plugin validate` and a future release will require the nested form)
+4. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$2` when the user selects it
+5. Remind: users press `Ctrl+E` to copy the plugin theme into `~/.claude/themes/` for editing — your bundled file is read-only in the picker
 
 ## After Adding
 

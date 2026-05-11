@@ -1,11 +1,12 @@
 # Hook Events
 
-Complete reference for all 28 hook events in Claude Code.
+Complete reference for all 29 hook events in Claude Code.
 
 ## Event Reference Table
 
 | Event | Trigger | Can Block? | Matcher Support |
 |-------|---------|-----------|-----------------|
+| Setup | One-time preparation: `--init-only`, `--init -p`, `--maintenance -p`. Does **not** fire on every launch. | No | Yes (`init`, `maintenance`) |
 | SessionStart | Session begins or resumes | No | Yes (startup, resume, clear, compact) |
 | UserPromptSubmit | User submits prompt | Yes | No |
 | UserPromptExpansion | A user-typed slash command expands into a prompt | Yes (blocks expansion) | Yes (command name) |
@@ -55,6 +56,7 @@ All hook events receive JSON input with the following common fields:
 | `hook_event_name` | string | The event that triggered the hook |
 | `agent_id` | string | Identifier of the agent (or main session) running the hook |
 | `agent_type` | string | Type of agent (e.g., the agent name, or `main` for the primary session) |
+| `effort` | object | `{ "level": "low" \| "medium" \| "high" \| "xhigh" \| "max" }` — the active [effort level](https://docs.anthropic.com/en/model-config#adjust-effort-level) for the turn. Reflects the level the current model actually used (if requested effort exceeded what the model supports, it's downgraded). Present for events that fire within a tool-use context (`PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, etc.) when the current model supports effort. The same level is exported to command hooks and the Bash tool as the `$CLAUDE_EFFORT` environment variable. |
 
 ## Event Details
 
@@ -88,6 +90,48 @@ All hook events receive JSON input with the following common fields:
   ]
 }
 ```
+
+### Setup
+
+**Trigger**: One-time preparation. Fires only when Claude Code is launched with `--init-only` (runs Setup + `SessionStart` matcher `startup`, then exits), or with `--init` / `--maintenance` combined with `-p` (print mode). **Does not fire on every launch.** Intended for CI/dependency installation that should run on demand, distinct from `SessionStart` which fires on every session.
+
+**Matcher**: `trigger` value -- `init`, `maintenance`
+
+**Can Block**: No. Exit code 2 shows stderr to the user; other non-zero codes show stderr only with `--verbose`. Execution always continues.
+
+**Handler Types**: Only `type: "command"` and `type: "mcp_tool"` supported.
+
+**Input Fields**: In addition to common fields, Setup receives:
+- `trigger` -- `"init"` or `"maintenance"`
+
+**Special**: Access to `${CLAUDE_ENV_FILE}` -- variables written here persist into subsequent Bash commands for the session, same as `SessionStart`.
+
+**Important pattern**: Because Setup does not fire on every launch, a plugin that needs a dependency cannot rely on Setup alone. Use the `${CLAUDE_PLUGIN_DATA}` "check-and-install on first use" pattern documented in `writing-hooks.md` -- Setup is the *opt-in* one-shot path, not a replacement for lazy install.
+
+**Use Cases**:
+- One-time CI dependency install separate from session startup
+- Maintenance tasks (cache prune, schema migration) triggered manually
+- Plugin first-time configuration
+
+**Example**:
+```json
+{
+  "Setup": [
+    {
+      "matcher": "init",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "cd \"${CLAUDE_PLUGIN_DATA}\" && cp \"${CLAUDE_PLUGIN_ROOT}/package.json\" . && npm install"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Return Fields** (JSON stdout):
+- `additionalContext` -- string injected into Claude's context. Plain stdout is debug-log only.
 
 ### UserPromptSubmit
 
@@ -270,6 +314,7 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
 - Log completed operations
 - Validate tool output
 - Trigger follow-up actions
+- Rewrite the tool output Claude sees (e.g. redact secrets, trim noisy diffs) via the `updatedToolOutput` JSON return field
 
 **Example**:
 ```json
@@ -288,6 +333,13 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
   ]
 }
 ```
+
+**Return Fields** (JSON stdout):
+- `updatedToolOutput` -- replaces the tool's output before Claude sees it. **Works for all tools.** The value must match the tool's output shape.
+- `updatedMCPToolOutput` -- **legacy** MCP-only variant; superseded by `updatedToolOutput`. The old field still works, but new code should use `updatedToolOutput` so it survives moves between MCP and built-in tools.
+- `decision: "block"` -- adds the `reason` next to the tool result; Claude still sees the original output unless `updatedToolOutput` is also set.
+
+> `updatedToolOutput` only changes what Claude sees. The tool has already run; any side effects (file writes, shell commands, HTTP requests) have already occurred. To prevent a tool call, use `PreToolUse`.
 
 ### PostToolUseFailure
 
@@ -839,16 +891,25 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
 
 ### WorktreeCreate
 
-**Trigger**: When a worktree is created for an agent
+**Trigger**: A worktree is being created (`--worktree` or `isolation: "worktree"`). The hook **replaces** the default git-based worktree behavior, so it's the entry point for plugins that target non-git VCS (SVN, Perforce, Mercurial) or want a custom isolation strategy.
 
 **Matcher**: Not supported
 
-**Can Block**: No
+**Can Block**: Yes — and unlike most events, **any non-zero exit code aborts worktree creation**, not just exit 2.
+
+**Input Fields**: In addition to common fields, receives a `name` field via stdin JSON:
+```json
+{ "hook_event_name": "WorktreeCreate", "name": "feature-branch-task" }
+```
+
+**Output**:
+- **Command hooks**: print the absolute path of the created worktree directory on stdout. Hook failure or missing path fails creation.
+- **HTTP hooks**: return `hookSpecificOutput.worktreePath`.
 
 **Use Cases**:
-- Initialize worktree-specific resources
+- Replace default git worktree behavior with SVN/Perforce/Mercurial equivalent
+- Initialize worktree-specific resources (env vars, copied configs)
 - Log worktree creation for tracking
-- Set up environment in the new worktree
 
 **Example**:
 ```json
@@ -858,7 +919,7 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-worktree-create.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-checkout.sh"
         }
       ]
     }
@@ -868,15 +929,17 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
 
 ### WorktreeRemove
 
-**Trigger**: When a worktree is removed after agent completion
+**Trigger**: A worktree is being removed (at session exit or when a subagent finishes). Pairs with `WorktreeCreate`.
 
 **Matcher**: Not supported
 
-**Can Block**: No
+**Can Block**: No. Failures are logged in debug mode only.
+
+**Input Fields**: In addition to common fields, receives the worktree `name` (same shape as `WorktreeCreate`).
 
 **Use Cases**:
-- Clean up worktree-specific resources
-- Archive worktree results
+- Clean up the equivalent resources your `WorktreeCreate` hook provisioned (SVN working copy, Perforce client, etc.)
+- Archive worktree results before teardown
 - Log worktree lifecycle completion
 
 **Example**:
@@ -887,7 +950,7 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-worktree-remove.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-cleanup.sh"
         }
       ]
     }
@@ -1081,5 +1144,5 @@ Multiple matcher groups and multiple hooks per group:
 
 ## See Also
 
-- `writing-hooks.md` -- hook configuration and handler types (references all 28 events)
+- `writing-hooks.md` -- hook configuration and handler types (references all 29 events)
 - `hook-patterns.md` -- common implementation patterns

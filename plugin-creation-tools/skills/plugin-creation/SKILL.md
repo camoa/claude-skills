@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-version: 3.3.0
+version: 3.4.0
 description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
 user-invocable: false
 ---
@@ -37,7 +37,7 @@ Create complete Claude Code plugins with any combination of components.
 
 When creating any plugin, also consider:
 - `.claude/rules/` with modular project rules (path-scoped if needed for different component directories)
-- `CLAUDE.md` at plugin root for project conventions
+- `CLAUDE.md` at plugin root **for authoring reference only** — it is NOT loaded as project context when the plugin is installed. To ship instructions Claude reads at runtime, put them in a skill (`skills/<name>/SKILL.md`). The validator emits an info notice when a plugin-root `CLAUDE.md` is present so you don't mistake it for runtime context.
 - README.md and CHANGELOG.md at plugin root (for humans — never inside skill directories)
 
 ## Documentation Principles
@@ -145,19 +145,23 @@ When user says "add agent", "create agent", "make agent":
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for all 28 events
+2. Read `references/06-hooks/hook-events.md` for all 29 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
+   - `Setup` - one-time `--init-only` / `--init -p` / `--maintenance -p` preparation. **Distinct from `SessionStart`**: Setup does NOT fire on every launch, so a plugin that needs a dependency installed cannot rely on Setup alone — pair with a `${CLAUDE_PLUGIN_DATA}` "check on first use, install on miss" pattern.
    - `PreToolUse` - before tool execution (can block)
-   - `PostToolUse` - after tool execution (formatting, logging)
+   - `PostToolUse` - after tool execution (formatting, logging). Use the `updatedToolOutput` JSON return field to rewrite what Claude sees (replaces the older MCP-only `updatedMCPToolOutput`).
    - `PostToolBatch` - after a parallel batch resolves (one-shot summary)
    - `SessionStart` - setup, output directories
    - `SessionEnd` - cleanup
    - `UserPromptSubmit` - validation, context injection (can block)
    - `UserPromptExpansion` - intercept direct `/skillname` invocations (can block)
    - `SubagentStart`/`SubagentStop` - agent lifecycle
+   - `WorktreeCreate`/`WorktreeRemove` - replace default git worktree behavior with custom VCS logic (SVN/Perforce/Mercurial). Input: `name` via stdin; `WorktreeCreate` must print the worktree path on stdout, and any non-zero exit aborts creation.
    - `PreCompact` - inject context before compaction
    - `Notification`, `Stop`, `TaskCompleted`, `TeammateIdle`
+
+**Adaptive hooks**: Hook stdin JSON includes an `effort` object (`{ "level": ... }`) on tool-use-context events; the same level is exported as `$CLAUDE_EFFORT` to command hooks and the Bash tool. Use it to adapt verbosity, recursion depth, or external-call budget to the user's effort setting.
 
 **Five handler types** — choose the right one:
 - `command` — shell script, fastest, no LLM cost. Use for logging, file ops, env setup.
@@ -176,8 +180,18 @@ When user says "configure plugin", "setup plugin.json":
 
 1. Read `references/08-configuration/plugin-json.md` for full schema
 2. Required fields: `name`
-3. Recommended fields: `version`, `description`, `author`, `license`
-4. Component paths: `commands`, `agents`, `hooks`, `mcpServers`
+3. Recommended fields: `$schema` (SchemaStore JSON Schema for editor autocomplete), `version`, `description`, `author`, `license`
+4. Component paths: `commands` (array), `agents` (array — string form no longer accepted), `hooks`, `mcpServers`
+5. **Experimental components** (`themes`, `monitors`) belong under `experimental.*`. Top-level `themes` / `monitors` still load but `claude plugin validate` warns and a future release will require the nested form. The validator (`/plugin-creation-tools:validate`) flags top-level usage and offers an auto-migration diff.
+
+### Suppressing a plugin skill without forking
+
+Users who want to silence a single plugin skill don't need to uninstall the plugin or edit its SKILL.md. Two escape hatches, in priority order:
+
+- **`skillOverrides` setting** (`.claude/settings.local.json`) — four states: `on` / `name-only` / `user-invocable-only` / `off`. The `/skills` menu writes this for them. Note: upstream caveat is that `skillOverrides` does NOT affect plugin-shipped skills — for those, point users at `/plugin disable` for the whole plugin. Surface this in your README's troubleshooting section.
+- **`/plugin disable <name>@<marketplace>`** for the entire plugin, scoped per scope (user/project/local).
+
+See `references/08-configuration/settings.md#skilloverrides` for details.
 
 ## Settings and Output
 
@@ -275,7 +289,7 @@ Before creating a component, verify it's the right choice:
 |---------|--------------|-----|
 | Plugin doesn't appear after install | Components placed inside `.claude-plugin/` instead of plugin root | Move `commands/` / `agents/` / `skills/` / `hooks/` to the plugin root. Only `plugin.json` belongs in `.claude-plugin/`. |
 | Skill exists but Claude never invokes it | Description missing trigger phrase or imperatives | Rewrite to start with "Use when…", include WHAT and WHEN, preserve any `PROACTIVELY` / `MUST` / `NEVER` markers from the prior version. Run `skill-quality-reviewer` agent to audit. |
-| Hook configured but never fires | Wrong event name (case-sensitive) or `http` handler in `hooks/hooks.json` | Verify event name is exactly one of the 28 documented in `references/06-hooks/hook-events.md`. `http` handlers only work in `settings.json` — they are silently ignored in `hooks.json`. Run `/plugin-creation-tools:validate`. |
+| Hook configured but never fires | Wrong event name (case-sensitive) or `http` handler in `hooks/hooks.json` | Verify event name is exactly one of the 29 documented in `references/06-hooks/hook-events.md`. `http` handlers only work in `settings.json` — they are silently ignored in `hooks.json`. Run `/plugin-creation-tools:validate`. |
 | Hook spawns on every Bash call but only acts on `rm` | Filtering inside the script instead of with `if` | Add `if: "Bash(rm *)"` to the handler. The matcher fires the event; `if` is a cheap pre-spawn filter that avoids the "spawn-and-exit-0" anti-pattern. See `references/06-hooks/writing-hooks.md#the-if-field`. |
 | `mcp_tool` hook returns "not connected" on first run | `SessionStart` / `Setup` typically fire before MCP servers finish connecting | Expected on first run. Either accept the non-blocking error, or move the call to a later event (`PostToolUse`, `Stop`, etc.) where the server is reliably connected. |
 | Plugin theme doesn't appear in `/theme` | `themes/*.json` missing `name` / `base` / `overrides`, or invalid JSON | Run `/plugin-creation-tools:validate`. See `references/08-configuration/themes.md` for the schema. |

@@ -19,7 +19,7 @@ The plugin contains one large skill (`plugin-creation`) that progressively discl
 | Skill | `plugin-creation` | Progressive-disclosure authoring guide. Auto-triggered when creating skills, commands, agents, hooks, MCP servers, themes, or plugin manifests. |
 | Command | `/plugin-creation-tools:create` | Scaffold a new plugin (selects components interactively). |
 | Command | `/plugin-creation-tools:add-component` | Add a skill / command / agent / hook / MCP / **theme** to an existing plugin. |
-| Command | `/plugin-creation-tools:validate` | Validate plugin structure, frontmatter, dependency graph, hook events (28), `mcp_tool` server references, themes, `userConfig` schema, cross-marketplace allowlists. |
+| Command | `/plugin-creation-tools:validate` | Validate plugin structure, frontmatter, dependency graph, hook events (29), `experimental.themes` / `experimental.monitors` manifest migration, `mcp_tool` server references, themes, `userConfig` schema, cross-marketplace allowlists. |
 | Agent | `plugin-structure-auditor` | Deep structural audit (Architecture / Cross-Component Consistency / Performance) — areas the validator does not cover. Read-only. |
 | Agent | `skill-quality-reviewer` | Review skill description quality, SKILL.md structure, progressive-disclosure patterns, regression flags (stripped imperatives, dropped `` !`command` `` injections). Read-only. |
 
@@ -27,7 +27,7 @@ The plugin contains one large skill (`plugin-creation`) that progressively discl
 
 The bundled references map to every section of the upstream Claude Code docs that affects plugin authoring (snapshot at commit `c142d14`):
 
-- **Hooks** — all 28 events with payloads, decision controls, and matcher behavior; five handler types (`command` / `http` / `mcp_tool` / `prompt` / `agent`); the `if` pre-spawn filter; cross-platform polyglot wrapper; permission-mode-per-hook table.
+- **Hooks** — all 29 events (including `Setup` for `--init-only` / `--init -p` / `--maintenance -p` one-time preparation, and `WorktreeCreate` / `WorktreeRemove` for replacing default git worktree behavior with custom VCS logic) with payloads, decision controls, and matcher behavior; five handler types (`command` / `http` / `mcp_tool` / `prompt` / `agent`); the `if` pre-spawn filter; the `effort.level` adaptive-effort input + `$CLAUDE_EFFORT` env var; `updatedToolOutput` (supersedes MCP-only `updatedMCPToolOutput`); cross-platform polyglot wrapper; permission-mode-per-hook table.
 - **Skills** — frontmatter schema, voice and structure, progressive disclosure, dynamic context injection (`` !`command` ``), preload caveats, char/line caps.
 - **Agents** — frontmatter, model selection, tool restrictions, scoped hooks/MCP, agent teams, forked subagents (experimental), `--agent` main-session behavior.
 - **Configuration** — `plugin.json` (themes, `userConfig` with `type`/`title`, dependencies with semver ranges, `${user_config.KEY}` substitution); `marketplace.json` (sources, `allowCrossMarketplaceDependenciesOn`, `claude plugin tag`); `settings.json` (hierarchy, `prUrlTemplate`, `enabledPlugins`); permission modes; plugin themes.
@@ -41,6 +41,12 @@ The bundled references map to every section of the upstream Claude Code docs tha
 3. Run `/plugin-creation-tools:validate` before opening a PR — it catches schema, frontmatter, dependency, and hook-event issues.
 4. For structural review (architecture balance, naming consistency, performance footguns), invoke the `plugin-structure-auditor` agent.
 5. For skill description quality, invoke the `skill-quality-reviewer` agent.
+
+## Distribution housekeeping
+
+- After significant uninstalls, run `claude plugin prune --dry-run` to see auto-installed dependencies no other plugin needs; `claude plugin uninstall <name> --prune` does it in one step.
+- `claude --plugin-url <zip-url>` loads a packaged plugin for the current session only — handy for previewing a pre-release without writing to `~/.claude/plugins`.
+- Users who want to mute a single skill from a *non-plugin* source can use the `skillOverrides` setting (four states: `on` / `name-only` / `user-invocable-only` / `off`); for plugin-shipped skills, the right escape hatch is `/plugin disable`. Surface this distinction in your own plugin README so users know which lever to pull.
 
 ## Quality gates this plugin enforces on itself
 
