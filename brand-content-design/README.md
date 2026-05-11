@@ -4,6 +4,8 @@
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
 ## The Flow
 
 ```

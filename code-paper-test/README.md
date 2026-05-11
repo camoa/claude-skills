@@ -2,6 +2,8 @@
 
 Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, AI hallucinations, and contract violations before deployment.
 
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
 ## What is Paper Testing?
 
 Paper testing is the practice of mentally executing code with concrete test cases to find issues before running it. Unlike code review (which focuses on style and patterns), paper testing **actually runs** the code in your head with real values to catch:
