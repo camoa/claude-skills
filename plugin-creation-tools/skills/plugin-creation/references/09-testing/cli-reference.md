@@ -51,6 +51,11 @@ Complete reference for plugin-related CLI commands.
 # Uninstall but keep persistent data (${CLAUDE_PLUGIN_DATA})
 /plugin uninstall plugin-name@marketplace-name --keep-data
 
+# Uninstall a plugin AND remove auto-installed dependencies no other plugin needs
+/plugin uninstall plugin-name@marketplace-name --prune
+# Or, in one step from the CLI:
+claude plugin uninstall plugin-name@marketplace-name --prune --yes
+
 # Get plugin details
 /plugin info plugin-name@marketplace-name
 
@@ -60,6 +65,28 @@ Complete reference for plugin-related CLI commands.
 # Update all plugins in a scope (including managed/org-deployed plugins)
 /plugin update --scope managed
 ```
+
+### Plugin Prune (`claude plugin prune`)
+
+Remove auto-installed dependency plugins that no other installed plugin requires. Plugins you installed directly are never touched. Requires Claude Code v2.1.121+.
+
+```bash
+# Show what would be removed
+claude plugin prune --dry-run
+
+# Prune at user scope (default)
+claude plugin prune
+
+# Prune at project scope
+claude plugin prune --scope project
+
+# Non-interactive (CI/scripts) — required when stdin isn't a TTY
+claude plugin prune --yes
+```
+
+**Aliases:** `autoremove`.
+
+After any large set of plugin upgrades / uninstalls, run `claude plugin prune --dry-run` to see what's orphaned. The validator surfaces this as a reminder under its "after major changes" guidance.
 
 ### Plugin Release Tagging (`claude plugin tag`)
 
@@ -91,6 +118,11 @@ claude --plugin-dir ./my-plugins
 
 # Load from multiple directories
 claude --plugin-dir ./plugins1 --plugin-dir ./plugins2
+
+# Load a packaged plugin .zip from a URL for the current session only
+# (useful for previewing a pre-release plugin without adding it to the marketplace
+# or writing to ~/.claude/plugins)
+claude --plugin-url https://example.com/my-plugin-v1.2.0.zip
 ```
 
 ### Validation

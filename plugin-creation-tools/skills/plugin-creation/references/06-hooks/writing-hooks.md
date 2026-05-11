@@ -75,7 +75,7 @@ Execute a shell script. Receives JSON on stdin with event context. Returns exit 
 }
 ```
 
-**Stdin JSON** includes: `hook_event_name`, `tool_name`, `tool_input`, `tool_output` (varies by event).
+**Stdin JSON** includes: `hook_event_name`, `tool_name`, `tool_input`, `tool_output` (varies by event), and an `effort` object (`{ "level": "low" | "medium" | "high" | "xhigh" | "max" }`) on tool-use-context events when the current model supports effort. The same level is exported as the `$CLAUDE_EFFORT` env var to command hooks and Bash-tool subprocesses — adapt verbosity or invocation depth to it.
 
 **Exit codes**: 0 = success/allow, non-zero = failure/block (for blocking events).
 
@@ -322,7 +322,8 @@ Available in hook scripts:
 | `${CLAUDE_PLUGIN_ROOT}` | Plugin installation directory |
 | `${CLAUDE_PLUGIN_DATA}` | Persistent data directory (`~/.claude/plugins/data/{plugin-id}/`). Survives plugin updates. |
 | `${CLAUDE_PROJECT_DIR}` | Project root directory |
-| `${CLAUDE_ENV_FILE}` | Env file path (SessionStart only) |
+| `${CLAUDE_ENV_FILE}` | Env file path. Available to `SessionStart`, `Setup`, `CwdChanged`, and `FileChanged` hooks. Variables written here persist into subsequent Bash commands for the session. |
+| `${CLAUDE_EFFORT}` | Active [effort level](../03-skills/writing-skillmd.md#string-substitutions) for the current turn -- `low`, `medium`, `high`, `xhigh`, `max`. Use to adapt hook behavior to the user's effort setting. |
 
 ## Example: Complete hooks.json
 
@@ -488,5 +489,5 @@ This pattern checks if `node_modules` exists in the persistent data directory an
 
 ## See Also
 
-- `hook-events.md` -- all 28 available events with return values
+- `hook-events.md` -- all 29 available events with return values
 - `hook-patterns.md` -- common patterns and examples

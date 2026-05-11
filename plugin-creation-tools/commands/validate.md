@@ -26,6 +26,13 @@ Validate a plugin's structure and components against best practices.
 - [ ] `description` present and not placeholder text
 - [ ] README.md exists at plugin root
 - [ ] CHANGELOG.md exists at plugin root
+- [ ] **Info** (not warning) if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude. The file is fine to keep as authoring reference (this plugin uses it that way)."
+
+### plugin.json Schema Migration (soft-breaking — `experimental.*`)
+- [ ] **Warning** if top-level `themes` or `monitors` is set in `plugin.json`: "`themes` / `monitors` should live under `experimental.*`. `claude plugin validate` flags this and a future release will require the nested form." Offer an auto-migration diff that wraps both keys under an `experimental` object (preserve existing values, deduplicate if `experimental.themes` / `experimental.monitors` is already partially set).
+- [ ] **Warning** if `agents` is a bare string path: "The `agents` field is array-only. Wrap the path in an array: `\"agents\": [\"./agents/foo.md\"]`."
+- [ ] **Info** (not warning) if `commands` or `skills` is a bare string path: "The array form is preferred — `\"commands\": [\"./cmd.md\"]`. The string form still loads but is being phased out."
+- [ ] **Info** if `$schema` is missing: "Consider adding `\"$schema\": \"https://json.schemastore.org/claude-code-plugin-manifest.json\"` for editor autocomplete. Claude Code ignores the field at load time."
 
 ### Marketplace (`marketplace.json` if present)
 - [ ] `owner` field is present and non-empty (error if missing)
@@ -58,6 +65,7 @@ Validate a plugin's structure and components against best practices.
 - [ ] Referenced files in `references/` exist
 - [ ] Referenced scripts in `scripts/` exist
 - [ ] No README.md inside skill directories (belongs at plugin root)
+- [ ] **Info** when `allowed-tools` is present on a project-scoped skill (path matches `.claude/skills/`): "`.claude/skills/*` skills with `allowed-tools` only take effect after the workspace trust dialog is accepted. Review the skill carefully before trusting a repository — a skill can grant itself broad tool access this way." (Plugin-shipped skills are not subject to this — their trust is established at install time.)
 
 ### Commands (for each `commands/*.md`)
 - [ ] Valid YAML frontmatter — invalid frontmatter causes command to load with no metadata at runtime
@@ -87,7 +95,7 @@ Validate a plugin's structure and components against best practices.
 
 ### Hooks (`hooks/hooks.json`)
 - [ ] Valid JSON structure — **Note:** malformed hooks.json prevents the entire plugin from loading
-- [ ] Each event name is one of the 28 recognized events: `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
+- [ ] Each event name is one of the 29 recognized events: `Setup`, `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
 - [ ] Each hook entry has `type` — one of `command`, `prompt`, `agent`, or `mcp_tool` — plus the matching required fields for that type. `agent` is upstream-marked experimental; flag a one-line info note when used.
 - [ ] `mcp_tool` handlers: require `server` and `tool`; if `server` is not declared in the plugin's `mcpServers` (and isn't a known external server the user wires up themselves), emit a **warning**: "`mcp_tool` references server `<name>` not declared in this plugin's `mcpServers`. The handler will produce a non-blocking error if the server isn't already connected at runtime."
 - [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
@@ -96,6 +104,7 @@ Validate a plugin's structure and components against best practices.
 - [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` / `$CLAUDE_PLUGIN_ROOT` / `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_DATA` / `${CLAUDE_PLUGIN_DATA}` usage is quoted in all command strings (paths with spaces break otherwise)
 - [ ] **Warning**: hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with a broad matcher (`*`, `""`, omitted, or `.*`) should include an `if` field to pre-filter. Emit a **suggestion** (not error): "Consider adding an `if` field to this handler to avoid spawning a process on every tool call."
 - [ ] `if` field is only valid on tool events — flag as warning if set on non-tool events (silently ignored at runtime)
+- [ ] **Info** when a `PostToolUse` JSON output example or hook script uses `updatedMCPToolOutput`: "Upstream now prefers `updatedToolOutput` (works for all tools, not just MCP). The old field still works; new code should use `updatedToolOutput`."
 
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)

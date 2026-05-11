@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-11
+
+Doc-snapshot refresh covering Claude Code **v2.1.120 → v2.1.136**. Source: tracking memo `claude_docs/improvements/plugin-creation-tools-2026-05-08.md`. Plan-driven, additive — no breaking changes for plugin authors who haven't migrated yet (top-level `themes`/`monitors` still load).
+
+### Added — Manifest schema (`experimental.*`, `$schema`, array-only `agents`)
+- **NEW migration section** in `references/08-configuration/plugin-json.md`: themes/monitors belong under `experimental.*`. Top-level still loads but `claude plugin validate` warns; a future release will require the nested form. Includes a `diff` block showing the wrapping change.
+- `templates/plugin.json.template`: emits `$schema` (SchemaStore JSON Schema URL — editor autocomplete only, Claude Code ignores it at load time), commented `experimental.{themes,monitors}` block, and array-form guidance for `commands`/`agents`/`skills`.
+- `references/08-configuration/themes.md`: examples updated to nest under `experimental.themes`.
+- `references/08-configuration/plugin-json.md`: `$schema` row added to metadata table; `agents` row tightened to array-only; `commands`/`skills` flagged as array-preferred.
+- `commands/add-component.md`: `theme` subcommand now writes paths under `experimental.themes` and warns about the top-level form.
+
+### Added — Hook event #29: `Setup`
+- **NEW `Setup` event** in `references/06-hooks/hook-events.md`. Fires only on `--init-only`, `--init -p`, `--maintenance -p` — distinct from `SessionStart` which fires every launch. Receives `trigger: "init" | "maintenance"`. Has `CLAUDE_ENV_FILE`. Cannot block (exit 2 shows stderr only). Only `command` and `mcp_tool` handler types supported. Documents the "check on first use, install on miss" pattern with `${CLAUDE_PLUGIN_DATA}` since Setup doesn't fire on every launch.
+- Hook event count drift sweep — 28 → **29** across `SKILL.md`, `commands/validate.md`, `commands/add-component.md`, `hook-events.md` (intro + See Also), `writing-hooks.md` (See Also), `plugin.json` description, `README.md`, root `CLAUDE.md` Drift to Watch list, `references/quick-reference.md` (was stale at 22 — caught during count audit).
+
+### Added — Worktree hook input/output schema
+- `references/06-hooks/hook-events.md`: `WorktreeCreate` and `WorktreeRemove` entries refined with input schema (stdin JSON `{ "name": "..." }`), the stdout-path contract for `WorktreeCreate` command hooks (`hookSpecificOutput.worktreePath` for HTTP hooks), and the "any non-zero exit aborts creation" exception (unlike most events where only exit 2 blocks). Use case framed as "replace default git worktree behavior with custom VCS logic" — SVN/Perforce/Mercurial wrapper plugins.
+
+### Added — Adaptive effort (`effort.level` / `${CLAUDE_EFFORT}`)
+- `references/06-hooks/hook-events.md`: `effort` object added to Common Input Fields — present on tool-use-context events (`PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`) when the current model supports effort. Reflects the level the model actually used (downgraded if requested level exceeded support).
+- `references/06-hooks/writing-hooks.md`: `$CLAUDE_EFFORT` env var added to the env-vars table; `${CLAUDE_ENV_FILE}` row extended to list all four events that can write to it (`SessionStart`, `Setup`, `CwdChanged`, `FileChanged`).
+- `references/03-skills/writing-skillmd.md`: `${CLAUDE_EFFORT}` added to skill body substitutions with usage note (terser steps at `low`, fuller checklists at `high`+).
+- `SKILL.md`: hooks section gets an "Adaptive hooks" paragraph linking the two.
+
+### Added — `updatedToolOutput` preferred over `updatedMCPToolOutput`
+- `references/06-hooks/hook-events.md`: PostToolUse return-fields block now documents `updatedToolOutput` (works for all tools) and explicitly marks `updatedMCPToolOutput` as legacy MCP-only. Includes the "tool already ran" warning — `updatedToolOutput` only changes what Claude sees, not what the tool did.
+- `commands/validate.md`: new info-level check flagging `updatedMCPToolOutput` usage in hook scripts/JSON.
+
+### Added — `skillOverrides` setting
+- **NEW `skillOverrides` section** in `references/08-configuration/settings.md`. Four states (`on` / `name-only` / `user-invocable-only` / `off`), how the `/skills` menu writes it to `.claude/settings.local.json`, and the upstream caveat that `skillOverrides` does NOT affect plugin-shipped skills — for those, point users at `/plugin disable`. Surface this distinction in plugin READMEs.
+- `SKILL.md`: new "Suppressing a plugin skill without forking" subsection under Configuring Plugin.
+- `README.md`: Distribution housekeeping paragraph mentioning the lever.
+
+### Added — Lifecycle CLI commands
+- `references/09-testing/cli-reference.md`: **`claude plugin prune`** (remove auto-installed dependencies no other plugin requires, requires v2.1.121+, alias `autoremove`, `--dry-run`/`--yes`/`--scope` flags), **`--prune` flag on `plugin uninstall`**, and **`--plugin-url`** session-only flag (load a packaged `.zip` from a URL — useful for previewing pre-release plugins without writing to `~/.claude/plugins`).
+- `README.md`: Distribution housekeeping section surfaces all three.
+
+### Added — Plugin Hints (CLI-driven install prompts)
+- **NEW section** in `references/10-distribution/packaging.md`. Mechanism: CLI checks `CLAUDECODE=1` env var, emits `<claude-code-hint plugin="namespace/plugin-name" />` on its own line (stderr preferred). Claude Code strips the line before sending to the model (zero token cost). User sees a one-time install prompt. Constraints: **official Anthropic marketplace only** (so out-of-scope for camoa-skills / palcera_skills plugins — documented as such); gate on the env var; one line, no surrounding text; stderr preferred.
+
+### Added — Workspace-trust gating clarification
+- `references/03-skills/writing-skillmd.md`: `allowed-tools` row rewritten to (a) clarify it *grants* permission not *restricts* (existing wording was wrong), and (b) document the workspace-trust gate for `.claude/skills/*` skills. Notes that plugin-shipped skills are not subject to this gate — trust is established at install time.
+- `commands/validate.md`: new info-level check for project-scoped skills with `allowed-tools`, pointing at the trust-dialog gate.
+
+### Added — Plugin-root `CLAUDE.md` clarification
+- `SKILL.md`: "Plugin Project Setup" section reframes plugin-root `CLAUDE.md` as authoring reference only (NOT loaded as project context when the plugin is installed). Instructions belong in a skill.
+- `commands/validate.md`: new info-level (not warning) notice when a plugin-root `CLAUDE.md` is present.
+
+### Validator drift sweep (`commands/validate.md`)
+New checks added in one batch:
+- Top-level `themes`/`monitors` → **warning** with auto-migration diff offer.
+- String-form `agents` → **warning** (array-only).
+- String-form `commands`/`skills` → **info** (array preferred).
+- Missing `$schema` → **info** (developer ergonomics).
+- `updatedMCPToolOutput` → **info** (prefer `updatedToolOutput`).
+- Plugin-root `CLAUDE.md` → **info** (not loaded as context).
+- Project-scoped skill `allowed-tools` → **info** (workspace-trust gate).
+- Hook event whitelist bumped to 29 names including `Setup`.
+
+### Out of scope (deferred to follow-up sessions)
+- **Existing-plugin audit.** Sister plugins (`brand-content-design`, design-* on the feature branch) were not run through `claude plugin validate` this cycle — that's a separate migration session.
+- **Native binary distribution / `claude project purge` / routines on web / `/ultrareview` / `/usage` / Agent SDK Python/TS API churn** — per the plan's "Out of Scope" list. Tracked in other docs.
+
+### Metadata sync
+- `.claude-plugin/plugin.json`: `version` 3.3.1 → **3.4.0**; description "28 hook events" → "29 hook events".
+- `skills/plugin-creation/SKILL.md` frontmatter `version` 3.3.0 → **3.4.0**.
+- Root `marketplace.json`: `plugin-creation-tools` entry version 3.3.1 → **3.4.0** + description sync; `metadata.version` 1.14.33 → **1.14.34** (patch bump per `feedback_marketplace_version_bump`).
+- `README.md`: hook count, validator coverage line, new Distribution housekeeping section.
+- Root `CLAUDE.md` Drift to Watch: 28 → 29, themes/monitors flagged as experimental.
+
+### Notes
+- Doc baseline: upstream `claude_memory/guides/claude/` snapshot from 2026-05-08 (per the tracking memo). Plan + Implementation notes live at `claude_docs/improvements/plugin-creation-tools-2026-05-08.md`.
+- Caught during this cycle: `references/quick-reference.md` "Hook Events" was stale at "22 total events" — drifted unnoticed since pre-v3.3.0. Fixed in the same sweep.
+- Did NOT touch `scripts/init_plugin.py` (no hardcoded `themes`/`monitors` strings found) or `examples/{simple-greeter,full-featured}-plugin/` (no manifest fields needing migration).
+
 ## [3.3.1] - 2026-04-27
 
 ### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)

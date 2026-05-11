@@ -17,7 +17,9 @@ plugin-name/
     └── high-contrast.json
 ```
 
-Default scan path is `themes/`. Override with the `themes` field in `plugin.json` (`string` or `array` of paths). When set, the default `themes/` directory is **not** scanned — your custom path replaces it.
+Default scan path is `themes/`. Override with `experimental.themes` in `plugin.json` (`string` or `array` of paths). When set, the default `themes/` directory is **not** scanned — your custom path replaces it.
+
+> **Schema migration:** Themes are an [experimental component](plugin-json.md#experimental-components-migration). Declare the path under `experimental.themes`; top-level `themes` still loads but `claude plugin validate` warns and a future release will require the nested form.
 
 ## Theme schema
 
@@ -62,7 +64,9 @@ Themes are auto-discovered from `themes/`. Declare an explicit path only when yo
 ```json
 {
   "name": "my-brand",
-  "themes": "./themes/"
+  "experimental": {
+    "themes": "./themes/"
+  }
 }
 ```
 
@@ -70,7 +74,9 @@ Or list specific files:
 
 ```json
 {
-  "themes": ["./themes/dark.json", "./themes/light.json"]
+  "experimental": {
+    "themes": ["./themes/dark.json", "./themes/light.json"]
+  }
 }
 ```
 

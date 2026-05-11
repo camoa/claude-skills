@@ -187,10 +187,11 @@ Use when [triggers] - [what it does, third person]
 
 ## Hook Events
 
-22 total events. Key events:
+29 total events (see `references/06-hooks/hook-events.md` for the full list). Key events:
 
 | Event | Use Case | Matcher |
 |-------|----------|---------|
+| Setup | One-time `--init-only` / `--init -p` / `--maintenance -p` preparation | `init`, `maintenance` |
 | SessionStart | Setup, initialization | Optional |
 | SessionEnd | Cleanup | Optional |
 | PreToolUse | Validation before tools | Tool name regex |

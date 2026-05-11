@@ -194,6 +194,39 @@ Set these environment variables in `.claude/settings.json`:
 | `MYPLUGIN_FEATURE_X` | `false` | Enable experimental feature X |
 ```
 
+### skillOverrides
+
+Per-skill visibility control without editing the skill's own SKILL.md. Useful for:
+
+- Skills checked into a shared project repo where you don't want to fork the SKILL.md
+- Skills provided by an MCP server
+- Enterprise admins silencing noisy plugin skills for a team via `.claude/settings.json`
+- End users who want to mute a plugin skill without uninstalling
+
+The `/skills` menu writes this for you — highlight a skill, press `Space` to cycle states, `Enter` to save to `.claude/settings.local.json`.
+
+```json
+{
+  "skillOverrides": {
+    "legacy-context": "name-only",
+    "deploy": "off"
+  }
+}
+```
+
+Each value is one of four states:
+
+| Value | Listed to Claude | In `/` menu |
+|-------|------------------|-------------|
+| `"on"` | Name and description | Yes |
+| `"name-only"` | Name only | Yes |
+| `"user-invocable-only"` | Hidden | Yes |
+| `"off"` | Hidden | Hidden |
+
+Skills absent from `skillOverrides` are treated as `"on"`.
+
+> **Plugin skills caveat:** `skillOverrides` does **not** affect skills shipped by plugins. Manage those through `/plugin` (enable/disable per scope) instead. This is the right escape hatch to surface in your plugin's README — point users who want to mute a single skill at `/plugin disable` for the whole plugin, or at the skill's own `disable-model-invocation` / `user-invocable` frontmatter if they're forking.
+
 ### prUrlTemplate
 
 Custom URL pattern for the PR link rendered in `/code-review` footers and similar review UIs. Useful when your remote isn't on github.com — `--from-pr` now also accepts GitLab, Bitbucket, and GHES URLs (release 2.1.119+), so the template lets you mirror the remote's URL shape.
