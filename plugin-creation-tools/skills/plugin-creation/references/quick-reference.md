@@ -27,6 +27,8 @@ plugin-name/
 │       └── SKILL.md
 ├── hooks/
 │   └── hooks.json
+├── bin/                      # Executables auto-added to Bash PATH
+│   └── my-tool
 ├── scripts/
 │   └── script.sh
 ├── .mcp.json

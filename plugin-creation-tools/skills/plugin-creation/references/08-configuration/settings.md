@@ -227,6 +227,24 @@ Skills absent from `skillOverrides` are treated as `"on"`.
 
 > **Plugin skills caveat:** `skillOverrides` does **not** affect skills shipped by plugins. Manage those through `/plugin` (enable/disable per scope) instead. This is the right escape hatch to surface in your plugin's README — point users who want to mute a single skill at `/plugin disable` for the whole plugin, or at the skill's own `disable-model-invocation` / `user-invocable` frontmatter if they're forking.
 
+### subagentStatusLine
+
+Status-line configuration applied to subagents spawned in the session. Pairs with the regular `statusLine` setting (which governs the main thread). Plugins can ship a default `subagentStatusLine` in their plugin-root `settings.json` (alongside the `agent` key — those are the two currently-supported plugin-settings keys).
+
+```json
+{
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/subagent-status.sh",
+    "padding": 0
+  }
+}
+```
+
+User precedence still applies: a user-level `subagentStatusLine` in `~/.claude/settings.json` overrides a plugin's default. Plugins should treat their `settings.json` value as a reasonable default for their own subagents — not as a UX dictation.
+
+See upstream **Status Line** guide for the full status-line schema (it's identical for main-thread and subagent status lines — they just live in different setting keys).
+
 ### prUrlTemplate
 
 Custom URL pattern for the PR link rendered in `/code-review` footers and similar review UIs. Useful when your remote isn't on github.com — `--from-pr` now also accepts GitLab, Bitbucket, and GHES URLs (release 2.1.119+), so the template lets you mirror the remote's URL shape.

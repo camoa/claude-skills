@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1] - 2026-05-12
+
+Post-v3.4.0 audit patch. A read-only comparison against the current `claude_memory/guides/claude/` snapshot surfaced three missing-content gaps (not stale-content). None affect the typical plugin-authoring path; all are scoped to short additions in existing reference files.
+
+### Added — `channels` manifest field
+- `references/08-configuration/plugin-json.md`: new `channels` row in the component-paths table + new "Channels" section with full schema (`server` required, must match a key in `mcpServers`; per-channel `userConfig` mirrors the top-level schema; Telegram/Slack/Discord-style message-injection use case).
+- `templates/plugin.json.template`: commented `channels` example block.
+- `commands/validate.md`: info-level check — when `channels` is declared, verify `server` matches a key in the plugin's `mcpServers` (warn on dangling reference); apply userConfig legacy/required checks to per-channel `userConfig`.
+
+### Added — `bin/` directory
+- `references/08-configuration/plugin-json.md`: new "`bin/` Directory" section. Auto-discovered (no manifest entry), executables added to the Bash tool's `PATH` while the plugin is enabled. Cross-platform shebang guidance; "use this over `hooks/` for utilities users invoke directly" distinction; chmod +x requirement.
+- `references/10-distribution/packaging.md`: `bin/` added to the standard plugin-layout diagram alongside `scripts/`, `output-styles/`, `themes/`, `monitors/`, `.lsp.json` (which were also missing from the diagram).
+- `references/quick-reference.md`: `bin/` added to the structure diagram.
+- `templates/plugin.json.template`: explanatory note about `bin/` auto-discovery.
+- `commands/validate.md`: info-level check — when `bin/` is present, warn on non-executable entries (they'll appear on `PATH` but fail to run).
+
+### Added — `subagentStatusLine` plugin setting
+- `references/08-configuration/settings.md`: new `subagentStatusLine` section with example, precedence note (user-level overrides plugin default), pointer to upstream Status Line guide.
+- `references/08-configuration/plugin-json.md`: settings.json supported-keys table updated — `agent` joined by `subagentStatusLine`. Confirmed upstream: these two are the only currently-supported plugin-settings keys (unknown keys silently ignored).
+- `templates/plugin.json.template`: settings.json note updated to mention both keys.
+
+### Added — Validator: plugin-root `settings.json`
+- `commands/validate.md`: new "Plugin settings.json" check block — valid JSON, recognized keys only (`agent` / `subagentStatusLine`), `agent` value must match an agent file, `subagentStatusLine` must match upstream schema shape. Forward-compat info note on unknown keys.
+
+### Changed — SKILL.md niche-fields pointer
+- `SKILL.md` "Configuring Plugin" section: added a 6th bullet covering `channels`, `bin/`, and plugin-root `settings.json` (both keys), so authors building atypical plugins are routed to the right reference without bloating the main flow.
+
+### Metadata sync
+- `.claude-plugin/plugin.json`: `version` 3.4.0 → **3.4.1**.
+- `skills/plugin-creation/SKILL.md` frontmatter `version` 3.4.0 → **3.4.1**.
+- Root `marketplace.json`: `plugin-creation-tools` entry version 3.4.0 → **3.4.1**; `metadata.version` 1.14.34 → **1.14.35** (patch bump per `feedback_marketplace_version_bump`).
+
+### Notes
+- Doc baseline unchanged from v3.4.0 (2026-05-08 snapshot).
+- Audit source: `claude_docs/improvements/plugin-creation-tools-audit-2026-05-12.md` (in-conversation).
+- Still deferred for the next refresh cycle (v3.5.0): output-style **authoring** depth (the field is documented but custom-style `.md` schema isn't) and Agent SDK coverage breadth (9 of 29 upstream pages — explicitly deferred in v3.4.0). Not blocking — manifest-field documentation exists; authors aren't stuck.
+
 ## [3.4.0] - 2026-05-11
 
 Doc-snapshot refresh covering Claude Code **v2.1.120 → v2.1.136**. Source: tracking memo `claude_docs/improvements/plugin-creation-tools-2026-05-08.md`. Plan-driven, additive — no breaking changes for plugin authors who haven't migrated yet (top-level `themes`/`monitors` still load).
