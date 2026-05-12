@@ -100,8 +100,9 @@ Or simple string:
 | outputStyles | string/array | Custom output style paths |
 | `experimental.themes` | string/array | Color theme files/directories (replaces default `themes/`). Each file: `name`, `base`, `overrides`. See [`themes.md`](themes.md). **Was top-level `themes`** — see [Experimental components migration](#experimental-components-migration). |
 | `experimental.monitors` | string/array | Background [Monitor](https://docs.anthropic.com/en/tools-reference#monitor-tool) configurations that start automatically when the plugin is active. **Was top-level `monitors`** — see [Experimental components migration](#experimental-components-migration). |
+| `channels` | array | Channel declarations for message injection (Telegram, Slack, Discord style). Each channel binds to an MCP server the plugin provides. See [Channels](#channels) below. |
 | userConfig | object | User-configurable values prompted at enable time. See [User configuration](#user-configuration) below. |
-| settings | string | Path to settings.json (only `agent` key supported) |
+| settings | string | Path to settings.json. Supported keys: `agent` (activates one of the plugin's agents as the main thread agent), `subagentStatusLine` (default status-line config for spawned subagents — see [`settings.md`](settings.md#subagentstatusline)). Unknown keys are silently ignored (forward-compatible). |
 
 ### Experimental components migration
 
@@ -479,6 +480,60 @@ This minimal plugin will still load:
 }
 ```
 
+## Channels
+
+The `channels` field lets a plugin declare one or more **message channels** that inject content into the conversation (Telegram, Slack, Discord-style integrations). Each channel binds to an MCP server that the plugin also provides.
+
+```json
+{
+  "channels": [
+    {
+      "server": "telegram",
+      "userConfig": {
+        "bot_token": {
+          "type": "string",
+          "title": "Bot token",
+          "description": "Telegram bot token",
+          "sensitive": true
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner ID",
+          "description": "Your Telegram user ID"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Per-entry fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `server` | Yes | Must match a key in the plugin's `mcpServers`. The channel binds to that server. |
+| `userConfig` | No | Same schema as the top-level `userConfig` field — prompts the user for per-channel values (bot tokens, owner IDs) when the plugin is enabled. |
+
+Channels is a niche but documented manifest field. If your plugin doesn't ship a message-injection MCP server, omit the field entirely.
+
+## `bin/` Directory (executables on Bash PATH)
+
+A `bin/` directory at the plugin root is a standard plugin component — **not** a manifest field. Files placed in `bin/` are added to the Bash tool's `PATH` while the plugin is enabled, so they're invokable as bare commands in any Bash tool call:
+
+```
+plugin-name/
+├── .claude-plugin/
+│   └── plugin.json
+└── bin/
+    ├── my-tool          # invokable as `my-tool` in Bash
+    └── my-other-tool
+```
+
+- Files must be **executable** (`chmod +x`).
+- Use cross-platform shebangs (`#!/usr/bin/env bash`, `#!/usr/bin/env python3`) or pair with a `.cmd` wrapper like the hooks polyglot pattern (`templates/hooks/run-hook.cmd.template`).
+- Prefer this over `hooks` for utilities the *user* (or another plugin's hook) calls directly, rather than event-driven automation.
+- Auto-discovered — no manifest entry needed.
+
 ## Validation
 
 Ensure your plugin.json is valid JSON:
@@ -509,6 +564,7 @@ plugin-name/
 | Key | Type | Description |
 |-----|------|-------------|
 | `agent` | string | Activates one of the plugin's agents as the main thread agent |
+| `subagentStatusLine` | object/string | Default status-line configuration for subagents spawned from this plugin. Same shape as the user-level `subagentStatusLine` setting. See [`settings.md`](settings.md#subagentstatusline). |
 
 ### Behavior
 

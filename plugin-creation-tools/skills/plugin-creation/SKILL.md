@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-version: 3.4.0
+version: 3.4.1
 description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
 user-invocable: false
 ---
@@ -183,6 +183,7 @@ When user says "configure plugin", "setup plugin.json":
 3. Recommended fields: `$schema` (SchemaStore JSON Schema for editor autocomplete), `version`, `description`, `author`, `license`
 4. Component paths: `commands` (array), `agents` (array — string form no longer accepted), `hooks`, `mcpServers`
 5. **Experimental components** (`themes`, `monitors`) belong under `experimental.*`. Top-level `themes` / `monitors` still load but `claude plugin validate` warns and a future release will require the nested form. The validator (`/plugin-creation-tools:validate`) flags top-level usage and offers an auto-migration diff.
+6. **Niche but valid manifest fields**: `channels` (Telegram/Slack/Discord-style message injection — each entry binds to one of the plugin's `mcpServers`); `bin/` directory auto-discovered (executables there are added to the Bash tool's `PATH` while the plugin is enabled — chmod +x; useful for CLI helpers users invoke directly, distinct from `hooks/` which are event-driven). Plugin-root `settings.json` supports two keys: `agent` (activates one of the plugin's agents as the main thread agent) and `subagentStatusLine` (default status-line config for subagents). See `references/08-configuration/plugin-json.md` and `references/08-configuration/settings.md`.
 
 ### Suppressing a plugin skill without forking
 

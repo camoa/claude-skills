@@ -38,10 +38,19 @@ plugin-name/
 │       └── SKILL.md
 ├── hooks/                    # Optional
 │   └── hooks.json
+├── bin/                      # Optional — executables auto-added to Bash PATH
+│   └── my-tool               #   (chmod +x; invokable as bare command)
 ├── scripts/                  # Optional
 │   └── *.sh
+├── output-styles/            # Optional
+│   └── *.md
+├── themes/                   # Optional — see experimental.themes
+│   └── *.json
+├── monitors/                 # Optional — see experimental.monitors
+│   └── monitors.json
 ├── .mcp.json                # Optional
-├── settings.json            # Optional
+├── .lsp.json                # Optional
+├── settings.json            # Optional (agent + subagentStatusLine keys)
 ├── README.md                # Recommended
 ├── CHANGELOG.md             # Recommended
 └── LICENSE                  # Recommended

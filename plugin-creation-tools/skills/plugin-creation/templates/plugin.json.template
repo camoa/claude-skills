@@ -46,7 +46,31 @@
   //   }
   // }
 
+  // Optional: declare message channels (Telegram, Slack, Discord style) that
+  // inject content into the conversation. Each channel binds to an MCP server
+  // the plugin also provides. The "server" field is required and must match
+  // a key in this plugin's "mcpServers". Per-channel "userConfig" uses the
+  // same schema as the top-level field.
+  // "channels": [
+  //   {
+  //     "server": "telegram",
+  //     "userConfig": {
+  //       "bot_token": {
+  //         "type": "string",
+  //         "title": "Bot token",
+  //         "description": "Telegram bot token",
+  //         "sensitive": true
+  //       }
+  //     }
+  //   }
+  // ]
+
   // Note: A separate settings.json file at the plugin root can set the
-  // "agent" key to configure agent behavior for this plugin.
-  // See the agent template for available agent configuration fields.
+  // "agent" key (activates one of the plugin's agents as the main thread
+  // agent) and "subagentStatusLine" key (default status-line config for
+  // spawned subagents). Other keys are silently ignored (forward-compatible).
+  //
+  // Note: A bin/ directory at the plugin root is auto-discovered (no manifest
+  // entry needed) — executables there are added to the Bash tool's PATH while
+  // the plugin is enabled. Useful for CLI helpers users invoke directly.
 }

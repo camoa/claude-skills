@@ -33,6 +33,14 @@ Validate a plugin's structure and components against best practices.
 - [ ] **Warning** if `agents` is a bare string path: "The `agents` field is array-only. Wrap the path in an array: `\"agents\": [\"./agents/foo.md\"]`."
 - [ ] **Info** (not warning) if `commands` or `skills` is a bare string path: "The array form is preferred — `\"commands\": [\"./cmd.md\"]`. The string form still loads but is being phased out."
 - [ ] **Info** if `$schema` is missing: "Consider adding `\"$schema\": \"https://json.schemastore.org/claude-code-plugin-manifest.json\"` for editor autocomplete. Claude Code ignores the field at load time."
+- [ ] **Info** when `channels` is declared in `plugin.json`: each entry must have a `server` field that matches a key in the plugin's `mcpServers` (or an externally-known MCP server name). Flag a warning if `server` references an undeclared MCP server. Per-channel `userConfig` follows the same schema as the top-level `userConfig` — apply the same legacy/required checks.
+- [ ] **Info** when a `bin/` directory is present at the plugin root: confirm files are executable (warn on non-executable entries — they will appear on `PATH` but fail to run). Auto-discovered, no manifest entry needed.
+
+### Plugin settings.json (if present at plugin root)
+- [ ] Valid JSON.
+- [ ] Recognized keys only: `agent`, `subagentStatusLine`. Unknown keys are silently ignored upstream (forward-compatible) — emit **info** noting the value will be ignored at runtime.
+- [ ] `agent` value matches an agent file under `agents/` (warn on dangling reference).
+- [ ] `subagentStatusLine` matches the upstream status-line schema (object with `type` + `command`/`script`, or string command).
 
 ### Marketplace (`marketplace.json` if present)
 - [ ] `owner` field is present and non-empty (error if missing)
