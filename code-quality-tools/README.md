@@ -228,6 +228,33 @@ All results save to `.reports/` (git-ignored):
 
 See `references/operations/dast-tools.md` for setup.
 
+## CI & Git Hooks (opt-in)
+
+Two GitHub Actions templates and a pre-commit hook config ship with the plugin. All three are independently opt-in — install whichever fit your team.
+
+### GitHub Actions
+
+| Template | Triggers on | Scope | What it does |
+|----------|-------------|-------|--------------|
+| `templates/ci/github-drupal.yml` → `.github/workflows/quality.yml` | `push` + `pull_request` to `main`/`develop` | Full custom modules + themes tree | Full battery: PHPStan, PHPMD, PHPCPD, phpcs, Psalm, Drush security advisories, `composer audit`, Semgrep, Trivy, Gitleaks, PHPUnit + coverage gate. Uploads to Codecov. |
+| `templates/ci/github-drupal-pr.yml` → `.github/workflows/quality-pr.yml` | `pull_request` only | **Changed PHP files in the PR only** (via `git diff --diff-filter=ACMR base...head`) | Runs phpcs + phpstan + Semgrep scoped to changed files, builds a rubric score (/50), and posts a **sticky PR comment** (`marocchino/sticky-pull-request-comment`) with findings + gate verdict. Uploads raw JSON as an artifact. |
+
+**Gate behavior for the PR workflow:** soft by default — comment posts, check stays green. To enforce, set repo Variable `FAIL_ON_GATE=true` (Settings → Variables → Actions). Then the workflow fails when rubric < 35/50 OR any high/critical Semgrep finding.
+
+Both assume DDEV (uses `ddev/github-action-setup-ddev@v1`). For non-DDEV projects, adapt the `ddev exec` calls to plain `vendor/bin/...`.
+
+### Git pre-commit hook (Drupal, optional)
+
+`/code-quality:setup` will prompt — default **No** — to install **GrumPHP** with `phpcs + phpstan` running on **staged files only** (`context: git-staged-files`). The template lives at `templates/grumphp.yml`. Excluded by design: PHPCPD (directory-scoped, slow on every commit), PHPUnit (full suite — keep that in CI), PHPMD (noisy; opt in by editing the template).
+
+To install later without re-running setup:
+
+```bash
+ddev composer require --dev phpro/grumphp
+cp <plugin>/skills/code-quality-audit/templates/grumphp.yml ./grumphp.yml
+ddev exec vendor/bin/grumphp git:init
+```
+
 ## Watch-mode & Scheduled Sweeps
 
 - **Watch-mode linting** activates while the `code-quality-audit` skill is loaded — edits to `composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, or `tsconfig.json` re-run the lint. Disable mid-session: `export CLAUDE_CODE_QUALITY_WATCH=0`.

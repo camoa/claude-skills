@@ -1,0 +1,228 @@
+#
+# GitHub Actions workflow for Drupal PR review — changed-files only.
+# Copy to .github/workflows/quality-pr.yml.
+#
+# Sibling to github-drupal.yml (which runs the full quality battery on
+# push/PR-to-main). This workflow is the lighter PR companion:
+#   - Detects PHP files changed in the PR (vs the merge base of base_ref).
+#   - Runs phpcs + phpstan + semgrep scoped to those files only.
+#   - Posts a sticky PR comment with the audit synthesis + rubric score.
+#   - Gate behavior is configurable via the FAIL_ON_GATE env var.
+#
+# Both workflows are opt-in. Install one, both, or neither.
+#
+# Prerequisites:
+#   - DDEV configured in project (same as github-drupal.yml)
+#   - Quality tools available via composer (PHPStan + phpstan-drupal, Coder)
+#   - GITHUB_TOKEN (automatic, provided by Actions) — used for PR comment
+#
+
+name: PR Code Review (changed files)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  # Soft-nudge by default: comment findings, never fail the check.
+  # Set to "true" in repo Variables (Settings → Variables → Actions) to enforce:
+  #   - rubric score < 35/50, OR
+  #   - any HIGH/CRITICAL Semgrep finding
+  FAIL_ON_GATE: ${{ vars.FAIL_ON_GATE || 'false' }}
+
+permissions:
+  contents: read
+  pull-requests: write   # required to post the sticky comment
+
+jobs:
+  pr-review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR head with merge-base history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Compute changed PHP files
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Three-dot diff against the merge base — only files touched in this PR.
+          mapfile -t FILES < <(
+            git diff --name-only --diff-filter=ACMR "${BASE_SHA}...${HEAD_SHA}" \
+              -- '*.php' '*.module' '*.theme' '*.install' '*.inc' '*.profile' \
+              | grep -Ev '^(vendor/|node_modules/|web/core/|web/modules/contrib/|web/themes/contrib/)' \
+              || true
+          )
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No PHP files changed in this PR — skipping analysis."
+            exit 0
+          fi
+
+          printf '%s\n' "${FILES[@]}" > .changed-files.txt
+          {
+            echo "count=${#FILES[@]}"
+            echo "files<<EOF"
+            printf '%s\n' "${FILES[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup DDEV
+        if: steps.changed.outputs.count != '0'
+        uses: ddev/github-action-setup-ddev@v1
+        with:
+          autostart: true
+
+      - name: Install dependencies + quality tools
+        if: steps.changed.outputs.count != '0'
+        run: |
+          ddev composer install --no-interaction
+          ddev composer require --dev \
+            phpstan/phpstan \
+            mglaman/phpstan-drupal \
+            phpstan/extension-installer \
+            drupal/coder \
+            --no-interaction
+
+      # =====================
+      # PHPCS — changed files only
+      # =====================
+      - name: PHPCS (Drupal standards)
+        if: steps.changed.outputs.count != '0'
+        id: phpcs
+        continue-on-error: true
+        run: |
+          mkdir -p .reports
+          xargs -a .changed-files.txt ddev exec vendor/bin/phpcs \
+            --standard=Drupal,DrupalPractice \
+            --report=json \
+            --report-file=.reports/phpcs.json \
+            || true
+
+      # =====================
+      # PHPStan — changed files only
+      # =====================
+      - name: PHPStan (Drupal)
+        if: steps.changed.outputs.count != '0'
+        id: phpstan
+        continue-on-error: true
+        run: |
+          mkdir -p .reports
+          xargs -a .changed-files.txt ddev exec vendor/bin/phpstan analyse \
+            --error-format=json \
+            --no-progress \
+            > .reports/phpstan.json || true
+
+      # =====================
+      # Semgrep — changed files only
+      # =====================
+      - name: Semgrep SAST (changed files)
+        if: steps.changed.outputs.count != '0'
+        id: semgrep
+        continue-on-error: true
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/php
+            p/security-audit
+            p/owasp-top-ten
+          generateSarif: false
+          publishToken: ""
+        env:
+          SEMGREP_TARGETS_FILE: .changed-files.txt
+          SEMGREP_JSON_OUTPUT: .reports/semgrep.json
+
+      # =====================
+      # Synthesize findings → PR comment body
+      # =====================
+      - name: Build synthesis + rubric
+        if: steps.changed.outputs.count != '0'
+        id: synth
+        run: |
+          set -euo pipefail
+          mkdir -p .reports
+
+          # Count findings (jq tolerant of missing files / empty arrays).
+          PHPCS_ERR=$(jq '[.files[]?.errors // 0] | add // 0' .reports/phpcs.json 2>/dev/null || echo 0)
+          PHPCS_WARN=$(jq '[.files[]?.warnings // 0] | add // 0' .reports/phpcs.json 2>/dev/null || echo 0)
+          PHPSTAN_ERR=$(jq '.totals.file_errors // 0' .reports/phpstan.json 2>/dev/null || echo 0)
+          SEMGREP_HIGH=$(jq '[.results[]? | select(.extra.severity=="ERROR" or .extra.severity=="HIGH" or .extra.severity=="CRITICAL")] | length' .reports/semgrep.json 2>/dev/null || echo 0)
+          SEMGREP_TOTAL=$(jq '.results | length // 0' .reports/semgrep.json 2>/dev/null || echo 0)
+
+          # Naive rubric: start at 50, deduct for issues. Replace with
+          # /code-quality:review --json when wiring real rubric scorer.
+          SCORE=$((50 - PHPSTAN_ERR - PHPCS_ERR / 2 - SEMGREP_HIGH * 3))
+          [ "$SCORE" -lt 0 ] && SCORE=0
+          if [ "$SCORE" -ge 35 ]; then GATE="PASS"; else GATE="FAIL"; fi
+
+          CHANGED_COUNT="${{ steps.changed.outputs.count }}"
+
+          {
+            echo "## Code Quality (changed files)"
+            echo ""
+            echo "**Files reviewed:** ${CHANGED_COUNT}"
+            echo "**Rubric:** ${SCORE}/50 — **${GATE}** (gate at 35)"
+            echo ""
+            echo "| Tool | Findings |"
+            echo "|------|----------|"
+            echo "| PHPCS errors | ${PHPCS_ERR} |"
+            echo "| PHPCS warnings | ${PHPCS_WARN} |"
+            echo "| PHPStan errors | ${PHPSTAN_ERR} |"
+            echo "| Semgrep (high/critical) | ${SEMGREP_HIGH} |"
+            echo "| Semgrep (total) | ${SEMGREP_TOTAL} |"
+            echo ""
+            if [ "${SEMGREP_HIGH}" -gt 0 ] || [ "${PHPSTAN_ERR}" -gt 0 ]; then
+              echo "<details><summary>Top findings</summary>"
+              echo ""
+              echo '```'
+              jq -r '.files | to_entries[] | "\(.key):\n" + (.value.messages[]? | "  L\(.line) \(.message)")' .reports/phpstan.json 2>/dev/null | head -40 || true
+              echo '```'
+              echo ""
+              echo "</details>"
+            fi
+            echo ""
+            echo "_Posted by code-quality-tools v3.2.0 — see `.reports/` for raw JSON._"
+          } > .reports/pr-comment.md
+
+          echo "score=${SCORE}" >> "$GITHUB_OUTPUT"
+          echo "gate=${GATE}" >> "$GITHUB_OUTPUT"
+          echo "semgrep_high=${SEMGREP_HIGH}" >> "$GITHUB_OUTPUT"
+
+      - name: Post sticky PR comment
+        if: steps.changed.outputs.count != '0'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: code-quality-tools
+          path: .reports/pr-comment.md
+
+      - name: Upload raw reports
+        if: always() && steps.changed.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-quality-reports
+          path: .reports/
+          retention-days: 14
+
+      # =====================
+      # Optional hard gate
+      # =====================
+      - name: Enforce gate (FAIL_ON_GATE=true)
+        if: steps.changed.outputs.count != '0' && env.FAIL_ON_GATE == 'true'
+        run: |
+          GATE="${{ steps.synth.outputs.gate }}"
+          HIGH="${{ steps.synth.outputs.semgrep_high }}"
+          if [ "${GATE}" = "FAIL" ] || [ "${HIGH}" -gt 0 ]; then
+            echo "::error::Quality gate failed (gate=${GATE}, high-severity security=${HIGH})."
+            exit 1
+          fi
+          echo "Quality gate passed."

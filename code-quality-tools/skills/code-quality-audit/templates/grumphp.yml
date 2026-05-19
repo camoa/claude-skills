@@ -1,0 +1,42 @@
+# GrumPHP configuration for code-quality-tools v3.2.0+
+#
+# Copy to your project root as `grumphp.yml`. Installed by `/code-quality:setup`
+# when the optional "Install GrumPHP git hooks?" prompt is accepted.
+#
+# Scope: pre-commit only checks files staged for the current commit
+# (`context: git-staged-files`). Full-tree analysis lives in CI workflows —
+# see templates/ci/github-drupal.yml and templates/ci/github-drupal-pr.yml.
+#
+# Intentionally excluded from this hook:
+#   - phpcpd  (directory-scoped; slow on every commit)
+#   - phpunit (full suite by default; runs in CI instead)
+#   - phpmd   (noisy on legacy code; opt in by adding `phpmd:` below if desired)
+
+grumphp:
+  process_timeout: 120
+  stop_on_failure: false
+  ignore_unstaged_changes: true
+  hide_circumvention_tip: false
+
+  tasks:
+    phpcs:
+      standard: Drupal,DrupalPractice
+      whitelist_patterns:
+        - /^web\/modules\/custom\/(.*)/
+        - /^web\/themes\/custom\/(.*)/
+        - /^modules\/custom\/(.*)/
+        - /^themes\/custom\/(.*)/
+      triggered_by: [php, module, theme, install, inc, profile]
+      ignore_patterns:
+        - vendor/
+        - node_modules/
+
+    phpstan:
+      configuration: phpstan.neon
+      level: ~  # use level from phpstan.neon
+      force_patterns:
+        - /^web\/modules\/custom\/(.*)/
+        - /^web\/themes\/custom\/(.*)/
+      triggered_by: [php, module, theme, install, inc, profile]
+      memory_limit: "-1"
+      use_grumphp_paths: true

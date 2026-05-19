@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-05-19
+
+### PR-time review surfaces (CI workflow split + optional pre-commit hook)
+
+Two new opt-in surfaces for reviewing code at PR time without adding noise to existing audits. All three CI/hook surfaces (the existing full-tree workflow, the new PR workflow, and the new pre-commit hook) are independently opt-in — install whichever fit the team.
+
+**New: `skills/code-quality-audit/templates/ci/github-drupal-pr.yml`** — GitHub Actions workflow scoped to `pull_request` only. Computes changed PHP files via `git diff --diff-filter=ACMR base...head` (excludes `vendor/`, `node_modules/`, `web/core/`, contrib), then runs phpcs + phpstan + Semgrep against the changed list only. Builds a /50 rubric score, posts a **sticky PR comment** (`marocchino/sticky-pull-request-comment@v2`) with synthesis table + gate verdict, and uploads raw JSON as an artifact. Soft-nudge gate by default; repo Variable `FAIL_ON_GATE=true` enforces hard fail on rubric < 35 OR any high/critical Semgrep finding. Sibling to the existing `github-drupal.yml` (full-tree on push/PR), which is unchanged.
+
+**New: `skills/code-quality-audit/templates/grumphp.yml`** — pre-commit hook template. phpcs (Drupal,DrupalPractice) + phpstan, both `context: git-staged-files`, so the hook only checks files staged for the current commit. Intentionally excludes phpcpd (directory-scoped, slow), phpunit (full suite — keep in CI), phpmd (noisy on legacy code; opt-in via template edit).
+
+**Updated: `commands/setup.md`** — wizard now prompts "Install GrumPHP git hooks to lint staged files on every commit? [y/N]" (default No). On yes: runs `ddev composer require --dev phpro/grumphp`, copies the template, runs `vendor/bin/grumphp git:init`, and verifies with an empty commit. Re-runs of `/code-quality:setup` only re-ask when hooks aren't already installed. Setup also now documents the two GitHub Actions templates as the CI alternative.
+
+**Updated: `README.md`** — new "CI & Git Hooks (opt-in)" section above "Watch-mode & Scheduled Sweeps" with a comparison table for the two workflow templates, the `FAIL_ON_GATE` env var, and manual install steps for GrumPHP.
+
+No behavior change to existing commands or hooks. Existing `templates/ci/github-drupal.yml` is unchanged.
+
 ## [3.1.1] - 2026-04-27
 
 ### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
