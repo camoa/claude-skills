@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.1] - 2026-05-19
+
+### Fixed: `/scope` aborted on brand-new tasks, making the framework feel like it forgot the scope step
+
+User-reported: after answering `[y]` to `/next`'s "want to author a scope contract first?" offer on a brand-new task, `/scope <task>` aborted because no task folder existed yet. The user then ran `/research <task>`, which created the folder AND surfaced the alignment retrofit prompt — making it look like the framework "forgot" the scope conversation that had never actually happened. Root cause: `/next` v4.2.3+ wired the brand-new-task offer to `/scope`, but `/scope` resolution policy required an existing folder (`commands/scope.md` "Task resolution" section, pre-fix wording: *"If the task doesn't resolve, report the options and abort."*).
+
+### Changed
+
+- **`commands/scope.md` Task resolution.** Folder-missing path now scaffolds a minimal `task.md` stub at `implementation_process/in_progress/<task_name>/task.md` instead of aborting. Stub carries `**Current Phase:** Phase 0 — Scope` and a Notes-section sentinel (`Stub scaffolded by /scope on <date>`) so `/research` can detect and replace it.
+- **`commands/research.md` Step 2.** Detects the stub sentinel and overwrites `task.md` with the full Phase 1 template (preserving `alignment.md` and any other siblings). Any other pre-existing `task.md` aborts as before.
+- **`commands/scope.md` Errors and edge cases.** Adds rows for folder-missing+valid-name (scaffold), folder-missing+invalid-name (abort), and folder-missing+`--phase N` (abort with hint to run task-level scope first). The "User hits Ctrl-C mid-conversation" row notes that a freshly-scaffolded stub is left in place as a valid starting point for a later retry.
+
+### Why this is a PATCH not a minor
+
+The change reinstates a UX path `/next` v4.2.3+ already promises but couldn't fulfill. No new commands, no new flags, no new schemas — just removing an inconsistency between two existing commands. Per `feedback_semver_patch_vs_minor.md`, behavior-correcting fixes that don't add capability stay at PATCH.
+
 ## [4.3.0] - 2026-04-29
 
 ### Catalog-grounded code-change inference + component-aware /implement preflight

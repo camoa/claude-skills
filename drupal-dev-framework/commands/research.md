@@ -26,6 +26,7 @@ Run in order. Each "gate" step writes an audit JSON; non-bypassable unless an ex
    - **Skip flag.** `--skip-pre-analysis <reason>` writes audit with `bypass_reason`.
 
 2. **Create task scaffolding.** Make `implementation_process/in_progress/<task_name>/`. Write `task.md` with frontmatter, Goal, Phase Status, Acceptance Criteria, Research Questions sections (template in walkthrough §"Output").
+   - **Stub from `/scope` (v4.3.1+):** if the folder already exists and `task.md` carries either the literal line `**Current Phase:** Phase 0 — Scope` OR a Notes-section line starting with `Stub scaffolded by `/scope``, treat it as a `/scope`-scaffolded stub and overwrite `task.md` with the full Phase 1 template (preserving `alignment.md` and any other sibling files). Do not abort on the pre-existing folder in this case. Any other pre-existing `task.md` aborts as before.
 
 3. **Dev-guides preflight (deterministic, v4.0.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` → `keywords_matched[]` + `guides_to_load[]`. Display literal preflight prompt with auto-loaded guides (or "— none auto-matched —"). Block on `[c]/[a]/[n]` per `prompts:dev-guides-preflight` semantics (defaults `[c]`). Apply choice (load/scan/clear). Write `_dev-guides-load.json` audit.
 
