@@ -141,6 +141,45 @@ Claude: PLAN (dry-run): /migrate-to-epic my_big_task
 No changes made. Re-run without --dry-run to execute.
 ```
 
+### Promote a subtask to a sub_epic (v4.4.0+)
+
+```
+User: /drupal-dev-framework:migrate-to-epic auth_subtask --children "token_logic,session_storage"
+
+Claude: Promoting `auth_subtask` to a sub_epic.
+
+Preflight detected nested location:
+  parent epic: user_management_epic
+  subtask:     auth_subtask
+
+Invoking epic-migrator...
+  [1/8] Preflight: OK — kind=subtask parent kind=epic
+  [2/8] Children resolved (looking under parent epic):
+        token_logic     → MOVE from parent's in_progress/
+        session_storage → CREATE stub
+  [3/8] Built temp structure (sub_epic frontmatter: kind=sub_epic, parent=local:user_management_epic)
+  [4/8] Validation: all frontmatter parses cleanly
+  [5/8] Atomic swap: OK
+  [6/8] Rollback scheduled (.migration-tmp/.old-auth_subtask/ for 24h)
+  [7/8] Session context refreshed
+  [8/8] Done.
+
+user_management_epic/
+  task.md                                (unchanged — still lists auth_subtask in children[])
+  in_progress/
+    auth_subtask/                        (kind: sub_epic — was: subtask)
+      task.md
+      in_progress/
+        token_logic/task.md              (kind: subtask, parent: local:auth_subtask)
+        session_storage/task.md          (stub)
+
+Note: max nesting depth is 2. Cannot promote `token_logic` or `session_storage` further —
+preflight will refuse with "parent is already a sub_epic".
+
+Rollback available 24h at .migration-tmp/.old-auth_subtask/
+Next: /drupal-dev-framework:next
+```
+
 ### Promote to epic shell (no children yet)
 
 ```
@@ -168,7 +207,7 @@ Next: work on the epic's own phases, or add children when ready.
 - **Does not propose which tasks should be epics.** That's `/drupal-dev-framework:propose-epics` (v3.11.0+).
 - **Does not migrate multiple tasks at once.** One invocation = one task. Bulk review is a `/propose-epics` concern.
 - **Does not migrate completed tasks.** Preflight refuses.
-- **Does not promote a subtask to a sub_epic.** That's a different flow (candidate for a later command). Today, sub-epics are created by running this command on a task whose parent is already an epic — which the preflight currently refuses. If you need nested decomposition, contact the framework maintainers (mechanism pending).
+- **Does promote a subtask to a sub_epic** (v4.4.0+). Running this command on a subtask inside an epic creates the second and final nesting level: the subtask becomes `kind: sub_epic` with its own `in_progress/` and `completed/` subfolders for grandchildren. The parent epic's frontmatter is unchanged (it still lists the promoted task in its `children[]`; only the kind shifts). Refused when the parent is already a `sub_epic` — max nesting depth is 2. The classifier looks for peer subtasks under the parent epic's `in_progress/` and `completed/` (not project-level) when resolving `move_existing` / `already_completed` children.
 - **Does not cross project boundaries.** A task in project A cannot have children in project B.
 
 ## Errors and how to resolve
@@ -178,7 +217,11 @@ Next: work on the epic's own phases, or add children when ready.
 | `task folder not found` | Check the spelling of `<task-name>`; it must match an in-progress folder name exactly. |
 | `task already in completed/` | Cannot migrate completed tasks. Move the folder back to `in_progress/` manually if you really need to. |
 | `task is already an epic (kind=epic)` | The task is already an epic. Add children via re-running this command (expansion flow — see examples above). |
-| `task is a subtask of another epic` | Cannot promote subtasks directly. Detach the task from its parent first (manual: edit the parent's `task.md` frontmatter `children[]` to remove this task, then re-run). |
+| `task is already an epic (kind=sub_epic)` | The subtask was already promoted to a sub_epic earlier. Re-run with a new `--children` list to expand it. |
+| `parent '<name>' is already a sub_epic — sub-sub-epics are not allowed (max nesting depth = 2)` | The subtask you're trying to promote lives inside a sub_epic; the framework allows only one level of nesting. Re-decompose at the top of the tree (split work into a peer epic instead). |
+| `ambiguous task name '<name>'` | The subtask name exists under multiple parent epics. Run from inside the parent epic's folder, or rename one of the subtasks so the name is unique under `in_progress/`. |
+| `task at top-level has kind=subtask — frontmatter inconsistent with location` | The task lives at project-level but its frontmatter says `kind: subtask`. Edit the frontmatter to `kind: flat` (or move the folder under its parent epic) and retry. |
+| `task at nested path has kind=flat — frontmatter inconsistent with location` | The task lives inside an epic but its frontmatter says `kind: flat`. Edit the frontmatter to `kind: subtask` (or move the folder to project-level) and retry. |
 | `a prior migration's rollback directory exists` | A previous migration left `.migration-tmp/.old-<task>/`. Either the rollback window is still open (use it, or delete it manually), or a previous migration crashed mid-run. Resolve the temp state before retrying. |
 | `generated task.md has blocking warnings` | Schema-level problem with how the migration was assembled. Check the warning detail; usually indicates a malformed child name. |
 

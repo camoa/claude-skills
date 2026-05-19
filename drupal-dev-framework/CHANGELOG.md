@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-05-19
+
+### Added: `/migrate-to-epic` promotes subtasks to sub_epics (second nesting level)
+
+User-reported: `CLAUDE.md` documents sub-epics as a legal task kind ("second and final nesting level; no sub-sub-epics") and the frontmatter reader accepts `kind: sub_epic`, but `commands/migrate-to-epic.md` line 171 said *"Does not promote a subtask to a sub_epic. That's a different flow (candidate for a later command)"* and the preflight refused outright with `task is a subtask; cannot promote`. The plumbing was half-built — schema knew about sub_epics, but no command could create one.
+
+### Changed
+
+- **`scripts/migrate-to-epic.sh` task resolution.** Resolves `<task_name>` against two locations: project-level `in_progress/<task>/` (existing flat→epic path, unchanged behavior) OR `in_progress/<parent>/in_progress/<task>/` (new subtask→sub_epic path). Ambiguous nested matches abort with a per-candidate list.
+- **`scripts/migrate-to-epic.sh` preflight.** New variable `IS_SUBEPIC_PROMOTION` routes the rest of the script through parent-scoped child roots. When kind=subtask, parent's kind is checked: `epic` proceeds, `sub_epic` aborts with `parent '<name>' is already a sub_epic — sub-sub-epics are not allowed (max nesting depth = 2)`. Frontmatter/location mismatches abort (top-level kind=subtask or nested kind=flat).
+- **`scripts/migrate-to-epic.sh` build step.** Sub_epic frontmatter is `kind: sub_epic, parent: local:<parent_name>` via the new `write_subepic_frontmatter` helper. Child peers are sourced from the parent epic's `in_progress/` / `completed/` (via `CHILD_IN_PROGRESS_ROOT` / `CHILD_COMPLETED_ROOT`), so moving sibling subtasks under the new sub_epic works correctly. Cleanup of original peer folders uses the same parent-scoped roots.
+- **`scripts/fm-helpers.sh`** — adds `write_subepic_frontmatter <task> <parent> <status> [<children>...]` matching the existing `write_epic_frontmatter` shape. Sub_epic carries `kind: sub_epic` + non-null `parent`. Canonical YAML via `yaml.safe_dump(sort_keys=False)`.
+- **`commands/migrate-to-epic.md`** — adds usage example for sub_epic promotion, replaces the "does not promote subtasks" disclaimer with the new behavior description, updates the errors table with the 4 new abort conditions (already-sub_epic, parent-is-sub_epic, ambiguous-name, kind/location mismatch), removes the now-misleading "task is a subtask of another epic" row.
+- **`CLAUDE.md`** — updates the `/migrate-to-epic` description to document the dual path.
+
+### Compatibility
+
+- **Flat→epic path is byte-identical** to v4.3.1 behavior. All routing through new `CHILD_*_ROOT` variables resolves to the same project-level paths when `IS_SUBEPIC_PROMOTION=false`.
+- **The parent epic's `task.md` is not modified.** The promoted subtask was already in the parent's `children[]`; only its own `kind` shifts from `subtask` to `sub_epic`. Hierarchy walkers (`/status`, `/next`, `/complete`) should continue to follow `children[]` references and inspect the referenced task's kind to decide rendering — same pattern as before.
+- **Max nesting depth is 2.** This is enforced both by the parent-kind check in preflight AND by the simple-glob task resolver (which only walks one level deep, so a nested-nested folder won't be findable as `<task>`). To go deeper, decompose at the top of the tree.
+
+### Why MINOR not patch
+
+Adds capability that didn't exist before (`sub_epic` creation). Schema accepted `sub_epic`, but no path produced one. Per `feedback_semver_patch_vs_minor.md`, adding capability is MINOR.
+
 ## [4.3.1] - 2026-05-19
 
 ### Fixed: `/scope` aborted on brand-new tasks, making the framework feel like it forgot the scope step
