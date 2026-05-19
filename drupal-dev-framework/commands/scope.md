@@ -21,7 +21,7 @@ Without `--phase`, authors the `## Task-Level` section. With `--phase N`, author
 
 ## What this does
 
-1. Resolves `<task-name>` to a task folder using the usual resolver (in-progress folder, epic subfolder, etc.).
+1. Resolves `<task-name>` to a task folder using the usual resolver (in-progress folder, epic subfolder, etc.). If the folder does not exist, **scaffold a minimal task stub** (see "Task resolution" below) so brand-new tasks can author scope before `/research` runs.
 2. Invokes `alignment-reader` skill to read the current state of `alignment.md` (if any).
 3. **Overwrite guard** — if the target section already exists, asks before overwriting.
 4. Runs the alignment conversation — **one question at a time**, author-authored, never auto-generated.
@@ -36,7 +36,47 @@ Accept task names in these forms:
 - `<epic>/<subtask>` — explicit epic-subtask path (inside the epic's `in_progress/`)
 - absolute or relative path to a task folder
 
-If the task doesn't resolve, report the options and abort.
+**Resolution outcomes:**
+
+| Outcome | Behavior |
+|---|---|
+| Folder exists with `task.md` | Proceed normally — the task is established |
+| Folder absent, name validates (`^[A-Za-z0-9_][A-Za-z0-9._-]*$`, no path separators, not `.`/`..`) | **Scaffold a minimal task stub** at `implementation_process/in_progress/<task_name>/task.md` so the scope conversation has a home. See "Stub scaffolding" below. |
+| Folder absent, name invalid | Report the validation error and abort. Do not scaffold. |
+| Ambiguous match (e.g., same name in two epics) | Report candidate matches and abort. |
+
+This scaffolding-on-miss is required so `/next`'s brand-new-task offer (`commands/next.md` v4.2.3+ "Scope offer for brand-new tasks") can hand off to `/scope` before `/research` creates the folder. Without scaffolding, `/scope` aborts and the user has to skip scope, then run `/research`, then accept the alignment retrofit prompt — which feels like the framework "forgot" the earlier scope offer.
+
+### Stub scaffolding
+
+When scaffolding a missing task folder, write exactly this minimal `task.md` (Phase 1 will replace it with the fuller template at `references/research-walkthrough.md` §"Output"):
+
+```markdown
+# Task: <task_name>
+
+**Created:** <YYYY-MM-DD>
+**Current Phase:** Phase 0 — Scope
+
+## Goal
+_To be authored via `/drupal-dev-framework:scope`. `/drupal-dev-framework:research` will replace this stub with the full Phase 1 tracker._
+
+## Phase Status
+- [ ] Phase 0: Scope → See [alignment.md](alignment.md)
+- [ ] Phase 1: Research → See [research.md](research.md)
+- [ ] Phase 2: Architecture → See [architecture.md](architecture.md)
+- [ ] Phase 3: Implementation → See [implementation.md](implementation.md)
+- [ ] Phase 4: Review (_review.json) → run `/drupal-dev-framework:review <task>`
+
+## Acceptance Criteria
+- [ ] _to be defined_
+
+## Notes
+Stub scaffolded by `/drupal-dev-framework:scope` on <YYYY-MM-DD>.
+```
+
+`/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by /scope" note) and overwrite it with the full template rather than aborting on a pre-existing folder.
+
+Skip stub scaffolding if invoked with `--phase N` — phase-level scope only makes sense on an established task; abort with a hint to run `/drupal-dev-framework:scope <task>` first (task-level) or `/drupal-dev-framework:research <task>` to begin Phase 1.
 
 ## Overwrite guard (retrofit case)
 
@@ -183,8 +223,11 @@ After a successful write, print:
 
 | Scenario | Behavior |
 |---|---|
-| Task doesn't resolve | Report candidate matches if any; abort |
-| User hits Ctrl-C mid-conversation | No partial write; `alignment.md` untouched |
+| Task folder missing, name validates | Scaffold stub task.md (see "Stub scaffolding") and continue; report `Scaffolded new task folder: <path>` |
+| Task folder missing, name invalid | Report validation error; abort. Do not scaffold. |
+| Task folder missing, `--phase N` provided | Abort with: "Phase-level scope requires an existing task. Run `/drupal-dev-framework:scope <task>` (task-level) first, or `/drupal-dev-framework:research <task>` to begin Phase 1." |
+| Ambiguous match across epics | Report candidate matches; abort |
+| User hits Ctrl-C mid-conversation | No partial write; `alignment.md` untouched. If the stub was just scaffolded this run, leave it — it's a valid starting point for a later retry. |
 | `--phase N` with N outside 1–3 | Report error; abort |
 | `alignment.md` unreadable (permissions) | Reader returns `error` warning; surface to user; abort |
 | User provides prose instead of checklist for success criteria | Accept prose; reader will later surface `success_criteria_not_checklist` warning — do NOT re-prompt in `/scope`, that's passive-aggressive |
