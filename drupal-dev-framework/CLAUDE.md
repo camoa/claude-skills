@@ -10,7 +10,7 @@ The plugin supports **opt-in epic/sub-task hierarchy** on top of flat tasks (whi
 - **Subtask** — a task nested inside an epic's `in_progress/` (while active) or `completed/` (when done). Completion never removes a subtask from its parent epic.
 
 **Key commands:**
-- **`/drupal-dev-framework:migrate-to-epic <task>`** — convert a flat task into an epic. Manual, per-task, transactional. Supports `--dry-run` and `--children "a,b,c"`.
+- **`/drupal-dev-framework:migrate-to-epic <task>`** — convert a flat task into an epic, OR (v4.4.0+) promote a subtask to a sub_epic (second and final nesting level). The same command handles both paths; the path is chosen by where `<task>` resolves (top-level vs nested under an epic). Manual, per-task, transactional. Supports `--dry-run` and `--children "a,b,c"`. Refuses when the would-be parent is already a `sub_epic` — max nesting depth is 2.
 - `/status` is hierarchy-aware — renders a tree for epics, flat list for flat tasks.
 - `/next` biases toward sibling subtasks inside the active epic; surfaces `/migrate-to-epic` when a task looks epic-sized.
 - `/complete` enforces epic-completion gates (all children done before the epic itself completes).

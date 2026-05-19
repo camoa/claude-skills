@@ -106,6 +106,29 @@ print(yaml.safe_dump(json.load(sys.stdin), sort_keys=False).rstrip())
 print("---")'
 }
 
+# write_subepic_frontmatter <task_name> <parent_name> <current_status> [<child1> <child2> ...]
+# Used when promoting a subtask to a sub_epic (second and final nesting level).
+# Sub-epics carry the same shape as epics but with kind=sub_epic and a non-null parent.
+write_subepic_frontmatter() {
+  local task="$1"; shift
+  local parent="$1"; shift
+  local current_status="${1:-in_progress}"; shift
+  local children_json="[]"
+  if [ $# -gt 0 ]; then
+    children_json=$(printf '%s\n' "$@" | jq -R '"local:" + .' | jq -sc .)
+  fi
+  jq -n --arg id "local:$task" --arg parent_id "local:$parent" --arg status "$current_status" --argjson children "$children_json" '
+    {
+      id: $id, kind: "sub_epic", parent: $parent_id,
+      children: $children, blocks: [], blocked_by: [],
+      external_ids: {}, status: $status
+    }' | python3 -c '
+import sys, json, yaml
+print("---")
+print(yaml.safe_dump(json.load(sys.stdin), sort_keys=False).rstrip())
+print("---")'
+}
+
 # write_subtask_frontmatter <child_name> <parent_name> [<current_status>]
 write_subtask_frontmatter() {
   local child="$1"

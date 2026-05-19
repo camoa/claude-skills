@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# migrate-to-epic.sh — 8-step transactional migration of a flat task → epic.
+# migrate-to-epic.sh — 8-step transactional migration. Two paths:
+#   1. flat → epic        (top-level task becomes a project-level epic)
+#   2. subtask → sub_epic (subtask inside an epic gets its own children;
+#                          second and final nesting level; max depth = 2)
 #
 # Usage:
 #   migrate-to-epic.sh <project_path> <task_name> [--dry-run] [<child1> <child2> ...]
+#
+# The path is chosen by where <task_name> resolves:
+#   - .../in_progress/<task>/                           → flat → epic
+#   - .../in_progress/<parent>/in_progress/<task>/      → subtask → sub_epic
+# Ambiguous match (subtask name exists under multiple parents) aborts.
 #
 # Transactional: the filesystem is either in pre-migration or post-migration
 # state; never half-migrated. Rollback dir persists 24h in .migration-tmp/.old-<task>/.
@@ -31,13 +39,16 @@
 #      yaml.safe_dump(..., sort_keys=False) — byte-deterministic across runs.
 #
 # Preflight rejections (exit 1 with ABORT:... message on stderr):
-#   - Task folder not found in in_progress/
+#   - Task folder not found at top-level or nested
 #   - task.md missing inside the folder
 #   - Task folder is a symlink (security hardening — paper-test finding)
 #   - task.md is a symlink (security hardening — paper-test finding)
 #   - Task already in completed/
 #   - Task is already an epic or sub_epic
-#   - Task is a subtask of another epic
+#   - Top-level task carries kind=subtask (frontmatter/location mismatch)
+#   - Nested task carries kind=flat (frontmatter/location mismatch)
+#   - Parent of a subtask is already a sub_epic (max nesting depth = 2)
+#   - Ambiguous subtask name across multiple epics
 #   - In-flight migration at .migration-tmp/<task>/ or .old-<task>/
 #   - Any child name equals the task name
 #   - Duplicate child names
@@ -109,15 +120,50 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
   done
 fi
 
-TASK_DIR="$PROJECT_PATH/implementation_process/in_progress/$TASK_NAME"
-COMPLETED_DIR="$PROJECT_PATH/implementation_process/completed/$TASK_NAME"
+# ---------------------------------------------------------------------------
+# Resolve TASK_DIR. Two possibilities:
+#   1. Top-level flat task → TASK_DIR = .../in_progress/<task>/
+#   2. Subtask inside an epic → TASK_DIR = .../in_progress/<parent>/in_progress/<task>/
+#      (subtask-to-sub_epic promotion; second and final nesting level allowed)
+# ---------------------------------------------------------------------------
+IS_SUBEPIC_PROMOTION=false
+PARENT_EPIC_NAME=""
+PARENT_EPIC_DIR=""
+
+TOP_LEVEL_TASK_DIR="$PROJECT_PATH/implementation_process/in_progress/$TASK_NAME"
+TOP_LEVEL_COMPLETED_DIR="$PROJECT_PATH/implementation_process/completed/$TASK_NAME"
+
+if [ -d "$TOP_LEVEL_TASK_DIR" ]; then
+  TASK_DIR="$TOP_LEVEL_TASK_DIR"
+  COMPLETED_DIR="$TOP_LEVEL_COMPLETED_DIR"
+else
+  # Search one level deep: any epic that owns a subtask with this name.
+  CANDIDATES=()
+  for epic_in_progress in "$PROJECT_PATH"/implementation_process/in_progress/*/in_progress/"$TASK_NAME"; do
+    [ -d "$epic_in_progress" ] && CANDIDATES+=("$epic_in_progress")
+  done
+  if [ ${#CANDIDATES[@]} -eq 0 ]; then
+    abort "task folder not found at top-level or nested: $TOP_LEVEL_TASK_DIR"
+  elif [ ${#CANDIDATES[@]} -gt 1 ]; then
+    echo "ABORT: ambiguous task name '$TASK_NAME' — found in multiple epics:" >&2
+    for c in "${CANDIDATES[@]}"; do echo "  $c" >&2; done
+    exit 1
+  fi
+  TASK_DIR="${CANDIDATES[0]}"
+  # PARENT_EPIC_DIR is the dirname of TASK_DIR's parent in_progress/.
+  # TASK_DIR = .../in_progress/<parent>/in_progress/<task>; parent_epic_dir = .../in_progress/<parent>
+  PARENT_EPIC_DIR="$(dirname "$(dirname "$TASK_DIR")")"
+  PARENT_EPIC_NAME="$(basename "$PARENT_EPIC_DIR")"
+  COMPLETED_DIR="$PARENT_EPIC_DIR/completed/$TASK_NAME"
+  IS_SUBEPIC_PROMOTION=true
+fi
+
 TEMP_ROOT="$PROJECT_PATH/implementation_process/in_progress/.migration-tmp"
 
 # ---------------------------------------------------------------------------
 # Step 1 — Preflight
 # ---------------------------------------------------------------------------
 echo "[1/8] Preflight"
-[ -d "$TASK_DIR" ] || abort "task folder not found: $TASK_DIR"
 [ ! -L "$TASK_DIR" ] || abort "task folder is a symlink — rejected (Paper-test Flaw 3 security hardening)"
 [ -f "$TASK_DIR/task.md" ] || abort "task.md not found in folder"
 [ ! -L "$TASK_DIR/task.md" ] || abort "task.md is a symlink — rejected (Paper-test Flaw 3 security hardening)"
@@ -127,12 +173,31 @@ READER=$(fm_read "$TASK_DIR")
 CURRENT_KIND=$(jq -r '.kind' <<<"$READER")
 CURRENT_STATUS=$(jq -r '.status' <<<"$READER")
 
-case "$CURRENT_KIND" in
-  flat) : ;;
-  epic|sub_epic) abort "task is already an epic (kind=$CURRENT_KIND)" ;;
-  subtask) abort "task is a subtask; cannot promote" ;;
-  *) abort "unknown kind: $CURRENT_KIND" ;;
-esac
+if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+  # Subtask-to-sub_epic path. Verify parent's kind is `epic` (not `sub_epic` — no third level).
+  case "$CURRENT_KIND" in
+    subtask) : ;;
+    epic|sub_epic) abort "task is already an epic (kind=$CURRENT_KIND)" ;;
+    flat) abort "task at nested path has kind=flat — frontmatter inconsistent with location" ;;
+    *) abort "unknown kind: $CURRENT_KIND" ;;
+  esac
+  PARENT_READER=$(fm_read "$PARENT_EPIC_DIR")
+  PARENT_KIND=$(jq -r '.kind' <<<"$PARENT_READER")
+  case "$PARENT_KIND" in
+    epic) : ;;
+    sub_epic) abort "parent '$PARENT_EPIC_NAME' is already a sub_epic — sub-sub-epics are not allowed (max nesting depth = 2)" ;;
+    *) abort "parent '$PARENT_EPIC_NAME' has unexpected kind=$PARENT_KIND" ;;
+  esac
+  echo "  Sub-epic promotion: parent='$PARENT_EPIC_NAME' subtask='$TASK_NAME'"
+else
+  # Top-level flat-to-epic path (unchanged behavior).
+  case "$CURRENT_KIND" in
+    flat) : ;;
+    epic|sub_epic) abort "task is already an epic (kind=$CURRENT_KIND)" ;;
+    subtask) abort "task at top-level has kind=subtask — frontmatter inconsistent with location" ;;
+    *) abort "unknown kind: $CURRENT_KIND" ;;
+  esac
+fi
 
 [ ! -d "$TEMP_ROOT/$TASK_NAME" ] || abort "prior migration in temp; resolve manually"
 [ ! -d "$TEMP_ROOT/.old-$TASK_NAME" ] || abort "prior rollback dir exists; resolve manually"
@@ -156,12 +221,27 @@ echo "[2/8] Classify children"
 #   create_stub       — child name has no folder anywhere; epic creates an empty stub
 # Paper-test Integration-Bug-1 (2026-04-22) fix: distinguish completed children to avoid
 # creating empty duplicate folders inside the epic when dog-fooding this migration.
+# For sub_epic promotion, peer candidates live INSIDE the parent epic, not at
+# project-level. CHILD_IN_PROGRESS_ROOT / CHILD_COMPLETED_ROOT abstract over the
+# two cases so the rest of the script doesn't need to branch.
+if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+  CHILD_IN_PROGRESS_ROOT="$PARENT_EPIC_DIR/in_progress"
+  CHILD_COMPLETED_ROOT="$PARENT_EPIC_DIR/completed"
+else
+  CHILD_IN_PROGRESS_ROOT="$PROJECT_PATH/implementation_process/in_progress"
+  CHILD_COMPLETED_ROOT="$PROJECT_PATH/implementation_process/completed"
+fi
+
 CHILD_KINDS=()
 if [ ${#CHILDREN[@]} -gt 0 ]; then
   for child in "${CHILDREN[@]}"; do
-    if [ -d "$PROJECT_PATH/implementation_process/in_progress/$child" ]; then
+    # A child that happens to share the migrating task's name (which already
+    # owns the candidate path) must not match itself.
+    if [ "$child" = "$TASK_NAME" ]; then
+      CHILD_KINDS+=("create_stub")  # will be caught by the name-clash preflight check above
+    elif [ -d "$CHILD_IN_PROGRESS_ROOT/$child" ]; then
       CHILD_KINDS+=("move_existing")
-    elif [ -d "$PROJECT_PATH/implementation_process/completed/$child" ]; then
+    elif [ -d "$CHILD_COMPLETED_ROOT/$child" ]; then
       CHILD_KINDS+=("already_completed")
     else
       CHILD_KINDS+=("create_stub")
@@ -193,7 +273,12 @@ fi
 if [ "$DRY_RUN" = "true" ]; then
   echo ""
   echo "PLAN (dry-run): no changes made."
-  echo "  Would create epic folder with kind=epic, status=$CURRENT_STATUS"
+  if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+    echo "  Would promote subtask '$TASK_NAME' (inside epic '$PARENT_EPIC_NAME') to kind=sub_epic, status=$CURRENT_STATUS"
+    echo "  Promoted path stays at $TASK_DIR"
+  else
+    echo "  Would create epic folder with kind=epic, status=$CURRENT_STATUS"
+  fi
   echo "  Would preserve phase artifacts:"
   for f in research.md architecture.md implementation.md; do
     [ -f "$TASK_DIR/$f" ] && echo "    - $f"
@@ -217,7 +302,11 @@ mkdir "$TEMP_ROOT/$TASK_NAME/in_progress"
 mkdir "$TEMP_ROOT/$TASK_NAME/completed"
 
 cp "$TASK_DIR/task.md" "$TEMP_ROOT/$TASK_NAME/task.md"
-EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+  EPIC_FM=$(write_subepic_frontmatter "$TASK_NAME" "$PARENT_EPIC_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+else
+  EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+fi
 apply_frontmatter "$TEMP_ROOT/$TASK_NAME/task.md" "$EPIC_FM"
 
 for artifact in research.md architecture.md implementation.md; do
@@ -243,22 +332,22 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
     kind=$(child_kind_at $idx)
     case "$kind" in
       move_existing)
-        # Child is in progress → land in epic's in_progress/
-        cp -r "$PROJECT_PATH/implementation_process/in_progress/$child" "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
+        # Child is in progress → land in (sub-)epic's in_progress/. Source is the
+        # parent epic's in_progress/ for sub_epic promotion; project-level otherwise.
+        cp -r "$CHILD_IN_PROGRESS_ROOT/$child" "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
         CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/in_progress/$child")
         CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
         SUB_FM=$(write_subtask_frontmatter "$child" "$TASK_NAME" "$CHILD_STATUS")
         apply_frontmatter "$TEMP_ROOT/$TASK_NAME/in_progress/$child/task.md" "$SUB_FM"
         ;;
       create_stub)
-        # New stub → land in epic's in_progress/ (status=draft)
+        # New stub → land in (sub-)epic's in_progress/ (status=draft)
         mkdir "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
         write_stub_task_md "$TEMP_ROOT/$TASK_NAME/in_progress/$child/task.md" "$child" "$TASK_NAME"
         ;;
       already_completed)
-        # Child is completed → copy from project-level completed/ into epic's completed/
-        # Preserves spatial association with the parent epic.
-        cp -r "$PROJECT_PATH/implementation_process/completed/$child" "$TEMP_ROOT/$TASK_NAME/completed/$child"
+        # Child is completed → copy from parent-scoped completed/ into (sub-)epic's completed/.
+        cp -r "$CHILD_COMPLETED_ROOT/$child" "$TEMP_ROOT/$TASK_NAME/completed/$child"
         CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/completed/$child")
         CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
         # Force status=completed regardless of what frontmatter said (authoritative by location)
@@ -319,10 +408,10 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
     kind=$(child_kind_at $idx)
     case "$kind" in
       move_existing)
-        rm -rf "$PROJECT_PATH/implementation_process/in_progress/$child"
+        rm -rf "$CHILD_IN_PROGRESS_ROOT/$child"
         ;;
       already_completed)
-        rm -rf "$PROJECT_PATH/implementation_process/completed/$child"
+        rm -rf "$CHILD_COMPLETED_ROOT/$child"
         ;;
     esac
     idx=$((idx + 1))
