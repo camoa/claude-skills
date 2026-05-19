@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.39"
+    "version": "1.14.40"
   },
   "plugins": [
     {
@@ -35,8 +35,8 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration. Covers 29 hook events (now including Setup for --init-only / --init -p / --maintenance -p one-time preparation, plus WorktreeCreate/WorktreeRemove for replacing default git worktree behavior with custom VCS logic), the if pre-spawn filter, the mcp_tool handler type, the effort.level adaptive-effort input + $CLAUDE_EFFORT env var, updatedToolOutput (supersedes MCP-only updatedMCPToolOutput), experimental.themes / experimental.monitors manifest migration with auto-migration diff offer, $schema field for editor autocomplete, array-only agents, plugin themes, userConfig with type/title schema, skillOverrides setting + the plugin-skills caveat, claude plugin prune + --prune flag on uninstall + --plugin-url session loader, Plugin Hints (CLI-driven install prompts) for first-party plugin authors, workspace-trust gating clarification on allowed-tools, plugin-root CLAUDE.md scoping clarification, allowCrossMarketplaceDependenciesOn, claude plugin tag, forked subagents, Agent SDK (overview/migration/custom-tools/subagents/permissions/structured-outputs/tool-search/observability/agent-loop), plugin dependencies, permission modes, claude directory layout, REVIEW.md v2, Routines-based auto-validate, and skill-description quality patterns.",
-      "version": "3.4.1",
+      "description": "Authoritative quality gate + authoring guide for Claude Code plugins. Covers all 29 hook events (Setup, WorktreeCreate/WorktreeRemove, PostToolBatch, UserPromptExpansion, …), five handler types (command / http / mcp_tool / prompt / agent), the if pre-spawn filter, the effort.level adaptive-effort input + $CLAUDE_EFFORT env var, experimental.themes / experimental.monitors manifest migration, $schema field, array-only agents, channels, bin/ auto-discovery, plugin-root settings.json (agent + subagentStatusLine), userConfig with type/title schema, skillOverrides, claude plugin prune + --plugin-url + --plugin-dir, Plugin Hints, workspace-trust gating, allowCrossMarketplaceDependenciesOn, forked subagents, Agent SDK, REVIEW.md v2, Routines auto-validate. v3.5.0 ships **Hook Authoring Depth**: exec form (`args` field) preferred for path placeholders, `systemMessage` / `terminalSequence` JSON output (v2.1.139+ no controlling terminal), 10,000-character output cap, parallel-then-merge execution with `deny > defer > ask > allow` PreToolUse precedence — and seven paired validator rules (H05 shell→exec form with `--fix`; H06 `$VAR`→`${VAR}` with `--fix`; H08 broad-matcher missing `if`; H09 `if` on non-tool events; H10 updatedMCPToolOutput → updatedToolOutput with `--fix`; H11 SessionStart install → Setup; H12 hook writes to `/dev/tty` is an error; H13 hook output >10K). Opt-in `--fix` flag with `.claude-plugin/.validate-fixes.log` audit trail.",
+      "version": "3.5.0",
       "author": {
         "name": "camoa"
       },

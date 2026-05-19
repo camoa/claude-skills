@@ -27,7 +27,7 @@ The plugin contains one large skill (`plugin-creation`) that progressively discl
 
 The bundled references map to every section of the upstream Claude Code docs that affects plugin authoring (snapshot at commit `c142d14`):
 
-- **Hooks** — all 29 events (including `Setup` for `--init-only` / `--init -p` / `--maintenance -p` one-time preparation, and `WorktreeCreate` / `WorktreeRemove` for replacing default git worktree behavior with custom VCS logic) with payloads, decision controls, and matcher behavior; five handler types (`command` / `http` / `mcp_tool` / `prompt` / `agent`); the `if` pre-spawn filter; the `effort.level` adaptive-effort input + `$CLAUDE_EFFORT` env var; `updatedToolOutput` (supersedes MCP-only `updatedMCPToolOutput`); cross-platform polyglot wrapper; permission-mode-per-hook table.
+- **Hooks** — all 29 events (including `Setup` for `--init-only` / `--init -p` / `--maintenance -p` one-time preparation, and `WorktreeCreate` / `WorktreeRemove` for replacing default git worktree behavior with custom VCS logic) with payloads, decision controls, and matcher behavior; five handler types (`command` / `http` / `mcp_tool` / `prompt` / `agent`); **exec form vs shell form** with the `args` field (preferred whenever a path placeholder appears); the `if` pre-spawn filter; the `effort.level` adaptive-effort input + `$CLAUDE_EFFORT` env var; `updatedToolOutput` (supersedes MCP-only `updatedMCPToolOutput`); **JSON output return fields** (`systemMessage`, `terminalSequence`, `additionalContext`, 10,000-character output cap, no controlling terminal as of v2.1.139); **parallel-then-merge execution** with `deny > defer > ask > allow` PreToolUse precedence; cross-platform polyglot wrapper; permission-mode-per-hook table.
 - **Skills** — frontmatter schema, voice and structure, progressive disclosure, dynamic context injection (`` !`command` ``), preload caveats, char/line caps.
 - **Agents** — frontmatter, model selection, tool restrictions, scoped hooks/MCP, agent teams, forked subagents (experimental), `--agent` main-session behavior.
 - **Configuration** — `plugin.json` (themes, `userConfig` with `type`/`title`, dependencies with semver ranges, `${user_config.KEY}` substitution); `marketplace.json` (sources, `allowCrossMarketplaceDependenciesOn`, `claude plugin tag`); `settings.json` (hierarchy, `prUrlTemplate`, `enabledPlugins`); permission modes; plugin themes.
@@ -57,7 +57,7 @@ The bundled references map to every section of the upstream Claude Code docs tha
 
 ## Compatibility
 
-Targets Claude Code as of release **2.1.119** (2026-04-25 doc snapshot). Most content is forward-compatible; new features in later releases are added in subsequent minor versions.
+Targets Claude Code as of release **2.1.144** (2026-05-12 doc snapshot). Most content is forward-compatible; new features in later releases are added in subsequent minor versions.
 
 ## Changelog
 

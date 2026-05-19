@@ -16,6 +16,7 @@ Create output directories and initialize environment at session start:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup-session.sh",
+          "args": [],
           "timeout": 30
         }
       ]
@@ -66,6 +67,7 @@ Auto-format code after file modifications:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format-code.sh",
+          "args": [],
           "timeout": 30
         }
       ]
@@ -121,6 +123,7 @@ Log all tool operations:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-operation.py",
+          "args": [],
           "timeout": 5
         }
       ]
@@ -178,6 +181,7 @@ Validate code before git commits:
         {
           "type": "validation",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/pre-commit-check.sh",
+          "args": [],
           "timeout": 60
         }
       ]
@@ -253,6 +257,7 @@ Add context to user prompts:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/inject-context.sh",
+          "args": [],
           "timeout": 10
         }
       ]
@@ -293,6 +298,7 @@ Clean up on session end:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+          "args": [],
           "timeout": 15
         }
       ]
@@ -332,11 +338,13 @@ Multiple hooks for the same event:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+          "args": []
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh",
+          "args": []
         }
       ]
     }
@@ -360,7 +368,8 @@ Show custom status text during tool execution:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/status-message.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/status-message.sh",
+          "args": []
         }
       ]
     }
@@ -400,6 +409,7 @@ Fire a hook only once per session using `once: true`:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/first-modification-alert.sh",
+          "args": [],
           "once": true
         }
       ]
@@ -422,7 +432,8 @@ Use `ask` to escalate uncertain decisions to the user:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/risk-assessment.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/risk-assessment.sh",
+          "args": []
         }
       ]
     }
@@ -469,6 +480,7 @@ Run a linter automatically when specific config files change on disk:
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/relint-on-config-change.sh",
+          "args": [],
           "async": true,
           "timeout": 60
         }
@@ -514,7 +526,8 @@ In auto mode, log classifier denials and tell the model it may retry when approp
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bash-denial-handler.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bash-denial-handler.sh",
+          "args": []
         }
       ]
     }
@@ -565,7 +578,8 @@ Enforce task-subject conventions and log created tasks for observability:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/track-task-creation.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/track-task-creation.sh",
+          "args": []
         }
       ]
     }
@@ -618,7 +632,8 @@ Block direct invocation of a skill or command unless a precondition is met. `Pre
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh",
+          "args": []
         }
       ]
     }
@@ -667,7 +682,8 @@ Inject one summary message after a batch of parallel tool calls instead of N per
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh",
+          "args": []
         }
       ]
     }

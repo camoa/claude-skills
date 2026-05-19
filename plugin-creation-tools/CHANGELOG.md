@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-05-19
+
+**Theme: Hook Authoring Depth.** First release of the consolidated roadmap (2026-05-12). Catches up on the v2.1.139 → v2.1.144 hook revolution and ships paired enforcement rules so the same regressions can't reappear in other plugins.
+
+Snapshot baseline: Claude Code v2.1.144, `~/workspace/claude_memory/guides/claude/` refreshed 2026-05-12 (`552b666`).
+
+### Added — Exec form vs shell form
+
+- `references/06-hooks/writing-hooks.md`: new section "Exec form vs shell form" — covers the `args` field, when exec form is preferred (any time a placeholder appears), the Windows `.cmd`/`.bat` caveat (invoke `node` with the script path), and the bare-name + whitespace warning condition. Fields table gains `args` and `shell` rows.
+- All canonical hook examples in `templates/hooks/hooks.json.template`, `references/06-hooks/hook-events.md` (25 examples), `references/06-hooks/hook-patterns.md` (16 examples), `references/06-hooks/writing-hooks.md`, `hooks/hooks.json` (plugin self-application), and `skills/plugin-creation/examples/full-featured-plugin/hooks/hooks.json` (the cross-platform `.cmd` wrapper stays in shell form with an inline note explaining why).
+
+### Added — JSON output return fields
+
+- `references/06-hooks/writing-hooks.md`: new section "JSON Output Return Fields" — table of `continue` / `stopReason` / `suppressOutput` / `systemMessage` / `terminalSequence` / `hookSpecificOutput.additionalContext`. Covers the v2.1.139 "no controlling terminal" change (hooks can no longer write to `/dev/tty` or emit raw escape sequences), the OSC allowlist for `terminalSequence` (0/1/2/9/99/777 + BEL), and the 10,000-character output cap with file-fallback behavior.
+- `references/06-hooks/hook-events.md`: top-of-file callout summarising the three v2.1.139+ rules (no controlling terminal, 10K cap, exec form for placeholders) with links to the writing-hooks section.
+
+### Added — Hook execution semantics
+
+- `references/06-hooks/writing-hooks.md`: new section "Hook Execution Order & Precedence" — parallel-then-merge, dedup-by-`command`+`args` for command hooks (HTTP by URL), and PreToolUse decision precedence `deny > defer > ask > allow`. Replaces the "most restrictive setting wins" misconception that authors sometimes ship.
+
+### Added — Validator rules H05–H13 (paired with `--fix` machinery)
+
+`commands/validate.md` gains:
+
+- **H05 (warn, `--fix`)** — Command hook with a `${CLAUDE_*}` path placeholder in `command` but no `args` field → suggest exec form. Auto-fix inserts `"args": []`; skips when the command contains shell metacharacters (`|`, `&&`, `;`, redirects, etc.).
+- **H06 (warn, `--fix`)** — Bare `$CLAUDE_PROJECT_DIR` / `$CLAUDE_PLUGIN_ROOT` / `$CLAUDE_PLUGIN_DATA` / `$CLAUDE_ENV_FILE` / `$CLAUDE_EFFORT` inside JSON command-string values in `hooks.json` → rewrite to `${VAR}`. Only scans JSON command strings; bare `$VAR` inside `.sh` scripts is correct bash and is **not** flagged.
+- **H07 (warn)** — Shell-form command hooks must quote `${CLAUDE_*}` placeholders. Skipped when `args` is present (exec form needs no quoting).
+- **H08 (info)** — Broad-matcher tool-event hooks (`*` / `""` / `.*` / omitted) without `if` field may spawn on every tool call. Info-level suggestion, not warn — some authors intentionally spawn for logging.
+- **H09 (warn)** — `if` field on non-tool events (silently ignored at runtime).
+- **H10 (warn, `--fix`)** — `updatedMCPToolOutput` literal → `updatedToolOutput` in `hooks.json` and referenced hook scripts. Old field still works, but the rename means the hook also catches built-in tools, not only MCP.
+- **H11 (info)** — `SessionStart` hook script doing one-time install (check-then-install + package-install heuristic) → suggest moving to `Setup` event.
+- **H12 (error)** — Hook script writes to `/dev/tty`. Broken as of v2.1.139; surfaces as error with pointer to `terminalSequence` / `systemMessage`.
+- **H13 (warn)** — Best-effort heuristic on hook output approaching the 10K cap (large heredocs, `cat` of large files used as the only stdout).
+
+`--fix` is opt-in and reversible. All auto-fixes are logged to `.claude-plugin/.validate-fixes.log` (append-only, timestamp + rule + summary) so the author can grep the change history if a later version regresses.
+
+### Updated
+
+- `skills/plugin-creation/SKILL.md`: new "Exec form vs shell form" + "No controlling terminal" paragraphs in the Hooks section.
+- `README.md`: hook bullet expanded with exec form / JSON output fields / 10K cap / no controlling terminal / parallel-then-merge precedence. Compatibility line bumped from 2.1.119 → 2.1.144.
+- `CLAUDE.md`: Drift to Watch list gains hook command-form pair, output cap, controlling-terminal note, terminal-sequence allowlist, and PreToolUse decision precedence.
+- Marketplace description rewritten as an elevator pitch + v3.5.0 highlight (down from ~3500-char history dump).
+- Root marketplace.json `metadata.version` 1.14.39 → 1.14.40 (plugin-version pointer update).
+
+### Notes
+
+- **Rule numbering follows the roadmap (H05–H13).** Enforcement-design §4 uses overlapping IDs for different rules; the next release will reconcile if needed. The roadmap is authoritative for what each release ships.
+- **Ecosystem migration deferred.** The `--fix` machinery lands here; bulk migration of camoa-skills + palcera_skills hooks is a separate `chore/ecosystem-hook-migration` PR so the change history per plugin stays auditable.
+- **Out of scope** (parked for later releases per the roadmap): single-skill-at-root auto-discovery, recursive `agents/` subfolder scoping, `init_plugin.py` template-source refactor (v3.6.0); `$schema` / `experimental.*` auto-fix, `TodoWrite` deprecation, `WaitForMcpServers` / LSP tool rows (v3.6.1); skill-listing budget guidance, workspace-trust UI gate, `effort.level` skill examples (v3.6.2); cross-plugin session-remembrance helper (v3.7.0, conditional on DDF adopting the pattern first).
+
 ## [3.4.1] - 2026-05-12
 
 Post-v3.4.0 audit patch. A read-only comparison against the current `claude_memory/guides/claude/` snapshot surfaced three missing-content gaps (not stale-content). None affect the typical plugin-authoring path; all are scoped to short additions in existing reference files.

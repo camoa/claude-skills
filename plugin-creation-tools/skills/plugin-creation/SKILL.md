@@ -163,6 +163,10 @@ When user says "add hooks", "setup hooks", "event handlers":
 
 **Adaptive hooks**: Hook stdin JSON includes an `effort` object (`{ "level": ... }`) on tool-use-context events; the same level is exported as `$CLAUDE_EFFORT` to command hooks and the Bash tool. Use it to adapt verbosity, recursion depth, or external-call budget to the user's effort setting.
 
+**Exec form vs shell form** (v2.1.139+): Command hooks run in **exec form** when `args` is set — `command` resolves as an executable and is spawned directly with each `args` element passed as one argument, no shell tokenization, no quoting. Prefer exec form for any hook that references a path placeholder (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_DATA}`). Omit `args` to fall back to shell form when you need pipes, `&&`, or redirects.
+
+**No controlling terminal** (v2.1.139+): On macOS and Linux, command hooks run without `/dev/tty`. To surface a message, return `systemMessage` in JSON stdout; to ring the bell or fire a desktop notification, return `terminalSequence` (allowlisted OSC sequences). All hook output is capped at 10,000 characters — longer output is replaced with a file-path preview.
+
 **Five handler types** — choose the right one:
 - `command` — shell script, fastest, no LLM cost. Use for logging, file ops, env setup.
 - `http` — POST event JSON to a webhook (settings.json only). Use for external services.

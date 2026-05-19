@@ -1,7 +1,7 @@
 ---
 description: Validate plugin structure, frontmatter, and best practices. Use when user says "validate plugin", "check plugin", "audit plugin", "verify plugin", "is my plugin correct", or before distributing/publishing a plugin.
 allowed-tools: Read, Glob, Grep
-argument-hint: [plugin-path]
+argument-hint: "[plugin-path] [--fix] [--strict]"
 context: fork
 ---
 
@@ -12,9 +12,29 @@ Validate a plugin's structure and components against best practices.
 ## Steps
 
 1. Determine plugin path: use `$1` if provided, otherwise detect from current directory
-2. Find `.claude-plugin/plugin.json` to confirm it's a plugin root
-3. Run all validation checks below
-4. Report results as a structured checklist
+2. Parse flags: `--fix` enables auto-migration for rules tagged below; `--strict` promotes warnings to errors for CI gating
+3. Find `.claude-plugin/plugin.json` to confirm it's a plugin root
+4. Run all validation checks below
+5. If `--fix` is set, after the report ask the user to confirm before applying any auto-migration. Apply each fix atomically (write-tempfile-then-rename) and append an entry to `.claude-plugin/.validate-fixes.log`
+6. Report results as a structured checklist
+
+## Auto-fix (`--fix`)
+
+The validator gains an opt-in `--fix` flag that performs **only** mechanical, reversible migrations. Every fix:
+
+- Is logged to `.claude-plugin/.validate-fixes.log` (append-only) with timestamp + rule ID + summary
+- Writes atomically (tempfile + rename), so a failure leaves the original intact
+- Is reversible via `git diff` / `git restore`
+- Requires user confirmation before any file is changed in this release
+
+Rules that ship with `--fix` in v3.5.0: **H05**, **H06**, **H10**. Other auto-fixable rules (M07/M08/M09/M10, C05/C06, etc.) land in later releases.
+
+Log entry format:
+
+```
+2026-05-19T14:22:01Z  H05  hooks/hooks.json: SessionStart → exec form (added "args": [])
+2026-05-19T14:22:01Z  H10  scripts/post-write.sh: updatedMCPToolOutput → updatedToolOutput
+```
 
 ## Validation Checks
 
@@ -102,17 +122,97 @@ Validate a plugin's structure and components against best practices.
 - [ ] If `min`/`max` are set, `type` is `number`
 
 ### Hooks (`hooks/hooks.json`)
-- [ ] Valid JSON structure — **Note:** malformed hooks.json prevents the entire plugin from loading
-- [ ] Each event name is one of the 29 recognized events: `Setup`, `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
-- [ ] Each hook entry has `type` — one of `command`, `prompt`, `agent`, or `mcp_tool` — plus the matching required fields for that type. `agent` is upstream-marked experimental; flag a one-line info note when used.
-- [ ] `mcp_tool` handlers: require `server` and `tool`; if `server` is not declared in the plugin's `mcpServers` (and isn't a known external server the user wires up themselves), emit a **warning**: "`mcp_tool` references server `<name>` not declared in this plugin's `mcpServers`. The handler will produce a non-blocking error if the server isn't already connected at runtime."
-- [ ] No `http` type hooks — `http` hooks only work in `settings.json`, not `hooks.json` (error if found)
-- [ ] Command hooks reference executable files
-- [ ] Timeouts are reasonable (< 120s for sync hooks)
-- [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` / `$CLAUDE_PLUGIN_ROOT` / `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_DATA` / `${CLAUDE_PLUGIN_DATA}` usage is quoted in all command strings (paths with spaces break otherwise)
-- [ ] **Warning**: hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with a broad matcher (`*`, `""`, omitted, or `.*`) should include an `if` field to pre-filter. Emit a **suggestion** (not error): "Consider adding an `if` field to this handler to avoid spawning a process on every tool call."
-- [ ] `if` field is only valid on tool events — flag as warning if set on non-tool events (silently ignored at runtime)
-- [ ] **Info** when a `PostToolUse` JSON output example or hook script uses `updatedMCPToolOutput`: "Upstream now prefers `updatedToolOutput` (works for all tools, not just MCP). The old field still works; new code should use `updatedToolOutput`."
+
+#### H01–H04 — structural
+
+- [ ] **H01 (error)** — Valid JSON structure. Malformed `hooks.json` prevents the entire plugin from loading.
+- [ ] **H02 (error)** — Each event name is one of the 29 recognized events: `Setup`, `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
+- [ ] **H03 (error)** — Each hook entry has `type` — one of `command`, `prompt`, `agent`, or `mcp_tool` — plus the matching required fields for that type. `agent` is upstream-marked experimental; flag a one-line info note when used.
+- [ ] **H04 (error)** — No `http` type hooks in `hooks.json`. `http` hooks only work in `settings.json` (silently ignored when placed in `hooks.json`).
+- [ ] **(error)** — `mcp_tool` handlers: require `server` and `tool`; if `server` is not declared in the plugin's `mcpServers` (and isn't a known external server the user wires up themselves), emit a **warning**: "`mcp_tool` references server `<name>` not declared in this plugin's `mcpServers`. The handler will produce a non-blocking error if the server isn't already connected at runtime."
+- [ ] **(warn)** — Command hooks reference executable files (chmod +x missing → warn).
+- [ ] **(warn)** — Timeouts are reasonable (< 120s for sync hooks).
+
+#### H05 — Exec form preferred for path placeholders (warn, `--fix`)
+
+For each command hook in `hooks.json` whose `command` string contains a path placeholder (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_DATA}`) AND lacks an `args` field, emit:
+
+> "Hook `<event>` handler uses shell form with a path placeholder. Prefer exec form: add `\"args\": []` so the script path is passed as one argument with no quoting needed. See `references/06-hooks/writing-hooks.md` § Exec form vs shell form."
+
+**`--fix`**: Insert `"args": []` as a sibling to `command` in the hook handler. Do **not** auto-migrate when the command string contains shell metacharacters (`|`, `&&`, `||`, `;`, `>`, `<`, `` ` ``, `$(`, glob `*`/`?` outside placeholder, `~`) — those need shell form. In that case, emit the warning but skip the fix and note "shell form required for this command".
+
+#### H06 — Curly-brace placeholders in command strings (warn, `--fix`)
+
+In each `hooks.json` command-string value (and only in command-string values — NOT inside referenced `.sh` script files, where bare `$VAR` is normal bash), flag bare-dollar `$CLAUDE_PROJECT_DIR` / `$CLAUDE_PLUGIN_ROOT` / `$CLAUDE_PLUGIN_DATA` / `$CLAUDE_ENV_FILE` / `$CLAUDE_EFFORT` references:
+
+> "Use `${VAR}` (curly-brace form) instead of bare `$VAR` inside JSON command strings — the curly form is the canonical placeholder syntax and is unambiguous to the placeholder resolver."
+
+**`--fix`**: Literal rewrite of `$CLAUDE_<NAME>` → `${CLAUDE_<NAME>}` inside JSON string values in `hooks.json` only. Skip script files (`.sh`, `.py`, etc.) entirely.
+
+#### H07 — Placeholder quoting (warn)
+
+In **shell form** command hooks (no `args` field), path placeholders inside the `command` string must be wrapped in double quotes (`"${CLAUDE_PROJECT_DIR}"`) — paths with spaces break otherwise. Exec form does not need quoting. Skip this check when `args` is present.
+
+#### H08 — Broad-matcher tool hooks without `if` (info)
+
+Hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) with a broad matcher (`*`, `""`, omitted, or `.*`) **may** spawn a process on every tool call. Emit an info-level suggestion (not warn, not error):
+
+> "Consider adding an `if` field to this handler to pre-filter tool calls cheaply — broad-matcher hooks spawn a process on every call. See `references/06-hooks/writing-hooks.md` § The if Field."
+
+This is intentionally **info**, not warn — some authors deliberately spawn on every call (logging, analytics). Don't punish them.
+
+#### H09 — `if` on non-tool events (warn)
+
+The `if` field is only evaluated on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`). On any other event, `if` is silently ignored at runtime. Flag as warn so authors notice the dead config.
+
+#### H10 — `updatedMCPToolOutput` → `updatedToolOutput` (warn, `--fix`)
+
+`updatedMCPToolOutput` is the legacy MCP-only field; `updatedToolOutput` supersedes it and works for all tools. Search for `updatedMCPToolOutput` literally in:
+
+1. `hooks.json` JSON output snippets (rare — usually only seen in `command` strings that emit JSON inline).
+2. Referenced hook scripts (`.sh`, `.py`, `.js`, etc.) in `hooks/`, `scripts/`, and `bin/`.
+
+Emit warn: "`updatedMCPToolOutput` is the legacy field. Rewrite to `updatedToolOutput` so the hook works for built-in tools too."
+
+**`--fix`**: Literal string rewrite `updatedMCPToolOutput` → `updatedToolOutput` in matched files. Old field still works, but the rename is semantically equivalent.
+
+#### H11 — `Setup` hook recommended for one-time install (info)
+
+Heuristic: if a `SessionStart` hook's referenced script grep-matches **all three** of:
+
+- `mkdir -p` OR an existence check (`[ -d`, `[ -f`, `test -d`, `test -e`)
+- A package-install command (`npm install`, `pip install`, `composer install`, `bundle install`, `yarn install`, `pnpm install`, `python -m venv`, `python3 -m venv`)
+- A "skip-if-already-installed" pattern (`||` after the check, OR an `if ... else` guard)
+
+Then the script is doing one-time install on every session start. Emit info:
+
+> "This `SessionStart` hook looks like a one-time install (check-then-install pattern). Consider moving the install to a `Setup` hook (fires on `--init-only` / `--init -p` / `--maintenance -p`) and keeping `SessionStart` for per-session state. See `references/06-hooks/hook-events.md` § Setup."
+
+Info-only; don't autofix — moving install logic is a content decision.
+
+#### H12 — Hook writes to `/dev/tty` (error)
+
+For each referenced hook script (any file under `hooks/`, `scripts/`, `bin/` referenced by a command hook), grep for `/dev/tty`. Any match is an **error**:
+
+> "Hook script writes to `/dev/tty`. Command hooks run without a controlling terminal as of Claude Code v2.1.139 — `/dev/tty` writes fail silently. Return `terminalSequence` or `systemMessage` in JSON output instead. See `references/06-hooks/writing-hooks.md` § Terminal Sequences."
+
+Heuristic exclusions: commented-out lines (`# .* /dev/tty`), lines inside a heredoc clearly marked as documentation, lines inside string literals that are JSON output snippets (`"systemMessage": "...wrote to /dev/tty..."`). Best-effort grep — surface the line for human review.
+
+#### H13 — Hook output >10K chars (warn)
+
+Hook output strings (`additionalContext`, `systemMessage`, plain stdout) are capped at 10,000 characters. Heuristic best-effort:
+
+- Heredocs (`<<EOF ... EOF`, `<<'EOF' ... EOF`) inside hook scripts that exceed 10K characters between the open and close marker.
+- `cat` of files known to be large (>10K) inside a hook script.
+- Large string-literal assignments to a variable used as the only `echo`/`printf`/`jq` output.
+
+Emit warn: "This hook may emit >10K characters. Claude Code truncates oversize output to a file with a preview; large diffs/logs should be written to a side file under `${CLAUDE_PLUGIN_DATA}/` and referenced by path instead."
+
+Best-effort heuristic. Don't autofix.
+
+#### Hooks: legacy / cross-form
+
+- [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` / `$CLAUDE_PLUGIN_ROOT` / `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_DATA` / `${CLAUDE_PLUGIN_DATA}` usage is quoted in **shell-form** command strings (covered by H07 above; exec-form hooks need no quoting).
 
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)

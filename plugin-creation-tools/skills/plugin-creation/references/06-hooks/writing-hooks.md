@@ -50,7 +50,9 @@ Or inline in `plugin.json`:
 | matcher | string | No | Pattern to filter when the matcher group fires (see Matcher Patterns) |
 | hooks | array | **Yes** | Array of hook handlers |
 | type | string | **Yes** | Handler type: `command`, `http`, `mcp_tool`, `prompt`, or `agent` |
-| command | string | For command | Shell command to execute |
+| command | string | For command | Executable (exec form) or shell command (shell form). See [Exec form vs shell form](#exec-form-vs-shell-form). |
+| args | string[] | No | Argument list. When present, `command` is resolved as an executable and spawned directly with `args` as the argument vector — no shell. **Prefer this whenever the hook references a path placeholder**, since each element is passed as one argument with no quoting. |
+| shell | string | No | `"bash"` (default) or `"powershell"`. Selects the shell for shell form on Windows; ignored when `args` is set. |
 | prompt | string | For prompt/agent | LLM prompt (`$ARGUMENTS` for context) |
 | if | string | No | Permission-rule syntax (e.g. `"Bash(git *)"`, `"Edit(*.ts)"`) to pre-filter tool events before spawning the handler. See [The `if` Field](#the-if-field). |
 | timeout | number | No | Timeout in seconds (default varies by type) |
@@ -59,21 +61,77 @@ Or inline in `plugin.json`:
 | statusMessage | string | No | Message shown in the TUI while the hook runs |
 | once | boolean | No | Fires once per session then is removed. Only honored in skill frontmatter; ignored in settings/agent frontmatter. |
 
+## Exec Form vs Shell Form
+
+A command hook runs in **exec form** when the `args` field is set, and **shell form** when `args` is omitted. The shape you choose determines whether a shell tokenizes the command — and whether path placeholders need quoting.
+
+Set `args` whenever the hook references a [path placeholder](#environment-variables) like `${CLAUDE_PLUGIN_ROOT}`. Omit `args` when you need shell features (pipes, `&&`, redirects, globs).
+
+### Exec form (preferred for path placeholders)
+
+```json
+{
+  "type": "command",
+  "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+  "args": ["--fix"]
+}
+```
+
+- `command` resolves as an executable on `PATH` and is spawned directly.
+- No shell tokenization. Each `args` element is one argument exactly as written.
+- Placeholders (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_DATA}`) are substituted into `command` and each `args` element as plain strings.
+- Apostrophes, `$`, backticks, and other special characters pass through verbatim.
+- No quoting needed for paths with spaces.
+
+### Shell form (use for pipes, redirects, conditional chains)
+
+```json
+{
+  "type": "command",
+  "command": "[ -d \"${CLAUDE_PLUGIN_DATA}/node_modules\" ] || npm install --prefix \"${CLAUDE_PLUGIN_DATA}\""
+}
+```
+
+- `command` is passed to a shell: `sh -c` on macOS and Linux, Git Bash on Windows (or PowerShell when Git Bash isn't installed). Set `shell` to choose explicitly.
+- The shell tokenizes, expands variables, and interprets pipes / `&&` / redirects / globs.
+- **Wrap every placeholder in double quotes** so paths with spaces don't split.
+
+### Windows caveat
+
+In exec form, `command` must resolve to a **real executable** (e.g. a `.exe`). The `.cmd` and `.bat` shims that npm/npx/eslint install in `node_modules/.bin` are **not** executables and cannot be spawned without a shell. To run them in exec form, invoke the underlying script with `node` directly:
+
+```json
+{
+  "type": "command",
+  "command": "node",
+  "args": ["${CLAUDE_PLUGIN_ROOT}/node_modules/eslint/bin/eslint.js"]
+}
+```
+
+The `node` + script-path pattern works on every platform because `node.exe` is a real binary. To run a `.cmd` / `.bat` shim by its bare name, use shell form.
+
+### Bare-name + whitespace warning
+
+In exec form, if `command` is a bare name (no path separator) and contains whitespace alongside `args`, Claude Code logs a warning because the spawn will fail — there is no executable named `node script.js`. Move the extra tokens into `args`. Absolute paths with spaces, such as `C:\Program Files\nodejs\node.exe`, are a single valid executable and do not trigger the warning.
+
 ## Hook Handler Types
 
 Five handler types are available. Each serves a different complexity level. (`agent` is upstream-marked **experimental** — behavior may change.)
 
 ### 1. Command Hook
 
-Execute a shell script. Receives JSON on stdin with event context. Returns exit code + stdout.
+Execute a script or binary. Receives JSON on stdin with event context. Returns exit code + stdout.
 
 ```json
 {
   "type": "command",
   "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+  "args": [],
   "timeout": 30
 }
 ```
+
+The `"args": []` puts this hook in [exec form](#exec-form-vs-shell-form). Omit `args` if you need shell features (pipes, `&&`); see the form comparison above.
 
 **Stdin JSON** includes: `hook_event_name`, `tool_name`, `tool_input`, `tool_output` (varies by event), and an `effort` object (`{ "level": "low" | "medium" | "high" | "xhigh" | "max" }`) on tool-use-context events when the current model supports effort. The same level is exported as the `$CLAUDE_EFFORT` env var to command hooks and Bash-tool subprocesses — adapt verbosity or invocation depth to it.
 
@@ -251,7 +309,8 @@ The `if` field avoids the "spawn a process just to check and exit 0" anti-patter
       "hooks": [
         {
           "type": "command",
-          "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm.sh"
+          "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-rm.sh",
+          "args": []
         }
       ]
     }
@@ -270,7 +329,8 @@ The script itself checks whether the command is `rm *` and exits 0 otherwise. Ev
         {
           "type": "command",
           "if": "Bash(rm *)",
-          "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm.sh"
+          "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-rm.sh",
+          "args": []
         }
       ]
     }
@@ -338,6 +398,7 @@ Available in hook scripts:
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -349,7 +410,8 @@ Available in hook scripts:
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh",
+            "args": []
           }
         ]
       }
@@ -361,6 +423,7 @@ Available in hook scripts:
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -393,6 +456,7 @@ Available in hook scripts:
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+            "args": [],
             "timeout": 10
           }
         ]
@@ -401,6 +465,74 @@ Available in hook scripts:
   }
 }
 ```
+
+## JSON Output Return Fields
+
+Exit codes let you allow or block; JSON output gives finer-grained control. Exit 0 and print a JSON object on stdout — Claude Code parses these fields:
+
+| Field | Description |
+|-------|-------------|
+| `continue` | If `false`, Claude stops processing entirely after the hook runs. Takes precedence over any event-specific decision. |
+| `stopReason` | Message shown to the user when `continue` is `false`. Not shown to Claude. |
+| `suppressOutput` | If `true`, omits stdout from the debug log. |
+| `systemMessage` | Warning message shown to the user. Use for user-facing notes the hook needs to surface. |
+| `terminalSequence` | Allowlisted OSC escape sequence Claude Code emits on the hook's behalf — desktop notification, window title, bell. Requires v2.1.141. See [Terminal sequences](#terminal-sequences). |
+| `hookSpecificOutput.additionalContext` | String injected into Claude's context (system reminder). The insertion point depends on the event. |
+
+Choose **one** approach per hook: either exit codes alone, or exit 0 + JSON. Claude Code only processes JSON on exit 0; if you exit 2, the JSON is ignored.
+
+> **10,000-character output cap:** Hook output strings — `additionalContext`, `systemMessage`, and plain stdout — are capped at 10,000 characters. Output that exceeds this limit is saved to a file and replaced with a preview plus file path, the same way large tool results are handled. Plan around this when logging verbose diffs or test output.
+
+### No controlling terminal (v2.1.139+)
+
+On macOS and Linux, command hooks run in their own session **without a controlling terminal** as of v2.1.139. The hook process and any child processes:
+
+- **Cannot** open `/dev/tty`.
+- **Cannot** send escape sequences directly to the Claude Code interface.
+
+Windows has no `/dev/tty`. To surface a message to the user on any platform:
+
+- Return `systemMessage` for a plain warning message.
+- Return `terminalSequence` to ring the bell, set a window title, or fire a desktop notification.
+
+### Terminal sequences
+
+`terminalSequence` requires Claude Code v2.1.141 or later. The field accepts an allowlisted OSC escape sequence; anything outside the allowlist is rejected and the field is ignored.
+
+Allowlist:
+
+- OSC `0`, `1`, `2`: window and icon titles
+- OSC `9`: iTerm2, ConEmu, Windows Terminal, WezTerm notifications (including `9;4` taskbar progress)
+- OSC `99`: Kitty notifications
+- OSC `777`: urxvt, Ghostty, Warp notifications
+- Bare BEL
+
+Sequences may terminate with BEL or ST. CSI cursor/color sequences, OSC palette sequences, OSC 8 hyperlinks, OSC 52 clipboard writes, and OSC 1337 are **rejected**.
+
+Example — fire a desktop notification from a `Notification` hook:
+
+```bash
+#!/bin/bash
+input=$(cat)
+title="Claude Code"
+body=$(jq -r '.message // "Needs your attention"' <<<"$input")
+seq=$(printf '\033]777;notify;%s;%s\007' "$title" "$body")
+jq -nc --arg seq "$seq" '{terminalSequence: $seq}'
+```
+
+Use `printf` octal escapes so the control bytes never appear on the shell command line, and `jq -n --arg` so quotes/backslashes in the body are escaped correctly. `terminalSequence` is the supported replacement for hooks that previously wrote escape sequences directly to `/dev/tty`.
+
+## Hook Execution Order & Precedence
+
+When multiple hooks match the same event:
+
+- **All matching hooks run in parallel.** There is no sequential ordering across handlers, matcher groups, or settings layers. If you need ordered execution, combine the logic into a single script.
+- **Identical handlers are deduplicated.** Command hooks are deduplicated by their `command` string **and** `args` array; HTTP hooks are deduplicated by URL. If the same plugin and a user `settings.json` define the same command + args, it runs once.
+- **PreToolUse decision precedence is `deny > defer > ask > allow`.** When multiple PreToolUse hooks return different decisions, Claude Code resolves to the strictest. A single `deny` wins over any number of `allow` votes.
+- **`continue: false` overrides event-specific decisions.** Any handler can stop the conversation entirely; the event's normal decision logic is ignored.
+- **`additionalContext` is additive.** When several hooks return `additionalContext` for the same event, Claude receives all of the values. Values over 10K characters are written to a file with a preview passed inline.
+
+> Common misconception: "most restrictive setting wins." The rule is parallel-then-merge with the specific precedence above, not a settings-layer override.
 
 ## Hook Scripts
 

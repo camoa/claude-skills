@@ -1,12 +1,14 @@
 {
   "description": "Plugin hooks for [purpose]",
   "hooks": {
+    "// Exec form": "Command hooks below set `args` (often `[]`), which puts them in exec form: `command` resolves to an executable on PATH and is spawned directly, with each `args` element passed as one argument and no shell tokenization. Prefer exec form for any hook that references a path placeholder — `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PROJECT_DIR}` / `${CLAUDE_PLUGIN_DATA}` are substituted into `command` and into each `args` element with no quoting needed. Omit `args` to fall back to shell form when you need pipes or `&&`. See references/06-hooks/writing-hooks.md.",
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -19,6 +21,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -33,7 +36,8 @@
           {
             "type": "command",
             "if": "Bash(rm *)",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-destructive-rm.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-destructive-rm.sh",
+            "args": []
           }
         ]
       }
@@ -44,13 +48,14 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+            "args": [],
             "timeout": 15
           }
         ]
       }
     ],
 
-    "// HTTP hook example": "Use type: http to call a webhook instead of a local command",
+    "// HTTP hook example": "Use type: http to call a webhook instead of a local command. http hooks are valid only in settings.json — not in hooks.json — and are silently ignored if placed here. The schema below is shown for reference only.",
     "InstructionsLoaded": [
       {
         "hooks": [
@@ -93,6 +98,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on_config_change.sh",
+            "args": [],
             "timeout": 15,
             "statusMessage": "Reloading configuration..."
           }
@@ -105,6 +111,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -116,6 +123,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_cleanup.sh",
+            "args": [],
             "timeout": 15
           }
         ]
