@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-05-19
+
+### Paper-test fixes for `github-drupal-pr.yml`
+
+Five bugs surfaced by an inline paper-test of the v3.2.0 PR workflow. All in `skills/code-quality-audit/templates/ci/github-drupal-pr.yml`; no other files changed.
+
+- **CRITICAL: Backtick command substitution in PR-comment footer.** The footer line `echo "_… see \`.reports/\` for raw JSON._"` was double-quoted, so bash interpreted the backticks as command substitution and tried to execute `.reports/` as a command. The footer rendered as `… see  for raw JSON.` plus a stderr line in Actions logs. Switched to single-quoted echo with literal markdown backticks.
+- **CRITICAL: Semgrep step was unscoped.** The previous step used `semgrep/semgrep-action@v1` with `SEMGREP_TARGETS_FILE` and `SEMGREP_JSON_OUTPUT` env vars — neither of which the action honors. Semgrep was silently scanning the entire repo, but its output went to the action's own location, not `.reports/semgrep.json`, so the synthesis step's jq fallback returned 0 for every PR and the security gate was a no-op. Replaced with a direct `semgrep` CLI invocation (installed via `pip install semgrep`) that takes the changed-file list as positional args and writes JSON to the expected path.
+- **HIGH: xargs multi-batch overwrite in phpcs/phpstan.** Large PRs (100+ files) could push `xargs` past `ARG_MAX`, triggering multiple command invocations. For phpcs, each invocation's `--report-file=.reports/phpcs.json` overwrote the previous batch's results → only the last batch's findings survived. For phpstan, concatenated JSON documents on stdout produced invalid JSON downstream. Switched both to single invocations via `$(cat .changed-files.txt)`; documented the shellcheck SC2046 suppression.
+- **HIGH: `composer require --dev` ran on every PR.** Previous step installed phpstan/phpstan-drupal/extension-installer/drupal/coder on every PR run, wasting 30-60s of CI per run and risking transient resolver conflicts. Replaced with a comment instructing users to add these tools to `composer.json` as dev dependencies once locally.
+- **MEDIUM: PHPCS jq counts now read `.totals`.** Switched `.files[]?.errors`/`.warnings` array-sums to `.totals.errors` and `.totals.warnings` — phpcs already aggregates at the totals level, simpler and more robust to shape changes. Also fixed `(.results | length) // 0` precedence in the Semgrep total count.
+
+No behavior change to `github-drupal.yml`, `grumphp.yml`, or `commands/setup.md`. Marketplace metadata bumped 1.14.36 → 1.14.37.
+
 ## [3.2.0] - 2026-05-19
 
 ### PR-time review surfaces (CI workflow split + optional pre-commit hook)

@@ -1,5 +1,5 @@
 #
-# GitHub Actions workflow for Drupal PR review — changed-files only.
+# GitHub Actions workflow for Drupal PR review — changed-files only. (v3.2.1)
 # Copy to .github/workflows/quality-pr.yml.
 #
 # Sibling to github-drupal.yml (which runs the full quality battery on
@@ -83,19 +83,20 @@ jobs:
         with:
           autostart: true
 
-      - name: Install dependencies + quality tools
+      - name: Install dependencies
         if: steps.changed.outputs.count != '0'
         run: |
           ddev composer install --no-interaction
-          ddev composer require --dev \
-            phpstan/phpstan \
-            mglaman/phpstan-drupal \
-            phpstan/extension-installer \
-            drupal/coder \
-            --no-interaction
+          # Quality tools (phpstan, phpstan-drupal, drupal/coder) are expected to
+          # already be in the project's composer.json as dev dependencies. If
+          # missing, add them once locally with:
+          #   ddev composer require --dev phpstan/phpstan mglaman/phpstan-drupal \
+          #     phpstan/extension-installer drupal/coder
+          # Re-installing them on every PR wastes CI minutes and can cause
+          # transient resolver conflicts.
 
       # =====================
-      # PHPCS — changed files only
+      # PHPCS — changed files only (single invocation)
       # =====================
       - name: PHPCS (Drupal standards)
         if: steps.changed.outputs.count != '0'
@@ -103,14 +104,19 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p .reports
-          xargs -a .changed-files.txt ddev exec vendor/bin/phpcs \
+          # Single invocation: passing the file list as arguments via $(cat ...)
+          # avoids xargs' multi-batch behaviour, which would overwrite
+          # --report-file on each batch and silently drop findings.
+          # shellcheck disable=SC2046
+          ddev exec vendor/bin/phpcs \
             --standard=Drupal,DrupalPractice \
             --report=json \
             --report-file=.reports/phpcs.json \
+            $(cat .changed-files.txt) \
             || true
 
       # =====================
-      # PHPStan — changed files only
+      # PHPStan — changed files only (single invocation)
       # =====================
       - name: PHPStan (Drupal)
         if: steps.changed.outputs.count != '0'
@@ -118,29 +124,41 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p .reports
-          xargs -a .changed-files.txt ddev exec vendor/bin/phpstan analyse \
+          # Single invocation: same reason as phpcs — multiple xargs batches
+          # would concatenate JSON documents to stdout, producing invalid JSON.
+          # shellcheck disable=SC2046
+          ddev exec vendor/bin/phpstan analyse \
             --error-format=json \
             --no-progress \
+            $(cat .changed-files.txt) \
             > .reports/phpstan.json || true
 
       # =====================
-      # Semgrep — changed files only
+      # Semgrep — changed files only (direct CLI, not the action)
       # =====================
+      # The `semgrep/semgrep-action@v1` action does NOT support an env-var
+      # targets file (no SEMGREP_TARGETS_FILE). Running the CLI directly with
+      # the changed-file list as positional args is the only way to actually
+      # scope semgrep to the PR diff.
+      - name: Install Semgrep
+        if: steps.changed.outputs.count != '0'
+        run: |
+          python3 -m pip install --quiet semgrep
       - name: Semgrep SAST (changed files)
         if: steps.changed.outputs.count != '0'
         id: semgrep
         continue-on-error: true
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/php
-            p/security-audit
-            p/owasp-top-ten
-          generateSarif: false
-          publishToken: ""
-        env:
-          SEMGREP_TARGETS_FILE: .changed-files.txt
-          SEMGREP_JSON_OUTPUT: .reports/semgrep.json
+        run: |
+          mkdir -p .reports
+          # shellcheck disable=SC2046
+          semgrep \
+            --config p/php \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --json \
+            --output .reports/semgrep.json \
+            $(cat .changed-files.txt) \
+            || true
 
       # =====================
       # Synthesize findings → PR comment body
@@ -153,11 +171,13 @@ jobs:
           mkdir -p .reports
 
           # Count findings (jq tolerant of missing files / empty arrays).
-          PHPCS_ERR=$(jq '[.files[]?.errors // 0] | add // 0' .reports/phpcs.json 2>/dev/null || echo 0)
-          PHPCS_WARN=$(jq '[.files[]?.warnings // 0] | add // 0' .reports/phpcs.json 2>/dev/null || echo 0)
+          # PHPCS exposes aggregate counts at .totals — simpler and more robust
+          # than summing per-file values.
+          PHPCS_ERR=$(jq '.totals.errors // 0' .reports/phpcs.json 2>/dev/null || echo 0)
+          PHPCS_WARN=$(jq '.totals.warnings // 0' .reports/phpcs.json 2>/dev/null || echo 0)
           PHPSTAN_ERR=$(jq '.totals.file_errors // 0' .reports/phpstan.json 2>/dev/null || echo 0)
           SEMGREP_HIGH=$(jq '[.results[]? | select(.extra.severity=="ERROR" or .extra.severity=="HIGH" or .extra.severity=="CRITICAL")] | length' .reports/semgrep.json 2>/dev/null || echo 0)
-          SEMGREP_TOTAL=$(jq '.results | length // 0' .reports/semgrep.json 2>/dev/null || echo 0)
+          SEMGREP_TOTAL=$(jq '(.results | length) // 0' .reports/semgrep.json 2>/dev/null || echo 0)
 
           # Naive rubric: start at 50, deduct for issues. Replace with
           # /code-quality:review --json when wiring real rubric scorer.
@@ -191,7 +211,7 @@ jobs:
               echo "</details>"
             fi
             echo ""
-            echo "_Posted by code-quality-tools v3.2.0 — see `.reports/` for raw JSON._"
+            echo '_Posted by code-quality-tools v3.2.1 — see `.reports/` artifact for raw JSON._'
           } > .reports/pr-comment.md
 
           echo "score=${SCORE}" >> "$GITHUB_OUTPUT"
