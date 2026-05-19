@@ -149,20 +149,41 @@ Creates `.code-quality.json`:
 
 ## Git Hooks Setup (Optional)
 
-**Drupal - GrumPHP:**
-```yaml
-# grumphp.yml
-grumphp:
-  tasks:
-    phpstan:
-      level: 5
-    phpcs:
-      standard: Drupal
-    phpcpd:
-      min_lines: 5
-```
+After installing the static-analysis tools, prompt the user:
 
-**Next.js - Husky + lint-staged:**
+> Install GrumPHP git hooks to lint staged files on every commit? [y/N]
+
+Default is **No**. The wizard must not install hooks silently. Re-runs of `/code-quality:setup` re-ask only if hooks aren't already installed.
+
+### On "yes" — Drupal (GrumPHP)
+
+The hook only checks **files staged for the current commit** (`context: git-staged-files`). Heavier checks stay in CI.
+
+1. Install GrumPHP:
+   ```bash
+   ddev composer require --dev phpro/grumphp
+   ```
+2. Copy the template into the project root:
+   ```bash
+   cp skills/code-quality-audit/templates/grumphp.yml ./grumphp.yml
+   ```
+   The template ships with `phpcs` (Drupal standards) and `phpstan` only. Intentionally excluded:
+   - **phpcpd** — directory-scoped, too slow for pre-commit
+   - **phpunit** — runs the full suite; lives in CI instead
+   - **phpmd** — noisy on legacy code; opt-in by uncommenting in the template
+3. Register the hook:
+   ```bash
+   ddev exec vendor/bin/grumphp git:init
+   ```
+4. Confirm with a no-op staged change:
+   ```bash
+   git commit --allow-empty -m "Test grumphp hook"
+   ```
+
+To remove later: `vendor/bin/grumphp git:deinit && composer remove --dev phpro/grumphp`.
+
+### On "yes" — Next.js (Husky + lint-staged)
+
 ```json
 // package.json
 "lint-staged": {
@@ -172,6 +193,17 @@ grumphp:
   ]
 }
 ```
+
+Then `npx husky init && echo 'npx lint-staged' > .husky/pre-commit`.
+
+### CI alternative (recommended in addition to or instead of hooks)
+
+For per-PR review without a local hook, install one or both opt-in GitHub Actions workflows:
+
+- `skills/code-quality-audit/templates/ci/github-drupal.yml` → `.github/workflows/quality.yml` — full quality battery on push/PR to main.
+- `skills/code-quality-audit/templates/ci/github-drupal-pr.yml` → `.github/workflows/quality-pr.yml` — **changed-files-only** review of PRs; posts a sticky comment with synthesis + rubric. Gate is soft by default; set repo Variable `FAIL_ON_GATE=true` to enforce.
+
+Both workflows are independent — install one, both, or neither.
 
 ## Baseline Audit
 
@@ -197,7 +229,7 @@ Tools Installed:
 
 Configuration:
   ✓ .code-quality.json created
-  ✓ Git hooks configured (GrumPHP)
+  ✓ Git hooks configured (GrumPHP — staged files only, phpcs + phpstan)
 
 Baseline Audit Results:
   Coverage: 72% (target: 80%)
