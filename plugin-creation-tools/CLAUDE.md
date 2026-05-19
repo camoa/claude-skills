@@ -33,6 +33,11 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 
 - Hook event count (currently **29** — added `Setup` in the 2026-05-08 doc snapshot).
 - Hook handler types (currently **5** — `command`, `http`, `mcp_tool`, `prompt`, `agent` with `agent` marked experimental).
+- **Hook command-form pair** (v2.1.139+ — exec form via `args` field is preferred whenever a path placeholder appears; shell form remains valid for pipes/redirects/chains).
+- **Hook output cap** (10,000 characters across `additionalContext` / `systemMessage` / stdout; overflow becomes a file-path preview).
+- **No controlling terminal in hooks** (v2.1.139+ — `/dev/tty` writes from hook scripts no longer reach the user; surface via `systemMessage` / `terminalSequence` JSON output).
+- **Terminal sequence allowlist** (OSC `0`/`1`/`2`/`9`/`99`/`777` + BEL — anything else is rejected and the field is ignored).
+- **PreToolUse decision precedence** (`deny > defer > ask > allow`) and parallel-then-merge across all matching hooks.
 - Plugin component types (skills, commands, agents, hooks, mcpServers, lspServers, outputStyles, **`experimental.themes`**, **`experimental.monitors`** — themes and monitors are upstream-marked experimental and live under the `experimental.*` key; top-level still loads but `claude plugin validate` warns).
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).

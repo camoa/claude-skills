@@ -2,6 +2,12 @@
 
 Complete reference for all 29 hook events in Claude Code.
 
+> **No controlling terminal (v2.1.139+).** Command hooks on macOS and Linux run without a controlling terminal — `/dev/tty` writes and raw escape sequences from a hook fail. To surface a message to the user, return `systemMessage` in JSON output. To ring the bell, set a window title, or fire a desktop notification, return `terminalSequence`. See [writing-hooks.md › JSON Output Return Fields](writing-hooks.md#json-output-return-fields).
+>
+> **10,000-char output cap.** `additionalContext`, `systemMessage`, and plain stdout are capped at 10,000 characters; longer output is replaced with a file path and a preview.
+>
+> **Exec form for path placeholders.** The command-hook examples below set `"args": []` to use [exec form](writing-hooks.md#exec-form-vs-shell-form) — preferred whenever `command` references a `${CLAUDE_*}` placeholder. Omit `args` to use shell form when you need pipes, `&&`, or redirects.
+
 ## Event Reference Table
 
 | Event | Trigger | Can Block? | Matcher Support |
@@ -83,7 +89,8 @@ All hook events receive JSON input with the following common fields:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh",
+          "args": []
         }
       ]
     }
@@ -154,7 +161,8 @@ All hook events receive JSON input with the following common fields:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-prompt.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-prompt.sh",
+          "args": []
         }
       ]
     }
@@ -190,7 +198,8 @@ All hook events receive JSON input with the following common fields:
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-deploy.sh",
+          "args": []
         }
       ]
     }
@@ -229,7 +238,8 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-bash.sh",
+          "args": []
         }
       ]
     }
@@ -326,6 +336,7 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+          "args": [],
           "timeout": 30
         }
       ]
@@ -364,7 +375,8 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-failure.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-failure.sh",
+          "args": []
         }
       ]
     }
@@ -395,7 +407,8 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/batch-summary.sh",
+          "args": []
         }
       ]
     }
@@ -433,7 +446,8 @@ Stdout from `UserPromptExpansion` (like `UserPromptSubmit` and `SessionStart`) i
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-denial-and-retry.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-denial-and-retry.sh",
+          "args": []
         }
       ]
     }
@@ -475,7 +489,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-notification.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-notification.sh",
+          "args": []
         }
       ]
     }
@@ -505,7 +520,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-subagent-start.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-subagent-start.sh",
+          "args": []
         }
       ]
     }
@@ -644,7 +660,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-task.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-task.sh",
+          "args": []
         }
       ]
     }
@@ -712,7 +729,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/save-context.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/save-context.sh",
+          "args": []
         }
       ]
     }
@@ -744,7 +762,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+          "args": []
         }
       ]
     }
@@ -773,7 +792,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-instructions-loaded.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-instructions-loaded.sh",
+          "args": []
         }
       ]
     }
@@ -802,7 +822,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-config-change.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-config-change.sh",
+          "args": []
         }
       ]
     }
@@ -837,7 +858,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-cwd-change.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/on-cwd-change.sh",
+          "args": []
         }
       ]
     }
@@ -878,7 +900,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/reload-env.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/reload-env.sh",
+          "args": []
         }
       ]
     }
@@ -919,7 +942,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-checkout.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-checkout.sh",
+          "args": []
         }
       ]
     }
@@ -950,7 +974,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-cleanup.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/svn-cleanup.sh",
+          "args": []
         }
       ]
     }
@@ -979,7 +1004,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-api-error.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-api-error.sh",
+          "args": []
         }
       ]
     }
@@ -1008,7 +1034,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/restore-context.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/restore-context.sh",
+          "args": []
         }
       ]
     }
@@ -1039,7 +1066,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation.sh",
+          "args": []
         }
       ]
     }
@@ -1068,7 +1096,8 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
       "hooks": [
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation-result.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-elicitation-result.sh",
+          "args": []
         }
       ]
     }
@@ -1091,6 +1120,7 @@ Set `once: true` on a hook to fire it only once per session, regardless of how m
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/first-write-notification.sh",
+          "args": [],
           "once": true
         }
       ]

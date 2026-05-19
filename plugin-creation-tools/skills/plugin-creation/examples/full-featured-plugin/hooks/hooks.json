@@ -1,5 +1,5 @@
 {
-  "description": "Example hooks demonstrating cross-platform setup",
+  "description": "Example hooks demonstrating cross-platform setup. These intentionally use shell form: the `.cmd` wrapper is a Windows shim that cannot be spawned in exec form (per upstream Windows caveat). For pure-Linux/macOS plugins that don't need the polyglot wrapper, prefer exec form with `\"args\": []`. See references/06-hooks/writing-hooks.md.",
   "hooks": {
     "SessionStart": [
       {
