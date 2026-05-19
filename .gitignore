@@ -1,0 +1,9 @@
+# Per-machine Claude Code local state (settings.local.json, logs, agent-memory).
+# Anchored to root so plugin-internal .claude/ dirs (e.g. code-quality-tools/.claude/rules/)
+# remain tracked.
+/.claude/
+/.claude-telemetry/
+
+# Skill runtime telemetry (design-intelligence Wave-4 gates, motion auditor, etc.)
+/.design-intelligence/
+/.design-intelligence-audit/
