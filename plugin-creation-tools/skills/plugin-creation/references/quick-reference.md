@@ -172,8 +172,8 @@ Use when [triggers] - [what it does, third person]
 
 | Component | Target | Maximum |
 |-----------|--------|---------|
-| Skill description | 200-500 chars | 1024 chars |
-| SKILL.md body | <500 lines | - |
+| Skill description | 200-500 chars | 1,536 chars runtime cap (`maxSkillDescriptionChars`); ~1,024 for agentskills.io portability |
+| SKILL.md body | <250 lines | warn ≥250, error ≥500 |
 | Reference files | <1000 lines | - |
 | Command description | 50-100 chars | - |
 | Agent description | 100-200 chars | - |

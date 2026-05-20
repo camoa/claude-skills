@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.42"
+    "version": "1.14.43"
   },
   "plugins": [
     {
@@ -36,7 +36,7 @@
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
       "description": "Authoritative quality gate + authoring guide for Claude Code plugins. Covers all 29 hook events, five handler types, exec form via `args`, `systemMessage` / `terminalSequence` JSON output, the 10K-character output cap, parallel-then-merge precedence, recursive `agents/` subfolder scoping (`my-plugin:review:security`), single-skill-at-root auto-discovery (v2.1.142+), v2.1.140+ `/doctor` ignored-folder semantics, experimental.themes / experimental.monitors migration, $schema field, array-only agents, channels, bin/ auto-discovery, plugin-root settings.json (agent + subagentStatusLine), userConfig with type/title schema, skillOverrides, claude plugin prune + --plugin-url + --plugin-dir, Plugin Hints, workspace-trust gating, allowCrossMarketplaceDependenciesOn, forked subagents, Agent SDK, REVIEW.md v2, Routines auto-validate. v3.5.0 shipped Hook Authoring Depth + 7 paired validator rules (H05–H13) with opt-in `--fix`. v3.6.0 adds Layout & Discovery: 5 paired validator rules (A02 subfolder scoped-id awareness; A03 missing `name` on subfolder agents; ST04 redundant `skills: [\"./\"]` on auto-discovered single-skill plugins; ST05 manifest path doesn't exist; ST06 manifest override leaves a populated default folder ignored), `init_plugin.py` refactored to read the canonical `templates/plugin.json.template` (kills divergence). Auto-fix audit trail at `.claude-plugin/.validate-fixes.log`.",
-      "version": "3.6.1",
+      "version": "3.6.2",
       "author": {
         "name": "camoa"
       },
