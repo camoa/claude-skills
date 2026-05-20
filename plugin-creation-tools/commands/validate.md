@@ -46,7 +46,7 @@ Log entry format:
 - [ ] `description` present and not placeholder text
 - [ ] README.md exists at plugin root
 - [ ] CHANGELOG.md exists at plugin root
-- [ ] **Info** (not warning) if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude. The file is fine to keep as authoring reference (this plugin uses it that way)."
+- [ ] **ST03 (info)** — if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude. The file is fine to keep as authoring reference (this plugin uses it that way)."
 
 #### ST04 — Redundant `skills: ["./"]` on a single-skill-at-root plugin (info)
 
@@ -144,22 +144,72 @@ Info only — sometimes a plugin lives in the marketplace root on a feature bran
 - [ ] Pre-release ranges are only matched when the range opts in with a pre-release suffix (e.g. `^2.0.0-0`)
 - [ ] Use official error names when reporting: `range-conflict`, `dependency-version-unsatisfied`, `no-matching-tag` (align with `claude plugin list` output)
 
-### Skills (for each skill in `skills/*/`)
-- [ ] `SKILL.md` exists with valid YAML frontmatter — invalid frontmatter causes skill to load with no metadata at runtime
-- [ ] Frontmatter has `name` (hyphen-case, max 64 chars)
-- [ ] Frontmatter has `description` (starts with "Use when" or three-part structure, max 1024 chars)
-- [ ] Description includes WHAT it does AND WHEN to use it (trigger conditions)
-- [ ] Description uses third person (no "you")
-- [ ] No XML angle brackets (< >) in frontmatter (security restriction)
-- [ ] `compatibility` field valid if present (1-500 chars)
-- [ ] Body is instructions, not documentation (imperative voice)
-- [ ] Body under 500 lines
-- [ ] Body includes examples section with user scenarios (warning if missing)
-- [ ] Body includes troubleshooting/error handling section (warning if missing)
-- [ ] Referenced files in `references/` exist
-- [ ] Referenced scripts in `scripts/` exist
-- [ ] No README.md inside skill directories (belongs at plugin root)
-- [ ] **Info** when `allowed-tools` is present on a project-scoped skill (path matches `.claude/skills/`): "`.claude/skills/*` skills with `allowed-tools` only take effect after the workspace trust dialog is accepted. Review the skill carefully before trusting a repository — a skill can grant itself broad tool access this way." (Plugin-shipped skills are not subject to this — their trust is established at install time.)
+### Skills (for each skill in `skills/*/` — plus a root `SKILL.md` for single-skill plugins)
+
+- [ ] **S01 (error)** — `SKILL.md` exists with valid YAML frontmatter. Invalid frontmatter causes the skill to load with no metadata at runtime.
+- [ ] **S02 (error)** — Frontmatter has `name` (hyphen-case, max 64 chars).
+- [ ] **(error)** — `name` contains no reserved words (`anthropic`, `claude`).
+- [ ] **(warn)** — Description includes WHAT it does AND WHEN to use it (trigger conditions).
+- [ ] **(warn)** — Description uses third person (no "you").
+- [ ] **(error)** — No XML angle brackets (`<` `>`) in any frontmatter value (security restriction — prompt-injection vector).
+- [ ] **(warn)** — `compatibility` field valid if present (1–500 chars).
+- [ ] **(warn)** — Body is instructions, not documentation (imperative voice).
+- [ ] **(warn)** — Body includes an examples section with user scenarios.
+- [ ] **(warn)** — Body includes a troubleshooting / error-handling section.
+- [ ] **(error)** — Referenced files in `references/` exist.
+- [ ] **(error)** — Referenced scripts in `scripts/` exist.
+- [ ] **(warn)** — No `README.md` inside skill directories (belongs at plugin root).
+
+#### S04 — Description trigger phrase (warn)
+
+The `description` must give Claude a routing signal — either it opens with a trigger phrase ("Use when …") OR it follows the three-part WHAT / WHEN / NOT-FOR structure. A description that only says WHAT the skill does, with no WHEN, leaves Claude unable to route to it. Emit warn:
+
+> "Skill `<name>` description has no trigger phrase. Start with 'Use when …' or include an explicit WHEN/NOT-FOR boundary so Claude can route to the skill. A WHAT-only description is loaded into context but rarely matched."
+
+Severity is **warn**, promoted to error under `--strict`. (Routing-critical, but making it a hard error would fail existing skills on day one — soft-nudge adoption.)
+
+#### S05 — Description length cap (warn)
+
+The combined `description` + `when_to_use` text is capped at `maxSkillDescriptionChars` (default **1,536**; read the actual value from settings if the validated environment sets it). Past the cap, text is silently truncated from the listing Claude sees. Emit warn when the description exceeds the cap:
+
+> "Skill `<name>` description is `<n>` characters, over the `maxSkillDescriptionChars` cap (`<cap>`). Text past the cap is silently dropped from the skill listing. Trim to the cap — put the key trigger phrase first so it survives truncation."
+
+(This replaces the old flat "max 1024 chars" check — 1,024 was stale; 1,536 is the runtime cap. ~1,024 remains a stricter agentskills.io portability target, not a validator error.)
+
+#### S10 — Body length (warn ≥ 250, error ≥ 500)
+
+Count the SKILL.md body lines (excluding frontmatter). Warn at **≥ 250 lines**, error at **≥ 500 lines**:
+
+> warn: "Skill `<name>` body is `<n>` lines. Consider extracting detail into `references/` — every body line is loaded into context on invocation. Mature skills legitimately reach 250–400 lines, so this is a nudge, not a defect."
+> error: "Skill `<name>` body is `<n>` lines, over the 500-line ceiling. Extract detail into `references/` and keep only the essential workflow in SKILL.md."
+
+Configurable via `--max-skill-lines`. Note: this plugin's own `plugin-creation` SKILL.md exceeds 250 lines — an accepted finding (it's a deliberately large hub skill with heavy progressive disclosure).
+
+#### S11 — Body conciseness threshold (info)
+
+Body exceeds **150 lines** — info-level conciseness nudge below the S10 warn threshold:
+
+> "Skill `<name>` body is `<n>` lines. Skills that load frequently benefit from staying under ~150 lines. If this skill is invoked often, consider whether more detail can move to `references/`."
+
+Info only — many legitimate skills sit in the 150–250 band.
+
+#### S12 — Project-scoped skill `allowed-tools` without a workspace-trust note (warn)
+
+When a **project-scoped** skill (path matches `.claude/skills/`) declares `allowed-tools` AND the skill **body** contains no note explaining the workspace-trust gating, emit warn:
+
+> "Project-scoped skill `<name>` declares `allowed-tools` but the body doesn't document the workspace-trust gating. `allowed-tools` on a `.claude/skills/` skill only takes effect after the user accepts the workspace trust dialog — and grants the skill prompt-free tool access. Add a note so a user reviewing the skill before trusting the repo understands what they're granting."
+
+(Plugin-shipped skills are exempt — trust is established at install time. This rule targets skills checked into a project repo, where the reader IS the person deciding whether to trust.)
+
+The validator additionally emits its own **info** note on every project-scoped `allowed-tools` skill (unchanged behavior): "`.claude/skills/*` skills with `allowed-tools` only take effect after the workspace trust dialog is accepted. Review the skill carefully before trusting a repository."
+
+#### S13 — Nested skill directory (info)
+
+A `skills/<name>/` directory that itself contains a subdirectory with its own `SKILL.md`. Claude Code recursively discovers nested skill directories, which may not be the author's intent (e.g. a `references/` folder accidentally named such that it looks like a skill). Emit info:
+
+> "Skill directory `skills/<name>/` contains a nested subdirectory `<sub>/` with its own `SKILL.md`. Claude Code discovers nested skill directories recursively — if `<sub>` is meant to be a separate skill, give it a top-level `skills/` entry; if it's reference material, it shouldn't contain a `SKILL.md`."
+
+Info only — surfaces a layout that's usually unintended.
 
 ### Commands (for each `commands/*.md`)
 - [ ] Valid YAML frontmatter — invalid frontmatter causes command to load with no metadata at runtime

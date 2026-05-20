@@ -102,10 +102,12 @@ description: Use when [triggers] - [what it does]
 
 ## Line Count Target
 
-**Keep SKILL.md under 500 lines.** If approaching this limit:
+**Target SKILL.md under 250 lines; treat 500 as a hard ceiling.** The validator warns at ≥ 250 lines and errors at ≥ 500. Mature skills legitimately reach 250–400 lines — the warn is a nudge to consider extraction, not a defect. If approaching 500:
 1. Move detailed content to `references/`
 2. Link from SKILL.md: "See references/topic.md for..."
 3. Keep only essential workflow in SKILL.md
+
+Every line of SKILL.md body is loaded into context when the skill is invoked — extraction to `references/` is the progressive-disclosure mechanism that keeps the invocation cost low.
 
 ## Frontmatter Requirements
 
@@ -121,7 +123,7 @@ context: fork
 | Field | Required | Constraints |
 |-------|----------|-------------|
 | `name` | Yes | Lowercase, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude". |
-| `description` | Yes | Max 1024 chars. Must include WHAT and WHEN. Third person only. |
+| `description` | Yes | Must include WHAT and WHEN. Third person only. **Two caps apply:** the Claude Code runtime truncates the combined `description` + `when_to_use` text at `maxSkillDescriptionChars` (default **1,536**, configurable in settings); the agentskills.io portability standard recommends a stricter **~1,024**. Target 1,024 for portable skills; 1,536 is the hard runtime limit past which text is silently dropped from the listing Claude sees. |
 | `model` | No | Override model for this skill. Values: `haiku`, `sonnet`, `opus`. Use for cost optimization -- `haiku` for simple/repetitive tasks, `opus` for complex reasoning. |
 | `allowed-tools` | No | Grants permission for the listed tools while the skill is active (does not restrict — every tool remains callable, but listed tools skip the permission prompt). Syntax: `"Bash(python:*) Bash(npm:*) WebFetch"`. **Workspace-trust gating:** for skills checked into a project at `.claude/skills/`, `allowed-tools` only takes effect *after* the workspace trust dialog is accepted (same gate as permission rules in `.claude/settings.json`). Review project skills before trusting a repo — a hostile skill can grant itself broad tool access this way. Plugin-shipped skills are not subject to this gate (trust is established at install time). |
 | `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
@@ -209,6 +211,26 @@ Look up issue $0 and summarize it.
 Store results in ${CLAUDE_SKILL_DIR}/output/.
 ```
 
+### Adaptive skills with `${CLAUDE_EFFORT}`
+
+`${CLAUDE_EFFORT}` lets a skill scale its own thoroughness to the user's effort dial. Branch the instructions on the substituted value so a `low`-effort turn gets a terse path and a `high`/`max` turn gets the full checklist:
+
+```markdown
+## Review the change
+
+The current effort level is `${CLAUDE_EFFORT}`.
+
+- At **low** / **medium**: run the linter, report pass/fail, stop.
+- At **high** / **xhigh** / **max**: run the linter, then trace each
+  changed function for edge cases, check test coverage, and write a
+  findings summary.
+
+Match your depth to the effort level above — don't over-investigate a
+`low` turn or under-investigate a `max` turn.
+```
+
+`${CLAUDE_EFFORT}` is substituted as a literal string before Claude reads the body, so the branch reads as plain instructions. Use it for skills where the right amount of work genuinely varies — audits, reviews, research. A skill whose work is fixed (format a file, rename a symbol) doesn't need it.
+
 ## Context Budget
 
 Each skill consumes context when loaded. The budget defaults to **2% of the context window** with a **16,000-character fallback** if the window size is unknown. This includes the SKILL.md content and any dynamically injected output.
@@ -216,6 +238,19 @@ Each skill consumes context when loaded. The budget defaults to **2% of the cont
 - Run `/context` to check current context usage and remaining budget
 - Override the default budget with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable (value in characters)
 - Keep skills concise to leave room for conversation context
+
+## Where Skills Live & How They're Discovered
+
+Skills load from several locations, and the discovery rules matter when you advise teams on layout:
+
+| Source | Discovery |
+|--------|-----------|
+| **Plugin skills** (`skills/<name>/SKILL.md` in a plugin) | Loaded when the plugin is enabled. Plus the single-skill-at-root layout — root `SKILL.md`, no `skills/` subdir — auto-discovered (v2.1.142+). |
+| **Project skills** (`.claude/skills/`) | Loaded from the starting directory **and every parent directory up to the repository root**. Starting Claude in a subdirectory still picks up skills defined at the repo root. |
+| **Nested project skills** (`.claude/skills/` deeper in the tree) | Loaded **on demand**: when Claude works with a file under a subdirectory, it also discovers skills from that subdirectory's `.claude/skills/`. Editing `packages/frontend/file.ts` picks up `packages/frontend/.claude/skills/`. This is the monorepo pattern — each package ships its own skills. |
+| **User skills** (`~/.claude/skills/`) | Available in every project. |
+
+**Monorepo guidance**: in a monorepo, put repo-wide skills in the root `.claude/skills/` and package-specific skills in each package's `.claude/skills/`. The package skills only enter context when Claude touches that package's files, keeping the listing budget lean for unrelated work.
 
 ## Hot-Reload
 
@@ -450,7 +485,7 @@ Build at least 3 test scenarios before finalizing:
 - [ ] Name is lowercase, hyphens only
 - [ ] Description is third person
 - [ ] Description includes WHAT and WHEN
-- [ ] Description under 1024 chars
+- [ ] Description under the 1,536-char runtime cap (`maxSkillDescriptionChars`); ~1,024 for agentskills.io portability
 
 ### References
 - [ ] All references one level deep

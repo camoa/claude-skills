@@ -49,6 +49,9 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 - **License hygiene** — prefer SPDX identifiers; `"proprietary"` only with private repository; validator M16 surfaces non-SPDX at info.
 - **Keywords cap** — soft cap 25; validator M15 warns past this (marketplace UI truncation + per-tag budget pressure).
 - **Marketplace per-plugin description cap** — soft cap 600 chars; validator X02 warns past this. Verbose history goes in CHANGELOG.md.
+- **Skill body line model** — target < 250 lines; validator S10 warns ≥ 250, errors ≥ 500. This plugin's own `plugin-creation` SKILL.md (~334 lines) trips the warn — an accepted self-finding (large hub skill, heavy progressive disclosure).
+- **Skill description caps** — runtime cap `maxSkillDescriptionChars` 1,536 (validator S05); agentskills.io portability target ~1,024. Don't conflate the two — 1,024 is a recommendation, 1,536 is the hard truncation point.
+- **Skill discovery** — project skills load from `.claude/skills/` in the starting dir AND every parent up to repo root; nested `.claude/skills/` load on demand (monorepo pattern).
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
 

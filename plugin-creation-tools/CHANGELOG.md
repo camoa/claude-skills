@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2026-05-19
+
+**Theme: Skill & Authoring Guidance.** Fourth release of the consolidated 2026-05-12 roadmap — the last before the conditional v3.7.0. Sharpens skill-body authoring guidance, documents skill discovery semantics, fixes a stale description-cap number, and ships six skill-quality validator rules with explicit S-IDs.
+
+Snapshot baseline: Claude Code v2.1.144. No upstream-version bump from v3.6.1.
+
+### Added — `${CLAUDE_EFFORT}` adaptive-skill worked example
+
+- `references/03-skills/writing-skillmd.md`: new "Adaptive skills with `${CLAUDE_EFFORT}`" subsection — a worked SKILL.md body fragment that branches verbosity on the effort level (terse at `low`/`medium`, full checklist at `high`+). The substitution was already in the variables table; this adds the missing how-to.
+
+### Added — Skill discovery semantics
+
+- `references/03-skills/writing-skillmd.md`: new "Where Skills Live & How They're Discovered" section — a table covering plugin skills (incl. single-skill-at-root), project skills (`.claude/skills/` loads from the starting dir **and every parent up to repo root**), nested project skills (loaded **on demand** when Claude touches a subdirectory's files — the monorepo pattern), and user skills. Plus explicit monorepo guidance: repo-wide skills at the root, package-specific skills in each package's `.claude/skills/`.
+
+### Fixed — Stale description cap (1024 → 1536)
+
+The plugin claimed a flat "Max 1024 chars" for skill `description` in three places. The Claude Code **runtime** cap is `maxSkillDescriptionChars`, default **1,536** — text past it is silently truncated from the listing Claude sees. 1,024 is the stricter agentskills.io **portability** recommendation, a different thing.
+
+- `references/03-skills/writing-skillmd.md`: frontmatter table row rewritten to distinguish the two caps; completion-checklist line updated.
+- `references/quick-reference.md`: size-guidelines table updated — description max is now the 1,536 runtime cap (~1,024 for portability); SKILL.md body target/maximum updated to the warn-250 / error-500 model.
+- `references/03-skills/anthropic-skill-standards.md`: left at 1,024 — that file documents the agentskills.io standard, where 1,024 is correct.
+
+### Updated — Line-count guidance
+
+- `references/03-skills/writing-skillmd.md` "Line Count Target": was a flat "under 500 lines"; now "target under 250, hard ceiling 500" matching the validator's warn-250 / error-500 model, with an explicit note that mature 250–400-line skills are fine.
+
+### Added — Validator rules S04 / S05 / S10 / S11 / S12 / S13 (+ S-ID renumbering, ST03 tag)
+
+`commands/validate.md` Skills section renumbered with explicit S-IDs. New/changed rules:
+
+- **S04 (warn)** — Description has no trigger phrase ("Use when …") and no three-part WHAT/WHEN/NOT-FOR structure. Routing-critical; promoted to error under `--strict`.
+- **S05 (warn)** — Description exceeds `maxSkillDescriptionChars` (default 1,536; read from settings if set). Replaces the stale flat "max 1024" check.
+- **S10 (warn ≥ 250 / error ≥ 500)** — SKILL.md body length. Replaces the flat "under 500 lines" check with the two-threshold model. Configurable via `--max-skill-lines`.
+- **S11 (info)** — Body > 150 lines — conciseness nudge below the S10 warn threshold.
+- **S12 (warn)** — Project-scoped skill (`.claude/skills/`) declares `allowed-tools` but the body has no workspace-trust note. Targets the reader who decides whether to trust a repo. Plugin-shipped skills exempt.
+- **S13 (info)** — Nested skill directory (`skills/<name>/` containing a subdirectory with its own `SKILL.md`) — Claude Code discovers these recursively; usually unintended.
+- The existing plugin-root `CLAUDE.md` info rule is tagged **ST03** for cross-release ID consistency.
+
+### Updated
+
+- `plugin.json` 3.6.1 → 3.6.2.
+- Root `marketplace.json` `metadata.version` 1.14.42 → 1.14.43; plugin entry version bump.
+- `CLAUDE.md` Drift to Watch list: parent-directory skill discovery + the warn-250/error-500 line model added.
+
+### Notes
+
+- **S04 ships as warn, not error** — the roadmap's v3.6.2 task list says "S04 (error)", but enforcement-design §3/§13 reasons that a day-one hard error on missing trigger phrases would fail existing skills across the ecosystem. Soft-nudge adoption wins: warn by default, error under `--strict`. The roadmap's "Notes from v3.6.2" records this deliberate deviation.
+- **S10 thresholds (250/500)** follow enforcement-design §3/§13, not the roadmap's looser ">500" phrasing — §13 explicitly picks 250-warn/500-error to leave headroom for mature skills.
+- **This plugin's own `plugin-creation` SKILL.md is 334 lines** — it trips S10's new ≥250 warn. This is an **accepted self-finding**: it's a deliberately large hub skill with heavy progressive disclosure into `references/`. Not fixed; documented here and in the rule text. (The plugin's self-application gate in CLAUDE.md is "clean or all-warnings" — a warn is within bounds.)
+- **Ecosystem migration** for the S-rules deferred to `chore/ecosystem-skill-migration`. Expected: S10 warn fires on several mature skills across DDF / brand-content-design (the enforcement-design sample already noted `memory-manager` and `visual-content` near 400 lines).
+- **Out of scope** — v3.7.0 (cross-plugin session-remembrance helper) remains conditional on drupal-dev-framework shipping `/install-remembrance-hook` first.
+
 ## [3.6.1] - 2026-05-19
 
 **Theme: Metadata & Tool Catalogue.** Third release of the consolidated 2026-05-12 roadmap. Brings the agent-tools catalogue and manifest-schema guidance current with v2.1.142+ tool churn, documents the skill listing budget, and ships seven new validator rules + extends `--fix` coverage to seven manifest/command auto-fixes.
