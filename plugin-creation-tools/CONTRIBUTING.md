@@ -1,6 +1,6 @@
-# Plugin Creation Tools — Plugin Conventions
+# Contributing to Plugin Creation Tools
 
-This plugin teaches plugin authoring; it must hold itself to the same standards it teaches.
+Maintainer and contributor conventions for this plugin. It teaches plugin authoring, so it must hold itself to the same standards it teaches — including its own rule (ST03) that a plugin-root `CLAUDE.md` is not loaded as project context. That is why these conventions live in `CONTRIBUTING.md`, not `CLAUDE.md`. Path-scoped editing rules additionally live in `.claude/rules/`.
 
 ## Self-Application Rule
 
@@ -54,7 +54,10 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 - **Skill discovery** — project skills load from `.claude/skills/` in the starting dir AND every parent up to repo root; nested `.claude/skills/` load on demand (monorepo pattern).
 - **Session-remembrance pattern** — `add-component remembrance-hooks` scaffolds it; validator R01–R05 enforce conformance. Two rules are load-bearing and must never be "fixed" out of the templates: **no `PostCompact` hook** (stdout not injected into context) and **copy `save-session.sh` into the project** (`${CLAUDE_PLUGIN_ROOT}` doesn't resolve in project `settings.json`). The pattern is two hook events — `SessionStart` + `SessionEnd`. drupal-dev-framework v4.5.0 is the reference adopter.
 - Reserved marketplace names list.
-- The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
+- The skill-description budget numbers (`skillListingBudgetFraction` 1% default / 8,000-char fallback / `maxSkillDescriptionChars` 1,536-char per-entry cap) and the SKILL.md body model (S10: warn ≥ 250 lines, error ≥ 500).
+- **Frontmatter integrity** — FM01 does a real whole-block YAML parse of every component (error on failure); FM02 flags string-typed fields parsed as lists. The validator must never extract keys leniently.
+- **Argument indexing** — `$N` is 0-based (`$0` = first argument). Commands use named `arguments:` frontmatter or parse `$ARGUMENTS`; never bare `$1` for "the first argument".
+- **`--fix` is non-interactive** — `context: fork` commands have no user turn; `--fix` applies + logs, `--fix --dry-run` previews.
 
 ## Anti-Patterns Specific to This Plugin
 
@@ -67,8 +70,10 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 
 - `skills/plugin-creation/SKILL.md` — single large skill, progressive disclosure into `references/`.
 - `commands/create.md` — scaffold a new plugin.
-- `commands/add-component.md` — add a skill / command / agent / hook / MCP / theme.
+- `commands/add-component.md` — add a skill / command / agent / hook / MCP / theme / remembrance-hooks.
 - `commands/validate.md` — validate plugin structure and wiring.
 - `agents/plugin-structure-auditor.md` — Architecture / Cross-Component Consistency / Performance audit (read-only).
 - `agents/skill-quality-reviewer.md` — SKILL.md description-and-body review (read-only).
 - `hooks/hooks.json` — `PreCompact` only, instructs Claude to read plugin files on demand instead of dumping metadata.
+- `CONTRIBUTING.md` (this file) — maintainer conventions. NOT a plugin-root `CLAUDE.md` by design (ST03).
+- `.claude/rules/` — path-scoped editing rules (skill / command / agent conventions).

@@ -26,6 +26,6 @@ echo ""
 echo "To restore context after compaction:"
 echo "1. Read \`$PLUGIN_JSON\` for plugin metadata"
 echo "2. List \`$PLUGIN_DIR/skills/\`, \`$PLUGIN_DIR/commands/\`, \`$PLUGIN_DIR/agents/\` for components"
-if [ -f "$PLUGIN_DIR/CLAUDE.md" ]; then
-  echo "3. Read \`$PLUGIN_DIR/CLAUDE.md\` for plugin conventions"
+if [ -f "$PLUGIN_DIR/CONTRIBUTING.md" ]; then
+  echo "3. Read \`$PLUGIN_DIR/CONTRIBUTING.md\` for plugin conventions"
 fi

@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1] - 2026-05-20
+
+**Theme: validator self-defects.** Bug-fix patch. drupal-dev-framework v4.6.0 used `/plugin-creation-tools:validate` v3.7.0 as its release gate and the tool surfaced eight defects in itself, recorded in `plugin-creation-tools-gaps-2026-05-20.md`. This release fixes all eight, plus a versioning-drift bug found while fixing them.
+
+All items are bug fixes — patch, not minor — even though FM01/FM02 are new rules: the validator's existing S01/A01 contract already *claimed* to check frontmatter validity; FM01 just makes that true.
+
+### Fixed — argument indexing (gaps A1)
+
+`commands/validate.md`, `create.md`, `add-component.md` all read `$1` as "the first argument". Claude Code's `$N` placeholders are **0-based** — `$0` is the first argument, `$1` the second (Slash Commands guide). Passing one argument left `$1` empty; passing `<path> --strict` made `$1` the flag. This is why a forked `/validate <plugin>` validated the wrong plugin or the whole marketplace.
+
+- `validate.md` Step 1 now parses `$ARGUMENTS`: first non-`--` token = plugin path, `--` tokens = flags. Resolves absolute paths directly; relative/bare names against cwd then marketplace siblings.
+- `create.md` parses `$ARGUMENTS` for the plugin name (the first non-flag token).
+- `add-component.md` now declares `arguments: component-type component-name` in frontmatter and uses the named placeholders `$component-type` / `$component-name` — the documented, index-free mechanism. All `$2` references replaced.
+
+`context: fork` commands **do** receive arguments — substitution happens before the fork (Slash Commands guide, "Run skills in a subagent"). A1 was never a harness limitation; it was this indexing bug.
+
+### Fixed — `--fix` is non-interactive (gaps A2)
+
+`validate.md` Step 5 told `--fix` to "ask the user to confirm" — impossible in a forked subagent (no user turn). `--fix` now applies directly + logs to `.claude-plugin/.validate-fixes.log` (reversible via `git`); passing `--fix` is the consent. New `--fix --dry-run` reports proposed migrations without writing. Both modes are non-interactive and work in fork context.
+
+### Fixed — frontmatter check now does a real YAML parse (gaps B1)
+
+New **FM-series** (Frontmatter Integrity), run against every component file:
+
+- **FM01 (error)** — the whole frontmatter block must pass a real `yaml.safe_load`. Lenient per-key extraction missed 3 error-class malformed files in DDF (`argument-hint: [x] [y]` flow-sequence-plus-trailing-content; an unquoted `:` in a `description`). A file whose frontmatter doesn't parse loads with **no metadata** at runtime — error-class.
+- **FM02 (info)** — a string-typed field (`argument-hint`, `description`, `name`, `compatibility`) that parses as a list/mapping instead of a string. Info, not error: the upstream guide's own `argument-hint` examples use the unquoted bracket form.
+
+S01 / A01 / the command frontmatter check now reference FM01 as the authoritative strict parse.
+
+### Fixed — this plugin's own flagship SKILL.md frontmatter was malformed
+
+Applying FM01 to plugin-creation-tools itself immediately caught a real defect in `skills/plugin-creation/SKILL.md` — the very skill the plugin is built around. Its `description` contained an unquoted `NOT for: using existing plugins` — the `: ` is YAML's mapping indicator, so the whole frontmatter block failed a standard YAML parse (`mapping values are not allowed here`). The same defect existed in the bundled `examples/full-featured-plugin/skills/code-helper/SKILL.md`.
+
+Both `description` values are now single-quoted. This was **mischaracterized for releases v3.5.0–v3.7.0**: each release's notes dismissed the `claude plugin validate` SKILL.md error as a harmless false positive caused by the `` !`ls …` `` dynamic-context injection. That was wrong — the `!` was a red herring; the cause was the unquoted colon, a genuine malformed-frontmatter bug of exactly the class gaps-doc B1 describes. A skill with unparseable frontmatter loads with **no metadata** at runtime.
+
+With this fix, **`claude plugin validate` passes clean** — the first fully-clean upstream validation of this plugin across the entire v3.5.0–v3.7.1 rollout. (The plugin-root `CLAUDE.md` warning is also gone, via the `CONTRIBUTING.md` rename below.)
+
+### Fixed — M14 / ST03 severity parity with upstream (gaps B2)
+
+Both were `info`; upstream `claude plugin validate` emits **warnings** for unknown manifest keys and a plugin-root `CLAUDE.md`. A plugin could pass `/plugin-creation-tools:validate` "clean" yet warn upstream. **M14 → warn**, **ST03 → warn**.
+
+### Fixed — H05 / H06 under-fire (gaps B3)
+
+v3.7.0's H05 was read as space-conditional ("exec form not needed since no spaces"). The Hooks Reference says exec form is preferred for *any* path-placeholder reference. H05/H06 rule text now explicitly states the check fires **regardless of whether the path contains spaces** — "no spaces" is not a pass condition.
+
+### Clarified — H08 scope (gaps B4)
+
+H08 fires only on broad matchers (`*`, `""`, `.*`, omitted). A **named-tool** matcher (`Write`, `Edit`, `Bash`) is intentionally "narrow enough" and not flagged. The rule note now says so explicitly.
+
+### Fixed — report formatting (gaps C1)
+
+`validate.md` Output Format: ruled-out checks must not be listed under the **Warnings** header with body text concluding they're clean (a gate counting Warnings entries would over-count). New "Checked — clean" bucket; header discipline spelled out — one finding goes in exactly one bucket, by actual severity.
+
+### Fixed — plugin-root `CLAUDE.md` relocated to `CONTRIBUTING.md`
+
+The plugin shipped its own maintainer doctrine in a plugin-root `CLAUDE.md` — the exact thing ST03 (now warn) flags. The plugin teaches "don't do this"; it must not do it. `CLAUDE.md` → **`CONTRIBUTING.md`** (`git mv`, history preserved). Inbound references updated: `.claude/rules/skill-conventions.md`, `hooks/pre-compact.sh`, `SKILL.md`. The plugin now validates clean against its own ST03.
+
+### Fixed — SKILL.md `version` drift
+
+`skills/plugin-creation/SKILL.md` frontmatter still said `version: 3.4.1` — never bumped across v3.5.0–v3.7.0 despite the versioning rule requiring it. Corrected to `3.7.1`. (The rule is in `CONTRIBUTING.md` § Versioning; this drift is itself evidence the SKILL.md version field is easy to forget — future releases must include it.)
+
+### Metadata
+
+- `plugin.json` 3.7.0 → 3.7.1; `skills/plugin-creation/SKILL.md` frontmatter 3.4.1 → 3.7.1.
+- Root `marketplace.json` `metadata.version` 1.14.46 → 1.14.47; plugin entry version bump.
+
+### Validation
+
+- `claude plugin validate` (upstream) now **passes clean** — zero errors, zero warnings. This is the first clean upstream run since the v3.5.0 cycle began; every prior release shipped with the malformed-SKILL.md error misreported as a false positive.
+- All 8 component frontmatter blocks parse via a real `yaml.safe_load` (the FM01 self-test).
+- jq / JSON syntax of all touched files verified.
+
+### Notes
+
+- **`context: fork` + arguments verified** against the cached Slash Commands guide ("Run skills in a subagent" — the `deep-research` example is a `context: fork` skill whose body uses `$ARGUMENTS`). The fork receives substituted arguments; A1 was an indexing bug, not a structural one.
+- **The 8th defect** (A3 — inconsistent fork cwd) is a harness behavior the plugin can't fix; mitigated by A1 — with an explicit path argument, cwd no longer matters. `validate.md` Step 1 documents "prefer an explicit path argument."
+- The gaps doc has been annotated with a "Resolved in v3.7.1" section.
+
 ## [3.7.0] - 2026-05-20
 
 **Theme: Cross-plugin pattern enforcement.** Fifth and final release of the consolidated 2026-05-12 roadmap. Extracts the session-remembrance pattern — pioneered by drupal-dev-framework v4.5.0 — into a scaffoldable, validatable shared pattern any plugin can adopt.

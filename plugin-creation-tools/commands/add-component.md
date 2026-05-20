@@ -2,6 +2,7 @@
 description: Add a skill, command, agent, hook, MCP server, theme, or remembrance-hooks pattern to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "add theme", "add remembrance hooks", "session remembrance", "new component", or wants to extend an existing plugin with additional functionality.
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 argument-hint: <component-type> <name>
+arguments: component-type component-name
 context: fork
 ---
 
@@ -11,8 +12,8 @@ Add a new component to an existing Claude Code plugin.
 
 ## Steps
 
-1. Parse arguments: `$1` = component type, `$2` = component name
-2. If missing arguments, ask user for component type and name
+1. Read the two named arguments: `$component-type` and `$component-name`. They come from the `arguments:` frontmatter, which maps the names to positions in order — `$component-type` is the first argument, `$component-name` the second. (Named arguments avoid the 0-based `$N` footgun: `$1` is the *second* positional, not the first.)
+2. If either is missing, ask the user for the component type and name
 3. Find the plugin root (look for `.claude-plugin/plugin.json` in current or parent directories)
 4. Validate the component name (hyphen-case, max 64 chars)
 5. Scaffold the component from templates
@@ -21,18 +22,18 @@ Add a new component to an existing Claude Code plugin.
 ## Component Types
 
 ### `skill`
-1. Create `skills/$2/SKILL.md` from `templates/skill/SKILL.md.template`
-2. Create `skills/$2/references/` directory
+1. Create `skills/$component-name/SKILL.md` from `templates/skill/SKILL.md.template`
+2. Create `skills/$component-name/references/` directory
 3. Remind: SKILL.md is instructions for Claude, not documentation
 4. Consider: `model:` field, dynamic context injection, `context: fork` for heavy ops
 
 ### `command`
-1. Create `commands/$2.md` from `templates/command/command.md.template`
+1. Create `commands/$component-name.md` from `templates/command/command.md.template`
 2. Remind: set `allowed-tools` to minimum needed
-3. Remind: use `$ARGUMENTS`, `$1`, `$2` for argument handling
+3. Remind: the scaffolded command can handle arguments via `$ARGUMENTS`, or declare named arguments in frontmatter (`arguments: foo bar` → `$foo` / `$bar`). Avoid bare `$1` / `$2` — `$N` is 0-based, so `$1` is the *second* argument.
 
 ### `agent`
-1. Create `agents/$2.md` from `templates/agent/agent.md.template`
+1. Create `agents/$component-name.md` from `templates/agent/agent.md.template`
 2. Remind: description must include delegation triggers ("Use proactively when...")
 3. Consider: `memory: project` for cross-session learning
 4. Consider: `model:` matched to task complexity (haiku for simple, opus for complex)
@@ -51,15 +52,15 @@ Add a new component to an existing Claude Code plugin.
 2. Guide user to configure server command and args
 
 ### `theme`
-1. Create `themes/$2.json` with `name`, `base`, `overrides` fields (see `references/08-configuration/themes.md`)
+1. Create `themes/$component-name.json` with `name`, `base`, `overrides` fields (see `references/08-configuration/themes.md`)
 2. Default `base` to `"dark"`; keep `overrides` sparse (only the tokens you actually change)
 3. If the user is using a non-default theme directory, write the path under **`experimental.themes`** in `plugin.json` (not the top level — the top-level form warns under `claude plugin validate` and a future release will require the nested form)
-4. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$2` when the user selects it
+4. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$component-name` when the user selects it
 5. Remind: users press `Ctrl+E` to copy the plugin theme into `~/.claude/themes/` for editing — your bundled file is read-only in the picker
 
 ### `remembrance-hooks`
 
-Scaffold the [session-remembrance pattern](../skills/plugin-creation/references/06-hooks/remembrance-hooks-pattern.md) — per-project `SessionStart` + `SessionEnd` hooks that survive compaction. `$2` is ignored (the component names are fixed). Read `references/06-hooks/remembrance-hooks-pattern.md` first so you can explain the design to the user.
+Scaffold the [session-remembrance pattern](../skills/plugin-creation/references/06-hooks/remembrance-hooks-pattern.md) — per-project `SessionStart` + `SessionEnd` hooks that survive compaction. `$component-name` is ignored (the component names are fixed). Read `references/06-hooks/remembrance-hooks-pattern.md` first so you can explain the design to the user.
 
 1. Confirm the plugin maintains **per-project state** worth remembering. If it's stateless (single command path, no project memory), say so and stop — the pattern adds nothing. A plugin used to build other plugins rather than maintain project state should not adopt it.
 2. Copy the four templates into the plugin, substituting `{plugin-name}` with the plugin's `name` from `plugin.json` throughout each file:
@@ -86,5 +87,5 @@ Scaffold the [session-remembrance pattern](../skills/plugin-creation/references/
 
 ## Arguments
 
-- `$1`: Component type (skill, command, agent, hook, mcp, theme, remembrance-hooks)
-- `$2`: Component name (hyphen-case) — ignored for `remembrance-hooks` (fixed component names)
+- `$component-type`: Component type (skill, command, agent, hook, mcp, theme, remembrance-hooks)
+- `$component-name`: Component name (hyphen-case) — ignored for `remembrance-hooks` (fixed component names)
