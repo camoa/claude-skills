@@ -1,7 +1,7 @@
 ---
 description: Validate plugin structure, frontmatter, and best practices. Use when user says "validate plugin", "check plugin", "audit plugin", "verify plugin", "is my plugin correct", or before distributing/publishing a plugin.
 allowed-tools: Read, Glob, Grep
-argument-hint: "[plugin-path] [--fix] [--strict]"
+argument-hint: "[plugin-path] [--fix] [--dry-run] [--strict]"
 context: fork
 ---
 
@@ -11,21 +11,25 @@ Validate a plugin's structure and components against best practices.
 
 ## Steps
 
-1. Determine plugin path: use `$1` if provided, otherwise detect from current directory
-2. Parse flags: `--fix` enables auto-migration for rules tagged below; `--strict` promotes warnings to errors for CI gating
-3. Find `.claude-plugin/plugin.json` to confirm it's a plugin root
-4. Run all validation checks below
-5. If `--fix` is set, after the report ask the user to confirm before applying any auto-migration. Apply each fix atomically (write-tempfile-then-rename) and append an entry to `.claude-plugin/.validate-fixes.log`
-6. Report results as a structured checklist
+1. **Resolve the plugin path from `$ARGUMENTS`.** Parse `$ARGUMENTS` (the full argument string): the first token that does **not** start with `--` is the plugin path; tokens starting with `--` are flags. Do **not** read `$1` — Claude Code's `$N` placeholders are **0-based** (`$0` is the first argument, `$1` the second), so `$1` silently reads the wrong token. If no path token is present, fall back to detecting the plugin from the current directory.
+   - Absolute path → use directly.
+   - Relative path or bare plugin name → resolve against the current directory; if that misses and the cwd is inside a marketplace, resolve as a sibling plugin directory.
+   - This command is `context: fork`; argument substitution happens **before** the fork, so `$ARGUMENTS` is available in the forked run. The cwd of the fork is not reliable — always prefer an explicit path argument.
+2. Parse flags from the `--` tokens: `--fix` applies auto-migrations for rules tagged below; `--dry-run` (with `--fix`) reports the proposed migrations without writing; `--strict` promotes warnings to errors for CI gating.
+3. Find `.claude-plugin/plugin.json` to confirm it's a plugin root.
+4. Run all validation checks below.
+5. If `--fix` is set: apply each auto-fixable finding (unless `--dry-run`), atomically (write-tempfile-then-rename), and append an entry to `.claude-plugin/.validate-fixes.log`. With `--dry-run`, list the proposed changes instead of writing. **No interactive confirmation** — passing `--fix` is the consent; review the result via `git diff`.
+6. Report results as a structured checklist.
 
 ## Auto-fix (`--fix`)
 
-The validator gains an opt-in `--fix` flag that performs **only** mechanical, reversible migrations. Every fix:
+The validator has an opt-in `--fix` flag that performs **only** mechanical, reversible migrations. Every fix:
 
 - Is logged to `.claude-plugin/.validate-fixes.log` (append-only) with timestamp + rule ID + summary
 - Writes atomically (tempfile + rename), so a failure leaves the original intact
 - Is reversible via `git diff` / `git restore`
-- Requires user confirmation before any file is changed in this release
+
+`--fix` is **non-interactive** — it applies directly and relies on `git diff` for review. This is deliberate: the command runs `context: fork`, and a forked subagent has no interactive turn with the user, so a confirmation prompt could never fire. Passing the `--fix` flag is itself the consent. To preview without writing, run `--fix --dry-run` — it reports every proposed migration as a diff and changes nothing.
 
 Rules that ship with `--fix` (cumulative across releases): **H05**, **H06**, **H10** (v3.5.0); **M06**, **M07**, **M08**, **M09**, **M10**, **C01**, **C02** (v3.6.1). Future releases add more.
 
@@ -38,6 +42,32 @@ Log entry format:
 
 ## Validation Checks
 
+### Frontmatter Integrity (FM-series)
+
+Run these against **every** component file with a YAML frontmatter block — every `commands/*.md`, every `skills/**/SKILL.md`, every `agents/**/*.md`. These rules supersede the lenient per-key checks: a file can have a `description` key extractable by eye yet still fail a real parse.
+
+#### FM01 — Frontmatter block parses as YAML (error)
+
+Take the text **between** the opening `---` and closing `---` and run it through a real YAML parser (`yaml.safe_load` or equivalent) as a single document. If it raises, emit an **error**:
+
+> "Frontmatter of `<file>` fails YAML parsing: `<parser error>`. A file whose frontmatter block does not parse **loads with no metadata at runtime** — every frontmatter field (`description`, `allowed-tools`, `name`, …) is silently dropped. Fix the YAML."
+
+Do **not** extract individual keys leniently and call it valid — parse the whole block. Common real failures:
+
+- `argument-hint: [<task-name>] [--all]` — a YAML flow sequence (`[<task-name>]`) followed by more content (`[--all]`) on the same line is a syntax error for the whole value, and can break the block.
+- An unquoted `:` inside a value — `description: Do X: then Y` parses `X` as a nested mapping key. Quote the value.
+- A bare `%`, `@`, `` ` ``, or leading `[`/`{` in an unquoted scalar.
+
+The fix for almost all of these is to **quote the value**: `argument-hint: "[task-name] [--all]"`.
+
+#### FM02 — String-typed field parsed as a non-string (info)
+
+After a successful FM01 parse, check fields that are meant to be strings — `argument-hint`, `description`, `name`, `compatibility`. If the parsed value is a **list** or **mapping** instead of a string, emit info:
+
+> "`<field>` in `<file>` parses as a YAML `<list|mapping>`, not a string. Most commonly `argument-hint: [task-name]` → the list `[\"task-name\"]`. Quote it — `argument-hint: \"[task-name]\"` — so it's an unambiguous string."
+
+Info, not warn: the upstream Slash Commands guide's own `argument-hint` examples use the unquoted bracket form, so a single clean flow sequence is tolerated at runtime — but quoting removes the ambiguity and is the safer authoring habit.
+
 ### Plugin Structure
 - [ ] `.claude-plugin/plugin.json` exists and is valid JSON
 - [ ] `name` field present in plugin.json
@@ -46,7 +76,7 @@ Log entry format:
 - [ ] `description` present and not placeholder text
 - [ ] README.md exists at plugin root
 - [ ] CHANGELOG.md exists at plugin root
-- [ ] **ST03 (info)** — if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude. The file is fine to keep as authoring reference (this plugin uses it that way)."
+- [ ] **ST03 (warn)** — if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude; maintainer/contributor conventions belong in a `CONTRIBUTING.md` (a non-`CLAUDE.md` filename). Upstream `claude plugin validate` also warns on a plugin-root `CLAUDE.md` — this rule matches that severity so a plugin can't pass here yet warn upstream." (Raised from info to warn in v3.7.1 for upstream parity.)
 
 #### ST04 — Redundant `skills: ["./"]` on a single-skill-at-root plugin (info)
 
@@ -80,13 +110,13 @@ Heuristic exclusion: don't fire when the manifest path resolves into the default
 - [ ] **(info)** — `channels` declared in `plugin.json`: each entry must have a `server` field that matches a key in the plugin's `mcpServers` (or an externally-known MCP server name). Flag warning if `server` references an undeclared MCP server. Per-channel `userConfig` follows the top-level schema — apply the same legacy/required checks.
 - [ ] **(info)** — `bin/` directory present at the plugin root: confirm files are executable (warn on non-executable entries — they appear on `PATH` but fail to run). Auto-discovered, no manifest entry needed.
 
-#### M14 — Unknown top-level manifest keys (info)
+#### M14 — Unknown top-level manifest keys (warn)
 
-For each top-level key in `plugin.json` that is **not** in the documented schema (canonical list: `$schema`, `name`, `displayName`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`, `commands`, `agents`, `skills`, `hooks`, `mcpServers`, `lspServers`, `outputStyles`, `experimental`, `channels`, `userConfig`, `settings`, `dependencies`), emit info:
+For each top-level key in `plugin.json` that is **not** in the documented schema (canonical list: `$schema`, `name`, `displayName`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`, `commands`, `agents`, `skills`, `hooks`, `mcpServers`, `lspServers`, `outputStyles`, `experimental`, `channels`, `userConfig`, `settings`, `dependencies`), emit warn:
 
-> "Plugin manifest contains unknown top-level key `<name>`. Claude Code silently ignores keys not in the schema (forward-compatible). If this is intentional forward-compat or vendor-specific metadata, you can suppress this notice. Real-world example: `defaults`, `recommended` in drupal-dev-framework — both intentional, both load fine."
+> "Plugin manifest contains unknown top-level key `<name>`. Claude Code silently ignores keys not in the schema (forward-compatible), and upstream `claude plugin validate` warns on them. If this is intentional forward-compat or vendor-specific metadata, the warning is expected — keep it or move the data under a recognized key. Real-world example: `defaults`, `recommended` in drupal-dev-framework."
 
-Info only; never warn or error — surfacing for author confirmation, not enforcement.
+Severity is **warn** (raised from info in v3.7.1): upstream `claude plugin validate` warns on unknown keys, so this rule matches it — a plugin must not pass `/plugin-creation-tools:validate` "clean" while still warning upstream.
 
 #### M15 — Keywords cap (warn)
 
@@ -146,7 +176,7 @@ Info only — sometimes a plugin lives in the marketplace root on a feature bran
 
 ### Skills (for each skill in `skills/*/` — plus a root `SKILL.md` for single-skill plugins)
 
-- [ ] **S01 (error)** — `SKILL.md` exists with valid YAML frontmatter. Invalid frontmatter causes the skill to load with no metadata at runtime.
+- [ ] **S01 (error)** — `SKILL.md` exists, and its frontmatter passes the **FM01** strict YAML parse (see Frontmatter Integrity). Invalid frontmatter causes the skill to load with no metadata at runtime.
 - [ ] **S02 (error)** — Frontmatter has `name` (hyphen-case, max 64 chars).
 - [ ] **(error)** — `name` contains no reserved words (`anthropic`, `claude`).
 - [ ] **(warn)** — Description includes WHAT it does AND WHEN to use it (trigger conditions).
@@ -212,7 +242,7 @@ A `skills/<name>/` directory that itself contains a subdirectory with its own `S
 Info only — surfaces a layout that's usually unintended.
 
 ### Commands (for each `commands/*.md`)
-- [ ] Valid YAML frontmatter — invalid frontmatter causes command to load with no metadata at runtime
+- [ ] Frontmatter passes the **FM01** strict YAML parse (see Frontmatter Integrity) — invalid frontmatter causes the command to load with no metadata at runtime
 - [ ] `description` field present
 - [ ] `allowed-tools` field present
 - [ ] No inline code with backtick+exclamation or backtick+at-sign that could trigger execution
@@ -237,7 +267,7 @@ Info only — surfaces a layout that's usually unintended.
 
 Plugin `agents/` directories are scanned **recursively** (Claude Code v2.x+). Walk every `.md` file under `agents/`, not just the top level.
 
-- [ ] **A01 (error)** — Valid YAML frontmatter. Invalid frontmatter causes agent to load with no metadata at runtime.
+- [ ] **A01 (error)** — Frontmatter passes the **FM01** strict YAML parse (see Frontmatter Integrity). Invalid frontmatter causes the agent to load with no metadata at runtime.
 - [ ] **(error)** — `name` field present.
 - [ ] **(error)** — `description` field present (includes delegation triggers).
 - [ ] **(warn)** — `tools` field present.
@@ -286,9 +316,11 @@ Flat-layout agents missing `name` are already caught by the general A01-family c
 
 #### H05 — Exec form preferred for path placeholders (warn, `--fix`)
 
-For each command hook in `hooks.json` whose `command` string contains a path placeholder (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_DATA}`) AND lacks an `args` field, emit:
+For each command hook in `hooks.json` whose `command` string contains a path placeholder (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_DATA}`) AND lacks an `args` field, emit a warning.
 
-> "Hook `<event>` handler uses shell form with a path placeholder. Prefer exec form: add `\"args\": []` so the script path is passed as one argument with no quoting needed. See `references/06-hooks/writing-hooks.md` § Exec form vs shell form."
+**Fire regardless of whether the path contains spaces.** The Hooks Reference says exec form is preferred for *any* hook that references a path placeholder — "Set `args` whenever the hook references a [path placeholder]" — not only when the resolved path happens to contain spaces. A hook can `PASS` H05 only if it has no path placeholder, or already uses exec form (`args` present). "No spaces in the path" is **not** a pass condition — do not reason "exec form not needed since no spaces."
+
+> "Hook `<event>` handler uses shell form with a path placeholder. Prefer exec form: add `\"args\": []` so the script path is passed as one argument with no quoting needed — this is the recommended shape for every placeholder reference, independent of spaces. See `references/06-hooks/writing-hooks.md` § Exec form vs shell form."
 
 **`--fix`**: Insert `"args": []` as a sibling to `command` in the hook handler. Do **not** auto-migrate when the command string contains shell metacharacters (`|`, `&&`, `||`, `;`, `>`, `<`, `` ` ``, `$(`, glob `*`/`?` outside placeholder, `~`) — those need shell form. In that case, emit the warning but skip the fix and note "shell form required for this command".
 
@@ -299,6 +331,8 @@ In each `hooks.json` command-string value (and only in command-string values —
 > "Use `${VAR}` (curly-brace form) instead of bare `$VAR` inside JSON command strings — the curly form is the canonical placeholder syntax and is unambiguous to the placeholder resolver."
 
 **`--fix`**: Literal rewrite of `$CLAUDE_<NAME>` → `${CLAUDE_<NAME>}` inside JSON string values in `hooks.json` only. Skip script files (`.sh`, `.py`, etc.) entirely.
+
+H06 fires on **any** bare-dollar placeholder in a command string — like H05 it is not conditioned on spaces or any other property of the resolved path.
 
 #### H07 — Placeholder quoting (warn)
 
@@ -311,6 +345,8 @@ Hook handlers on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`,
 > "Consider adding an `if` field to this handler to pre-filter tool calls cheaply — broad-matcher hooks spawn a process on every call. See `references/06-hooks/writing-hooks.md` § The if Field."
 
 This is intentionally **info**, not warn — some authors deliberately spawn on every call (logging, analytics). Don't punish them.
+
+**Scope — what counts as a "broad" matcher.** H08 fires only on `*`, `""`, an omitted matcher, or `.*`. A **named-tool** matcher — `Write`, `Edit`, `Bash`, `Write|Edit` — is considered narrow enough and does **not** trip H08, even with no `if` field. Rationale: the matcher already scopes the hook to specific tool(s); an `if` would narrow it further (to specific arguments) but the spawn-on-every-call cost is bounded to one tool's frequency, which is an acceptable, common design. If you want argument-level filtering on a named-tool hook, `if` is still available — H08 just doesn't *demand* it there.
 
 #### H09 — `if` on non-tool events (warn)
 
@@ -429,17 +465,30 @@ The `SessionEnd` hook entry the install command emits must set an explicit `time
 ## Plugin Validation: {name} v{version}
 
 ### Errors (must fix)
-- ...
+- {rule-id} {file}: {what's wrong}
 
 ### Warnings (should fix)
-- ...
+- {rule-id} {file}: {what's wrong}
 
 ### Info
+- {rule-id} {file}: {note}
+
+### Checked — clean
 - {n} skills, {n} commands, {n} agents, hooks: {yes/no}, MCP: {yes/no}
+- {rule-ids that were evaluated and found nothing}
 
 ### Result: PASS / FAIL
 ```
 
+**Header discipline (one finding, one correct bucket):**
+
+- Place an entry under **Errors** / **Warnings** / **Info** strictly by its actual emitted severity. A rule that was evaluated and produced **no finding** is not a warning — it does not appear under Warnings at all.
+- Do **not** list a ruled-out check under Warnings with body text that concludes it's clean (e.g. "S04 — no actual hits", "S10 — below the 250-line line"). A consumer or gate that counts entries under the Warnings header would over-count. Ruled-out checks go under **Checked — clean**, or are simply omitted.
+- The `### Result` line is `PASS` only when Errors is empty (and, under `--strict`, Warnings is empty too).
+
 ## Arguments
 
-- `$1`: Path to plugin directory (optional, defaults to current directory)
+- **Plugin path** (optional): the first non-`--` token in `$ARGUMENTS`. Resolve per Step 1. Defaults to current-directory detection when absent. Do not read `$1` — `$N` is 0-based; the path is `$0` if you index positionally, but parsing `$ARGUMENTS` for the first non-flag token is the robust approach.
+- `--fix`: apply auto-migrations for `--fix`-tagged rules (non-interactive; see Auto-fix section).
+- `--dry-run`: with `--fix`, report proposed migrations without writing.
+- `--strict`: promote warnings to errors (CI gating).

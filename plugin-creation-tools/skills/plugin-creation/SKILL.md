@@ -1,7 +1,7 @@
 ---
 name: plugin-creation
-version: 3.4.1
-description: Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`
+version: 3.7.1
+description: 'Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`'
 user-invocable: false
 ---
 
@@ -37,7 +37,7 @@ Create complete Claude Code plugins with any combination of components.
 
 When creating any plugin, also consider:
 - `.claude/rules/` with modular project rules (path-scoped if needed for different component directories)
-- `CLAUDE.md` at plugin root **for authoring reference only** — it is NOT loaded as project context when the plugin is installed. To ship instructions Claude reads at runtime, put them in a skill (`skills/<name>/SKILL.md`). The validator emits an info notice when a plugin-root `CLAUDE.md` is present so you don't mistake it for runtime context.
+- Maintainer/contributor conventions belong in a `CONTRIBUTING.md` at the plugin root — **not** a `CLAUDE.md`. A plugin-root `CLAUDE.md` is NOT loaded as project context when the plugin is installed; both `claude plugin validate` and this validator (rule **ST03**, warn) flag one. To ship instructions Claude reads at runtime, put them in a skill (`skills/<name>/SKILL.md`); for path-scoped editing rules use `.claude/rules/`.
 - README.md and CHANGELOG.md at plugin root (for humans — never inside skill directories)
 
 ## Documentation Principles

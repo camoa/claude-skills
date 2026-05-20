@@ -10,13 +10,13 @@ Create a new Claude Code plugin with any combination of components.
 
 ## Steps
 
-1. Parse arguments: `$1` = plugin name, remaining = component flags
+1. Parse `$ARGUMENTS`: the first non-`--` token is the plugin name; `--` tokens are component flags. (Claude Code's `$N` placeholders are **0-based** — `$0` is the first argument — so do not read `$1` for the plugin name; parse `$ARGUMENTS` for the first non-flag token, or use `$0`.)
 2. If no arguments, ask the user for plugin name and desired components
 3. Validate plugin name (lowercase, hyphens, max 64 chars)
 4. Ask user for target directory if not obvious from context
-5. Run the init script:
+5. Run the init script (substitute the parsed plugin name for `<plugin-name>`):
    ```
-   python3 ${CLAUDE_PLUGIN_ROOT}/skills/plugin-creation/scripts/init_plugin.py $1 --path <target> --components <list>
+   python3 ${CLAUDE_PLUGIN_ROOT}/skills/plugin-creation/scripts/init_plugin.py <plugin-name> --path <target> --components <list>
    ```
 6. After scaffolding, load the plugin-creation skill for guidance on completing each component
 7. Read `references/02-philosophy/core-philosophy.md` for design principles
@@ -45,5 +45,5 @@ After creating, guide the user to:
 
 ## Arguments
 
-- `$1`: Plugin name (hyphen-case, e.g., `my-tools`)
-- `$ARGUMENTS`: All arguments including component flags
+- **Plugin name**: first non-`--` token in `$ARGUMENTS` (equivalently `$0` — `$N` is 0-based). Hyphen-case, e.g. `my-tools`.
+- **Component flags**: the `--skill` / `--command` / `--agent` / `--hook` / `--mcp` tokens in `$ARGUMENTS`.

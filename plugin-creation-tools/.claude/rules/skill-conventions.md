@@ -28,4 +28,4 @@ paths:
 - Current state only — no historical narratives, no version migration stories.
 
 ## Drift Watchlist
-The hook event count, hook handler types, plugin component types, reserved marketplace names, and skill-description budget numbers must stay in sync between SKILL.md, `commands/validate.md`, and the relevant references. See `../../CLAUDE.md` "Drift to Watch".
+The hook event count, hook handler types, plugin component types, reserved marketplace names, and skill-description budget numbers must stay in sync between SKILL.md, `commands/validate.md`, and the relevant references. See `../../CONTRIBUTING.md` "Drift to Watch".
