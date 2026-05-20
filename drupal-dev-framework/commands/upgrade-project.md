@@ -1,7 +1,7 @@
 ---
 description: "Retrofit the active project to current scaffolder parity. Trigger: 'upgrade project', 'retrofit', 'bring project up to date', 'modernize project state'. Backfills project_state.md fields (Code Path, Playbook Sets, User Playbook + state, Worktree By Default, Review Required) AND iterates in-progress tasks for task-level gaps (frontmatter, Phase 4 line, missing audit JSONs). Active-project-only, never bulk. Wizard pattern delegating to existing /set-* commands. Idempotent + journal-based atomic. Introduced v4.1.0."
 allowed-tools: Read, Edit, Bash, Glob, Skill
-argument-hint: [<project-name>]
+argument-hint: "[<project-name>]"
 ---
 
 # Upgrade Project

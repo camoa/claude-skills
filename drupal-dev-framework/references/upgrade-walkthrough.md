@@ -3,7 +3,7 @@
 > Companion to `commands/upgrade-project.md`. Loaded only on explicit user read (token-efficiency split per v4.0.2 pattern).
 
 **Introduced:** drupal-dev-framework v4.1.0
-**Driver:** Old projects (created before v3.15.0 playbook system / v4.1.0 review phase) silently inherit defaults from `plugin.json defaults.playbookSets`; without retrofit, framework upgrades produce a two-tier ecosystem.
+**Driver:** Old projects (created before v3.15.0 playbook system / v4.1.0 review phase) silently inherit defaults from the plugin's `defaults.json`; without retrofit, framework upgrades produce a two-tier ecosystem.
 
 ## Overview
 

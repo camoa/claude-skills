@@ -1,7 +1,7 @@
 ---
 description: "Start a new development project. Trigger: 'start project', 'new module', 'initialize project', 'begin development'. Creates project structure and gathers requirements BEFORE any coding."
 allowed-tools: Read, Write, Bash(mkdir:*), Glob, Task
-argument-hint: [project-name]
+argument-hint: "[project-name]"
 ---
 
 # New Project

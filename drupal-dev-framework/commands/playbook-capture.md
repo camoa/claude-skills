@@ -1,7 +1,7 @@
 ---
 description: "Capture a new play (opinionated rule) into the project's local user playbook. Drafts entry with What/Rationale/When/Example fields, shows diff, appends on user confirmation. Introduced v3.15.0."
 allowed-tools: Read, Write, Edit, Bash, Skill
-argument-hint: [<short description of the rule>]
+argument-hint: "[<short description of the rule>]"
 ---
 
 # Playbook Capture

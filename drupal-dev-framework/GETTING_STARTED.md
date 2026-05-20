@@ -188,7 +188,7 @@ You're done with the basics. When you're ready for more:
 
 - [README.md](README.md) — full command reference, references list, principles enforced
 - [CHANGELOG.md](CHANGELOG.md) — what each version added
-- [CLAUDE.md](CLAUDE.md) — internal conventions (read if extending the framework)
+- [CONVENTIONS.md](CONVENTIONS.md) — internal conventions (read if extending the framework)
 - [Dev-guides site](https://camoa.github.io/dev-guides/) — the published guides Claude loads
 
 ## One framework principle to remember

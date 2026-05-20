@@ -1,7 +1,7 @@
 ---
 description: "Run the v3.13.0 /validate:* gates in isolated Claude Code agent teams (4 teammates) so each gate is assessed in a fresh context free of the main session's prior reasoning. Sibling to /validate:all — not a replacement. Gracefully falls back to /validate:all when the experimental flag is unset or TeamCreate fails. Introduced v3.14.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
-argument-hint: [<task-name>] [--no-fallback]
+argument-hint: "[<task-name>] [--no-fallback]"
 ---
 
 # Validate: Team

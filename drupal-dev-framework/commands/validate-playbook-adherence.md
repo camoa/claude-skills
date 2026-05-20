@@ -1,7 +1,7 @@
 ---
 description: "Verify that the task's phase artifacts cite plays from the loaded playbook (active sets + local user playbook). Framework-owned gate — heuristic any-of-three cite match (filename slug | normalized title | tldr-prefix). Soft-nudge standalone; promotes warning→fail when invoked from /review with --hard-block. Section-aware: skips 'Rejected'/'Considered Alternatives'/'Out of Scope' headings. Introduced v4.1.0."
 allowed-tools: Read, Grep, Glob, Bash
-argument-hint: [<task-name>]
+argument-hint: "[<task-name>]"
 ---
 
 # Validate: Playbook Adherence

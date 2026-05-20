@@ -1,7 +1,7 @@
 ---
 description: "Use when a user wants to set, update, or clear a drupal-dev-framework project's codePath — the absolute path to the code the project is editing (distinct from the memory folder). Prompts detect+confirm if no argument given; accepts explicit path or (docs-only) sentinel. Updates project_state.md (source of truth) and syncs registry cache. Introduced v3.11.0."
 allowed-tools: Read, Write, Edit, Bash, Skill
-argument-hint: [<path> | --docs-only]
+argument-hint: "[<path> | --docs-only]"
 ---
 
 # Set Code Path
@@ -130,6 +130,6 @@ Read, modify, write. For the matching project entry, set `codePath` to the resol
 
 - README Commands table
 - Command frontmatter `description` (this file)
-- Plugin CLAUDE.md Project Metadata section (v3.11.0+)
+- Plugin CONVENTIONS.md Project Metadata section (v3.11.0+)
 - marketplace.json description (v3.11.0)
 - `/drupal-dev-framework:next` references when codePath is unknown and a feature needs code

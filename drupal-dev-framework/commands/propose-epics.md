@@ -1,7 +1,7 @@
 ---
 description: "Use when a user wants the framework to scan their in-progress flat tasks and propose which ones might benefit from being decomposed into epics. Bulk-review workflow: analysis-agent examines each candidate, user accepts or rejects per-task, accepted proposals call /migrate-to-epic under the hood. Conservative — skips already-epics, subtasks, completed, and tasks with no signals. Introduced v3.11.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
-argument-hint: [--only-in-progress]
+argument-hint: "[--only-in-progress]"
 ---
 
 # Propose Epics
@@ -90,7 +90,7 @@ Options:
 - README Commands table
 - Command frontmatter `description`
 - marketplace.json plugin description
-- Plugin CLAUDE.md Analysis Agent section
+- Plugin CONVENTIONS.md Analysis Agent section
 - `/drupal-dev-framework:next` mentions this command when the project has multiple long-running flat tasks
 
 ## Related

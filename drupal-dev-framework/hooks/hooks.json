@@ -6,11 +6,13 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-reminder.sh",
+            "args": [],
             "timeout": 5
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loaded-context-summary.sh",
+            "args": [],
             "timeout": 5
           }
         ]
@@ -22,7 +24,9 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Write(**/implementation_process/**)",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/phase-command-bypass.sh",
+            "args": [],
             "timeout": 5
           }
         ]
@@ -34,6 +38,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "args": [],
             "timeout": 5
           }
         ]
@@ -45,6 +50,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact.sh",
+            "args": [],
             "timeout": 10
           }
         ]
@@ -56,6 +62,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-compact.sh",
+            "args": [],
             "timeout": 5
           }
         ]
@@ -67,6 +74,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-failure.sh",
+            "args": [],
             "timeout": 5
           }
         ]

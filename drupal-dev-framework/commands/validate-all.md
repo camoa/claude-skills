@@ -1,7 +1,7 @@
 ---
 description: "Run all 7 validation gates (tdd, solid, dry, security, guides, visual-regression, visual-parity) sequentially against the current task. Aggregates results, prints summary table, and surfaces complementary code-quality-tools capabilities that aren't wrapped. Soft-nudge; never blocks. Introduced v3.13.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
-argument-hint: [<task-name>]
+argument-hint: "[<task-name>]"
 ---
 
 # Validate: All

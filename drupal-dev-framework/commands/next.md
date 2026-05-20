@@ -1,7 +1,7 @@
 ---
 description: "Suggest next action based on project state. Trigger: 'what's next', 'continue working', 'resume', 'suggest action', 'what should I do'. ALWAYS use this when resuming work — it enforces phase order and quality gates."
 allowed-tools: Read, Write, Glob, Bash, Task
-argument-hint: [project-name]
+argument-hint: "[project-name]"
 ---
 
 # Next
@@ -188,7 +188,7 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 
 ### Playbook-config nudge (v4.2.1+)
 
-After resolving the project (Step 1) but before recommending a task action, invoke `project-state-reader` and inspect the `playbook` block. If `playbook_sets_source: "default"` (Playbook Sets line absent — implicit inheritance from `plugin.json` defaults) **OR** `user_playbook_state: "unset"`, print this one-line soft-nudge once per `/next` invocation:
+After resolving the project (Step 1) but before recommending a task action, invoke `project-state-reader` and inspect the `playbook` block. If `playbook_sets_source: "default"` (Playbook Sets line absent — implicit inheritance from the plugin's `defaults.json`) **OR** `user_playbook_state: "unset"`, print this one-line soft-nudge once per `/next` invocation:
 
 > 💡 This project has not configured a playbook (`playbook_sets_source: default` and/or `user_playbook_state: unset`). Playbook loads at every phase entry. Consider `/drupal-dev-framework:set-playbook-sets` and `/drupal-dev-framework:set-user-playbook` before your first task. Or run `/drupal-dev-framework:upgrade-project` to retrofit all project-state fields at once. (Optional — never blocks.)
 
