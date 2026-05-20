@@ -43,6 +43,12 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 - **Recursive `agents/` scanning + plugin-scoped subfolder ids** (subfolders join the scoped id with colons: `agents/review/security.md` → `my-plugin:review:security`). Project/user scopes do NOT join subfolders; this is plugin-only behavior.
 - **Single-skill-at-root auto-discovery** (v2.1.142+): `SKILL.md` at the plugin root + no `skills/` subdir + no `skills` field is auto-loaded as a single-skill plugin; the `"skills": ["./"]` field becomes redundant.
 - **Canonical templates source-of-truth**: `init_plugin.py` reads `templates/plugin.json.template` rather than embedding its own. Don't add new manifest fields in the script — add them to the template; the script will pick them up.
+- **TodoWrite is disabled by default v2.1.142+** — new content uses `TaskCreate` / `TaskGet` / `TaskList` / `TaskUpdate` / `TaskStop`. Validator rule C01 flags `TodoWrite` references.
+- **Skill listing budget**: per-skill cap `maxSkillDescriptionChars` (default 1,536); aggregate cap `skillListingBudgetFraction` (default 0.01 = 1%); descriptions for least-used skills collapse to bare names when the listing overflows. `/doctor` shows truncation count.
+- **`displayName` manifest field** (v2.1.143+) — optional, human-readable, falls back to `name`. Not used for namespacing/lookup.
+- **License hygiene** — prefer SPDX identifiers; `"proprietary"` only with private repository; validator M16 surfaces non-SPDX at info.
+- **Keywords cap** — soft cap 25; validator M15 warns past this (marketplace UI truncation + per-tag budget pressure).
+- **Marketplace per-plugin description cap** — soft cap 600 chars; validator X02 warns past this. Verbose history goes in CHANGELOG.md.
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
 

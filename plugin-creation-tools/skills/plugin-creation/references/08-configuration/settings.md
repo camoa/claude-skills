@@ -194,6 +194,34 @@ Set these environment variables in `.claude/settings.json`:
 | `MYPLUGIN_FEATURE_X` | `false` | Enable experimental feature X |
 ```
 
+### Skill listing budget (`maxSkillDescriptionChars`, `skillListingBudgetFraction`)
+
+Both settings shipped in Claude Code v2.1.105. Together they control how much of Claude's context is spent on skill descriptions each turn — relevant to plugin authors because **every line in the skill listing is a recurring token cost** on every model call.
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `maxSkillDescriptionChars` | `1536` | Per-skill character cap on the combined `description` + `when_to_use` text. Text past this is truncated. Raise to keep long descriptions intact at the cost of more context per turn; lower to fit more skills under the listing budget. |
+| `skillListingBudgetFraction` | `0.01` (1%) | Fraction of the model's context window reserved for the skill listing. When the listing exceeds this budget, descriptions for the **least-used** skills are collapsed to bare names (Claude can still invoke them but won't see why). |
+
+`/doctor` shows the current truncation count and which skills are affected — surface this in your plugin's README so users on small-context models know they can raise the budget.
+
+```json
+{
+  "maxSkillDescriptionChars": 2048,
+  "skillListingBudgetFraction": 0.02
+}
+```
+
+**Why this matters for plugin authors**:
+
+- If your plugin ships > 10 skills, you're contributing meaningfully to the user's listing budget. Keep each description tight and avoid duplicating WHEN-to-use phrasing.
+- If a user installs your plugin alongside 5 other large plugins, their listing may overflow and your least-used skill drops to name-only — losing the trigger phrasing Claude uses to route. Write descriptions that survive `name-only` (descriptive skill names matter more than they look).
+- Authors shipping niche skills (`framework-debug-foo`) can suggest the user raise `skillListingBudgetFraction` to `0.02`–`0.03` in the plugin README's "Recommended settings" section.
+
+### `defaultMode: "auto"` is ignored in project/local settings (v2.1.142+)
+
+As of Claude Code v2.1.142, setting `defaultMode: "auto"` in `.claude/settings.json` or `.claude/settings.local.json` is **silently ignored** — a repository cannot grant itself auto mode. To use auto mode, set it in `~/.claude/settings.json` (user scope) or pass `--permission-mode auto` on the CLI. Plugin authors should not document `defaultMode: "auto"` as a project-settings recommendation; it won't take effect.
+
 ### skillOverrides
 
 Per-skill visibility control without editing the skill's own SKILL.md. Useful for:

@@ -27,7 +27,7 @@ The validator gains an opt-in `--fix` flag that performs **only** mechanical, re
 - Is reversible via `git diff` / `git restore`
 - Requires user confirmation before any file is changed in this release
 
-Rules that ship with `--fix` in v3.5.0: **H05**, **H06**, **H10**. Other auto-fixable rules (M07/M08/M09/M10, C05/C06, etc.) land in later releases.
+Rules that ship with `--fix` (cumulative across releases): **H05**, **H06**, **H10** (v3.5.0); **M06**, **M07**, **M08**, **M09**, **M10**, **C01**, **C02** (v3.6.1). Future releases add more.
 
 Log entry format:
 
@@ -70,13 +70,39 @@ For each "Replaces the default" field (`commands`, `agents`, `outputStyles`, `ex
 
 Heuristic exclusion: don't fire when the manifest path resolves into the default folder (e.g. `"commands": ["./commands/deploy.md"]`) — that's the explicit-address case upstream documents as not warning-worthy.
 
-### plugin.json Schema Migration (soft-breaking — `experimental.*`)
-- [ ] **Warning** if top-level `themes` or `monitors` is set in `plugin.json`: "`themes` / `monitors` should live under `experimental.*`. `claude plugin validate` flags this and a future release will require the nested form." Offer an auto-migration diff that wraps both keys under an `experimental` object (preserve existing values, deduplicate if `experimental.themes` / `experimental.monitors` is already partially set).
-- [ ] **Warning** if `agents` is a bare string path: "The `agents` field is array-only. Wrap the path in an array: `\"agents\": [\"./agents/foo.md\"]`."
-- [ ] **Info** (not warning) if `commands` or `skills` is a bare string path: "The array form is preferred — `\"commands\": [\"./cmd.md\"]`. The string form still loads but is being phased out."
-- [ ] **Info** if `$schema` is missing: "Consider adding `\"$schema\": \"https://json.schemastore.org/claude-code-plugin-manifest.json\"` for editor autocomplete. Claude Code ignores the field at load time."
-- [ ] **Info** when `channels` is declared in `plugin.json`: each entry must have a `server` field that matches a key in the plugin's `mcpServers` (or an externally-known MCP server name). Flag a warning if `server` references an undeclared MCP server. Per-channel `userConfig` follows the same schema as the top-level `userConfig` — apply the same legacy/required checks.
-- [ ] **Info** when a `bin/` directory is present at the plugin root: confirm files are executable (warn on non-executable entries — they will appear on `PATH` but fail to run). Auto-discovered, no manifest entry needed.
+### plugin.json Schema Migration (M-series)
+
+- [ ] **M06 (info, `--fix`)** — `$schema` field missing. Auto-fix inserts `"$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json"` as the first key. Ignored by Claude Code at load time — purely for editor autocomplete.
+- [ ] **M07 (warn, `--fix`)** — Top-level `themes` should live under `experimental.themes`. Auto-fix wraps the key under an `experimental` object. **Merge semantics**: if `experimental.themes` already exists, combine the two values (arrays concatenated and deduped; mixed string + array coerced to an array). Preserve existing keys order. Upstream `claude plugin validate` also warns; we add the migration.
+- [ ] **M08 (warn, `--fix`)** — Top-level `monitors` → `experimental.monitors`. Same merge semantics as M07.
+- [ ] **M09 (warn, `--fix`)** — `agents` is a bare string path. Auto-fix wraps in `[...]`: `"agents": "./agents/foo.md"` → `"agents": ["./agents/foo.md"]`.
+- [ ] **M10 (info, `--fix`)** — `commands` or `skills` is a bare string path. Auto-fix wraps in `[...]`. The string form still loads but is being phased out.
+- [ ] **(info)** — `channels` declared in `plugin.json`: each entry must have a `server` field that matches a key in the plugin's `mcpServers` (or an externally-known MCP server name). Flag warning if `server` references an undeclared MCP server. Per-channel `userConfig` follows the top-level schema — apply the same legacy/required checks.
+- [ ] **(info)** — `bin/` directory present at the plugin root: confirm files are executable (warn on non-executable entries — they appear on `PATH` but fail to run). Auto-discovered, no manifest entry needed.
+
+#### M14 — Unknown top-level manifest keys (info)
+
+For each top-level key in `plugin.json` that is **not** in the documented schema (canonical list: `$schema`, `name`, `displayName`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`, `commands`, `agents`, `skills`, `hooks`, `mcpServers`, `lspServers`, `outputStyles`, `experimental`, `channels`, `userConfig`, `settings`, `dependencies`), emit info:
+
+> "Plugin manifest contains unknown top-level key `<name>`. Claude Code silently ignores keys not in the schema (forward-compatible). If this is intentional forward-compat or vendor-specific metadata, you can suppress this notice. Real-world example: `defaults`, `recommended` in drupal-dev-framework — both intentional, both load fine."
+
+Info only; never warn or error — surfacing for author confirmation, not enforcement.
+
+#### M15 — Keywords cap (warn)
+
+`keywords` array has more than **25** entries:
+
+> "Plugin manifest declares `<n>` keywords (cap: 25). Marketplace UIs typically truncate long keyword lists, and budget pressure on each keyword decreases the chance any single tag drives a match. Trim to your most distinctive 20–25 entries."
+
+This is the proposed cap from enforcement design — brand-content-design v3.3.1 ships 29 keywords as a real-world ecosystem hit.
+
+#### M16 — License is non-SPDX (info)
+
+`license` value is not a recognized SPDX identifier AND not the literal `"proprietary"`. Common SPDX values: `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `GPL-3.0-or-later`, `LGPL-3.0-or-later`, `MPL-2.0`, `CC-BY-4.0`, `CC0-1.0`, `Unlicense`, `ISC`. Info:
+
+> "Plugin manifest uses `<license-value>`, which is not a recognized SPDX identifier. Use an SPDX value when possible (https://spdx.org/licenses/) so marketplace UIs and license-scanners interpret it correctly. `\"proprietary\"` is acceptable when the repository is private and the value reflects company policy — the validator only surfaces this so you confirm intent."
+
+Info only — palcera/design-system-converter ships `"license": "proprietary"` intentionally.
 
 ### Plugin settings.json (if present at plugin root)
 - [ ] Valid JSON.
@@ -91,6 +117,24 @@ Heuristic exclusion: don't fire when the manifest path resolves into the default
 - [ ] No `..` path traversal in source paths (error if found)
 - [ ] No duplicate plugin names within the plugins array (error if found)
 - [ ] Each plugin's `version` in the marketplace entry matches the `version` in its `.claude-plugin/plugin.json` (error if drifted — reference `feedback_marketplace_json`)
+
+#### X02 — Marketplace per-plugin description >600 chars (warn)
+
+For each entry in the `plugins` array, if the `description` field exceeds 600 characters, emit warn:
+
+> "Marketplace entry for `<plugin-name>` has a `<n>`-character description (cap: 600). Marketplace UIs typically truncate at this length, so the long form is invisible to users browsing the catalog. Move the verbose history into the plugin's CHANGELOG.md and keep the marketplace description to a one-paragraph elevator pitch plus the latest release highlight."
+
+Real ecosystem hit: drupal-dev-framework v4.3.0 shipped a ~3,500-character description (multi-version changelog dump) before the v3.5.0 cycle trimmed it.
+
+**No auto-fix** — trimming a description is a content decision. The validator surfaces the issue and points at CHANGELOG.md as the destination.
+
+#### X03 — Marketplace entry missing for a plugin directory (info)
+
+When validating a marketplace root (a directory containing `.claude-plugin/marketplace.json` and subdirectories that look like plugins — each has its own `.claude-plugin/plugin.json`), for each subdirectory NOT referenced by an entry in the marketplace `plugins` array, emit info:
+
+> "Plugin directory `./<dir>/` has its own `plugin.json` but is not listed in `marketplace.json`. Add it to the `plugins` array to make it installable through this marketplace, or move it out of the marketplace root if it's an in-progress branch."
+
+Info only — sometimes a plugin lives in the marketplace root on a feature branch before it's added to `plugins`.
 
 ### Plugin Dependencies (if `dependencies` is declared in `plugin.json`)
 - [ ] `dependencies` is an array
@@ -122,6 +166,22 @@ Heuristic exclusion: don't fire when the manifest path resolves into the default
 - [ ] `description` field present
 - [ ] `allowed-tools` field present
 - [ ] No inline code with backtick+exclamation or backtick+at-sign that could trigger execution
+
+#### C01 — `TodoWrite` referenced in command/skill body or examples (warn, `--fix`)
+
+`TodoWrite` is disabled by default as of Claude Code v2.1.142 (replaced by the `Task*` family). For each command file, skill body, agent file, or referenced reference doc, grep for the literal token `TodoWrite`. Each hit emits warn:
+
+> "References `TodoWrite`, which is disabled by default as of Claude Code v2.1.142. Use `TaskCreate` / `TaskGet` / `TaskList` / `TaskUpdate` instead. To re-enable `TodoWrite` for users on a managed environment, set `CLAUDE_CODE_ENABLE_TASKS=0`."
+
+**`--fix`**: literal text replacement of `TodoWrite` → `TaskCreate` in non-ambiguous contexts. The auto-fix flags **ambiguous** cases for human review rather than silently transforming them:
+
+- A sentence like "use `TodoWrite` to track session todos" → ambiguous (which Task* operation? Create? Update?). Flag, don't fix.
+- A list like "Available tools: Read, Write, TodoWrite, Bash" → safe to rewrite to `TaskCreate, TaskUpdate, TaskList, TaskGet` (the canonical replacement set). Auto-fix.
+- A code example using TodoWrite-specific arguments (e.g. `TodoWrite({ todos: [...] })`) → ambiguous; the Task* family has a different argument shape. Flag, don't fix.
+
+#### C02 — `/extra-usage` reference (warn, `--fix`)
+
+`/extra-usage` was renamed to `/usage-credits`. Literal references in command bodies, skill descriptions, agent prompts, and reference docs should be updated. Auto-fix performs the literal rename. Source: Built-in Commands guide L127 ("Previously `/extra-usage`").
 
 ### Agents (for each `agents/**/*.md`)
 

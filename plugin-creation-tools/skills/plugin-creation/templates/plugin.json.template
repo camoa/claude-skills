@@ -11,6 +11,11 @@
   "repository": "https://github.com/username/repo",
   "keywords": ["keyword1", "keyword2"]
 
+  // Optional: human-readable name shown in the /plugin picker and other UI
+  // surfaces (v2.1.143+). Falls back to "name" when omitted. May contain
+  // spaces and any casing. Not used for namespacing or lookup.
+  // "displayName": "Plugin Name"
+
   // Optional: experimental components have a manifest schema that may change
   // between releases while they stabilize. Top-level "themes" / "monitors"
   // still load but `claude plugin validate` emits a warning, and a future
