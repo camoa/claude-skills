@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-05-19
+
+**Theme: Layout & Discovery.** Second release of the consolidated 2026-05-12 roadmap. Catches up on plugin-author-relevant layout features (recursive `agents/` subfolder scoping, single-skill-at-root auto-discovery) and kills one of the longest-standing divergences — `init_plugin.py` now reads the canonical `templates/plugin.json.template` instead of embedding its own truncated copy.
+
+Snapshot baseline: Claude Code v2.1.144, `~/workspace/claude_memory/guides/claude/` refreshed 2026-05-12 (`552b666`). No upstream-version bump from v3.5.0.
+
+### Added — Recursive `agents/` subfolder scoping
+
+- `references/05-agents/writing-agents.md`: new section "Organizing Agents Into Subfolders" — covers recursive scanning, the **plugin-specific** scoped-id behavior (`agents/review/security.md` → `my-plugin:review:security`), contrast with project/user scopes (where subfolders are organizational only), and the `name`-uniqueness-across-tree rule.
+- `references/10-distribution/packaging.md`: layout diagram updated with a subfolder example and an inline note distinguishing plugin scope from project/user scope.
+- `skills/plugin-creation/SKILL.md`: the directory-structure block now annotates `agents/` with the recursive-scan + scoped-id behavior.
+
+Source: Subagents guide L181–183.
+
+### Added — Single-skill-at-root auto-discovery (v2.1.142+)
+
+- `references/08-configuration/plugin-json.md`: new item #4 in "Important Path Rules" — a plugin with `SKILL.md` at root + no `skills/` subdir + no `skills` field is auto-loaded as a single-skill plugin. No need for `"skills": ["./"]`.
+- `references/10-distribution/packaging.md`: flat-layout diagram added beside the standard layout, with the "migrate to standard when you add a second component" caveat.
+- `skills/plugin-creation/SKILL.md`: brief mention in the plugin-init section pointing at the plugin-json.md rule.
+
+Source: Plugins Reference L530, L532.
+
+### Added — v2.1.140+ `/doctor` ignored-folder semantics
+
+- `references/08-configuration/plugin-json.md`: "Important Path Rules" item #1 rewritten. **The previous text said "Custom paths SUPPLEMENT default directories" — this was wrong.** For `commands`, `agents`, `outputStyles`, `experimental.themes`, `experimental.monitors`, custom paths **replace** the default. Only `skills` adds; `hooks` / `mcpServers` / `lspServers` have their own merge rules. The rule now explicitly cites the v2.1.140+ tooling that surfaces the ignored folder in `/doctor`, `claude plugin list`, and the `/plugin` detail view.
+- `skills/plugin-creation/SKILL.md` troubleshooting row updated: the "components missing" symptom now mentions `/doctor` will name the folder being skipped.
+
+Source: Plugins Reference L515–523.
+
+### Refactored — `init_plugin.py` reads the canonical template
+
+The script's embedded `PLUGIN_JSON_TEMPLATE` string had drifted from `templates/plugin.json.template` since v3.4.0 — it lacked `$schema`, lacked the commented `experimental.*` / `userConfig` / `channels` blocks, lacked `bin/` / `settings.json` notes, and lacked the array-form guidance. A user who invoked the script got a manifest that disagreed with what the docs and templates teach.
+
+Fix: `_render_plugin_json()` reads `templates/plugin.json.template`, strips the `//` documentation comments, parses the remaining JSON, substitutes the plugin name, and writes. The same source-of-truth file is rendered no matter where the user invokes `init_plugin.py` from.
+
+A related v3.5.0 miss is also patched: the embedded `HOOKS_TEMPLATE` now uses exec form (`"args": []`) on its three example command hooks, matching the canonical `templates/hooks/hooks.json.template`. This is a retroactive v3.5.0 fix; functional behavior of the scaffolded hooks is identical (exec form is semantically equivalent for these script invocations).
+
+Source: gap §2.1.
+
+### Added — Validator rules A02, A03, ST04, ST05, ST06
+
+`commands/validate.md` gains:
+
+- **A02 (info)** — Agent file under an `agents/` subfolder; emit a note that the scoped id includes the subfolder so the author can confirm the `name` field matches the label they expect users to type after the colons.
+- **A03 (warn)** — Agent file under an `agents/` subfolder missing the `name` frontmatter field. The agent loads with empty metadata and can't be invoked by scoped id.
+- **ST04 (info)** — Single-skill-at-root plugin (`SKILL.md` at plugin root, no `skills/` subdir) with a redundant `"skills": ["./"]` manifest field — the field is unnecessary as of v2.1.142+.
+- **ST05 (warn)** — Manifest references a folder that doesn't exist (typo catcher).
+- **ST06 (info)** — Manifest sets a "Replaces the default" field to a custom path AND the matching default folder still has files. Those files are silently ignored at runtime; `/doctor` flags this in v2.1.140+.
+
+The "Agents" validation section also gains an opener noting that plugin `agents/` is scanned **recursively** — older validator runs that only walked the top level missed subfolder agents.
+
+### Updated
+
+- `plugin.json` 3.5.0 → 3.6.0; description appended with v3.6.0 highlight.
+- Root `marketplace.json` `metadata.version` 1.14.40 → 1.14.41. Plugin entry version bumped + description tightened (now ~1200 chars, down from 1400+).
+
+### Notes
+
+- **`init_plugin.py` MARKETPLACE_JSON_TEMPLATE intentionally stays embedded.** The canonical `templates/marketplace.json.template` is a multi-plugin example (git-subdir / npm / pip sources) — not the right shape for a freshly-scaffolded single-plugin marketplace. Reading the canonical there would make the scaffold worse, not better. Roadmap §2.1 only called out the `plugin.json` divergence.
+- **Smoke test ran**: `init_plugin.py smoke-test --path /tmp --components skill,hook` — the rendered `plugin.json` contains `$schema`, the `repository` placeholder, and the keywords array, all from the canonical template. JSON parses; structure matches `templates/plugin.json.template` byte-for-byte after comment stripping.
+- **Ecosystem migration still deferred** to a `chore/ecosystem-layout-migration` follow-up PR. A02/A03/ST06 are most likely to fire against drupal-dev-framework (recursive `agents/` + several `agents` manifest entries) and brand-content-design (similar structure).
+- **Out of scope** (parked per roadmap): v3.6.1 metadata/tools (`displayName`, Task* family, `WaitForMcpServers`, $schema auto-fix); v3.6.2 skill guidance (effort.level skill examples, workspace-trust UI gate, listing budget framing); v3.7.0 cross-plugin session-remembrance helper.
+
 ## [3.5.0] - 2026-05-19
 
 **Theme: Hook Authoring Depth.** First release of the consolidated roadmap (2026-05-12). Catches up on the v2.1.139 → v2.1.144 hook revolution and ships paired enforcement rules so the same regressions can't reappear in other plugins.

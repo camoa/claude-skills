@@ -21,16 +21,48 @@ import json
 from pathlib import Path
 
 
-PLUGIN_JSON_TEMPLATE = """{
-  "name": "%s",
-  "version": "1.0.0",
-  "description": "Brief description of plugin purpose",
-  "author": {
-    "name": "Your Name"
-  },
-  "license": "MIT"
-}
-"""
+# Path to the canonical plugin.json template that the docs and scaffolds teach.
+# Resolved at runtime relative to this script's location, so the same source-
+# of-truth file is rendered no matter where the user invokes init_plugin.py
+# from.
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+PLUGIN_JSON_TEMPLATE_PATH = TEMPLATE_DIR / "plugin.json.template"
+
+
+def _render_plugin_json(plugin_name):
+    """
+    Render the canonical templates/plugin.json.template for `plugin_name`.
+
+    The template file ships JSON-with-//-comments so it can document optional
+    fields inline. We strip the comment lines, parse the remainder as JSON,
+    and substitute the plugin name — guaranteeing the scaffold and the docs
+    teach the same shape (channels, bin/, settings.json notes, $schema, the
+    commented experimental.* / userConfig blocks, etc.).
+    """
+    raw = PLUGIN_JSON_TEMPLATE_PATH.read_text()
+
+    # Strip lines whose first non-whitespace token starts a // comment, and
+    # blank lines that follow such stripped blocks. We deliberately leave
+    # the multi-line commented-out JSON blocks (// "experimental": {...}) on
+    # the floor — those are documentation, not config.
+    cleaned_lines = []
+    for line in raw.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("//"):
+            continue
+        cleaned_lines.append(line)
+    cleaned = "\n".join(cleaned_lines)
+
+    # The template has trailing whitespace lines between commented blocks
+    # which are fine. Collapse the run of empty lines to a single one for
+    # readability of the rendered file.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    # Parse to make sure we still have valid JSON, then re-serialize so we
+    # control formatting (2-space indent, no trailing newline before `}`).
+    parsed = json.loads(cleaned)
+    parsed["name"] = plugin_name
+    return json.dumps(parsed, indent=2) + "\n"
 
 SKILL_TEMPLATE = """---
 name: %s
@@ -112,6 +144,7 @@ HOOKS_TEMPLATE = """{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/setup-output.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -124,6 +157,7 @@ HOOKS_TEMPLATE = """{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/example-hook.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -135,6 +169,7 @@ HOOKS_TEMPLATE = """{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup.sh",
+            "args": [],
             "timeout": 30
           }
         ]
@@ -144,6 +179,8 @@ HOOKS_TEMPLATE = """{
 }
 """
 # Note: 'http' hook type is NOT supported in hooks.json — http hooks only work in settings.json.
+# Note: command hooks above use exec form ("args": []) — preferred for any hook that references
+# a path placeholder like ${CLAUDE_PLUGIN_ROOT}. See references/06-hooks/writing-hooks.md.
 
 SETUP_OUTPUT_SCRIPT = """#!/bin/bash
 # SessionStart hook - Create output directories and set env vars
@@ -346,7 +383,7 @@ def init_plugin(plugin_name, path, components=None):
         claude_plugin_dir = plugin_dir / '.claude-plugin'
         claude_plugin_dir.mkdir()
         (claude_plugin_dir / 'plugin.json').write_text(
-            PLUGIN_JSON_TEMPLATE % plugin_name
+            _render_plugin_json(plugin_name)
         )
         print("Created .claude-plugin/plugin.json")
         (claude_plugin_dir / 'marketplace.json').write_text(

@@ -31,8 +31,12 @@ plugin-name/
 │   └── plugin.json          # Required
 ├── commands/                 # Optional
 │   └── *.md
-├── agents/                   # Optional
-│   └── *.md
+├── agents/                   # Optional — scanned recursively; subfolders join the scoped id
+│   ├── *.md                  #   (e.g. agents/review/security.md → my-plugin:review:security)
+│   └── review/               # Subfolder organization for plugins with many agents
+│       └── security.md       #   — only plugin scope joins subfolders into the id;
+│                             #   project (.claude/agents/) and user (~/.claude/agents/)
+│                             #   scopes ignore the subfolder path.
 ├── skills/                   # Optional
 │   └── skill-name/
 │       └── SKILL.md
@@ -55,6 +59,21 @@ plugin-name/
 ├── CHANGELOG.md             # Recommended
 └── LICENSE                  # Recommended
 ```
+
+**Single-skill plugins (v2.1.142+) can use a flatter layout** — `SKILL.md` at the plugin root with no `skills/` subdirectory and no `skills` manifest field is auto-discovered as a single-skill plugin. Use this when the plugin ships exactly one skill and nothing else:
+
+```
+plugin-name/
+├── .claude-plugin/
+│   └── plugin.json          # Required
+├── SKILL.md                 # Auto-loaded — no `skills/` subdir, no `skills` field needed
+├── references/              # Skill's progressive-disclosure references (optional)
+├── scripts/                 # Skill's bundled scripts (optional)
+├── README.md
+└── LICENSE
+```
+
+If you later add a command, agent, or second skill, migrate to the standard `skills/<name>/SKILL.md` layout — the flat layout is for the single-skill case only.
 
 ## Validation Script
 

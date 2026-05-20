@@ -65,7 +65,7 @@ python scripts/init_plugin.py my-plugin --path ./plugins --components skill,comm
    ├── .claude-plugin/
    │   └── plugin.json
    ├── commands/        # if needed
-   ├── agents/          # if needed
+   ├── agents/          # if needed (recursively scanned — subfolders join the scoped id, e.g. agents/review/security.md → my-plugin:review:security)
    ├── skills/          # if needed
    │   └── skill-name/
    │       └── SKILL.md
@@ -73,6 +73,8 @@ python scripts/init_plugin.py my-plugin --path ./plugins --components skill,comm
    │   └── hooks.json
    └── .mcp.json        # if needed
    ```
+
+   **Single-skill minimum layout (v2.1.142+)**: if the plugin is exactly one skill and nothing else, put `SKILL.md` at the plugin root with no `skills/` subdirectory and no `skills` field — Claude Code auto-discovers it. See `references/08-configuration/plugin-json.md` § Important Path Rules item 4.
 
 2. Copy template from `templates/plugin.json.template`
 
@@ -301,7 +303,7 @@ Before creating a component, verify it's the right choice:
 | Cross-marketplace dependency rejected at install | Root marketplace's `marketplace.json` is missing `allowCrossMarketplaceDependenciesOn` | Add the target marketplace name to the root marketplace's `allowCrossMarketplaceDependenciesOn` array. Trust does not chain — only the **root** marketplace's allowlist is consulted. See `references/08-configuration/marketplace-json.md`. |
 | Version mismatch errors after release | `version` drifted between `plugin.json` and the marketplace entry | Bump both. The validator enforces this. Use `claude plugin tag` (run from inside the plugin folder) to create the `{plugin-name}--v{version}` git tag dependents resolve against. |
 | Frontmatter `hooks` / `mcpServers` ignored on a plugin agent | Plugin-packaged agents silently strip `hooks` / `mcpServers` / `permissionMode` for security | Move the hooks to `hooks/hooks.json` at the plugin root, or scope them via SKILL.md frontmatter. (For agents launched via `--agent` from project-local `.claude/agents/`, those fields fire as of v2.1.117+.) |
-| `--debug` shows the plugin loading but components missing | Custom `commands` / `skills` / `agents` paths in `plugin.json` replace defaults — they don't supplement | When you set a custom path for a component, the default directory is no longer scanned. Either remove the override or include the default path in the array. |
+| `--debug` shows the plugin loading but components missing | Custom `commands` / `agents` / `outputStyles` / `experimental.themes` / `experimental.monitors` paths in `plugin.json` **replace** defaults — they don't supplement. (`skills` is the only exception — it **adds** to the default `skills/` directory.) | When you set a custom path for a "Replaces the default" field, the default directory is no longer scanned. Either remove the override or include the default path in the array. **v2.1.140+ surfaces the ignored folder in `/doctor`, `claude plugin list`, and the `/plugin` detail view** — those tools name the folder being skipped, which is the fastest way to spot a misconfigured manifest. |
 
 For a symptom-first walkthrough of "what state is the runtime actually in," see the upstream **Debug Your Config** guide (`/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status`).
 
