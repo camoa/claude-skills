@@ -2,7 +2,7 @@
 description: "Show current project state and task progress. Trigger: 'show progress', 'where am I', 'project overview', 'task status'."
 allowed-tools: Read, Write, Glob, Bash
 context: fork
-argument-hint: [project-name]
+argument-hint: "[project-name]"
 ---
 
 # Status

@@ -1,7 +1,7 @@
 ---
 description: "Run the SOLID quality gate on demand and persist the result to the current task folder. Thin wrapper around /code-quality:solid — adds task context, persistence, and the shared result envelope. Soft-nudge: reports fail verdict but never blocks. Introduced v3.13.0."
 allowed-tools: Read, Write, Bash, Glob, Skill
-argument-hint: [<task-name>]
+argument-hint: "[<task-name>]"
 ---
 
 # Validate: SOLID

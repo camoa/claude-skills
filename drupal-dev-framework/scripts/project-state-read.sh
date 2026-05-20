@@ -72,11 +72,13 @@ emit_json() {
     }'
 }
 
-# Resolve framework default playbook sets from plugin.json
-PLUGIN_JSON_PATH="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")/.claude-plugin/plugin.json"
+# Resolve framework default playbook sets from the plugin's defaults.json.
+# Kept out of plugin.json: non-standard manifest keys trip `claude plugin
+# validate`. Forks override the default by editing defaults.json.
+PLUGIN_DEFAULTS_PATH="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")/defaults.json"
 get_default_playbook_sets() {
-  if [ -f "$PLUGIN_JSON_PATH" ]; then
-    jq -c '.defaults.playbookSets // []' "$PLUGIN_JSON_PATH" 2>/dev/null || echo "[]"
+  if [ -f "$PLUGIN_DEFAULTS_PATH" ]; then
+    jq -c '.playbookSets // []' "$PLUGIN_DEFAULTS_PATH" 2>/dev/null || echo "[]"
   else
     echo "[]"
   fi

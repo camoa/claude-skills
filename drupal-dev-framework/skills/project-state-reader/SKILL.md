@@ -21,7 +21,7 @@ Fields:
 - `project_name` — from the H1 line in `project_state.md`, or folder basename fallback
 - `codePath` — absolute path (string) if declared and resolves, or `null` if docs-only / unknown
 - `folder` — the absolute path passed in
-- `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["drupal/best-practices/camoa"]`). Falls back to plugin.json `defaults.playbookSets` when field absent. Empty array when explicit `none`.
+- `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["drupal/best-practices/camoa"]`). Falls back to the plugin's `defaults.json` `playbookSets` when field absent. Empty array when explicit `none`.
 - `playbookSetsSource` — *(v1.1+)* `"explicit"` (field present with values) \| `"explicit-none"` (field is literal `none`) \| `"default"` (field absent, defaults applied)
 - `userPlaybook` — *(v1.1+)* absolute path to project-local playbook file, or `null` when state is `unset` or `docs-only-no-playbook`
 - `userPlaybookState` — *(v1.1+)* `"unset"` \| `"docs-only-no-playbook"` \| `"set"`
@@ -64,7 +64,7 @@ Case-insensitive match on the label.
 |---|---|
 | `**Playbook Sets:** <ids,...>` | Comma-separated set IDs |
 | `**Playbook Sets:** none` | Explicit opt-out — empty list, source `explicit-none` |
-| (line absent) | Use plugin.json `defaults.playbookSets`; source `default` |
+| (line absent) | Use the plugin's `defaults.json` `playbookSets`; source `default` |
 | `**User Playbook:** <abs path>` | Project-local playbook file |
 | `**User Playbook State:** unset \| docs-only-no-playbook \| set` | 3-state field; mirrors `Code Path State` precedent |
 | `**Playbook Resolutions:**` (multi-line list) | Per-topic multi-set choices |

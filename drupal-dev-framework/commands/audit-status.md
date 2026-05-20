@@ -1,7 +1,7 @@
 ---
 description: "Display the audit state of a task — which v4.0.0 hardened gates fired, which were bypassed, and per-bypass reasons. Read-only. Introduced v4.0.0."
 allowed-tools: Read, Bash, Glob
-argument-hint: [<task-name>] [--all]
+argument-hint: "[<task-name>] [--all]"
 ---
 
 # Audit Status

@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-05-20
+
+### Validator hygiene & hook form
+
+Makes the plugin pass the plugin-creation-tools v3.7.0 validator and upstream
+`claude plugin validate` clean. Implements §10.5 of the 2026-05-08 improvement
+plan plus the validation-debt items from the 2026-05-20 modernization roadmap.
+No behavior change — frontmatter syntax, hook invocation form, and manifest
+hygiene only.
+
+### Fixed
+
+- **Frontmatter YAML errors (3 files).** `commands/audit-status.md` and
+  `commands/validate-team.md` had `argument-hint` values of the form
+  `[<x>] [<y>]` — a YAML flow sequence followed by trailing content, which
+  fails to parse and causes the file to load with no metadata.
+  `skills/task-frontmatter-reader/SKILL.md` had an unquoted `:` inside its
+  `description` value, parsed as a nested mapping. All three are now quoted.
+- **Frontmatter type drift (17 more command files).** `argument-hint` values
+  beginning with `[` parsed as YAML lists instead of strings. All 19
+  `[`-leading `argument-hint` values are now double-quoted so each is an
+  unambiguous string (matching the documented convention).
+
+### Changed
+
+- **Hooks migrated to exec form.** All 7 entries in `hooks/hooks.json` now set
+  `"args": []`. Per the Hooks Reference, exec form is preferred for any hook
+  that references a path placeholder (`${CLAUDE_PLUGIN_ROOT}`) — each element
+  is passed as one argument with no shell quoting. All hook scripts already
+  carry a shebang and the executable bit. `command`, `matcher`, and `timeout`
+  are unchanged. Windows users running under Git Bash should confirm `.sh`
+  resolution (exec form spawns the script directly).
+- **`phase-command-bypass` hook narrowed.** The `PreToolUse`/`Write` hook gained
+  `"if": "Write(**/implementation_process/**)"` so it spawns only for writes
+  under a task `implementation_process/` tree instead of on every `Write`. The
+  script's own phase-artifact filtering is unchanged (defense in depth).
+- **`$schema` added** to `.claude-plugin/plugin.json`
+  (`json.schemastore.org/claude-code-plugin-manifest.json`) for editor
+  autocomplete. Ignored by Claude Code at load time.
+- **Marketplace description trimmed.** The `marketplace.json` entry for this
+  plugin was a ~4,770-character multi-version changelog dump; marketplace UIs
+  truncate at ~600 chars. Trimmed to a ~510-character elevator pitch — full
+  history stays here in CHANGELOG.md.
+- **Manifest cleaned of non-standard keys.** `claude plugin validate` warns on
+  unknown top-level manifest keys. `recommended` (a purely informational
+  soft-dependency hint that nothing read) was removed — the recommendation now
+  lives in `README.md`. `defaults.playbookSets` is load-bearing (it sets the
+  framework's default playbook voice), so its data moved to a new plugin-root
+  `defaults.json`; `scripts/project-state-read.sh` reads it from there. Forks
+  override the default by editing `defaults.json`.
+- **Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md`.** A plugin-root
+  `CLAUDE.md` is not loaded into Claude's context, and `claude plugin validate`
+  warns on its presence; the name was also misleading. The file is a
+  maintainer authoring reference and now carries an explanatory header.
+  Internal references updated.
+
+### Notes
+
+- **`effort.level` in hooks deferred.** §5 of the improvement plan is
+  defer-eligible absent user signal; additionally the Hooks Reference scopes
+  the `effort` input field to tool-context events, not `UserPromptSubmit`
+  (where the two summary hooks run). Not adopted.
+
 ## [4.5.0] - 2026-05-20
 
 ### Added: per-project session-remembrance hooks (`/install-remembrance-hook` + `/save-session`)

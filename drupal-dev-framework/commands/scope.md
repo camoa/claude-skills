@@ -245,7 +245,7 @@ After a successful write, print:
 - README Commands table
 - Command frontmatter `description` (this file)
 - `/drupal-dev-framework:next` mentions `/scope` as a retrofit option when the selected task has no `alignment.md`
-- CLAUDE.md alignment section
+- CONVENTIONS.md alignment section
 
 ## Do NOT
 

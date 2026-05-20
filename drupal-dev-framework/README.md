@@ -51,6 +51,7 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 - `superpowers` — TDD enforcement, brainstorming, verification workflows
 - `drupal-dev-tools` — DDEV integration, Drupal audits
 - `code-quality-tools` — PHPStan, security scanning, SOLID/DRY analysis
+- `plugin-creation-tools` — invoked by the v4.0.0 skill-review and plugin-validate hardened gates when a task touches plugin files
 
 ## Quick Start
 
@@ -134,7 +135,7 @@ is lost even if you forget.
 | `/playbook-active` | **(v3.15.0)** Display the project's active playbook configuration: subscribed sets, local playbook, recent conflicts. Read-only. |
 | `/playbook-capture` | **(v3.15.0)** Capture a new opinionated rule into the project's local user playbook. Framework drafts entry; user approves with diff preview. |
 | `/playbook-review` | **(v3.15.0)** Walk every play in the local user playbook with `[k]eep / [u]pdate / [r]emove / [q]uit`. Immediate-write semantics; `/loop`-able for periodic review. |
-| `/set-playbook-sets` | **(v3.15.0)** Set or clear active playbook sets (e.g., `drupal/best-practices/camoa`). Validates each via `dev-guides-navigator`. Default subscription comes from plugin.json `defaults.playbookSets`. |
+| `/set-playbook-sets` | **(v3.15.0)** Set or clear active playbook sets (e.g., `drupal/best-practices/camoa`). Validates each via `dev-guides-navigator`. Default subscription comes from the plugin's `defaults.json`. |
 | `/set-user-playbook` | **(v3.15.0)** Set/clear the project-local user playbook file. Three modes: explicit path, `--docs-only`, or interactive detect-and-confirm. |
 | `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
 | `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
@@ -286,7 +287,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.4.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.6.0**.
 
 ## License
 

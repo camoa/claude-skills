@@ -1,3 +1,12 @@
+<!--
+  AUTHORING REFERENCE — for maintainers working on the plugin source.
+  This file was named CLAUDE.md through v4.5.0. It was never loaded into
+  Claude's context (a plugin-root CLAUDE.md is not — see
+  https://code.claude.com/docs/en/plugins-reference), and the misleading name
+  tripped `claude plugin validate`. Renamed to CONVENTIONS.md in v4.6.0.
+  Instructions that must reach Claude at runtime live in skills/.
+-->
+
 # Drupal Dev Framework - Plugin Conventions
 
 ## Task Hierarchy (v3.10.0+)
@@ -160,11 +169,11 @@ Two-layer Drupal best-practices system:
 - **Project-local user playbook** — single markdown file the user maintains. Can OVERRIDE shipped opinions (replace) or EXTEND them (cover topics shipped doesn't). Local always wins on conflict.
 
 **`project_state.md` fields** (v3.15.0+):
-- `**Playbook Sets:** drupal/best-practices/camoa, ...` (comma-list) OR `none` (explicit opt-out) OR absent (uses plugin.json `defaults.playbookSets`)
+- `**Playbook Sets:** drupal/best-practices/camoa, ...` (comma-list) OR `none` (explicit opt-out) OR absent (uses the plugin's `defaults.json` `playbookSets`)
 - `**User Playbook:** /abs/path/to/playbook.md` paired with `**User Playbook State:** unset | docs-only-no-playbook | set`
 - `**Playbook Resolutions:**` — multi-line list recording per-topic multi-set contradiction choices
 
-**Default voice:** `plugin.json` ships `defaults.playbookSets: ["drupal/best-practices/camoa"]` — opinionation by default. Forks of the plugin override this field to ship a different default.
+**Default voice:** the plugin ships `defaults.json` with `playbookSets: ["drupal/best-practices/camoa"]` — opinionation by default. Forks of the plugin edit `defaults.json` to ship a different default. (This lived in `plugin.json` `defaults.playbookSets` through v4.5.0; moved to `defaults.json` in v4.6.0 because non-standard manifest keys trip `claude plugin validate`.)
 
 **Precedence at decision time:** project-local > active opinion-set(s) > generic dev-guides.
 

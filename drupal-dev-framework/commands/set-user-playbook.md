@@ -1,7 +1,7 @@
 ---
 description: "Set, update, or clear the project-local user playbook file path. Three modes: explicit path, --docs-only sentinel, or interactive detect-and-confirm. Mirrors /set-code-path precedent. Introduced v3.15.0."
 allowed-tools: Read, Write, Edit, Bash, Skill, Glob
-argument-hint: [<path> | --docs-only]
+argument-hint: "[<path> | --docs-only]"
 ---
 
 # Set User Playbook

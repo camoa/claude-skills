@@ -1,7 +1,7 @@
 ---
 description: "Set or clear the active playbook sets for the current project. Validates each set ID via dev-guides-navigator before writing. Accepts comma-separated list, literal `none` (explicit opt-out), or no arg (interactive). Introduced v3.15.0."
 allowed-tools: Read, Write, Edit, Bash, Skill
-argument-hint: [<set-id-1,set-id-2,...> | none]
+argument-hint: "[<set-id-1,set-id-2,...> | none]"
 ---
 
 # Set Playbook Sets

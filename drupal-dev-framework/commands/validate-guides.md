@@ -1,7 +1,7 @@
 ---
 description: "Verify that the task's phase artifacts cite dev-guides-navigator guides appropriate to the domain AND (v4.3.0+) that those citations cover the catalog guides relevant to the actually-changed code. Framework-owned gate — not a wrapper. Soft-nudge posture; never blocks. Introduced v3.13.0."
 allowed-tools: Read, Write, Bash, Glob, Skill, Agent
-argument-hint: [<task-name>]
+argument-hint: "[<task-name>]"
 ---
 
 # Validate: Guides
