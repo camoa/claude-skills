@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-05-20
+
+### Added: per-project session-remembrance hooks (`/install-remembrance-hook` + `/save-session`)
+
+Implements §9 of the 2026-05-08 improvement plan. Opt-in, per-project hooks that
+keep Claude from forgetting the framework after compaction, `/clear`, or a new
+session, and that persist in-flight state on every exit. This is the reference
+implementation of the cross-plugin session-remembrance pattern.
+
+- **`templates/session-primer.md`** — new. Primer template with `{project_name}`,
+  `{memory_path}`, `{code_path}`, `{user_additions}`, `{generated_date}`
+  placeholders. The installer fills it; the filled copy is user-editable by hand.
+- **`scripts/save-session.sh`** — new. Pure bash, no AI. Resolves the
+  per-workspace session file (`md5(cwd)` scheme — same as `session-context-writer`),
+  stamps `savedAt`, scans the active task folder for markdown changed since the
+  last save, and adds an additive `session_saved_at` field to task-folder audit
+  JSONs. Prints a stderr warning **only when changed markdown is detected**.
+  Always exits 0. Defensive: silent no-op when no session file exists or it is
+  unparseable; malformed audit JSONs are skipped, never rewritten.
+- **`commands/save-session.md`** — new. Judgement-first persistence: Claude
+  reviews the active task for un-written progress, then runs `save-session.sh`.
+- **`commands/install-remembrance-hook.md`** — new. 6-step interactive,
+  idempotent installer. Detects project facts from `project_state.md`, gathers
+  free-form user reminders (pre-filled from the existing primer on re-run),
+  merges a `SessionStart` and a `SessionEnd` hook entry into
+  `<project>/.claude/settings.json`, and places the filled primer + a copy of
+  `save-session.sh` in `<project>/.claude/drupal-dev-framework/`.
+
+### Design notes
+
+- **No `PostCompact` hook.** §9 specified one, but the cached Hooks Reference is
+  explicit that `PostCompact` stdout is **not** injected into Claude's context —
+  only `SessionStart`, `UserPromptSubmit`, and `UserPromptExpansion` stdout is.
+  A no-matcher `SessionStart` hook already fires with `source: "compact"` after
+  compaction, so it covers post-compaction re-injection. Net hook events: 2, not
+  3. The §9 plan and the cross-plugin pattern doc were corrected to match.
+- **The script is copied into the project, not referenced from the plugin.**
+  `${CLAUDE_PLUGIN_ROOT}` does not resolve in a project `settings.json`, and an
+  absolute plugin path breaks on every plugin update. The project-local copy
+  referenced via `${CLAUDE_PROJECT_DIR}` is stable; re-running the installer
+  refreshes it.
+- **`SessionEnd` hook sets `timeout: 10`.** `SessionEnd`'s default budget is
+  1.5 s; a per-hook `timeout` in a project `settings.json` raises it.
+
+### Changed
+
+- `CLAUDE.md` — new "Session Remembrance (v4.5.0+)" section.
+- `README.md` — new "Recommended setup for new projects" Quick Start subsection;
+  `/install-remembrance-hook` and `/save-session` added to the command table.
+
+### Compatibility
+
+- Purely additive. No existing command, hook, script, or schema changes.
+- Opt-in per project — projects that never run `/install-remembrance-hook` are
+  unaffected. The plugin's existing plugin-scoped hooks are untouched.
+
 ## [4.4.0] - 2026-05-19
 
 ### Added: `/migrate-to-epic` promotes subtasks to sub_epics (second nesting level)
