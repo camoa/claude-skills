@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# save-session.sh — {plugin-name} session persistence.
+#
+# Pure bash. No AI. No network. Safe to run unconditionally at session exit.
+#
+# Two entry points converge on this script:
+#   - SessionEnd hook (wired by /{plugin-name}:install-remembrance-hook) runs it
+#     directly on every session exit. No judgement — safety net.
+#   - /{plugin-name}:save-session slash command runs it after Claude has
+#     reviewed in-flight state. Judgement first, then this script.
+#
+# Input:  SessionEnd hook JSON on stdin (optional). `.cwd` is read when present;
+#         otherwise $PWD is used. The slash command invokes it with no stdin.
+# Output: stderr warning only when changed state is detected. stdout unused.
+# Exit:   always 0. SessionEnd cannot be blocked, and a non-zero exit only
+#         yields a noisy "hook error" notice — there is nothing useful to fail.
+#
+# Timeout: the SessionEnd hook entry sets `timeout: 10`. SessionEnd's default
+# budget is 1.5s; a per-hook timeout in a project settings.json raises it.
+# Keep this script to bounded, fast file I/O — no network, no AI.
+
+set -uo pipefail
+
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# --- 1. Resolve the working directory --------------------------------------
+
+CWD=""
+if [ ! -t 0 ]; then
+  STDIN_JSON=$(cat 2>/dev/null || true)
+  if [ -n "${STDIN_JSON:-}" ]; then
+    CWD=$(printf '%s' "$STDIN_JSON" | jq -r '.cwd // empty' 2>/dev/null || true)
+  fi
+fi
+[ -n "$CWD" ] || CWD="$PWD"
+
+NOW=$(now_iso)
+
+# --- 2. Resolve this plugin's state file -----------------------------------
+#
+# TODO(plugin-author): locate the file/dir holding this project's plugin
+# state. A common scheme is a per-workspace file keyed by md5(cwd):
+#
+#   WORKSPACE_HASH=$(printf %s "$CWD" | md5sum | cut -d' ' -f1)
+#   STATE_FILE="$HOME/.{plugin-name}/sessions/${WORKSPACE_HASH}.json"
+#
+# If there is no state file, there was no plugin activity this session —
+# exit 0 silently. Do NOT create state here.
+
+STATE_FILE=""   # TODO(plugin-author): set this.
+if [ -z "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
+  exit 0
+fi
+
+# --- 3. Stamp savedAt into the state file (atomic) -------------------------
+#
+# TODO(plugin-author): adapt to your state file's format. For JSON:
+#
+#   TMP="$STATE_FILE.savetmp.$$"
+#   if jq --arg t "$NOW" '. + {savedAt: $t}' "$STATE_FILE" > "$TMP" 2>/dev/null; then
+#     mv "$TMP" "$STATE_FILE" 2>/dev/null || rm -f "$TMP"
+#   else
+#     rm -f "$TMP"
+#   fi
+
+# --- 4. Detect changes since the last save (marker-file diff) --------------
+#
+# Keep a private marker file OUTSIDE any state file your SessionStart hook
+# might delete. Diff with `find -newer` (full mtime precision) — NOT
+# `find -newermt` against an ISO string, which truncates to second
+# granularity and re-reports files touched in the same clock-second.
+#
+#   MARKER_FILE="$HOME/.{plugin-name}/sessions/${WORKSPACE_HASH}.last-saved"
+#   CHANGED_COUNT=0
+#   if [ -d "$TASK_DIR" ] && [ -f "$MARKER_FILE" ]; then
+#     while IFS= read -r f; do
+#       [ -n "$f" ] || continue
+#       CHANGED_COUNT=$((CHANGED_COUNT + 1))
+#     done < <(find "$TASK_DIR" -type f -name '*.md' -newer "$MARKER_FILE" 2>/dev/null)
+#   fi
+
+# --- 5. Refresh the marker, then warn (only when changes were detected) ----
+#
+# Emit a single stderr line ONLY when changes are detected — SessionEnd
+# stderr is shown to the user (not Claude) and the user is already exiting,
+# so an every-time warning is pure alert fatigue.
+#
+#   printf '%s' "$NOW" > "$MARKER_FILE" 2>/dev/null || true
+#   if [ "${CHANGED_COUNT:-0}" -gt 0 ]; then
+#     echo "{plugin-name}: ${CHANGED_COUNT} file(s) changed since the last save. Run /{plugin-name}:save-session to persist in-flight state." >&2
+#   fi
+
+exit 0

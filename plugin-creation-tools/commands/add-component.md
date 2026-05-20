@@ -1,5 +1,5 @@
 ---
-description: Add a skill, command, agent, hook, MCP server, or theme to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "add theme", "new component", or wants to extend an existing plugin with additional functionality.
+description: Add a skill, command, agent, hook, MCP server, theme, or remembrance-hooks pattern to an existing plugin. Use when user says "add skill", "add command", "add agent", "add hook", "add MCP", "add theme", "add remembrance hooks", "session remembrance", "new component", or wants to extend an existing plugin with additional functionality.
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 argument-hint: <component-type> <name>
 context: fork
@@ -57,6 +57,25 @@ Add a new component to an existing Claude Code plugin.
 4. Remind: theme appears in `/theme` once the plugin is enabled, persisted as `custom:<plugin-name>:$2` when the user selects it
 5. Remind: users press `Ctrl+E` to copy the plugin theme into `~/.claude/themes/` for editing — your bundled file is read-only in the picker
 
+### `remembrance-hooks`
+
+Scaffold the [session-remembrance pattern](../skills/plugin-creation/references/06-hooks/remembrance-hooks-pattern.md) — per-project `SessionStart` + `SessionEnd` hooks that survive compaction. `$2` is ignored (the component names are fixed). Read `references/06-hooks/remembrance-hooks-pattern.md` first so you can explain the design to the user.
+
+1. Confirm the plugin maintains **per-project state** worth remembering. If it's stateless (single command path, no project memory), say so and stop — the pattern adds nothing. A plugin used to build other plugins rather than maintain project state should not adopt it.
+2. Copy the four templates into the plugin, substituting `{plugin-name}` with the plugin's `name` from `plugin.json` throughout each file:
+   - `templates/session-primer.md` → `<plugin>/templates/session-primer.md` (no `.template` suffix — it's filled at install time)
+   - `templates/remembrance-hooks/install-remembrance-hook.md.template` → `<plugin>/commands/install-remembrance-hook.md`
+   - `templates/remembrance-hooks/save-session.md.template` → `<plugin>/commands/save-session.md`
+   - `templates/remembrance-hooks/save-session.sh.template` → `<plugin>/scripts/save-session.sh` (then `chmod +x`)
+3. Tell the user the three `TODO(plugin-author)` blocks they must now fill in:
+   - **install command, Step 1** — the plugin's project-resolution logic (how it finds `project_name`, `state_path`, `install_dir`).
+   - **save-session command, Steps 1–2** — how Claude resolves the active project/task and what in-flight state it reviews.
+   - **save-session.sh, Steps 2–5** — the plugin's state-file scheme, the `savedAt` stamp, the marker-file change scan.
+4. Remind the user of the two non-negotiable design rules baked into the templates — **do not "fix" them out**:
+   - **No `PostCompact` hook.** `PostCompact` stdout is not injected into context; a no-matcher `SessionStart` covers compaction.
+   - **Copy `save-session.sh` into the project**, reference it via `${CLAUDE_PROJECT_DIR}`. `${CLAUDE_PLUGIN_ROOT}` does not resolve in a project `settings.json`.
+5. After the author fills the TODOs, `/plugin-creation-tools:validate` checks the result against rules R01–R05.
+
 ## After Adding
 
 1. Update `.claude-plugin/plugin.json` if component paths need explicit configuration
@@ -67,5 +86,5 @@ Add a new component to an existing Claude Code plugin.
 
 ## Arguments
 
-- `$1`: Component type (skill, command, agent, hook, mcp, theme)
-- `$2`: Component name (hyphen-case)
+- `$1`: Component type (skill, command, agent, hook, mcp, theme, remembrance-hooks)
+- `$2`: Component name (hyphen-case) — ignored for `remembrance-hooks` (fixed component names)

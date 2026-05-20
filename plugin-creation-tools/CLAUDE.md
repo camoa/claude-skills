@@ -52,6 +52,7 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 - **Skill body line model** — target < 250 lines; validator S10 warns ≥ 250, errors ≥ 500. This plugin's own `plugin-creation` SKILL.md (~334 lines) trips the warn — an accepted self-finding (large hub skill, heavy progressive disclosure).
 - **Skill description caps** — runtime cap `maxSkillDescriptionChars` 1,536 (validator S05); agentskills.io portability target ~1,024. Don't conflate the two — 1,024 is a recommendation, 1,536 is the hard truncation point.
 - **Skill discovery** — project skills load from `.claude/skills/` in the starting dir AND every parent up to repo root; nested `.claude/skills/` load on demand (monorepo pattern).
+- **Session-remembrance pattern** — `add-component remembrance-hooks` scaffolds it; validator R01–R05 enforce conformance. Two rules are load-bearing and must never be "fixed" out of the templates: **no `PostCompact` hook** (stdout not injected into context) and **copy `save-session.sh` into the project** (`${CLAUDE_PLUGIN_ROOT}` doesn't resolve in project `settings.json`). The pattern is two hook events — `SessionStart` + `SessionEnd`. drupal-dev-framework v4.5.0 is the reference adopter.
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
 
