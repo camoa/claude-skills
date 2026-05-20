@@ -62,11 +62,12 @@ The `name` field is the **only required field**.
 | `$schema` | string | JSON Schema URL for editor autocomplete and validation (e.g., `"https://json.schemastore.org/claude-code-plugin-manifest.json"`). Ignored by Claude Code at load time — purely a developer-ergonomics hint. |
 | version | string | Semantic version (e.g., "2.1.0") |
 | description | string | Brief explanation of plugin purpose |
+| `displayName` | string | **v2.1.143+** Human-readable name shown in the `/plugin` picker and other UI surfaces. Falls back to `name` when omitted. Unlike `name`, may contain spaces and any casing. Not used for namespacing or lookup. |
 | author | object/string | Author information |
 | homepage | string | Documentation URL |
 | repository | string | Source code URL |
-| license | string | SPDX identifier (MIT, Apache-2.0, etc.) |
-| keywords | array | Discovery tags |
+| license | string | SPDX identifier (`MIT`, `Apache-2.0`, `BSD-3-Clause`, `GPL-3.0-or-later`, etc.). Use `"proprietary"` only when the repository is private and the value reflects company policy. The validator surfaces non-SPDX values as info-level so you can confirm intent. |
+| keywords | array | Discovery tags. Keep to ≤ 25 entries — marketplace UIs truncate longer lists and the budget pressure isn't worth squeezing in another niche tag. |
 
 ### Author Object
 

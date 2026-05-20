@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-05-19
+
+**Theme: Metadata & Tool Catalogue.** Third release of the consolidated 2026-05-12 roadmap. Brings the agent-tools catalogue and manifest-schema guidance current with v2.1.142+ tool churn, documents the skill listing budget, and ships seven new validator rules + extends `--fix` coverage to seven manifest/command auto-fixes.
+
+Snapshot baseline: Claude Code v2.1.144. No upstream-version bump from v3.6.0.
+
+### Added — Tool catalogue updates
+
+- `references/05-agents/agent-tools.md`:
+  - **`TaskStop`** row added under Agent and Task Operations (kills a running background task by ID).
+  - **`TodoWrite` deprecation callout**: disabled by default as of v2.1.142; pointer to `TaskCreate` / `TaskGet` / `TaskList` / `TaskUpdate`; mention of the `CLAUDE_CODE_ENABLE_TASKS=0` escape hatch; warning that new content should not reference it (the validator's C01 flags it).
+  - **`EnterWorktree` / `ExitWorktree`** rows added (with the "not available to subagents" caveat).
+  - **`WaitForMcpServers`** row added (v2.1.142+; only appears when `ToolSearch` is disabled).
+  - New **Code Intelligence & Background Work** subsection covers **`LSP`** (code intelligence on edited files; not available to subagents) and **`Monitor`** (background command with per-line feedback; same permission rules as `Bash`; not available on Bedrock/Vertex/Foundry).
+
+### Added — `displayName` manifest field (v2.1.143+)
+
+- `templates/plugin.json.template`: commented optional `displayName` block added at the bottom of the metadata section.
+- `references/08-configuration/plugin-json.md`: new `displayName` row in the metadata fields table. Note: human-readable; may contain spaces and any casing; not used for namespacing or lookup; falls back to `name`.
+
+### Added — Skill listing budget guidance
+
+- `references/08-configuration/settings.md`: new "Skill listing budget" subsection documents `maxSkillDescriptionChars` (default 1,536) and `skillListingBudgetFraction` (default 0.01 = 1%) — both v2.1.105+. Explains why the budget exists (every line is recurring token cost), how `/doctor` surfaces truncation, and three plugin-author-relevant implications.
+- New `defaultMode: "auto"` security-change subsection: setting it in project/local settings is silently ignored as of v2.1.142 — repositories can't grant themselves auto mode.
+- `references/03-skills/description-patterns.md` gets a one-paragraph budget callout linking to settings.md.
+
+### Updated — License, keywords, repository guidance
+
+`references/08-configuration/plugin-json.md` metadata-fields table:
+
+- `license` row clarified: prefer SPDX identifiers (`MIT`, `Apache-2.0`, etc.); `"proprietary"` acceptable when paired with a private repository; non-SPDX values are surfaced by the validator at info level so the author confirms intent.
+- `keywords` row gets a soft cap of 25 (marketplace UI truncation + budget pressure).
+
+### Added — Validator rules M06 / M07 / M08 / M09 / M10 (with `--fix`) + M14 / M15 / M16 / C01 / C02 / X02 / X03
+
+`commands/validate.md` gains:
+
+- **M06 (info, `--fix`)** — Missing `$schema`. Auto-fix inserts the SchemaStore URL as the first key.
+- **M07 (warn, `--fix`)** — Top-level `themes` → `experimental.themes`. Auto-fix wraps under `experimental` with merge semantics (arrays concatenated and deduped; string + array coerced to array).
+- **M08 (warn, `--fix`)** — Top-level `monitors` → `experimental.monitors`. Same merge semantics as M07.
+- **M09 (warn, `--fix`)** — `agents` as string → array. Auto-fix wraps in `[...]`.
+- **M10 (info, `--fix`)** — `commands` / `skills` as string → array. Auto-fix wraps in `[...]`.
+- **M14 (info)** — Unknown top-level manifest keys (forward-compat catcher). Real-world example: drupal-dev-framework's `defaults` + `recommended`.
+- **M15 (warn)** — `keywords` array > 25 entries. Real ecosystem hit: brand-content-design ships 29.
+- **M16 (info)** — `license` not a recognized SPDX identifier and not `"proprietary"` + private repo. Real ecosystem hit: design-system-converter ships `"license": "proprietary"`.
+- **C01 (warn, `--fix`)** — `TodoWrite` referenced in command/skill/agent body or examples. Auto-fix performs literal text replacement in safe contexts (lists of tools) and flags ambiguous contexts (TodoWrite-specific argument shapes) for human review.
+- **C02 (warn, `--fix`)** — `/extra-usage` referenced (renamed to `/usage-credits`). Auto-fix performs literal rename. Source: Built-in Commands guide L127.
+- **X02 (warn)** — Marketplace per-plugin `description` > 600 characters. Real ecosystem hit: drupal-dev-framework was ~3,500 chars before v3.5.0/v3.6.0 trim. No auto-fix — trimming is a content decision.
+- **X03 (info)** — Marketplace root contains a plugin subdirectory not listed in `marketplace.json`. Surfaces feature-branch state for confirmation.
+
+### Updated
+
+- `plugin.json` 3.6.0 → 3.6.1; description unchanged (already covers H05–H13 and the layout/discovery items; the v3.6.1 additions slot under "metadata & tool catalogue" which is implied by the existing list).
+- Root `marketplace.json` `metadata.version` 1.14.41 → 1.14.42; plugin entry version bump.
+- `commands/validate.md` `--fix` rule list now: H05, H06, H10 (v3.5.0); M06, M07, M08, M09, M10, C01, C02 (v3.6.1).
+
+### Notes
+
+- **C02 verified against cached guides** — Built-in Commands guide L127 explicitly documents `/usage-credits` as the rename target ("Previously `/extra-usage`"). Auto-fix is a safe literal rename.
+- **M14 stays info, not warn.** Surfacing unknown keys is forward-compat reassurance, not a quality issue. Drupal-dev-framework's `defaults` / `recommended` keys are intentional and the validator says so.
+- **M15 keyword cap set at 25, not 30.** brand-content-design ships 29 keywords; the rule fires once. The enforcement-design note about possibly raising to 30 is parked — if more ecosystem plugins push past 25, revisit. For now, 25 is the cap a careful author should target.
+- **X02 deliberately stays warn, not error.** Existing plugins may need a content-rewrite cycle. Authors opt into hard enforcement via `--strict`.
+- **Ecosystem migration** for v3.6.1 paired rules deferred to `chore/ecosystem-metadata-migration` per the no-half-measures + real-smoke-tests memos. Expected hits: M06 (3/3 sampled plugins); M14 (DDF); M15 (brand-content-design); M16 (design-system-converter); X02 (DDF, pre-trim — already addressed in v3.5.0/v3.6.0 cycles).
+
 ## [3.6.0] - 2026-05-19
 
 **Theme: Layout & Discovery.** Second release of the consolidated 2026-05-12 roadmap. Catches up on plugin-author-relevant layout features (recursive `agents/` subfolder scoping, single-skill-at-root auto-discovery) and kills one of the longest-standing divergences — `init_plugin.py` now reads the canonical `templates/plugin.json.template` instead of embedding its own truncated copy.

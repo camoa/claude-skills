@@ -59,8 +59,11 @@ Use `disallowedTools` when it is easier to exclude a few tools than to list all 
 | TaskUpdate | Update an existing task | Medium |
 | TaskList | List active tasks | Low |
 | TaskGet | Get task details and output | Low |
+| TaskStop | Kill a running background task by ID | Medium |
 | Skill | Invoke a preloaded skill | Low |
 | AskUserQuestion | Prompt the user for input | Low |
+
+> **`TodoWrite` is disabled by default as of Claude Code v2.1.142.** It used to manage the session task checklist; that role has moved to `TaskCreate` / `TaskGet` / `TaskList` / `TaskUpdate`. To re-enable `TodoWrite`, set `CLAUDE_CODE_ENABLE_TASKS=0` in the environment. **Don't reference `TodoWrite` in new skills, commands, or agent prompts** — the validator's C01 rule flags it.
 
 ### Planning and Discovery
 
@@ -68,9 +71,19 @@ Use `disallowedTools` when it is easier to exclude a few tools than to list all 
 |------|---------|------------|
 | EnterPlanMode | Switch agent to read-only planning | Low |
 | ExitPlanMode | Leave planning mode | Low |
+| EnterWorktree | Create an isolated git worktree and switch into it (or switch into an existing worktree with `path`). **Not available to subagents.** | Medium |
+| ExitWorktree | Exit a worktree session and return to the original directory. **Not available to subagents.** | Low |
 | ToolSearch | Discover and load deferred tools | Low |
+| WaitForMcpServers | **v2.1.142+** Wait for MCP servers still connecting in the background so a request can use their tools without restarting the session. Only appears when [tool search](https://docs.anthropic.com/en/mcp#scale-with-mcp-tool-search) is **disabled** — `ToolSearch` handles the wait when enabled. | Low |
 | ListMcpResourcesTool | List available MCP resources | Low |
 | ReadMcpResourceTool | Read a specific MCP resource | Low |
+
+### Code Intelligence & Background Work
+
+| Tool | Purpose | Risk Level |
+|------|---------|------------|
+| LSP | Code intelligence via language servers: jump to definitions, find references, report type errors and warnings on edited files. **Not available to subagents.** | Low |
+| Monitor | Run a command in the background and feed each output line back to Claude — react to log entries, file changes, or polled status mid-conversation. Same permission rules as `Bash`. **Not available on Amazon Bedrock, Vertex AI, or Foundry**, nor when `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set. Available to subagents. | Medium |
 
 ## MCP Tool Access
 

@@ -2,6 +2,8 @@
 
 The description field is the most critical part of a skill - it determines whether Claude loads your skill.
 
+> **Listing budget matters per-skill AND in aggregate.** Each description is capped at `maxSkillDescriptionChars` (default 1,536). Across all installed skills, the total listing is capped at `skillListingBudgetFraction` of the model's context window (default 1%). When the aggregate overflows, descriptions for the least-used skills are collapsed to bare names — losing the trigger phrasing Claude uses to route. Write descriptions tight enough to survive both caps. See `references/08-configuration/settings.md` § Skill listing budget for the tunable settings.
+
 ## The Formula
 
 Two valid structures (per Anthropic's official guide):
