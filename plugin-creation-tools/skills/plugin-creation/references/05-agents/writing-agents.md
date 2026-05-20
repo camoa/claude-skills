@@ -13,6 +13,46 @@ plugin-name/
     └── performance-analyst.md
 ```
 
+## Organizing Agents Into Subfolders
+
+Claude Code scans plugin `agents/` directories **recursively**, so a plugin with many agents can group them into topic subfolders:
+
+```
+my-plugin/
+└── agents/
+    ├── review/
+    │   ├── security.md
+    │   └── style.md
+    ├── research/
+    │   ├── api-finder.md
+    │   └── pattern-finder.md
+    └── code-reviewer.md
+```
+
+**Plugin agents — subfolder becomes part of the scoped id.** Unlike project (`.claude/agents/`) and user (`~/.claude/agents/`) scopes — where the subdirectory path is ignored and identity comes only from the frontmatter `name` field — **plugin** subfolders are joined into the [scoped identifier](#) with colons:
+
+| Plugin file path | Scoped id |
+|---|---|
+| `agents/code-reviewer.md` | `my-plugin:code-reviewer` |
+| `agents/review/security.md` | `my-plugin:review:security` |
+| `agents/research/api-finder.md` | `my-plugin:research:api-finder` |
+
+The scoped id is what users type in the picker (`@agent-my-plugin:review:security`) or pass to `--agent` (`claude --agent my-plugin:review:security`).
+
+**Identity rules**:
+
+- The agent's **invocation name** still comes from the `name` frontmatter field, exactly like flat-layout agents. Don't rely on the filename.
+- `name` must be **unique across the whole `agents/` tree**. Two files in different subfolders that declare the same `name` aren't disambiguated by the subfolder — Claude Code keeps one and discards the other without warning. Use the subfolder for **organization**, not for namespacing collisions away.
+- Project and user agents in subfolders have no scoped-id distinction (the subfolder is purely organisational). Don't carry the assumption over.
+
+**When to use subfolders**:
+
+- The plugin ships more than ~6–8 agents and they fall into clear topic clusters.
+- You want the scoped picker to read naturally (`my-plugin:review:security` is more discoverable than a flat `my-plugin:security-review`).
+- You want grouped agents to be obviously related at the file level.
+
+If your plugin only has 1–4 agents, keep them flat in `agents/` — the subfolder structure adds friction without payoff.
+
 ## Basic Structure
 
 ```markdown

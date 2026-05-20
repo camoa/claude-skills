@@ -48,6 +48,28 @@ Log entry format:
 - [ ] CHANGELOG.md exists at plugin root
 - [ ] **Info** (not warning) if a `CLAUDE.md` is present at the plugin root: "Plugin-root `CLAUDE.md` is NOT loaded as project context. Instructions belong in a skill — put them in `skills/<name>/SKILL.md` so they reach Claude. The file is fine to keep as authoring reference (this plugin uses it that way)."
 
+#### ST04 — Redundant `skills: ["./"]` on a single-skill-at-root plugin (info)
+
+When a plugin has all three of: (a) `SKILL.md` at the plugin root, (b) no `skills/` subdirectory, AND (c) a manifest `skills` field set to exactly `["./"]` (or `"./"`), emit info:
+
+> "This plugin is auto-loaded as a single-skill plugin (v2.1.142+) when `SKILL.md` lives at the root and no `skills/` subdirectory exists. The `\"skills\": [\"./\"]` field is redundant — Claude Code discovers the root `SKILL.md` automatically. The field still works; you can remove it to declutter the manifest."
+
+#### ST05 — Manifest references a folder that doesn't exist (warn)
+
+For every path in `commands`, `agents`, `skills`, `outputStyles`, `experimental.themes`, `experimental.monitors`, resolve it against the plugin root and check the target exists. Missing target → warn:
+
+> "Plugin manifest references `<path>` which does not exist under the plugin root. Common cause: typo (`agents/` ↔ `agents`, `agnets/`, `commnads/`) or a folder that was renamed but not updated in `plugin.json`."
+
+Skip glob-style entries (`./commands/*.md`) — those are evaluated at load time and an empty match is not an error.
+
+#### ST06 — Manifest path overrides a populated default folder (info)
+
+For each "Replaces the default" field (`commands`, `agents`, `outputStyles`, `experimental.themes`, `experimental.monitors`), if the manifest sets a **custom** path that is NOT `./<default>/` or a sub-path of `./<default>/`, AND the default folder at `./<default>/` exists AND contains files matching the expected extension, emit info:
+
+> "Plugin manifest overrides `<field>` to `<custom-path>` but `<default-folder>/` is also populated. Those files will be **silently ignored** at runtime — the `<field>` field replaces the default for this component type (only `skills` adds). v2.1.140+ flags this in `/doctor`, `claude plugin list`, and the `/plugin` detail view. Either remove the default folder, or include it in the manifest array: `\"<field>\": [\"./<default>/\", \"<custom-path>\"]`."
+
+Heuristic exclusion: don't fire when the manifest path resolves into the default folder (e.g. `"commands": ["./commands/deploy.md"]`) — that's the explicit-address case upstream documents as not warning-worthy.
+
 ### plugin.json Schema Migration (soft-breaking — `experimental.*`)
 - [ ] **Warning** if top-level `themes` or `monitors` is set in `plugin.json`: "`themes` / `monitors` should live under `experimental.*`. `claude plugin validate` flags this and a future release will require the nested form." Offer an auto-migration diff that wraps both keys under an `experimental` object (preserve existing values, deduplicate if `experimental.themes` / `experimental.monitors` is already partially set).
 - [ ] **Warning** if `agents` is a bare string path: "The `agents` field is array-only. Wrap the path in an array: `\"agents\": [\"./agents/foo.md\"]`."
@@ -101,12 +123,31 @@ Log entry format:
 - [ ] `allowed-tools` field present
 - [ ] No inline code with backtick+exclamation or backtick+at-sign that could trigger execution
 
-### Agents (for each `agents/*.md`)
-- [ ] Valid YAML frontmatter — invalid frontmatter causes agent to load with no metadata at runtime
-- [ ] `name` field present
-- [ ] `description` field present (includes delegation triggers)
-- [ ] `tools` field present
-- [ ] `model` field present (haiku, sonnet, opus, or inherit)
+### Agents (for each `agents/**/*.md`)
+
+Plugin `agents/` directories are scanned **recursively** (Claude Code v2.x+). Walk every `.md` file under `agents/`, not just the top level.
+
+- [ ] **A01 (error)** — Valid YAML frontmatter. Invalid frontmatter causes agent to load with no metadata at runtime.
+- [ ] **(error)** — `name` field present.
+- [ ] **(error)** — `description` field present (includes delegation triggers).
+- [ ] **(warn)** — `tools` field present.
+- [ ] **(warn)** — `model` field present (haiku, sonnet, opus, or inherit).
+
+#### A02 — Subfolder agents and the scoped id (info)
+
+When an agent file sits under a subfolder of `agents/` (e.g. `agents/review/security.md`), the resulting plugin-scoped id includes the subfolder path — `<plugin>:review:security`, not `<plugin>:security`. If the agent's frontmatter `name` field differs in a way that suggests the author didn't realise the subfolder is part of the id, emit info:
+
+> "Agent `agents/<subfolder>/<file>.md` registers as `<plugin>:<subfolder>:<name>` (the subfolder joins the scoped id in plugins — unlike project/user scopes where the subfolder is purely organizational). Confirm the `name` field is the agent label you want users to invoke after the colons."
+
+Heuristic: only fire when a subfolder is present AND the frontmatter `name` doesn't naturally include the subfolder as a prefix.
+
+#### A03 — Subfolder agent missing `name` frontmatter (warn)
+
+When an agent file sits under an `agents/` subfolder AND its frontmatter is missing the `name` field, emit warn:
+
+> "Agent `agents/<subfolder>/<file>.md` has no `name` frontmatter — it loads with empty metadata at runtime and cannot be invoked by the scoped id. Add `name: <invocation-label>` to the frontmatter."
+
+Flat-layout agents missing `name` are already caught by the general A01-family check; A03 is the subfolder-aware variant that flags the scoped-id breakage explicitly.
 
 ### Themes (for each `themes/*.json`)
 - [ ] Valid JSON — invalid JSON is an **error** (theme will not load)

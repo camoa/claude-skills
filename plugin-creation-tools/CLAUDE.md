@@ -39,6 +39,10 @@ Every revision must keep these counts in sync between SKILL.md, `commands/valida
 - **Terminal sequence allowlist** (OSC `0`/`1`/`2`/`9`/`99`/`777` + BEL — anything else is rejected and the field is ignored).
 - **PreToolUse decision precedence** (`deny > defer > ask > allow`) and parallel-then-merge across all matching hooks.
 - Plugin component types (skills, commands, agents, hooks, mcpServers, lspServers, outputStyles, **`experimental.themes`**, **`experimental.monitors`** — themes and monitors are upstream-marked experimental and live under the `experimental.*` key; top-level still loads but `claude plugin validate` warns).
+- **Path-field replacement semantics** (`commands` / `agents` / `outputStyles` / `experimental.themes` / `experimental.monitors` **replace** the default; only `skills` **adds**; `hooks` / `mcpServers` / `lspServers` have their own merge rules). v2.1.140+ surfaces ignored defaults in `/doctor`, `claude plugin list`, and the `/plugin` detail view.
+- **Recursive `agents/` scanning + plugin-scoped subfolder ids** (subfolders join the scoped id with colons: `agents/review/security.md` → `my-plugin:review:security`). Project/user scopes do NOT join subfolders; this is plugin-only behavior.
+- **Single-skill-at-root auto-discovery** (v2.1.142+): `SKILL.md` at the plugin root + no `skills/` subdir + no `skills` field is auto-loaded as a single-skill plugin; the `"skills": ["./"]` field becomes redundant.
+- **Canonical templates source-of-truth**: `init_plugin.py` reads `templates/plugin.json.template` rather than embedding its own. Don't add new manifest fields in the script — add them to the template; the script will pick them up.
 - Reserved marketplace names list.
 - The skill-description budget numbers (1% / 8,000-char fallback / 1,536-char per-entry cap / 500-line SKILL.md soft cap).
 

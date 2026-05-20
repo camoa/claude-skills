@@ -254,9 +254,23 @@ The `lspServers` field configures Language Server Protocol servers for code inte
 
 ## Important Path Rules
 
-1. **Custom paths SUPPLEMENT default directories**
-   - If `commands/` exists, it's loaded automatically
-   - Custom paths add to (don't replace) defaults
+1. **Custom paths REPLACE the default for most fields — only `skills` adds.**
+
+   Whether a custom path replaces or extends the plugin's default directory depends on the field. This is the rule that surprises the most plugin authors, so memorize it:
+
+   | Behavior | Fields |
+   |---|---|
+   | **Replaces the default** — the default folder is no longer scanned | `commands`, `agents`, `outputStyles`, `experimental.themes`, `experimental.monitors` |
+   | **Adds to the default** — the default folder is always scanned, and listed paths are loaded alongside it | `skills` |
+   | **Own merge rules** — see each section below | `hooks`, `mcpServers`, `lspServers` |
+
+   For "Replaces the default" fields, to keep the default AND add more, list it explicitly:
+
+   ```json
+   { "commands": ["./commands/", "./extras/"] }
+   ```
+
+   **v2.1.140+ surfaces ignored defaults in tooling**: when a plugin sets a custom path for a "Replaces the default" field AND the matching default folder still exists with files, Claude Code flags the ignored folder in `/doctor`, `claude plugin list`, and the `/plugin` detail view. The plugin still loads using the manifest paths — the default folder's files are simply not scanned. No warning fires when the manifest key points **into** the default folder (e.g. `"commands": ["./commands/deploy.md"]`), because the folder is addressed explicitly.
 
 2. **All paths relative to plugin root**
    - Must start with `./`
@@ -265,6 +279,24 @@ The `lspServers` field configures Language Server Protocol servers for code inte
 3. **Use forward slashes**
    - Works across all platforms
    - Example: `./path/to/file.md`
+
+4. **Single-skill-at-root auto-discovery (v2.1.142+)**
+
+   A plugin with **all three** of:
+
+   - `SKILL.md` at the plugin root
+   - no `skills/` subdirectory
+   - no `skills` field in `plugin.json`
+
+   is **automatically** loaded as a single-skill plugin. You do **not** need `"skills": ["./"]` for this layout. The skill's invocation name comes from the frontmatter `name` field, with the directory basename as a fallback.
+
+   This is the minimum-overhead shape for plugins that ship exactly one skill and nothing else. Use it when:
+
+   - The plugin is a single skill — no commands, no agents, no hooks.
+   - You want users to discover the skill by the plugin name without an extra subdirectory hop.
+   - You don't anticipate adding more skills (if you do, migrate later to `skills/<name>/SKILL.md`).
+
+   Adding a manifest `skills` field on top of the root-`SKILL.md` layout is redundant; the validator flags it as info-level noise.
 
 ## Environment Variables and Path Substitution
 
