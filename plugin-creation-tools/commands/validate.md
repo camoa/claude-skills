@@ -365,6 +365,53 @@ Best-effort heuristic. Don't autofix.
 
 - [ ] `$CLAUDE_PROJECT_DIR` / `${CLAUDE_PROJECT_DIR}` / `$CLAUDE_PLUGIN_ROOT` / `${CLAUDE_PLUGIN_ROOT}` / `$CLAUDE_PLUGIN_DATA` / `${CLAUDE_PLUGIN_DATA}` usage is quoted in **shell-form** command strings (covered by H07 above; exec-form hooks need no quoting).
 
+### Session-Remembrance Pattern (R-series)
+
+These rules run **only when the plugin adopts the [session-remembrance pattern](../skills/plugin-creation/references/06-hooks/remembrance-hooks-pattern.md)**. Detect adoption by either: a `commands/install-remembrance-hook.md` file, or any command whose body references `session-primer`. If the plugin doesn't adopt the pattern, skip this whole section.
+
+> Rule IDs are **R-series** here, not the enforcement-design's `X01`. `X` is already the marketplace cross-file series (X02/X03). R-series is the dedicated remembrance-pattern group.
+
+#### R01 — Install command writes only inside the project (error)
+
+The install command must write **only** under `${CLAUDE_PROJECT_DIR}/.claude/` — never above it. Scan the install command body for write targets (the `settings.json` path, the primer destination, the script copy destination). Any of these is an **error**:
+
+- a `..` path-traversal segment in a write target
+- an absolute path that is not rooted at `${CLAUDE_PROJECT_DIR}` (e.g. `$HOME`, `/etc`, a hardcoded `/Users/...`)
+- writing to a parent of the project directory
+
+> "Install command writes to `<path>`, outside `${CLAUDE_PROJECT_DIR}/.claude/`. A remembrance installer must confine all writes to the project's own `.claude/` tree — it runs against the user's project, not the plugin."
+
+#### R02 — `PostCompact` hook is dead config (warn)
+
+If the install command emits a `PostCompact` hook entry into the project `settings.json`, emit warn:
+
+> "Install command wires a `PostCompact` hook. `PostCompact` stdout is **not** injected into Claude's context — only `SessionStart` / `UserPromptSubmit` / `UserPromptExpansion` stdout is. A no-matcher `SessionStart` hook already fires after compaction (`source: \"compact\"`) and re-injects the primer. Remove the `PostCompact` entry — it's dead config. The pattern is two hook events, not three."
+
+#### R03 — `${CLAUDE_PLUGIN_ROOT}` in an emitted project-settings hook (warn)
+
+Inspect the hook `command` strings the install command writes into the **project** `settings.json` (typically the values of the `jq --arg` variables). If any references `${CLAUDE_PLUGIN_ROOT}` (or `$CLAUDE_PLUGIN_ROOT`), emit warn:
+
+> "An emitted project-`settings.json` hook command references `${CLAUDE_PLUGIN_ROOT}`. That placeholder is plugin-context only — it does not resolve in a project settings file, and an absolute plugin path breaks on every plugin update. Copy `save-session.sh` into `<project>/.claude/<plugin-name>/` and reference it via `${CLAUDE_PROJECT_DIR}` instead."
+
+(`${CLAUDE_PLUGIN_ROOT}` is fine **elsewhere** in the install command — e.g. reading the template, copying the script *from* the plugin. R03 only flags it inside a string destined for the project `settings.json`.)
+
+#### R04 — Incomplete adoption (info)
+
+A plugin adopting the pattern should ship all four artifacts. If some but not all are present, emit info listing what's missing:
+
+- `templates/session-primer.md`
+- `commands/install-remembrance-hook.md`
+- `commands/save-session.md`
+- `scripts/save-session.sh`
+
+> "Plugin adopts the session-remembrance pattern but is missing `<artifact(s)>`. The pattern needs all four — primer template, install command, save-session command, and the bash persistence script. Scaffold the missing pieces with `/plugin-creation-tools:add-component remembrance-hooks`."
+
+#### R05 — `SessionEnd` hook missing an explicit `timeout` (warn)
+
+The `SessionEnd` hook entry the install command emits must set an explicit `timeout`. `SessionEnd`'s default budget is 1.5 s, and timeouts on plugin-provided hooks do **not** raise it — only a per-hook `timeout` written into the project `settings.json` does. If the emitted `SessionEnd` entry has no `timeout`, emit warn:
+
+> "The `SessionEnd` hook the install command emits has no explicit `timeout`. `SessionEnd`'s default budget is 1.5 s — too short for a save script — and plugin-provided timeouts don't raise it. Set `timeout` (the pattern uses `10`) on the entry written into the project `settings.json`."
+
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)
 - [ ] Skills include scope boundaries / negative triggers in description if broad

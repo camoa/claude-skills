@@ -180,6 +180,8 @@ When user says "add hooks", "setup hooks", "event handlers":
 
 **MCP tool matching**: Use `mcp__<server>__<tool>` pattern in matchers for PreToolUse/PostToolUse.
 
+**Session-remembrance pattern**: For plugins that maintain per-project state, `/plugin-creation-tools:add-component remembrance-hooks` scaffolds a `SessionStart` + `SessionEnd` hook pair (plus the install command, `/save-session` command, and `save-session.sh`) that survives compaction / `/clear` / new sessions. Two design rules are non-negotiable: **no `PostCompact` hook** (its stdout isn't injected into context — a no-matcher `SessionStart` covers compaction), and **copy `save-session.sh` into the project** (`${CLAUDE_PLUGIN_ROOT}` doesn't resolve in a project `settings.json`). See `references/06-hooks/remembrance-hooks-pattern.md`.
+
 ## Configuring Plugin
 
 When user says "configure plugin", "setup plugin.json":

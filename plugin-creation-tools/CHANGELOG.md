@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-05-20
+
+**Theme: Cross-plugin pattern enforcement.** Fifth and final release of the consolidated 2026-05-12 roadmap. Extracts the session-remembrance pattern — pioneered by drupal-dev-framework v4.5.0 — into a scaffoldable, validatable shared pattern any plugin can adopt.
+
+Snapshot baseline: Claude Code v2.1.144. Unblocked by drupal-dev-framework v4.5.0 shipping `/install-remembrance-hook` + `/save-session` + `scripts/save-session.sh` as the first adopter.
+
+### Added — Session-remembrance pattern templates
+
+- `templates/session-primer.md` — plugin-agnostic primer with `{plugin_name}` / `{project_name}` / `{state_path}` / `{resume_hint}` / `{user_additions}` / `{generated_date}` placeholders and a generated-by header documenting the re-run-on-staleness contract.
+- `templates/remembrance-hooks/install-remembrance-hook.md.template` — generic interactive installer. Carries the jq idempotency merge, the two-hook design, the copy-the-script step, the no-`PostCompact` rationale, and the `timeout: 10` `SessionEnd` note. Plugin-specific project-fact detection is marked `TODO(plugin-author)`.
+- `templates/remembrance-hooks/save-session.md.template` — generic judgement-first `/save-session` command.
+- `templates/remembrance-hooks/save-session.sh.template` — bash skeleton: resolve a per-workspace state file, stamp `savedAt`, marker-file `find -newer` change diff, exit 0. Plugin-specific state-scan logic marked `TODO(plugin-author)`.
+
+### Added — `remembrance-hooks` component type
+
+- `commands/add-component.md`: new `### remembrance-hooks` section. Copies the four templates into a target plugin (substituting `{plugin-name}`), creates `templates/` / `commands/` / `scripts/` as needed, `chmod +x`'s the script, and prints the three `TODO(plugin-author)` blocks the author must fill (project resolution, in-flight-state review, state-file scheme). Frontmatter description + `$1` argument list updated.
+
+### Added — Pattern reference doc
+
+- `references/06-hooks/remembrance-hooks-pattern.md` — the pattern explained: the failure mode, the two-hook design, the two first-adopter corrections (no `PostCompact`; copy the script), the jq idempotency merge, the `SessionStart`/`SessionEnd` handler-type + timeout constraints (cited to Hooks Reference), adoption-fit guidance, and what the pattern is NOT.
+
+### Added — Validator rules R01–R05
+
+`commands/validate.md` gains a "Session-Remembrance Pattern" section. Rules fire **only** when the plugin adopts the pattern (detected by `commands/install-remembrance-hook.md` or a command body referencing `session-primer`):
+
+- **R01 (error)** — Install command writes outside `${CLAUDE_PROJECT_DIR}/.claude/` (path-traversal guard: `..`, absolute paths, non-project roots).
+- **R02 (warn)** — Install command emits a `PostCompact` hook — dead config (`PostCompact` stdout isn't injected into context).
+- **R03 (warn)** — A hook command string emitted into the project `settings.json` references `${CLAUDE_PLUGIN_ROOT}` — doesn't resolve in project scope.
+- **R04 (info)** — Incomplete adoption: some but not all four artifacts present.
+- **R05 (warn)** — Emitted `SessionEnd` hook has no explicit `timeout` (default 1.5 s budget; plugin-provided timeouts don't raise it).
+
+R-series, not the enforcement-design's overloaded `X01` — `X` is already the marketplace cross-file series (X02/X03 from v3.6.1).
+
+### Updated
+
+- `skills/plugin-creation/SKILL.md`: new "Session-remembrance pattern" paragraph in the Hooks section.
+- `CLAUDE.md` Drift to Watch list: the two load-bearing pattern rules (no `PostCompact`, copy the script) added so future revisions don't "fix" them out of the templates.
+- `plugin.json` 3.6.2 → 3.7.0; description appended with the v3.7.0 highlight.
+- Root `marketplace.json` `metadata.version` 1.14.44 → 1.14.45 (1.14.44 was DDF v4.5.0's pointer bump); plugin entry version + description.
+
+### Notes
+
+- **Two corrections from the first adopter are baked into the templates.** The cross-plugin pattern doc was updated after drupal-dev-framework v4.5.0 adopted: (1) no `PostCompact` hook — its stdout isn't injected into context, a no-matcher `SessionStart` covers compaction; (2) copy `save-session.sh` into the project — `${CLAUDE_PLUGIN_ROOT}` doesn't resolve in a project `settings.json`. The roadmap's original v3.7.0 sketch predates these; the templates and validator implement the **corrected** pattern. R02 and R03 exist specifically to stop a future author from regressing either correction.
+- **Hard constraints verified against the cached Hooks Reference**: `SessionStart`/`SessionEnd` support only `command`/`mcp_tool` handlers (L854, L2484); only `SessionStart`/`UserPromptSubmit`/`UserPromptExpansion` stdout reaches Claude's context (L607); `SessionEnd` default timeout 1.5 s, raised only by per-hook timeouts in project settings files, not plugin-provided ones (L2325).
+- **R-series ID divergence from enforcement-design §8** (which labels the path-traversal rule `X01`): `X` was already assigned to marketplace cross-file rules in v3.6.1, so the remembrance rules use a dedicated `R` series. Documented in the validator section and the roadmap notes.
+- **plugin-creation-tools does not adopt the pattern itself** — per the cross-plugin doc's adoption-fit table, a plugin used to build other plugins (rather than maintain ongoing project state) should skip it. v3.7.0 ships the *scaffolder and validator*, not a self-install.
+- **Adopter count**: the cross-plugin doc's "suggested rollout" mentions extracting the helper "after 2–3 plugins adopt"; only drupal-dev-framework (1) has. The roadmap gates v3.7.0 on DDF as the *first* adopter and that condition is met — shipping now. brand-content-design and design-intelligence are queued as next adopters and can scaffold from these templates.
+- **Roadmap complete.** v3.5.0 → v3.7.0 all shipped. No further releases in `plugin-creation-tools-roadmap-2026-05-12.md`.
+
 ## [3.6.2] - 2026-05-19
 
 **Theme: Skill & Authoring Guidance.** Fourth release of the consolidated 2026-05-12 roadmap — the last before the conditional v3.7.0. Sharpens skill-body authoring guidance, documents skill discovery semantics, fixes a stale description-cap number, and ships six skill-quality validator rules with explicit S-IDs.
