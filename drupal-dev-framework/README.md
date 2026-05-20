@@ -86,6 +86,25 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 /drupal-dev-framework:status            # See all projects and task progress
 ```
 
+### Recommended setup for new projects
+
+Once per project, install the session-remembrance hooks so Claude does not lose
+the framework context after compaction, `/clear`, or a new session:
+
+```bash
+/drupal-dev-framework:install-remembrance-hook
+```
+
+This is interactive and idempotent — it fills a session primer (framework facts
+plus any conventions you want re-stated every session) and wires `SessionStart`
+and `SessionEnd` hooks into the project's `.claude/settings.json`. Re-run it any
+time the project name, memory path, or code path changes.
+
+Then make `/save-session` a habit before you stop working — it reviews the
+active task for un-written progress and persists session state. The `SessionEnd`
+hook runs the same persistence script automatically as a safety net, so nothing
+is lost even if you forget.
+
 ## Commands
 
 ### Core Workflow
@@ -126,6 +145,8 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 | `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
 | `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks — analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
 | `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's scope contract (`alignment.md`) — 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
+| `/install-remembrance-hook` | **(v4.5.0)** Interactive, idempotent. Wires per-project `SessionStart` + `SessionEnd` hooks into `<project>/.claude/settings.json` so Claude does not forget the framework after compaction / `/clear` / a new session. Fills a user-editable session primer. Opt-in per project. |
+| `/save-session` | **(v4.5.0)** Persist in-flight session state before stopping — Claude reviews the active task for un-written progress, then runs `save-session.sh`. The `SessionEnd` hook runs the same script unconditionally as a scripted safety net. |
 
 All commands are prefixed with `drupal-dev-framework:` (e.g., `/drupal-dev-framework:next`).
 

@@ -116,6 +116,19 @@ The 7 hardened surfaces, by category:
 
 **Cross-references:** `references/upgrade-walkthrough.md` (full prose).
 
+## Session Remembrance (v4.5.0+)
+
+Per-project session-lifecycle hooks that survive compaction, `/clear`, and new sessions. **Opt-in per project.**
+
+- **`/install-remembrance-hook`** — interactive, idempotent installer. Fills a session primer (framework facts + free-form user reminders) from `templates/session-primer.md`, then merges two hook entries into `<project>/.claude/settings.json`:
+  - **`SessionStart`** (no matcher) — `cat`s the primer to stdout. SessionStart stdout is injected as context, and the event fires on `startup` / `resume` / `clear` / **`compact`** — so one entry also covers post-compaction re-injection. **No `PostCompact` hook** is used: `PostCompact` stdout is not injected into context, so it cannot do this job.
+  - **`SessionEnd`** (exec form, `timeout: 10`) — runs `save-session.sh`. SessionEnd's default budget is 1.5 s; a per-hook `timeout` in a project `settings.json` raises it.
+- **`/save-session`** — judgement-first persistence: Claude reviews in-flight task state, then runs `save-session.sh`. The `SessionEnd` hook runs the same script unconditionally as a scripted safety net.
+
+**`scripts/save-session.sh`** is pure bash (no AI). It resolves the per-workspace session file (`md5(cwd)` scheme), stamps `savedAt`, scans the task folder for markdown changed since the last save (warns on stderr **only when changes are detected**), and adds an additive `session_saved_at` field to task-folder audit JSONs. The installer copies it into `<project>/.claude/drupal-dev-framework/` — `${CLAUDE_PLUGIN_ROOT}` does not resolve in a project `settings.json`, and an absolute plugin path breaks on plugin update.
+
+The filled primer at `<project>/.claude/drupal-dev-framework/session-primer.md` is **user-editable by hand**. Re-run `/install-remembrance-hook` if the project name, memory path, or code path changes — the primer is a static snapshot.
+
 ## Worktree Workflow (v3.16.0+)
 
 Two Claude Code sessions on the same project workspace collide on `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` (last-writer-wins) and on the git working tree itself. Solution: the second session runs in a worktree at `.worktrees/<task_name>/`. Distinct `$PWD` → distinct hash → independent session-context. **No changes to `session-context-writer` — the existing hash naturally separates worktree sessions.**
