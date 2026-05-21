@@ -117,6 +117,52 @@ The 7 hardened surfaces, by category:
 
 **Cross-references:** `references/review-phase-walkthrough.md` (full prose); `references/feedback_framework_phase_gates.md` (driver memo).
 
+## Visual + E2E Review (v4.11.0+)
+
+The `visual_and_e2e_review_gates` epic adds **three rendered-output review surfaces** so
+`/review` validates not just that source follows the rules, but that the page works and
+looks correct:
+
+- **E2E (behavioral)** — does the flow still work? — ATK + Playwright (Task B)
+- **Visual regression** — did anything change vs. last green? — `@lullabot/playwright-drupal` (Task C)
+- **Visual parity** — does this match the design intent? — Lullabot, shared with VR (Task D)
+
+**Evolve, not greenfield.** v3.13.0 already shipped `validate-visual-regression` /
+`validate-visual-parity` on ad-hoc Playwright MCP capture. The epic KEEPS the
+`.meta.json` provenance model, the `validation-gate-result.md` envelope, and the
+classification UX; REPLACES capture (committed Playwright test files), invocation
+(registry-driven batch), and diff tooling; ADDS the E2E gate, the dispatcher, a11y
+pairing, and masks.
+
+**Two runtimes, one infrastructure.** E2E and visual review ride one Playwright
+install, one `playwright.config.ts`, one DDEV `playwright` service, one surface
+registry — split only at the test-library layer (`tests/e2e/` vs `tests/visual/`,
+separate `projects[]` entries).
+
+**Opt-in.** A project has zero review surface until a `/setup-*` command runs. The
+`**Visual Review:**` field in `project_state.md` points at the surface registry
+(`<project>/.visual-review/registry.yml`); absent ⇒ not set up. `/review` on an
+un-set-up project runs zero new gates and says so.
+
+**Change-impact dispatcher — a RECOMMENDER, not an enforcer.** `/review` step 6
+(v4.11.0+) classifies the merge-base diff and *recommends* gates per
+`change-impact-rules.json`; the user opts in **per task** via a `## Review Gates` block
+in `task.md` (written once, never re-asked). `visual_parity` is not part of the opt-in
+— it auto-runs (soft) on design-implementation tasks. Forcing heavy gates on every CSS
+tweak would make users disable the feature.
+
+**Task A — Foundation (v4.11.0)** ships plumbing only — **zero new commands, zero
+runtime files in any project**: the surface-registry schema, the change-impact
+dispatcher + `scripts/change-impact-classify.sh`, `gate-audit-schema.md` v1.2 (`e2e` +
+`visual_regression` gate_types, the `review` payload's `dispatch_plan` key), the
+`**Visual Review:**` field in `project-state-read.sh`, and the
+`playwright-base.config.ts` reference template. Tasks B/C/D add the user-facing
+`/setup-*` and `/validate:*` commands.
+
+**References:** `references/visual-review-walkthrough.md` (full model),
+`references/visual-review/{surface-registry-schema,change-impact-rules,change-impact-dispatch}.md`,
+`references/visual-review/playwright-base.config.ts`.
+
 ## Retrofit Tools (v4.1.0+)
 
 `/drupal-dev-framework:upgrade-project` retrofits the active project to current scaffolder parity — backfills missing fields onto `project_state.md` (Code Path, Playbook Sets, User Playbook + state, Worktree By Default, Review Required) AND iterates in-progress tasks for task-level gaps (frontmatter, Phase 4 line, missing audit JSONs). Active-project-only; never bulk across the registry.

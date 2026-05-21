@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.1
+# Gate Audit Schema v1.2
 
-**Introduced:** drupal-dev-framework v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive).
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive).
 **Owner:** `scripts/gate-audit-write.sh`
-**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
+**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 8 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 10 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -24,6 +24,8 @@ Where `<gate_type>` is one of:
 - `dev-guides-load`
 - `playbook-load`
 - `review` (v1.1+)
+- `e2e` (v1.2+)
+- `visual_regression` (v1.2+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -38,7 +40,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 7>",
+  "gate_type": "<one of the 10>",
   "fired_at": "2026-04-24T20:30:00Z",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
@@ -51,8 +53,8 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for v4.1.0+ when `gate_type: "review"`. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 8 listed in §1. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`). JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 10 listed in §1. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -177,7 +179,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "dry_run": false,
   "gates_run": [
     {
-      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | visual-regression | visual-parity",
+      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity",
       "kind": "hard-block | soft",
       "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
       "envelope_path": "<task>/validations/latest/<gate>.json or null",
@@ -187,11 +189,63 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   ],
   "overall_verdict": "pass | fail | bypassed",
   "pr_ready": true,
-  "pr_body_path": "<task>/PR_BODY.md or null"
+  "pr_body_path": "<task>/PR_BODY.md or null",
+  "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
 
 `user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+
+**`dispatch_plan` (v1.2+, optional).** `/review`'s change-impact dispatcher (v4.11.0+, `commands/review.md` step 6 / `references/visual-review/change-impact-dispatch.md`) records what it recommended, what the user opted into, and what actually ran. It is a new **optional key inside the existing `review` payload** — NOT a new `gate_type`. Absent on projects with no visual-review setup, and on `_review.json` written before v4.11.0.
+
+```json
+"dispatch_plan": {
+  "diff_signature": ["**/*.css", "**/*.twig"],
+  "gates_recommended": ["visual_regression"],
+  "gates_opted_in": ["visual_regression"],
+  "gates_run": ["visual_regression"],
+  "gates_declined": [{"gate": "e2e", "reason": "user-declined-not-recommended"}],
+  "parity_auto": false,
+  "overrides": {"include": [], "skip": []},
+  "rule_source": "default"
+}
+```
+
+| Field | Type | Contract |
+|---|---|---|
+| `diff_signature` | list | Distinct rule globs the merge-base diff matched (`change-impact-classify.sh` output). |
+| `gates_recommended` | list | What the classifier recommended (`e2e` / `visual_regression`). |
+| `gates_opted_in` | list | What the user opted into for the task (`## Review Gates` block in `task.md`). |
+| `gates_run` | list | Opted-in gates that actually fired (an opted-in gate whose subtask B/C/D has not shipped is excluded here and recorded `skipped-not-shipped` in the outer `gates_run[]`). |
+| `gates_declined` | list | `{gate, reason}` — gates the **user declined** at opt-in. An opted-in gate whose owning subtask (B/C/D) has not shipped is **not** listed here — it appears in the outer `gates_run[]` as `verdict: "skipped-not-shipped"`. |
+| `parity_auto` | bool | `true` when `visual_parity` auto-ran (design-implementation task). Parity is never part of the opt-in question. |
+| `overrides` | object | `{include: [], skip: []}` — one-run `--include-<gate>` / `--skip-<gate>` flags applied (not persisted to `task.md`). |
+| `rule_source` | string | `"default"` or `"project-override"` — which ruleset the classifier used. |
+
+**Gate-name forms.** `dispatch_plan.*` arrays (`gates_recommended`, `gates_opted_in`, `gates_run`, `gates_declined[].gate`) use the **underscore** form (`visual_regression`, `e2e`); the outer `gates_run[].name` uses the **hyphen** form (`visual-regression`, `visual-parity`), matching `/review`'s `--skip-<gate>` flag convention. The two map 1:1 (`s/_/-/`). See `references/visual-review/change-impact-dispatch.md` "Gate-name forms".
+
+### 5.9 `e2e` (v1.2+)
+
+Written by the ATK-backed E2E gate (`/validate:e2e`, Task B). Task A reserves the
+`gate_type` value and the `_e2e.json` file slot; the `gate_specific` payload shape is
+defined by Task B. Minimum expected shape — a `verdict` and a pointer to the shared
+validation envelope:
+
+```json
+"gate_specific": {
+  "verdict": "pass | warning | fail | skipped",
+  "envelope_path": "<task>/validations/latest/e2e.json or null"
+}
+```
+
+### 5.10 `visual_regression` (v1.2+)
+
+Written by the reworked Visual Regression gate (`/validate:visual-regression`, Task C).
+Task A reserves the `gate_type` value and the `_visual_regression.json` file slot; the
+`gate_specific` payload shape is defined by Task C. Minimum expected shape mirrors
+§5.9. `gate-audit-write.sh` validates only the top-level envelope and `schema_version`,
+not the per-gate payload — so B and C may shape `gate_specific` freely within the §5
+additive-field policy.
 
 ## 6. Invariants
 
@@ -207,7 +261,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 - **Minor bumps** (`1.1`) are additive: new gate_type values, new optional top-level fields, new optional per-gate fields. Existing consumers ignore the new fields.
 - **Patch bumps** do not exist for schema versioning.
 
-v1.0 covers all 7 v4.0.0 gate_types. v1.1 (drupal-dev-framework v4.1.0) adds `review` gate_type — additive only, existing v1.0 consumers unaffected.
+v1.0 covers all 7 v4.0.0 gate_types. v1.1 (drupal-dev-framework v4.1.0) adds `review` gate_type — additive only, existing v1.0 consumers unaffected. v1.2 (drupal-dev-framework v4.11.0) adds `e2e` + `visual_regression` gate_types and the `review` payload's optional `dispatch_plan` key — additive only; existing v1.0/v1.1 consumers ignore the new gate_types and the new key.
 
 ## 8. Non-goals
 

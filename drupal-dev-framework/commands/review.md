@@ -18,11 +18,11 @@ Phase 4 of a task — run all hard-blocking validation gates before PR creation.
 /drupal-dev-framework:review <task> --dry-run           # run, write audit, don't mark Phase 4 [x]
 /drupal-dev-framework:review <task> --rerun-failed      # only re-run gates that failed last run
 /drupal-dev-framework:review <task> --no-pr-body        # skip writing PR_BODY.md
-/drupal-dev-framework:review <task> --skip-<gate> <r>   # bypass a gate; reason recorded in audit
+/drupal-dev-framework:review <task> --skip-<gate> <r>   # skip a gate (reason recorded); --include-<gate> forces a dispatch gate on
 /drupal-dev-framework:review <task> --allow-dirty       # skip working-tree warning
 ```
 
-`<gate>` whitelist: `tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate`. Unknown gate names → exit 2. Reasons must be non-empty and must NOT start with `--` (would eat the next flag) → exit 2.
+`<gate>` whitelist: `tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate` (hard-block — `--skip-` bypasses) plus `e2e | visual-regression | visual-parity` (step-6 dispatch gates — `--skip-` = off this run, `--include-` = on this run). Unknown gate names → exit 2. Reasons non-empty, must NOT start with `--` → exit 2.
 
 `<task-name>` must match `^[a-z0-9_-]+$`. Path traversal (`..`, `/`) and special chars rejected → exit 2. Missing arg AND no session-context task → exit 2 with usage.
 
@@ -44,7 +44,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 5. **Run hard-block gates sequentially.** For each: invoke flow inline (do NOT shell out). Capture per-gate envelope at `<task>/validations/latest/<gate>.json` per `references/validation-gate-result.md` v1.0. Add to `gates_run[]`. Order: tdd → solid → dry → security → guides → validate-playbook-adherence → skill-review (conditional) → plugin-validate (conditional).
 
-6. **Run soft gates** (visual-regression, visual-parity per `commands/validate-all.md` semantics — interactive classification, never auto-block).
+6. **Change-impact dispatch** (v4.11.0+ — replaces v3.13.0's always-soft visual step). Execute `references/visual-review/change-impact-dispatch.md` in full — a RECOMMENDER, not an enforcer. Fast path: no `**Visual Review:**` field in `project_state.md` (or `disabled`) → run zero new gates, print `no visual-review surfaces configured; run /setup-* to opt in`, omit `dispatch_plan` from the payload entirely, skip to step 7. Otherwise: `change-impact-classify.sh <task>` classifies the merge-base diff → recommended gates; the user opts in **per task** via a `## Review Gates` block in `task.md` (written once, never re-asked); opted-in **and** dispatch-ready gates run soft; `visual_parity` auto-runs on design-implementation tasks; unshipped B/C/D gates → `skipped-not-shipped`. `--include-/--skip-<gate>` override the stored opt-in for this run only. Assemble `dispatch_plan` (`gate-audit-schema.md` §5.8) for the step-10 payload.
 
 7. **Apply `--skip-<gate> <reason>` flags.** Validate gate name against whitelist + reason non-empty + reason not `--`-prefixed (else exit 2). For each valid flag: don't run the gate; set `gates_run[].verdict: "bypassed"` and `bypass_reason: <reason>`.
 
@@ -55,7 +55,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 9. **On `fail` (no bypass): mandated-wording prompt.** Display verbatim per template `review-gate-fail` (literal text below; mirrors v1.2 template when sibling ships, byte-identical fallback otherwise). Block on `[r]/[s]/[a]` — no default. `[r]` exits 1 (user fixes, re-runs). `[s]` prompts per failed gate for free-text reason, populates `bypass_reason`, sets `overall_verdict: "bypassed"`. `[a]` exits 1 without writing `_review.json`. **Non-`r/s/a` input: re-display the prompt verbatim. Do not infer choice.**
 
-10. **Write `_review.json`** via `gate-audit-write.sh <task> review <payload>` (atomic temp+rename; schema_version `1.1`). `gate_specific.pr_ready: true` ONLY when `overall_verdict == "pass"` AND not `--dry-run`. Bypass paths → `pr_ready: false` (user picked the bypass; they pick whether the PR is ready). Dry-run → `pr_ready: false` regardless. `gates_run[]` is the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+10. **Write `_review.json`** via `gate-audit-write.sh <task> review <payload>` (atomic temp+rename; schema_version `1.2` for v4.11.0+ — the `review` payload schema grew the optional `dispatch_plan` key). When step 6's dispatcher ran, the payload carries `dispatch_plan` (`gate-audit-schema.md` §5.8); when visual review is not set up, the key is omitted. `gate_specific.pr_ready: true` ONLY when `overall_verdict == "pass"` AND not `--dry-run`. Bypass paths → `pr_ready: false` (user picked the bypass; they pick whether the PR is ready). Dry-run → `pr_ready: false` regardless. `gates_run[]` is the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
 
 11. **Write `PR_BODY.md`.** Skip if `--no-pr-body` OR `--dry-run` OR `pr_ready != true`. Template: H1 task title, Summary (Goal first paragraph), AC count `[x]`/total, gate verdicts table, audit links footer.
 
@@ -104,21 +104,19 @@ Audit: {{audit_path}}
 ```
 
 ## `--rerun-failed` and `--team` semantics
-
 `--rerun-failed` reads previous `_review.json gate_specific.gates_run[]`, filters `verdict == "fail" AND bypass_reason == null`, runs only those, re-aggregates (overwrite). Preserves passed-gate envelopes; soft gates preserve prior verdicts. Refuses with "no valid prior run" if `_review.json` absent/empty/malformed/missing `gate_specific.gates_run`.
 
 `--team` invokes `/validate:team` directly; inner fallback (auto-falls-back to `/validate:all` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != "1"` or `TeamCreate` fails) handles unavailability. `_review.json gate_specific.mode` records actual: `"team"`, `"all"`, `"team-fallback-to-all"`.
 
 ## When to escalate — `claude ultrareview`
-
 After `/review`'s gates pass, a high-stakes PR (production-adjacent, security-critical, or large) can get a deeper pass: `claude ultrareview <PR>` (or `/ultrareview`) runs a multi-agent reviewer fleet in a cloud sandbox that independently reproduces and verifies each finding. **Explicit user opt-in only** — never run it automatically from `/review`; it bills as usage credits (~$5–20/run beyond a small free-run allotment). The `code-quality-tools:ultrareview` skill wraps the same platform check; either entry point works.
-
 **Tip — long runs.** `/review`, `/research-team`, and `/validate:team` take minutes. Enable `channelsEnabled` in user settings for a push notification on completion. `/goal` pairs with `/review` for unattended green-until-done runs (e.g. `/goal every hard-block gate in <task>/validations/latest reports pass`) — see `CONVENTIONS.md` "Condition-checked autonomy with `/goal`".
 
 ## Pointers
 
 - Full walkthrough: `references/review-phase-walkthrough.md` (sibling `plumbing_docs_tests`)
-- Audit shape: `references/gate-audit-schema.md` v1.1 (`gate_type: "review"`)
+- Step 6 dispatcher: `references/visual-review/change-impact-dispatch.md` (v4.11.0+)
+- Audit shape: `references/gate-audit-schema.md` v1.2 (`gate_type: "review"`; `dispatch_plan` key)
 - Per-gate envelope: `references/validation-gate-result.md` v1.0
 - Project opt-out: `**Review Required:** false` keeps gates at `/complete` (legacy v4.0.2 posture)
 

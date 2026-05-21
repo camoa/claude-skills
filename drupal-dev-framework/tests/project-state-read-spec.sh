@@ -123,6 +123,82 @@ else
   fail_check "eval present in script ($EVAL_COUNT instances) — RCE regression"
 fi
 
+# === Test 4: Visual Review field (v4.11.0+) ===
+
+vr_check() {
+  local label="$1" line="$2" filter="$3" expected="$4"
+  printf '# Test\n%s\n' "$line" > "$TMPDIR/project_state.md"
+  local actual
+  actual=$(bash "$READER" "$TMPDIR" 2>/dev/null | jq -c "$filter")
+  if [ "$actual" = "$expected" ]; then
+    pass_check "$label ($filter = $expected)"
+  else
+    fail_check "$label — $filter returned '$actual' (expected '$expected')"
+  fi
+}
+
+# enabled + path
+vr_check "VR enabled" "**Visual Review:** enabled .visual-review/registry.yml" \
+  '.visualReview' '{"enabled":true,"registryPath":".visual-review/registry.yml"}'
+# disabled + path
+vr_check "VR disabled" "**Visual Review:** disabled .visual-review/registry.yml" \
+  '.visualReview.enabled' 'false'
+# case-insensitive header
+vr_check "VR header lowercase" "**visual review:** enabled .visual-review/registry.yml" \
+  '.visualReview.enabled' 'true'
+# absent → null
+printf '# Test\n' > "$TMPDIR/project_state.md"
+if [ "$(bash "$READER" "$TMPDIR" 2>/dev/null | jq -c '.visualReview')" = "null" ]; then
+  pass_check "VR absent → visualReview: null"
+else
+  fail_check "VR absent did not yield null"
+fi
+# bad state → warning + enabled:false
+vr_check "VR bad state → enabled false" "**Visual Review:** bogus .visual-review/registry.yml" \
+  '.visualReview.enabled' 'false'
+out=$(bash "$READER" "$TMPDIR" 2>/dev/null)  # last write was the bad-state file
+if echo "$out" | jq -e '.warnings[] | select(.code == "visual_review_bad_state")' >/dev/null; then
+  pass_check "VR bad state → visual_review_bad_state warning"
+else
+  fail_check "VR bad state did not emit visual_review_bad_state warning"
+fi
+# no path → warning + registryPath null
+printf '# Test\n**Visual Review:** enabled\n' > "$TMPDIR/project_state.md"
+out=$(bash "$READER" "$TMPDIR" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.visualReview.registryPath')" = "null" ] \
+   && echo "$out" | jq -e '.warnings[] | select(.code == "visual_review_no_path")' >/dev/null; then
+  pass_check "VR no path → registryPath null + visual_review_no_path warning"
+else
+  fail_check "VR no path handling — got: $(echo "$out" | jq -c '.visualReview, .warnings')"
+fi
+# path escape → warning + visualReview null
+printf '# Test\n**Visual Review:** enabled ../../../../etc/passwd\n' > "$TMPDIR/project_state.md"
+out=$(bash "$READER" "$TMPDIR" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.visualReview')" = "null" ] \
+   && echo "$out" | jq -e '.warnings[] | select(.code == "visual_review_path_escape")' >/dev/null; then
+  pass_check "VR path escape → visualReview null + visual_review_path_escape warning"
+else
+  fail_check "VR path escape handling — got: $(echo "$out" | jq -c '.visualReview, .warnings')"
+fi
+# absolute path → rejected (F-04 regression — would otherwise survive the prefix guard)
+printf '# Test\n**Visual Review:** enabled /etc/passwd\n' > "$TMPDIR/project_state.md"
+out=$(bash "$READER" "$TMPDIR" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.visualReview')" = "null" ] \
+   && echo "$out" | jq -e '.warnings[] | select(.code == "visual_review_path_escape")' >/dev/null; then
+  pass_check "VR absolute path → visualReview null + visual_review_path_escape warning"
+else
+  fail_check "VR absolute path handling — got: $(echo "$out" | jq -c '.visualReview, .warnings')"
+fi
+# '.' path → rejected (F-10 regression — resolves to the project folder itself)
+printf '# Test\n**Visual Review:** enabled .\n' > "$TMPDIR/project_state.md"
+out=$(bash "$READER" "$TMPDIR" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.visualReview')" = "null" ] \
+   && echo "$out" | jq -e '.warnings[] | select(.code == "visual_review_path_escape")' >/dev/null; then
+  pass_check "VR '.' path → visualReview null + visual_review_path_escape warning"
+else
+  fail_check "VR '.' path handling — got: $(echo "$out" | jq -c '.visualReview, .warnings')"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nproject-state-read.sh parsing invariants violated.\n' >&2
   exit 1
