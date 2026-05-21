@@ -174,3 +174,4 @@ A run that fails or is stopped **still consumes** one of the three free Pro/Max 
 - `/code-quality:audit` — full local audit (all tools, no rubric)
 - `/code-quality:generate-review-md` — tune managed Code Review (separate from ultrareview)
 - `skills/code-quality-audit/references/scheduled-sweeps.md` — scheduling reviews across local and cloud surfaces
+- `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to pick up review or fix work on a PR; distinct from `/ultrareview <PR>`, which clones a PR fresh to review it.

@@ -65,6 +65,11 @@ Not for: production quality automation — restart the session and the loop is g
 
 **`/loop` vs `/goal`:** `/loop` re-runs a prompt on a fixed **time interval** and stops only when you stop it. `/goal` re-runs after every turn and stops when a fresh evaluator model confirms a **completion condition** from the transcript — use it for "audit until clean" / "fix until tests pass" loops (see `commands/audit.md` and `commands/tdd.md`). Neither is a CI primitive: both keep the current session running.
 
+## Autonomous & headless runs
+
+- **Proactive output style.** A `/goal`-driven audit-remediation loop (see `commands/audit.md`) or a TDD GREEN loop runs more smoothly under the built-in **Proactive** output style — it makes Claude execute immediately and prefer action over planning, the same guidance as auto mode but *without* changing your permission mode (you still see permission prompts). Switch via `/config` → Output style. Do **not** use it for interactive review where you want Claude to pause and ask. This plugin does not ship an output style — only the built-in is referenced.
+- **`--dangerously-skip-permissions`.** Running an unattended audit with this flag activates `bypassPermissions` mode, which skips *all* permission prompts — including writes to `.git`, `.claude`, `.vscode`, `.idea`, and `.husky` (root- and home-directory removals still circuit-break). Audits are read-heavy but the linters and `git`-aware scanners do touch the tree; only use this flag in an isolated environment (container/VM). To forbid it organization-wide, set `permissions.disableBypassPermissionsMode` to `"disable"` in managed settings.
+
 ## See Also
 
 - `desktop-sweep-template.md` — full Desktop Scheduled Task template (primary)

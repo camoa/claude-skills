@@ -94,6 +94,8 @@ These spawn 3-agent teams that analyze from competing perspectives, cross-challe
 
 Each agent runs in an isolated worktree with scoped tool access and cost-controlled turns.
 
+> To control which of this plugin's commands and skills are available, use `/plugin` — plugin skills are not affected by the `skillOverrides` setting, and slash commands are not skills, so neither can be muted that way.
+
 ## How It Works
 
 ### Conversational Use

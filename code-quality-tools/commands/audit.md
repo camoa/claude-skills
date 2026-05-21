@@ -132,6 +132,8 @@ For recurring sweeps (daily, weekly, hourly security watch), pick a surface base
 
 Surface comparison and decision tree: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/scheduled-sweeps.md`.
 
+**Run it without blocking.** A full audit is a ~10-minute run. `claude --bg "/code-quality:audit"` dispatches it as a background session that keeps running with no terminal attached while you keep working — monitor it with `claude agents` (the agent-view TUI) and pull results in a script with `claude logs <id>`. This is on-demand-async; the scheduled surfaces above are clock-driven.
+
 ## Wire to CI
 
 For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/premerge-gate-routine.md`.

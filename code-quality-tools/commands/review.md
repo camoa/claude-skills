@@ -197,3 +197,4 @@ To gate merges on Code Review findings, parse the **Claude Code Review** check r
 - `/code-quality:generate-review-md` — generate a v2 REVIEW.md tailored to the project
 - `/code-quality:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
 - `@claude review once` — GitHub PR comment that triggers one managed Code Review without subscribing the PR to future push-triggered reviews. Requires the managed Code Review service enabled on the repository. Useful for long-running PRs with frequent rebases.
+- `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to act on review findings in the original session's context.

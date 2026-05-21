@@ -96,6 +96,10 @@ To customize, create `.code-quality.json`:
 }
 ```
 
+## Run in the background
+
+To run a security scan without blocking your session, dispatch it as a background session: `claude --bg "/code-quality:security"`. It keeps running with no terminal attached — monitor it with `claude agents` and pull results with `claude logs <id>`.
+
 ## Error Handling
 
 Common issues:

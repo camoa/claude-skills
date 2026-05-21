@@ -11,6 +11,7 @@ hooks:
       hooks:
         - type: command
           command: "${CLAUDE_PLUGIN_ROOT}/hooks/lint-changed.sh"
+          args: []
           timeout: 30
   PermissionDenied:
     - matcher: "Read|Grep|Glob"

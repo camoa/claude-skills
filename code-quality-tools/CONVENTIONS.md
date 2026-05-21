@@ -14,6 +14,7 @@
 - Description must be pushy — include "Use proactively" and enforcement where appropriate
 - Body uses imperative voice — instructions, not documentation
 - Under 500 lines per SKILL.md
+- Keep the `description` (plus any `when_to_use`) within `maxSkillDescriptionChars` — default 1,536 — since text past the cap is truncated in the skill listing Claude sees each turn; put the key trigger phrases first
 
 ## Commands
 - Frontmatter must include: description, allowed-tools
@@ -25,6 +26,8 @@
 
 ## Agent Frontmatter Limitations
 Agent spawn prompts in this plugin document `effort`, `model`, `maxTurns`, and `isolation` as intent markers inside Markdown. These are NOT evaluated as YAML frontmatter — they are instructions to Claude on how to configure the spawned agent. The actual agent launch mechanism (TeamCreate/TaskCreate) is what enforces model routing and isolation. Do not add `hooks`, `mcpServers`, or `permissionMode` to agent spawn prompt blocks — those fields are not processed in the agent spawning context and will be silently ignored.
+
+Per the Subagents guide: a subagent's `name` frontmatter is the value hooks receive as `agent_type`, and `permissionMode` / `hooks` are specifically ignored for *plugin* subagents. See that guide's "what loads at startup" section for the full list of what reaches a spawned agent.
 
 ## Hooks
 
@@ -74,6 +77,8 @@ Users can run quality checks on a schedule during long coding sessions using Cla
 Session-scoped — checks stop when the session exits. 3-day auto-expiry prevents forgotten loops. Up to 50 concurrent tasks.
 
 For CI-based recurring checks, use GitHub Actions or GitLab CI instead of `/loop`.
+
+For a **condition-checked** loop — run until a stated end state holds rather than on a clock — use `/goal` instead of `/loop`. `commands/audit.md` and `commands/tdd.md` document worked `/goal` patterns (audit-until-clean, TDD GREEN phase). Like `/loop`, `/goal` is session-scoped and not a CI primitive.
 
 ## Online Dev-Guides
 For Drupal-specific patterns when explaining violations or suggesting fixes, fetch the guide index:
