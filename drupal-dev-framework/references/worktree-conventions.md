@@ -1,4 +1,4 @@
-# Worktree Conventions v1.0
+# Worktree Conventions v1.1
 
 **Introduced:** drupal-dev-framework v3.16.0
 **Owner:** `commands/worktree.md`, `commands/worktree-prune.md`, `commands/implement.md` (recommendation), `commands/complete.md` (lifecycle)
@@ -135,13 +135,116 @@ The existing `session-context-writer` skill (v1.4.0) writes to `~/.claude/drupal
 
 `/worktree` pre-seeds the new session-context file with `task: null, taskPath: null, project: <name>, projectPath: <abs>` so the file exists for hooks; the user's first `/research` or `/implement` populates the task field.
 
-## 11. Versioning policy
+## 11. Claude Code's native worktree support
+
+Claude Code ships its own git-worktree features, separate from this framework's
+`/worktree` command. The two coexist; this section maps the relationship so a
+user running framework work inside native worktrees is not surprised.
+
+### 11.1 Two entry points
+
+| Entry point | Creates | Branch | Owned by |
+|---|---|---|---|
+| `/drupal-dev-framework:worktree <task>` | `.worktrees/<task>/` | `feature/<task>` | this framework |
+| `claude --worktree <name>` (or `-w`) | `.claude/worktrees/<name>/` | `worktree-<name>` | Claude Code |
+
+The framework's `/worktree` is task-scoped: it resolves the task folder, runs
+Drupal/DDEV-aware setup, and pre-seeds session-context (§2, §10). The native
+`--worktree` flag is session-scoped — it starts a whole Claude Code session in a
+fresh worktree. Mid-session, asking Claude to "work in a worktree" triggers the
+`EnterWorktree` tool, which creates one the same way. Native `--worktree`
+requires the workspace-trust dialog to have been accepted (run `claude` once in
+the directory first).
+
+### 11.2 Reviewing a PR in a worktree
+
+`claude --worktree "#1234"` (or a full GitHub pull-request URL) fetches
+`pull/1234/head` and creates a worktree at `.claude/worktrees/pr-1234`. This
+pairs naturally with Phase 4 `/review`: open the PR in its own checkout, run
+`/review` there, and the main working tree stays untouched. The framework does
+not wrap this — it is a native CLI entry point, used directly.
+
+### 11.3 Copying gitignored files — `.worktreeinclude`
+
+A native worktree is a fresh checkout, so gitignored files (`.env`,
+`settings.local.php`, parts of `.ddev/`) are absent. A `.worktreeinclude` file
+at the project root — `.gitignore` syntax — lists gitignored files to copy into
+each new native worktree. Only files that both match a pattern AND are
+gitignored are copied, so tracked files are never duplicated. A typical Drupal
+entry:
+
+```text
+.env
+web/sites/default/settings.local.php
+```
+
+`.worktreeinclude` applies to `--worktree`, `EnterWorktree`, and subagent
+worktrees. It is NOT processed when a `WorktreeCreate` hook is configured
+(§11.6). The framework's own `/worktree` runs explicit setup (`commands/worktree.md`
+Step 7) rather than relying on `.worktreeinclude`.
+
+### 11.4 Base ref — `worktree.baseRef` vs the framework's HEAD default
+
+The `worktree.baseRef` setting governs which ref *native* worktrees branch from:
+
+- `"fresh"` (default) — branches from `origin/<default-branch>`, a clean tree
+  matching the remote.
+- `"head"` — branches from local `HEAD`, carrying unpushed commits and
+  feature-branch state.
+
+It applies to `--worktree`, the `EnterWorktree` tool, and subagent isolation.
+
+The framework's `/worktree` command does **not** read `worktree.baseRef`. It has
+its own `--base <ref>` flag and defaults `BASE` to `git rev-parse HEAD` — i.e.
+the `"head"` semantic. This is deliberate: Drupal task work frequently sits on
+uncommitted local patches and feature-branch state that a `"fresh"` base would
+drop. Users who want a clean base pass `--base origin/main` explicitly.
+
+### 11.5 Background-session isolation — `worktree.bgIsolation`
+
+`worktree.bgIsolation` (v2.1.143+) controls how *background* sessions
+(`claude --bg`, `/background`, Agent View) isolate their edits:
+
+- `"worktree"` (default) — `Edit`/`Write` in the main checkout are blocked until
+  the background session calls `EnterWorktree`, so background work lands in a
+  `.claude/worktrees/` worktree.
+- `"none"` — background jobs edit the working copy directly.
+
+This is a background-session mechanism, finer-grained than and independent of
+the framework's `/worktree`. A user who runs framework work in background
+sessions will accumulate native worktrees under `.claude/worktrees/` — see §11.7.
+
+### 11.6 Non-git VCS — `WorktreeCreate` / `WorktreeRemove`
+
+`WorktreeCreate` / `WorktreeRemove` hooks let non-git VCSs (SVN, Perforce,
+Mercurial) supply custom worktree creation and cleanup. Drupal projects are git
+in practice, so the framework neither ships nor needs these hooks — noted only
+so the relationship is complete.
+
+### 11.7 Cleanup boundaries
+
+`/worktree-prune` scans only `.worktrees/` and `worktrees/` — the framework's own
+layout. It does **not** see `.claude/worktrees/` (native `--worktree` sessions,
+PR worktrees, background isolation). Native worktrees are managed by:
+
+- Agent View (`Ctrl+X` to delete a background-session worktree),
+- `git worktree remove` / `git worktree prune`, and
+- the `cleanupPeriodDays` auto-sweep, which removes *orphaned subagent*
+  worktrees older than the cutoff that have no uncommitted changes, untracked
+  files, or unpushed commits. Worktrees created with `--worktree` are never
+  swept.
+
+The `cleanupPeriodDays` auto-sweep complements `/worktree-prune`; it does not
+replace it — the framework's prune is task-aware (checks branch-merged and
+task-completed), the native sweep is not.
+
+## 12. Versioning policy
 
 - **Major bumps** (`2.0`) are breaking: changes to directory priority semantics, branch-naming default, signal-strength thresholds, lifecycle path order.
-- **Minor bumps** (`1.1`) are additive: new optional signal types, new lifecycle paths, additional refusal cases, new flags.
-- v1.0 is committed for v3.16.0.
+- **Minor bumps** (`1.1`) are additive: new optional signal types, new lifecycle paths, additional refusal cases, new flags, new documentation sections.
+- v1.0 committed for v3.16.0; v1.1 (additive — §11 native worktree support) for v4.7.0.
 
-## 12. Non-goals (deferred to v2)
+## 13. Non-goals (deferred to v2)
 
 - Configurable detection-window beyond 2 hours
 - Detection signals on `/research` and `/design`
