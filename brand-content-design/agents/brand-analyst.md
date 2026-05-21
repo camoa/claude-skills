@@ -1,11 +1,11 @@
 ---
 name: brand-analyst
 description: Analyze brand assets (screenshots, documents, logos, websites) to extract brand elements including color palettes with color theory analysis. Use proactively when user provides assets for brand analysis.
-version: 3.1.2
+version: 3.1.3
 model: sonnet
 maxTurns: 25
 memory: project
-allowed-tools: Read, Glob, WebFetch, Write
+tools: Read, Glob, WebFetch, Write
 ---
 
 # Brand Analyst Agent

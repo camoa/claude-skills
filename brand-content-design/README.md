@@ -187,7 +187,7 @@ Generates two files for your template:
 ### Agent
 | Agent | Model | Features |
 |-------|-------|----------|
-| `brand-analyst` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write, Bash`) |
+| `brand-analyst` | sonnet | `memory: project`, scoped `tools: Read, Glob, WebFetch, Write` |
 
 ### Skills (4)
 | Skill | Model | Invocation |

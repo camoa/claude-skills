@@ -124,6 +124,7 @@ All detailed guides are in the `references/` directory:
 - `references/dependency-verification.md` — how to verify external calls
 - `references/contract-patterns.md` — all code contract types
 - `references/ai-code-auditing.md` — testing AI-generated code
+- `references/fork-vs-fresh.md` — decision record: why `/test-team` spawns fresh-context (not forked) teammates
 - `references/hybrid-testing.md` — module-level testing strategy
 - `references/common-flaws.md` — catalog of frequent bugs
 - `references/advanced-techniques.md` — progressive injects, red team testing, attack surface analysis, AAR format

@@ -32,9 +32,9 @@ HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 
 | Agent | Model | Features |
 |-------|-------|----------|
-| `ajax-analyzer` | sonnet | Read-only (`disallowedTools: Edit, Write`), scans AJAX patterns |
-| `htmx-recommender` | sonnet | Read-only (`disallowedTools: Edit, Write, Bash`), recommends patterns |
-| `htmx-validator` | sonnet | Read-only (`disallowedTools: Edit, Write`), validates implementations |
+| `ajax-analyzer` | sonnet | Read-only (`tools: Read, Grep, Glob`), scans AJAX patterns |
+| `htmx-recommender` | sonnet | Read-only (`tools: Read, Glob`), recommends patterns |
+| `htmx-validator` | sonnet | Read-only (`tools: Read, Grep, Glob`), validates implementations |
 
 ## Skill
 
@@ -73,6 +73,36 @@ The `htmx-development` skill auto-activates when discussing:
 ## Scope
 
 All agents and commands focus on **custom modules only**. They will not scan or modify contrib or core modules unless explicitly requested.
+
+## Tips
+
+### Deciding HTMX vs AJAX with `/branch`
+
+The core decision this plugin supports is HTMX-vs-AJAX. When a migration could
+go either way, use Claude Code's `/branch` to fork the session at the decision
+point and try each path against the *same* loaded context — implement the HTMX
+version in one branch, keep the AJAX version in another, then compare. The
+original session is unchanged and remains in the session picker.
+
+### Effort-adaptive depth
+
+The `htmx-development` skill scales its work to the active effort level
+(`${CLAUDE_EFFORT}`): `low` emits HTMX scaffolding and stops; `medium` and above
+also run the validation checklist inline; `high`/`xhigh`/`max` additionally
+cross-reference the Drupal forms and JS-development dev-guides.
+
+### Skill visibility (`skillOverrides`)
+
+The `htmx-development` skill triggers proactively on common terms like "AJAX"
+and "Drupal". On a project where that is noise, use the `skillOverrides`
+setting in `.claude/settings.json` (Claude Code v2.1.129+) to dial it back
+without editing the plugin:
+
+- `"htmx-development": "user-invocable-only"` — suppress proactive
+  auto-invocation, keep the skill loadable on request.
+- `"htmx-development": "name-only"` — keep it discoverable for cross-skill
+  delegation but drop the aggressive proactive triggers.
+- `"htmx-development": "off"` — hide it entirely.
 
 ## References
 

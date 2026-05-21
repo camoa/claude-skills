@@ -19,6 +19,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed (pre-existing)
 - **`visual-content` dangling reference** — `visual-content/SKILL.md` cited `references/slide-composition-rules.md`, but that file only existed under the sibling `brand-content-design` skill's `references/`. Copied it into `visual-content/references/` so the skill is self-contained (validator flagged it as a missing-reference error).
 - **`commands/outline.md` argument-hint** — quoted `argument-hint: "<template-name>"` (was unquoted; validator FM02 angle-bracket nudge).
+- **`brand-analyst` agent tool field** — the agent declared its tool list as `allowed-tools`, but the recognized agent frontmatter field is `tools` (`allowed-tools` is the skill/command field — silently ignored on an agent, so the scoping was not actually applied). Renamed `allowed-tools:` → `tools: Read, Glob, WebFetch, Write`; agent version 3.1.2 → 3.1.3. (README agent table corrected — `brand-analyst` is not read-only; it has `Write` to persist analysis results.)
 
 ### Hygiene
 - Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md` (validator ST03 — a plugin-root `CLAUDE.md` is not loaded as end-user context).

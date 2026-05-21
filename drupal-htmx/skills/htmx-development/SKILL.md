@@ -102,6 +102,20 @@ The FAPI quick map (`#ajax` → `Htmx` equivalents), command-level mappings, and
 7 detailed before/after patterns are in `references/migration-patterns.md` and
 `references/quick-reference.md`.
 
+## Effort-Adaptive Depth
+
+This skill's work forms a natural gradient — scaffold, validate, cross-reference.
+Scale it to the active effort level, `${CLAUDE_EFFORT}`:
+
+| `${CLAUDE_EFFORT}` | Depth |
+|--------------------|-------|
+| `low` | Emit the HTMX scaffolding (Quick Start + the relevant Core Pattern) and stop. |
+| `medium` and above | Also run the Validation Checklist below inline against what was produced. |
+| `high` / `xhigh` / `max` | Additionally delegate to `/dev-guides-navigator` for `drupal/forms` and `drupal/js-development` to cross-reference FAPI and behavior patterns. |
+
+When `${CLAUDE_EFFORT}` is unset (model without effort support), default to the
+`medium` depth.
+
 ## Validation Checklist
 
 When reviewing HTMX implementations:
