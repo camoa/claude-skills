@@ -19,6 +19,7 @@
 #     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
 #     "worktreeByDefault": bool,
 #     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
+#     "visualReview": null | {"enabled": bool, "registryPath": "<rel>" | null},  # v4.11.0+
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
@@ -28,11 +29,19 @@
 #   project_state_md_missing  — project_state.md not in folder
 #   code_path_unknown         — project_state.md has no Code path line (first-use case)
 #   code_path_missing         — Code path declares a directory that does not exist
+#   visual_review_bad_state   — **Visual Review:** state token is not enabled|disabled
+#   visual_review_no_path     — **Visual Review:** line has a state but no registry path
+#   visual_review_path_escape — **Visual Review:** registry path escapes the project folder
 #
 # codePath sentinels in project_state.md:
 #   **Code path:** /abs/path    → non-null string
 #   **Code path:** (docs-only)  → null (docs-only project)
 #   (absent)                    → null + warning code_path_unknown
+#
+# Visual Review field (v4.11.0+):
+#   **Visual Review:** enabled .visual-review/registry.yml   → {enabled:true,  registryPath:"..."}
+#   **Visual Review:** disabled .visual-review/registry.yml  → {enabled:false, registryPath:"..."}
+#   (absent)                                                 → null (feature not set up)
 #
 # No writes. No side effects. This script only reads.
 
@@ -56,7 +65,8 @@ emit_json() {
     --arg up "${7:-null}" --arg ups "${8:-unset}" \
     --argjson pr "${9:-[]}" \
     --argjson wbd "${10:-false}" \
-    --arg rr "${11:-null}" '
+    --arg rr "${11:-null}" \
+    --argjson vr "${12:-null}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -68,8 +78,16 @@ emit_json() {
       playbookResolutions: $pr,
       worktreeByDefault: $wbd,
       reviewRequired: (if $rr == "null" then null elif $rr == "true" then true else false end),
+      visualReview: $vr,
       warnings: $w
     }'
+}
+
+# Append a {code, detail} object to the WARNINGS JSON array (v4.11.0+).
+# WARNINGS is initialized below; this helper resolves it at call time.
+add_warning() {
+  WARNINGS=$(jq -c -n --argjson w "$WARNINGS" --arg c "$1" --arg d "$2" \
+    '$w + [{code: $c, detail: $d}]')
 }
 
 # Resolve framework default playbook sets from the plugin's defaults.json.
@@ -259,5 +277,76 @@ RR_RAW=$(awk '
 ' "$PROJECT_STATE")
 RR_OUT=$(parse_bool "$RR_RAW")
 
+# === Visual Review parsing (v4.11.0+) ===
+# Grammar: **Visual Review:** <state> <relative-path>
+#   <state> ∈ {enabled, disabled}; <relative-path> must resolve WITHIN the project.
+# Absent line → visualReview: null (feature not set up).
+VR_RAW=$(awk '
+  /^\*\*[Vv]isual [Rr]eview:\*\*/ {
+    sub(/^\*\*[Vv]isual [Rr]eview:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+VR_OUT="null"
+if [ -n "$VR_RAW" ]; then
+  VR_STATE="${VR_RAW%%[[:space:]]*}"               # first whitespace-delimited token
+  VR_REST="${VR_RAW#"$VR_STATE"}"
+  VR_PATH="${VR_REST#"${VR_REST%%[![:space:]]*}"}"  # ltrim
+  VR_PATH="${VR_PATH%"${VR_PATH##*[![:space:]]}"}"  # rtrim
+
+  case "$(printf '%s' "$VR_STATE" | tr '[:upper:]' '[:lower:]')" in
+    enabled)  VR_ENABLED="true" ;;
+    disabled) VR_ENABLED="false" ;;
+    *)        VR_ENABLED="false"
+              add_warning "visual_review_bad_state" "expected enabled|disabled, got: $VR_STATE" ;;
+  esac
+
+  if [ -z "$VR_PATH" ]; then
+    add_warning "visual_review_no_path" "**Visual Review:** has a state but no registry path"
+    VR_OUT=$(jq -nc --argjson e "$VR_ENABLED" '{enabled: $e, registryPath: null}')
+  else
+    # The registry path MUST be relative (surface-registry-schema.md §2). An
+    # absolute path would survive the realpath prefix check below — joining
+    # "$PROJ_REAL/$VR_PATH" with an absolute $VR_PATH string-concatenates to
+    # "$PROJ_REAL/etc/passwd" (shell join, not Python os.path.join), which
+    # passes the prefix guard while the raw absolute path stays in registryPath.
+    # Reject leading-slash and the degenerate ./.. forms up front.
+    case "$VR_PATH" in
+      /*)
+        add_warning "visual_review_path_escape" "registry path must be relative, not absolute: $VR_PATH"
+        VR_OUT="null"
+        ;;
+      . | .. | ./ | ../)
+        add_warning "visual_review_path_escape" "registry path is not a file path: $VR_PATH"
+        VR_OUT="null"
+        ;;
+      *)
+        # Path-escape guard: the registry path must stay within the project
+        # folder. realpath -m resolves `..` without requiring the path to exist.
+        PROJ_REAL=$(realpath -m "$PROJECT_DIR" 2>/dev/null || echo "$PROJECT_DIR")
+        VR_ABS=$(realpath -m "$PROJ_REAL/$VR_PATH" 2>/dev/null || echo "")
+        if [ "$VR_ABS" = "$PROJ_REAL" ]; then
+          add_warning "visual_review_path_escape" "registry path resolves to the project folder, not a file: $VR_PATH"
+          VR_OUT="null"
+        else
+          case "${VR_ABS}/" in
+            "$PROJ_REAL"/*)
+              VR_OUT=$(jq -nc --argjson e "$VR_ENABLED" --arg p "$VR_PATH" \
+                '{enabled: $e, registryPath: $p}')
+              ;;
+            *)
+              add_warning "visual_review_path_escape" "registry path escapes the project folder: $VR_PATH"
+              VR_OUT="null"
+              ;;
+          esac
+        fi
+        ;;
+    esac
+  fi
+fi
+
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
-  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT"
+  "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT" \
+  "$VR_OUT"

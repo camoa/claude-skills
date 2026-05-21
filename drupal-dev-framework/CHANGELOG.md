@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.11.0] - 2026-05-21
+
+### Visual + E2E review gates — foundation (epic `visual_and_e2e_review_gates`, Task A)
+
+First release of the `visual_and_e2e_review_gates` epic. Task A ships the **shared foundation** the ATK E2E (B), Visual Regression v2 (C), and Visual Parity v2 (D) subtasks depend on — framework plumbing only: **zero new commands, zero runtime files in any consuming project**. The epic evolves the v3.13.0 visual gates onto committed Playwright test files + `@lullabot/playwright-drupal` and adds a change-impact dispatcher to `/review`.
+
+### Added
+
+- **Surface registry schema** (`references/visual-review/surface-registry-schema.md` v1.0) — the project-level "visual coverage manifest" v3.13.0 flagged as a v2 candidate. A project registry (`<project>/.visual-review/registry.yml`, YAML) plus a per-task fragment merged at `/complete`; forward-compatible with the v3.13.0 `.screenshots/<component>/<viewport>` store keys (`id` = `<component>`, `width×height` = `<viewport>`).
+- **Change-impact classifier** — `scripts/change-impact-classify.sh` maps a merge-base diff to recommended review gates via a glob rule table (`references/visual-review/change-impact-rules.{md,json}`), project-overridable at `<project>/.visual-review/change-impact.json` (full replacement). Standalone, exit-0-always, covered by `tests/change-impact-classify-spec.sh` (25 checks).
+- **Change-impact dispatcher** in `/review` step 6 (`references/visual-review/change-impact-dispatch.md`) — a **recommender, not an enforcer**: it classifies the diff and recommends gates; the user opts in **per task** via a `## Review Gates` block in `task.md` (written once, never re-asked). `visual_parity` auto-runs (soft) on design-implementation tasks. Replaces v3.13.0's always-soft step 6; writes a `dispatch_plan` into `_review.json`. `--include-/--skip-<gate>` one-run overrides.
+- **`playwright-base.config.ts`** reference template (`references/visual-review/`) — the shared two-runtime config contract (ATK `tests/e2e/` + Lullabot `tests/visual/` as separate `projects[]` entries). No `playwright.config.ts` is created in any project by Task A.
+- **`references/visual-review-walkthrough.md`** + a `CONVENTIONS.md` `## Visual + E2E Review` section — the three-surface / two-runtime / opt-in / evolve-not-greenfield model.
+
+### Changed
+
+- **`gate-audit-schema.md` v1.1 → v1.2** (additive) — the `gate_type` enum gains `e2e` and `visual_regression`; the `review` payload gains an optional `dispatch_plan` key. `scripts/gate-audit-write.sh` accepts the two new gate_types and `schema_version` `1.2`; existing v1.0/v1.1 audit JSON stays valid.
+- **`scripts/project-state-read.sh`** parses a new `**Visual Review:**` scalar field (`<state> <relative-path>`) into `visualReview: {enabled, registryPath}`; the registry path is prefix-checked against the project folder (path-escape rejected with a `visual_review_path_escape` warning). Absent field → `visualReview: null`. `tests/project-state-read-spec.sh` extended.
+- **`commands/review.md`** step 6 reworked from "always run the soft visual gates" to the change-impact dispatcher; `<gate>` whitelist extended with `e2e` / `visual-regression` / `visual-parity`; body held at 120/120 lines (a pre-existing 2-line overrun from v4.9.0 reclaimed in the same pass).
+
+### Notes
+
+- **Implement-time decision:** the change-impact rule files are **JSON**, not YAML — the framework ships no YAML parser and a shell script (`change-impact-classify.sh`) parses them. The surface registry stays YAML: no Task A script parses it; it is read only by Claude (the dispatcher) and the future Task B/C/D commands.
+- Until B/C/D ship, the dispatcher produces a `dispatch_plan` but runs no new gates — an opted-in gate whose subtask has not shipped records `verdict: "skipped-not-shipped"` (detected by a `<!-- visual-review:dispatch-ready -->` capability marker). The v3.13.0 `/validate:visual-regression`, `/validate:visual-parity`, and `/validate:all` commands are unchanged and remain independently invocable.
+
+### Component versions
+
+`references/gate-audit-schema.md` v1.1 → v1.2. New: `references/visual-review/` (`surface-registry-schema.md` v1.0, `change-impact-rules.md` v1.0 + `change-impact-rules.json`, `change-impact-dispatch.md` v1.0, `playwright-base.config.ts`), `references/visual-review-walkthrough.md`, `scripts/change-impact-classify.sh`, `tests/change-impact-classify-spec.sh`.
+
+Version: plugin.json + marketplace entry 4.10.0 → 4.11.0; marketplace metadata.version 1.14.57 → 1.14.58.
+
 ## [4.10.0] - 2026-05-21
 
 ### Guide-detection rework + reliability bug batch

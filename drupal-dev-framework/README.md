@@ -318,7 +318,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.10.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.11.0**.
 
 ## License
 
