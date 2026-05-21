@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.14.0] - 2026-05-21
+
+### Visual Parity v2 — `/setup-visual-parity` + reworked `/validate:visual-parity` (epic `visual_and_e2e_review_gates`, Task D)
+
+Task D of the `visual_and_e2e_review_gates` epic. **Evolves** the v3.13.0 visual-parity gate onto committed Playwright test files + `@lullabot/playwright-drupal`, mirroring the Task C (v4.13.0) visual-regression rework structurally 1:1. Builds on the Task A (v4.11.0) surface registry and reuses the Task C host-side Playwright stack.
+
+The central fix (Task D `research.md` Q1): v3.13.0 parity reported a bare pixel-% that an AI cannot act on. v4.14.0 emits a **two-layer diff** — a coarse `pixelmatch` pixel-% ("something is off") plus a **structured CSS-actionable diff** (`getComputedStyle` → `{selector, property, build, reference}` rows) that names *what* drifts (`font-weight 400 vs 500`, `gap 12px vs 16px`). The CSS diff is **tiered by reference type**: full for renderable references (`html-template`/`react-template`/`prod-url` — a DOM on both sides), `build-only` and honestly labelled for static `figma`/`image` PNGs (no DOM).
+
+### Added
+
+- **`commands/setup-visual-parity.md`** — idempotent setup. Hard-depends on `/setup-visual-regression` (refuses without it); installs `pixelmatch` + `pngjs`; scaffolds `tests/parity/` + `tests/parity/references/`; appends one `parity-chromium-<viewport>` Playwright project per registry viewport; registers a `parity_reference` per surface; generates one parity spec per surface. `--add-surface <url>` registers one reference post-setup.
+- **`scripts/visual-parity-gate.sh`** — runs the committed `tests/parity/` suite host-side, discovers `parity-chromium-*` projects, creates a timestamped `parity-results/<run>/`, and merges the per-surface `.parity.json` fragments. Single-viewport default; `--all-viewports` opt-in. The single authority for per-surface verdict (pixel-over-tolerance OR non-empty CSS diff → `fail`). Exit 0/1/2.
+- **`references/visual-review/parity-compare.mjs`** — the comparison engine, copied into `<codePath>/tests/parity/`. Renders build + reference, screenshots both, runs `pixelmatch` + the `getComputedStyle` property diff, writes a structured `.parity.json`. External deps load lazily so the pure helpers stay offline-testable. Charset-validates `surfaceId`/viewport and confines every file reference to `PARITY_CODE_PATH`.
+- **`references/visual-review/_parity-starter.spec.ts`** — the parity spec, copied **verbatim** per surface (no token substitution); it derives its surface id from its filename and reads per-surface config from `tests/parity/parity-surfaces.json` (data — untrusted registry values never enter spec source).
+- **`references/visual-review/tests-parity-readme.md`** — scaffolded as `tests/parity/README.md`.
+- **`references/visual-parity-walkthrough.md`** — the parity narrative/rationale.
+- **`tests/visual-parity-gate-spec.sh`** + **`tests/parity-compare-spec.mjs`** — TDD harnesses for the gate script and the comparison engine's pure logic.
+- **`gate_type: visual_parity`** — `gate-audit-schema.md` v1.2 → **v1.3**; `_visual_parity.json` is the 11th audit file type. `gate-hardening-prompts.md` v1.4 → **v1.5** adds the `visual-parity-gate-fail` classification prompt.
+
+### Changed
+
+- **`commands/validate-visual-parity.md`** — full rework. Registry-driven (no positional args); host-side Lullabot capture; two-layer diff; `[g]/[i]/[c]` classification UX preserved; standard envelope + `_visual_parity.json`; carries `<!-- visual-review:dispatch-ready -->`.
+- **`references/visual-review/surface-registry-schema.md`** — v1.0 → **v1.1**: the `parity_reference` object gains `reference_hash`, `compare_selectors`, `notes`, `last_compared_at`; `type` widens to `figma | react-template | html-template | image | prod-url`. Additive — a v1.0 registry remains valid.
+- **`scripts/gate-audit-write.sh`** — accepts the `visual_parity` gate_type and `schema_version` `1.3`.
+- **`commands/implement.md`** — adds a guarded one-line Design-drives-build soft-nudge: when a buildable design reference (`html-template`/`react-template`) is registered for a surface, suggest loading it as a build input. Silent for non-visual projects; never blocks.
+- **`commands/validate-all.md`** — corrects the visual-parity skip rationale: parity is now registry-driven but design-implementation-scoped, so `/validate:all` leaves it to `/review`'s dispatcher and standalone invocation (no longer "needs an explicit reference per invocation").
+- **`references/visual-review/playwright-base.config.ts`** — documents the `/setup-visual-parity` `parity-chromium-*` extension point.
+- **No baseline machinery for parity** — `[i] intentional deviation` records the decision (and may annotate `registry.yml` notes) but never rewrites the reference; updating a reference is a deliberate re-export + registry edit.
+
+### Security
+
+A 3-agent paper-test (`/code-paper-test:test-team`) ran against the implementation; 1 CRITICAL + 5 HIGH + 8 MEDIUM were found and remediated before this release. The threat model: `registry.yml` and the design references it points at may come from a cloned, untrusted repository.
+
+- **Spec-source code injection (CRITICAL) closed** — the first cut substituted untrusted registry values (`id`/`url`/`uri`/`compare_selectors`) into the generated `.spec.ts` JavaScript. Specs are now copied **verbatim**; all surface data lives in `parity-surfaces.json` (read as data); the only registry value tied to a spec is the `id`, used solely as a charset-validated filename.
+- **Path traversal closed** — `parity-compare.mjs` `assertSafeIdentifier`s `surfaceId`/viewport before any path join, and `confinedPath`s every file reference to `PARITY_CODE_PATH`; a traversal/absolute `uri` becomes a clean `skipped`.
+- **`buildUrl` scheme check** — relative or `http(s)` only (`file://` refused). No SSRF host filtering — local URLs are legitimate parity targets; register only trusted URLs (documented v1 posture).
+- **Robustness** — the reference-image decode is wrapped (a malformed PNG → `skipped`, not an uncaught throw); the gate's `PARITY_MAX_DIFF_RATIO` validator matches the engine's `0 < r < 1` predicate exactly; the gate rejects a structurally-incomplete `.parity.json` fragment instead of counting it as a pass.
+
 ## [4.13.0] - 2026-05-21
 
 ### Visual Regression v2 — `/setup-visual-regression` + reworked `/validate:visual-regression` (epic `visual_and_e2e_review_gates`, Task C)

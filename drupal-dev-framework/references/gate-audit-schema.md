@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.2
+# Gate Audit Schema v1.3
 
-**Introduced:** drupal-dev-framework v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive).
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive).
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 10 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 11 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -26,6 +26,7 @@ Where `<gate_type>` is one of:
 - `review` (v1.1+)
 - `e2e` (v1.2+)
 - `visual_regression` (v1.2+)
+- `visual_parity` (v1.3+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -40,7 +41,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 10>",
+  "gate_type": "<one of the 11>",
   "fired_at": "2026-04-24T20:30:00Z",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
@@ -53,8 +54,8 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`). JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 10 listed in §1. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+. JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 11 listed in §1. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -247,6 +248,42 @@ Task A reserves the `gate_type` value and the `_visual_regression.json` file slo
 not the per-gate payload — so B and C may shape `gate_specific` freely within the §5
 additive-field policy.
 
+### 5.11 `visual_parity` (v1.3+)
+
+Written by the reworked Visual Parity gate (`/validate:visual-parity`, Task D — v4.14.0).
+Audit file `_visual_parity.json`, `schema_version: "1.3"`. `gate-audit-write.sh`
+validates only the top-level envelope and `schema_version`, not the per-gate payload.
+Expected `gate_specific` shape:
+
+```json
+"gate_specific": {
+  "verdict": "pass | warning | fail | skipped",
+  "envelope_path": "<task>/validations/latest/visual-parity.json or null",
+  "surfaces_run": 3,
+  "surfaces_passed": 2,
+  "surfaces_failed": 1,
+  "surfaces_skipped": 0,
+  "viewports_tested": ["desktop"],
+  "css_diff_surfaces": ["home-hero"],
+  "build_only_surfaces": ["promo-banner"],
+  "playwright_project_pattern": "parity-chromium-*"
+}
+```
+
+| Field | Type | Contract |
+|---|---|---|
+| `verdict` | enum | Aggregate worst verdict across surfaces. |
+| `envelope_path` | string \| null | The shared validation envelope at `<task>/validations/latest/visual-parity.json`. |
+| `surfaces_run` / `_passed` / `_failed` / `_skipped` | int | Per-verdict surface counts. |
+| `viewports_tested` | list | Viewport names actually run (one entry unless `--all-viewports`). |
+| `css_diff_surfaces` | list | Surfaces whose structured CSS-actionable diff was **non-empty** — the AI fix-list surfaces. |
+| `build_only_surfaces` | list | Surfaces whose reference is static (`figma`/`image`) so the CSS diff is build-side only — honest capability labelling, never implies a full comparison. |
+| `playwright_project_pattern` | string | Always `parity-chromium-*`. |
+
+`user_choice` enum: `"g" | "i" | "c" | null` — the `[g]` build-gap / `[i]` intentional /
+`[c]` cancel classification, or `null` when no surface failed (nothing to classify) or
+in `--ci` mode.
+
 ## 6. Invariants
 
 - **One file per gate per task.** Overwrite-on-fire. No history kept in this file.
@@ -261,7 +298,7 @@ additive-field policy.
 - **Minor bumps** (`1.1`) are additive: new gate_type values, new optional top-level fields, new optional per-gate fields. Existing consumers ignore the new fields.
 - **Patch bumps** do not exist for schema versioning.
 
-v1.0 covers all 7 v4.0.0 gate_types. v1.1 (drupal-dev-framework v4.1.0) adds `review` gate_type — additive only, existing v1.0 consumers unaffected. v1.2 (drupal-dev-framework v4.11.0) adds `e2e` + `visual_regression` gate_types and the `review` payload's optional `dispatch_plan` key — additive only; existing v1.0/v1.1 consumers ignore the new gate_types and the new key.
+v1.0 covers all 7 v4.0.0 gate_types. v1.1 (drupal-dev-framework v4.1.0) adds `review` gate_type — additive only, existing v1.0 consumers unaffected. v1.2 (drupal-dev-framework v4.11.0) adds `e2e` + `visual_regression` gate_types and the `review` payload's optional `dispatch_plan` key — additive only; existing v1.0/v1.1 consumers ignore the new gate_types and the new key. v1.3 (drupal-dev-framework v4.14.0) adds the `visual_parity` gate_type — additive only; existing v1.0–v1.2 consumers ignore it.
 
 ## 8. Non-goals
 
