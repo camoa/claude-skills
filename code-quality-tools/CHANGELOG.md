@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-05-20
+
+### Fixed
+
+- **`README.md` and `commands/setup.md` no longer install the abandoned `sebastian/phpcpd`.** Both manual-install / Quick Install blocks listed `sebastian/phpcpd`, which is marked **abandoned** on Packagist (Sebastian Bergmann archived phpcpd) — so following the README or running `/code-quality:setup` Quick Install produced a Composer deprecation warning. Switched both to the maintained community fork `systemsdk/phpcpd`, which the plugin's own `scripts/core/install-tools.sh`, `scripts/drupal/dry-check.sh`, CI template, and `references/dry-detection.md` already use. The fork is a drop-in replacement — same `vendor/bin/phpcpd` binary and CLI flags — so no script or command logic changed.
+
+Marketplace metadata bumped 1.14.54 → 1.14.55.
+
 ## [3.6.0] - 2026-05-20
 
 ### References & loose ends

@@ -68,7 +68,7 @@ Installs all recommended tools with default thresholds.
 ddev composer require --dev \
   phpstan/phpstan \
   phpmd/phpmd \
-  sebastian/phpcpd \
+  systemsdk/phpcpd \
   vimeo/psalm \
   drupal/coder \
   rector/rector \
