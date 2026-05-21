@@ -86,4 +86,54 @@ describe('buildSlideRequests', () => {
   it('throws when a fixed image has no resolved URL', () => {
     expect(() => buildSlideRequests(titleLayout, tokens, {})).toThrow(/logo/);
   });
+
+  it('emits insertText before updateTextStyle for a text element', () => {
+    const built = buildSlideRequests(titleLayout, tokens, { logo: 'https://img/logo.png' });
+    const insertIdx = built.requests.findIndex((r) => r.insertText);
+    const styleIdx = built.requests.findIndex((r) => r.updateTextStyle);
+    expect(insertIdx).toBeGreaterThanOrEqual(0);
+    expect(styleIdx).toBeGreaterThan(insertIdx);
+  });
+
+  it('makes a tagged image element a RECTANGLE placeholder, not a createImage', () => {
+    const imageLayout: SlideTypeLayout = {
+      type: 'Image',
+      elements: [
+        {
+          id: 'img',
+          kind: 'image',
+          x: 0,
+          y: 0,
+          w: 720,
+          h: 405,
+          zOrder: 0,
+          content: { tag: '{{image}}' },
+        },
+      ],
+    };
+    const built = buildSlideRequests(imageLayout, tokens, {});
+    expect(built.requests.some((r) => r.createImage)).toBe(false);
+    expect(built.requests[1].createShape?.shapeType).toBe('RECTANGLE');
+    expect(built.requests.find((r) => r.insertText)?.insertText?.text).toBe('{{image}}');
+    expect(built.tags).toEqual({ '{{image}}': { kind: 'image' } });
+  });
+
+  it('throws when a generated objectId would exceed the 50-char API limit', () => {
+    const longLayout: SlideTypeLayout = {
+      type: 'Content',
+      elements: [
+        {
+          id: 'x'.repeat(60),
+          kind: 'text',
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          zOrder: 0,
+          content: { tag: '{{t}}' },
+        },
+      ],
+    };
+    expect(() => buildSlideRequests(longLayout, tokens, {})).toThrow(/objectId/i);
+  });
 });

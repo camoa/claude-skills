@@ -13,6 +13,10 @@ function fakeClient() {
         Promise.resolve({ fileId: name, url: `https://img/${name}` }),
       ),
     batchUpdate: vi.fn().mockResolvedValue({ replies: [] }),
+    findOrCreateFolder: vi
+      .fn()
+      .mockImplementation((name: string) => Promise.resolve({ folderId: `fold_${name}` })),
+    moveFileToFolder: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -85,5 +89,25 @@ describe('scaffoldTemplate', () => {
   it('reports no substitutions when both brand fonts are Google Fonts', async () => {
     const res = await scaffoldTemplate(asClient(fakeClient()), tokens, layoutSpec);
     expect(res.fontSubstitutions).toEqual([]);
+  });
+
+  it('organises output into a nested Drive folder path when given', async () => {
+    const client = fakeClient();
+    const res = await scaffoldTemplate(asClient(client), tokens, layoutSpec, {}, {
+      driveFolderPath: ['BrandX', 'templates'],
+    });
+    expect(client.findOrCreateFolder).toHaveBeenCalledTimes(2);
+    expect(client.findOrCreateFolder).toHaveBeenNthCalledWith(1, 'BrandX', undefined);
+    expect(client.findOrCreateFolder).toHaveBeenNthCalledWith(2, 'templates', 'fold_BrandX');
+    expect(client.moveFileToFolder).toHaveBeenCalledWith('pres1', 'fold_templates');
+    expect(res.folderId).toBe('fold_templates');
+  });
+
+  it('leaves files in Drive root when no folder path is given', async () => {
+    const client = fakeClient();
+    const res = await scaffoldTemplate(asClient(client), tokens, layoutSpec);
+    expect(client.findOrCreateFolder).not.toHaveBeenCalled();
+    expect(client.moveFileToFolder).not.toHaveBeenCalled();
+    expect(res.folderId).toBeUndefined();
   });
 });

@@ -14,7 +14,13 @@ function fakeServices() {
       },
     },
     drive: {
-      files: { copy: vi.fn(), export: vi.fn(), create: vi.fn() },
+      files: {
+        copy: vi.fn(),
+        export: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        list: vi.fn(),
+      },
       permissions: { create: vi.fn() },
     },
   };
@@ -195,6 +201,81 @@ describe('SlidesClient.uploadImage', () => {
     const s = fakeServices();
     s.drive.files.create.mockResolvedValue({ data: {} });
     await expect(client(s).uploadImage('x.png', Buffer.from('x'))).rejects.toThrow();
+  });
+
+  it('uploads into a parent folder when one is given', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: { id: 'img2' } });
+    s.drive.permissions.create.mockResolvedValue({ data: {} });
+    await client(s).uploadImage('x.png', Buffer.from('x'), 'image/png', 'fold1');
+    expect(s.drive.files.create.mock.calls[0][0].requestBody.parents).toEqual(['fold1']);
+  });
+});
+
+describe('SlidesClient.createFolder', () => {
+  it('creates a Drive folder and returns its id', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: { id: 'fold1' } });
+    await expect(client(s).createFolder('Templates')).resolves.toEqual({ folderId: 'fold1' });
+    expect(s.drive.files.create).toHaveBeenCalledWith({
+      requestBody: { name: 'Templates', mimeType: 'application/vnd.google-apps.folder' },
+      fields: 'id',
+    });
+  });
+
+  it('nests under a parent folder when given', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: { id: 'fold2' } });
+    await client(s).createFolder('Sub', 'parent1');
+    expect(s.drive.files.create).toHaveBeenCalledWith({
+      requestBody: {
+        name: 'Sub',
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: ['parent1'],
+      },
+      fields: 'id',
+    });
+  });
+
+  it('throws when Drive returns no folder id', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: {} });
+    await expect(client(s).createFolder('X')).rejects.toThrow();
+  });
+});
+
+describe('SlidesClient.moveFileToFolder', () => {
+  it('reparents a file into the folder, off the Drive root', async () => {
+    const s = fakeServices();
+    s.drive.files.update.mockResolvedValue({ data: { id: 'f1' } });
+    await client(s).moveFileToFolder('f1', 'fold1');
+    expect(s.drive.files.update).toHaveBeenCalledWith({
+      fileId: 'f1',
+      addParents: 'fold1',
+      removeParents: 'root',
+      fields: 'id',
+    });
+  });
+});
+
+describe('SlidesClient.findOrCreateFolder', () => {
+  it('returns an existing folder id when one matches by name', async () => {
+    const s = fakeServices();
+    s.drive.files.list.mockResolvedValue({ data: { files: [{ id: 'existing1' }] } });
+    await expect(client(s).findOrCreateFolder('Templates')).resolves.toEqual({
+      folderId: 'existing1',
+    });
+    expect(s.drive.files.create).not.toHaveBeenCalled();
+  });
+
+  it('creates the folder when none exists', async () => {
+    const s = fakeServices();
+    s.drive.files.list.mockResolvedValue({ data: { files: [] } });
+    s.drive.files.create.mockResolvedValue({ data: { id: 'new1' } });
+    await expect(client(s).findOrCreateFolder('Templates', 'parent1')).resolves.toEqual({
+      folderId: 'new1',
+    });
+    expect(s.drive.files.create).toHaveBeenCalledOnce();
   });
 });
 

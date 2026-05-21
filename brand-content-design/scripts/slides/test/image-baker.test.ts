@@ -44,4 +44,16 @@ describe('bakeDisplayText', () => {
       bakeDisplayText({ text: '', fontFamily: 'sans-serif', fontSizePx: 48, color: '#000000' }),
     ).toThrow();
   });
+
+  it('throws a clear error when the supplied fontFile does not exist', () => {
+    expect(() =>
+      bakeDisplayText({
+        text: 'Hi',
+        fontFamily: 'X',
+        fontSizePx: 20,
+        color: '#000000',
+        fontFile: '/no/such/font.ttf',
+      }),
+    ).toThrow(/font file/i);
+  });
 });

@@ -72,6 +72,12 @@ export function buildSlideRequests(
   const ordered = [...layout.elements].sort((a, b) => a.zOrder - b.zOrder);
   for (const e of ordered) {
     const objectId = `${slideObjectId}_${e.id}`;
+    if (objectId.length > 50) {
+      throw new Error(
+        `buildSlideRequests: generated objectId "${objectId}" exceeds the ` +
+          `50-char Slides API limit — shorten the layout element id "${e.id}"`,
+      );
+    }
     const ep = elementProperties(slideObjectId, e);
     const isTag = !!e.content && 'tag' in e.content;
     const isFixed = !!e.content && 'fixed' in e.content;

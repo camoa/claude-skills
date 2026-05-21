@@ -34,11 +34,24 @@ const FALLBACK_FONT = 'Inter';
  * custom font is a merge-time concern (the real heading text is only known
  * then) — owned by `slides_merge_engine`, not this scaffolder.
  */
+/** Optional scaffold behaviour. */
+export interface ScaffoldOptions {
+  /**
+   * Drive folder path (segment names, outermost first) to organise the
+   * template presentation + baked images into. Each segment is found-or-created
+   * under the previous; the leaf folder holds the output. Omit to leave files
+   * in My Drive root. The integration child may pass segments mirroring the
+   * local brand-project structure.
+   */
+  driveFolderPath?: string[];
+}
+
 export async function scaffoldTemplate(
   client: SlidesClient,
   tokens: BrandTokens,
   layoutSpec: LayoutSpec,
   assets: ScaffoldAssets = {},
+  options: ScaffoldOptions = {},
 ): Promise<ScaffoldResult> {
   // 1. Classify fonts; substitute custom faces so the template renders natively.
   const fontClass = classifyFonts(tokens);
@@ -67,8 +80,17 @@ export async function scaffoldTemplate(
     },
   };
 
-  // 2. Create the presentation.
+  // 2. Ensure the Drive folder path (find-or-create — re-scaffolding reuses it).
+  let folderId: string | undefined;
+  for (const segment of options.driveFolderPath ?? []) {
+    folderId = (await client.findOrCreateFolder(segment, folderId)).folderId;
+  }
+
+  // 3. Create the presentation; move it into the folder (Slides creates in root).
   const { presentationId } = await client.createPresentation('Brand template');
+  if (folderId) {
+    await client.moveFileToFolder(presentationId, folderId);
+  }
 
   // 3. Bake gradients, then upload every image → fixed-image URL map.
   const imageBuffers: Record<string, Buffer> = { ...(assets.images ?? {}) };
@@ -77,7 +99,7 @@ export async function scaffoldTemplate(
   }
   const fixedImageUrls: Record<string, string> = {};
   for (const [id, bytes] of Object.entries(imageBuffers)) {
-    const { url } = await client.uploadImage(`${id}.png`, bytes);
+    const { url } = await client.uploadImage(`${id}.png`, bytes, 'image/png', folderId);
     fixedImageUrls[id] = url;
   }
 
@@ -92,5 +114,5 @@ export async function scaffoldTemplate(
     };
   }
 
-  return { presentationId, tagMap, fontSubstitutions };
+  return { presentationId, tagMap, fontSubstitutions, folderId };
 }

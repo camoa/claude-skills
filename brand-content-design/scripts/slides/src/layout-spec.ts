@@ -80,4 +80,6 @@ export interface ScaffoldResult {
   tagMap: TagMap;
   /** Font substitutions applied (custom brand font → nearest Google font). */
   fontSubstitutions: { role: string; from: string; to: string }[];
+  /** The Drive folder the output was organised into, if a path was given. */
+  folderId?: string;
 }

@@ -125,11 +125,12 @@ export class SlidesClient {
     name: string,
     bytes: Buffer,
     mimeType = 'image/png',
+    parentId?: string,
   ): Promise<{ fileId: string; url: string }> {
     const created = await withRetry(
       () =>
         this.services.drive.files.create({
-          requestBody: { name },
+          requestBody: { name, ...(parentId ? { parents: [parentId] } : {}) },
           media: { mimeType, body: Readable.from(bytes) },
           fields: 'id',
         }),
@@ -151,6 +152,77 @@ export class SlidesClient {
       fileId,
       url: `https://drive.google.com/uc?export=view&id=${fileId}`,
     };
+  }
+
+  /**
+   * Create a Drive folder (optionally nested under `parentId`); returns its id.
+   * Used to organise template presentations + baked images instead of
+   * dumping them in My Drive root.
+   */
+  async createFolder(
+    name: string,
+    parentId?: string,
+  ): Promise<{ folderId: string }> {
+    const res = await withRetry(
+      () =>
+        this.services.drive.files.create({
+          requestBody: {
+            name,
+            mimeType: 'application/vnd.google-apps.folder',
+            ...(parentId ? { parents: [parentId] } : {}),
+          },
+          fields: 'id',
+        }),
+      this.retry,
+    );
+    const folderId = res.data.id;
+    if (!folderId) {
+      throw new Error('Drive API returned no id for the created folder');
+    }
+    return { folderId };
+  }
+
+  /**
+   * Move a file into `folderId`, off the Drive root. The Slides API creates
+   * presentations in My Drive root, so a freshly-created template must be
+   * reparented into its organising folder.
+   */
+  async moveFileToFolder(fileId: string, folderId: string): Promise<void> {
+    await withRetry(
+      () =>
+        this.services.drive.files.update({
+          fileId,
+          addParents: folderId,
+          removeParents: 'root',
+          fields: 'id',
+        }),
+      this.retry,
+    );
+  }
+
+  /**
+   * Find a folder by exact name (optionally within `parentId`), or create it.
+   * Idempotent — re-scaffolding reuses the folder tree instead of spawning
+   * duplicate-named folders.
+   */
+  async findOrCreateFolder(
+    name: string,
+    parentId?: string,
+  ): Promise<{ folderId: string }> {
+    const escaped = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const q =
+      `name = '${escaped}' and ` +
+      `mimeType = 'application/vnd.google-apps.folder' and trashed = false` +
+      (parentId ? ` and '${parentId}' in parents` : '');
+    const list = await withRetry(
+      () => this.services.drive.files.list({ q, fields: 'files(id)', pageSize: 1 }),
+      this.retry,
+    );
+    const existing = list.data.files?.[0]?.id;
+    if (existing) {
+      return { folderId: existing };
+    }
+    return this.createFolder(name, parentId);
   }
 
   /** Get a single page's PNG thumbnail URL (feeds the visual-diff gate). */

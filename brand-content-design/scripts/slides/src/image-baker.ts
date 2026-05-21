@@ -10,6 +10,7 @@
  * element is baked whole as part of its own image when needed; a standalone
  * "shadow image" has no single well-defined meaning.
  */
+import { existsSync } from 'node:fs';
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
 
 export interface GradientSpec {
@@ -68,6 +69,9 @@ export function bakeDisplayText(spec: DisplayTextSpec): Buffer {
     throw new Error('bakeDisplayText: text must not be empty');
   }
   if (fontFile) {
+    if (!existsSync(fontFile)) {
+      throw new Error(`bakeDisplayText: font file not found: "${fontFile}"`);
+    }
     GlobalFonts.registerFromPath(fontFile, fontFamily);
   }
   const font = `${fontSizePx}px "${fontFamily}"`;
