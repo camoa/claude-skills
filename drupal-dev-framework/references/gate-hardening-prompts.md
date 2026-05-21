@@ -166,8 +166,30 @@ Audit: {{audit_path}}
 {{pr_body_line_or_empty}}
 ```
 
+## Template ID: `e2e-gate-fail`
+
+Used by `commands/validate-e2e.md` when verdict is `fail`.
+
+```
+E2E gate: {failed_count} test(s) failed.
+
+Failed tests:
+{failed_test_list}
+
+Playwright HTML report: `{report_path}`
+
+Options:
+- **Fix and re-run:** Address the failures and run `/drupal-dev-framework:validate:e2e` again.
+- **Skip (with reason):** Run `/drupal-dev-framework:validate:e2e --skip "<your reason>"` to bypass and record the reason in the audit.
+
+The E2E gate is **soft** — it signals but does not block. Bypassing is recorded in `_e2e.json` and visible via `/drupal-dev-framework:audit-status`.
+```
+
+Variables: `{failed_count}` (integer), `{failed_test_list}` (one `- <title> (<file>)` line per failure), `{report_path}` (relative path to HTML report).
+
 ## Changelog
 
+- **v1.3 (2026-05-21, v4.12.0):** additive; adds `e2e-gate-fail` template for `/validate:e2e` (Task B). Existing 7 templates byte-identical to v1.2 baseline.
 - **v1.2 (2026-04-26, v4.1.0):** additive; adds `review-gate-fail` + `review-summary` for `/review` Phase 4. Templates byte-identical to inline literals shipped in `commands/review.md` PR #138 (verified by `tests/gate-prompts-vs-inline.sh`). Existing 5 templates byte-identical to v1.1 baseline (verified by `tests/gate-prompts-literal.sh`).
 - **v1.1 (2026-04-25, v4.0.2):** additive; added Templates index table consolidating defaults + substitutions + fire conditions; trimmed per-template prose. ALL literal blocks preserved byte-for-byte (verified by `tests/gate-prompts-literal.sh`).
 - **v1.0 (2026-04-25, v4.0.0):** initial; 5 templates covering all v4.0.0 user-prompt surfaces.

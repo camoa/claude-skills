@@ -381,6 +381,19 @@ These load only when Claude works on matching files, keeping context lean.
 
 **OTel skill metrics.** The framework does not ship OpenTelemetry instrumentation. If it ever does, note that `claude_code.skill_activated` carries an `invocation_trigger` attribute distinguishing `user-slash` from `claude-proactive` and `nested-skill` — useful for measuring how often framework commands are user-invoked versus auto-triggered. Recorded here as a future-instrumentation footnote.
 
+## ATK E2E Gate (v4.12.0+)
+
+`/setup-atk` installs **ATK `^2.0` (behavioral) + Playwright** and scaffolds `tests/e2e/`.
+`/validate:e2e` runs the gate and emits `_e2e.json` + the standard validation envelope.
+
+Key conventions:
+- ATK canned tests live in `tests/e2e/behavioral/atk/` as a **copy** — never modify in-place. Use `--update-atk` after ATK contrib updates.
+- Journey specs (`tests/e2e/specs/<slug>.md`) are the reviewable artifact; `<slug>.spec.ts` is regenerable from them.
+- `testIdAttribute: 'data-qa-id'` must remain in the `e2e-chromium` project `use:` block in `playwright.config.ts` after any config edit — ATK's injected attributes rely on it.
+- `<!-- visual-review:dispatch-ready -->` in `commands/validate-e2e.md` is what makes `/review`'s dispatcher invoke this gate. Never remove it.
+- ATK's VR mode is NOT used — Task C (Lullabot) owns visual regression.
+- `/validate:a11y` and `/validate:perf` are v2-deferred.
+
 ## General
 - Current state only — no historical narratives
 - Replace outdated content, don't keep alongside new
