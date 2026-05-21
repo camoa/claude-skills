@@ -1,7 +1,7 @@
 ---
 description: Run complete code quality and security audit for Drupal/Next.js projects. Use when user says "full audit", "check everything", "code quality report", "run all checks", "audit this project", "pre-merge check", "quality gate". Runs lint + security + SOLID + DRY + coverage, then synthesizes findings into prioritized action plan with cross-tool correlation.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: [--json] [project-path]
+argument-hint: "[--json] [project-path]"
 ---
 
 # Code Quality Audit
@@ -131,6 +131,8 @@ Surface comparison and decision tree: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality
 ## Wire to CI
 
 For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/premerge-gate-routine.md`.
+
+Two complementary gates: run the cheap local `/code-quality:audit --json` on every push; reserve the verified-findings cloud review for release branches via the headless `claude ultrareview --json` subcommand (exit-code contract + gating snippet in `commands/ultrareview.md` → "CI / Headless Mode").
 
 ## Related Commands
 

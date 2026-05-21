@@ -1,7 +1,7 @@
 ---
 description: Run Claude Code's cloud-hosted multi-agent deep code review (/ultrareview) with pre-flight platform checks and cost transparency. Use when user says "deep review", "pre-merge review", "ultrareview", "cloud review", "rigorous review", "thorough review", "find bugs before merge", "multi-agent review", "verified review".
 allowed-tools: Bash, Read
-argument-hint: [PR-number]
+argument-hint: "[PR-number]"
 ---
 
 # Ultrareview (Deep Cloud Review)
@@ -75,7 +75,7 @@ If no env var matched, proceed — but tell the user:
 > | Pro / Max | 3 free runs (one-time, never refresh) | $5–$20 per run |
 > | Team / Enterprise | none | $5–$20 per run |
 >
-> Extra usage must be enabled on the account. Run `/extra-usage` to check or change the setting. If disabled, `/ultrareview` will block and link to billing settings.
+> Usage credits must be enabled on the account. Run `/usage-credits` to check or change the setting. If disabled, `/ultrareview` will block and link to billing settings.
 >
 > A review takes 5–10 minutes and runs in the background — track it with `/tasks`.
 
@@ -106,11 +106,57 @@ If missing, STOP:
 
 ### Step 4 — Hand Off to the Built-in /ultrareview
 
-After the pre-flight passes, tell the user to run the built-in command themselves (a command body cannot invoke another slash command directly):
+A command body cannot invoke another *slash* command, so the interactive `/ultrareview` must be run by the user. (This limitation does **not** apply to CI/headless use — the `claude ultrareview` CLI subcommand *is* Bash-invokable; see "CI / Headless Mode" below.) After the pre-flight passes, tell the user:
 
 > Pre-flight passed. Run `/ultrareview $ARGUMENTS` to start the review.
 >
 > The built-in will show a confirmation dialog with the file/line count, remaining free runs, and estimated cost before the session launches. Monitor progress with `/tasks` — the review runs in the background, so you can keep coding or close the terminal.
+
+## CI / Headless Mode (`claude ultrareview`)
+
+For pre-merge gating in CI or scripts, use the `claude ultrareview` CLI subcommand instead of the interactive slash command. It launches the same cloud review, blocks until the remote review finishes, prints findings to stdout, and returns an exit code — so a pipeline step can gate on it directly. Unlike the `/ultrareview` slash command, this subcommand runs from a Bash step.
+
+### Invocation
+
+```bash
+claude ultrareview                 # diff: current branch vs default branch
+claude ultrareview 1234            # GitHub PR #1234
+claude ultrareview origin/main     # diff vs an explicit base branch
+```
+
+Invoking the subcommand counts as consent for the billing/terms prompt the interactive command shows.
+
+### Flags
+
+| Flag | Effect |
+|---|---|
+| `--json` | Print the raw `bugs.json` payload instead of the formatted findings |
+| `--timeout <minutes>` | Maximum minutes to wait for the review to finish (default 30) |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Review completed — with or without findings |
+| `1` | Failed to launch, the remote session errored, or the timeout elapsed |
+| `130` | Interrupted with Ctrl-C — the remote review keeps running; follow the session URL printed to stderr |
+
+Progress messages and the live session URL go to **stderr**; findings go to **stdout**, so stdout stays parseable.
+
+### Gating snippet
+
+```bash
+claude ultrareview --json "${BASE:-origin/main}" --timeout 20 > ultrareview.json
+rc=$?
+[ "$rc" -eq 0 ] || { echo "ultrareview failed (rc=$rc)"; exit 1; }
+# bugs.json field names are not published — verify against a real run before relying on this filter.
+jq -e '[.bugs[]? | select(.severity=="high" or .severity=="critical")] | length == 0' ultrareview.json \
+  || { echo "ultrareview found blocking bugs"; jq '.bugs' ultrareview.json; exit 1; }
+```
+
+### Cost discipline for CI
+
+A run that fails or is stopped **still consumes** one of the three free Pro/Max runs; paid runs bill $5–$20 as usage credits. Reserve `claude ultrareview` for merge-ready / release branches — do **not** wire it to `on: push`. For every-push gating use the cheaper local `/code-quality:audit --json`; use `claude ultrareview --json` only as a release-gate step. The Step 1 pre-flight platform constraints (Bedrock/Vertex/Foundry/ZDR/API-key-only) apply to the subcommand identically — it has the same authentication and usage-credit requirements as `/ultrareview`.
 
 ## When to Use This vs `/code-quality:review`
 
