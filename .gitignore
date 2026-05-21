@@ -7,3 +7,6 @@
 # Skill runtime telemetry (design-intelligence Wave-4 gates, motion auditor, etc.)
 /.design-intelligence/
 /.design-intelligence-audit/
+
+# Git worktrees for parallel task execution (drupal-dev-framework /worktree).
+/.worktrees/
