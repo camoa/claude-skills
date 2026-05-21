@@ -25,6 +25,26 @@ Credentials come **only** from environment variables — never commit them. The
 
 Two modes; the service account wins if both are set.
 
+### Creating the credentials in Google Cloud
+
+One-time, in [console.cloud.google.com](https://console.cloud.google.com):
+
+1. Create or pick a project; under **APIs & Services → Library** enable **both**
+   the **Google Slides API** and the **Google Drive API**.
+2. **Service account path** — **IAM & Admin → Service Accounts → Create**, then
+   **Keys → Add key → Create new key → JSON**. The downloaded file's path is
+   `BCD_SLIDES_SA_KEY_FILE`. Share the template presentation (and any output
+   folder) with the service-account email, or put them in a Shared Drive it can
+   access.
+3. **OAuth path** — **APIs & Services → OAuth consent screen** (add yourself as
+   a test user), then **Credentials → Create credentials → OAuth client ID →
+   Desktop app** for the client id/secret. Mint a refresh token with the
+   [OAuth Playground](https://developers.google.com/oauthplayground): ⚙ → "Use
+   your own OAuth credentials" → scopes `auth/presentations` + `auth/drive.file`
+   → Authorize → Exchange authorization code for tokens.
+
+The service-account path is simpler — no consent screen, no refresh token.
+
 ### Service account (best for automation / CI)
 
 ```sh
