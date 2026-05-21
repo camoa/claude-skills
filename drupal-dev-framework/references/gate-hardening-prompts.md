@@ -1,6 +1,6 @@
-# Gate Hardening Prompts v1.2
+# Gate Hardening Prompts v1.4
 
-**Introduced:** drupal-dev-framework v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command).
+**Introduced:** drupal-dev-framework v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`).
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
@@ -21,6 +21,8 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 | `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
 | `review-summary` (v1.2+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
+| `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
+| `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 
 ## Template authoring rules
 
@@ -187,8 +189,31 @@ The E2E gate is **soft** — it signals but does not block. Bypassing is recorde
 
 Variables: `{{failed_count}}` (integer), `{{failed_test_list}}` (one `- <title> (<file>)` line per failure), `{{report_path}}` (relative path to HTML report).
 
+## Template ID: `visual-regression-gate-fail`
+
+Used by `commands/validate-visual-regression.md` — emitted once per failed
+surface, before the regression/intentional/cancel classification.
+
+```
+A Visual Regression diff was detected for {{surface_id}} at viewport {{viewport}}.
+
+Diff: {{diff_percent}}% pixels changed ({{diff_pixels}} px).
+Diff image: {{diff_path}}
+
+Classify this change:
+
+  [r] Regression — this is a bug; leave the baseline unchanged
+  [i] Intentional change — update the baseline to reflect the new design
+  [c] Cancel — skip this surface; revisit later
+
+Choice (default [c]):
+```
+
+Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport name), `{{diff_percent}}` (percentage, may be unknown), `{{diff_pixels}}` (pixel count, may be unknown), `{{diff_path}}` (path to the Playwright diff image).
+
 ## Changelog
 
+- **v1.4 (2026-05-21, v4.13.0):** additive; adds `visual-regression-gate-fail` template for `/validate:visual-regression` (Task C). Existing 8 templates byte-identical to v1.3 baseline.
 - **v1.3 (2026-05-21, v4.12.0):** additive; adds `e2e-gate-fail` template for `/validate:e2e` (Task B). Existing 7 templates byte-identical to v1.2 baseline.
 - **v1.2 (2026-04-26, v4.1.0):** additive; adds `review-gate-fail` + `review-summary` for `/review` Phase 4. Templates byte-identical to inline literals shipped in `commands/review.md` PR #138 (verified by `tests/gate-prompts-vs-inline.sh`). Existing 5 templates byte-identical to v1.1 baseline (verified by `tests/gate-prompts-literal.sh`).
 - **v1.1 (2026-04-25, v4.0.2):** additive; added Templates index table consolidating defaults + substitutions + fire conditions; trimmed per-template prose. ALL literal blocks preserved byte-for-byte (verified by `tests/gate-prompts-literal.sh`).

@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.13.0] - 2026-05-21
+
+### Visual Regression v2 — `/setup-visual-regression` + reworked `/validate:visual-regression` (epic `visual_and_e2e_review_gates`, Task C)
+
+Task C of the `visual_and_e2e_review_gates` epic. **Evolves** the v3.13.0 visual-regression gate onto committed Playwright test files + `@lullabot/playwright-drupal`: registry-driven multi-viewport batch, a11y baseline pairing, mask regions, explicit user-confirmed baseline machinery. Builds on the Task A (v4.11.0) foundation and shares Playwright infrastructure with the Task B (v4.12.0) ATK E2E gate.
+
+The central architectural decision (Task C `research.md` Q1): the screenshot store moves from the memory project's `.screenshots/` to a **codePath-native** layout — committed Playwright snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/` with `.meta.json` provenance sidecars in-tree. Baselines are now PR-native and team-shared by default.
+
+### Added
+
+- **`commands/setup-visual-regression.md`** — idempotent 10-step setup wizard. Installs `@lullabot/playwright-drupal` + `@playwright/test`, scaffolds `tests/visual/`, extends `playwright.config.ts` with one `visual-chromium-<viewport>` project per derived viewport, drives breakpoint derivation + AI-assisted surface discovery, and prompts for a first baseline capture. `--add-surface <url>` appends one surface post-setup; `--migrate` imports a v3.13.0 `.screenshots/` store.
+- **`scripts/derive-viewport-matrix.sh`** — three-path waterfall viewport derivation: parse `<theme>.breakpoints.yml` (custom theme or Radix contrib fallback) → infer from CSS `@media` queries → fall through for the command to ask. Emits a JSON viewport array.
+- **`scripts/surface-discovery.sh`** — enumerates VR coverage candidates: home + View page-display routes (config scan) + one URL per content type (best-effort drush), grouped front-end (default-ON) / admin (default-OFF). Pure data producer; never auto-seeds.
+- **`scripts/migrate-screenshots-to-codepath.sh`** — one-time guided migration of the v3.13.0 `.screenshots/` store to the codePath-native layout. Copies PNGs + sidecars, rewrites `captured_by`/`viewport`, generates stub specs. Never auto-deletes the legacy store.
+- **`scripts/visual-regression-gate.sh`** — core gate logic: discovers `visual-chromium-*` projects from `playwright.config.ts`, runs `npx playwright test --reporter=json` host-side, emits a per-surface `surfaces[]` JSON fragment. Called by `/validate:visual-regression` and `/validate:all` (Library-First).
+- **`scripts/baseline-manager.sh`** — `--bootstrap` / `--update-baselines "<reason>"` baseline machinery with a **two-stage confirm model**: plan mode (prints the surfaces it would capture, writes nothing) → `--confirmed` mode (runs `--update-snapshots`, appends `baseline-history.jsonl`). No baseline write without an explicit user `[y]`. `--grep` scopes selective regeneration.
+- **`references/visual-regression-walkthrough.md`** — full prose: setup, surface discovery, viewport derivation, bootstrap, run, classify, update triggers, codePath-native store, migration, a11y pairing, masks, CI (GitHub Actions), ATK coexistence, BYO-server appendix.
+- **`references/visual-review/_starter.spec.ts`** + **`references/visual-review/tests-visual-readme.md`** — the per-surface spec template and `tests/visual/README.md` content `/setup-visual-regression` writes into codePath.
+- **`scripts/screenshot-store-write.sh` `write-baseline-codepath` subcommand** — writes the `.meta.json` provenance sidecar next to a Playwright-written baseline PNG (no rotation — git holds history). `captured_by` enum gains `lullabot-playwright` + `migrated-from-screenshots-store`.
+- **TDD harnesses** — `tests/{derive-viewport-matrix,surface-discovery,migrate-screenshots-to-codepath,screenshot-store-read,screenshot-store-write,visual-regression-gate,baseline-manager}-spec.sh` (7 spec files, all passing).
+
+### Changed
+
+- **`commands/validate-visual-regression.md`** — **fully reworked** (was v3.13.0 ad-hoc Playwright MCP). Registry-driven, no positional args; runs the committed `tests/visual/` suite; multi-viewport batch; missing baseline → loud `fail` with remediation (never silent auto-create); classification UX preserved; adds `<!-- visual-review:dispatch-ready -->` (makes `/review`'s dispatcher invoke it) + `gate_type: "visual_regression"` audit.
+- **`scripts/screenshot-store-read.sh`** — reworked to scan the codePath-native `tests/visual/*.spec.ts-snapshots/` layout; viewport parsed as a name from the `visual-chromium-<name>` project segment; `--legacy-path` flag reports a surviving `.screenshots/` store. Same §7 JSON output contract (Liskov — consumers unchanged).
+- **`commands/validate-all.md`** — visual-regression step rewired: registry-presence check (3 conditions) replaces store-iteration; single `visual-regression-gate.sh` invocation replaces the per-component loop; `--ci` mode runs the suite (any diff → `fail`) instead of skipping entirely.
+- **`skills/screenshot-store-reader/SKILL.md`** v1.0.0 → v1.1.0 — codePath-native scan path; `--legacy-path`; documents the no-`.previous`-tier model.
+- **`references/screenshot-store-schema.md`** — §1 location → codePath-native primary, `.screenshots/` legacy/migration-source; §2 new directory diagram + §2b legacy; §3–§6 viewport-name vs WIDTHxHEIGHT; §4 `captured_by` enum additions; §6 no-rotation note; §10 `write-baseline-codepath` signature.
+- **`references/gate-hardening-prompts.md`** v1.3 → v1.4 (additive) — adds the `visual-regression-gate-fail` template.
+- **`CONVENTIONS.md`** — Validation Gates section updated (codePath-native store, reworked gate); new `## Visual Regression Gate (v4.13.0+)` section.
+
+### Notes
+
+- **Screenshot store is codePath-native** (research Q1, fork option (b+)). Baselines are committed Playwright snapshots — PR-native diffs, team-shared by default, no absolute paths in config. The v3.13.0 memory-project `.screenshots/` store is retired (migration source only).
+- **No baseline write without an explicit `[y]`.** `baseline-manager.sh` is non-interactive (like every framework script): plan mode prints what would be captured; only the calling command, after showing the user the plan + `[y]/[n]`, re-invokes with `--confirmed`. Every regeneration is logged to `baseline-history.jsonl` (per-project, beside the registry).
+- **Playwright is HOST-SIDE.** `npx playwright test` runs on the host; the DDEV site is reached over HTTP via `DDEV_PRIMARY_URL` / `PLAYWRIGHT_BASE_URL`. Linux capture is canonical (`-linux.png`); macOS/Windows teams capture in CI/Docker/`ddev exec` — the platform suffix makes drift fail loudly, never silently.
+- **YAML boundary.** No new shell script parses `registry.yml` — Claude (the commands) reads the registry and passes structured data; the scripts take explicit flags or scan the filesystem (Task C D-impl-1). The viewport derivation parses `THEME.breakpoints.yml` (a theme file, not the registry).
+- **Registry shared with `/setup-atk`** at `<codePath>/.visual-review/registry.yml`; one `playwright.config.ts` carries both `e2e-*` and `visual-chromium-*` projects. Setup is idempotent + order-independent.
+- **Install location:** the Playwright runner is installed at the **codePath root** (where `playwright.config.ts` lives and `npx playwright test` runs), not in `tests/visual/` — the runner must resolve from the invocation directory. (Implementation refinement of architecture C1 step 2.)
+- **`gate-audit-write.sh`** required no changes — Task A already added `visual_regression` to the allowlist and schema_version `1.2` support.
+- **a11y baseline pairing** is warning-only in v1; per-surface `a11y_block: true` is a v2 candidate.
+- **v2 deferred:** SDC component-level isolation (Spike #1), multi-browser beyond Chromium, per-surface `maxDiffPixelRatio`.
+
+### Component versions
+
+New: `commands/setup-visual-regression.md`, `scripts/derive-viewport-matrix.sh`, `scripts/surface-discovery.sh`, `scripts/migrate-screenshots-to-codepath.sh`, `scripts/visual-regression-gate.sh`, `scripts/baseline-manager.sh`, `references/visual-regression-walkthrough.md`, `references/visual-review/_starter.spec.ts`, `references/visual-review/tests-visual-readme.md`, 7 `tests/*-spec.sh` harnesses. Modified: `commands/validate-visual-regression.md` (reworked), `commands/validate-all.md`, `scripts/screenshot-store-read.sh` (reworked), `scripts/screenshot-store-write.sh` (`write-baseline-codepath` added), `skills/screenshot-store-reader/SKILL.md` v1.0.0 → v1.1.0, `references/screenshot-store-schema.md`, `references/gate-hardening-prompts.md` v1.3 → v1.4, `CONVENTIONS.md`.
+
+Version: plugin.json + marketplace entry 4.12.0 → 4.13.0; marketplace metadata.version 1.14.59 → 1.14.60.
+
 ## [4.12.0] - 2026-05-21
 
 ### ATK E2E gate — `/setup-atk` + `/validate:e2e` (epic `visual_and_e2e_review_gates`, Task B)

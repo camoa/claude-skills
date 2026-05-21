@@ -1,56 +1,98 @@
 # Screenshot Store Schema v1.0
 
 **Introduced:** drupal-dev-framework v3.13.0
+**Location reworked:** v4.13.0 (Task C) — store moved to codePath-native
 **Owner:** `skills/screenshot-store-reader/SKILL.md` + `scripts/screenshot-store-read.sh` + `scripts/screenshot-store-write.sh`
-**Consumers (as of v3.13.0):** `commands/validate-visual-regression.md`, `commands/validate-visual-parity.md`, `commands/validate-all.md`
+**Consumers:** `commands/validate-visual-regression.md`, `commands/validate-visual-parity.md`, `commands/validate-all.md`
 
-The screenshot store is a project-scoped filesystem tree that holds regression baselines and parity references for visual validation. Per-image metadata files carry provenance, integrity hashes, and source info so any task can read the store and understand what each image represents.
+The screenshot store holds visual-regression baselines and parity references.
+Per-image `.meta.json` sidecars carry provenance, integrity hashes, and source
+info so any task can read the store and understand what each image represents.
+The 9-field `.meta.json` schema (§4) is **unchanged**; v4.13.0 changed only the
+store **location** and the `<viewport>` field's value form.
 
 ## 1. Location
 
-```
-<claude_memory_projects_base>/<project_name>/.screenshots/
-```
-
-The store lives next to the memory project's other artifacts (`project_state.md`, `implementation_process/`, etc.). It is NOT under `codePath` — screenshots are framework metadata, not code. Users who want team-sharing can use git on the memory folder or copy individual references manually.
-
-## 2. Directory layout
+**Primary (v4.13.0+) — codePath-native.** Visual-regression baselines are
+committed Playwright snapshots under the project's code repository:
 
 ```
-.screenshots/
+<codePath>/tests/visual/<surface>.spec.ts-snapshots/
+```
+
+This makes baselines PR-native (a baseline change diffs alongside the code
+change), team-shared by default (committed to the repo), and portable (no
+absolute paths in `playwright.config.ts`). Resolution Q1 in Task C `research.md`
+(fork option **(b+)**).
+
+**Legacy — memory-project `.screenshots/`.** The v3.13.0 store lived in the
+memory project folder (`<project>/.screenshots/`). It is **retired for new
+projects** and serves only as a migration source — see §2b and
+`scripts/migrate-screenshots-to-codepath.sh`.
+
+## 2. Directory layout (codePath-native)
+
+```
+<codePath>/tests/visual/
+├── <surface>.spec.ts
+└── <surface>.spec.ts-snapshots/
+    ├── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.png
+    ├── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.meta.json   ← provenance sidecar
+    └── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.txt          ← a11y snapshot (Lullabot)
+```
+
+Example:
+
+```
+<codePath>/tests/visual/
+├── home-hero.spec.ts
+└── home-hero.spec.ts-snapshots/
+    ├── home-hero-1-visual-chromium-desktop-linux.png
+    ├── home-hero-1-visual-chromium-desktop-linux.meta.json
+    ├── home-hero-1-visual-chromium-tablet-linux.png
+    └── home-hero-1-visual-chromium-tablet-linux.meta.json
+```
+
+The baseline filename is Playwright's snapshot naming —
+`<test-name>-<ordinal>-<projectName>-<platform>`. Generated specs fix the test
+name so `<ordinal>` is always `1`; the `<viewport>` is the `visual-chromium-<viewport>`
+project segment. The `.meta.json` sidecar replaces the `.png` extension.
+
+### 2b. Legacy layout (migration source only)
+
+The v3.13.0 memory-project store keyed images as
+`.screenshots/<component>/<viewport>.png` with `<viewport>` in `WIDTHxHEIGHT`
+form, plus optional `.previous.png` 1-deep history:
+
+```
+<project>/.screenshots/
 └── <component>/
-    ├── <viewport>.png
+    ├── <viewport>.png              # <viewport> = WIDTHxHEIGHT, e.g. 1920x1080
     ├── <viewport>.meta.json
     ├── <viewport>.previous.png         # optional — 1-deep history
     └── <viewport>.previous.meta.json   # optional — 1-deep history
 ```
 
-Examples:
-
-```
-.screenshots/
-├── home-hero/
-│   ├── 1920x1080.png
-│   ├── 1920x1080.meta.json
-│   ├── 1920x1080.previous.png
-│   ├── 1920x1080.previous.meta.json
-│   └── 375x812.png
-│   └── 375x812.meta.json
-└── article-hero/
-    ├── 1920x1080.png
-    └── 1920x1080.meta.json
-```
+`migrate-screenshots-to-codepath.sh` copies this into the codePath-native
+layout, rewriting `captured_by` and the `viewport` field. The legacy store is
+never auto-deleted — the user removes it after verifying the migration.
 
 ## 3. Naming rules
 
 | Element | Format | Regex |
 |---|---|---|
-| `<component>` | kebab-case, lowercase, no spaces | `^[a-z0-9][a-z0-9-]*$` |
-| `<viewport>` | `WIDTHxHEIGHT` in pixels | `^[0-9]+x[0-9]+$` |
+| `<surface>` / `<component>` | kebab-case, lowercase, no spaces | `^[a-z0-9][a-z0-9-]*$` |
+| `<viewport>` (codePath-native) | viewport **name** — kebab-case | `^[a-z0-9][a-z0-9-]*$` |
+| `<viewport>` (legacy `.screenshots/`) | `WIDTHxHEIGHT` in pixels | `^[0-9]+x[0-9]+$` |
 
-No nesting beyond `<component>/<viewport>`. Flat within each component keeps retrieval predictable at Drupal-theme scale (dozens to hundreds of components). Multi-viewport per component is the common case.
+In the codePath-native layout the surface `id` is the spec-file stem and the
+`<viewport>` is the registry viewport **name** (`desktop`, `tablet`, `phone`) —
+the same value carried in the `viewport` field of `.meta.json`. The pixel size
+lives in `registry.yml`'s viewport descriptor, not in the filename.
 
-Component names should describe what's captured (`home-hero`, `article-card`, `admin-toolbar`, `footer`), not where on the page (`top-left`). Callers are responsible for sanitizing user input to the kebab-case format before invoking the writer.
+Surface names should describe what's captured (`home-hero`, `article-card`,
+`footer`), not where on the page (`top-left`). The surface `id` in the registry
+IS the store key — `/setup-visual-regression` keeps them in sync.
 
 ## 4. `.meta.json` schema v1.0 (9 fields)
 
@@ -76,11 +118,11 @@ Every `.png` in the store has a sibling `.meta.json` with exactly these 9 fields
 |---|---|---|
 | `schema_version` | string | `"1.0"` for v3.13.0. Follows semver. Consumers match on major. MUST be a JSON string, never a number |
 | `role` | enum | `"baseline"` (regression source of truth) \| `"parity_reference"` (imported design comp) \| `"previous"` (used ONLY if meta is explicitly rewritten to mark an archived state; normally `.previous.meta.json` keeps the prior `role` unchanged) |
-| `viewport` | string | Matches `^[0-9]+x[0-9]+$` — same as the filename stem |
+| `viewport` | string | codePath-native: the viewport **name** (`desktop`), kebab-case. Legacy `.screenshots/`: `WIDTHxHEIGHT` (`^[0-9]+x[0-9]+$`). Matches the value in the filename's project segment |
 | `captured_at` | string | ISO-8601 UTC with `Z` suffix (e.g. `2026-04-24T14:30:00Z`). Serves as approval timestamp for baselines (they're written at approval time) |
 | `sha256` | string | Lowercase hex SHA-256 of the sibling PNG. 64 chars. Integrity + provenance |
 | `originating_task` | string | Task folder name that approved/wrote this baseline. For auditing — answers "who put this here?" |
-| `captured_by` | enum | `"playwright-mcp"` \| `"claude-in-chrome"` \| `"figma-export"` \| `"html-render"` \| `"user-upload"`. Identifies capture method — matters for understanding cross-run differences |
+| `captured_by` | enum | `"lullabot-playwright"` (primary for v4.13.0+ codePath-native captures) \| `"migrated-from-screenshots-store"` (set by `migrate-screenshots-to-codepath.sh`) \| `"playwright-mcp"` \| `"claude-in-chrome"` \| `"figma-export"` \| `"html-render"` \| `"user-upload"`. Identifies capture method — matters for understanding cross-run differences |
 | `prior_hash` | string \| null | SHA-256 of the file rotated to `.previous` when this baseline was written. `null` on the first baseline (no predecessor). Enables quick integrity checks without reading `.previous.meta.json` |
 | `source` | object \| null | REQUIRED when `role: "parity_reference"`, MUST be `null` otherwise. Shape: `{type: "figma" \| "html" \| "image" \| "url", uri: "<absolute url or path>"}`. Without this, a parity reference is unidentifiable after capture |
 
@@ -90,12 +132,26 @@ Every `.png` in the store has a sibling `.meta.json` with exactly these 9 fields
 2. `role: "parity_reference"` requires non-null `source`; other roles have `source: null`
 3. `sha256` MUST match the actual sibling PNG hash; reader emits `hash_mismatch` warning if not
 4. First baseline for any `<component>/<viewport>` has `prior_hash: null`; subsequent ones have `prior_hash` = sha256 of what was rotated to `.previous`
-5. `<component>` matches `^[a-z0-9][a-z0-9-]*$`
-6. `<viewport>` matches `^[0-9]+x[0-9]+$` and matches the filename stem exactly
+5. `<surface>` / `<component>` matches `^[a-z0-9][a-z0-9-]*$`
+6. The `viewport` field matches the `<viewport>` segment of the filename. In
+   the codePath-native layout that segment is the viewport **name**
+   (`^[a-z0-9][a-z0-9-]*$`, e.g. `desktop`); in the legacy `.screenshots/`
+   layout it is `WIDTHxHEIGHT` (`^[0-9]+x[0-9]+$`).
 
 ## 6. `.previous` rotation (1-deep history)
 
-On every write to an existing `<viewport>`:
+> **codePath-native (v4.13.0+) has no `.previous` rotation.** Baselines are
+> committed Playwright snapshots — **git history IS the baseline history**.
+> `npx playwright test --update-snapshots` overwrites the PNG in place; the
+> prior commit holds the old baseline. `write-baseline-codepath` still records
+> the prior PNG's hash in the new sidecar's `prior_hash` field (read from the
+> sidecar it is about to overwrite), but no `.previous.png` file is created.
+> The reader reports `has_previous: false` / `previous_meta: null` for every
+> codePath-native viewport. The rotation below applies ONLY to the legacy
+> `.screenshots/` writer (`write-baseline` / `write-parity-reference`).
+
+On every legacy `write-baseline` / `write-parity-reference` to an existing
+`<viewport>`:
 
 1. Compute SHA-256 of current `<viewport>.png` → becomes `prior_hash` in the new meta
 2. Delete existing `<viewport>.previous.png` + `.previous.meta.json` if present (unconditional drop — only 1 deep ever)
@@ -160,20 +216,26 @@ Warnings are additive — a single viewport can have multiple. Never blocks; con
 ## 10. Writer invocation reference
 
 ```bash
-# Baseline (regression source-of-truth)
+# codePath-native baseline sidecar (v4.13.0+ — PRIMARY for visual regression).
+# Playwright writes the PNG via --update-snapshots; this writes the .meta.json
+# sidecar next to it. No rotation — git holds history.
+screenshot-store-write.sh write-baseline-codepath \
+  <codePath> <surface-id> <png-filename> <viewport-name> <captured_by> <originating_task>
+
+# Legacy baseline in .screenshots/ (retained for the migration period).
 screenshot-store-write.sh write-baseline \
   <project> <component> <viewport> <source.png> <captured_by> <originating_task>
 
-# Parity reference (imported design comp)
+# Parity reference (imported design comp — Task D).
 screenshot-store-write.sh write-parity-reference \
   <project> <component> <viewport> <source.png> <captured_by> <originating_task> <source_type> <source_uri>
 ```
 
-Both return JSON: `{status: "ok"|"rollback"|"error", warnings: [], summary: {...}}`. Exit codes: 0 ok; 1 rollback (warning in JSON); 2 arg validation; 3 IO error pre-rotation.
+All three return JSON: `{status: "ok"|"rollback"|"error", warnings: [], summary: {...}}`. Exit codes: 0 ok; 1 rollback (warning in JSON); 2 arg validation; 3 IO error. `write-baseline-codepath` never rotates, so it never returns `rollback`.
 
 ## 11. Consumers
 
-- **`screenshot-store-reader` skill** (v1.0.0) — thin wrapper around the reader script
+- **`screenshot-store-reader` skill** (v1.1.0) — thin wrapper around the reader script
 - **`/validate:visual-regression`** — reads current baseline; on approved intentional change, invokes `write-baseline` to rotate
 - **`/validate:visual-parity`** — reads/writes parity references; diffs against current capture
 - **`/validate:all`** — reads store for summary; does NOT write
@@ -239,4 +301,5 @@ Future consumers needing screenshot data should call the reader skill rather tha
 - `scripts/screenshot-store-write.sh` — the writer
 - `skills/screenshot-store-reader/SKILL.md` — skill wrapper
 - `references/validation-gate-result.md` — the JSON envelope emitted by all `/validate:*` commands
-- Architecture §4 in `dev_framework_granular_validation/architecture.md`
+- `references/visual-regression-walkthrough.md` — the v4.13.0 codePath-native workflow
+- `scripts/migrate-screenshots-to-codepath.sh` — legacy `.screenshots/` → codePath migration
