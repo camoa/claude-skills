@@ -247,6 +247,15 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 D-A-D phases (Research → Architecture → Design) are **Type B** work — audit / review / architecture analysis. Read full source and config files; do NOT grep-first. Inherited methods, annotations, config-wired classes, and docblock metadata are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. Cited inline in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md`.
 
+## Effort-Adaptive Commands (v4.8.0+)
+
+Command and skill bodies may use the `${CLAUDE_EFFORT}` string substitution — Claude Code replaces it with the session's active effort level (`low` / `medium` / `high` / `xhigh` / `max`) when the command runs. Use it to scale *depth*, not correctness: an effort-adaptive command does less corroboration at `low` and more at `xhigh`, but never skips a gate or a required step.
+
+**Convention for adding effort-adaptivity:**
+- Insert `${CLAUDE_EFFORT}`-conditional language **only at genuine depth decision points** — every line is recurring tokens, so do not narrate effort handling throughout the body.
+- Gates, audits, and non-bypassable steps run **regardless of effort**. Effort scales discretionary depth (how many sources to corroborate, how many alternatives to enumerate), never enforcement.
+- Pilot first, broaden later. `commands/research.md` Step 6 is the **v4.8.0 pilot** (research depth). Broaden to `/design`, `/review`, and the component/pattern skills only after the pilot has been observed in real use.
+
 ## Forked Subagents (v4.2.0+, experimental upstream)
 
 Claude Code 2.1.117+ ships forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`) — context-inheriting parallel work. Relevant to `/propose-epics` bulk review and parallel sub-task investigation where shared loaded context (research, dev-guides, playbook) avoids re-establishment cost. **Not enabled by default** — `/validate:team`'s honest-validation guarantee deliberately wants fresh context. See `references/forked-subagents.md` for the framework's evaluation criteria.

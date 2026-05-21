@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-05-20
+
+### Effort-adaptive skills
+
+Adopts the `${CLAUDE_EFFORT}` substitution and documents how users mute
+individual framework skills. Implements §3 and §4 of the 2026-05-08 improvement
+plan. No gate or enforcement behavior changes — `${CLAUDE_EFFORT}` scales
+discretionary research depth only.
+
+### Added
+
+- **`${CLAUDE_EFFORT}` pilot in `commands/research.md`.** Step 6 ("Author
+  research.md") gains one effort-adaptive block: research depth scales with the
+  session effort level — `low` confirms the single most likely pattern;
+  `medium`/`high` runs the standard contrib + core-pattern pass; `xhigh`/`max`
+  corroborates across multiple sources and enumerates alternatives. The
+  non-bypassable gates (Steps 1, 3, 4, 7) run regardless of effort. `/research`
+  is the deliberate pilot — to be observed before broadening to `/design`,
+  `/review`, and the component/pattern skills.
+- **`CONVENTIONS.md` — "Effort-Adaptive Commands (v4.8.0+)" section.** Documents
+  the convention: insert `${CLAUDE_EFFORT}`-conditional language only at genuine
+  depth decision points, never around gates or required steps; pilot first,
+  broaden later.
+- **`README.md` — "Customizing skill visibility" section.** Shows how to mute
+  individual framework skills/commands with `Skill()` permission deny rules
+  (`/permissions` or `permissions.deny` in settings), with role-based starting
+  points, plus `/plugin disable` as the whole-plugin off switch.
+
+### Notes
+
+- **`skillOverrides` does not apply to plugin skills.** The 2026-05-08 plan §4
+  proposed documenting `skillOverrides` for per-skill visibility, but the
+  upstream Skills and Settings guides are explicit that `skillOverrides`
+  controls only non-plugin skills (project-repo or MCP-server skills) —
+  drupal-dev-framework's skills are plugin skills, so `skillOverrides` entries
+  for them are ignored. The README section therefore documents `Skill()` deny
+  rules (which do apply to plugin skills) and notes the `skillOverrides`
+  limitation so users don't reach for it.
+
 ## [4.7.0] - 2026-05-20
 
 ### Worktree & subagent modernization
