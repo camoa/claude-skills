@@ -2,9 +2,10 @@
 # Session start hook for drupal-dev-framework
 # Checks required plugins and registered projects
 
-# Clear stale session context for THIS workspace only
-WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-rm -f "$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
+# Clear stale session context for THIS session only
+DDF_DIR=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+. "$DDF_DIR/scripts/session-paths.sh"
+rm -f "$(ddf_session_file)"
 
 # Note: dev-guides-navigator presence is now enforced at install time via the
 # `dependencies` field in .claude-plugin/plugin.json. The former soft runtime

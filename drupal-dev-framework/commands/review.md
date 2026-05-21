@@ -109,6 +109,12 @@ Audit: {{audit_path}}
 
 `--team` invokes `/validate:team` directly; inner fallback (auto-falls-back to `/validate:all` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != "1"` or `TeamCreate` fails) handles unavailability. `_review.json gate_specific.mode` records actual: `"team"`, `"all"`, `"team-fallback-to-all"`.
 
+## When to escalate — `claude ultrareview`
+
+After `/review`'s gates pass, a high-stakes PR (production-adjacent, security-critical, or large) can get a deeper pass: `claude ultrareview <PR>` (or `/ultrareview`) runs a multi-agent reviewer fleet in a cloud sandbox that independently reproduces and verifies each finding. **Explicit user opt-in only** — never run it automatically from `/review`; it bills as usage credits (~$5–20/run beyond a small free-run allotment). The `code-quality-tools:ultrareview` skill wraps the same platform check; either entry point works.
+
+**Tip — long runs.** `/review`, `/research-team`, and `/validate:team` take minutes. Enable `channelsEnabled` in user settings for a push notification on completion. `/goal` pairs with `/review` for unattended green-until-done runs (e.g. `/goal every hard-block gate in <task>/validations/latest reports pass`) — see `CONVENTIONS.md` "Condition-checked autonomy with `/goal`".
+
 ## Pointers
 
 - Full walkthrough: `references/review-phase-walkthrough.md` (sibling `plumbing_docs_tests`)

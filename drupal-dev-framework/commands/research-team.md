@@ -14,6 +14,8 @@ Research or investigate a task using an agent team with 3 competing perspectives
 /drupal-dev-framework:research-team <task-name>
 ```
 
+> **Tip — long runs.** A 3-teammate research team takes minutes. Enable `channelsEnabled` in user settings for a push notification when the run completes.
+
 ## What This Does
 
 Spawns a 3-teammate agent team for Phase 1 research. Detects whether the task is a **feature** (Build vs Use vs Extend debate) or a **bug** (competing hypothesis investigation). Each teammate writes their own findings file. The lead synthesizes a final output.

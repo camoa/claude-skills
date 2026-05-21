@@ -40,8 +40,8 @@ case "$ARTIFACT" in
 esac
 
 # Read session_context for current workspace
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
-SESS_FILE="$HOME/.claude/drupal-dev-framework/sessions/$WORKSPACE_HASH.json"
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/session-paths.sh"
+SESS_FILE=$(ddf_session_file)
 
 ACTIVE_PHASE="null"
 if [[ -f "$SESS_FILE" ]]; then

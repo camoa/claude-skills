@@ -15,6 +15,8 @@ Run every validation gate sequentially against the current task. Aggregate the p
 /drupal-dev-framework:validate-all <task-name>  # run against a specific task
 ```
 
+> **Tip — unattended runs.** `/goal` pairs with `/validate:all` for green-until-done loops — e.g. `/goal every gate in the validation summary reports pass or skipped`. The evaluator judges only what the transcript shows, so the printed summary table (step 7) is what it reads. See `CONVENTIONS.md` "Condition-checked autonomy with `/goal`".
+
 ## What this does
 
 1. **Resolve task + project context** — same resolution as other `/validate:*` commands.

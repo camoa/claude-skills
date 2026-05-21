@@ -1,4 +1,4 @@
-# Worktree Conventions v1.1
+# Worktree Conventions v1.2
 
 **Introduced:** drupal-dev-framework v3.16.0
 **Owner:** `commands/worktree.md`, `commands/worktree-prune.md`, `commands/implement.md` (recommendation), `commands/complete.md` (lifecycle)
@@ -131,7 +131,7 @@ The `/worktree` creation command refuses on:
 
 ## 10. Session-context interaction
 
-The existing `session-context-writer` skill (v1.4.0) writes to `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json`. **No changes needed** — the worktree's distinct `$PWD` produces a distinct hash, which produces a distinct session-context file automatically.
+The `session-context-writer` skill (v1.5.0+) writes the session-context file through the shared `scripts/session-paths.sh` helper (`ddf_session_file`). The path is keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID. A worktree gets a distinct `$PWD` (`.worktrees/<task>/`), so its session-context file is already distinct from the main tree's; the session-ID salt (added v4.9.0, §7a of the improvement plan) additionally separates two sessions that share the **same** `$PWD` — two terminals in the main checkout, or a resumed session. Every session hook resolves the same path through the helper; the project-copied `save-session.sh` inlines an equivalent formula. When `CLAUDE_CODE_SESSION_ID` is absent the key is `md5($PWD)` exactly as before v4.9.0.
 
 `/worktree` pre-seeds the new session-context file with `task: null, taskPath: null, project: <name>, projectPath: <abs>` so the file exists for hooks; the user's first `/research` or `/implement` populates the task field.
 
@@ -242,7 +242,7 @@ task-completed), the native sweep is not.
 
 - **Major bumps** (`2.0`) are breaking: changes to directory priority semantics, branch-naming default, signal-strength thresholds, lifecycle path order.
 - **Minor bumps** (`1.1`) are additive: new optional signal types, new lifecycle paths, additional refusal cases, new flags, new documentation sections.
-- v1.0 committed for v3.16.0; v1.1 (additive — §11 native worktree support) for v4.7.0.
+- v1.0 committed for v3.16.0; v1.1 (additive — §11 native worktree support) for v4.7.0; v1.2 (§10 reworded for session-ID-salted session files) for v4.9.0.
 
 ## 13. Non-goals (deferred to v2)
 

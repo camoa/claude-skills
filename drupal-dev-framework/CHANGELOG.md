@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-05-20
+
+### Workflow integration & references
+
+The final release of the 2026-05-20 modernization roadmap. Implements §6, §7a–§7e, §8, §10.4, and §10.7 of the 2026-05-08 improvement plan: session-ID-scoped session files, background-agent workflows, and the remaining reference docs.
+
+### Changed
+
+- **Session-context files are now session-ID-scoped (§7a).** `session-context-writer` and every session hook resolved the per-workspace session file as `md5($PWD).json`, so two Claude Code sessions in the same directory collided last-writer-wins. A new shared helper `scripts/session-paths.sh` (`ddf_session_file`) keys the file by `md5($PWD)` salted with `$CLAUDE_CODE_SESSION_ID` when set, falling back to the pre-v4.9.0 `md5($PWD)` scheme when absent (backward compatible).
+  - Helper sourced by 9 consumers: the `session-context-writer` skill, `session-start.sh`, `pre-compact.sh`, `post-compact.sh`, `stop-failure.sh`, `context-reminder.sh`, `loaded-context-summary.sh`, `phase-command-bypass-detect.sh`, `migrate-to-epic.sh`.
+  - `save-session.sh` (copied into the project by `/install-remembrance-hook`, so it cannot source the plugin helper) inlines the equivalent formula, with a keep-in-sync comment.
+  - Only the session-context JSON is session-salted. The within-session skip-emit caches (`<hash>.last-*.md5`) and `save-session.sh`'s cross-session `<hash>.last-saved` marker stay keyed by the workspace-only hash — the marker is cross-session by design; the caches self-heal.
+  - `session-context-writer` skill 1.4.0 → 1.5.0; `worktree-conventions.md` §10 reworded (doc v1.1 → v1.2).
+
+### Added
+
+- **`references/post-batch-aggregation.md` (§6).** Documents the opt-in `PostToolBatch` pattern for aggregating `/research-team` and `/validate:team` per-teammate outputs into one roll-up. The plugin does **not** ship the hook — plugin-scoped `PostToolBatch` fires on every conversation and has no matcher. Mirrors code-quality-tools' sibling reference.
+- **`commands/review.md` — "When to escalate" (§7b, §7d, §10.4).** `claude ultrareview` documented as an opt-in deeper cloud review after `/review`'s gates pass (explicit user opt-in, ~$5–20/run as usage credits, never automatic); plus a long-runs tip pairing `channelsEnabled` notifications and `/goal` with the gate-aggregating commands.
+- **`CONVENTIONS.md` — three sections (§7c, §7e, §8, §10.4, §10.7):**
+  - "Condition-checked autonomy with `/goal`" — `/goal` vs `/loop`, framework examples, background sessions / Agent View.
+  - "Security & auto-mode posture" — `--dangerously-skip-permissions` removes the framework's `.claude/`-write safety net; `defaultMode: "auto"` is silently ignored in project settings since v2.1.142, so `autoMode.hard_deny` only guards a user-enabled auto mode.
+  - "Documentation & observability notes" — link upstream pages directly (the `/en/common-workflows` hub was pruned); OTel `invocation_trigger` future-instrumentation footnote.
+- **Long-run tips** in `commands/research-team.md` (`channelsEnabled` notification) and `commands/validate-all.md` (`/goal` pairing).
+
+### Notes
+
+- No change to gate semantics, the `/worktree` flow, or agent behavior. §7a is the only code change and is backward compatible — the session-file path is byte-identical to the pre-v4.9.0 scheme when `CLAUDE_CODE_SESSION_ID` is unset.
+- §7a was scoped by the roadmap as a 2-file edit; in reality the `md5($PWD)` path was computed in ~10 places, so it shipped as a coordinated change behind one shared helper (surfaced and confirmed with the maintainer before implementation).
+
+Version: plugin.json + marketplace entry 4.8.0 → 4.9.0; marketplace metadata.version 1.14.49 → 1.14.50.
+
 ## [4.8.0] - 2026-05-20
 
 ### Effort-adaptive skills

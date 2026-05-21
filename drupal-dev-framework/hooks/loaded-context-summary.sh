@@ -9,8 +9,10 @@
 set -euo pipefail
 
 # Read session_context for the current workspace
-WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-SESS_FILE="$HOME/.claude/drupal-dev-framework/sessions/$WORKSPACE_HASH.json"
+DDF_DIR=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+. "$DDF_DIR/scripts/session-paths.sh"
+WORKSPACE_HASH=$(ddf_workspace_hash)   # cache key (workspace-stable)
+SESS_FILE=$(ddf_session_file)
 
 [[ -s "$SESS_FILE" ]] || { jq -nc '{}'; exit 0; }
 

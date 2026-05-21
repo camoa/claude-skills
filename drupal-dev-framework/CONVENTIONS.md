@@ -157,7 +157,7 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 **`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
 
-**Conventions:** `references/worktree-conventions.md` v1.1 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and (§11) how the command relates to Claude Code's native `--worktree` support.
+**Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and (§11) how the command relates to Claude Code's native `--worktree` support.
 
 **Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle + Drupal/DDEV awareness. Not a hard dependency; replicated in command body.
 
@@ -286,6 +286,16 @@ Users can poll deploy status or run periodic checks during long sessions:
 
 Session-scoped — stops when session exits. 3-day auto-expiry.
 
+## Condition-checked autonomy with `/goal` (v4.9.0+)
+
+`/loop` re-runs a prompt on a time interval; `/goal` re-runs the session **until a condition holds**. After each turn a small fast model checks the condition against what the transcript shows and either starts another turn or clears the goal. It fits framework phases with a verifiable end state.
+
+- `/review` writes `_review.json` and per-gate envelopes — a goal like `/goal every hard-block gate in <task>/validations/latest reports pass` runs review-fix loops unattended.
+- `/validate:all` (7 gates) is similar — `/goal every gate in the validation summary reports pass or skipped`.
+- The evaluator judges only what is **already in the transcript** — it does not run tools or read files. The command must surface gate results inline (both `/review` and `/validate:all` do). Each `/goal` turn bills tokens; keep conditions measurable and bound them (`… or stop after 20 turns`).
+
+Long `/review`, `/research-team`, and `/validate:team` runs can also be dispatched as **background sessions** — `claude --bg "<prompt>"`, `/background` (alias `/bg`) from inside a session, or from Agent View (`claude agents`). A background session keeps running with no terminal attached. This composes with the `channelsEnabled` push-notification tip: background-run + ping-on-done.
+
 ## Sandbox and DDEV
 
 If users enable Claude Code sandboxing (`/sandbox`), DDEV commands will fail because Docker socket access is restricted. Required configuration:
@@ -312,6 +322,18 @@ Recommend users create `.claude/rules/` files scoped to file types for Drupal-sp
 - `drupal-scss.md` with `paths: ["*.scss"]` — BEM, Bootstrap usage, mobile-first
 
 These load only when Claude works on matching files, keeping context lean.
+
+## Security & auto-mode posture (v4.9.0+)
+
+**`--dangerously-skip-permissions`.** The framework writes to `.claude/` constantly — `session_context.json`, the `_*.json` gate audits, task folders under `.claude/projects/`. Running Claude Code with `--dangerously-skip-permissions` removes the permission prompts on `.claude/`, `.git/`, and `.vscode/` writes that are the safety net for the framework's own state files. Use it only in throwaway or sandboxed environments, never on a production-adjacent checkout.
+
+**`autoMode.hard_deny` and project settings.** Since Claude Code v2.1.142, a project's `.claude/settings.json` (or `.claude/settings.local.json`) **cannot** set `defaultMode: "auto"` — it is silently ignored, so a repository cannot grant itself auto mode. Auto mode is enabled only from the user's own `~/.claude/settings.json`. A project may still ship an `autoMode.hard_deny` array (unconditional denials — e.g. `core/`, `vendor/`, `web/sites/default/settings.php`, `.ddev/`); that list applies as a guardrail **if** the user has turned auto mode on, but it cannot itself turn auto mode on.
+
+## Documentation & observability notes (v4.9.0+)
+
+**Upstream doc links.** When referencing Claude Code documentation, link the specific current page — `/en/permission-modes`, `/en/worktrees`, `/en/sub-agents` — not the former `/en/common-workflows` hub, which was pruned. Direct per-topic links are stable; the hub is gone.
+
+**OTel skill metrics.** The framework does not ship OpenTelemetry instrumentation. If it ever does, note that `claude_code.skill_activated` carries an `invocation_trigger` attribute distinguishing `user-slash` from `claude-proactive` and `nested-skill` — useful for measuring how often framework commands are user-invoked versus auto-triggered. Recorded here as a future-instrumentation footnote.
 
 ## General
 - Current state only — no historical narratives
