@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.55"
+    "version": "1.14.56"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content. v0.5.0 documents that Claude Code platform docs (Debug Your Config, Auto Mode Config, Admin Setup) live at code.claude.com and are out-of-scope for this navigator.",
-      "version": "0.5.0",
+      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content. v0.5.1 normalizes the cache to a {hash, fetched_at, content} contract — the full llms.txt markdown is always stored under `content`, legacy minimal/compact caches self-heal on next use, and the cache-path derivation is documented for other plugins to consume.",
+      "version": "0.5.1",
       "author": {
         "name": "camoa"
       },
@@ -56,8 +56,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow (Research → Architecture → Implementation) with enforced SOLID, TDD, DRY, and security gates. Ships 22 skills, 30 commands, and 7 agents covering epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate, the Playbook System for opinionated best-practices, git-worktree parallel-task awareness, agent-team validation, and per-project session-remembrance hooks. Depends on dev-guides-navigator and code-quality-tools; see CHANGELOG.md for full version history.",
-      "version": "4.9.0",
+      "description": "Systematic 3-phase Drupal development workflow (Research → Architecture → Implementation) with enforced SOLID, TDD, DRY, and security gates. Ships 22 skills, 36 commands, and 7 agents covering epic/sub-task hierarchy (create, promote, and expand epics), scope contracts, a Phase 4 /review gate, two-stage dev-guides detection (methodology floor + catalog-grounded prose matching), the Playbook System, git-worktree parallel-task awareness, agent-team validation, and per-project session-remembrance hooks.",
+      "version": "4.10.0",
       "author": {
         "name": "camoa"
       },

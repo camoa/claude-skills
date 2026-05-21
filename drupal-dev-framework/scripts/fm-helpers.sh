@@ -171,6 +171,10 @@ apply_frontmatter() {
 }
 
 # write_stub_task_md <file> <child_name> <parent_name>
+# Emits a minimal subtask stub. The "## Notes" line carries the shared
+# `Stub scaffolded by ` marker family (mirrors the /scope stub convention) so
+# /research step 2 can detect the stub and overwrite it with the full Phase 1
+# template rather than aborting on a pre-existing folder.
 write_stub_task_md() {
   local file="$1"
   local child="$2"
@@ -193,5 +197,8 @@ $fm
 - [ ] Phase 2: Architecture
 - [ ] Phase 3: Implementation
 - [ ] Phase 4: Review (_review.json)
+
+## Notes
+Stub scaffolded by \`/drupal-dev-framework:migrate-to-epic\` on $(date -I).
 EOF
 }

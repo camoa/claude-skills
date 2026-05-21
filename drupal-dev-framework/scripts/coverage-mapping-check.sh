@@ -20,9 +20,11 @@
 #   2. research.md must contain a `## Coverage Mapping` H2 (synonyms accepted:
 #      `## Coverage Mapping`, `## Coverage`, `## Coverage Map`)
 #   3. Section must have ≥3 content lines below the heading
-#   4. Each Research Question from task.md (extracted from `## Research Questions`
-#      bullets) must have a corresponding row in the Coverage Mapping section
-#      (matched by case-insensitive substring of the question text against the row)
+#   4. Each Research Question from task.md (extracted from the `## Research
+#      Questions` section — ordered `1.`/`2.` items, or `-`/`*`/`+` bullets;
+#      the marker prefix is stripped) must have a corresponding row in the
+#      Coverage Mapping section (matched by case-insensitive substring of the
+#      question text against the row)
 #
 # verdict: pass requires all 4 conditions; fail otherwise.
 
@@ -87,14 +89,17 @@ QUESTIONS_ADDRESSED=0
 MISSING_JSON='[]'
 
 if [[ -f "$TASK_MD" ]]; then
-  # Extract bullets under ## Research Questions (case-insensitive)
+  # Extract list items under ## Research Questions (case-insensitive).
+  # Tolerant reader: accepts ordered (1. / 2) ) and bulleted (- / * / +) markers;
+  # an optional numeric section prefix on the heading is allowed too. The
+  # marker prefix is stripped before the question text is emitted.
   QUESTIONS=$(awk '
     BEGIN { in_block = 0; IGNORECASE = 1 }
-    /^## Research Questions/ { in_block = 1; next }
+    /^## ([0-9]+\.?[[:space:]]+)?Research Questions([[:space:]]|$)/ { in_block = 1; next }
     in_block && /^## / { in_block = 0 }
-    in_block && /^- / {
+    in_block && /^([0-9]+[.)]|[-*+])[[:space:]]/ {
       line = $0
-      sub(/^- */, "", line)
+      sub(/^([0-9]+[.)]|[-*+])[[:space:]]+/, "", line)
       print line
     }
   ' "$TASK_MD")

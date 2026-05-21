@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# migrate-to-epic.sh — 8-step transactional migration. Two paths:
+# migrate-to-epic.sh — 8-step transactional migration. Three operations:
 #   1. flat → epic        (top-level task becomes a project-level epic)
 #   2. subtask → sub_epic (subtask inside an epic gets its own children;
 #                          second and final nesting level; max depth = 2)
+#   3. expand epic        (an existing epic/sub_epic gains more children;
+#                          triggered when the resolved task is already an
+#                          epic/sub_epic AND one or more child names are passed)
 #
 # Usage:
 #   migrate-to-epic.sh <project_path> <task_name> [--dry-run] [<child1> <child2> ...]
 #
-# The path is chosen by where <task_name> resolves:
-#   - .../in_progress/<task>/                           → flat → epic
-#   - .../in_progress/<parent>/in_progress/<task>/      → subtask → sub_epic
+# The operation is chosen by where <task_name> resolves AND its current kind:
+#   - .../in_progress/<task>/   kind=flat              → flat → epic
+#   - .../in_progress/<parent>/in_progress/<task>/  kind=subtask → subtask → sub_epic
+#   - <task> already kind=epic|sub_epic, children passed → expand epic
+#   - <task> already kind=epic|sub_epic, no children     → no-op (exits with a hint)
 # Ambiguous match (subtask name exists under multiple parents) aborts.
 #
 # Transactional: the filesystem is either in pre-migration or post-migration
@@ -44,7 +49,8 @@
 #   - Task folder is a symlink (security hardening — paper-test finding)
 #   - task.md is a symlink (security hardening — paper-test finding)
 #   - Task already in completed/
-#   - Task is already an epic or sub_epic
+#   - Task is already an epic/sub_epic AND no children passed (nothing to expand)
+#   - Expansion: a new child name collides with an existing epic child or folder
 #   - Top-level task carries kind=subtask (frontmatter/location mismatch)
 #   - Nested task carries kind=flat (frontmatter/location mismatch)
 #   - Parent of a subtask is already a sub_epic (max nesting depth = 2)
@@ -173,11 +179,31 @@ READER=$(fm_read "$TASK_DIR")
 CURRENT_KIND=$(jq -r '.kind' <<<"$READER")
 CURRENT_STATUS=$(jq -r '.status' <<<"$READER")
 
-if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+# Expansion mode: the resolved task is ALREADY an epic/sub_epic. With children
+# passed, expand it in place instead of aborting; with none, exit with a hint.
+EXPANSION_MODE=false
+if [ "$CURRENT_KIND" = "epic" ] || [ "$CURRENT_KIND" = "sub_epic" ]; then
+  if [ ${#CHILDREN[@]} -eq 0 ]; then
+    echo "Nothing to do: '$TASK_NAME' is already an epic (kind=$CURRENT_KIND)." >&2
+    echo "Pass child names (positional args, or --children \"<name> …\" via /migrate-to-epic) to expand it." >&2
+    exit 1
+  fi
+  EXPANSION_MODE=true
+fi
+
+if [ "$EXPANSION_MODE" = "true" ]; then
+  # Expanding an existing epic. Verify kind matches the resolved location.
+  if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+    [ "$CURRENT_KIND" = "sub_epic" ] || abort "nested epic '$TASK_NAME' has kind=$CURRENT_KIND — expected sub_epic at this depth"
+    echo "  Epic expansion (nested): sub_epic='$TASK_NAME'"
+  else
+    [ "$CURRENT_KIND" = "epic" ] || abort "top-level epic '$TASK_NAME' has kind=$CURRENT_KIND — expected epic"
+    echo "  Epic expansion: epic='$TASK_NAME'"
+  fi
+elif [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
   # Subtask-to-sub_epic path. Verify parent's kind is `epic` (not `sub_epic` — no third level).
   case "$CURRENT_KIND" in
     subtask) : ;;
-    epic|sub_epic) abort "task is already an epic (kind=$CURRENT_KIND)" ;;
     flat) abort "task at nested path has kind=flat — frontmatter inconsistent with location" ;;
     *) abort "unknown kind: $CURRENT_KIND" ;;
   esac
@@ -193,7 +219,6 @@ else
   # Top-level flat-to-epic path (unchanged behavior).
   case "$CURRENT_KIND" in
     flat) : ;;
-    epic|sub_epic) abort "task is already an epic (kind=$CURRENT_KIND)" ;;
     subtask) abort "task at top-level has kind=subtask — frontmatter inconsistent with location" ;;
     *) abort "unknown kind: $CURRENT_KIND" ;;
   esac
@@ -209,7 +234,23 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
   DUPES=$(printf '%s\n' "${CHILDREN[@]}" | sort | uniq -d)
   [ -z "$DUPES" ] || abort "duplicate child names: $DUPES"
 fi
-echo "  OK — kind=$CURRENT_KIND status=$CURRENT_STATUS children=${#CHILDREN[@]}"
+
+# Expansion-only: every new child must be genuinely new — reject collisions with
+# the epic's existing children[] frontmatter or its in_progress/ / completed/ folders.
+if [ "$EXPANSION_MODE" = "true" ]; then
+  EXISTING_CHILDREN=$(jq -r '.children[]? | sub("^local:";"")' <<<"$READER")
+  for c in "${CHILDREN[@]}"; do
+    if printf '%s\n' "$EXISTING_CHILDREN" | grep -qxF "$c"; then
+      abort "child '$c' is already in epic '$TASK_NAME' children[] — cannot re-add"
+    fi
+    if [ -d "$TASK_DIR/in_progress/$c" ] || [ -d "$TASK_DIR/completed/$c" ]; then
+      abort "child '$c' already exists as a folder inside epic '$TASK_NAME'"
+    fi
+  done
+fi
+OK_SUFFIX=""
+[ "$EXPANSION_MODE" = "true" ] && OK_SUFFIX=" (expansion — adding to existing epic)"
+echo "  OK — kind=$CURRENT_KIND status=$CURRENT_STATUS children=${#CHILDREN[@]}$OK_SUFFIX"
 
 # ---------------------------------------------------------------------------
 # Step 2 — Classify children (parallel array)
@@ -273,7 +314,11 @@ fi
 if [ "$DRY_RUN" = "true" ]; then
   echo ""
   echo "PLAN (dry-run): no changes made."
-  if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+  if [ "$EXPANSION_MODE" = "true" ]; then
+    echo "  Would expand existing $CURRENT_KIND '$TASK_NAME' with ${#CHILDREN[@]} new child(ren):"
+    for c in "${CHILDREN[@]}"; do echo "    + $c"; done
+    echo "  Epic path stays at $TASK_DIR; existing children preserved"
+  elif [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
     echo "  Would promote subtask '$TASK_NAME' (inside epic '$PARENT_EPIC_NAME') to kind=sub_epic, status=$CURRENT_STATUS"
     echo "  Promoted path stays at $TASK_DIR"
   else
@@ -294,38 +339,71 @@ echo "[3/8] Build in temp"
 mkdir -p "$TEMP_ROOT" || abort "cannot create temp root"
 # Atomic lock: mkdir without -p fails fast if dir exists (concurrent migration).
 mkdir "$TEMP_ROOT/$TASK_NAME" || abort "concurrent migration detected"
-mkdir "$TEMP_ROOT/$TASK_NAME/shared"
-# Nested per-epic progress folders — consistent with project-level in_progress/completed
-# convention. Design fix 2026-04-22: keeps completed children spatially associated with
-# their parent epic. Subtasks live in $EPIC/in_progress/ or $EPIC/completed/ by status.
-mkdir "$TEMP_ROOT/$TASK_NAME/in_progress"
-mkdir "$TEMP_ROOT/$TASK_NAME/completed"
-
-cp "$TASK_DIR/task.md" "$TEMP_ROOT/$TASK_NAME/task.md"
-if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
-  EPIC_FM=$(write_subepic_frontmatter "$TASK_NAME" "$PARENT_EPIC_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+if [ "$EXPANSION_MODE" = "true" ]; then
+  # Expansion: copy the WHOLE existing epic (task.md, in_progress/, completed/,
+  # shared/, phase artifacts, audit JSONs) into temp, then merge in the new
+  # children. `/.` copies directory contents (including _*.json) into the
+  # already-created atomic-lock dir.
+  cp -r "$TASK_DIR"/. "$TEMP_ROOT/$TASK_NAME/" || { rm -rf "$TEMP_ROOT/$TASK_NAME"; abort "failed to copy epic into temp"; }
+  mkdir -p "$TEMP_ROOT/$TASK_NAME/shared" "$TEMP_ROOT/$TASK_NAME/in_progress" "$TEMP_ROOT/$TASK_NAME/completed"
+  # Merged children[] = existing (from frontmatter, local: prefix stripped) + new.
+  EXISTING_BARE=()
+  while IFS= read -r ec; do
+    [ -n "$ec" ] && EXISTING_BARE+=("$ec")
+  done < <(jq -r '.children[]? | sub("^local:";"")' <<<"$READER")
+  MERGED_CHILDREN=("${EXISTING_BARE[@]}" "${CHILDREN[@]}")
+  if [ "$CURRENT_KIND" = "sub_epic" ]; then
+    PARENT_BARE=$(jq -r '(.parent // "") | sub("^local:";"")' <<<"$READER")
+    EPIC_FM=$(write_subepic_frontmatter "$TASK_NAME" "$PARENT_BARE" "$CURRENT_STATUS" "${MERGED_CHILDREN[@]}")
+  else
+    EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${MERGED_CHILDREN[@]}")
+  fi
+  apply_frontmatter "$TEMP_ROOT/$TASK_NAME/task.md" "$EPIC_FM"
 else
-  EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+  mkdir "$TEMP_ROOT/$TASK_NAME/shared"
+  # Nested per-epic progress folders — consistent with project-level in_progress/completed
+  # convention. Design fix 2026-04-22: keeps completed children spatially associated with
+  # their parent epic. Subtasks live in $EPIC/in_progress/ or $EPIC/completed/ by status.
+  mkdir "$TEMP_ROOT/$TASK_NAME/in_progress"
+  mkdir "$TEMP_ROOT/$TASK_NAME/completed"
+
+  cp "$TASK_DIR/task.md" "$TEMP_ROOT/$TASK_NAME/task.md"
+  if [ "$IS_SUBEPIC_PROMOTION" = "true" ]; then
+    EPIC_FM=$(write_subepic_frontmatter "$TASK_NAME" "$PARENT_EPIC_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+  else
+    EPIC_FM=$(write_epic_frontmatter "$TASK_NAME" "$CURRENT_STATUS" "${CHILDREN[@]}")
+  fi
+  apply_frontmatter "$TEMP_ROOT/$TASK_NAME/task.md" "$EPIC_FM"
+
+  for artifact in research.md architecture.md implementation.md; do
+    [ -f "$TASK_DIR/$artifact" ] && cp "$TASK_DIR/$artifact" "$TEMP_ROOT/$TASK_NAME/$artifact"
+  done
+
+  # Preserve split-artifact subdirectories: research/<subject>.md (split research)
+  # and architecture/<component>.md (split design). These are epic-level phase
+  # detail — they belong with the promoted task's own research.md/architecture.md.
+  # The OTHER-files loop below only handles regular files, so without this they
+  # would be lost into the 24h rollback dir.
+  for subdir in research architecture; do
+    [ -d "$TASK_DIR/$subdir" ] && cp -r "$TASK_DIR/$subdir" "$TEMP_ROOT/$TASK_NAME/$subdir"
+  done
+
+  # Preserve any OTHER top-level files from the original (e.g. mechanisms-map.md,
+  # decision logs, planning docs). They are epic-wide cross-cutting artifacts →
+  # destination is shared/. Paper-test integration finding 2026-04-22: the
+  # earlier version lost these files into the 24h rollback dir.
+  for srcfile in "$TASK_DIR"/*; do
+    [ -f "$srcfile" ] || continue
+    name=$(basename "$srcfile")
+    case "$name" in
+      task.md|research.md|architecture.md|implementation.md) ;;  # already handled
+      *) cp "$srcfile" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
+    esac
+  done
 fi
-apply_frontmatter "$TEMP_ROOT/$TASK_NAME/task.md" "$EPIC_FM"
 
-for artifact in research.md architecture.md implementation.md; do
-  [ -f "$TASK_DIR/$artifact" ] && cp "$TASK_DIR/$artifact" "$TEMP_ROOT/$TASK_NAME/$artifact"
-done
-
-# Preserve any OTHER top-level files from the original (e.g. mechanisms-map.md,
-# decision logs, planning docs). They are epic-wide cross-cutting artifacts →
-# destination is shared/. Paper-test integration finding 2026-04-22: the
-# earlier version lost these files into the 24h rollback dir.
-for srcfile in "$TASK_DIR"/*; do
-  [ -f "$srcfile" ] || continue
-  name=$(basename "$srcfile")
-  case "$name" in
-    task.md|research.md|architecture.md|implementation.md) ;;  # already handled
-    *) cp "$srcfile" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
-  esac
-done
-
+# Add the NEW children (both promotion and expansion). Existing epic children
+# in expansion mode were already copied by the cp -r above.
 if [ ${#CHILDREN[@]} -gt 0 ]; then
   idx=0
   for child in "${CHILDREN[@]}"; do
@@ -462,7 +540,11 @@ echo "  (caller invokes session-context-writer with these values)"
 # ---------------------------------------------------------------------------
 echo "[8/8] Done"
 echo ""
-echo "Migrated $TASK_NAME to epic with ${#CHILDREN[@]} children."
+if [ "$EXPANSION_MODE" = "true" ]; then
+  echo "Expanded $CURRENT_KIND $TASK_NAME with ${#CHILDREN[@]} new child(ren); ${#EXISTING_BARE[@]} existing child(ren) preserved."
+else
+  echo "Migrated $TASK_NAME to epic with ${#CHILDREN[@]} children."
+fi
 echo ""
 echo "Structure:"
 cd "$TASK_DIR" && find . -maxdepth 3 -type f | sort | sed 's|^\./|  |'

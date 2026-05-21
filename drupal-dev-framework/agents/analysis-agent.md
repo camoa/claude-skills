@@ -2,7 +2,7 @@
 name: analysis-agent
 description: "Use when a framework flow needs to assess task scope or propose decomposition. Reads task docs (task.md + phase artifacts) and optionally codePath; emits structured JSON per references/analysis-agent-schema.md. Three modes: folder mode (/propose-epics bulk review + post-phase epic checks), description mode (/research **always-on** pre-analysis at new-task creation, v4.0.0+ — fires regardless of strong signals), and play_candidates mode (/complete candidate-play surface, v1.1.0+ — surfaces repeated decisions worth capturing as plays). Never modifies files."
 capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-decomposition"]
-version: 1.1.0
+version: 1.1.1
 model: sonnet
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
@@ -180,13 +180,24 @@ Produce the JSON per `references/analysis-agent-schema.md`. Schema-version check
 From the schema reference, restated for agent convenience:
 
 1. `proposed_children` non-empty iff `decision: epic_candidate`
-2. `confidence: low` REQUIRED when `code_read: false`
+2. `confidence` MUST be exactly `"low"` whenever `code_read: false`. There is no
+   exception — docs-only input cannot support `"medium"` or `"high"`. Set
+   `confidence` to `"low"` as the FIRST thing you do once `code_read` is known
+   to be `false` (step 3), before signal evaluation can tempt a higher value.
 3. `signals_used` non-empty when `decision: epic_candidate`
 4. All child names match the naming regex
 5. `rationale` ≤400 chars
 6. No literal newlines inside JSON string fields
 
 If any invariant would be violated, adjust the decision/output rather than emitting invalid JSON. Common adjustment: a proposed child name with disallowed chars → substitute underscores; a too-long rationale → trim with an ellipsis.
+
+**Invariant 2 is also enforced deterministically downstream.** Every consumer
+pipes this agent's JSON through `scripts/analysis-agent-normalize.sh`, which
+clamps `confidence` to `"low"` when `code_read: false` and appends a `notes[]`
+entry. The script is the authoritative enforcement; the agent upholding the
+invariant itself is belt-and-suspenders. Do not rely on the clamp as a licence
+to be sloppy — emit `"low"` correctly — but know the framework will not trust a
+drifted value.
 
 ## Do NOT
 

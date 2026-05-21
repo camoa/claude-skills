@@ -1,7 +1,7 @@
 ---
 name: epic-migrator
-description: Use when converting a flat task into an epic folder with children. Runs the 8-step transactional migration via scripts/migrate-to-epic.sh. Supports --dry-run for preflight plan. Never leaves half-migrated state on disk.
-version: 2.0.1
+description: Use when converting a flat task into an epic folder with children, promoting a subtask to a sub_epic, or expanding an existing epic with more children. Runs the 8-step transactional migration via scripts/migrate-to-epic.sh. Supports --dry-run for preflight plan. Never leaves half-migrated state on disk.
+version: 2.1.0
 user-invocable: false
 model: sonnet
 allowed-tools: Bash, Skill
@@ -15,7 +15,11 @@ Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`. The scri
 
 **Input (CLI args to the script):**
 - `<project_path>` — absolute project path
-- `<task_name>` — flat task folder to promote
+- `<task_name>` — the task folder to operate on. The script picks the operation by where the name resolves and its current `kind`:
+  - flat task at project level → **flat → epic** promotion
+  - subtask nested inside an epic → **subtask → sub_epic** promotion
+  - already an epic/sub_epic + child names passed → **epic expansion** (adds children to the existing epic, preserving existing children + artifacts)
+  - already an epic/sub_epic + no child names → no-op (exit 1 with a "pass children to expand" hint)
 - `[--dry-run]` — prints plan, changes nothing
 - `[<child1> <child2> ...]` — zero or more child names
 
@@ -25,7 +29,7 @@ Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`. The scri
 
 **Exit codes:**
 - `0` success (live or dry-run)
-- `1` abort (preflight/validation/mid-migration error — nothing committed)
+- `1` abort (preflight/validation/mid-migration error — nothing committed) OR no-op (epic with no children to add)
 - `2` usage error (missing required arg)
 
 ## Invocation

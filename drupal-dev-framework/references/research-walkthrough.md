@@ -132,14 +132,15 @@ If `[n]` → skip the walkthrough; proceed to session-context-writer.
 On `[y]`:
 
 1. **Pull the traceability sources** using this priority:
-   - `task.md` → Research Questions list (extract `- ...` bullets under that heading, if present)
+   - `task.md` → Research Questions list (extract the list items under that heading — ordered `1.`/`2.` items OR `-`/`*`/`+` bullets, with the marker prefix stripped; the canonical authored style is numbered)
    - `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked}`)
    - If both sources are empty → "This task has no research questions or acceptance criteria declared. Walkthrough can't map without them; consider `/scope <task>` to add task-level criteria."
-2. **For each item (question or criterion)**, scan `research.md` and identify the section(s) that address it. Look for:
+2. **For each item (question or criterion)**, scan `research.md` — and any `research/<subject>.md` files when the research was split — and identify the section(s)/file(s) that address it. Look for:
+   - the `## Coverage Mapping` rows in the `research.md` hub (the authoritative question → research map)
    - Q-headings that match (e.g., `### Q1 — Playwright MCP concurrency` ↔ a Research Question about MCP concurrency)
    - Decision-log entries
-   - Cross-cutting pattern numbers
-   - Evidence index references
+   - a `research/<subject>.md` file whose subject answers the item
+   - Cross-cutting pattern numbers / evidence references
 3. **Honest mapping.** If a question or criterion has no clear section in `research.md`, mark it **"NOT YET ADDRESSED"** — do not invent a reference. Flag it for the discussion step.
 
 ### Step 3 — Print the table
@@ -204,6 +205,29 @@ implementation_process/in_progress/{task_name}/
 └── research.md     # Phase 1 findings
 ```
 
+**Per-subject research files (v4.10.0+).** Each distinct subject the research
+investigates gets **its own file** under `research/` — one file per subject,
+named after that subject. `research.md` is the **index/hub**: it does not
+restate the detail, it synthesizes and links. This keeps each `/design` or
+`/implement` read targeted (load only the subjects that phase needs) instead of
+pulling one monolithic file:
+```
+implementation_process/in_progress/{task_name}/
+├── task.md
+├── research.md            # Index/hub: Problem Statement, the index table,
+│                          #   Recommendation, Decision Log, Coverage Mapping
+└── research/
+    ├── <subject-a>.md      # full findings for one researched subject
+    ├── <subject-b>.md      # full findings for another
+    └── <subject-c>.md
+```
+A `<subject>` is whatever was investigated as a unit — a contrib module, an
+integration approach, a core subsystem, a competing option. Each subject file
+holds that subject's complete findings (what it is, how it would apply, fit
+assessment, evidence). When research genuinely covered a single subject, a
+flat single-file `research.md` is still fine — the split exists to stop
+unrelated subjects from sharing one token-heavy file.
+
 **task.md** (tracker):
 ```markdown
 # Task: {task_name}
@@ -224,6 +248,10 @@ implementation_process/in_progress/{task_name}/
 - [ ] {criterion 1}
 - [ ] {criterion 2}
 
+## Research Questions
+1. {first question research must answer}
+2. {second question research must answer}
+
 ## Related Tasks
 None
 
@@ -231,33 +259,71 @@ None
 {Any additional notes}
 ```
 
-**research.md** (Phase 1 findings):
+**Research Questions list style (strict writer).** Always emit the `## Research
+Questions` section as a **numbered list** — one question per `N.` item (`1.`,
+`2.`, …). Do not use bullets and do not mix styles. Numbered is canonical
+because it is coherent with the `Q1`/`Q2` references and the `### Q1 —`
+research.md headings used elsewhere in this walkthrough, and it is the form the
+coverage-mapping gate's question count depends on being authored consistently.
+(The coverage-mapping reader is tolerant of any list marker — see the
+"Coverage-mapping validation gate" section — but the writer commits to one.)
+
+**research.md** — the index/hub. It synthesizes; it does not restate each
+subject's detail. The per-subject findings live in `research/<subject>.md`.
+
 ```markdown
 # Research: {task_name}
 
 ## Problem Statement
 What we're trying to solve.
 
-## Existing Solutions
-| Solution | Type | Fit | Notes |
-|----------|------|-----|-------|
-| {module/pattern} | Contrib/Core | Good/Partial/Poor | {notes} |
-
-## Core Patterns Found
-| Pattern | Location | Applicability |
-|---------|----------|---------------|
-| {pattern} | {path} | {notes} |
+## Research Index
+| Subject | File | One-line finding |
+|---------|------|------------------|
+| {subject investigated} | [research/{subject}.md](research/{subject}.md) | {verdict in a sentence} |
+| {another subject} | [research/{subject}.md](research/{subject}.md) | {verdict in a sentence} |
 
 ## Recommendation
-Use / Extend / Build from scratch
+Use / Extend / Build from scratch — the cross-subject decision, with a
+sentence on why, citing the subject files.
 
 ## Key Patterns to Apply
-- Pattern 1: {description}
+- Pattern 1: {description} (see research/{subject}.md)
 - Pattern 2: {description}
 
 ## Decision Log
-{Research decisions made}
+{Cross-cutting research decisions}
+
+## Coverage Mapping
+{Each Research Question → the research that addresses it. MUST live here in
+the hub — the coverage-mapping gate reads only research.md. Rows may point
+into research/<subject>.md files.}
 ```
+
+**research/{subject}.md** — one file per investigated subject. Holds that
+subject's complete findings; nothing in the hub duplicates it.
+
+```markdown
+# Research — {subject}
+
+## What it is
+{The module / approach / subsystem / option, described.}
+
+## Fit
+Good / Partial / Poor — and why, against this task's goal.
+
+## How it would apply
+{Concretely, how this subject would be used or adapted here.}
+
+## Patterns & evidence
+| Pattern | Location | Applicability |
+|---------|----------|---------------|
+| {pattern} | {path / URL} | {notes} |
+```
+
+When the research genuinely covered a single subject, the hub MAY hold the
+findings inline (no `research/` folder) — but `## Coverage Mapping` always
+stays in `research.md`.
 
 ## Pre-analysis validation gate (v4.0.0+, refactored from soft hook)
 

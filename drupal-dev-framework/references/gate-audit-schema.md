@@ -131,14 +131,27 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 
 ```json
 "gate_specific": {
-  "phase": "research | design | implement",
-  "keywords_matched": ["gate", "complete", "quality"],
-  "guides_to_load": ["plugin:quality-gates"],
-  "guides_actually_loaded": ["plugin:quality-gates"]
+  "phase": "research | design | implement | complete",
+  "methodology_floor": ["plugin:tdd-workflow", "plugin:solid-drupal", "plugin:dry-patterns"],
+  "catalog_candidates": [
+    {"slug": "drupal/views", "title": "Views", "description": "...", "triggered_by": ["views"]}
+  ],
+  "matched_domain_guides": ["drupal/views", "drupal/jsonapi"],
+  "guides_actually_loaded": ["plugin:tdd-workflow", "drupal/views"],
+  "keywords_matched": [],
+  "guides_to_load": []
 }
 ```
 
 `user_choice` enum: `"c" | "a" | "n"`.
+
+**v4.10.0+ fields (additive, no schema version bump per §7).** The two-stage hybrid guide detection writes:
+
+- `methodology_floor[]` — the phase-aware plugin methodology guides `dev-guides-detect.sh` emits unconditionally (research → 3 refs, design → 4, implement/complete → 5). Always present; never empty.
+- `catalog_candidates[]` — Stage-1 lexical catalog matches: `{slug, title, description, triggered_by[]}` objects. Empty when the catalog cache is missing (`warnings` carries `catalog_cache_missing`).
+- `matched_domain_guides[]` — the `guides-matcher` agent's semantic adds (prose mode; plus component-match plan mode for `/implement`). Slug list.
+
+`keywords_matched[]` / `guides_to_load[]` are **legacy** (v4.0.0 keyword-table model, removed in v4.10.0). The detector no longer populates them; they remain in the schema as `[]` so pre-v4.10.0 audit readers do not break. New consumers read `methodology_floor[]` + `catalog_candidates[]` + `matched_domain_guides[]`.
 
 ### 5.7 `playbook-load`
 

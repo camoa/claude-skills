@@ -26,7 +26,7 @@ This is the bulk-review counterpart to the inline pre-analysis hook in `/researc
    - `kind: subtask` (inside an epic; subject to different analysis)
    - `completed/` subtasks (via folder-location check inside any epic's `completed/`)
    - Empty task folders (no task.md)
-4. **Analyzes each candidate** — invokes `analysis-agent` (via Task tool, one subagent per candidate — they can run in parallel). Each returns structured JSON per `references/analysis-agent-schema.md` v1.0.
+4. **Analyzes each candidate** — invokes `analysis-agent` (via Task tool, one subagent per candidate — they can run in parallel). Each returns structured JSON per `references/analysis-agent-schema.md` v1.0. **Normalize each candidate's JSON** through `${CLAUDE_PLUGIN_ROOT}/scripts/analysis-agent-normalize.sh` as it returns, before the schema-version check, presentation, or any `/migrate-to-epic` call — it deterministically clamps `confidence` to `low` when `code_read:false` (schema invariant 2).
 5. **Presents per-task** — for each analyzed task, show the user the agent's decision:
    - `epic_candidate` — proposed children + rationale → ask user to accept / edit / reject / skip
    - `keep_flat` — brief "no change recommended" note; move on

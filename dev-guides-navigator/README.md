@@ -66,8 +66,12 @@ curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/form
 No configuration required. The skill automatically caches `llms.txt` per project at:
 
 ```
-~/.claude/projects/{project-hash}/memory/dev-guides-cache.json
+~/.claude/projects/<dasherized-cwd>/memory/dev-guides-cache.json
 ```
+
+`<dasherized-cwd>` is the absolute working directory with every non-alphanumeric
+character replaced by `-`. See `references/cache-format.md` for the exact
+derivation and the `{hash, fetched_at, content}` schema.
 
 ## Disambiguation
 
@@ -97,9 +101,9 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-**v0.2.0** (Current) — Fixed WebFetch contradictions, upgraded to sonnet, pushy descriptions, allowed-tools enforcement
-
-**v0.1.0** — Initial release with hash-based caching and KG metadata disambiguation
+**v0.5.1** (Current) — Cache schema normalized to a `{hash, fetched_at, content}`
+contract; legacy minimal/compact caches self-heal on next use. See `CHANGELOG.md`
+for the full history.
 
 ## License
 
