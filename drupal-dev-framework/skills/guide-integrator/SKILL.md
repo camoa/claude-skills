@@ -1,7 +1,7 @@
 ---
 name: guide-integrator
-description: "Use when a phase command (research/design/implement) needs to load methodology references, online dev-guides, and project playbooks before task work begins. **v4.0.0+: deterministic detection** via scripts/dev-guides-detect.sh (replaces agent-mediated keyword detection). Delegates guide fetching to dev-guides-navigator. Loads playbook layers via scripts/playbook-load-deterministic.sh. Cross-references conflicts. Records loaded guide IDs into session_context.json loadedGuides[] to prevent re-loads."
-version: 5.1.0
+description: "Use when a phase command (research/design/implement) needs to load methodology references, online dev-guides, and project playbooks before task work begins. **v4.10.0+: hybrid detection** — a deterministic phase-aware methodology floor + lexical catalog candidates via scripts/dev-guides-detect.sh, plus semantic matches from the guides-matcher agent. Delegates guide fetching to dev-guides-navigator. Loads playbook layers via scripts/playbook-load-deterministic.sh. Cross-references conflicts. Records loaded guide IDs into session_context.json loadedGuides[] to prevent re-loads."
+version: 5.2.0
 user-invocable: false
 model: sonnet
 ---
@@ -36,26 +36,30 @@ Activate when:
 
 **Skip if:** The relevant guide is already listed in `loadedGuides[]` of the per-workspace `session_context.json` (see "Record Loaded Guide" below). The conversation context is an unreliable fallback; the file is the source of truth.
 
-## Auto-Load Rules (Plugin References)
+## Methodology Floor (Plugin References)
 
-| Keywords Detected | Reference to Load |
-|-------------------|-------------------|
-| "test", "TDD", "unit test", "kernel test" | `references/tdd-workflow.md` |
-| "service", "dependency", "inject", "SOLID" | `references/solid-drupal.md` |
-| "duplicate", "reuse", "DRY", "extract" | `references/dry-patterns.md` |
-| "form", "drush", "command", "service first" | `references/library-first.md` |
-| "complete", "done", "quality", "gate" | `references/quality-gates.md` |
+The plugin methodology references load by a **phase-aware floor**, not by keyword matching. `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder> --phase <research|design|implement|complete>` emits the floor deterministically — every task at a phase loads these regardless of task content:
 
-**v4.0.0+: deterministic detection.** As of v4.0.0, keyword detection runs via `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh` (not agent judgment). The script greps `task.md` + phase artifacts + alignment.md for the keywords above and returns a structured JSON of matched keywords + guide IDs. Phase commands invoke the script BEFORE prompting the user, populating the prompt's "Auto-loaded based on task keywords:" line from script output. This eliminates bypass-by-declaration (agent claiming "none matched" without running detection).
+| Phase | Methodology floor |
+|-------|-------------------|
+| Research | `references/tdd-workflow.md`, `references/solid-drupal.md`, `references/dry-patterns.md` |
+| Design (and later) | the above + `references/library-first.md` |
+| Implement / Complete | the above + `references/quality-gates.md` |
+
+Guide IDs: `plugin:tdd-workflow`, `plugin:solid-drupal`, `plugin:dry-patterns`, `plugin:library-first`, `plugin:quality-gates`.
+
+**Why a floor, not keywords (v4.10.0+).** The v4.0.0 keyword table ("test" → tdd-workflow, "quality" → quality-gates, …) produced spurious matches and could be silently zeroed by an agent claiming "none matched." The phase floor is deterministic and unconditional — Stage 1 (`dev-guides-detect.sh`) always emits it; the `guides-matcher` agent (Stage 2) can add domain guides and re-rank but can never remove the floor. That is the anti-bypass guarantee.
+
+Domain dev-guides (Drupal / Next.js / design-system topics) are NOT in the floor — they come from Stage 1 `catalog_candidates[]` plus the Stage-2 `guides-matcher` agent. See the phase commands' "Dev-guides preflight" step.
 
 ## Workflow
 
 ### 1. Load Plugin References (Methodology)
 
-Based on detected keywords in the task:
+From the phase floor emitted by `dev-guides-detect.sh`:
 1. Check `loadedGuides[]` (see "Record Loaded Guide" below). If the ID (e.g. `plugin:solid-drupal`) is already present, skip.
-2. Identify which methodology references apply (see Auto-Load Rules)
-3. Read each applicable reference file
+2. Identify which methodology references the phase floor includes (see Methodology Floor above).
+3. Read each floor reference file
 4. Record the guide ID via the snippet in "Record Loaded Guide"
 5. Extract patterns relevant to current task
 
@@ -203,6 +207,14 @@ For local-vs-shipped: no prompt; precedence rule applies; just announce.
 #### 6f. Record loaded playbook IDs
 
 Record each loaded shipped-set guide and the local playbook into `loadedGuides[]` per §2b. Local playbook ID convention: `local:userPlaybook:<basename>`.
+
+## Mid-phase guide checks
+
+The preflight at phase start loads the methodology floor + the domain guides matched from the artifacts that exist *then*. Work uncovers more as it proceeds — a contrib module chosen during research, an API reached for while drafting architecture, a pattern that surfaces mid-implementation.
+
+**Standing instruction:** before writing code or architecture that uses a Drupal API, a contrib module, or a pattern that is **not already represented in `loadedGuides[]`**, do a catalog lookup via the `dev-guides-navigator` skill for that topic. If a guide exists, load and apply it; record its ID per "Record Loaded Guide". If none exists, proceed.
+
+This is not a gate and never blocks — it is a discipline that keeps guide coverage tracking the work as it actually unfolds, instead of freezing at whatever the phase-start artifacts implied. Cheap because `loadedGuides[]` dedups: a topic already loaded is a no-op. Apply it whenever the work turns to a domain the preflight could not have seen coming.
 
 ## Reference Locations
 

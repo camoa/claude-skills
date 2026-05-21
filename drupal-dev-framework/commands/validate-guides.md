@@ -68,11 +68,17 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
    If the union is empty → set `code_inference.source: "none"`, `sources_used: []`, skip to Step 6 with no domain-gap signal.
 
-   **b) Locate the dev-guides catalog cache.** It lives at `~/.claude/projects/<workspace_hash>/memory/dev-guides-cache.json`. The workspace hash is `md5($PWD)` matching `session-context-writer`. Find via:
+   **b) Locate the dev-guides catalog cache.** The `dev-guides-navigator` plugin writes it to `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-cache.json`, where `<dasherized-cwd>` is the absolute working directory with every non-alphanumeric character replaced by `-` — **not** an `md5` hash (see the navigator's `references/cache-format.md`, the contract this consumes). Derive the precise path first, glob-fallback only if absent:
    ```bash
-   find ~/.claude/projects/*/memory/dev-guides-cache.json -type f 2>/dev/null
+   DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
+   CATALOG="$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json"
+   if [ ! -f "$CATALOG" ]; then
+     for d in ~/.claude/projects/*/memory/; do
+       [ -f "${d}dev-guides-cache.json" ] && CATALOG="${d}dev-guides-cache.json" && break
+     done
+   fi
    ```
-   If multiple workspace caches exist, prefer the one whose path component contains the current `$PWD` slug. If none exist → emit `code_inference.warnings: ["catalog_cache_missing"]`, set `inferred_slugs: []`, do NOT demote verdict (no signal == no penalty).
+   The glob fallback (first match) mirrors the navigator's pre-compact hook. If no cache exists anywhere — or the cache file has no `.content` key (treat as missing) — emit `code_inference.warnings: ["catalog_cache_missing"]`, set `inferred_slugs: []`, do NOT demote verdict (no signal == no penalty).
 
    **Staleness check (caller-side, not agent-side):** `stat -c %Y "$catalog_path"` to read mtime; if older than 30 days (compare to `date +%s`), append `code_inference.warnings: ["catalog_cache_stale"]` AND proceed — staleness is informational, not blocking. Suggest in the CLI summary that the user run `/dev-guides-navigator --refresh` to update the cache.
 

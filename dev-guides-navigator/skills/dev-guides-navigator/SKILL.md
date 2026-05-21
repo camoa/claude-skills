@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.4.0
+version: 0.5.1
 allowed-tools: Read, Bash, Glob, Grep, Write
 user-invocable: true
 ---
@@ -21,23 +21,40 @@ Route to the correct online guide and enforce guide application.
 
 ### 1. Get llms.txt (with caching)
 
-Check for cache at `~/.claude/projects/{project-hash}/memory/dev-guides-cache.json`.
+Cache file: `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-cache.json`.
+See `references/cache-format.md` for the **exact path derivation** and schema —
+other plugins (e.g. `drupal-dev-framework`) consume this cache directly, so the
+format and location are a contract, not an implementation detail.
 
 **NEVER use WebFetch in this workflow.** All fetches use `curl -s` via Bash:
 - WebFetch summarizes content through AI, destroying structured formats needed for matching
 - MkDocs GitHub Pages URLs return 400KB+ HTML navigation shells, not guide content
 - Guides are atomic and small enough for `curl` — no summarization needed
 
-**No cache (first time):**
+The cache schema is **exactly** three keys:
+
+```json
+{ "hash": "<contents of llms.hash>", "fetched_at": "<ISO-8601 timestamp>", "content": "<full llms.txt markdown>" }
+```
+
+Always write the **complete `llms.txt` markdown** to the `content` key. Never
+write a compact placeholder (e.g. the legacy `"llms_txt": "see full content…"`
+variant) — downstream consumers parse `content` directly and a placeholder
+breaks them.
+
+**No cache, OR cache file is missing the `content` key (treat as stale):**
 1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` — save the hash
 2. Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt` — save the content
-3. Write both to cache file
+3. Write `{ hash, fetched_at, content }` to the cache file. This self-heals the
+   old minimal (`{hash,fetched_at}`) and compact (`{hash,llms_txt}`) caches by
+   backfilling `content`.
 
-**Cache exists:**
+**Cache exists and has a `content` key:**
 1. Bash: `curl -s https://camoa.github.io/dev-guides/llms.hash` (tiny, fast)
-2. Compare with cached hash
-   - **Same** → use cached `llms.txt`, skip re-fetch
-   - **Different** → Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt`, update cache
+2. Compare with cached `hash`
+   - **Same** → use cached `content`, skip re-fetch
+   - **Different** → Bash: `curl -s https://camoa.github.io/dev-guides/llms.txt`,
+     rewrite the cache as `{ hash, fetched_at, content }`
 
 ### 2. Match Task to Topic
 

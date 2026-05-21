@@ -72,6 +72,32 @@ Signals evaluated in description mode: `description_length_and_conjunction`, `bu
 6. `rationale` is ≤400 chars. Keeps output scannable.
 7. Each `proposed_children[].name` matches `^[A-Za-z0-9_][A-Za-z0-9._-]*$` (consumed by `/migrate-to-epic` which enforces this; the agent must also enforce to avoid proposal failures).
 
+### Consumer-side deterministic enforcement of invariant 2
+
+Invariant 2 (`confidence: "low"` required when `code_read: false`) is part of
+the agent's output contract, but the agent enforcing it itself is
+non-deterministic — observed to drift (e.g. `code_read: false` emitted with
+`confidence: "medium"`). The framework's philosophy is deterministic
+enforcement, so invariant 2 is **also** enforced by a script.
+
+`scripts/analysis-agent-normalize.sh` reads an analysis-agent JSON and applies:
+
+```
+if .code_read == false and .confidence != "low" then .confidence = "low"
+```
+
+When it clamps, it appends a `notes[]` entry citing this invariant so the
+adjustment is visible in `/audit-status` and the on-disk audit. Every consumer
+(`/research` pre-analysis + post-research epic check, `/propose-epics`,
+`/design` + `/implement` post-phase epic checks) pipes the agent output through
+this script **immediately after the agent returns and before any branching or
+`gate-audit-write.sh` call**. The clamp is idempotent: already-`"low"` and
+`code_read: true` outputs pass through unchanged. `play_candidates` mode output
+(no top-level `code_read`/`confidence`) is untouched.
+
+This makes invariant 2 a deterministic property of the data every consumer
+sees, not an agent promise.
+
 ## Signal codes
 
 Signals the agent cites in `signals_used` when it reaches `epic_candidate`:

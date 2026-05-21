@@ -74,7 +74,9 @@ _To be authored via `/drupal-dev-framework:scope`. `/drupal-dev-framework:resear
 Stub scaffolded by `/drupal-dev-framework:scope` on <YYYY-MM-DD>.
 ```
 
-`/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by /scope" note) and overwrite it with the full template rather than aborting on a pre-existing folder.
+`/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by " note — the same marker family `/migrate-to-epic` stubs carry) and overwrite it with the full template rather than aborting on a pre-existing folder.
+
+The stub intentionally omits a `## Research Questions` section — Phase 1 (`/research`) authors that section. When it does, it is authored as a **numbered list** (one question per `N.` item; never bullets, never mixed styles) so the coverage-mapping gate counts it reliably. Do not add a bulleted Research Questions section to this stub.
 
 Skip stub scaffolding if invoked with `--phase N` — phase-level scope only makes sense on an established task; abort with a hint to run `/drupal-dev-framework:scope <task>` first (task-level) or `/drupal-dev-framework:research <task>` to begin Phase 1.
 

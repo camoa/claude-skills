@@ -132,7 +132,7 @@ If `[n]` → skip the walkthrough; proceed to session-context-writer.
 On `[y]`:
 
 1. **Pull the traceability sources** using this priority:
-   - `task.md` → Research Questions list (extract `- ...` bullets under that heading, if present)
+   - `task.md` → Research Questions list (extract the list items under that heading — ordered `1.`/`2.` items OR `-`/`*`/`+` bullets, with the marker prefix stripped; the canonical authored style is numbered)
    - `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked}`)
    - If both sources are empty → "This task has no research questions or acceptance criteria declared. Walkthrough can't map without them; consider `/scope <task>` to add task-level criteria."
 2. **For each item (question or criterion)**, scan `research.md` and identify the section(s) that address it. Look for:
@@ -224,12 +224,25 @@ implementation_process/in_progress/{task_name}/
 - [ ] {criterion 1}
 - [ ] {criterion 2}
 
+## Research Questions
+1. {first question research must answer}
+2. {second question research must answer}
+
 ## Related Tasks
 None
 
 ## Notes
 {Any additional notes}
 ```
+
+**Research Questions list style (strict writer).** Always emit the `## Research
+Questions` section as a **numbered list** — one question per `N.` item (`1.`,
+`2.`, …). Do not use bullets and do not mix styles. Numbered is canonical
+because it is coherent with the `Q1`/`Q2` references and the `### Q1 —`
+research.md headings used elsewhere in this walkthrough, and it is the form the
+coverage-mapping gate's question count depends on being authored consistently.
+(The coverage-mapping reader is tolerant of any list marker — see the
+"Coverage-mapping validation gate" section — but the writer commits to one.)
 
 **research.md** (Phase 1 findings):
 ```markdown

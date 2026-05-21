@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.1 (2026-05-21)
+
+### Fixed
+- **Cache schema normalized to a contract.** The on-disk cache had three
+  incompatible shapes (`{hash,fetched}`, `{hash,fetched_at,llms_txt}`,
+  `{hash,llms_txt:"see full content…"}`). Step 1 now always writes the full
+  `llms.txt` markdown under a fixed `content` key with `hash` + `fetched_at`,
+  and treats any cache lacking `content` as stale — refetch + backfill. This
+  self-heals the legacy minimal/compact caches. The compact
+  `llms_txt: "see full content…"` placeholder is no longer written.
+- `references/cache-format.md` now mandates the `{hash, fetched_at, content}`
+  schema and documents the exact cache-path derivation (dasherized cwd under
+  `~/.claude/projects/<dir>/memory/`, with a glob fallback) as a contract that
+  other plugins consume.
+
 ## 0.5.0 (2026-04-27)
 
 ### 2026-04-25 doc-refresh deltas

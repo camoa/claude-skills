@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.10.0] - 2026-05-21
+
+### Guide-detection rework + reliability bug batch
+
+A combined release: the dev-guides "guide finder" preflight is reworked into a deterministic two-stage hybrid, and four more distinct reliability bugs found during a bug-hunting pass are fixed. Paired with `dev-guides-navigator` v0.5.1 (cache schema normalized to a contract).
+
+### Changed — hybrid guide detection (Part B)
+
+- **`scripts/dev-guides-detect.sh` is now Stage 1 of a two-stage detector.** New signature: `dev-guides-detect.sh <task_folder> --phase <research|design|implement|complete>`. The hardcoded 5-row keyword table — which produced spurious matches ("quality" → quality-gates, "test" → tdd-workflow) and could be silently zeroed — is **deleted**. It emits instead:
+  - a **phase-aware methodology floor** with no keyword gating (research → 3 refs, design → +`library-first`, implement/complete → +`quality-gates`);
+  - **catalog candidates** — dev-guides topics whose distinctive terms appear in the task's artifact prose, matched against the cached navigator catalog (`jq -r .content`). The cache is located by the dasherized-cwd derivation (with a `~/.claude/projects/*/memory/` glob fallback). Cache missing / no `.content` → `catalog_candidates: []` + `warnings:["catalog_cache_missing"]`; the floor still emits.
+- **`guides-matcher` agent gained a `prose` mode** (1.0.0 → 1.1.0) alongside `plan`/`validation`. Inputs `artifact_excerpts[]` + a Stage-1 `candidate_slugs[]` seed; keeps the seed as a floor and adds semantic/synonym matches (`view` → `drupal/views`). The catalog-parsing instruction is **fixed in all modes** — the cache is JSON with a `.content` field holding `llms.txt` markdown; the agent parses topic entries from that markdown, not from a non-existent slug array.
+- **Cache-path bug fixed.** `/implement` Pass B and `/validate:guides` located the cache via `md5($PWD)` — the navigator never writes there. Both now use the dasherized-cwd convention + glob fallback (per `dev-guides-navigator` `references/cache-format.md`).
+- **Phase commands wired to the two stages.** `/research` (step 3, `--phase research`), `/design` (step 2, `--phase design`), `/implement` (step 3, `--phase implement`; keeps the v4.3.0 file-path Pass B with the fixed cache path). The preflight prompt is now two-group: `Methodology (always): …` and `Domain guides matched: …`. `[c]/[a]/[n]` semantics unchanged. `_dev-guides-load.json` gains `methodology_floor[]`, `catalog_candidates[]`, `matched_domain_guides[]` (`gate-audit-schema.md` §5.6, additive).
+- **`guide-integrator` skill** (5.1.0 → 5.2.0): the obsolete 5-row "Auto-Load Rules" table is replaced with the phase-floor table; new "Mid-phase guide checks" standing instruction — before writing code/architecture against a Drupal API, contrib module, or pattern not in `loadedGuides[]`, do a `dev-guides-navigator` catalog lookup.
+- **Anti-bypass preserved.** Stage 1 always runs and always emits the floor + candidates deterministically; the agent can only add/rank, never zero out the floor — keeps the v4.0.0 no-bypass-by-declaration guarantee.
+
+### Fixed — epic expansion (Part C)
+
+- **`/migrate-to-epic` epic expansion is now implemented.** `migrate-to-epic.md` documented an "add children later" expansion flow in four places, but `migrate-to-epic.sh` unconditionally aborted on `kind=epic|sub_epic`. The script now has an **expansion mode**: when the resolved task is already an epic/sub_epic AND `--children` is non-empty, it copies the whole existing epic into temp, classifies + adds the new children (reusing the existing `move_existing`/`already_completed`/`create_stub` classifier, `CHILD_*_ROOT` abstraction, transactional temp-build / atomic-swap / 24h-rollback machinery), and re-emits frontmatter with `children[]` = existing + new. Empty `--children` on an epic is a no-op with a hint. New-child names colliding with the epic's existing `children[]` or `in_progress/`/`completed/` folders are rejected at preflight.
+
+### Fixed — reliability bug batch (Parts D, E, F)
+
+- **`/research` recognizes `/migrate-to-epic` stubs (Part D).** `write_stub_task_md` (`fm-helpers.sh`) now emits a `## Notes` line `Stub scaffolded by …` mirroring the `/scope` stub convention. `/research` step 2 generalizes stub-detection to the `Stub scaffolded by ` prefix (any framework command) — a freshly-migrated subtask is overwritten with the full Phase 1 template instead of aborting.
+- **Coverage gate counts numbered lists (Part E).** `coverage-mapping-check.sh` extracted Research Questions with `/^- /` only — numbered lists (`1.` `2.`) yielded `research_questions_found: 0`, a trivial pass. The extractor now matches ordered and bulleted markers (`^([0-9]+[.)]|[-*+])[[:space:]]`) and strips the prefix; `research-walkthrough.md`'s coverage step is broadened the same way. Tolerant reader, strict writer: the `## Research Questions` section is now pinned to **numbered** style across all three producers (`research-walkthrough.md` §Output, `commands/scope.md`, `commands/research.md` step 2).
+- **Deterministic confidence clamp for `analysis-agent` (Part F).** Schema invariant 2 (`confidence: low` required when `code_read: false`) was agent-enforced only and drifted. New `scripts/analysis-agent-normalize.sh` clamps it deterministically and appends a `notes[]` entry; wired into every consumer (`/research` steps 1+9, `/propose-epics` step 4, `/design` + `/implement` post-phase epic checks) immediately after the agent returns.
+
+### Component versions
+
+`guides-matcher` agent 1.0.0 → 1.1.0; `guides-matcher-schema.md` v1.0 → v1.1; `analysis-agent` agent 1.1.0 → 1.1.1; `guide-integrator` skill 5.1.0 → 5.2.0; `epic-migrator` skill 2.0.1 → 2.1.0. New script `analysis-agent-normalize.sh`.
+
+Version: plugin.json + marketplace entry 4.9.0 → 4.10.0; marketplace metadata.version 1.14.55 → 1.14.56. Paired: `dev-guides-navigator` 0.5.0 → 0.5.1.
+
 ## [4.9.0] - 2026-05-20
 
 ### Workflow integration & references
