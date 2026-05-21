@@ -61,6 +61,12 @@ export interface LayoutSpec {
 /** Per-tag info recorded in the tag map. */
 export interface TagInfo {
   kind: 'text' | 'image';
+  /**
+   * True for display text (e.g. headings). When the brand display font is
+   * custom, the merge engine bakes a display tag's real text as an image
+   * rather than filling it with `replaceAllText`.
+   */
+  display?: boolean;
 }
 
 /** Per-slide-type entry in the tag map. */
