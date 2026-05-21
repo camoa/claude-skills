@@ -430,8 +430,8 @@ echo "  rollback at $TEMP_ROOT/.old-$TASK_NAME/ (delete manually after 24h)"
 # Step 7 — Session context hint (actual write delegated to caller)
 # ---------------------------------------------------------------------------
 echo "[7/8] Session context hint"
-SESS_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-SESS_FILE="$HOME/.claude/drupal-dev-framework/sessions/${SESS_HASH}.json"
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/session-paths.sh"
+SESS_FILE=$(ddf_session_file)
 CASE="A"
 EPIC_FOR_CTX="{CURRENT_EPIC_OR_NULL}"
 NEW_TASK_PATH=""

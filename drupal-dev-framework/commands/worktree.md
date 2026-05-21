@@ -18,7 +18,7 @@ Create a git worktree at `.worktrees/<task_name>/` on branch `feature/<task_name
 /drupal-dev-framework:worktree <task-name> --no-ddev-check              # skip DDEV name: warning
 ```
 
-See `references/worktree-conventions.md` v1.1 for the full convention — including §11, how this command relates to Claude Code's native `claude --worktree` flag, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, and `worktree.bgIsolation`.
+See `references/worktree-conventions.md` v1.2 for the full convention — including §11, how this command relates to Claude Code's native `claude --worktree` flag, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, and `worktree.bgIsolation`.
 
 ## What this does
 

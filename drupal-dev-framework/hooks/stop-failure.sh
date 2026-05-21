@@ -11,8 +11,9 @@ TIMESTAMP=$(date -Iseconds)
 PROJECT_NAME=""
 TASK_NAME=""
 
-WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-SESSION_FILE="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
+DDF_DIR=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+. "$DDF_DIR/scripts/session-paths.sh"
+SESSION_FILE=$(ddf_session_file)
 
 if [ -f "$SESSION_FILE" ]; then
   PROJECT_NAME=$(jq -r '.project // empty' "$SESSION_FILE" 2>/dev/null)

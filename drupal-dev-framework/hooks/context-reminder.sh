@@ -11,8 +11,10 @@
 
 set -eu
 
-WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-SESS="$HOME/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json"
+DDF_DIR=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+. "$DDF_DIR/scripts/session-paths.sh"
+WORKSPACE_HASH=$(ddf_workspace_hash)   # cache key (workspace-stable)
+SESS=$(ddf_session_file)
 
 # Fast gate — no session file means no active task in this workspace.
 [ -s "$SESS" ] || exit 0

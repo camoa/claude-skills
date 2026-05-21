@@ -2,7 +2,7 @@
 name: session-context-writer
 description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[], lastPhase, and currentEpic across writes.
 user-invocable: false
-version: 1.4.0
+version: 1.5.0
 model: haiku
 allowed-tools: Bash
 ---
@@ -39,11 +39,12 @@ You receive the resolved project and task values from the calling command. Write
 
 Run this bash command with the provided values. It merges the new core fields over any existing file, seeding `loadedGuides: []` and `lastPhase: null` only when the file is first created.
 
+The session file path is resolved by the shared `scripts/session-paths.sh` helper (`ddf_session_file`). The path is keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID, so two Claude Code sessions in the same directory get distinct session files instead of colliding. When the variable is absent the key is `md5($PWD)` exactly as before v4.9.0 (backward compatible).
+
 ```bash
-WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
-SESS_DIR=~/.claude/drupal-dev-framework/sessions
-SESS_FILE=$SESS_DIR/${WORKSPACE_HASH}.json
-mkdir -p "$SESS_DIR"
+. "${CLAUDE_PLUGIN_ROOT}/scripts/session-paths.sh"
+SESS_FILE=$(ddf_session_file)
+mkdir -p "$(dirname "$SESS_FILE")"
 
 NEW_CORE=$(jq -n \
   --arg workspace "$PWD" \

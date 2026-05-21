@@ -10,9 +10,10 @@
 #     has reviewed in-flight state. Judgement first, then this script.
 #
 # What it does:
-#   1. Resolves the per-workspace session file (keyed by md5(cwd) — the same
-#      scheme session-context-writer uses). No file → no framework activity
-#      this session → exit 0 silently.
+#   1. Resolves the session file (keyed by md5(cwd), salted by
+#      CLAUDE_CODE_SESSION_ID when set — the same scheme session-context-writer
+#      uses via scripts/session-paths.sh). No file → no framework activity this
+#      session → exit 0 silently.
 #   2. Stamps `savedAt` (UTC ISO-8601) into that session file.
 #   3. Scans the active task folder for *.md changed since the last save. If
 #      any are found, prints ONE warning line to stderr. Silent otherwise
@@ -47,9 +48,20 @@ if [ ! -t 0 ]; then
 fi
 [ -n "$CWD" ] || CWD="$PWD"
 
+# Session key — kept in sync with scripts/session-paths.sh (ddf_session_file /
+# ddf_workspace_hash). save-session.sh is copied into the project by
+# /install-remembrance-hook and cannot source the plugin helper, so the formula
+# is inlined here. The session-context JSON is salted by CLAUDE_CODE_SESSION_ID
+# (when set) so concurrent same-directory sessions do not collide; the marker is
+# NOT salted — it is cross-session by design ("changed since the last persist").
 WORKSPACE_HASH=$(printf %s "$CWD" | md5sum | cut -d' ' -f1)
 SESS_DIR="$HOME/.claude/drupal-dev-framework/sessions"
-SESS_FILE="$SESS_DIR/${WORKSPACE_HASH}.json"
+if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  SESS_KEY=$(printf %s "${WORKSPACE_HASH}::${CLAUDE_CODE_SESSION_ID}" | md5sum | cut -d' ' -f1)
+else
+  SESS_KEY="$WORKSPACE_HASH"
+fi
+SESS_FILE="$SESS_DIR/${SESS_KEY}.json"
 MARKER_FILE="$SESS_DIR/${WORKSPACE_HASH}.last-saved"
 
 # No session file, or unparseable JSON → no resolved framework context this
