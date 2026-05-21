@@ -1,0 +1,13 @@
+# Build output
+dist/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Credentials — NEVER commit. See README for the env-var setup.
+*-key.json
+*-credentials.json
+service-account*.json
+.env
+.env.*

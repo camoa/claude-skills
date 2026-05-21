@@ -1,0 +1,29 @@
+{
+  "name": "@camoa/bcd-slides-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Google Slides/Drive API client for the brand-content-design plugin's google_slides_renderer epic. Typed SlidesClient library + thin CLI wrapper.",
+  "type": "module",
+  "main": "./dist/client.js",
+  "bin": {
+    "bcd-slides": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "spike": "node spike/run.mjs"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.15.0",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
