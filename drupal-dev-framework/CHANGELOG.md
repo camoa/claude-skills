@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.0] - 2026-05-21
+
+### ATK E2E gate — `/setup-atk` + `/validate:e2e` (epic `visual_and_e2e_review_gates`, Task B)
+
+Task B of the `visual_and_e2e_review_gates` epic. Builds on the Task A (v4.11.0) foundation to add the behavioral E2E gate — the first user-facing `/setup-*` + `/validate:*` pair in the epic. Adopts **ATK (Automated Testing Kit) v2.0 + Playwright** as the behavioral test runtime.
+
+### Added
+
+- **`commands/setup-atk.md`** — idempotent ATK + Playwright scaffold command. Arguments: `--add-journey <desc>`, `--skip-demo-recipe`, `--skip-discovery`, `--force`, `--update-atk`. Rejects `--variant cypress`. Invokes the three-phase install via `setup-atk.sh`, then the `journey-discovery-agent` for AI-assisted test authoring unless `--skip-discovery`. Plan-first: writes `tests/e2e/specs/<slug>.md` for user review, then generates `tests/e2e/behavioral/project-custom/<slug>.spec.ts`.
+- **`scripts/setup-atk.sh`** — three-phase ATK install: (A) Drupal-side `ddev composer require + drush en`, (B) host-side Playwright runner (`npm init` + `npx playwright install --with-deps` in `tests/e2e/`), (C) scaffold `tests/e2e/` directory tree + ATK catalog copy + `playwright.config.ts` extension + surface registry seeding. `--update-atk` re-runs Phase C only. Playwright is HOST-SIDE — never `ddev exec`-wrapped.
+- **`agents/journey-discovery-agent.md`** — read-only sonnet agent. Analyzes `*.routing.yml`, `buildForm()`, `*.permissions.yml`, content type config, and `ddev drush role:list` to propose user journeys for E2E testing. Emits structured JSON with `proposed_journeys[]` and `analysis_summary`.
+- **`commands/validate-e2e.md`** — behavioral gate command. Contains `<!-- visual-review:dispatch-ready -->` marker (makes `/review` dispatcher call this gate). Arguments: `--task`, `--skip <reason>`, `--smoke-only`, `--include-e2e`. Emits standard `validations/latest/e2e.json` envelope + `_e2e.json` gate audit. Soft gate — signals but never blocks.
+- **`scripts/validate-e2e.sh`** — runs `ddev drush atk:preflight` + `npx playwright test --project e2e-chromium`. Accepts `--surfaces-json` (Claude passes filtered registry surface ids; this script never parses YAML). Builds `--grep` pattern from surfaces + `--smoke-only`. Emits result JSON to stdout. Exit 0 on pass/warning; exit 1 on fail.
+- **`scripts/setup-atk-idempotency.sh`** — detects existing ATK install state. Emits JSON with six boolean checks + `status: absent|partial|complete`. Exit 0 always.
+- **`references/atk-e2e-walkthrough.md`** — full reference: Overview, Setup walkthrough, Journey authoring (plan-first pattern), Running the gate, DDEV + CI (GitHub Actions pattern), ATK upgrade path, v2 stubs (`/validate:a11y` + `/validate:perf` deferred), Coexistence with `/setup-visual-regression` (Task C).
+- **`tests/setup-atk-spec.sh`** — TDD harness for `setup-atk.sh`: 12 checks covering arg parsing, pre-flight guards, Phase C file creation, registry seeding idempotency.
+- **`tests/validate-e2e-spec.sh`** — TDD harness for `validate-e2e.sh`: 10 checks covering arg parsing, pass/fail exit codes, JSON output shape, flag acceptance.
+- **`tests/setup-atk-idempotency-spec.sh`** — TDD harness for `setup-atk-idempotency.sh`: 12 checks covering all three status states, individual boolean checks, exit-0-always, valid JSON output.
+
+### Changed
+
+- **`references/gate-hardening-prompts.md`** v1.2 → v1.3 (additive): adds `e2e-gate-fail` template consumed by `commands/validate-e2e.md` when verdict is `fail`. Variables: `{failed_count}`, `{failed_test_list}`, `{report_path}`. Soft-gate wording; bypass path documented.
+- **`CONVENTIONS.md`** (additive): adds `## ATK E2E Gate (v4.12.0+)` section documenting `data-qa-id` invariant, `dispatch-ready` marker invariant, VR mode exclusion, plan-first spec convention, v2 deferred items.
+
+### Notes
+
+- **Playwright is HOST-SIDE.** `npx playwright install --with-deps` and `npx playwright test` always run on the host, never inside `ddev exec`. The browser reaches the DDEV site over HTTP via `DDEV_PRIMARY_URL` / `PLAYWRIGHT_BASE_URL`.
+- **YAML boundary.** `validate-e2e.sh` does not parse `registry.yml` — Claude (the calling command) reads the YAML, filters `gate: e2e` surfaces, and passes ids as `--surfaces-json '["id1","id2"]'`. This follows Task A's D-impl-1 decision.
+- **C10 (change-impact-dispatch.md)** required no changes — Task A already documents the `dispatch-ready` marker protocol and the `e2e` gate rules.
+- **`gate-audit-write.sh`** required no changes — Task A already added `e2e` to the `case` allowlist and schema_version `1.2` support.
+- **`playwright.config.ts` `e2e-chromium` entry**: the script appends a commented block with instructions to paste into `projects[]` rather than attempting TypeScript AST manipulation. This is the safe pattern given TypeScript config variability.
+- **v2 deferred**: `/validate:a11y`, `/validate:perf`, per-test Testor DB reset, multi-browser beyond Chromium. All stubbed in walkthrough and example files.
+
+### Component versions
+
+New: `commands/setup-atk.md`, `scripts/setup-atk.sh`, `agents/journey-discovery-agent.md` v1.0.0, `commands/validate-e2e.md`, `scripts/validate-e2e.sh`, `scripts/setup-atk-idempotency.sh`, `references/atk-e2e-walkthrough.md`, `tests/setup-atk-spec.sh`, `tests/validate-e2e-spec.sh`, `tests/setup-atk-idempotency-spec.sh`. Modified: `references/gate-hardening-prompts.md` v1.2 → v1.3, `CONVENTIONS.md` (additive section).
+
+Version: plugin.json + marketplace entry 4.11.0 → 4.12.0; marketplace metadata.version 1.14.58 → 1.14.59.
+
 ## [4.11.0] - 2026-05-21
 
 ### Visual + E2E review gates — foundation (epic `visual_and_e2e_review_gates`, Task A)

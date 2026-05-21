@@ -130,6 +130,8 @@ is lost even if you forget.
 | `/validate:guides` | **(v3.13.0)** Verify research.md + architecture.md cite `dev-guides-navigator` guides |
 | `/validate:visual-regression <component> <viewport>` | **(v3.13.0)** Capture + diff against stored baseline. On diff, user classifies regression / intentional / cancel; intentional rotates baseline inline |
 | `/validate:visual-parity <component> <viewport> <reference>` | **(v3.13.0)** Compare built output against design comp (PNG/JPG, Figma URL, HTML file). Shared infrastructure with visual-regression |
+| `/setup-atk` | **(v4.12.0)** Install ATK `^2.0` + Playwright, scaffold `tests/e2e/`, discover site journeys, and scaffold plan-first E2E tests. Idempotent; `--add-journey` adds a single journey post-setup. |
+| `/validate:e2e` | **(v4.12.0)** Run ATK behavioral + project-custom journey tests. Emits `_e2e.json` audit + standard envelope. Part of `/review` dispatch chain. Soft gate. |
 | `/validate:all` | **(v3.13.0)** Run all 7 gates sequentially; aggregate summary; discoverability hint for unwrapped `/code-quality:*` capabilities |
 | `/validate:team` | **(v3.14.0)** Sibling to `/validate:all` — runs the 7 gates in **isolated Claude Code agent teams** (4 teammates) for honest validation free of main-session bias. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (agent-teams CLI v2.1.32+); gracefully falls back to `/validate:all` when unavailable. `--no-fallback` opts out of fallback for CI team-or-nothing runs. See `references/team-manifest-schema.md` v1.0 for the minimum-context contract. |
 | `/playbook-active` | **(v3.15.0)** Display the project's active playbook configuration: subscribed sets, local playbook, recent conflicts. Read-only. |
@@ -318,7 +320,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.11.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.12.0**.
 
 ## License
 
