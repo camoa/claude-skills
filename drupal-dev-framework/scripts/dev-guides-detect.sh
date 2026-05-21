@@ -86,7 +86,29 @@ for f in task.md alignment.md research.md architecture.md implementation.md; do
   PF="$TASK_FOLDER/$f"
   if [[ -f "$PF" ]]; then
     SCANNED_FILES+=("$PF")
-    SCANNED_CONTENT+=$'\n'"$(cat "$PF")"
+    if [[ "$f" == "task.md" ]]; then
+      # Strip the YAML frontmatter block before scanning — its keys (e.g.
+      # `blocks:`, a task-dependency field) are not prose and collide with
+      # catalog topic terms (`drupal/blocks`).
+      SCANNED_CONTENT+=$'\n'"$(awk '
+        NR==1 && /^---[[:space:]]*$/ { fm=1; next }
+        fm && /^---[[:space:]]*$/    { fm=0; next }
+        !fm                          { print }
+      ' "$PF")"
+    else
+      SCANNED_CONTENT+=$'\n'"$(cat "$PF")"
+    fi
+  fi
+done
+# Multi-file detail: research/<topic>.md (split research, v4.10.0+) and
+# architecture/<component>.md (split design). Scanned when present.
+for d in research architecture; do
+  if [[ -d "$TASK_FOLDER/$d" ]]; then
+    for sub in "$TASK_FOLDER/$d"/*.md; do
+      [[ -f "$sub" ]] || continue
+      SCANNED_FILES+=("$sub")
+      SCANNED_CONTENT+=$'\n'"$(cat "$sub")"
+    done
   fi
 done
 LC_CONTENT=$(printf '%s' "$SCANNED_CONTENT" | tr '[:upper:]' '[:lower:]')

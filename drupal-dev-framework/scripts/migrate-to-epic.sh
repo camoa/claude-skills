@@ -379,6 +379,15 @@ else
     [ -f "$TASK_DIR/$artifact" ] && cp "$TASK_DIR/$artifact" "$TEMP_ROOT/$TASK_NAME/$artifact"
   done
 
+  # Preserve split-artifact subdirectories: research/<subject>.md (split research)
+  # and architecture/<component>.md (split design). These are epic-level phase
+  # detail — they belong with the promoted task's own research.md/architecture.md.
+  # The OTHER-files loop below only handles regular files, so without this they
+  # would be lost into the 24h rollback dir.
+  for subdir in research architecture; do
+    [ -d "$TASK_DIR/$subdir" ] && cp -r "$TASK_DIR/$subdir" "$TEMP_ROOT/$TASK_NAME/$subdir"
+  done
+
   # Preserve any OTHER top-level files from the original (e.g. mechanisms-map.md,
   # decision logs, planning docs). They are epic-wide cross-cutting artifacts →
   # destination is shared/. Paper-test integration finding 2026-04-22: the

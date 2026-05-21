@@ -49,8 +49,8 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
    Detection is shallow (top-level + 1-deep) to keep the check fast. Implement via `Glob` + `Bash` `grep`. Cache result on `details.applicability` so consumers can see what fired.
 
 3. **Inspect phase artifacts** — read any of these that exist in the task folder:
-   - `research.md` (Phase 1 artifact)
-   - `architecture.md` (Phase 2 artifact)
+   - `research.md` (Phase 1 artifact) **plus any `research/<subject>.md` files** (v4.10.0+ split research — guide citations may live in the per-subject files, not the hub)
+   - `architecture.md` (Phase 2 artifact) **plus any `architecture/<component>.md` files**
    - `implementation.md` (Phase 3 artifact)
 
 4. **Extract guide citations** — scan for guide references in each artifact. Accept:
