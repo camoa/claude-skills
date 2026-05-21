@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-05-20
+
+### Worktree & subagent modernization
+
+Brings the `/worktree` command and the subagent references up to parity with
+Claude Code's dedicated Worktrees guide and the current Subagents content.
+Documentation only — no change to the `/worktree` command flow or any agent.
+Implements §1, §2, §10.2, §10.3 of the 2026-05-08 improvement plan.
+
+### Added
+
+- **`references/worktree-conventions.md` §11 — "Claude Code's native worktree
+  support"** (doc bumped v1.0 → v1.1). New section mapping the framework's
+  task-scoped `/worktree` to Claude Code's native worktree features:
+  - the `claude --worktree` / `-w` CLI flag as a second, session-scoped entry
+    point (`.claude/worktrees/<name>/` on branch `worktree-<name>`);
+  - PR-based worktrees — `claude --worktree "#1234"` → `.claude/worktrees/pr-1234`
+    — and how they pair with Phase 4 `/review`;
+  - `.worktreeinclude` for copying gitignored files (`.env`,
+    `settings.local.php`) into native worktrees;
+  - `worktree.baseRef` (`fresh`/`head`) and why `/worktree` keeps its own
+    `--base` flag defaulting to HEAD rather than reading the setting;
+  - `worktree.bgIsolation` (v2.1.143) and the distinction between the
+    framework's `.worktrees/<task>/` and Claude Code's `.claude/worktrees/`;
+  - cleanup boundaries — `/worktree-prune` scans only `.worktrees/`/`worktrees/`;
+    `cleanupPeriodDays` auto-sweep and Agent View manage native worktrees;
+  - a brief `WorktreeCreate`/`WorktreeRemove` note (non-git VCS; n/a for Drupal).
+
+### Changed
+
+- **`commands/worktree.md`** — "Related" section links the upstream Worktrees
+  guide and conventions §11; Step 6 notes the HEAD default matches the
+  `worktree.baseRef: "head"` semantic (cross-reference, no behavior change).
+- **`references/forked-subagents.md`** — Status line clarifies
+  `CLAUDE_CODE_FORK_SUBAGENT=1` is honored in non-interactive / SDK / `claude -p`
+  flows, not only interactive sessions; "What it is" now states what a standard
+  non-fork subagent loads at startup (CLAUDE.md + memory + git status +
+  preloaded `skills`, but not the parent conversation, prior skill invocations,
+  or already-read files — the cost forks amortize); the bulk-epic-review pattern
+  notes `/propose-epics` re-invocations are SDK-eligible fork candidates; the
+  upstream reference adds the "What loads at startup" anchor. The v4.2.0
+  decision not to enable forks is unchanged.
+
+### Notes
+
+- No behavior change. `/worktree` does not begin reading the `worktree.baseRef`
+  setting — it keeps its `--base` flag and HEAD default (§11.4 explains the
+  reconciliation). The 7 agent files are untouched.
+
 ## [4.6.0] - 2026-05-20
 
 ### Validator hygiene & hook form

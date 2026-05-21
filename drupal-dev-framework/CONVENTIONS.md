@@ -157,7 +157,7 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 **`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
 
-**Conventions:** `references/worktree-conventions.md` v1.0 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases.
+**Conventions:** `references/worktree-conventions.md` v1.1 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and (§11) how the command relates to Claude Code's native `--worktree` support.
 
 **Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle + Drupal/DDEV awareness. Not a hard dependency; replicated in command body.
 
