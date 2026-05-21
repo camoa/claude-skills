@@ -42,7 +42,7 @@ Or install manually:
 ddev composer require --dev \
   phpstan/phpstan \
   phpmd/phpmd \
-  sebastian/phpcpd \
+  systemsdk/phpcpd \
   vimeo/psalm \
   drupal/coder \
   drupal/security_review \
