@@ -17,9 +17,11 @@ Backs `/drupal-ai-contrib:verify`. Load the knowledge layer via `dev-guides-navi
 `drupal/contributing/drupalci-pipeline-gitlab-templates`,
 `drupal/contributing/drupal-coding-standards-ci-parity`,
 `drupal/contributing/reproducing-drupalci-failures-locally`,
+`drupal/contributing/contrib-project-scaffolding`,
 `drupal/contributing-with-ai/coding-standards`,
 `drupal/contributing-with-ai/testing-ai-code`,
 `drupal/contributing-with-ai/drupal-ai-policy`,
+`drupal/contributing-with-ai/disclosure-checkboxes`,
 `drupal/contributing-with-ai/ai-best-practices-and-evals`.
 
 ## Procedure
@@ -67,11 +69,17 @@ to fetch the **current** state of the adopted *Policy on the use of AI when
 contributing to Drupal* and `ai_best_practices` — never hard-code policy text. The
 gate's pass artifact is:
 - a **disclosure decision recorded** — does AI use cross the "significant portion"
-  threshold (whole functions / classes / scaffolding / extensive docblocks; single-line
-  autocomplete is exempt)? If yes, the `AI-Generated: Yes (...)` disclosure is prepared.
+  threshold (illustrative examples: whole functions / classes / scaffolding / extensive
+  docblocks; single-line autocomplete exempt — the live policy the agent returns is
+  authoritative over these examples)? If yes, the `AI-Generated: Yes (...)` disclosure
+  is prepared.
 - the **verification checklist confirmed for this contribution** — dependencies, logic,
   and security verified (not assumed); full contributor responsibility acknowledged.
 - the policy state fetched **live** and attached.
+
+If the `ai-policy-checker` agent reports a policy source **unreachable**, the AI-policy
+gate is **UNRUN** — report it as UNRUN, never as passed. The contribution cannot clear
+this gate on an unconfirmed policy state.
 
 ### 5. The eval gate — best-effort
 

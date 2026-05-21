@@ -39,6 +39,7 @@ open as draft while work continues; mark ready when the issue moves to Needs rev
 
 Determine whether AI generated a **significant portion** — whole functions, classes,
 architectural scaffolding, or extensive docblocks. Single-line autocomplete is exempt.
+(These examples are illustrative — the live policy fetched below is authoritative.)
 
 - If **yes**: prepare the disclosure in **both** places the policy requires — the issue
   **disclosure checkboxes** (AI Assisted Code / AI Generated Code / Vibe Coded, as
@@ -56,9 +57,11 @@ contributor as the responsible author — "the AI wrote it" is never a defense.
 
 ### 4. Create or update the MR — via drupalorg-cli
 
-Wrap `mglaman/drupalorg-cli` with **fixed, validated subcommands**. Validate issue IDs
-and project names against expected patterns; never interpolate unsanitized input.
-Credentials are the contributor's own — never stored or transmitted.
+Wrap `mglaman/drupalorg-cli` with **fixed, validated subcommands**. Before any
+shell-out, validate identifiers against an explicit pattern — issue IDs `^[0-9]+$`,
+project machine-names `^[a-z][a-z0-9_]*$` — and reject non-matching values; never
+interpolate unsanitized input. Credentials are the contributor's own — never stored or
+transmitted.
 
 The MR description states: what the change does, the issue it resolves, the AI
 disclosure (§2), and how it was verified (cite the captured `verify` artifacts).

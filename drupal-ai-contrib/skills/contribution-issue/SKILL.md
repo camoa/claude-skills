@@ -57,10 +57,11 @@ the most recent development branch (`main` for core; per-project for contrib).
 ### 5. Wrap drupalorg-cli — safely
 
 All issue/fork operations wrap `mglaman/drupalorg-cli`. Use **fixed, validated
-subcommands**. Validate issue IDs and project names against their expected patterns
-before passing them to the CLI; never interpolate unsanitized input into a shell
-command. drupal.org / GitLab credentials are the contributor's own — never store or
-transmit them.
+subcommands**. Before passing any identifier to the CLI, validate it against an
+explicit pattern — issue IDs must match `^[0-9]+$`, project machine-names must match
+`^[a-z][a-z0-9_]*$` — and **reject anything that does not match** rather than shelling
+out with it. Never interpolate unsanitized input into a shell command. drupal.org /
+GitLab credentials are the contributor's own — never store or transmit them.
 
 ### 6. Report
 

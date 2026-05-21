@@ -19,7 +19,8 @@ Thin entry point. Prepares the policy-required AI disclosure with the MR.
 
 ## Steps
 
-1. If `$1` is given, validate it against the expected numeric pattern.
+1. If `$1` is given, **reject it unless it matches `^[0-9]+$`** (issue IDs are
+   numeric) — ask for a valid issue ID rather than passing a malformed value on.
 2. Invoke the `drupal-ai-contrib:contribution-submit` skill via the Skill tool, passing
    `$1`.
 3. Present the skill's result: the MR URL, target branch, the AI-disclosure decision

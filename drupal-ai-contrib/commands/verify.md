@@ -1,6 +1,6 @@
 ---
 description: "Run the local verification inner loop for a Drupal contribution — the drupalci-parity gate set at CI strictness, the AI-policy gate, and the eval gate, every gate passing only on a captured artifact. Use when user says 'verify Drupal contribution', 'run the gates', 'check before submitting', 'drupalci parity', 'drupal-ai-contrib verify'."
-allowed-tools: Read, Bash, Glob, Grep, Skill, Task, WebFetch
+allowed-tools: Read, Bash, Glob, Grep, Skill, Task
 argument-hint: "[project-path]"
 ---
 

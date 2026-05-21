@@ -3,6 +3,7 @@ name: contribution-guardrails
 description: "Enforces the development discipline for AI-assisted Drupal contributions — evidence over assertion, the no-guessing rule for external facts, the verification-gate artifact contracts, and re-verification on post-gate change. Use PROACTIVELY during any development between claiming an issue and verifying it. Use when user says 'guardrails', 'evidence over assertion', 'no guessing', 'verify this fact', 'is this actually tested', or whenever AI-assisted code is being written for a Drupal contribution. MUST apply before claiming any gate passed."
 version: 0.1.0
 model: sonnet
+user-invocable: true
 ---
 
 # Contribution Guardrails

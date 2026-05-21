@@ -24,7 +24,10 @@ Backs `/drupal-ai-contrib:review`. Load the knowledge layer via `dev-guides-navi
 
 Gather, without editorializing:
 - the **scope contract** — goal / expected result / success criteria / non-goals
-- the **diff** under review (the issue-fork branch vs. its target)
+- the **diff** under review — produce it explicitly with
+  `git diff <target-branch>...<issue-fork-branch>` (the three-dot form shows only the
+  contribution's own changes). The reviewer agent must receive a real, non-empty diff;
+  if `git diff` returns nothing, there is nothing to review — report that and stop.
 - the issue and its acceptance criteria
 
 ### 2. Dispatch the fresh-context reviewer

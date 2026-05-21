@@ -20,7 +20,9 @@ real pipeline is green.
 
 ## Steps
 
-1. If `$1` is given, validate the MR URL / issue ID against expected patterns.
+1. If `$1` is given, validate it: an issue ID must match `^[0-9]+$`; an MR URL must
+   match `^https://[^ ]+/-/merge_requests/[0-9]+$`. Reject anything else — ask for a
+   valid issue ID or MR URL rather than passing a malformed value on.
 2. Invoke the `drupal-ai-contrib:contribution-pipeline` skill via the Skill tool,
    passing `$1`.
 3. Present the skill's per-job report: name, status, blocking vs. `allow_failure` vs.

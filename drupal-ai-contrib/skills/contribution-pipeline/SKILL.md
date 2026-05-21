@@ -21,8 +21,9 @@ Backs `/drupal-ai-contrib:pipeline`. Load the knowledge layer via `dev-guides-na
 ### 1. Resolve the MR and project
 
 Identify the GitLab project and merge-request for the current issue fork (from `submit`
-state, or ask). Validate the project path and MR number against expected patterns
-before any API call.
+state, or ask). Before any API call, validate against an explicit pattern — the MR
+number must match `^[0-9]+$`, the project path `^[A-Za-z0-9_./-]+$` — and reject
+anything that does not match rather than calling the API with it.
 
 ### 2. Fetch the pipeline — via the GitLab API
 

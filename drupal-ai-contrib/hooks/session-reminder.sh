@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # drupal-ai-contrib — SessionStart reminder.
 #
-# Speaks one line only when the working directory looks like a Drupal contribution
+# Speaks one line only when the working directory looks like a *Drupal* contribution
 # workspace; silent (exit 0) otherwise, so non-contribution sessions are not disturbed.
 set -u
 
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
 is_contrib=0
 
-[ -f "$proj/.gitlab-ci.yml" ] && is_contrib=1
+# A bare .gitlab-ci.yml is not Drupal-specific — require a Drupal signal in it.
+if [ -f "$proj/.gitlab-ci.yml" ] && \
+   grep -qi 'gitlab_templates\|drupal' "$proj/.gitlab-ci.yml" 2>/dev/null; then
+  is_contrib=1
+fi
 [ -d "$proj/.drupal-ai-contrib" ] && is_contrib=1
 for f in "$proj"/*.info.yml; do
   [ -e "$f" ] && is_contrib=1
