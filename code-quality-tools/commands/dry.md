@@ -10,6 +10,12 @@ Find duplicated code blocks that violate the DRY (Don't Repeat Yourself) princip
 
 > **Reading strategy:** This is **Type B** work — duplicate detection often reveals near-duplicates that need full-file context to assess intent. Do NOT grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
 
+## LSP Code Intelligence (recommended)
+
+PHPCPD and jscpd detect **textual** clones. If a code-intelligence plugin is installed (`php-lsp` for Drupal, `typescript-lsp` for Next.js), also use the **LSP tool**'s `find-references` to catch **semantic** duplication the copy-paste detectors miss — e.g. the same service resolved inline at 14 call sites is a DRY/DIP violation even though the surrounding text differs at every site.
+
+The LSP tool needs no permission and is inert when no plugin is installed — fall back to the copy-paste detectors and full-file reads when it is unavailable. See `skills/code-quality-audit/references/code-intelligence.md`.
+
 ## Usage
 
 ```

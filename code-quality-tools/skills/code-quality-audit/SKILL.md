@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.0.0
+version: 3.4.0
 model: sonnet
 allowed-tools: Read, Bash, Grep, Glob
 user-invocable: false
@@ -24,7 +24,7 @@ hooks:
 
 Run quality and security audits for **Drupal** and **Next.js** projects with consistent tooling and reporting.
 
-> **Reading strategy:** Audit, review, security, SOLID, and DRY commands are **Type B** work (audit / review / architecture analysis) — agents must read full source and config files. Do NOT grep-first these flows. Inherited methods, annotations, and config-wired classes are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
+> **Reading strategy:** Audit, review, security, SOLID, and DRY commands are **Type B** work (audit / review / architecture analysis) — agents must read full source and config files. Do NOT grep-first these flows. Inherited methods, annotations, and config-wired classes are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. When a code-intelligence plugin is installed, the **LSP tool** resolves those inherited and config-wired relationships semantically — prefer it for SOLID/DRY/review relationship questions, and fall back to the full-read pass when it is unavailable. See `references/code-intelligence.md`.
 
 ## Quick Commands
 
@@ -267,6 +267,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/composer-scripts.md` - Ready-to-use composer scripts
 - `references/scope-targeting.md` - Target specific modules/components
 - `references/post-batch-aggregation.md` - Optional `PostToolBatch` aggregation pattern (Claude Code 2.1.118+); not shipped by default
+- `references/code-intelligence.md` - Optional LSP-tool code intelligence for deeper SOLID/DRY/review analysis (recommended-not-required)
 
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations
