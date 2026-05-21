@@ -63,6 +63,8 @@ Best for:
 
 Not for: production quality automation — restart the session and the loop is gone.
 
+**`/loop` vs `/goal`:** `/loop` re-runs a prompt on a fixed **time interval** and stops only when you stop it. `/goal` re-runs after every turn and stops when a fresh evaluator model confirms a **completion condition** from the transcript — use it for "audit until clean" / "fix until tests pass" loops (see `commands/audit.md` and `commands/tdd.md`). Neither is a CI primitive: both keep the current session running.
+
 ## See Also
 
 - `desktop-sweep-template.md` — full Desktop Scheduled Task template (primary)
