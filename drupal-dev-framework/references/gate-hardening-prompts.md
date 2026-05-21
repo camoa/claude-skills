@@ -209,7 +209,7 @@ Classify this change:
 Choice (default [c]):
 ```
 
-Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport name), `{{diff_percent}}` (percentage, may be unknown), `{{diff_pixels}}` (pixel count, may be unknown), `{{diff_path}}` (path to the Playwright diff image).
+Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport name), `{{diff_percent}}` (percentage, may be unknown), `{{diff_pixels}}` (pixel count, may be unknown), `{{diff_path}}` (path to the Playwright diff image — Playwright writes diff images under `test-results/`; may be unknown if the run produced none). The command substitutes `unknown` for any value it cannot resolve.
 
 ## Changelog
 

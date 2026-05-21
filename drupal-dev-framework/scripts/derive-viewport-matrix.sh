@@ -193,7 +193,11 @@ CLUSTERED=$(printf '%s\n' "$CSS_WIDTHS" | awk '
 ')
 
 # Keep at most 4 clusters; name them by ascending size.
-mapfile -t WIDTHS < <(printf '%s\n' "$CLUSTERED" | sort -n | uniq | head -4)
+# (portable read loop — `mapfile` is bash 4+; macOS ships bash 3.2)
+WIDTHS=()
+while IFS= read -r w; do
+  [ -n "$w" ] && WIDTHS+=("$w")
+done < <(printf '%s\n' "$CLUSTERED" | sort -n | uniq | head -4)
 NAMES=(mobile tablet desktop wide)
 RESULT='[]'
 idx=0

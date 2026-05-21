@@ -118,6 +118,24 @@ else
   fail_check "history_path — $(echo "$OUT" | jq -r '.history_path')"
 fi
 
+# === Test 12 (regression, paper-test EC-10): execute mode with --confirmed ===
+# but NO visual-chromium-* projects → exit 2, refuses unscoped --update-snapshots
+# (would otherwise regenerate ATK's e2e snapshots). The abort happens before
+# npx is reached, so this is offline-deterministic.
+CP2="$TMPDIR/cp2"
+mkdir -p "$CP2/tests/visual" "$CP2/.visual-review"
+REG2="$CP2/.visual-review/registry.yml"; touch "$REG2"
+: > "$CP2/tests/visual/x.spec.ts"
+cat > "$CP2/playwright.config.ts" <<'EOF'
+projects: [ { name: 'e2e-chromium' } ]
+EOF
+RC=0; OUT=$(bash "$SCRIPT" --bootstrap --registry "$REG2" --codepath "$CP2" --confirmed 2>/dev/null) || RC=$?
+if [ "$RC" -eq 2 ] && echo "$OUT" | jq -e '.warnings[] | select(startswith("no_visual_projects"))' >/dev/null; then
+  pass_check "execute mode, no visual projects → exit 2, refuses unscoped --update-snapshots"
+else
+  fail_check "no-visual-projects execute guard — rc=$RC out=$OUT"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nbaseline-manager.sh invariants violated.\n' >&2
   exit 1

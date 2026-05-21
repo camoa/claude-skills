@@ -88,10 +88,21 @@ emit() {
       project_pattern: $pp, ci_mode: $ci, playwright_exit: $pe, warnings: $w }'
 }
 
+# Validate --project-pattern before it is interpolated into a grep regex —
+# restrict to plain identifier chars so no regex metacharacters reach grep.
+if ! printf '%s' "$PROJECT_PREFIX" | grep -qE '^[A-Za-z0-9_-]+$'; then
+  echo "visual-regression-gate: --project-pattern must match ^[A-Za-z0-9_-]+\$" >&2
+  exit 2
+fi
+
 # Discover the exact visual project names from playwright.config.ts. Playwright
 # --project matches exact names; deriving them from the config is version-safe.
-mapfile -t PROJECTS < <(grep -oE "name:[[:space:]]*['\"]${PROJECT_PREFIX}[a-z0-9-]+['\"]" "$PW_CONFIG" 2>/dev/null \
-  | grep -oE "${PROJECT_PREFIX}[a-z0-9-]+" | sort -u)
+# (portable read loop — `mapfile` is bash 4+; macOS ships bash 3.2)
+PROJECTS=()
+while IFS= read -r p; do
+  [ -n "$p" ] && PROJECTS+=("$p")
+done < <(grep -oE "name:[[:space:]]*['\"]${PROJECT_PREFIX}[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
+  | grep -oE "${PROJECT_PREFIX}[A-Za-z0-9_-]+" | sort -u)
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
   add_warning "no_visual_projects: playwright.config.ts has no ${PROJECT_PREFIX}* project entries"
@@ -137,7 +148,11 @@ while IFS= read -r row; do
   sid="${sid%.spec.ts}"
 
   # Collect per-result status; determine the surface verdict.
-  mapfile -t STATUSES < <(jq -r '.results[]?.status // empty' <<<"$row")
+  # (portable read loop — `mapfile` is bash 4+; macOS ships bash 3.2)
+  STATUSES=()
+  while IFS= read -r st_line; do
+    [ -n "$st_line" ] && STATUSES+=("$st_line")
+  done < <(jq -r '.results[]?.status // empty' <<<"$row")
   verdict="skipped"
   if [ "${#STATUSES[@]}" -gt 0 ]; then
     any_fail=0; any_pass=0

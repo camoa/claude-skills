@@ -88,6 +88,31 @@ else
   fail_check "report shape — out=$OUT"
 fi
 
+# === Test 8 (regression, paper-test RT-6): non-kebab component dir skipped ===
+CP3="$TMPDIR/cp3"; MP3="$TMPDIR/mp3"
+mkdir -p "$CP3" "$MP3/.screenshots/../evil" "$MP3/.screenshots/Bad Name"
+printf 'X' > "$MP3/.screenshots/Bad Name/375x812.png"
+RC=0; OUT=$(bash "$SCRIPT" "$MP3" "$CP3" 2>/dev/null) || RC=$?
+if echo "$OUT" | jq -e '.warnings[] | select(test("not kebab-case"))' >/dev/null \
+   && ! echo "$OUT" | jq -e '.migrated[] | select(.component | test("[^a-z0-9-]"))' >/dev/null; then
+  pass_check "non-kebab component dir → skipped with warning (path-traversal blocked)"
+else
+  fail_check "non-kebab component handling — rc=$RC out=$OUT"
+fi
+
+# === Test 9 (regression, paper-test EC-5): two viewports → same size bucket ===
+CP4="$TMPDIR/cp4mig"; MP4="$TMPDIR/mp4mig"
+mkdir -p "$CP4" "$MP4/.screenshots/hero"
+printf 'A' > "$MP4/.screenshots/hero/370x800.png"
+printf 'B' > "$MP4/.screenshots/hero/400x850.png"
+OUT=$(bash "$SCRIPT" "$MP4" "$CP4" 2>/dev/null)
+MIGRATED_PNGS=$(ls "$CP4/tests/visual/hero.spec.ts-snapshots/"*.png 2>/dev/null | wc -l)
+if [ "$MIGRATED_PNGS" -eq 1 ] && echo "$OUT" | jq -e '.warnings[] | select(test("already migrated this run"))' >/dev/null; then
+  pass_check "two viewports → same size: first kept, second skipped + warned (no overwrite)"
+else
+  fail_check "size-collision handling — migrated=$MIGRATED_PNGS out=$OUT"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nmigrate-screenshots-to-codepath.sh invariants violated.\n' >&2
   exit 1

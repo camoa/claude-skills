@@ -99,6 +99,15 @@ add_warning() { WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }
 while IFS= read -r comp_dir; do
   [ -z "$comp_dir" ] && continue
   component=$(basename "$comp_dir")
+  # The component name is a directory name from the (possibly hand-edited)
+  # legacy store. It flows into file paths and the generated spec — reject
+  # anything that is not the kebab-case surface-id form, exactly as
+  # screenshot-store-write.sh does for the legacy writer. This blocks path
+  # traversal (`../`) and stray metacharacters.
+  if ! printf '%s' "$component" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
+    add_warning "$component: component name is not kebab-case (^[a-z0-9][a-z0-9-]*\$); skipped"
+    continue
+  fi
   spec_file="$VISUAL_DIR/$component.spec.ts"
   snap_dir="$VISUAL_DIR/$component.spec.ts-snapshots"
   comp_viewports='[]'
@@ -119,6 +128,14 @@ while IFS= read -r comp_dir; do
     [ -z "$size" ] && size="desktop"
     base="$component-1-visual-chromium-$size-linux"
     mkdir -p "$snap_dir" || { add_warning "$component: cannot create snapshot dir"; continue; }
+
+    # Collision guard: two legacy viewports can map to the same size bucket
+    # (e.g. 370x800 and 400x850 both → phone). Never silently overwrite —
+    # keep the first, warn on the rest.
+    if [ -e "$snap_dir/$base.png" ]; then
+      add_warning "$component/$vp_base: maps to size '$size' already migrated this run; skipped (no overwrite)"
+      continue
+    fi
 
     if ! cp "$png" "$snap_dir/$base.png" 2>/dev/null; then
       add_warning "$component/$vp_base: PNG copy failed"

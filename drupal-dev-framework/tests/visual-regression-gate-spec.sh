@@ -89,6 +89,21 @@ else
   fail_check "summary counts — out=$OUT"
 fi
 
+# === Test 9 (regression, paper-test RT-4): --project-pattern with regex ===
+# metacharacters → exit 2 (rejected before interpolation into a grep regex).
+RC=0; bash "$SCRIPT" /tmp/reg.yml "$CP" --project-pattern '.*|evil' >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 2 ]; then
+  pass_check "--project-pattern with metacharacters → exit 2"
+else
+  fail_check "--project-pattern validation should exit 2, got $RC"
+fi
+RC=0; bash "$SCRIPT" /tmp/reg.yml "$CP" --project-pattern 'visual-chromium-' >/dev/null 2>&1 || RC=$?
+if [ "$RC" -ne 2 ]; then
+  pass_check "--project-pattern 'visual-chromium-' (plain) accepted"
+else
+  fail_check "plain --project-pattern wrongly rejected"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nvisual-regression-gate.sh invariants violated.\n' >&2
   exit 1

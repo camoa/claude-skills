@@ -105,6 +105,29 @@ else
   fail_check "output keys — out=$OUT"
 fi
 
+# === Test 9 (regression, paper-test EC-1): a PNG not matching <stem>- → ===
+# warning + exit 0, never a crash (jq -n on the warning-append path).
+SNAP3="$CP/tests/visual/widget.spec.ts-snapshots"
+mkdir -p "$SNAP3"
+printf 'X' > "$SNAP3/totally-unrelated.png"
+RC=0; OUT=$(bash "$SCRIPT" "$CP" 2>/dev/null) || RC=$?
+if [ "$RC" -eq 0 ] && echo "$OUT" | jq -e '.warnings[] | select(.code == "meta_schema_mismatch")' >/dev/null; then
+  pass_check "stray PNG not matching <stem>- → meta_schema_mismatch warning, exit 0 (no crash)"
+else
+  fail_check "stray-PNG handling — rc=$RC out=$OUT"
+fi
+
+# === Test 10 (regression, paper-test EC-4): PNG whose project segment is ===
+# not visual-chromium-<viewport> → warning + skipped, no garbage viewport.
+printf 'Y' > "$SNAP3/widget-1-firefox-desktop-linux.png"
+OUT=$(bash "$SCRIPT" "$CP" 2>/dev/null)
+GARBAGE=$(echo "$OUT" | jq -r '.components[] | select(.name=="widget") | .viewports[]?.viewport' 2>/dev/null || true)
+if [ -z "$GARBAGE" ] && echo "$OUT" | jq -e '.warnings[] | select(.code == "meta_schema_mismatch")' >/dev/null; then
+  pass_check "non-visual-chromium project segment → warning, no garbage viewport emitted"
+else
+  fail_check "non-visual-chromium segment — garbage='$GARBAGE' out=$OUT"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nscreenshot-store-read.sh invariants violated.\n' >&2
   exit 1

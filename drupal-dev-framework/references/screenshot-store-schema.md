@@ -102,11 +102,11 @@ Every `.png` in the store has a sibling `.meta.json` with exactly these 9 fields
 {
   "schema_version": "1.0",
   "role": "baseline",
-  "viewport": "1920x1080",
+  "viewport": "desktop",
   "captured_at": "2026-04-24T14:30:00Z",
   "sha256": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "originating_task": "dev_framework_granular_validation",
-  "captured_by": "playwright-mcp",
+  "captured_by": "lullabot-playwright",
   "prior_hash": null,
   "source": null
 }
@@ -164,20 +164,20 @@ Atomic enough: `mv` on POSIX is atomic within the same filesystem; `cp` + `rm` i
 
 ## 7. Reader JSON output contract
 
-`scripts/screenshot-store-read.sh <project_folder>` emits:
+`scripts/screenshot-store-read.sh <codePath>` emits:
 
 ```json
 {
   "schema_version": "1.0",
-  "project_path": "/abs/path/to/project",
-  "store_path": "/abs/path/to/project/.screenshots",
+  "project_path": "/abs/path/to/codePath",
+  "store_path": "/abs/path/to/codePath/tests/visual",
   "store_exists": true,
   "components": [
     {
       "name": "home-hero",
       "viewports": [
         {
-          "viewport": "1920x1080",
+          "viewport": "desktop",
           "has_current": true,
           "has_previous": true,
           "meta": { ... 9-field object ... },
@@ -197,7 +197,7 @@ Exit code always 0 except on unrecoverable IO failures (permission denied, etc.)
 
 | Code | Level | When |
 |---|---|---|
-| `store_missing` | store | `.screenshots/` does not exist (normal for projects that never ran visual tests) |
+| `store_missing` | store | `<codePath>/tests/visual/` does not exist (normal for projects that have not run `/setup-visual-regression`) |
 | `component_missing_meta` | viewport | `<viewport>.png` exists but no `.meta.json` sibling |
 | `meta_schema_mismatch` | viewport | `.meta.json` is invalid JSON OR missing one or more required v1.0 fields |
 | `hash_mismatch` | viewport | `.meta.json`'s `sha256` does not match the actual PNG (data drift; file edited outside the writer) |
@@ -250,27 +250,27 @@ Future consumers needing screenshot data should call the reader skill rather tha
 {
   "schema_version": "1.0",
   "role": "baseline",
-  "viewport": "1920x1080",
+  "viewport": "desktop",
   "captured_at": "2026-04-24T14:30:00Z",
   "sha256": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "originating_task": "theme_redesign",
-  "captured_by": "playwright-mcp",
+  "captured_by": "lullabot-playwright",
   "prior_hash": null,
   "source": null
 }
 ```
 
-### Regression baseline (after rotation)
+### Regression baseline (subsequent capture — prior_hash chained)
 
 ```json
 {
   "schema_version": "1.0",
   "role": "baseline",
-  "viewport": "1920x1080",
+  "viewport": "desktop",
   "captured_at": "2026-05-15T09:12:44Z",
   "sha256": "d91ed079d493278a89a72d1e8f70144bb95a09f4c206c3a391ac44b027e65ce6",
   "originating_task": "hero_cta_update",
-  "captured_by": "playwright-mcp",
+  "captured_by": "lullabot-playwright",
   "prior_hash": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "source": null
 }

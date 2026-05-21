@@ -139,8 +139,8 @@ if [ -f "$PW_CONFIG" ]; then
   while IFS= read -r vp; do
     [ -z "$vp" ] && continue
     VIEWPORTS=$(jq -c --arg v "$vp" '. + [$v]' <<<"$VIEWPORTS")
-  done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[a-z0-9-]+['\"]" "$PW_CONFIG" 2>/dev/null \
-            | grep -oE 'visual-chromium-[a-z0-9-]+' | sed 's/^visual-chromium-//' | sort -u)
+  done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
+            | grep -oE 'visual-chromium-[A-Za-z0-9_-]+' | sed 's/^visual-chromium-//' | sort -u)
 fi
 
 HISTORY_PATH="$(dirname "$REGISTRY_PATH")/baseline-history.jsonl"
@@ -176,11 +176,19 @@ PROJ_ARGS=()
 while IFS= read -r p; do
   [ -z "$p" ] && continue
   PROJ_ARGS+=("--project" "$p")
-done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[a-z0-9-]+['\"]" "$PW_CONFIG" 2>/dev/null \
-          | grep -oE 'visual-chromium-[a-z0-9-]+' | sort -u)
+done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
+          | grep -oE 'visual-chromium-[A-Za-z0-9_-]+' | sort -u)
 
-PW_ARGS=(test --update-snapshots)
-[ "${#PROJ_ARGS[@]}" -gt 0 ] && PW_ARGS+=("${PROJ_ARGS[@]}")
+# Refuse to run unscoped: with no visual-chromium-* projects, a bare
+# `npx playwright test --update-snapshots` would regenerate snapshots for ALL
+# projects — including ATK's e2e-chromium. Abort instead.
+if [ "${#PROJ_ARGS[@]}" -eq 0 ]; then
+  add_warning "no_visual_projects: playwright.config.ts has no visual-chromium-* projects — refusing to run --update-snapshots unscoped"
+  jq -nc --argjson w "$WARNINGS" '{stage:"execute",updated:false,playwright_exit:0,warnings:$w}'
+  exit 2
+fi
+
+PW_ARGS=(test --update-snapshots "${PROJ_ARGS[@]}")
 [ -n "$GREP_PATTERN" ] && PW_ARGS+=(--grep "$GREP_PATTERN")
 
 PW_EXIT=0

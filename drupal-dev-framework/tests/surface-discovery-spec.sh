@@ -75,6 +75,23 @@ else
   fail_check "non-kebab surface ids: $BAD"
 fi
 
+# === Test 7 (regression, paper-test RT-3): --drush-path with shell ===
+# metacharacters → rejected (empty groups, no command injection).
+RC=0; OUT=$(bash "$SCRIPT" "$CP" --drush-path 'ddev drush; rm -rf ~') || RC=$?
+if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -c '.frontend')" = "[]" ] \
+   && [ "$(echo "$OUT" | jq -c '.admin')" = "[]" ]; then
+  pass_check "--drush-path with metacharacters → rejected, empty groups"
+else
+  fail_check "--drush-path injection guard — rc=$RC out=$OUT"
+fi
+# A clean drush path is still accepted (does not get rejected by the guard).
+OUT=$(bash "$SCRIPT" "$CP" --drush-path 'ddev drush')
+if echo "$OUT" | jq -e '.frontend[] | select(.id == "home")' >/dev/null; then
+  pass_check "--drush-path 'ddev drush' (clean) accepted"
+else
+  fail_check "clean --drush-path wrongly rejected — out=$OUT"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nsurface-discovery.sh invariants violated.\n' >&2
   exit 1

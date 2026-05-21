@@ -41,7 +41,15 @@ shift || true
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --drush-path)
-      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then DRUSH_CMD="$2"; shift 2
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then
+        # $DRUSH_CMD must stay unquoted at the call site (it may be two words,
+        # e.g. `ddev drush`) — so restrict it to a safe charset: no shell
+        # metacharacters can reach the command line.
+        if ! printf '%s' "$2" | grep -qE '^[A-Za-z0-9 _./-]+$'; then
+          echo "surface-discovery: --drush-path contains disallowed characters" >&2
+          emit '[]' '[]'
+        fi
+        DRUSH_CMD="$2"; shift 2
       else shift; fi
       ;;
     *) shift ;;

@@ -120,7 +120,7 @@ while IFS= read -r snap_dir; do
     # We know <stem> from the directory name, so strip it deterministically.
     rest="${png_base#"$stem"-}"
     if [ "$rest" = "$png_base" ]; then
-      STORE_WARNINGS=$(jq -c --argjson p "$STORE_WARNINGS" --arg f "$png_base" \
+      STORE_WARNINGS=$(jq -cn --argjson p "$STORE_WARNINGS" --arg f "$png_base" \
         '$p + [{code:"meta_schema_mismatch",detail:("baseline \($f) does not match <stem>-<ordinal>-<project>-<platform>")}]' )
       continue
     fi
@@ -128,6 +128,14 @@ while IFS= read -r snap_dir; do
     platform="${rest##*-}"
     project="${rest#"$ordinal"-}"
     project="${project%-"$platform"}"
+    # The project segment must be visual-chromium-<viewport>; anything else is a
+    # stray file (a renamed surface's leftover, a hand-placed PNG) — warn + skip,
+    # never emit a garbage viewport name.
+    if [ "${project#visual-chromium-}" = "$project" ]; then
+      STORE_WARNINGS=$(jq -cn --argjson p "$STORE_WARNINGS" --arg f "$png_base" \
+        '$p + [{code:"meta_schema_mismatch",detail:("baseline \($f) project segment is not visual-chromium-<viewport>")}]' )
+      continue
+    fi
     viewport="${project#visual-chromium-}"
 
     meta_file="$snap_dir/$png_base.meta.json"
