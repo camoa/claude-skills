@@ -90,6 +90,21 @@ TDD workflow tracks coverage incrementally:
 4. **Commit when green** - Only commit passing code
 5. **Keep tests fast** - Under 1 second for unit tests
 
+## Drive the GREEN phase with `/goal`
+
+The RED-GREEN cycle is iterative by nature — a good fit for the built-in `/goal` command, which keeps the session working turn after turn until a fresh evaluator model confirms a completion condition from the transcript.
+
+Once a failing test exists (RED), set a goal for the GREEN phase:
+
+```
+/goal all tests in tests/Unit pass and phpstan exits 0, verified by running
+the suite — and no test file is modified — or stop after 12 turns
+```
+
+Write the condition as a **transcript-checkable end state**: the evaluator does not run tools, it reads what Claude has surfaced, so name the proof (`npm test exits 0`, `the PHPUnit run reports 0 failures`) — not "the feature works". Add constraints that must hold (`no test file is modified`) and an explicit `stop after N turns` bound.
+
+`/goal` requires an accepted workspace-trust dialog and is unavailable when `disableAllHooks` or `allowManagedHooksOnly` is set; in those cases it reports why rather than failing silently. It is a session-scoped interactive / headless-`-p` convenience.
+
 ## Error Handling
 
 Common issues:

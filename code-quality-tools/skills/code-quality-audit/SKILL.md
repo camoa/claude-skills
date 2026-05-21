@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.4.0
+version: 3.5.0
 model: sonnet
 allowed-tools: Read, Bash, Grep, Glob
 user-invocable: false
@@ -151,6 +151,21 @@ Read `decision-guides/quality-audit-checklist.md` for detailed guidance.
 | Pre-merge | Full audit | ~10min |
 | Weekly | Full audit + HTML reports | ~15min |
 
+## Adaptive Audit Depth (`${CLAUDE_EFFORT}`)
+
+When this skill drives an audit, scale depth to the session's effort level. The `${CLAUDE_EFFORT}` substitution resolves to the current level:
+
+| `${CLAUDE_EFFORT}` | Audit depth |
+|---|---|
+| `low` | Fast lint only — coding-standards pass; skip security, SOLID, DRY, coverage |
+| `medium` | Lint + coverage + SOLID + DRY; skip the deep security battery |
+| `high` | Full audit — all 22 operations (the effective default) |
+| `xhigh` / `max` | Full audit, then offer `/code-quality:security-debate` for a 3-agent review of the security findings |
+
+Treat an unset or unrecognized value as `high` (full audit) — never silently skip coverage or security because the level could not be read.
+
+This is a **pilot** (v3.5.0): adaptive depth is wired into the audit flow only. The `FileChanged` watch-mode dispatcher and per-command effort gates are intentionally not yet effort-aware — they will be revisited once this pilot has been observed in real use.
+
 ## Scope Targeting
 
 To audit specific modules or components instead of the entire project:
@@ -268,6 +283,7 @@ All reports must follow `schemas/audit-report.schema.json`:
 - `references/scope-targeting.md` - Target specific modules/components
 - `references/post-batch-aggregation.md` - Optional `PostToolBatch` aggregation pattern (Claude Code 2.1.118+); not shipped by default
 - `references/code-intelligence.md` - Optional LSP-tool code intelligence for deeper SOLID/DRY/review analysis (recommended-not-required)
+- `references/setup-hook-pattern.md` - Optional `Setup`-hook pattern for one-time CI tool bootstrap on `claude --init -p`; not shipped by default
 
 ### Operations
 - `references/operations/drupal-setup.md` - Drupal setup operations

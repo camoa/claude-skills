@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-05-20
+
+### Adaptive depth & autonomous remediation
+
+Third release of the modernization roadmap. Three additive items — effort-scaled audit depth, `/goal`-driven autonomous loops, and a `Setup`-hook CI-bootstrap reference. No behavior change to scripts, hooks, or audit logic.
+
+### Added
+
+- **Adaptive audit depth (`${CLAUDE_EFFORT}`)** — `skills/code-quality-audit/SKILL.md` gains an "Adaptive Audit Depth" section that scales the audit to the session effort level: `low` → fast lint only, `medium` → lint + coverage + SOLID/DRY, `high` → full audit (the effective default), `xhigh`/`max` → full audit + a `/code-quality:security-debate` offer. An unset/unrecognized level falls back to `high` — depth never silently drops because the level could not be read. `commands/audit.md` carries a prose "Adaptive Depth" pointer to the ladder. **Pilot scope (v3.5.0):** wired into the audit flow only — `lint-changed.sh` and per-command effort gates are deliberately left for a later "broaden" cycle once the pilot is observed. *Grounding note:* the cached Skills guide documents `${CLAUDE_EFFORT}` strictly as a **skill-content** string substitution; it is therefore placed in `SKILL.md` (skill content), and `audit.md` uses a plain-prose behavioral instruction rather than the literal token, which the guides do not support inside slash-command bodies.
+- **`/goal` autonomous loops** — `commands/tdd.md` gains a "Drive the GREEN phase with `/goal`" subsection (worked condition, transcript-checkable end-state rule, trust/`disableAllHooks`/`allowManagedHooksOnly` requirements); `commands/audit.md` gains an "Autonomous remediation with `/goal`" subsection (fix-verify-fix loop paired with `--json` as the proof step). Both state plainly that `/goal` is an interactive / headless-`-p` convenience and **not** a CI gate — the CI primitives remain `audit --json` and `claude ultrareview --json`.
+- **`skills/code-quality-audit/references/setup-hook-pattern.md`** — new reference documenting the `Setup` hook event (fires on `--init-only` / `--init -p` / `--maintenance -p`; `init`/`maintenance` matcher; `trigger` field; cannot block; `command`/`mcp_tool` handlers only) as the one-time CI tool-bootstrap pattern. Exec form (`args` array). Opt-in, **not shipped** — honest about the Hooks Reference caveat that `Setup` never fires on a normal launch (first-use detection stays the fallback) and that `${CLAUDE_PLUGIN_ROOT}` resolves only in plugin-shipped hooks, not a project's own `settings.json`. Corrects the capability-analysis `args: ["--ci"]` example — `install-tools.sh` takes no positional arguments (it is env-var driven).
+
+### Changed
+
+- **`skills/code-quality-audit/references/scheduled-sweeps.md`** — the `/loop` section now distinguishes `/loop` (time-interval re-run) from `/goal` (condition-checked re-run); neither is a CI primitive.
+- **`skills/code-quality-audit/SKILL.md`** — `setup-hook-pattern.md` added to the References list; skill `version` 3.4.0 → 3.5.0.
+- **`hooks/hooks.json`** — the `PreCompact` command hook migrated to exec form (`"args": []`), the Hooks Reference's preferred form for any hook referencing a `${CLAUDE_PLUGIN_ROOT}` path placeholder. Surfaced as a validator H05 warning; fixed here to keep the release gate clean. (The skill-scoped `FileChanged` hook and the `post-batch-aggregation.md` example snippet — the rest of deep-dive item 2.1 — remain queued for v3.6.0.)
+
+Marketplace metadata bumped 1.14.52 → 1.14.53.
+
 ## [3.4.0] - 2026-05-20
 
 ### LSP code intelligence
