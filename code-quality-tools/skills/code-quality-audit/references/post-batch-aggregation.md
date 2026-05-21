@@ -34,6 +34,7 @@ Project-local `.claude/hooks.json`:
           {
             "type": "command",
             "command": "${HOME}/.claude/scripts/quality-batch-summary.sh",
+            "args": [],
             "timeout": 10
           }
         ]
@@ -79,4 +80,4 @@ If `PostToolBatch` gains skill-scoping (matching this plugin's existing skill-sc
 
 - `references/troubleshooting.md` — `Debug Your Config` cross-link for verifying the hook actually loads (`/hooks` slash command).
 - Skill-scoped vs plugin-scoped hooks — see `CONVENTIONS.md` in plugin root.
-- `if`-Bash subcommand semantics: `Bash(rm *)` matches `FOO=bar rm file` and `npm test && rm file` (per Hooks Reference 2026-04-25 clarification). There is no `&&`/`||` in `if` — register separate handlers for compound conditions.
+- `if`-Bash subcommand semantics: the rule is matched against each subcommand after leading `VAR=value` assignments are stripped, so `Bash(rm *)` matches `FOO=bar rm file` and `npm test && rm file` (per the Hooks Reference). The hook also always runs when the command is too complex to parse. There is no `&&`/`||` or list syntax in `if` — register a separate handler per condition.

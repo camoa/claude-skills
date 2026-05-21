@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-05-20
+
+### References & loose ends
+
+Final release of the modernization roadmap — the LOW-priority gaps and ride-along capability items from the 2026-05-12 deep dives. All doc-currency edits; no behavior change to scripts, hooks, or audit logic.
+
+### Changed
+
+- **Hook exec form** — the skill-scoped `FileChanged` hook (`SKILL.md` frontmatter) and the worked-example snippet in `references/post-batch-aggregation.md` migrated to exec form (`"args": []`), completing deep-dive item 2.1 begun in v3.5.0 (`PreCompact`).
+- **`references/post-batch-aggregation.md`** — the `if`-Bash footnote refreshed against the current Hooks Reference: the rule matches each subcommand after leading `VAR=value` assignments are stripped, and the hook always runs when the command is too complex to parse. Semantics verified unchanged; stale date attribution dropped.
+- **`references/scheduled-sweeps.md`** — new "Autonomous & headless runs" section: the built-in **Proactive** output style suits `/goal`-driven loops (mirrors auto mode without changing permission mode; the plugin ships no output style of its own); and a `--dangerously-skip-permissions` advisory — it activates `bypassPermissions`, which skips all prompts including writes to `.git`/`.claude`/`.vscode`/`.idea`/`.husky` (root/home removals still circuit-break), disableable via `permissions.disableBypassPermissionsMode`.
+- **`commands/audit.md`, `commands/security.md`** — "run in the background" notes: `claude --bg`, monitor with `claude agents`, pull output with `claude logs <id>`.
+- **`commands/security-debate.md`, `commands/architecture-debate.md`** — "Teammate model & monitoring" note: `teammateDefaultModel` is the global lever (per-spawn `Model:` overrides it); watch teammates with `claude agents` / `/tasks`; do not background a whole debate (`claude --bg`) — the worktree-of-worktrees + permission-auto-deny interaction is untested, run debates in the foreground.
+- **`commands/ultrareview.md`, `commands/review.md`** — See-also entry for `claude --from-pr <number>` (resumes the Claude Code session linked to a PR; distinct from `/ultrareview <PR>`, which clones a PR fresh).
+- **`README.md`** — note that plugin command/skill visibility is managed via `/plugin`; plugin skills are not affected by the `skillOverrides` setting, and slash commands are not skills.
+- **`CONVENTIONS.md`** — Skills checklist gains the `maxSkillDescriptionChars` (1,536 default) cap; Agent Frontmatter Limitations gains the Subagents-guide detail (`name` → `agent_type` for hooks; `permissionMode`/`hooks` ignored for plugin subagents; "what loads at startup"); the `/loop` section gains a `/goal` condition-checked-loop pointer.
+
+### Not done (intentional)
+
+- `agentProgressSummaries` (capability item 4) — not documented in any cached Claude Code guide; dropped rather than guessed. `teammateDefaultModel` (a confirmed setting) and Agent View monitoring cover the same need.
+- `SKILL.md` body trim — at 303 lines it trips the validator's S10 hub-skill nudge (an accepted carve-out, not a defect; shipped at 286–303 since v3.3.0). Trimming is outside the roadmap's scope for this release; left as an optional future follow-up.
+
+Marketplace metadata bumped 1.14.53 → 1.14.54. This completes the v3.3.0 → v3.6.0 modernization roadmap.
+
 ## [3.5.0] - 2026-05-20
 
 ### Adaptive depth & autonomous remediation
