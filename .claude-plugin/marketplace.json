@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.48"
+    "version": "1.14.49"
   },
   "plugins": [
     {
@@ -57,7 +57,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow (Research → Architecture → Implementation) with enforced SOLID, TDD, DRY, and security gates. Ships 22 skills, 30 commands, and 7 agents covering epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate, the Playbook System for opinionated best-practices, git-worktree parallel-task awareness, agent-team validation, and per-project session-remembrance hooks. Depends on dev-guides-navigator and code-quality-tools; see CHANGELOG.md for full version history.",
-      "version": "4.7.0",
+      "version": "4.8.0",
       "author": {
         "name": "camoa"
       },

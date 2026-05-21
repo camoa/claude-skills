@@ -166,6 +166,35 @@ Instead of a single research pass, `/research-team` launches 3 competing AI agen
 
 The debate produces a synthesized recommendation with dissenting opinions noted. Useful for complex decisions where a single perspective might miss options.
 
+## Customizing skill visibility
+
+drupal-dev-framework ships 22 skills and 38 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
+
+**Mute an individual skill or command** with a `Skill()` deny rule. Add it through `/permissions`, or to `permissions.deny` in `.claude/settings.json` (one project) or `~/.claude/settings.json` (all projects):
+
+```json
+{
+  "permissions": {
+    "deny": ["Skill(epic-migrator *)", "Skill(migrate-to-epic *)"]
+  }
+}
+```
+
+`Skill(<name>)` matches exactly; `Skill(<name> *)` matches the skill with any arguments. A denied skill is not auto-invoked by Claude.
+
+**Role-based starting points:**
+
+| If you… | Deny |
+|---|---|
+| never break tasks into epics | `Skill(migrate-to-epic *)`, `Skill(propose-epics *)`, `Skill(epic-migrator *)` |
+| don't use the playbook system | `Skill(playbook-capture *)`, `Skill(playbook-review *)`, `Skill(playbook-active *)` |
+| don't run visual checks | `Skill(visual-check *)`, `Skill(validate-visual-regression *)`, `Skill(validate-visual-parity *)` |
+| don't want agent-team modes | `Skill(validate-team *)`, `Skill(research-team *)` |
+
+**Whole-plugin off switch:** `/plugin disable drupal-dev-framework` disables every component at once; `/plugin enable drupal-dev-framework` restores it.
+
+> **Note — `skillOverrides` does not apply here.** The `skillOverrides` setting (Claude Code v2.1.129+) controls visibility only for *non-plugin* skills — ones in a project repo or provided by an MCP server. drupal-dev-framework's skills are plugin skills, so `skillOverrides` entries for them are ignored. Use `Skill()` deny rules (above) or `/plugin` instead.
+
 ## What's Inside
 
 ### Agents (6)
@@ -287,7 +316,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.7.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.8.0**.
 
 ## License
 
