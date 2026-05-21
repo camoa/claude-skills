@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.50"
+    "version": "1.14.51"
   },
   "plugins": [
     {
@@ -100,8 +100,8 @@
     {
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
-      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). v3.0.0 ships REVIEW.md v2 injection-model generator, /ultrareview wrapper with platform pre-flight, skill-scoped watch-mode linting via FileChanged hook, scheduled quality sweeps (Desktop + Cloud Routine + /loop), API-triggered pre-merge CI gate, check-run JSON parsing for gh+jq, and --json mode on /audit /review /security with a stable schema v1.0 for CI gating. v3.1.0 adds the PostToolBatch aggregation pattern reference, Type-B reading-strategy citations on audit/review/security/SOLID/DRY commands, Debug Your Config cross-link, and the if-Bash subcommand clarification (Hooks Reference 2026-04-25). v3.2.0 ships two opt-in PR-time surfaces: changed-files-only GitHub Actions workflow (github-drupal-pr.yml) that scopes phpcs+phpstan+Semgrep to the PR diff via `git diff base...head` and posts a sticky PR comment with rubric score (soft gate by default; hard gate via repo Variable FAIL_ON_GATE=true), and an optional GrumPHP pre-commit hook template (staged-files only, phpcs+phpstan) installed on prompt by /code-quality:setup. Sibling github-drupal.yml full-tree workflow unchanged; all three CI/hook surfaces are independently opt-in. v3.2.1 patches five bugs in github-drupal-pr.yml surfaced by paper-test: (1) backtick command substitution in the comment footer (rendered broken), (2) Semgrep step running unscoped via non-existent SEMGREP_TARGETS_FILE env var (now uses direct semgrep CLI with positional args), (3) xargs multi-batch overwrite/concat in phpcs/phpstan (now single invocation via $(cat .changed-files.txt)), (4) unconditional `composer require --dev` on every PR (now documented as one-time setup), (5) PHPCS jq sum via `.totals.errors`/.totals.warnings for robustness.",
-      "version": "3.2.1",
+      "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Provides full audits with cross-tool synthesis, rubric-scored code review, 3-agent security and architecture debates, REVIEW.md v2 generation, an /ultrareview cloud-review wrapper with a headless CLI gating path, watch-mode linting, scheduled sweeps, and --json output for CI pipelines.",
+      "version": "3.3.0",
       "author": {
         "name": "camoa"
       },

@@ -1,7 +1,7 @@
 ---
 description: Review code quality with structured rubric scoring (Content + Structure grades, /50 scale). Use when user says "review this code", "grade this module", "code review", "quality score", "is this production ready", "rate this code", "code assessment". Produces scored report with quality gate (PASS 35+/FAIL) and prioritized action items.
 allowed-tools: Read, Bash, Grep, Glob, Write
-argument-hint: [--json] <file-or-directory-path>
+argument-hint: "[--json] <file-or-directory-path>"
 ---
 
 # Code Review

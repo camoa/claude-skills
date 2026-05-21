@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-05-20
+
+### Validator hygiene & the ultrareview CLI gap
+
+Currency + correctness pass: makes the plugin pass the `plugin-creation-tools` v3.7.x validator clean and closes the one HIGH gap from the 2026-05-12 deep dive — the non-interactive `claude ultrareview` subcommand.
+
+### Fixed (validator FM01 errors — pre-existing breakage)
+
+- **`commands/audit.md`, `commands/security.md`, `commands/review.md`** — the `argument-hint` values contained unquoted `[...]` / `<...>` brackets, which broke the **entire** YAML frontmatter block. Each command was loading with **no `description` and no `allowed-tools`** at runtime. Quoted all three values. Surfaced by `/plugin-creation-tools:validate`.
+
+### Changed
+
+- **`commands/ultrareview.md`** — new "CI / Headless Mode" section documenting the `claude ultrareview` CLI subcommand: no-arg / PR-number / base-branch invocation forms, `--json` and `--timeout` flags, the exit-code contract (`0` complete, `1` failure/timeout, `130` interrupt), stdout/stderr split, a CI gating snippet, and cost discipline (a failed or stopped run still consumes a free run — reserve for release branches). Step 4's "a command body cannot invoke another slash command" note is corrected: it holds for the *slash* command, but the CLI subcommand is Bash-invokable. Grounded in the Ultrareview guide §"Run ultrareview non-interactively".
+- **`commands/ultrareview.md`** — `/extra-usage` renamed to `/usage-credits` (upstream rename, v2.1.144); `argument-hint` quoted.
+- **`commands/audit.md`** "Wire to CI" — cross-references the headless `claude ultrareview --json` release-gate path alongside the local `audit --json` per-push gate.
+- **`skills/code-quality-audit/references/premerge-gate-routine.md`** — "See also" cross-references the `claude ultrareview` CLI subcommand as a routine-free verified-findings gate.
+- **Plugin-root `CLAUDE.md` → `CONVENTIONS.md`** (validator rule ST03) — a plugin-root `CLAUDE.md` is not loaded as end-user context and trips both `claude plugin validate` and the v3.7.x validator. Content unchanged; only the filename changed. The one internal pointer (`post-batch-aggregation.md`) was updated. Matches the drupal-dev-framework v4.6.0 precedent.
+- **`plugin.json` and `marketplace.json` descriptions** — replaced the multi-version changelog narrative (~1,800 / 1,858 chars) with a stable ~450-char capability summary (validator rule X02; marketplace cap is 600 chars). Version history stays here in `CHANGELOG.md`.
+- **`plugin.json`** — added the `$schema` field (`https://json.schemastore.org/claude-code-plugin-manifest.json`) for editor autocomplete; ignored by Claude Code at load time.
+
+Marketplace metadata bumped 1.14.50 → 1.14.51. No behavior change to scripts, hooks, or audit logic.
+
 ## [3.2.1] - 2026-05-19
 
 ### Paper-test fixes for `github-drupal-pr.yml`

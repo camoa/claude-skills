@@ -78,5 +78,5 @@ If `PostToolBatch` gains skill-scoping (matching this plugin's existing skill-sc
 ## Cross-references
 
 - `references/troubleshooting.md` — `Debug Your Config` cross-link for verifying the hook actually loads (`/hooks` slash command).
-- Skill-scoped vs plugin-scoped hooks — see `CLAUDE.md` in plugin root.
+- Skill-scoped vs plugin-scoped hooks — see `CONVENTIONS.md` in plugin root.
 - `if`-Bash subcommand semantics: `Bash(rm *)` matches `FOO=bar rm file` and `npm test && rm file` (per Hooks Reference 2026-04-25 clarification). There is no `&&`/`||` in `if` — register separate handlers for compound conditions.

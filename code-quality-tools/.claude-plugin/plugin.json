@@ -1,7 +1,8 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "code-quality-tools",
-  "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks, Socket CLI). REVIEW.md v2 generator, /ultrareview wrapper, skill-scoped watch-mode linting, scheduled sweeps (Desktop + Cloud Routine), API-triggered pre-merge gate, check-run JSON gating, and --json mode on audit/review/security for CI pipelines. v3.2.0 ships two opt-in CI surfaces for PR-time review: changed-files-only GitHub Actions workflow (github-drupal-pr.yml) that scopes phpcs+phpstan+Semgrep to PR diff and posts a sticky comment with rubric score (configurable hard gate via FAIL_ON_GATE), and an optional GrumPHP pre-commit hook (staged-files only, phpcs+phpstan) installed on prompt by /code-quality:setup. v3.2.1 patches five paper-test-discovered bugs in github-drupal-pr.yml: backtick command-substitution in the footer, Semgrep running unscoped (SEMGREP_TARGETS_FILE doesn't exist — now uses direct semgrep CLI), xargs multi-batch overwrite in phpcs/phpstan (now single invocation), unconditional `composer require --dev` on every PR run (now one-time setup), and PHPCS jq counts via `.totals.errors`/`.totals.warnings`.",
-  "version": "3.2.1",
+  "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Provides full audits with cross-tool synthesis, rubric-scored code review, 3-agent security and architecture debates, REVIEW.md v2 generation, an /ultrareview cloud-review wrapper with a headless CLI gating path, watch-mode linting, scheduled sweeps, and --json output for CI pipelines.",
+  "version": "3.3.0",
   "author": {
     "name": "camoa"
   },

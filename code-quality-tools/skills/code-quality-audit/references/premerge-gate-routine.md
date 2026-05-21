@@ -182,3 +182,4 @@ Exact response shape (including a JSON error body vs plain text) is subject to c
 - `scheduled-sweeps.md` — scheduling surface comparison
 - `cloud-routine-sweep.md` — general Cloud Routine patterns
 - `check-run-json.md` — parse managed Code Review check-run JSON for a no-routine alternative
+- `commands/ultrareview.md` → "CI / Headless Mode" — the `claude ultrareview` CLI subcommand: a routine-free, verified-findings cloud gate with a direct exit-code contract for release branches
