@@ -1,7 +1,7 @@
 ---
 name: generating-infographics
 description: Use when creating infographics, data visualizations, process diagrams, timelines, or comparisons - generates branded infographics using @antv/infographic with 114 templates across 7 categories. Triggers on "create infographic", "make infographic", "visualize data", "timeline", "process diagram".
-version: 2.9.0
+version: 2.9.1
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
@@ -90,24 +90,11 @@ If overlap occurs: shorten text, use wider canvas (1200px+), or use column/grid 
 
 ## Background Presets
 
-**Layered (gradient + pattern):**
-| Preset | Effect |
-|--------|--------|
-| `spotlight-dots` | Radial spotlight + subtle dots (recommended) |
-| `spotlight-grid` | Radial spotlight + grid lines |
-| `diagonal-crosshatch` | Diagonal fade + crosshatch |
-| `tech-matrix` | Tech gradient + dense grid |
-
-**Simple (gradient or pattern only):**
-| Preset | Effect |
-|--------|--------|
-| `spotlight` | Radial gradient only |
-| `diagonal-fade` | Corner to corner fade |
-| `top-down` | Vertical fade |
-| `subtle-dots` | Light dot pattern |
-| `tech-grid` | Grid lines |
-| `crosshatch` | Diagonal crosshatch |
-| `solid` | Plain solid color |
+Layered presets (gradient + pattern) include `spotlight-dots` (recommended),
+`spotlight-grid`, `diagonal-crosshatch`, `tech-matrix`. Simple presets include
+`spotlight`, `diagonal-fade`, `top-down`, `subtle-dots`, `tech-grid`,
+`crosshatch`, `solid`. Full effect descriptions and custom background
+configuration: `references/backgrounds.md`.
 
 ## Workflow
 
@@ -173,77 +160,20 @@ Select template → paste content → name → get PNG
 
 **If ANY check fails, DO NOT generate. Fix the content or config first.**
 
-### Config Examples
+### Config by Background Type
 
-**Dark Backgrounds (spotlight-dots, tech-matrix, etc.)**
-```json
-{
-  "colorBg": "{brand-bg-dark}",
-  "colorPrimary": "{brand-primary}",
-  "title": { "fill": "#FFFFFF" },
-  "desc": { "fill": "rgba(255,255,255,0.85)" },
-  "item": {
-    "label": { "fill": "#FFFFFF" },
-    "desc": { "fill": "rgba(255,255,255,0.7)" }
-  }
-}
-```
-
-**Light Backgrounds (solid, subtle-dots, etc.)**
-```json
-{
-  "colorBg": "#FFFFFF",
-  "colorPrimary": "{brand-primary}",
-  "title": { "fill": "#1A202C" },
-  "desc": { "fill": "#4A5568" },
-  "item": {
-    "label": { "fill": "#1A202C" },
-    "desc": { "fill": "#4A5568" }
-  }
-}
-```
-
-**Common mistake:** Using pastel palette colors for text on light backgrounds. Pastels are for decorative shapes only.
-
-See template-infographic.md for complete config examples.
-
-> **Note:** The `/template-infographic` command generates correct configs from your brand-philosophy.md.
-> Never copy hex values from the examples above — they are illustrative placeholders only.
+Set `title`/`desc`/`item` text fills by background brightness — dark
+backgrounds need white/near-white text, light backgrounds need near-black.
+**Never use palette colors for text** — they are for decorative shapes only.
+Ready-to-adapt dark-bg and light-bg config JSON is in `references/theming.md`
+§ Text Fill by Background Type. The `/template-infographic` command generates
+correct configs from your brand-philosophy.md.
 
 ## Data Structure by Type
 
-### Sequence/List
-```json
-{
-  "title": "Our Process",
-  "items": [
-    { "label": "Step 1", "desc": "Discovery" },
-    { "label": "Step 2", "desc": "Design" }
-  ]
-}
-```
-
-### Compare
-```json
-{
-  "title": "Before vs After",
-  "items": [
-    { "label": "Before", "children": [{ "label": "Slow" }] },
-    { "label": "After", "children": [{ "label": "Fast" }] }
-  ]
-}
-```
-
-### Hierarchy
-```json
-{
-  "title": "Organization",
-  "items": [{
-    "label": "CEO",
-    "children": [{ "label": "CTO" }, { "label": "CFO" }]
-  }]
-}
-```
+Content JSON shape depends on the template category — Sequence/List use a flat
+`items` array of `label`+`desc`; Compare and Hierarchy nest `children`. Full
+JSON examples per category: `references/templates.md` § Data Structure by Type.
 
 ## Common Mistakes
 

@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.5.1
+version: 0.6.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 user-invocable: true
 ---
@@ -126,50 +126,11 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 3. Apply them directly to the implementation
 4. Reference the guide in architecture docs if in design phase
 
-## Quick Reference
-
-| Step | Action |
-|------|--------|
-| Cache check | `curl -s` llms.hash, compare with cached hash |
-| Find topic | Match task keywords in cached `llms.txt` |
-| Get routing table | `curl -s` raw GitHub URL for topic `index.md` |
-| Disambiguate | Check `guide-meta:` concepts/not fields |
-| Pre-filter | Read Summary column in routing table; pick best-match guide |
-| Get guide | `curl -s` raw GitHub URL for specific guide `.md` |
-| Apply | Extract patterns and implement, don't summarize |
-
-## Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Using WebFetch instead of curl | **Always use `curl -s`** — WebFetch returns AI summaries or 400KB HTML shells |
-| Reading guide and only summarizing | Extract patterns and apply to current task |
-| Grabbing first keyword match | Check guide-meta `not` fields for disambiguation |
-| Fetching llms.txt every time | Check llms.hash first, use cache |
-| Ignoring `requires` | Load prerequisites first |
-
-## Examples
-
-| User says | Action |
-|-----------|--------|
-| "I need to create a Drupal form" | Match "form" → `drupal/forms/` → fetch index.md → pick guide for form creation |
-| "Add a story.yml for my component" | Match "story.yml" → check guide-meta → `drupal/ui-patterns/` (NOT storybook) |
-| "Set up responsive images" | Match "responsive image" → `drupal/image-styles/` (NOT drupal/media) |
-| "How do I use Config Split?" | Match "Config Split" → `drupal/config-management/` |
-| "I need SOLID architecture for my module" | Drupal context → `drupal/solid-principles/` (NOT generic `development/solid-principles`) |
-| "Build a FormBase vs ConfigFormBase" | index.md routing table has both → read Summary column → FormBase Summary mentions entity forms, ConfigFormBase mentions config → pick based on user context |
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `curl` fails (network error) | Fall back to `references/guide-index.md` for keyword-to-URL lookup |
-| No topic matches the task | Broaden keywords, check category sections in llms.txt, or task may not need a guide |
-| Cache file path unknown | Use Bash: `echo ~/.claude/projects/*/memory/` to find the project memory directory |
-| Guide content too large for context | Request only the specific section from the routing table, not the entire guide |
-
 ## See Also
 
-- `references/cache-format.md` — cache file format
+- `references/quick-reference.md` — condensed workflow table + common mistakes
+- `references/examples.md` — worked routing examples (user request → correct guide)
+- `references/troubleshooting.md` — what to do when a workflow step fails
+- `references/cache-format.md` — cache file format and the cross-plugin contract
 - `references/manifest-schema.md` — build output (llms.txt + llms.hash)
 - `references/guide-index.md` — fallback keyword table (offline/network failure)

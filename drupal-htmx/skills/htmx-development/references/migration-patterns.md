@@ -391,6 +391,26 @@ public function ajaxCallback(...) {
 
 ---
 
+## FAPI Quick Map
+
+Form-API-level equivalents when converting an `#ajax` element to HTMX:
+
+| AJAX (Form API) | HTMX |
+|-----------------|------|
+| `'#ajax' => ['callback' => '::cb']` | `(new Htmx())->post()->applyTo()` |
+| `'wrapper' => 'id'` | `->target('#id')` |
+| `return $form['element']` (callback) | Logic in `buildForm()` |
+| `new AjaxResponse()` | Return render array |
+| `ReplaceCommand` | `->swap('outerHTML')` |
+| `HtmlCommand` | `->swap('innerHTML')` |
+| `AppendCommand` | `->swap('beforeend')` |
+| `MessageCommand` | Auto-included (via `HtmxRenderer`) |
+
+Migration steps: identify `#ajax` properties → replace with the `Htmx` class →
+move callback logic into `buildForm()` → use `getHtmxTriggerName()` for
+conditional logic → replace `AjaxResponse` with render arrays → test
+progressive enhancement.
+
 ## Migration Checklist
 
 - [ ] Identify all `#ajax` properties

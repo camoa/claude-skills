@@ -200,3 +200,43 @@ const brandTheme = {
 | Body text | `desc.fill`, `item.desc.fill` |
 | Labels | `item.label.fill` |
 | Lines/borders | `base.shape.stroke` |
+
+## Text Fill by Background Type
+
+Palette colors are for SHAPES and FILLS, not text — text needs explicit
+high-contrast fills. Set `title`/`desc`/`item` fills by background brightness:
+
+**Dark backgrounds** (spotlight-dots, tech-matrix, etc.):
+
+```json
+{
+  "colorBg": "{brand-bg-dark}",
+  "colorPrimary": "{brand-primary}",
+  "title": { "fill": "#FFFFFF" },
+  "desc": { "fill": "rgba(255,255,255,0.85)" },
+  "item": {
+    "label": { "fill": "#FFFFFF" },
+    "desc": { "fill": "rgba(255,255,255,0.7)" }
+  }
+}
+```
+
+**Light backgrounds** (solid, subtle-dots, etc.):
+
+```json
+{
+  "colorBg": "#FFFFFF",
+  "colorPrimary": "{brand-primary}",
+  "title": { "fill": "#1A202C" },
+  "desc": { "fill": "#4A5568" },
+  "item": {
+    "label": { "fill": "#1A202C" },
+    "desc": { "fill": "#4A5568" }
+  }
+}
+```
+
+**Common mistake:** using pastel palette colors for text on light backgrounds —
+pastels are for decorative shapes only. The `/template-infographic` command
+generates correct configs from your brand-philosophy.md; never copy the hex
+values above — they are illustrative placeholders.

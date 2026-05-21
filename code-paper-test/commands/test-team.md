@@ -1,7 +1,7 @@
 ---
 description: Paper test code or skills with competing agent team (Happy Path + Edge Case + Red Team). Use when user says "test team", "3 perspectives", "competing testers", "thorough paper test", "security review", "deep code analysis", "test this skill with team". Best for large code (300+ lines), security-critical paths, or skill/command testing where perspective diversity matters most. For 50-300 line files, the single-agent structured 3-phase mode in /paper-test is more cost-effective. Each tester runs in isolated worktree.
 allowed-tools: Read, Write, Glob, Grep, WebSearch
-argument-hint: [--json] <file-path> [file-path...]
+argument-hint: "[--json] <file-path> [file-path...]"
 ---
 
 # Test Team
@@ -109,6 +109,23 @@ Create a team and these tasks:
 
 ### Step 5 — Spawn Teammates
 
+**Compute per-teammate effort first.** The active effort level is `${CLAUDE_EFFORT}`.
+Each teammate runs at `max(caller effort, role floor)` — caller effort is a
+**floor-raiser**, never a floor-lowerer:
+
+| Teammate | Role floor | Effective effort |
+|----------|-----------|------------------|
+| Happy Path Validator | `medium` | `max(${CLAUDE_EFFORT}, medium)` |
+| Edge Case Hunter | `high` | `max(${CLAUDE_EFFORT}, high)` |
+| Red Team Attacker | `high` | `max(${CLAUDE_EFFORT}, high)` |
+
+Effort ordering: `low` < `medium` < `high` < `xhigh` < `max`. So a caller at
+`low` or `medium` still gets Edge Case and Red Team at their `high` floor (the
+adversarial lenses are never cheapened), while a caller at `xhigh`/`max` bumps
+the whole team up. When `${CLAUDE_EFFORT}` is unset (model without effort
+support), use each role's floor as-is. Substitute the resulting level into the
+`**Effort:**` line of each spawn block below.
+
 Spawn 3 teammates using the prompt templates below. Substitute `{target_dir}` with the directory computed in Step 1, `{list each file path}` with the validated targets, and interpolate `JSON_MODE={true|false}` near the top of each spawn prompt (so the teammate knows whether to emit the parallel `.json` report). After spawning:
 
 1. Tell the user: "Team spawned. Teammates are working — I'll synthesize when they finish."
@@ -128,11 +145,17 @@ When all teammates finish:
 
 ## Spawn Prompts
 
+> **Teammate model:** the `**Model:** sonnet` lines below are explicit per-spawn
+> defaults. A user who sets `teammateDefaultModel` in `settings.json` can drop
+> the need to think about per-spawn models — see the plugin README "Configuration".
+> The explicit lines are kept so the command works without that setting.
+
 ### Teammate 1: Happy Path Validator
 
 **Model:** sonnet
 **MaxTurns:** 15
 **Isolation:** worktree
+**Effort:** max(${CLAUDE_EFFORT}, medium)
 
 ```
 You are the Happy Path Validator for a paper testing team.
@@ -234,7 +257,7 @@ To signal completion to the lead, either:
 **Model:** sonnet
 **MaxTurns:** 15
 **Isolation:** worktree
-**Effort:** high
+**Effort:** max(${CLAUDE_EFFORT}, high)
 
 ```
 You are the Edge Case Hunter for a paper testing team.
@@ -325,7 +348,7 @@ To signal completion to the lead, either:
 **Model:** sonnet
 **MaxTurns:** 15
 **Isolation:** worktree
-**Effort:** high
+**Effort:** max(${CLAUDE_EFFORT}, high)
 **Note:** For complex security analysis, consider using `model: opus` for deeper reasoning.
 
 ```

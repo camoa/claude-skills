@@ -5,6 +5,25 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-05-21
+
+### Added
+- **`${CLAUDE_EFFORT}` honored as a floor.** `/paper-test` (SKILL.md, "Effort-Adaptive Scenario Depth") scales scenarios per phase with the active effort level — `low` = happy path + one error case, `medium` = 2 per phase, `high`/`xhigh`/`max` = 3+. Effort never lowers the verification bar; every external call is still verified. `/code-paper:test-team` treats caller effort as a **floor-raiser**: each teammate runs at `max(${CLAUDE_EFFORT}, role floor)` — floors are `medium` (Happy Path Validator) and `high` (Edge Case Hunter, Red Team Attacker). A `low`/`medium` caller still gets the adversarial lenses at `high`; an `xhigh`/`max` caller bumps the whole team.
+- README documentation for `teammateDefaultModel` / `teammateMode` settings as an alternative to the per-spawn `Model:` lines in `/test-team`.
+
+### Changed
+- **SKILL.md conciseness pass** (494 → 126 body lines, no behavior change). The full 8-step workflow, verification procedures, flaw-catalog summary, module strategy, and output template moved to the new `references/workflow.md`; SKILL.md keeps the routing, the condensed workflow, the effort guidance, and the references list.
+- SKILL.md frontmatter `version: 0.7.0` → `0.9.0` — realigns the skill version with the plugin version (the v0.8.0 doc-refresh bump left the skill at 0.7.0).
+
+### Fixed (pre-existing)
+- **`commands/test-team.md` FM01 error** — the `argument-hint` value (`[--json] <file-path> [file-path...]`) was unquoted, so YAML parsed `[--json]` as a flow sequence and the trailing scalar broke the **entire frontmatter block** — the command loaded with no `description` and no `allowed-tools` at runtime. Quoted the value. This defect predates this release; it surfaced under the v3.7.x validator's FM01 check.
+
+### Hygiene
+- Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md` (validator ST03).
+- `$schema` added to `plugin.json`.
+- PreCompact hook migrated to exec form (`"args": []`).
+- marketplace.json description trimmed 604 → 547 chars (validator X02 cap).
+
 ## [0.8.0] - 2026-04-27
 
 ### 2026-04-25 doc-refresh deltas

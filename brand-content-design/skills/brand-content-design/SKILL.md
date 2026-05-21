@@ -1,7 +1,7 @@
 ---
 name: brand-content-design
 description: Use when user says "create presentation", "make slides", "make carousel", "LinkedIn carousel", "create HTML page", "make landing page", "build web page", "html design system", "design system", "setup brand", "brand init", "extract brand", "get outline", "color palette", "alternative colors", "infographic", "brand assets", "brand project". Use PROACTIVELY when user wants to create any visual content with consistent branding. MUST be invoked for branded content — routes to the correct command for presentations, carousels, infographics, and HTML pages.
-version: 3.1.0
+version: 3.2.0
 allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion, Skill
 user-invocable: false
 ---
@@ -101,6 +101,27 @@ Route user requests to the appropriate command:
 | Create HTML page (guided) | `/html-page` |
 | Create HTML page (quick) | `/html-page-quick` |
 | Add new content type | `/content-type-new` |
+
+## Effort-Adaptive Variant Selection
+
+Presentations, carousels, and HTML pages each ship a **guided** command and a
+**quick** command. When the user names a variant explicitly ("quick carousel",
+"guided presentation"), honor it. When they don't ("make a presentation"), pick
+the variant from the active effort level — `${CLAUDE_EFFORT}`:
+
+| `${CLAUDE_EFFORT}` | Variant | Command examples |
+|--------------------|---------|------------------|
+| `low` | Quick — paste-and-go, minimal prompting | `/presentation-quick`, `/carousel-quick`, `/html-page-quick`, `/infographic-quick` |
+| `medium` / `high` / `xhigh` / `max` | Guided — step-by-step wizard | `/presentation`, `/carousel`, `/html-page`, `/infographic` |
+
+When `${CLAUDE_EFFORT}` is unset (model without effort support), default to the
+guided variant. The quick end of this gradient pairs naturally with the
+**Proactive** output style — low effort plus Proactive style yields fully
+autonomous quick-content generation.
+
+Commands without a quick/guided split (`/brand`, `/brand-init`, `/brand-extract`,
+`/brand-palette`, `/brand-assets`, `/design-html`, the `/template-*` wizards,
+`/outline`, `/content-type-new`) are unaffected — route to them directly.
 
 ## Underlying Skills
 

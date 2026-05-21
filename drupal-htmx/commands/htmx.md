@@ -1,7 +1,7 @@
 ---
 description: Show HTMX development status and suggest next actions. Use when user says "HTMX status", "what HTMX commands", "HTMX help", "show HTMX", "htmx overview".
 allowed-tools: Read, Glob, Grep
-argument-hint: [module-path]
+argument-hint: "[module-path]"
 ---
 
 # HTMX Status

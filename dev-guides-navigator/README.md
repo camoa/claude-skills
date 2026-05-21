@@ -73,6 +73,39 @@ No configuration required. The skill automatically caches `llms.txt` per project
 character replaced by `-`. See `references/cache-format.md` for the exact
 derivation and the `{hash, fetched_at, content}` schema.
 
+### Cache pre-warming (optional)
+
+A `Setup` hook (`hooks/setup-cache.sh`) pre-warms the `llms.txt` cache so the
+first navigator call in a project is instant instead of paying a round-trip to
+`camoa.github.io`. It fires **only** on `claude --init-only`, `claude -p --init`,
+or `claude -p --maintenance` — never on normal interactive startup. In CI,
+`claude --init-only` becomes the prep step. It is a pure optimization: if `jq`
+or `curl` is missing, or the network is down, the skill still fills the cache
+lazily on first use.
+
+### Skill visibility (`skillOverrides`)
+
+This skill triggers proactively on broad development terms. On a non-Drupal or
+non-development project where that is noise, use the `skillOverrides` setting in
+`.claude/settings.json` (Claude Code v2.1.129+) to dial it back without editing
+the plugin:
+
+- `"dev-guides-navigator": "user-invocable-only"` — keep `/dev-guides-navigator`
+  as an explicit command, suppress proactive auto-invocation.
+- `"dev-guides-navigator": "name-only"` — keep it discoverable for cross-skill
+  delegation but drop the aggressive proactive triggers.
+- `"dev-guides-navigator": "off"` — hide it entirely.
+
+### Skill listing budget
+
+Claude Code shows a per-turn skill listing capped by `skillListingBudgetFraction`
+(default 1% of the context window) and `maxSkillDescriptionChars` (default 1536).
+On a machine with many skills installed, the least-used skills' descriptions are
+collapsed to bare names when the listing exceeds the budget — which can drop the
+"why" of a proactive trigger. This navigator's description is well under the
+1536-char cap, but if its proactive triggers seem to stop firing, run `/doctor`
+to see the truncation count and raise `skillListingBudgetFraction` if needed.
+
 ## Disambiguation
 
 KG metadata in each topic's `index.md` prevents routing to the wrong guide:
@@ -101,9 +134,10 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-**v0.5.1** (Current) — Cache schema normalized to a `{hash, fetched_at, content}`
-contract; legacy minimal/compact caches self-heal on next use. See `CHANGELOG.md`
-for the full history.
+**v0.6.0** (Current) — SKILL.md conciseness pass (extracted quick-reference,
+examples, and troubleshooting to `references/`); `Setup` hook for `llms.txt`
+cache pre-warming; `skillOverrides` and skill-listing-budget documentation. See
+`CHANGELOG.md` for the full history.
 
 ## License
 

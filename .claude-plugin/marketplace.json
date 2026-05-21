@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.56"
+    "version": "1.14.57"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content. v0.5.1 normalizes the cache to a {hash, fetched_at, content} contract — the full llms.txt markdown is always stored under `content`, legacy minimal/compact caches self-heal on next use, and the cache-path derivation is documented for other plugins to consume.",
-      "version": "0.5.1",
+      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content. v0.6.0 adds a Setup hook that pre-warms the llms.txt cache for instant first lookups, a leaner SKILL.md with reference extraction, and skillOverrides / skill-listing-budget documentation.",
+      "version": "0.6.0",
       "author": {
         "name": "camoa"
       },
@@ -82,7 +82,7 @@
       "name": "drupal-htmx",
       "source": "./drupal-htmx",
       "description": "HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+. Includes analyzers, pattern recommendations, and validation.",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "author": {
         "name": "camoa"
       },
@@ -132,8 +132,8 @@
     {
       "name": "code-paper-test",
       "source": "./code-paper-test",
-      "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50–300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration. v0.8.0 documents forked subagents as a future avenue, adds Type-B reading-strategy citation for AI-code auditing, and cross-links the PostToolBatch hook for team-result aggregation.",
-      "version": "0.8.0",
+      "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50–300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration. v0.9.0 honors ${CLAUDE_EFFORT} as a floor across scenario depth and per-teammate effort, and trims SKILL.md into references.",
+      "version": "0.9.0",
       "author": {
         "name": "camoa"
       },
@@ -157,8 +157,8 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering. v3.3.0 — plugin themes feature available upstream (Claude Code 2.1.118+); branded themes/default.json deferred to a follow-up PR pending color tokens.",
-      "version": "3.3.1",
+      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering. v3.4.0 adds effort-adaptive guided/quick variant selection and trims the heavy generator skills into references.",
+      "version": "3.4.0",
       "author": {
         "name": "camoa"
       },
