@@ -1,7 +1,7 @@
 ---
 name: screenshot-store-reader
-description: Use when a framework command needs to inspect the project's screenshot store — baselines and parity references used by visual-regression and visual-parity validation. Reads the store defensively via scripts/screenshot-store-read.sh and returns structured JSON. Never blocks on malformed input.
-version: 1.0.0
+description: Use when a framework command needs to inspect the project's visual-regression baseline store — the codePath-native tests/visual/ snapshot tree. Reads the store defensively via scripts/screenshot-store-read.sh and returns structured JSON. Never blocks on malformed input.
+version: 1.1.0
 user-invocable: false
 model: haiku
 allowed-tools: Bash
@@ -9,86 +9,108 @@ allowed-tools: Bash
 
 # Screenshot Store Reader
 
-Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh`. The script inspects `.screenshots/` under a memory project folder and emits structured JSON per `references/screenshot-store-schema.md` v1.0. This skill gives the reader a Skill-tool-callable name and documents the invocation contract.
+Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh`.
+The script inspects the **codePath-native** visual-regression store —
+`<codePath>/tests/visual/*.spec.ts-snapshots/` — and emits structured JSON per
+`references/screenshot-store-schema.md` v1.0. This skill gives the reader a
+Skill-tool-callable name and documents the invocation contract.
+
+The store moved to codePath in v4.13.0 (Task C). Baselines are committed
+Playwright snapshots; `.meta.json` provenance sidecars travel with each PNG.
 
 ## Contract
 
-**Input:** one argument — absolute path to a memory project folder (the one that may contain `.screenshots/`).
+**Input:** the absolute `codePath` (the Drupal project root). Optional
+`--legacy-path <memory_project_folder>` adds a `legacy_store_present` boolean
+when a v3.13.0 `.screenshots/` directory still exists there.
 
-**Output:** single JSON object to stdout per `references/screenshot-store-schema.md` §7. Exit code always 0 except for unrecoverable read failures (permission denied, IO error).
+**Output:** single JSON object to stdout per `references/screenshot-store-schema.md` §7. Exit code always 0 except for unrecoverable read failures.
 
 Fields:
 - `schema_version` — JSON string, currently `"1.0"`
-- `project_path` — absolute path passed in
-- `store_path` — absolute path to the store (`<project>/.screenshots`); present whether or not it exists
-- `store_exists` — boolean
-- `components[]` — per-component array of `{name, viewports[]}` where each viewport has `{viewport, has_current, has_previous, meta, previous_meta, warnings}`
+- `project_path` — the codePath passed in
+- `store_path` — `<codePath>/tests/visual`; present whether or not it exists
+- `store_exists` — boolean (`tests/visual/` present)
+- `legacy_store_present` — boolean; emitted ONLY when `--legacy-path` is given
+- `components[]` — per-surface array of `{name, viewports[]}` where each
+  viewport has `{viewport, has_current, has_previous, meta, previous_meta, warnings}`
 - `warnings[]` — store-level warnings
+
+`name` is the spec-file stem (the surface `id`). `viewport` is the viewport
+**name** (`desktop`), parsed from the baseline filename's `visual-chromium-<name>`
+project segment — not `WIDTHxHEIGHT`.
 
 ## Defensive posture (never throws)
 
 | Input state | Warning code | Level |
 |---|---|---|
-| Project folder missing | `error` | store |
-| `.screenshots/` does not exist | `store_missing` | store |
-| `<viewport>.png` exists without `.meta.json` | `component_missing_meta` | viewport |
+| codePath missing | `error` | store |
+| `tests/visual/` does not exist | `store_missing` | store |
+| baseline PNG exists without `.meta.json` | `component_missing_meta` | viewport |
 | `.meta.json` invalid JSON or missing required v1.0 fields | `meta_schema_mismatch` | viewport |
 | `.meta.json.sha256` differs from actual PNG hash | `hash_mismatch` | viewport |
-| `<viewport>.meta.json` exists without PNG sibling | `orphan_meta` | store |
+| `.meta.json` exists without a PNG sibling | `orphan_meta` | store |
 | Unrecoverable read failure (permission, IO) | `error` | store |
 
 ## Invocation
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh" "/abs/path/to/memory/project"
+"${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh" "/abs/path/to/codePath"
+"${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh" "/abs/codePath" --legacy-path "/abs/memory/project"
 ```
 
 Parse with `jq`. Examples:
 
 ```bash
-OUT=$("${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh" "$PROJECT_DIR")
+OUT=$("${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh" "$CODE_PATH")
 STORE_EXISTS=$(jq -r '.store_exists' <<<"$OUT")
-COMPONENT_COUNT=$(jq '.components | length' <<<"$OUT")
+SURFACE_COUNT=$(jq '.components | length' <<<"$OUT")
 # Has a specific baseline?
-HAS_HERO=$(jq -e '.components[] | select(.name == "home-hero") | .viewports[] | select(.viewport == "1920x1080" and .has_current)' <<<"$OUT" >/dev/null && echo true || echo false)
-# Any warnings at the store level?
-jq -e '.warnings | length > 0' <<<"$OUT" >/dev/null && echo "store warnings present"
-# Get a specific baseline's prior_hash (for integrity check)
-PRIOR=$(jq -r '.components[] | select(.name=="home-hero") | .viewports[] | select(.viewport=="1920x1080") | .meta.prior_hash // "none"' <<<"$OUT")
+HAS_HERO=$(jq -e '.components[] | select(.name == "home-hero") | .viewports[] | select(.viewport == "desktop" and .has_current)' <<<"$OUT" >/dev/null && echo true || echo false)
+# Surfaces with a missing-meta or hash warning:
+jq -r '.components[] | .name as $n | .viewports[] | select((.warnings|length)>0) | "\($n)/\(.viewport)"' <<<"$OUT"
 ```
 
-## `.previous` siblings
+## codePath-native layout — no `.previous` tier
 
-Every baseline OR parity reference MAY have an optional `.previous.png` + `.previous.meta.json` sibling (1-deep history). The reader surfaces these:
-- `has_previous: true|false` per viewport
-- `previous_meta: { ... }` contains the rotated meta exactly as it was when current, OR `null` if no `.previous` exists
+In the v3.13.0 memory-project store, an intentional change rotated the prior
+baseline to `.previous.png`. The codePath-native store has **no `.previous`
+files** — git history IS the baseline history, and Playwright's
+`--update-snapshots` overwrites in place. The reader keeps `has_previous` and
+`previous_meta` in the output for contract-compatibility, but they are always
+`false` / `null`. The prior baseline's hash is still carried in the current
+sidecar's `prior_hash` field.
 
-Consumers wanting to verify the rotation chain can cross-reference `meta.prior_hash` against `previous_meta.sha256`.
+## Consumers (v4.13.0+)
 
-**Validation asymmetry (v1):** the reader performs full schema validation + hash verification on the CURRENT meta but NOT on `.previous.meta.json`. Rationale: `.previous` is opportunistic historical state (may be edited or deleted by the user without concern; not a source of truth). If a consumer needs full integrity on the previous tier, it should re-invoke the reader's validation logic OR treat `previous_meta` as best-effort. v2 candidate: symmetric validation if real use-cases surface.
+- `/drupal-dev-framework:validate-visual-regression` — checks `has_current` /
+  warnings before running; reports missing baselines as a loud failure
+- `/drupal-dev-framework:validate-all` — enumerates surfaces for the
+  visual-regression coverage check; reads `legacy_store_present` to surface
+  migration status
+- `/drupal-dev-framework:setup-visual-regression` — checks which surfaces
+  already have baselines before the bootstrap prompt
 
-## Consumers (v3.13.0+)
-
-- `/drupal-dev-framework:validate-visual-regression` — reads current baseline; checks `has_current` before running; reads `meta.sha256` for integrity
-- `/drupal-dev-framework:validate-visual-parity` — reads imported parity references; checks `source` field for provenance
-- `/drupal-dev-framework:validate-all` — enumerates components for visual coverage summary
-- `/drupal-dev-framework:complete` — (future v2) reads for pending-update surfacing when batch approval lands
-
-Future consumers needing screenshot-store data should call this skill rather than parsing the store directly.
+Future consumers needing screenshot-store data should call this skill rather
+than parsing the store directly.
 
 ## Do NOT
 
-- Do not write to the store from this skill. Reading only. Writes happen via `scripts/screenshot-store-write.sh` invoked directly from visual gate commands
-- Do not treat non-empty `warnings[]` as a blocking error — warnings are observations
-- Do not duplicate the parsing logic elsewhere. Call this skill or the script
-- Do not assume any component or viewport exists. Always guard on `store_exists`, then filter `components[]`
+- Do not write to the store from this skill. Reading only. Baseline PNGs are
+  written by Playwright (`--update-snapshots`); provenance sidecars by
+  `scripts/screenshot-store-write.sh write-baseline-codepath`.
+- Do not treat non-empty `warnings[]` as a blocking error — warnings are
+  observations.
+- Do not duplicate the parsing logic elsewhere. Call this skill or the script.
+- Do not assume any surface or viewport exists. Guard on `store_exists`, then
+  filter `components[]`.
 
 ## See also
 
 - `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh` — the reader
-- `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-write.sh` — the writer (invoked directly by visual gate commands, not wrapped as a skill in v1)
-- `references/screenshot-store-schema.md` — canonical directory + `.meta.json` v1.0 schema, warning codes
+- `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-write.sh` — the writer
+  (`write-baseline-codepath` for sidecars; legacy `write-baseline` /
+  `write-parity-reference` retained for migration + parity)
+- `references/screenshot-store-schema.md` — canonical layout + `.meta.json` v1.0 schema, warning codes
 - `references/validation-gate-result.md` — the result envelope visual gates emit
-- `alignment-reader` skill (v1.0.0) — same design pattern
-- `project-state-reader` skill (v1.0.0) — same design pattern
-- `task-frontmatter-reader` skill (v2.0.0) — same design pattern
+- `alignment-reader` / `project-state-reader` skills — same design pattern

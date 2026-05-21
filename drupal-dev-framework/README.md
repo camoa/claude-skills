@@ -128,7 +128,8 @@ is lost even if you forget.
 | `/validate [file]` | Check implementation against architecture decisions (architecture-fit validator) |
 | `/validate:tdd` / `:solid` / `:dry` / `:security` | **(v3.13.0)** Individual quality gates wrapping `code-quality-tools` skills with task context + persistence |
 | `/validate:guides` | **(v3.13.0)** Verify research.md + architecture.md cite `dev-guides-navigator` guides |
-| `/validate:visual-regression <component> <viewport>` | **(v3.13.0)** Capture + diff against stored baseline. On diff, user classifies regression / intentional / cancel; intentional rotates baseline inline |
+| `/setup-visual-regression` | **(v4.13.0)** Install `@lullabot/playwright-drupal` + Playwright, scaffold `tests/visual/`, extend `playwright.config.ts` with per-viewport visual projects, derive a viewport matrix from the theme, run AI-assisted surface discovery, prompt for a first baseline. Idempotent; `--add-surface` adds one surface, `--migrate` imports a v3.13.0 `.screenshots/` store. |
+| `/validate:visual-regression` | **(v4.13.0, reworked)** Registry-driven — runs the committed `tests/visual/` suite across every viewport; diffs each surface; classify regression / intentional / cancel. `--bootstrap` / `--update-baselines "<reason>"` (user-confirmed). Emits `_visual_regression.json` audit. Part of `/review` dispatch chain. Soft gate. |
 | `/validate:visual-parity <component> <viewport> <reference>` | **(v3.13.0)** Compare built output against design comp (PNG/JPG, Figma URL, HTML file). Shared infrastructure with visual-regression |
 | `/setup-atk` | **(v4.12.0)** Install ATK `^2.0` + Playwright, scaffold `tests/e2e/`, discover site journeys, and scaffold plan-first E2E tests. Idempotent; `--add-journey` adds a single journey post-setup. |
 | `/validate:e2e` | **(v4.12.0)** Run ATK behavioral + project-custom journey tests. Emits `_e2e.json` audit + standard envelope. Part of `/review` dispatch chain. Soft gate. |
@@ -170,7 +171,7 @@ The debate produces a synthesized recommendation with dissenting opinions noted.
 
 ## Customizing skill visibility
 
-drupal-dev-framework ships 22 skills and 38 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
+drupal-dev-framework ships 22 skills and 41 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
 
 **Mute an individual skill or command** with a `Skill()` deny rule. Add it through `/permissions`, or to `permissions.deny` in `.claude/settings.json` (one project) or `~/.claude/settings.json` (all projects):
 
@@ -246,7 +247,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `analysis-agent-schema.md` **(v3.11.0; v1.1 since v3.15.0)** | `analysis-agent` | JSON output schema (v1.0 base + v1.1 adds `play_candidates` mode for `/complete`); 8 signal codes, 7 invariants, three input modes (`folder`, `description`, `play_candidates`); backward-compatible — existing `folder` and `description` modes unchanged |
 | `code-path-detection.md` **(v3.11.0)** | `/set-code-path`, `/new` | Detection strategies in priority order, three-null-states table (`unknown` / `docs-only` / `set`), safety filter (hard-reject list for system roots) |
 | `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
-| `screenshot-store-schema.md` **(v3.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0, directory layout with `.previous` rotation (1-deep), 6 warning codes, `role` enum (`baseline` / `parity_reference` / `previous`), `captured_by` + `source` provenance fields |
+| `screenshot-store-schema.md` **(v3.13.0; location reworked v4.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0; **codePath-native layout** (`tests/visual/<surface>.spec.ts-snapshots/`, provenance sidecars in-tree) since v4.13.0; legacy `.screenshots/` is a migration source only; 6 warning codes, `role` / `captured_by` / `source` provenance fields |
 | `validation-gate-result.md` **(v3.13.0)** | All `/validate:*` commands | Shared JSON envelope v1.0 emitted by every gate; 4-value verdict (`pass` / `warning` / `fail` / `skipped`); per-gate `details` shapes; aggregate envelope for `/validate:all` |
 | `team-manifest-schema.md` **(v3.14.0)** | `/validate:team` + 4 teammates | Minimum-context package v1.0 written by lead before team spawn; absolute-path invariant; `visual_fanout[]` presence rule; write-once contract; fallback behavior hints; gate enum excludes `visual-parity` (deferred to v2 Set B5) |
 | `playbook-schema.md` **(v3.15.0)** | `/playbook-capture`, `/playbook-review`, `scripts/playbook-read.sh` | Recommended local playbook structure v1.0: H3-per-play with What / Rationale / When it applies / Example fields; freeform fallback; defensive parser contract |
@@ -320,7 +321,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.12.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.13.0**.
 
 ## License
 

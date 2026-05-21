@@ -54,13 +54,13 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 - `validate-tdd` / `validate-solid` / `validate-dry` / `validate-security` — thin wrappers over `code-quality-tools` skills; add task context + persistence + shared envelope
 - `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides. **Hardened in v4.1.0 to dual-mode** — soft-nudge standalone, hard-block-capable when invoked from `/review` (via `<!-- /review:hard-block -->` capability marker + `--hard-block` argv flag). **v4.3.0 adds catalog-grounded code-change inference** — gate collects changed files from session edits + `implementation.md` Files Created/Modified + git working tree, then dispatches the `guides-matcher` agent (haiku, read-only) to match them against the cached dev-guides catalog. Slugs the agent matches but no artifact citation covers → `domain_coverage_gaps[]` → demote `pass` → `warning`. Symmetric `/implement` Step 3 component-aware preflight runs `guides-matcher` in plan mode against architecture.md planned components and augments the keyword-detect auto-load list. Catalog is the only taxonomy — no parallel hardcoded map. Suppress gate inference with `--no-code-inference`. See `references/guides-matcher-schema.md`.
 - `validate-playbook-adherence` (**new in v4.1.0**) — heuristic cite-checker for loaded plays; literal-string match (`Grep -F`) per match-type; section-aware skip on `Rejected` / `Considered Alternatives` / `Out of Scope` headings; `--hard-block` / `--strict` / `--invoked-by` flags
-- `validate-visual-regression <component> <viewport>` — captures via Playwright MCP, diffs via `odiff`/`pixelmatch`, prompts regression/intentional/cancel on diff. Intentional approval rotates baseline inline (no deferred approval in v1)
-- `validate-visual-parity <component> <viewport> <reference>` — compares against design comp (PNG/JPG, Figma URL via MCP, HTML file headless-rendered). React/PSD/Sketch deferred to v2
-- `validate-all` — sequential orchestrator; non-interactive CI mode skips visual gates
+- `validate-visual-regression` — **reworked v4.13.0 (Task C)**: registry-driven, runs the committed `tests/visual/` suite on `@lullabot/playwright-drupal`; multi-viewport batch; a11y baseline pairing; mask regions; classification UX kept. No positional args (registry-driven). `gate_type: visual_regression`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Regression Gate` below.
+- `validate-visual-parity <component> <viewport> <reference>` — compares against design comp (PNG/JPG, Figma URL via MCP, HTML file headless-rendered). React/PSD/Sketch deferred to v2 (Task D reworks this on Lullabot)
+- `validate-all` — sequential orchestrator; non-interactive CI mode runs visual-regression with `--ci` (any diff → `fail`, no prompts, no baseline writes), skips visual-parity
 
 **Shared result envelope** (per `references/validation-gate-result.md` v1.0): every gate emits `{schema_version, gate, task, run_at, verdict, details, messages}`. Verdicts: `pass | warning | fail | skipped`. Persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append).
 
-**Screenshot store** (per `references/screenshot-store-schema.md` v1.0) at `<memory_project>/.screenshots/<component>/<viewport>.{png,meta.json}`. 9-field `.meta.json` with `role`, `captured_by` enum, `prior_hash` chain, `source` for parity refs. 1-deep `.previous` history.
+**Screenshot store** (per `references/screenshot-store-schema.md` v1.0): **codePath-native since v4.13.0** — baselines are committed Playwright snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/`, with `.meta.json` provenance sidecars in-tree. The 9-field `.meta.json` schema is unchanged (`role`, `captured_by` enum, `prior_hash`, `source`); only the location moved (and the legacy `.previous` rotation is retired — git holds history). The v3.13.0 memory-project `.screenshots/` store is a migration source only — `migrate-screenshots-to-codepath.sh` imports it.
 
 **Soft-nudge posture:** `fail` signals but never blocks; visual diffs require explicit user classification; `/validate:all` CI mode explicitly skips prompts rather than silent-defaulting.
 
@@ -393,6 +393,36 @@ Key conventions:
 - `<!-- visual-review:dispatch-ready -->` in `commands/validate-e2e.md` is what makes `/review`'s dispatcher invoke this gate. Never remove it.
 - ATK's VR mode is NOT used — Task C (Lullabot) owns visual regression.
 - `/validate:a11y` and `/validate:perf` are v2-deferred.
+
+## Visual Regression Gate (v4.13.0+)
+
+`/setup-visual-regression` installs **`@lullabot/playwright-drupal` + Playwright**
+and scaffolds `tests/visual/`. `/validate:visual-regression` runs the gate and
+emits `_visual_regression.json` + the standard validation envelope. Task C of the
+`visual_and_e2e_review_gates` epic — an **evolve** of the v3.13.0 gate.
+
+Key conventions:
+- **Screenshot store is codePath-native.** Baselines are committed Playwright
+  snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/`; `.meta.json`
+  provenance sidecars travel in-tree. The v3.13.0 `.screenshots/` memory-project
+  store is retired (migration source only). Resolved in Task C `research.md` Q1
+  (fork option **(b+)**).
+- **Generated specs name the test exactly `'visual regression'`.** That fixes
+  Playwright's snapshot ordinal at `-1-` so baseline filenames are deterministic.
+  Renaming the test orphans every committed baseline — see `tests/visual/README.md`.
+- **No baseline write without an explicit `[y]`.** `baseline-manager.sh` runs in
+  plan mode first (prints the surfaces it would capture, writes nothing); the
+  command shows the plan + `[y]/[n]`; only `--confirmed` runs `--update-snapshots`.
+  Every regeneration is logged to `baseline-history.jsonl`.
+- **Missing baseline = loud `fail`** with a `--bootstrap` remediation message —
+  never a silent auto-create.
+- **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-regression.md`
+  is what makes `/review`'s dispatcher invoke this gate. Never remove it.
+- **Registry shared with `/setup-atk`** at `<codePath>/.visual-review/registry.yml`;
+  one `playwright.config.ts` carries both `e2e-*` and `visual-chromium-*` projects.
+  Setup is idempotent + order-independent.
+- a11y baseline pairing is **warning-only** in v1 (per-surface `a11y_block: true`
+  is a v2 candidate).
 
 ## General
 - Current state only — no historical narratives
