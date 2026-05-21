@@ -10,6 +10,10 @@ Structured code review with rubric-based scoring. Produces a graded assessment w
 
 > **Reading strategy:** This is **Type B** work — read full source and config files; do NOT grep-first. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`.
 
+## LSP Code Intelligence (recommended)
+
+If a code-intelligence plugin is installed (`php-lsp` for Drupal, `typescript-lsp` for Next.js), use the **LSP tool** to ground the rubric's *Separation of concerns* and *Testability* categories in evidence rather than impression: `call-hierarchy` shows whether a controller/form method reaches into a data layer N levels deep; `find-references` and definition resolution show how dependencies are actually wired. The tool needs no permission and is inert when no plugin is installed — fall back to full-file reads when it is unavailable. See `skills/code-quality-audit/references/code-intelligence.md`.
+
 ## Usage
 
 ```

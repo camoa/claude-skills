@@ -54,6 +54,10 @@ Detection → Tool Selection → Threshold Config → Installation → Git Hooks
 - Drupal: Drupal Coder, Rector
 - Next.js: Prettier (optional)
 
+**Code Intelligence (recommended):**
+- Drupal: `php-lsp` plugin + `intelephense` binary
+- Next.js: `typescript-lsp` plugin + `typescript-language-server` binary
+
 ## Installation Modes
 
 ### Quick Install (Recommended)
@@ -93,6 +97,23 @@ Plus: Semgrep, Trivy, Gitleaks (system-level)
 
 ### Custom Install
 Select specific tools and configure thresholds individually.
+
+## Code Intelligence Plugins (recommended)
+
+The `/code-quality:solid`, `/code-quality:dry`, and `/code-quality:review` commands go deeper when Claude Code's built-in **LSP tool** is active — it resolves references, interface implementations, and call hierarchies that grep cannot see, and it reports type errors automatically after every edit. The tool is inactive until a code-intelligence plugin **and** its language-server binary are installed:
+
+| Project | Plugin | Server binary |
+|---------|--------|---------------|
+| Drupal / PHP | `php-lsp` | `intelephense` |
+| Next.js / TypeScript | `typescript-lsp` | `typescript-language-server` |
+
+```bash
+/plugin install php-lsp@claude-plugins-official        # or typescript-lsp@claude-plugins-official
+```
+
+Then install the language-server binary so it is on `$PATH` (see each plugin's README for the exact package). If `/plugin` shows `Executable not found in $PATH`, the binary is missing.
+
+This is **recommended, not required** — every command falls back to full-file reads when no LSP plugin is present. Analysis-depth gains and the Drupal `.module`/`.inc`/`.theme` indexing caveat: `skills/code-quality-audit/references/code-intelligence.md`.
 
 ## Threshold Configuration
 

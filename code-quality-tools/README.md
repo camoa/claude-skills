@@ -65,6 +65,8 @@ npm install --save-dev \
 
 **System tools (both):** [Semgrep](https://semgrep.dev/docs/getting-started/), [Trivy](https://trivy.dev/latest/getting-started/installation/), [Gitleaks](https://github.com/gitleaks/gitleaks#installing)
 
+**Code intelligence (optional, recommended):** install a code-intelligence plugin — `php-lsp` (Drupal) or `typescript-lsp` (Next.js) — plus its language-server binary to make `/code-quality:solid`, `:dry`, and `:review` resolve inherited and config-wired relationships semantically via Claude Code's LSP tool. Recommended, not required: the commands fall back to full-file reads when no LSP plugin is present. See `skills/code-quality-audit/references/code-intelligence.md`.
+
 ### 3. Run Commands
 
 | Command | Purpose | When to Use |

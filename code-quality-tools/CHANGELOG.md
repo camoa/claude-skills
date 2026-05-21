@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-20
+
+### LSP code intelligence
+
+Marquee release of the modernization roadmap: the SOLID, DRY, and review commands can now use Claude Code's built-in **LSP tool** for language-server semantics instead of grep heuristics — converting the plugin's biggest documented weakness (grep blindness on inherited, interface-wired, and config-wired relationships) into a strength, while reducing token cost (no more full-file reads as the default). Ships **recommended-not-required**: every command degrades cleanly to the existing full-file-read Type-B pass when no code-intelligence plugin is present.
+
+### Added
+
+- **`skills/code-quality-audit/references/code-intelligence.md`** — new reference: what the LSP tool provides (definitions, references, find-implementations, call-hierarchy, list-symbols, automatic post-edit diagnostics), how to enable it (`php-lsp`→`intelephense`, `typescript-lsp`→`typescript-language-server`, installed from the official marketplace), per-command leverage, and the honest caveats — LSP availability varies by language/environment, Drupal `.module`/`.inc`/`.theme` files carry non-`.php` extensions that `intelephense` may not index by default (the grep-free full-read pass stays the guaranteed floor there), plus large-project memory and monorepo false-positive notes.
+
+### Changed
+
+- **`commands/solid.md`, `commands/dry.md`, `commands/review.md`** — each gains an "LSP Code Intelligence (recommended)" section: `solid` uses `find-implementations` for genuine Liskov/ISP checks, `find-references` for Dependency Inversion, and `call-hierarchy` for Single Responsibility fan-in/fan-out; `dry` uses `find-references` to catch semantic duplication that textual clone detectors (PHPCPD/jscpd) miss; `review` uses `call-hierarchy` and reference resolution to ground the *Separation of concerns* and *Testability* rubric categories in evidence. Each block instructs an explicit fall-back to the full-file-read pass when no LSP plugin is installed.
+- **`commands/setup.md`** — new "Code Intelligence Plugins (recommended)" section with the plugin/binary install table; code intelligence added to the Tool Categories list.
+- **`skills/code-quality-audit/SKILL.md`** — the reading-strategy note now points at the LSP tool for inherited/wired relationship questions; `references/code-intelligence.md` added to the References list. Skill `version` 3.0.0 → 3.4.0.
+- **`README.md`** — optional code-intelligence install note added under First-Time Setup.
+- **`plugin.json` / `marketplace.json` descriptions** — added "optional LSP code-intelligence" to the capability summary (still under the 600-char cap).
+
+The `LSP` tool is **not** added to any command or skill `allowed-tools` — it requires no permission and is inert without a code-intelligence plugin, so listing it would imply a hard dependency that does not exist. Shipping `lspServers` in the plugin manifest is intentionally out of scope (a future consideration, not a currency item). `architecture-debate.md` is unchanged this release. No behavior change to scripts, hooks, or audit logic.
+
+Marketplace metadata bumped 1.14.51 → 1.14.52.
+
 ## [3.3.0] - 2026-05-20
 
 ### Validator hygiene & the ultrareview CLI gap

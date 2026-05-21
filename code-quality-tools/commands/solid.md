@@ -10,6 +10,16 @@ Analyze code architecture and adherence to SOLID principles.
 
 > **Reading strategy:** This is **Type B** work — read full class hierarchies, interfaces, and service definitions; do NOT grep-first. SOLID violations span inherited methods that grep cannot see. See `https://camoa.github.io/dev-guides/development/reading-strategy/`.
 
+## LSP Code Intelligence (recommended)
+
+If a code-intelligence plugin is installed (`php-lsp` for Drupal, `typescript-lsp` for Next.js), prefer the **LSP tool** over grep for the relationship questions SOLID depends on:
+
+- **Liskov / Interface Segregation** — `find-implementations` on an interface enumerates every subtype; check each override for contract compatibility. This is the exact check grep cannot do.
+- **Dependency Inversion** — `find-references` on a concrete class shows whether high-level modules depend on it directly instead of on an abstraction.
+- **Single Responsibility** — `call-hierarchy` gives real fan-in/fan-out instead of inferring "reasons to change" from file size.
+
+The LSP tool needs no permission and is inert when no plugin is installed — **fall back to the full-file-read Type-B pass above** in that case. Setup and the Drupal `.module`/`.inc`/`.theme` indexing caveat: `skills/code-quality-audit/references/code-intelligence.md`.
+
 ## Usage
 
 ```
