@@ -15,6 +15,7 @@
     "spike": "node spike/run.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0"
   },

@@ -22,6 +22,7 @@ import {
   buildReplaceAllTextRequests,
   buildReplaceAllShapesWithImageRequests,
 } from './requests.js';
+import { Readable } from 'node:stream';
 import { withRetry, type RetryOptions } from './retry.js';
 
 export class SlidesClient {
@@ -109,6 +110,47 @@ export class SlidesClient {
       this.retry,
     );
     return Buffer.from(res.data as ArrayBuffer);
+  }
+
+  /**
+   * Upload an image to Drive, make it readable by anyone with the link, and
+   * return a URL the Slides API can fetch — for `createImage` /
+   * `replaceAllShapesWithImage`, which require a publicly reachable URL.
+   *
+   * The scaffolder uses this to host baked gradient/display-text images.
+   * NOTE: whether the Slides API's server-side fetch can read this URL is the
+   * epic's flagged image-reachability item — verify via the live spike.
+   */
+  async uploadImage(
+    name: string,
+    bytes: Buffer,
+    mimeType = 'image/png',
+  ): Promise<{ fileId: string; url: string }> {
+    const created = await withRetry(
+      () =>
+        this.services.drive.files.create({
+          requestBody: { name },
+          media: { mimeType, body: Readable.from(bytes) },
+          fields: 'id',
+        }),
+      this.retry,
+    );
+    const fileId = created.data.id;
+    if (!fileId) {
+      throw new Error('Drive API returned no file id for the uploaded image');
+    }
+    await withRetry(
+      () =>
+        this.services.drive.permissions.create({
+          fileId,
+          requestBody: { role: 'reader', type: 'anyone' },
+        }),
+      this.retry,
+    );
+    return {
+      fileId,
+      url: `https://drive.google.com/uc?export=view&id=${fileId}`,
+    };
   }
 
   /** Get a single page's PNG thumbnail URL (feeds the visual-diff gate). */

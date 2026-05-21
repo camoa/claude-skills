@@ -14,7 +14,8 @@ function fakeServices() {
       },
     },
     drive: {
-      files: { copy: vi.fn(), export: vi.fn() },
+      files: { copy: vi.fn(), export: vi.fn(), create: vi.fn() },
+      permissions: { create: vi.fn() },
     },
   };
 }
@@ -171,6 +172,29 @@ describe('SlidesClient.replaceAllShapesWithImage', () => {
     await expect(
       client(s).replaceAllShapesWithImage('p1', { '{{logo}}': 'https://img/l.png' }),
     ).resolves.toEqual({ occurrencesByTag: { '{{logo}}': 1 } });
+  });
+});
+
+describe('SlidesClient.uploadImage', () => {
+  it('uploads bytes to Drive, makes the file link-readable, returns a fetch URL', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: { id: 'img1' } });
+    s.drive.permissions.create.mockResolvedValue({ data: {} });
+    const res = await client(s).uploadImage('logo.png', Buffer.from('PNG'));
+    expect(res).toEqual({
+      fileId: 'img1',
+      url: 'https://drive.google.com/uc?export=view&id=img1',
+    });
+    expect(s.drive.permissions.create).toHaveBeenCalledWith({
+      fileId: 'img1',
+      requestBody: { role: 'reader', type: 'anyone' },
+    });
+  });
+
+  it('throws when Drive returns no file id for the upload', async () => {
+    const s = fakeServices();
+    s.drive.files.create.mockResolvedValue({ data: {} });
+    await expect(client(s).uploadImage('x.png', Buffer.from('x'))).rejects.toThrow();
   });
 });
 
