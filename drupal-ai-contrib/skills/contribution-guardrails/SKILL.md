@@ -4,6 +4,7 @@ description: "Enforces the development discipline for AI-assisted Drupal contrib
 version: 0.1.0
 model: sonnet
 user-invocable: true
+allowed-tools: Read, Grep, Glob, Task
 ---
 
 # Contribution Guardrails

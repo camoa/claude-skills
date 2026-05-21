@@ -23,6 +23,10 @@ Backs `/drupal-ai-contrib:submit`. Load the knowledge layer via `dev-guides-navi
 - Has `verify` been run, with its gates green? If not, say so — submitting unverified
   work is exactly the drive-by behavior the AI policy lists as unacceptable.
 - Has `review` been run? Surface it if not.
+- **Is the green `verify` still valid?** Run `${CLAUDE_PLUGIN_ROOT}/scripts/reverify-list.sh`.
+  If it prints any path, those files were edited **after** `verify` last passed — the
+  green is stale. Surface the stale paths and recommend re-running `verify` before
+  submitting. A pre-edit green is not evidence for the current code (guardrails Rule 3).
 
 If a precondition is unmet, **report it and let the contributor decide** — do not
 silently block. The contributor may have evidence from another path.

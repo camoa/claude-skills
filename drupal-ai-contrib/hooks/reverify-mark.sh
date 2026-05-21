@@ -46,9 +46,13 @@ fi
 fp="$(printf '%s' "$fp" | tr -d '[:cntrl:]')"
 [ -n "$fp" ] || exit 0
 
-# Track only contribution-relevant source files; ignore everything else.
+# Track contribution-relevant source files and the gate-config files that change what
+# a gate does (composer.json, phpcs.xml.dist, phpstan.neon, phpunit.xml.dist, cspell
+# wordlist); ignore everything else.
 case "$fp" in
   *.php|*.module|*.inc|*.install|*.theme|*.profile|*.engine|*.yml|*.yaml|*.twig|*.js|*.css) ;;
+  */composer.json|composer.json|*.dist|*.neon) ;;
+  */.cspell-project-words.txt|.cspell-project-words.txt) ;;
   *) exit 0 ;;
 esac
 

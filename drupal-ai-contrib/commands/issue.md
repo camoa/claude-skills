@@ -20,10 +20,11 @@ duplicate.
 
 ## Steps
 
-1. If `$1` is present and is not `create`, it is an issue ID — **reject it unless it
-   matches `^[0-9]+$`** (drupal.org / GitLab issue IDs are numeric). A non-matching,
-   non-`create` argument is an error: ask for a valid issue ID, do not pass it on. If
-   `$1` is `create` or absent, treat it as create / interactive.
+1. If `$1` is present and is not `create` (case-insensitive — `create`, `Create`,
+   `CREATE` all count), it is an issue ID — **reject it unless it matches `^[0-9]+$`**
+   (drupal.org / GitLab issue IDs are numeric). A non-matching, non-`create` argument
+   is an error: ask for a valid issue ID, do not pass it on. If `$1` is `create` or
+   absent, treat it as create / interactive.
 2. Invoke the `drupal-ai-contrib:contribution-issue` skill via the Skill tool, passing
    `$1`.
 3. Present the skill's result: the issue and its system + status, the prior-work

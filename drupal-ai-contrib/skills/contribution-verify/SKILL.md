@@ -90,6 +90,10 @@ never pin its schema, never adopt `promptfoo`. When guidance fails in practice, 
 an expert correction (correction → fix → eval passes; agent-agnostic JSONL) and offer
 to file it upstream.
 
+When **3 or more** captured corrections cluster on the **same subsystem**, surface a
+recommendation to propose a dedicated skill section or eval suite for it — a recurring
+failure cluster is a signal the guidance itself has a gap, not just one bad output.
+
 ### 6. Re-verification
 
 Any path edited after its gate last passed is **stale**. The `PostToolUse`

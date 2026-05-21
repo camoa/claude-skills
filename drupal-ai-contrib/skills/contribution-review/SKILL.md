@@ -29,6 +29,9 @@ Gather, without editorializing:
   contribution's own changes). The reviewer agent must receive a real, non-empty diff;
   if `git diff` returns nothing, there is nothing to review — report that and stop.
 - the issue and its acceptance criteria
+- the **verify-staleness state** — run `${CLAUDE_PLUGIN_ROOT}/scripts/reverify-list.sh`;
+  if it prints any path, note in the report that those files changed since `verify`
+  last passed, so reviewers know the gate evidence may not cover the current diff.
 
 ### 2. Dispatch the fresh-context reviewer
 

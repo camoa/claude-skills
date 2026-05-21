@@ -1,6 +1,6 @@
 ---
 description: "Create or update a Drupal merge request and generate the AI-disclosure comment at the policy threshold. Use when user says 'submit Drupal contribution', 'open a merge request', 'update the MR', 'submit patch', 'drupal-ai-contrib submit'. Wraps drupalorg-cli."
-allowed-tools: Read, Bash, Glob, Grep, Skill, Task, WebFetch
+allowed-tools: Read, Bash, Glob, Grep, Skill, Task
 argument-hint: "[issue-id]"
 ---
 

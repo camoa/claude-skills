@@ -13,6 +13,9 @@ if [ -f "$proj/.gitlab-ci.yml" ] && \
    grep -qi 'gitlab_templates\|drupal' "$proj/.gitlab-ci.yml" 2>/dev/null; then
   is_contrib=1
 fi
+# Optional opt-in marker: a contributor may `mkdir .drupal-ai-contrib` to force the
+# reminder on (e.g. early in a contribution, before .gitlab-ci.yml or *.info.yml exist).
+# The plugin never creates this directory itself.
 [ -d "$proj/.drupal-ai-contrib" ] && is_contrib=1
 for f in "$proj"/*.info.yml; do
   [ -e "$f" ] && is_contrib=1
