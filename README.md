@@ -28,6 +28,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 /plugin install code-quality-tools@camoa-skills
 /plugin install drupal-htmx@camoa-skills
 /plugin install code-paper-test@camoa-skills
+/plugin install drupal-ai-contrib@camoa-skills
 ```
 
 ## Using these plugins outside Claude Code
@@ -170,6 +171,26 @@ Systematically test code, skills, commands, and configs through mental execution
 Tests code AND non-code artifacts: skills, commands, agents, YAML configs. Auto-detects skill files and switches to instruction tracing mode.
 
 See [code-paper-test/README.md](code-paper-test/README.md) for full documentation.
+
+### drupal-ai-contrib (v0.1.0)
+
+AI-assisted Drupal contribution quality — **evidence over assertion**: every gate passes only on a produced, captured artifact, never on an AI assertion. Mirrors the drupalci pipeline locally at CI strictness, gates on the adopted AI-contribution policy, reviews work in fresh-context agents, and confirms the real GitLab pipeline.
+
+```bash
+/drupal-ai-contrib:setup     # Onboard + environment-match a contribution workspace
+/drupal-ai-contrib:verify    # Local drupalci-parity + AI-policy + eval gates
+```
+
+| Component | Contents |
+|-----------|----------|
+| Commands | 6 (`/setup`, `/issue`, `/verify`, `/review`, `/submit`, `/pipeline`) — the detect-driven contribution arc |
+| Skills | 8 (`drupal-ai-contrib` umbrella/router, 6 worker skills, `contribution-guardrails` discipline) |
+| Agents | 3 read-only (`fresh-context-reviewer`, `external-fact-verifier`, `ai-policy-checker`) |
+| Hooks | PostToolUse (re-verification ledger), SessionStart (contribution-workspace reminder) |
+
+The drupalci-parity gate set (`composer`/`phpcs`/`phpstan`/`phpunit`/`cspell`/`eslint`/`stylelint`) mirrors each enabled `gitlab_templates` job at its real strictness. Cites the `camoa/dev-guides` contribution guides by slug via `dev-guides-navigator`; a contribution is run as a `drupal-dev-framework` task.
+
+See [drupal-ai-contrib/README.md](drupal-ai-contrib/README.md) for full documentation.
 
 ## Plugin Conventions
 

@@ -5,8 +5,8 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.14.60"
+    "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
+    "version": "1.15.0"
   },
   "plugins": [
     {
@@ -95,6 +95,30 @@
         "migration",
         "forms",
         "dynamic-content"
+      ]
+    },
+    {
+      "name": "drupal-ai-contrib",
+      "source": "./drupal-ai-contrib",
+      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside drupal-dev-framework; cites the camoa/dev-guides contribution guides as its knowledge layer.",
+      "version": "0.1.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": [
+        "drupal",
+        "contribution",
+        "drupalci",
+        "gitlab-ci",
+        "ai-policy",
+        "code-quality",
+        "merge-request",
+        "phpcs",
+        "phpstan",
+        "phpunit",
+        "evidence-over-assertion"
       ]
     },
     {
