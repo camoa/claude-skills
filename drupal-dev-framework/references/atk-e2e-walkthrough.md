@@ -33,6 +33,8 @@ ATK's built-in VR (visual regression) mode is **not used**. Task C (Lullabot) ow
 
 ## 2. Setup walkthrough
 
+> **Security note (RT-V7):** Only run `/setup-atk` on repositories you trust. Phase C copies ATK catalog test files from the Composer-installed module into `tests/e2e/behavioral/atk/`, and subsequently `npx playwright test` executes those files on your host machine with full Node.js access. If the `drupal/automated_testing_kit` Composer package has been substituted or the module directory has been tampered with in the cloned repo, that test code will run on your system. This is inherent to running any test runner against repo-supplied test files — the same caution applies to any `npm test` or `phpunit` run on untrusted code.
+
 ### First-time setup
 
 ```
@@ -235,6 +237,8 @@ After upgrading `drupal/automated_testing_kit` via Composer:
 ```
 
 This re-runs Phase C only — re-copies `tests/e2e/behavioral/atk/` and `tests/e2e/helpers/atk/` from the newly-installed module. Your project-custom journey tests in `tests/e2e/behavioral/project-custom/` are not touched.
+
+> **Resume tip (EC-F5):** If `/setup-atk` failed midway through Phase C (e.g., after Phases A and B completed), use `--update-atk` to re-run Phase C only — there is no separate "resume Phase C" command. Do not use a plain `/setup-atk` re-run, which would restart Phases A and B unnecessarily.
 
 **Never modify `behavioral/atk/` files in-place.** If you need to override an ATK canned test, copy it to `behavioral/project-custom/` with a new name.
 

@@ -171,12 +171,12 @@ Audit: {{audit_path}}
 Used by `commands/validate-e2e.md` when verdict is `fail`.
 
 ```
-E2E gate: {failed_count} test(s) failed.
+E2E gate: {{failed_count}} test(s) failed.
 
 Failed tests:
-{failed_test_list}
+{{failed_test_list}}
 
-Playwright HTML report: `{report_path}`
+Playwright HTML report: `{{report_path}}`
 
 Options:
 - **Fix and re-run:** Address the failures and run `/drupal-dev-framework:validate:e2e` again.
@@ -185,7 +185,7 @@ Options:
 The E2E gate is **soft** — it signals but does not block. Bypassing is recorded in `_e2e.json` and visible via `/drupal-dev-framework:audit-status`.
 ```
 
-Variables: `{failed_count}` (integer), `{failed_test_list}` (one `- <title> (<file>)` line per failure), `{report_path}` (relative path to HTML report).
+Variables: `{{failed_count}}` (integer), `{{failed_test_list}}` (one `- <title> (<file>)` line per failure), `{{report_path}}` (relative path to HTML report).
 
 ## Changelog
 

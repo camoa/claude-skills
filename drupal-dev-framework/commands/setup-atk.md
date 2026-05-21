@@ -20,16 +20,18 @@ Unsupported flag: `--variant cypress` → print `"/setup-atk: only the Playwrigh
 
 ## Step 1: Validate arguments
 
-Parse `$ARGUMENTS`. If `--variant cypress` is present, print the literal message above and stop.
+Parse `$ARGUMENTS`. If `--variant` appears (in any form: `--variant cypress`, `--variant=cypress`, `--VARIANT cypress`, case-insensitive) with the value `cypress`, print the literal message above and stop. (EC-F14)
 
 Read `codePath` from the active project's `project_state.md` via the `project-state-reader` skill. If `codePath` is null or unknown, prompt the user to run `/set-code-path` first and stop.
 
 ## Step 2: --add-journey branch
 
 If `--add-journey <description>` is present:
-- Extract the description text following the flag.
+- Guard: if `tests/e2e/` does not exist at `<codePath>`, print: `"setup-atk: run /setup-atk first before using --add-journey."` and stop. (EC-F6)
+- Extract the description text following the flag. If the description is empty (nothing after the flag), print: `"setup-atk: provide a journey description: /setup-atk --add-journey <description>"` and stop. (EC-F15)
+- Note: `--skip-discovery` has no effect when `--add-journey` is also present — `--add-journey` takes precedence and `--skip-discovery` is silently ignored. (EC-F16)
 - Build the agent input JSON: `{"codePath":"<path>","mode":"add-one","journey_hint":"<description>","existing_specs":["<slug>",...]}`
-  - Populate `existing_specs` by globbing `<codePath>/tests/e2e/specs/*.md` and collecting the basenames without extension.
+  - Populate `existing_specs` by globbing `<codePath>/tests/e2e/specs/*.md` and collecting the basenames without extension. If the directory is absent, `existing_specs` is `[]`.
 - Spawn the `journey-discovery-agent` with this input (see §Journey Discovery Flow).
 - Skip remaining steps.
 
@@ -38,7 +40,14 @@ If `--add-journey <description>` is present:
 Run `scripts/setup-atk-idempotency.sh <codePath>`. Capture the JSON output.
 
 - `status: "complete"` and no `--force` flag → print the idempotency notice from the script (do not clobber), suggest `--add-journey` or `--update-atk`, and stop.
-- `status: "partial"` → display which steps are done and which remain; prompt "Resume setup? [y/N]". Default N. User declines → stop.
+- `status: "partial"` → display which steps are done and which remain using this mapping (EC-F22):
+  - `atk_composer_installed: false` → "ATK Composer package: not installed"
+  - `atk_module_enabled: false` → "ATK Drupal module: not enabled"
+  - `tests_e2e_exists: false` → "tests/e2e/ directory: not created"
+  - `playwright_config_has_e2e_entry: false` → "playwright.config.ts e2e-chromium entry: not active (stub appended — paste manually)"
+  - `registry_has_e2e_surfaces: false` → "Surface registry (.visual-review/registry.yml): no e2e surfaces"
+
+  Prompt "Resume setup? [y/N]". Default N. User declines → stop.
 - `status: "absent"` → proceed.
 
 ## Step 4: Three-phase ATK install
@@ -49,7 +58,7 @@ On non-zero exit from the script: surface the error output verbatim and stop.
 
 ## Step 5: Journey discovery
 
-Unless `--skip-discovery` is present:
+Unless `--skip-discovery` **or `--update-atk`** is present (both imply skipping discovery): (HP-F8)
 
 Build agent input JSON:
 ```
@@ -65,11 +74,13 @@ After the agent returns its JSON output:
 1. Display the `proposed_journeys` table to the user:
    - slug | title | role | priority | atk_canned_covers
 2. Display `analysis_summary`.
-3. Prompt: `Which journeys should I scaffold tests for? (all / <comma-list of slugs> / none)`
-4. For each confirmed slug, write `<codePath>/tests/e2e/specs/<slug>.md` with the plan-first spec format below.
-5. Prompt: `The specs above are in tests/e2e/specs/. Review them, then press Enter to generate test files (or type 'skip' to generate later with --add-journey).`
-6. On proceed (Enter): generate `<codePath>/tests/e2e/behavioral/project-custom/<slug>.spec.ts` from each spec.
-7. On `skip`: print "Run \`/setup-atk --add-journey <slug>\` to generate test files when ready."
+3. If `proposed_journeys` is empty: print `"No journeys were proposed. Run /setup-atk --add-journey <description> to add a journey manually."` and skip to Step 6. (EC-F3)
+4. Prompt: `Which journeys should I scaffold tests for? (all / <comma-list of slugs> / none)`
+5. Before writing any files: validate each confirmed slug matches `^[a-z0-9][a-z0-9-]*$`. If a slug contains spaces or non-kebab characters, sanitize it (lowercase, replace spaces and invalid chars with `-`) or skip it with a warning. (EC-F9)
+6. For each confirmed slug, write `<codePath>/tests/e2e/specs/<slug>.md` with the plan-first spec format below.
+7. Prompt: `The specs above are in tests/e2e/specs/. Review them, then press Enter to generate test files (or type 'skip' to generate later with --add-journey).`
+8. On proceed (Enter): generate `<codePath>/tests/e2e/behavioral/project-custom/<slug>.spec.ts` from each spec.
+9. On `skip`: print `"Run /setup-atk --add-journey <description> to generate test files when ready."` (EC-F3)
 
 **Plan-first spec format** (`tests/e2e/specs/<slug>.md`):
 ```

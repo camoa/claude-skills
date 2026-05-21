@@ -114,10 +114,15 @@ if [[ "$UPDATE_ATK" -eq 0 ]]; then
 
   mkdir -p "$CODE_PATH/tests/e2e"
 
-  (cd "$CODE_PATH/tests/e2e" && npm init -y) || {
-    echo "setup-atk: Phase B failed: npm init" >&2
-    exit 1
-  }
+  # EC-F2: guard against clobbering an existing package.json on resume
+  if [[ ! -f "$CODE_PATH/tests/e2e/package.json" ]]; then
+    (cd "$CODE_PATH/tests/e2e" && npm init -y) || {
+      echo "setup-atk: Phase B failed: npm init" >&2
+      exit 1
+    }
+  else
+    echo "setup-atk: tests/e2e/package.json already exists — skipping npm init"
+  fi
 
   (cd "$CODE_PATH/tests/e2e" && npm install -D '@playwright/test@^1.44') || {
     echo "setup-atk: Phase B failed: npm install @playwright/test" >&2
@@ -138,6 +143,8 @@ echo "setup-atk: Phase C — scaffolding tests/e2e/..."
 
 ATK_MODULE_DIR="$CODE_PATH/web/modules/contrib/automated_testing_kit"
 E2E_DIR="$CODE_PATH/tests/e2e"
+# RT-V3: CLAUDE_PLUGIN_ROOT is set by Claude Code itself (not by user input or the
+# cloned repo) — it is treated as trusted for the playwright-base.config.ts copy.
 PLUGIN_ROOT_GUESS="${CLAUDE_PLUGIN_ROOT:-}"
 
 # Ensure directory structure
@@ -151,12 +158,26 @@ mkdir -p \
 
 # Copy ATK canned tests and helpers from installed module
 if [[ -d "$ATK_MODULE_DIR/tests/playwright" ]]; then
+  # RT-V2: verify ATK module dir resolves within CODE_PATH (symlink safety)
+  ATK_REAL=$(realpath "$ATK_MODULE_DIR/tests/playwright" 2>/dev/null || echo "")
+  CODE_REAL=$(realpath "$CODE_PATH" 2>/dev/null || echo "$CODE_PATH")
+  if [[ -z "$ATK_REAL" ]] || [[ "$ATK_REAL" != "$CODE_REAL"* ]]; then
+    echo "setup-atk: SECURITY: ATK module dir resolves outside CODE_PATH (symlink?): $ATK_REAL" >&2
+    echo "  Refusing to cp from outside the project tree." >&2
+    exit 1
+  fi
   cp -R "$ATK_MODULE_DIR/tests/playwright/." "$E2E_DIR/behavioral/atk/" || {
     echo "setup-atk: Phase C failed: cp ATK behavioral tests" >&2
     exit 1
   }
   echo "setup-atk: copied ATK canned tests → tests/e2e/behavioral/atk/"
 else
+  # EC-F7: in --update-atk mode, ATK module must be installed — hard error, not warning
+  if [[ "$UPDATE_ATK" -eq 1 ]]; then
+    echo "setup-atk: ERROR: ATK module not found at $ATK_MODULE_DIR/tests/playwright" >&2
+    echo "  Run '/setup-atk' (without --update-atk) first to install the ATK module." >&2
+    exit 1
+  fi
   echo "setup-atk: WARNING: $ATK_MODULE_DIR/tests/playwright not found; skipping catalog copy" >&2
   echo "  Run 'ddev composer require drupal/automated_testing_kit:^2.0' first." >&2
 fi
@@ -369,9 +390,10 @@ REGISTRY_FILE="$REGISTRY_DIR/registry.yml"
 mkdir -p "$REGISTRY_DIR"
 
 # Only seed ATK surfaces that are not already present (idempotent by id)
+# EC-F4/RT-V6: use grep -F (fixed-string) so id chars are never treated as regex
 seed_surface() {
   local id="$1" url="$2"
-  if grep -q "^  - id: $id$" "$REGISTRY_FILE" 2>/dev/null; then
+  if grep -qF "id: $id" "$REGISTRY_FILE" 2>/dev/null; then
     echo "setup-atk: registry surface '$id' already present — skipped"
     return
   fi
@@ -385,11 +407,16 @@ SURFACE
 
 # Ensure the registry file has a surfaces: block
 if [[ ! -f "$REGISTRY_FILE" ]]; then
+  # HP-F4: include required viewports: block per surface-registry-schema.md §3.1
   cat > "$REGISTRY_FILE" <<'REGHDR'
 # .visual-review/registry.yml — surface coverage manifest.
 # Managed by /setup-atk (e2e surfaces) and /setup-visual-regression (vr surfaces).
 # Schema: references/visual-review/surface-registry-schema.md
 schema_version: "1.0"
+viewports:
+  - name: desktop
+    width: 1920
+    height: 1080
 surfaces:
 REGHDR
   echo "setup-atk: created .visual-review/registry.yml"

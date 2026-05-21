@@ -73,8 +73,10 @@ if [[ -d "$CODE_PATH/tests/e2e" ]]; then
 fi
 
 # ─── Check 4: playwright.config.ts has e2e-chromium entry ────────────────────
+# HP-F6: exclude commented lines so the stub comment appended by setup-atk.sh
+# does NOT falsely report the entry as active.
 PW_ENTRY=false
-if grep -q 'e2e-chromium' "$CODE_PATH/playwright.config.ts" 2>/dev/null; then
+if grep -v -E '^\s*//' "$CODE_PATH/playwright.config.ts" 2>/dev/null | grep -q 'e2e-chromium'; then
   PW_ENTRY=true
 fi
 

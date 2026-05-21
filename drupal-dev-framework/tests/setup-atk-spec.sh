@@ -36,6 +36,13 @@ make_fake_project() {
   echo '{}' > "$dir/composer.json"
 }
 
+# Create a fake ATK module dir (for tests that require --update-atk to succeed)
+make_fake_atk_module() {
+  local dir="$1"
+  mkdir -p "$dir/web/modules/contrib/automated_testing_kit/tests/playwright"
+  mkdir -p "$dir/web/modules/contrib/automated_testing_kit/js-helpers/playwright"
+}
+
 # Stub: replace ddev with a no-op for Phase A + B tests
 # (Phase C can run without ddev)
 stub_ddev() {
@@ -114,6 +121,7 @@ fi
 # and test that Phase C creates the registry file.
 PROJ2="$TMPDIR/proj_phase_c"
 make_fake_project "$PROJ2"
+make_fake_atk_module "$PROJ2"
 mkdir -p "$PROJ2/tests/e2e"
 
 # Run with --update-atk (skips A+B) so we don't need real ddev/npm
@@ -182,6 +190,7 @@ fi
 # ─── Test 12: --skip-demo-recipe flag parses without error ───────────────────
 PROJ3="$TMPDIR/proj_skip_demo"
 make_fake_project "$PROJ3"
+make_fake_atk_module "$PROJ3"
 mkdir -p "$PROJ3/tests/e2e"
 rc=0
 bash "$SCRIPT" "$PROJ3" --update-atk --skip-demo-recipe 2>/dev/null || rc=$?
@@ -191,6 +200,85 @@ if [ "$rc" -eq 0 ]; then
   pass_check "--skip-demo-recipe + --update-atk → exit 0"
 else
   fail_check "--skip-demo-recipe + --update-atk → unexpected exit $rc"
+fi
+
+# ─── Regression: EC-F2 — npm init does not clobber existing package.json ─────
+PROJ_PKG="$TMPDIR/proj_pkg_guard"
+make_fake_project "$PROJ_PKG"
+mkdir -p "$PROJ_PKG/tests/e2e"
+# Pre-create a package.json with custom content
+echo '{"name":"my-existing-project","version":"2.0.0"}' > "$PROJ_PKG/tests/e2e/package.json"
+stub_ddev
+# Run Phase B (full install, not --update-atk so npm init path is exercised)
+# But we stub npm so npm init won't run; the key test is that the content is preserved
+rc=0
+bash "$SCRIPT" "$PROJ_PKG" 2>/dev/null || rc=0  # ignore exit (ddev stub, npm stub)
+PKG_CONTENT=$(cat "$PROJ_PKG/tests/e2e/package.json" 2>/dev/null || echo "")
+if echo "$PKG_CONTENT" | grep -q 'my-existing-project'; then
+  pass_check "EC-F2: existing package.json preserved (not clobbered by npm init)"
+else
+  fail_check "EC-F2: package.json was clobbered; expected 'my-existing-project', got: $PKG_CONTENT"
+fi
+
+# ─── Regression: EC-F7 — --update-atk exits 1 when ATK module dir absent ────
+PROJ_NO_ATK="$TMPDIR/proj_no_atk"
+make_fake_project "$PROJ_NO_ATK"
+mkdir -p "$PROJ_NO_ATK/tests/e2e"
+stub_ddev
+rc=0
+bash "$SCRIPT" "$PROJ_NO_ATK" --update-atk 2>/dev/null || rc=$?
+if [ "$rc" -eq 1 ]; then
+  pass_check "EC-F7: --update-atk with no ATK module → exit 1"
+else
+  fail_check "EC-F7: --update-atk with no ATK module should exit 1, got $rc"
+fi
+
+# ─── Regression: HP-F4 — registry.yml contains viewports: block ─────────────
+PROJ_VPT="$TMPDIR/proj_viewports"
+make_fake_project "$PROJ_VPT"
+make_fake_atk_module "$PROJ_VPT"
+mkdir -p "$PROJ_VPT/tests/e2e"
+stub_ddev
+bash "$SCRIPT" "$PROJ_VPT" --update-atk 2>/dev/null || true
+REGISTRY_VPT="$PROJ_VPT/.visual-review/registry.yml"
+if grep -q 'viewports:' "$REGISTRY_VPT" 2>/dev/null; then
+  pass_check "HP-F4: new registry.yml contains viewports: block"
+else
+  fail_check "HP-F4: registry.yml missing viewports: block"
+fi
+
+# ─── Regression: RT-V2 — ATK module symlink outside CODE_PATH is rejected ────
+PROJ_SYM="$TMPDIR/proj_symlink"
+make_fake_project "$PROJ_SYM"
+mkdir -p "$PROJ_SYM/tests/e2e"
+# Create a real directory and a fake ATK module dir with a symlink pointing outside
+mkdir -p "$TMPDIR/outside_dir/tests/playwright"
+echo "evil.spec.ts" > "$TMPDIR/outside_dir/tests/playwright/evil.spec.ts"
+mkdir -p "$PROJ_SYM/web/modules/contrib"
+ln -s "$TMPDIR/outside_dir" "$PROJ_SYM/web/modules/contrib/automated_testing_kit"
+stub_ddev
+rc=0
+bash "$SCRIPT" "$PROJ_SYM" --update-atk 2>/dev/null || rc=$?
+if [ "$rc" -ne 0 ]; then
+  pass_check "RT-V2: ATK module symlink outside CODE_PATH → non-zero exit"
+else
+  fail_check "RT-V2: ATK module symlink outside CODE_PATH should be rejected (got exit 0)"
+fi
+
+# ─── Regression: EC-F4/RT-V6 — seed_surface uses fixed-string grep (grep -F) ─
+# Verify registry seeding is still idempotent with the grep -F fix in place
+PROJ_GSEED="$TMPDIR/proj_grep_seed"
+make_fake_project "$PROJ_GSEED"
+make_fake_atk_module "$PROJ_GSEED"
+mkdir -p "$PROJ_GSEED/tests/e2e"
+stub_ddev
+bash "$SCRIPT" "$PROJ_GSEED" --update-atk 2>/dev/null || true
+bash "$SCRIPT" "$PROJ_GSEED" --update-atk 2>/dev/null || true
+ATKCNT=$(grep -c 'id: atk-login' "$PROJ_GSEED/.visual-review/registry.yml" 2>/dev/null || echo 0)
+if [ "$ATKCNT" -eq 1 ]; then
+  pass_check "EC-F4/RT-V6: seed_surface idempotent with grep -F (atk-login count=1)"
+else
+  fail_check "EC-F4/RT-V6: seed_surface not idempotent, atk-login appears $ATKCNT times"
 fi
 
 # ─── Report ──────────────────────────────────────────────────────────────────

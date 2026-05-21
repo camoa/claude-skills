@@ -166,6 +166,53 @@ else
   fail_check "output is not valid JSON: $OUT"
 fi
 
+# ─── Regression: HP-F6 — commented e2e-chromium stub → playwright_config=false ─
+# The setup-atk.sh script appends a COMMENTED-OUT e2e-chromium block to
+# playwright.config.ts. The idempotency check must NOT treat that as an
+# active entry (false positive).
+PROJ_CSTUB="$TMPDIR/proj_comment_stub"
+mkdir -p "$PROJ_CSTUB/.ddev" "$PROJ_CSTUB/tests/e2e"
+echo "name: test" > "$PROJ_CSTUB/.ddev/config.yaml"
+# Write a playwright.config.ts that contains e2e-chromium ONLY in a comment block
+# (exactly what setup-atk.sh appends before the user pastes the live entry)
+cat > "$PROJ_CSTUB/playwright.config.ts" <<'PW_COMMENT'
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  projects: [],
+});
+
+// Added by /setup-atk — ATK behavioral E2E tests (do not remove):
+// {
+//   name: 'e2e-chromium',
+//   testDir: './tests/e2e/behavioral',
+// },
+//
+// NOTE: add this object inside the projects: [] array above.
+PW_COMMENT
+OUT=$(run_script "$PROJ_CSTUB")
+check_json_key "HP-F6: commented stub only" "$OUT" "playwright_config_has_e2e_entry" "false"
+
+# ─── Regression: HP-F6 — live (uncommented) e2e-chromium → playwright_config=true
+PROJ_LIVE="$TMPDIR/proj_live_e2e"
+mkdir -p "$PROJ_LIVE/.ddev" "$PROJ_LIVE/tests/e2e"
+echo "name: test" > "$PROJ_LIVE/.ddev/config.yaml"
+cat > "$PROJ_LIVE/playwright.config.ts" <<'PW_LIVE'
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  projects: [
+    {
+      name: 'e2e-chromium',
+      testDir: './tests/e2e/behavioral',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+});
+PW_LIVE
+OUT=$(run_script "$PROJ_LIVE")
+check_json_key "HP-F6: live e2e-chromium entry" "$OUT" "playwright_config_has_e2e_entry" "true"
+
 # ─── Report ──────────────────────────────────────────────────────────────────
 
 if [ "$FAIL" -ne 0 ]; then
