@@ -1,9 +1,11 @@
-# Surface Registry Schema v1.0
+# Surface Registry Schema v1.1
 
 **Introduced:** drupal-dev-framework v4.11.0 (Task A — `visual_and_e2e_review_gates`)
+**v1.1:** v4.14.0 (Task D) — extends the `parity_reference` object additively (§3.4, §7)
 **Owner:** `commands/review.md` step 6 (change-impact dispatcher)
-**Consumers (planned):** `/setup-atk` + `/validate:e2e` (Task B), the reworked
-`validate-visual-regression` (Task C), `validate-visual-parity` (Task D)
+**Consumers:** `/setup-atk` + `/validate:e2e` (Task B), the reworked
+`validate-visual-regression` (Task C), `/setup-visual-parity` + the reworked
+`validate-visual-parity` (Task D)
 
 The **surface registry** is the project's single source of truth for *which rendered
 surfaces have review coverage* — which URLs, at which viewports, with which masks, for
@@ -51,10 +53,10 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 `scripts/project-state-read.sh` parses this field into
 `visualReview: {enabled, registryPath}` (or `null` when absent). See its header.
 
-## 3. Project registry schema (`registry.yml`) v1.0
+## 3. Project registry schema (`registry.yml`) v1.1
 
 ```yaml
-schema_version: "1.0"
+schema_version: "1.1"
 viewports:                       # project default viewport matrix
   - {name: desktop, width: 1920, height: 1080}
   - {name: tablet,  device: "Galaxy Tab S4"}
@@ -65,14 +67,30 @@ surfaces:
     gates: [visual_regression, e2e]      # gate-applicability flags
     viewports: [desktop, tablet, phone]  # optional — overrides the default matrix
     masks: ["time", ".field--name-created"]   # CSS selectors, optional
-    parity_reference: null       # null | {type: figma|prod|mockup, uri: "..."}
+    parity_reference: null       # null | object — see §3.4
+```
+
+A surface that participates in visual parity carries a populated `parity_reference`
+object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes both:
+
+```yaml
+  - id: marketing-landing
+    url: "/landing"
+    gates: [visual_regression, visual_parity]
+    parity_reference:
+      type: html-template
+      uri: "themes/custom/foo/design/landing.html"
+      reference_hash: "a1b2c3…"            # sha256 of the reference file
+      compare_selectors: [".hero-title", ".hero .cta", ".card"]
+      notes: "CTA colour intentionally darker than comp"
+      last_compared_at: "2026-05-21T12:00:00Z"
 ```
 
 ### 3.1 Top-level keys
 
 | Key | Type | Required | Notes |
 |---|---|---|---|
-| `schema_version` | string | yes | `"1.0"` for v4.11.0. Consumers gate on major. |
+| `schema_version` | string | yes | `"1.0"` (v4.11.0) or `"1.1"` (v4.14.0+). Consumers gate on major; a v1.0 registry is a valid v1.1 registry (the v1.1 additions are all optional). |
 | `viewports` | list | yes | The project default viewport matrix. Each entry is a **viewport descriptor** (§3.3). |
 | `surfaces` | list | yes | Zero or more **surface entries** (§3.2). Empty list is valid (set up, no surfaces yet). |
 
@@ -85,7 +103,7 @@ surfaces:
 | `gates` | list | yes | Subset of `[e2e, visual_regression, visual_parity]` — which gates apply to this surface. Empty list = registered but no gate runs it. |
 | `viewports` | list | no | List of viewport **names** (from `viewports[].name`). Absent ⇒ the project default matrix applies. |
 | `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. |
-| `parity_reference` | object \| null | no | `null`, or `{type, uri}` with `type ∈ {figma, prod, mockup}`. Consumed by Task D. |
+| `parity_reference` | object \| null | no | `null`, or the **parity-reference object** (§3.4). Consumed by `/setup-visual-parity` + `/validate:visual-parity` (Task D). |
 
 ### 3.3 Viewport descriptor
 
@@ -101,6 +119,30 @@ Either an explicit pixel size **or** a Playwright device name — never both:
 | `name` | string | yes | Kebab-case label. Referenced by surface `viewports[]`. |
 | `width` / `height` | int | one form | Explicit pixel size. Both required together. |
 | `device` | string | one form | A Playwright built-in device name. Mutually exclusive with `width`/`height`. |
+
+### 3.4 Parity-reference object (v1.1)
+
+The `parity_reference` field is `null` (the surface has no design comp) or an object
+declaring the external design reference the surface is checked against. `/setup-visual-parity`
+writes it; `/validate:visual-parity` reads it. **Every field but `type` and `uri` is
+optional** — a v1.0-shaped `{type, uri}` object remains valid.
+
+| Field | Type | Required | Contract |
+|---|---|---|---|
+| `type` | enum | yes | `figma` \| `react-template` \| `html-template` \| `image` \| `prod-url`. **Renderable** (`html-template`, `react-template`, `prod-url`) → both sides have a DOM → full CSS-actionable diff. **Static** (`figma`, `image`) → a flat PNG, no DOM → build-only diff. |
+| `uri` | string | yes | A **file path** (for `figma`, `image`, `html-template`, and a pre-rendered `react-template`) or an **`http(s)` URL** (for `prod-url`, or a `react-template` served by a dev server). File paths must resolve within `codePath` or be a user-confirmed absolute path; non-`http(s)` schemes are rejected for `prod-url`. |
+| `reference_hash` | string \| null | no | Lowercase hex sha256 of the reference **file**. `null` for URL-only references (`prod-url`, served `react-template`) — a live URL has no stable hash. Drives "reference changed since last compare" drift detection. |
+| `compare_selectors` | list | no | CSS selectors whose computed styles are compared across build and reference. Absent ⇒ the gate's default set (headings `h1`–`h3`, `button`/`.button`/`.cta`, the main content container). |
+| `notes` | string | no | Free-text — e.g. an accepted intentional deviation recorded by `[i]` classification. Never executed; display-only. |
+| `last_compared_at` | string \| null | no | ISO-8601 UTC of the last `/validate:visual-parity` run touching this surface. Written by the gate. |
+
+**v1.0 → v1.1 changes (all additive):** `type` widens from `{figma, prod, mockup}` to
+`{figma, react-template, html-template, image, prod-url}`. `prod` is renamed `prod-url`
+and `mockup` is renamed `image` — no migration is needed because Task A shipped the
+schema only and **no v1.0 registry file exists in the wild** (the first registry any
+project gets is written by a Task C/D `/setup-*` command, which emits v1.1). The new
+optional fields (`reference_hash`, `compare_selectors`, `notes`, `last_compared_at`) are
+ignored by any v1.0 consumer.
 
 ## 4. Task fragment (`visual-review-surfaces.yml`)
 
@@ -167,6 +209,10 @@ Task B/C/D commands — all of which parse YAML natively. The sibling
   top-level keys, new `parity_reference.type` values. Existing consumers ignore unknown
   keys.
 - v1.0 committed for v4.11.0.
+- **v1.1 committed for v4.14.0** (Task D) — the `parity_reference` object grows four
+  optional fields and its `type` enum widens (§3.4). Additive: a v1.0 consumer reading a
+  v1.1 registry ignores the new keys; a v1.1 consumer reading a v1.0-shaped
+  `parity_reference` sees only `type`/`uri` and applies its defaults.
 
 ## 8. Non-goals
 

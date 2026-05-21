@@ -23,7 +23,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
 2. **Determine which visual gates can run.**
    - `validate-visual-regression` (v4.13.0+, registry-driven) → runs when ALL three hold: (a) `project_state.md` has `**Visual Review:** enabled`, (b) `<codePath>/tests/visual/` exists, and (c) the surface registry has at least one surface with `visual_regression` in `gates[]`. When all three hold, run the gate via `scripts/visual-regression-gate.sh` (step 4). Otherwise → `skipped` with the contextual reason: `"visual review not enabled — run /setup-visual-regression"` / `"tests/visual/ not set up"` / `"registry has no visual_regression surfaces"`.
-   - `validate-visual-parity` → v1 ALWAYS skips in the `/validate:all` flow (no way to know the user's intended reference per-invocation). User runs `/validate:visual-parity` manually with explicit args.
+   - `validate-visual-parity` (v4.14.0+, registry-driven) → ALWAYS `skipped` in the `/validate:all` flow, with the reason `"visual-parity is design-implementation-scoped — run /validate:visual-parity, or let /review auto-run it on design tasks"`. Parity is no longer reference-per-invocation (the rework made it registry-driven), but it is not a *universal* gate the way tdd/solid/security are: it applies only when a task implements a designed surface. `/review`'s change-impact dispatcher auto-runs it (soft) on exactly those tasks; `/validate:all` runs the universal set and leaves parity to the dispatcher + standalone invocation.
 
    The surface registry (`<codePath>/.visual-review/registry.yml`) is the "visual coverage manifest" — it declares which surfaces `/validate:all` covers. No per-component iteration: the committed `tests/visual/` suite handles the surface × viewport loop.
 
@@ -61,7 +61,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
        {"gate": "security", "verdict": "pass"},
        {"gate": "guides", "verdict": "fail", "messages": ["..."]},
        {"gate": "visual-regression", "verdict": "skipped", "messages": ["No baselines in store"]},
-       {"gate": "visual-parity", "verdict": "skipped", "messages": ["visual-parity requires explicit reference; run manually"]}
+       {"gate": "visual-parity", "verdict": "skipped", "messages": ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
      ],
      "summary": {"pass": 3, "warning": 1, "fail": 1, "skipped": 2, "total": 7},
      "discoverability_hint": "For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
@@ -86,7 +86,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
      security              pass       no findings
      guides                fail       no guide citations in research.md
      visual-regression     skipped    no baselines in store yet
-     visual-parity         skipped    run manually with <reference>
+     visual-parity         skipped    design-scoped — /validate:visual-parity or /review
 
      Totals: 3 pass · 1 warning · 1 fail · 2 skipped
 
@@ -112,7 +112,7 @@ Gates run one at a time. Rationale: simpler error handling, cache locality (git 
 
 - Does NOT wrap `/code-quality:lint`, `:coverage`, `:review`, `:audit`, `:ultrareview`, `:architecture-debate`, `:security-debate`. These stay invokable via their native `/code-quality:*` namespace. `/validate:all` surfaces them as available via the discoverability hint.
 - Does NOT auto-skip gates based on AI-inferred applicability. v1 runs every gate (respects each gate's own skip semantics — e.g., `/validate:guides` skips if no phase artifacts exist). AI-driven skipping is a v2 candidate.
-- Does NOT enforce `/validate:visual-parity` to run. It requires an explicit reference per invocation; user runs it manually when they have a comp in hand.
+- Does NOT run `/validate:visual-parity`. Parity is registry-driven (v4.14.0+) but design-implementation-scoped, not universal — `/review`'s change-impact dispatcher auto-runs it (soft) on design tasks, and the user can invoke `/validate:visual-parity` standalone. `/validate:all` runs the universal gate set only.
 
 ## Error cases
 

@@ -6,15 +6,15 @@
 #   <task_folder>: absolute path to task folder
 #   <gate_type>: one of pre-analysis | coverage-mapping | skill-review |
 #                plugin-validate | phase-command-bypass | dev-guides-load |
-#                playbook-load | review | e2e | visual_regression
+#                playbook-load | review | e2e | visual_regression | visual_parity
 #   <json_payload>: complete audit JSON object conforming to
 #                   references/gate-audit-schema.md (v1.0 for the original 7
 #                   gate types; v1.1 adds `review`; v1.2 — v4.11.0 — adds `e2e`
-#                   + `visual_regression`)
+#                   + `visual_regression`; v1.3 — v4.14.0 — adds `visual_parity`)
 #
 # Behavior:
-# - Validates the JSON parses + has schema_version starting with "1." (1.0, 1.1, 1.2 accepted)
-# - Validates gate_type is one of the 10 allowed values
+# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.3 accepted)
+# - Validates gate_type is one of the 11 allowed values
 # - Validates required top-level fields (gate_type, fired_at, task_folder, gate_specific)
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
@@ -32,11 +32,11 @@ PAYLOAD="${3:?JSON payload required}"
 
 # Validate gate_type
 case "$GATE_TYPE" in
-  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression)
+  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity)
     ;;
   *)
     echo "gate-audit-write: invalid gate_type: $GATE_TYPE" >&2
-    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression" >&2
+    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity" >&2
     exit 2
     ;;
 esac
@@ -47,13 +47,13 @@ if ! echo "$PAYLOAD" | jq empty >/dev/null 2>&1; then
   exit 2
 fi
 
-# Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate
-# and v1.2 e2e / visual_regression gates)
+# Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate,
+# v1.2 e2e / visual_regression gates, and v1.3 visual_parity gate)
 SV=$(echo "$PAYLOAD" | jq -r '.schema_version // empty')
 case "$SV" in
-  1.0|1.1|1.2) ;;
+  1.0|1.1|1.2|1.3) ;;
   *)
-    echo "gate-audit-write: schema_version must be \"1.0\", \"1.1\", or \"1.2\" (got \"$SV\")" >&2
+    echo "gate-audit-write: schema_version must be \"1.0\", \"1.1\", \"1.2\", or \"1.3\" (got \"$SV\")" >&2
     exit 2
     ;;
 esac
