@@ -181,6 +181,8 @@ export class SlidesClient {
     if (requests.length === 0) {
       return { occurrencesByTag };
     }
+    // Slides returns one reply per request, positionally — map each back to
+    // its tag by index. A short reply array leaves trailing tags at 0.
     const { replies } = await this.batchUpdate(presentationId, requests);
     replies.forEach((reply, i) => {
       const tag = tags[i];

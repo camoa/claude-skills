@@ -87,6 +87,10 @@ Exit code is `0` when `ok`, `1` otherwise — but always read the envelope.
 `tagMap` / `tagImageMap` are `{ "{{tag}}": "value" }` objects — keys are the
 literal tag tokens in the template, values are replacement text or image URLs.
 
+Note: `exportFile` with `image/png` exports the **first page only** (a Drive
+API limitation — `files.export` is whole-file). For per-page images use
+`getPageThumbnail`.
+
 ## Library usage
 
 ```ts

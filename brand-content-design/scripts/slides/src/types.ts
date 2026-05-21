@@ -77,10 +77,12 @@ export interface CopyFileResult {
 }
 
 export interface ThumbnailResult {
-  /** Short-lived thumbnail URL returned by the Slides API. */
+  /**
+   * Short-lived thumbnail URL returned by the Slides API. The caller (the
+   * visual-diff gate) fetches the image bytes itself — the client returns the
+   * URL only, keeping this module pure transport.
+   */
   contentUrl: string;
-  /** Thumbnail image bytes, when the caller asked the client to fetch them. */
-  bytes?: Buffer;
 }
 
 export interface ReplaceResult {
