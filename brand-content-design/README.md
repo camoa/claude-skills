@@ -1,6 +1,6 @@
 # Brand Content Design Plugin
 
-> **Current version: v3.1.0**
+> **Current version: v3.4.0**
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
 
@@ -187,7 +187,7 @@ Generates two files for your template:
 ### Agent
 | Agent | Model | Features |
 |-------|-------|----------|
-| `brand-analyst` | sonnet | `memory: project`, read-only (`disallowedTools: Edit, Write, Bash`) |
+| `brand-analyst` | sonnet | `memory: project`, scoped `tools: Read, Glob, WebFetch, Write` |
 
 ### Skills (4)
 | Skill | Model | Invocation |
@@ -544,6 +544,29 @@ The `visual-content` skill is bundled with this plugin - it uses artistic philos
 The `infographic-generator` skill provides 114 data visualization templates with brand theming and custom backgrounds.
 
 The `html-generator` skill creates standalone HTML components and composed pages using design tokens, responsive CSS, and WCAG AA accessibility.
+
+## Configuration
+
+### Effort-adaptive variant selection
+
+Presentations, carousels, and HTML pages each have a **guided** command and a
+**quick** command. When you don't name a variant ("make a presentation"), the
+router picks one from the active effort level (`${CLAUDE_EFFORT}`): `low` →
+the `*-quick` variants, `medium` and above → the guided wizards. Naming a
+variant explicitly always overrides this.
+
+The quick end of that gradient pairs naturally with the built-in **Proactive**
+output style — `low` effort plus the Proactive style yields fully autonomous
+quick-content generation with minimal prompting.
+
+### Skill visibility (`skillOverrides`)
+
+The umbrella `brand-content-design` skill is already `user-invocable: false`
+(the user-facing entry points are the `/brand` dashboard and the verb commands).
+To further tune any of this plugin's skills without editing them, the
+`skillOverrides` setting in `.claude/settings.json` (Claude Code v2.1.129+)
+takes per-skill values `"on"`, `"name-only"`, `"user-invocable-only"`, or
+`"off"`.
 
 ## Tips
 

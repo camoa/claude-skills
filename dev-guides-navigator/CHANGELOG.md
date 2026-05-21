@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 (2026-05-21)
+
+### Added
+- **`Setup` hook for cache pre-warming** — new `hooks/setup-cache.sh` fetches `llms.hash` + `llms.txt` and writes the `{hash, fetched_at, content}` cache so the first navigator call in a project is instant. Fires only on `claude --init-only`, `claude -p --init`, or `claude -p --maintenance` — never on normal interactive startup. Pure optimization: degrades silently (no `jq`/`curl`, network down) to the existing lazy-fill-on-first-use path.
+- README documentation for the `skillOverrides` setting (`user-invocable-only` / `name-only` / `off` for non-Drupal projects) and the `skillListingBudgetFraction` / `maxSkillDescriptionChars` skill-listing-budget settings.
+
+### Changed
+- **SKILL.md conciseness pass** (175 → 129 body lines). The Quick Reference + Common Mistakes, Examples, and Troubleshooting tables moved to new `references/quick-reference.md`, `references/examples.md`, and `references/troubleshooting.md`. SKILL.md keeps the 7-step workflow and a pointered See Also.
+
+### Hygiene
+- Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md` (validator ST03 — a plugin-root `CLAUDE.md` is not loaded as end-user context).
+- `$schema` added to `plugin.json`.
+- PreCompact hook migrated to exec form (`"args": []`).
+
 ## 0.5.1 (2026-05-21)
 
 ### Fixed

@@ -14,6 +14,8 @@ Paper-test team mode (`/code-paper:test-team`) currently spawns 3 agents in fres
 
 **Re-evaluation criteria when upstream stabilizes:** if forks gain a "share-context-but-isolate-reasoning" mode, switch the team-test spawn pattern. Until then, fresh-context spawns remain the right default. Upstream reference: Subagents guide → "Fork the current conversation".
 
+See `fork-vs-fresh.md` for the full decision record — the fresh-vs-forked tradeoff table, why fresh is the default, when to reconsider, and how to opt in.
+
 ## Contents
 
 - [Common AI Code Problems](#common-ai-code-problems)

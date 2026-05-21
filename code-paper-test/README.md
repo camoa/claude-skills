@@ -103,6 +103,29 @@ Also works with skills and configs:
 
 Auto-detects skill files and switches to instruction tracing mode.
 
+### Effort-adaptive depth
+
+Both modes honor the active effort level (`${CLAUDE_EFFORT}`) so the plugin is
+honest about cost in CI and smoke runs:
+
+- **`/paper-test`** scales scenarios per phase — `low` traces a minimal happy
+  path plus one error case, `medium` traces two per phase, `high`/`xhigh`/`max`
+  go to full edge and adversarial coverage. Effort never lowers the
+  verification bar — every external call is still verified.
+- **`/code-paper:test-team`** treats caller effort as a **floor-raiser**: each
+  teammate runs at `max(caller effort, role floor)`. Role floors are `medium`
+  for the Happy Path Validator and `high` for the Edge Case Hunter and Red Team
+  Attacker — so the adversarial lenses are never cheapened, and a caller at
+  `xhigh`/`max` bumps the whole team up.
+
+### Teammate model configuration
+
+`/code-paper:test-team` spawn prompts set `Model: sonnet` per teammate. If you
+prefer a single setting, set `teammateDefaultModel` in `settings.json` (e.g.
+`"sonnet"`, or `null` to inherit the lead's `/model`) — it applies to any
+teammate whose spawn prompt doesn't name a model. `teammateMode` (`auto` /
+`in-process` / `tmux`) controls whether teammates appear in split panes.
+
 ## How It Works
 
 The skill guides you through a systematic workflow:
@@ -255,16 +278,13 @@ Specific checks for AI-generated code:
 
 ## Version
 
-**0.4.0** (Current) - Methodology depth + skill/config testing + infrastructure
-- 6 new methodology steps: data flow tracking, error propagation, config validation, performance patterns, untested path analysis, state machine validation
-- 4 new reference guides: severity scoring, blind A/B comparison, rubric scoring, skill/config testing
-- Skill/config testing: trace instructions through Claude, not just code
-- Agent team: `maxTurns: 15`, `isolation: worktree`, removed experimental flag
-- Pushy descriptions with comprehensive trigger phrases
+**0.9.0** (Current) — effort-adaptive depth + hygiene
+- `${CLAUDE_EFFORT}` honored as a floor across `/paper-test` (scenario depth) and `/code-paper:test-team` (per-teammate effort)
+- SKILL.md conciseness pass — workflow detail extracted to `references/workflow.md`
+- `teammateDefaultModel` / `teammateMode` documentation for `/test-team`
+- Plugin-root conventions file, manifest `$schema`, exec-form hook
 
-**0.3.0** - Competing Testers agent team command
-
-**0.2.0** - Plugin conventions and model routing
+See `CHANGELOG.md` for the full release history.
 
 ## License
 

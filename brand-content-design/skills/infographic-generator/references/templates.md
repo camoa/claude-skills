@@ -298,3 +298,46 @@ quadrant-simple-illus
 | Org Chart | hierarchy-tree-curved-line-badge-card |
 | Priority Matrix | quadrant-quarter-simple-card |
 | Bar Chart | chart-column-simple |
+
+## Data Structure by Type
+
+The content JSON shape depends on the template category.
+
+**Sequence / List** — flat `items` with `label` + `desc`:
+
+```json
+{
+  "title": "Our Process",
+  "items": [
+    { "label": "Step 1", "desc": "Discovery" },
+    { "label": "Step 2", "desc": "Design" }
+  ]
+}
+```
+
+**Compare** — `items` with nested `children`:
+
+```json
+{
+  "title": "Before vs After",
+  "items": [
+    { "label": "Before", "children": [{ "label": "Slow" }] },
+    { "label": "After", "children": [{ "label": "Fast" }] }
+  ]
+}
+```
+
+**Hierarchy** — a root item with recursive `children`:
+
+```json
+{
+  "title": "Organization",
+  "items": [{
+    "label": "CEO",
+    "children": [{ "label": "CTO" }, { "label": "CFO" }]
+  }]
+}
+```
+
+Icon templates take `"label": "icon:rocket"`; illustrated (`-illus`) templates
+add an `"illus": "filename"` field per item.

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-05-21
+
+### Added
+- **Effort-adaptive validation depth** — the `htmx-development` skill now scales its work to `${CLAUDE_EFFORT}`: `low` emits HTMX scaffolding and stops, `medium`+ also runs the Validation Checklist inline, `high`/`xhigh`/`max` additionally delegate to `/dev-guides-navigator` for `drupal/forms` + `drupal/js-development`.
+- README notes: a `/branch` tip for exploring the HTMX-vs-AJAX decision (fork the session, try each path against the same context), and `skillOverrides` guidance (`user-invocable-only` / `name-only` / `off`) for projects where the skill's proactive "AJAX"/"Drupal" triggers are noise.
+
+### Changed
+- **SKILL.md conciseness pass** (246 → 146 body lines, no behavior change). The Quick Start code blocks, the dependent-dropdown / OOB / URL-history code, and the AJAX→HTMX conversion table moved into the existing `references/` files — all of that detail already lived in `references/htmx-implementation.md`, `references/quick-reference.md`, and `references/migration-patterns.md`. SKILL.md keeps the decision tables, pattern-selection matrix, validation checklist, and common-issues table. A "FAPI Quick Map" section was added to `references/migration-patterns.md` to preserve the form-API-level `#ajax` → `Htmx` mappings.
+
+### Fixed
+- **Version drift** — `htmx-development` SKILL.md frontmatter was left at `version: 1.4.0` when the plugin bumped to 1.5.0 (the v1.5.0 PreCompact change). Frontmatter is now `1.6.0`, matching `plugin.json`.
+- **Agent tool restriction not applied (pre-existing)** — all three agents declared their tool allowlist as `allowed-tools`, but the recognized agent frontmatter field is `tools` (`allowed-tools` is the skill/command field; on an agent it is silently ignored, so the agents actually inherited *all* tools rather than being read-only). The v1.4.0 changelog's "changed from `tools` to `allowed-tools`" was itself the regression. Renamed `allowed-tools:` → `tools:` on `ajax-analyzer`, `htmx-recommender`, and `htmx-validator` — this restores the intended read-only restriction. Agent `version` fields aligned to `1.6.0` while editing.
+
+### Hygiene
+- Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md` (validator ST03 — a plugin-root `CLAUDE.md` is not loaded as end-user context).
+- `$schema` added to `plugin.json`.
+- PreCompact hook migrated to exec form (`"args": []`).
+
 ## [1.5.0] - 2026-04-08
 
 ### Changed

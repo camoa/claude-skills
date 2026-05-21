@@ -5,6 +5,28 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-21
+
+### Added
+- **Effort-adaptive variant selection** — the `brand-content-design` router skill (v3.1.0 → v3.2.0) now reads `${CLAUDE_EFFORT}` to pick between the guided and quick command variants when the user doesn't name one: `low` → `*-quick`, `medium`+ → guided. Explicit variant requests still win. Paired with a README note on the built-in **Proactive** output style for the low-effort end of the gradient.
+
+### Changed
+- **Conciseness pass on the heavy generator skills** (no behavior change — detail extracted to `references/`, nothing removed):
+  - `html-generator` SKILL.md 602 → 189 body lines (v2.9.0 → v2.9.1). All code samples, the metadata-comment format, responsive/JS patterns, the composed-page example, and the convertibility table already lived in `references/html-technical.md` and `references/html-components.md`; SKILL.md now points to them.
+  - `visual-content` SKILL.md 480 → 143 body lines (v3.1.0 → v3.1.1). Canvas-philosophy example language, the full 4-gate visual-component decision flow, and the accessibility procedures extracted to the new `references/visual-craft.md`.
+  - `infographic-generator` SKILL.md 277 → 200 body lines (v2.9.0 → v2.9.1). Background presets point to `references/backgrounds.md`; config-by-background examples appended to `references/theming.md`; data-structure JSON appended to `references/templates.md`.
+
+### Fixed (pre-existing)
+- **`visual-content` dangling reference** — `visual-content/SKILL.md` cited `references/slide-composition-rules.md`, but that file only existed under the sibling `brand-content-design` skill's `references/`. Copied it into `visual-content/references/` so the skill is self-contained (validator flagged it as a missing-reference error).
+- **`commands/outline.md` argument-hint** — quoted `argument-hint: "<template-name>"` (was unquoted; validator FM02 angle-bracket nudge).
+- **`brand-analyst` agent tool field** — the agent declared its tool list as `allowed-tools`, but the recognized agent frontmatter field is `tools` (`allowed-tools` is the skill/command field — silently ignored on an agent, so the scoping was not actually applied). Renamed `allowed-tools:` → `tools: Read, Glob, WebFetch, Write`; agent version 3.1.2 → 3.1.3. (README agent table corrected — `brand-analyst` is not read-only; it has `Write` to persist analysis results.)
+
+### Hygiene
+- Plugin-root `CLAUDE.md` renamed to `CONVENTIONS.md` (validator ST03 — a plugin-root `CLAUDE.md` is not loaded as end-user context).
+- `$schema` added to `plugin.json`.
+- Both hooks (SessionStart, PreCompact) migrated to exec form (`"args": []`).
+- `keywords` trimmed 30 → 25 (validator M15 cap).
+
 ## [3.3.1] - 2026-04-27
 
 ### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
