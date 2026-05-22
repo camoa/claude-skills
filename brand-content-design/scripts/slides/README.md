@@ -25,6 +25,21 @@ Credentials come **only** from environment variables — never commit them. The
 
 Two modes; the service account wins if both are set.
 
+### Which mode should I use?
+
+- **Personal Google account (`@gmail.com`) → use OAuth.** Decks are created
+  directly in *your own* Drive, where you can open them. A service account has
+  its own Drive with **no browsable UI**, so files it creates are not in your
+  Drive unless it parents them into a folder you pre-shared with it — and the
+  clean fix for that (a **Shared Drive**) requires Google Workspace, which
+  personal accounts do not have.
+- **Google Workspace account, or unattended CI → use the service account.**
+  No consent screen, no refresh token; pair it with a Shared Drive.
+
+Heads-up: some projects have the `iam.disableServiceAccountKeyCreation` org
+policy on, which greys out JSON-key creation — another reason OAuth is the
+smoother path for an individual.
+
 ### Creating the credentials in Google Cloud
 
 One-time, in [console.cloud.google.com](https://console.cloud.google.com):
@@ -43,9 +58,11 @@ One-time, in [console.cloud.google.com](https://console.cloud.google.com):
    your own OAuth credentials" → scopes `auth/presentations` + `auth/drive.file`
    → Authorize → Exchange authorization code for tokens.
 
-The service-account path is simpler — no consent screen, no refresh token.
+The service-account path has fewer steps (no consent screen, no refresh token),
+but see "Which mode should I use?" above — on a personal account OAuth is
+usually the better fit despite the extra steps.
 
-### Service account (best for automation / CI)
+### Service account (best for Workspace accounts / CI)
 
 ```sh
 export BCD_SLIDES_SA_KEY_FILE=/abs/path/to/service-account-key.json
@@ -53,7 +70,10 @@ export BCD_SLIDES_SA_KEY_FILE=/abs/path/to/service-account-key.json
 
 The service account needs access to the files it touches — share the template
 (and an output folder) with the service-account email, or use a Shared Drive,
-or domain-wide delegation.
+or domain-wide delegation. **Files the service account creates land in the
+service account's own Drive** (which has no UI); to see them, have it create
+everything inside a folder you own and shared with it as Editor, or use a
+Shared Drive (Workspace only).
 
 ### OAuth (best for an individual user — no Workspace domain needed)
 
