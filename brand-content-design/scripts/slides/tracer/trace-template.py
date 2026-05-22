@@ -20,6 +20,8 @@ The generator's own PDF write is redirected to a throwaway file — the template
 `sample.pdf` is never touched.
 """
 import json
+import os
+import shutil
 import sys
 import tempfile
 
@@ -37,6 +39,8 @@ def _rgb(color):
 _pages = []          # finished pages, each a list of op dicts
 _current = []        # ops on the page being drawn
 _pagesize = [1920, 1080]
+_assets_dir = None   # persistent dir; drawn images are copied here
+_img_counter = 0     # makes copied-image filenames unique
 
 
 class RecordingCanvas(_canvas_mod.Canvas):
@@ -133,7 +137,22 @@ class RecordingCanvas(_canvas_mod.Canvas):
         return super().linearGradient(x0, y0, x1, y1, colors, positions=positions, *a, **kw)
 
     def drawImage(self, image, x, y, width=None, height=None, *a, **kw):
-        _current.append({'op': 'image', 'path': str(image), 'x': x, 'y': y,
+        # Copy the source image into a persistent dir and record the COPY's
+        # path. Generators often draw from temp files they delete on exit
+        # (e.g. recoloured icons) — recording the bare path would leave the
+        # trace pointing at deleted files by render time.
+        global _img_counter
+        src = str(image)
+        path = src
+        if _assets_dir and os.path.isfile(src):
+            _img_counter += 1
+            dst = os.path.join(_assets_dir, f'{_img_counter}_{os.path.basename(src) or "img"}')
+            try:
+                shutil.copy(src, dst)
+                path = dst
+            except OSError:
+                path = src
+        _current.append({'op': 'image', 'path': path, 'x': x, 'y': y,
                          'w': width, 'h': height})
         return super().drawImage(image, x, y, width=width, height=height, *a, **kw)
 
@@ -149,6 +168,12 @@ def main():
         sys.stderr.write('usage: trace-template.py <generate_sample.py> <out.json>\n')
         sys.exit(2)
     gen_path, out_path = sys.argv[1], sys.argv[2]
+
+    # Persistent dir for copies of every image the generator draws — survives
+    # the generator's own temp-file cleanup. Lives next to the trace JSON.
+    global _assets_dir
+    _assets_dir = os.path.abspath(out_path) + '-assets'
+    os.makedirs(_assets_dir, exist_ok=True)
 
     # Instrument: every `canvas.Canvas(...)` in the generator becomes a recorder.
     _canvas_mod.Canvas = RecordingCanvas
