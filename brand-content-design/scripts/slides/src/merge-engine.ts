@@ -45,6 +45,11 @@ export interface RenderOptions {
   fontSubstitutions?: FontSubstitution[];
   /** Path to the custom brand font file — required to bake display text. */
   customFontFile?: string;
+  /**
+   * Name for the rendered deck in Drive. Convention: `"<presentation title> -
+   * <template name>"`. Defaults to a timestamped name when omitted.
+   */
+  deckName?: string;
 }
 
 const DISPLAY_BAKE_FONT_PX = 96;
@@ -82,7 +87,7 @@ export async function renderDeck(
   // 2. Copy the template — the rendered deck is the copy; template untouched.
   const { fileId: presentationId } = await client.copyFile(
     template.presentationId,
-    `Rendered deck ${new Date().toISOString()}`,
+    options.deckName ?? `Rendered deck ${new Date().toISOString()}`,
   );
 
   const fontSubstitutions = options.fontSubstitutions ?? [];

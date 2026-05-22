@@ -28,7 +28,7 @@ const doc = {
     layoutSpec: buildCommunityTalkLayout(),
     imagePaths: { logo: logoPath },
     gradients: { grad: communityTalkGradient() },
-    presentationName: 'community-talk — Slides template',
+    presentationName: 'community-talk Template',
     ...(driveFolder ? { driveFolderPath: [driveFolder] } : {}),
   },
 };

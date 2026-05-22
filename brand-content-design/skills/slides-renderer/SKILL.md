@@ -95,13 +95,14 @@ Decoration the Slides API cannot fill (gradients) is baked: declare a full-bleed
    `GradientSpec` (`colors`, `direction`, optional `positions`); the renderer
    bakes it to an image.
 3. **Render** — write the command document and invoke the CLI. Always pass
-   `presentationName` (the template's name) so the Drive file is identifiable —
-   omitting it names every scaffold "Brand Slides template":
+   `presentationName` — the **naming convention is `"<template name> Template"`**
+   (e.g. `"community-talk Template"`); omitting it names every scaffold
+   "Untitled Template":
    ```sh
    echo '{"command":"scaffoldTemplate","args":{"tokens":<BrandTokens>,
      "layoutSpec":<LayoutSpec>,"imagePaths":{"logo":"<assets/logo.png>"},
      "gradients":{"grad":<GradientSpec>},
-     "presentationName":"<template-name> — Slides template"}}' \
+     "presentationName":"<template name> Template"}}' \
      | node scripts/slides/dist/cli.js
    ```
    The result envelope's `result.presentationId` is the rendered Google Slides
@@ -135,6 +136,11 @@ Called by `/presentation` (Google Slides output target) and may be called by
 `/template-presentation` to render a Slides sample. The renderer's merge engine
 (`renderDeck`) then fills the typed template per a content outline — see
 `scripts/slides/references/slides-api-guide.md`.
+
+**Naming convention** — keep Drive tidy:
+- the scaffolded **template** → `"<template name> Template"` (`presentationName`).
+- a rendered **presentation** → `"<presentation title> - <template name>"`
+  (`renderDeck`'s `deckName` argument).
 
 ## Part 8 — Speaker notes
 

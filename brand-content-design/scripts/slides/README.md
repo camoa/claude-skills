@@ -125,7 +125,7 @@ Exit code is `0` when `ok`, `1` otherwise — but always read the envelope.
 | `replaceAllShapesWithImage` | `presentationId`, `tagImageMap` | `{ occurrencesByTag }` |
 | `scaffoldTemplate` | `tokens`, `layoutSpec?`, `imagePaths?`, `gradients?`, `driveFolderPath?`, `presentationName?` | `ScaffoldResult` |
 | `outlineToPayload` | `outlineMarkdown`, `tagMap` | `ContentPayload` |
-| `renderDeck` | `templatePresentationId`, `tagMap`, `payload`, `fontSubstitutions?`, `customFontFile?` | `RenderResult` |
+| `renderDeck` | `templatePresentationId`, `tagMap`, `payload`, `fontSubstitutions?`, `customFontFile?`, `deckName?` | `RenderResult` |
 
 `tagMap` / `tagImageMap` (on the low-level text/image commands) are
 `{ "{{tag}}": "value" }` objects — keys are the literal tag tokens in the

@@ -291,7 +291,11 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
         client,
         { presentationId: reqString(a, 'templatePresentationId'), tagMap },
         payload,
-        { fontSubstitutions, customFontFile: optString(a, 'customFontFile') },
+        {
+          fontSubstitutions,
+          customFontFile: optString(a, 'customFontFile'),
+          deckName: optString(a, 'deckName'),
+        },
       );
     }
     default:

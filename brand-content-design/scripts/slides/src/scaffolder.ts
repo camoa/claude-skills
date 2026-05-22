@@ -45,9 +45,9 @@ export interface ScaffoldOptions {
    */
   driveFolderPath?: string[];
   /**
-   * Name for the created presentation in Drive. Pass the template's name (e.g.
-   * `"community-talk — Slides template"`) so scaffolds are distinguishable.
-   * Defaults to `"Brand Slides template"` when omitted.
+   * Name for the created template presentation in Drive. Convention:
+   * `"<template name> Template"` (e.g. `"community-talk Template"`).
+   * Defaults to `"Untitled Template"` when omitted.
    */
   presentationName?: string;
 }
@@ -94,7 +94,7 @@ export async function scaffoldTemplate(
 
   // 3. Create the presentation; move it into the folder (Slides creates in root).
   const { presentationId } = await client.createPresentation(
-    options.presentationName ?? 'Brand Slides template',
+    options.presentationName ?? 'Untitled Template',
   );
   if (folderId) {
     await client.moveFileToFolder(presentationId, folderId);

@@ -108,4 +108,12 @@ describe('renderDeck', () => {
     await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap }, payload);
     expect(client.copyFile).toHaveBeenCalledTimes(2);
   });
+
+  it('names the rendered deck from options.deckName', async () => {
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap }, payload, {
+      deckName: 'My Talk - community-talk',
+    });
+    expect(client.copyFile).toHaveBeenCalledWith('tmpl1', 'My Talk - community-talk');
+  });
 });
