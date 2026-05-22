@@ -1,7 +1,7 @@
 ---
 name: drupal-ai-contrib
 description: "Routes Drupal contribution work to the right contribution-quality stage and supplies the contribution knowledge layer. Use when user says 'contribute to Drupal', 'Drupal contribution', 'submit a Drupal patch', 'Drupal merge request', 'fix a Drupal core issue', 'contribute a module', 'AI-assisted Drupal contribution', or works a drupal.org / GitLab Drupal issue. Use PROACTIVELY whenever AI-assisted code is headed for a Drupal contribution — drupalci and maintainer review are unforgiving."
-version: 0.1.0
+version: 0.1.1
 model: sonnet
 user-invocable: false
 ---
@@ -88,7 +88,7 @@ use this plugin's commands alongside it.
 | Phase lifecycle + phase gates | `drupal-dev-framework` |
 | Philosophy / standards review (SOLID, DRY) | `code-quality-tools` |
 | Paper-testing before submission | `code-paper-test` |
-| Issue / MR / pipeline CLI | `drupalorg-cli` (wrapped by `issue` / `submit` / `pipeline`) |
+| Issue / MR / pipeline CLI | `mglaman/drupalorg-cli` — executable `drupalorg`, wrapped by `issue` / `submit` / `pipeline`; see `references/drupalorg-cli.md` |
 | Drupal AI skill install | `drupal_devkit` |
 
 ## Examples
@@ -120,3 +120,4 @@ use this plugin's commands alongside it.
 ## References
 
 - `references/dev-guides-index.md` — contribution stage → dev-guide slugs to load
+- `references/drupalorg-cli.md` — the `drupalorg` CLI: what it is, install, subcommands

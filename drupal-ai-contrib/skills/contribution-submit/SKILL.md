@@ -1,7 +1,7 @@
 ---
 name: contribution-submit
 description: "Creates or updates a Drupal merge request and generates the AI-disclosure comment at the policy threshold. Use when the user runs /drupal-ai-contrib:submit or asks to submit, open, or update a Drupal merge request or patch. Wraps drupalorg-cli; surfaces status and RTBC guidance."
-version: 0.1.0
+version: 0.1.1
 model: sonnet
 user-invocable: false
 ---
@@ -59,13 +59,22 @@ Fetch the **current** policy state via the `drupal-ai-contrib:ai-policy-checker`
 Attribute AI involvement in commit messages per the commit-messages dev-guide. Keep the
 contributor as the responsible author — "the AI wrote it" is never a defense.
 
-### 4. Create or update the MR — via drupalorg-cli
+### 4. Create or update the MR
 
-Wrap `mglaman/drupalorg-cli` with **fixed, validated subcommands**. Before any
-shell-out, validate identifiers against an explicit pattern — issue IDs `^[0-9]+$`,
-project machine-names `^[a-z][a-z0-9_]*$` — and reject non-matching values; never
-interpolate unsanitized input. Credentials are the contributor's own — never stored or
-transmitted.
+The contribution tool is `mglaman/drupalorg-cli`; the executable on `PATH` is
+**`drupalorg`** (detect with `command -v drupalorg`). See
+`${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md` for what
+it is, how to install it, and the subcommand set.
+
+On GitLab there is **no MR-create subcommand** — a merge request is created by
+**pushing the issue-fork branch** (`issue:branch` / `issue:checkout` set up the fork +
+branch; develop, commit, `git push`, and GitLab opens the MR). Use `drupalorg mr:list`
+and `mr:status` to confirm and report the MR. Do not invent an `mr:create` subcommand.
+
+Wrap the CLI with **fixed, validated subcommands**. Before any shell-out, validate
+identifiers against an explicit pattern — issue IDs `^[0-9]+$`, project machine-names
+`^[a-z][a-z0-9_]*$` — and reject non-matching values; never interpolate unsanitized
+input. Credentials are the contributor's own — never stored or transmitted.
 
 The MR description states: what the change does, the issue it resolves, the AI
 disclosure (§2), and how it was verified (cite the captured `verify` artifacts).
@@ -111,6 +120,7 @@ submission, including copyright and licensing.
 | Situation | Handling |
 |-----------|----------|
 | `verify` / `review` not run | Surface it; report, do not refuse — the contributor decides. |
-| `drupalorg-cli` not installed | Report how to install it; do not fabricate an MR URL. |
+| `drupalorg` not installed | Surface the install steps from `references/drupalorg-cli.md`; do not fabricate an MR URL. |
+| `git push` rejected — no MR opens | The drupal.org SSH key is likely missing/unregistered — point at `setup` §5 and `references/drupalorg-cli.md` §Authentication. No push, no MR. |
 | Disclosure threshold ambiguous | Fetch the live policy via `drupal-ai-contrib:ai-policy-checker`; when still unclear, disclose. |
 | Project uses GitLab `state::*` labels | Set the GitLab scoped label, not a classic-queue status. |
