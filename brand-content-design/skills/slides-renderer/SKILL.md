@@ -1,155 +1,98 @@
 ---
 name: slides-renderer
-description: Use when creating a branded presentation as a native Google Slides deck. Composes a resolution-independent layout spec from any template's canvas philosophy and renders it via the Slides API — the Google Slides analog of the visual-content (PDF) skill.
-version: 0.1.0
+description: Use when creating a branded presentation as a native Google Slides deck. Traces the template's reportlab generator to reproduce its sample.pdf faithfully in Google Slides — the PDF is the design source of truth, not an independent re-composition.
+version: 0.2.0
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
 
 # Slides Renderer Skill
 
-Render a branded presentation natively in **Google Slides** — the counterpart of
-`visual-content` (which renders PDF). Where `visual-content` reads a template's
-design and writes reportlab code, this skill reads the **same** design and
-composes a **`LayoutSpec`** — a resolution-independent layout the bundled
-`scripts/slides/` renderer turns into a real Google Slides deck.
+Render a `brand-content-design` presentation template **faithfully** as a native
+Google Slides deck. The template's `sample.pdf` is the design source of truth;
+this skill **reproduces** it — it does not re-compose the design from the
+philosophy docs (independent re-composition drifts).
 
-## The Critical Understanding
+## How it works — trace, don't re-compose
 
-This is **composition, not per-template code**. There is no hardcoded layout for
-any one template. You — reading a template's `canvas-philosophy.md` and
-`template.md` — compose its `LayoutSpec`, exactly as `visual-content` composes a
-PDF for any template from the same inputs. A new template needs no new code: its
-design docs ARE the input.
+A presentation template ships `generate_sample.py` — a reportlab script that
+draws `sample.pdf`. This skill:
 
-The split:
-- **`scripts/slides/`** (TypeScript) is the *rendering engine* — like reportlab.
-  It is generic: it renders any `LayoutSpec`. Do not modify it.
-- **This skill** is the *compositor* — like the artistic layout work inside
-  `visual-content`. It produces the `LayoutSpec`.
+1. runs that script through an **instrumented canvas** (`tracer/trace-template.py`)
+   that records every draw call — text runs, rects, rounded rects, circles,
+   lines, gradients, images — as JSON;
+2. converts the capture to a `LayoutSpec` (`src/trace-to-layout.ts`);
+3. scaffolds it into Google Slides via `scripts/slides/`.
 
-## Part 1 — Inputs
+The result matches `sample.pdf` **by construction** — same geometry, content,
+colours, even syntax-highlighted code — because it *is* the PDF's draw list.
+Generic: works on any template's `generate_sample.py`, no per-template code. This
+is the shared-source fix the brand-content-design parity audit (B1) calls for.
 
-The calling command (`/presentation`, `/template-presentation`) provides, or you
-locate, a template folder under `templates/presentations/<name>/`:
+## Preconditions — check FIRST, fail loudly
 
-- `canvas-philosophy.md` — the aesthetic manifesto, **Composition Rules**, the
-  colour + typography application, component support, brand anchors.
-- `template.md` — the **Slide Types** catalogue: each type's background, focal
-  point, word ceiling, content elements.
+- **`generate_sample.py` + `sample.pdf` exist** in the template folder. Without
+  the generator there is nothing to trace — stop and tell the user (a template
+  predating the generator must be regenerated first).
+- **The brand logo is PNG or JPG.** Read `brand-philosophy.md` → Brand Assets.
+  The Slides API `createImage` cannot place an SVG — if the logo is `.svg`, stop
+  and ask the user to run `/brand-extract` (it converts SVG→PNG).
+- `python3` with `reportlab` available; the slides package built (run
+  `npm run build` in `scripts/slides/` if `dist/` is absent).
+- Credentials in the environment — `BCD_SLIDES_OAUTH_*` or
+  `BCD_SLIDES_SA_KEY_FILE` (see `scripts/slides/README.md`).
 
-Plus the project's `brand-philosophy.md` (colours, fonts, logo) and the renderer
-at `scripts/slides/` (run `npm run build` in it once if `dist/` is absent).
-Credentials: `BCD_SLIDES_OAUTH_*` or `BCD_SLIDES_SA_KEY_FILE` in the environment
-(see `scripts/slides/README.md`).
+## Steps
 
-## Part 2 — Read the design
-
-1. **`canvas-philosophy.md`** — internalise the movement, the style constraints,
-   and the **Composition Rules** section (focal-point placement, element
-   positioning, component frequency, density). This is the same reading
-   `visual-content` Part 1 does. If the file has no Composition Rules section,
-   fall back to `references/slide-composition-rules.md`.
-2. **`template.md`** — list every slide **type** and, per type, its background,
-   focal point, content elements, and word ceiling.
-3. **`brand-philosophy.md`** — extract the colour tokens and the heading / body /
-   mono fonts.
-
-## Part 3 — Compose the LayoutSpec
-
-A `LayoutSpec` is `{ pageWidth: 720, pageHeight: 405, slides: SlideTypeLayout[] }`
-— a **type library**: one `SlideTypeLayout` per slide type (the merge engine
-duplicates a type per outline entry). Geometry is **points, top-left origin**, a
-16:9 720×405 page.
-
-For **each slide type** in `template.md`, compose a `SlideTypeLayout` — an
-ordered `LayoutElement[]`. Apply the Composition Rules: place the background
-first, then the focal element off-centre per the style, then supporting elements
-as counterweight, then accents and the logo. Honour the type scale, the colour
-roles (primary ~60 / secondary ~30 / accent ~10), and the component gates from
-`canvas-philosophy.md`.
-
-**Each `LayoutElement`** carries `id`, `kind` (`text`|`shape`|`image`|`ellipse`),
-`x`/`y`/`w`/`h`, `zOrder`, and optionally `color`, `rounded`, `fontSize`,
-`fontWeight` (100–900), `fontFamily` (`heading`|`body`|`mono`), `align`, and
-`content`. `content` is `{ tag: '{{name}}' }` for a **merge placeholder** (every
-variable content slot the outline fills), `{ fixed: '…' }` for fixed copy or a
-fixed image, or omitted for a pure styled shape (accent bar, card fill).
-
-The exact schema is `scripts/slides/src/layout-spec.ts`. **Read
-`scripts/slides/src/community-talk-layout.ts` — it is a complete worked example**:
-the `community-talk` template (13 typed slides) composed into a `LayoutSpec`,
-with the coordinate helpers and the gradient/logo pattern. Compose new templates
-the same way; do not copy its numbers.
-
-Decoration the Slides API cannot fill (gradients) is baked: declare a full-bleed
-`image` element and pass a `GradientSpec` (see Part 4).
-
-## Part 4 — Build tokens, gradients, and render
-
-1. **`BrandTokens`** — `{ colors: { primary, background, textLight, textDark,
-   secondary?, accent? }, typography: { headingFont, bodyFont, monoFont? } }`
-   from `brand-philosophy.md`. `textLight` = text on light backgrounds,
-   `textDark` = text on dark.
-2. **Gradients** — if the style uses a gradient background, build a
-   `GradientSpec` (`colors`, `direction`, optional `positions`); the renderer
-   bakes it to an image.
-3. **Render** — write the command document and invoke the CLI. Always pass
-   `presentationName` — the **naming convention is `"<template name> Template"`**
-   (e.g. `"community-talk Template"`); omitting it names every scaffold
-   "Untitled Template":
+1. **Trace** the generator (its own PDF write is redirected — `sample.pdf` is
+   never touched):
    ```sh
-   echo '{"command":"scaffoldTemplate","args":{"tokens":<BrandTokens>,
-     "layoutSpec":<LayoutSpec>,"imagePaths":{"logo":"<assets/logo.png>"},
-     "gradients":{"grad":<GradientSpec>},
-     "presentationName":"<template name> Template"}}' \
-     | node scripts/slides/dist/cli.js
+   python3 scripts/slides/tracer/trace-template.py \
+     <template>/generate_sample.py /tmp/trace.json
    ```
-   The result envelope's `result.presentationId` is the rendered Google Slides
-   template.
+2. **Brand tokens** — read `brand-philosophy.md` for the **heading / body / mono
+   font names** and the colour palette; write a `BrandTokens` JSON. Do NOT
+   hardcode fonts (parity audit B2). Shape:
+   `{ colors: { primary, background, textLight, textDark, secondary?, accent? },
+   typography: { headingFont, bodyFont, monoFont? } }`.
+3. **Convert + scaffold** — `examples/render-from-trace.mjs` reads the trace +
+   the tokens JSON and emits the `scaffoldTemplate` command. Pass:
+   - `presentationName` → `"<template name> Template"`
+   - `driveFolderPath` → a folder, e.g. `["<brand>", "Slides Templates"]`
+   ```sh
+   node examples/render-from-trace.mjs /tmp/trace.json /tmp/tokens.json \
+     "<template name> Template" "<brand>,Slides Templates" \
+     | node dist/cli.js
+   ```
+   The result envelope's `result.presentationId` is the rendered deck.
+4. **Verify (MANDATORY)** — export it to PDF and compare **every slide** to the
+   template's `sample.pdf`:
+   ```sh
+   echo '{"command":"exportFile","args":{"fileId":"<id>","mimeType":"application/pdf"}}' \
+     | node dist/cli.js
+   ```
+   They should match closely (same source). Confirm no element overlaps, the
+   logo is present, colours/fonts are right. The converter reports a `skipped`
+   list (diagonal lines, stroke-only outlines — see limits); confirm nothing
+   essential was dropped.
 
-## Part 5 — Verify (MANDATORY)
+## Known limits (informed by the brand-content-design parity audit)
 
-Export the rendered deck and check it before declaring done:
-```sh
-echo '{"command":"exportFile","args":{"fileId":"<presentationId>","mimeType":"application/pdf"}}' \
-  | node scripts/slides/dist/cli.js
-```
-Decode the base64 to a PDF and review every slide: focal point placed, no
-overlaps, brand colours, text-on-background contrast, type scale, logo present.
-If the template has a `sample.pdf`, compare against it. Fix the `LayoutSpec` and
-re-render until faithful — composition is iterative, exactly as in `visual-content`.
+- **Faithful to the generator** — the Slides deck reproduces whatever
+  `generate_sample.py` draws; a generator bug (e.g. a wrong hardcoded font) is
+  inherited. The converter maps fonts to brand *roles* (heading/body/mono) and
+  resolves them through `brand-philosophy.md` tokens, so a wrong heading font
+  still renders as the brand heading font — partial B2 resilience.
+- **Diagonal lines** and **stroke-only outlines** are not yet reproduced (the
+  converter lists them in `skipped`). Horizontal/vertical lines (accent rules,
+  dividers) and all filled shapes, text, circles, images, gradients ARE.
+- **No `generate_sample.py`** → no faithful trace (parity audit G1).
+- **Custom (non-Google) fonts** are substituted with the nearest Google font and
+  the substitution reported; **gradients** are baked to images.
 
-## Part 6 — Honest API limits
+## Workflow integration
 
-Designed around, never fought (full detail in `scripts/slides/references/slides-api-guide.md`):
-- **No gradient fill** — baked to an image (Part 4).
-- **No master/layout/theme authoring** — per-slide free-form placement only.
-- **Custom (non-Google) fonts** — the renderer substitutes the nearest Google
-  font and reports it; display text in a custom face is baked to an image.
-- Google Slides is not a pixel engine like reportlab — aim for brand- and
-  structure-faithful, verified against `sample.pdf`, not pixel-identical.
-
-## Part 7 — Workflow integration
-
-Called by `/presentation` (Google Slides output target) and may be called by
-`/template-presentation` to render a Slides sample. The renderer's merge engine
-(`renderDeck`) then fills the typed template per a content outline — see
-`scripts/slides/references/slides-api-guide.md`.
-
-**Naming & folder convention** — keep Drive tidy:
-- the scaffolded **template** → name `"<template name> Template"`
-  (`presentationName`).
-- a rendered **presentation** → name `"<presentation title> - <template name>"`
-  (`renderDeck`'s `deckName`).
-- **Always pass `driveFolderPath`** on both `scaffoldTemplate` and `renderDeck`
-  so files land in a folder, not My Drive root — e.g. `["<brand>", "Slides
-  Templates"]` for templates and `["<brand>", "Presentations"]` for decks, or
-  segments mirroring the local brand-project structure. Each segment is
-  found-or-created.
-
-## Part 8 — Speaker notes
-
-Each slide type may carry speaker-notes content; the outline supplies it per
-slide (`/outline` + `template.md` carry a `Speaker notes:` slot). The renderer
-fills the notes page — a capability the PPTX path does not have.
+Called by `/presentation` (Google Slides output target). Naming + folder
+convention: a scaffolded template → `"<name> Template"` in a Drive folder; a
+rendered *presentation* (a deck filled from an outline via `renderDeck`) →
+`"<presentation title> - <template name>"`.
