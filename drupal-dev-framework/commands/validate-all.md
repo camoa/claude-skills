@@ -21,11 +21,11 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
 1. **Resolve task + project context** — same resolution as other `/validate:*` commands.
 
-2. **Determine which visual gates can run** — visual-regression and visual-parity require args (`<component>`, `<viewport>`, and for parity a `<reference>`) that this command doesn't take. So:
-   - `validate-visual-regression` → runs ONLY if the project's screenshot store already has at least one `<component>/<viewport>` with `role: baseline`. Invokes itself for EACH known component+viewport pair. If the store is empty → skipped with a helpful message.
-   - `validate-visual-parity` → v1 ALWAYS skips in the `/validate:all` flow (no way to know the user's intended reference per-invocation). User runs `/validate:visual-parity` manually with explicit args.
+2. **Determine which visual gates can run.**
+   - `validate-visual-regression` (v4.13.0+, registry-driven) → runs when ALL three hold: (a) `project_state.md` has `**Visual Review:** enabled`, (b) `<codePath>/tests/visual/` exists, and (c) the surface registry has at least one surface with `visual_regression` in `gates[]`. When all three hold, run the gate via `scripts/visual-regression-gate.sh` (step 4). Otherwise → `skipped` with the contextual reason: `"visual review not enabled — run /setup-visual-regression"` / `"tests/visual/ not set up"` / `"registry has no visual_regression surfaces"`.
+   - `validate-visual-parity` (v4.14.0+, registry-driven) → ALWAYS `skipped` in the `/validate:all` flow, with the reason `"visual-parity is design-implementation-scoped — run /validate:visual-parity, or let /review auto-run it on design tasks"`. Parity is no longer reference-per-invocation (the rework made it registry-driven), but it is not a *universal* gate the way tdd/solid/security are: it applies only when a task implements a designed surface. `/review`'s change-impact dispatcher auto-runs it (soft) on exactly those tasks; `/validate:all` runs the universal set and leaves parity to the dispatcher + standalone invocation.
 
-   v2 candidate: per-task "visual coverage manifest" declaring which components and references to include in `/validate:all`. For now, user picks.
+   The surface registry (`<codePath>/.visual-review/registry.yml`) is the "visual coverage manifest" — it declares which surfaces `/validate:all` covers. No per-component iteration: the committed `tests/visual/` suite handles the surface × viewport loop.
 
 3. **Run the 5 non-visual gates sequentially**:
    - `/drupal-dev-framework:validate-tdd` → capture envelope
@@ -38,14 +38,14 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
    For each: execute the flow of the target command within this command's execution context (same pattern as `/scope` invocation from `/research` — do NOT shell out to sibling slash commands). Produce the result envelope per `references/validation-gate-result.md`.
 
-4. **Run visual-regression for each stored baseline** (step 2 gate): if the store has components, iterate. For each `<component>/<viewport>` pair, invoke the visual-regression flow with the stored baseline. The user may get a diff-classification prompt per component if any diffs are found — that's expected. Sequence matters: let the user classify each before moving to the next (do NOT batch the prompts).
+4. **Run visual-regression as a single suite invocation** (step 2 gate): when the three conditions hold, invoke `scripts/visual-regression-gate.sh <registry_path> <codePath>` (Library-First — call it via the `Bash` tool, do NOT inline the gate logic). The script runs the whole committed `tests/visual/` suite in one `npx playwright test` invocation and returns the aggregate `surfaces[]` JSON. There is no per-component loop — the suite handles the surface × viewport matrix.
 
-   **Per-component result aggregation:** multiple per-baseline runs collapse into a SINGLE entry in the aggregate `gates[]` with `gate: "visual-regression"`. Verdict is the worst across all runs (`fail` if any failed > `warning` if any warned > `pass` if all passed; `skipped` only if ALL runs skipped). Per-component details go into `messages[]`:
-   > `["home-hero/1920x1080: pass", "article-card/375x812: fail (4.2% diff, classified regression)", "admin-toolbar/1920x1080: pass (intentional change accepted, baseline rotated)"]`
+   **Result aggregation:** the gate's per-surface results collapse into a SINGLE entry in the aggregate `gates[]` with `gate: "visual-regression"`. Verdict is the worst across all surfaces (`fail` if any failed > `warning` > `pass`; `skipped` only if all skipped). Per-surface detail goes into `messages[]`:
+   > `["home-hero: pass", "article-card: fail (4.2% diff)", "footer: pass"]`
 
-   This keeps the aggregate envelope's `gates[]` closed to the 7 known IDs; per-component fan-out lives in `messages[]`.
+   This keeps the aggregate envelope's `gates[]` closed to the 7 known IDs; per-surface fan-out lives in `messages[]`.
 
-   **Non-interactive (CI) mode:** when `/validate:all` runs without a TTY or with an env flag indicating CI (detect via `[ -t 0 ] || [ -n "$CI" ]`), visual-regression is ENTIRELY SKIPPED with a single entry: `{"gate": "visual-regression", "verdict": "skipped", "messages": ["non-interactive mode: visual regression requires interactive classification; run /validate:visual-regression manually or in interactive session"]}`. Rationale: the classification prompt has no sensible non-interactive default — defaulting to `regression` would fail every diff (noisy); defaulting to `intentional` would silently rotate baselines (dangerous). Explicit skip is honest.
+   **Non-interactive (CI) mode:** when `/validate:all` runs without a TTY or with `$CI` set (detect via `[ -t 0 ] || [ -n "$CI" ]`), pass `--ci` to `visual-regression-gate.sh`. In `--ci` mode the suite still runs, but any diff is recorded as `fail` with no classification prompt and no baseline write — defaulting to `intentional` would silently move baselines (dangerous); defaulting to `regression` is the honest CI outcome. This matches v3.13.0's CI posture (interactive classification only happens in an interactive session).
 
 5. **Aggregate into the `_all.json` envelope** (per `references/validation-gate-result.md` §6):
 
@@ -61,7 +61,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
        {"gate": "security", "verdict": "pass"},
        {"gate": "guides", "verdict": "fail", "messages": ["..."]},
        {"gate": "visual-regression", "verdict": "skipped", "messages": ["No baselines in store"]},
-       {"gate": "visual-parity", "verdict": "skipped", "messages": ["visual-parity requires explicit reference; run manually"]}
+       {"gate": "visual-parity", "verdict": "skipped", "messages": ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
      ],
      "summary": {"pass": 3, "warning": 1, "fail": 1, "skipped": 2, "total": 7},
      "discoverability_hint": "For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
@@ -86,7 +86,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
      security              pass       no findings
      guides                fail       no guide citations in research.md
      visual-regression     skipped    no baselines in store yet
-     visual-parity         skipped    run manually with <reference>
+     visual-parity         skipped    design-scoped — /validate:visual-parity or /review
 
      Totals: 3 pass · 1 warning · 1 fail · 2 skipped
 
@@ -112,7 +112,7 @@ Gates run one at a time. Rationale: simpler error handling, cache locality (git 
 
 - Does NOT wrap `/code-quality:lint`, `:coverage`, `:review`, `:audit`, `:ultrareview`, `:architecture-debate`, `:security-debate`. These stay invokable via their native `/code-quality:*` namespace. `/validate:all` surfaces them as available via the discoverability hint.
 - Does NOT auto-skip gates based on AI-inferred applicability. v1 runs every gate (respects each gate's own skip semantics — e.g., `/validate:guides` skips if no phase artifacts exist). AI-driven skipping is a v2 candidate.
-- Does NOT enforce `/validate:visual-parity` to run. It requires an explicit reference per invocation; user runs it manually when they have a comp in hand.
+- Does NOT run `/validate:visual-parity`. Parity is registry-driven (v4.14.0+) but design-implementation-scoped, not universal — `/review`'s change-impact dispatcher auto-runs it (soft) on design tasks, and the user can invoke `/validate:visual-parity` standalone. `/validate:all` runs the universal gate set only.
 
 ## Error cases
 

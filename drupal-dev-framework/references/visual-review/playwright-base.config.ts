@@ -10,8 +10,9 @@
  *
  * It documents the SHARED CONFIG CONTRACT for the epic's two runtimes:
  *
- *   - E2E (behavioral)        — ATK + Playwright            → tests/e2e/
- *   - Visual regression+parity — @lullabot/playwright-drupal → tests/visual/
+ *   - E2E (behavioral)   — ATK + Playwright                      → tests/e2e/
+ *   - Visual regression  — @lullabot/playwright-drupal           → tests/visual/
+ *   - Visual parity      — @lullabot/playwright-drupal+pixelmatch → tests/parity/
  *
  * Both runtimes ride ONE `playwright.config.ts`. They differ only at the
  * test-library layer and are separated by distinct `projects[]` + `testDir`
@@ -71,14 +72,16 @@ export default defineConfig({
    *   { name: 'e2e-chromium',    testDir: './tests/e2e',
    *     use: { ...devices['Desktop Chrome'] } }
    *
-   * `/setup-visual-regression` (Task C) appends:
-   *   { name: 'visual-chromium', testDir: './tests/visual',
-   *     use: { ...devices['Desktop Chrome'] } }
+   * `/setup-visual-regression` (Task C) appends one entry per derived viewport:
+   *   { name: 'visual-chromium-<viewport>', testDir: './tests/visual',
+   *     use: { ...devices['Desktop Chrome'], viewport: {...} } }
+   *
+   * `/setup-visual-parity` (Task D) appends one entry per registry viewport:
+   *   { name: 'parity-chromium-<viewport>', testDir: './tests/parity',
+   *     use: { ...devices['Desktop Chrome'], viewport: {...} } }
    *
    * Setup is idempotent and order-independent: each command adds ONLY its own
-   * entry and leaves any sibling entry untouched. Multi-viewport visual runs
-   * are expressed inside `tests/visual/` test files (driven by the surface
-   * registry's viewport matrix), not as extra `projects[]` rows here.
+   * `<runtime>-chromium-*` entries and leaves every sibling entry untouched.
    * -------------------------------------------------------------------- */
   projects: [
     // (empty in the template — populated by /setup-atk and /setup-visual-regression)

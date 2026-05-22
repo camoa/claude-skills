@@ -4,6 +4,14 @@
 # Usage:
 #   screenshot-store-write.sh write-baseline <project> <component> <viewport> <source.png> <captured_by> <originating_task>
 #   screenshot-store-write.sh write-parity-reference <project> <component> <viewport> <source.png> <captured_by> <originating_task> <source_type> <source_uri>
+#   screenshot-store-write.sh write-baseline-codepath <codePath> <surface-id> <png-filename> <viewport-name> <captured_by> <originating_task>
+#
+# write-baseline-codepath (v4.13.0, Task C — codePath-native layout):
+#   Writes ONLY the provenance .meta.json sidecar next to a baseline PNG that
+#   Playwright has already written (via `npx playwright test --update-snapshots`).
+#   The PNG must already exist at
+#   <codePath>/tests/visual/<surface-id>.spec.ts-snapshots/<png-filename>.
+#   No rotation, no .previous tier — git holds the baseline history.
 #
 # Performs the 6-step rotation from architecture §4.4:
 #   1. Compute sha256 of existing <viewport>.png (becomes prior_hash)
@@ -43,6 +51,76 @@ emit_result() {
   # $1 = status ("ok"|"rollback"|"error"), $2 = warnings JSON array, $3 = summary object
   jq -nc --arg st "$1" --argjson w "$2" --argjson s "$3" '{status:$st, warnings:$w, summary:$s}'
 }
+
+# ─── write-baseline-codepath (v4.13.0 — codePath-native sidecar) ─────────────
+# Handled up front: a distinct flow from the rotating .screenshots/ writer.
+if [ "$MODE" = "write-baseline-codepath" ]; then
+  if [ $# -ne 7 ]; then usage; exit 2; fi
+  CODE_PATH="$2"; SURFACE_ID="$3"; PNG_NAME="$4"; VP_NAME="$5"; CB="$6"; OT="$7"
+
+  if [ ! -d "$CODE_PATH" ]; then
+    emit_result "error" '[{"code":"codepath_missing","detail":"codePath does not exist"}]' '{}'
+    exit 3
+  fi
+  if ! echo "$SURFACE_ID" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
+    emit_result "error" '[{"code":"invalid_surface_id","detail":"surface id must match ^[a-z0-9][a-z0-9-]*$"}]' '{}'
+    exit 2
+  fi
+  if ! echo "$VP_NAME" | grep -qE '^[a-z0-9][a-z0-9-]*$'; then
+    emit_result "error" '[{"code":"invalid_viewport","detail":"viewport name must match ^[a-z0-9][a-z0-9-]*$"}]' '{}'
+    exit 2
+  fi
+  case "$PNG_NAME" in
+    *.png) ;;
+    *) emit_result "error" '[{"code":"invalid_png_name","detail":"png-filename must end in .png"}]' '{}'; exit 2 ;;
+  esac
+  case "$PNG_NAME" in
+    */*|..*) emit_result "error" '[{"code":"invalid_png_name","detail":"png-filename must be a bare filename"}]' '{}'; exit 2 ;;
+  esac
+  # captured_by enum — v4.13.0 adds lullabot-playwright + migrated-from-screenshots-store.
+  case "$CB" in
+    playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
+    *)
+      emit_result "error" '[{"code":"invalid_captured_by","detail":"captured_by not in the v4.13.0 enum"}]' '{}'
+      exit 2 ;;
+  esac
+
+  SNAP_DIR="$CODE_PATH/tests/visual/$SURFACE_ID.spec.ts-snapshots"
+  PNG_PATH="$SNAP_DIR/$PNG_NAME"
+  if [ ! -f "$PNG_PATH" ]; then
+    emit_result "error" '[{"code":"png_missing","detail":"baseline PNG not found — Playwright must write it first via --update-snapshots"}]' '{}'
+    exit 3
+  fi
+
+  META_PATH="$SNAP_DIR/${PNG_NAME%.png}.meta.json"
+  PRIOR_HASH_JSON='null'
+  if [ -f "$META_PATH" ]; then
+    EXISTING=$(jq -r '.sha256 // empty' "$META_PATH" 2>/dev/null)
+    [ -n "$EXISTING" ] && PRIOR_HASH_JSON=$(jq -nc --arg h "$EXISTING" '$h')
+  fi
+
+  NEW_HASH=$(sha256sum "$PNG_PATH" | awk '{print $1}')
+  NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  META_JSON=$(jq -nc \
+    --arg vp "$VP_NAME" --arg ca "$NOW_ISO" --arg sha "$NEW_HASH" \
+    --arg ot "$OT" --arg cb "$CB" --argjson ph "$PRIOR_HASH_JSON" '
+    { schema_version: "1.0", role: "baseline", viewport: $vp,
+      captured_at: $ca, sha256: $sha, originating_task: $ot,
+      captured_by: $cb, prior_hash: $ph, source: null }')
+
+  if ! echo "$META_JSON" > "$META_PATH" 2>/dev/null; then
+    emit_result "error" '[{"code":"meta_write_failed"}]' '{}'
+    exit 3
+  fi
+
+  SUMMARY=$(jq -nc --arg s "$SURFACE_ID" --arg vp "$VP_NAME" \
+    --arg png "$PNG_PATH" --arg meta "$META_PATH" --arg sha "$NEW_HASH" '
+    { surface_id: $s, viewport: $vp, png_path: $png,
+      meta_path: $meta, sha256: $sha }')
+  emit_result "ok" '[]' "$SUMMARY"
+  exit 0
+fi
 
 case "$MODE" in
   write-baseline)

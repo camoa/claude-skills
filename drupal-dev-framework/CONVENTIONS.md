@@ -54,13 +54,13 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 - `validate-tdd` / `validate-solid` / `validate-dry` / `validate-security` — thin wrappers over `code-quality-tools` skills; add task context + persistence + shared envelope
 - `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides. **Hardened in v4.1.0 to dual-mode** — soft-nudge standalone, hard-block-capable when invoked from `/review` (via `<!-- /review:hard-block -->` capability marker + `--hard-block` argv flag). **v4.3.0 adds catalog-grounded code-change inference** — gate collects changed files from session edits + `implementation.md` Files Created/Modified + git working tree, then dispatches the `guides-matcher` agent (haiku, read-only) to match them against the cached dev-guides catalog. Slugs the agent matches but no artifact citation covers → `domain_coverage_gaps[]` → demote `pass` → `warning`. Symmetric `/implement` Step 3 component-aware preflight runs `guides-matcher` in plan mode against architecture.md planned components and augments the keyword-detect auto-load list. Catalog is the only taxonomy — no parallel hardcoded map. Suppress gate inference with `--no-code-inference`. See `references/guides-matcher-schema.md`.
 - `validate-playbook-adherence` (**new in v4.1.0**) — heuristic cite-checker for loaded plays; literal-string match (`Grep -F`) per match-type; section-aware skip on `Rejected` / `Considered Alternatives` / `Out of Scope` headings; `--hard-block` / `--strict` / `--invoked-by` flags
-- `validate-visual-regression <component> <viewport>` — captures via Playwright MCP, diffs via `odiff`/`pixelmatch`, prompts regression/intentional/cancel on diff. Intentional approval rotates baseline inline (no deferred approval in v1)
-- `validate-visual-parity <component> <viewport> <reference>` — compares against design comp (PNG/JPG, Figma URL via MCP, HTML file headless-rendered). React/PSD/Sketch deferred to v2
-- `validate-all` — sequential orchestrator; non-interactive CI mode skips visual gates
+- `validate-visual-regression` — **reworked v4.13.0 (Task C)**: registry-driven, runs the committed `tests/visual/` suite on `@lullabot/playwright-drupal`; multi-viewport batch; a11y baseline pairing; mask regions; classification UX kept. No positional args (registry-driven). `gate_type: visual_regression`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Regression Gate` below.
+- `validate-visual-parity` — **reworked v4.14.0 (Task D)**: registry-driven, runs the committed `tests/parity/` suite on `@lullabot/playwright-drupal` + `pixelmatch`; compares the build against an external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`); emits a TWO-LAYER diff — a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift; `[g]/[i]/[c]` classification; no positional args (registry-driven); `gate_type: visual_parity`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Parity Gate` below.
+- `validate-all` — sequential orchestrator; non-interactive CI mode runs visual-regression with `--ci` (any diff → `fail`, no prompts, no baseline writes); skips visual-parity (design-implementation-scoped — runs via `/review` or standalone)
 
 **Shared result envelope** (per `references/validation-gate-result.md` v1.0): every gate emits `{schema_version, gate, task, run_at, verdict, details, messages}`. Verdicts: `pass | warning | fail | skipped`. Persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append).
 
-**Screenshot store** (per `references/screenshot-store-schema.md` v1.0) at `<memory_project>/.screenshots/<component>/<viewport>.{png,meta.json}`. 9-field `.meta.json` with `role`, `captured_by` enum, `prior_hash` chain, `source` for parity refs. 1-deep `.previous` history.
+**Screenshot store** (per `references/screenshot-store-schema.md` v1.0): **codePath-native since v4.13.0** — baselines are committed Playwright snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/`, with `.meta.json` provenance sidecars in-tree. The 9-field `.meta.json` schema is unchanged (`role`, `captured_by` enum, `prior_hash`, `source`); only the location moved (and the legacy `.previous` rotation is retired — git holds history). The v3.13.0 memory-project `.screenshots/` store is a migration source only — `migrate-screenshots-to-codepath.sh` imports it.
 
 **Soft-nudge posture:** `fail` signals but never blocks; visual diffs require explicit user classification; `/validate:all` CI mode explicitly skips prompts rather than silent-defaulting.
 
@@ -246,7 +246,7 @@ Two-layer Drupal best-practices system:
 - `validator-docs` (haiku, worktree) — owns `guides`
 - `validator-visual` (sonnet, none) — owns `visual-regression` (fanned out per `<component>/<viewport>`)
 
-`validate-visual-parity` is NOT in the roster (deferred to v2 Set B5 — inherits `/validate:all`'s `<reference>`-arg limitation).
+`validate-visual-parity` is NOT in the fixed team roster — it is design-implementation-scoped (not a universal gate) and auto-runs soft via `/review`'s change-impact dispatcher on design tasks. Adding it to the parallel `validate-team` roster is a v2 candidate.
 
 **Manifest contract** (per `references/team-manifest-schema.md` v1.0): lead writes `<task>/validations/tmp/team-manifest.json` before spawn. All paths absolute; `visual_fanout[]` present only on visual gates; write-once; teammates treat it read-only.
 
@@ -393,6 +393,78 @@ Key conventions:
 - `<!-- visual-review:dispatch-ready -->` in `commands/validate-e2e.md` is what makes `/review`'s dispatcher invoke this gate. Never remove it.
 - ATK's VR mode is NOT used — Task C (Lullabot) owns visual regression.
 - `/validate:a11y` and `/validate:perf` are v2-deferred.
+
+## Visual Regression Gate (v4.13.0+)
+
+`/setup-visual-regression` installs **`@lullabot/playwright-drupal` + Playwright**
+and scaffolds `tests/visual/`. `/validate:visual-regression` runs the gate and
+emits `_visual_regression.json` + the standard validation envelope. Task C of the
+`visual_and_e2e_review_gates` epic — an **evolve** of the v3.13.0 gate.
+
+Key conventions:
+- **Screenshot store is codePath-native.** Baselines are committed Playwright
+  snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/`; `.meta.json`
+  provenance sidecars travel in-tree. The v3.13.0 `.screenshots/` memory-project
+  store is retired (migration source only). Resolved in Task C `research.md` Q1
+  (fork option **(b+)**).
+- **Generated specs name the test exactly `'visual regression'`.** That fixes
+  Playwright's snapshot ordinal at `-1-` so baseline filenames are deterministic.
+  Renaming the test orphans every committed baseline — see `tests/visual/README.md`.
+- **No baseline write without an explicit `[y]`.** `baseline-manager.sh` runs in
+  plan mode first (prints the surfaces it would capture, writes nothing); the
+  command shows the plan + `[y]/[n]`; only `--confirmed` runs `--update-snapshots`.
+  Every regeneration is logged to `baseline-history.jsonl`.
+- **Missing baseline = loud `fail`** with a `--bootstrap` remediation message —
+  never a silent auto-create.
+- **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-regression.md`
+  is what makes `/review`'s dispatcher invoke this gate. Never remove it.
+- **Registry shared with `/setup-atk`** at `<codePath>/.visual-review/registry.yml`;
+  one `playwright.config.ts` carries both `e2e-*` and `visual-chromium-*` projects.
+  Setup is idempotent + order-independent.
+- a11y baseline pairing is **warning-only** in v1 (per-surface `a11y_block: true`
+  is a v2 candidate).
+
+## Visual Parity Gate (v4.14.0+)
+
+`/setup-visual-parity` adds parity checking **on top of** the visual-regression
+stack (it hard-depends on `/setup-visual-regression`): it installs
+`pixelmatch` + `pngjs`, scaffolds `tests/parity/`, and appends
+`parity-chromium-*` projects. `/validate:visual-parity` runs the gate and emits
+`_visual_parity.json` + the standard envelope. Task D of the
+`visual_and_e2e_review_gates` epic — an **evolve** of the v3.13.0 gate.
+
+Key conventions:
+- **Parity compares against an EXTERNAL reference**, not a committed baseline —
+  `figma` / `react-template` / `html-template` / `image` / `prod-url`. There is
+  **no baseline machinery**: a reference is updated by re-exporting it + editing
+  `registry.yml`, never by the gate.
+- **Two-layer diff.** A coarse `pixelmatch` pixel-% (loose ~`0.05` tolerance) plus
+  a structured CSS-actionable diff (`getComputedStyle` → `{selector, property,
+  build, reference}` rows). A bare pixel-% is never the verdict — a surface fails
+  on pixel drift **or** a non-empty CSS diff.
+- **CSS diff is tiered by reference type.** Full for renderable references
+  (`html-template`/`react-template`/`prod-url` — both sides have a DOM);
+  `build-only` and honestly labelled for static `figma`/`image` PNGs (no DOM).
+- **Comparison logic lives in `references/visual-review/parity-compare.mjs`**,
+  copied once into `<codePath>/tests/parity/`; generated specs `import` it. Its
+  external deps (`@playwright/test`/`pngjs`/`pixelmatch`) load lazily so the pure
+  helpers stay offline-testable by `tests/parity-compare-spec.mjs`.
+- **Specs carry no untrusted data.** `<id>.spec.ts` files are **verbatim copies**
+  (no token substitution) — each derives its surface id from its filename and reads
+  per-surface config from `tests/parity/parity-surfaces.json`. The engine
+  charset-validates `surfaceId`/viewport and confines every file reference to
+  `PARITY_CODE_PATH`. This closed a paper-test CRITICAL (registry → spec-source code
+  injection); never reintroduce token substitution into the generated spec.
+- **`parity_reference` lives in the surface registry** (schema v1.1 — see
+  `surface-registry-schema.md` §3.4). Static references are committed under
+  `tests/parity/references/`; `parity-results/` (per-run captures + diffs) is
+  gitignored.
+- **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-parity.md`
+  makes `/review`'s dispatcher auto-run parity on design-implementation tasks.
+  Never remove it. Parity is NOT part of the VR/E2E per-task opt-in question.
+- **`react-template` v1 scope:** a pre-rendered HTML file or a served URL — a raw
+  `.jsx`/`.tsx` source path is skipped with guidance (headless React rendering
+  needs a build step, deferred to v2).
 
 ## General
 - Current state only — no historical narratives

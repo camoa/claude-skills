@@ -40,6 +40,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 5. **Alignment retrofit + phase-level offer.** Invoke `alignment-reader`. If `task_level.present: false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-3 scope (default `[n]`); on `[y]` execute `--phase 3` inline. Never block.
 
 6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from core/contrib, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a Drupal API, contrib module, or pattern not already in `loadedGuides[]`, do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
+   - **Design-drives-build nudge (v4.14.0+).** If `project_state.md` carries `**Visual Review:** enabled` AND the surface registry holds at least one surface whose `parity_reference.type` is `react-template` or `html-template`, print ONE soft-nudge line: *"A buildable design reference is registered for surface `<id>` — if this task implements that surface, load the reference as a build input, not only a `/validate:visual-parity` check."* Silent when there is no registry, no enabled visual review, or no buildable parity reference. Never blocks — a strong nudge, not enforcement.
 
 7. **Author/update implementation.md.** Standard sections: Step Plan (numbered), Files Created/Modified, Progress (`[ ]`/`[x]` per step), TDD Log, Notes, Blockers. Update `task.md` Phase 3 in-progress.
 
@@ -63,6 +64,23 @@ For each acceptance criterion:
 5. Developer runs tests.
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
 7. Repeat until task complete.
+
+## Verify-and-promote nudge (v4.15.0+)
+
+When a change is implemented and the developer signals it is done, print **one
+declinable soft-nudge** (once per change — not per file, never re-asked):
+
+> Want me to verify this change live — drive the DDEV site / `drush` / the browser to
+> confirm it actually works and renders as intended? And if the change is worth
+> protecting against regression, I can promote it to a committed gate:
+> `/setup-atk --add-journey` (behavioural), or `/setup-visual-regression --add-surface`
+> / `/setup-visual-parity --add-surface` (visual).
+
+The live verification itself uses Claude Code's built-in `verify` capability — this
+nudge only surfaces it at the right moment and bridges to the epic's committed review
+gates. Soft-nudge posture (matches the change-impact dispatcher's recommender model):
+never blocks, never a gate, no audit. Skip it silently for a docs-only or
+non-functional change.
 
 ## Pointers
 
