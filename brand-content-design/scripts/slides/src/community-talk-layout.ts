@@ -30,6 +30,8 @@ const CODE_FG = '#E6E6E6';
 /* ---- coordinate conversion: 1920×1080 reportlab → 720×405 top-left ---- */
 const SCALE = 720 / 1920; // 0.375
 const SRC_H = 1080;
+/** Aspect ratio of the Palcera logo asset (source is 2024×1024 px). */
+const LOGO_ASPECT = 2024 / 1024;
 
 interface TxtOpts {
   id: string;
@@ -125,9 +127,23 @@ function gradientBg(): LayoutElement {
   return { id: 'grad', kind: 'image', x: 0, y: 0, w: 720, h: 405, zOrder: 0, content: { fixed: 'gradient' } };
 }
 
+/** A tagged image placeholder authored in source coordinates (bottom-edge y). */
+function imgBox(o: { id: string; x: number; bottom: number; w: number; h: number; tag: string; z?: number }): LayoutElement {
+  return {
+    id: o.id,
+    kind: 'image',
+    x: o.x * SCALE,
+    y: (SRC_H - o.bottom - o.h) * SCALE,
+    w: o.w * SCALE,
+    h: o.h * SCALE,
+    zOrder: o.z ?? 2,
+    content: { tag: o.tag },
+  };
+}
+
 /** Brand logo, bottom-right (fixed image — resolved via ScaffoldAssets.images). */
 function logo(srcX = 1690, srcBottom = 58, srcW = 150): LayoutElement {
-  const h = srcW / (2024 / 1024);
+  const h = srcW / LOGO_ASPECT;
   return {
     id: 'logo',
     kind: 'image',
@@ -291,7 +307,7 @@ const IMAGE: SlideTypeLayout = {
     ...bars('bar', 138, 590),
     txt({ id: 'cap', x: 138, base: 500, size: 28, w: 600, color: PALE, weight: 300, family: 'body', tag: '{{caption}}', lines: 3 }),
     rect({ id: 'panel', x: 820, bottom: 150, w: 950, h: 780, color: NAVY, rounded: true, z: 1 }),
-    { id: 'img', kind: 'image', x: 820 * SCALE, y: (SRC_H - 150 - 780) * SCALE, w: 950 * SCALE, h: 780 * SCALE, zOrder: 2, content: { tag: '{{image}}' } },
+    imgBox({ id: 'img', x: 820, bottom: 150, w: 950, h: 780, tag: '{{image}}', z: 2 }),
     logo(),
   ],
 };

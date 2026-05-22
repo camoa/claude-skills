@@ -184,6 +184,19 @@ describe('buildSlideRequests', () => {
     expect(built.requests.some((r) => r.updateParagraphStyle?.style?.alignment === 'CENTER')).toBe(true);
   });
 
+  it('falls back to the body font when a `mono` element has no monoFont token', () => {
+    const layout: SlideTypeLayout = {
+      type: 'X',
+      elements: [
+        { id: 'c', kind: 'text', x: 0, y: 0, w: 200, h: 30, zOrder: 0, content: { fixed: 'x' }, fontFamily: 'mono', fontWeight: 400 },
+      ],
+    };
+    // `tokens` has no monoFont — `fontFor` must fall back to the body font.
+    const built = buildSlideRequests(layout, tokens, {});
+    const style = built.requests.find((r) => r.updateTextStyle?.style?.weightedFontFamily)?.updateTextStyle;
+    expect(style?.style?.weightedFontFamily?.fontFamily).toBe('Lora');
+  });
+
   it('throws when a generated objectId would exceed the 50-char API limit', () => {
     const longLayout: SlideTypeLayout = {
       type: 'Content',
