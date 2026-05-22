@@ -1,206 +1,192 @@
 #!/usr/bin/env python3
 """
-Template tracer — capture a template's exact layout from its reportlab generator.
+Template tracer — capture a template's exact layout via the committed
+generator-library contract.
 
-`brand-content-design` templates ship a `generate_sample.py` that draws the
-template's `sample.pdf` with reportlab. This script runs that generator through
-an **instrumented `Canvas`** that records every primitive draw call — text runs
-(with position, font, size, colour, alignment), rectangles, rounded rectangles,
-circles, lines, gradients, images — as structured JSON, one page at a time.
-
-The Slides renderer converts that JSON into a `LayoutSpec` (see
-`src/trace-to-layout.ts`), so the Google Slides output reproduces the PDF *by
-construction* — same geometry, same content. Generic: works on any template's
-`generate_sample.py`, no per-template code.
+After the Template Generator Contract shipped (sibling `scripts/generator/`), a
+template is a thin module importing `DeckCanvas`, `FieldSpec`, `SlideType`,
+`FontSpec`, `build` from that library. The tracer is now just another backend
+alongside `PdfCanvas` and `PptxCanvas`: a `TracingCanvas(DeckCanvas)` that
+records every public draw call to JSON instead of rendering. Because it sits at
+the spec layer, it captures the `field=` tag on each fillable text element
+(C4) — which is exactly what `src/trace-to-layout.ts` needs to emit
+`{ field, sample }` LayoutElement content.
 
 Usage:
-    python3 trace-template.py <path/to/generate_sample.py> <out-trace.json>
+    python3 trace-template.py <template-dir> <out.json>
 
-The generator's own PDF write is redirected to a throwaway file — the template's
-`sample.pdf` is never touched.
+`<template-dir>` must expose a `deck_layout` module with `SLIDES`, `FONTS`,
+`FONT_DIR` (the conformance-check contract). Static asset bytes (icon PNGs,
+logos, photos) drawn by `image()` are copied to `<out.json>-assets/` so the
+trace stays valid after the generator's tempdirs are cleaned up.
+
+Output JSON shape (one entry per page):
+    {
+      "pageSize": [W, H],
+      "pages": [
+        [
+          {"op": "solid", "color": "#RRGGBB"},
+          {"op": "gradient", "stops": [[pos, "#RRGGBB"], ...]},
+          {"op": "text", "x", "y", "w", "text", "field": <str|null>,
+           "font", "size", "color", "align", "valign"},
+          {"op": "rect" | "roundRect" | "circle" | "line" | "image", ...},
+          ...
+        ],
+        ...
+      ]
+    }
+
+`field` is `null` for static chrome (logos, decoration); non-null for every
+fillable draw. The text op carries the call-site default in `text` AND the
+field tag — `slides/src/trace-to-layout.ts` uses both: `sample = text`,
+`field = field`.
 """
+import importlib
 import json
 import os
 import shutil
 import sys
-import tempfile
 
-from reportlab.pdfgen import canvas as _canvas_mod
+# Locate the committed generator library: ../../generator/ relative to this file.
+_GEN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'generator'))
+sys.path.insert(0, _GEN_DIR)
 
-
-def _rgb(color):
-    """A reportlab colour → an [r,g,b] list of 0–1 floats."""
-    try:
-        return [round(color.red, 4), round(color.green, 4), round(color.blue, 4)]
-    except AttributeError:
-        return [0, 0, 0]
+from deck_canvas import DeckCanvas, build, WIDTH, HEIGHT  # noqa: E402
 
 
-_pages = []          # finished pages, each a list of op dicts
-_current = []        # ops on the page being drawn
-_pagesize = [1920, 1080]
-_assets_dir = None   # persistent dir; drawn images are copied here
-_img_counter = 0     # makes copied-image filenames unique
+class TracingCanvas(DeckCanvas):
+    """A DeckCanvas backend whose 'render' is recording the calls."""
 
+    def __init__(self, assets_dir=None):
+        self.out = '<trace>'
+        self.pages = []
+        self._current = None
+        self._assets_dir = assets_dir
+        self._img_counter = 0
 
-class RecordingCanvas(_canvas_mod.Canvas):
-    """A reportlab Canvas that records every draw call and still renders."""
+    # ---- page lifecycle (C1) ----
+    def start_slide(self):
+        self._current = []
+        self.pages.append(self._current)
 
-    def __init__(self, filename, *args, **kwargs):
-        # Redirect the generator's PDF to a throwaway — never touch sample.pdf.
-        self._trace_throwaway = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
-        super().__init__(self._trace_throwaway.name, *args, **kwargs)
-        self._font = ('Helvetica', 12)
-        self._fill = [0, 0, 0]
-        self._stroke = [0, 0, 0]
-        self._linewidth = 1.0
-        global _pagesize, _current
-        _pagesize = [self._pagesize[0], self._pagesize[1]]
-        _current = []
+    def save(self):
+        # Nothing to flush; pages were collected as they were drawn.
+        pass
 
-    # --- state tracking ---
-    def setFont(self, name, size, *a, **kw):
-        self._font = (name, size)
-        return super().setFont(name, size, *a, **kw)
+    # ---- public text() override (C2 + C4) — capture `field` at the spec layer ----
+    def text(self, s, x, y, w, font, size, color, align='left', valign='top',
+             field=None):
+        # Mirror the base's content+align resolution exactly, then record.
+        value = s
+        if field is not None and self.content and field in self.content:
+            value = self.content[field]
+        if align == 'center':
+            bx = x - w / 2
+        elif align == 'right':
+            bx = x - w
+        else:
+            bx = x
+        self._current.append({
+            'op': 'text',
+            'x': bx, 'y': y, 'w': w,
+            'text': value,
+            'field': field,
+            'font': font, 'size': size, 'color': color,
+            'align': align, 'valign': valign,
+        })
 
-    def setFillColor(self, color, *a, **kw):
-        self._fill = _rgb(color)
-        return super().setFillColor(color, *a, **kw)
+    # ---- _-primitive recorders (C1) ----
+    def _text_block(self, *a):
+        # text() captures everything we need; the abstract _text_block route
+        # is the PDF/PPTX backend's internal seam — irrelevant to the trace.
+        pass
 
-    def setFillColorRGB(self, r, g, b, *a, **kw):
-        self._fill = [r, g, b]
-        return super().setFillColorRGB(r, g, b, *a, **kw)
+    def _solid(self, color):
+        self._current.append({'op': 'solid', 'color': color})
 
-    def setStrokeColor(self, color, *a, **kw):
-        self._stroke = _rgb(color)
-        return super().setStrokeColor(color, *a, **kw)
+    def _gradient(self, stops):
+        # Stops normalize to a JSON-serializable list of [position, hex].
+        self._current.append({
+            'op': 'gradient',
+            'stops': [[float(p), c] for p, c in stops],
+        })
 
-    def setStrokeColorRGB(self, r, g, b, *a, **kw):
-        self._stroke = [r, g, b]
-        return super().setStrokeColorRGB(r, g, b, *a, **kw)
+    def _rect(self, x, y, w, h, color):
+        self._current.append({
+            'op': 'rect', 'x': x, 'y': y, 'w': w, 'h': h, 'color': color,
+        })
 
-    def setLineWidth(self, width, *a, **kw):
-        self._linewidth = width
-        return super().setLineWidth(width, *a, **kw)
+    def _round_rect(self, x, y, w, h, r, fill, stroke, stroke_w):
+        self._current.append({
+            'op': 'roundRect',
+            'x': x, 'y': y, 'w': w, 'h': h, 'r': r,
+            'fill': fill, 'stroke': stroke, 'strokeW': stroke_w,
+        })
 
-    # --- recorded draw calls ---
-    def _text(self, x, y, text, align):
-        _current.append({'op': 'text', 'x': x, 'y': y, 'text': text, 'align': align,
-                         'font': self._font[0], 'size': self._font[1], 'color': list(self._fill)})
+    def _circle(self, cx, cy, r, fill, stroke, stroke_w):
+        self._current.append({
+            'op': 'circle',
+            'cx': cx, 'cy': cy, 'r': r,
+            'fill': fill, 'stroke': stroke, 'strokeW': stroke_w,
+        })
 
-    def drawString(self, x, y, text, *a, **kw):
-        self._text(x, y, text, 'start')
-        return super().drawString(x, y, text, *a, **kw)
+    def _line(self, x1, y1, x2, y2, color, w):
+        self._current.append({
+            'op': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+            'color': color, 'w': w,
+        })
 
-    def drawCentredString(self, x, y, text, *a, **kw):
-        self._text(x, y, text, 'center')
-        return super().drawCentredString(x, y, text, *a, **kw)
-
-    def drawRightString(self, x, y, text, *a, **kw):
-        self._text(x, y, text, 'end')
-        return super().drawRightString(x, y, text, *a, **kw)
-
-    def rect(self, x, y, w, h, stroke=1, fill=0, *a, **kw):
-        _current.append({'op': 'rect', 'x': x, 'y': y, 'w': w, 'h': h,
-                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
-                         'color': list(self._fill), 'strokeColor': list(self._stroke)})
-        return super().rect(x, y, w, h, stroke=stroke, fill=fill, *a, **kw)
-
-    def roundRect(self, x, y, w, h, radius, stroke=1, fill=0, *a, **kw):
-        _current.append({'op': 'roundRect', 'x': x, 'y': y, 'w': w, 'h': h, 'radius': radius,
-                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
-                         'color': list(self._fill), 'strokeColor': list(self._stroke)})
-        return super().roundRect(x, y, w, h, radius, stroke=stroke, fill=fill, *a, **kw)
-
-    def circle(self, cx, cy, r, stroke=1, fill=0, *a, **kw):
-        _current.append({'op': 'circle', 'cx': cx, 'cy': cy, 'r': r,
-                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
-                         'color': list(self._fill), 'strokeColor': list(self._stroke)})
-        return super().circle(cx, cy, r, stroke=stroke, fill=fill, *a, **kw)
-
-    def ellipse(self, x1, y1, x2, y2, stroke=1, fill=0, *a, **kw):
-        _current.append({'op': 'ellipse', 'x': min(x1, x2), 'y': min(y1, y2),
-                         'w': abs(x2 - x1), 'h': abs(y2 - y1),
-                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
-                         'color': list(self._fill), 'strokeColor': list(self._stroke)})
-        return super().ellipse(x1, y1, x2, y2, stroke=stroke, fill=fill, *a, **kw)
-
-    def line(self, x1, y1, x2, y2, *a, **kw):
-        _current.append({'op': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-                         'width': self._linewidth, 'color': list(self._stroke)})
-        return super().line(x1, y1, x2, y2, *a, **kw)
-
-    def linearGradient(self, x0, y0, x1, y1, colors, positions=None, *a, **kw):
-        _current.append({'op': 'gradient', 'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1,
-                         'colors': [_rgb(c) for c in colors],
-                         'positions': list(positions) if positions else None})
-        return super().linearGradient(x0, y0, x1, y1, colors, positions=positions, *a, **kw)
-
-    def drawImage(self, image, x, y, width=None, height=None, *a, **kw):
-        # Copy the source image into a persistent dir and record the COPY's
-        # path. Generators often draw from temp files they delete on exit
-        # (e.g. recoloured icons) — recording the bare path would leave the
-        # trace pointing at deleted files by render time.
-        global _img_counter
-        src = str(image)
-        path = src
-        if _assets_dir and os.path.isfile(src):
-            _img_counter += 1
-            dst = os.path.join(_assets_dir, f'{_img_counter}_{os.path.basename(src) or "img"}')
+    def _image(self, path, x, y, w, h):
+        # Generators draw recoloured icons from tempdirs that get cleaned up
+        # at process exit (see icon_png in generator/deck_canvas.py). Copy the
+        # bytes into our persistent assets dir so the trace stays usable.
+        copied = path
+        if self._assets_dir and os.path.isfile(path):
+            self._img_counter += 1
+            base = os.path.basename(path) or 'img'
+            dst = os.path.join(self._assets_dir,
+                               f'{self._img_counter}_{base}')
             try:
-                shutil.copy(src, dst)
-                path = dst
+                shutil.copy(path, dst)
+                copied = dst
             except OSError:
-                path = src
-        _current.append({'op': 'image', 'path': path, 'x': x, 'y': y,
-                         'w': width, 'h': height})
-        return super().drawImage(image, x, y, width=width, height=height, *a, **kw)
-
-    def showPage(self, *a, **kw):
-        global _current
-        _pages.append(_current)
-        _current = []
-        return super().showPage(*a, **kw)
+                copied = path
+        self._current.append({
+            'op': 'image', 'path': copied, 'x': x, 'y': y, 'w': w, 'h': h,
+        })
 
 
-def main():
-    if len(sys.argv) != 3:
-        sys.stderr.write('usage: trace-template.py <generate_sample.py> <out.json>\n')
-        sys.exit(2)
-    # Absolutise both paths up front — the generator's directory becomes the
-    # working directory below, so a relative out.json would otherwise be lost.
-    gen_path = os.path.abspath(sys.argv[1])
-    out_path = os.path.abspath(sys.argv[2])
-    gen_dir = os.path.dirname(gen_path)
+def trace_template(template_dir, out_path):
+    """Build the template with a TracingCanvas; write the JSON trace.
+    Returns the in-memory canvas for callers that want to assert on it."""
+    template_dir = os.path.abspath(template_dir)
+    out_path = os.path.abspath(out_path)
+    assets_dir = out_path + '-assets'
+    os.makedirs(assets_dir, exist_ok=True)
 
-    # Persistent dir for copies of every image the generator draws — survives
-    # the generator's own temp-file cleanup. Lives next to the trace JSON.
-    global _assets_dir
-    _assets_dir = out_path + '-assets'
-    os.makedirs(_assets_dir, exist_ok=True)
+    sys.path.insert(0, template_dir)
+    # Force re-import so the same process can trace multiple templates safely
+    # (matters for the self-test more than for CLI use, but cheap to do here).
+    if 'deck_layout' in sys.modules:
+        del sys.modules['deck_layout']
+    template = importlib.import_module('deck_layout')
 
-    # Run the generator as if launched from its own folder: put that folder on
-    # sys.path (so multi-file generators can `import` sibling modules — e.g.
-    # community-talk's `deck_layout`) and chdir into it (so relative asset
-    # reads — logos, icons, fonts — resolve). Generic: no per-template code.
-    sys.path.insert(0, gen_dir)
-    os.chdir(gen_dir)
-
-    # Instrument: every `canvas.Canvas(...)` in the generator becomes a recorder.
-    _canvas_mod.Canvas = RecordingCanvas
-
-    with open(gen_path) as f:
-        source = f.read()
-    exec(compile(source, gen_path, 'exec'), {'__name__': '__main__'})
-
-    # `save()` flushes a final un-showPage'd page; capture it if present.
-    if _current:
-        _pages.append(_current)
+    canvas = TracingCanvas(assets_dir=assets_dir)
+    build(canvas, template.SLIDES)
 
     with open(out_path, 'w') as f:
-        json.dump({'pageSize': _pagesize, 'pages': _pages}, f)
-    sys.stderr.write(f'traced {len(_pages)} page(s) → {out_path}\n')
+        json.dump({'pageSize': [WIDTH, HEIGHT], 'pages': canvas.pages}, f)
+    sys.stderr.write(f'traced {len(canvas.pages)} page(s) → {out_path}\n')
+    return canvas
+
+
+def main(argv):
+    if len(argv) != 3:
+        sys.stderr.write('usage: trace-template.py <template-dir> <out.json>\n')
+        return 2
+    trace_template(argv[1], argv[2])
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main(sys.argv))
