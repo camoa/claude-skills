@@ -167,13 +167,24 @@ def main():
     if len(sys.argv) != 3:
         sys.stderr.write('usage: trace-template.py <generate_sample.py> <out.json>\n')
         sys.exit(2)
-    gen_path, out_path = sys.argv[1], sys.argv[2]
+    # Absolutise both paths up front — the generator's directory becomes the
+    # working directory below, so a relative out.json would otherwise be lost.
+    gen_path = os.path.abspath(sys.argv[1])
+    out_path = os.path.abspath(sys.argv[2])
+    gen_dir = os.path.dirname(gen_path)
 
     # Persistent dir for copies of every image the generator draws — survives
     # the generator's own temp-file cleanup. Lives next to the trace JSON.
     global _assets_dir
-    _assets_dir = os.path.abspath(out_path) + '-assets'
+    _assets_dir = out_path + '-assets'
     os.makedirs(_assets_dir, exist_ok=True)
+
+    # Run the generator as if launched from its own folder: put that folder on
+    # sys.path (so multi-file generators can `import` sibling modules — e.g.
+    # community-talk's `deck_layout`) and chdir into it (so relative asset
+    # reads — logos, icons, fonts — resolve). Generic: no per-template code.
+    sys.path.insert(0, gen_dir)
+    os.chdir(gen_dir)
 
     # Instrument: every `canvas.Canvas(...)` in the generator becomes a recorder.
     _canvas_mod.Canvas = RecordingCanvas
