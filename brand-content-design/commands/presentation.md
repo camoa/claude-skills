@@ -150,22 +150,21 @@ Create a presentation from an existing template with user-provided content.
    - Save as PPTX
 
    **If OUTPUT_TARGET is "Google Slides" — render natively via the Slides renderer:**
-   Instead of PPTX, drive the bundled renderer at `scripts/slides/` (shell-out;
-   credentials read from env vars). The PDF from step 8 still renders and stays
-   as the visual-diff reference.
-   1. Build the brand token set from brand-philosophy.md (colors + heading/body fonts).
-   2. Scaffold the branded template — the typed slide library:
-      `echo '{"command":"scaffoldTemplate","args":{"tokens":<tokens>}}' | node scripts/slides/dist/cli.js`
-      The result records `{ presentationId, tagMap }`. Omit `layoutSpec` to use
-      the built-in 7-type default layout, or pass one to override geometry.
-   3. Parse the filled outline into a content payload:
+   Use the **slides-renderer** skill — the Google Slides analog of
+   `visual-content`. It reads the *same* design (`canvas-philosophy.md` +
+   `template.md`), composes a resolution-independent `LayoutSpec`, and scaffolds
+   the branded typed-slide template via the bundled `scripts/slides/` renderer.
+   Then fill it from the outline:
+   1. Invoke `slides-renderer` with the template folder + brand-philosophy.md →
+      it returns the scaffolded template's `{ presentationId, tagMap }`.
+   2. Parse the filled outline into a content payload:
       `echo '{"command":"outlineToPayload","args":{"outlineMarkdown":<md>,"tagMap":<tagMap>}}' | node scripts/slides/dist/cli.js`
-      → a `ContentPayload` carrying each slide's `speakerNotes`.
-   4. Render the deck:
+   3. Render the deck:
       `echo '{"command":"renderDeck","args":{"templatePresentationId":<id>,"tagMap":<tagMap>,"payload":<payload>}}' | node scripts/slides/dist/cli.js`
-   5. The renderer returns the Google Slides presentation ID; speaker notes are
-      filled automatically. Report the deck URL to the user.
-   See `scripts/slides/references/slides-api-guide.md` for the full model.
+   4. Report the Google Slides deck URL; speaker notes fill automatically. The
+      PDF from step 8 stays as the visual-diff reference.
+   `slides-renderer` composes the layout per-template — there is no per-template
+   code. See `scripts/slides/references/slides-api-guide.md` for the model.
 
 10. **Save outputs**
     Create folder: `{PROJECT_PATH}/presentations/{YYYY-MM-DD}-{topic-slug}/`

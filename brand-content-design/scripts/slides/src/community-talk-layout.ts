@@ -1,15 +1,19 @@
 /**
- * community-talk template — a real designed `LayoutSpec`.
+ * community-talk template — a **worked-example** `LayoutSpec`.
  *
- * Translated from the brand-content-design `community-talk` template's
- * `generate_sample.py` (the reportlab design source of truth — 13 typed slides,
- * Pitch-Velocity style, Palcera brand). Geometry is converted from that script's
- * 1920×1080 bottom-left reportlab space into the renderer's 720×405 top-left
- * point space by the pure helpers below (`SCALE`, `txt`, `rect`, `circ`).
+ * This is NOT how templates are normally turned into Slides decks. The generic
+ * mechanism is the `slides-renderer` skill, which *composes* a `LayoutSpec` from
+ * any template's `canvas-philosophy.md` + `template.md` — exactly as
+ * `visual-content` composes a PDF. This file is one such composition captured in
+ * code: the `community-talk` template (13 typed slides, Pitch-Velocity, Palcera)
+ * translated from its `generate_sample.py` design source.
  *
- * This is the proof that the extended renderer can carry a faithful design:
- * per-element font size / weight / colour, rounded cards, number-badge circles,
- * a mono code font, and gradient backgrounds.
+ * It is kept for two reasons: (1) a reference the `slides-renderer` skill points
+ * at to show the target schema + quality, and (2) a tested fixture proving the
+ * extended renderer carries a faithful design — per-element font size / weight /
+ * colour, rounded cards, number-badge circles, a mono code font, gradients.
+ * Geometry is converted from the script's 1920×1080 bottom-left reportlab space
+ * into the renderer's 720×405 top-left point space by the helpers below.
  */
 import type { LayoutSpec, SlideTypeLayout, LayoutElement } from './layout-spec.js';
 import type { GradientSpec } from './image-baker.js';
