@@ -5,6 +5,17 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-05-22
+
+### Added
+- **Google Slides renderer** (`google_slides_renderer` epic, PR #179) — a bundled TypeScript module at `scripts/slides/` (official `googleapis` SDK, shell-out invoked, no MCP server) that renders brand decks natively in Google Slides via the Slides API, as an alternative to the PDF→PPTX path. Five components: a typed Slides/Drive API client, a brand-token→styling-request mapper, a branded typed-slide template scaffolder, an outline-driven merge engine, and the `brand-content-design` integration (`outline-parser.ts`, `default-layout.ts`, three CLI orchestration commands — `scaffoldTemplate`, `outlineToPayload`, `renderDeck`). Type-library template model with page-scoped fills so repeated slide types fill independently. 158-test suite; `tsc --strict` + build clean.
+- **Speaker notes** — a capability the PPTX path never had: `/outline` and `/template-presentation` gain an additive `Speaker notes:` slot; the renderer fills each slide's notes page from the outline.
+- `/presentation` gains a **Google Slides output target** — the PDF→PPTX path stays the no-authentication default.
+- Plugin-local Slides API reference guide at `scripts/slides/references/slides-api-guide.md` (not published to the public dev-guides system).
+
+### Notes
+- Deferred (not blocking): a live end-to-end spike needs Google credentials not yet created (`scripts/slides/README.md` → Credentials); `TagInfo.display` is never set by the scaffolder, so custom-font display-text baking is currently unreachable end-to-end (tracked follow-up).
+
 ## [3.4.0] - 2026-05-21
 
 ### Added
