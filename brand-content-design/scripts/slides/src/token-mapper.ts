@@ -111,6 +111,64 @@ export function mapShapeFill(
 }
 
 /**
+ * Map a shape outline — `updateShapeProperties` setting a solid-fill outline of
+ * the given hex colour and weight (points). For window frames, rings, borders.
+ */
+export function mapShapeOutline(
+  objectId: string,
+  hex: string,
+  weightPt: number,
+): slides_v1.Schema$Request {
+  return {
+    updateShapeProperties: {
+      objectId,
+      shapeProperties: {
+        outline: {
+          outlineFill: { solidFill: { color: { rgbColor: hexToRgbColor(hex) } } },
+          weight: { magnitude: weightPt, unit: 'PT' },
+        },
+      },
+      fields: 'outline.outlineFill.solidFill.color,outline.weight',
+    },
+  };
+}
+
+/**
+ * Remove a shape's background fill — `updateShapeProperties` with the fill
+ * `NOT_RENDERED`. Pair with `mapShapeOutline` for an outline-only shape.
+ */
+export function mapShapeNoFill(objectId: string): slides_v1.Schema$Request {
+  return {
+    updateShapeProperties: {
+      objectId,
+      shapeProperties: { shapeBackgroundFill: { propertyState: 'NOT_RENDERED' } },
+      fields: 'shapeBackgroundFill.propertyState',
+    },
+  };
+}
+
+/**
+ * Style a line — `updateLineProperties` with a solid-fill colour and weight
+ * (points). Applied to a `createLine` element.
+ */
+export function mapLineProperties(
+  objectId: string,
+  hex: string,
+  weightPt: number,
+): slides_v1.Schema$Request {
+  return {
+    updateLineProperties: {
+      objectId,
+      lineProperties: {
+        lineFill: { solidFill: { color: { rgbColor: hexToRgbColor(hex) } } },
+        weight: { magnitude: weightPt, unit: 'PT' },
+      },
+      fields: 'lineFill.solidFill.color,weight',
+    },
+  };
+}
+
+/**
  * Map a hex colour onto text — an `updateTextStyle` request setting
  * `foregroundColor`. `textRange` defaults to all text in the element.
  */

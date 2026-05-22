@@ -17,7 +17,15 @@ import type {
   FontRole,
 } from './layout-spec.js';
 import type { BrandTokens } from './token-mapper.js';
-import { mapShapeFill, mapTextColor, mapTextStyle, mapParagraphStyle } from './token-mapper.js';
+import {
+  mapShapeFill,
+  mapShapeOutline,
+  mapShapeNoFill,
+  mapLineProperties,
+  mapTextColor,
+  mapTextStyle,
+  mapParagraphStyle,
+} from './token-mapper.js';
 
 /** The build product for one type-slide. */
 export interface BuiltSlide {
@@ -125,15 +133,42 @@ export function buildSlideRequests(
       continue;
     }
 
+    // Line → createLine. The box's top-left→bottom-right diagonal is the line;
+    // `lineFromBottomLeft` mirrors the box vertically for a bottom-left→top-right
+    // line (arrowheads, rising connectors).
+    if (e.kind === 'line') {
+      const lineEp: slides_v1.Schema$PageElementProperties = {
+        pageObjectId: slideObjectId,
+        size: { width: { magnitude: e.w, unit: UNIT }, height: { magnitude: e.h, unit: UNIT } },
+        transform: e.lineFromBottomLeft
+          ? { scaleX: 1, scaleY: -1, translateX: e.x, translateY: e.y + e.h, unit: UNIT }
+          : { scaleX: 1, scaleY: 1, translateX: e.x, translateY: e.y, unit: UNIT },
+      };
+      requests.push({
+        createLine: { objectId, lineCategory: 'STRAIGHT', elementProperties: lineEp },
+      });
+      const hex = e.color ?? colorFor(tokens, e.styleRole) ?? tokens.colors.primary;
+      requests.push(mapLineProperties(objectId, hex, e.outline?.weight ?? 2));
+      continue;
+    }
+
     // Everything else (text, shape, ellipse, tagged image placeholder) → a shape.
     requests.push({
       createShape: { objectId, shapeType: shapeTypeFor(e), elementProperties: ep },
     });
 
-    // Shape / ellipse fill — explicit colour wins over a style role.
+    // Shape / ellipse fill + outline — explicit colour wins over a style role.
     if (e.kind === 'shape' || e.kind === 'ellipse') {
       const hex = e.color ?? colorFor(tokens, e.styleRole);
-      if (hex) requests.push(mapShapeFill(objectId, hex));
+      if (hex) {
+        requests.push(mapShapeFill(objectId, hex));
+      } else if (e.outline) {
+        // Outline-only shape — remove the API's default fill.
+        requests.push(mapShapeNoFill(objectId));
+      }
+      if (e.outline) {
+        requests.push(mapShapeOutline(objectId, e.outline.color, e.outline.weight ?? 1));
+      }
     }
 
     // Content text — the tag token, or fixed copy.

@@ -17,7 +17,7 @@
 export type SlideType = string;
 
 /** The kind of a layout element. */
-export type ElementKind = 'shape' | 'image' | 'text' | 'ellipse';
+export type ElementKind = 'shape' | 'image' | 'text' | 'ellipse' | 'line';
 
 /** Which brand font a text element uses. */
 export type FontRole = 'heading' | 'body' | 'mono';
@@ -58,6 +58,16 @@ export interface LayoutElement {
   fontFamily?: FontRole;
   /** Text only — paragraph alignment. */
   align?: 'start' | 'center' | 'end';
+  /**
+   * Shape / ellipse outline. With `outline` and no fill `color`, the element is
+   * an outline only (window frames, rings). `weight` is in points.
+   */
+  outline?: { color: string; weight?: number };
+  /**
+   * `line` only — draw the line from the bottom-left to the top-right of the
+   * `x/y/w/h` box instead of the default top-left → bottom-right diagonal.
+   */
+  lineFromBottomLeft?: boolean;
   /**
    * Element content. A `tag` makes it a merge placeholder; `fixed` makes it
    * fixed content; omitted means a pure styled shape (e.g. an accent bar).

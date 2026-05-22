@@ -102,26 +102,26 @@ class RecordingCanvas(_canvas_mod.Canvas):
 
     def rect(self, x, y, w, h, stroke=1, fill=0, *a, **kw):
         _current.append({'op': 'rect', 'x': x, 'y': y, 'w': w, 'h': h,
-                         'fill': bool(fill), 'stroke': bool(stroke),
+                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
                          'color': list(self._fill), 'strokeColor': list(self._stroke)})
         return super().rect(x, y, w, h, stroke=stroke, fill=fill, *a, **kw)
 
     def roundRect(self, x, y, w, h, radius, stroke=1, fill=0, *a, **kw):
         _current.append({'op': 'roundRect', 'x': x, 'y': y, 'w': w, 'h': h, 'radius': radius,
-                         'fill': bool(fill), 'stroke': bool(stroke),
+                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
                          'color': list(self._fill), 'strokeColor': list(self._stroke)})
         return super().roundRect(x, y, w, h, radius, stroke=stroke, fill=fill, *a, **kw)
 
     def circle(self, cx, cy, r, stroke=1, fill=0, *a, **kw):
         _current.append({'op': 'circle', 'cx': cx, 'cy': cy, 'r': r,
-                         'fill': bool(fill), 'stroke': bool(stroke),
+                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
                          'color': list(self._fill), 'strokeColor': list(self._stroke)})
         return super().circle(cx, cy, r, stroke=stroke, fill=fill, *a, **kw)
 
     def ellipse(self, x1, y1, x2, y2, stroke=1, fill=0, *a, **kw):
         _current.append({'op': 'ellipse', 'x': min(x1, x2), 'y': min(y1, y2),
                          'w': abs(x2 - x1), 'h': abs(y2 - y1),
-                         'fill': bool(fill), 'stroke': bool(stroke),
+                         'fill': bool(fill), 'stroke': bool(stroke), 'lineWidth': self._linewidth,
                          'color': list(self._fill), 'strokeColor': list(self._stroke)})
         return super().ellipse(x1, y1, x2, y2, stroke=stroke, fill=fill, *a, **kw)
 

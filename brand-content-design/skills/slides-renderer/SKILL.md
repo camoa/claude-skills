@@ -58,10 +58,12 @@ is the shared-source fix the brand-content-design parity audit (B1) calls for.
 3. **Convert + scaffold** — `examples/render-from-trace.mjs` reads the trace +
    the tokens JSON and emits the `scaffoldTemplate` command. Pass:
    - `presentationName` → `"<template name> Template"`
-   - `driveFolderPath` → a folder, e.g. `["<brand>", "Slides Templates"]`
+   - `driveFolderPath` → **`["<brand>", "Slide Templates", "<template name>"]`** —
+     each template gets its own subfolder under the brand's `Slide Templates`
+     folder (e.g. `Palcera/Slide Templates/community-talk`).
    ```sh
    node examples/render-from-trace.mjs /tmp/trace.json /tmp/tokens.json \
-     "<template name> Template" "<brand>,Slides Templates" \
+     "<template name> Template" "<brand>,Slide Templates,<template name>" \
      | node dist/cli.js
    ```
    The result envelope's `result.presentationId` is the rendered deck.
@@ -83,16 +85,17 @@ is the shared-source fix the brand-content-design parity audit (B1) calls for.
   inherited. The converter maps fonts to brand *roles* (heading/body/mono) and
   resolves them through `brand-philosophy.md` tokens, so a wrong heading font
   still renders as the brand heading font — partial B2 resilience.
-- **Diagonal lines** and **stroke-only outlines** are not yet reproduced (the
-  converter lists them in `skipped`). Horizontal/vertical lines (accent rules,
-  dividers) and all filled shapes, text, circles, images, gradients ARE.
 - **No `generate_sample.py`** → no faithful trace (parity audit G1).
 - **Custom (non-Google) fonts** are substituted with the nearest Google font and
   the substitution reported; **gradients** are baked to images.
 
 ## Workflow integration
 
-Called by `/presentation` (Google Slides output target). Naming + folder
-convention: a scaffolded template → `"<name> Template"` in a Drive folder; a
-rendered *presentation* (a deck filled from an outline via `renderDeck`) →
-`"<presentation title> - <template name>"`.
+Called by `/presentation` (Google Slides output target).
+
+**Drive naming + folder convention:**
+- a scaffolded **template** → name `"<template name> Template"`, folder
+  `<brand>/Slide Templates/<template name>/`.
+- a rendered **presentation** (a deck filled from an outline via `renderDeck`)
+  → name `"<presentation title> - <template name>"`, folder
+  `<brand>/presentations/`.
