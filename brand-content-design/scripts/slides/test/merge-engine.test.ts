@@ -28,6 +28,9 @@ function fakeClient(presSlides: unknown[] = []) {
     uploadImage: vi
       .fn()
       .mockImplementation((name: string) => Promise.resolve({ fileId: name, url: `https://img/${name}` })),
+    findOrCreateFolder: vi
+      .fn()
+      .mockImplementation((name: string) => Promise.resolve({ folderId: `fold_${name}` })),
   };
 }
 const asClient = (c: ReturnType<typeof fakeClient>) => c as unknown as SlidesClient;
@@ -41,7 +44,7 @@ describe('renderDeck', () => {
   it('validates, copies the template, and returns the rendered deck id', async () => {
     const client = fakeClient();
     const res = await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap }, payload);
-    expect(client.copyFile).toHaveBeenCalledWith('tmpl1', expect.any(String));
+    expect(client.copyFile).toHaveBeenCalledWith('tmpl1', expect.any(String), undefined);
     expect(res.presentationId).toBe('deck1');
     expect(res.slidesRendered).toBe(2);
   });
@@ -114,6 +117,19 @@ describe('renderDeck', () => {
     await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap }, payload, {
       deckName: 'My Talk - community-talk',
     });
-    expect(client.copyFile).toHaveBeenCalledWith('tmpl1', 'My Talk - community-talk');
+    expect(client.copyFile).toHaveBeenCalledWith('tmpl1', 'My Talk - community-talk', undefined);
+  });
+
+  it('places the rendered deck in a found-or-created Drive folder', async () => {
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap }, payload, {
+      driveFolderPath: ['Brand', 'Presentations'],
+    });
+    expect(client.findOrCreateFolder).toHaveBeenCalledTimes(2);
+    expect(client.copyFile).toHaveBeenCalledWith(
+      'tmpl1',
+      expect.any(String),
+      'fold_Presentations',
+    );
   });
 });

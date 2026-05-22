@@ -50,6 +50,12 @@ export interface RenderOptions {
    * <template name>"`. Defaults to a timestamped name when omitted.
    */
   deckName?: string;
+  /**
+   * Drive folder path (segment names, outermost first) for the rendered deck
+   * and any baked images. Each segment is found-or-created under the previous.
+   * Omit to leave the deck in My Drive root.
+   */
+  driveFolderPath?: string[];
 }
 
 const DISPLAY_BAKE_FONT_PX = 96;
@@ -84,10 +90,16 @@ export async function renderDeck(
     );
   }
 
-  // 2. Copy the template — the rendered deck is the copy; template untouched.
+  // 2. Resolve the Drive folder, then copy the template into it — the rendered
+  //    deck is the copy; the template is never mutated.
+  let folderId: string | undefined;
+  for (const segment of options.driveFolderPath ?? []) {
+    folderId = (await client.findOrCreateFolder(segment, folderId)).folderId;
+  }
   const { fileId: presentationId } = await client.copyFile(
     template.presentationId,
     options.deckName ?? `Rendered deck ${new Date().toISOString()}`,
+    folderId,
   );
 
   const fontSubstitutions = options.fontSubstitutions ?? [];
@@ -126,7 +138,12 @@ export async function renderDeck(
           fontFile: options.customFontFile,
         });
         const safeTag = tag.replace(/[^a-zA-Z0-9]/g, '');
-        const { url } = await client.uploadImage(`${newSlideId}_${safeTag}.png`, png);
+        const { url } = await client.uploadImage(
+          `${newSlideId}_${safeTag}.png`,
+          png,
+          'image/png',
+          folderId,
+        );
         images[tag] = url;
       } else {
         normalText[tag] = value;

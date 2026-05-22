@@ -159,8 +159,9 @@ Create a presentation from an existing template with user-provided content.
       it returns the scaffolded template's `{ presentationId, tagMap }`.
    2. Parse the filled outline into a content payload:
       `echo '{"command":"outlineToPayload","args":{"outlineMarkdown":<md>,"tagMap":<tagMap>}}' | node scripts/slides/dist/cli.js`
-   3. Render the deck — name it `"<presentation title> - <template name>"`:
-      `echo '{"command":"renderDeck","args":{"templatePresentationId":<id>,"tagMap":<tagMap>,"payload":<payload>,"deckName":"<title> - <template>"}}' | node scripts/slides/dist/cli.js`
+   3. Render the deck — name it `"<presentation title> - <template name>"` and
+      place it in a Drive folder (`driveFolderPath`), not My Drive root:
+      `echo '{"command":"renderDeck","args":{"templatePresentationId":<id>,"tagMap":<tagMap>,"payload":<payload>,"deckName":"<title> - <template>","driveFolderPath":["<brand>","Presentations"]}}' | node scripts/slides/dist/cli.js`
    4. Report the Google Slides deck URL; speaker notes fill automatically. The
       PDF from step 8 stays as the visual-diff reference.
    `slides-renderer` composes the layout per-template — there is no per-template

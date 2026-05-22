@@ -137,10 +137,16 @@ Called by `/presentation` (Google Slides output target) and may be called by
 (`renderDeck`) then fills the typed template per a content outline — see
 `scripts/slides/references/slides-api-guide.md`.
 
-**Naming convention** — keep Drive tidy:
-- the scaffolded **template** → `"<template name> Template"` (`presentationName`).
-- a rendered **presentation** → `"<presentation title> - <template name>"`
-  (`renderDeck`'s `deckName` argument).
+**Naming & folder convention** — keep Drive tidy:
+- the scaffolded **template** → name `"<template name> Template"`
+  (`presentationName`).
+- a rendered **presentation** → name `"<presentation title> - <template name>"`
+  (`renderDeck`'s `deckName`).
+- **Always pass `driveFolderPath`** on both `scaffoldTemplate` and `renderDeck`
+  so files land in a folder, not My Drive root — e.g. `["<brand>", "Slides
+  Templates"]` for templates and `["<brand>", "Presentations"]` for decks, or
+  segments mirroring the local brand-project structure. Each segment is
+  found-or-created.
 
 ## Part 8 — Speaker notes
 

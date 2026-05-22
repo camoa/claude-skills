@@ -295,6 +295,7 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
           fontSubstitutions,
           customFontFile: optString(a, 'customFontFile'),
           deckName: optString(a, 'deckName'),
+          driveFolderPath: optStringArray(a, 'driveFolderPath'),
         },
       );
     }
