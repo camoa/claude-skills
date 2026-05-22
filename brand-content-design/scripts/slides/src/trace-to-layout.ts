@@ -1,29 +1,49 @@
 /**
- * Trace → LayoutSpec converter.
+ * Trace → LayoutSpec converter (v2 — post-Template Generator Contract).
  *
- * Turns a `tracer/trace-template.py` capture (every reportlab draw call of a
- * template's `generate_sample.py`) into a `LayoutSpec` the Slides renderer
- * scaffolds. Because the trace is the PDF's own draw list, the Google Slides
- * output reproduces `sample.pdf` *by construction* — same geometry, same
- * content, same colours. Generic: no per-template code.
+ * Consumes the spec-layer trace JSON written by `tracer/trace-template.py` (a
+ * `TracingCanvas(DeckCanvas)` subclass) and produces the `LayoutSpec` the
+ * Slides renderer scaffolds. Because the trace is the template's own
+ * `DeckCanvas` call list, the Google Slides output reproduces the
+ * template-rendered PDF *by construction* — same geometry, same content,
+ * same colours. Generic: no per-template code.
  *
- * The trace is in reportlab space (bottom-left origin, page in points); this
+ * The trace lives in the generator-contract space (1920×1080 px, origin
+ * bottom-left; shapes by bottom-left corner; text by box top-left); this
  * converts to the renderer's 720×405 top-left point space.
+ *
+ * The trace's per-page `type` becomes the `LayoutSpec` slide-type id — the
+ * key downstream `TagMap` / outline-parser / content-payload pipelines key on.
+ *
+ * Field tags from the generator's `field=` kwarg (contract C4) propagate as
+ * `{ field, sample }` `LayoutElement.content` entries; the slide-builder
+ * inserts the `sample` text on the type-slide and records `field → objectId`
+ * in the `TagMap` (B3). Ops without `field` stay `{ fixed }`.
  */
 import type { LayoutSpec, LayoutElement, SlideTypeLayout, FontRole } from './layout-spec.js';
 import type { GradientSpec } from './image-baker.js';
 
 /* ---- the trace shape (mirrors tracer/trace-template.py output) ---- */
-type RGB = [number, number, number];
-interface TextOp { op: 'text'; x: number; y: number; text: string; align: 'start' | 'center' | 'end'; font: string; size: number; color: RGB }
-interface RectOp { op: 'rect' | 'roundRect'; x: number; y: number; w: number; h: number; radius?: number; fill: boolean; stroke: boolean; lineWidth: number; color: RGB; strokeColor: RGB }
-interface CircleOp { op: 'circle'; cx: number; cy: number; r: number; fill: boolean; stroke: boolean; lineWidth: number; color: RGB; strokeColor: RGB }
-interface EllipseOp { op: 'ellipse'; x: number; y: number; w: number; h: number; fill: boolean; stroke: boolean; lineWidth: number; color: RGB; strokeColor: RGB }
-interface GradientOp { op: 'gradient'; x0: number; y0: number; x1: number; y1: number; colors: RGB[]; positions: number[] | null }
-interface ImageOp { op: 'image'; path: string; x: number; y: number; w: number | null; h: number | null }
-interface LineOp { op: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: RGB }
-type Op = TextOp | RectOp | CircleOp | EllipseOp | GradientOp | ImageOp | LineOp;
-export interface TemplateTrace { pageSize: [number, number]; pages: Op[][] }
+type Hex = string;
+interface SolidOp { op: 'solid'; color: Hex }
+interface GradientOp { op: 'gradient'; stops: [number, Hex][] }
+interface RectOp { op: 'rect'; x: number; y: number; w: number; h: number; color: Hex }
+interface RoundRectOp { op: 'roundRect'; x: number; y: number; w: number; h: number; r: number; fill: Hex | null; stroke: Hex | null; strokeW: number }
+interface CircleOp { op: 'circle'; cx: number; cy: number; r: number; fill: Hex | null; stroke: Hex | null; strokeW: number }
+interface LineOp { op: 'line'; x1: number; y1: number; x2: number; y2: number; color: Hex; w: number }
+interface ImageOp { op: 'image'; path: string; x: number; y: number; w: number; h: number }
+interface TextOp {
+  op: 'text';
+  x: number; y: number; w: number;
+  text: string;
+  field: string | null;
+  font: string; size: number; color: Hex;
+  align: 'left' | 'center' | 'right';
+  valign: 'top' | 'middle' | 'bottom';
+}
+type Op = SolidOp | GradientOp | RectOp | RoundRectOp | CircleOp | LineOp | ImageOp | TextOp;
+export interface TracePage { type: string; ops: Op[] }
+export interface TemplateTrace { pageSize: [number, number]; pages: TracePage[] }
 
 /** Everything `scaffoldTemplate` needs to render the traced template. */
 export interface TraceRenderInputs {
@@ -37,24 +57,14 @@ export interface TraceRenderInputs {
 const PAGE_W = 720;
 const PAGE_H = 405;
 
-/**
- * Text vertical-position calibration. reportlab gives a baseline; the Slides
- * text box renders a touch low relative to it, so the box top is lifted by
- * `1.3 × fontSize` above the baseline (tuned against centred elements).
- */
-const TEXT_TOP_FACTOR = 1.3;
+/** Generator's `align` → LayoutElement's `align` vocabulary. */
+const ALIGN: Record<TextOp['align'], 'start' | 'center' | 'end'> = {
+  left: 'start',
+  center: 'center',
+  right: 'end',
+};
 
-/** A reportlab 0–1 RGB triple → `#RRGGBB`. */
-function hex(rgb: RGB): string {
-  return (
-    '#' +
-    rgb
-      .map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0'))
-      .join('')
-  );
-}
-
-/** A reportlab font name → the renderer's font role + numeric weight. */
+/** A reportlab/PIL-style font name → the renderer's font role + numeric weight. */
 function fontOf(name: string): { family: FontRole; weight: number } {
   const n = name.toLowerCase();
   const family: FontRole = /mono|jetbrains/.test(n) ? 'mono' : /inter/.test(n) ? 'body' : 'heading';
@@ -75,141 +85,148 @@ function fontOf(name: string): { family: FontRole; weight: number } {
 }
 
 /**
- * Convert a template trace into render inputs — reportlab page → 720×405 page,
- * bottom-left origin → top-left.
+ * Convert a template trace into render inputs — generator-contract page
+ * (1920×1080, bottom-left origin) → 720×405 top-left page.
  */
 export function traceToLayoutSpec(trace: TemplateTrace): TraceRenderInputs {
   const [srcW, srcH] = trace.pageSize;
-  const S = PAGE_W / srcW; // uniform scale (16:9 in, 16:9 out)
+  const S = PAGE_W / srcW; // uniform scale (both axes — the source is 16:9)
   const gradients: Record<string, GradientSpec> = {};
   const imagePaths: Record<string, string> = {};
   const skipped: { page: number; op: string }[] = [];
 
-  /** reportlab bottom-left y of an element's bottom edge → top-left y, scaled. */
-  const top = (yBottom: number, h: number): number => (srcH - yBottom - h) * S;
+  /** Spec bottom-left y of a shape's bottom edge → top-left y, scaled. */
+  const shapeTop = (yBottom: number, h: number): number => (srcH - yBottom - h) * S;
+  /** Spec y of a text box's TOP edge → top-left y, scaled (text y is already top). */
+  const textTop = (yTopSrc: number): number => (srcH - yTopSrc) * S;
 
   const slides: SlideTypeLayout[] = trace.pages.map((page, pageIdx) => {
     const elements: LayoutElement[] = [];
-    page.forEach((op, z) => {
+    page.ops.forEach((op, z) => {
       const id = `e${z}`;
-      if (op.op === 'gradient') {
-        const gid = `grad${pageIdx}`;
-        const horizontal = Math.abs(op.y0 - op.y1) < 1;
-        const vertical = Math.abs(op.x0 - op.x1) < 1;
-        gradients[gid] = {
-          width: srcW,
-          height: srcH,
-          colors: op.colors.map(hex),
-          direction: horizontal ? 'horizontal' : vertical ? 'vertical' : 'diagonal',
-          ...(op.positions ? { positions: op.positions } : {}),
-        };
-        elements.push({ id: gid, kind: 'image', x: 0, y: 0, w: PAGE_W, h: PAGE_H, zOrder: z, content: { fixed: 'gradient' } });
-      } else if (op.op === 'rect' || op.op === 'roundRect') {
-        if (!op.fill && !op.stroke) {
-          skipped.push({ page: pageIdx + 1, op: `${op.op} (no fill/stroke)` });
-          return;
+      switch (op.op) {
+        case 'solid': {
+          // A full-page solid fill. Represent as a shape covering the page.
+          elements.push({
+            id, kind: 'shape', x: 0, y: 0, w: PAGE_W, h: PAGE_H, zOrder: z,
+            color: op.color,
+          });
+          break;
         }
-        const el: LayoutElement = {
-          id,
-          kind: 'shape',
-          x: op.x * S,
-          y: top(op.y, op.h),
-          w: op.w * S,
-          h: op.h * S,
-          zOrder: z,
-        };
-        if (op.op === 'roundRect') el.rounded = true;
-        if (op.fill) el.color = hex(op.color);
-        if (op.stroke) el.outline = { color: hex(op.strokeColor), weight: Math.max((op.lineWidth || 1) * S, 0.5) };
-        elements.push(el);
-      } else if (op.op === 'circle' || op.op === 'ellipse') {
-        if (!op.fill && !op.stroke) {
-          skipped.push({ page: pageIdx + 1, op: `${op.op} (no fill/stroke)` });
-          return;
+        case 'gradient': {
+          // A full-page gradient. The generator's gradient is brand content
+          // (per C1) declared as ordered (pos, hex) stops — the direction is
+          // template-defined and we treat it as diagonal here (image-baker
+          // bakes the actual pixels at render time).
+          const gid = `grad${pageIdx}`;
+          gradients[gid] = {
+            width: srcW,
+            height: srcH,
+            colors: op.stops.map(([, hex]) => hex),
+            direction: 'diagonal',
+            positions: op.stops.map(([pos]) => pos),
+          };
+          elements.push({
+            id: gid, kind: 'image', x: 0, y: 0, w: PAGE_W, h: PAGE_H, zOrder: z,
+            content: { fixed: 'gradient' },
+          });
+          break;
         }
-        const box =
-          op.op === 'circle'
-            ? { x: (op.cx - op.r) * S, y: top(op.cy - op.r, op.r * 2), w: op.r * 2 * S, h: op.r * 2 * S }
-            : { x: op.x * S, y: top(op.y, op.h), w: op.w * S, h: op.h * S };
-        const el: LayoutElement = { id, kind: 'ellipse', ...box, zOrder: z };
-        if (op.fill) el.color = hex(op.color);
-        if (op.stroke) el.outline = { color: hex(op.strokeColor), weight: Math.max((op.lineWidth || 1) * S, 0.5) };
-        elements.push(el);
-      } else if (op.op === 'image') {
-        // Image element ids must be unique ACROSS pages — `imagePaths` is keyed
-        // by the bare element id.
-        const imgId = `img${pageIdx}_${z}`;
-        imagePaths[imgId] = op.path;
-        elements.push({
-          id: imgId,
-          kind: 'image',
-          x: op.x * S,
-          y: top(op.y, op.h ?? 0),
-          w: (op.w ?? 0) * S,
-          h: (op.h ?? 0) * S,
-          zOrder: z,
-          content: { fixed: 'image' },
-        });
-      } else if (op.op === 'text') {
-        const { family, weight } = fontOf(op.font);
-        const fontSize = op.size * S;
-        const yTop = (srcH - op.y - op.size * TEXT_TOP_FACTOR) * S;
-        const h = op.size * 1.4 * S;
-        // Honour the reportlab anchor: start = left edge at x; center/end use a
-        // generous box positioned so the anchor lands at x.
-        let x: number;
-        let w: number;
-        if (op.align === 'center') {
-          w = 1000 * S;
-          x = op.x * S - w / 2;
-        } else if (op.align === 'end') {
-          w = 1000 * S;
-          x = op.x * S - w;
-        } else {
-          x = op.x * S;
-          w = (srcW - op.x) * S;
+        case 'rect': {
+          elements.push({
+            id, kind: 'shape',
+            x: op.x * S, y: shapeTop(op.y, op.h),
+            w: op.w * S, h: op.h * S, zOrder: z,
+            color: op.color,
+          });
+          break;
         }
-        elements.push({
-          id,
-          kind: 'text',
-          x,
-          y: yTop,
-          w,
-          h,
-          zOrder: z,
-          color: hex(op.color),
-          fontSize,
-          fontWeight: weight,
-          fontFamily: family,
-          align: op.align,
-          content: { fixed: op.text },
-        });
-      } else if (op.op === 'line') {
-        // Real line element (handles diagonals — arrowheads, connectors — as
-        // well as horizontal/vertical rules).
-        const x0 = Math.min(op.x1, op.x2);
-        const yBot = Math.min(op.y1, op.y2);
-        const w = Math.abs(op.x2 - op.x1);
-        const h = Math.abs(op.y2 - op.y1);
-        // reportlab y is up: the line "rises" (bottom-left → top-right) when the
-        // higher-x endpoint also has the higher y.
-        const leftIsP1 = op.x1 <= op.x2;
-        const rising = (leftIsP1 ? op.y2 : op.y1) > (leftIsP1 ? op.y1 : op.y2);
-        elements.push({
-          id,
-          kind: 'line',
-          x: x0 * S,
-          y: top(yBot, h),
-          w: Math.max(w, 1) * S,
-          h: Math.max(h, 1) * S,
-          zOrder: z,
-          color: hex(op.color),
-          outline: { color: hex(op.color), weight: Math.max((op.width || 2) * S, 0.5) },
-          lineFromBottomLeft: rising,
-        });
+        case 'roundRect': {
+          if (!op.fill && !op.stroke) {
+            skipped.push({ page: pageIdx + 1, op: 'roundRect (no fill/stroke)' });
+            break;
+          }
+          const el: LayoutElement = {
+            id, kind: 'shape', rounded: true,
+            x: op.x * S, y: shapeTop(op.y, op.h),
+            w: op.w * S, h: op.h * S, zOrder: z,
+          };
+          if (op.fill) el.color = op.fill;
+          if (op.stroke) el.outline = { color: op.stroke, weight: Math.max((op.strokeW || 1) * S, 0.5) };
+          elements.push(el);
+          break;
+        }
+        case 'circle': {
+          if (!op.fill && !op.stroke) {
+            skipped.push({ page: pageIdx + 1, op: 'circle (no fill/stroke)' });
+            break;
+          }
+          const el: LayoutElement = {
+            id, kind: 'ellipse',
+            x: (op.cx - op.r) * S, y: shapeTop(op.cy - op.r, op.r * 2),
+            w: op.r * 2 * S, h: op.r * 2 * S, zOrder: z,
+          };
+          if (op.fill) el.color = op.fill;
+          if (op.stroke) el.outline = { color: op.stroke, weight: Math.max((op.strokeW || 1) * S, 0.5) };
+          elements.push(el);
+          break;
+        }
+        case 'line': {
+          const x0 = Math.min(op.x1, op.x2);
+          const yBot = Math.min(op.y1, op.y2);
+          const w = Math.abs(op.x2 - op.x1);
+          const h = Math.abs(op.y2 - op.y1);
+          // Spec y is up: the line "rises" (bottom-left → top-right) when the
+          // higher-x endpoint also has the higher y.
+          const leftIsP1 = op.x1 <= op.x2;
+          const rising = (leftIsP1 ? op.y2 : op.y1) > (leftIsP1 ? op.y1 : op.y2);
+          elements.push({
+            id, kind: 'line',
+            x: x0 * S, y: shapeTop(yBot, h),
+            w: Math.max(w, 1) * S, h: Math.max(h, 1) * S,
+            zOrder: z,
+            color: op.color,
+            outline: { color: op.color, weight: Math.max((op.w || 2) * S, 0.5) },
+            lineFromBottomLeft: rising,
+          });
+          break;
+        }
+        case 'image': {
+          // Image element ids must be unique ACROSS pages — `imagePaths` is
+          // keyed by the bare element id.
+          const imgId = `img${pageIdx}_${z}`;
+          imagePaths[imgId] = op.path;
+          elements.push({
+            id: imgId, kind: 'image',
+            x: op.x * S, y: shapeTop(op.y, op.h),
+            w: op.w * S, h: op.h * S, zOrder: z,
+            content: { fixed: 'image' },
+          });
+          break;
+        }
+        case 'text': {
+          const { family, weight } = fontOf(op.font);
+          const content: { field: string; sample: string } | { fixed: string } =
+            op.field !== null
+              ? { field: op.field, sample: op.text }
+              : { fixed: op.text };
+          elements.push({
+            id, kind: 'text',
+            x: op.x * S, y: textTop(op.y),
+            w: op.w * S, h: op.size * 1.4 * S,
+            zOrder: z,
+            color: op.color,
+            fontSize: op.size * S,
+            fontWeight: weight,
+            fontFamily: family,
+            align: ALIGN[op.align],
+            content,
+          });
+          break;
+        }
       }
     });
-    return { type: `p${pageIdx + 1}`, elements };
+    return { type: page.type, elements };
   });
 
   return { layoutSpec: { pageWidth: PAGE_W, pageHeight: PAGE_H, slides }, gradients, imagePaths, skipped };

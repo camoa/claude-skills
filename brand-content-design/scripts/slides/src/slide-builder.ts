@@ -122,6 +122,7 @@ export function buildSlideRequests(
     const ep = elementProperties(slideObjectId, e);
     const isTag = !!e.content && 'tag' in e.content;
     const isFixed = !!e.content && 'fixed' in e.content;
+    const isField = !!e.content && 'field' in e.content;
 
     // Fixed image → createImage with the resolved URL.
     if (e.kind === 'image' && isFixed) {
@@ -171,13 +172,17 @@ export function buildSlideRequests(
       }
     }
 
-    // Content text — the tag token, or fixed copy.
+    // Content text — the tag token, the fixed copy, or a field slot's sample
+    // (the template displays the faithful default; the merge engine fills it
+    // by objectId at render time).
     const text =
       e.content && 'tag' in e.content
         ? e.content.tag
         : e.content && 'fixed' in e.content
           ? e.content.fixed
-          : undefined;
+          : e.content && 'field' in e.content
+            ? e.content.sample
+            : undefined;
     if (text) {
       requests.push({ insertText: { objectId, text, insertionIndex: 0 } });
       if (e.kind === 'text') {
@@ -198,6 +203,14 @@ export function buildSlideRequests(
 
     if (isTag && e.content && 'tag' in e.content) {
       tags[e.content.tag] = { kind: e.kind === 'image' ? 'image' : 'text' };
+    }
+    if (isField && e.content && 'field' in e.content) {
+      // Record the placed element's objectId — the merge engine duplicates
+      // the type-slide and fills slots by id, not by token-text match.
+      tags[e.content.field] = {
+        kind: e.kind === 'image' ? 'image' : 'text',
+        objectId,
+      };
     }
   }
 

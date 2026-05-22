@@ -111,9 +111,13 @@ def main():
         _assert(data['pageSize'] == [1920, 1080], 'pageSize is [WIDTH, HEIGHT]')
         _assert(len(data['pages']) == 2,
                 f"2 pages traced (got {len(data['pages'])})")
+        _assert(data['pages'][0]['type'] == 'title',
+                "page 0 carries type='title'")
+        _assert(data['pages'][1]['type'] == 'quote',
+                "page 1 carries type='quote'")
 
         # --- Slide 1 — text ops field tags ---
-        p0_text = [op for op in data['pages'][0] if op['op'] == 'text']
+        p0_text = [op for op in data['pages'][0]['ops'] if op['op'] == 'text']
         by_text = {op['text']: op for op in p0_text}
         _assert(by_text['Hello world']['field'] == 'headline',
                 "headline text carries field='headline'")
@@ -123,13 +127,13 @@ def main():
                 'static chrome text carries field=null')
 
         # --- Slide 1 — non-text primitives ---
-        ops0 = [op['op'] for op in data['pages'][0]]
+        ops0 = [op['op'] for op in data['pages'][0]['ops']]
         _assert('solid' in ops0, 'slide 1 records solid()')
         _assert('rect' in ops0, 'slide 1 records rect()')
         _assert('line' in ops0, 'slide 1 records line()')
 
         # --- Slide 2 — gradient + circle + field tags ---
-        p1 = data['pages'][1]
+        p1 = data['pages'][1]['ops']
         ops1 = [op['op'] for op in p1]
         _assert('gradient' in ops1, 'slide 2 records gradient()')
         _assert('circle' in ops1, 'slide 2 records circle()')

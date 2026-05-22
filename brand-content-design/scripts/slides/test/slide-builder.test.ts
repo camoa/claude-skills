@@ -197,6 +197,55 @@ describe('buildSlideRequests', () => {
     expect(style?.style?.weightedFontFamily?.fontFamily).toBe('Lora');
   });
 
+  it('inserts the sample text and records field→objectId for a {field,sample} element', () => {
+    const layout: SlideTypeLayout = {
+      type: 'cover',
+      elements: [
+        { id: 'bg', kind: 'shape', x: 0, y: 0, w: 720, h: 405, zOrder: 0, color: '#101010' },
+        {
+          id: 'hdln',
+          kind: 'text',
+          x: 60, y: 80, w: 600, h: 90,
+          zOrder: 1,
+          color: '#FFFFFF',
+          fontSize: 48, fontWeight: 900, fontFamily: 'heading',
+          align: 'start',
+          content: { field: 'headline', sample: 'Meet field_pulse' },
+        },
+      ],
+    };
+    const built = buildSlideRequests(layout, tokens, {});
+    // The type-slide displays the SAMPLE text, not a {{token}}.
+    const insert = built.requests.find((r) => r.insertText)?.insertText;
+    expect(insert?.text).toBe('Meet field_pulse');
+    // The tag map records field→objectId so the merge engine can target the
+    // placed element by id (not by token-text match).
+    expect(built.tags).toEqual({
+      headline: { kind: 'text', objectId: 'slide_cover_hdln' },
+    });
+  });
+
+  it('records objectId on a {field,sample} image element (kind=image)', () => {
+    const layout: SlideTypeLayout = {
+      type: 'people',
+      elements: [
+        {
+          id: 'avtr',
+          kind: 'image',
+          x: 100, y: 100, w: 120, h: 120,
+          zOrder: 0,
+          content: { field: 'avatar', sample: 'avatar' },
+        },
+      ],
+    };
+    const built = buildSlideRequests(layout, tokens, {});
+    expect(built.tags).toEqual({
+      avatar: { kind: 'image', objectId: 'slide_people_avtr' },
+    });
+    // A {field}-image is treated like a tagged image — placeholder shape, not a createImage.
+    expect(built.requests.some((r) => r.createImage)).toBe(false);
+  });
+
   it('throws when a generated objectId would exceed the 50-char API limit', () => {
     const longLayout: SlideTypeLayout = {
       type: 'Content',

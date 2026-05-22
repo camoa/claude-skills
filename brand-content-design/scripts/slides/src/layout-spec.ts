@@ -69,10 +69,20 @@ export interface LayoutElement {
    */
   lineFromBottomLeft?: boolean;
   /**
-   * Element content. A `tag` makes it a merge placeholder; `fixed` makes it
-   * fixed content; omitted means a pure styled shape (e.g. an accent bar).
+   * Element content. Three variants:
+   *  - `{ tag }`     — legacy merge placeholder (the type-slide carries the
+   *                    literal `{{token}}` text; the merge engine fills via
+   *                    `replaceAllText`). Used by `default-layout.ts`.
+   *  - `{ fixed }`   — fixed content (chrome, decoration, sample image label).
+   *  - `{ field, sample }` — field-tagged fillable slot from the generator
+   *                    contract (C4): the type-slide carries `sample` (the
+   *                    template's faithful default), and the renderer records
+   *                    the placed element's `objectId` in the `TagMap` so the
+   *                    merge engine can target it by id (`deleteText` +
+   *                    `insertText`) instead of by `{{token}}` text match.
+   *  - omitted       — pure styled shape (e.g. an accent bar).
    */
-  content?: { tag: string } | { fixed: string };
+  content?: { tag: string } | { fixed: string } | { field: string; sample: string };
 }
 
 /** The layout of one slide type — its ordered element list. */
@@ -98,6 +108,14 @@ export interface TagInfo {
    * rather than filling it with `replaceAllText`.
    */
   display?: boolean;
+  /**
+   * The placed element's Slides API object id on the type-slide. Set for
+   * `{ field, sample }` slots — the merge engine duplicates the type-slide,
+   * remaps element ids, and fills slots by id (`deleteText` + `insertText`)
+   * rather than by `{{token}}` text replacement. Undefined for legacy
+   * `{ tag }` content.
+   */
+  objectId?: string;
 }
 
 /** Per-slide-type entry in the tag map. */

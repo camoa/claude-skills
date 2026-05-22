@@ -24,17 +24,23 @@ Output JSON shape (one entry per page):
     {
       "pageSize": [W, H],
       "pages": [
-        [
-          {"op": "solid", "color": "#RRGGBB"},
-          {"op": "gradient", "stops": [[pos, "#RRGGBB"], ...]},
-          {"op": "text", "x", "y", "w", "text", "field": <str|null>,
-           "font", "size", "color", "align", "valign"},
-          {"op": "rect" | "roundRect" | "circle" | "line" | "image", ...},
-          ...
-        ],
+        {
+          "type": "<slide-type-id>",
+          "ops": [
+            {"op": "solid", "color": "#RRGGBB"},
+            {"op": "gradient", "stops": [[pos, "#RRGGBB"], ...]},
+            {"op": "text", "x", "y", "w", "text", "field": <str|null>,
+             "font", "size", "color", "align", "valign"},
+            {"op": "rect" | "roundRect" | "circle" | "line" | "image", ...},
+            ...
+          ]
+        },
         ...
       ]
     }
+
+The per-page `type` is the template's declared `SlideType.type` (the registry id
+that downstream code — `TagMap`, outline parser, payload — keys on).
 
 `field` is `null` for static chrome (logos, decoration); non-null for every
 fillable draw. The text op carries the call-site default in `text` AND the
@@ -59,15 +65,20 @@ class TracingCanvas(DeckCanvas):
 
     def __init__(self, assets_dir=None):
         self.out = '<trace>'
-        self.pages = []
-        self._current = None
+        self.pages = []          # one {type, ops} entry per slide, in order
+        self._current_ops = None # alias of pages[-1]['ops'] for fast append
         self._assets_dir = assets_dir
         self._img_counter = 0
 
     # ---- page lifecycle (C1) ----
     def start_slide(self):
-        self._current = []
-        self.pages.append(self._current)
+        # build() (from generator.deck_canvas) sets canvas.content per slide
+        # AFTER start_slide() returns; we don't know the type id from start_slide
+        # alone. Open the page with an empty type placeholder; trace_template()
+        # back-fills `type` from the SLIDES iteration order it controls.
+        entry = {'type': None, 'ops': []}
+        self.pages.append(entry)
+        self._current_ops = entry['ops']
 
     def save(self):
         # Nothing to flush; pages were collected as they were drawn.
@@ -86,7 +97,7 @@ class TracingCanvas(DeckCanvas):
             bx = x - w
         else:
             bx = x
-        self._current.append({
+        self._current_ops.append({
             'op': 'text',
             'x': bx, 'y': y, 'w': w,
             'text': value,
@@ -102,36 +113,36 @@ class TracingCanvas(DeckCanvas):
         pass
 
     def _solid(self, color):
-        self._current.append({'op': 'solid', 'color': color})
+        self._current_ops.append({'op': 'solid', 'color': color})
 
     def _gradient(self, stops):
         # Stops normalize to a JSON-serializable list of [position, hex].
-        self._current.append({
+        self._current_ops.append({
             'op': 'gradient',
             'stops': [[float(p), c] for p, c in stops],
         })
 
     def _rect(self, x, y, w, h, color):
-        self._current.append({
+        self._current_ops.append({
             'op': 'rect', 'x': x, 'y': y, 'w': w, 'h': h, 'color': color,
         })
 
     def _round_rect(self, x, y, w, h, r, fill, stroke, stroke_w):
-        self._current.append({
+        self._current_ops.append({
             'op': 'roundRect',
             'x': x, 'y': y, 'w': w, 'h': h, 'r': r,
             'fill': fill, 'stroke': stroke, 'strokeW': stroke_w,
         })
 
     def _circle(self, cx, cy, r, fill, stroke, stroke_w):
-        self._current.append({
+        self._current_ops.append({
             'op': 'circle',
             'cx': cx, 'cy': cy, 'r': r,
             'fill': fill, 'stroke': stroke, 'strokeW': stroke_w,
         })
 
     def _line(self, x1, y1, x2, y2, color, w):
-        self._current.append({
+        self._current_ops.append({
             'op': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
             'color': color, 'w': w,
         })
@@ -151,7 +162,7 @@ class TracingCanvas(DeckCanvas):
                 copied = dst
             except OSError:
                 copied = path
-        self._current.append({
+        self._current_ops.append({
             'op': 'image', 'path': copied, 'x': x, 'y': y, 'w': w, 'h': h,
         })
 
@@ -173,6 +184,15 @@ def trace_template(template_dir, out_path):
 
     canvas = TracingCanvas(assets_dir=assets_dir)
     build(canvas, template.SLIDES)
+
+    # Back-fill page-level type ids in the SLIDES order build() drew them
+    # (the sample deck draws one slide per SlideType).
+    if len(canvas.pages) != len(template.SLIDES):
+        sys.stderr.write(
+            f'WARNING: traced {len(canvas.pages)} page(s) but SLIDES declares '
+            f'{len(template.SLIDES)}; type ids will be partial.\n')
+    for page, st in zip(canvas.pages, template.SLIDES):
+        page['type'] = st.type
 
     with open(out_path, 'w') as f:
         json.dump({'pageSize': [WIDTH, HEIGHT], 'pages': canvas.pages}, f)
