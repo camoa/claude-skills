@@ -8,22 +8,23 @@
  * output, consumed by the merge engine and the payload validator.
  */
 
-/** A slide type in the template's type-library. */
-export type SlideType =
-  | 'Title'
-  | 'Content'
-  | 'Image'
-  | 'Data'
-  | 'Quote'
-  | 'CTA'
-  | 'Transition';
+/**
+ * A slide type label. Each template names its own type catalogue — the generic
+ * `default-layout.ts` uses Title / Content / Image / Data / Quote / CTA /
+ * Transition; a designed template (e.g. `community-talk`, 13 types) defines its
+ * own set. Hence a free `string` rather than a fixed union.
+ */
+export type SlideType = string;
 
 /** The kind of a layout element. */
-export type ElementKind = 'shape' | 'image' | 'text';
+export type ElementKind = 'shape' | 'image' | 'text' | 'ellipse';
+
+/** Which brand font a text element uses. */
+export type FontRole = 'heading' | 'body' | 'mono';
 
 /**
  * A single positioned element on a type-slide. Geometry is in **points**
- * (resolution-independent; 1 pt = 12700 EMU).
+ * (resolution-independent; 1 pt = 12700 EMU), top-left origin.
  */
 export interface LayoutElement {
   /** Stable id within the slide; the caller-assigned API objectId derives from it. */
@@ -37,6 +38,26 @@ export interface LayoutElement {
   zOrder: number;
   /** Brand-token role for styling, if any (e.g. `primary`, `textDark`). */
   styleRole?: string;
+  /**
+   * Explicit hex colour. Overrides `styleRole` — a shape/ellipse fill or a text
+   * element's foreground colour. Use when the design needs a precise colour
+   * rather than a brand-token role.
+   */
+  color?: string;
+  /**
+   * A `shape` element with `rounded` is built as a `ROUND_RECTANGLE`. The
+   * Slides API's rounded rectangle has an intrinsic corner style — there is no
+   * settable radius — so this is a boolean, not a magnitude.
+   */
+  rounded?: boolean;
+  /** Text only — point size. Omitted falls back to the renderer default. */
+  fontSize?: number;
+  /** Text only — weight 100–900 (emits `weightedFontFamily`). */
+  fontWeight?: number;
+  /** Text only — which brand font. Defaults to `heading`. */
+  fontFamily?: FontRole;
+  /** Text only — paragraph alignment. */
+  align?: 'start' | 'center' | 'end';
   /**
    * Element content. A `tag` makes it a merge placeholder; `fixed` makes it
    * fixed content; omitted means a pure styled shape (e.g. an accent bar).

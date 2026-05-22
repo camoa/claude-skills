@@ -144,3 +144,29 @@ describe('mapParagraphStyle', () => {
     expect(() => mapParagraphStyle('p1', {})).toThrow();
   });
 });
+
+describe('mapTextStyle — weighted fonts', () => {
+  it('emits weightedFontFamily when a weight is given', () => {
+    const r = mapTextStyle('o1', { fontFamily: 'Nunito', weight: 900 });
+    expect(r.updateTextStyle?.style?.weightedFontFamily).toEqual({
+      fontFamily: 'Nunito',
+      weight: 900,
+    });
+    expect(r.updateTextStyle?.style?.fontFamily).toBeUndefined();
+    expect(r.updateTextStyle?.fields).toBe('weightedFontFamily');
+  });
+
+  it('emits plain fontFamily when no weight is given', () => {
+    const r = mapTextStyle('o1', { fontFamily: 'Inter' });
+    expect(r.updateTextStyle?.style?.fontFamily).toBe('Inter');
+    expect(r.updateTextStyle?.style?.weightedFontFamily).toBeUndefined();
+    expect(r.updateTextStyle?.fields).toBe('fontFamily');
+  });
+
+  it('combines a weight with an explicit font size', () => {
+    const r = mapTextStyle('o1', { fontFamily: 'Nunito', weight: 800, fontSize: 52 });
+    expect(r.updateTextStyle?.style?.weightedFontFamily?.weight).toBe(800);
+    expect(r.updateTextStyle?.style?.fontSize).toEqual({ magnitude: 52, unit: 'PT' });
+    expect(r.updateTextStyle?.fields).toBe('weightedFontFamily,fontSize');
+  });
+});

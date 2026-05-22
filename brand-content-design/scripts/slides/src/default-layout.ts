@@ -46,16 +46,16 @@ const SLIDES: SlideTypeLayout[] = [
       background(),
       { id: 'accent', kind: 'shape', x: 60, y: 150, w: 80, h: 8, zOrder: 1, styleRole: 'accent' },
       image('logo', '{{logo}}', { x: 60, y: 40, w: 120, h: 40 }),
-      text('title', '{{title}}', { x: 60, y: 170, w: 600, h: 80 }, 'textDark'),
-      text('subtitle', '{{subtitle}}', { x: 60, y: 260, w: 600, h: 40 }, 'textDark'),
+      text('title', '{{title}}', { x: 60, y: 170, w: 600, h: 80 }, 'textLight'),
+      text('subtitle', '{{subtitle}}', { x: 60, y: 260, w: 600, h: 40 }, 'textLight'),
     ],
   },
   {
     type: 'Content',
     elements: [
       background(),
-      text('title', '{{title}}', { x: 60, y: 50, w: 600, h: 60 }, 'textDark'),
-      text('body', '{{body}}', { x: 60, y: 130, w: 600, h: 220 }, 'textDark'),
+      text('title', '{{title}}', { x: 60, y: 50, w: 600, h: 60 }, 'textLight'),
+      text('body', '{{body}}', { x: 60, y: 130, w: 600, h: 220 }, 'textLight'),
     ],
   },
   {
@@ -63,39 +63,39 @@ const SLIDES: SlideTypeLayout[] = [
     elements: [
       background(),
       image('image', '{{image}}', { x: 0, y: 0, w: PAGE_W, h: 300 }),
-      text('caption', '{{caption}}', { x: 60, y: 320, w: 600, h: 50 }, 'textDark'),
+      text('caption', '{{caption}}', { x: 60, y: 320, w: 600, h: 50 }, 'textLight'),
     ],
   },
   {
     type: 'Data',
     elements: [
       background(),
-      text('title', '{{title}}', { x: 60, y: 40, w: 600, h: 50 }, 'textDark'),
+      text('title', '{{title}}', { x: 60, y: 40, w: 600, h: 50 }, 'textLight'),
       image('chart', '{{chart}}', { x: 60, y: 100, w: 400, h: 260 }),
-      text('insight', '{{insight}}', { x: 490, y: 100, w: 180, h: 260 }, 'textDark'),
+      text('insight', '{{insight}}', { x: 490, y: 100, w: 180, h: 260 }, 'textLight'),
     ],
   },
   {
     type: 'Quote',
     elements: [
       background(),
-      text('quote', '{{quote}}', { x: 90, y: 120, w: 540, h: 140 }, 'textDark'),
-      text('attribution', '{{attribution}}', { x: 90, y: 270, w: 540, h: 40 }, 'textDark'),
+      text('quote', '{{quote}}', { x: 90, y: 120, w: 540, h: 140 }, 'textLight'),
+      text('attribution', '{{attribution}}', { x: 90, y: 270, w: 540, h: 40 }, 'textLight'),
     ],
   },
   {
     type: 'CTA',
     elements: [
       background('primary'),
-      text('headline', '{{headline}}', { x: 60, y: 140, w: 600, h: 80 }, 'textLight'),
-      text('action', '{{action}}', { x: 60, y: 230, w: 600, h: 50 }, 'textLight'),
+      text('headline', '{{headline}}', { x: 60, y: 140, w: 600, h: 80 }, 'textDark'),
+      text('action', '{{action}}', { x: 60, y: 230, w: 600, h: 50 }, 'textDark'),
     ],
   },
   {
     type: 'Transition',
     elements: [
       background('primary'),
-      text('section', '{{section}}', { x: 60, y: 170, w: 600, h: 80 }, 'textLight'),
+      text('section', '{{section}}', { x: 60, y: 170, w: 600, h: 80 }, 'textDark'),
     ],
   },
 ];

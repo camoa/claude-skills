@@ -17,19 +17,28 @@ export interface GradientSpec {
   /** Pixel dimensions of the baked image. */
   width: number;
   height: number;
-  /** Two or more CSS colour stops, evenly distributed. */
+  /** Two or more CSS colour stops. Evenly distributed unless `positions` is set. */
   colors: string[];
   direction?: 'horizontal' | 'vertical' | 'diagonal';
+  /**
+   * Optional stop offsets in `[0,1]`, one per colour, for an uneven gradient
+   * (e.g. a colour that holds longer before the next blooms). When omitted the
+   * colours are spread evenly. Length must match `colors`.
+   */
+  positions?: number[];
 }
 
 /** Bake a linear-gradient fill into a PNG buffer. */
 export function bakeGradient(spec: GradientSpec): Buffer {
-  const { width, height, colors, direction = 'vertical' } = spec;
+  const { width, height, colors, direction = 'vertical', positions } = spec;
   if (width <= 0 || height <= 0) {
     throw new Error('bakeGradient: width and height must be positive');
   }
   if (colors.length < 2) {
     throw new Error('bakeGradient: at least two colour stops are required');
+  }
+  if (positions && positions.length !== colors.length) {
+    throw new Error('bakeGradient: positions length must match colors length');
   }
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -40,7 +49,9 @@ export function bakeGradient(spec: GradientSpec): Buffer {
         ? [0, 0, width, height]
         : [0, 0, 0, height];
   const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-  colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
+  colors.forEach((c, i) =>
+    grad.addColorStop(positions ? positions[i] : i / (colors.length - 1), c),
+  );
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
   return canvas.toBuffer('image/png');

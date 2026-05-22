@@ -91,6 +91,11 @@ export async function scaffoldTemplate(
   if (folderId) {
     await client.moveFileToFolder(presentationId, folderId);
   }
+  // `presentations.create` seeds one blank default slide. Capture its id now —
+  // it is removed once the typed slides exist (a presentation must always keep
+  // at least one slide, so the delete happens last).
+  const seeded = await client.getPresentation(presentationId);
+  const defaultSlideId = seeded.slides?.[0]?.objectId ?? undefined;
 
   // 3. Bake gradients, then upload every image → fixed-image URL map.
   const imageBuffers: Record<string, Buffer> = { ...(assets.images ?? {}) };
@@ -112,6 +117,13 @@ export async function scaffoldTemplate(
       typeSlideObjectId: built.slideObjectId,
       tags: built.tags,
     };
+  }
+
+  // Drop the API's seeded blank slide — the template is only the typed slides.
+  if (defaultSlideId) {
+    await client.batchUpdate(presentationId, [
+      { deleteObject: { objectId: defaultSlideId } },
+    ]);
   }
 
   return { presentationId, tagMap, fontSubstitutions, folderId };

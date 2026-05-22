@@ -57,3 +57,23 @@ describe('bakeDisplayText', () => {
     ).toThrow(/font file/i);
   });
 });
+
+describe('bakeGradient — uneven positions', () => {
+  it('bakes a 3-stop diagonal gradient with explicit positions', () => {
+    const png = bakeGradient({
+      width: 64,
+      height: 36,
+      colors: ['#081E41', '#194582', '#00F3FF'],
+      direction: 'diagonal',
+      positions: [0, 0.62, 1],
+    });
+    expect(png.length).toBeGreaterThan(0);
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+  });
+
+  it('throws when positions length does not match colours', () => {
+    expect(() =>
+      bakeGradient({ width: 10, height: 10, colors: ['#000000', '#FFFFFF'], positions: [0, 0.5, 1] }),
+    ).toThrow(/positions/);
+  });
+});

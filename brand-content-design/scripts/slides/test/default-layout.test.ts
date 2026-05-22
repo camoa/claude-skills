@@ -50,6 +50,20 @@ describe('buildDefaultLayout', () => {
     }
   });
 
+  it('pairs text colour with the slide background — dark text on light, light on dark', () => {
+    const el = (type: string, id: string) =>
+      spec.slides.find((s) => s.type === type)?.elements.find((e) => e.id === id);
+    // Light-background slides (styleRole 'background') → text uses 'textLight'
+    // (the brand's on-light-background token).
+    expect(el('Title', 'bg')?.styleRole).toBe('background');
+    expect(el('Title', 'title')?.styleRole).toBe('textLight');
+    expect(el('Content', 'body')?.styleRole).toBe('textLight');
+    // Primary-background slides → text uses 'textDark' (the on-dark token).
+    expect(el('CTA', 'bg')?.styleRole).toBe('primary');
+    expect(el('CTA', 'headline')?.styleRole).toBe('textDark');
+    expect(el('Transition', 'section')?.styleRole).toBe('textDark');
+  });
+
   it('keeps every element within the 720 × 405 page bounds', () => {
     for (const slide of spec.slides) {
       for (const el of slide.elements) {

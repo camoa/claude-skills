@@ -3,13 +3,21 @@
  * ordered `batchUpdate` request array that composes that type-slide.
  *
  * Sequence per element: create (shape/image, positioned via `elementProperties`)
- * → token-mapper styling → `insertText`. Elements are processed in z-order.
- * No I/O, no SDK calls — the scaffolder applies the requests.
+ * → fill / token-mapper styling → `insertText` → text styling. Elements are
+ * processed in z-order. No I/O, no SDK calls — the scaffolder applies them.
+ *
+ * Honours the full `LayoutElement` model: explicit colours, rounded rectangles,
+ * ellipses, and per-element font family / size / weight / alignment.
  */
 import type { slides_v1 } from 'googleapis';
-import type { SlideTypeLayout, LayoutElement, TagInfo } from './layout-spec.js';
+import type {
+  SlideTypeLayout,
+  LayoutElement,
+  TagInfo,
+  FontRole,
+} from './layout-spec.js';
 import type { BrandTokens } from './token-mapper.js';
-import { mapShapeFill, mapTextColor, mapTextStyle } from './token-mapper.js';
+import { mapShapeFill, mapTextColor, mapTextStyle, mapParagraphStyle } from './token-mapper.js';
 
 /** The build product for one type-slide. */
 export interface BuiltSlide {
@@ -19,6 +27,13 @@ export interface BuiltSlide {
 }
 
 const UNIT = 'PT';
+
+/** `align` → the Slides paragraph-alignment enum. */
+const ALIGNMENT: Record<string, 'START' | 'CENTER' | 'END'> = {
+  start: 'START',
+  center: 'CENTER',
+  end: 'END',
+};
 
 function elementProperties(
   pageObjectId: string,
@@ -40,9 +55,27 @@ function elementProperties(
   };
 }
 
+/** Resolve a brand-token colour role to its hex value. */
 function colorFor(tokens: BrandTokens, role: string | undefined): string | undefined {
   if (!role) return undefined;
   return (tokens.colors as Record<string, string | undefined>)[role];
+}
+
+/** Resolve a text element's font-family role to a concrete font name. */
+function fontFor(tokens: BrandTokens, role: FontRole | undefined): string {
+  if (role === 'body') return tokens.typography.bodyFont;
+  if (role === 'mono') {
+    return tokens.typography.monoFont ?? tokens.typography.bodyFont;
+  }
+  return tokens.typography.headingFont;
+}
+
+/** The Slides `createShape` `shapeType` for a layout element. */
+function shapeTypeFor(e: LayoutElement): string {
+  if (e.kind === 'text') return 'TEXT_BOX';
+  if (e.kind === 'ellipse') return 'ELLIPSE';
+  if (e.kind === 'shape' && e.rounded) return 'ROUND_RECTANGLE';
+  return 'RECTANGLE';
 }
 
 /**
@@ -92,13 +125,14 @@ export function buildSlideRequests(
       continue;
     }
 
-    // Everything else (text, shape, tagged image placeholder) → a shape.
-    const shapeType = e.kind === 'text' ? 'TEXT_BOX' : 'RECTANGLE';
-    requests.push({ createShape: { objectId, shapeType, elementProperties: ep } });
+    // Everything else (text, shape, ellipse, tagged image placeholder) → a shape.
+    requests.push({
+      createShape: { objectId, shapeType: shapeTypeFor(e), elementProperties: ep },
+    });
 
-    // Shape fill from the element's style role.
-    if (e.kind === 'shape') {
-      const hex = colorFor(tokens, e.styleRole);
+    // Shape / ellipse fill — explicit colour wins over a style role.
+    if (e.kind === 'shape' || e.kind === 'ellipse') {
+      const hex = e.color ?? colorFor(tokens, e.styleRole);
       if (hex) requests.push(mapShapeFill(objectId, hex));
     }
 
@@ -112,9 +146,18 @@ export function buildSlideRequests(
     if (text) {
       requests.push({ insertText: { objectId, text, insertionIndex: 0 } });
       if (e.kind === 'text') {
-        requests.push(mapTextStyle(objectId, { fontFamily: tokens.typography.headingFont }));
-        const hex = colorFor(tokens, e.styleRole) ?? tokens.colors.textDark;
+        requests.push(
+          mapTextStyle(objectId, {
+            fontFamily: fontFor(tokens, e.fontFamily),
+            fontSize: e.fontSize,
+            weight: e.fontWeight,
+          }),
+        );
+        const hex = e.color ?? colorFor(tokens, e.styleRole) ?? tokens.colors.textDark;
         requests.push(mapTextColor(objectId, hex));
+        if (e.align) {
+          requests.push(mapParagraphStyle(objectId, { alignment: ALIGNMENT[e.align] }));
+        }
       }
     }
 

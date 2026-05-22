@@ -13,6 +13,11 @@ const tokens: BrandTokens = {
   typography: { headingFont: 'Inter', bodyFont: 'Lora' },
 };
 
+const monoTokens: BrandTokens = {
+  ...tokens,
+  typography: { ...tokens.typography, monoFont: 'JetBrains Mono' },
+};
+
 const titleLayout: SlideTypeLayout = {
   type: 'Title',
   elements: [
@@ -116,6 +121,67 @@ describe('buildSlideRequests', () => {
     expect(built.requests[1].createShape?.shapeType).toBe('RECTANGLE');
     expect(built.requests.find((r) => r.insertText)?.insertText?.text).toBe('{{image}}');
     expect(built.tags).toEqual({ '{{image}}': { kind: 'image' } });
+  });
+
+  it('builds an `ellipse` element as an ELLIPSE shape with its fill', () => {
+    const layout: SlideTypeLayout = {
+      type: 'X',
+      elements: [{ id: 'badge', kind: 'ellipse', x: 10, y: 10, w: 40, h: 40, zOrder: 0, color: '#00F3FF' }],
+    };
+    const built = buildSlideRequests(layout, tokens, {});
+    expect(built.requests[1].createShape?.shapeType).toBe('ELLIPSE');
+    expect(built.requests.some((r) => r.updateShapeProperties)).toBe(true);
+  });
+
+  it('builds a `rounded` shape as a ROUND_RECTANGLE', () => {
+    const layout: SlideTypeLayout = {
+      type: 'X',
+      elements: [{ id: 'card', kind: 'shape', x: 0, y: 0, w: 100, h: 80, zOrder: 0, color: '#194582', rounded: true }],
+    };
+    const built = buildSlideRequests(layout, tokens, {});
+    expect(built.requests[1].createShape?.shapeType).toBe('ROUND_RECTANGLE');
+  });
+
+  it('uses an explicit element colour over its style role for a shape fill', () => {
+    const layout: SlideTypeLayout = {
+      type: 'X',
+      elements: [{ id: 's', kind: 'shape', x: 0, y: 0, w: 10, h: 10, zOrder: 0, styleRole: 'primary', color: '#00FFBE' }],
+    };
+    const built = buildSlideRequests(layout, tokens, {});
+    const fill = built.requests.find((r) => r.updateShapeProperties)?.updateShapeProperties;
+    expect(fill?.shapeProperties?.shapeBackgroundFill?.solidFill?.color?.rgbColor).toEqual({
+      red: 0,
+      green: 1,
+      blue: 190 / 255,
+    });
+  });
+
+  it('applies per-element font size, weight, family and alignment to text', () => {
+    const layout: SlideTypeLayout = {
+      type: 'X',
+      elements: [
+        {
+          id: 'h',
+          kind: 'text',
+          x: 0,
+          y: 0,
+          w: 400,
+          h: 60,
+          zOrder: 0,
+          content: { fixed: 'Hi' },
+          fontSize: 52,
+          fontWeight: 900,
+          fontFamily: 'mono',
+          align: 'center',
+          color: '#194582',
+        },
+      ],
+    };
+    const built = buildSlideRequests(layout, monoTokens, {});
+    const style = built.requests.find((r) => r.updateTextStyle?.style?.weightedFontFamily)?.updateTextStyle;
+    expect(style?.style?.weightedFontFamily).toEqual({ fontFamily: 'JetBrains Mono', weight: 900 });
+    expect(style?.style?.fontSize).toEqual({ magnitude: 52, unit: 'PT' });
+    expect(built.requests.some((r) => r.updateParagraphStyle?.style?.alignment === 'CENTER')).toBe(true);
   });
 
   it('throws when a generated objectId would exceed the 50-char API limit', () => {

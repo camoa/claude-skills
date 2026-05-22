@@ -25,6 +25,8 @@ export interface BrandTokens {
   typography: {
     headingFont: string;
     bodyFont: string;
+    /** Monospace font for code / technical text. Optional. */
+    monoFont?: string;
     sizes?: { title?: number; heading?: number; body?: number; caption?: number };
   };
 }
@@ -35,6 +37,11 @@ export interface Typography {
   /** points */
   fontSize?: number;
   bold?: boolean;
+  /**
+   * Font weight 100–900. When set, the request emits `weightedFontFamily`
+   * (so e.g. Nunito Black renders at weight 900) instead of plain `fontFamily`.
+   */
+  weight?: number;
 }
 
 /** Paragraph spacing / alignment values for a single paragraph-style mapping. */
@@ -145,16 +152,28 @@ export function mapPageBackground(
 
 /**
  * Map typography values onto text — an `updateTextStyle` request. The `fields`
- * mask names exactly the properties supplied (`fontFamily` always; `fontSize`
- * and `bold` only when given). `textRange` defaults to all text.
+ * mask names exactly the properties supplied. When `weight` is given the font
+ * is emitted as `weightedFontFamily` (carrying the numeric weight); otherwise
+ * as plain `fontFamily`. `fontSize` and `bold` are added only when given.
+ * `textRange` defaults to all text.
  */
 export function mapTextStyle(
   objectId: string,
   typography: Typography,
   textRange?: slides_v1.Schema$Range,
 ): slides_v1.Schema$Request {
-  const style: slides_v1.Schema$TextStyle = { fontFamily: typography.fontFamily };
-  const fields: string[] = ['fontFamily'];
+  const style: slides_v1.Schema$TextStyle = {};
+  const fields: string[] = [];
+  if (typography.weight !== undefined) {
+    style.weightedFontFamily = {
+      fontFamily: typography.fontFamily,
+      weight: typography.weight,
+    };
+    fields.push('weightedFontFamily');
+  } else {
+    style.fontFamily = typography.fontFamily;
+    fields.push('fontFamily');
+  }
   if (typography.fontSize !== undefined) {
     style.fontSize = { magnitude: typography.fontSize, unit: 'PT' };
     fields.push('fontSize');

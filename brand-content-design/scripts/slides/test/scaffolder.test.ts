@@ -7,6 +7,7 @@ import type { LayoutSpec } from '../src/layout-spec.js';
 function fakeClient() {
   return {
     createPresentation: vi.fn().mockResolvedValue({ presentationId: 'pres1' }),
+    getPresentation: vi.fn().mockResolvedValue({ slides: [{ objectId: 'p_default' }] }),
     uploadImage: vi
       .fn()
       .mockImplementation((name: string) =>
@@ -54,10 +55,11 @@ describe('scaffoldTemplate', () => {
     expect(client.createPresentation).toHaveBeenCalledOnce();
   });
 
-  it('applies one batchUpdate per slide type and records the tag map', async () => {
+  it('applies one batchUpdate per slide type plus a cleanup, and records the tag map', async () => {
     const client = fakeClient();
     const res = await scaffoldTemplate(asClient(client), tokens, layoutSpec);
-    expect(client.batchUpdate).toHaveBeenCalledTimes(2);
+    // 2 slide types + 1 trailing deleteObject cleanup of the seeded blank slide
+    expect(client.batchUpdate).toHaveBeenCalledTimes(3);
     expect(res.tagMap.Title).toEqual({
       typeSlideObjectId: 'slide_Title',
       tags: { '{{title}}': { kind: 'text' } },
@@ -101,6 +103,15 @@ describe('scaffoldTemplate', () => {
     expect(client.findOrCreateFolder).toHaveBeenNthCalledWith(2, 'templates', 'fold_BrandX');
     expect(client.moveFileToFolder).toHaveBeenCalledWith('pres1', 'fold_templates');
     expect(res.folderId).toBe('fold_templates');
+  });
+
+  it('deletes the API-seeded blank default slide once the typed slides exist', async () => {
+    const client = fakeClient();
+    await scaffoldTemplate(asClient(client), tokens, layoutSpec);
+    const calls = client.batchUpdate.mock.calls;
+    expect(calls[calls.length - 1][1]).toEqual([
+      { deleteObject: { objectId: 'p_default' } },
+    ]);
   });
 
   it('leaves files in Drive root when no folder path is given', async () => {
