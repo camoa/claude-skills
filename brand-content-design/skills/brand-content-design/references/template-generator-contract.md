@@ -19,15 +19,32 @@ then just *generator + filled outline*. Parity is structural, not reviewed.
 
 ## The canonical artifact
 
-A template **is one Python module** (`deck_layout.py`) — an *abstract layout spec*
-plus thin per-target *backends*. The module never renders directly; it draws onto a
-`DeckCanvas`, and a backend turns those calls into a PDF, a PPTX, or (via the Slides
-tracer) a Google Slides deck. Because every target consumes the one spec, the targets
-cannot structurally diverge.
+The drawing machinery is a **committed, reusable library** —
+`brand-content-design/scripts/generator/`:
 
-**Forbidden:** a per-template monolithic generator; a second generator in another
-language for another target; layout logic or content inside a backend. (These are the
-`tech-talk` anti-pattern that motivated this contract.)
+| File | Holds |
+|---|---|
+| `deck_canvas.py` | `DeckCanvas`, `FieldSpec`, `SlideType`, `FontSpec`, `build`, `icon_png` (C1–C5) |
+| `pdf_backend.py` | `PdfCanvas` — the reportlab backend |
+| `pptx_backend.py` | `PptxCanvas` — the python-pptx backend |
+| `conformance_check.py` | the generic conformance check (any template) |
+| `__init__.py` | the package surface |
+
+A **template** is then a *thin module* (`deck_layout.py`) that **imports** this
+library and declares **only** what is specific to it: its palette, fonts, brand
+composites, the slide functions, and the `SLIDES` registry. The template never
+re-derives `DeckCanvas` or the backends — it cannot, because they are not its to
+write. That is what makes a template deterministic: the variable part is small and
+declarative, the machinery is fixed and shared.
+
+The template draws onto a `DeckCanvas`; a backend turns those calls into a PDF, a
+PPTX, or (via the Slides tracer) a Google Slides deck. Because every target consumes
+the one library, the targets cannot structurally diverge.
+
+**Forbidden:** a per-template monolithic generator; a per-template copy of
+`DeckCanvas` or a backend; a second generator in another language for another target;
+layout logic or content inside a backend. (These are the `tech-talk` anti-pattern
+that motivated this contract.)
 
 ## The five components
 
@@ -140,32 +157,41 @@ call-site default string.
 
 ## How the other artifacts derive
 
+`deck_layout.py` below is the **template module** (the thin importer); `build`,
+`PdfCanvas`, `PptxCanvas` and the conformance check come from the committed library.
+
 ```
-deck_layout.py ─build(canvas)──────────────▶ sample.pdf / sample.pptx
-deck_layout.py ─build(canvas, outline)─────▶ a presentation (PDF / PPTX)
-deck_layout.py ─traced─────────────────────▶ Google Slides template + field map
-deck_layout.py SLIDES registry ────────────▶ template.md catalog
-deck_layout.py SLIDES[].fields ────────────▶ outline-template.md per-type fields
+deck_layout.py ─build(canvas, SLIDES)─────────▶ sample.pdf / sample.pptx
+deck_layout.py ─build(canvas, SLIDES, outline)▶ a presentation (PDF / PPTX)
+deck_layout.py ─traced────────────────────────▶ Google Slides template + field map
+deck_layout.py SLIDES registry ───────────────▶ template.md catalog
+deck_layout.py SLIDES[].fields ───────────────▶ outline-template.md per-type fields
 ```
 
-`/template-presentation` authors the generator and runs it for the samples.
-`/outline` reads `SLIDES[].fields` to emit `outline-template.md`. No artifact is
-hand-authored independently; none can drift.
+`/template-presentation` authors the template module (slide functions + `SLIDES`)
+against the committed library and runs it for the samples. `/outline` reads
+`SLIDES[].fields` to emit `outline-template.md`. No artifact is hand-authored
+independently; none can drift.
 
 ## Conformance requirements
 
-A conforming template generator:
+A conforming template:
 
-1. Draws only through `DeckCanvas` — no direct backend calls in slide functions.
-2. Models every text element as a block (string + width); never pre-wraps.
-3. Declares every slide type in `SLIDES` with a non-empty, unique-per-type `fields`
+1. Imports `DeckCanvas` / `build` / the backends from the committed library — it
+   does not copy or re-derive them.
+2. Draws only through `DeckCanvas` — no direct backend calls in slide functions.
+3. Models every text element as a block (string + width); never pre-wraps.
+4. Declares every slide type in `SLIDES` with a non-empty, unique-per-type `fields`
    list; every fillable draw carries a matching `field=`.
-4. Puts each field's sample value at its call site as the default.
-5. Provides `build(canvas, content=None)`.
-6. Keeps backends thin — primitives only, no layout, no content.
+5. Puts each field's sample value at its call site as the default.
+6. Exposes `SLIDES`, `FONTS`, `FONT_DIR` and `SAMPLE_PDF` so the conformance check
+   can run against it.
+
+The library's `conformance_check.py` runs against any template directory
+(`python3 conformance_check.py <template-dir>`) and asserts rules 4–5 plus sample
+stability.
 
 **Sample stability.** After a refactor to conform, the generated `sample.pdf` must be
 **render-identical** to the prior one — verified by rasterizing both and pixel-diffing
 each page (literal byte identity is not required: reportlab embeds `/CreationDate` and
-a document `/ID`). A conformance check script ships with the template and asserts
-render-identity plus rules 3–4.
+a document `/ID`).
