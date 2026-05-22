@@ -63,7 +63,7 @@ describe('renderDeck', () => {
     const dups = batch1.filter((r: Record<string, unknown>) => r.duplicateObject);
     const dels = batch1.filter((r: Record<string, unknown>) => r.deleteObject);
     expect(dups).toHaveLength(2); // one per payload entry
-    expect(dups[0].duplicateObject.objectIds).toEqual({ slide_Title: 'Title_0' });
+    expect(dups[0].duplicateObject.objectIds).toEqual({ slide_Title: 'slide_Title_0' });
     expect(dels).toHaveLength(2); // the two prototype type-slides
   });
 
@@ -74,13 +74,13 @@ describe('renderDeck', () => {
     const textReq = batch1.find(
       (r: Record<string, any>) => r.replaceAllText?.containsText?.text === '{{body}}',
     );
-    expect(textReq.replaceAllText.pageObjectIds).toEqual(['Content_1']);
+    expect(textReq.replaceAllText.pageObjectIds).toEqual(['slide_Content_1']);
   });
 
   it('fills speaker notes from a getPresentation read in a second batch', async () => {
     const client = fakeClient([
       {
-        objectId: 'Content_1',
+        objectId: 'slide_Content_1',
         slideProperties: { notesPage: { notesProperties: { speakerNotesObjectId: 'notes_C1' } } },
       },
     ]);

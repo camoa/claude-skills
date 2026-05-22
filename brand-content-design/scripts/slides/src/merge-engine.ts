@@ -33,8 +33,9 @@ export interface RenderResult {
   /** The rendered deck — a copy; the template is never mutated. */
   presentationId: string;
   slidesRendered: number;
+  /** Count of tags dispatched for fill (text + image). Whether each actually
+   * matched a shape is confirmed by the visual-diff gate, not here. */
   tagsFilled: number;
-  unmatchedTags: string[];
   fontSubstitutions: FontSubstitution[];
 }
 
@@ -96,7 +97,9 @@ export async function renderDeck(
   for (let i = 0; i < payload.length; i++) {
     const slide = payload[i];
     const srcId = template.tagMap[slide.type].typeSlideObjectId;
-    const newSlideId = `${slide.type}_${i}`;
+    // `slide_` prefix keeps the id safely above the 5-char API floor for
+    // every SlideType (the shortest, `CTA`, would otherwise be exactly 5).
+    const newSlideId = `slide_${slide.type}_${i}`;
     rendered.push({ slideId: newSlideId, notes: slide.speakerNotes });
 
     batch1.push({
@@ -135,7 +138,9 @@ export async function renderDeck(
       deleteObject: { objectId: template.tagMap[type].typeSlideObjectId },
     });
   }
-  await client.batchUpdate(presentationId, batch1);
+  if (batch1.length > 0) {
+    await client.batchUpdate(presentationId, batch1);
+  }
 
   // 4. Resolve speaker-notes shape ids — unpredictable, needs a read.
   const presentation = await client.getPresentation(presentationId);
@@ -157,7 +162,6 @@ export async function renderDeck(
     presentationId,
     slidesRendered: payload.length,
     tagsFilled,
-    unmatchedTags: [],
     fontSubstitutions,
   };
 }
