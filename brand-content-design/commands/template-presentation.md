@@ -368,6 +368,10 @@ Create a new presentation template or edit an existing one.
 13. **Create/update template.md**
     Using template-structure.md from references:
     - Fill in purpose, content type, slide structure
+    - For each slide in the structure, include an optional **Speaker notes:**
+      guidance line (what the presenter should cover on that slide). Optional and
+      additive — the PDF/PPTX path ignores it; the Google Slides renderer fills
+      each slide's speaker notes from the matching outline field.
     - **Include selected style name and key constraints**
     - **Include selected palette name and colors**
     - **Include visual components configuration** (if enabled)

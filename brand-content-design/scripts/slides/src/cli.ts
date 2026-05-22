@@ -18,9 +18,18 @@ import type {
   ExportMimeType,
   SlidesServices,
 } from './types.js';
+import { readFileSync } from 'node:fs';
 import { SlidesClient } from './client.js';
 import { resolveAuthConfig, createAuthClient } from './auth.js';
 import { normalizeError } from './errors.js';
+import type { BrandTokens } from './token-mapper.js';
+import type { LayoutSpec, TagMap as LayoutTagMap } from './layout-spec.js';
+import type { GradientSpec } from './image-baker.js';
+import type { ContentPayload } from './payload-validator.js';
+import type { FontSubstitution } from './merge-engine.js';
+import { scaffoldTemplate } from './scaffolder.js';
+import { renderDeck } from './merge-engine.js';
+import { buildDefaultLayout } from './default-layout.js';
 
 /** A bad command document or argument. Carries a stable `code`. */
 class CommandError extends Error {
@@ -133,6 +142,71 @@ function reqExportMime(
   return v;
 }
 
+/** Require an object-valued argument (not array, not null). */
+function reqObject(
+  args: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const v = args[key];
+  if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    throw new CommandError(`Missing or invalid object argument "${key}".`);
+  }
+  return v as Record<string, unknown>;
+}
+
+/** Optional object-valued argument. */
+function optObject(
+  args: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | undefined {
+  if (args[key] === undefined) return undefined;
+  return reqObject(args, key);
+}
+
+/** Optional `Record<string,string>` argument (e.g. element id → file path). */
+function optStringMap(
+  args: Record<string, unknown>,
+  key: string,
+): Record<string, string> | undefined {
+  const v = optObject(args, key);
+  if (v === undefined) return undefined;
+  for (const [k, val] of Object.entries(v)) {
+    if (typeof val !== 'string') {
+      throw new CommandError(
+        `Argument "${key}" values must be strings ("${k}" is not).`,
+      );
+    }
+  }
+  return v as Record<string, string>;
+}
+
+/** Require an array argument of unknown element type. */
+function reqUnknownArray(args: Record<string, unknown>, key: string): unknown[] {
+  const v = args[key];
+  if (!Array.isArray(v)) {
+    throw new CommandError(`Missing or invalid array argument "${key}".`);
+  }
+  return v;
+}
+
+/** Optional array-of-objects argument. */
+function optObjectArray(
+  args: Record<string, unknown>,
+  key: string,
+): Record<string, unknown>[] | undefined {
+  const v = args[key];
+  if (v === undefined) return undefined;
+  if (
+    !Array.isArray(v) ||
+    !v.every((x) => !!x && typeof x === 'object' && !Array.isArray(x))
+  ) {
+    throw new CommandError(
+      `Argument "${key}" must be an array of objects when present.`,
+    );
+  }
+  return v as Record<string, unknown>[];
+}
+
 /** Route a command document to the matching SlidesClient method. */
 async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown> {
   const a = doc.args;
@@ -173,6 +247,41 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
         reqTagMap(a, 'tagImageMap'),
         optStringArray(a, 'pageObjectIds'),
       );
+    case 'scaffoldTemplate': {
+      const tokens = reqObject(a, 'tokens') as unknown as BrandTokens;
+      const layoutSpec =
+        (optObject(a, 'layoutSpec') as unknown as LayoutSpec | undefined) ??
+        buildDefaultLayout();
+      const imagePaths = optStringMap(a, 'imagePaths');
+      const images = imagePaths
+        ? Object.fromEntries(
+            Object.entries(imagePaths).map(([id, p]) => [id, readFileSync(p)]),
+          )
+        : undefined;
+      const gradients = optObject(a, 'gradients') as unknown as
+        | Record<string, GradientSpec>
+        | undefined;
+      return scaffoldTemplate(
+        client,
+        tokens,
+        layoutSpec,
+        { images, gradients },
+        { driveFolderPath: optStringArray(a, 'driveFolderPath') },
+      );
+    }
+    case 'renderDeck': {
+      const tagMap = reqObject(a, 'tagMap') as unknown as LayoutTagMap;
+      const payload = reqUnknownArray(a, 'payload') as unknown as ContentPayload;
+      const fontSubstitutions = optObjectArray(a, 'fontSubstitutions') as
+        | FontSubstitution[]
+        | undefined;
+      return renderDeck(
+        client,
+        { presentationId: reqString(a, 'templatePresentationId'), tagMap },
+        payload,
+        { fontSubstitutions, customFontFile: optString(a, 'customFontFile') },
+      );
+    }
     default:
       throw new CommandError(`Unknown command: ${doc.command}`);
   }

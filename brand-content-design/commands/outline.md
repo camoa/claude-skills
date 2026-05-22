@@ -72,6 +72,7 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - {Content element 2}: ___
    {If cards enabled: - **Card text**: ___ (content for rounded card container)}
    {If icons enabled: - **Icon suggestion**: ___ (e.g., lightbulb, rocket, chart-bar)}
+   - Speaker notes: ___ (presenter script — optional; filled into the Google Slides deck)
 
    ## Slide 2: {Slide Type}
    **Purpose:** {What this slide should achieve}
@@ -80,6 +81,7 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - {Content element 2}: ___
    {If cards enabled: - **Card text**: ___}
    {If icons enabled: - **Icon suggestion**: ___}
+   - Speaker notes: ___ (presenter script — optional; filled into the Google Slides deck)
 
    ...
    ```
@@ -145,6 +147,7 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - **Quote Slide**: Add authority or emphasis. Content: quote text + attribution.
    - **CTA Slide**: Bridge content to action. Content: clear direction, reason to act, easy next step. Words: 10-15.
    - **Transition Slide**: Signal section changes. Content: section title only. Words: 3-5.
+   - **Speaker notes** (every slide type): a short presenter script — what to say aloud while the slide is shown. Optional, 1-3 sentences. Used by the Google Slides renderer to fill each slide's notes page; ignored by the PDF/PPTX path.
 
    ## MY TEMPLATE STRUCTURE
 
@@ -168,11 +171,13 @@ Help users prepare content that maps perfectly to a template's structure. Users 
    - {element}: {filled content}
    {If cards enabled: - Card text: {short label for card}}
    {If icons enabled: - Icon: {icon-name}}
+   - Speaker notes: {presenter script for this slide}
 
    ## Slide 2: {Type}
    - {element}: {filled content}
    {If cards enabled: - Card text: {short label for card}}
    {If icons enabled: - Icon: {icon-name}}
+   - Speaker notes: {presenter script for this slide}
 
    ...
    ```

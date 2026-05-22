@@ -35,6 +35,18 @@ Create a presentation from an existing template with user-provided content.
    - Question: "Which template would you like to use?"
    - Options: List each template by name
 
+3b. **Ask output target**
+   Use AskUserQuestion:
+   - Header: "Output"
+   - Question: "Which presentation format do you want?"
+   - Options:
+     - "PDF + PPTX" — default; rendered locally, no Google account needed
+     - "Google Slides" — a native Google Slides deck via the bundled Slides renderer (needs Google credentials)
+   Store the choice as OUTPUT_TARGET. If "Google Slides", confirm the Slides API
+   credentials env vars are set (see `scripts/slides/README.md` → Credentials).
+   If they are absent, tell the user how to set them and fall back to "PDF + PPTX"
+   — never block the presentation on missing credentials.
+
 4. **Load template files**
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/template.md`
    - Read `{PROJECT_PATH}/templates/presentations/{template-name}/canvas-philosophy.md`
@@ -127,13 +139,34 @@ Create a presentation from an existing template with user-provided content.
    - Request output as multi-page PDF at 1920x1080 (16:9)
    - Save to workspace
 
-9. **Convert PDF to PPTX**
+9. **Produce the editable deliverable**
+
+   **If OUTPUT_TARGET is "PDF + PPTX" (default) — convert PDF to PPTX:**
    Use the **pptx** skill:
    - Use the "Creating without a template" (html2pptx) workflow
    - Match the PDF design exactly
    - Create editable text boxes for each content element
    - Incorporate logo from brand-philosophy.md assets
    - Save as PPTX
+
+   **If OUTPUT_TARGET is "Google Slides" — render natively via the Slides renderer:**
+   Instead of PPTX, drive the bundled renderer at `scripts/slides/` (shell-out;
+   credentials read from env vars). The PDF from step 8 still renders and stays
+   as the visual-diff reference.
+   1. Build the brand token set from brand-philosophy.md (colors + heading/body fonts).
+   2. Scaffold the branded template — the typed slide library:
+      `echo '{"command":"scaffoldTemplate","args":{"tokens":<tokens>}}' | node scripts/slides/dist/cli.js`
+      The result records `{ presentationId, tagMap }`. Omit `layoutSpec` to use
+      the built-in 7-type default layout, or pass one to override geometry.
+   3. Parse the filled outline into a content payload with the outline parser
+      (`scripts/slides/src/outline-parser.ts` — `parseOutline` then
+      `toContentPayload(parsed, tagMap)`); the payload carries each slide's
+      `speakerNotes`.
+   4. Render the deck:
+      `echo '{"command":"renderDeck","args":{"templatePresentationId":<id>,"tagMap":<tagMap>,"payload":<payload>}}' | node scripts/slides/dist/cli.js`
+   5. The renderer returns the Google Slides presentation ID; speaker notes are
+      filled automatically. Report the deck URL to the user.
+   See `scripts/slides/references/slides-api-guide.md` for the full model.
 
 10. **Save outputs**
     Create folder: `{PROJECT_PATH}/presentations/{YYYY-MM-DD}-{topic-slug}/`

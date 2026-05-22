@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleCommand, parseCommandDoc } from '../src/cli.js';
 import type { SlidesClient } from '../src/client.js';
 
+// The orchestration commands delegate to these free functions — mock them so
+// the dispatch routing is exercised without real scaffold / render work.
+vi.mock('../src/scaffolder.js', () => ({ scaffoldTemplate: vi.fn() }));
+vi.mock('../src/merge-engine.js', () => ({ renderDeck: vi.fn() }));
+import { scaffoldTemplate } from '../src/scaffolder.js';
+import { renderDeck } from '../src/merge-engine.js';
+
 /** A fake SlidesClient — every method a vi.fn(), overridable per test. */
 function fakeClient(overrides: Record<string, unknown> = {}): SlidesClient {
   return {
@@ -148,6 +155,80 @@ describe('handleCommand', () => {
     const env = await handleCommand(fakeClient(), {
       command: 'replaceAllText',
       args: { presentationId: 'p1', tagMap: { '{{a}}': 42 } },
+    });
+    expect(env.ok).toBe(false);
+    if (!env.ok) expect(env.error.code).toBe('BAD_COMMAND');
+  });
+});
+
+describe('handleCommand — orchestration commands', () => {
+  const tokens = { colors: {}, typography: {} };
+
+  it('dispatches scaffoldTemplate and wraps the ScaffoldResult', async () => {
+    vi.mocked(scaffoldTemplate).mockResolvedValue({
+      presentationId: 'tmpl1',
+      tagMap: {},
+      fontSubstitutions: [],
+    });
+    const env = await handleCommand(fakeClient(), {
+      command: 'scaffoldTemplate',
+      args: { tokens },
+    });
+    expect(env).toEqual({
+      ok: true,
+      result: { presentationId: 'tmpl1', tagMap: {}, fontSubstitutions: [] },
+    });
+    expect(scaffoldTemplate).toHaveBeenCalled();
+  });
+
+  it('falls back to the default 7-type layout when layoutSpec is omitted', async () => {
+    vi.mocked(scaffoldTemplate).mockResolvedValue({
+      presentationId: 't',
+      tagMap: {},
+      fontSubstitutions: [],
+    });
+    await handleCommand(fakeClient(), {
+      command: 'scaffoldTemplate',
+      args: { tokens },
+    });
+    const layoutArg = vi.mocked(scaffoldTemplate).mock.calls[0][2];
+    expect(layoutArg.slides).toHaveLength(7);
+  });
+
+  it('rejects scaffoldTemplate without a tokens object', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'scaffoldTemplate',
+      args: {},
+    });
+    expect(env.ok).toBe(false);
+    if (!env.ok) expect(env.error.code).toBe('BAD_COMMAND');
+  });
+
+  it('dispatches renderDeck and wraps the RenderResult', async () => {
+    vi.mocked(renderDeck).mockResolvedValue({
+      presentationId: 'deck1',
+      slidesRendered: 3,
+      tagsFilled: 9,
+      fontSubstitutions: [],
+    });
+    const env = await handleCommand(fakeClient(), {
+      command: 'renderDeck',
+      args: { templatePresentationId: 'tmpl1', tagMap: {}, payload: [] },
+    });
+    expect(env.ok).toBe(true);
+    if (env.ok) expect(env.result).toMatchObject({ presentationId: 'deck1' });
+    expect(renderDeck).toHaveBeenCalledWith(
+      expect.anything(),
+      { presentationId: 'tmpl1', tagMap: {} },
+      [],
+      expect.any(Object),
+    );
+  });
+
+  it('rejects renderDeck without a templatePresentationId', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'renderDeck',
+      args: { tagMap: {}, payload: [] },
     });
     expect(env.ok).toBe(false);
     if (!env.ok) expect(env.error.code).toBe('BAD_COMMAND');

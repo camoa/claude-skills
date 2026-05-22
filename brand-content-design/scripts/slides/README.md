@@ -103,9 +103,18 @@ Exit code is `0` when `ok`, `1` otherwise — but always read the envelope.
 | `getPageThumbnail` | `presentationId`, `pageObjectId` | `{ contentUrl }` |
 | `replaceAllText` | `presentationId`, `tagMap` | `{ occurrencesByTag }` |
 | `replaceAllShapesWithImage` | `presentationId`, `tagImageMap` | `{ occurrencesByTag }` |
+| `scaffoldTemplate` | `tokens`, `layoutSpec?`, `imagePaths?`, `gradients?`, `driveFolderPath?` | `ScaffoldResult` |
+| `renderDeck` | `templatePresentationId`, `tagMap`, `payload`, `fontSubstitutions?`, `customFontFile?` | `RenderResult` |
 
-`tagMap` / `tagImageMap` are `{ "{{tag}}": "value" }` objects — keys are the
-literal tag tokens in the template, values are replacement text or image URLs.
+`tagMap` / `tagImageMap` (on the low-level text/image commands) are
+`{ "{{tag}}": "value" }` objects — keys are the literal tag tokens in the
+template, values are replacement text or image URLs.
+
+`scaffoldTemplate` and `renderDeck` are the orchestration commands the
+`/presentation` Google Slides target shells out to. `scaffoldTemplate` omitting
+`layoutSpec` uses the built-in 7-type default layout. `renderDeck`'s `payload`
+is produced from a filled outline by `src/outline-parser.ts`. See
+`references/slides-api-guide.md` for the full rendering model.
 
 Note: `exportFile` with `image/png` exports the **first page only** (a Drive
 API limitation — `files.export` is whole-file). For per-page images use
@@ -153,4 +162,20 @@ npm run spike
 | `retry.ts` | exponential backoff for `429` / `5xx` |
 | `errors.ts` | normalize any throwable into a structured `SlidesError` |
 | `client.ts` | `SlidesClient` — the typed API surface |
-| `cli.ts` | stdin-JSON → stdout-envelope adapter |
+| `cli.ts` | stdin-JSON → stdout-envelope adapter; low-level + orchestration commands |
+| `token-mapper.ts` | pure brand-token → Slides styling-request mapper |
+| `layout-spec.ts` | layout-IR + tag-map types — scaffolder input/output contract |
+| `default-layout.ts` | the built-in 16:9 layout IR for all 7 slide types |
+| `font-classifier.ts` | classify brand fonts — Google-Fonts-native vs custom |
+| `image-baker.ts` | bake gradients + custom-font display text to PNG (`@napi-rs/canvas`) |
+| `slide-builder.ts` | build one type-slide's create/style requests from a layout |
+| `scaffolder.ts` | `scaffoldTemplate` — compose the branded typed-slide template |
+| `payload-validator.ts` | validate a content payload against the tag map (fail-fast) |
+| `outline-parser.ts` | parse a filled `/outline` markdown → `ContentPayload` |
+| `merge-engine.ts` | `renderDeck` — outline-driven render of a finished deck |
+
+## Reference
+
+`references/slides-api-guide.md` — the rendering model (auth, the batchUpdate
+model, the type-library + merge model, page-scoping, speaker notes, known API
+limits). Plugin-local; not part of the public `dev-guides` system.
