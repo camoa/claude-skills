@@ -94,11 +94,15 @@ Decoration the Slides API cannot fill (gradients) is baked: declare a full-bleed
 2. **Gradients** — if the style uses a gradient background, build a
    `GradientSpec` (`colors`, `direction`, optional `positions`); the renderer
    bakes it to an image.
-3. **Render** — write the command document and invoke the CLI:
+3. **Render** — write the command document and invoke the CLI. Always pass
+   `presentationName` (the template's name) so the Drive file is identifiable —
+   omitting it names every scaffold "Brand Slides template":
    ```sh
    echo '{"command":"scaffoldTemplate","args":{"tokens":<BrandTokens>,
      "layoutSpec":<LayoutSpec>,"imagePaths":{"logo":"<assets/logo.png>"},
-     "gradients":{"grad":<GradientSpec>}}}' | node scripts/slides/dist/cli.js
+     "gradients":{"grad":<GradientSpec>},
+     "presentationName":"<template-name> — Slides template"}}' \
+     | node scripts/slides/dist/cli.js
    ```
    The result envelope's `result.presentationId` is the rendered Google Slides
    template.

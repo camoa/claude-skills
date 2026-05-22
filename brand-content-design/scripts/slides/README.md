@@ -123,7 +123,7 @@ Exit code is `0` when `ok`, `1` otherwise — but always read the envelope.
 | `getPageThumbnail` | `presentationId`, `pageObjectId` | `{ contentUrl }` |
 | `replaceAllText` | `presentationId`, `tagMap` | `{ occurrencesByTag }` |
 | `replaceAllShapesWithImage` | `presentationId`, `tagImageMap` | `{ occurrencesByTag }` |
-| `scaffoldTemplate` | `tokens`, `layoutSpec?`, `imagePaths?`, `gradients?`, `driveFolderPath?` | `ScaffoldResult` |
+| `scaffoldTemplate` | `tokens`, `layoutSpec?`, `imagePaths?`, `gradients?`, `driveFolderPath?`, `presentationName?` | `ScaffoldResult` |
 | `outlineToPayload` | `outlineMarkdown`, `tagMap` | `ContentPayload` |
 | `renderDeck` | `templatePresentationId`, `tagMap`, `payload`, `fontSubstitutions?`, `customFontFile?` | `RenderResult` |
 

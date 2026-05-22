@@ -267,7 +267,10 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
         tokens,
         layoutSpec,
         { images, gradients },
-        { driveFolderPath: optStringArray(a, 'driveFolderPath') },
+        {
+          driveFolderPath: optStringArray(a, 'driveFolderPath'),
+          presentationName: optString(a, 'presentationName'),
+        },
       );
     }
     case 'outlineToPayload': {

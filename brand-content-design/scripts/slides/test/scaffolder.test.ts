@@ -114,6 +114,14 @@ describe('scaffoldTemplate', () => {
     ]);
   });
 
+  it('names the created presentation from options.presentationName', async () => {
+    const client = fakeClient();
+    await scaffoldTemplate(asClient(client), tokens, layoutSpec, {}, {
+      presentationName: 'tech-talk — Slides template',
+    });
+    expect(client.createPresentation).toHaveBeenCalledWith('tech-talk — Slides template');
+  });
+
   it('leaves files in Drive root when no folder path is given', async () => {
     const client = fakeClient();
     const res = await scaffoldTemplate(asClient(client), tokens, layoutSpec);
