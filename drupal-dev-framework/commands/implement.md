@@ -65,6 +65,23 @@ For each acceptance criterion:
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
 7. Repeat until task complete.
 
+## Verify-and-promote nudge (v4.15.0+)
+
+When a change is implemented and the developer signals it is done, print **one
+declinable soft-nudge** (once per change — not per file, never re-asked):
+
+> Want me to verify this change live — drive the DDEV site / `drush` / the browser to
+> confirm it actually works and renders as intended? And if the change is worth
+> protecting against regression, I can promote it to a committed gate:
+> `/setup-atk --add-journey` (behavioural), or `/setup-visual-regression --add-surface`
+> / `/setup-visual-parity --add-surface` (visual).
+
+The live verification itself uses Claude Code's built-in `verify` capability — this
+nudge only surfaces it at the right moment and bridges to the epic's committed review
+gates. Soft-nudge posture (matches the change-impact dispatcher's recommender model):
+never blocks, never a gate, no audit. Skip it silently for a docs-only or
+non-functional change.
+
 ## Pointers
 
 - Full walkthrough: `references/implement-walkthrough.md`
