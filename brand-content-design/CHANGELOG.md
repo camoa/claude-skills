@@ -12,6 +12,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Speaker notes** — a capability the PPTX path never had: `/outline` and `/template-presentation` gain an additive `Speaker notes:` slot; the renderer fills each slide's notes page from the outline.
 - `/presentation` gains a **Google Slides output target** — the PDF→PPTX path stays the no-authentication default.
 - Plugin-local Slides API reference guide at `scripts/slides/references/slides-api-guide.md` (not published to the public dev-guides system).
+- **Faithful design rendering** — the renderer's layout model carries a real design: per-element font size / weight / family, explicit colours, rounded rectangles, ellipses, a mono font, and uneven-stop gradients. `scripts/slides/src/community-talk-layout.ts` is the `community-talk` template (13 typed slides) translated from its design source and rendered natively in Google Slides; `examples/render-community-talk.mjs` is the reproducible entry point. The scaffolder also drops the API's seeded blank default slide.
 
 ### Notes
 - Deferred (not blocking): a live end-to-end spike needs Google credentials not yet created (`scripts/slides/README.md` → Credentials); `TagInfo.display` is never set by the scaffolder, so custom-font display-text baking is currently unreachable end-to-end (tracked follow-up).
