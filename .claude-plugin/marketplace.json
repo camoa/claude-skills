@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.15.1"
+    "version": "1.15.2"
   },
   "plugins": [
     {
@@ -57,7 +57,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "Systematic 3-phase Drupal development workflow (Research → Architecture → Implementation) with enforced SOLID, TDD, DRY, and security gates. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with a change-impact dispatcher, two-stage dev-guides detection, the Playbook System, git-worktree parallel-task awareness, agent-team validation, per-project session-remembrance hooks, the ATK E2E behavioral gate (/setup-atk + /validate:e2e), the committed-Playwright visual-regression gate (/setup-visual-regression + /validate:visual-regression), and the committed-Playwright visual-parity gate with a structured CSS-actionable diff (/setup-visual-parity + /validate:visual-parity).",
-      "version": "4.14.0",
+      "version": "4.15.0",
       "author": {
         "name": "camoa"
       },

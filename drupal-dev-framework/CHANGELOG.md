@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.0] - 2026-05-21
+
+### Added
+
+- **`/implement` verify-and-promote nudge** — when a change is implemented and the developer signals it is done, `/implement` prints one declinable soft-nudge offering to (a) verify the change live (drive the DDEV site / `drush` / browser via Claude Code's built-in `verify` capability) and (b) — if the change is worth protecting — promote it to a committed gate (`/setup-atk --add-journey`, `/setup-visual-regression --add-surface`, `/setup-visual-parity --add-surface`). Soft-nudge posture: once per change, never blocks, no audit. Bridges ad-hoc verification to the epic's committed review gates.
+
+This is the residue of the dropped `task_e_change_verification` (the `visual_and_e2e_review_gates` epic's 5th subtask). Its `/research` resolved the task's own drop-or-build gate: a standalone change-verification skill would have been too thin a delta over Claude Code's built-in `verify` skill — the only framework-coupled substance was this nudge, shipped here directly. The epic concludes with Tasks A–D (v4.11.0–v4.14.0) plus this nudge.
+
 ## [4.14.0] - 2026-05-21
 
 ### Visual Parity v2 — `/setup-visual-parity` + reworked `/validate:visual-parity` (epic `visual_and_e2e_review_gates`, Task D)
