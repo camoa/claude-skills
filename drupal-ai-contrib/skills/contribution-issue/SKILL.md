@@ -1,7 +1,7 @@
 ---
 name: contribution-issue
 description: "Works the Drupal issue lifecycle — reviews prior work on an issue first, then creates / comments on / claims it, and checks out the issue fork + branch with three-way fork handling. Use when the user runs /drupal-ai-contrib:issue or asks to find, create, claim, or check out a Drupal issue or issue fork. Wraps drupalorg-cli."
-version: 0.1.0
+version: 0.1.1
 model: sonnet
 user-invocable: false
 ---
@@ -36,7 +36,13 @@ handle dual-mode per the issue-lifecycle dev-guide.
 
 ### 3. Act — create, comment, or claim
 
-- **Create** an issue — a clear summary, steps to reproduce, the proposed resolution.
+- **Create** an issue — `drupalorg-cli` has **no** `issue:create` command. A *new*
+  issue is filed through the **web UI**: the project's Drupal.org issue queue, or its
+  GitLab issues page if the project has migrated. Draft the issue *for* the
+  contributor — title, summary, steps to reproduce, proposed resolution, the component,
+  and the affected version — then guide them to file it in the web UI and resume with
+  the new issue ID. Cite `drupal/contributing-with-ai/issue-creation`. Do not attempt a
+  CLI creation command.
 - **Comment** on an issue — shape: thank → what works → feedback → next step.
 - **Claim** an issue — set the appropriate status; then proceed to fork checkout (§4).
 
@@ -56,12 +62,25 @@ the most recent development branch (`main` for core; per-project for contrib).
 
 ### 5. Wrap drupalorg-cli — safely
 
-All issue/fork operations wrap `mglaman/drupalorg-cli`. Use **fixed, validated
-subcommands**. Before passing any identifier to the CLI, validate it against an
-explicit pattern — issue IDs must match `^[0-9]+$`, project machine-names must match
-`^[a-z][a-z0-9_]*$` — and **reject anything that does not match** rather than shelling
-out with it. Never interpolate unsanitized input into a shell command. drupal.org /
-GitLab credentials are the contributor's own — never store or transmit them.
+Issue/fork operations wrap `mglaman/drupalorg-cli`. The executable on `PATH` is
+**`drupalorg`** (not `drupalorg-cli` — that is only the package name); detect it with
+`command -v drupalorg`. See `${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md`
+for what the tool is, how to install it, authentication, and what it can and cannot do.
+Confirm exact subcommand names with `drupalorg list` — names can drift between
+releases; do not assume them.
+
+**Pushing needs credentials.** Reviewing and reading an issue work over public APIs,
+but creating the issue-fork branch and `git push`ing it need an **SSH key registered
+on the contributor's drupal.org account** (issue-fork remotes are SSH URLs). If a push
+is rejected, that missing/unregistered key is the first thing to check — surface it and
+point at `setup` §5 and the reference's Authentication section; never fabricate fork or
+push state.
+
+Use **fixed subcommands** — never build a subcommand name from user input. Before
+passing any identifier, validate it: issue IDs must match `^[0-9]+$`, project
+machine-names must match `^[a-z][a-z0-9_]*$` — and **reject anything that does not
+match** rather than shelling out with it. Never interpolate unsanitized input into a
+shell command. Credentials are the contributor's own — never store or transmit them.
 
 ### 6. Report
 
@@ -88,7 +107,9 @@ state and what was done. Point the contributor at the development phase, then `v
 
 | Situation | Handling |
 |-----------|----------|
-| Issue ID is non-numeric / malformed | Reject before calling `drupalorg-cli`; ask for a valid ID. |
-| `drupalorg-cli` not installed | Report how to install `mglaman/drupalorg-cli`; do not fabricate fork state. |
+| Issue ID is non-numeric / malformed | Reject before calling `drupalorg`; ask for a valid ID. |
+| `drupalorg` not installed | Surface the install steps from `references/drupalorg-cli.md`; do not fabricate fork state. |
+| User asks to "create an issue" | There is no `issue:create` — draft the issue and guide the contributor to file it in the web UI (Drupal.org queue or GitLab); resume with the new issue ID. |
+| `git push` to the issue fork is rejected | The drupal.org SSH key is likely missing or unregistered — point at `setup` §5 and `references/drupalorg-cli.md` §Authentication; do not fabricate push state. |
 | Project uses GitLab, not the classic queue | Use the `state::*` scoped-label taxonomy per the issue-lifecycle dev-guide. |
 | Prior work fully resolves the issue | Surface it — the contribution may be unnecessary; let the contributor decide. |

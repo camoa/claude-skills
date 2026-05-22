@@ -69,9 +69,11 @@ The plugin is the **implementation layer** for those standards inside your edito
 ```
 
 **Companions & tools** — `dev-guides-navigator` (companion — supplies the contribution
-how-to guides; install it alongside), `drupalorg-cli` (issue / MR / pipeline
-operations), DDEV (the local environment), and a drupal.org account with GitLab access.
-`setup` detects what is missing and points you at it; nothing is a hard prerequisite.
+how-to guides; install it alongside), `mglaman/drupalorg-cli` (issue / MR / pipeline
+operations — the executable is `drupalorg`; install the PHAR per
+`skills/drupal-ai-contrib/references/drupalorg-cli.md`), DDEV (the local environment),
+and a drupal.org account with GitLab access. `setup` detects what is missing and points
+you at it; nothing is a hard prerequisite.
 
 ## The contribution arc
 
@@ -175,5 +177,6 @@ contribution-quality commands and gates on top, without forking or modifying DDF
 ## Interop — delegate, never reinvent
 
 `code-quality-tools` (philosophy / standards review) · `code-paper-test` (paper
-testing) · `drupalorg-cli` (issue / MR / pipeline CLI) · `drupal_devkit` (Drupal AI
-skill install) · `ai_best_practices` (the canonical AI policy + evals).
+testing) · `mglaman/drupalorg-cli` (issue / MR / pipeline CLI — executable `drupalorg`)
+· `drupal_devkit` (Drupal AI skill install) · `ai_best_practices` (the canonical AI
+policy + evals).
