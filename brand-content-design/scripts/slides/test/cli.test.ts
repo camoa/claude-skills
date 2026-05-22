@@ -191,7 +191,7 @@ describe('handleCommand — orchestration commands', () => {
       command: 'scaffoldTemplate',
       args: { tokens },
     });
-    const layoutArg = vi.mocked(scaffoldTemplate).mock.calls[0][2];
+    const layoutArg = vi.mocked(scaffoldTemplate).mock.lastCall![2];
     expect(layoutArg.slides).toHaveLength(7);
   });
 
@@ -232,5 +232,58 @@ describe('handleCommand — orchestration commands', () => {
     });
     expect(env.ok).toBe(false);
     if (!env.ok) expect(env.error.code).toBe('BAD_COMMAND');
+  });
+
+  it('reads imagePaths into Buffers for scaffoldTemplate', async () => {
+    vi.mocked(scaffoldTemplate).mockResolvedValue({
+      presentationId: 't',
+      tagMap: {},
+      fontSubstitutions: [],
+    });
+    await handleCommand(fakeClient(), {
+      command: 'scaffoldTemplate',
+      args: { tokens, imagePaths: { logo: 'package.json' } },
+    });
+    const assets = vi.mocked(scaffoldTemplate).mock.lastCall![3];
+    expect(Buffer.isBuffer(assets.images?.logo)).toBe(true);
+  });
+
+  it('returns an error envelope when an imagePath does not exist', async () => {
+    vi.mocked(scaffoldTemplate).mockResolvedValue({
+      presentationId: 't',
+      tagMap: {},
+      fontSubstitutions: [],
+    });
+    const env = await handleCommand(fakeClient(), {
+      command: 'scaffoldTemplate',
+      args: { tokens, imagePaths: { logo: '/no/such/file.png' } },
+    });
+    expect(env.ok).toBe(false);
+  });
+
+  it('dispatches outlineToPayload and returns a ContentPayload', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'outlineToPayload',
+      args: {
+        outlineMarkdown: '## Slide 1: Title\n- Title: Hello',
+        tagMap: {
+          Title: { typeSlideObjectId: 's', tags: { '{{title}}': { kind: 'text' } } },
+        },
+      },
+    });
+    expect(env.ok).toBe(true);
+    if (env.ok) {
+      expect(env.result).toEqual([
+        { type: 'Title', text: { '{{title}}': 'Hello' }, images: {} },
+      ]);
+    }
+  });
+
+  it('returns an error envelope for an outline that does not match the template', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'outlineToPayload',
+      args: { outlineMarkdown: '## Slide 1: Bogus\n- X: y', tagMap: {} },
+    });
+    expect(env.ok).toBe(false);
   });
 });

@@ -30,6 +30,7 @@ import type { FontSubstitution } from './merge-engine.js';
 import { scaffoldTemplate } from './scaffolder.js';
 import { renderDeck } from './merge-engine.js';
 import { buildDefaultLayout } from './default-layout.js';
+import { parseOutline, toContentPayload } from './outline-parser.js';
 
 /** A bad command document or argument. Carries a stable `code`. */
 class CommandError extends Error {
@@ -267,6 +268,14 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
         layoutSpec,
         { images, gradients },
         { driveFolderPath: optStringArray(a, 'driveFolderPath') },
+      );
+    }
+    case 'outlineToPayload': {
+      // Parse a filled `/outline` markdown into a renderDeck-ready payload.
+      const tagMap = reqObject(a, 'tagMap') as unknown as LayoutTagMap;
+      return toContentPayload(
+        parseOutline(reqString(a, 'outlineMarkdown')),
+        tagMap,
       );
     }
     case 'renderDeck': {

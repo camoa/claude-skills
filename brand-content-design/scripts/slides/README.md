@@ -104,16 +104,18 @@ Exit code is `0` when `ok`, `1` otherwise — but always read the envelope.
 | `replaceAllText` | `presentationId`, `tagMap` | `{ occurrencesByTag }` |
 | `replaceAllShapesWithImage` | `presentationId`, `tagImageMap` | `{ occurrencesByTag }` |
 | `scaffoldTemplate` | `tokens`, `layoutSpec?`, `imagePaths?`, `gradients?`, `driveFolderPath?` | `ScaffoldResult` |
+| `outlineToPayload` | `outlineMarkdown`, `tagMap` | `ContentPayload` |
 | `renderDeck` | `templatePresentationId`, `tagMap`, `payload`, `fontSubstitutions?`, `customFontFile?` | `RenderResult` |
 
 `tagMap` / `tagImageMap` (on the low-level text/image commands) are
 `{ "{{tag}}": "value" }` objects — keys are the literal tag tokens in the
 template, values are replacement text or image URLs.
 
-`scaffoldTemplate` and `renderDeck` are the orchestration commands the
-`/presentation` Google Slides target shells out to. `scaffoldTemplate` omitting
-`layoutSpec` uses the built-in 7-type default layout. `renderDeck`'s `payload`
-is produced from a filled outline by `src/outline-parser.ts`. See
+`scaffoldTemplate`, `outlineToPayload`, and `renderDeck` are the orchestration
+commands the `/presentation` Google Slides target shells out to, in that order.
+`scaffoldTemplate` omitting `layoutSpec` uses the built-in 7-type default
+layout. `outlineToPayload` parses a filled `/outline` markdown into the
+`ContentPayload` that `renderDeck` consumes. See
 `references/slides-api-guide.md` for the full rendering model.
 
 Note: `exportFile` with `image/png` exports the **first page only** (a Drive

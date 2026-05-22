@@ -109,18 +109,20 @@ Low-level (one Slides/Drive call each): `createPresentation`, `getPresentation`,
 `batchUpdate`, `copyFile`, `exportFile`, `getPageThumbnail`, `replaceAllText`,
 `replaceAllShapesWithImage`.
 
-Orchestration (compose the modules):
+Orchestration (compose the modules) — the `/presentation` Slides target shells
+out to these three in order:
 
 - `scaffoldTemplate` — `{ tokens, layoutSpec?, imagePaths?, gradients?,
   driveFolderPath? }` → `ScaffoldResult { presentationId, tagMap,
   fontSubstitutions, folderId? }`. Omit `layoutSpec` to use the built-in
   7-type default layout (`src/default-layout.ts`).
+- `outlineToPayload` — `{ outlineMarkdown, tagMap }` → `ContentPayload`. Parses
+  a filled `/outline` markdown (`src/outline-parser.ts` — `parseOutline` →
+  `toContentPayload`); fails fast on an outline that does not match the
+  template.
 - `renderDeck` — `{ templatePresentationId, tagMap, payload,
   fontSubstitutions?, customFontFile? }` → `RenderResult { presentationId,
   slidesRendered, tagsFilled, fontSubstitutions }`.
-
-The `payload` is produced from a filled outline by `src/outline-parser.ts`
-(`parseOutline` → `toContentPayload`).
 
 ## Fidelity & the layout IR
 

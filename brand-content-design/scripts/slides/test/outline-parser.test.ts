@@ -83,4 +83,11 @@ describe('toContentPayload', () => {
     const parsed = parseOutline('## Slide 1: Title\n- Nonsense: x');
     expect(() => toContentPayload(parsed, tagMap)).toThrow(/no tag matches field/i);
   });
+
+  it('aggregates errors across slides into one fail-fast message', () => {
+    const parsed = parseOutline(
+      '## Slide 1: Bogus\n- Title: x\n\n## Slide 2: Title\n- Nonsense: y',
+    );
+    expect(() => toContentPayload(parsed, tagMap)).toThrow(/slide 1.*slide 2/s);
+  });
 });

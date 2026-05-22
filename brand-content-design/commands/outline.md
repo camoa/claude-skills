@@ -266,3 +266,4 @@ Help users prepare content that maps perfectly to a template's structure. Users 
 - Content elements should be specific to each type (e.g., "Hook question" for opening, "3 key benefits" for solution slide/card)
 - The prompt should guide users to think about what content fits where
 - For carousels, remind users content must work on mobile (short, punchy text)
+- Each content line must be a `- Label: value` bullet. The Google Slides renderer's outline parser keys content by the label before the first colon; a line that is not a `- key: value` bullet is silently skipped. Keep `Speaker notes` as its own bullet.

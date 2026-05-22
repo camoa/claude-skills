@@ -49,4 +49,16 @@ describe('buildDefaultLayout', () => {
       expect(new Set(ids).size, slide.type).toBe(ids.length);
     }
   });
+
+  it('keeps every element within the 720 × 405 page bounds', () => {
+    for (const slide of spec.slides) {
+      for (const el of slide.elements) {
+        const where = `${slide.type}/${el.id}`;
+        expect(el.x, where).toBeGreaterThanOrEqual(0);
+        expect(el.y, where).toBeGreaterThanOrEqual(0);
+        expect(el.x + el.w, where).toBeLessThanOrEqual(720);
+        expect(el.y + el.h, where).toBeLessThanOrEqual(405);
+      }
+    }
+  });
 });

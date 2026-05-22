@@ -158,10 +158,9 @@ Create a presentation from an existing template with user-provided content.
       `echo '{"command":"scaffoldTemplate","args":{"tokens":<tokens>}}' | node scripts/slides/dist/cli.js`
       The result records `{ presentationId, tagMap }`. Omit `layoutSpec` to use
       the built-in 7-type default layout, or pass one to override geometry.
-   3. Parse the filled outline into a content payload with the outline parser
-      (`scripts/slides/src/outline-parser.ts` — `parseOutline` then
-      `toContentPayload(parsed, tagMap)`); the payload carries each slide's
-      `speakerNotes`.
+   3. Parse the filled outline into a content payload:
+      `echo '{"command":"outlineToPayload","args":{"outlineMarkdown":<md>,"tagMap":<tagMap>}}' | node scripts/slides/dist/cli.js`
+      → a `ContentPayload` carrying each slide's `speakerNotes`.
    4. Render the deck:
       `echo '{"command":"renderDeck","args":{"templatePresentationId":<id>,"tagMap":<tagMap>,"payload":<payload>}}' | node scripts/slides/dist/cli.js`
    5. The renderer returns the Google Slides presentation ID; speaker notes are
