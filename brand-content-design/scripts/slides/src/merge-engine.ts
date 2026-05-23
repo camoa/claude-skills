@@ -16,6 +16,7 @@ import {
   buildReplaceAllTextRequests,
   buildReplaceAllShapesWithImageRequests,
   buildSetSpeakerNotesRequests,
+  buildObjectIdTextFillRequests,
 } from './requests.js';
 import { bakeDisplayText } from './image-baker.js';
 
@@ -113,22 +114,64 @@ export async function renderDeck(
 
   for (let i = 0; i < payload.length; i++) {
     const slide = payload[i];
-    const srcId = template.tagMap[slide.type].typeSlideObjectId;
+    const entry = template.tagMap[slide.type];
+    const srcId = entry.typeSlideObjectId;
     // `slide_` prefix keeps the id safely above the 5-char API floor for
     // every SlideType (the shortest, `CTA`, would otherwise be exactly 5).
     const newSlideId = `slide_${slide.type}_${i}`;
     rendered.push({ slideId: newSlideId, notes: slide.speakerNotes });
 
-    batch1.push({
-      duplicateObject: { objectId: srcId, objectIds: { [srcId]: newSlideId } },
-    });
+    // Build the duplicateObject id remap: the slide id + every field-tagged
+    // element's objectId. Without a child remap, the API auto-generates random
+    // ids — fine for chrome but useless for the objectId-targeted fill below.
+    // info.objectId on the type-slide has the form `<srcId>_<elemSuffix>`
+    // (set by slide-builder); the duplicate's child lands at
+    // `<newSlideId>_<elemSuffix>` so the fill code can address it.
+    const idRemap: Record<string, string> = { [srcId]: newSlideId };
+    const targetIdByTag: Record<string, string> = {};
+    for (const [tag, info] of Object.entries(entry.tags)) {
+      if (!info.objectId) continue;
+      const elemSuffix = info.objectId.slice(srcId.length + 1);
+      const target = `${newSlideId}_${elemSuffix}`;
+      if (target.length > 50) {
+        throw new Error(
+          `renderDeck: duplicated objectId "${target}" exceeds the 50-char ` +
+            `Slides API limit — shorten the SlideType id or layout element id`,
+        );
+      }
+      idRemap[info.objectId] = target;
+      targetIdByTag[tag] = target;
+    }
 
-    // Split text tags into normal fills and (when the brand font is custom)
-    // display tags baked as images.
+    batch1.push({ duplicateObject: { objectId: srcId, objectIds: idRemap } });
+
+    // Field-tagged image slots aren't fillable via objectId in v1 — the
+    // placeholder displays the field's sample label, so `replaceAllShapesWithImage`
+    // (which keys by literal text) can't match. The objectId path for images
+    // (delete-then-createImage at the saved geometry) is a documented follow-up
+    // tracked in slides_render task notes. Fail fast.
+    for (const tag of Object.keys(slide.images ?? {})) {
+      const info = entry.tags[tag];
+      if (info?.objectId) {
+        throw new Error(
+          `renderDeck: field-tagged image slot "${tag}" is not yet supported — ` +
+            `use a legacy {tag}-style image placeholder, or fill this slot ` +
+            `via the v2 image-objectId path (planned follow-up).`,
+        );
+      }
+    }
+
+    // Split text fills three ways:
+    //   - display-baked (custom heading font + info.display) → image fill via
+    //     the legacy token path;
+    //   - objectId-targeted (info.objectId set, the field-tagged path) →
+    //     deleteText + insertText addressed by the duplicate's child id;
+    //   - legacy token (info.objectId absent) → replaceAllText.
     const normalText: Record<string, string> = {};
+    const objectIdFills: { objectId: string; text: string }[] = [];
     const images: Record<string, string> = { ...(slide.images ?? {}) };
     for (const [tag, value] of Object.entries(slide.text ?? {})) {
-      const info = template.tagMap[slide.type].tags[tag];
+      const info = entry.tags[tag];
       if (bakeDisplay && info?.display && options.customFontFile) {
         const png = bakeDisplayText({
           text: value,
@@ -145,13 +188,20 @@ export async function renderDeck(
           folderId,
         );
         images[tag] = url;
+      } else if (info?.objectId) {
+        objectIdFills.push({ objectId: targetIdByTag[tag], text: value });
       } else {
         normalText[tag] = value;
       }
     }
+
+    batch1.push(...buildObjectIdTextFillRequests(objectIdFills));
     batch1.push(...buildReplaceAllTextRequests(normalText, [newSlideId]));
     batch1.push(...buildReplaceAllShapesWithImageRequests(images, [newSlideId]));
-    tagsFilled += Object.keys(normalText).length + Object.keys(images).length;
+    tagsFilled +=
+      objectIdFills.length +
+      Object.keys(normalText).length +
+      Object.keys(images).length;
   }
 
   // Delete the prototype type-slides — the deck shows only outline slides.

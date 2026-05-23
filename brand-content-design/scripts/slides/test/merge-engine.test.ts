@@ -133,3 +133,135 @@ describe('renderDeck', () => {
     );
   });
 });
+
+/* ---- Field-tagged objectId path (C1) ------------------------------------ */
+
+const fieldTagMap: TagMap = {
+  cover: {
+    typeSlideObjectId: 'slide_cover',
+    tags: {
+      headline: { kind: 'text', objectId: 'slide_cover_hdln' },
+      subtitle: { kind: 'text', objectId: 'slide_cover_sub' },
+    },
+  },
+  concept: {
+    typeSlideObjectId: 'slide_concept',
+    tags: {
+      title: { kind: 'text', objectId: 'slide_concept_ttl' },
+    },
+  },
+};
+
+const fieldPayload: ContentPayload = [
+  { type: 'cover', text: { headline: "Who's Driving This Thing?", subtitle: 'A community talk' } },
+  { type: 'concept', text: { title: 'Drupal AI 1.0' }, speakerNotes: 'Talk track' },
+];
+
+describe('renderDeck — field-tagged objectId path (C1)', () => {
+  it('remaps every field-tagged element id alongside the slide id in duplicateObject', async () => {
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: fieldTagMap }, fieldPayload);
+    const batch1 = client.batchUpdate.mock.calls[0][1];
+    const dup0 = batch1.find((r: Record<string, any>) => r.duplicateObject?.objectId === 'slide_cover');
+    expect(dup0.duplicateObject.objectIds).toEqual({
+      slide_cover: 'slide_cover_0',
+      slide_cover_hdln: 'slide_cover_0_hdln',
+      slide_cover_sub: 'slide_cover_0_sub',
+    });
+  });
+
+  it('fills each text field via deleteText + insertText addressed by the remapped objectId', async () => {
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: fieldTagMap }, fieldPayload);
+    const batch1 = client.batchUpdate.mock.calls[0][1];
+    const insertHdln = batch1.find(
+      (r: Record<string, any>) => r.insertText?.objectId === 'slide_cover_0_hdln',
+    );
+    expect(insertHdln?.insertText?.text).toBe("Who's Driving This Thing?");
+    const deleteHdln = batch1.find(
+      (r: Record<string, any>) =>
+        r.deleteText?.objectId === 'slide_cover_0_hdln' && r.deleteText?.textRange?.type === 'ALL',
+    );
+    expect(deleteHdln).toBeDefined();
+    // The objectId path does NOT emit a replaceAllText for that tag.
+    const replaceHdln = batch1.find(
+      (r: Record<string, any>) => r.replaceAllText?.containsText?.text === 'headline',
+    );
+    expect(replaceHdln).toBeUndefined();
+  });
+
+  it('keeps delete before insert per element (insert-first would erase the new text)', async () => {
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: fieldTagMap }, fieldPayload);
+    const batch1 = client.batchUpdate.mock.calls[0][1];
+    const delIdx = batch1.findIndex(
+      (r: Record<string, any>) => r.deleteText?.objectId === 'slide_cover_0_hdln',
+    );
+    const insIdx = batch1.findIndex(
+      (r: Record<string, any>) => r.insertText?.objectId === 'slide_cover_0_hdln',
+    );
+    expect(delIdx).toBeGreaterThanOrEqual(0);
+    expect(insIdx).toBeGreaterThan(delIdx);
+  });
+
+  it('coexists with legacy {tag} tagmap entries — each tag routes to its own path', async () => {
+    const mixed: TagMap = {
+      ...fieldTagMap,
+      Legacy: {
+        typeSlideObjectId: 'slide_Legacy',
+        tags: { '{{body}}': { kind: 'text' } }, // no objectId → token path
+      },
+    };
+    const mixedPayload: ContentPayload = [
+      { type: 'cover', text: { headline: 'New', subtitle: 'Sub' } },
+      { type: 'Legacy', text: { '{{body}}': 'Old-school' } },
+    ];
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: mixed }, mixedPayload);
+    const batch1 = client.batchUpdate.mock.calls[0][1];
+    // Field-tagged "headline" → deleteText + insertText
+    expect(batch1.some((r: Record<string, any>) => r.insertText?.objectId === 'slide_cover_0_hdln')).toBe(true);
+    // Legacy "{{body}}" → replaceAllText
+    expect(batch1.some((r: Record<string, any>) => r.replaceAllText?.containsText?.text === '{{body}}')).toBe(true);
+  });
+
+  it('throws on a field-tagged image slot (v1 limitation — documented follow-up)', async () => {
+    const imageTagMap: TagMap = {
+      people: {
+        typeSlideObjectId: 'slide_people',
+        tags: { avatar: { kind: 'image', objectId: 'slide_people_av' } },
+      },
+    };
+    const client = fakeClient();
+    await expect(
+      renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: imageTagMap }, [
+        { type: 'people', images: { avatar: 'https://img/a.png' } },
+      ]),
+    ).rejects.toThrow(/field-tagged image slot/);
+  });
+
+  it('still uses page-scoped fill for legacy {tag} entries alongside objectId fills', async () => {
+    const mixed: TagMap = {
+      ...fieldTagMap,
+      Legacy: { typeSlideObjectId: 'slide_Legacy', tags: { '{{body}}': { kind: 'text' } } },
+    };
+    const mixedPayload: ContentPayload = [
+      { type: 'cover', text: { headline: 'X', subtitle: 'Y' } },
+      { type: 'Legacy', text: { '{{body}}': 'Z' } },
+    ];
+    const client = fakeClient();
+    await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: mixed }, mixedPayload);
+    const batch1 = client.batchUpdate.mock.calls[0][1];
+    const legacyFill = batch1.find(
+      (r: Record<string, any>) => r.replaceAllText?.containsText?.text === '{{body}}',
+    );
+    expect(legacyFill.replaceAllText.pageObjectIds).toEqual(['slide_Legacy_1']);
+  });
+
+  it('counts every field fill in tagsFilled', async () => {
+    const client = fakeClient();
+    const res = await renderDeck(asClient(client), { presentationId: 'tmpl1', tagMap: fieldTagMap }, fieldPayload);
+    // cover: 2 fields (headline, subtitle) + concept: 1 field (title) = 3
+    expect(res.tagsFilled).toBe(3);
+  });
+});

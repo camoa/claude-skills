@@ -3,6 +3,7 @@ import {
   buildReplaceAllTextRequests,
   buildReplaceAllShapesWithImageRequests,
   buildSetSpeakerNotesRequests,
+  buildObjectIdTextFillRequests,
 } from '../src/requests.js';
 
 describe('buildReplaceAllTextRequests', () => {
@@ -102,5 +103,44 @@ describe('buildSetSpeakerNotesRequests', () => {
   it('preserves multi-paragraph notes text', () => {
     const reqs = buildSetSpeakerNotesRequests('n1', 'Line one\nLine two');
     expect(reqs[0].insertText?.text).toBe('Line one\nLine two');
+  });
+});
+
+describe('buildObjectIdTextFillRequests', () => {
+  it('returns no requests for empty fills', () => {
+    expect(buildObjectIdTextFillRequests([])).toEqual([]);
+  });
+
+  it('emits deleteText (range=ALL) before insertText (index=0) per fill', () => {
+    const reqs = buildObjectIdTextFillRequests([
+      { objectId: 'slide_cover_0_hdln', text: "Who's Driving This Thing?" },
+    ]);
+    expect(reqs).toEqual([
+      { deleteText: { objectId: 'slide_cover_0_hdln', textRange: { type: 'ALL' } } },
+      {
+        insertText: {
+          objectId: 'slide_cover_0_hdln',
+          text: "Who's Driving This Thing?",
+          insertionIndex: 0,
+        },
+      },
+    ]);
+  });
+
+  it('orders requests per-element (delete N, insert N, delete N+1, insert N+1)', () => {
+    const reqs = buildObjectIdTextFillRequests([
+      { objectId: 'A', text: 'one' },
+      { objectId: 'B', text: 'two' },
+    ]);
+    expect(reqs.map((r) =>
+      r.deleteText ? `D:${r.deleteText.objectId}` : `I:${r.insertText?.objectId}`,
+    )).toEqual(['D:A', 'I:A', 'D:B', 'I:B']);
+  });
+
+  it('preserves multi-line and special-character text payloads', () => {
+    const reqs = buildObjectIdTextFillRequests([
+      { objectId: 'X', text: 'Line 1\nLine 2 — "quoted"' },
+    ]);
+    expect(reqs[1].insertText?.text).toBe('Line 1\nLine 2 — "quoted"');
   });
 });

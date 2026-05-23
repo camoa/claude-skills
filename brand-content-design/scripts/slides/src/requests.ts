@@ -62,6 +62,29 @@ export function buildReplaceAllShapesWithImageRequests(
 }
 
 /**
+ * Build delete-then-insert request pairs to replace a text element's content
+ * by its API objectId. This is the field-tagged renderer's fill primitive — it
+ * targets a specific element rather than matching by `{{token}}` text.
+ *
+ * Per fill: a `deleteText` with `Range.type='ALL'` (clears any prior content,
+ * including the template's sample text) followed by an `insertText` at index 0
+ * (the now-empty text frame). Order matters: insert-then-delete would erase
+ * the just-inserted text.
+ *
+ * Pure. Empty `fills` yields no requests.
+ */
+export function buildObjectIdTextFillRequests(
+  fills: { objectId: string; text: string }[],
+): slides_v1.Schema$Request[] {
+  const requests: slides_v1.Schema$Request[] = [];
+  for (const { objectId, text } of fills) {
+    requests.push({ deleteText: { objectId, textRange: { type: 'ALL' } } });
+    requests.push({ insertText: { objectId, text, insertionIndex: 0 } });
+  }
+  return requests;
+}
+
+/**
  * Build the request to set a slide's speaker notes.
  *
  * Speaker notes can NOT be filled by `replaceAllText`: its `pageObjectIds`
