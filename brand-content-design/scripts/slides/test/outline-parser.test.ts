@@ -90,4 +90,23 @@ describe('toContentPayload', () => {
     );
     expect(() => toContentPayload(parsed, tagMap)).toThrow(/slide 1.*slide 2/s);
   });
+
+  it('resolves natural-language type labels via normalized-name lookup', () => {
+    // tagMap has keys 'Title' and 'Content'; an outline using "title" or
+    // "Title Slide" should still resolve to the stable id.
+    const lowerCased = parseOutline('## Slide 1: title\n- Title: Hello');
+    expect(toContentPayload(lowerCased, tagMap)[0].type).toBe('Title');
+
+    // Multi-word with separators normalizes to the same alphanumeric token.
+    const fieldStyle: TagMap = {
+      getinvolved: { typeSlideObjectId: 'slide_g', tags: { headline: { kind: 'text' } } },
+    };
+    const parsed = parseOutline('## Slide 1: Get Involved\n- headline: Take what is useful');
+    expect(toContentPayload(parsed, fieldStyle)[0].type).toBe('getinvolved');
+  });
+
+  it('still throws on an unknown type when neither exact nor normalized match', () => {
+    const parsed = parseOutline('## Slide 1: TotallyMadeUp\n- Title: x');
+    expect(() => toContentPayload(parsed, tagMap)).toThrow(/unknown slide type/i);
+  });
 });

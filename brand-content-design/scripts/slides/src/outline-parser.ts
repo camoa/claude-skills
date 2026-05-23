@@ -100,9 +100,21 @@ export function toContentPayload(
   const errors: string[] = [];
   const payload: ContentPayload = [];
 
+  // Build a normalized-name lookup over tagMap keys so outline headers can use
+  // natural-language type labels ("Title", "Section Divider") that resolve to
+  // the template's stable type ids ("title", "divider"). Exact-key lookup is
+  // tried first to preserve backward compatibility with legacy outlines that
+  // already use the literal id.
+  const tagMapByNorm = new Map<string, string>();
+  for (const key of Object.keys(tagMap)) {
+    tagMapByNorm.set(normalize(key), key);
+  }
+
   parsed.forEach((slide, i) => {
-    const entry = tagMap[slide.type];
-    if (!entry) {
+    const resolvedType =
+      slide.type in tagMap ? slide.type : tagMapByNorm.get(normalize(slide.type));
+    const entry = resolvedType !== undefined ? tagMap[resolvedType] : undefined;
+    if (!entry || resolvedType === undefined) {
       errors.push(`slide ${i + 1}: unknown slide type "${slide.type}"`);
       return;
     }
@@ -125,7 +137,7 @@ export function toContentPayload(
       else text[token] = value;
     }
 
-    const content: ContentSlide = { type: slide.type, text, images };
+    const content: ContentSlide = { type: resolvedType, text, images };
     if (slide.speakerNotes !== undefined) content.speakerNotes = slide.speakerNotes;
     payload.push(content);
   });
