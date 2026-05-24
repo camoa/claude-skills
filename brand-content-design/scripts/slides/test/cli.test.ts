@@ -5,9 +5,13 @@ import type { SlidesClient } from '../src/client.js';
 // The orchestration commands delegate to these free functions — mock them so
 // the dispatch routing is exercised without real scaffold / render work.
 vi.mock('../src/scaffolder.js', () => ({ scaffoldTemplate: vi.fn() }));
-vi.mock('../src/merge-engine.js', () => ({ renderDeck: vi.fn() }));
+vi.mock('../src/merge-engine.js', () => ({
+  renderDeck: vi.fn(),
+  resyncDeck: vi.fn(),
+  tagMapFromLayoutSpec: vi.fn(() => ({})),
+}));
 import { scaffoldTemplate } from '../src/scaffolder.js';
-import { renderDeck } from '../src/merge-engine.js';
+import { renderDeck, resyncDeck } from '../src/merge-engine.js';
 
 /** A fake SlidesClient — every method a vi.fn(), overridable per test. */
 function fakeClient(overrides: Record<string, unknown> = {}): SlidesClient {
@@ -283,6 +287,147 @@ describe('handleCommand — orchestration commands', () => {
     const env = await handleCommand(fakeClient(), {
       command: 'outlineToPayload',
       args: { outlineMarkdown: '## Slide 1: Bogus\n- X: y', tagMap: {} },
+    });
+    expect(env.ok).toBe(false);
+  });
+});
+
+/* ---- Resync CLI wiring (D3 / E1 minimal) -------------------------------- */
+
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { MANIFEST_SCHEMA } from '../src/render-manifest.js';
+import { tagMapFromLayoutSpec } from '../src/merge-engine.js';
+
+describe('handleCommand — renderDeck manifest write (post-render)', () => {
+  it('writes the manifest sidecar when manifestPath is supplied', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-renderDeck-'));
+    const manifestPath = join(dir, 'outline.md.render-manifest.json');
+    (renderDeck as unknown as { mockResolvedValue: Function }).mockResolvedValue({
+      presentationId: 'deck-new',
+      slidesRendered: 1,
+      tagsFilled: 1,
+      fontSubstitutions: [],
+    });
+    const env = await handleCommand(fakeClient(), {
+      command: 'renderDeck',
+      args: {
+        templatePresentationId: 'tpl1',
+        tagMap: { t: { typeSlideObjectId: 'slide_t', tags: {} } },
+        payload: [{ type: 't', text: { h: 'Hi' } }],
+        manifestPath,
+        layoutSpec: {
+          pageWidth: 720,
+          pageHeight: 405,
+          slides: [{ type: 't', elements: [] }],
+        },
+        tokens: {
+          colors: { primary: '#000', background: '#fff', textLight: '#fff', textDark: '#000' },
+          typography: { headingFont: 'I', bodyFont: 'I' },
+        },
+        fixedImageUrls: { logo: 'https://x/l.png' },
+      },
+    });
+    expect(env.ok).toBe(true);
+    expect(existsSync(manifestPath)).toBe(true);
+    const written = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    expect(written.schema).toBe(MANIFEST_SCHEMA);
+    expect(written.deckPresentationId).toBe('deck-new');
+    expect(written.templatePresentationId).toBe('tpl1');
+    expect(written.fixedImageUrls).toEqual({ logo: 'https://x/l.png' });
+    expect(written.slides).toEqual([
+      { type: 't', text: { h: 'Hi' }, images: {} },
+    ]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('does NOT write a manifest when manifestPath is omitted', async () => {
+    (renderDeck as unknown as { mockResolvedValue: Function }).mockResolvedValue({
+      presentationId: 'deck-x',
+      slidesRendered: 0,
+      tagsFilled: 0,
+      fontSubstitutions: [],
+    });
+    const env = await handleCommand(fakeClient(), {
+      command: 'renderDeck',
+      args: {
+        templatePresentationId: 'tpl1',
+        tagMap: {},
+        payload: [],
+      },
+    });
+    expect(env.ok).toBe(true);
+    expect((env as { result: { manifestPath?: string } }).result.manifestPath).toBeUndefined();
+  });
+});
+
+describe('handleCommand — resyncDeck', () => {
+  it('reads the manifest, calls resyncDeck, and rewrites the manifest', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-resync-'));
+    const manifestPath = join(dir, 'outline.md.render-manifest.json');
+    const seed = {
+      schema: MANIFEST_SCHEMA,
+      templatePresentationId: 'tpl1',
+      deckPresentationId: 'deck-stable',
+      renderedAt: '2026-05-23T00:00:00.000Z',
+      layoutSpec: { pageWidth: 720, pageHeight: 405, slides: [] },
+      tokens: {
+        colors: { primary: '#000', background: '#fff', textLight: '#fff', textDark: '#000' },
+        typography: { headingFont: 'I', bodyFont: 'I' },
+      },
+      fixedImageUrls: {},
+      fontSubstitutions: [],
+      slides: [],
+    };
+    writeFileSync(manifestPath, JSON.stringify(seed), 'utf8');
+    // Real outline-parser is used; tagMapFromLayoutSpec is mocked at module
+    // level — set the return value so toContentPayload finds matching tags.
+    (tagMapFromLayoutSpec as unknown as { mockReturnValue: Function }).mockReturnValue({
+      title: {
+        typeSlideObjectId: 'slide_title',
+        tags: { headline: { kind: 'text' } },
+      },
+    });
+    (resyncDeck as unknown as { mockResolvedValue: Function }).mockResolvedValue({
+      presentationId: 'deck-stable',
+      slidesRendered: 0,
+      changeReport: { unchanged: [], refilled: [], added: [], removed: [], reordered: false },
+      manifest: { ...seed, renderedAt: '2026-05-24T00:00:00.000Z' },
+    });
+
+    const env = await handleCommand(fakeClient(), {
+      command: 'resyncDeck',
+      args: {
+        manifestPath,
+        outlineMarkdown: '## Slide 1: title\n\n- Headline: Hi\n',
+      },
+    });
+    expect(env.ok).toBe(true);
+    expect((env as { result: { presentationId: string } }).result.presentationId).toBe(
+      'deck-stable',
+    );
+    const after = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    expect(after.renderedAt).toBe('2026-05-24T00:00:00.000Z');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('returns BAD_COMMAND when the manifest is missing', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'resyncDeck',
+      args: {
+        manifestPath: '/nonexistent/path/manifest.json',
+        outlineMarkdown: '# t',
+      },
+    });
+    expect(env.ok).toBe(false);
+    expect((env as { error: { code: string } }).error.code).toBe('BAD_COMMAND');
+  });
+
+  it('rejects missing arguments', async () => {
+    const env = await handleCommand(fakeClient(), {
+      command: 'resyncDeck',
+      args: { manifestPath: '/x.json' }, // no outlineMarkdown
     });
     expect(env.ok).toBe(false);
   });

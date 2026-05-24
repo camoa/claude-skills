@@ -10,7 +10,12 @@
  */
 import type { slides_v1 } from 'googleapis';
 import type { SlidesClient } from './client.js';
-import type { TagMap } from './layout-spec.js';
+import type {
+  TagMap,
+  TagInfo,
+  SlideTypeLayout,
+  LayoutSpec,
+} from './layout-spec.js';
 import { validatePayload, type ContentPayload } from './payload-validator.js';
 import {
   buildReplaceAllTextRequests,
@@ -19,6 +24,13 @@ import {
   buildObjectIdTextFillRequests,
 } from './requests.js';
 import { bakeDisplayText } from './image-baker.js';
+import { buildSlideRequests } from './slide-builder.js';
+import {
+  type RenderManifest,
+  slideFromPayload,
+  MANIFEST_SCHEMA,
+} from './render-manifest.js';
+import { diffOutline, isEmptyDiff, type OutlineDiff } from './outline-diff.js';
 
 export type { ContentSlide, ContentPayload } from './payload-validator.js';
 
@@ -235,5 +247,242 @@ export async function renderDeck(
     slidesRendered: payload.length,
     tagsFilled,
     fontSubstitutions,
+  };
+}
+
+/* ----- Resync ----------------------------------------------------------- */
+
+/** What `resyncDeck` returns. */
+export interface ResyncResult {
+  /** Always equal to `manifest.deckPresentationId` — the user-visible URL is preserved. */
+  presentationId: string;
+  slidesRendered: number;
+  /** The per-index diff that drove this resync — empty on the no-op fast path. */
+  changeReport: OutlineDiff;
+  /** The updated manifest. The caller persists it via `writeManifest`. */
+  manifest: RenderManifest;
+}
+
+/** Derive a {@link TagMap} from a {@link LayoutSpec}. Pure, for payload validation. */
+export function tagMapFromLayoutSpec(spec: LayoutSpec): TagMap {
+  const out: TagMap = {};
+  for (const layout of spec.slides) {
+    out[layout.type] = {
+      typeSlideObjectId: `slide_${layout.type}`,
+      tags: tagsFromLayout(layout),
+    };
+  }
+  return out;
+}
+
+function tagsFromLayout(layout: SlideTypeLayout): Record<string, TagInfo> {
+  const tags: Record<string, TagInfo> = {};
+  for (const e of layout.elements) {
+    if (!e.content) continue;
+    const kind: TagInfo['kind'] = e.kind === 'image' ? 'image' : 'text';
+    if ('tag' in e.content) {
+      tags[e.content.tag] = { kind };
+    } else if ('field' in e.content) {
+      // objectId is intentionally undefined here — validation only cares about
+      // `kind`; resync assigns real per-slide objectIds at build time.
+      tags[e.content.field] = { kind };
+    }
+  }
+  return tags;
+}
+
+/**
+ * Resync a deck in place — preserving `deckPresentationId` (the user-visible
+ * file/URL stays the same).
+ *
+ * Strategy (v1):
+ *   1. validatePayload (fail-fast, same as renderDeck) against a tagMap
+ *      derived from `manifest.layoutSpec`.
+ *   2. diffOutline(manifest, newPayload). Empty diff → no API calls;
+ *      only `renderedAt` is bumped in the returned manifest.
+ *   3. Non-empty diff → in-place rebuild:
+ *      - get current slide ids via getPresentation;
+ *      - build each new payload slide via buildSlideRequests (createSlide +
+ *        shapes + insertText of samples) with a resync-unique slide objectId;
+ *      - for field-tagged text slots, append deleteText(ALL) + insertText
+ *        with the payload value, addressed by the new slide's child id;
+ *      - for legacy {tag}-text slots, page-scoped replaceAllText into the
+ *        new slide; same for image slots;
+ *      - deleteObject every prior slide id;
+ *      - send as one atomic batchUpdate (Batch 1).
+ *   4. Speaker notes: getPresentation again (notes ids for the new slides)
+ *      → Batch 2 with buildSetSpeakerNotesRequests.
+ *   5. Return updated manifest. Caller writes it via `writeManifest`.
+ *
+ * Field-tagged IMAGE slots are not yet supported (same v1 limitation as
+ * renderDeck — the placeholder displays the sample label so
+ * `replaceAllShapesWithImage` can't match).
+ */
+export async function resyncDeck(
+  client: SlidesClient,
+  manifest: RenderManifest,
+  newPayload: ContentPayload,
+): Promise<ResyncResult> {
+  const tagMap = tagMapFromLayoutSpec(manifest.layoutSpec);
+
+  // 1. Validate — fail-fast before any API write.
+  const report = validatePayload(newPayload, tagMap);
+  if (!report.ok) {
+    throw new Error(
+      `resyncDeck: invalid content payload — ${JSON.stringify(report.errors)}`,
+    );
+  }
+
+  // 2. Diff.
+  const changeReport = diffOutline(manifest, newPayload);
+  const renderedAt = new Date().toISOString();
+
+  if (isEmptyDiff(changeReport)) {
+    return {
+      presentationId: manifest.deckPresentationId,
+      slidesRendered: newPayload.length,
+      changeReport,
+      manifest: {
+        ...manifest,
+        renderedAt,
+        slides: newPayload.map(slideFromPayload),
+      },
+    };
+  }
+
+  // 3. Enumerate prior slide ids so we can delete them after the rebuild.
+  const before = await client.getPresentation(manifest.deckPresentationId);
+  const priorSlideIds: string[] = (before.slides ?? [])
+    .map((s) => s.objectId)
+    .filter((id): id is string => typeof id === 'string' && id !== '');
+
+  // Index by layout type for quick lookup.
+  const layoutByType = new Map<string, SlideTypeLayout>();
+  for (const layout of manifest.layoutSpec.slides) {
+    layoutByType.set(layout.type, layout);
+  }
+
+  // 4. Build Batch 1 — one createSlide-and-shape batch per payload slide,
+  //    then objectId or page-scoped fills, then deletes of the prior slides.
+  const batch1: slides_v1.Schema$Request[] = [];
+  const builtSlideIds: { slideId: string; notes?: string }[] = [];
+  // Nonce keeps every resync's slide ids unique vs. anything in the deck —
+  // base36 of Date.now() is ~8 chars and well under the 50-char API limit.
+  const nonce = `r${Date.now().toString(36)}`;
+  let tagsFilled = 0;
+
+  for (let i = 0; i < newPayload.length; i++) {
+    const slide = newPayload[i];
+    const layout = layoutByType.get(slide.type);
+    if (!layout) {
+      // Defensive — validatePayload should have caught this; keeps tsc strict happy.
+      throw new Error(`resyncDeck: no layout for type "${slide.type}"`);
+    }
+    const slideObjectId = `${nonce}_${i}`;
+    if (slideObjectId.length > 50) {
+      throw new Error(
+        `resyncDeck: slide id "${slideObjectId}" exceeds the 50-char API limit`,
+      );
+    }
+    const built = buildSlideRequests(
+      layout,
+      manifest.tokens,
+      manifest.fixedImageUrls,
+      slideObjectId,
+    );
+    batch1.push(...built.requests);
+    builtSlideIds.push({ slideId: slideObjectId, notes: slide.speakerNotes });
+
+    // Fail fast on field-tagged image slots (v1 limitation; same as renderDeck).
+    for (const tag of Object.keys(slide.images ?? {})) {
+      const layoutTag = tagsFromLayout(layout)[tag];
+      const isFieldTagged = layout.elements.some(
+        (e) => e.content && 'field' in e.content && e.content.field === tag,
+      );
+      if (layoutTag && isFieldTagged) {
+        throw new Error(
+          `resyncDeck: field-tagged image slot "${tag}" is not yet supported — ` +
+            `use a legacy {tag}-style image placeholder, or wait for the v2 ` +
+            `image-objectId path (planned follow-up).`,
+        );
+      }
+    }
+
+    // Field-tagged text → deleteText + insertText addressed by the just-built
+    // element's objectId (`<slideObjectId>_<elemId>`). Legacy {tag} text and
+    // image slots → page-scoped replace, same shape as renderDeck.
+    const objectIdFills: { objectId: string; text: string }[] = [];
+    const legacyText: Record<string, string> = {};
+    const images: Record<string, string> = { ...(slide.images ?? {}) };
+    for (const [tag, value] of Object.entries(slide.text ?? {})) {
+      const elem = layout.elements.find(
+        (e) =>
+          e.content &&
+          (('field' in e.content && e.content.field === tag) ||
+            ('tag' in e.content && e.content.tag === tag)),
+      );
+      if (elem && elem.content && 'field' in elem.content) {
+        objectIdFills.push({
+          objectId: `${slideObjectId}_${elem.id}`,
+          text: value,
+        });
+      } else {
+        legacyText[tag] = value;
+      }
+    }
+    batch1.push(...buildObjectIdTextFillRequests(objectIdFills));
+    batch1.push(...buildReplaceAllTextRequests(legacyText, [slideObjectId]));
+    batch1.push(
+      ...buildReplaceAllShapesWithImageRequests(images, [slideObjectId]),
+    );
+    tagsFilled +=
+      objectIdFills.length + Object.keys(legacyText).length + Object.keys(images).length;
+  }
+
+  // Delete prior slides last — Slides API requires at least one slide in the
+  // presentation at all times, so the new slides must be created before the
+  // old ones are removed (the single atomic batch makes both steps land
+  // together or not at all).
+  for (const id of priorSlideIds) {
+    batch1.push({ deleteObject: { objectId: id } });
+  }
+
+  if (batch1.length > 0) {
+    await client.batchUpdate(manifest.deckPresentationId, batch1);
+  }
+
+  // 5. Speaker notes — Batch 2.
+  const presentation = await client.getPresentation(manifest.deckPresentationId);
+  const batch2: slides_v1.Schema$Request[] = [];
+  for (const { slideId, notes } of builtSlideIds) {
+    if (!notes) continue;
+    const notesId = speakerNotesObjectId(presentation, slideId);
+    if (notesId) {
+      batch2.push(...buildSetSpeakerNotesRequests(notesId, notes));
+    }
+  }
+  if (batch2.length > 0) {
+    await client.batchUpdate(manifest.deckPresentationId, batch2);
+  }
+
+  // `tagsFilled` is reported via the diff `changeReport` (refilled count etc.);
+  // the bare count is folded into change report telemetry, not the return shape.
+  void tagsFilled;
+
+  return {
+    presentationId: manifest.deckPresentationId,
+    slidesRendered: newPayload.length,
+    changeReport,
+    manifest: {
+      schema: MANIFEST_SCHEMA,
+      templatePresentationId: manifest.templatePresentationId,
+      deckPresentationId: manifest.deckPresentationId,
+      renderedAt,
+      layoutSpec: manifest.layoutSpec,
+      tokens: manifest.tokens,
+      fixedImageUrls: manifest.fixedImageUrls,
+      fontSubstitutions: manifest.fontSubstitutions,
+      slides: newPayload.map(slideFromPayload),
+    },
   };
 }

@@ -28,9 +28,20 @@ import type { GradientSpec } from './image-baker.js';
 import type { ContentPayload } from './payload-validator.js';
 import type { FontSubstitution } from './merge-engine.js';
 import { scaffoldTemplate } from './scaffolder.js';
-import { renderDeck } from './merge-engine.js';
+import {
+  renderDeck,
+  resyncDeck,
+  tagMapFromLayoutSpec,
+} from './merge-engine.js';
 import { buildDefaultLayout } from './default-layout.js';
 import { parseOutline, toContentPayload } from './outline-parser.js';
+import {
+  readManifest,
+  writeManifest,
+  slideFromPayload,
+  MANIFEST_SCHEMA,
+  type RenderManifest,
+} from './render-manifest.js';
 
 /** A bad command document or argument. Carries a stable `code`. */
 class CommandError extends Error {
@@ -287,9 +298,10 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
       const fontSubstitutions = optObjectArray(a, 'fontSubstitutions') as
         | FontSubstitution[]
         | undefined;
-      return renderDeck(
+      const templatePresentationId = reqString(a, 'templatePresentationId');
+      const result = await renderDeck(
         client,
-        { presentationId: reqString(a, 'templatePresentationId'), tagMap },
+        { presentationId: templatePresentationId, tagMap },
         payload,
         {
           fontSubstitutions,
@@ -298,6 +310,55 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
           driveFolderPath: optStringArray(a, 'driveFolderPath'),
         },
       );
+      // Manifest write (D-block, post-renderDeck) — when the caller supplies
+      // `manifestPath`, also supplying `layoutSpec`, `tokens`, and
+      // `fixedImageUrls` lets us persist the sidecar so future `resyncDeck`
+      // calls can rebuild in place on the same deckPresentationId.
+      const manifestPath = optString(a, 'manifestPath');
+      if (manifestPath !== undefined) {
+        const layoutSpec = reqObject(a, 'layoutSpec') as unknown as LayoutSpec;
+        const tokens = reqObject(a, 'tokens') as unknown as BrandTokens;
+        const fixedImageUrlsRaw = optStringMap(a, 'fixedImageUrls') ?? {};
+        const manifest: RenderManifest = {
+          schema: MANIFEST_SCHEMA,
+          templatePresentationId,
+          deckPresentationId: result.presentationId,
+          renderedAt: new Date().toISOString(),
+          layoutSpec,
+          tokens,
+          fixedImageUrls: fixedImageUrlsRaw,
+          fontSubstitutions: fontSubstitutions ?? [],
+          slides: payload.map(slideFromPayload),
+        };
+        writeManifest(manifestPath, manifest);
+        return { ...result, manifestPath };
+      }
+      return result;
+    }
+    case 'resyncDeck': {
+      // The manifest carries every input resync needs (layoutSpec, tokens,
+      // fixedImageUrls, fontSubstitutions, deckPresentationId, prior slides).
+      // The caller supplies the manifest path + the new outline markdown;
+      // we parse → payload → resync → rewrite the manifest in place.
+      const manifestPath = reqString(a, 'manifestPath');
+      const outlineMarkdown = reqString(a, 'outlineMarkdown');
+      const manifest = readManifest(manifestPath);
+      if (!manifest) {
+        throw new CommandError(
+          `resyncDeck: no render manifest at "${manifestPath}" — ` +
+            `run renderDeck first to produce one.`,
+        );
+      }
+      const tagMap = tagMapFromLayoutSpec(manifest.layoutSpec);
+      const payload = toContentPayload(parseOutline(outlineMarkdown), tagMap);
+      const res = await resyncDeck(client, manifest, payload);
+      writeManifest(manifestPath, res.manifest);
+      return {
+        presentationId: res.presentationId,
+        slidesRendered: res.slidesRendered,
+        changeReport: res.changeReport,
+        manifestPath,
+      };
     }
     default:
       throw new CommandError(`Unknown command: ${doc.command}`);

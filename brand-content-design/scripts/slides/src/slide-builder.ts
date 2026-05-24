@@ -89,17 +89,23 @@ function shapeTypeFor(e: LayoutElement): string {
 /**
  * Build the request batch for one type-slide.
  *
- * @param layout          the slide type's element layout
- * @param tokens          brand tokens (colours + typography) for styling
- * @param fixedImageUrls  resolved URLs for fixed-image elements, keyed by
- *                        element id (the scaffolder uploads + supplies these)
+ * @param layout                the slide type's element layout
+ * @param tokens                brand tokens (colours + typography) for styling
+ * @param fixedImageUrls        resolved URLs for fixed-image elements, keyed by
+ *                              element id (the scaffolder uploads + supplies these)
+ * @param slideObjectIdOverride optional unique slide objectId — used by the
+ *                              resync engine, which builds many instances of
+ *                              the same type into one deck and cannot reuse
+ *                              the scaffolder's `slide_<type>` id. Defaults
+ *                              to `slide_<type>` (the scaffolder shape).
  */
 export function buildSlideRequests(
   layout: SlideTypeLayout,
   tokens: BrandTokens,
   fixedImageUrls: Record<string, string>,
+  slideObjectIdOverride?: string,
 ): BuiltSlide {
-  const slideObjectId = `slide_${layout.type}`;
+  const slideObjectId = slideObjectIdOverride ?? `slide_${layout.type}`;
   const requests: slides_v1.Schema$Request[] = [
     {
       createSlide: {
