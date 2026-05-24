@@ -109,4 +109,48 @@ describe('toContentPayload', () => {
     const parsed = parseOutline('## Slide 1: TotallyMadeUp\n- Title: x');
     expect(() => toContentPayload(parsed, tagMap)).toThrow(/unknown slide type/i);
   });
+
+  it('strips trailing parenthetical hints from bullet labels before normalize-match', () => {
+    // Worksheets author labels like `Talk title (≤10 words)` for human guidance;
+    // matching binds to the bare field id (`talk_title`) after the hint is stripped.
+    const titleMap: TagMap = {
+      Title: {
+        typeSlideObjectId: 'slide_Title',
+        tags: {
+          '{{talk_title}}': { kind: 'text' },
+          '{{event_name_date}}': { kind: 'text' },
+        },
+      },
+    };
+    const parsed = parseOutline(
+      [
+        '## Slide 1: Title',
+        '- Talk title (≤10 words): Hello World',
+        '- Event name + date (≤8 words): Drupal AI Club, May 22, 2026',
+      ].join('\n'),
+    );
+    const payload = toContentPayload(parsed, titleMap);
+    expect(payload[0].text).toEqual({
+      '{{talk_title}}': 'Hello World',
+      '{{event_name_date}}': 'Drupal AI Club, May 22, 2026',
+    });
+  });
+
+  it('only strips a parenthetical that sits at the end of the label', () => {
+    // A parenthetical mid-label (rare, but possible) must not be stripped —
+    // only a trailing hint is editorial noise.
+    const map: TagMap = {
+      T: {
+        typeSlideObjectId: 'slide_T',
+        tags: { '{{footnote_a}}': { kind: 'text' } },
+      },
+    };
+    // Label `Footnote (a)` is the canonical form; the field is `footnote_a`.
+    const parsed = parseOutline('## Slide 1: T\n- Footnote (a): see appendix');
+    // Trailing `(a)` IS stripped → label becomes `Footnote`, which won't bind
+    // to `footnote_a`. This documents the trade-off: trailing parens are always
+    // treated as hints. The author can disambiguate by inlining the letter
+    // (`Footnote a`).
+    expect(() => toContentPayload(parsed, map)).toThrow(/no tag matches field/i);
+  });
 });

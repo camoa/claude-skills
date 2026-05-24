@@ -32,9 +32,17 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-/** Strip surrounding `**bold**` markdown from a bullet label. */
+/**
+ * Strip surrounding `**bold**` markdown and any trailing parenthetical hint
+ * (e.g. ` (≤10 words)`, ` (icon: shield)`) from a bullet label. The hint is
+ * editorial guidance for the outline author; matching is done against the
+ * bare label so labels normalize-equal `FieldSpec.id`.
+ */
 function cleanLabel(label: string): string {
-  return label.replace(/\*\*/g, '').trim();
+  return label
+    .replace(/\*\*/g, '')
+    .replace(/\s*\([^()]*\)\s*$/, '')
+    .trim();
 }
 
 /** A value is "unfilled" when blank or an underscore placeholder (`___`). */
