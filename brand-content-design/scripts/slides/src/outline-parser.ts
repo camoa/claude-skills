@@ -11,6 +11,20 @@
  */
 import type { TagMap } from './layout-spec.js';
 import type { ContentPayload, ContentSlide } from './payload-validator.js';
+import { OutlineTooLargeError } from './errors.js';
+
+/** Default cap on outline source size — 1 MiB. Override via `BCD_SLIDES_MAX_OUTLINE_BYTES`. */
+const DEFAULT_MAX_OUTLINE_BYTES = 1024 * 1024;
+/** Default cap on parsed slide count — 500. Override via `BCD_SLIDES_MAX_SLIDES`. */
+const DEFAULT_MAX_SLIDES = 500;
+
+/** Read a positive-integer env var with a fallback. Non-numeric → fallback. */
+function envCap(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 /** One slide of a parsed outline — labels are human element names, not tags. */
 export interface ParsedOutlineSlide {
@@ -57,14 +71,33 @@ function isUnfilled(value: string): boolean {
  * @throws {Error} when no slides are found.
  */
 export function parseOutline(markdown: string): ParsedOutlineSlide[] {
+  // Hard cap on input size — a 100 MB outline would block the event loop
+  // before producing a single batchUpdate. Byte-length, not char-length,
+  // because the limit is about memory + I/O cost.
+  const maxBytes = envCap('BCD_SLIDES_MAX_OUTLINE_BYTES', DEFAULT_MAX_OUTLINE_BYTES);
+  const byteLen = Buffer.byteLength(markdown, 'utf8');
+  if (byteLen > maxBytes) {
+    throw new OutlineTooLargeError(
+      `parseOutline: outline source is ${byteLen} bytes (cap ${maxBytes}). ` +
+        `Raise BCD_SLIDES_MAX_OUTLINE_BYTES if this is intentional.`,
+    );
+  }
+
   const slides: ParsedOutlineSlide[] = [];
   let current: ParsedOutlineSlide | undefined;
+  const maxSlides = envCap('BCD_SLIDES_MAX_SLIDES', DEFAULT_MAX_SLIDES);
 
   for (const line of markdown.split(/\r?\n/)) {
     const header = HEADER.exec(line);
     if (header) {
       current = { type: header[1].trim(), fields: {} };
       slides.push(current);
+      if (slides.length > maxSlides) {
+        throw new OutlineTooLargeError(
+          `parseOutline: outline declares more than ${maxSlides} slides. ` +
+            `Raise BCD_SLIDES_MAX_SLIDES if this is intentional.`,
+        );
+      }
       continue;
     }
     if (!current) continue;

@@ -153,4 +153,59 @@ describe('toContentPayload', () => {
     // (`Footnote a`).
     expect(() => toContentPayload(parsed, map)).toThrow(/no tag matches field/i);
   });
+
+  describe('size caps (C3)', () => {
+    it('rejects an outline source over the byte cap', () => {
+      process.env.BCD_SLIDES_MAX_OUTLINE_BYTES = '128';
+      try {
+        const big = '## Slide 1: Title\n' + '- Title: ' + 'x'.repeat(200) + '\n';
+        let caught: unknown;
+        try {
+          parseOutline(big);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeDefined();
+        expect((caught as { code?: string }).code).toBe('OUTLINE_TOO_LARGE');
+        expect((caught as Error).message).toMatch(/bytes/);
+      } finally {
+        delete process.env.BCD_SLIDES_MAX_OUTLINE_BYTES;
+      }
+    });
+
+    it('rejects an outline that declares more slides than the count cap', () => {
+      process.env.BCD_SLIDES_MAX_SLIDES = '3';
+      try {
+        const headers = Array.from(
+          { length: 5 },
+          (_, i) => `## Slide ${i + 1}: Title\n- Title: x`,
+        ).join('\n\n');
+        let caught: unknown;
+        try {
+          parseOutline(headers);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeDefined();
+        expect((caught as { code?: string }).code).toBe('OUTLINE_TOO_LARGE');
+        expect((caught as Error).message).toMatch(/more than 3 slides/);
+      } finally {
+        delete process.env.BCD_SLIDES_MAX_SLIDES;
+      }
+    });
+
+    it('accepts an outline exactly at the slide count limit', () => {
+      process.env.BCD_SLIDES_MAX_SLIDES = '2';
+      try {
+        const outline = [
+          '## Slide 1: Title\n- Title: a',
+          '## Slide 2: Title\n- Title: b',
+        ].join('\n\n');
+        const parsed = parseOutline(outline);
+        expect(parsed).toHaveLength(2);
+      } finally {
+        delete process.env.BCD_SLIDES_MAX_SLIDES;
+      }
+    });
+  });
 });
