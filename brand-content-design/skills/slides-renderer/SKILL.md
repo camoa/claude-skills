@@ -89,9 +89,83 @@ is the shared-source fix the brand-content-design parity audit (B1) calls for.
 - **Custom (non-Google) fonts** are substituted with the nearest Google font and
   the substitution reported; **gradients** are baked to images.
 
+## Create — render a deck from an outline (`renderDeck`)
+
+The steps above produce a **template** in Drive. To produce a **presentation**,
+fill that template with a `/outline`-shaped markdown via the `renderDeck`
+command. The CLI is a stdin-JSON → stdout-envelope adapter; there are no
+`--flag` arguments — pipe a single JSON command document into `node dist/cli.js`.
+
+1. **Parse the outline → payload.** Send `outlineToPayload` with the outline
+   markdown and the layout's `tagMap` (derive from the saved `LayoutSpec` via
+   `tagMapFromLayoutSpec`, or pass the same map used at scaffold time):
+   ```sh
+   echo '{"command":"outlineToPayload","args":{
+     "outlineMarkdown":"<...>","tagMap":{...}
+   }}' | node dist/cli.js
+   ```
+   `result` is the `ContentPayload` array to hand to `renderDeck`.
+
+2. **Render the deck.** Send `renderDeck`. Include `manifestPath` (plus the
+   `layoutSpec`, `tokens`, and `fixedImageUrls` used at scaffold time) so the
+   sidecar gets written for future resyncs:
+   ```sh
+   echo '{"command":"renderDeck","args":{
+     "templatePresentationId":"<scaffolded-template-id>",
+     "tagMap":{...},
+     "payload":[...],
+     "deckName":"<presentation title> - <template name>",
+     "driveFolderPath":["<brand>","presentations"],
+     "manifestPath":"<outline.md>.render-manifest.json",
+     "layoutSpec":{...},
+     "tokens":{...},
+     "fixedImageUrls":{...}
+   }}' | node dist/cli.js
+   ```
+   What it does: duplicates the template in Drive → fills tagged text + image
+   slots from the payload → writes `<outline>.render-manifest.json` beside the
+   outline source. The envelope's `result.presentationId` is the new deck's
+   Drive id; `result.manifestPath` is the sidecar location.
+
+   Manifest path convention: **`<outline>.render-manifest.json` next to the
+   outline file** (e.g. `talk.outline.md` → `talk.outline.md.render-manifest.json`).
+   Without `manifestPath` the render still works, but no resync is possible.
+
+## Resync — re-render an edited outline in place (`resyncDeck`)
+
+For subsequent edits to the **same** outline, use `resyncDeck`. It reads the
+manifest, diffs prior payload vs new outline, and rebuilds slides **in place**
+on the same `deckPresentationId` — the user-visible file id and URL are
+preserved.
+
+```sh
+echo '{"command":"resyncDeck","args":{
+  "manifestPath":"<outline.md>.render-manifest.json",
+  "outlineMarkdown":"<new outline contents>"
+}}' | node dist/cli.js
+```
+
+Behaviour notes:
+
+- **Empty diff = no-op fast path.** When nothing changed, only `renderedAt` in
+  the manifest is updated; no batchUpdate is issued.
+- **Frozen `layoutSpec`.** Resync rebuilds from the `layoutSpec` captured in
+  the manifest at first render — it does NOT re-trace the template. If the
+  template's structure changed (new slide type, moved geometry, retagged
+  fields), run `renderDeck` fresh against the new template instead; resync is
+  for outline-content edits, not template-shape changes.
+- **Field-tagged IMAGE slots = v1 limitation.** Same constraint as
+  `renderDeck` — fixed/chrome images are rebuilt from `fixedImageUrls`;
+  outline-driven image fields are not yet supported.
+- **Missing manifest → error.** If the sidecar is absent, `resyncDeck` fails
+  with a `BAD_COMMAND` envelope ("run renderDeck first to produce one"). A
+  corrupt manifest throws `ManifestCorruptError`.
+
 ## Workflow integration
 
-Called by `/presentation` (Google Slides output target).
+Called by `/presentation` (Google Slides output target). First run = Create
+(scaffold + `renderDeck`); subsequent edits to the same outline = Resync
+(`resyncDeck`, same Drive file).
 
 **Drive naming + folder convention:**
 - a scaffolded **template** → name `"<template name> Template"`, folder
@@ -99,3 +173,5 @@ Called by `/presentation` (Google Slides output target).
 - a rendered **presentation** (a deck filled from an outline via `renderDeck`)
   → name `"<presentation title> - <template name>"`, folder
   `<brand>/presentations/`.
+- a resynced presentation keeps its original name, file id, and folder — the
+  Drive URL is stable across edits.
