@@ -31,6 +31,7 @@ import {
   MANIFEST_SCHEMA,
 } from './render-manifest.js';
 import { diffOutline, isEmptyDiff, type OutlineDiff } from './outline-diff.js';
+import { EmptyPayloadError } from './errors.js';
 
 export type { ContentSlide, ContentPayload } from './payload-validator.js';
 
@@ -323,6 +324,17 @@ export async function resyncDeck(
   manifest: RenderManifest,
   newPayload: ContentPayload,
 ): Promise<ResyncResult> {
+  // 0. Refuse an empty payload — `validatePayload` accepts `[]` (forEach no-op),
+  //    `diffOutline` would then produce an all-deletes batch that the Slides
+  //    API rejects with an opaque INVALID_ARGUMENT ("must keep ≥1 slide").
+  //    Fail-fast with a clear, actionable message instead.
+  if (newPayload.length === 0) {
+    throw new EmptyPayloadError(
+      'resyncDeck: refusing to empty the deck (newPayload has 0 slides). ' +
+        'If you intend to discard this deck, delete the manifest and presentation manually.',
+    );
+  }
+
   const tagMap = tagMapFromLayoutSpec(manifest.layoutSpec);
 
   // 1. Validate — fail-fast before any API write.

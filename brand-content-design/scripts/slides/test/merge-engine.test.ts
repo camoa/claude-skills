@@ -582,6 +582,23 @@ describe('resyncDeck (D3)', () => {
     expect(res.manifest.deckPresentationId).toBe('deck-X');
     expect(res.manifest.layoutSpec).toBe(m.layoutSpec);
   });
+
+  it('refuses an empty payload — typed EmptyPayloadError, no API calls (C1)', async () => {
+    const m = makeManifest([{ type: 'title', text: { headline: 'A' } }]);
+    const client = resyncClient();
+    let caught: unknown;
+    try {
+      await resyncDeck(asClient(client as any), m, []);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeDefined();
+    expect((caught as { code?: string }).code).toBe('EMPTY_PAYLOAD');
+    expect((caught as Error).message).toMatch(/refusing to empty the deck/i);
+    // No client method may run — the guard sits above validate and getPresentation.
+    expect(client.batchUpdate).not.toHaveBeenCalled();
+    expect(client.getPresentation).not.toHaveBeenCalled();
+  });
 });
 
 describe('tagMapFromLayoutSpec', () => {

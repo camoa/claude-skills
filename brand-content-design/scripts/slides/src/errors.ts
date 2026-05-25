@@ -8,6 +8,38 @@
  */
 import type { SlidesError } from './types.js';
 
+/**
+ * Typed input/contract errors. Each carries a stable `code` string that
+ * `normalizeError` lifts into the result envelope so callers can branch on it.
+ */
+
+/** resyncDeck refused an empty payload (would all-delete the deck). */
+export class EmptyPayloadError extends Error {
+  readonly code = 'EMPTY_PAYLOAD';
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmptyPayloadError';
+  }
+}
+
+/** A user-controlled path failed confinement (traversal, wrong extension, escape). */
+export class InvalidPathError extends Error {
+  readonly code = 'INVALID_PATH';
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidPathError';
+  }
+}
+
+/** Outline source or parsed payload exceeded the configured size caps. */
+export class OutlineTooLargeError extends Error {
+  readonly code = 'OUTLINE_TOO_LARGE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'OutlineTooLargeError';
+  }
+}
+
 /** Shape of the error body googleapis nests under `response.data`. */
 interface GoogleApiErrorBody {
   error?: { code?: number; message?: string; status?: string };
