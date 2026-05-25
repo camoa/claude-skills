@@ -74,6 +74,31 @@ export interface RenderOptions {
 
 const DISPLAY_BAKE_FONT_PX = 96;
 
+/**
+ * Append per-slide fill requests (objectId-targeted text, legacy page-scoped
+ * text, page-scoped image swaps) to a batch and return the count of tags
+ * dispatched. The shape is identical in renderDeck and resyncDeck once the
+ * three buckets have been classified — only the *classification* differs
+ * (renderDeck consults `TagMap` + `info.objectId` + display-bake; resyncDeck
+ * scans `LayoutSpec.elements`). Extracting only the emission step keeps the
+ * helper honest — a flag-driven classifier would be two functions glued
+ * together.
+ */
+function appendSlideFillRequests(
+  batch: slides_v1.Schema$Request[],
+  slideObjectId: string,
+  objectIdFills: { objectId: string; text: string }[],
+  normalText: Record<string, string>,
+  images: Record<string, string>,
+): number {
+  batch.push(...buildObjectIdTextFillRequests(objectIdFills));
+  batch.push(...buildReplaceAllTextRequests(normalText, [slideObjectId]));
+  batch.push(...buildReplaceAllShapesWithImageRequests(images, [slideObjectId]));
+  return (
+    objectIdFills.length + Object.keys(normalText).length + Object.keys(images).length
+  );
+}
+
 /** Resolve a slide's speaker-notes shape id from a `getPresentation` result. */
 function speakerNotesObjectId(
   presentation: slides_v1.Schema$Presentation,
@@ -208,13 +233,13 @@ export async function renderDeck(
       }
     }
 
-    batch1.push(...buildObjectIdTextFillRequests(objectIdFills));
-    batch1.push(...buildReplaceAllTextRequests(normalText, [newSlideId]));
-    batch1.push(...buildReplaceAllShapesWithImageRequests(images, [newSlideId]));
-    tagsFilled +=
-      objectIdFills.length +
-      Object.keys(normalText).length +
-      Object.keys(images).length;
+    tagsFilled += appendSlideFillRequests(
+      batch1,
+      newSlideId,
+      objectIdFills,
+      normalText,
+      images,
+    );
   }
 
   // Delete the prototype type-slides — the deck shows only outline slides.
@@ -442,13 +467,13 @@ export async function resyncDeck(
         legacyText[tag] = value;
       }
     }
-    batch1.push(...buildObjectIdTextFillRequests(objectIdFills));
-    batch1.push(...buildReplaceAllTextRequests(legacyText, [slideObjectId]));
-    batch1.push(
-      ...buildReplaceAllShapesWithImageRequests(images, [slideObjectId]),
+    tagsFilled += appendSlideFillRequests(
+      batch1,
+      slideObjectId,
+      objectIdFills,
+      legacyText,
+      images,
     );
-    tagsFilled +=
-      objectIdFills.length + Object.keys(legacyText).length + Object.keys(images).length;
   }
 
   // Delete prior slides last — Slides API requires at least one slide in the
