@@ -1,7 +1,7 @@
 ---
 name: contribution-setup
-description: "Stands up and environment-matches a Drupal contribution workspace — DDEV with the workflow-matched add-on, CI gate config (new-module scaffold or existing-module discovery), and the Drupal AI skills. Use when the user runs /drupal-ai-contrib:setup or asks to set up a Drupal contribution environment. Idempotent and detect-driven — does only what is missing; never a gate, never a prerequisite."
-version: 0.1.0
+description: "Stands up and environment-matches a Drupal contribution workspace — DDEV with the workflow-matched add-on, CI gate config (new-module scaffold or existing-module discovery), the Drupal AI skills, the drupalorg CLI, and a contribution-credentials (SSH-key) check. Use when the user runs /drupal-ai-contrib:setup or asks to set up a Drupal contribution environment. Idempotent and detect-driven — does only what is missing; never a gate, never a prerequisite."
+version: 0.1.1
 model: sonnet
 user-invocable: false
 ---
@@ -63,23 +63,60 @@ Generate, version-resolved per the target core, from the scaffolding dev-guide:
 - `drupal/core-dev` (+ `drupal/coder`, `phpstan/phpstan`, `mglaman/phpstan-drupal`) in
   `require-dev`, constrained to the target major
 
-### 4. Ensure the Drupal AI skills
+### 4. Ensure the toolchain
 
-Ensure `ai_best_practices` and `ai_skills` are installed via `drupal_devkit` (the
-cross-harness skill installer). If `drupal_devkit` is absent, report how to obtain it;
-do not block.
+**Drupal AI skills** — ensure `ai_best_practices` and `ai_skills` are installed via
+`drupal_devkit` (the cross-harness skill installer). If `drupal_devkit` is absent,
+report how to obtain it; do not block.
 
-### 5. Environment-match
+**The issue / MR CLI** — the `issue`, `submit`, and `pipeline` skills wrap
+`mglaman/drupalorg-cli`. Detect it with `command -v drupalorg` (the executable is
+`drupalorg`, not `drupalorg-cli`). If it is missing, surface the install instructions
+from `${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md` —
+that reference covers what the tool is, the recommended PHAR install, the deprecated
+Composer path, and the subcommand set. Offer to install it; do not block if the
+contributor declines (`issue`/`submit` re-surface the same instructions).
+
+### 5. Check contribution credentials — and guide, do not assume
+
+The contribution arc needs the contributor's **drupal.org credentials** for its write
+operations. Surface this now — do not let it surface mid-`issue` as a failed `git
+push`. The plugin and the CLI **cannot** set credentials up; this is the contributor's
+own account action. Guide them through it.
+
+- **Read operations** (`drupalorg issue:show`, `mr:list`, `project:issues`) hit public
+  APIs — no credentials needed. An empty `project:issues` result can itself be an
+  auth/config gap rather than "no issues" — note that when reporting.
+- **Write / push operations** — `git push` to an issue fork, and the `/do:` issue-bot
+  commands — need an **SSH key registered on the contributor's drupal.org account**,
+  because issue-fork git remotes use SSH URLs (`git@git.drupal.org:…`).
+
+Detect, then guide:
+
+```bash
+ssh -T git@git.drupal.org      # a working key greets the contributor by username
+```
+
+If it does not authenticate, tell the contributor plainly: this is a ~2-minute action —
+register an SSH key at *drupal.org → My account → SSH keys* (add the public key, e.g.
+`~/.ssh/id_ed25519.pub`). It is the prerequisite for `git push` to issue forks; without
+it, `issue` can still review and read, but cannot push a branch. Never block setup on
+it — report it as the next thing to do. See
+`${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md` §Authentication.
+
+### 6. Environment-match
 
 Install the **CI-target core version** + `drupal/core-dev` so `phpunit` / `phpstan`
 resolve to the same releases CI uses (the local DDEV default usually will not match).
 This is the mechanism that makes `verify`'s gates trustworthy — see `contribution-verify`.
 
-### 6. Report
+### 7. Report
 
-Summarize: workflow, issue system, environment status, the resolved gate set, AI-skill
+Summarize, and for each item state ready vs. needs-action so the contributor knows
+their exact next step: workflow, issue system, environment status, the resolved gate
+set, AI-skill status, the issue/MR CLI (`drupalorg`) status, the **credentials/SSH-key**
 status, the environment-match result. Point the contributor at `issue` (or, if work is
-underway, `verify`).
+underway, `verify`) — and if the SSH key is missing, name *that* as the first step.
 
 ## Writes — explicit confirmation only
 
@@ -115,6 +152,8 @@ environment is a no-op that simply reports state.
 | Situation | Handling |
 |-----------|----------|
 | `drupal_devkit` not installed | Report how to obtain it; do not block setup. |
+| `drupalorg` not on `PATH` | Surface `references/drupalorg-cli.md` (PHAR install); offer to install; do not block. If installed via Composer global, the bin dir may just be off `PATH` — see the reference's Install note. |
+| No SSH key registered on the drupal.org account | Guide the contributor to add one (*drupal.org → My account → SSH keys*); report it as the next step. Read/review still works; `git push` to issue forks does not. Never block. |
 | Workflow cannot be inferred | Ask the contributor — never assume core vs. contrib. |
 | `.gitlab-ci.yml` exists but uses a non-`gitlab_templates` setup | Record what is there; `verify` mirrors the discovered jobs as-is. |
 | Contributor declines a scaffold write | Skip that file; report which gates remain unconfigured. |
