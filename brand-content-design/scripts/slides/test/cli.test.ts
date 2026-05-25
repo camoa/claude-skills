@@ -303,6 +303,7 @@ import { tagMapFromLayoutSpec } from '../src/merge-engine.js';
 describe('handleCommand — renderDeck manifest write (post-render)', () => {
   it('writes the manifest sidecar when manifestPath is supplied', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-renderDeck-'));
+    process.env.BCD_SLIDES_WORKSPACE = dir;
     const manifestPath = join(dir, 'outline.md.render-manifest.json');
     (renderDeck as unknown as { mockResolvedValue: Function }).mockResolvedValue({
       presentationId: 'deck-new',
@@ -340,6 +341,7 @@ describe('handleCommand — renderDeck manifest write (post-render)', () => {
       { type: 't', text: { h: 'Hi' }, images: {} },
     ]);
     rmSync(dir, { recursive: true, force: true });
+    delete process.env.BCD_SLIDES_WORKSPACE;
   });
 
   it('does NOT write a manifest when manifestPath is omitted', async () => {
@@ -365,6 +367,7 @@ describe('handleCommand — renderDeck manifest write (post-render)', () => {
 describe('handleCommand — resyncDeck', () => {
   it('reads the manifest, calls resyncDeck, and rewrites the manifest', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-resync-'));
+    process.env.BCD_SLIDES_WORKSPACE = dir;
     const manifestPath = join(dir, 'outline.md.render-manifest.json');
     const seed = {
       schema: MANIFEST_SCHEMA,
@@ -410,25 +413,34 @@ describe('handleCommand — resyncDeck', () => {
     const after = JSON.parse(readFileSync(manifestPath, 'utf8'));
     expect(after.renderedAt).toBe('2026-05-24T00:00:00.000Z');
     rmSync(dir, { recursive: true, force: true });
+    delete process.env.BCD_SLIDES_WORKSPACE;
   });
 
   it('returns BAD_COMMAND when the manifest is missing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-resync-missing-'));
+    process.env.BCD_SLIDES_WORKSPACE = dir;
+    const manifestPath = join(dir, 'outline.md.render-manifest.json');
     const env = await handleCommand(fakeClient(), {
       command: 'resyncDeck',
-      args: {
-        manifestPath: '/nonexistent/path/manifest.json',
-        outlineMarkdown: '# t',
-      },
+      args: { manifestPath, outlineMarkdown: '# t' },
     });
     expect(env.ok).toBe(false);
     expect((env as { error: { code: string } }).error.code).toBe('BAD_COMMAND');
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env.BCD_SLIDES_WORKSPACE;
   });
 
   it('rejects missing arguments', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-resync-missing-args-'));
+    process.env.BCD_SLIDES_WORKSPACE = dir;
     const env = await handleCommand(fakeClient(), {
       command: 'resyncDeck',
-      args: { manifestPath: '/x.json' }, // no outlineMarkdown
+      args: {
+        manifestPath: join(dir, 'x.render-manifest.json'),
+      }, // no outlineMarkdown
     });
     expect(env.ok).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env.BCD_SLIDES_WORKSPACE;
   });
 });

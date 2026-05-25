@@ -42,6 +42,7 @@ import {
   MANIFEST_SCHEMA,
   type RenderManifest,
 } from './render-manifest.js';
+import { confineManifestPath, confineReadPath } from './path-guard.js';
 
 /** A bad command document or argument. Carries a stable `code`. */
 class CommandError extends Error {
@@ -267,7 +268,10 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
       const imagePaths = optStringMap(a, 'imagePaths');
       const images = imagePaths
         ? Object.fromEntries(
-            Object.entries(imagePaths).map(([id, p]) => [id, readFileSync(p)]),
+            Object.entries(imagePaths).map(([id, p]) => [
+              id,
+              readFileSync(confineReadPath(p, `imagePaths["${id}"]`)),
+            ]),
           )
         : undefined;
       const gradients = optObject(a, 'gradients') as unknown as
@@ -299,13 +303,24 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
         | FontSubstitution[]
         | undefined;
       const templatePresentationId = reqString(a, 'templatePresentationId');
+      // Confine user-controlled paths BEFORE any API write — if the path is
+      // invalid, the deck never gets duplicated. (`renderDeck` is otherwise
+      // not idempotent at this layer; rejecting late would leave orphan files.)
+      const rawCustomFontFile = optString(a, 'customFontFile');
+      const customFontFile =
+        rawCustomFontFile !== undefined
+          ? confineReadPath(rawCustomFontFile, 'customFontFile')
+          : undefined;
+      const rawManifestPath = optString(a, 'manifestPath');
+      const manifestPath =
+        rawManifestPath !== undefined ? confineManifestPath(rawManifestPath) : undefined;
       const result = await renderDeck(
         client,
         { presentationId: templatePresentationId, tagMap },
         payload,
         {
           fontSubstitutions,
-          customFontFile: optString(a, 'customFontFile'),
+          customFontFile,
           deckName: optString(a, 'deckName'),
           driveFolderPath: optStringArray(a, 'driveFolderPath'),
         },
@@ -314,7 +329,6 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
       // `manifestPath`, also supplying `layoutSpec`, `tokens`, and
       // `fixedImageUrls` lets us persist the sidecar so future `resyncDeck`
       // calls can rebuild in place on the same deckPresentationId.
-      const manifestPath = optString(a, 'manifestPath');
       if (manifestPath !== undefined) {
         const layoutSpec = reqObject(a, 'layoutSpec') as unknown as LayoutSpec;
         const tokens = reqObject(a, 'tokens') as unknown as BrandTokens;
@@ -340,7 +354,7 @@ async function dispatch(client: SlidesClient, doc: CommandDoc): Promise<unknown>
       // fixedImageUrls, fontSubstitutions, deckPresentationId, prior slides).
       // The caller supplies the manifest path + the new outline markdown;
       // we parse → payload → resync → rewrite the manifest in place.
-      const manifestPath = reqString(a, 'manifestPath');
+      const manifestPath = confineManifestPath(reqString(a, 'manifestPath'));
       const outlineMarkdown = reqString(a, 'outlineMarkdown');
       const manifest = readManifest(manifestPath);
       if (!manifest) {
