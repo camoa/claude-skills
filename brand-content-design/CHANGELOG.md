@@ -5,6 +5,11 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`references/slides-credentials.md`** — credentials setup reference for the upcoming Google Slides output of `/template-presentation` and `/presentation`. Covers the OAuth-refresh-token vs service-account decision tree, Google Cloud Console + OAuth Playground setup steps, the `BCD_SLIDES_*` env-var contract (service account wins when both set; default scopes `presentations` + `drive.file`), and ready-to-paste Python wire-up snippets for the follow-up `slides_python_runner` subtask. Carries forward the credentials guidance from the rejected PR #179 TypeScript renderer prototype.
+
 ## [3.4.0] - 2026-05-21
 
 ### Added
