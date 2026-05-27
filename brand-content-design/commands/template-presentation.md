@@ -405,16 +405,80 @@ Create a new presentation template or edit an existing one.
     - **Create ALL slides defined in template.md** with placeholder content
     - Save as sample.pptx
 
-16. **Save template**
+16. **Save template (local)**
     Save to `templates/presentations/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
     - sample.pptx
 
-17. **Confirm completion**
-    Show template location and sample preview
-    Explain how to use: `/presentation` and select this template
+    The template folder created here is `LOCAL_DIR` for the next step.
+
+17. **Render sample.slides deck (Drive)**
+
+    Templates flow mirrors ONLY the sample.slides deck to Drive — `template.md`,
+    `canvas-philosophy.md`, `sample.pdf`, and `sample.pptx` stay local.
+
+    Reference: `references/slides-batchupdate-authoring.md` (sibling
+    `slides_llm_authoring` subtask) — load it from the plugin's `references/`
+    directory. It documents how to translate the sample PDF + reportlab
+    Python source into a Slides API `batchUpdate` request list.
+
+    **17a. Detect prior render.** If `LOCAL_DIR` already contains a
+    `*.slides.url` pointer file, use AskUserQuestion:
+    - Header: "Existing sample Slides deck"
+    - Question: "A sample Slides deck already exists in Drive for this
+      template. What would you like to do?"
+    - Options:
+      - **Trash and recreate** (default) → `"strategy": "trash"`
+      - **Keep alongside** → `"strategy": "keep_alongside"` (`-v2`/`-v3`)
+      - **Cancel** → skip step 17 entirely
+
+    **17b. Author the batchUpdate JSON.** Following the authoring guide,
+    using sample.pdf + reportlab source + canvas-philosophy.md as the design
+    rules. Persist the payload to `{LOCAL_DIR}/sample.slides.batchupdate.json`.
+
+    **17c. Create the deck.** Shell out:
+    ```
+    echo '{"title": "{template-name} sample"}' \
+      | python -m slides.cli create_deck
+    ```
+    Capture `deck_id` from the JSON response.
+
+    **17d. Apply the layout.** Shell out:
+    ```
+    echo '{"deck_id": "...", "requests": [...]}' \
+      | python -m slides.cli apply_batch_update
+    ```
+
+    **17e. Mirror sample to Drive.** Shell out:
+    ```
+    echo '{
+      "brand": "{BRAND_NAME}",
+      "render_slug": "{template-name}",
+      "kind": "templates",
+      "local_dir": "{LOCAL_DIR}",
+      "deck_id": "{deck_id}",
+      "strategy": "trash"
+    }' | python -m slides.cli replace_render
+    ```
+    NO `pdf_path` and NO `outline_path` — templates flow uploads only the
+    Slides deck. The runner creates
+    `brand-content/{brand}/templates/{template-name}/` in Drive (idempotent),
+    reparents the deck into it, and writes `{LOCAL_DIR}/sample.slides.url`.
+
+    Returns `{folder_id, folder_url, deck_id, deck_url, ...}`.
+
+    Credentials come from environment vars per
+    `references/slides-credentials.md` (`BCD_SLIDES_*`).
+
+18. **Confirm completion**
+    Show:
+    - Local template location: `templates/presentations/{template-name}/`
+    - Drive folder URL (from step 17e)
+    - Sample Slides deck URL (from step 17e)
+    - Sample preview
+    - Explain how to use: `/presentation` and select this template
 
 ## Output
 
@@ -422,3 +486,8 @@ Create a new presentation template or edit an existing one.
 - Created: `templates/presentations/{name}/canvas-philosophy.md`
 - Created: `templates/presentations/{name}/sample.pdf`
 - Created: `templates/presentations/{name}/sample.pptx`
+- Created: `templates/presentations/{name}/sample.slides.batchupdate.json` (NEW)
+- Created: `templates/presentations/{name}/sample.slides.url` (NEW — local
+  pointer file)
+- Created in Drive (NEW): `brand-content/{brand}/templates/{name}/`
+  containing the live sample Slides deck (no source files mirrored)
