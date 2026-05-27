@@ -1,7 +1,7 @@
 ---
 name: visual-content
 description: Use when creating branded presentations or carousels. Generates museum-quality visual output from canvas philosophy, enforcing style constraints. Outputs PDF first, then converts to PPTX for editability.
-version: 3.1.1
+version: 3.1.2
 allowed-tools: Read, Write, Glob, Bash
 user-invocable: false
 ---
@@ -132,6 +132,10 @@ PDF generation code patterns are in `references/technical-implementation.md` —
 Key constraints: logos must be **PNG or JPG** (reportlab does not support SVG — `/brand-extract` converts SVG→PNG automatically); custom fonts load from `{PROJECT_PATH}/assets/fonts/`; colors parse from the brand-philosophy.md color table.
 
 **Output process**: generate the PDF (source of truth) with the `pdf` skill, then convert presentations to PPTX with the `pptx` skill for editability.
+
+### Google Slides output (additional, AI-authored per render)
+
+When a presentation render also targets Google Slides, the LLM emits a Slides API `batchUpdate` `requests[]` list that visually matches the PDF, using the reportlab Python source as ground truth. The authoring guide — coordinate translation (px → PT), per-element recipes (text, background, gradient, logo, card, icon), font fallback, anti-patterns, and the `{name}.slides.batchupdate.json` persistence contract — lives in `../../references/slides-batchupdate-authoring.md`. Execution is handled by the Python runner in `scripts/slides/` (see `references/slides-credentials.md` for the env-var contract).
 
 ## Part 9: Workflow Integration
 
