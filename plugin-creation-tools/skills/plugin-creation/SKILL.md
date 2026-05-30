@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-version: 3.7.1
+version: 3.8.0
 description: 'Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`'
 user-invocable: false
 ---
@@ -100,8 +100,9 @@ When user says "add skill", "create skill", "make skill":
 | "The description field is important" | "Write the description starting with 'Use when...'" |
 
 **Consider these optional frontmatter fields:**
-- `model: haiku` for simple lookup/formatting skills, `opus` for complex reasoning
+- `model:` — `opus` (safe, 1M) or `inherit` (safe default). **Do NOT pin `sonnet`/`haiku` on a skill** — a skill's `model:` is an inline current-turn override with no context isolation, so a sub-1M pin overflows when the skill activates from a large conversation (validator rule **S14**). For cheap heavy work, put it in a Task-dispatched agent instead. See `references/03-skills/writing-skillmd.md` § Don't pin a skill below the session window.
 - `context: fork` with `agent: <type>` for heavy operations that would pollute main context
+- `disallowed-tools` (kebab-case) to hard-remove tools from the pool while the skill runs (e.g. block `AskUserQuestion` in a background loop). Note the agent equivalent is camelCase `disallowedTools` — the forms are not interchangeable (rules **S15** / **A04**).
 - `disable-model-invocation: true` for command-only skills (no auto-trigger)
 - `user-invocable: false` to hide from `/` menu (Claude can still invoke via Skill tool)
 

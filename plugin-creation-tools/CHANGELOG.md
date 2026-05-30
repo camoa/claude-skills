@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-05-29
+
+**Theme: gate-enabling rules — the prerequisites for the 2026-05-29 cross-plugin rollout.** Six ecosystem plugins carry the BUG-1 model-pin defect and all twelve are `disallowed-tools` candidates; their rollouts run *through this tool's validator*, so the rules they depend on ship here first. Source: `cross-plugin-feature-adoption-2026-05-29.md` Part 3 (PCT-1, PCT-7) + the verified BUG-1 audit; grounded in the cached Skills guide (line 218 `model:` semantics, line 217 skill `disallowed-tools`).
+
+### Added — validator rules
+
+- **S14 (warn, `--strict`→error) — skill `model:` pins a sub-1M-context model.** A skill's `model:` is an inline current-turn override with **no context isolation** (Skills guide line 218), so a `sonnet`/`haiku` pin (≈ 200k window) overflows the moment the skill activates from a larger conversation — an API context error until `/compact`. This is BUG-1, confirmed on `code-paper-test/paper-test`. Fires on `sonnet`/`haiku` and dated `claude-sonnet-*`/`claude-haiku-*` ids without a `1m`/`[1m]` suffix; **exempt:** absent, `inherit`, `opus`, any `1m`-suffixed value. **Agents are exempt** — `model:` pins on `agents/**/*.md` run in fresh subagent contexts. Not auto-fixable (convert-to-agent vs `inherit` is intent-dependent); the message points to both fix patterns.
+- **S15 (error, `--fix`) — skill uses camelCase `disallowedTools`.** The skill field is kebab-case `disallowed-tools`; the camel form is the agent field and is silently ignored on a skill. Auto-fix renames the key.
+- **A04 (error, `--fix`) — agent uses kebab `disallowed-tools`.** Reciprocal of S15 — the agent field is camelCase `disallowedTools`; the kebab form is silently ignored, so the agent inherits all tools. Auto-fix renames the key.
+
+### Added — authoring docs (PCT-1 / PCT-7)
+
+- `references/03-skills/writing-skillmd.md`: new `disallowed-tools` (kebab) frontmatter row with the explicit kebab-vs-camel distinction; rewrote the `model:` row to state the inline-override-no-isolation semantics; new "Don't pin a skill below the session window" section (Task-dispatched agent for cheap heavy work; `inherit` safe default; `opus` safe; `sonnet`/`haiku` the footgun); corrected the Model Selection Guidelines table so it no longer recommends sub-1M skill pins.
+- `references/05-agents/agent-tools.md`: reciprocal kebab-vs-camel callout on the `disallowedTools` section.
+- `SKILL.md`: "optional frontmatter fields" list corrected (no more `model: haiku` skill-pin recommendation) and gained `disallowed-tools`.
+
+### Changed — count determinism & housekeeping (D1)
+
+- `validate.md` now computes the component inventory with the shell (`ls`/`find` + `wc -l`) in a dedicated Step 4 instead of letting the fork eyeball it — kills the observed 30/37/38 run-to-run drift. Added scoped read-only `Bash(ls:*), Bash(find:*), Bash(wc:*)` to the command's `allowed-tools`.
+- Auto-fix inventory updated to include S15 + A04.
+
+### Verified — A1 re-verification (closes the 2026-05-20 gap)
+
+The path-argument form (`/plugin-creation-tools:validate <plugin-path>`) was exercised against another plugin and confirmed to target that plugin (not PCT, not the whole marketplace). Result recorded in the roadmap notes.
+
 ## [3.7.1] - 2026-05-20
 
 **Theme: validator self-defects.** Bug-fix patch. drupal-dev-framework v4.6.0 used `/plugin-creation-tools:validate` v3.7.0 as its release gate and the tool surfaced eight defects in itself, recorded in `plugin-creation-tools-gaps-2026-05-20.md`. This release fixes all eight, plus a versioning-drift bug found while fixing them.
