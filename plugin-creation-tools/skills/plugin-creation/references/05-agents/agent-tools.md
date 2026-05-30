@@ -29,6 +29,8 @@ Use `disallowedTools` when it is easier to exclude a few tools than to list all 
 
 > **Note:** `disallowedTools` applies when Claude auto-delegates to the agent based on its description. It does not apply when an agent is spawned explicitly via the Task tool from the main conversation.
 
+> **Kebab vs camel — the field name differs between agents and skills.** On an **agent** the field is **`disallowedTools`** (camelCase, shown here). On a **skill** (`SKILL.md`) the equivalent field is **`disallowed-tools`** (kebab-case). The two are not interchangeable: a kebab `disallowed-tools` key in an agent's frontmatter is **silently ignored**, so the agent inherits all tools instead of being restricted — and the camel `disallowedTools` key in a skill is likewise ignored. The validator catches both: rule **A04** flags kebab-on-agent (auto-fixable), rule **S15** flags camel-on-skill (auto-fixable). This mismatch has shipped in real ecosystem plugins whose agents were mis-"standardized" onto the skill field — always verify the agent field is `disallowedTools`. See `../03-skills/writing-skillmd.md` for the skill side.
+
 ## Available Tools
 
 ### File Operations
