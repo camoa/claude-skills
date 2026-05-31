@@ -52,6 +52,7 @@ The SDK gives you every Claude Code capability, programmable:
 - **Custom tools** — register your own tools for the model (see [`custom-tools.md`](custom-tools.md))
 - **Subagents** — delegate to named subagents with their own context window (see [`subagents-sdk.md`](subagents-sdk.md))
 - **Sessions** — multi-turn conversations with state (see [`subagents-sdk.md`](subagents-sdk.md))
+- **Session storage** — by default the SDK writes session transcripts to JSONL under `~/.claude/projects/`; a `SessionStore` adapter (`append`/`load` + 3 optional methods) mirrors them to your own backend (S3, Redis, a DB) so a session created on one host can resume on another. See the upstream **Agent SDK Session Storage** guide.
 - **Permissions** — the same permission-mode system as the CLI (see [`permissions.md`](permissions.md))
 - **Structured outputs** — force JSON-schema-compliant responses (see [`structured-outputs.md`](structured-outputs.md))
 - **Tool search** — defer tool loading for large tool catalogs (see [`tool-search.md`](tool-search.md))

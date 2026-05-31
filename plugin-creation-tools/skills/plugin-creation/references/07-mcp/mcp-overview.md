@@ -70,6 +70,7 @@ Or inline in `plugin.json`:
 | env | object | No | Environment variables |
 | cwd | string | No | Working directory |
 | headers | object | No | HTTP headers (http only) |
+| timeout | number | No | Per-server tool-execution timeout in **milliseconds** (e.g. `600000` = 10 min). Overrides the `MCP_TOOL_TIMEOUT` env var for this server only. Hard per-tool-call wall-clock limit; values below `1000` are floored to 1 s. For http/sse servers the first-byte fetch budget keeps a 60 s floor regardless. |
 
 ## Transport Types
 
@@ -220,6 +221,10 @@ MCP servers defined in plugins:
 2. Run in the background
 3. Appear as tools in Claude's toolkit
 4. Restart if they crash (with limits)
+
+## Managed MCP (admin-deployed)
+
+An administrator can deploy a `managed-mcp.json` file (via device management — Jamf, Intune, Group Policy). When present, Claude Code loads **only** the servers it defines and users cannot add, modify, or use any others — **including plugin-provided servers**. An empty server map disables MCP entirely. Admins can also filter with `allowedMcpServers` / `deniedMcpServers`. Implication for plugin authors: in a managed environment your plugin's `mcpServers` may be suppressed, so don't make core plugin behavior hard-depend on a bundled MCP server.
 
 ## Debugging
 

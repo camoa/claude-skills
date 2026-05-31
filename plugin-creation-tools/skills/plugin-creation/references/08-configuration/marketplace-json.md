@@ -82,6 +82,7 @@ marketplace-repo/
 | homepage | string | No | Plugin homepage URL; overrides value from plugin.json |
 | repository | string | No | Plugin repository URL; overrides value from plugin.json |
 | license | string | No | Plugin license identifier; overrides value from plugin.json |
+| `defaultEnabled` | boolean | No | **v2.1.154+** Whether the plugin is enabled after install (default: `true`). Set `false` to install it disabled until the user opts in. Overrides the same field in the plugin's `plugin.json`. |
 | commands | array/string | No | Command paths; overrides value from plugin.json |
 | agents | array/string | No | Agent paths; overrides value from plugin.json |
 | hooks | string | No | Hooks file path; overrides value from plugin.json |
