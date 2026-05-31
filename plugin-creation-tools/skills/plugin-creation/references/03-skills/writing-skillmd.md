@@ -124,8 +124,9 @@ context: fork
 |-------|----------|-------------|
 | `name` | Yes | Lowercase, numbers, hyphens only. Max 64 chars. No "anthropic" or "claude". |
 | `description` | Yes | Must include WHAT and WHEN. Third person only. **Two caps apply:** the Claude Code runtime truncates the combined `description` + `when_to_use` text at `maxSkillDescriptionChars` (default **1,536**, configurable in settings); the agentskills.io portability standard recommends a stricter **~1,024**. Target 1,024 for portable skills; 1,536 is the hard runtime limit past which text is silently dropped from the listing Claude sees. |
-| `model` | No | Override model for this skill. Values: `haiku`, `sonnet`, `opus`. Use for cost optimization -- `haiku` for simple/repetitive tasks, `opus` for complex reasoning. |
+| `model` | No | Model to use when this skill is active. Values: `inherit`, `opus`, `sonnet`, `haiku` (same values as `/model`). **An inline current-turn override with no context isolation** — the override applies for the rest of the current turn, runs in the live conversation, and the session model resumes on your next prompt. **Footgun:** a sub-1M pin (`sonnet`/`haiku` ≈ 200k) overflows when the skill activates from a larger conversation. `inherit` is the safe default; `opus` is safe (1M tier); `sonnet`/`haiku` is the footgun. See "Don't pin a skill below the session window" below. |
 | `allowed-tools` | No | Grants permission for the listed tools while the skill is active (does not restrict — every tool remains callable, but listed tools skip the permission prompt). Syntax: `"Bash(python:*) Bash(npm:*) WebFetch"`. **Workspace-trust gating:** for skills checked into a project at `.claude/skills/`, `allowed-tools` only takes effect *after* the workspace trust dialog is accepted (same gate as permission rules in `.claude/settings.json`). Review project skills before trusting a repo — a hostile skill can grant itself broad tool access this way. Plugin-shipped skills are not subject to this gate (trust is established at install time). |
+| `disallowed-tools` | No | **Kebab-case.** Tools removed from Claude's available pool while this skill is active. Use for autonomous skills that should never call certain tools (e.g. block `AskUserQuestion` in a background loop). Accepts a space- or comma-separated string, or a YAML list. The restriction clears when you send your next message. **Do not confuse with the agent field:** agents use the camelCase `disallowedTools`. The camelCase form on a skill is silently ignored (validator rule **S15** flags it); the kebab form on an agent is silently ignored (rule **A04**). See `../05-agents/agent-tools.md` § The disallowedTools Field. |
 | `context` | No | Set to `fork` to run skill in an isolated context (own context window). Use for heavy operations that would pollute the main context. |
 | `agent` | No | When `context: fork`, specify agent type for the forked context. |
 | `disable-model-invocation` | No | Set to `true` to prevent Claude from auto-invoking. User must call explicitly via `/name`. Reduces context cost to zero for triggered-only skills. |
@@ -137,13 +138,28 @@ context: fork
 | `argument-hint` | No | Hint shown during autocomplete to indicate expected arguments. Example: `argument-hint: "[issue-number]"` shows `/skill-name [issue-number]` in the autocomplete menu. |
 | `effort` | No | Sets the reasoning effort level for the skill. Values: `low`, `medium`, `high`. Default: inherits from session. |
 
+### Don't pin a skill below the session window
+
+A skill's `model:` is an **inline, current-turn override with no context isolation** — the skill runs in the *live conversation* on the pinned model (Skills guide: *"the model to use when this skill is active… the override applies for the rest of the current turn"*). It is **not** a fresh subagent. So if you pin a model whose context window is smaller than a realistic session — `sonnet` or `haiku` (≈ 200k) — the skill **overflows the moment it activates from a conversation larger than that window**, producing an API context error until the user `/compact`s. This is a verified cross-plugin defect (BUG-1).
+
+| Want | Do | Don't |
+|------|----|----|
+| Cheap model for heavy/mechanical work that needs only its input | Put the work in a **Task-dispatched agent** (`agents/<name>.md` with `model: haiku`/`sonnet`) — fresh, isolated context AND the cheap model | Pin the inline skill's `model:` to `sonnet`/`haiku` |
+| A skill that needs the conversation context | `model: inherit` (runs on the 1M session model) | Pin a sub-1M model and hope the chat stays small |
+| Deep reasoning in a skill | `model: opus` (1M tier — safe) | — |
+
+**Rule of thumb:** `inherit` is the safe default; `opus` is safe (1M); `sonnet`/`haiku` is the footgun. Model pins on **agents** are exempt from this concern — agents always run in a fresh subagent context. The validator enforces this with rule **S14** (warns on a sub-1M skill pin; exempts agents and `opus`/`inherit`).
+
 ### Model Selection Guidelines
+
+These apply to **agents** and to the safe skill values (`opus`, `inherit`) — not to inline sub-1M skill pins (see the section above):
 
 | Model | Use When |
 |-------|----------|
-| `haiku` | Simple formatting, file listing, repetitive transforms, boilerplate generation |
-| `sonnet` | Standard coding tasks, most skills (default behavior) |
-| `opus` | Complex multi-step reasoning, architecture decisions, nuanced analysis |
+| `haiku` | Simple formatting, file listing, repetitive transforms, boilerplate — **in an agent**, not pinned on an inline skill |
+| `sonnet` | Standard coding tasks — **in an agent**, not pinned on an inline skill |
+| `opus` | Complex multi-step reasoning, architecture decisions, nuanced analysis — safe on a skill (1M tier) |
+| `inherit` | The safe default for a skill that should run on whatever the session uses |
 
 ### Context and Invocation Examples
 

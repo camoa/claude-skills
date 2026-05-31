@@ -7,7 +7,7 @@ paths:
 
 ## Required Frontmatter
 - `description` — clear, action-oriented, includes trigger phrases ("Use when…").
-- `allowed-tools` — minimum needed. `validate.md` is read-only (`Read, Glob, Grep`); `create.md` and `add-component.md` need write access.
+- `allowed-tools` — minimum needed. `validate.md` is read-only (`Read, Glob, Grep`) plus scoped read-only Bash (`Bash(ls:*), Bash(find:*), Bash(wc:*)`) for deterministic component counts (D1 — never let the fork eyeball counts); `create.md` and `add-component.md` need write access.
 
 ## Optional Frontmatter
 - `argument-hint` — when the command accepts arguments.
