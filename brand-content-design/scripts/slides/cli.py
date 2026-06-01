@@ -9,6 +9,17 @@ Usage::
     python -m slides.cli apply_batch_update <<< '{"deck_id": "...", "requests": [...]}'
     python -m slides.cli move_to_folder    <<< '{"deck_id": "...", "folder_id": "..."}'
 
+PPTX-import path (canonical, 2026-05-26+) — mirror commands also accept a
+``pptx_path`` instead of a ``deck_id``. When ``pptx_path`` is provided the
+CLI uploads the PPTX to Drive with ``mimeType:
+application/vnd.google-apps.presentation``, which triggers Drive's OOXML
+importer to convert it to a native Slides deck while preserving page size
+(1440x810 pt) and SHAPE_AUTOFIT — both of which the direct-create Slides
+API path cannot achieve (pageSize ignored on ``presentations.create``;
+``autofitType`` rejects anything other than NONE). See
+``references/slides-batchupdate-authoring.md`` for the deprecated
+direct-create authoring path retained as fallback.
+
 Designed for the eventual command-md integration in subtask
 ``slides_drive_mirroring`` — a Claude Code command can shell out and pipe
 JSON in / out without importing Python.
@@ -41,6 +52,12 @@ def _make_mirror(drive_service) -> DriveFolderMirror:
     )
 
 
+PPTX_MIMETYPE = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+GOOGLE_SLIDES_MIMETYPE = "application/vnd.google-apps.presentation"
+
+
 def _upload_file(
     drive_service,
     folder_id: str,
@@ -61,6 +78,35 @@ def _upload_file(
     return created["id"]
 
 
+def _upload_pptx_as_slides(
+    drive_service,
+    folder_id: str,
+    pptx_path: str,
+    title: str,
+) -> str:
+    """Upload a PPTX into the given Drive folder, converted to native Slides.
+
+    Drive's OOXML importer preserves the PPTX page size (e.g. 1440x810 pt
+    from python-pptx) and SHAPE_AUTOFIT — limitations the direct-create
+    Slides API path cannot work around. Returns the new deck (file) id.
+    """
+    media = MediaFileUpload(pptx_path, mimetype=PPTX_MIMETYPE, resumable=False)
+    created = (
+        drive_service.files()
+        .create(
+            body={
+                "name": title,
+                "mimeType": GOOGLE_SLIDES_MIMETYPE,
+                "parents": [folder_id],
+            },
+            media_body=media,
+            fields="id, webViewLink",
+        )
+        .execute()
+    )
+    return created["id"]
+
+
 def _mirror_into_folder(
     runner: SlidesRunner,
     mirror: DriveFolderMirror,
@@ -69,24 +115,60 @@ def _mirror_into_folder(
     kind: str,
     render_slug: str,
     local_dir: str,
-    deck_id: str,
+    deck_id: Optional[str] = None,
+    pptx_path: Optional[str] = None,
+    deck_title: Optional[str] = None,
     pdf_path: Optional[str],
     outline_path: Optional[str],
 ) -> dict[str, Any]:
     """Shared body of mirror_presentation / mirror_template_sample.
 
-    Creates the Drive render folder, reparents the deck into it, optionally
-    uploads PDF and outline.md, and writes the local ``.slides.url`` pointer
-    file. PDF/outline are skipped when their paths are absent or empty —
-    that is how the templates flow opts out of mirroring source files per
-    the epic alignment.
+    Resolves the deck via one of two paths:
+
+    * **PPTX-import (preferred, canonical 2026-05-26+)** — when
+      ``pptx_path`` is provided, upload the PPTX directly into the render
+      folder with ``mimeType: application/vnd.google-apps.presentation``
+      so Drive's OOXML importer converts it in place. Preserves PPTX page
+      size and SHAPE_AUTOFIT, which the direct-create Slides API path
+      cannot.
+
+    * **Direct-create (deprecated fallback)** — when ``deck_id`` is
+      provided (caller already created and authored via
+      ``create_deck`` + ``apply_batch_update``), reparent it into the
+      render folder via ``move_to_folder``. Retained for narrow cases
+      (placeholder substitution into existing templates, theme
+      integration). See ``references/slides-batchupdate-authoring.md``.
+
+    When both are provided, ``pptx_path`` wins.
+
+    Optionally uploads PDF and outline.md and writes the local
+    ``.slides.url`` pointer file. PDF/outline are skipped when their
+    paths are absent or empty — that is how the templates flow opts out
+    of mirroring source files per the epic alignment.
     """
+    if not pptx_path and not deck_id:
+        raise ValueError(
+            "Either 'pptx_path' (preferred) or 'deck_id' (deprecated) must "
+            "be provided."
+        )
+
     folder_id = mirror.ensure_render_folder(brand, kind, render_slug)
-    runner.move_to_folder(deck_id, folder_id)
+    drive_service = runner._drive  # already authenticated
+
+    if pptx_path:
+        # Canonical PPTX-import path — upload directly into the folder so
+        # there is no second reparent call.
+        title = deck_title or Path(pptx_path).stem
+        deck_id = _upload_pptx_as_slides(
+            drive_service, folder_id, pptx_path, title
+        )
+    else:
+        # Deprecated direct-create path — deck already exists at another
+        # parent, reparent it into our folder.
+        runner.move_to_folder(deck_id, folder_id)
 
     pdf_file_id: Optional[str] = None
     outline_file_id: Optional[str] = None
-    drive_service = runner._drive  # already authenticated
     if pdf_path:
         pdf_file_id = _upload_file(
             drive_service, folder_id, pdf_path, "application/pdf"
@@ -105,6 +187,7 @@ def _mirror_into_folder(
         "deck_url": SlidesRunner.deck_url(deck_id),
         "pdf_file_id": pdf_file_id,
         "outline_file_id": outline_file_id,
+        "path_used": "pptx_import" if pptx_path else "direct_create",
     }
 
 
@@ -139,6 +222,12 @@ def _cmd_ensure_render_folder(runner: SlidesRunner, payload: dict) -> dict[str, 
 
 
 def _cmd_mirror_presentation(runner: SlidesRunner, payload: dict) -> dict[str, Any]:
+    """Mirror a presentation render into Drive.
+
+    Accepts either ``pptx_path`` (preferred — canonical PPTX-import path)
+    or ``deck_id`` (deprecated direct-create fallback). When both are
+    present, ``pptx_path`` wins.
+    """
     mirror = _make_mirror(runner._drive)
     return _mirror_into_folder(
         runner,
@@ -147,7 +236,9 @@ def _cmd_mirror_presentation(runner: SlidesRunner, payload: dict) -> dict[str, A
         kind="presentations",
         render_slug=payload["render_slug"],
         local_dir=payload["local_dir"],
-        deck_id=payload["deck_id"],
+        deck_id=payload.get("deck_id"),
+        pptx_path=payload.get("pptx_path"),
+        deck_title=payload.get("deck_title"),
         pdf_path=payload.get("pdf_path"),
         outline_path=payload.get("outline_path"),
     )
@@ -159,6 +250,10 @@ def _cmd_mirror_template_sample(runner: SlidesRunner, payload: dict) -> dict[str
     Per the epic alignment, templates' source files (template.md,
     canvas-philosophy.md, sample.pdf, sample.pptx) stay local; only the
     sample.slides deck is in Drive.
+
+    Accepts either ``pptx_path`` (preferred — canonical PPTX-import path)
+    or ``deck_id`` (deprecated direct-create fallback). When both are
+    present, ``pptx_path`` wins.
     """
     mirror = _make_mirror(runner._drive)
     return _mirror_into_folder(
@@ -168,7 +263,9 @@ def _cmd_mirror_template_sample(runner: SlidesRunner, payload: dict) -> dict[str
         kind="templates",
         render_slug=payload["render_slug"],
         local_dir=payload["local_dir"],
-        deck_id=payload["deck_id"],
+        deck_id=payload.get("deck_id"),
+        pptx_path=payload.get("pptx_path"),
+        deck_title=payload.get("deck_title"),
         pdf_path=None,
         outline_path=None,
     )
@@ -204,6 +301,10 @@ def _cmd_replace_render(runner: SlidesRunner, payload: dict) -> dict[str, Any]:
     any), then mirror normally. Strategy ``keep_alongside``: skip trashing;
     write to a ``{slug}-v2`` (or v3, …) folder instead. Both end with a
     fresh local ``.slides.url`` pointer file.
+
+    Like the underlying mirror commands, this accepts either ``pptx_path``
+    (preferred — canonical PPTX-import path) or ``deck_id`` (deprecated
+    direct-create fallback). When both are present, ``pptx_path`` wins.
     """
     mirror = _make_mirror(runner._drive)
     strategy = payload.get("strategy", "trash")
@@ -237,7 +338,9 @@ def _cmd_replace_render(runner: SlidesRunner, payload: dict) -> dict[str, Any]:
         kind=kind,
         render_slug=target_slug,
         local_dir=payload["local_dir"],
-        deck_id=payload["deck_id"],
+        deck_id=payload.get("deck_id"),
+        pptx_path=payload.get("pptx_path"),
+        deck_title=payload.get("deck_title"),
         pdf_path=payload.get("pdf_path"),
         outline_path=payload.get("outline_path"),
     )

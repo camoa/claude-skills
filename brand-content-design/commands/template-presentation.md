@@ -414,15 +414,21 @@ Create a new presentation template or edit an existing one.
 
     The template folder created here is `LOCAL_DIR` for the next step.
 
-17. **Render sample.slides deck (Drive)**
+17. **Render sample.slides deck (Drive) — PPTX-import path (canonical)**
 
-    Templates flow mirrors ONLY the sample.slides deck to Drive — `template.md`,
-    `canvas-philosophy.md`, `sample.pdf`, and `sample.pptx` stay local.
+    Templates flow mirrors ONLY the sample.slides deck to Drive —
+    `template.md`, `canvas-philosophy.md`, `sample.pdf`, and `sample.pptx`
+    stay local.
 
-    Reference: `references/slides-batchupdate-authoring.md` (sibling
-    `slides_llm_authoring` subtask) — load it from the plugin's `references/`
-    directory. It documents how to translate the sample PDF + reportlab
-    Python source into a Slides API `batchUpdate` request list.
+    The canonical Slides rendering path is **PPTX-import via Drive's OOXML
+    importer**. Step 15 already produced `sample.pptx` with the right
+    brand-consistent design; we upload it with `mimeType:
+    application/vnd.google-apps.presentation` so Drive converts it to a
+    native Slides deck on upload — preserving the python-pptx page size
+    (1440×810 pt) and `SHAPE_AUTOFIT`, neither of which the direct-create
+    Slides API path can achieve. See
+    `references/slides-batchupdate-authoring.md` for the deprecated
+    direct-create fallback.
 
     **17a. Detect prior render.** If `LOCAL_DIR` already contains a
     `*.slides.url` pointer file, use AskUserQuestion:
@@ -434,43 +440,40 @@ Create a new presentation template or edit an existing one.
       - **Keep alongside** → `"strategy": "keep_alongside"` (`-v2`/`-v3`)
       - **Cancel** → skip step 17 entirely
 
-    **17b. Author the batchUpdate JSON.** Following the authoring guide,
-    using sample.pdf + reportlab source + canvas-philosophy.md as the design
-    rules. Persist the payload to `{LOCAL_DIR}/sample.slides.batchupdate.json`.
-
-    **17c. Create the deck.** Shell out:
-    ```
-    echo '{"title": "{template-name} sample"}' \
-      | python -m slides.cli create_deck
-    ```
-    Capture `deck_id` from the JSON response.
-
-    **17d. Apply the layout.** Shell out:
-    ```
-    echo '{"deck_id": "...", "requests": [...]}' \
-      | python -m slides.cli apply_batch_update
-    ```
-
-    **17e. Mirror sample to Drive.** Shell out:
+    **17b. Upload PPTX as Slides + mirror to Drive.** Shell out:
     ```
     echo '{
       "brand": "{BRAND_NAME}",
       "render_slug": "{template-name}",
       "kind": "templates",
       "local_dir": "{LOCAL_DIR}",
-      "deck_id": "{deck_id}",
+      "pptx_path": "{LOCAL_DIR}/sample.pptx",
+      "deck_title": "{template-name} sample",
       "strategy": "trash"
     }' | python -m slides.cli replace_render
     ```
     NO `pdf_path` and NO `outline_path` — templates flow uploads only the
     Slides deck. The runner creates
-    `brand-content/{brand}/templates/{template-name}/` in Drive (idempotent),
-    reparents the deck into it, and writes `{LOCAL_DIR}/sample.slides.url`.
+    `brand-content/{brand}/templates/{template-name}/` in Drive
+    (idempotent), uploads the PPTX with the Google Slides mimeType so
+    Drive converts on import (deck title = `deck_title`), and writes
+    `{LOCAL_DIR}/sample.slides.url`.
 
-    Returns `{folder_id, folder_url, deck_id, deck_url, ...}`.
+    Returns `{folder_id, folder_url, deck_id, deck_url, path_used:
+    "pptx_import", ...}`.
 
     Credentials come from environment vars per
     `references/slides-credentials.md` (`BCD_SLIDES_*`).
+
+    **Fallback (deprecated direct-create path).** If `sample.pptx` cannot
+    be produced or you need direct-create authoring (placeholder
+    substitution into an existing Drive template, theme integration),
+    follow `references/slides-batchupdate-authoring.md` to author a
+    `batchUpdate` JSON, persist it to
+    `{LOCAL_DIR}/sample.slides.batchupdate.json`, then call `create_deck`
+    + `apply_batch_update` + `replace_render` with `deck_id` instead of
+    `pptx_path`. Expect reduced design fidelity (720×405 pt canvas; no
+    autofit).
 
 18. **Confirm completion**
     Show:
@@ -486,8 +489,9 @@ Create a new presentation template or edit an existing one.
 - Created: `templates/presentations/{name}/canvas-philosophy.md`
 - Created: `templates/presentations/{name}/sample.pdf`
 - Created: `templates/presentations/{name}/sample.pptx`
-- Created: `templates/presentations/{name}/sample.slides.batchupdate.json` (NEW)
 - Created: `templates/presentations/{name}/sample.slides.url` (NEW — local
   pointer file)
+- Created (fallback only — deprecated direct-create path):
+  `templates/presentations/{name}/sample.slides.batchupdate.json`
 - Created in Drive (NEW): `brand-content/{brand}/templates/{name}/`
   containing the live sample Slides deck (no source files mirrored)

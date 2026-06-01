@@ -7,6 +7,41 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Pivot to PPTX-import as canonical Slides path** (architectural). Direct-create
+  Slides API batchUpdate authoring is demoted to fallback after empirical
+  diagnostic confirmed two Slides API limitations (`pageSize` ignored on
+  `presentations.create` — Google IssueTracker #119321089; `autofit.autofitType`
+  cannot be set to anything other than `NONE` via `updateShapeProperties`).
+  PPTX→Slides import via Drive's OOXML importer preserves recipe intent natively
+  (1440×810 pt page size + `SHAPE_AUTOFIT`). CLI `mirror_template_sample`,
+  `mirror_presentation`, and `replace_render` now accept a `pptx_path` parameter
+  (preferred over the legacy `deck_id`); when both are present `pptx_path` wins
+  and the legacy `move_to_folder` reparent is skipped. New optional
+  `deck_title` parameter sets the deck name on PPTX upload. Mirror result
+  carries a `path_used` field (`"pptx_import"` or `"direct_create"`). Commands
+  `presentation.md` step 11 and `template-presentation.md` step 17 updated to
+  shell `pptx_path` through `replace_render` (single CLI call instead of the
+  prior 3-step `create_deck` + `apply_batch_update` + `replace_render` chain);
+  direct-create kept inline as fallback for placeholder-substitution / theme-
+  integration cases. `references/slides-batchupdate-authoring.md` marked
+  deprecated with an empirical-evidence header pointing back to the canonical
+  PPTX flow.
+
+### Added
+- **`tests/test_pptx_import_cli.py`** — 5 mocked unit tests covering the
+  PPTX-import path: presentation flow upload with Google Slides mimeType +
+  deck title + pointer file, template flow uploads only the deck (no PDF /
+  outline), `pptx_path` wins over `deck_id` when both supplied (legacy
+  `move_to_folder` skipped), legacy `deck_id` path still works (`path_used ==
+  "direct_create"`), and missing both raises `ValueError`.
+- **`tests/test_pptx_upload_smoke.py`** — env-gated E2E smoke test that
+  generates a one-slide PPTX with python-pptx, uploads it with
+  `mimeType: application/vnd.google-apps.presentation`, asserts Drive
+  converted on upload (read-back `mimeType` equals the Slides type), and
+  trashes the deck in `finally`. Skipped automatically when credentials env
+  vars are absent or `python-pptx` is not installed.
+
 ### Added
 - **`references/slides-batchupdate-authoring.md`** — LLM-facing authoring guide that teaches how to write a Google Slides API `batchUpdate` `requests[]` list that visually matches a reportlab-rendered PDF. Symmetric counterpart to `visual-content/references/technical-implementation.md`: the reportlab patterns there are the visual ground truth; every recipe in the authoring guide shows the same element authored as a Slides API request. Covers the mental model, the coordinate-translation contract (`PX_TO_PT = 0.375`, y-axis flip), the slide-creation ordering rule, per-element recipes (solid background, pre-rendered-PNG gradient, headline/kicker/paragraph text, hosted-URL logo, card, Iconify-bridge icon), Google-Fonts-first font fallback table for brand fonts unavailable server-side, the anti-patterns table (off-slide, overlap, missing `fields` mask, custom-TTF substitution, SVG URLs, sub-5-char `objectId`, `outline.weight: 0`), the coordinate-fidelity checklist, the `{name}.slides.batchupdate.json` persistence contract (native `{"requests": [...]}` schema), the destructive trash-and-recreate error-recovery loop, and a 1-slide end-to-end worked example with both the reportlab source and the resulting batchUpdate JSON side by side. Validation proof in `scripts/slides/tests/test_authoring_smoke.py` executes the worked example against the real Slides API (auth via `BCD_SLIDES_*`), asserts headline + kicker text + element count read back, and trashes the deck. Out of scope (subtask 4): Drive folder conventions, `.slides.url` pointer files, trash-and-recreate command-md wiring, writing the persisted batchUpdate JSON from `/presentation`.
 - **`skills/visual-content/SKILL.md` (3.1.1 → 3.1.2)** — added a short pointer subsection inside Part 8 (Technical Implementation) referencing the new Slides authoring guide. No behavioral change to the existing reportlab-PDF / PPTX path.
