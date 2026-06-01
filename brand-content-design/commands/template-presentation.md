@@ -405,16 +405,83 @@ Create a new presentation template or edit an existing one.
     - **Create ALL slides defined in template.md** with placeholder content
     - Save as sample.pptx
 
-16. **Save template**
+16. **Save template (local)**
     Save to `templates/presentations/{template-name}/`:
     - template.md
     - canvas-philosophy.md
     - sample.pdf
     - sample.pptx
 
-17. **Confirm completion**
-    Show template location and sample preview
-    Explain how to use: `/presentation` and select this template
+    The template folder created here is `LOCAL_DIR` for the next step.
+
+17. **Render sample.slides deck (Drive) — PPTX-import path (canonical)**
+
+    Templates flow mirrors ONLY the sample.slides deck to Drive —
+    `template.md`, `canvas-philosophy.md`, `sample.pdf`, and `sample.pptx`
+    stay local.
+
+    The canonical Slides rendering path is **PPTX-import via Drive's OOXML
+    importer**. Step 15 already produced `sample.pptx` with the right
+    brand-consistent design; we upload it with `mimeType:
+    application/vnd.google-apps.presentation` so Drive converts it to a
+    native Slides deck on upload — preserving the python-pptx page size
+    (1440×810 pt) and `SHAPE_AUTOFIT`, neither of which the direct-create
+    Slides API path can achieve. See
+    `references/slides-batchupdate-authoring.md` for the deprecated
+    direct-create fallback.
+
+    **17a. Detect prior render.** If `LOCAL_DIR` already contains a
+    `*.slides.url` pointer file, use AskUserQuestion:
+    - Header: "Existing sample Slides deck"
+    - Question: "A sample Slides deck already exists in Drive for this
+      template. What would you like to do?"
+    - Options:
+      - **Trash and recreate** (default) → `"strategy": "trash"`
+      - **Keep alongside** → `"strategy": "keep_alongside"` (`-v2`/`-v3`)
+      - **Cancel** → skip step 17 entirely
+
+    **17b. Upload PPTX as Slides + mirror to Drive.** Shell out:
+    ```
+    echo '{
+      "brand": "{BRAND_NAME}",
+      "render_slug": "{template-name}",
+      "kind": "templates",
+      "local_dir": "{LOCAL_DIR}",
+      "pptx_path": "{LOCAL_DIR}/sample.pptx",
+      "deck_title": "{template-name} sample",
+      "strategy": "trash"
+    }' | python -m slides.cli replace_render
+    ```
+    NO `pdf_path` and NO `outline_path` — templates flow uploads only the
+    Slides deck. The runner creates
+    `brand-content/{brand}/templates/{template-name}/` in Drive
+    (idempotent), uploads the PPTX with the Google Slides mimeType so
+    Drive converts on import (deck title = `deck_title`), and writes
+    `{LOCAL_DIR}/sample.slides.url`.
+
+    Returns `{folder_id, folder_url, deck_id, deck_url, path_used:
+    "pptx_import", ...}`.
+
+    Credentials come from environment vars per
+    `references/slides-credentials.md` (`BCD_SLIDES_*`).
+
+    **Fallback (deprecated direct-create path).** If `sample.pptx` cannot
+    be produced or you need direct-create authoring (placeholder
+    substitution into an existing Drive template, theme integration),
+    follow `references/slides-batchupdate-authoring.md` to author a
+    `batchUpdate` JSON, persist it to
+    `{LOCAL_DIR}/sample.slides.batchupdate.json`, then call `create_deck`
+    + `apply_batch_update` + `replace_render` with `deck_id` instead of
+    `pptx_path`. Expect reduced design fidelity (720×405 pt canvas; no
+    autofit).
+
+18. **Confirm completion**
+    Show:
+    - Local template location: `templates/presentations/{template-name}/`
+    - Drive folder URL (from step 17e)
+    - Sample Slides deck URL (from step 17e)
+    - Sample preview
+    - Explain how to use: `/presentation` and select this template
 
 ## Output
 
@@ -422,3 +489,9 @@ Create a new presentation template or edit an existing one.
 - Created: `templates/presentations/{name}/canvas-philosophy.md`
 - Created: `templates/presentations/{name}/sample.pdf`
 - Created: `templates/presentations/{name}/sample.pptx`
+- Created: `templates/presentations/{name}/sample.slides.url` (NEW — local
+  pointer file)
+- Created (fallback only — deprecated direct-create path):
+  `templates/presentations/{name}/sample.slides.batchupdate.json`
+- Created in Drive (NEW): `brand-content/{brand}/templates/{name}/`
+  containing the live sample Slides deck (no source files mirrored)

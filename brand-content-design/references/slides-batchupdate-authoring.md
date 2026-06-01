@@ -1,5 +1,27 @@
 # Slides batchUpdate Authoring
 
+> ⚠️ **Deprecated path — use PPTX-import instead.** 2026-05-26 empirical
+> diagnostic confirmed two Google Slides API limitations that make direct-create
+> batchUpdate authoring unable to match PDF-design fidelity:
+>
+> 1. `pageSize` is silently ignored on `presentations.create` (Google
+>    IssueTracker #119321089). Forces 720×405pt; python-pptx PPTXs are 1440×810pt.
+> 2. `updateShapeProperties.autofit.autofitType` rejects anything other than NONE.
+>    PPTX-import gets autofit via Drive's OOXML importer; direct-create cannot.
+>
+> Canonical Slides path: render PPTX via python-pptx (existing `pp_*` recipes
+> + `visual-content` html2pptx flow), upload to Drive with `mimeType:
+> application/vnd.google-apps.presentation` to convert on import. See
+> `commands/template-presentation.md` and `commands/presentation.md` for the
+> updated workflow.
+>
+> This document remains for reference and as a fallback for narrow cases where
+> direct-create authoring is genuinely required (placeholder substitution into
+> an existing Drive template via `replaceAllText`, programmatic in-place updates,
+> theme integration). Do not use it as the primary Slides rendering path.
+
+
+
 How to write the Google Slides API `batchUpdate` `requests[]` list that
 visually matches a reportlab-rendered PDF slide. The Python runner in
 `scripts/slides/` executes the JSON; **this guide teaches the LLM how to

@@ -135,23 +135,112 @@ Create a presentation from an existing template with user-provided content.
    - Incorporate logo from brand-philosophy.md assets
    - Save as PPTX
 
-10. **Save outputs**
+10. **Save local outputs**
     Create folder: `{PROJECT_PATH}/presentations/{YYYY-MM-DD}-{topic-slug}/`
     Save:
     - `{topic-slug}.pdf`
     - `{topic-slug}.pptx`
 
-11. **Present results**
+    The folder created here is `LOCAL_DIR` for the next step.
+
+11. **Render Google Slides deck (Drive) — PPTX-import path (canonical)**
+
+    The canonical Slides rendering path is **PPTX-import via Drive's OOXML
+    importer**. The `visual-content` skill (step 9) already produced a
+    brand-consistent `{topic-slug}.pptx`; we upload that PPTX to Drive with
+    `mimeType: application/vnd.google-apps.presentation` so Drive converts
+    it to a native Slides deck on upload — preserving the python-pptx page
+    size (1440×810 pt) and `SHAPE_AUTOFIT`, neither of which the direct-
+    create Slides API path can achieve. See
+    `references/slides-batchupdate-authoring.md` for the deprecated
+    direct-create fallback (kept for narrow cases like placeholder
+    substitution into an existing Drive template).
+
+    **11a. Detect prior render.** Check if `LOCAL_DIR` already contains a
+    `*.slides.url` pointer file. If it does, use AskUserQuestion:
+    - Header: "Existing Slides deck"
+    - Question: "A Slides deck already exists in Drive for this
+      presentation. What would you like to do?"
+    - Options:
+      - **Trash and recreate** (default) — soft-delete the old Drive folder
+        (recoverable from Drive Trash for 30 days), then create fresh
+      - **Keep alongside** — leave the old folder, create a new
+        `-v2`/`-v3`/... versioned sibling
+      - **Cancel** — stop, do not render Slides
+    Map: "Trash and recreate" → `"strategy": "trash"`,
+         "Keep alongside" → `"strategy": "keep_alongside"`,
+         "Cancel" → skip step 11 entirely (the PDF + PPTX outputs already
+         exist).
+
+    **11b. Save outline locally if missing.** If `{LOCAL_DIR}/outline.md`
+    does not exist (e.g. user pasted content slide-by-slide), write a
+    minimal outline.md from the collected content before step 11c so the
+    Drive mirror has something to upload.
+
+    **11c. Upload PPTX as Slides + mirror to Drive.** Shell out:
+    ```
+    echo '{
+      "brand": "{BRAND_NAME}",
+      "render_slug": "{YYYY-MM-DD}-{topic-slug}",
+      "kind": "presentations",
+      "local_dir": "{LOCAL_DIR}",
+      "pptx_path": "{LOCAL_DIR}/{topic-slug}.pptx",
+      "deck_title": "{presentation-title}",
+      "pdf_path": "{LOCAL_DIR}/{topic-slug}.pdf",
+      "outline_path": "{LOCAL_DIR}/outline.md",
+      "strategy": "trash"
+    }' | python -m slides.cli replace_render
+    ```
+    Pass the user's strategy choice from 11a. The runner:
+    - Trashes the existing render folder (or picks a `-vN` slug if keeping)
+    - Creates `brand-content/{brand}/presentations/{date}-{slug}/` in Drive
+      (idempotent — intermediate folders are reused)
+    - **Uploads the PPTX with the Google Slides mimeType** so Drive
+      converts on import (deck title = `deck_title`)
+    - Uploads `{topic-slug}.pdf` and `outline.md` into the same folder
+    - Writes `{LOCAL_DIR}/{topic-slug}.slides.url` (JSON pointer file
+      mapping local → Drive ids/urls)
+    - Returns `{folder_id, folder_url, deck_id, deck_url, path_used:
+      "pptx_import", ...}`
+
+    Credentials come from environment vars per
+    `references/slides-credentials.md` (`BCD_SLIDES_*`). Optional
+    `BRAND_CONTENT_DRIVE_ROOT_ID` overrides where `brand-content/` lives in
+    Drive (defaults to My Drive root).
+
+    **Fallback (deprecated direct-create path).** If the PPTX cannot be
+    produced (e.g. python-pptx unavailable) or you genuinely need
+    direct-create authoring (placeholder substitution into an existing
+    Drive template via `replaceAllText`, theme integration), follow
+    `references/slides-batchupdate-authoring.md` to author a
+    `batchUpdate` JSON, then call `create_deck` + `apply_batch_update`,
+    then `replace_render` with `deck_id` instead of `pptx_path`. Expect
+    reduced design fidelity (720×405 pt canvas; no autofit). Persist the
+    payload to `{LOCAL_DIR}/{topic-slug}.slides.batchupdate.json` for the
+    diff-against-PDF iteration loop.
+
+12. **Present results**
     Show:
-    - Output location
-    - File paths
+    - Local output location: `{LOCAL_DIR}/`
+    - Local file paths: `{topic-slug}.pdf`, `{topic-slug}.pptx`,
+      `{topic-slug}.slides.batchupdate.json`, `{topic-slug}.slides.url`
+    - Drive folder URL (from step 11e)
+    - Slides deck URL (from step 11e)
     - Preview of first slide
-    - "Open the PPTX to review and make final adjustments"
+    - "Open the Slides deck for live editing, or the PPTX for offline edits"
 
 ## Output
 
 - Created: `presentations/{date}-{name}/{name}.pdf`
-- Created: `presentations/{date}-{name}/{name}.pptx`
+- Created: `presentations/{date}-{name}/{name}.pptx` (transitional — PPTX is
+  on the deprecation path)
+- Created: `presentations/{date}-{name}/{name}.slides.url` (NEW — local
+  pointer file mapping to Drive)
+- Created (fallback only — deprecated direct-create path):
+  `presentations/{date}-{name}/{name}.slides.batchupdate.json`
+- Created in Drive (NEW):
+  `brand-content/{brand}/presentations/{date}-{name}/` containing
+  `{name}.pdf`, `outline.md`, and the live Slides deck
 
 ## Notes
 
