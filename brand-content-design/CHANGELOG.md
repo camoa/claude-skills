@@ -7,6 +7,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-06-01
+
+The **`slides_output_minimal` epic** release — adds Google Slides output to `/template-presentation` and `/presentation` alongside the existing PDF + PPTX outputs. After empirical diagnostic against the Slides API and an in-place comparison between direct-create batchUpdate authoring and PPTX→Slides Drive import, the canonical path is **PPTX-import**: python-pptx generates the deck, Drive's OOXML importer converts to a Slides deck with native fidelity (preserves 1440×810 page size and SHAPE_AUTOFIT — both unsettable via direct Slides API per Google IssueTracker #119321089). Direct-create kept as fallback for placeholder-substitution + theme-integration cases. Releases the work of 4 merged subtask PRs (#181 credentials, #182 runner, #184 authoring guide + visual-content pointer, #187 PPTX-import pivot + Drive folder mirroring).
+
 ### Changed
 - **Pivot to PPTX-import as canonical Slides path** (architectural). Direct-create
   Slides API batchUpdate authoring is demoted to fallback after empirical
