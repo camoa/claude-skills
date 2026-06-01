@@ -189,7 +189,7 @@ Use when [triggers] - [what it does, third person]
 
 ## Hook Events
 
-29 total events (see `references/06-hooks/hook-events.md` for the full list). Key events:
+30 total events (see `references/06-hooks/hook-events.md` for the full list). Key events:
 
 | Event | Use Case | Matcher |
 |-------|----------|---------|

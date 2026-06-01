@@ -1,6 +1,6 @@
 ---
 description: Validate plugin structure, frontmatter, and best practices. Use when user says "validate plugin", "check plugin", "audit plugin", "verify plugin", "is my plugin correct", or before distributing/publishing a plugin.
-allowed-tools: Read, Glob, Grep
+allowed-tools: Read, Glob, Grep, Bash(ls:*), Bash(find:*), Bash(wc:*)
 argument-hint: "[plugin-path] [--fix] [--dry-run] [--strict]"
 context: fork
 ---
@@ -17,9 +17,14 @@ Validate a plugin's structure and components against best practices.
    - This command is `context: fork`; argument substitution happens **before** the fork, so `$ARGUMENTS` is available in the forked run. The cwd of the fork is not reliable — always prefer an explicit path argument.
 2. Parse flags from the `--` tokens: `--fix` applies auto-migrations for rules tagged below; `--dry-run` (with `--fix`) reports the proposed migrations without writing; `--strict` promotes warnings to errors for CI gating.
 3. Find `.claude-plugin/plugin.json` to confirm it's a plugin root.
-4. Run all validation checks below.
-5. If `--fix` is set: apply each auto-fixable finding (unless `--dry-run`), atomically (write-tempfile-then-rename), and append an entry to `.claude-plugin/.validate-fixes.log`. With `--dry-run`, list the proposed changes instead of writing. **No interactive confirmation** — passing `--fix` is the consent; review the result via `git diff`.
-6. Report results as a structured checklist.
+4. **Compute the component inventory deterministically (D1).** Do **not** eyeball counts from a file listing — count with the shell so the numbers are stable run-to-run. From the plugin root:
+   - skills: `ls -d skills/*/SKILL.md 2>/dev/null | wc -l` (add `1` when a root `SKILL.md` exists for a single-skill plugin)
+   - commands: `ls commands/*.md 2>/dev/null | wc -l`
+   - agents: `find agents -name '*.md' 2>/dev/null | wc -l` (recursive — agent subfolders count)
+   Use these integers verbatim in the `Checked — clean` block of the Output Format. LLM-counted inventories drift across runs (observed 30/37/38 on the same plugin); the shell count does not.
+5. Run all validation checks below.
+6. If `--fix` is set: apply each auto-fixable finding (unless `--dry-run`), atomically (write-tempfile-then-rename), and append an entry to `.claude-plugin/.validate-fixes.log`. With `--dry-run`, list the proposed changes instead of writing. **No interactive confirmation** — passing `--fix` is the consent; review the result via `git diff`.
+7. Report results as a structured checklist.
 
 ## Auto-fix (`--fix`)
 
@@ -31,7 +36,7 @@ The validator has an opt-in `--fix` flag that performs **only** mechanical, reve
 
 `--fix` is **non-interactive** — it applies directly and relies on `git diff` for review. This is deliberate: the command runs `context: fork`, and a forked subagent has no interactive turn with the user, so a confirmation prompt could never fire. Passing the `--fix` flag is itself the consent. To preview without writing, run `--fix --dry-run` — it reports every proposed migration as a diff and changes nothing.
 
-Rules that ship with `--fix` (cumulative across releases): **H05**, **H06**, **H10** (v3.5.0); **M06**, **M07**, **M08**, **M09**, **M10**, **C01**, **C02** (v3.6.1). Future releases add more.
+Rules that ship with `--fix` (cumulative across releases): **H05**, **H06**, **H10** (v3.5.0); **M06**, **M07**, **M08**, **M09**, **M10**, **C01**, **C02** (v3.6.1); **S15**, **A04** (v3.8.0). Future releases add more.
 
 Log entry format:
 
@@ -112,7 +117,7 @@ Heuristic exclusion: don't fire when the manifest path resolves into the default
 
 #### M14 — Unknown top-level manifest keys (warn)
 
-For each top-level key in `plugin.json` that is **not** in the documented schema (canonical list: `$schema`, `name`, `displayName`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`, `commands`, `agents`, `skills`, `hooks`, `mcpServers`, `lspServers`, `outputStyles`, `experimental`, `channels`, `userConfig`, `settings`, `dependencies`), emit warn:
+For each top-level key in `plugin.json` that is **not** in the documented schema (canonical list: `$schema`, `name`, `displayName`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`, `defaultEnabled`, `commands`, `agents`, `skills`, `hooks`, `mcpServers`, `lspServers`, `outputStyles`, `experimental`, `channels`, `userConfig`, `settings`, `dependencies`), emit warn:
 
 > "Plugin manifest contains unknown top-level key `<name>`. Claude Code silently ignores keys not in the schema (forward-compatible), and upstream `claude plugin validate` warns on them. If this is intentional forward-compat or vendor-specific metadata, the warning is expected — keep it or move the data under a recognized key. Real-world example: `defaults`, `recommended` in drupal-dev-framework."
 
@@ -241,6 +246,36 @@ A `skills/<name>/` directory that itself contains a subdirectory with its own `S
 
 Info only — surfaces a layout that's usually unintended.
 
+#### S14 — Skill `model:` pins a sub-1M-context model (warn)
+
+For each `skills/**/SKILL.md` (and a root `SKILL.md` on a single-skill plugin), read the frontmatter `model:` value. A skill's `model:` is an **inline, current-turn model override with no context isolation** — per the Skills guide, *"the model to use when this skill is active… the override applies for the rest of the current turn."* The skill runs in the live conversation on the pinned model, so pinning a model whose context window is **smaller than a realistic session** (`sonnet`/`haiku` ≈ 200k) makes the skill **overflow whenever it activates from a conversation larger than that window** — an API context error until the user `/compact`s. This is BUG-1, confirmed in production on `code-paper-test/paper-test`.
+
+**Fires (warn)** when `model:` resolves to a sub-1M window:
+- `sonnet`, `haiku`
+- any dated `claude-sonnet-*` / `claude-haiku-*` id **without** a long-context suffix (`1m` / `[1m]`)
+
+**Exempt — no finding:**
+- `model:` absent (no override — inherits the session model)
+- `model: inherit` (explicitly inherits the 1M session model)
+- `opus` / any `opus*` value (Opus is the 1M tier)
+- any value carrying a `1m` / `[1m]` long-context suffix (e.g. `sonnet[1m]`)
+
+Fires **regardless of `user-invocable` / `disable-model-invocation`** — the override is always inline whether the skill is user- or model-triggered.
+
+**Agents are exempt.** This rule scans **only** `SKILL.md` files. A `model:` pin on an `agents/**/*.md` file runs in a fresh subagent context (its own empty window), so it is safe and must **not** be flagged. If S14 ever fires on an agent file, the rule is mis-scoped.
+
+> "Skill `<name>` pins `model: <value>`, a sub-1M-context model. A skill's `model:` is an inline current-turn override with no context isolation, so the skill overflows when activated from a conversation larger than ~200k. Two fixes: (1) if the skill is a pure reader/transform that needs only its input, convert it to a **Task-dispatched agent** — keeps the cheap model AND isolates context in a fresh window; (2) if it needs the conversation context, set **`model: inherit`** to run on the 1M session model. See `references/03-skills/writing-skillmd.md` § Don't pin a skill below the session window."
+
+**Not auto-fixable** — the choice between convert-to-agent and `inherit` is intent-dependent. Report only. Severity is **warn**, promoted to error under `--strict` so it's caught at authoring time.
+
+#### S15 — Skill uses camelCase `disallowedTools` (error, `--fix`)
+
+Skills use the **kebab-case** `disallowed-tools` frontmatter field (Skills guide). The camelCase `disallowedTools` is the **agent** field and does **nothing** on a skill — it is silently ignored, so the tool restriction the author intended never takes effect. For each `SKILL.md`, if the frontmatter contains a `disallowedTools:` key, emit **error**:
+
+> "Skill `<name>` declares `disallowedTools` (camelCase). On a skill the field is `disallowed-tools` (kebab-case); the camelCase form is the agent field and is silently ignored here, so the intended tool restriction never applies. Rename to `disallowed-tools`."
+
+**`--fix`**: rename the frontmatter key `disallowedTools` → `disallowed-tools` (value unchanged). Paired with **A04** (the reciprocal agent rule). See `references/05-agents/agent-tools.md` § The disallowedTools Field for the kebab-vs-camel split.
+
 ### Commands (for each `commands/*.md`)
 - [ ] Frontmatter passes the **FM01** strict YAML parse (see Frontmatter Integrity) — invalid frontmatter causes the command to load with no metadata at runtime
 - [ ] `description` field present
@@ -289,6 +324,14 @@ When an agent file sits under an `agents/` subfolder AND its frontmatter is miss
 
 Flat-layout agents missing `name` are already caught by the general A01-family check; A03 is the subfolder-aware variant that flags the scoped-id breakage explicitly.
 
+#### A04 — Agent uses kebab-case `disallowed-tools` (error, `--fix`)
+
+Agents use the **camelCase** `disallowedTools` frontmatter field (Subagents guide). The kebab-case `disallowed-tools` is the **skill** field and does **nothing** on an agent — it is silently ignored, so the agent inherits ALL tools instead of being restricted. For each `agents/**/*.md`, if the frontmatter contains a `disallowed-tools:` key, emit **error**:
+
+> "Agent `<name>` declares `disallowed-tools` (kebab-case). On an agent the field is `disallowedTools` (camelCase); the kebab form is the skill field and is silently ignored here, so the agent inherits all tools instead of the intended restriction. Rename to `disallowedTools`."
+
+**`--fix`**: rename the frontmatter key `disallowed-tools` → `disallowedTools` (value unchanged). Reciprocal of **S15** (the skill rule). The same defect with the fields reversed has historically shipped in ecosystem plugins (agents mis-"standardized" on the skill field) — see `references/05-agents/agent-tools.md` § The disallowedTools Field.
+
 ### Themes (for each `themes/*.json`)
 - [ ] Valid JSON — invalid JSON is an **error** (theme will not load)
 - [ ] Required fields present: `name` (display label), `base` (preset name), `overrides` (color-token map). Missing any of the three → **warning** with the field name.
@@ -307,7 +350,7 @@ Flat-layout agents missing `name` are already caught by the general A01-family c
 #### H01–H04 — structural
 
 - [ ] **H01 (error)** — Valid JSON structure. Malformed `hooks.json` prevents the entire plugin from loading.
-- [ ] **H02 (error)** — Each event name is one of the 29 recognized events: `Setup`, `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
+- [ ] **H02 (error)** — Each event name is one of the 30 recognized events: `Setup`, `SessionStart`, `UserPromptSubmit`, `UserPromptExpansion`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `MessageDisplay`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`
 - [ ] **H03 (error)** — Each hook entry has `type` — one of `command`, `prompt`, `agent`, or `mcp_tool` — plus the matching required fields for that type. `agent` is upstream-marked experimental; flag a one-line info note when used.
 - [ ] **H04 (error)** — No `http` type hooks in `hooks.json`. `http` hooks only work in `settings.json` (silently ignored when placed in `hooks.json`).
 - [ ] **(error)** — `mcp_tool` handlers: require `server` and `tool`; if `server` is not declared in the plugin's `mcpServers` (and isn't a known external server the user wires up themselves), emit a **warning**: "`mcp_tool` references server `<name>` not declared in this plugin's `mcpServers`. The handler will produce a non-blocking error if the server isn't already connected at runtime."
@@ -474,7 +517,7 @@ The `SessionEnd` hook entry the install command emits must set an explicit `time
 - {rule-id} {file}: {note}
 
 ### Checked — clean
-- {n} skills, {n} commands, {n} agents, hooks: {yes/no}, MCP: {yes/no}
+- {n} skills, {n} commands, {n} agents, hooks: {yes/no}, MCP: {yes/no}  ← counts from the deterministic inventory (Step 4), not eyeballed
 - {rule-ids that were evaluated and found nothing}
 
 ### Result: PASS / FAIL

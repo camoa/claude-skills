@@ -621,5 +621,5 @@ This pattern checks if `node_modules` exists in the persistent data directory an
 
 ## See Also
 
-- `hook-events.md` -- all 29 available events with return values
+- `hook-events.md` -- all 30 available events with return values
 - `hook-patterns.md` -- common patterns and examples

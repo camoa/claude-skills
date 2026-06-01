@@ -1,6 +1,6 @@
 # Hook Events
 
-Complete reference for all 29 hook events in Claude Code.
+Complete reference for all 30 hook events in Claude Code.
 
 > **No controlling terminal (v2.1.139+).** Command hooks on macOS and Linux run without a controlling terminal — `/dev/tty` writes and raw escape sequences from a hook fail. To surface a message to the user, return `systemMessage` in JSON output. To ring the bell, set a window title, or fire a desktop notification, return `terminalSequence`. See [writing-hooks.md › JSON Output Return Fields](writing-hooks.md#json-output-return-fields).
 >
@@ -23,6 +23,7 @@ Complete reference for all 29 hook events in Claude Code.
 | PostToolUseFailure | After tool fails | No | Yes (tool name) |
 | PostToolBatch | After every tool call in a parallel batch resolves | Yes (stops the agentic loop) | No |
 | Notification | Alert sent | No | Yes (notification type) |
+| MessageDisplay | While assistant message text streams to the screen | No | No |
 | SubagentStart | Subagent spawned | No | Yes (agent type) |
 | SubagentStop | Subagent finishes | Yes | Yes (agent type) |
 | TaskCreated | Task being created via TaskCreate | Yes | No |
@@ -490,6 +491,45 @@ When `retry: true`, Claude Code adds a message telling the model it may retry th
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-notification.sh",
+          "args": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+### MessageDisplay
+
+**Trigger**: While an assistant message streams to the screen. Fires once per batch of newly-completed lines (a long message produces several calls; a short one may produce a single call). Messages with no text — tool-call-only responses — do not trigger it.
+
+**Matcher**: Not supported (always fires).
+
+**Can Block**: No — and it has **no decision control** at all. It cannot block the message or change what is stored in the transcript or sent to Claude.
+
+**Display-only**: the replacement text changes only what is rendered on screen. The transcript and what Claude sees keep the original text (verbose mode also shows the original). Use it to reformat, redact, or condense responses *as they appear* — never to change meaning, since Claude never sees the replacement.
+
+**Input Fields**: In addition to common fields:
+- `turn_id` — UUID of the current turn
+- `message_id` — UUID of the assistant message (stable across every batch; not the API `msg_…` id)
+- `index` — zero-based index of this batch within the message
+- `final` — `true` on the message's last batch (use `final`, not a non-empty delta, as the end-of-message signal)
+- `delta` — the newly-completed lines since the prior batch
+
+In non-interactive runs (Agent SDK, `claude -p`), MessageDisplay fires **once per message** after it completes: `index` is `0`, `final` is `true`, and `delta` holds the entire message.
+
+**Return Fields** (JSON stdout):
+- `displayContent` — text shown in place of the delta. Omit to display the original.
+
+**Example**:
+```json
+{
+  "MessageDisplay": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/scripts/redact-display.sh",
           "args": []
         }
       ]
@@ -1174,5 +1214,5 @@ Multiple matcher groups and multiple hooks per group:
 
 ## See Also
 
-- `writing-hooks.md` -- hook configuration and handler types (references all 29 events)
+- `writing-hooks.md` -- hook configuration and handler types (references all 30 events)
 - `hook-patterns.md` -- common implementation patterns

@@ -61,7 +61,7 @@ Narrow rules like `Bash(npm test)` carry over. Dropped rules are restored when l
 **Requirements** (auto is gated):
 - Plan: Max, Team, Enterprise, or API (not Pro)
 - Admin enablement on Team/Enterprise
-- Model: Sonnet 4.6, Opus 4.6, or Opus 4.7 (Team/Enterprise/API); Opus 4.7 only on Max
+- Model: a recent Opus or Sonnet (the `opus` alias resolves to Opus 4.8 on the Anthropic API — the current Max / Team Premium / Enterprise PAYG / API default). The exact supported-model list is in the upstream **Auto Mode Config** guide; aliases track the recommended version over time, so don't pin a specific version here.
 - Provider: Anthropic API only (not Bedrock, Vertex, or Foundry)
 
 ## Subagent inheritance
@@ -108,6 +108,10 @@ Writes to these paths are **never** auto-approved, in any mode. In `default`/`ac
 Administrators can lock modes off via [managed settings](https://docs.claude.com/en/permissions#managed-settings):
 - `permissions.disableAutoMode: "disable"` blocks `auto`
 - `permissions.disableBypassPermissionsMode: "disable"` blocks `bypassPermissions`
+
+## Sandbox runtime (process-level isolation)
+
+Permission modes gate what Claude asks about; they don't contain what an approved action can reach. For untrusted execution — especially `bypassPermissions` or `auto` — pair the mode with an isolation boundary. Beyond the built-in [sandboxed Bash tool](https://docs.claude.com/en/sandboxing) (which restricts only Bash), the **sandbox runtime** (`@anthropic-ai/sandbox-runtime`, run via `npx @anthropic-ai/sandbox-runtime claude`) wraps the **entire** Claude Code process — file tools, MCP servers, and hooks, not just Bash — in OS-level isolation (Seatbelt on macOS, bubblewrap on Linux/WSL2), no Docker required. It denies all write and network access by default, so configure `~/.srt-settings.json` first (allow your project dir, `~/.claude`, `~/.claude.json`, and `api.anthropic.com`). **It is a beta research preview — the config format may change.** Relevance to plugin authors: a plugin whose hooks or MCP servers run untrusted code should recommend the sandbox runtime in its README rather than relying on permission prompts.
 
 ## See Also
 

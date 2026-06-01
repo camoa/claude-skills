@@ -43,7 +43,7 @@ Add a new component to an existing Claude Code plugin.
 ### `hook`
 1. If `hooks/hooks.json` exists, add new event entry
 2. If not, create from `templates/hooks/hooks.json.template`
-3. Ask which event(s) to handle (29 available — see `references/06-hooks/hook-events.md`). New events worth flagging: **`Setup`** (one-time `--init-only` / `--init -p` / `--maintenance -p` preparation, distinct from `SessionStart`), **`WorktreeCreate`** / **`WorktreeRemove`** (replace default git worktree behavior with custom VCS logic — useful for SVN/Perforce/Mercurial wrappers).
+3. Ask which event(s) to handle (30 available — see `references/06-hooks/hook-events.md`). New events worth flagging: **`Setup`** (one-time `--init-only` / `--init -p` / `--maintenance -p` preparation, distinct from `SessionStart`), **`MessageDisplay`** (display-only — reformat/redact assistant text on screen; can't block or change what Claude sees), **`WorktreeCreate`** / **`WorktreeRemove`** (replace default git worktree behavior with custom VCS logic — useful for SVN/Perforce/Mercurial wrappers).
 4. Consider the five handler types: `command` (shell, fastest), `mcp_tool` (call an already-connected MCP server tool — no shell, cross-platform-safe), `prompt` (single-turn LLM), `agent` (multi-turn subagent — **experimental**), `http` (POST to webhook — **settings.json only**, will be silently ignored in `hooks.json`)
 5. For cross-platform support when shell logic is genuinely needed, use `templates/hooks/run-hook.cmd.template`. If the hook only calls an MCP server, use `type: "mcp_tool"` instead — it removes the cross-platform footgun.
 

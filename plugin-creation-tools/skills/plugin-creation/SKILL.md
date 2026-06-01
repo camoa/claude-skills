@@ -1,6 +1,6 @@
 ---
 name: plugin-creation
-version: 3.7.1
+version: 3.9.0
 description: 'Use when creating Claude Code plugins - covers skills, commands, agents, hooks, MCP servers, and plugin configuration. Use when user says "create plugin", "make a skill", "add command", "add hooks", "skill authoring", "SKILL.md", "plugin components", "package reusable behavior", "distribute skills", "scaffold plugin", "plugin structure", "write a skill description". NOT for: using existing plugins, installing plugins, plugin marketplace browsing. !`ls .claude-plugin/ 2>/dev/null`'
 user-invocable: false
 ---
@@ -100,8 +100,9 @@ When user says "add skill", "create skill", "make skill":
 | "The description field is important" | "Write the description starting with 'Use when...'" |
 
 **Consider these optional frontmatter fields:**
-- `model: haiku` for simple lookup/formatting skills, `opus` for complex reasoning
+- `model:` — `opus` (safe, 1M) or `inherit` (safe default). **Do NOT pin `sonnet`/`haiku` on a skill** — a skill's `model:` is an inline current-turn override with no context isolation, so a sub-1M pin overflows when the skill activates from a large conversation (validator rule **S14**). For cheap heavy work, put it in a Task-dispatched agent instead. See `references/03-skills/writing-skillmd.md` § Don't pin a skill below the session window.
 - `context: fork` with `agent: <type>` for heavy operations that would pollute main context
+- `disallowed-tools` (kebab-case) to hard-remove tools from the pool while the skill runs (e.g. block `AskUserQuestion` in a background loop). Note the agent equivalent is camelCase `disallowedTools` — the forms are not interchangeable (rules **S15** / **A04**).
 - `disable-model-invocation: true` for command-only skills (no auto-trigger)
 - `user-invocable: false` to hide from `/` menu (Claude can still invoke via Skill tool)
 
@@ -147,7 +148,7 @@ When user says "add agent", "create agent", "make agent":
 When user says "add hooks", "setup hooks", "event handlers":
 
 1. Read `references/06-hooks/writing-hooks.md`
-2. Read `references/06-hooks/hook-events.md` for all 29 events
+2. Read `references/06-hooks/hook-events.md` for all 30 events
 3. Copy template from `templates/hooks/hooks.json.template`
 4. Key events:
    - `Setup` - one-time `--init-only` / `--init -p` / `--maintenance -p` preparation. **Distinct from `SessionStart`**: Setup does NOT fire on every launch, so a plugin that needs a dependency installed cannot rely on Setup alone — pair with a `${CLAUDE_PLUGIN_DATA}` "check on first use, install on miss" pattern.
@@ -298,7 +299,7 @@ Before creating a component, verify it's the right choice:
 |---------|--------------|-----|
 | Plugin doesn't appear after install | Components placed inside `.claude-plugin/` instead of plugin root | Move `commands/` / `agents/` / `skills/` / `hooks/` to the plugin root. Only `plugin.json` belongs in `.claude-plugin/`. |
 | Skill exists but Claude never invokes it | Description missing trigger phrase or imperatives | Rewrite to start with "Use when…", include WHAT and WHEN, preserve any `PROACTIVELY` / `MUST` / `NEVER` markers from the prior version. Run `skill-quality-reviewer` agent to audit. |
-| Hook configured but never fires | Wrong event name (case-sensitive) or `http` handler in `hooks/hooks.json` | Verify event name is exactly one of the 29 documented in `references/06-hooks/hook-events.md`. `http` handlers only work in `settings.json` — they are silently ignored in `hooks.json`. Run `/plugin-creation-tools:validate`. |
+| Hook configured but never fires | Wrong event name (case-sensitive) or `http` handler in `hooks/hooks.json` | Verify event name is exactly one of the 30 documented in `references/06-hooks/hook-events.md`. `http` handlers only work in `settings.json` — they are silently ignored in `hooks.json`. Run `/plugin-creation-tools:validate`. |
 | Hook spawns on every Bash call but only acts on `rm` | Filtering inside the script instead of with `if` | Add `if: "Bash(rm *)"` to the handler. The matcher fires the event; `if` is a cheap pre-spawn filter that avoids the "spawn-and-exit-0" anti-pattern. See `references/06-hooks/writing-hooks.md#the-if-field`. |
 | `mcp_tool` hook returns "not connected" on first run | `SessionStart` / `Setup` typically fire before MCP servers finish connecting | Expected on first run. Either accept the non-blocking error, or move the call to a later event (`PostToolUse`, `Stop`, etc.) where the server is reliably connected. |
 | Plugin theme doesn't appear in `/theme` | `themes/*.json` missing `name` / `base` / `overrides`, or invalid JSON | Run `/plugin-creation-tools:validate`. See `references/08-configuration/themes.md` for the schema. |
