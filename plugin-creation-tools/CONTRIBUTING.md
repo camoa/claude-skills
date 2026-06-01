@@ -31,7 +31,7 @@ Bump in **all** of: `.claude-plugin/plugin.json`, the root `marketplace.json` pl
 
 Every revision must keep these counts in sync between SKILL.md, `commands/validate.md`, and the relevant reference files:
 
-- Hook event count (currently **29** — added `Setup` in the 2026-05-08 doc snapshot).
+- Hook event count (currently **30** — added `MessageDisplay` in the 2026-05-29 doc snapshot).
 - Hook handler types (currently **5** — `command`, `http`, `mcp_tool`, `prompt`, `agent` with `agent` marked experimental).
 - **Hook command-form pair** (v2.1.139+ — exec form via `args` field is preferred whenever a path placeholder appears; shell form remains valid for pipes/redirects/chains).
 - **Hook output cap** (10,000 characters across `additionalContext` / `systemMessage` / stdout; overflow becomes a file-path preview).

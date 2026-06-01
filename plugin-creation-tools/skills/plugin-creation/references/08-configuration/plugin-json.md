@@ -68,6 +68,7 @@ The `name` field is the **only required field**.
 | repository | string | Source code URL |
 | license | string | SPDX identifier (`MIT`, `Apache-2.0`, `BSD-3-Clause`, `GPL-3.0-or-later`, etc.). Use `"proprietary"` only when the repository is private and the value reflects company policy. The validator surfaces non-SPDX values as info-level so you can confirm intent. |
 | keywords | array | Discovery tags. Keep to ≤ 25 entries — marketplace UIs truncate longer lists and the budget pressure isn't worth squeezing in another niche tag. |
+| `defaultEnabled` | boolean | **v2.1.154+** Whether the plugin is enabled when the user hasn't set a state. Defaults to `true`. Set `false` to install disabled — the user opts in with `claude plugin enable <plugin>` or `/plugin`. Use for plugins that add cost or scope (e.g. one that connects to an external service). Earlier Claude Code versions ignore the field and enable on install. Precedence: a user's `enabledPlugins` setting and a dependency requirement both override it. A marketplace entry's `defaultEnabled` also overrides this one. |
 
 ### Author Object
 

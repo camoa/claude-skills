@@ -138,6 +138,8 @@ claude plugin validate --check-commands
 claude plugin validate --strict
 ```
 
+> **`--strict` parity.** `/plugin-creation-tools:validate --strict` mirrors upstream `claude plugin validate --strict`: unknown-key and plugin-root-`CLAUDE.md` findings (this validator's **M14** and **ST03**, both warn-level by default) are promoted to hard errors so CI fails on them. Run both — the upstream check is the authority on manifest schema; this validator adds the frontmatter, hook-event, dependency, and best-practice rules on top.
+
 ### Debug Mode
 
 ```bash
@@ -187,6 +189,8 @@ claude doctor
 # View MCP servers
 /mcp
 ```
+
+> **`/model` picker (v2.1.153+).** In the picker, **`Enter`** switches the model *and saves it as your default* (writes `model` to user settings); **`s`** switches for the current session only. Typing `/model <name>` behaves like `Enter`. The old `d`-to-save-default keybinding (v2.1.144–152) is gone. Project and managed settings still take precedence on next launch.
 
 ### Debug Tools
 
