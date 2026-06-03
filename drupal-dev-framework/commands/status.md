@@ -22,7 +22,7 @@ Show current project status and task progress.
 2. Loads `project_state.md` from project path
 3. Scans `implementation_process/` for task files
 4. Invokes `phase-detector` for each task
-5. **For each task folder, invoke `task-frontmatter-reader` skill (v1.0.0+) to determine `kind`** — flat/epic/sub_epic/subtask — so the rendering below knows whether to show a flat line or a tree.
+5. **For each task folder, run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind`** — flat/epic/sub_epic/subtask — so the rendering below knows whether to show a flat line or a tree.
 6. Presents comprehensive status with hierarchy-aware rendering
 
 ## Hierarchy-aware rendering (added v3.10.0)
@@ -45,7 +45,7 @@ For each top-level task folder in `implementation_process/in_progress/`:
 - Mixed output: flat tasks appear separately from trees for readability.
 
 Do NOT walk dependency graphs here — that's `/next`'s (future) responsibility.
-6. **Invokes `session-context-writer` skill with the resolved project (and task if one is active)**
+6. **Runs `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task|null>" "<task_path|null>"`** (Bash) with the resolved project (and task if one is active; pass `null null` if not)
 
 ## Output Format
 

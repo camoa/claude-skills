@@ -19,7 +19,7 @@ Set or update the `codePath` metadata for the active drupal-dev-framework projec
 ## What this does
 
 1. Resolves the active project from `session_context.json` (`projectPath`). If no project active, prompts the user to pick one via `/drupal-dev-framework:next` first.
-2. **Reads current value** via `project-state-reader` skill (so the confirm prompt can show what's changing).
+2. **Reads current value** by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON (so the confirm prompt can show what's changing).
 3. **Resolves new value:**
    - With `<path>` arg: `realpath -m` normalize; validate exists (unless `--docs-only` or the path resolves to an acceptable path that may not yet exist; in that case, warn and continue).
    - With `--docs-only`: set to `(docs-only)` sentinel (null at runtime).

@@ -19,7 +19,7 @@ Interactive flow that drafts a new play and appends it to the project's local us
 
 ### Step 1 — Resolve project context + check userPlaybook
 
-Invoke `project-state-reader`. If `userPlaybookState != "set"`:
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON. If `userPlaybookState != "set"`:
 > Refuse with: "No user playbook configured for this project. Run `/drupal-dev-framework:set-user-playbook` first."
 
 If `userPlaybookState == "set"`, continue.

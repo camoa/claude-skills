@@ -17,7 +17,7 @@ Walk every play in the project-local user playbook one at a time. Per-play promp
 
 ### Step 1 — Resolve project context + load playbook
 
-Invoke `project-state-reader`. If `userPlaybookState != "set"`:
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON. If `userPlaybookState != "set"`:
 > Refuse with: "No user playbook configured. Run `/drupal-dev-framework:set-user-playbook` first."
 
 Invoke `scripts/playbook-read.sh` against the path. Parse JSON output.

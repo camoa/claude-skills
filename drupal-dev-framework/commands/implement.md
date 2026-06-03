@@ -37,7 +37,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 4. **Playbook load.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. Surface conflicts once-per-session per topic. Write `_playbook-load.json` audit.
 
-5. **Alignment retrofit + phase-level offer.** Invoke `alignment-reader`. If `task_level.present: false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-3 scope (default `[n]`); on `[y]` execute `--phase 3` inline. Never block.
+5. **Alignment retrofit + phase-level offer.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parse its JSON. If `.sections.task_level.present == false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-3 scope (default `[n]`); on `[y]` execute `--phase 3` inline. Never block.
 
 6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from core/contrib, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a Drupal API, contrib module, or pattern not already in `loadedGuides[]`, do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
    - **Design-drives-build nudge (v4.14.0+).** If `project_state.md` carries `**Visual Review:** enabled` AND the surface registry holds at least one surface whose `parity_reference.type` is `react-template` or `html-template`, print ONE soft-nudge line: *"A buildable design reference is registered for surface `<id>` — if this task implements that surface, load the reference as a build input, not only a `/validate:visual-parity` check."* Silent when there is no registry, no enabled visual review, or no buildable parity reference. Never blocks — a strong nudge, not enforcement.
@@ -50,7 +50,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 9. **Traceability walkthrough (opt-in).** One-line `[y]/[n]` (default `[n]`). On `[y]`: pull AC; map each to implementation.md Progress entries OR architecture.md sections OR research.md decisions; status-annotate (`[complete]`, `[in-progress]`, `(planned)`, `— NOT YET ADDRESSED —`); print table; `[c]/[r]/[d]` (default `[c]`). Re-invokable mid-flight.
 
-10. **Invoke `session-context-writer`** with resolved project + task.
+10. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with resolved project + task.
 
 11. **Hand off to interactive development.** Developer guides each step. Claude proposes (test-first), developer approves, Claude writes test then implementation, developer runs tests (Claude does NOT auto-run unless explicitly asked).
 

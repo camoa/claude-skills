@@ -19,9 +19,9 @@ Get recommendation for what to do next based on project state.
 
 1. Invokes `project-orchestrator` agent
 2. Analyzes current state (project requirements + active tasks)
-3. **For each in-progress task folder, invoke `task-frontmatter-reader` skill (v1.0.0+) to learn its `kind` and any `parent`/`children` relationships** — so the suggestion below can prefer "continue a subtask in the active epic" over "start an unrelated flat task."
+3. **For each in-progress task folder, run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind` and any `.parent`/`.children` relationships** — so the suggestion below can prefer "continue a subtask in the active epic" over "start an unrelated flat task."
 4. Suggests prioritized next actions using the rules below
-5. **After resolving project and task, invoke `session-context-writer` skill with the resolved values**; pass `currentEpic` = the parent epic's folder name if the chosen task is a subtask, or `null` otherwise.
+5. **After resolving project and task, run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>" "<currentEpic>"` (Bash)** with the resolved values; pass `<currentEpic>` = the parent epic's folder name if the chosen task is a subtask, or `null` otherwise.
 
 ## Hierarchy-aware suggestion rules (added v3.10.0)
 
@@ -188,7 +188,7 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 
 ### Playbook-config nudge (v4.2.1+)
 
-After resolving the project (Step 1) but before recommending a task action, invoke `project-state-reader` and inspect the `playbook` block. If `playbook_sets_source: "default"` (Playbook Sets line absent — implicit inheritance from the plugin's `defaults.json`) **OR** `user_playbook_state: "unset"`, print this one-line soft-nudge once per `/next` invocation:
+After resolving the project (Step 1) but before recommending a task action, run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and inspect its JSON. If `.playbookSetsSource == "default"` (Playbook Sets line absent — implicit inheritance from the plugin's `defaults.json`) **OR** `.userPlaybookState == "unset"`, print this one-line soft-nudge once per `/next` invocation:
 
 > 💡 This project has not configured a playbook (`playbook_sets_source: default` and/or `user_playbook_state: unset`). Playbook loads at every phase entry. Consider `/drupal-dev-framework:set-playbook-sets` and `/drupal-dev-framework:set-user-playbook` before your first task. Or run `/drupal-dev-framework:upgrade-project` to retrofit all project-state fields at once. (Optional — never blocks.)
 

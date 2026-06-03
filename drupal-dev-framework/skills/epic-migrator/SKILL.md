@@ -1,10 +1,10 @@
 ---
 name: epic-migrator
 description: Use when converting a flat task into an epic folder with children, promoting a subtask to a sub_epic, or expanding an existing epic with more children. Runs the 8-step transactional migration via scripts/migrate-to-epic.sh. Supports --dry-run for preflight plan. Never leaves half-migrated state on disk.
-version: 2.1.0
+version: 2.2.0
 user-invocable: false
-model: sonnet
-allowed-tools: Bash, Skill
+model: inherit
+allowed-tools: Bash
 ---
 
 # Epic Migrator
@@ -42,13 +42,20 @@ Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`. The scri
 
 ## Session-context dispatch (apply after live run)
 
-Parse the stderr `KEY=VALUE` lines, then invoke `session-context-writer`:
+Parse the stderr `KEY=VALUE` lines (`SESSION_CONTEXT_CASE`, `EPIC_FOR_CTX`, `NEW_TASK_PATH`), then write session context by running `scripts/session-context-write.sh` directly (Bash, zero model context — v4.16.0):
 
-| Case | When | `currentEpic` arg | `taskPath` arg |
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh" \
+  "$PROJECT_NAME" "$PROJECT_PATH" "$TASK" "$TASK_PATH" "$EPIC_ARG"
+```
+
+Choose the `$EPIC_ARG` (5th positional) and `$TASK_PATH` by the case the script emitted:
+
+| Case | When | `$EPIC_ARG` (5th arg) | `$TASK_PATH` (4th arg) |
 |---|---|---|---|
 | **A** | Migrated task != active task | literal `{CURRENT_EPIC_OR_NULL}` (preserve) | unchanged |
-| **B** | Migrated task == active task | `"null"` (clear) | unchanged |
-| **C** | A `move_existing` child == active task | `$TASK_NAME` (set epic) | `$NEW_TASK_PATH` |
+| **B** | Migrated task == active task | `null` (clear) | unchanged |
+| **C** | A `move_existing` child == active task | `$EPIC_FOR_CTX` (= `$TASK_NAME`, set epic) | `$NEW_TASK_PATH` |
 
 ## See also
 

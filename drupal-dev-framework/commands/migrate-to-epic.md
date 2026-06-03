@@ -1,5 +1,5 @@
 ---
-description: "Use when the user wants to convert a flat task into an epic folder with child sub-tasks — manual, one-task-at-a-time, transactional. Runs the 8-step migration via the epic-migrator skill. Flat tasks remain a valid permanent choice; this command is opt-in."
+description: "Use when the user wants to convert a flat task into an epic folder with child sub-tasks — manual, one-task-at-a-time, transactional. Runs the 8-step migration via scripts/migrate-to-epic.sh. Flat tasks remain a valid permanent choice; this command is opt-in."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
 argument-hint: <task-name> [--children "name1,name2,..."] [--dry-run]
 ---
@@ -26,21 +26,21 @@ Convert a single flat task into an epic folder containing child sub-tasks. Manua
 1. **Preflight** — validate the task exists, is not completed, and no in-flight migration blocks the attempt. If the task is **already** an epic/sub_epic: with `--children` it enters **expansion mode** (the new children are added to the existing epic; existing children and artifacts are preserved); with no children it is a no-op that prints how to expand.
 2. **Resolve children** — use `--children` if provided; otherwise prompt the user interactively. Classify each child as `move_existing` (there's a peer folder with that name), `already_completed` (a peer folder in `completed/`), or `create_stub` (a new subtask folder will be scaffolded). In expansion mode, every new child name must be genuinely new — collisions with the epic's existing `children[]` or its `in_progress/` / `completed/` folders are rejected at preflight.
 3. **Build in temp** — construct the new epic structure under `.migration-tmp/<task>/`. Never touches the live folder.
-4. **Validate** — run `task-frontmatter-reader` on every generated `task.md` in temp. Abort if any blocking warning surfaces.
+4. **Validate** — the script validates every generated `task.md` in temp via `fm_read` (from `fm-helpers.sh`). Abort if any blocking warning surfaces.
 5. **Atomic swap** — two-step rename (original → `.old-<task>`, then temp → live). Failure-recovers original on error.
 6. **Cleanup scheduling** — `.old-<task>/` persists for 24 hours for manual rollback.
-7. **Session context refresh** — update `session_context.json` to reflect the new epic via `session-context-writer` (sets `currentEpic` when appropriate).
+7. **Session context refresh** — update `session_context.json` to reflect the new epic via `scripts/session-context-write.sh` (sets `currentEpic` when appropriate).
 8. **Report** — print the new structure + rollback instructions + suggested next command.
 
 ## Behavior
 
-This command is a **thin orchestrator**. All file surgery lives in a real bash script (`${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`) invoked via the `epic-migrator` skill. This command is responsible only for:
+This command is a **thin orchestrator**. All file surgery lives in a real bash script (`${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`), invoked directly via Bash (v4.16.0 — was previously routed through the `epic-migrator` skill; a Bash call carries no model context, so it can't overflow a large session). This command is responsible only for:
 
 - Argument parsing and validation
 - User interaction (interactive prompt when `--children` absent)
-- Invoking the script (through the skill) with correctly-classified inputs
+- Invoking the script (Bash, directly) with correctly-classified inputs
 - Surfacing the script's output to the user
-- Invoking `session-context-writer` with the case-analysis result the script emits on stderr
+- Running `scripts/session-context-write.sh` with the case-analysis result the script emits on stderr
 
 ## Invocation steps
 
@@ -58,19 +58,19 @@ Follow these exactly:
    >
    > Leave blank to create an epic shell with no children yet.
 
-3. **Invoke `epic-migrator` skill** (which calls `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh`). The script takes positional arguments:
+3. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh` directly** (Bash). The script takes positional arguments:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh" "$PROJECT_PATH" "$TASK_NAME" [--dry-run] [<child1> <child2> ...]
    ```
 
    Resolve `$PROJECT_PATH` from session context (`session_context.json` `projectPath`) or from `pwd` if no project is active. The script handles all file surgery; this command does not touch disk directly.
 
-4. **If dry-run**, print the skill's plan output verbatim and stop.
+4. **If dry-run**, print the script's plan output verbatim and stop.
 
 5. **If live run**:
-   - Relay the skill's step-by-step progress to the user
-   - On success, print the summary the skill emits
-   - On failure, print the skill's abort message and stop — the skill has already cleaned up any temp state
+   - Relay the script's step-by-step progress to the user
+   - On success, print the summary the script emits
+   - On failure, print the script's abort message and stop — the script has already cleaned up any temp state
 
 6. **Post-success**, parse the three `KEY=VALUE` lines the script emits on stderr:
    ```
@@ -78,10 +78,10 @@ Follow these exactly:
    EPIC_FOR_CTX=<value>           # literal string "{CURRENT_EPIC_OR_NULL}" for Case A; "null" for Case B; task_name for Case C
    NEW_TASK_PATH=<path or empty>  # non-empty only for Case C
    ```
-   Invoke `session-context-writer` accordingly:
-   - **Case A**: pass `{CURRENT_EPIC_OR_NULL}` literal → preserves existing `currentEpic`
-   - **Case B**: pass `currentEpic=null`; keep `taskPath` unchanged
-   - **Case C**: pass `currentEpic=<task_name>`; also update `taskPath` to `NEW_TASK_PATH`
+   Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>" "<epic_arg>"` (Bash) accordingly — the 5th positional `<epic_arg>` and the 4th `<task_path>` vary by case:
+   - **Case A**: omit the 5th arg (or pass the literal `{CURRENT_EPIC_OR_NULL}`) → preserves existing `currentEpic`; `<task_path>` unchanged
+   - **Case B**: pass `null` as the 5th arg → clears `currentEpic`; `<task_path>` unchanged
+   - **Case C**: pass `$EPIC_FOR_CTX` (= `<task_name>`) as the 5th arg → sets `currentEpic`; set `<task_path>` to `$NEW_TASK_PATH`
 
 7. **Suggest the next command**:
    - If the migrated epic has children: `/drupal-dev-framework:next` to continue with a child

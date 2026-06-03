@@ -1,10 +1,11 @@
 ---
 name: project-state-reader
 description: Use when a framework command needs project-level metadata (codePath, playbookSets, userPlaybook, playbookResolutions, project_name). Reads project_state.md defensively via scripts/project-state-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.2.0
+version: 1.3.0
 user-invocable: false
-model: haiku
+model: inherit
 allowed-tools: Bash
+disallowed-tools: Write, Edit
 ---
 
 # Project State Reader

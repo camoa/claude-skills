@@ -20,8 +20,8 @@ This is the bulk-review counterpart to the inline pre-analysis hook in `/researc
 ## What this does
 
 1. Resolves the active project from `session_context.json`. If no project active, asks user to run `/drupal-dev-framework:next` first.
-2. **Resolves `codePath`** via `project-state-reader` skill. If unknown, runs the detect+confirm flow (shared with `/set-code-path`) and persists the answer.
-3. **Enumerates candidates** — every subfolder of `<project>/implementation_process/in_progress/` that is `kind: flat` (via `task-frontmatter-reader`). Skips:
+2. **Resolves `codePath`** by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing `.codePath`. If unknown, runs the detect+confirm flow (shared with `/set-code-path`) and persists the answer.
+3. **Enumerates candidates** — every subfolder of `<project>/implementation_process/in_progress/` that is `kind: flat` (via `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"`, Bash, parse `.kind`). Skips:
    - `kind: epic` / `kind: sub_epic` (already an epic)
    - `kind: subtask` (inside an epic; subject to different analysis)
    - `completed/` subtasks (via folder-location check inside any epic's `completed/`)
@@ -65,7 +65,7 @@ Options:
 
 ## Implementation notes (for the command body)
 
-1. **Candidate enumeration** — iterate `<project>/implementation_process/in_progress/*/` and for each subfolder call `task-frontmatter-reader`. Filter to `kind: flat`. Do NOT recurse into epic folders; this run only considers top-level flat tasks.
+1. **Candidate enumeration** — iterate `<project>/implementation_process/in_progress/*/` and for each subfolder run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash, parse `.kind`). Filter to `kind: flat`. Do NOT recurse into epic folders; this run only considers top-level flat tasks.
 2. **Parallel analysis** — Agent SDK Subagents model fits: spawn N subagents (one per candidate) via the Task tool. Each subagent invokes `analysis-agent` and returns the JSON. Parent aggregates. Reference: Claude Code Agent SDK Subagents docs [cite AS-1 in research.md].
 3. **Accept flow** — on accept, build the child-names string (comma-separated) and invoke `/drupal-dev-framework:migrate-to-epic <task> --children "<csv>"`. The migration command handles the transactional work; this command only surfaces the proposal and relays the decision.
 4. **Edit flow** — on edit, show the proposed children as an editable list; user can rename, remove, add. Validate names match `^[A-Za-z0-9_][A-Za-z0-9._-]*$` before passing to `/migrate-to-epic`.

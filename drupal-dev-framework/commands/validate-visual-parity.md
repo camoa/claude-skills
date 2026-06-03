@@ -48,13 +48,16 @@ The v3.13.0 positional `<component> <viewport> <reference> [<url>]` signature is
 ## Step 1: Resolve task + project context
 
 Resolve the task and project the same way other `/validate:*` commands do. Resolve
-`codePath` from `project_state.md` via the `project-state-reader` skill. If `codePath`
-is null, prompt the user to run `/set-code-path` and stop. Invoke the
-`session-context-writer` skill with the resolved project + task.
+`codePath` from `project_state.md` by running
+`${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and
+parsing the JSON (keep the whole object — Step 2 reuses `.visualReview`). If `.codePath`
+is null, prompt the user to run `/set-code-path` and stop. Then persist session context
+with the resolved project + task:
+`${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash).
 
 ## Step 2: Read the Visual Review pointer
 
-Read `project_state.md` via `project-state-reader`; inspect `visualReview`. Parity
+Inspect `.visualReview` from the Step 1 JSON. Parity
 rides the **same** surface registry as visual regression — there is no separate parity
 enable pointer.
 

@@ -21,7 +21,7 @@ Set or update the project's `**Playbook Sets:**` field in `project_state.md`. Th
 
 ### Step 1 — Resolve project context
 
-Invoke `project-state-reader` to get current `playbookSets[]`, `playbookSetsSource`, and `folder`. Refuse with helpful message if no project resolved.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON for current `playbookSets[]`, `playbookSetsSource`, and `folder`. Refuse with helpful message if no project resolved.
 
 ### Step 2 — Parse arg
 

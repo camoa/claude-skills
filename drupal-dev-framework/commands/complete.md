@@ -16,7 +16,7 @@ Mark a task complete and move to `completed/`. Behavior current as of v4.1.0; fu
 
 ## Runtime Steps
 
-1. **Read task hierarchy.** Invoke `task-frontmatter-reader` (v1.0.0+) to learn `kind` and `parent`. Hierarchy-aware completion rules per kind:
+1. **Read task hierarchy.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind` and `.parent`. Hierarchy-aware completion rules per kind:
    - `flat` → moves to project-level `completed/<name>/`.
    - `subtask` → moves from `<epic>/in_progress/<subtask>/` to `<epic>/completed/<subtask>/` (stays in epic; preserves spatial association).
    - `epic` / `sub_epic` → enforce `<epic>/in_progress/` is empty (all children done) before allowing the epic to complete; whole folder moves to project-level `completed/<epic>/`.
@@ -44,7 +44,7 @@ Mark a task complete and move to `completed/`. Behavior current as of v4.1.0; fu
 
 8. **Suggest next task.** Surface `/next` recommendation. If all tasks done: print summary + offer to mark project done.
 
-9. **Invoke `session-context-writer`** with project resolved and task set to `null`.
+9. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" null null`** (Bash) — project resolved, task set to `null` (the task moved to completed).
 
 ## Pointers
 

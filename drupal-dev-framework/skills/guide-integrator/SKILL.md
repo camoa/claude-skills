@@ -99,7 +99,7 @@ jq --arg g "$GUIDE_ID" \
   "$SESS_FILE" > "$SESS_FILE.tmp" && mv "$SESS_FILE.tmp" "$SESS_FILE"
 ```
 
-If `session_context.json` does not yet exist, skip silently — the next framework command will create it via `session-context-writer` and future loads will be recorded.
+If `session_context.json` does not yet exist, skip silently — the next framework command will create it via `scripts/session-context-write.sh` and future loads will be recorded.
 
 ### 3. Extract Applicable Patterns
 
@@ -151,7 +151,7 @@ After loading methodology refs and dev-guides topics, load the project's playboo
 
 #### 6a. Read project state
 
-Invoke `project-state-reader` skill to get `playbookSets[]`, `userPlaybook`, `userPlaybookState`, and `playbookResolutions[]`.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse `.playbookSets[]`, `.userPlaybook`, `.userPlaybookState`, and `.playbookResolutions[]`.
 
 #### 6b-c. Deterministic load (v4.0.0+)
 

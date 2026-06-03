@@ -32,7 +32,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 1. **Phase Transition Check.** Read `task.md` Phase Status. If Phase 3 not `[x]`, soft-nudge once. If `## Phase Status` H2 absent entirely, append it with the four standard phase lines (1 Research, 2 Architecture, 3 Implementation, 4 Review). If only Phase 4 line missing, idempotently insert before next `## ` boundary (or EOF if none).
 
-2. **Resolve task + project context.** Validate `<task-name>` charset (above). If absent, try session-context-reader; if also null, exit 2 with usage. Resolve project folder via project-state-reader.
+2. **Resolve task + project context.** Validate `<task-name>` charset (above). If absent, try session-context-reader; if also null, exit 2 with usage. Resolve the project folder by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON.
 
 3. **Working-tree warning.** Run `git diff --name-only`. If non-empty AND `--allow-dirty` not set: print warning ("gates run on staged + working tree state, not committed state. Continue? [y/N]"). Default `[N]`. User declines → exit 0.
 
@@ -61,7 +61,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 12. **Mark Phase 4 `[x]`** in `task.md` (only if not `--dry-run` AND `overall_verdict in ("pass", "bypassed")`).
 
-13. **Display `review-summary` mandated wording** (literal text below). Then invoke `session-context-writer` with `lastPhase: "review"`.
+13. **Display `review-summary` mandated wording** (literal text below). Then persist session context: `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash). (`lastPhase` is **preserved**, not set, by the writer — it is managed by the phase components; this step does not change it.)
 
 ## Anti-bypass clause (applies to gates 1-9)
 

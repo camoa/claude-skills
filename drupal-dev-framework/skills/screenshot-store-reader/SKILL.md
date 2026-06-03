@@ -1,10 +1,11 @@
 ---
 name: screenshot-store-reader
 description: Use when a framework command needs to inspect the project's visual-regression baseline store — the codePath-native tests/visual/ snapshot tree. Reads the store defensively via scripts/screenshot-store-read.sh and returns structured JSON. Never blocks on malformed input.
-version: 1.1.0
+version: 1.2.0
 user-invocable: false
-model: haiku
+model: inherit
 allowed-tools: Bash
+disallowed-tools: Write, Edit
 ---
 
 # Screenshot Store Reader

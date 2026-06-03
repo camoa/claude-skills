@@ -61,7 +61,7 @@ Otherwise: **folder mode**. Proceed with steps 1-2.
 
 ### 1. Read the task (folder mode only)
 
-Invoke `task-frontmatter-reader` skill on `task_folder`. Capture `kind`, `status`, `task_id`.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "$task_folder"` (Bash) and parse `.kind`, `.status`, and `.id` (`task_id`).
 
 Compute two gates (v3.12.3+):
 

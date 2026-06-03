@@ -46,8 +46,8 @@ Resolve the active project. Read the per-workspace session file
 if no project is active, tell the user to run `/drupal-dev-framework:next`
 first and stop.
 
-Run the `project-state-reader` skill (or `scripts/project-state-read.sh
-<projectPath>`) to get `project_name`, the project `folder` (the **memory
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<projectPath>"` (Bash)
+and parse its JSON to get `project_name`, the project `folder` (the **memory
 path**), and `codePath`.
 
 Determine the **install directory** — the directory Claude Code is started from
