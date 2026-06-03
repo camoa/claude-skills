@@ -172,7 +172,7 @@ The debate produces a synthesized recommendation with dissenting opinions noted.
 
 ## Customizing skill visibility
 
-drupal-dev-framework ships 22 skills and 41 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
+drupal-dev-framework ships 18 skills and 41 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
 
 **Mute an individual skill or command** with a `Skill()` deny rule. Add it through `/permissions`, or to `permissions.deny` in `.claude/settings.json` (one project) or `~/.claude/settings.json` (all projects):
 
@@ -214,17 +214,17 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
 | `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer — proposes epic decomposition as JSON per schema v1.0 |
 
-### Skills (22)
+### Skills (18)
 
 Skills are invoked automatically by commands and agents — 10 are user-invocable, 12 are internal:
 
 | Category | Skills |
 |----------|--------|
 | **Research** | `core-pattern-finder` |
-| **Architecture** | `component-designer`, `diagram-generator`, `guide-integrator`, `guide-loader` |
+| **Architecture** | `guide-integrator`, `guide-loader` |
 | **Implementation** | `tdd-companion`, `code-pattern-checker`, `task-completer` |
-| **Utility** | `project-initializer`, `requirements-gatherer`, `session-resume`, `implementation-task-creator`, `task-folder-migrator` |
-| **Internal** | `phase-detector`, `memory-manager`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0), `alignment-reader` (v3.12.0), `screenshot-store-reader` (v3.13.0) |
+| **Utility** | `project-initializer`, `requirements-gatherer`, `implementation-task-creator`, `task-folder-migrator` |
+| **Internal** | `phase-detector`, `task-context-loader`, `session-context-writer`, `task-frontmatter-reader` (v3.10.0), `epic-migrator` (v3.10.0), `project-state-reader` (v3.11.0), `alignment-reader` (v3.12.0), `screenshot-store-reader` (v3.13.0) |
 
 ### Methodology References (6)
 
@@ -322,7 +322,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-d
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.16.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.17.0**.
 
 ## License
 

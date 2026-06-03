@@ -1,8 +1,8 @@
 ---
 name: project-initializer
 description: Use when starting a new development project — creates memory folder structure with project_state.md (including codePath), architecture scaffolding, and registers project. Accepts optional code_path argument.
-version: 1.4.0
-model: sonnet
+version: 1.5.0
+model: inherit
 user-invocable: false
 allowed-tools: Bash, Read, Write
 ---

@@ -1,8 +1,8 @@
 ---
 name: task-completer
 description: "Use when finishing a task — moves the v3.0.0 task folder to completed/, updates project_state.md, suggests next task. Runs all 5 quality gates and blocks completion if any gate fails. Trigger: 'finish task', 'done with task', 'move to completed'."
-version: 2.2.0
-model: sonnet
+version: 2.3.0
+model: inherit
 user-invocable: false
 ---
 
