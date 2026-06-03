@@ -29,7 +29,7 @@ Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Without it, this command prin
 ### Step 1 — Resolve task + project context
 
 - Accept `<task>` arg (falls back to session-context `task` if omitted).
-- Invoke `project-state-reader` → `codePath`, `codePathState`, memory project folder.
+- Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) → parse `.codePath`, `.folder` (memory project folder), and `.warnings` (a `code_path_unknown`/`code_path_missing` warning, or `.codePath == null`, ⇒ `codePathState` is not `set`).
 - Resolve task folder. Refuse if the folder doesn't exist.
 
 ### Step 2 — Detect agent-teams availability (fallback chain)
@@ -57,11 +57,11 @@ With `--no-fallback`: print the reason, exit 2, do NOT invoke `/validate:all`.
 
 ### Step 3 — Read context for manifest
 
-Invoke these skills/readers **in parallel** where possible:
+Run these readers (Bash) **in parallel** where possible:
 
-- `alignment-reader` → `sections.task_level` (used by teammates that need the goal/success-criteria)
-- `project-state-reader` → `codePath`, `codePathState` (already loaded in Step 1; re-use)
-- `screenshot-store-reader` → enumerate `<component>/<viewport>` pairs with `role: baseline` → used to populate `visual_fanout[]` for the visual gate entry
+- `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` → parse `.sections.task_level` (used by teammates that need the goal/success-criteria)
+- project-state — `.codePath`, `codePathState` (already loaded in Step 1 via `project-state-read.sh`; re-use)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh "<codePath>"` → enumerate `<component>/<viewport>` pairs with `role: baseline` → used to populate `visual_fanout[]` for the visual gate entry
 
 If the screenshot store is empty OR `codePathState != "set"` for visual gates, the visual-regression entry in the manifest still ships but its `visual_fanout[]` is an empty array (teammate will emit `verdict: "skipped"` with reason).
 

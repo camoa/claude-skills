@@ -24,7 +24,7 @@ Full walkthrough: `references/atk-e2e-walkthrough.md`.
 
 Parse `$ARGUMENTS`. Extract task name (positional or `--task`).
 
-Resolve `codePath` from `project_state.md` via the `project-state-reader` skill. If `codePath` is null or unknown, prompt the user to run `/set-code-path` first and stop.
+Resolve `codePath` from `project_state.md` by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing `.codePath`. If `codePath` is null or unknown, prompt the user to run `/set-code-path` first and stop.
 
 If no task name is provided (neither positional nor `--task`): resolve from `session_context.json` active task. If no active task is found, print: `"validate:e2e: no task specified — provide a task name or run with an active task."` and stop. (EC-F25)
 

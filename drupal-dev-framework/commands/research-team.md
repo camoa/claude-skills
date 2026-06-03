@@ -26,7 +26,7 @@ When this command is invoked with `$ARGUMENTS`:
 
 ### Step 0 — Update Session Context
 
-After resolving the project and task, **invoke `session-context-writer` skill** with the resolved project and task values.
+After resolving the project and task, **run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with the resolved project and task values.
 
 ### Step 1 — Locate Task
 

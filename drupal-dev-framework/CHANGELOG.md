@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.16.0] - 2026-06-03
+
+### Fixed — Model-pin footgun: readers (BUG-1, tier 1)
+
+A skill's `model:` is an **inline current-turn override with no context isolation** (Skills guide: *"the override applies for the rest of the current turn"*). DDF pinned a sub-1M model (`haiku`/`sonnet`) on 15 inline skills, so each **overflowed when invoked from a session larger than ~200k tokens** — worst case `project-state-reader` (haiku), invoked inline by ~18 lifecycle commands that run late in long sessions. This release eliminates that footgun on the six Tier-1 reader/writer skills and fixes the institutional guidance that caused it.
+
+- **Call sites rewired to deterministic scripts (Bash, zero model context).** Every inline `invoke <skill>` for the six Tier-1 skills now runs the existing `scripts/*.sh` directly and parses its output — the output contract is unchanged (the scripts were already the source of truth the skills wrapped):
+  - `project-state-reader` → `scripts/project-state-read.sh` (18 commands + `analysis-agent` + `guide-integrator`)
+  - `session-context-writer` → **new** `scripts/session-context-write.sh` (17 commands + `epic-migrator` + `guide-integrator`)
+  - `task-frontmatter-reader` → `scripts/fm-read.sh` (`next`, `complete`, `propose-epics`, `scope`, `status`, `analysis-agent`)
+  - `alignment-reader` → `scripts/alignment-read.sh` (`research`, `design`, `implement`, `scope`, `validate:team`)
+  - `screenshot-store-reader` → `scripts/screenshot-store-read.sh` (`validate:visual-regression`, `validate:team`)
+  - `epic-migrator` → `scripts/migrate-to-epic.sh` (`migrate-to-epic`, parsing the `KEY=VALUE` stderr handoff directly)
+- **New `scripts/session-context-write.sh`** — verbatim lift of the `jq` merge block that lived in the `session-context-writer` SKILL body (sources `session-paths.sh`; positional args mirror the former placeholders 1:1; preserves `loadedGuides`/`lastPhase`/`currentEpic`).
+- **Tier-1 skill frontmatter → `model: inherit`** (was `haiku`/`sonnet`) on all six (`project-state-reader`, `task-frontmatter-reader`, `alignment-reader`, `screenshot-store-reader`, `session-context-writer`, `epic-migrator`) so the validator's **S14** rule clears on them and the skills no longer overflow if invoked directly. `epic-migrator` also drops the now-unused `Skill` tool.
+- **CC-1 — `disallowed-tools: Write, Edit`** (kebab-case) added to the four read-only readers (`project-state-reader`, `task-frontmatter-reader`, `alignment-reader`, `screenshot-store-reader`); they keep `allowed-tools: Bash`.
+- **Root-cause guidance corrected** in `CONVENTIONS.md` **and** `.claude/rules/skill-conventions.md` (a second instance of the same bad advice the roadmap had not flagged) **and** `.claude/rules/command-conventions.md` (the Session Context Tracking section): a skill's `model:` must be `opus`/`inherit` (1M) or delegate to a `scripts/*.sh` / Task-dispatched agent; reserve `haiku`/`sonnet` for `agents/*.md` only.
+
+**Validation.** `/plugin-creation-tools:validate --strict` (installed validator v3.9.0): S14 cleared on all six Tier-1 skills; the nine Tier-3 synthesizer skills still pin sub-1M and are addressed in v4.17.0 (`model: inherit`). The pre-existing X02 (marketplace entry > 600 chars) is cleared by trimming the entry to 529 chars. FM01/FM02/S15/A04 clean. Scripts smoke-tested against a live project.
+
+**Surfaced (not silently changed):** `review.md` step 13 instructed `session-context-writer` "with `lastPhase: "review"`", but the writer (old inline `jq` and the lifted script alike) only *preserves* `lastPhase` — it never set it from input, so that instruction was an effective no-op since written. Preserved that behavior per the verbatim-lift mandate; the call site now states `lastPhase` is preserved, not set.
+
 ## [4.15.0] - 2026-05-21
 
 ### Added

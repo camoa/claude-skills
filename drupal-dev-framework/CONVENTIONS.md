@@ -279,7 +279,7 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 ## Skills
 - Frontmatter must include: name, description, version
-- Add `model:` matched to complexity (haiku for lookup, sonnet for balanced, opus for complex)
+- **`model:` on a skill is an inline current-turn override with no context isolation** — it reinterprets the *live conversation* on the pinned model (Skills guide: *"the override applies for the rest of the current turn"*). A sub-1M pin (`haiku`/`sonnet` ≈ 200k) therefore **overflows whenever the skill activates from a session larger than that window** (BUG-1; validator rule **S14**). So: pin **`opus`** or **`inherit`** (1M), or — for cheap deterministic work — **delegate to a `scripts/*.sh` (Bash, zero model context) or a Task-dispatched `agents/*.md`**. Reserve `haiku`/`sonnet` **only** for `agents/*.md`, which run in a fresh isolated subagent window.
 - Internal-only skills must have `user-invocable: false`
 - Body uses imperative voice — instructions for Claude, not documentation
 - Under 500 lines per SKILL.md

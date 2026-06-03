@@ -17,7 +17,7 @@ Read-only view of the project's playbook state. Shows subscribed sets, local pla
 
 ### Step 1 — Resolve project state
 
-Invoke `project-state-reader` to get `playbookSets[]`, `playbookSetsSource`, `userPlaybook`, `userPlaybookState`, `playbookResolutions[]`.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON for `playbookSets[]`, `playbookSetsSource`, `userPlaybook`, `userPlaybookState`, `playbookResolutions[]`.
 
 ### Step 2 — Read local playbook (if set)
 

@@ -34,9 +34,11 @@ directories, not separate npm packages.
 
 ## Step 0: Resolve project + codePath
 
-Resolve the active project and `codePath` from `project_state.md` via the
-`project-state-reader` skill. If `codePath` is null, prompt the user to run
-`/set-code-path` and stop. Invoke the `session-context-writer` skill.
+Resolve the active project and `codePath` from `project_state.md` by running
+`${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash)
+and parsing `.codePath`. If `codePath` is null, prompt the user to run
+`/set-code-path` and stop. Then persist session context:
+`${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" null null` (Bash).
 
 The surface registry is `<codePath>/.visual-review/registry.yml` — shared with
 `/setup-atk`. If `/setup-atk` already created it, this command **merges** into

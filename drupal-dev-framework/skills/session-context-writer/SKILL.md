@@ -2,8 +2,8 @@
 name: session-context-writer
 description: Use when a framework command has resolved the active project and/or task and needs to persist that context for hooks. Writes per-workspace session_context.json so compaction hooks and the context-reminder hook can restore the right project/task context. Preserves loadedGuides[], lastPhase, and currentEpic across writes.
 user-invocable: false
-version: 1.5.0
-model: haiku
+version: 1.6.0
+model: inherit
 allowed-tools: Bash
 ---
 
@@ -37,62 +37,20 @@ You receive the resolved project and task values from the calling command. Write
 
 ## Action
 
-Run this bash command with the provided values. It merges the new core fields over any existing file, seeding `loadedGuides: []` and `lastPhase: null` only when the file is first created.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh` with the provided values. The script merges the new core fields over any existing file, seeding `loadedGuides: []` and `lastPhase: null` only when the file is first created. It sources `scripts/session-paths.sh` for the session-file path (keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID, so two Claude Code sessions in the same directory get distinct files; when the variable is absent the key is `md5($PWD)` exactly as before v4.9.0).
 
-The session file path is resolved by the shared `scripts/session-paths.sh` helper (`ddf_session_file`). The path is keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID, so two Claude Code sessions in the same directory get distinct session files instead of colliding. When the variable is absent the key is `md5($PWD)` exactly as before v4.9.0 (backward compatible).
+> **v4.16.0:** the `jq` merge logic moved verbatim into `scripts/session-context-write.sh`. Callers run the script via Bash directly — a Bash call carries no model context, so the write no longer overflows when triggered from a large session (BUG-1). This skill is the documented name/contract; prefer the script at call sites.
 
 ```bash
-. "${CLAUDE_PLUGIN_ROOT}/scripts/session-paths.sh"
-SESS_FILE=$(ddf_session_file)
-mkdir -p "$(dirname "$SESS_FILE")"
-
-NEW_CORE=$(jq -n \
-  --arg workspace "$PWD" \
-  --arg project "{PROJECT_NAME}" \
-  --arg projectPath "{PROJECT_PATH}" \
-  --arg task "{TASK_NAME_OR_NULL}" \
-  --arg taskPath "{TASK_PATH_OR_NULL}" \
-  --arg updatedAt "$(date -I)" \
-  '{
-    workspace: $workspace,
-    project: $project,
-    projectPath: $projectPath,
-    task: (if $task == "null" or $task == "" then null else $task end),
-    taskPath: (if $taskPath == "null" or $taskPath == "" then null else $taskPath end),
-    updatedAt: $updatedAt
-  }')
-
-NEW_EPIC_ARG='{CURRENT_EPIC_OR_NULL}'
-
-if [ -s "$SESS_FILE" ] && jq -e . "$SESS_FILE" >/dev/null 2>&1; then
-  # Preserve loadedGuides, lastPhase, and currentEpic; overwrite core fields.
-  # currentEpic behavior: if the caller passed an explicit value (not the literal "{CURRENT_EPIC_OR_NULL}" placeholder), use it; otherwise preserve existing.
-  jq --argjson new "$NEW_CORE" --arg epic "$NEW_EPIC_ARG" \
-    '. * $new
-     | .loadedGuides = (.loadedGuides // [])
-     | .lastPhase = (.lastPhase // null)
-     | .currentEpic = (
-         if $epic == "{CURRENT_EPIC_OR_NULL}" then (.currentEpic // null)
-         elif $epic == "null" or $epic == "" then null
-         else $epic
-         end
-       )' \
-    "$SESS_FILE" > "$SESS_FILE.tmp" && mv "$SESS_FILE.tmp" "$SESS_FILE"
-else
-  # First write, empty, or corrupt JSON — reseed from scratch with fresh core + preserved-field defaults.
-  echo "$NEW_CORE" | jq --arg epic "$NEW_EPIC_ARG" '. + {
-    loadedGuides: [],
-    lastPhase: null,
-    currentEpic: (if $epic == "{CURRENT_EPIC_OR_NULL}" or $epic == "null" or $epic == "" then null else $epic end)
-  }' > "$SESS_FILE"
-fi
+"${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh" \
+  "{PROJECT_NAME}" "{PROJECT_PATH}" "{TASK_NAME_OR_NULL}" "{TASK_PATH_OR_NULL}" "{CURRENT_EPIC_OR_NULL}"
 ```
 
-Replace placeholders:
-- `{PROJECT_NAME}` — resolved project name (e.g., `wasatch_update`)
-- `{PROJECT_PATH}` — absolute project path
-- `{TASK_NAME_OR_NULL}` — task name if known, or the literal string `null`
-- `{TASK_PATH_OR_NULL}` — absolute task path if known, or the literal string `null`
-- `{CURRENT_EPIC_OR_NULL}` — (added v1.4.0) epic folder name if the task is inside an epic, `null` if not, or leave as the literal string `{CURRENT_EPIC_OR_NULL}` to preserve whatever was there before (i.e., caller doesn't know or doesn't want to change it).
+Positional args (mirror the former placeholders 1:1):
+- `$1` `{PROJECT_NAME}` — resolved project name (e.g., `wasatch_update`)
+- `$2` `{PROJECT_PATH}` — absolute project path
+- `$3` `{TASK_NAME_OR_NULL}` — task name if known, or the literal string `null`
+- `$4` `{TASK_PATH_OR_NULL}` — absolute task path if known, or the literal string `null`
+- `$5` `{CURRENT_EPIC_OR_NULL}` — (added v1.4.0) epic folder name if the task is inside an epic, `null` to clear, or the literal string `{CURRENT_EPIC_OR_NULL}` to preserve whatever was there before. **Omit the 5th arg entirely** for the same preserve behavior.
 
 Do not output anything to the user. This is a silent background operation.

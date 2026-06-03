@@ -22,11 +22,11 @@ Without `--phase`, authors the `## Task-Level` section. With `--phase N`, author
 ## What this does
 
 1. Resolves `<task-name>` to a task folder using the usual resolver (in-progress folder, epic subfolder, etc.). If the folder does not exist, **scaffold a minimal task stub** (see "Task resolution" below) so brand-new tasks can author scope before `/research` runs.
-2. Invokes `alignment-reader` skill to read the current state of `alignment.md` (if any).
+2. Runs `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parses its JSON to read the current state of `alignment.md` (if any).
 3. **Overwrite guard** — if the target section already exists, asks before overwriting.
 4. Runs the alignment conversation — **one question at a time**, author-authored, never auto-generated.
 5. Writes the section to `alignment.md` (creates the file with H1 + metadata if absent).
-6. Invokes `session-context-writer` skill with resolved project + task.
+6. Runs `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash) with resolved project + task.
 7. Prints next-step hint.
 
 ## Task resolution
@@ -82,7 +82,7 @@ Skip stub scaffolding if invoked with `--phase N` — phase-level scope only mak
 
 ## Overwrite guard (retrofit case)
 
-Invoke `alignment-reader` at start. Behavior:
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) at start and parse its JSON. Behavior:
 
 | Current state | Target | Behavior |
 |---|---|---|
@@ -106,9 +106,9 @@ The conversation produces a 4-field contract (Goal / Expected result / Success c
 
 Before asking anything, read the task's current content:
 
-1. Invoke `task-frontmatter-reader` on the task folder to get `kind`, `status`, description, dependencies.
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind`, `.status`, description, dependencies.
 2. Read `task.md` body (Goal, Current State, Acceptance Criteria, Research Questions, Notes — whatever exists).
-3. Read `alignment.md` via `alignment-reader` (should be missing or have no Task-Level section, since this command path only runs when we intend to author).
+3. Read `alignment.md` via `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) (should be missing or have no Task-Level section, since this command path only runs when we intend to author).
 
 ### Step 2 — Decide the conversation mode
 
@@ -212,7 +212,7 @@ Default answer: `[y]` (the warnings don't block; the user may have intentionally
 
 ## Session context
 
-After writing (or cleanly cancelling), invoke `session-context-writer` skill with the resolved project + task so compaction hooks can restore focus. Pass `{CURRENT_EPIC_OR_NULL}` as the epic sentinel per the skill's contract.
+After writing (or cleanly cancelling), run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash) with the resolved project + task so compaction hooks can restore focus. **Omit the 5th arg** (epic) so the preserve-sentinel `{CURRENT_EPIC_OR_NULL}` applies and the existing `currentEpic` is kept.
 
 ## Next-step hint
 

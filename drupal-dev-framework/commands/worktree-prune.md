@@ -17,7 +17,7 @@ List and selectively remove worktrees in the current project. Each worktree gets
 
 ### Step 1 — Resolve project context
 
-Invoke `project-state-reader`. Refuse if no project resolved.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON. Refuse if no project resolved.
 
 ### Step 2 — Refuse if in a worktree
 

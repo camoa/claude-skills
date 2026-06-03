@@ -1,10 +1,11 @@
 ---
 name: task-frontmatter-reader
 description: "Use when a framework command needs to read the hierarchy metadata of a task — parses the YAML frontmatter block at the top of task.md and returns structured data (id, kind, parent, children, blocks, blocked_by, external_ids, derived status) plus any warnings. Defensive: never blocks on malformed input; absent frontmatter yields kind=flat. Delegates to scripts/fm-read.sh."
-version: 2.0.0
+version: 2.1.0
 user-invocable: false
-model: haiku
+model: inherit
 allowed-tools: Bash
+disallowed-tools: Write, Edit
 ---
 
 # Task Frontmatter Reader

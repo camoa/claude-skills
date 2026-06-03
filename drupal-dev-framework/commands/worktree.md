@@ -24,7 +24,7 @@ See `references/worktree-conventions.md` v1.2 for the full convention — includ
 
 ### Step 1 — Resolve task + project context
 
-Invoke `project-state-reader` to get `folder` (project path), `codePath`, `worktreeByDefault`. Resolve task folder under `<project>/implementation_process/**/<task-name>/`. Refuse with helpful message if task folder doesn't exist.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parse its JSON for `folder` (project path), `codePath`, `worktreeByDefault`. Resolve task folder under `<project>/implementation_process/**/<task-name>/`. Refuse with helpful message if task folder doesn't exist.
 
 ### Step 2 — Refuse if already in a worktree
 
@@ -113,12 +113,17 @@ Default: skip baseline (Drupal/DDEV setups make this heavy).
 
 ### Step 9 — Pre-seed session-context
 
-Invoke `session-context-writer` skill from inside the worktree (`$PWD` is now the worktree path) with:
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh` **from inside the worktree** (`$PWD` is now the worktree path — the script keys the session file by `md5($PWD)`):
 
-- `project: <project_name>` (from project-state-reader)
-- `projectPath: <abs project memory folder>`
-- `task: null`
-- `taskPath: null`
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh" \
+  "<project_name>" "<abs project memory folder>" null null
+```
+
+- `$1` `<project_name>` (from `project-state-read.sh`)
+- `$2` `<abs project memory folder>`
+- `$3` `null` (task)
+- `$4` `null` (taskPath)
 
 This ensures the worktree's session-context file exists; the user's first `/research` or `/implement` populates the task field.
 

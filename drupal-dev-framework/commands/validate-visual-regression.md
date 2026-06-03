@@ -35,13 +35,16 @@ Soft-nudge — `fail` signals but never blocks. Full walkthrough:
 ## Step 1: Resolve task + project context
 
 Resolve the task and project the same way other `/validate:*` commands do.
-Resolve `codePath` from `project_state.md` via the `project-state-reader`
-skill. If `codePath` is null, prompt the user to run `/set-code-path` and stop.
-Invoke the `session-context-writer` skill with the resolved project + task.
+Resolve `codePath` from `project_state.md` by running
+`${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash)
+and parsing the JSON (keep the whole object — Step 2 reuses `.visualReview`).
+If `.codePath` is null, prompt the user to run `/set-code-path` and stop.
+Then persist session context with the resolved project + task:
+`${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash).
 
 ## Step 2: Read the Visual Review pointer
 
-Read `project_state.md` via `project-state-reader`; inspect `visualReview`.
+Inspect `.visualReview` from the Step 1 JSON.
 
 - `visualReview: null` (field absent) or `visualReview.enabled: false` → visual
   review is not set up. Print: `"visual review is not set up — run /setup-visual-regression first."` and stop.
@@ -78,8 +81,8 @@ message `"registry has no visual_regression surfaces"`, persist, and stop.
 
 For each (surface × viewport), the expected baseline is
 `<codePath>/tests/visual/<id>.spec.ts-snapshots/<id>-1-visual-chromium-<viewport>-linux.png`.
-Use the `screenshot-store-reader` skill (`screenshot-store-read.sh <codePath>`)
-to enumerate what exists.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh "<codePath>"` (Bash)
+and parse its JSON to enumerate what exists.
 
 If any (surface × viewport) has **no baseline** and neither `--bootstrap` nor
 `--update-baselines` was passed → emit `verdict: fail` with the remediation

@@ -27,7 +27,7 @@ Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 3. **Playbook load.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. Surface conflicts once-per-session per topic. Write `_playbook-load.json` audit.
 
-4. **Alignment retrofit + phase-level offer.** Invoke `alignment-reader`. If `task_level.present: false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-2 scope (default `[n]`); on `[y]` execute `--phase 2` inline. Never block.
+4. **Alignment retrofit + phase-level offer.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parse its JSON. If `.sections.task_level.present == false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-2 scope (default `[n]`); on `[y]` execute `--phase 2` inline. Never block.
 
 5. **Author architecture.md.** Invoke `architecture-drafter` agent + `guide-integrator` for methodology refs. Write standard sections: Approach, Components, Dependencies, Pattern Reference, Interface, Data Flow, SOLID Principles Applied, Security Considerations, Acceptance Criteria. For complex tasks, optionally write `architecture/<component>.md` per component. Update `task.md` Phase 2 in-progress. **Mid-phase guide checks apply:** before designing against a Drupal API, contrib module, or pattern not already in `loadedGuides[]`, do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
 
@@ -39,7 +39,7 @@ Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 8. **Mark Phase 2 `[x]`** in `task.md`.
 
-9. **Invoke `session-context-writer`** with resolved project + task.
+9. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with resolved project + task.
 
 ## Pointers
 

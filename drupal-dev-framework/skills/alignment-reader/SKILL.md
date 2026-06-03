@@ -1,10 +1,11 @@
 ---
 name: alignment-reader
 description: Use when a framework command needs to parse a task's alignment.md (the scope contract — Goal / Expected result / Success criteria / Non-goals per section). Reads defensively via scripts/alignment-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.0.0
+version: 1.1.0
 user-invocable: false
-model: haiku
+model: inherit
 allowed-tools: Bash
+disallowed-tools: Write, Edit
 ---
 
 # Alignment Reader

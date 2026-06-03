@@ -22,7 +22,7 @@ Unsupported flag: `--variant cypress` → print `"/setup-atk: only the Playwrigh
 
 Parse `$ARGUMENTS`. If `--variant` appears (in any form: `--variant cypress`, `--variant=cypress`, `--VARIANT cypress`, case-insensitive) with the value `cypress`, print the literal message above and stop. (EC-F14)
 
-Read `codePath` from the active project's `project_state.md` via the `project-state-reader` skill. If `codePath` is null or unknown, prompt the user to run `/set-code-path` first and stop.
+Read `codePath` from the active project's `project_state.md` by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON `.codePath`. If `codePath` is null or unknown (`.codePath == null` or a `code_path_unknown`/`code_path_missing` warning), prompt the user to run `/set-code-path` first and stop.
 
 ## Step 2: --add-journey branch
 
