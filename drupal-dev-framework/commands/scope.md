@@ -221,6 +221,8 @@ After a successful write, print:
 - Task-level: `"Scope contract written. Next: /drupal-dev-framework:research <task>"`
 - Phase N: `"Phase N alignment written. Next: continue with /drupal-dev-framework:<research|design|implement> <task>"`
 
+Optionally add one line (never auto-runs `/goal`): `"You can later drive implementation to done with a /goal condition built from this contract — surfaced at /implement; see references/goal-from-scope.md."`
+
 ## Errors & edge cases
 
 | Scenario | Behavior |

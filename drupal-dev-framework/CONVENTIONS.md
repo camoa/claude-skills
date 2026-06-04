@@ -79,7 +79,7 @@ The 7 hardened surfaces, by category:
 1. **Pre-analysis epic gate** at `/research` — always-on (was: signal-conditional). Invokes `analysis-agent` regardless of signals; user sees verbatim agent output before pick.
 2. **Coverage-mapping requirement** at end-of-`/research` — `## Coverage Mapping` H2 mandatory in research.md; verified by `scripts/coverage-mapping-check.sh`; refuses Phase 1 `[x]` on fail.
 3. **Skill-review** at `/complete` — fires when staged/branched changes include `skills/*/SKILL.md`; invokes `plugin-creation-tools:skill-quality-reviewer`.
-4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate`.
+4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate --strict` (DDF dogfoods strict validation on its own plugin changes). `--skip-plugin-validate <reason>` still bypasses by explicit declaration.
 5. **Phase-command-bypass** detected by PreToolUse hook on Write to phase artifacts — non-blocking audit when no `/research` / `/design` / `/implement` slash command is active.
 
 **Deterministic surfaces (2)** — fire shell scripts that detect+act without user prompts; bypass-by-declaration is impossible:
@@ -293,6 +293,8 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 D-A-D phases (Research → Architecture → Design) are **Type B** work — audit / review / architecture analysis. Read full source and config files; do NOT grep-first. Inherited methods, annotations, config-wired classes, and docblock metadata are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. Cited inline in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md`.
 
+On very large Drupal repos, pair this read-everything posture with the upstream Claude Code monorepo/large-codebase guide ("Set up Claude Code in a monorepo or large codebase") for scoping reads to the relevant subtree.
+
 ## Effort-Adaptive Commands (v4.8.0+)
 
 Command and skill bodies may use the `${CLAUDE_EFFORT}` string substitution — Claude Code replaces it with the session's active effort level (`low` / `medium` / `high` / `xhigh` / `max`) when the command runs. Use it to scale *depth*, not correctness: an effort-adaptive command does less corroboration at `low` and more at `xhigh`, but never skips a gate or a required step.
@@ -304,7 +306,7 @@ Command and skill bodies may use the `${CLAUDE_EFFORT}` string substitution — 
 
 ## Forked Subagents (v4.2.0+, experimental upstream)
 
-Claude Code 2.1.117+ ships forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`) — context-inheriting parallel work. Relevant to `/propose-epics` bulk review and parallel sub-task investigation where shared loaded context (research, dev-guides, playbook) avoids re-establishment cost. **Not enabled by default** — `/validate:team`'s honest-validation guarantee deliberately wants fresh context. See `references/forked-subagents.md` for the framework's evaluation criteria.
+Claude Code 2.1.117+ ships forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`) — context-inheriting parallel work. Relevant to `/propose-epics` bulk review and parallel sub-task investigation where shared loaded context (research, dev-guides, playbook) avoids re-establishment cost. **Not enabled by default** — `/validate:team`'s honest-validation guarantee deliberately wants fresh context. See `references/forked-subagents.md` for the framework's evaluation criteria. See `references/dynamic-workflows.md` for how the upstream Dynamic Workflows model maps onto `/research-team` / `/validate:team` and `/deep-research`.
 
 ## Troubleshooting
 
@@ -359,6 +361,8 @@ If users enable Claude Code sandboxing (`/sandbox`), DDEV commands will fail bec
 
 `ddev` must be in `excludedCommands` (not `allowWrite`) because it uses the Docker socket which sandboxing blocks at the network level.
 
+For choosing and tuning a sandbox, see the upstream "Choose a sandbox environment" guide at `https://code.claude.com/docs/en/sandbox-environments`; the `excludedCommands: ["ddev"]` config above already covers the DDEV case.
+
 ## Path-Specific Rules for Drupal Projects
 
 Recommend users create `.claude/rules/` files scoped to file types for Drupal-specific conventions:
@@ -374,6 +378,8 @@ These load only when Claude works on matching files, keeping context lean.
 **`--dangerously-skip-permissions`.** The framework writes to `.claude/` constantly — `session_context.json`, the `_*.json` gate audits, task folders under `.claude/projects/`. Running Claude Code with `--dangerously-skip-permissions` removes the permission prompts on `.claude/`, `.git/`, and `.vscode/` writes that are the safety net for the framework's own state files. Use it only in throwaway or sandboxed environments, never on a production-adjacent checkout.
 
 **`autoMode.hard_deny` and project settings.** Since Claude Code v2.1.142, a project's `.claude/settings.json` (or `.claude/settings.local.json`) **cannot** set `defaultMode: "auto"` — it is silently ignored, so a repository cannot grant itself auto mode. Auto mode is enabled only from the user's own `~/.claude/settings.json`. A project may still ship an `autoMode.hard_deny` array (unconditional denials — e.g. `core/`, `vendor/`, `web/sites/default/settings.php`, `.ddev/`); that list applies as a guardrail **if** the user has turned auto mode on, but it cannot itself turn auto mode on.
+
+**security-guidance plugin (complementary).** The official Claude Code `security-guidance` plugin is harness-level edit review (it flags risky edits as they happen), complementary to — not a substitute for — DDF's per-task Gate 4 (`/review`).
 
 ## Documentation & observability notes (v4.9.0+)
 
