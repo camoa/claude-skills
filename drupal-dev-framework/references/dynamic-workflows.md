@@ -70,6 +70,7 @@ codebase/architecture decision that wants competing perspectives plus a debate.
 
 ## Upstream reference
 
-Workflows guide — `https://code.claude.com/docs/en/workflows` ("Orchestrate
-subagents at scale with dynamic workflows"). Compare-the-primitives table in its
-"When to use a workflow" section.
+Upstream Claude Code guide: "Orchestrate subagents at scale with dynamic
+workflows" (find it via the Claude Code docs index — slug not asserted here to
+avoid drift). See its "When to use a workflow" section for the
+compare-the-primitives table.
