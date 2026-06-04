@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.0] - 2026-06-04
+
+Additive docs + one optional soft-nudge. No enforced behavior change — mostly new and edited Markdown.
+
+### Added
+
+- **`references/dynamic-workflows.md`** — maps the upstream Dynamic Workflows model (research preview, Claude Code v2.1.154+) onto the framework's existing `TeamCreate`-based fan-out commands (`/research-team`, `/validate:team`) and notes `/deep-research` as a web-research sibling to `/research-team`. Documentation/mapping only — the framework does NOT adopt the workflow runtime as an execution path this release; the team path already works and degrades gracefully. Pointer added from `CONVENTIONS.md` § Forked Subagents.
+- **`references/goal-from-scope.md`** — the `/scope` → `/goal` bridge: builds a ready-to-paste `/goal` completion condition from a task's parsed `alignment.md` (Success criteria → completion clause, Non-goals → `git status` guard). Anchors the condition to the `/review` (or `/validate:all`) gate verdict surfaced inline — never to bare prose — because the `/goal` evaluator reads only the transcript. States the limits plainly (session-scoped, completion-check-not-guardrail, requires trust + hooks + v2.1.139+, degrades to omitted). Cross-references the existing `## Condition-checked autonomy with /goal` section rather than duplicating it.
+- **`/implement` Phase-3 `/goal` tip** — emit-once, declinable, never auto-runs `/goal`; prints a suggested gate-anchored, turn-bounded `/goal` string built from the parsed contract; omitted silently when `/goal` is unavailable or no Success criteria exist.
+- **`/scope` optional pointer** — one line noting implementation can later be driven to done via `/goal`, surfaced at `/implement`.
+
+### Changed
+
+- **CC-2** — the `/complete` plugin-validate hardened gate now invokes `/plugin-creation-tools:validate --strict` (DDF dogfoods strict validation on its own plugin changes); `--skip-plugin-validate <reason>` semantics unchanged. Updated in `references/complete-walkthrough.md` and `CONVENTIONS.md` Hardened Gate #4.
+- **CC-3** — `CONVENTIONS.md` § Security & auto-mode posture notes the official `security-guidance` Claude Code plugin as complementary to DDF's per-task Gate 4 (`/review`): harness-level edit review vs. per-task gate.
+- **CC-4** — `CONVENTIONS.md` § Sandbox and DDEV links the upstream "Choose a sandbox environment" guide (`/en/sandbox-environments`); the existing `excludedCommands: ["ddev"]` config already covers DDEV.
+- **CC-5** — `CONVENTIONS.md` § Reading Strategy points at the upstream Claude Code monorepo/large-codebase guide for the read-everything posture on big Drupal repos.
+
 ## [4.17.0] - 2026-06-03
 
 ### Fixed — Model-pin footgun: synthesizers (BUG-1, tier 3)
