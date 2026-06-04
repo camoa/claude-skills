@@ -1,8 +1,8 @@
 ---
 name: implementation-task-creator
 description: Use when breaking down a component for implementation - creates task file in implementation_process/in_progress/ with TDD steps and acceptance criteria
-version: 1.1.1
-model: sonnet
+version: 1.2.0
+model: inherit
 user-invocable: false
 ---
 

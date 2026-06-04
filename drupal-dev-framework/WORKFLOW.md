@@ -352,8 +352,6 @@ This plugin includes skills and agents that activate automatically at each phase
 | `project-orchestrator` | Agent (sonnet, 25 turns) | Central coordinator - routes to correct phase/command |
 | `project-initializer` | Skill | Creates project folder structure and memory files |
 | `requirements-gatherer` | Skill | Collects requirements across 7 categories |
-| `memory-manager` | Skill | Manages project memory files |
-| `session-resume` | Skill | Restores context when starting new session |
 
 ### Step 2: Task Selection
 
@@ -378,8 +376,6 @@ This plugin includes skills and agents that activate automatically at each phase
 | `pattern-recommender` | Agent (sonnet, 15 turns) | Recommends Drupal patterns for use cases |
 | `guide-integrator` | Skill | Loads dev-guides for architecture decisions + methodology refs |
 | `guide-loader` | Skill | Loads specific guide files |
-| `component-designer` | Skill | Designs individual components |
-| `diagram-generator` | Skill | Creates Mermaid diagrams for architecture |
 | `implementation-task-creator` | Skill | Breaks architecture into implementation tasks |
 
 ### Phase 3: Implementation
@@ -404,10 +400,10 @@ This plugin includes skills and agents that activate automatically at each phase
 ```
 /next (no project)
      │
-     └──▶ project-orchestrator ──▶ memory-manager ──▶ List projects
-                                                          │
-                                   (if new name entered) ──▶ project-initializer
-                                                          └──▶ requirements-gatherer
+     └──▶ project-orchestrator ──▶ List projects
+                                       │
+                (if new name entered) ──▶ project-initializer
+                                       └──▶ requirements-gatherer
 
 /research <task>
      │
@@ -420,8 +416,6 @@ This plugin includes skills and agents that activate automatically at each phase
 /design <task>
      │
      └──▶ guide-integrator (dev-guides + refs) ──▶ architecture-drafter ──▶ pattern-recommender
-                │
-                └──▶ component-designer ──▶ diagram-generator (optional)
 
 /implement <task>
      │
@@ -429,7 +423,7 @@ This plugin includes skills and agents that activate automatically at each phase
 
 /complete <task>
      │
-     └──▶ task-completer (5 quality gates) ──▶ memory-manager
+     └──▶ task-completer (5 quality gates)
 
 /validate <task>
      │

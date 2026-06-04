@@ -1,9 +1,9 @@
 ---
 name: guide-integrator
 description: "Use when a phase command (research/design/implement) needs to load methodology references, online dev-guides, and project playbooks before task work begins. **v4.10.0+: hybrid detection** — a deterministic phase-aware methodology floor + lexical catalog candidates via scripts/dev-guides-detect.sh, plus semantic matches from the guides-matcher agent. Delegates guide fetching to dev-guides-navigator. Loads playbook layers via scripts/playbook-load-deterministic.sh. Cross-references conflicts. Records loaded guide IDs into session_context.json loadedGuides[] to prevent re-loads."
-version: 5.2.0
+version: 5.3.0
 user-invocable: false
-model: sonnet
+model: inherit
 ---
 
 # Guide Integrator

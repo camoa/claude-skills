@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.17.0] - 2026-06-03
+
+### Fixed — Model-pin footgun: synthesizers (BUG-1, tier 3)
+
+Completes the BUG-1 model-pin remediation started in v4.16.0. The nine Tier-3 synthesizer skills genuinely need conversation context (they don't wrap a deterministic script), so the fix is to run them on the 1M session model instead of pinning a sub-1M model that overflows in large sessions.
+
+- **`model: inherit`** set on the five **kept** Tier-3 skills (was `haiku`/`sonnet`): `guide-integrator` (5.3.0), `guide-loader` (3.1.0), `implementation-task-creator` (1.2.0), `project-initializer` (1.5.0), `task-completer` (2.3.0). No call-site edits.
+
+### Removed — dead-skill audit (4 orphans retired)
+
+A dispatch audit found four Tier-3 skills with **zero live dispatch** — no command, agent, or reachable skill invoked them; they survived only in README/WORKFLOW documentation prose. Retired:
+
+- **`diagram-generator`** — Mermaid architecture diagrams; never wired into the live `/design` flow.
+- **`component-designer`** — per-component design; never wired into `/design`.
+- **`memory-manager`** — project-registry maintenance; superseded by direct registry handling.
+- **`session-resume`** — context restore on new session; superseded by the session-context hooks + `session-context-writer`.
+
+Their `skills/<name>/SKILL.md` files are deleted and all live references scrubbed from `README.md` (skill tables + the "22 skills" → "18 skills" count) and `WORKFLOW.md` (component tables + the component-flow diagram). Historical CHANGELOG entries are left intact (append-only record). Skill count: **22 → 18**.
+
+**Kept (not orphans):** `guide-integrator` + `project-initializer` are heavily live-dispatched; `task-completer` remains in the `project-orchestrator` routing table (largely superseded by `/review` + the slimmed `/complete` since v4.1.0); `guide-loader` + `implementation-task-creator` are reachable via `task-context-loader` and were retained.
+
+**Validation.** `/plugin-creation-tools:validate drupal-dev-framework --strict` (installed validator v3.9.0): **S14 fully clear** — zero sub-1M skill pins remain across all 18 skills. Agent `model:` pins are S14-exempt (fresh subagent context) and untouched. BUG-1 is now fully closed plugin-wide.
+
 ## [4.16.0] - 2026-06-03
 
 ### Fixed — Model-pin footgun: readers (BUG-1, tier 1)
