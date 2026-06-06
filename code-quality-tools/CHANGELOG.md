@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-06-06
+
+### 2026-05-29 doc hardening
+
+Second release of the 2026-05-29 feature wave. Validator hygiene + threat-model accuracy on the `code-quality-audit` hub skill. No SAST script, gate logic, or command behavior changed — skill frontmatter + two doc notes + a CONVENTIONS section.
+
+### Changed
+
+- **S14 — `skills/code-quality-audit/SKILL.md` `model: sonnet` → `model: inherit`.** The audit skill runs **inline** (not as a Task-dispatched agent — it needs live conversation context) and is meant to scan whole codebases, so pinning it to sonnet's ~200k window was doubly wrong: context-overflow risk when invoked from a large session, **and** an undersized window for large-repo audits. `inherit` runs it on the session model (up to 1M). The six `**Model:** sonnet` markers in `architecture-debate.md` / `security-debate.md` are agent-**spawn** intent (fresh context, isolated worktrees) and are **S14-exempt — left unchanged**.
+- **CC-4 — "Sandbox users" note rewritten for the process-level sandbox runtime.** The note now states that the built-in **sandboxed Bash tool** restricts *only Bash* — hooks run unconstrained on the host — so the `npx`-trojan-in-hook risk (watch-mode dispatcher `lint-changed.sh`, documented under "Known limitations") is **outside** that boundary. Adds the **sandbox runtime** (`@anthropic-ai/sandbox-runtime`, no Docker, wraps file tools + Bash + hooks) with `~/.srt-settings.json` config + `npx @anthropic-ai/sandbox-runtime claude` launch, and **recommends running audits of untrusted checkouts under it** (or a VM / Claude Code on the web). Cross-references the **Sandbox Environments** guide. Grounded in the cached Sandbox Environments guide (2026-05-29 snapshot).
+
+### Added
+
+- **CC-1 — `disallowed-tools: Write, Edit` on `code-quality-audit/SKILL.md`.** The audit skill is read-only analysis (already `allowed-tools: Read, Bash, Grep, Glob`); declaring the denial hardens the documented hostile-clone threat model at the harness level. **Not** applied to the report-writing commands (`review.md`, `audit.md`, `generate-review-md.md`) — they legitimately write `.reports/` / `REVIEW.md`.
+- **CC-2 — `/plugin-creation-tools:validate --strict` added to `CONVENTIONS.md` release hygiene.** New "Release Hygiene" section names `--strict` as the pre-PR gate (promotes S-series warnings to gating errors) alongside the lockstep version-bump checklist.
+
+### Note
+
+- Skill frontmatter `version` resynced `3.5.0` → `3.8.0` (it had lagged two releases; this release makes substantive frontmatter changes, so it's the natural resync point).
+
+Marketplace metadata bumped 1.15.12 → 1.15.13.
+
 ## [3.7.0] - 2026-06-06
 
 ### Native review/security alignment + security-guidance adoption

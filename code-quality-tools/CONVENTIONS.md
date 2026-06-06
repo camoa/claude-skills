@@ -86,6 +86,11 @@ For Drupal-specific patterns when explaining violations or suggesting fixes, fet
 - WebFetch the index to discover available topics, then fetch specific topic pages
 - Likely relevant topics: solid-principles, dry-principles, security, testing, tdd, js-development, github-actions
 
+## Release Hygiene
+- Per release, bump in lockstep: `.claude-plugin/plugin.json` `version`, the plugin entry **and** `metadata.version` in the camoa-skills root `marketplace.json`, the `CHANGELOG.md` entry, and any skill/agent frontmatter `version` touched.
+- **Pre-PR gate:** run `/plugin-creation-tools:validate --strict` against the plugin (`cd code-quality-tools/`). `--strict` promotes the S-series warnings (e.g. S10 body length, S14 inline-model context risk) to gating errors — treat a `--strict` FAIL as a blocker unless the finding is an explicitly accepted carve-out recorded in the release notes. Plain `/plugin-creation-tools:validate` is the looser check; `--strict` is the release gate.
+- One minor bump per PR; one release = one PR.
+
 ## General
 - Reference files instead of reproducing content
 - Current state only — no historical narratives

@@ -1,9 +1,10 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.5.0
-model: sonnet
+version: 3.8.0
+model: inherit
 allowed-tools: Read, Bash, Grep, Glob
+disallowed-tools: Write, Edit
 user-invocable: false
 hooks:
   FileChanged:
@@ -141,7 +142,9 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 1. Verify npm: `npm --version`
 2. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
 
-> **Sandbox users:** If Claude Code sandbox mode is enabled, bash scripts that invoke linters (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) require their binary paths to be whitelisted. Add the tool binaries to your `allowedPaths` in `claude_code_config.json` (e.g., `vendor/bin/phpstan`, `/usr/local/bin/semgrep`). DDEV-proxied commands run inside the container and are unaffected.
+> **Sandbox users:** If the built-in **sandboxed Bash tool** (`/sandbox`) is enabled, bash scripts that invoke linters (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) require their binary paths to be whitelisted. Add the tool binaries to your `allowedPaths` (e.g., `vendor/bin/phpstan`, `/usr/local/bin/semgrep`). DDEV-proxied commands run inside the container and are unaffected.
+>
+> The Bash sandbox restricts **only Bash** — built-in file tools, MCP servers, and **hooks run unconstrained on the host**. That matters here because the watch-mode dispatcher runs as a `FileChanged` **hook** (`lint-changed.sh`), so the `npx`-trojan risk documented under "Known limitations" above is **outside** the Bash sandbox's boundary. To contain hooks (and file tools and MCP) under one OS boundary **without Docker**, run the whole Claude Code process under the **sandbox runtime** (`@anthropic-ai/sandbox-runtime`, a beta research preview): configure `~/.srt-settings.json` (it denies all write + network by default) to allow your project dir, `~/.claude`/`~/.claude.json`, and `api.anthropic.com`, then launch with `npx @anthropic-ai/sandbox-runtime claude`. **Recommendation:** run audits of **untrusted checkouts** under the sandbox runtime (or, for kernel-level separation, a dedicated VM / Claude Code on the web). Compare the isolation approaches in the **Sandbox Environments** guide (`/en/sandbox-environments`).
 
 ## When to Run What
 
