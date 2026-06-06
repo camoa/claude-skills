@@ -1,8 +1,9 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.6.0
+version: 0.7.0
 allowed-tools: Read, Bash, Glob, Grep, Write
+disallowed-tools: WebFetch
 user-invocable: true
 ---
 
@@ -10,11 +11,21 @@ user-invocable: true
 
 Route to the correct online guide and enforce guide application.
 
+## Two modes
+
+The navigator exposes **two independent routing modes** over two separate published catalogs:
+
+- **Guide search** (`llms.txt`) — atomic, mechanics-level decision guides. The original flow. See **Core Workflow** below.
+- **Recipe search** (`agentic-recipes.txt`) — goal-oriented, prescriptive capability deliveries that sequence existing guides/plays end-to-end and carry a verifier. See **Recipe Search** below.
+
+The navigator does **not** hardcode an order. The **caller** owns ordering — typically recipe-search first (is there a prescriptive end-to-end recipe for this capability?), then guide-search (fall back to raw mechanics). Recipe search never fabricates a recipe: a miss cleanly defers to guide search.
+
 ## When to Use
 
 - Any Drupal, Next.js, design system, or dev-practice task where a guide might help
 - When another skill or agent needs domain knowledge beyond its bundled references
 - When the user mentions a specific guide topic
+- When a task is a whole **capability** (one end-to-end goal) rather than a single mechanic — try **recipe search** first
 - NOT for: plugin methodology references (those are in drupal-dev-framework/references/)
 
 ## Core Workflow
@@ -126,11 +137,80 @@ Example: `curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/d
 3. Apply them directly to the implementation
 4. Reference the guide in architecture docs if in design phase
 
+## Recipe Search
+
+Recipe search is **symmetric to guide search** but consumes a **separate** catalog —
+the **agentic recipes** index. A recipe is a prescriptive, goal-oriented delivery of
+**one capability** end-to-end: it **names** the guides and plays it needs (it never
+duplicates them) and carries a **verifier** (the drift check). Recipes publish to their
+**own** index, deliberately separate from `llms.txt` so the guides index never grows by
+a recipe.
+
+This flow is **strictly additive** — it does not touch guide search, `llms.txt`, or the
+guides cache.
+
+### Catalog contract (build to exactly this)
+
+- **Index** (`curl`, never WebFetch):
+  `https://camoa.github.io/dev-guides/agentic-recipes.txt` + `agentic-recipes.hash`
+- One line per recipe, grouped under a `## Domain` heading:
+  `- <name> [<capability>] (sha:XXXXXXXX): <one-line when-to-use> — <site-url>`
+- **Recipe body** (full RECIPE.md) fetched as **raw markdown**, never the GH Pages HTML —
+  derive from the `<site-url>` in the index line:
+  `https://raw.githubusercontent.com/camoa/dev-guides/main/docs/agentic-recipes/<domain>/<name-dasherized>.md`
+  (e.g. site-url `.../agentic-recipes/drupal/responsive-image-wiring/` →
+  raw `.../docs/agentic-recipes/drupal/responsive-image-wiring.md`). Born-atomic: one file, one fetch.
+- **Two hashes, two jobs:** `agentic-recipes.hash` gates the **index** cache; the per-line
+  `(sha:XXXXXXXX)` gates each **recipe body** cache — checkable without fetching the body.
+
+### 1. Get `agentic-recipes.txt` (with caching)
+
+Cache file: `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-recipes-cache.json` —
+a **separate sibling** to the guides cache, same path derivation. See
+`references/cache-format.md` for the schema and the cross-plugin contract.
+
+**NEVER use WebFetch.** All fetches use `curl -s` via Bash (same discipline, same reasons
+as guide search). The frontmatter `disallowed-tools: WebFetch` makes this a hard block.
+
+- Bash: `curl -s https://camoa.github.io/dev-guides/agentic-recipes.hash`
+- Compare with the cached `index.hash`:
+  - **Same** → use cached `index.content`, skip re-fetch
+  - **Different or no cache** → Bash: `curl -s https://camoa.github.io/dev-guides/agentic-recipes.txt`,
+    rewrite `index` as `{ hash, fetched_at, content }`
+
+### 2. Match capability
+
+Scan the index lines and match on **`capability`** (the machine key in `[...]`) plus the
+**when-to-use description**. Keep this lean — **do not fetch any recipe body during matching.**
+
+- **Match** → proceed to step 3 with that line's `<name>`, `<sha>`, and `<site-url>`.
+- **No match** → report "no recipe for this capability; fall back to guide search" and **STOP**.
+  Never fabricate a recipe.
+
+### 3. Fetch the body (download-once)
+
+Read the matched line's `(sha:XXXXXXXX)`:
+
+- Cached body for `<name>` exists with the **same sha** → **reuse it, no fetch.**
+- Otherwise → `curl -s` the raw `.md` **once** (raw URL derived from the site-url, per the
+  contract above) and store `recipes.<name> = { sha, fetched_at, content }`.
+
+A body is downloaded **exactly once per content version** and reused for the session.
+
+### 4. Apply (hand off + surface the verifier)
+
+The recipe is **sequence + opinion + verifier**; the guides it cites are the **mechanics**.
+
+1. For each guide or play the recipe **names**, hand off to the **existing guide-search flow**
+   above (Core Workflow steps 2–7). The recipe does not replace guide search — it drives it.
+2. **Surface the recipe's verifier to the caller** — it is the drift check that confirms the
+   capability was delivered correctly.
+
 ## See Also
 
 - `references/quick-reference.md` — condensed workflow table + common mistakes
 - `references/examples.md` — worked routing examples (user request → correct guide)
 - `references/troubleshooting.md` — what to do when a workflow step fails
-- `references/cache-format.md` — cache file format and the cross-plugin contract
+- `references/cache-format.md` — guides cache + recipes cache formats (cross-plugin contract)
 - `references/manifest-schema.md` — build output (llms.txt + llms.hash)
 - `references/guide-index.md` — fallback keyword table (offline/network failure)
