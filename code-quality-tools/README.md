@@ -196,6 +196,19 @@ All results save to `.reports/` (git-ignored):
 
 ## Security Layers
 
+### Where this fits (defense in depth)
+
+These layers are the **whole-codebase / CI SAST** stage of Claude Code's defense-in-depth model — framework-aware multi-tool scans across the entire tree. The earlier stages are **native** and complementary:
+
+| Stage | Tool | Covers |
+|---|---|---|
+| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Vulns in code Claude writes, fixed the same session — `/code-quality:setup` offers to install it |
+| On demand — diff | native `/security-review` | One generic, diff-scoped vuln pass |
+| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context (tune via `/code-quality:generate-review-md`) |
+| Whole-codebase / CI | **this plugin** (`/code-quality:security` + debates) | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
+
+The native layers reduce what reaches these scans; they do **not** replace them — `/security-review` is generic and diff-only, with no whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate.
+
 ### Drupal (10 layers)
 
 | # | Tool | What It Checks |
@@ -261,6 +274,7 @@ ddev exec vendor/bin/grumphp git:init
 
 ## Watch-mode & Scheduled Sweeps
 
+- **In-session security** — the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit pattern match, end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes). It's the in-session counterpart to this plugin's whole-tree scans — it reduces what reaches the PR and the whole-codebase scan without replacing either. `/code-quality:setup` offers to install it (`/plugin install security-guidance@claude-plugins-official`; needs Claude Code 2.1.144+, python3, git). See the layering table under "Security Layers".
 - **Watch-mode linting** activates while the `code-quality-audit` skill is loaded — edits to `composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, or `tsconfig.json` re-run the lint. Disable mid-session: `export CLAUDE_CODE_QUALITY_WATCH=0`.
 - **Scheduled sweeps** — pick a surface (Desktop / Cloud Routine / `/loop`) based on whether the audit needs local file access, machine-off reliability, or in-session polling. Templates in `skills/code-quality-audit/references/scheduled-sweeps.md`, `desktop-sweep-template.md`, `cloud-routine-sweep.md`.
 - **Pre-merge CI gate** — Cloud Routine with API trigger callable from GitHub Actions / GitLab CI. Full template in `skills/code-quality-audit/references/premerge-gate-routine.md`.
