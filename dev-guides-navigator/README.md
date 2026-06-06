@@ -98,6 +98,26 @@ Guide search, `llms.txt`, and the guides cache are untouched — recipe search i
 additive. Recipe bodies cache to a separate sibling file,
 `dev-guides-recipes-cache.json` (see `references/cache-format.md`).
 
+## Create-on-Miss (v0.8.0, maintainer mode)
+
+If you **maintain** the dev-guides source repo, the navigator can help close gaps. When
+guide search finds **no** guide for a topic **and** the local dev-guides source repo is
+detected, the navigator **offers** to author the missing guide and **hands off** to that
+repo's own `/create-guide` command. It only **detects + offers + hands off** — it never
+authors, partitions, commits, or deploys.
+
+- **Detection** — `DEV_GUIDES_SRC` env/config → `$PWD` → `~/workspace/dev-guides`,
+  accepting a candidate only with the full 4-part signature (`mkdocs.yml` +
+  `scripts/generate_llms.py` + `docs/agentic-recipes/` + a `.claude/agents/guide-*`).
+- **Offer, never auto** — on a genuine miss it asks before doing anything.
+- **`/create-guide`** researches a source guide, **pauses for your review**, partitions
+  it, and opens a **PR** — it never merges or deploys (a human merging the PR is the
+  deploy).
+- **Consumer mode is byte-for-byte unchanged** — no repo detected → no offer, no behavior
+  change.
+
+See `references/create-on-miss.md` for the detection probe and full handoff protocol.
+
 ## Configuration
 
 No configuration required. The skill automatically caches `llms.txt` per project at:
@@ -171,10 +191,16 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-**v0.7.0** (Current) — Recipe Search mode over the separate agentic-recipes
-catalog (goal-oriented, verifier-carrying capability deliveries that name
-guides/plays end-to-end); new `dev-guides-recipes-cache.json` sibling cache with
-two-hash invalidation (index hash + per-recipe sha, download-once bodies);
+**v0.8.0** (Current) — Create-on-Miss (maintainer mode): when guide search finds
+nothing and the dev-guides source repo is detected (`DEV_GUIDES_SRC` /
+auto-probe + 4-part signature), the navigator offers to author the topic and
+hands off to that repo's `/create-guide` command (which opens a PR, never
+deploys). Detect + offer + hand off only; consumer mode byte-for-byte unchanged.
+
+**v0.7.0** — Recipe Search mode over the separate agentic-recipes catalog
+(goal-oriented, verifier-carrying capability deliveries that name guides/plays
+end-to-end); new `dev-guides-recipes-cache.json` sibling cache with two-hash
+invalidation (index hash + per-recipe sha, download-once bodies);
 `disallowed-tools: WebFetch` hard-blocking the curl-only discipline. Guide search,
 `llms.txt`, and the guides cache are untouched. See `CHANGELOG.md` for the full
 history.

@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.7.0
+version: 0.8.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 disallowed-tools: WebFetch
 user-invocable: true
@@ -26,6 +26,7 @@ The navigator does **not** hardcode an order. The **caller** owns ordering — t
 - When another skill or agent needs domain knowledge beyond its bundled references
 - When the user mentions a specific guide topic
 - When a task is a whole **capability** (one end-to-end goal) rather than a single mechanic — try **recipe search** first
+- **Maintainer mode only:** when you maintain the dev-guides source repo and guide search finds *nothing* for a topic — see **Create-on-Miss** below
 - NOT for: plugin methodology references (those are in drupal-dev-framework/references/)
 
 ## Core Workflow
@@ -206,11 +207,41 @@ The recipe is **sequence + opinion + verifier**; the guides it cites are the **m
 2. **Surface the recipe's verifier to the caller** — it is the drift check that confirms the
    capability was delivered correctly.
 
+## Create-on-Miss (maintainer mode only)
+
+When guide search finds **no** guide for a topic **and** the local dev-guides
+**source** repo is detected, the navigator **offers** to author the missing guide
+and **hands off** to the repo's own `/create-guide` command. It only detects,
+offers, and hands off — it **never** authors, partitions, commits, or deploys.
+**Consumer mode is unchanged:** no repo detected → no offer, no behavior change;
+this section never alters guide search, `llms.txt`, or the guides cache.
+
+**Fires only when both hold:** (1) a *genuine* guide-search miss — Core Workflow
+steps 1–7 **and** the `references/guide-index.md` fallback exhausted with no
+matching topic/guide (a weak match is not a miss; recipe-search misses defer to
+guide search, not here); and (2) **maintainer mode** — a source root resolved
+from `DEV_GUIDES_SRC` → `$PWD` → `~/workspace/dev-guides`, accepted only on the
+full 4-part signature (`mkdocs.yml` + `scripts/generate_llms.py` +
+`docs/agentic-recipes/` + a `.claude/agents/guide-*`; partial = consumer mode).
+
+Then: **offer, never auto** ("No topic exists for `<topic>` — author via
+`/create-guide`?"; declined → STOP), and **hand off, don't reimplement** —
+`/create-guide` is a dev-guides *project* command the navigator can't invoke
+programmatically, so tell the user to run `/create-guide <topic>` from the
+detected repo (cd / open a session there first if needed), then **STOP**. Frame
+it honestly: `/create-guide` researches a source guide, pauses for review,
+partitions, and **opens a PR — never merges or deploys** (deploy = a human
+merging the PR).
+
+See `references/create-on-miss.md` for the exact detection probe, the offer
+protocol, and the full `/create-guide` lifecycle.
+
 ## See Also
 
 - `references/quick-reference.md` — condensed workflow table + common mistakes
 - `references/examples.md` — worked routing examples (user request → correct guide)
 - `references/troubleshooting.md` — what to do when a workflow step fails
 - `references/cache-format.md` — guides cache + recipes cache formats (cross-plugin contract)
+- `references/create-on-miss.md` — maintainer-mode detection + `/create-guide` handoff protocol
 - `references/manifest-schema.md` — build output (llms.txt + llms.hash)
 - `references/guide-index.md` — fallback keyword table (offline/network failure)

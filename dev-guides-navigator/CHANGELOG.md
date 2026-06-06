@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 (2026-06-06)
+
+### Added
+- **Create-on-Miss (maintainer mode)** — when guide search finds **no** guide for a topic **and** the local dev-guides **source** repo is detected, the navigator now **offers** to author the missing guide and **hands off** to that repo's own `/create-guide` command. New `## Create-on-Miss (maintainer mode only)` SKILL.md section + `references/create-on-miss.md` with the full protocol.
+- **Detection** — resolves a source root in priority order: `DEV_GUIDES_SRC` env/config → `$PWD` → `~/workspace/dev-guides`, accepting a candidate only if it carries the full 4-part signature (`mkdocs.yml` + `scripts/generate_llms.py` + `docs/agentic-recipes/` + a `.claude/agents/guide-*` agent). A partial signature is not a match.
+- **Thin by design** — the navigator only **detects + offers + hands off**. It never authors, partitions, commits, pushes, or deploys; authoring belongs to the dev-guides repo's agents/scripts via `/create-guide`. The offer is explicit (never auto). `/create-guide` itself pauses for human source review and ends at a **PR** — it never merges or deploys (deploy = a human merging the PR).
+- **Misses only** — fires on a genuine guide-search miss (Core Workflow steps 1–7 + the `guide-index.md` fallback exhausted). Recipe-search misses defer to guide search, not to this flow. Refreshing existing guides is out of scope.
+
+### Unchanged
+- **Consumer mode is byte-for-byte unchanged.** No dev-guides source repo detected → no offer, no behavior change. Guide search, recipe search, `llms.txt`, the guides cache, and the recipes cache are untouched.
+
 ## 0.7.0 (2026-06-06)
 
 ### Added
