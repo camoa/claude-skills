@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 (2026-06-06)
+
+### Added
+- **Recipe Search mode** — a second routing path, symmetric to guide search, over the separate **agentic-recipes** catalog (`agentic-recipes.txt` + `agentic-recipes.hash`). Recipes are goal-oriented, prescriptive capability deliveries that **name** the guides/plays they need (never duplicate them) and carry a **verifier**. New `## Recipe Search` SKILL.md section: index-cache via `.hash`/`.txt`; match on `capability` + when-to-use (no match → "fall back to guide search" + STOP, never fabricate); body download-once keyed by the per-line `(sha:XXXXXXXX)` (raw markdown only, URL derived from the index line's site-url); apply by handing each named guide/play to the existing guide-search flow and **surfacing the verifier** to the caller.
+- **Two modes, caller owns order** — a "Two modes" overview + a When-to-Use note state that the navigator exposes both guide search and recipe search with **no hardcoded order**; the caller (e.g. the drupal-dev-framework orchestrator) decides, typically recipe-search first then guide-search.
+- **`dev-guides-recipes-cache.json`** — a new sibling cache file (same dasherized-cwd derivation as the guides cache), schema `{ index: { hash, fetched_at, content }, recipes: { <name>: { sha, fetched_at, content } } }`. Two-hash invalidation: `agentic-recipes.hash` gates the index; each per-line `sha` gates one body, checkable without a fetch. Documented in `references/cache-format.md` as a cross-plugin contract.
+- **`disallowed-tools: WebFetch`** in SKILL.md frontmatter (CC-1) — turns the three prose "NEVER use WebFetch" warnings into a harness-level hard block, reinforcing the curl-only discipline for both modes.
+
+### Unchanged
+- **Guide search, `llms.txt`, and the guides cache (`dev-guides-cache.json`) are byte-for-byte untouched.** Recipe search is strictly additive.
+
 ## 0.6.0 (2026-05-21)
 
 ### Added

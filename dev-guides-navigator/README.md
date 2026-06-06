@@ -2,6 +2,13 @@
 
 Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/dev-guides/) site. Routes AI to the correct guide using hash-based caching and KG metadata for disambiguation.
 
+**Two modes (v0.7.0+):** the navigator routes over two separate published catalogs —
+**guide search** (`llms.txt`, atomic mechanics-level guides) and **recipe search**
+(`agentic-recipes.txt`, goal-oriented capability deliveries that sequence guides/plays
+end-to-end and carry a verifier). Both modes are exposed with **no hardcoded order** — the
+caller decides, typically recipe-search first, then guide-search. See
+[Recipe Search](#recipe-search-v070) below.
+
 > **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — this plugin is pure-skill and the highest-portability one in the marketplace.
 
 ## Installation
@@ -60,6 +67,36 @@ curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/form
 # Specific guide (raw GitHub)
 curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/drupal/forms/form-validation.md
 ```
+
+The `disallowed-tools: WebFetch` frontmatter (v0.7.0+) makes this a harness-level hard
+block, not just a convention.
+
+## Recipe Search (v0.7.0)
+
+Alongside guide search, the navigator exposes **recipe search** over the separate
+**agentic-recipes** catalog. A recipe is a prescriptive, goal-oriented delivery of **one
+capability** end-to-end: it **names** the guides and plays it needs (never duplicating
+them) and carries a **verifier** (the drift check). The recipes index is published
+separately from `llms.txt` so the guides index never grows by a recipe.
+
+```bash
+# Recipe index hash (gates the index cache)
+curl -s https://camoa.github.io/dev-guides/agentic-recipes.hash
+
+# Recipe index
+curl -s https://camoa.github.io/dev-guides/agentic-recipes.txt
+
+# Recipe body (raw GitHub — derived from the index line's site-url)
+curl -s https://raw.githubusercontent.com/camoa/dev-guides/main/docs/agentic-recipes/drupal/responsive-image-wiring.md
+```
+
+Flow: cache the index by `agentic-recipes.hash` → match a line on `capability` +
+when-to-use (no match → fall back to guide search, never fabricate) → download the body
+**once**, keyed by the line's per-recipe `(sha:XXXXXXXX)` → hand each guide/play the recipe
+names to the existing guide-search flow, and surface the recipe's verifier to the caller.
+Guide search, `llms.txt`, and the guides cache are untouched — recipe search is strictly
+additive. Recipe bodies cache to a separate sibling file,
+`dev-guides-recipes-cache.json` (see `references/cache-format.md`).
 
 ## Configuration
 
@@ -122,7 +159,7 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 | Problem | Fix |
 |---------|-----|
-| AI uses WebFetch instead of curl | The `allowed-tools` field excludes WebFetch — if it still happens, check that the plugin is installed |
+| AI uses WebFetch instead of curl | The `disallowed-tools: WebFetch` frontmatter hard-blocks it — if it still happens, check that the plugin is installed and the skill is active |
 | curl fails (network error) | Falls back to built-in `references/guide-index.md` keyword table |
 | No topic matches | Broaden keywords or check category sections in llms.txt |
 | Guide too large for context | Request only the specific section from the routing table |
@@ -134,10 +171,13 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-**v0.6.0** (Current) — SKILL.md conciseness pass (extracted quick-reference,
-examples, and troubleshooting to `references/`); `Setup` hook for `llms.txt`
-cache pre-warming; `skillOverrides` and skill-listing-budget documentation. See
-`CHANGELOG.md` for the full history.
+**v0.7.0** (Current) — Recipe Search mode over the separate agentic-recipes
+catalog (goal-oriented, verifier-carrying capability deliveries that name
+guides/plays end-to-end); new `dev-guides-recipes-cache.json` sibling cache with
+two-hash invalidation (index hash + per-recipe sha, download-once bodies);
+`disallowed-tools: WebFetch` hard-blocking the curl-only discipline. Guide search,
+`llms.txt`, and the guides cache are untouched. See `CHANGELOG.md` for the full
+history.
 
 ## License
 

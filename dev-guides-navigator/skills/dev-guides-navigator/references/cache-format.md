@@ -4,6 +4,16 @@ This file is a **contract**. Other plugins (notably `drupal-dev-framework`)
 locate and parse this cache directly. Do not change the location derivation or
 the schema without updating those consumers.
 
+There are **two sibling cache files**, same directory, same path derivation:
+
+| File | Catalog | Written by | Schema |
+|------|---------|-----------|--------|
+| `dev-guides-cache.json` | guides (`llms.txt`) | guide search | `{ hash, fetched_at, content }` |
+| `dev-guides-recipes-cache.json` | agentic recipes (`agentic-recipes.txt`) | recipe search (v0.7.0+) | `{ index, recipes }` (below) |
+
+The two files are independent. Recipe search (v0.7.0) added the recipes cache; it
+does **not** change the guides-cache schema.
+
 ## Location
 
 ```
@@ -84,3 +94,73 @@ the compact `llms_txt` placeholder variant.
 
 **NEVER use WebFetch** — it summarizes content through AI, destroying the
 structured formats needed for matching and routing.
+
+---
+
+## Recipes Cache (v0.7.0)
+
+A **second, independent** cache file for the agentic-recipes catalog. Recipe
+search consumes a separate published index (`agentic-recipes.txt` +
+`agentic-recipes.hash`), deliberately distinct from `llms.txt`, so it gets its
+own cache file. The guides cache above is untouched.
+
+### Location
+
+```
+~/.claude/projects/<dasherized-cwd>/memory/dev-guides-recipes-cache.json
+```
+
+Same `<dasherized-cwd>` derivation and the same glob fallback as the guides
+cache (see [Location](#location) above). Only the filename differs.
+
+### Structure
+
+```json
+{
+  "index": {
+    "hash":       "<contents of agentic-recipes.hash>",
+    "fetched_at": "<ISO-8601 timestamp>",
+    "content":    "<full agentic-recipes.txt markdown>"
+  },
+  "recipes": {
+    "<name>": {
+      "sha":        "<8-char per-recipe content hash from the index line>",
+      "fetched_at": "<ISO-8601 timestamp>",
+      "content":    "<full RECIPE.md markdown>"
+    }
+  }
+}
+```
+
+- `index` — caches the recipe **index** (`agentic-recipes.txt`), gated by the
+  global `agentic-recipes.hash`. Same `{ hash, fetched_at, content }` shape as
+  the guides cache, nested under `index`.
+- `recipes` — a map keyed by recipe **name** (the `<name>` token from the index
+  line, e.g. `responsive_image_wiring`). Each entry caches one recipe body
+  (`RECIPE.md`), gated by that recipe's per-line `(sha:XXXXXXXX)`.
+
+### Two hashes, two jobs
+
+- **Index invalidation** — `agentic-recipes.hash` gates the `index` cache, exactly
+  as `llms.hash` gates the guides cache.
+- **Per-body invalidation** — each recipe body is gated by its own per-line
+  `(sha:XXXXXXXX)`, **checkable without fetching the body**. A body is downloaded
+  **exactly once per content version** and reused while its sha is unchanged.
+
+### Flow
+
+**Index (every recipe search):**
+1. `curl -s https://camoa.github.io/dev-guides/agentic-recipes.hash`
+2. Compare with cached `index.hash`
+   - Same → use cached `index.content`
+   - Different / no cache → `curl -s …/agentic-recipes.txt`, rewrite
+     `index = { hash, fetched_at, content }`
+
+**Body (download-once, per matched recipe):**
+1. Read the matched index line's `(sha:XXXXXXXX)`
+2. `recipes.<name>.sha` equals it → reuse `recipes.<name>.content`, **no fetch**
+3. Else → `curl -s` the raw `.md` **once** (raw URL derived from the index line's
+   site-url — never the GH Pages HTML), store
+   `recipes.<name> = { sha, fetched_at, content }`
+
+**NEVER use WebFetch**, never the GH Pages HTML URL for a body (raw only).

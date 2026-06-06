@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.15.9"
+    "version": "1.15.10"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Uses hash-based caching and KG metadata (concepts, disambiguation, relationships) to route AI to the correct guide. All fetches use curl (never WebFetch) to preserve raw structured content. v0.6.0 adds a Setup hook that pre-warms the llms.txt cache for instant first lookups, a leaner SKILL.md with reference extraction, and skillOverrides / skill-listing-budget documentation.",
-      "version": "0.6.0",
+      "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + KG metadata route AI to the correct guide; all fetches use curl (never WebFetch) to preserve raw structured content. v0.7.0 adds a second routing mode — recipe search — over the separate agentic-recipes catalog (verifier-carrying capability deliveries that name guides/plays end-to-end), a dev-guides-recipes-cache.json sibling cache with two-hash invalidation (index hash + per-recipe sha, download-once bodies), and disallowed-tools: WebFetch. Both modes exposed, caller owns order; guide search untouched.",
+      "version": "0.7.0",
       "author": {
         "name": "camoa"
       },
@@ -23,6 +23,8 @@
         "guides",
         "dev-guides",
         "llms-txt",
+        "agentic-recipes",
+        "recipe-search",
         "knowledge-graph",
         "caching",
         "routing",
