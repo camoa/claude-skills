@@ -340,9 +340,14 @@ The lead synthesizes into `.reports/security-debate.md`:
 {Key disagreements and how they resolved}
 ```
 
+## Where This Fits (defense in depth)
+
+This debate is the **whole-codebase, multi-agent OWASP** layer — it has **no native equivalent**. It sits above the native diff/in-session layers: the official **security-guidance** plugin reviews Claude's *own* edits in session (auto, no command; offered by `/code-quality:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. Neither chains findings into attack scenarios, maps OWASP/CWE coverage, or challenges severity across competing perspectives. Run those native layers to reduce what reaches a scan; run this debate to pressure-test the whole-tree findings `/code-quality:security` produced.
+
 ## Related Commands
 
 - `/code-quality:security` - Run security audit (prerequisite — generates the report this command debates)
 - `/code-quality:audit` - Full audit (includes security)
 - `/code-quality:architecture-debate` - Architecture and SOLID debate (Pragmatist + Purist + Maintainer)
 - `/code-quality:review` - Rubric-scored code review
+- native `/security-review` - generic diff-scoped vuln pass; the **security-guidance** plugin covers Claude's own in-session edits. Both complement — neither replaces — this whole-codebase debate layer.

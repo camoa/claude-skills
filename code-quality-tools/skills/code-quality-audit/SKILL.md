@@ -78,6 +78,8 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 
 > **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
 
+> **Note — the `security-guidance` plugin and native `/security-review`:** This skill's security flows (`/code-quality:security`, the debates) are the **whole-codebase / CI SAST** layer — framework-aware multi-tool scans across the whole tree. They sit *below* two native layers in Claude Code's defense-in-depth model: the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit / end-of-turn / commit — auto, no command; offered by `/code-quality:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. The native layers reduce what reaches a whole-tree scan; they do **not** replace it — `/security-review` cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run this skill's security audit for the framework-specific, whole-codebase coverage native review does not perform.
+
 ## When to Use
 
 **Drupal projects:**

@@ -21,14 +21,15 @@ Interactive wizard to install and configure code quality tools for your project.
 3. Configures quality thresholds
 4. Installs selected tools
 5. Generates `.code-quality.json` configuration
-6. Optionally sets up git hooks (GrumPHP/Husky)
-7. Runs baseline audit
-8. Displays next steps
+6. Optionally offers the in-session **security-guidance** plugin (soft offer — never auto-installs)
+7. Optionally sets up git hooks (GrumPHP/Husky)
+8. Runs baseline audit
+9. Displays next steps
 
 ## Setup Workflow
 
 ```
-Detection → Tool Selection → Threshold Config → Installation → Git Hooks (optional) → Baseline Audit → Summary
+Detection → Tool Selection → Threshold Config → Installation → Security Plugin (optional) → Git Hooks (optional) → Baseline Audit → Summary
 ```
 
 ## Tool Categories
@@ -114,6 +115,27 @@ The `/code-quality:solid`, `/code-quality:dry`, and `/code-quality:review` comma
 Then install the language-server binary so it is on `$PATH` (see each plugin's README for the exact package). If `/plugin` shows `Executable not found in $PATH`, the binary is missing.
 
 This is **recommended, not required** — every command falls back to full-file reads when no LSP plugin is present. Analysis-depth gains and the Drupal `.module`/`.inc`/`.theme` indexing caveat: `skills/code-quality-audit/references/code-intelligence.md`.
+
+## In-Session Security Plugin (recommended, optional)
+
+The official **security-guidance** plugin reviews Claude's *own* code edits for vulnerabilities while it works — a fast per-edit pattern match (no model call), a background end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes — and feeds findings back into the same session for Claude to fix. It is the **in-session** layer of defense in depth: it reduces what reaches the PR (Code Review / `/code-review ultra`) and the whole-codebase scan (`/code-quality:security`) without replacing either.
+
+This plugin's audits scan the *whole tree*; security-guidance watches Claude's *live edits*. They complement each other.
+
+**Soft offer — never auto-install.** Ask the user (plain chat, not a silent install):
+
+> Install the in-session **security-guidance** plugin? It reviews Claude's own edits for vulnerabilities as it works, in addition to this plugin's whole-tree scans. [y/N]
+
+On **yes**, have the user run (the install needs network + their consent, so the wizard does not run it for them):
+
+```
+/plugin install security-guidance@claude-plugins-official
+/reload-plugins
+```
+
+Prerequisites: Claude Code **2.1.144+**, `python3` on `PATH`, and a git repository. On first run it creates a virtual environment under `~/.claude/security/` (needs `pip` + network); if that install fails it falls back to a single-shot commit review. Once installed it runs automatically — nothing to invoke. If the marketplace isn't found, run `/plugin marketplace add anthropics/claude-plugins-official` first, then retry.
+
+Default is **No**. To enable it for everyone who clones the repo, add it to checked-in `.claude/settings.json` under `enabledPlugins` instead (see the plugin's docs).
 
 ## Threshold Configuration
 

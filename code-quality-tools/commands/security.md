@@ -108,8 +108,23 @@ Common issues:
 
 See: `references/troubleshooting.md#security-scan-issues`
 
+## How This Fits — Security Layering (defense in depth)
+
+`/code-quality:security` is the **whole-codebase / CI SAST** layer — a multi-tool scan (Semgrep, Trivy, Gitleaks, Psalm taint, Drush/Composer advisories, Roave, Socket) across the entire tree, framework-aware for Drupal/Next.js. It is one layer in Claude Code's defense-in-depth model; the earlier layers are **native** and complementary:
+
+| Stage | Tool | Covers |
+|---|---|---|
+| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Common vulns in code Claude writes, fixed the same session. `/code-quality:setup` offers to install it. |
+| On demand — diff | native `/security-review` | One generic, diff-scoped vuln pass on the current branch |
+| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context; tune via `/code-quality:generate-review-md` |
+| Whole-codebase / CI | **`/code-quality:security`** (this command) + the debates | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
+
+The native diff-scoped layers reduce what reaches this scan — they do **not** replace it. `/security-review` is generic and diff-only; it cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run `/code-quality:security` for the whole-tree, framework-specific coverage.
+
 ## Related Commands
 
 - `/code-quality:audit` - Full audit (includes security)
-- `/code-quality:setup` - Install security tools
+- `/code-quality:setup` - Install security tools (also offers the in-session **security-guidance** plugin)
 - `/code-quality:security-debate` - Multi-perspective debate analysis of security findings (requires agent teams)
+- `/code-quality:generate-review-md` - Configure the PR-stage managed Code Review (`REVIEW.md`)
+- native `/security-review` - on-demand generic diff-scoped vuln pass (complements, does not replace, this whole-codebase scan)

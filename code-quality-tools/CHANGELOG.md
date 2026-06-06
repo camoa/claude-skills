@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-06-06
+
+### Native review/security alignment + security-guidance adoption
+
+First release of the 2026-05-29 feature wave. Stops pointing the cloud-review wrapper at a deprecated alias, adopts the one in-session security layer the plugin lacked, and positions the plugin in its real lane — whole-codebase / CI SAST, the layer native diff-scoped review does not cover. No SAST script or gate logic changed — doc / wrapper retargeting + a soft install offer only. Grounded in the cached Code Review, Ultrareview, Security Guidance, and Security guides (2026-05-29 snapshot).
+
+### Changed
+
+- **Cloud-review wrapper repointed to canonical `/code-review ultra`.** `commands/ultrareview.md` targeted the **deprecated alias** `/ultrareview` throughout (description, body, hand-off step, platform-refusal + cost notices, See-also). All **interactive** references now point to `/code-review ultra` (the canonical form per the Ultrareview guide — `/ultrareview` remains a working alias, noted inline). The headless **`claude ultrareview` CLI subcommand is kept unchanged** (still the documented non-interactive form; exit-code contract `0`/`1`/`130` intact). `plugin.json` + root `marketplace.json` descriptions: "an /ultrareview cloud-review wrapper" → "a /code-review ultra cloud-review wrapper". The `/code-quality:ultrareview` command name and file are **kept** for back-compat; only the built-in target changed. Cross-links in `audit.md` / `review.md` / `generate-review-md.md` / `SKILL.md` / `README.md` were verified to reference only the kept CLI, the kept plugin-command name, or the `commands/ultrareview.md` file path — no interactive-target edit was needed there.
+
+### Added
+
+- **Adopted the official `security-guidance` plugin as the in-session layer (CC-3).** Positioned per the official defense-in-depth layering model (in-session edits → security-guidance; on-demand diff → native `/security-review`; PR → Code Review / `/code-review ultra`; whole-codebase / CI → this plugin) at four points:
+  - **`commands/security.md`** — new "How This Fits — Security Layering" table + Related Commands entries (security-guidance, native `/security-review`, `generate-review-md`).
+  - **`skills/code-quality-audit/SKILL.md`** — a Note block parallel to the existing `/simplify` note: this skill's security flows are the whole-codebase SAST layer; native `/security-review` + security-guidance reduce what reaches it but cannot do whole-repo framework SAST / taint / CVE / OWASP debate.
+  - **`commands/security-debate.md`** — a "Where This Fits" note (the multi-agent OWASP debate has no native equivalent) + a Related Commands entry.
+  - **`README.md`** — a "Where this fits (defense in depth)" table at the top of Security Layers + an "In-session security" bullet in Watch-mode & Scheduled Sweeps.
+- **Soft install offer for `security-guidance` in `commands/setup.md`** — new "In-Session Security Plugin (recommended, optional)" section: `/plugin install security-guidance@claude-plugins-official` + `/reload-plugins`, prerequisites (Claude Code 2.1.144+, python3, git; venv under `~/.claude/security/`). **Never auto-installs** — the wizard asks (default No) because the install needs network + the user's consent. Added to the "What This Does" list and the Setup Workflow diagram.
+
+Marketplace metadata bumped 1.15.11 → 1.15.12.
+
 ## [3.6.1] - 2026-05-20
 
 ### Fixed

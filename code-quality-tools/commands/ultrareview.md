@@ -1,12 +1,14 @@
 ---
-description: Run Claude Code's cloud-hosted multi-agent deep code review (/ultrareview) with pre-flight platform checks and cost transparency. Use when user says "deep review", "pre-merge review", "ultrareview", "cloud review", "rigorous review", "thorough review", "find bugs before merge", "multi-agent review", "verified review".
+description: Run Claude Code's cloud-hosted multi-agent deep code review (/code-review ultra) with pre-flight platform checks and cost transparency. Use when user says "deep review", "pre-merge review", "ultrareview", "cloud review", "rigorous review", "thorough review", "find bugs before merge", "multi-agent review", "verified review".
 allowed-tools: Bash, Read
 argument-hint: "[PR-number]"
 ---
 
 # Ultrareview (Deep Cloud Review)
 
-Wrap Claude Code's built-in `/ultrareview` with pre-flight platform compatibility checks and cost transparency. `/ultrareview` launches a fleet of reviewer agents in a remote Anthropic-managed sandbox, independently verifies each finding, and reports back via `/tasks` — best for pre-merge review on substantial changes.
+Wrap Claude Code's built-in `/code-review ultra` with pre-flight platform compatibility checks and cost transparency. `/code-review ultra` launches a fleet of reviewer agents in a remote Anthropic-managed sandbox, independently verifies each finding, and reports back via `/tasks` — best for pre-merge review on substantial changes.
+
+> **Command name note:** the canonical interactive command is **`/code-review ultra`**. `/ultrareview` still works as an alias, but this wrapper targets the canonical form. The **headless CLI** is the separate `claude ultrareview` subcommand (still valid — see "CI / Headless Mode" below).
 
 ## Usage
 
@@ -21,7 +23,7 @@ PR mode requires a `github.com` remote on the repository. If the repo is too lar
 
 1. Pre-flight compatibility check (fails cleanly on unsupported platforms)
 2. Cost transparency notice on first use of this session
-3. Invokes the built-in `/ultrareview` command with `$ARGUMENTS`
+3. Invokes the built-in `/code-review ultra` command with `$ARGUMENTS`
 4. Points user to `/tasks` to monitor progress
 
 ## Instructions
@@ -36,7 +38,7 @@ Ultrareview is NOT available on:
 - Organizations with Zero Data Retention (ZDR) enabled
 - API-key-only authentication (requires Claude.ai login via `/login`)
 
-Only Bedrock and Vertex expose local env vars. **Foundry, ZDR, and API-only cannot be reliably detected from the shell** — for those, the built-in `/ultrareview` itself will refuse with a platform error when the session tries to launch. Warn the user accordingly.
+Only Bedrock and Vertex expose local env vars. **Foundry, ZDR, and API-only cannot be reliably detected from the shell** — for those, the built-in `/code-review ultra` itself will refuse with a platform error when the session tries to launch. Warn the user accordingly.
 
 Check the env-var-detectable platforms. Treat only truthy values as "set" (empty, `0`, `false`, `no` mean disabled even if the variable exists):
 
@@ -53,7 +55,7 @@ fi
 
 If an env-detectable platform matches, STOP and respond:
 
-> `/ultrareview` is not available on {platform}. It runs on Claude Code on the web infrastructure, which is not reachable from Bedrock/Vertex/Foundry and is unavailable to organizations with Zero Data Retention enabled.
+> `/code-review ultra` is not available on {platform}. It runs on Claude Code on the web infrastructure, which is not reachable from Bedrock/Vertex/Foundry and is unavailable to organizations with Zero Data Retention enabled.
 >
 > Alternatives:
 > - `/code-quality:review <path>` — local single-pass rubric review
@@ -62,11 +64,11 @@ If an env-detectable platform matches, STOP and respond:
 
 If no env var matched, proceed — but tell the user:
 
-> Pre-flight only detects Bedrock and Vertex locally. If you're on Foundry, a ZDR organization, or authenticated with an API key only, the built-in `/ultrareview` will refuse at session launch. If that happens, run `/login` and sign in with Claude.ai, or fall back to `/code-quality:review`.
+> Pre-flight only detects Bedrock and Vertex locally. If you're on Foundry, a ZDR organization, or authenticated with an API key only, the built-in `/code-review ultra` will refuse at session launch. If that happens, run `/login` and sign in with Claude.ai, or fall back to `/code-quality:review`.
 
 ### Step 2 — Cost Transparency
 
-`/ultrareview` bills as extra usage — not included usage. On first invocation per session, show:
+`/code-review ultra` bills as extra usage — not included usage. On first invocation per session, show:
 
 > **Ultrareview runs on Anthropic cloud infrastructure and bills as extra usage** (separate from your plan's included tokens).
 >
@@ -75,7 +77,7 @@ If no env var matched, proceed — but tell the user:
 > | Pro / Max | 3 free runs (one-time, never refresh) | $5–$20 per run |
 > | Team / Enterprise | none | $5–$20 per run |
 >
-> Usage credits must be enabled on the account. Run `/usage-credits` to check or change the setting. If disabled, `/ultrareview` will block and link to billing settings.
+> Usage credits must be enabled on the account. Run `/usage-credits` to check or change the setting. If disabled, `/code-review ultra` will block and link to billing settings.
 >
 > A review takes 5–10 minutes and runs in the background — track it with `/tasks`.
 
@@ -104,17 +106,17 @@ If missing, STOP:
 
 > PR mode requires a `github.com` remote. Either push your branch to GitHub and retry, or run `/code-quality:ultrareview` (no arguments) to review your local branch diff instead.
 
-### Step 4 — Hand Off to the Built-in /ultrareview
+### Step 4 — Hand Off to the Built-in /code-review ultra
 
-A command body cannot invoke another *slash* command, so the interactive `/ultrareview` must be run by the user. (This limitation does **not** apply to CI/headless use — the `claude ultrareview` CLI subcommand *is* Bash-invokable; see "CI / Headless Mode" below.) After the pre-flight passes, tell the user:
+A command body cannot invoke another *slash* command, so the interactive `/code-review ultra` must be run by the user. (This limitation does **not** apply to CI/headless use — the `claude ultrareview` CLI subcommand *is* Bash-invokable; see "CI / Headless Mode" below.) After the pre-flight passes, tell the user:
 
-> Pre-flight passed. Run `/ultrareview $ARGUMENTS` to start the review.
+> Pre-flight passed. Run `/code-review ultra $ARGUMENTS` to start the review.
 >
 > The built-in will show a confirmation dialog with the file/line count, remaining free runs, and estimated cost before the session launches. Monitor progress with `/tasks` — the review runs in the background, so you can keep coding or close the terminal.
 
 ## CI / Headless Mode (`claude ultrareview`)
 
-For pre-merge gating in CI or scripts, use the `claude ultrareview` CLI subcommand instead of the interactive slash command. It launches the same cloud review, blocks until the remote review finishes, prints findings to stdout, and returns an exit code — so a pipeline step can gate on it directly. Unlike the `/ultrareview` slash command, this subcommand runs from a Bash step.
+For pre-merge gating in CI or scripts, use the `claude ultrareview` CLI subcommand instead of the interactive slash command. It launches the same cloud review, blocks until the remote review finishes, prints findings to stdout, and returns an exit code — so a pipeline step can gate on it directly. Unlike the `/code-review ultra` slash command, this subcommand runs from a Bash step.
 
 ### Invocation
 
@@ -156,7 +158,7 @@ jq -e '[.bugs[]? | select(.severity=="high" or .severity=="critical")] | length 
 
 ### Cost discipline for CI
 
-A run that fails or is stopped **still consumes** one of the three free Pro/Max runs; paid runs bill $5–$20 as usage credits. Reserve `claude ultrareview` for merge-ready / release branches — do **not** wire it to `on: push`. For every-push gating use the cheaper local `/code-quality:audit --json`; use `claude ultrareview --json` only as a release-gate step. The Step 1 pre-flight platform constraints (Bedrock/Vertex/Foundry/ZDR/API-key-only) apply to the subcommand identically — it has the same authentication and usage-credit requirements as `/ultrareview`.
+A run that fails or is stopped **still consumes** one of the three free Pro/Max runs; paid runs bill $5–$20 as usage credits. Reserve `claude ultrareview` for merge-ready / release branches — do **not** wire it to `on: push`. For every-push gating use the cheaper local `/code-quality:audit --json`; use `claude ultrareview --json` only as a release-gate step. The Step 1 pre-flight platform constraints (Bedrock/Vertex/Foundry/ZDR/API-key-only) apply to the subcommand identically — it has the same authentication and usage-credit requirements as `/code-review ultra`.
 
 ## When to Use This vs `/code-quality:review`
 
@@ -174,4 +176,4 @@ A run that fails or is stopped **still consumes** one of the three free Pro/Max 
 - `/code-quality:audit` — full local audit (all tools, no rubric)
 - `/code-quality:generate-review-md` — tune managed Code Review (separate from ultrareview)
 - `skills/code-quality-audit/references/scheduled-sweeps.md` — scheduling reviews across local and cloud surfaces
-- `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to pick up review or fix work on a PR; distinct from `/ultrareview <PR>`, which clones a PR fresh to review it.
+- `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to pick up review or fix work on a PR; distinct from `/code-review ultra <PR>`, which clones a PR fresh to review it.
