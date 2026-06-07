@@ -69,9 +69,10 @@ Read the `## Review Gates` block in `task.md` (grammar below).
      hand later to change their mind.
 
   The first-run prompt always runs and always establishes the durable opt-in — a
-  `--include-/--skip-` flag does **not** suppress it. The flag is a one-run override
-  applied afterward (step 6.4): the prompt answer is what persists to the block; the
-  flag changes only this run.
+  `--include-/--skip-` flag does **not** suppress it — **except under `/review --headless`,
+  where the dispatcher is fully non-interactive (see *Headless mode* below).** The flag is
+  a one-run override applied afterward (step 6.4): the prompt answer is what persists to
+  the block; the flag changes only this run.
 
 ### Step 6.4 — Apply one-run flag overrides
 
@@ -86,6 +87,14 @@ this run only** — they are NOT written back to `## Review Gates`:
   `--skip-<gate>` flags).
 
 Record both in `dispatch_plan.overrides`.
+
+### Headless mode (`/review --headless`)
+
+When `/review` signals `--headless`, the dispatcher is **fully non-interactive** — this overrides the "first-run prompt always runs" rule in step 6.3:
+
+- **No opt-in prompt.** If the `## Review Gates` block is **absent**, treat every opt-in gate as `declined` **for this run only** — do **not** prompt, and do **not** write the block (the durable opt-in is established on the next *interactive* `/review`). A **present** block is honored as usual.
+- **`--ci` to every invoked gate (6.6 / 6.7).** Invoke each opted-in/auto-run visual gate in non-interactive mode: a diff over tolerance is recorded `verdict: fail` with **no** classification prompt and **no** baseline write (never auto-rotate a baseline under automation). Do not rely on the gate's own TTY/`$CI` autodetection — pass the signal explicitly.
+- **Fail-closed on classifier warnings.** A `bad_base_ref` / `no_merge_base` warning (step 6.2) under `--headless` forces the overall run non-zero rather than surfacing-and-proceeding — an unresolved diff base means conditional gates may have silently not run.
 
 ### Step 6.5 — Has the gate shipped?
 
