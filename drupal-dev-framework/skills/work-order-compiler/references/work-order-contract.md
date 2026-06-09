@@ -99,6 +99,8 @@ review_ref:   <task>/work-orders/wo-NN._review.json   | null   # RESERVED (M1): 
 critique_ref: <task>/work-orders/wo-NN._critique.json | null   # RESERVED (M1): ②'s §16.2 per-job critique verdict
                                     #   location (structural, not derivable — same logic as review_ref).
 risk_tier: low | medium | high | null   # RESERVED (M1): change-impact tier for ②'s risk-scaled critique (§16.2).
+                                    #   ERRATUM (within 1.0): the compiler does NOT populate this; ② derives the
+                                    #   OPERATIVE tier from the realized post-build diff in its _critique.json sidecar.
 size_estimate: <int> | null         # RESERVED (M1): ④ budget estimate.
 coverage_override: { reason: <str>, by: <str>, at: <iso8601> } | null   # RESERVED (M1): ③/human recorded override to
                                     #   dispatch a verified:false WO. Honored like a recorded bypass ⇒ ③ MUST NOT auto-merge.
@@ -254,7 +256,8 @@ mirror that records only its minted id back into `external_ids.beads`. Detail:
 | `verified` / `coverage_status` (fail-closed) | compiler (here) | `assert-dispatchable` (kernel, here) + ③ |
 | `coverage_override` | ③ / human | `assert-dispatchable` (here) ⇒ ③ no-auto-merge |
 | `autonomy_safe` | compiler (here) | `assert-dispatchable` (here) + ③ dispatch gate |
-| `gate_floor` / `review_ref` / `critique_ref` / `risk_tier` | compiler (here) | ② `/review` + §16.2 critique |
+| `gate_floor` | compiler (here) | ② reads (tiering + which gates) |
+| `review_ref` / `critique_ref` / `risk_tier` | reserved — compiler emits null; ② populates (sidecars + realized tier) | ② §16.2 critique |
 | `size_estimate` / WO count | compiler (here) | ④ budget governor |
 
 **OCP note:** the reserved fields (`review_ref` / `risk_tier` / `size_estimate` / `critique_ref` /
@@ -303,6 +306,8 @@ plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `
 - The **mechanical** injection boundary (transcript → shell/JSON/path) is structurally minimized on
   the load-bearing seam (the handle is built from git/disk, never the transcript). The **semantic**
   injection boundary (a judge that must READ the transcript can be steered) is **not closeable here**
-  — its real close is ②'s independent fresh-context critique. **Unattended operation on
-  high-`risk_tier` / security-touching work-orders is below the §14.5/§16.2 bar until ② ships.**
+  — ②'s independent fresh-context critique **narrows it (it does not close it): the judged diff is
+  itself attacker-authored, so the critic stays a semantic-injection target — a probabilistic
+  mitigation, not a structural close.** **Unattended operation on high-`risk_tier` / security-touching
+  work-orders is below the §14.5/§16.2 bar until ② ships.**
 - See `injection-boundary.md` for the mechanical-vs-semantic split in full.

@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "_doc": "Risk-tiering rules read by scripts/wo-risk-classify.sh (C7). Data-driven (OCP): add globs/extensions without touching the kernel. Globs are matched with bash [[ $file == $glob ]] where * spans '/'. A realized-diff file matching any security_glob => tier high (AR-C). A changed file whose extension is in executable_extensions => tier >= medium with a guaranteed security lens. NOTE: 'security in gate_floor' is NOT a trigger (it is invariantly true in the base set, AR-C); the gate_floor signal is 'gate_floor superset of base', computed by the kernel, not here.",
+  "security_globs": [
+    "*.routing.yml",
+    "*.permissions.yml",
+    "*.services.yml",
+    "*.role.*.yml",
+    "*user.role.*",
+    "*Access*.php",
+    "*Permission*.php",
+    "*Auth*.php",
+    "*Token*.php",
+    "*Credential*.php",
+    "*Password*.php",
+    "*Crypt*.php",
+    "*Security*.php",
+    "*Session*.php",
+    "*/access/*",
+    "*/Security/*",
+    "*/Access/*",
+    "*access*",
+    "*auth*",
+    "*permission*",
+    "*session*",
+    "*crypt*",
+    "*.install",
+    "*credential*",
+    "*secret*",
+    "*password*",
+    "*.htaccess",
+    "*settings*.php"
+  ],
+  "executable_extensions": [
+    "php", "module", "inc", "install", "theme", "profile", "engine",
+    "sh", "bash", "bats",
+    "js", "mjs", "cjs", "ts", "tsx", "jsx",
+    "py", "rb", "go", "rs", "java",
+    "twig"
+  ],
+  "tier_lenses": {
+    "low": ["skeptic"],
+    "medium": ["security", "correctness"],
+    "high": ["security", "correctness", "meets-ac"]
+  },
+  "base_gate_floor": ["tdd", "solid", "dry", "security", "guides"]
+}

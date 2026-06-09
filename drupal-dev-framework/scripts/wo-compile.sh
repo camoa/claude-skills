@@ -941,6 +941,7 @@ Usage: bash wo-compile.sh <subcommand> [args]
   assert-dispatchable <wo-file>                                          → {dispatchable,reason,override_used} (exit 0 iff dispatchable)
   collect-handle <worktree> <wo-file> [--checkpoint-before SHA]
                  [--dispatched B] [--override-used B] [--halt-reason R] [--build-returned B]  → the 10-key handle
+  frontmatter <wo-file>                                                 → parsed WO frontmatter JSON (safe parser; rejects YAML anchors)
 EOF
 }
 
@@ -955,6 +956,7 @@ case "$SUBCMD" in
   emit-frontmatter)     cmd_emit_frontmatter "$@" ;;
   assert-dispatchable)  cmd_assert_dispatchable "$@" ;;
   collect-handle)       cmd_collect_handle "$@" ;;
+  frontmatter)          wo_frontmatter_json "${1:-}"; printf '\n' ;;   # read-only; reuses the safe parser (②/gate_integration H1)
   ""|-h|--help|help)    usage; exit 0 ;;
   *) echo "wo-compile: unknown subcommand: $SUBCMD" >&2; usage >&2; exit 2 ;;
 esac

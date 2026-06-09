@@ -32,11 +32,13 @@ guaranteed, but off the load-bearing path.
 *A judge must **read** the transcript to decide, so persuasive content in it can steer the judgment.*
 
 Nothing about "data never code" stops a transcript from carrying text that biases a reading judge (a
-`/goal` loop, a merge decision, a critic). The real close is **② per-job adversarial critique
-(§16.2)**: an *independent* fresh-context critic that re-derives the verdict from the **artifacts**
-(the diff, the gate envelopes), not from the builder's self-narrative. Agent-team peer-to-peer
-`SendMessage` is the documented-superior primitive for that rung — a **forward seam for ②**, not built
-here.
+`/goal` loop, a merge decision, a critic). The **best available mitigation** is **② per-job adversarial
+critique (§16.2)**: an *independent* fresh-context critic that re-derives the verdict from the
+**artifacts** (the diff, the gate envelopes), not from the builder's self-narrative. **This NARROWS the
+class — it does not close it: the diff the critic must read is itself attacker-authored, so the critic
+remains a semantic-injection target. A probabilistic mitigation (a critic-prompt hostility contract),
+not a structural guarantee.** Fresh Task-tool fan-out is the unattended primitive; agent-team
+`SendMessage` is an attended escalation — a **forward seam for ②**, not built here.
 
 **Stated plainly:** the mechanical boundary is **necessary, not sufficient** for unattended high-risk
 autonomy. **Unattended operation on security-touching / high-`risk_tier` work-orders is below the
