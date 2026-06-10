@@ -52,6 +52,12 @@ Written by the `work-order-critique` skill at `<task>/work-orders/wo-NN.HALT` **
 `_review.json` to enforce — the HALT marker + the `blocking` field + the ship-gate verdict are the
 in-lane teeth. **No interim automated merge-enforcement until ③ consumes them** (honest).
 
+> **Shared `wo-NN.HALT` namespace (③ note, carry #7).** ③ `lifecycle_controls` also writes
+> `<task>/work-orders/wo-NN.HALT` — on retry-cap exhaustion, with `reason: "retry_cap_exhausted"` and
+> `by: "lifecycle_controls"` (a reason outside ②'s critique enum above). This is mechanically safe: the
+> ship-gate globs `*.HALT` and only **counts** markers, so any HALT (②'s or ③'s) raises the blocker count
+> and blocks `ship_ok`. The namespace is shared by design; the `reason`/`by` fields disambiguate origin.
+
 ## Consumer rule (③ / `wo-ship-gate.sh`)
 `mergeable(WO)` requires: the per-WO `_review.json` `overall_verdict==pass` AND a **present**
 `_critique.json` with `blocking==false` AND no `wo-NN.HALT`. **Absent / unreadable / `not_evaluated`**

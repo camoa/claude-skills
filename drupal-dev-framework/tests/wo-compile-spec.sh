@@ -1052,6 +1052,309 @@ RC=0; OUT=$(bash "$SUT" assert-dispatchable "$TSWO" 2>/dev/null) || RC=$?
 assert_eq "MEDIUM-3: a normal timestamped WO still parses + dispatches" "0" "$RC"
 
 # ═══════════════════════════════════════════════════════════════════════════
+# (h) set-status — K1 TDD test table (T1–T18)
+# ═══════════════════════════════════════════════════════════════════════════
+SSDIR="$TMPDIR/ss"
+mkdir -p "$SSDIR"
+
+# Fixtures are written with write_wo (already defined above) for simple cases
+# and inline cat for multi-line YAML (blocked_by lists, duplicate status keys).
+
+# === T1: ready → in_progress (legal dispatch transition) ===
+WO_SS1="$SSDIR/wo-ss1.md"
+write_wo "$WO_SS1" 'id: local:t#wo-ss1
+status: ready
+verified: true
+autonomy_safe: true'
+krun "" set-status "$WO_SS1" in_progress
+assert_eq "T1: ready→in_progress exit 0"               "0"           "$RC"
+assert_jq "T1: ready→in_progress ok:true"              '.ok'         'true'        "$OUT"
+assert_jq "T1: ready→in_progress changed:true"         '.changed'    'true'        "$OUT"
+assert_jq "T1: ready→in_progress previous_status"      '.previous_status' 'ready'  "$OUT"
+assert_jq "T1: ready→in_progress new_status"           '.new_status' 'in_progress' "$OUT"
+assert_jq "T1: ready→in_progress reason:dispatch"      '.reason'     'dispatch'    "$OUT"
+
+# === T2: in_progress → done ===
+WO_SS2="$SSDIR/wo-ss2.md"
+write_wo "$WO_SS2" 'id: local:t#wo-ss2
+status: in_progress'
+krun "" set-status "$WO_SS2" done
+assert_eq "T2: in_progress→done exit 0"   "0"    "$RC"
+assert_jq "T2: in_progress→done ok:true"  '.ok'  'true' "$OUT"
+assert_jq "T2: in_progress→done reason"   '.reason' 'ok' "$OUT"
+
+# === T3: in_progress → needs_rework ===
+WO_SS3="$SSDIR/wo-ss3.md"
+write_wo "$WO_SS3" 'id: local:t#wo-ss3
+status: in_progress'
+krun "" set-status "$WO_SS3" needs_rework
+assert_eq "T3: in_progress→needs_rework exit 0"  "0"    "$RC"
+assert_jq "T3: in_progress→needs_rework ok:true" '.ok'  'true' "$OUT"
+assert_jq "T3: in_progress→needs_rework reason"  '.reason' 'ok' "$OUT"
+
+# === T4: needs_rework → ready (the C2 return edge) ===
+WO_SS4="$SSDIR/wo-ss4.md"
+write_wo "$WO_SS4" 'id: local:t#wo-ss4
+status: needs_rework'
+krun "" set-status "$WO_SS4" ready
+assert_eq "T4: needs_rework→ready exit 0"       "0"    "$RC"
+assert_jq "T4: needs_rework→ready ok:true"      '.ok'  'true'    "$OUT"
+assert_jq "T4: needs_rework→ready reason:requeue" '.reason' 'requeue' "$OUT"
+
+# === T5: blocked → ready (all blocked_by siblings done — deps_cleared) ===
+WO_SS5_DEP="$SSDIR/wo-01-dep.md"
+write_wo "$WO_SS5_DEP" 'id: local:t#wo-01
+status: done'
+WO_SS5="$SSDIR/wo-02-main.md"
+cat > "$WO_SS5" <<'SS5EOF'
+---
+id: local:t#wo-02
+status: blocked
+blocked_by:
+  - local:t#wo-01
+---
+
+# Work Order
+SS5EOF
+krun "" set-status "$WO_SS5" ready
+assert_eq "T5: blocked→ready (deps done) exit 0"        "0"    "$RC"
+assert_jq "T5: blocked→ready ok:true"                   '.ok'  'true'         "$OUT"
+assert_jq "T5: blocked→ready reason:deps_cleared"       '.reason' 'deps_cleared' "$OUT"
+assert_jq "T5: blocked→ready changed:true"              '.changed' 'true'      "$OUT"
+
+# === T6: done → ready (terminal; illegal_transition) ===
+WO_SS6="$SSDIR/wo-ss6.md"
+write_wo "$WO_SS6" 'id: local:t#wo-ss6
+status: done'
+krun "" set-status "$WO_SS6" ready
+assert_eq "T6: done→ready exit non-zero"                        "1"     "$RC"
+assert_jq "T6: done→ready ok:false"                             '.ok'   'false' "$OUT"
+assert_jq "T6: done→ready reason illegal_transition:done->ready" '.reason' 'illegal_transition:done->ready' "$OUT"
+
+# === T7: ready → done (illegal_transition) ===
+WO_SS7="$SSDIR/wo-ss7.md"
+write_wo "$WO_SS7" 'id: local:t#wo-ss7
+status: ready'
+krun "" set-status "$WO_SS7" done
+assert_eq "T7: ready→done exit non-zero"                         "1"     "$RC"
+assert_jq "T7: ready→done ok:false"                              '.ok'   'false' "$OUT"
+assert_jq "T7: ready→done reason illegal_transition:ready->done" '.reason' 'illegal_transition:ready->done' "$OUT"
+
+# === T8: in_progress → in_progress (same-status noop; changed:false) ===
+WO_SS8="$SSDIR/wo-ss8.md"
+write_wo "$WO_SS8" 'id: local:t#wo-ss8
+status: in_progress'
+krun "" set-status "$WO_SS8" in_progress
+assert_eq "T8: in_progress→in_progress exit 0 (noop)" "0"    "$RC"
+assert_jq "T8: noop ok:true"                          '.ok'  'true'              "$OUT"
+assert_jq "T8: noop changed:false"                    '.changed' 'false'         "$OUT"
+assert_jq "T8: noop reason:noop_same_status"          '.reason' 'noop_same_status' "$OUT"
+
+# === T9: ready → bogus (invalid new_status) ===
+WO_SS9="$SSDIR/wo-ss9.md"
+write_wo "$WO_SS9" 'id: local:t#wo-ss9
+status: ready'
+krun "" set-status "$WO_SS9" bogus
+assert_eq "T9: invalid new_status exit non-zero"               "1"    "$RC"
+assert_jq "T9: invalid new_status ok:false"                    '.ok'  'false' "$OUT"
+assert_jq "T9: invalid new_status reason invalid_status:bogus" '.reason' 'invalid_status:bogus' "$OUT"
+
+# === T10: file status: foobar → ready (invalid current status) ===
+WO_SS10="$SSDIR/wo-ss10.md"
+write_wo "$WO_SS10" 'id: local:t#wo-ss10
+status: foobar'
+krun "" set-status "$WO_SS10" ready
+assert_eq "T10: invalid current status exit non-zero"                  "1"    "$RC"
+assert_jq "T10: invalid current status ok:false"                       '.ok'  'false' "$OUT"
+assert_jq "T10: invalid current status reason invalid_status:foobar"   '.reason' 'invalid_status:foobar' "$OUT"
+
+# === T11: FM with TWO status: lines ⇒ ambiguous_status_field (fail-closed) ===
+WO_SS11="$SSDIR/wo-ss11.md"
+cat > "$WO_SS11" <<'SS11EOF'
+---
+id: local:t#wo-ss11
+status: ready
+status: ready
+verified: true
+---
+
+# Work Order
+SS11EOF
+krun "" set-status "$WO_SS11" in_progress
+assert_eq "T11: two status: lines exit non-zero"     "1"    "$RC"
+assert_jq "T11: ambiguous_status_field ok:false"     '.ok'  'false'                  "$OUT"
+assert_jq "T11: ambiguous_status_field reason"       '.reason' 'ambiguous_status_field' "$OUT"
+
+# === T12: missing wo-file arg ⇒ exit 2 ===
+krun "" set-status
+assert_eq "T12: missing wo-file arg ⇒ exit 2" "2" "$RC"
+
+# === T13: metachar new_status (adversarial; no eval, no write, inert) ===
+WO_SS13="$SSDIR/wo-ss13.md"
+write_wo "$WO_SS13" 'id: local:t#wo-ss13
+status: ready'
+ORIG_SS13=$(cat "$WO_SS13")
+SS_EVIL='; rm -rf ~'
+krun "" set-status "$WO_SS13" "$SS_EVIL"
+assert_eq "T13: metachar status exit non-zero (invalid_status)"  "1"    "$RC"
+assert_jq "T13: metachar status ok:false"                        '.ok'  'false' "$OUT"
+assert_jq "T13: metachar status reason starts with invalid_status" '.reason | startswith("invalid_status")' 'true' "$OUT"
+AFTER_SS13=$(cat "$WO_SS13")
+assert_eq "T13: metachar status — file NOT modified (inert)"     "$ORIG_SS13" "$AFTER_SS13"
+
+# === T14: FM unreadable (__error__) ⇒ frontmatter_unreadable ===
+# A YAML alias triggers the anchor rejection in wo_frontmatter_json → __error__.
+WO_SS14="$SSDIR/wo-ss14.md"
+cat > "$WO_SS14" <<'SS14EOF'
+---
+anchor: &a ready
+status: *a
+---
+
+# Work Order
+SS14EOF
+krun "" set-status "$WO_SS14" ready
+assert_eq "T14: FM unreadable exit non-zero"               "1"    "$RC"
+assert_jq "T14: FM unreadable ok:false"                    '.ok'  'false' "$OUT"
+assert_jq "T14: FM unreadable reason:frontmatter_unreadable" '.reason' 'frontmatter_unreadable' "$OUT"
+
+# === T15: round-trip fidelity — only status: line changed, rest byte-identical ===
+WO_SS15="$SSDIR/wo-ss15.md"
+cat > "$WO_SS15" <<'SS15EOF'
+---
+id: local:t#wo-ss15
+kind: work-order
+status: ready
+verified: true
+autonomy_safe: true
+extra_field: should_be_preserved
+---
+
+# Round-trip body
+Body content preserved verbatim.
+This line must survive the write unchanged.
+SS15EOF
+ORIG_SS15=$(cat "$WO_SS15")
+krun "" set-status "$WO_SS15" in_progress
+assert_eq "T15: round-trip exit 0"   "0"    "$RC"
+assert_jq "T15: round-trip ok:true"  '.ok'  'true' "$OUT"
+NEW_SS15=$(cat "$WO_SS15")
+# The only changed line is `status: ready` → `status: in_progress`; everything else byte-identical.
+EXPECTED_SS15=$(printf '%s' "$ORIG_SS15" | sed 's/^status: ready$/status: in_progress/')
+assert_eq "T15: round-trip — body + other FM fields byte-identical; only status: changed" \
+  "$EXPECTED_SS15" "$NEW_SS15"
+
+# === T16: blocked (one blocked_by sibling still in_progress) → ready ⇒ deps_not_done ===
+WO_SS16_DEP="$SSDIR/wo-10-inprog.md"
+write_wo "$WO_SS16_DEP" 'id: local:t#wo-10
+status: in_progress'
+WO_SS16="$SSDIR/wo-11-blocked.md"
+cat > "$WO_SS16" <<'SS16EOF'
+---
+id: local:t#wo-11
+status: blocked
+blocked_by:
+  - local:t#wo-10
+---
+
+# Work Order
+SS16EOF
+ORIG_SS16=$(cat "$WO_SS16")
+krun "" set-status "$WO_SS16" ready
+assert_eq "T16: deps not done exit non-zero"                        "1"    "$RC"
+assert_jq "T16: deps not done ok:false"                             '.ok'  'false' "$OUT"
+assert_jq "T16: deps_not_done:<id> in reason"  '.reason | startswith("deps_not_done:")' 'true' "$OUT"
+AFTER_SS16=$(cat "$WO_SS16")
+assert_eq "T16: no write on deps failure — file unchanged" "$ORIG_SS16" "$AFTER_SS16"
+
+# === T17: blocked (no matching sibling file) → ready ⇒ deps_unresolvable ===
+WO_SS17="$SSDIR/wo-20-ghost.md"
+cat > "$WO_SS17" <<'SS17EOF'
+---
+id: local:t#wo-20
+status: blocked
+blocked_by:
+  - local:t#wo-99
+---
+
+# Work Order
+SS17EOF
+ORIG_SS17=$(cat "$WO_SS17")
+krun "" set-status "$WO_SS17" ready
+assert_eq "T17: unresolvable dep exit non-zero"                      "1"    "$RC"
+assert_jq "T17: deps_unresolvable ok:false"                          '.ok'  'false' "$OUT"
+assert_jq "T17: deps_unresolvable reason" '.reason | startswith("deps_unresolvable:")' 'true' "$OUT"
+AFTER_SS17=$(cat "$WO_SS17")
+assert_eq "T17: no write on unresolvable dep — file unchanged" "$ORIG_SS17" "$AFTER_SS17"
+
+# === T18: blocked (blocked_by: []) → ready ⇒ deps_cleared (no deps) ===
+WO_SS18="$SSDIR/wo-30-noblockers.md"
+cat > "$WO_SS18" <<'SS18EOF'
+---
+id: local:t#wo-30
+status: blocked
+blocked_by: []
+---
+
+# Work Order
+SS18EOF
+krun "" set-status "$WO_SS18" ready
+assert_eq "T18: empty blocked_by exit 0"               "0"    "$RC"
+assert_jq "T18: empty blocked_by ok:true"              '.ok'  'true'         "$OUT"
+assert_jq "T18: empty blocked_by reason:deps_cleared"  '.reason' 'deps_cleared' "$OUT"
+assert_jq "T18: empty blocked_by changed:true"         '.changed' 'true'     "$OUT"
+
+# === T19: CRLF file — set-status must preserve \r on the rewritten status line ===
+# Verify byte-identical fidelity for CRLF-encoded WO files: every line (including
+# the rewritten status: line) must still end with \r after the surgical write.
+WO_SS19="$SSDIR/wo-ss19.md"
+# Use '%s\r\n' to avoid the format-string-starting-with-'---' option-parse issue.
+printf '%s\r\n' '---' 'id: local:t#wo-ss19' 'status: ready' 'autonomy_safe: true' '---' '' '# Body' > "$WO_SS19"
+lines_total_pre=$(wc -l < "$WO_SS19")
+lines_cr_pre=$(grep -cP '\r$' "$WO_SS19" 2>/dev/null || echo 0)
+assert_eq "T19: pre-condition — fixture is CRLF (all lines end with \\r)" \
+  "$lines_total_pre" "$lines_cr_pre"
+krun "" set-status "$WO_SS19" in_progress
+assert_eq "T19: CRLF set-status exit 0"    "0"    "$RC"
+assert_jq "T19: CRLF set-status ok:true"  '.ok'  'true'        "$OUT"
+assert_jq "T19: CRLF set-status changed"  '.changed' 'true'    "$OUT"
+lines_total_after=$(wc -l < "$WO_SS19")
+lines_cr_after=$(grep -cP '\r$' "$WO_SS19" 2>/dev/null || echo 0)
+assert_eq "T19: CRLF preserved after set-status — all lines still CRLF (LOW-1)" \
+  "$lines_total_after" "$lines_cr_after"
+# Confirm the status VALUE was updated (not left as "ready")
+T19_STATUS=$(grep -oP '(?<=^status: )\S+' "$WO_SS19" 2>/dev/null | tr -d '\r' || echo "")
+assert_eq "T19: status value updated to in_progress" "in_progress" "$T19_STATUS"
+
+# === T20: blocked_by fragment with metachar → deps_unresolvable, no write (LOW-2) ===
+# A crafted fragment like "wo-*" must be rejected by grammar validation, not handed
+# to find as a shell glob (which could match exactly one unintended sibling).
+# Setup: controlled dir with ONE file matching "wo-*-*.md" and status:done, so
+# before the fix find() resolves a single match and the call succeeds (wrong).
+T20DIR="$TMPDIR/t20"
+mkdir -p "$T20DIR"
+# The lone sibling that the glob would match if not caught:
+printf '%s\n' '---' 'id: local:t#wo-00' 'status: done' '---' '' '# Done sibling' > "$T20DIR/wo-00-done.md"
+# The WO under test (named without "wo-NN-" prefix so it doesn't match the glob itself):
+cat > "$T20DIR/blocker.md" <<'T20EOF'
+---
+id: local:t#wo-50
+status: blocked
+blocked_by:
+  - local:t#wo-*
+---
+
+# Work Order
+T20EOF
+ORIG_T20=$(cat "$T20DIR/blocker.md")
+krun "" set-status "$T20DIR/blocker.md" ready
+assert_eq "T20: metachar fragment exit non-zero (LOW-2)"                            "1"    "$RC"
+assert_jq "T20: metachar fragment ok:false"                                         '.ok'  'false' "$OUT"
+assert_jq "T20: metachar fragment → deps_unresolvable" '.reason | startswith("deps_unresolvable:")' 'true' "$OUT"
+AFTER_T20=$(cat "$T20DIR/blocker.md")
+assert_eq "T20: metachar fragment — no write (file unchanged)" "$ORIG_T20" "$AFTER_T20"
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Dispatch hygiene
 # ═══════════════════════════════════════════════════════════════════════════
 RC=0; bash "$SUT" no-such-subcommand >/dev/null 2>&1 || RC=$?

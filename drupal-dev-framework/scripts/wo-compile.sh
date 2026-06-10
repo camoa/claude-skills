@@ -927,6 +927,206 @@ cmd_collect_handle() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# (h) set-status <wo-file> <new-status> — surgical status transition gate (K1).
+#
+# Enforces the legal-transition table (D4), the deps-done invariant for the
+# blocked→ready edge (M3), and validates both the current and new status as
+# known enum members before touching the file (injection rule 1).
+#
+# Legal transitions: blocked→ready (deps-guarded), ready→in_progress,
+#                    in_progress→done, in_progress→needs_rework,
+#                    needs_rework→ready.  done is terminal.
+#                    Same-status (x→x) = legal no-op (changed:false).
+#
+# Write = surgical: replaces ONLY the single `status:` line in the frontmatter
+# region via awk + temp-file + mv. Validates exactly one such line before write.
+#
+# stdout (always):
+#   {"ok":bool,"wo":"<id>","previous_status":"<s>","new_status":"<s>",
+#    "changed":bool,"reason":"<why>"}
+# exit 0 IFF ok; non-zero on illegal/invalid/unreadable/deps-fail; 2 on missing arg.
+# ─────────────────────────────────────────────────────────────────────────────
+cmd_set_status() {
+  local wo="${1:-}" new_status="${2:-}"
+
+  # --- Missing arg guard (exit 2; matches assert-dispatchable posture) ---
+  if [ -z "$wo" ] || [ -z "$new_status" ]; then
+    echo "wo-compile set-status: <wo-file> <new-status> required" >&2
+    jq -nc '{ok:false,wo:null,previous_status:null,new_status:null,changed:false,reason:"missing_arg"}'
+    return 2
+  fi
+
+  # --- Validate new_status BEFORE any read or write (injection rule 1).
+  #     A metachar-laden arg is inert: it won't match any enum pattern and
+  #     is passed via jq --arg (data, never code).  ---
+  case "$new_status" in
+    ready|blocked|in_progress|done|needs_rework) ;;
+    *)
+      jq -nc --arg ns "$new_status" \
+        '{ok:false,wo:null,previous_status:null,new_status:$ns,changed:false,reason:("invalid_status:"+$ns)}'
+      return 1
+      ;;
+  esac
+
+  # --- Read current frontmatter via the safe parser (rejects aliases) ---
+  local fm; fm=$(wo_frontmatter_json "$wo")
+  local err; err=$(printf '%s' "$fm" | jq -r '.__error__ // empty' 2>/dev/null)
+  if [ -n "$err" ]; then
+    jq -nc --arg ns "$new_status" \
+      '{ok:false,wo:null,previous_status:null,new_status:$ns,changed:false,reason:"frontmatter_unreadable"}'
+    return 1
+  fi
+
+  # --- Extract WO id and current status (both via jq --arg; data only) ---
+  local wo_id; wo_id=$(printf '%s' "$fm" | jq -r '.id // ""' 2>/dev/null)
+  [ -z "$wo_id" ] && wo_id=$(basename "$wo" .md)
+  local cur_status; cur_status=$(printf '%s' "$fm" | jq -r '.status // ""' 2>/dev/null)
+
+  # --- Validate current status is a known enum member ---
+  case "$cur_status" in
+    ready|blocked|in_progress|done|needs_rework) ;;
+    *)
+      jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" \
+        '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("invalid_status:"+$cs)}'
+      return 1
+      ;;
+  esac
+
+  # --- Same-status no-op (legal; aids idempotent crash-recovery re-runs) ---
+  if [ "$cur_status" = "$new_status" ]; then
+    jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" \
+      '{ok:true,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:"noop_same_status"}'
+    return 0
+  fi
+
+  # --- Legal-transition table (D4; done is terminal; all other edges below).
+  #     Uses colon separator to avoid `>` being parsed as shell redirection.  ---
+  local legal=0
+  case "${cur_status}:${new_status}" in
+    blocked:ready|ready:in_progress|in_progress:done|in_progress:needs_rework|needs_rework:ready)
+      legal=1 ;;
+  esac
+  if [ "$legal" -eq 0 ]; then
+    jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" \
+      '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("illegal_transition:"+$cs+"->"+$ns)}'
+    return 1
+  fi
+
+  # --- blocked→ready: kernel-guarded deps-done invariant (M3).
+  #     For each id in blocked_by[], resolve <dirname>/<wo-NN>-*.md and assert
+  #     status=="done" via wo_frontmatter_json.  Any sibling not done, missing,
+  #     ambiguous (≠1 match), or unreadable ⇒ fail-closed, no write.  ---
+  if [ "$cur_status" = "blocked" ] && [ "$new_status" = "ready" ]; then
+    local blocked_by_json; blocked_by_json=$(printf '%s' "$fm" | jq -c '.blocked_by // []' 2>/dev/null)
+    local blocked_by_len; blocked_by_len=$(printf '%s' "$blocked_by_json" | jq 'length' 2>/dev/null)
+
+    if [ "${blocked_by_len:-0}" -gt 0 ]; then
+      local wo_dir; wo_dir=$(dirname "$wo")
+      local dep_id dep_fragment
+
+      while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+        # Extract the #wo-NN fragment (e.g. local:t#wo-01 → wo-01).
+        dep_fragment="${dep_id##*#}"
+
+        # Validate fragment matches the id grammar (wo-[0-9]+).
+        # A metachar-laden fragment (e.g. "wo-*") would be expanded as a shell/find
+        # glob; reject it before it reaches find — fail-closed as deps_unresolvable.
+        if ! printf '%s' "$dep_fragment" | grep -qE '^wo-[0-9]+$'; then
+          jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" --arg id "$dep_id" \
+            '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("deps_unresolvable:"+$id)}'
+          return 1
+        fi
+
+        # Find exactly one sibling: <wo-dir>/wo-NN-*.md
+        # Ambiguous (0 or >1 match) ⇒ deps_unresolvable (fail-closed).
+        local match_count=0 sibling_file=""
+        while IFS= read -r f; do
+          [ -f "$f" ] || continue
+          match_count=$((match_count + 1))
+          sibling_file="$f"
+        done < <(find "$wo_dir" -maxdepth 1 -name "${dep_fragment}-*.md" -type f 2>/dev/null)
+
+        if [ "$match_count" -ne 1 ]; then
+          jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" --arg id "$dep_id" \
+            '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("deps_unresolvable:"+$id)}'
+          return 1
+        fi
+
+        # Check the sibling's status == done (via the safe parser).
+        local sib_fm; sib_fm=$(wo_frontmatter_json "$sibling_file")
+        local sib_err; sib_err=$(printf '%s' "$sib_fm" | jq -r '.__error__ // empty' 2>/dev/null)
+        if [ -n "$sib_err" ]; then
+          jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" --arg id "$dep_id" \
+            '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("deps_unresolvable:"+$id)}'
+          return 1
+        fi
+        local sib_status; sib_status=$(printf '%s' "$sib_fm" | jq -r '.status // ""' 2>/dev/null)
+        if [ "$sib_status" != "done" ]; then
+          jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" --arg id "$dep_id" \
+            '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:("deps_not_done:"+$id)}'
+          return 1
+        fi
+      done < <(printf '%s' "$blocked_by_json" | jq -r '.[]' 2>/dev/null)
+    fi
+    # Empty blocked_by [] ⇒ no deps to check; falls through to write.
+  fi
+
+  # --- Validate exactly ONE status: line in the frontmatter region.
+  #     Zero or >1 ⇒ ambiguous_status_field (fail-closed, no write).  ---
+  local status_line_count
+  status_line_count=$(awk '
+    NR==1 && /^---[[:space:]]*$/ {in_fm=1; next}
+    in_fm && /^---[[:space:]]*$/ {exit}
+    in_fm && /^status:/ {count++}
+    END {print count+0}
+  ' "$wo")
+  if [ "${status_line_count:-0}" -ne 1 ]; then
+    jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" \
+      '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:"ambiguous_status_field"}'
+    return 1
+  fi
+
+  # --- Determine reason string (semantic per transition type).
+  #     Uses colon separator to avoid `>` being parsed as shell redirection.  ---
+  local reason
+  case "${cur_status}:${new_status}" in
+    blocked:ready)            reason="deps_cleared" ;;
+    ready:in_progress)        reason="dispatch" ;;
+    in_progress:done)         reason="ok" ;;
+    in_progress:needs_rework) reason="ok" ;;
+    needs_rework:ready)       reason="requeue" ;;
+    *)                        reason="ok" ;;
+  esac
+
+  # --- Surgical write: replace ONLY the `status:` line in the FM region.
+  #     temp-file + mv is crash-atomic (consistent with all other WO writes).
+  #     new_status is a validated enum member so the replacement text is inert.  ---
+  local tmpf; tmpf=$(mktemp)
+  if ! awk -v new_status="$new_status" '
+    NR==1 && /^---[[:space:]]*$/ {in_fm=1; print; next}
+    in_fm && /^---[[:space:]]*$/ {in_fm=0; print; next}
+    in_fm && /^status:/ {
+      cr = (substr($0, length($0), 1) == "\r") ? "\r" : ""
+      printf "status: %s%s\n", new_status, cr
+      next
+    }
+    {print}
+  ' "$wo" > "$tmpf"; then
+    rm -f "$tmpf"
+    jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" \
+      '{ok:false,wo:$w,previous_status:$cs,new_status:$ns,changed:false,reason:"write_failed"}'
+    return 1
+  fi
+  mv "$tmpf" "$wo"
+
+  # --- Emit success ---
+  jq -nc --arg w "$wo_id" --arg cs "$cur_status" --arg ns "$new_status" --arg r "$reason" \
+    '{ok:true,wo:$w,previous_status:$cs,new_status:$ns,changed:true,reason:$r}'
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 usage() {
   cat <<'EOF'
 wo-compile.sh — deterministic safety kernel for the work_order_pipeline (C2)
@@ -942,6 +1142,7 @@ Usage: bash wo-compile.sh <subcommand> [args]
   collect-handle <worktree> <wo-file> [--checkpoint-before SHA]
                  [--dispatched B] [--override-used B] [--halt-reason R] [--build-returned B]  → the 10-key handle
   frontmatter <wo-file>                                                 → parsed WO frontmatter JSON (safe parser; rejects YAML anchors)
+  set-status <wo-file> <new-status>                                     → transition WO status (legal-transition gate + deps check)
 EOF
 }
 
@@ -957,6 +1158,7 @@ case "$SUBCMD" in
   assert-dispatchable)  cmd_assert_dispatchable "$@" ;;
   collect-handle)       cmd_collect_handle "$@" ;;
   frontmatter)          wo_frontmatter_json "${1:-}"; printf '\n' ;;   # read-only; reuses the safe parser (②/gate_integration H1)
+  set-status)           cmd_set_status "$@" ;;
   ""|-h|--help|help)    usage; exit 0 ;;
   *) echo "wo-compile: unknown subcommand: $SUBCMD" >&2; usage >&2; exit 2 ;;
 esac

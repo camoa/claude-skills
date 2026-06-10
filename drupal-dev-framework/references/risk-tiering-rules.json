@@ -43,5 +43,12 @@
     "medium": ["security", "correctness"],
     "high": ["security", "correctness", "meets-ac"]
   },
+  "tier_model_map": {
+    "_doc": "R-3 builder model routing — consumed by ③ lifecycle_controls (work-order-loop) to pick the BUILD ATOM's model from a PRE-BUILD tier estimate (wo-risk-classify.sh run on the WO's declared '## Files to touch'). BUDGET governance / cost lever ONLY: critics and the gate floor ALWAYS run top-model regardless, so an under-estimate degrades cost-efficiency, never the safety floor. Additive data (OCP) — no kernel change. ④ may override.",
+    "low": "sonnet",
+    "medium": "sonnet",
+    "high": "opus",
+    "security": "opus"
+  },
   "base_gate_floor": ["tdd", "solid", "dry", "security", "guides"]
 }

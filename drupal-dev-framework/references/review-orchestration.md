@@ -33,7 +33,7 @@ the **kernels**, not the `/review` run.
 ## Compact lines (progress only; truth is on disk, re-read at merge — §7.3)
 ```
 wo-NN review=<overall_verdict> review_ref=<path>          # after step 3
-ship_gate ship_ok=<bool> review=<verdict> halts=<n> blocking_critiques=<n>   # after step 5 (stderr)
+ship_gate ship_ok=<bool> review=<verdict> halts=<n> blocking=<n> uncritiqued=<n>   # after step 5 (stderr); erratum G7: matches wo-ship-gate.sh:81 exactly (was blocking_critiques=, missing uncritiqued=)
 ```
 
 ## Boundaries
