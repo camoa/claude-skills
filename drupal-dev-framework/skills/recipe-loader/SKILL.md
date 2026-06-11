@@ -111,8 +111,8 @@ From a trusted body, read the routing block + the **optional** `requires_guides:
 keys.
 - Present (and non-empty) → collect those slugs (`has_machine_deps:true`).
 - **Absent or empty list** → `has_machine_deps:false`; the recipe contributes **no** machine-resolvable
-  guides; its aspect falls to residual (step 6). **Never parse the prose `## References` table.** The
-  real `responsive_image_wiring` recipe is this case — normal, never block.
+  guides; its aspect falls to residual (step 6). **Never parse the prose `## References` table.** An older
+  or partially-authored recipe with no `requires_*` falls here — normal, never block.
 
 ### 6. Residual guide-search — never short-circuited (delegate)
 **Always COMPUTE the residual set** — a recipe match never skips discovery. The residual set =
@@ -168,12 +168,13 @@ execute-or-halt decision is the orchestrator's, never this skill's.
 
 ## Example
 *Task, two aspects: "responsive images on the hero field" + "image lazy-loading".* The index has one
-match — `responsive_image_wiring [responsive-image-delivery]` (no `requires_*`). recipe-loader emits: a
-`kind:recipe` entry for the capability (aspect 1, `provenance:upstream`, `verified:true`); aspect 1's
-guides come from **residual** guide-search (the recipe has no machine deps → a
-`recipe_matched_no_machine_deps:responsive-image-delivery` warning); aspect 2 ("lazy-loading") matches
-no recipe → pure residual guide(s). Both aspects covered → `uncovered_aspects: []`. The map is written
-to `$TASK_FOLDER/coverage-map.json` and surfaced for confirm/prune.
+match — `responsive_image_wiring [responsive-image-delivery]`. Its body declares `requires_guides` /
+`requires_plays`, so recipe-loader emits: a `kind:recipe` entry for the capability (aspect 1,
+`provenance:upstream`, `verified:true`) **plus** the recipe's declared guides/plays as machine-resolved
+deps (`has_machine_deps:true` — the machine path, **no** `recipe_matched_no_machine_deps` warning). Aspect
+1's residual set still computes any adjacent guides the recipe doesn't name; aspect 2 ("lazy-loading")
+matches no recipe → pure residual guide(s). Both aspects covered → `uncovered_aspects: []`. The map is
+written to `$TASK_FOLDER/coverage-map.json` and surfaced for confirm/prune.
 
 ## See also
 - `references/coverage-map-contract.md` — output contract, invariants, fail-closed provenance

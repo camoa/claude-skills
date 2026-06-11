@@ -61,7 +61,7 @@ version: ...
 ```
 - Read `requires_guides` / `requires_plays` if present → the recipe's declared guides/plays.
 - If **absent** → `has_machine_deps:false`; do not parse the prose `## References` table; fall to
-  residual guide-search. (The shipped `responsive_image_wiring` recipe is this case.)
+  residual guide-search. (A recipe with no `requires_*` frontmatter falls here.)
 
 ## Invocation pattern (concrete forms)
 recipe-loader uses the **Skill** tool to invoke `dev-guides-navigator`, then **Bash**/`jq` to read
