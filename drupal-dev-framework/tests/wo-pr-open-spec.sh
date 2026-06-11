@@ -388,6 +388,73 @@ else
   fail "K4-B" "rc=$rc opened=$opened_k4b create_calls=$create_count_k4b (want 1; existing PR must block retry)"
 fi
 
+# ══════════════════════════════════════════════════════════════════════════════
+# K3 ④-touch (safety_governor): out-of-band PAT read from WO_MERGE_PAT_FILE at call
+# time. File WINS over WO_MERGE_GH_TOKEN; -s guards an empty file (→ env fallback);
+# absent/unreadable → env fallback (current behavior). Token still redacted in stdout.
+# (kernels.md §K3 T9–T12, renamed PAT-1..PAT-4 to avoid the existing T9/T10/T11.)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── PAT-1 (kernels T9): WO_MERGE_PAT_FILE set + readable → gh gets file contents (file WINS over env);
+#                        the PAT value is NOT leaked into stdout JSON.
+T="$(mktask pat1 with_body)"
+GH_LOG="$TMP/pat1.log"; rm -f "$GH_LOG"
+PATF="$TMP/pat1.token"; printf 'file-pat-AAA' > "$PATF"
+out="$(WO_MERGE_GATE_CMD="$MG_STUB_OK" WO_GH_CMD="$GH_STUB" WO_GH_STUB_LOG="$GH_LOG" \
+      WO_MERGE_GH_TOKEN="env-pat-BBB" WO_MERGE_PAT_FILE="$PATF" \
+      bash "$KERNEL" "$T" 2>/dev/null)"
+rc=$?
+stub_tok="$(grep '^GH_TOKEN_ENV:' "$GH_LOG" 2>/dev/null | head -1 | sed 's/^GH_TOKEN_ENV: //' || echo missing)"
+leaked="$(echo "$out" | grep -c 'file-pat-AAA' || true)"
+if [ "$rc" -eq 0 ] && [ "$stub_tok" = "file-pat-AAA" ] && [ "$leaked" -eq 0 ]; then
+  pass "PAT-1"
+else
+  fail "PAT-1" "rc=$rc stub_tok=[$stub_tok] (want file-pat-AAA; file must WIN over env) value_leaked=$leaked"
+fi
+
+# ── PAT-2 (kernels T10): WO_MERGE_PAT_FILE set but absent/unreadable → falls back to WO_MERGE_GH_TOKEN.
+T="$(mktask pat2 with_body)"
+GH_LOG="$TMP/pat2.log"; rm -f "$GH_LOG"
+out="$(WO_MERGE_GATE_CMD="$MG_STUB_OK" WO_GH_CMD="$GH_STUB" WO_GH_STUB_LOG="$GH_LOG" \
+      WO_MERGE_GH_TOKEN="env-pat-CCC" WO_MERGE_PAT_FILE="$TMP/no-such-pat-file" \
+      bash "$KERNEL" "$T" 2>/dev/null)"
+rc=$?
+stub_tok="$(grep '^GH_TOKEN_ENV:' "$GH_LOG" 2>/dev/null | head -1 | sed 's/^GH_TOKEN_ENV: //' || echo missing)"
+if [ "$rc" -eq 0 ] && [ "$stub_tok" = "env-pat-CCC" ]; then
+  pass "PAT-2"
+else
+  fail "PAT-2" "rc=$rc stub_tok=[$stub_tok] (want env fallback env-pat-CCC when file absent)"
+fi
+
+# ── PAT-3 (-s empty-file guard): WO_MERGE_PAT_FILE present but 0-byte → falls back to env (not an empty token).
+T="$(mktask pat3 with_body)"
+GH_LOG="$TMP/pat3.log"; rm -f "$GH_LOG"
+EMPTYF="$TMP/pat3.empty"; : > "$EMPTYF"
+out="$(WO_MERGE_GATE_CMD="$MG_STUB_OK" WO_GH_CMD="$GH_STUB" WO_GH_STUB_LOG="$GH_LOG" \
+      WO_MERGE_GH_TOKEN="env-pat-DDD" WO_MERGE_PAT_FILE="$EMPTYF" \
+      bash "$KERNEL" "$T" 2>/dev/null)"
+rc=$?
+stub_tok="$(grep '^GH_TOKEN_ENV:' "$GH_LOG" 2>/dev/null | head -1 | sed 's/^GH_TOKEN_ENV: //' || echo missing)"
+if [ "$rc" -eq 0 ] && [ "$stub_tok" = "env-pat-DDD" ]; then
+  pass "PAT-3"
+else
+  fail "PAT-3" "rc=$rc stub_tok=[$stub_tok] (want env fallback; -s must reject empty file)"
+fi
+
+# ── PAT-4 (kernels T11): neither file nor env → ambient gh auth (v1 gap), unchanged.
+T="$(mktask pat4 with_body)"
+GH_LOG="$TMP/pat4.log"; rm -f "$GH_LOG"
+out="$(GH_TOKEN="" WO_MERGE_GATE_CMD="$MG_STUB_OK" WO_GH_CMD="$GH_STUB" WO_GH_STUB_LOG="$GH_LOG" \
+      bash "$KERNEL" "$T" 2>/dev/null)"
+rc=$?
+opened="$(jq -r '.opened' <<<"$out" 2>/dev/null || echo err)"
+stub_tok="$(grep '^GH_TOKEN_ENV:' "$GH_LOG" 2>/dev/null | head -1 | sed 's/^GH_TOKEN_ENV: //' || echo missing)"
+if [ "$rc" -eq 0 ] && [ "$opened" = "true" ] && [ -z "$stub_tok" ]; then
+  pass "PAT-4"
+else
+  fail "PAT-4" "rc=$rc opened=$opened stub_tok=[$stub_tok] (want empty; ambient auth unchanged)"
+fi
+
 # ──────────────────────────────────────────────────────────────────────────────
 # T8: grep kernel source — ZERO occurrences of "pr merge" (AC4: ③ never merges)
 # ──────────────────────────────────────────────────────────────────────────────

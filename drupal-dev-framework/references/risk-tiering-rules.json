@@ -50,5 +50,11 @@
     "high": "opus",
     "security": "opus"
   },
+  "model_weight_map": {
+    "_doc": "④ safety_governor — model→weight units consumed by scripts/governor.sh to compute the Weighted Dispatch Count (WDC). weight(tier) = model_weight_map[ tier_model_map[tier] ]. Fail-strict: an unknown model maps to _default (2, the opus-equivalent) — undercounting spend is the governor's fail-open (D2), so the default is the HIGHER weight, never 1. Additive data (OCP, MED-1 fix) — re-weighting needs no kernel edit.",
+    "sonnet": 1,
+    "opus": 2,
+    "_default": 2
+  },
   "base_gate_floor": ["tdd", "solid", "dry", "security", "guides"]
 }

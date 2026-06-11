@@ -14,11 +14,15 @@
 #   ${WO_MERGE_GATE_CMD:-<dir>/wo-merge-gate.sh}
 #   ${WO_GH_CMD:-gh}
 #
-# Token (R-2 / D6): GH_TOKEN="${WO_MERGE_GH_TOKEN:-$GH_TOKEN}"
-#   WO_MERGE_GH_TOKEN should be a fine-grained single-repo PAT (reduces blast radius vs ambient
-#   `repo`-scope token). Honest scope (H2): does NOT prevent exfiltration by a builder Task
-#   subagent that inherits ③'s session env — that requires ④'s spawn-env scrub (§6.2 / §14.5).
-#   If neither token is set, falls back to ambient `gh` auth (v1 gap, §14.5).
+# Token precedence (R-2 / D6 + ④ K3): out-of-band PAT FILE → fine-grained env PAT → ambient gh auth.
+#   WO_MERGE_PAT_FILE (④ K3) — a claude-uid-readable PATH set by wo-unattended-launch.sh; the PAT VALUE
+#     is read at call time (see :118), never a persistent session-env value, so a builder's `env` scrape
+#     finds nothing. File wins; an empty file (-s) falls back to env. This CLOSES the env-scrape vector.
+#   WO_MERGE_GH_TOKEN — a fine-grained single-repo PAT (reduces blast radius vs an ambient `repo`-scope
+#     token); fallback when no PAT file is provisioned.
+#   Honest residual (④ AC3 narrows, not closes): a same-uid injected builder can still `cat` the PAT file;
+#     true close needs OS user/sandbox separation (the OS-sandbox precondition in governor-contract.md).
+#   If neither file nor env token is set, falls back to ambient `gh` auth (v1 gap, §14.5).
 #
 # Output: one-line JSON to stdout; exit 0 IFF opened (or --print-cmd + merge_ok); 2 on bad args.
 
@@ -114,8 +118,16 @@ GH_ARGV=(pr create --title "$TITLE" --body-file "$BODY_FILE" --base "$BASE")
 GH_ARGV_NO_LABEL=("${GH_ARGV[@]}")
 [ "${#LABEL_ARGS[@]}" -gt 0 ] && GH_ARGV+=("${LABEL_ARGS[@]}")
 
-# Effective token: prefer fine-grained single-repo PAT over ambient token.
-EFFECTIVE_TOKEN="${WO_MERGE_GH_TOKEN:-${GH_TOKEN:-}}"
+# Effective token: prefer the out-of-band PAT FILE (④ K3), then the fine-grained env PAT, then ambient.
+# K3 (safety_governor ④): WO_MERGE_PAT_FILE is a claude-uid-readable PATH set by wo-unattended-launch.sh;
+# the value is read HERE at call time (never a persistent session-env value), so a builder running `env`
+# never sees it. File WINS over WO_MERGE_GH_TOKEN; -s guards an empty file (→ env fallback rather than an
+# empty token). The $( … ) wrapper strips any trailing newline from cat, so an `echo > file` PAT is safe.
+# `cat "$f"` is pure data (no word-split/injection). Honest residual (AC3 narrows, not closes): a same-uid
+# injected builder can still `cat "$WO_MERGE_PAT_FILE"` — true close needs OS user/sandbox separation.
+EFFECTIVE_TOKEN="$( if [ -n "${WO_MERGE_PAT_FILE:-}" ] && [ -r "${WO_MERGE_PAT_FILE}" ] && [ -s "${WO_MERGE_PAT_FILE}" ]; \
+                   then cat "${WO_MERGE_PAT_FILE}"; \
+                   else printf '%s' "${WO_MERGE_GH_TOKEN:-${GH_TOKEN:-}}"; fi )"
 
 # ── --print-cmd: show constructed argv (token redacted) + K3 verdict; no gh call ──
 # Exit 0 iff merge_ok — makes gating logic testable with no network.
