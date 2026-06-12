@@ -19,15 +19,24 @@ The LSP tool needs no permission and is inert when no plugin is installed — fa
 ## Usage
 
 ```
-/code-quality:dry [project-path]
+/code-quality:dry [project-path] [--changed <file>]
 ```
+
+`--changed <file>`: path to a newline-delimited list of changed files (e.g. from
+`git diff --name-only`). When supplied, the scan stays **whole-tree** (necessary
+because a clone needs both copies; scoping the scan to the diff would silently miss
+"you duplicated existing code"). The **verdict** is filtered: only clones where ≥1
+file location appears in the changed-files list are **failing**. Clones entirely
+among unchanged files are recorded **informationally** and do not fail the gate.
+Without `--changed`, every clone counts (original behavior, unchanged).
 
 ## What This Does
 
 1. Auto-detects project type (Drupal or Next.js)
-2. Scans for duplicated code blocks
+2. Scans for duplicated code blocks (**always whole-tree** — DRY is inherently cross-file)
 3. Reports duplication percentage
-4. Suggests refactoring opportunities
+4. Under `--changed`: filters verdict to change-touching clones; others are informational
+5. Suggests refactoring opportunities
 
 ## DRY Principle
 
@@ -55,8 +64,23 @@ Duplication leads to:
 !cd skills/code-quality-audit && bash scripts/core/detect-project.sh
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/dry-check.sh`
+- **Drupal**: `bash scripts/drupal/dry-check.sh [--changed <file>]`
 - **Next.js**: `bash scripts/nextjs/dry-check.sh`
+
+### Change-scoped mode (per-WO gating)
+
+When called from `/review` in headless/loop mode, the review command resolves the
+merge-base diff and passes a changed-files list via `--changed`. DRY is **not**
+scoped to the diff at scan time — both copies of a clone must be visible for the
+check to be meaningful. Instead, the post-scan verdict is filtered:
+
+| Clone | Verdict |
+|-------|---------|
+| ≥1 file in changed-files list | **FAIL** — fix before merging |
+| All files outside changed-files list | **INFO** — pre-existing debt, not blocking |
+
+Run without `--changed` (e.g. `/code-quality:audit`, `--full-audit`) to restore
+whole-tree failing behavior on all clones.
 
 ## Duplication Thresholds
 

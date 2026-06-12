@@ -1,0 +1,3 @@
+web/modules/custom/foo/src/FooService.php
+web/modules/custom/baz/src/BazService.php
+web/modules/custom/new/src/NewFeature.php
