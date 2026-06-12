@@ -1,0 +1,10 @@
+Found 2 clones with 30 duplicated lines in 4 files:
+
+  - web/modules/custom/foo/src/FooService.php:10-25 (15 lines)
+    web/modules/custom/bar/src/BarService.php:30-45
+
+  - web/modules/custom/unchanged/src/UnchangedService.php:5-20 (15 lines)
+    web/modules/custom/also/src/AlsoUnchanged.php:15-30
+
+3.14% duplicated lines out of 955 total lines of code
+Average size of duplication is 15 lines, largest clone has 15 lines
