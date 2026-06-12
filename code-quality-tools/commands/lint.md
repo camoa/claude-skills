@@ -42,6 +42,21 @@ Based on detection result, executes:
 - **Drupal**: `bash scripts/drupal/lint-check.sh`
 - **Next.js**: `bash scripts/nextjs/lint-check.sh`
 
+## Change-Scoped Mode (`--changed`)
+
+Pass a newline-delimited file of changed paths to scope `phpcs` to those files only:
+
+```bash
+bash scripts/drupal/lint-check.sh --changed .changed-files.txt
+```
+
+Behaviour:
+- Filters the list to lintable extensions (`.php .module .inc .install .profile .theme .engine .js`) and excludes `vendor/`, `web/core/`, `*/contrib/*`.
+- If the filtered set is empty → exits `0` with status `skipped` (no whole-tree scan).
+- Report gains `"mode": "changed"` and `"relevant_files": N`.
+- The `--fix` flag is **not** supported in `--changed` mode; use the full-path invocation for auto-fix.
+- Compatible with CI patterns: `bash scripts/drupal/lint-check.sh --changed .changed-files.txt`
+
 ## Auto-Fix
 
 Many violations can be auto-fixed:

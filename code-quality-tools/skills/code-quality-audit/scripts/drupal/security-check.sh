@@ -40,6 +40,386 @@ ISSUES="[]"
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
 
+# Parse command line arguments
+CHANGED_FILE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --changed)
+            shift
+            CHANGED_FILE="$1"
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+
+# =====================
+# --changed mode: SAST-only (semgrep + php-security-linter + grep patterns)
+# Advisory layers (drush pm:security, Psalm taint, Trivy, Security Review,
+# Gitleaks, Roave) are whole-project — skipped under --changed with a note.
+# composer audit runs ONLY when composer.json|composer.lock is in the list.
+# =====================
+if [ -n "$CHANGED_FILE" ]; then
+    echo "[changed mode] SAST-only scan scoped to files listed in: ${CHANGED_FILE}"
+    echo ""
+
+    # PHP/Twig extensions for SAST
+    LINTABLE_EXTS="\.php$|\.module$|\.inc$|\.install$|\.profile$|\.theme$|\.engine$|\.twig$|\.js$"
+
+    # Filter: keep relevant extensions, exclude vendor/core/contrib
+    RELEVANT_FILES=()
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        if ! echo "$f" | grep -qE "$LINTABLE_EXTS"; then
+            continue
+        fi
+        if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then
+            continue
+        fi
+        RELEVANT_FILES+=("$f")
+    done < "$CHANGED_FILE"
+
+    # Composer files in changed set — triggers composer audit
+    HAS_COMPOSER=false
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        if echo "$f" | grep -qE '(^|/)composer\.(json|lock)$'; then
+            HAS_COMPOSER=true
+            break
+        fi
+    done < "$CHANGED_FILE"
+
+    # Advisory-layer skip note (recorded in messages[])
+    ADVISORY_SKIP_NOTE="Advisory layers (drush pm:security, Psalm taint, Trivy, Security Review, Gitleaks, Roave) are whole-project scans — skipped under --changed mode. Run the full security-check.sh without --changed for a complete audit."
+
+    if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "$HAS_COMPOSER" = false ]; then
+        echo -e "${GREEN}[SKIP]${NC} No relevant files in the changed set — clean skip."
+        jq -n \
+            --arg note "$ADVISORY_SKIP_NOTE" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                meta: {
+                    timestamp: $ts,
+                    scan_type: "security_audit_changed",
+                    mode: "changed",
+                    tools_run: [],
+                    tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"]
+                },
+                summary: {
+                    overall_status: "skipped",
+                    total_issues: 0,
+                    by_severity: {critical:0,high:0,medium:0,low:0}
+                },
+                messages: [$note],
+                issues: []
+            }' > "${REPORT_DIR}/security-report.json"
+        exit 0
+    fi
+
+    echo "Relevant SAST files (${#RELEVANT_FILES[@]}):"
+    printf '  %s\n' "${RELEVANT_FILES[@]}"
+    echo ""
+
+    SEMGREP_ISSUES="[]"
+    PHPCS_ISSUES="[]"
+    CUSTOM_ISSUES="[]"
+    COMPOSER_VIOLATIONS="[]"
+
+    # =====================
+    # [1] Semgrep SAST — changed files only
+    # =====================
+    echo -e "${BLUE}[SAST 1/3]${NC} Running Semgrep SAST (changed files)..."
+    SEMGREP_JSON="${REPORT_DIR}/security/semgrep.json"
+
+    if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
+        if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; then
+            set +e
+            if ddev describe &> /dev/null; then
+                # shellcheck disable=SC2046
+                ddev exec semgrep scan --config=auto --json \
+                    "${RELEVANT_FILES[@]}" > "$SEMGREP_JSON" 2>/dev/null
+            else
+                # shellcheck disable=SC2046
+                semgrep scan --config=auto --json \
+                    "${RELEVANT_FILES[@]}" > "$SEMGREP_JSON" 2>/dev/null
+            fi
+            SEMGREP_EXIT=$?
+            set -e
+
+            if [ -f "$SEMGREP_JSON" ] && [ -s "$SEMGREP_JSON" ]; then
+                VULN_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' "$SEMGREP_JSON" 2>/dev/null || echo "0")
+                if [ "$VULN_COUNT" -gt 0 ]; then
+                    echo -e "  ${YELLOW}Found ${VULN_COUNT} Semgrep findings${NC}"
+                    SEMGREP_ISSUES=$(jq '[.results[] | {
+                        category: "Semgrep SAST",
+                        severity: (if .extra.severity == "ERROR" then "high" elif .extra.severity == "WARNING" then "medium" else "low" end),
+                        file: .path,
+                        line: .start.line,
+                        message: .extra.message,
+                        owasp: (.extra.metadata.owasp // "N/A" | if type == "array" then join(", ") else . end),
+                        remediation: (.extra.fix // "Review and fix the security issue")
+                    }]' "$SEMGREP_JSON" 2>/dev/null || echo "[]")
+
+                    SEMGREP_HIGH=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+                    SEMGREP_MEDIUM=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+                    SEMGREP_LOW=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
+                    HIGH_COUNT=$((HIGH_COUNT + SEMGREP_HIGH))
+                    MEDIUM_COUNT=$((MEDIUM_COUNT + SEMGREP_MEDIUM))
+                    LOW_COUNT=$((LOW_COUNT + SEMGREP_LOW))
+                else
+                    echo -e "  ${GREEN}No Semgrep issues${NC}"
+                fi
+            fi
+        else
+            echo -e "  ${YELLOW}Semgrep not installed (optional)${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
+    fi
+
+    # =====================
+    # [2] php-security-linter — changed files only
+    # =====================
+    echo ""
+    echo -e "${BLUE}[SAST 2/3]${NC} Running PHPCS security linter (changed files)..."
+    PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
+
+    if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
+        if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+            set +e
+            # shellcheck disable=SC2046
+            ddev exec vendor/bin/php-security-linter scan \
+                "${RELEVANT_FILES[@]}" \
+                --format=json \
+                2>/dev/null > "$PHPCS_SECURITY_JSON"
+            PHPCS_SEC_EXIT=$?
+            set -e
+
+            if [ -f "$PHPCS_SECURITY_JSON" ] && [ -s "$PHPCS_SECURITY_JSON" ]; then
+                PHPCS_ISSUES=$(jq '[.files // {} | to_entries[] | .key as $file | .value.messages[] | {
+                    category: ("PHPCS Security - " + (.source // "Unknown")),
+                    severity: (if .type == "ERROR" then "high" else "medium" end),
+                    file: $file,
+                    line: .line,
+                    message: .message,
+                    owasp: "Various",
+                    remediation: "Fix security issue in code"
+                }]' "$PHPCS_SECURITY_JSON" 2>/dev/null || echo "[]")
+
+                PHPCS_COUNT=$(echo "$PHPCS_ISSUES" | jq 'length' 2>/dev/null || echo "0")
+                if [ "$PHPCS_COUNT" -gt 0 ]; then
+                    echo -e "  ${YELLOW}Found ${PHPCS_COUNT} PHPCS security issues${NC}"
+                    PHPCS_HIGH=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+                    PHPCS_MED=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+                    HIGH_COUNT=$((HIGH_COUNT + PHPCS_HIGH))
+                    MEDIUM_COUNT=$((MEDIUM_COUNT + PHPCS_MED))
+                else
+                    echo -e "  ${GREEN}No PHPCS security issues${NC}"
+                fi
+            else
+                echo -e "  ${GREEN}No PHPCS security issues${NC}"
+                PHPCS_ISSUES="[]"
+            fi
+        else
+            echo -e "  ${YELLOW}PHPCS security linter not installed (optional)${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
+    fi
+
+    # =====================
+    # [3] Custom grep patterns — scoped to changed files only
+    # =====================
+    echo ""
+    echo -e "${BLUE}[SAST 3/3]${NC} Checking custom Drupal security patterns (changed files)..."
+
+    if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
+        # Unsafe db_query usage
+        DB_QUERY_UNSAFE=$(grep -n "db_query.*\$" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        if [ -n "$DB_QUERY_UNSAFE" ]; then
+            DB_COUNT=$(echo "$DB_QUERY_UNSAFE" | wc -l)
+            echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
+            HIGH_COUNT=$((HIGH_COUNT + DB_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
+                category: "SQL Injection Risk",
+                severity: "high",
+                file: "Multiple files (changed set)",
+                line: 0,
+                message: "Potentially unsafe db_query() with variable concatenation",
+                owasp: "A03:2021",
+                remediation: "Use placeholders or query builder"
+            }]')
+        fi
+
+        # Twig |raw filter
+        RAW_FILTER=$(grep -n "|raw" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        if [ -n "$RAW_FILTER" ]; then
+            RAW_COUNT=$(echo "$RAW_FILTER" | wc -l)
+            echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter${NC}"
+            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
+                category: "XSS Risk",
+                severity: "medium",
+                file: "Changed files",
+                line: 0,
+                message: "Use of |raw filter may expose XSS vulnerabilities",
+                owasp: "A03:2021",
+                remediation: "Remove |raw or ensure input is sanitized"
+            }]')
+        fi
+
+        # unserialize() on user input
+        UNSERIALIZE=$(grep -n "unserialize.*\$_" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        if [ -n "$UNSERIALIZE" ]; then
+            UNSER_COUNT=$(echo "$UNSERIALIZE" | wc -l)
+            echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
+            HIGH_COUNT=$((HIGH_COUNT + UNSER_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
+                category: "Insecure Deserialization",
+                severity: "high",
+                file: "Changed files",
+                line: 0,
+                message: "unserialize() on user input can lead to RCE",
+                owasp: "A08:2021",
+                remediation: "Use JSON or validate serialized data"
+            }]')
+        fi
+
+        if [ "$CUSTOM_ISSUES" = "[]" ]; then
+            echo -e "  ${GREEN}No custom pattern violations${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}No SAST-eligible files — skipping custom patterns${NC}"
+    fi
+
+    # =====================
+    # composer audit — runs ONLY when composer.json|lock is in the changed set
+    # =====================
+    echo ""
+    if [ "$HAS_COMPOSER" = true ]; then
+        echo -e "${BLUE}[ADVISORY]${NC} composer.json|lock changed — running composer audit..."
+        COMPOSER_AUDIT_JSON="${REPORT_DIR}/security/composer-audit.json"
+        set +e
+        ddev composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
+        COMPOSER_EXIT=$?
+        set -e
+
+        if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s "$COMPOSER_AUDIT_JSON" ]; then
+            VULN_COUNT=$(jq '[.advisories // {} | to_entries[]] | length' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "0")
+            if [ "$VULN_COUNT" -gt 0 ]; then
+                echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
+                COMPOSER_VIOLATIONS=$(jq '[.advisories // {} | to_entries[] | .value[] | {
+                    category: "Composer Vulnerability",
+                    severity: (if .severity == "high" or .severity == "critical" then "high" else "medium" end),
+                    file: .packageName,
+                    line: 0,
+                    message: (.title + " (" + .cve + ")"),
+                    owasp: "A06:2021",
+                    remediation: .link
+                }]' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "[]")
+
+                HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+                MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+                HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
+                MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
+            else
+                echo -e "  ${GREEN}No package vulnerabilities${NC}"
+            fi
+        else
+            echo -e "  ${YELLOW}Composer audit unavailable${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[SKIP]${NC} composer audit — composer.json/lock not in changed set"
+    fi
+
+    # =====================
+    # Combine SAST issues
+    # =====================
+    ISSUES=$(jq -n \
+        --argjson composer "$COMPOSER_VIOLATIONS" \
+        --argjson phpcs "$PHPCS_ISSUES" \
+        --argjson semgrep "$SEMGREP_ISSUES" \
+        --argjson custom "$CUSTOM_ISSUES" \
+        '$composer + $phpcs + $semgrep + $custom')
+
+    OVERALL_STATUS="pass"
+    if [ "$CRITICAL_COUNT" -gt 0 ]; then
+        OVERALL_STATUS="fail"
+    elif [ "$HIGH_COUNT" -gt 3 ]; then
+        OVERALL_STATUS="fail"
+    elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
+        OVERALL_STATUS="warning"
+    fi
+
+    REPORT_FILE="${REPORT_DIR}/security-report.json"
+    jq -n \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg status "$OVERALL_STATUS" \
+        --argjson critical "$CRITICAL_COUNT" \
+        --argjson high "$HIGH_COUNT" \
+        --argjson medium "$MEDIUM_COUNT" \
+        --argjson low "$LOW_COUNT" \
+        --argjson issues "$ISSUES" \
+        --arg advisory_note "$ADVISORY_SKIP_NOTE" \
+        '{
+            meta: {
+                timestamp: $timestamp,
+                scan_type: "security_audit_changed",
+                mode: "changed",
+                tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
+                tools_skipped: ["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"]
+            },
+            summary: {
+                overall_status: $status,
+                total_issues: ($critical + $high + $medium + $low),
+                by_severity: {
+                    critical: $critical,
+                    high: $high,
+                    medium: $medium,
+                    low: $low
+                }
+            },
+            messages: [$advisory_note],
+            thresholds: {
+                critical: {pass: 0, warning: 0, fail: ">0"},
+                high: {pass: 0, warning: "1-3", fail: ">3"},
+                medium: {pass: 0, warning: "1-10", fail: ">10"},
+                low: {pass: 0, warning: "any", fail: ">20"}
+            },
+            issues: $issues
+        }' > "$REPORT_FILE"
+
+    echo ""
+    echo "=== Security Audit Summary (changed mode) ==="
+    echo ""
+    echo -e "SAST layers: semgrep, php-security-linter, custom patterns$([ "$HAS_COMPOSER" = true ] && echo ", composer audit")"
+    echo -e "Skipped:     drush pm:security, Psalm taint, Trivy, Security Review, Gitleaks, Roave"
+    echo ""
+    echo -e "Critical: ${CRITICAL_COUNT}"
+    echo -e "High:     ${HIGH_COUNT}"
+    echo -e "Medium:   ${MEDIUM_COUNT}"
+    echo -e "Low:      ${LOW_COUNT}"
+    echo ""
+
+    if [ "$OVERALL_STATUS" = "pass" ]; then
+        echo -e "${GREEN}[PASS]${NC} Security SAST passed"
+        exit 0
+    elif [ "$OVERALL_STATUS" = "warning" ]; then
+        echo -e "${YELLOW}[WARN]${NC} Security SAST passed with warnings"
+        echo -e "Report: ${REPORT_FILE}"
+        exit 0
+    else
+        echo -e "${RED}[FAIL]${NC} Security SAST failed"
+        echo -e "Report: ${REPORT_FILE}"
+        exit 1
+    fi
+fi
+
+# =====================
+# Standard (no --changed) path — byte-identical to original logic
+# =====================
+
 echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================
 # Drush pm:security
