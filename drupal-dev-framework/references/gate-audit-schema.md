@@ -222,6 +222,33 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 | `parity_auto` | bool | `true` when `visual_parity` auto-ran (design-implementation task). Parity is never part of the opt-in question. |
 | `overrides` | object | `{include: [], skip: []}` — one-run `--include-<gate>` / `--skip-<gate>` flags applied (not persisted to `task.md`). |
 | `rule_source` | string | `"default"` or `"project-override"` — which ruleset the classifier used. |
+| `ai_surface_selection` | list \| absent | Optional. Per-gate AI surface selection records (see detail below). Absent when the selector did not run. |
+
+**`dispatch_plan.ai_surface_selection` (additive optional — §7 additive policy, no version bump).**
+
+Absent from `dispatch_plan` when the `ai-test-selector` agent did not run: no visual
+review configured, the gate was not recommended, or `--skip-ai-selection` was passed.
+One entry per gate (`e2e` or `visual_regression`) where the agent ran. `visual_parity` is never present — it is reference-driven and excluded from AI selection.
+
+```json
+{
+  "gate": "e2e | visual_regression",
+  "candidate_surfaces": ["<id>", "..."],
+  "selected_surfaces": ["<id>", "..."],
+  "skipped_surfaces": [{"id": "<id>", "reason": "<evidence-anchored rationale>"}],
+  "degraded": false,
+  "selection_model": "sonnet"
+}
+```
+
+| Field | Type | Contract |
+|---|---|---|
+| `gate` | string | `"e2e"` or `"visual_regression"`. Matches the dispatched gate. |
+| `candidate_surfaces` | string[] | All registry surfaces for this gate before AI narrowing. |
+| `selected_surfaces` | string[] | AI-selected subset to run. Always `⊆ candidate_surfaces`. |
+| `skipped_surfaces` | object[] | Surfaces excluded; each `{id, reason}` carries evidence-anchored rationale. Empty (`[]`) when `degraded: true`. |
+| `degraded` | bool | `true` when the agent fell back to the full candidate set due to insufficient evidence to narrow. |
+| `selection_model` | string | Model used for selection. `"sonnet"` for the current agent version. |
 
 **Gate-name forms.** `dispatch_plan.*` arrays (`gates_recommended`, `gates_opted_in`, `gates_run`, `gates_declined[].gate`) use the **underscore** form (`visual_regression`, `e2e`); the outer `gates_run[].name` uses the **hyphen** form (`visual-regression`, `visual-parity`), matching `/review`'s `--skip-<gate>` flag convention. The two map 1:1 (`s/_/-/`). See `references/visual-review/change-impact-dispatch.md` "Gate-name forms".
 
