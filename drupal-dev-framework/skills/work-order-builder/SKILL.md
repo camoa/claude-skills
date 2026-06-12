@@ -65,6 +65,10 @@ L-1). You never read the transcript to decide anything.
   checkpoint + any reset happen in the **code worktree** (the project `codePath`, a different repo). The
   atom mutates the code worktree freely and the memory-repo WO file **only** for the single `ready →
   in_progress` flip.
+- **Never modify an oracle.** The build MUST NOT delete or weaken a test, VR baseline/snapshot,
+  `phpstan-baseline.*`, or coverage threshold to pass a gate — only ADD tests / fix code. A diff touching
+  an oracle artifact without the WO's explicit `oracle_update` scope is a tamper signal, caught at the
+  critique rung (`oracle_tamper` HALT) and escalated — never auto-applied.
 
 ## Preconditions (set by ③, not by the atom)
 
