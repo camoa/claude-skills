@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.0] - 2026-06-12
+
+**Oracle-integrity invariant — a builder can never pass a gate by altering the gate's oracle.** The
+autonomous builder must fix the code, not weaken the check: VR baselines never auto-recreate, and a work-order
+diff that writes a VR baseline, deletes a test/spec, or adds/modifies `phpstan-baseline.neon` is an
+oracle-tamper signal that HALTs and escalates — unless the work-order's explicit human-authored `oracle_update`
+scope covers it (and even then it ships flagged). Closes the most visceral autonomy hole (rubber-stamping any
+visual change by regenerating the baseline) and its siblings (snapshots, phpstan-baseline, coverage thresholds,
+test deletion).
+
+### Added
+- **`scripts/wo-oracle-check.sh`** — a deterministic kernel that scans a work-order's `git diff --name-status`
+  against a fixed oracle watch-table and emits `{tamper_detected, signals[], halt_reason}`. Halts on the
+  unambiguous oracle-weakening signals (VR baseline write, VR-spec/test **deletion** — including a rename that
+  relocates a test out of `tests/`, the rename-evasion case — and `phpstan-baseline.neon` add/modify); flags
+  (advisory, non-halting) on ambiguous config modifies (`phpstan.neon`, coverage config, registry). A
+  human-authored `oracle_update: {classes, reason, by}` work-order field downgrades an in-scope halt to a flag
+  (the work-order ships, the PR opens flagged). Hermetic suite `tests/wo-oracle-check-spec.sh` (120 cases).
+- **Critique-rung integration** (`skills/work-order-critique/SKILL.md`) — the §16.2 critique rung now derives a
+  name-status diff and runs the oracle check **before spawning any critic**; on tamper it writes a
+  `wo-NN.HALT` (reason `oracle_tamper`) and returns, so the loop's existing terminal-HALT path escalates to the
+  human (no reset, no requeue, no merge). Contract spec `tests/critique-oracle-contract-spec.sh`.
+
+### Changed
+- **`work-order-contract.md`** — the invariant is stated (Honest scope boundary), `oracle_tamper` is added to
+  the build-and-collect handle's `halt_reason` enum **additively** (`schema_version` stays `1.0`), and the
+  `oracle_update` seam field (① authored, ② consumed) is documented in the ownership table.
+- **`work-order-builder/SKILL.md`** — a `Never modify an oracle` hard-boundary rule.
+- **`work-order-loop/references/merge-contract.md`** — states that under automation the loop runs VR but never
+  regenerates the baseline (consistent with `/review --headless` `--ci`); a VR diff or `oracle_tamper` HALT is
+  terminal escalation.
+
 ## [4.20.0] - 2026-06-12
 
 **Change-scoped gate floor — assess the diff, not the whole codebase.** The v4.19.1 F2 band-aid (a
