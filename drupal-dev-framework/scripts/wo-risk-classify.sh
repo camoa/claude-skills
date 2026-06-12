@@ -23,10 +23,14 @@
 #   unresolved (empty/missing file list OR change-impact-classify warnings) => HIGH (fail-closed).
 #   HIGH  when ANY of: a security-glob matches a realized-diff file
 #                    | gate_floor ⊋ base (a recipe ADDED a gate beyond the base set)
-#                    | verified != true | collapsed_scc == true | unresolved.
+#                    | collapsed_scc == true | unresolved.
 #         (`security ∈ gate_floor` is NOT a trigger — it is invariantly true in the base set.)
+#         (F1 fix 2026-06-12: `verified != true` is NO LONGER a trigger — grounding-verification status is
+#          orthogonal to change RISK. An unverified/override'd WO is controlled by its coverage_override +
+#          the flagged PR + human-merge, not by escalating the tier to opus+red-team. Risk follows change
+#          IMPACT. `verified`/`--verified` is still read but no longer drives the tier.)
 #   MEDIUM when any changed file's extension is an executable_extensions match (and not HIGH).
-#   LOW   otherwise (non-executable only; verified; determinable; no security signal).
+#   LOW   otherwise (non-executable only; determinable; no security signal).
 #
 # Rules data: ${CLAUDE_PLUGIN_ROOT}/references/risk-tiering-rules.json (script-relative fallback).
 # Output: single JSON object to stdout. ALWAYS exit 0 (issues surface in fields/warnings); non-zero
@@ -146,10 +150,9 @@ for g in "${GF[@]}"; do
 done
 
 # --- decide tier (fail-closed; precedence high > medium > low) ---------------
-TIER="low"; TRIGGER="none"; REASON="non-executable; verified; no security signal"
+TIER="low"; TRIGGER="none"; REASON="non-executable; determinable; no security signal"
 if   [ "$UNRESOLVED" = "true" ];     then TIER="high"; TRIGGER="unresolved:$UNRES_REASON"; REASON="undeterminable diff => fail-closed high"
 elif [ "$SECURITY_MATCH" = "true" ]; then TIER="high"; TRIGGER="security_glob";   REASON="realized diff matches a security-sensitive path"
-elif [ "$VERIFIED" != "true" ];      then TIER="high"; TRIGGER="verified_false";  REASON="grounding verified != true (unverified-local lane)"
 elif [ "$GATE_SUPER" = "true" ];     then TIER="high"; TRIGGER="recipe_added_gate"; REASON="gate_floor superset of base (recipe-flagged)"
 elif [ "$COLLAPSED" = "true" ];      then TIER="high"; TRIGGER="collapsed_scc";   REASON="WO merged a strongly-connected component"
 elif [ "$EXEC_CHANGE" = "true" ];    then TIER="medium"; TRIGGER="executable_change"; REASON="executable-code change => >= medium with security lens"

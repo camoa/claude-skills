@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.1] - 2026-06-12
+
+**Fix: make the autonomous work-order loop actually work on real changes.** The first attended end-to-end
+run (a CSS-only work-order on a branch cut from a non-`main` base) surfaced four reasons the *gated*
+pipeline didn't fit real work — the core build mechanic already worked; the loop's review/critique/PR
+stages did not. All four fixed (loop/command/kernel prose; all 9 `wo-*` suites green).
+
+### Fixed
+
+- **Risk over-escalation (F1).** `wo-risk-classify.sh` rated **any** `coverage_override`'d work-order
+  `high` (`verified != true`) → routed to an opus builder + a 3-agent red-team for a 4-line deletion.
+  Grounding-verification status is orthogonal to change *risk*; the override + flagged PR + human-merge is
+  the control. Removed the `verified → high` lane — tier now follows change **impact**
+  (security globs / executable extensions / collapsed SCC). Tests updated (19/19).
+- **PHP-centric gate floor false-failed non-PHP work-orders (F2).** `tdd`/`solid`/`dry`/`security` run the
+  code-quality tools against the whole codebase, so pre-existing PHP debt failed a CSS/config-only WO.
+  `/review` step 5 gains a **diff-type pre-filter**: a diff with no PHP/JS/Twig files marks those four gates
+  `verdict: skipped` (benign N/A, not a bypass), so `overall_verdict` can still be `pass`. `guides` keeps
+  its own applicability check.
+- **Review assessed the wrong tree (F3).** The loop builds in a worktree but invoked `/review` with no cwd,
+  so it diffed the unchanged main checkout. The loop's two `/review` invocations now run from
+  **cwd = the worktree** where the build was committed.
+- **`/review` hardcoded `main` as the diff base (F6).** On a branch cut from a non-`main` base,
+  `git merge-base main HEAD` resolves to an ancient fork point and the "diff" balloons to the entire branch
+  divergence (in the test run: **38,692 files**), defeating F2/F3. Added **`--base <branch>`** to `/review`
+  (default `main`) and threaded a **`<base>` input** through the `work-order-loop` to both `/review` and
+  `wo-pr-open.sh`, so the gate diff **and** the PR target the real integration branch.
+
 ## [4.19.0] - 2026-06-12
 
 **Slice ① of the graduated-autonomy initiative — the thin L1 orchestrator.** An opt-in autonomous
