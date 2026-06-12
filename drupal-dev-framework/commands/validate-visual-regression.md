@@ -74,6 +74,18 @@ contains `visual_regression`. Note each surface's `id`, `url`, `viewports`
 (default to the registry's top-level `viewports` matrix when absent), and
 `masks`.
 
+**AI surface selection pre-filter.** When invoked from the change-impact
+dispatcher with an `ai_selection` for `visual_regression` (a `selected_surfaces`
+list from the `ai-test-selector` agent), **narrow the surface set to
+`selected_surfaces`** before proceeding. Surfaces not in `selected_surfaces` are
+excluded from this run — they skip baseline checks, diffing, and classification.
+
+- If `selected_surfaces` is empty → emit `verdict: skipped`, message
+  `"AI surface selection: no affected visual_regression surfaces"`, persist,
+  and stop.
+- When invoked standalone (no AI selection from the dispatcher), use the full
+  registry surface set as normal — this step is unchanged for direct invocations.
+
 If no surface has `visual_regression` in `gates` → emit `verdict: skipped`,
 message `"registry has no visual_regression surfaces"`, persist, and stop.
 
