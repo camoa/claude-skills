@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.0] - 2026-06-12
+
+**Slice ① of the graduated-autonomy initiative — the thin L1 orchestrator.** An opt-in autonomous
+per-task run-loop on top of the existing enforced gate floor, built by reuse + glue over the shipped
+recipe rail (dev-guides-navigator v0.7/0.8). Additive: the manual lifecycle is unchanged and autonomy is
+opt-in per task; the human stays in the driver's seat (L1 opens a PR, the human merges — no auto-merge on
+a recorded bypass). Beads (slice ②, breaking → v5.0.0) and L2 parallel scheduling (slice ③) are separate
+later tracks.
+
+### Added
+
+- **`/review --headless`** — fail-closed headless mode of the Phase-4 gate. On gate-fail it writes
+  `_review.json` (overall verdict + per-gate envelopes) and exits non-zero with **no** interactive prompt;
+  `--allow-dirty` flag-gates the dirty-tree behavior. The precondition for any unattended `/goal` loop.
+- **`recipe-loader` skill** — a discovery orchestrator that delegates recipe-search to
+  `dev-guides-navigator`, matches **0..N** recipes, unions their `requires_guides`/`requires_plays`, runs
+  residual guide-search over uncovered aspects, and emits a fail-closed coverage map. Does **not** extend
+  `guides-matcher`.
+- **Work-order pipeline** — `work-order-compiler` skill + the `wo-compile.sh` kernel (Tarjan SCC/acyclicity,
+  fail-closed coverage slice, drift-guard, lockfile SHA, dispatch gate) that compiles a `/design`-complete
+  task into N self-contained, gate-verifiable work-orders against a frozen `schema_version: "1.0"` contract
+  (OpenSpec `ADDED/MODIFIED/REMOVED` deltas, GSD-style `[CATEGORY]-NN` requirement IDs, falsifiable
+  Current/Target/Acceptance triplets). `work-order-builder` atom builds one work-order in clean context;
+  `/compile-work-orders` is the thin entry. Deterministic safety kernel is test-covered.
+- **`work-order-loop` skill (lifecycle_controls)** — the autonomous run-loop: a live ready-queue over the
+  work-orders, one fresh build atom per WO, per-WO headless `/review` + the critique rung, disk-as-truth
+  verdicts, a bounded crash-safe retry, on-entry L1-light recovery, and PR-open through a choke point that
+  re-runs the merge gate and **never** merges.
+- **`work-order-critique` skill + `wo-critic` agent (gate_integration)** — the §16.2 per-job
+  adversarial-critique rung: opt-in, risk-scaled (skeptic / panel / red-team), fresh-context critics layered
+  **above** the deterministic gate floor; a CRITICAL halts-and-escalates and is never self-waved.
+- **safety_governor** — `governor.sh` (per-run token/$ budget with hard abort + a kill-switch call-site) and
+  `wo-unattended-launch.sh` (builder-credential narrowing: broad-token scrub, HOME isolation, out-of-band
+  PAT path). All deterministic kernels are test-covered.
+- **First machine-readable recipe** — `responsive_image_wiring` (in the `camoa/dev-guides` repo) now carries
+  `requires_guides`/`requires_plays` frontmatter, exercising the recipe-loader machine-resolution path on a
+  real catalog artifact.
+
+### Changed
+
+- **Autonomy is mode-keyed recipe behavior, not a per-work-order dispatch flag (design §17).** The
+  `autonomy_safe` dispatch gate is retired from `assert-dispatchable` — `dispatchable = (grounding_clean OR
+  coverage_override) AND status_ready`. A recipe is **additive**: if one matches, use it; if not, run the
+  guides path. A recipe's decision points branch on mode — *stop-and-ask at manual (L0)*, *infer-and-flag at
+  automatic (L1/L2)*, *halt-and-escalate only for irreversible out-of-band side-effects*. `autonomy_safe` is
+  now informational only; the `autonomy_unsafe` dispatch reason is retired. Dispatch rides on grounding + the
+  gate floor + the critique rung + no-auto-merge + human-merge.
+
+### Fixed
+
+- **work-order-loop conductor** — a paper test + fresh-context red-team of the loop↔kernel integration (the
+  kernels carry passing unit suites; the conductor that drives them had never been integration-traced) found
+  and closed showstoppers in the glue: the loop flipped a WO to `in_progress` **before** the dispatch gate
+  (which requires `ready`) so nothing dispatched; a failed run printed `LOOP_COMPLETE` instead of escalating;
+  crash recovery hung; a HALT was sticky; a blocking CRITICAL critique was blind-retried; and PR-open ran in
+  the wrong repo. All fixed (loop/contract/builder prose only — kernels and all 9 `wo-*` suites
+  unchanged/green); the `ready→in_progress` flip now belongs to the build atom (after its re-gate, before it
+  commits) so post-build crashes are recoverable. The merge-safety floor was verified intact in every trace.
+
 ## [4.18.0] - 2026-06-04
 
 Additive docs + one optional soft-nudge. No enforced behavior change — mostly new and edited Markdown.

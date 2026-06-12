@@ -61,7 +61,7 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 /dev-guides-navigator style guide
 ```
 
-### drupal-dev-framework (v3.6.0)
+### drupal-dev-framework (v4.19.0)
 
 Systematic 3-phase Drupal development workflow: **Research → Architecture → Implementation**. Enforces SOLID, TDD, DRY, security, and code purposefulness through 5 quality gates. **Requires `dev-guides-navigator`** — loads Drupal domain guides proactively at every phase.
 
