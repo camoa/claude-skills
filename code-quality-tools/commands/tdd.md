@@ -34,15 +34,22 @@ Scopes test execution to changed source files only — suitable for per-WO gate 
 /code-quality:tdd --changed $(cat .changed-files.txt)
 ```
 
-**Mapping convention (Drupal):**
+**Mapping convention (Drupal) — Unit tier only:**
 
 ```
 changed  web/modules/custom/<mod>/src/<Dir>/Foo.php
 → Unit   web/modules/custom/<mod>/tests/src/Unit/<Dir>/FooTest.php
-→ Kernel web/modules/custom/<mod>/tests/src/Kernel/<Dir>/FooTest.php
 ```
 
 Module root = the ancestor directory whose direct child is the `src/` segment.
+
+**Kernel tests are NOT mapped here — task-stage only:** per-WO `--changed` runs in
+a detached build worktree (static / no Drupal bootstrap). Kernel tests need a full
+bootstrap on the **running site** and cannot run in a worktree (same constraint as
+`salesforce_eca`); mapping one here would attempt a bootstrap-dependent run and
+spuriously fail. Kernel (and e2e/VR) selection happens at the **task stage on the
+running site**, not per-WO — so `--changed` emits only the `tests/src/Unit/…`
+candidate for each changed source.
 
 **Mapping limit — PHPUnit has no `--findRelatedTests`:**
 

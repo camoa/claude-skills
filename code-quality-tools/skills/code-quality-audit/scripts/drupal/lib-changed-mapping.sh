@@ -6,10 +6,17 @@
 # Mapping convention (Drupal module layout):
 #   changed  web/modules/custom/<mod>/src/<Dir>/<File>.php
 #   → Unit   web/modules/custom/<mod>/tests/src/Unit/<Dir>/<File>Test.php
-#   → Kernel web/modules/custom/<mod>/tests/src/Kernel/<Dir>/<File>Test.php
 #
 # Module root = ancestor directory whose direct child is the /src/ segment
 # (found via longest-suffix strip on the first /src/ occurrence — see tests).
+#
+# TIER SCOPING (design §2/§5 — load-bearing): this per-WO mapping emits
+# Unit-tier candidates ONLY. Kernel tests need a full Drupal bootstrap on the
+# RUNNING SITE and CANNOT run in a detached build worktree (the same
+# salesforce_eca runtime constraint). Mapping a KernelTest here would attempt a
+# bootstrap-dependent run in the worktree → a spurious fail — the exact failure
+# mode this epic targets. Kernel (and e2e/VR) selection happens at the TASK
+# STAGE on the running site, not per-WO-in-worktree.
 #
 # Mapping limit (documented here and in commands/{tdd,coverage}.md):
 #   PHPUnit has no --findRelatedTests equivalent; that flag is Jest/Next.js only.
@@ -54,13 +61,14 @@ map_source_to_test_paths() {
 
   local test_name="${file_part}Test.php"
 
-  for tier in Unit Kernel; do
-    if [[ -n "$dir_part" ]]; then
-      echo "${module_root}/tests/src/${tier}/${dir_part}/${test_name}"
-    else
-      echo "${module_root}/tests/src/${tier}/${test_name}"
-    fi
-  done
+  # Unit-tier ONLY (per-WO worktree constraint — see TIER SCOPING header).
+  # Kernel candidates are deliberately NOT emitted: they require a running-site
+  # bootstrap and are handled at the task stage, not here.
+  if [[ -n "$dir_part" ]]; then
+    echo "${module_root}/tests/src/Unit/${dir_part}/${test_name}"
+  else
+    echo "${module_root}/tests/src/Unit/${test_name}"
+  fi
 }
 
 # find_mapped_tests <src_file>

@@ -4,12 +4,14 @@
 #
 # --changed <src.php> [src2.php ...]:
 #   Scopes coverage to the changed source files.
-#   Runs only the co-located tests mapped from each changed source, and passes
-#   --coverage-filter for each changed source file so the coverage report
+#   Runs only the co-located Unit tests mapped from each changed source, and
+#   passes --coverage-filter for each changed source file so the coverage report
 #   reflects only the changed code.
 #   Sources with no co-located test are recorded as coverage gaps — not failures.
 #   NOTE: PHPUnit has no --findRelatedTests; that flag is Jest/Next.js only.
 #         The mapping is structural (path convention), not semantic.
+#   TIER (design §2/§5): Unit only — Kernel needs a running-site bootstrap and
+#         cannot run in a detached worktree; it is handled at the task stage.
 #   Guard: this mode is active ONLY when the first argument is --changed.
 #          All other invocations are byte-identical to pre-change behaviour.
 
@@ -96,7 +98,7 @@ if [[ "${1:-}" == "--changed" ]]; then
     done
     echo ""
     echo "  Mapping limit: PHPUnit has no --findRelatedTests (Jest/Next.js only)."
-    echo "  Convention: src/<Dir>/Foo.php → tests/src/{Unit,Kernel}/<Dir>/FooTest.php"
+    echo "  Convention: src/<Dir>/Foo.php → tests/src/Unit/<Dir>/FooTest.php (Unit tier only; Kernel = task stage)"
   fi
 
   if [[ ${#_test_paths[@]} -eq 0 ]]; then

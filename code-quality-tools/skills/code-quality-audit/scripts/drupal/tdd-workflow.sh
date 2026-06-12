@@ -3,11 +3,13 @@
 # Part of code-quality-audit skill
 #
 # --changed <src.php> [src2.php ...]:
-#   Maps changed source files to co-located tests and runs only those tests.
-#   Mapping: src/X.php → tests/src/{Unit,Kernel}/.../XTest.php (same module).
+#   Maps changed source files to co-located Unit tests and runs only those.
+#   Mapping: src/X.php → tests/src/Unit/.../XTest.php (same module, Unit tier only).
 #   Sources with no co-located *Test.php are recorded as coverage gaps — not failures.
 #   NOTE: PHPUnit has no --findRelatedTests; that flag is Jest/Next.js only.
 #         The mapping is structural (path convention), not semantic.
+#   TIER (design §2/§5): Unit only — Kernel needs a running-site bootstrap and
+#         cannot run in a detached worktree; it is handled at the task stage.
 #   Guard: this mode is active ONLY when the first argument is --changed.
 #          All other invocations are byte-identical to pre-change behaviour.
 
@@ -78,7 +80,7 @@ if [[ "${1:-}" == "--changed" ]]; then
       done
       echo ""
       echo "  Mapping limit: PHPUnit has no --findRelatedTests (Jest/Next.js only)."
-      echo "  Convention: src/<Dir>/Foo.php → tests/src/{Unit,Kernel}/<Dir>/FooTest.php"
+      echo "  Convention: src/<Dir>/Foo.php → tests/src/Unit/<Dir>/FooTest.php (Unit tier only; Kernel = task stage)"
       echo "  Add a test at the mapped path to close each gap."
     fi
 
@@ -136,7 +138,7 @@ show_help() {
     echo "           Map each changed source file to its co-located test(s) and"
     echo "           run only those tests. Sources with no mapped test are reported"
     echo "           as coverage gaps (not failures)."
-    echo "           Mapping: src/<Dir>/Foo.php → tests/src/{Unit,Kernel}/<Dir>/FooTest.php"
+    echo "           Mapping: src/<Dir>/Foo.php → tests/src/Unit/<Dir>/FooTest.php (Unit only)"
     echo "           Limit: PHPUnit has no --findRelatedTests (that is Jest/Next.js)."
     echo ""
     echo "Examples:"

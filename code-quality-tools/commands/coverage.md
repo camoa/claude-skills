@@ -36,19 +36,26 @@ per-WO gate runs where whole-project coverage would report pre-existing debt.
 ```
 
 What happens:
-- Maps each changed `src/*.php` to its co-located `tests/src/{Unit,Kernel}/…/*Test.php`
-- Runs only the mapped test files (not the full suite)
+- Maps each changed `src/*.php` to its co-located `tests/src/Unit/…/*Test.php`
+- Runs only the mapped Unit test files (not the full suite)
 - Passes `--coverage-filter <src_file>` for each changed source so coverage is
   reported only for the changed code, not the whole module or project
 - Records sources with no co-located test as **coverage gaps** (informational, not failures)
 
-**Mapping convention (Drupal):**
+**Mapping convention (Drupal) — Unit tier only:**
 
 ```
 changed  web/modules/custom/<mod>/src/<Dir>/Foo.php
 → Unit   web/modules/custom/<mod>/tests/src/Unit/<Dir>/FooTest.php
-→ Kernel web/modules/custom/<mod>/tests/src/Kernel/<Dir>/FooTest.php
 ```
+
+**Kernel tests are NOT mapped here — task-stage only:** per-WO `--changed` runs in
+a detached build worktree (static / no Drupal bootstrap). Kernel tests need a full
+bootstrap on the **running site** and cannot run in a worktree (same constraint as
+`salesforce_eca`); mapping one here would attempt a bootstrap-dependent run and
+spuriously fail. Kernel (and e2e/VR) selection happens at the **task stage on the
+running site**, not per-WO — so `--changed` emits only the `tests/src/Unit/…`
+candidate for each changed source.
 
 **Mapping limit — PHPUnit has no `--findRelatedTests`:**
 

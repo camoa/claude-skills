@@ -34,7 +34,7 @@ declare -a ERRORS=()
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF "$needle"; then
+  if echo "$haystack" | grep -qF -- "$needle"; then
     PASS=$((PASS + 1))
     echo "  PASS: $desc"
   else
@@ -80,10 +80,13 @@ trap 'rm -rf "$TMPDIR_FIXTURE"' EXIT
 MOD_ROOT="$TMPDIR_FIXTURE/web/modules/custom/my_module"
 mkdir -p "${MOD_ROOT}/src/Service"
 mkdir -p "${MOD_ROOT}/tests/src/Unit/Service"
-# Kernel test does NOT exist for this module — used to test gap detection
+mkdir -p "${MOD_ROOT}/tests/src/Kernel/Service"
 
-# Touch the Unit test only; Kernel is intentionally absent (gap)
+# Touch the Unit test (the per-WO target).
 touch "${MOD_ROOT}/tests/src/Unit/Service/MyServiceTest.php"
+# Touch a Kernel test ON DISK too — it must STILL be excluded from the per-WO
+# mapping (running-site tier), proving exclusion is by design not by absence.
+touch "${MOD_ROOT}/tests/src/Kernel/Service/MyServiceTest.php"
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -100,10 +103,17 @@ assert_contains \
   "web/modules/custom/my_module/tests/src/Unit/Service/MyServiceTest.php" \
   "$MAPPED1"
 
-assert_contains \
-  "maps to Kernel subdir" \
-  "web/modules/custom/my_module/tests/src/Kernel/Service/MyServiceTest.php" \
-  "$MAPPED1"
+# TIER SCOPING (design §2/§5): per-WO worktree tier is Unit ONLY.
+# Kernel needs a running-site bootstrap → never emitted by the per-WO mapper.
+assert_eq \
+  "Kernel candidate is NOT emitted (per-WO worktree = Unit only)" \
+  "" \
+  "$(echo "$MAPPED1" | grep -F "Kernel" || true)"
+
+assert_eq \
+  "exactly one candidate (Unit only) for a subdir source" \
+  "1" \
+  "$(echo "$MAPPED1" | wc -l | tr -d ' ')"
 
 echo ""
 
@@ -117,16 +127,16 @@ assert_contains \
   "web/modules/custom/my_module/tests/src/Unit/MyClassTest.php" \
   "$MAPPED2"
 
-assert_contains \
-  "src-root file → Kernel/MyClassTest.php" \
-  "web/modules/custom/my_module/tests/src/Kernel/MyClassTest.php" \
-  "$MAPPED2"
+assert_eq \
+  "src-root file → Kernel candidate NOT emitted" \
+  "" \
+  "$(echo "$MAPPED2" | grep -F "Kernel" || true)"
 
-# G2b: must NOT include a spurious extra path segment
+# G2b: exactly one candidate (Unit only) — no spurious extra path segment
 echo ""
 assert_eq \
-  "exactly two lines for a src-root file" \
-  "2" \
+  "exactly one line (Unit only) for a src-root file" \
+  "1" \
   "$(echo "$MAPPED2" | wc -l | tr -d ' ')"
 
 echo ""
@@ -160,10 +170,11 @@ assert_contains \
   "tests/src/Unit/Service/MyServiceTest.php" \
   "$FOUND"
 
-# Kernel test does not exist — should NOT be in output
+# Kernel is never a candidate in the per-WO path; even though a KernelTest
+# exists on disk in the fixture, it must NOT be returned (running-site tier).
 KERNEL_FOUND=$(echo "$FOUND" | grep -F "Kernel" || true)
 assert_eq \
-  "absent Kernel test is not returned" \
+  "Kernel test never returned per-WO (even when present on disk)" \
   "" \
   "$KERNEL_FOUND"
 
@@ -200,10 +211,10 @@ assert_contains \
   "web/modules/custom/src_tools/tests/src/Unit/Foo/BarTest.php" \
   "$MAPPED3"
 
-assert_contains \
-  "Kernel path also correct for src_ module name" \
-  "web/modules/custom/src_tools/tests/src/Kernel/Foo/BarTest.php" \
-  "$MAPPED3"
+assert_eq \
+  "Kernel candidate NOT emitted for src_ module name (Unit only)" \
+  "" \
+  "$(echo "$MAPPED3" | grep -F "Kernel" || true)"
 
 echo ""
 
@@ -219,6 +230,46 @@ assert_exit_nonzero \
 assert_exit_nonzero \
   "lib defines find_mapped_tests (not a random name)" \
   "! declare -f find_mapped_tests > /dev/null"
+
+echo ""
+
+# ── G8: Script-level wiring — --changed guard + all-gaps → exit 0 ────────────
+# Drives the REAL tdd-workflow.sh / coverage-report.sh via the --changed guard.
+# An all-gaps run (changed source with no mapped test) exits 0 BEFORE reaching
+# `ddev`, so this is hermetic — no DDEV / PHPUnit required.
+echo "G8: Script-level — --changed guard interception + all-gaps exit 0"
+
+TDD_SH="${SCRIPT_DIR}/../drupal/tdd-workflow.sh"
+COV_SH="${SCRIPT_DIR}/../drupal/coverage-report.sh"
+
+# A .php under /src/ with NO co-located test in the fixture → pure gap.
+GAP_SRC="${MOD_ROOT}/src/Service/UnmappedGapService.php"
+
+# tdd-workflow.sh --changed <gap-src> must exit 0 and print a gap notice.
+set +e
+TDD_OUT=$(bash "$TDD_SH" --changed "$GAP_SRC" 2>&1)
+TDD_RC=$?
+set -e
+assert_eq "tdd-workflow.sh --changed all-gaps exits 0" "0" "$TDD_RC"
+assert_contains "tdd-workflow.sh reports the gap" "GAP" "$TDD_OUT"
+assert_contains "tdd-workflow.sh names the unmapped source" "UnmappedGapService.php" "$TDD_OUT"
+
+# A non-.php changed file is skipped → still all-gaps → exit 0 (no ddev).
+set +e
+TDD_OUT2=$(bash "$TDD_SH" --changed "${MOD_ROOT}/my_module.module" 2>&1)
+TDD_RC2=$?
+set -e
+assert_eq "tdd-workflow.sh --changed non-php-only exits 0" "0" "$TDD_RC2"
+
+# coverage-report.sh --changed: the all-gaps short-circuit is gated AFTER the
+# ddev check, so we only assert the guard is intercepted (does not fall through
+# to the no-flag whole-suite body). With no DDEV it exits 2 at the ddev check —
+# which still proves the --changed branch was taken (the no-flag body prints
+# "=== Coverage Analysis (PHPUnit + PCOV) ===" with no "--changed mode" suffix).
+set +e
+COV_OUT=$(bash "$COV_SH" --changed "$GAP_SRC" 2>&1)
+set -e
+assert_contains "coverage-report.sh enters --changed branch" "--changed mode" "$COV_OUT"
 
 echo ""
 
