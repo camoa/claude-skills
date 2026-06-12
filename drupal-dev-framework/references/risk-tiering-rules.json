@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "_doc": "Risk-tiering rules read by scripts/wo-risk-classify.sh (C7). Data-driven (OCP): add globs/extensions without touching the kernel. Globs are matched with bash [[ $file == $glob ]] where * spans '/'. A realized-diff file matching any security_glob => tier high (AR-C). A changed file whose extension is in executable_extensions => tier >= medium with a guaranteed security lens. NOTE: 'security in gate_floor' is NOT a trigger (it is invariantly true in the base set, AR-C); the gate_floor signal is 'gate_floor superset of base', computed by the kernel, not here.",
+  "security_globs": [
+    "*.routing.yml",
+    "*.permissions.yml",
+    "*.services.yml",
+    "*.role.*.yml",
+    "*user.role.*",
+    "*Access*.php",
+    "*Permission*.php",
+    "*Auth*.php",
+    "*Token*.php",
+    "*Credential*.php",
+    "*Password*.php",
+    "*Crypt*.php",
+    "*Security*.php",
+    "*Session*.php",
+    "*/access/*",
+    "*/Security/*",
+    "*/Access/*",
+    "*access*",
+    "*auth*",
+    "*permission*",
+    "*session*",
+    "*crypt*",
+    "*.install",
+    "*credential*",
+    "*secret*",
+    "*password*",
+    "*.htaccess",
+    "*settings*.php"
+  ],
+  "executable_extensions": [
+    "php", "module", "inc", "install", "theme", "profile", "engine",
+    "sh", "bash", "bats",
+    "js", "mjs", "cjs", "ts", "tsx", "jsx",
+    "py", "rb", "go", "rs", "java",
+    "twig"
+  ],
+  "tier_lenses": {
+    "low": ["skeptic"],
+    "medium": ["security", "correctness"],
+    "high": ["security", "correctness", "meets-ac"]
+  },
+  "tier_model_map": {
+    "_doc": "R-3 builder model routing — consumed by ③ lifecycle_controls (work-order-loop) to pick the BUILD ATOM's model from a PRE-BUILD tier estimate (wo-risk-classify.sh run on the WO's declared '## Files to touch'). BUDGET governance / cost lever ONLY: critics and the gate floor ALWAYS run top-model regardless, so an under-estimate degrades cost-efficiency, never the safety floor. Additive data (OCP) — no kernel change. ④ may override.",
+    "low": "sonnet",
+    "medium": "sonnet",
+    "high": "opus",
+    "security": "opus"
+  },
+  "model_weight_map": {
+    "_doc": "④ safety_governor — model→weight units consumed by scripts/governor.sh to compute the Weighted Dispatch Count (WDC). weight(tier) = model_weight_map[ tier_model_map[tier] ]. Fail-strict: an unknown model maps to _default (2, the opus-equivalent) — undercounting spend is the governor's fail-open (D2), so the default is the HIGHER weight, never 1. Additive data (OCP, MED-1 fix) — re-weighting needs no kernel edit.",
+    "sonnet": 1,
+    "opus": 2,
+    "_default": 2
+  },
+  "base_gate_floor": ["tdd", "solid", "dry", "security", "guides"]
+}
