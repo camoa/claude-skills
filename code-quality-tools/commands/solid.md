@@ -63,6 +63,21 @@ Based on detection result, executes:
 - **Drupal**: `bash scripts/drupal/solid-check.sh`
 - **Next.js**: `bash scripts/nextjs/solid-check.sh`
 
+## Change-Scoped Mode (`--changed`)
+
+Pass a newline-delimited file of changed paths to scope `phpstan`, `phpmd`, and the `\Drupal::` grep to those files only:
+
+```bash
+bash scripts/drupal/solid-check.sh --changed .changed-files.txt
+```
+
+Behaviour:
+- Filters the list to PHP-family extensions (`.php .module .inc .install .profile .theme .engine`) and excludes `vendor/`, `web/core/`, `*/contrib/*`.
+- If the filtered set is empty → exits `0` with status `skipped` (no whole-tree scan).
+- `phpmd` receives a comma-separated file list (its required format for file-level targeting).
+- Report gains `"mode": "changed"` and `"relevant_files": N`.
+- Compatible with CI patterns: `bash scripts/drupal/solid-check.sh --changed .changed-files.txt`
+
 ## Complexity Thresholds
 
 Default: Cyclomatic complexity > 10 triggers warning

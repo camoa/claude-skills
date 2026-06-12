@@ -1,0 +1,13 @@
+Found 3 clones with 45 duplicated lines in 5 files:
+
+  - /var/www/html/web/modules/custom/foo/src/FooService.php:10-25 (15 lines)
+    /var/www/html/web/modules/custom/bar/src/BarService.php:30-45
+
+  - /var/www/html/web/modules/custom/baz/src/BazService.php:5-20 (15 lines)
+    /var/www/html/web/modules/custom/qux/src/QuxService.php:15-30
+
+  - /var/www/html/web/modules/custom/alpha/src/AlphaHelper.php:1-15 (15 lines)
+    /var/www/html/web/modules/custom/beta/src/BetaHelper.php:50-65
+
+4.71% duplicated lines out of 955 total lines of code
+Average size of duplication is 15 lines, largest clone has 15 lines

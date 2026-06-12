@@ -77,6 +77,30 @@ Based on detection result, execute:
 - **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"`
 - **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"`
 
+## Change-Scoped Mode (`--changed`) — SAST-only
+
+Pass a newline-delimited file of changed paths to run a **SAST-only** scan scoped to those files:
+
+```bash
+bash scripts/drupal/security-check.sh --changed .changed-files.txt
+```
+
+**What runs:** `semgrep` + `php-security-linter` + custom grep patterns (on changed files). If `composer.json` or `composer.lock` is in the changed list, `composer audit` also runs.
+
+**What is skipped** (whole-project layers — not file-scopable):
+- `drush pm:security` — Drupal security advisories
+- `Psalm taint` analysis
+- `Trivy` dependency/secret scanner
+- `Security Review` module
+- `Gitleaks` secret detection
+- `Roave Security Advisories` check
+
+A `messages[]` entry in the report records this skip with instructions to run the full scan for complete advisory coverage.
+
+**Empty relevant set:** if no PHP/Twig/JS files match after filtering, exits `0` with status `skipped` (no whole-tree scan).
+
+**Report differences:** `meta.scan_type` is `security_audit_changed`; `meta.tools_run` and `meta.tools_skipped` list the active/skipped tools; `messages[]` records the advisory-layer skip note.
+
 ## Output
 
 - JSON report: `.reports/security-report.json`

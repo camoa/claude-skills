@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-06-12
+
+**`--changed <files>` mode for the Drupal gates — scope a gate run to a changed-files list.** Brings the
+change-scoped pattern already proven in the CI templates into the gate scripts/commands, so a consumer
+(e.g. drupal-dev-framework `/review`) can assess a diff rather than the whole project tree. The no-flag
+path is byte-identical — `--changed` is purely additive.
+
+### Added
+- **`--changed <list>` on the Drupal lint/solid/security gates** (`lint-check.sh`, `solid-check.sh`,
+  `security-check.sh` + their `lint`/`solid`/`security` commands). Scopes the scopable tools
+  (phpcs/phpstan/phpmd/semgrep + grep layers) to the listed files (extension-filtered, vendor/contrib
+  excluded); an empty relevant set is a clean skip (no whole-tree scan). `security --changed` runs the SAST
+  layers only and notes the skipped whole-project advisory layers (run `composer audit` when
+  `composer.json|lock` is in the diff); `madge` (cycle check) stays whole-graph (`--full-audit` only).
+- **`--changed` DRY verdict filter** (`dry-check.sh` + `dry` command). Keeps the whole-tree phpcpd clone
+  scan but fails ONLY on clones where ≥1 location is in the changed files; clones among unchanged files are
+  informational. No-flag path unchanged.
+- **`--changed` tdd/coverage mapping** (`tdd-workflow.sh`, `coverage-report.sh`, new `lib-changed-mapping.sh`
+  + `tdd`/`coverage` commands). Maps each changed `.php` source to its co-located `*Test.php` (Unit tier)
+  and runs those + `--coverage-filter` on the changed sources; Kernel/Functional tiers are deferred to the
+  task stage (they need a running site). Best-effort; documents the mapping limit.
+
+### Tests
+- New hermetic suites: `tests/changed-mode.sh` (23), `scripts/tests/changed-mode-spec.sh` (22),
+  `scripts/drupal/tests/dry-check-spec.sh` (16) — assert the constructed scope/command + verdict filter
+  without requiring the real tools installed.
+
 ## [3.8.0] - 2026-06-06
 
 ### 2026-05-29 doc hardening
