@@ -17,6 +17,7 @@ Heuristic gate: cite-match is any-of-three (filename slug | normalized title | t
 /drupal-dev-framework:validate-playbook-adherence <task-name>  # specific task
 /drupal-dev-framework:validate-playbook-adherence <t> --hard-block   # /review-mode (warning→fail)
 /drupal-dev-framework:validate-playbook-adherence <t> --strict       # CI escalation (warning→fail)
+/drupal-dev-framework:validate-playbook-adherence <t> --base <branch>  # diff base (default: main). Pass the PR base for non-main branches — else merge-base main HEAD resolves to an ancient fork point (same issue as /review step 4).
 ```
 
 Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-playbook-adherence` audit exists from `/review`, it takes precedence over `--strict`.
@@ -33,7 +34,7 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
    - For each `set` in `playbook_sets_loaded[]`: `Glob ~/workspace/dev-guides/docs/<set>/*.md` (skip `index.md`). Per file: `filename_slug` = basename minus `.md`; `normalized_title` = `# H1` lowercased + non-alphanum stripped; `tldr_prefix` = frontmatter `tldr` first 40 chars lowercased. Fallback: `dev-guides-navigator` skill if local cache absent.
    - For `user_playbook_loaded`: `bash scripts/playbook-read.sh <path>`; per `.plays[]`, derive `filename_slug` from kebab-cased title, normalize title, take first 40 chars of `what` for `tldr_prefix`.
 
-5. **Build artifact list.** `<task>/{research,architecture,implementation}.md` (skip absent files); `git diff $(git merge-base main HEAD)..HEAD` written to a temp file.
+5. **Build artifact list.** `<task>/{research,architecture,implementation}.md` (skip absent files); `git diff $(git merge-base "$BASE" HEAD)..HEAD` written to a temp file, where `$BASE` is the `--base` argument (default `main`). Mirrors `/review` step 4's `$BASE` threading — on a branch cut from a non-`main` integration branch, `merge-base main HEAD` would resolve to an ancient fork point and the diff would balloon to the whole branch divergence.
 
 6. **Cite-check (literal-string match per match-type, NOT regex).** For each needle, run 3 separate `Grep` calls with `-F` (literal/fixed-string) — one per match-type. Glob over artifact list. Set `needle.cited = (any call returned matches)`; record `cite_locations[] = [{file, line, match_type}]` per match. Match-type is determined by **which call produced the hit** (no post-hoc string classification needed). Per-play 3 Grep calls; ~20 plays in default camoa = ~60 calls. Scales linearly with playbook size.
 
