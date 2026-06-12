@@ -28,6 +28,11 @@ rules 1–5) — never parse builder prose for control flow. Detail lives in `re
 - `<task-folder>` — the leaf DDF task whose `work-orders/` you run.
 - `<worktree>` — the code worktree to build in. **You own its lifecycle** (create/attach on entry, tear
   down on clean completion; keep on HALT for inspection). The build atom presupposes a handed worktree.
+- `<base>` — the integration branch the worktree was cut from and the PR targets (**default `main`**).
+  Thread it to BOTH `/review --base <base>` (so its merge-base diff is the actual change, not the whole
+  branch-vs-`main` divergence — on a non-`main` base, `merge-base main HEAD` is an ancient fork point and
+  every PHP file in the divergence false-triggers the gate floor) AND `wo-pr-open.sh --base <base>` (so the
+  PR targets the right branch). A non-`main` base that is not passed silently breaks both.
 
 ## Terminal-HALT — the highest-precedence predicate (check FIRST, everywhere)
 
@@ -125,9 +130,12 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
    handle `halt_reason`), mark the sidecar `wo-run-state.sh halt`, escalate. The WO is now TERMINAL
    (terminal keys off the HALT marker, regardless of `ready`/`in_progress` status). Otherwise the WO is
    already `in_progress` (the builder flipped it) — proceed to review.
-8. **Per-WO review (run for EVERY dispatched WO).** Run `/review --headless --dry-run <task-folder>`
-   **inline** (command-prose, not a callable), then `wo-review-snapshot.sh <task-folder> <wo-NN>` →
-   `wo-NN._review.json`. Forward the review's stdout verdict lines to the transcript.
+8. **Per-WO review (run for EVERY dispatched WO).** Run `/review --headless --dry-run --base <base> <task-folder>`
+   **inline from cwd=`<worktree>`** (command-prose, not a callable; `/review` derives the change from
+   `git diff $(git merge-base main HEAD)..HEAD` in its cwd, so it MUST run in the worktree where the build
+   was committed — otherwise it assesses the unchanged main checkout), then
+   `wo-review-snapshot.sh <task-folder> <wo-NN>` → `wo-NN._review.json`. Forward the review's stdout verdict
+   lines to the transcript.
 9. **Critique rung.** Invoke the `work-order-critique` skill **inline** → `wo-NN._critique.json`
    (+ `wo-NN.HALT` if blocking). Forward its compact line.
 10. **Verdict — from DISK only**, three-way (per-WO `_review.json` `.gate_specific.overall_verdict` +
@@ -161,14 +169,16 @@ TERMINAL WO — `wo-NN.HALT` / sidecar `halted:true` — is never processable an
   residue, NOT off status** — a HALTed-but-`ready` WO (cap exhausted at step 5) still escalates here and
   **never** reaches the `LOOP_COMPLETE` branch, so /goal cannot fire on a failed run.
 - **Else (every WO `done`):**
-  1. Run `/review --headless <task-folder>` **inline** (the authoritative task-level PR-gate; writes
-     `_review.json` + `PR_BODY.md` on green). Forward its verdict lines.
+  1. Run `/review --headless --base <base> <task-folder>` **inline from cwd=`<worktree>`** (the
+     authoritative task-level PR-gate; it derives the change from the worktree's
+     `git merge-base <base> HEAD..HEAD` diff, so it MUST run in the worktree where the build was committed
+     AND with the real `<base>`; writes `_review.json` + `PR_BODY.md` on green). Forward its verdict lines.
   2. **Open the PR from the code worktree** so `gh` targets the **code repo**, not the memory repo (the
      task folder lives in the memory repo; `gh` resolves the repo from its cwd). **Absolutize the task
      folder FIRST** — `wo-pr-open.sh` does `-d "$TASK"` and reads `$TASK/PR_BODY.md` relative to its cwd, so
      a relative `<task-folder>` would fail `task_folder_missing` once cwd is the worktree:
      `TASK_ABS=$(cd <task-folder> && pwd)`, then run, with cwd set to `<worktree>`:
-     `wo-pr-open.sh "$TASK_ABS" --head "$(git -C <worktree> rev-parse --abbrev-ref HEAD)"`. The choke point
+     `wo-pr-open.sh "$TASK_ABS" --base <base> --head "$(git -C <worktree> rev-parse --abbrev-ref HEAD)"`. The choke point
      re-runs `wo-merge-gate.sh` and calls `gh pr create` **only** on a clean merge verdict; it **never
      merges**. A recorded grounding override opens the PR **flagged** (human merges with eyes open).
      Forward the `merge_gate` compact line.

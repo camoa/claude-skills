@@ -33,9 +33,10 @@ assert "T1b recipe_added_gate"   high recipe_added_gate --files-from "$TMP/t1b.t
 # T2 — base floor CONTAINS security, docs-only, verified => LOW (proves security∈floor is NOT a trigger)
 printf 'README.md\n' > "$TMP/t2.txt"
 assert "T2 security∈floor!=trigger" low none           --files-from "$TMP/t2.txt" --gate-floor "$BASE" --verified true
-# T3 — verified:false => HIGH/verified_false
+# T3 — verified:false is NO LONGER a trigger (F1 2026-06-12): a docs-only unverified WO is LOW.
+# The coverage_override + flagged PR + human-merge is the control for unverified grounding, not the tier.
 printf 'README.md\n' > "$TMP/t3.txt"
-assert "T3 verified_false"        high verified_false   --files-from "$TMP/t3.txt" --gate-floor "$BASE" --verified false
+assert "T3 verified:false not a trigger" low none      --files-from "$TMP/t3.txt" --gate-floor "$BASE" --verified false
 # T4 — collapsed_scc:true => HIGH/collapsed_scc
 printf 'README.md\n' > "$TMP/t4.txt"
 assert "T4 collapsed_scc"         high collapsed_scc    --files-from "$TMP/t4.txt" --gate-floor "$BASE" --verified true --collapsed-scc true
@@ -72,10 +73,13 @@ printf 'web/modules/my/src/access_check.php\n' > "$TMP/m10b.txt"
 assert "M10b lowercase access"    high security_glob    --files-from "$TMP/m10b.txt" --gate-floor "$BASE" --verified true
 printf 'src/SessionManager.php\n' > "$TMP/m10c.txt"
 assert "M10c session"             high security_glob    --files-from "$TMP/m10c.txt" --gate-floor "$BASE" --verified true
-# H1 — read verified/gate_floor/collapsed_scc from the WO FILE via the safe parser (NOT flags)
-printf -- '---\nid: local:t#wo-09\ngate_floor: [tdd, solid, dry, security, guides]\nverified: false\ncollapsed_scc: false\n---\n# wo\n' > "$TMP/wo-hi.md"
+# H1 — read verified/gate_floor/collapsed_scc from the WO FILE via the safe parser (NOT flags).
+# collapsed_scc:true (read from the file) drives HIGH; verified:false is ALSO in the file but is NO LONGER
+# a trigger (F1) — so the trigger being `collapsed_scc` (not `verified_false`) proves both: file-reading
+# works AND verified:false no longer escalates.
+printf -- '---\nid: local:t#wo-09\ngate_floor: [tdd, solid, dry, security, guides]\nverified: false\ncollapsed_scc: true\n---\n# wo\n' > "$TMP/wo-hi.md"
 printf 'README.md\n' > "$TMP/h1.txt"
-assert "H1 file verified:false"   high verified_false   --files-from "$TMP/h1.txt" "$TMP/wo-hi.md"
+assert "H1 file collapsed_scc:true (verified:false not trigger)" high collapsed_scc --files-from "$TMP/h1.txt" "$TMP/wo-hi.md"
 printf -- '---\nid: local:t#wo-10\ngate_floor: [tdd, solid, dry, security, guides]\nverified: true\ncollapsed_scc: false\n---\n# wo\n' > "$TMP/wo-lo.md"
 printf 'docs/x.md\n' > "$TMP/h1b.txt"
 assert "H1 file verified:true low" low none             --files-from "$TMP/h1b.txt" "$TMP/wo-lo.md"
