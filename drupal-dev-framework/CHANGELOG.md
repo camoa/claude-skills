@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.0] - 2026-06-12
+
+**Change-scoped gate floor — assess the diff, not the whole codebase.** The v4.19.1 F2 band-aid (a
+binary "skip the PHP gates when the diff has no PHP" pre-filter) is replaced by genuine change-scoping:
+`/review` now passes the merge-base diff to the four PHP/JS-centric gates (`tdd`/`solid`/`dry`/`security`)
+via the `validate-*` wrappers' new `--files` parameter, which forwards to code-quality-tools' `--changed`
+mode (≥3.9.0). This stops a work-order false-failing on pre-existing debt elsewhere in the tree.
+
+### Changed
+- **`/review` is change-scoped by default** (headless/loop and interactive). Step 5a computes the
+  gate-relevant changed-files list from the resolved-`$BASE` merge-base diff, writes it to a temp file, and
+  passes it to each of `validate-tdd`/`validate-solid`/`validate-dry`/`validate-security` via `--files`.
+  An empty relevant set is skipped inside the code-quality `--changed` mode (no `/review`-side binary skip).
+- **New `--full-audit` flag** restores the pre-v4.20 whole-tree behavior: all four gates run with no
+  `--files`, surfacing whole-codebase debt on demand. Both flags compose freely with `--headless`.
+- **`validate-{tdd,solid,dry,security}`** accept a `--files <path>` parameter and forward it as `--changed`.
+  DRY keeps its whole-tree clone scan but filters the verdict to clones touching a changed file.
+- `guides`, `validate-playbook-adherence`, `skill-review`, `plugin-validate` keep their own applicability
+  conditions and are not change-scoped by this mechanism.
+
+### Fixed
+- **`validate-playbook-adherence` diff base** — replaced the hardcoded `git merge-base main HEAD` with the
+  resolved `$BASE` forwarded from `/review`, so a non-`main` PR base no longer diffs the whole branch
+  divergence (latent bug, paired with the v4.19.1 F6 `--base` fix).
+
 ## [4.19.1] - 2026-06-12
 
 **Fix: make the autonomous work-order loop actually work on real changes.** The first attended end-to-end
