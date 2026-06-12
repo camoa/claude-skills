@@ -11,8 +11,9 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-sp
 ## Usage
 
 ```
-/drupal-dev-framework:validate-security              # run against current task from session context
-/drupal-dev-framework:validate-security <task-name>  # run against a specific task
+/drupal-dev-framework:validate-security                          # run against current task from session context
+/drupal-dev-framework:validate-security <task-name>              # run against a specific task
+/drupal-dev-framework:validate-security <task> --files <path>    # change-scoped: forward <path> as --changed to the underlying check
 ```
 
 ## What this does
@@ -26,7 +27,7 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-sp
 
 2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. Minimum supported version: **3.0.0** (earlier versions may work but are untested against this wrapper). If missing, abort with install instructions.
 
-3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. Follow its instructions (auto-detect project type, run the security check, surface findings), then capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). Capture the output for envelope construction in step 4.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per §"Verdict interpretation" below. Extract any actionable findings into `messages[]`. If `/code-quality:security` wrote a JSON report to `.reports/security.json` (disk-read fallback), capture its path.
 

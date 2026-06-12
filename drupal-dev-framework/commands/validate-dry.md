@@ -11,8 +11,9 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 ## Usage
 
 ```
-/drupal-dev-framework:validate-dry              # run against current task from session context
-/drupal-dev-framework:validate-dry <task-name>  # run against a specific task
+/drupal-dev-framework:validate-dry                          # run against current task from session context
+/drupal-dev-framework:validate-dry <task-name>              # run against a specific task
+/drupal-dev-framework:validate-dry <task> --files <path>    # change-scoped: forward <path> as --changed (filters verdict to change-touching clones)
 ```
 
 ## What this does
@@ -26,7 +27,7 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
 2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. Minimum supported version: **3.0.0** (earlier versions may work but are untested against this wrapper). If missing, abort with install instructions.
 
-3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. Follow its instructions (auto-detect project type, run the dry check, surface findings), then capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — DRY keeps its whole-tree clone scan but the `--changed` mode filters the verdict to clones where at least one copy is in the changed-files list (a clone entirely in unchanged code is not your concern this review). The code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan with no verdict filter (auto-detect project type, run the dry check, surface findings). Capture the output for envelope construction in step 4.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per §"Verdict interpretation" below. Extract any actionable findings into `messages[]`. If `/code-quality:dry` wrote a JSON report to `.reports/dry.json` (disk-read fallback), capture its path.
 
