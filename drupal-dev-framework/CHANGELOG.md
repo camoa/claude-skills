@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.22.0] - 2026-06-12
+
+**Closes the build_gate_correctness epic — two final children: the AI affected-test selector (the dynamic
+gate tier) + work-order lifecycle integration (the slice-① machinery becomes first-class).**
+
+### Added — AI affected-test selector (`ai_test_selector`)
+- **`agents/ai-test-selector.md`** — a read-only agent (`model: sonnet`, `disallowedTools: Edit, Write`) that
+  reads a change's diff + the surface registry (+ e2e journey plans) and selects the **affected** subset of
+  e2e/visual-regression surfaces semantically, **erring toward inclusion** (exclude only on high-confidence
+  evidence; degraded input ⇒ full set), with an auditable per-surface why-record. Replaces the *mechanical*
+  change-impact classifier for *within-gate* e2e/VR selection (the classifier keeps the coarse gate-level
+  bucketing). Treats the diff as data, not instructions. Schema: `references/ai-test-selector-schema.md`.
+- **Dispatch integration** (`references/visual-review/change-impact-dispatch.md` step 6.2a) — invokes the
+  selector for `e2e`/`visual_regression` only (NOT `visual_parity`, which is reference-driven); the opt-in shows
+  the gate recommendation AND the AI-selected surfaces together (never silent narrowing); a
+  `--full-<gate>`/`--skip-ai-selection` override runs the full candidate set. e2e consumes the selection via the
+  existing `validate-e2e.sh --surfaces-json`; VR via a registry pre-filter in `validate-visual-regression.md`
+  (no `visual-regression-gate.sh` change). An additive `dispatch_plan.ai_surface_selection` audit records it.
+  The oracle-integrity no-auto-rebaseline rule is untouched (selection is orthogonal to the baseline path).
+
+### Added — Work-order lifecycle integration (`wo_integration`)
+- **`commands/run-work-orders.md`** (NEW) — the missing user on-ramp to the autonomous path: validates
+  preconditions (compiled work-orders present; a worktree, else offers `/worktree`), invokes the
+  `work-order-loop` skill **inline** (never Task-dispatched), and emits the `/goal` string.
+- **Lifecycle on-ramps** (additive soft-nudges, matching the established `💡`/`[y]`-`[n]`-default/never-block
+  posture, silent when their condition is unmet): `/design` offers `/compile-work-orders` at Phase-2 close;
+  `/implement` step 2b offers the work-order build path **when `work-orders/` exists** (the in-session
+  Interactive Development Loop is unchanged and stays the default); `/next` surfaces compiled-work-order status
+  (counts done/ready/needs_rework); the session-primer carries a static orientation line.
+- **`references/work-order-lifecycle.md`** (NEW) — documents the three build paths (in-session default,
+  manual-conduct, autonomous), all opt-in; the work-order paths never replace the in-session default.
+
 ## [4.21.0] - 2026-06-12
 
 **Oracle-integrity invariant — a builder can never pass a gate by altering the gate's oracle.** The
