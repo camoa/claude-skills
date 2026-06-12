@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "code-quality-tools",
   "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Provides full audits with cross-tool synthesis, rubric-scored code review, 3-agent security and architecture debates, REVIEW.md v2 generation, a /code-review ultra cloud-review wrapper with a headless CLI gating path, optional LSP code-intelligence for deeper SOLID/DRY/review analysis, watch-mode linting, scheduled sweeps, and --json output for CI pipelines.",
-  "version": "3.9.0",
+  "version": "3.9.1",
   "author": {
     "name": "camoa"
   },

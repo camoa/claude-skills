@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.1] - 2026-06-12
+
+**Fix: `--changed` security/dry gates no longer require DDEV to skip a no-PHP change.** A faithful
+autonomous-loop run surfaced that `security-check.sh` and `dry-check.sh` checked the DDEV precondition
+**before** their no-relevant-files clean-skip — so a CSS-only (or any no-PHP) changed set ERRORed with
+`DDEV is not running` instead of skipping, breaking the static-tier premise (change-scoped gates are meant to
+run in a detached worktree with no running site) and fail-closing `/review` under automation. `solid-check.sh`
+and `lint-check.sh` already skip-before-DDEV; this aligns security + dry to that pattern.
+
+### Fixed
+- **`security-check.sh` `--changed`** — the empty-relevant-set clean-skip now runs **before** the DDEV check;
+  DDEV is required only when there is real SAST work (a PHP/JS/Twig file, or composer.json/lock, in the set).
+  No security scan is bypassed — a PHP- or composer-containing changed set still requires DDEV and runs the
+  full SAST. The standard (no-`--changed`) path is unchanged.
+- **`dry-check.sh` `--changed`** — added a no-PHP early short-circuit: when the changed set contains no
+  PHP-relevant files, there can be zero change-touching clones by definition, so it resolves to a clean PASS
+  and exits 0 **without** running whole-tree phpcpd or requiring DDEV. A PHP-containing changed set keeps the
+  unchanged whole-tree phpcpd + verdict-filter (DDEV required) path.
+
+### Tests
+- `tests/changed-mode.sh` +4 (24–27): assert a CSS-only changed set SKIPS/PASSES with exit 0 for both
+  security and dry when DDEV is unavailable (stubbed), and that a PHP-containing set still requires DDEV.
+
 ## [3.9.0] - 2026-06-12
 
 **`--changed <files>` mode for the Drupal gates — scope a gate run to a changed-files list.** Brings the
