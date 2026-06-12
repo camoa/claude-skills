@@ -33,9 +33,32 @@ CRIT_REF="<task>/work-orders/${WO_ID}._critique.json"
 mkdir -p "$CDIR"
 ```
 
-**1 — risk tier (fail-closed kernel).**
+**1 — risk tier inputs + oracle-tamper guard (runs BEFORE critics).**
 ```bash
 git -C "<worktree>" diff <before>..<after> --name-only > "$CDIR/files.txt"
+```
+
+The oracle-tamper guard runs **before the risk classifier and before any critic is spawned** — catching tamper
+before any critic budget is spent. It needs `--name-status` (so deletions are visible); this is a SEPARATE
+diff alongside `files.txt`.
+```bash
+# derive NAME-STATUS diff — --name-only hides deletions (D); the oracle check needs them
+git -C "<worktree>" diff <before>..<after> --name-status > "$CDIR/name-status.txt"
+
+# invoke wo-01's kernel; pass the WO file PATH (safe read for oracle_update field, H1 — never paste diff content)
+ORACLE=$(bash "$KERNEL/wo-oracle-check.sh" "<wo-file>" --diff-from "$CDIR/name-status.txt")
+
+# on tamper_detected → write oracle_tamper HALT (jq-built; NEVER string-concatenated) and RETURN — critics NOT spawned
+if [ "$(printf '%s' "$ORACLE" | jq -r '.tamper_detected')" = "true" ]; then
+  jq -nc --arg wo "$WO_ID" --arg r "oracle_tamper" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+     '{wo_id:$wo, reason:$r, at:$at}' > "<task>/work-orders/${WO_ID}.HALT"
+  # emit the compact line (forward oracle signals[]), RETURN — the loop's terminal-HALT path escalates
+else
+  # severity:flag signals → record into the compact line; proceed to risk tier + critics below
+fi
+```
+
+```bash
 # pass the WO FILE PATH — the kernel reads verified/gate_floor/collapsed_scc via the safe parser (H1)
 TIER=$(bash "$KERNEL/wo-risk-classify.sh" "<wo-file>" --files-from "$CDIR/files.txt" | jq -r '.risk_tier')
 ```
