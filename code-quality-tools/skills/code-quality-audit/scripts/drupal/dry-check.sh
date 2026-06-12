@@ -124,7 +124,49 @@ if [ -n "$CHANGED_FILES_PATH" ]; then
 fi
 echo ""
 
-# Check DDEV
+# --changed early skip: no PHP files → zero change-touching clones possible, no DDEV needed.
+# A DRY clone is a PHP construct; if the changed set has no PHP files, there can be no
+# change-touching clones by definition. Mirror the solid/lint pattern: resolve without DDEV.
+if [ -n "$CHANGED_FILES_PATH" ]; then
+    _DRY_PHP_EXTS="\.php$|\.module$|\.inc$|\.install$|\.profile$|\.theme$|\.engine$"
+    _DRY_HAS_PHP=false
+    while IFS= read -r _f; do
+        [ -z "$_f" ] && continue
+        if echo "$_f" | grep -qE "$_DRY_PHP_EXTS"; then
+            _DRY_HAS_PHP=true
+            break
+        fi
+    done < "$CHANGED_FILES_PATH"
+
+    if [ "$_DRY_HAS_PHP" = false ]; then
+        echo -e "${GREEN}[SKIP]${NC} No PHP files in changed set — zero change-touching clones possible."
+        mkdir -p "${REPORT_DIR}/dry"
+        cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "changed_mode": true,
+  "changed_files": "${CHANGED_FILES_PATH}",
+  "duplication_percentage": 0,
+  "total_lines": 0,
+  "duplicated_lines": 0,
+  "clone_count": 0,
+  "failing_clones": 0,
+  "informational_clones": 0,
+  "clones": [],
+  "rating": "excellent",
+  "status": "pass",
+  "skip_reason": "no PHP files in changed set",
+  "settings": {
+    "min_lines": ${MIN_LINES},
+    "min_tokens": ${MIN_TOKENS}
+  },
+  "generated_at": "$(date -Iseconds)"
+}
+EOF
+        exit 0
+    fi
+fi
+
+# Check DDEV (only reached when PHP files are present in --changed mode, or no --changed flag)
 if ! ddev describe &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} DDEV is not running"
     exit 2

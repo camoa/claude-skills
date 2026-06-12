@@ -18,12 +18,6 @@ DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
 echo "=== Security Audit (OWASP + Drupal) ==="
 echo ""
 
-# Check DDEV
-if ! ddev describe &> /dev/null; then
-    echo -e "${RED}[ERROR]${NC} DDEV is not running"
-    exit 2
-fi
-
 # Check jq
 if ! command -v jq &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} jq is required but not installed"
@@ -115,6 +109,12 @@ if [ -n "$CHANGED_FILE" ]; then
                 issues: []
             }' > "${REPORT_DIR}/security-report.json"
         exit 0
+    fi
+
+    # Changed set has real SAST work to do — DDEV is required from here
+    if ! ddev describe &> /dev/null; then
+        echo -e "${RED}[ERROR]${NC} DDEV is not running"
+        exit 2
     fi
 
     echo "Relevant SAST files (${#RELEVANT_FILES[@]}):"
@@ -419,6 +419,12 @@ fi
 # =====================
 # Standard (no --changed) path — byte-identical to original logic
 # =====================
+
+# Check DDEV (standard path always requires a running site)
+if ! ddev describe &> /dev/null; then
+    echo -e "${RED}[ERROR]${NC} DDEV is not running"
+    exit 2
+fi
 
 echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================

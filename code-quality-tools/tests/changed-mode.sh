@@ -617,6 +617,120 @@ SECURITY_SCRIPT="${DRUPAL_SCRIPTS}/security-check.sh"
 }
 
 # =====================
+# No-DDEV static-tier gap tests (Tests 24-27)
+# Regression tests for the gap where --changed with a no-PHP changed set
+# errored with "DDEV is not running" instead of skipping cleanly.
+# These tests run with a stub ddev whose `describe` always exits non-zero,
+# simulating a fully detached worktree with no running site.
+# =====================
+make_no_ddev() {
+    local dir="$1"
+    mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+# Stub: DDEV unavailable — describe always exits non-zero
+case "$1" in
+    describe) exit 1 ;;
+    *)        exit 1 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+
+NO_DDEV_BIN=$(mktemp -d)
+make_no_ddev "$NO_DDEV_BIN"
+
+# =====================
+# Test 24: security-check.sh --changed CSS-only → exit 0 (SKIP) even without DDEV
+# =====================
+{
+    label="security-check.sh --changed CSS-only → exit 0/SKIP without DDEV"
+    tmpf=$(mktemp)
+    printf '%s\n' "themes/custom/x/scss/styles.scss" "themes/custom/x/css/styles.css" > "$tmpf"
+    RDIR=$(mktemp -d)
+
+    exit_code=0
+    output=$(PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    rm -f "$tmpf"
+
+    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "skip"; then
+        ok "$label → exit 0, skip message present"
+    else
+        fail "$label → exit_code=${exit_code}; output=${output}"
+    fi
+    rm -rf "$RDIR"
+}
+
+# =====================
+# Test 25: security-check.sh --changed PHP-file → requires DDEV (exit 2 when absent)
+# =====================
+{
+    label="security-check.sh --changed PHP-file → exit 2 (DDEV required)"
+    tmpf=$(mktemp)
+    printf '%s\n' "web/modules/custom/my_module/src/MyService.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+
+    exit_code=0
+    output=$(PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    rm -f "$tmpf"
+
+    if [ "$exit_code" -eq 2 ] && echo "$output" | grep -qi "ddev"; then
+        ok "$label → exit 2, DDEV error message"
+    else
+        fail "$label → expected exit 2, got ${exit_code}; output=${output}"
+    fi
+    rm -rf "$RDIR"
+}
+
+# =====================
+# Test 26: dry-check.sh --changed CSS-only → exit 0 (SKIP) even without DDEV
+# =====================
+{
+    label="dry-check.sh --changed CSS-only → exit 0/SKIP without DDEV"
+    tmpf=$(mktemp)
+    printf '%s\n' "themes/custom/x/scss/styles.scss" "themes/custom/x/css/styles.css" > "$tmpf"
+    RDIR=$(mktemp -d)
+
+    exit_code=0
+    output=$(PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    rm -f "$tmpf"
+
+    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "skip\|no php"; then
+        ok "$label → exit 0, skip/no-php message present"
+    else
+        fail "$label → exit_code=${exit_code}; output=${output}"
+    fi
+    rm -rf "$RDIR"
+}
+
+# =====================
+# Test 27: dry-check.sh --changed PHP-file → requires DDEV (exit 2 when absent)
+# =====================
+{
+    label="dry-check.sh --changed PHP-file → exit 2 (DDEV required)"
+    tmpf=$(mktemp)
+    printf '%s\n' "web/modules/custom/my_module/src/MyService.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+
+    exit_code=0
+    output=$(PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    rm -f "$tmpf"
+
+    if [ "$exit_code" -eq 2 ] && echo "$output" | grep -qi "ddev"; then
+        ok "$label → exit 2, DDEV error message"
+    else
+        fail "$label → expected exit 2, got ${exit_code}; output=${output}"
+    fi
+    rm -rf "$RDIR"
+}
+
+rm -rf "$NO_DDEV_BIN"
+
+# =====================
 # Cleanup
 # =====================
 rm -rf "$FINDINGS_BIN"
