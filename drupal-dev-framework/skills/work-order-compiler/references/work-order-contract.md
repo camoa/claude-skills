@@ -106,6 +106,12 @@ coverage_override: { reason: <str>, by: <str>, at: <iso8601> } | null   # RESERV
                                     #   dispatch a verified:false WO. Honored like a recorded bypass ⇒ ③ MUST NOT auto-merge.
                                     #   Default null. Resolves the "proceed on verified:false" path the prose promised but the
                                     #   hard precondition forbade (the dispatch gate now checks verified OR override).
+oracle_update: { classes: [baseline|snapshot|phpstan-baseline|coverage-threshold|test-delete], reason: <str>, by: <str> } | null
+                                    #   SEAM: ① AUTHORED in the WO (human); ② CONSUMED at the critique rung.
+                                    #   Default null. When present and a tamper signal’s oracle_class ∈ classes, the signal is
+                                    #   downgraded HALT→flag (the WO ships, the PR opens flagged); a signal outside classes,
+                                    #   or the field absent, HALTs (oracle_tamper). Shape:
+                                    #   oracle_update: {classes:[baseline|snapshot|phpstan-baseline|coverage-threshold|test-delete], reason:<str>, by:<str>} | null
 
 # ── provenance ──
 compiled_from:
@@ -260,6 +266,7 @@ mirror that records only its minted id back into `external_ids.beads`. Detail:
 | `gate_floor` | compiler (here) | ② reads (tiering + which gates) |
 | `review_ref` / `critique_ref` / `risk_tier` | reserved — compiler emits null; ② populates (sidecars + realized tier) | ② §16.2 critique |
 | `size_estimate` / WO count | compiler (here) | ④ budget governor |
+| `oracle_update` | ② / human (authored in the WO; null by default) | ② critique rung — `oracle_class ∈ classes` downgrades HALT→flag; absent or mismatch → `oracle_tamper` HALT |
 
 **OCP note:** the reserved fields (`review_ref` / `risk_tier` / `size_estimate` / `critique_ref` /
 `coverage_override`) absorb new sibling needs **additively**, the way `external_ids: {}` reserves
@@ -278,7 +285,7 @@ fields: ③ reads it to drive sequencing + status; ② reads the tree it points 
 { "wo_id": "local:<task>#wo-NN", "dispatched": true|false, "override_used": true|false,
   "halt_reason": null | "verified_false" | "poisoned" | "uncovered" | "unpinned_ref"
                | "drift_skipped" | "drift_unresolved" | "acceptance_not_runnable"
-               | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed",   # §17: "autonomy_unsafe" retired
+               | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed" | "oracle_tamper",   # §17: "autonomy_unsafe" retired; "oracle_tamper" added 2026-06-12
   "tree": "<worktree path>", "checkpoint_before": "<sha>", "checkpoint_after": "<sha>|null",
   "produced_changes": true|false,
   "artifacts": ["<path>", "..."], "build_returned": true|false }
@@ -295,7 +302,9 @@ fields: ③ reads it to drive sequencing + status; ② reads the tree it points 
 
 (The `halt_reason` enum was **widened 2026-06-08** alongside the dispatch-gate strengthening — the new
 `unpinned_ref` / `drift_skipped` / `drift_unresolved` / `acceptance_not_runnable` grounding reasons
-plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `schema_version: "1.0"`.)
+plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `schema_version: "1.0"`.
+**Widened again 2026-06-12** to add `oracle_tamper` — a WO diff touched an un-exempted oracle artifact
+(VR baseline / test deletion / phpstan-baseline); also additive within `schema_version: "1.0"`.)
 
 ---
 
@@ -311,4 +320,11 @@ plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `
   itself attacker-authored, so the critic stays a semantic-injection target — a probabilistic
   mitigation, not a structural close.** **Unattended operation on high-`risk_tier` / security-touching
   work-orders is below the §14.5/§16.2 bar until ② ships.**
+- **Oracle-integrity invariant.** The contract's `oracle_tamper` HALT reason enforces that the builder
+  must never delete or weaken a test, VR baseline/snapshot, `phpstan-baseline.*`, or coverage threshold
+  to pass a gate — only ADD tests / fix code. *Deterministic* enforcement is the path-level oracle-tamper
+  check at the critique rung: an add/modify of a VR baseline, delete of a test or VR spec, or add/modify
+  of `phpstan-baseline.neon` ⇒ `oracle_tamper` HALT (unless the WO's `oracle_update` field explicitly
+  exempts that class). *Semantic* oracle weakening inside a kept file remains the critics' probabilistic
+  lane — it is not structurally closed here.
 - See `injection-boundary.md` for the mechanical-vs-semantic split in full.
