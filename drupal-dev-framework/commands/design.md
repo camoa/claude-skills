@@ -41,6 +41,12 @@ Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 9. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with resolved project + task.
 
+10. **Work-order compile offer (v4.19.0+).** After writing session context, offer to decompose this architecture into self-contained work-orders for independent-agent build:
+
+> 💡 Phase 2 complete. Decompose this task into self-contained work-orders for independent-agent build? `/drupal-dev-framework:compile-work-orders <task>` produces `work-orders/wo-NN-*.md` (see `references/work-order-lifecycle.md`). `[y]` runs it now; `[n]` (default) — proceed to `/implement`.
+
+Default `[n]` — proceed to `/drupal-dev-framework:implement` as usual. Never blocks.
+
 ## Pointers
 
 - Full walkthrough: `references/design-walkthrough.md`
@@ -54,3 +60,4 @@ Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 - `/drupal-dev-framework:implement <task>` — Phase 3
 - `/drupal-dev-framework:pattern <use-case>` — pattern recommendations
 - `/drupal-dev-framework:validate <task>` — validate design
+- `/drupal-dev-framework:compile-work-orders <task>` — decompose architecture into work-orders for independent-agent build (see `references/work-order-lifecycle.md`)
