@@ -699,8 +699,8 @@ print("---")'
 # ─────────────────────────────────────────────────────────────────────────────
 # (f) assert-dispatchable <wo-file> — the WO-aware fail-closed dispatch gate.
 #
-# Exit 0 IFF (grounding_clean OR coverage_override valid) AND status=="ready"
-# AND autonomy_safe==true; else non-zero. Always prints one-line JSON:
+# Exit 0 IFF (grounding_clean OR coverage_override valid) AND status=="ready";
+# else non-zero. Always prints one-line JSON:
 #   {"dispatchable":bool,"reason":"<why>","override_used":bool}
 # The WO file is UNTRUSTED (parsed via wo_frontmatter_json → yaml.safe_load).
 #
@@ -719,17 +719,20 @@ print("---")'
 #                         missing drift_guard FAILS — no receipt ⇒ not dispatchable)
 #                     AND drift_guard.acceptance_runnable==true  (H2)
 #   A valid override bypasses ALL grounding (coverage + lockfile + drift) but
-#   NEVER status or autonomy_safe. override_used = override_valid AND NOT
+#   NEVER status. override_used = override_valid AND NOT
 #   grounding_clean (the override carried a non-clean WO ⇒ ③ withholds auto-merge).
 #   reason (deterministic, first failing clause; the grounding cluster is expanded
 #   so the operator sees WHICH grounding gate blocked):
 #     grounding → "poisoned" | "uncovered" | "verified_false" | "unpinned_ref"
 #                 | "drift_skipped" | "drift_unresolved" | "acceptance_not_runnable"
 #     status    → "status_not_ready:<status>"
-#     autonomy  → "autonomy_unsafe"
 #     all pass  → "dispatchable"
-# Defaults fail-closed: a missing verified / autonomy_safe / drift receipt, or an
-# unpinnable ref, reads as not-dispatchable.
+# Defaults fail-closed: a missing verified / drift receipt, or an unpinnable ref,
+# reads as not-dispatchable.
+# NOTE (design §17, 2026-06-11): autonomy_safe is NO LONGER a dispatch gate. Autonomy is
+# mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in recipe
+# authoring. Dispatch rides on grounding + status; the gate floor, §16.2 critique,
+# no-auto-merge, and human-merge are the safety net.
 # ─────────────────────────────────────────────────────────────────────────────
 cmd_assert_dispatchable() {
   local wo="${1:-}"
@@ -756,7 +759,6 @@ cmd_assert_dispatchable() {
       and (($o.at) // ""     | (type == "string") and (length > 0) and (test("^[0-9]{4}-[0-9]{2}-[0-9]{2}")));
     (.verified) as $v
     | (.status // "") as $st
-    | (.autonomy_safe) as $asafe
     | (.coverage_override) as $ov
     | (.coverage_status // "") as $cs
     | (.lockfile) as $lf
@@ -778,8 +780,10 @@ cmd_assert_dispatchable() {
     | (override_valid($ov)) as $ovok
     | ($grounding_clean or $ovok) as $cleared   # override bypasses ALL grounding
     | ($st == "ready") as $status_ok
-    | ($asafe == true) as $autonomy_ok
-    | ($cleared and $status_ok and $autonomy_ok) as $disp
+    # autonomy_safe is NO LONGER a dispatch gate (design §17, 2026-06-11): autonomy is
+    # mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in
+    # recipe authoring — not a per-WO flag. The field may still be present but never blocks.
+    | ($cleared and $status_ok) as $disp
     | ($ovok and ($grounding_clean | not)) as $override_used
     | (if $disp then "dispatchable"
        elif ($cleared | not) then
@@ -792,8 +796,7 @@ cmd_assert_dispatchable() {
           elif ($dgsym != true) then "drift_unresolved"
           elif ($dgacc != true) then "acceptance_not_runnable"
           else "verified_false" end)
-       elif ($status_ok | not) then ("status_not_ready:" + $st)
-       else "autonomy_unsafe" end) as $reason
+       else ("status_not_ready:" + $st) end) as $reason
     | {dispatchable: $disp, reason: $reason, override_used: $override_used}
   ' 2>/dev/null)
   if [ -z "$out" ]; then

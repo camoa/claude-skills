@@ -89,11 +89,11 @@ collapsed_scc: false                # true ⇒ this WO merged a strongly-connect
 
 # ── sibling SEAM fields — carried here, behavior built by the named sibling (frozen so they start in parallel) ──
 gate_floor: [tdd, solid, dry, security, guides]   # ② reads. Set at compile = base set ∪ recipe-declared gates.
-autonomy_safe: true | false         # DEFAULTS false (H-2 fail-closed). true ONLY when EVERY matched recipe EXPLICITLY
-                                    #   declares an autonomy-safe interaction contract via a MACHINE-READABLE recipe-
-                                    #   frontmatter field (NEVER inferred from prose — a cross-task recipe-catalog dep).
-                                    #   Gates the RECIPE §14.5 halt-and-escalate contract — NOT builder hallucination /
-                                    #   critique coverage (M2). ③ dispatch gate.
+autonomy_safe: true | false         # INFORMATIONAL ONLY (§17, 2026-06-11) — NO LONGER a dispatch gate.
+                                    #   Autonomy is mode-keyed RECIPE BEHAVIOR (stop-and-ask@L0 / infer-and-flag@L1-L2),
+                                    #   enforced in recipe authoring, not a per-WO flag. The field may still record whether
+                                    #   matched recipes declared an autonomy-safe interaction contract, but it never blocks
+                                    #   dispatch. (Was: defaulted false, gated dispatch on every matched recipe declaring it.)
 review_ref:   <task>/work-orders/wo-NN._review.json   | null   # RESERVED (M1): per-WO review location ② BUILDS
                                     #   (shipped /review --headless writes a TASK-level audit; ② adds the per-WO file — L-3).
 critique_ref: <task>/work-orders/wo-NN._critique.json | null   # RESERVED (M1): ②'s §16.2 per-job critique verdict
@@ -178,18 +178,19 @@ grounding_clean = verified == true AND coverage_status == "covered"
                   AND drift_guard.symbols_resolved == true        # H2: "skipped" AND false BOTH fail
                   AND drift_guard.acceptance_runnable == true     # H2
 dispatchable    = (grounding_clean OR a valid coverage_override {reason, by, at})
-                  AND status == "ready" AND autonomy_safe == true
+                  AND status == "ready"           # §17: autonomy_safe is NO LONGER a gate
 override_used   = override_valid AND NOT grounding_clean
 ```
 
 A valid `coverage_override` bypasses **all** grounding (coverage + lockfile + drift) — but **never**
-`status` or `autonomy_safe`. Else non-zero. It always prints
+`status`. Else non-zero. It always prints
 `{"dispatchable":bool,"reason":<why>,"override_used":bool}`. `override_used` is true when the override
 (not clean grounding) carried the dispatch ⇒ **③ withholds auto-merge** (a recorded bypass, like a
-`--skip-<gate>`). Missing `verified`/`autonomy_safe` read fail-closed as `false`. The `reason` is the
+`--skip-<gate>`). Missing `verified` reads fail-closed as `false`. The `reason` is the
 first failing clause in IFF order: `verified_false | poisoned | uncovered | unpinned_ref |
 drift_skipped | drift_unresolved | acceptance_not_runnable` → `status_not_ready:<status>` →
-`autonomy_unsafe` → `dispatchable`.
+`dispatchable`. (§17, 2026-06-11: `autonomy_safe` is no longer a dispatch gate — autonomy is mode-keyed
+recipe behavior; the `autonomy_unsafe` reason is retired.)
 
 ---
 
@@ -255,7 +256,7 @@ mirror that records only its minted id back into `external_ids.beads`. Detail:
 | `status` (ALL transitions) | ③ (H-3 two-repo) | `assert-dispatchable` reads (here); ② reads |
 | `verified` / `coverage_status` (fail-closed) | compiler (here) | `assert-dispatchable` (kernel, here) + ③ |
 | `coverage_override` | ③ / human | `assert-dispatchable` (here) ⇒ ③ no-auto-merge |
-| `autonomy_safe` | compiler (here) | `assert-dispatchable` (here) + ③ dispatch gate |
+| `autonomy_safe` | compiler (here) | informational only (§17) — NOT a dispatch gate |
 | `gate_floor` | compiler (here) | ② reads (tiering + which gates) |
 | `review_ref` / `critique_ref` / `risk_tier` | reserved — compiler emits null; ② populates (sidecars + realized tier) | ② §16.2 critique |
 | `size_estimate` / WO count | compiler (here) | ④ budget governor |
@@ -277,7 +278,7 @@ fields: ③ reads it to drive sequencing + status; ② reads the tree it points 
 { "wo_id": "local:<task>#wo-NN", "dispatched": true|false, "override_used": true|false,
   "halt_reason": null | "verified_false" | "poisoned" | "uncovered" | "unpinned_ref"
                | "drift_skipped" | "drift_unresolved" | "acceptance_not_runnable"
-               | "autonomy_unsafe" | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed",
+               | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed",   # §17: "autonomy_unsafe" retired
   "tree": "<worktree path>", "checkpoint_before": "<sha>", "checkpoint_after": "<sha>|null",
   "produced_changes": true|false,
   "artifacts": ["<path>", "..."], "build_returned": true|false }
@@ -300,9 +301,9 @@ plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `
 
 ## Honest scope boundary (what this contract does NOT guarantee)
 
-- `autonomy_safe: true` means every matched **recipe** carries the §14.5 halt-and-escalate
-  interaction contract — it does **NOT** mean the build won't hallucinate. Builder-output trust is a
-  separate concern, caught by ②'s gates + the §16.2 per-job critique.
+- `autonomy_safe` is **informational only** (§17, 2026-06-11) — it does **not** gate dispatch. Autonomy
+  is mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2). It never meant the build won't
+  hallucinate — builder-output trust is caught by ②'s gates + the §16.2 per-job critique + human-merge.
 - The **mechanical** injection boundary (transcript → shell/JSON/path) is structurally minimized on
   the load-bearing seam (the handle is built from git/disk, never the transcript). The **semantic**
   injection boundary (a judge that must READ the transcript can be steered) is **not closeable here**

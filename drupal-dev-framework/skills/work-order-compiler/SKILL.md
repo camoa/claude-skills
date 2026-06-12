@@ -112,10 +112,11 @@ Full detail, exact JSON shapes, and halt-handling tables: `references/compiler-a
    (`poisoned > uncovered > covered`). **Carry `verified` / `coverage_status` verbatim** — do not
    re-judge them.
 
-   6b. **`autonomy_safe` + `gate_floor`** `[kernel+model]`. `autonomy_safe` **defaults `false`**; set
-   `true` **only** when **every** matched recipe explicitly declares the machine-readable
-   autonomy-safe frontmatter field (never inferred from prose — a cross-task recipe-catalog
-   dependency). `gate_floor` = base `[tdd, solid, dry, security, guides]` ∪ recipe-declared gates.
+   6b. **`autonomy_safe` + `gate_floor`** `[model]`. `autonomy_safe` is **informational only** (§17,
+   2026-06-11) — it does **NOT** gate dispatch. Autonomy is mode-keyed recipe behavior
+   (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in recipe authoring. You may still record whether
+   matched recipes declared an autonomy-safe contract, but it never blocks. `gate_floor` = base
+   `[tdd, solid, dry, security, guides]` ∪ recipe-declared gates (still compiler-produced, still read by ②).
 
 7. **Assemble each WO body** `[model]`. Inline every section per the contract's body list: the Goal
    triplet, the architecture slice, Non-goals, the load-bearing research facts, the Scope delta,

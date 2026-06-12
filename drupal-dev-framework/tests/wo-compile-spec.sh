@@ -572,7 +572,8 @@ RC=0; OUT=$(bash "$SUT" assert-dispatchable "$WO_ST" 2>/dev/null) || RC=$?
 assert_eq "status!=ready WO ⇒ exit non-zero (halt)"    "1"    "$RC"
 assert_jq "status!=ready WO ⇒ reason status_not_ready" '.reason | startswith("status_not_ready")' 'true' "$OUT"
 
-# autonomy_safe:false ⇒ halt (verified:true + covered so autonomy is the ONLY failure)
+# §17 (2026-06-11): autonomy_safe is NO LONGER a dispatch gate. A grounded WO with
+# autonomy_safe:false still dispatches (autonomy is mode-keyed recipe behavior, not a flag).
 WO_AS="$TMPDIR/wo-as.md"
 write_wo "$WO_AS" 'id: local:t#wo-04
 status: ready
@@ -582,10 +583,11 @@ coverage_status: covered
 drift_guard: {symbols_resolved: true, acceptance_runnable: true}
 coverage_override: null'
 RC=0; OUT=$(bash "$SUT" assert-dispatchable "$WO_AS" 2>/dev/null) || RC=$?
-assert_eq "autonomy_safe:false WO ⇒ exit non-zero (halt)" "1" "$RC"
-assert_jq "autonomy_safe:false WO ⇒ reason autonomy_unsafe" '.reason' 'autonomy_unsafe' "$OUT"
+assert_eq "§17: autonomy_safe:false but grounded ⇒ exit 0 (dispatch)" "0" "$RC"
+assert_jq "§17: autonomy_safe:false but grounded ⇒ dispatchable:true" '.dispatchable' 'true' "$OUT"
+assert_jq "§17: autonomy_safe:false but grounded ⇒ reason dispatchable" '.reason' 'dispatchable' "$OUT"
 
-# autonomy_safe DEFAULT false (absent) ⇒ halt (H-2 fail-closed)
+# §17: autonomy_safe ABSENT (the no-recipe / guides-only case) ⇒ still dispatches when grounded.
 WO_NOAS="$TMPDIR/wo-noas.md"
 write_wo "$WO_NOAS" 'id: local:t#wo-05
 status: ready
@@ -594,7 +596,8 @@ coverage_status: covered
 drift_guard: {symbols_resolved: true, acceptance_runnable: true}
 coverage_override: null'
 RC=0; OUT=$(bash "$SUT" assert-dispatchable "$WO_NOAS" 2>/dev/null) || RC=$?
-assert_eq "absent autonomy_safe ⇒ halt (default false)" "1" "$RC"
+assert_eq "§17: absent autonomy_safe (guides-only) but grounded ⇒ exit 0 (dispatch)" "0" "$RC"
+assert_jq "§17: absent autonomy_safe but grounded ⇒ dispatchable:true" '.dispatchable' 'true' "$OUT"
 
 # valid coverage_override on a verified:false WO ⇒ dispatch + override_used:true
 WO_OV="$TMPDIR/wo-ov.md"
@@ -796,7 +799,7 @@ assert_jq "GROUNDING: fully-clean WO ⇒ dispatchable:true" '.dispatchable' 'tru
 assert_jq "GROUNDING: fully-clean WO ⇒ override_used:false" '.override_used' 'false' "$OUT"
 assert_jq "GROUNDING: fully-clean WO ⇒ reason dispatchable" '.reason' 'dispatchable' "$OUT"
 
-# === override bypasses ALL grounding (coverage+lockfile+drift) but NOT status/autonomy ===
+# === override bypasses ALL grounding (coverage+lockfile+drift) but NOT status ===
 WO_OVGR="$TMPDIR/wo-ovgr.md"
 write_wo "$WO_OVGR" 'id: local:t#wo-gr8
 status: ready
@@ -813,7 +816,7 @@ coverage_override:
 RC=0; OUT=$(bash "$SUT" assert-dispatchable "$WO_OVGR" 2>/dev/null) || RC=$?
 assert_eq "GROUNDING: valid override on an unpinned_ref WO ⇒ dispatch" "0" "$RC"
 assert_jq "GROUNDING: override bypasses grounding ⇒ override_used:true" '.override_used' 'true' "$OUT"
-# but the override does NOT bypass autonomy_safe:false
+# §17: autonomy_safe:false no longer halts — override bypasses grounding, status is ready ⇒ dispatch.
 WO_OVGRA="$TMPDIR/wo-ovgra.md"
 write_wo "$WO_OVGRA" 'id: local:t#wo-gr9
 status: ready
@@ -827,8 +830,9 @@ coverage_override:
   by: carlos
   at: 2026-06-08T00:00:00Z'
 RC=0; OUT=$(bash "$SUT" assert-dispatchable "$WO_OVGRA" 2>/dev/null) || RC=$?
-assert_eq "GROUNDING: override does NOT bypass autonomy_safe:false ⇒ halt" "1" "$RC"
-assert_jq "GROUNDING: override + autonomy_safe:false ⇒ reason autonomy_unsafe" '.reason' 'autonomy_unsafe' "$OUT"
+assert_eq "§17: override on unpinned + autonomy_safe:false ⇒ dispatch (autonomy no longer gates)" "0" "$RC"
+assert_jq "§17: override + autonomy_safe:false ⇒ dispatchable:true"  '.dispatchable'  'true' "$OUT"
+assert_jq "§17: override + autonomy_safe:false ⇒ override_used:true" '.override_used' 'true' "$OUT"
 
 # === a `lockfile` present-but-NON-ARRAY ⇒ fail-closed (treat as not-clean) ===
 WO_LFNA="$TMPDIR/wo-lfna.md"
