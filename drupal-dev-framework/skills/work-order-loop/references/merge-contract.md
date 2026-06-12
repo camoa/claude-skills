@@ -34,6 +34,24 @@ itself **re-runs** `wo-ship-gate.sh` from disk (never a cached verdict — TOCTO
   {in_progress,done,needs_rework}) ⇒ `missing_run_state` ⇒ `merge_ok=false`. A missing `PR_BODY.md` ⇒
   `wo-pr-open.sh` refuses (`pr_body_absent`).
 
+## VR and oracle-integrity (terminal escalation — never silent)
+
+Under automation the loop **runs** VR (compares current output to the baseline) but **NEVER regenerates
+the baseline** — consistent with `/review --headless` passing `--ci` to VR tooling (no baseline-write
+path in CI mode). This is load-bearing: an auto-rebaseline would silently pass a visual regression,
+defeating the gate.
+
+- A **VR diff** (baseline exists, current output diverges) is **terminal escalation** — the human
+  decides whether the change is a regression to fix or an intended change requiring a deliberate
+  I-rebaseline. The loop never resolves this silently.
+- An **`oracle_tamper` HALT** (a WO diff touched an un-exempted oracle artifact — VR baseline / test
+  deletion / `phpstan-baseline.*`) joins the set of terminal-HALT reasons the loop already escalates
+  on (alongside `verified_false`, `unpinned_ref`, etc.). Neither is auto-merged; both require human
+  decision before the PR can proceed.
+- The `oracle_update` WO field is the **sole exemption path**: when present and the tamper signal's
+  `oracle_class ∈ oracle_update.classes`, the signal is downgraded HALT→flag (PR opens flagged, not
+  blocked). Absent or mismatched ⇒ `oracle_tamper` HALT (terminal).
+
 ## PR-open posture + token (D6, R-2, H2)
 
 - v1 PR body source = `<task>/PR_BODY.md`, written by the task-level `/review --headless` on green
