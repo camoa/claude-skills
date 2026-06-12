@@ -14,6 +14,7 @@ Implementation phases, with SOLID / TDD / DRY / security gates).
 - Framework memory: `{memory_path}`
 - Code path: `{code_path}`
 - Run `/drupal-dev-framework:next` to see the current phase and task.
+- If a task has compiled work-orders, check `<task>/work-orders/` — `/drupal-dev-framework:next` surfaces their status and `/run-work-orders` builds them.
 - Before ending your work, run `/drupal-dev-framework:save-session` to persist
   in-flight state.
 

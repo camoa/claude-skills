@@ -26,6 +26,12 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 2. **Worktree signals (v3.16.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/worktree-signals.sh <task>`. On HIGH-strength signal (`another_task_active`, `dirty_tree`, `--worktree` flag, or `worktreeByDefault: true`), print soft-nudge offering `/worktree <task>`. Suppress when already inside a worktree. Never block.
 
+2b. **Work-order build-path offer (v4.19.0+, conditional).** Check whether `<task>/work-orders/wo-*.md` exist (Bash glob). **SILENT when absent — do not print anything if no work-orders are found.** When files are found, print ONE soft-nudge:
+
+> 💡 Work-orders found for this task. Build via independent agents? `/drupal-dev-framework:run-work-orders <task>` (requires a worktree) runs each WO in isolation. `[y]` → hand off to `/run-work-orders`; `[n]` (default) — continue in-session. See `references/work-order-lifecycle.md`.
+
+Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive Development Loop unchanged. The in-session default behavior is not altered by this check.
+
 3. **Dev-guides preflight (two-stage + component-aware, v4.10.0+).** Stage 1 deterministic; Stage 2 in two agent passes (prose + component file-path). See `/research` step 3 for the shared two-stage description.
    - **Stage 1 (deterministic).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder> --phase implement` → `{ methodology_floor[], catalog_candidates[], scanned_files[], warnings[] }`. The implement-phase methodology floor is 5 refs (`plugin:tdd-workflow`, `plugin:solid-drupal`, `plugin:dry-patterns`, `plugin:library-first`, `plugin:quality-gates`).
    - **Cache location.** Locate the dev-guides catalog cache via the dasherized-cwd derivation + glob fallback (snippet in `commands/validate-guides.md` Step 5b — **not** `md5($PWD)`). The same `catalog_path` feeds both Stage 2 passes.

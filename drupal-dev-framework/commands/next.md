@@ -204,6 +204,16 @@ Default `[n]` — soft-nudge per the v3.12.0+ contract; `/scope` is optional, ne
 
 This is the highest-value moment for `/scope`: nothing has been written yet. The Alignment retrofit suggestion below covers the orthogonal case of an existing task that didn't get a scope contract earlier.
 
+### Work-order awareness (v4.19.0+)
+
+After resolving the task folder (Step 3), check whether `<task>/work-orders/wo-*.md` exist (Bash glob). **Silent when absent — print nothing if no work-orders are found.** When files are present, read each file's `status:` frontmatter field (grep the `^status:` line) and count: total / `done` / `ready` / `needs_rework`. Surface ONE line in the `Alternative Actions` section of the output:
+
+```
+Work-orders compiled (N total: X done, Y ready, Z needs_rework) — build via independent agents: `/drupal-dev-framework:run-work-orders <task>`
+```
+
+Never blocks. Silent when `work-orders/` is absent or empty.
+
 ### Alignment retrofit suggestion (v3.12.0+)
 
 After resolving an EXISTING task (Step 2 "Tasks in Progress" path), check whether `alignment.md` exists in the task folder. If it does NOT exist AND the task has already progressed past initial creation (task.md exists):
