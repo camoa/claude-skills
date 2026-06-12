@@ -333,12 +333,19 @@ run_skip_test "solid-check.sh --changed empty set" "${DRUPAL_SCRIPTS}/solid-chec
 # The flag must be absent from the standard invocation path.
 # =====================
 {
-    label="lint-check.sh no-flag: no 'changed mode' message"
-    # We can't fully run it without DDEV but we can grep the script for the guard
-    if grep -q 'if \[ -n "\$CHANGED_FILE" \]' "${DRUPAL_SCRIPTS}/lint-check.sh"; then
-        ok "$label → --changed block is guarded (if [ -n \"\$CHANGED_FILE\" ])"
+    label="lint-check.sh no-flag: --changed is an additive guard, standard path untouched"
+    # lint-check.sh uses an ADDITIVE intercept: `if [ "$1" == "--changed" ]` near
+    # the top that exits before the standard path. The standard (no-flag) path —
+    # including the original `if [ "$1" == "--fix" ]` parser — must remain present
+    # and byte-identical. Assert both: the additive guard exists AND the original
+    # --fix parser is still there.
+    has_guard=false; has_orig_fix=false
+    grep -q 'if \[ "\$1" == "--changed" \]' "${DRUPAL_SCRIPTS}/lint-check.sh" && has_guard=true
+    grep -q 'if \[ "\$1" == "--fix" \]' "${DRUPAL_SCRIPTS}/lint-check.sh" && has_orig_fix=true
+    if [ "$has_guard" = true ] && [ "$has_orig_fix" = true ]; then
+        ok "$label → additive --changed guard present AND original --fix parser intact"
     else
-        fail "$label → guard not found in lint-check.sh"
+        fail "$label → guard=${has_guard} orig_fix_parser=${has_orig_fix}"
     fi
 }
 
@@ -421,8 +428,198 @@ run_skip_test "solid-check.sh --changed empty set" "${DRUPAL_SCRIPTS}/solid-chec
 }
 
 # =====================
+# Non-empty SAST run tests (drive real scoping + crash regression)
+# =====================
+# A richer fake ddev that:
+#   - passes semgrep/php-security-linter availability checks,
+#   - emits ONE medium-severity finding from each (HIGH stays 0 — the exact
+#     condition that crashed the pre-fix ((HIGH_COUNT += 0)) under set -e),
+#   - logs the file args each tool was invoked on to $DDEV_SCOPE_LOG so tests
+#     can assert the constructed scope,
+#   - logs composer-audit invocation.
+make_findings_ddev() {
+    local dir="$1"
+    mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+LOG="${DDEV_SCOPE_LOG:-/dev/null}"
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            semgrep)
+                if [ "${2:-}" = "--version" ]; then exit 0; fi
+                # scan: collect file args after --json, log them, emit 1 medium (WARNING)
+                files=(); seen_json=0
+                for a in "$@"; do
+                    if [ "$seen_json" = 1 ]; then files+=("$a"); fi
+                    if [ "$a" = "--json" ]; then seen_json=1; fi
+                done
+                printf 'SEMGREP_SCOPE: %s\n' "${files[*]}" >> "$LOG"
+                printf '{"results":[{"path":"%s","start":{"line":3},"extra":{"severity":"WARNING","message":"test medium finding","metadata":{},"fix":null}}]}\n' "${files[0]:-unknown}"
+                exit 0
+                ;;
+            vendor/bin/php-security-linter)
+                shift   # drop binary
+                shift   # drop 'scan'
+                files=()
+                for a in "$@"; do
+                    case "$a" in --*) ;; *) files+=("$a") ;; esac
+                done
+                printf 'PSL_SCOPE: %s\n' "${files[*]}" >> "$LOG"
+                printf '{"files":{"%s":{"messages":[{"type":"WARNING","source":"Test.Rule","line":5,"message":"test psl medium"}]}}}\n' "${files[0]:-unknown}"
+                exit 0
+                ;;
+            test) exit 0 ;;   # 'test -f vendor/bin/php-security-linter' → installed
+            grep) shift; grep "$@" ;;
+            *) exit 0 ;;
+        esac
+        ;;
+    composer)
+        case "$2" in
+            audit) printf 'COMPOSER_AUDIT: ran\n' >> "$LOG"; echo '{"advisories":{}}'; exit 0 ;;
+            show)  exit 1 ;;
+            *)     exit 0 ;;
+        esac
+        ;;
+    drush) echo '[]'; exit 0 ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+
+FINDINGS_BIN=$(mktemp -d)
+make_findings_ddev "$FINDINGS_BIN"
+SECURITY_SCRIPT="${DRUPAL_SCRIPTS}/security-check.sh"
+
+# =====================
+# Test 20: CRITICAL regression — medium-only SAST run does NOT crash, report written, exit 0
+# (covers the ((HIGH_COUNT += 0)) under set -e abort)
+# =====================
+{
+    label="security --changed: medium-only SAST → no crash, report written, exit 0"
+    WORKDIR=$(mktemp -d)
+    mkdir -p "${WORKDIR}/web/modules/custom/test_mod/src"
+    printf '<?php\n// no findings here\n' > "${WORKDIR}/web/modules/custom/test_mod/src/Test.php"
+    CHANGED=$(mktemp)
+    echo "web/modules/custom/test_mod/src/Test.php" > "$CHANGED"
+    RDIR=$(mktemp -d)
+    LOG=$(mktemp)
+
+    exit_code=0
+    ( cd "$WORKDIR" && PATH="${FINDINGS_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" DDEV_SCOPE_LOG="$LOG" \
+        bash "$SECURITY_SCRIPT" --changed "$CHANGED" >/dev/null 2>&1 ) || exit_code=$?
+
+    REPORT="${RDIR}/security-report.json"
+    if [ "$exit_code" -eq 0 ] && [ -f "$REPORT" ]; then
+        # medium count should be >= 1 (semgrep + psl each emitted a medium)
+        MED=$(jq '.summary.by_severity.medium // 0' "$REPORT" 2>/dev/null || echo 0)
+        if [ "$MED" -ge 1 ]; then
+            ok "$label (exit 0, report written, medium=${MED})"
+        else
+            fail "$label → report written but medium=${MED} (expected >=1)"
+        fi
+    else
+        fail "$label → exit_code=${exit_code}, report exists=$([ -f "$REPORT" ] && echo yes || echo NO)"
+    fi
+    rm -rf "$WORKDIR" "$RDIR"; rm -f "$CHANGED" "$LOG"
+}
+
+# =====================
+# Test 21: SAST tools invoked on the RELEVANT_FILES (constructed scope assertion)
+# =====================
+{
+    label="security --changed: semgrep + php-security-linter scoped to the changed file"
+    WORKDIR=$(mktemp -d)
+    mkdir -p "${WORKDIR}/web/modules/custom/test_mod/src"
+    printf '<?php\n' > "${WORKDIR}/web/modules/custom/test_mod/src/Service.php"
+    # Add a vendor file + a yml that MUST be filtered out of the tool scope
+    mkdir -p "${WORKDIR}/vendor/foo"
+    printf '<?php\n' > "${WORKDIR}/vendor/foo/Bar.php"
+    CHANGED=$(mktemp)
+    printf '%s\n' \
+        "web/modules/custom/test_mod/src/Service.php" \
+        "vendor/foo/Bar.php" \
+        "config/install/x.yml" > "$CHANGED"
+    RDIR=$(mktemp -d)
+    LOG=$(mktemp)
+
+    ( cd "$WORKDIR" && PATH="${FINDINGS_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" DDEV_SCOPE_LOG="$LOG" \
+        bash "$SECURITY_SCRIPT" --changed "$CHANGED" >/dev/null 2>&1 ) || true
+
+    SEMGREP_SCOPE=$(grep '^SEMGREP_SCOPE:' "$LOG" 2>/dev/null | head -1 || echo "")
+    PSL_SCOPE=$(grep '^PSL_SCOPE:' "$LOG" 2>/dev/null | head -1 || echo "")
+
+    scope_ok=true
+    # The custom file must be in scope
+    echo "$SEMGREP_SCOPE" | grep -q "web/modules/custom/test_mod/src/Service.php" || scope_ok=false
+    echo "$PSL_SCOPE"     | grep -q "web/modules/custom/test_mod/src/Service.php" || scope_ok=false
+    # vendor + yml must NOT be in scope
+    echo "$SEMGREP_SCOPE" | grep -q "vendor/foo/Bar.php" && scope_ok=false
+    echo "$SEMGREP_SCOPE" | grep -q "config/install/x.yml" && scope_ok=false
+
+    if [ "$scope_ok" = true ]; then
+        ok "$label (semgrep scope='${SEMGREP_SCOPE#SEMGREP_SCOPE: }', psl scoped, vendor/yml excluded)"
+    else
+        fail "$label → SEMGREP_SCOPE='${SEMGREP_SCOPE}' PSL_SCOPE='${PSL_SCOPE}'"
+    fi
+    rm -rf "$WORKDIR" "$RDIR"; rm -f "$CHANGED" "$LOG"
+}
+
+# =====================
+# Test 22: composer audit runs when composer.json is in the changed set
+# =====================
+{
+    label="security --changed: composer audit invoked on composer.json change"
+    WORKDIR=$(mktemp -d)
+    printf '{}\n' > "${WORKDIR}/composer.json"
+    CHANGED=$(mktemp)
+    echo "composer.json" > "$CHANGED"
+    RDIR=$(mktemp -d)
+    LOG=$(mktemp)
+
+    exit_code=0
+    ( cd "$WORKDIR" && PATH="${FINDINGS_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" DDEV_SCOPE_LOG="$LOG" \
+        bash "$SECURITY_SCRIPT" --changed "$CHANGED" >/dev/null 2>&1 ) || exit_code=$?
+
+    if [ "$exit_code" -eq 0 ] && grep -q '^COMPOSER_AUDIT: ran' "$LOG" 2>/dev/null; then
+        ok "$label (composer audit ran, exit 0)"
+    else
+        fail "$label → exit=${exit_code}, composer-audit-logged=$(grep -q '^COMPOSER_AUDIT' "$LOG" 2>/dev/null && echo yes || echo NO)"
+    fi
+    rm -rf "$WORKDIR" "$RDIR"; rm -f "$CHANGED" "$LOG"
+}
+
+# =====================
+# Test 23: composer audit NOT invoked when no composer file in the changed set
+# =====================
+{
+    label="security --changed: composer audit NOT run without composer.* change"
+    WORKDIR=$(mktemp -d)
+    mkdir -p "${WORKDIR}/web/modules/custom/m/src"
+    printf '<?php\n' > "${WORKDIR}/web/modules/custom/m/src/A.php"
+    CHANGED=$(mktemp)
+    echo "web/modules/custom/m/src/A.php" > "$CHANGED"
+    RDIR=$(mktemp -d)
+    LOG=$(mktemp)
+
+    ( cd "$WORKDIR" && PATH="${FINDINGS_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" DDEV_SCOPE_LOG="$LOG" \
+        bash "$SECURITY_SCRIPT" --changed "$CHANGED" >/dev/null 2>&1 ) || true
+
+    if grep -q '^COMPOSER_AUDIT: ran' "$LOG" 2>/dev/null; then
+        fail "$label → composer audit ran but should have been skipped"
+    else
+        ok "$label (composer audit correctly skipped)"
+    fi
+    rm -rf "$WORKDIR" "$RDIR"; rm -f "$CHANGED" "$LOG"
+}
+
+# =====================
 # Cleanup
 # =====================
+rm -rf "$FINDINGS_BIN"
 rm -rf "$FAKE_BIN"
 
 # =====================

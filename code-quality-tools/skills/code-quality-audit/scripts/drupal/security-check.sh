@@ -164,9 +164,9 @@ if [ -n "$CHANGED_FILE" ]; then
                     SEMGREP_HIGH=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
                     SEMGREP_MEDIUM=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
                     SEMGREP_LOW=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
-                    ((HIGH_COUNT += SEMGREP_HIGH))
-                    ((MEDIUM_COUNT += SEMGREP_MEDIUM))
-                    ((LOW_COUNT += SEMGREP_LOW))
+                    HIGH_COUNT=$((HIGH_COUNT + SEMGREP_HIGH))
+                    MEDIUM_COUNT=$((MEDIUM_COUNT + SEMGREP_MEDIUM))
+                    LOW_COUNT=$((LOW_COUNT + SEMGREP_LOW))
                 else
                     echo -e "  ${GREEN}No Semgrep issues${NC}"
                 fi
@@ -212,8 +212,8 @@ if [ -n "$CHANGED_FILE" ]; then
                     echo -e "  ${YELLOW}Found ${PHPCS_COUNT} PHPCS security issues${NC}"
                     PHPCS_HIGH=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
                     PHPCS_MED=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-                    ((HIGH_COUNT += PHPCS_HIGH))
-                    ((MEDIUM_COUNT += PHPCS_MED))
+                    HIGH_COUNT=$((HIGH_COUNT + PHPCS_HIGH))
+                    MEDIUM_COUNT=$((MEDIUM_COUNT + PHPCS_MED))
                 else
                     echo -e "  ${GREEN}No PHPCS security issues${NC}"
                 fi
@@ -240,7 +240,7 @@ if [ -n "$CHANGED_FILE" ]; then
         if [ -n "$DB_QUERY_UNSAFE" ]; then
             DB_COUNT=$(echo "$DB_QUERY_UNSAFE" | wc -l)
             echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
-            ((HIGH_COUNT += DB_COUNT))
+            HIGH_COUNT=$((HIGH_COUNT + DB_COUNT))
             CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
                 category: "SQL Injection Risk",
                 severity: "high",
@@ -257,7 +257,7 @@ if [ -n "$CHANGED_FILE" ]; then
         if [ -n "$RAW_FILTER" ]; then
             RAW_COUNT=$(echo "$RAW_FILTER" | wc -l)
             echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter${NC}"
-            ((MEDIUM_COUNT += RAW_COUNT))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
             CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
                 category: "XSS Risk",
                 severity: "medium",
@@ -274,7 +274,7 @@ if [ -n "$CHANGED_FILE" ]; then
         if [ -n "$UNSERIALIZE" ]; then
             UNSER_COUNT=$(echo "$UNSERIALIZE" | wc -l)
             echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
-            ((HIGH_COUNT += UNSER_COUNT))
+            HIGH_COUNT=$((HIGH_COUNT + UNSER_COUNT))
             CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
                 category: "Insecure Deserialization",
                 severity: "high",
@@ -321,8 +321,8 @@ if [ -n "$CHANGED_FILE" ]; then
 
                 HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
                 MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-                ((HIGH_COUNT += HIGH_VULNS))
-                ((MEDIUM_COUNT += MED_VULNS))
+                HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
+                MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
             else
                 echo -e "  ${GREEN}No package vulnerabilities${NC}"
             fi

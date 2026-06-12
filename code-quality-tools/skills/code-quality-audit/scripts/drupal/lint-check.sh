@@ -13,31 +13,15 @@ NC='\033[0m'
 REPORT_DIR="${REPORT_DIR:-.reports}"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 
-echo "=== PHP Coding Standards Check ==="
-echo ""
-
-# Parse command line arguments (before DDEV check so --changed can early-exit)
-FIX_MODE=false
-CHANGED_FILE=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --fix)
-            FIX_MODE=true
-            ;;
-        --changed)
-            shift
-            CHANGED_FILE="$1"
-            ;;
-        *)
-            ;;
-    esac
-    shift
-done
-
 # =====================
-# --changed mode: scope phpcs to the listed files only
+# --changed mode (ADDITIVE): if invoked with `--changed <file>`, scope phpcs to
+# the listed files and exit BEFORE the standard path below. Everything from the
+# `echo "=== PHP Coding Standards Check ==="` line onward is byte-identical to
+# the pre-existing script — a non-`--changed` invocation never enters this block.
 # =====================
-if [ -n "$CHANGED_FILE" ]; then
+if [ "$1" == "--changed" ]; then
+    CHANGED_FILE="$2"
+    echo "=== PHP Coding Standards Check (changed mode) ==="
     echo "[changed mode] Scoping phpcs to files listed in: ${CHANGED_FILE}"
     echo ""
 
@@ -47,13 +31,10 @@ if [ -n "$CHANGED_FILE" ]; then
     # Filter: keep lintable extensions, exclude vendor/core/contrib
     RELEVANT_FILES=()
     while IFS= read -r f; do
-        # Skip blank lines
         [ -z "$f" ] && continue
-        # Extension filter
         if ! echo "$f" | grep -qE "$LINTABLE_EXTS"; then
             continue
         fi
-        # Exclusion filter
         if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then
             continue
         fi
@@ -84,7 +65,6 @@ EOF
         echo -e "${RED}[ERROR]${NC} DDEV is not running"
         exit 2
     fi
-
     if ! ddev exec vendor/bin/phpcs --version &> /dev/null; then
         echo -e "${RED}[ERROR]${NC} PHP_CodeSniffer is not installed"
         echo "  Run: ddev composer require --dev drupal/coder"
@@ -97,10 +77,10 @@ EOF
     printf '  %s\n' "${RELEVANT_FILES[@]}"
     echo ""
 
-    ERRORS=0
-    WARNINGS=0
+    CHANGED_ERRORS=0
+    CHANGED_WARNINGS=0
 
-    # Run phpcs with JSON output — single invocation with file args
+    # Single invocation with the scoped file args.
     set +e
     # shellcheck disable=SC2046
     ddev exec vendor/bin/phpcs \
@@ -108,10 +88,8 @@ EOF
         --report=json \
         "${RELEVANT_FILES[@]}" \
         2>/dev/null > "${REPORT_DIR}/lint/phpcs.json"
-    PHPCS_EXIT=$?
     set -e
 
-    # Also generate human-readable summary
     set +e
     # shellcheck disable=SC2046
     ddev exec vendor/bin/phpcs \
@@ -121,17 +99,16 @@ EOF
         2>&1 | tee "${REPORT_DIR}/lint/phpcs-summary.txt"
     set -e
 
-    # Parse JSON for counts
     if [ -f "${REPORT_DIR}/lint/phpcs.json" ] && command -v jq &> /dev/null; then
-        ERRORS=$(jq '.totals.errors // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
-        WARNINGS=$(jq '.totals.warnings // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
+        CHANGED_ERRORS=$(jq '.totals.errors // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
+        CHANGED_WARNINGS=$(jq '.totals.warnings // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
     fi
 
-    LINT_STATUS="pass"
-    if [ "$ERRORS" -gt 0 ]; then
-        LINT_STATUS="fail"
-    elif [ "$WARNINGS" -gt 10 ]; then
-        LINT_STATUS="warning"
+    CHANGED_STATUS="pass"
+    if [ "$CHANGED_ERRORS" -gt 0 ]; then
+        CHANGED_STATUS="fail"
+    elif [ "$CHANGED_WARNINGS" -gt 10 ]; then
+        CHANGED_STATUS="warning"
     fi
 
     cat > "${REPORT_DIR}/lint-report.json" << EOF
@@ -141,9 +118,9 @@ EOF
   "standards": ["Drupal", "DrupalPractice"],
   "changed_file": "${CHANGED_FILE}",
   "relevant_files": ${#RELEVANT_FILES[@]},
-  "errors": ${ERRORS},
-  "warnings": ${WARNINGS},
-  "status": "${LINT_STATUS}",
+  "errors": ${CHANGED_ERRORS},
+  "warnings": ${CHANGED_WARNINGS},
+  "status": "${CHANGED_STATUS}",
   "generated_at": "$(date -Iseconds)"
 }
 EOF
@@ -151,14 +128,14 @@ EOF
     echo ""
     echo "=== Summary (changed mode) ==="
     echo "  Files scanned: ${#RELEVANT_FILES[@]}"
-    echo "  Errors:        ${ERRORS}"
-    echo "  Warnings:      ${WARNINGS}"
+    echo "  Errors:        ${CHANGED_ERRORS}"
+    echo "  Warnings:      ${CHANGED_WARNINGS}"
     echo ""
 
-    if [ "$LINT_STATUS" == "pass" ]; then
+    if [ "$CHANGED_STATUS" == "pass" ]; then
         echo -e "${GREEN}[PASS]${NC} Coding standards check passed"
         exit 0
-    elif [ "$LINT_STATUS" == "warning" ]; then
+    elif [ "$CHANGED_STATUS" == "warning" ]; then
         echo -e "${YELLOW}[WARN]${NC} Some warnings found"
         exit 1
     else
@@ -167,9 +144,8 @@ EOF
     fi
 fi
 
-# =====================
-# Standard (no --changed) path — byte-identical to original logic
-# =====================
+echo "=== PHP Coding Standards Check ==="
+echo ""
 
 # Check DDEV
 if ! ddev describe &> /dev/null; then
@@ -189,6 +165,12 @@ mkdir -p "${REPORT_DIR}/lint"
 # Initialize counters
 ERRORS=0
 WARNINGS=0
+
+# Parse command line arguments
+FIX_MODE=false
+if [ "$1" == "--fix" ]; then
+    FIX_MODE=true
+fi
 
 if [ "$FIX_MODE" == true ]; then
     echo "Running phpcbf (auto-fix mode)..."
