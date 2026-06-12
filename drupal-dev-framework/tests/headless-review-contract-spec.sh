@@ -38,6 +38,11 @@ check "Total fail-closed exit (no exit 0 on doubt)"   'never exit 0 on doubt'
 check "Unresolved ranked above bypass (CRITICAL fix)" 'never absorbed into .?bypassed'
 check "Step-6 gates run --ci under headless"          '\-\-ci'
 
+# Change-scoped default + --full-audit contract (wo-04)
+check "--full-audit flag documented in usage block"    '\-\-full-audit'
+check "change-scoped gate passing described"           'change-scoped'
+check "--files passed to gate wrappers"                '\-\-files'
+
 if [ "$fail" -eq 0 ]; then
   echo "ALL PASS — headless contract present in review.md"
   exit 0
