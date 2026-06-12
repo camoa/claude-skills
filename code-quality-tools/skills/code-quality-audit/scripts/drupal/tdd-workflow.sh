@@ -1,6 +1,15 @@
 #!/bin/bash
 # tdd-workflow.sh - TDD helper with watch mode
 # Part of code-quality-audit skill
+#
+# --changed <src.php> [src2.php ...]:
+#   Maps changed source files to co-located tests and runs only those tests.
+#   Mapping: src/X.php → tests/src/{Unit,Kernel}/.../XTest.php (same module).
+#   Sources with no co-located *Test.php are recorded as coverage gaps — not failures.
+#   NOTE: PHPUnit has no --findRelatedTests; that flag is Jest/Next.js only.
+#         The mapping is structural (path convention), not semantic.
+#   Guard: this mode is active ONLY when the first argument is --changed.
+#          All other invocations are byte-identical to pre-change behaviour.
 
 set -e
 
@@ -13,6 +22,95 @@ NC='\033[0m'
 
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 
+# ── --changed guard ───────────────────────────────────────────────────────────
+# Intercept --changed before any existing argument parsing; no-flag path is
+# byte-identical to pre-change behaviour.
+if [[ "${1:-}" == "--changed" ]]; then
+  shift
+  _CHANGED_FILES=("$@")
+
+  # Source mapping library (co-located with this script)
+  _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-changed-mapping.sh"
+  # shellcheck source=lib-changed-mapping.sh
+  source "$_LIB"
+
+  _run_changed_mode() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║           TDD --changed Mode                                 ║"
+    echo "║   Running tests for changed sources only                     ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    if [[ ${#_CHANGED_FILES[@]} -eq 0 ]]; then
+      echo -e "${RED}[ERROR]${NC} --changed requires at least one source file path"
+      exit 1
+    fi
+
+    local -a test_paths=()
+    local -a gap_files=()
+
+    for src_file in "${_CHANGED_FILES[@]}"; do
+      # Only map .php files that carry a /src/ segment; skip CSS/YAML/etc.
+      if [[ "$src_file" != *.php ]] || [[ "$src_file" != *"/src/"* ]]; then
+        continue
+      fi
+
+      local found
+      found=$(find_mapped_tests "$src_file")
+
+      if [[ -n "$found" ]]; then
+        while IFS= read -r tp; do
+          test_paths+=("$tp")
+          echo -e "${GREEN}[MAPPED]${NC} $(basename "$src_file") → $tp"
+        done <<< "$found"
+      else
+        gap_files+=("$src_file")
+        echo -e "${YELLOW}[GAP]${NC} No co-located test for: $src_file"
+      fi
+    done
+
+    if [[ ${#gap_files[@]} -gt 0 ]]; then
+      echo ""
+      echo -e "${YELLOW}[INFO]${NC} Coverage gaps (no co-located test found — not failures):"
+      for gap in "${gap_files[@]}"; do
+        echo "       $gap"
+      done
+      echo ""
+      echo "  Mapping limit: PHPUnit has no --findRelatedTests (Jest/Next.js only)."
+      echo "  Convention: src/<Dir>/Foo.php → tests/src/{Unit,Kernel}/<Dir>/FooTest.php"
+      echo "  Add a test at the mapped path to close each gap."
+    fi
+
+    if [[ ${#test_paths[@]} -eq 0 ]]; then
+      echo ""
+      echo -e "${YELLOW}[WARN]${NC} No mapped tests found for any changed source."
+      echo "  All changed sources recorded as gaps. No tests run. Exit 0."
+      exit 0
+    fi
+
+    echo ""
+    echo "Running ${#test_paths[@]} mapped test file(s)..."
+    echo ""
+
+    # Require DDEV for PHPUnit execution
+    if ! ddev describe &> /dev/null; then
+      echo -e "${RED}[ERROR]${NC} DDEV is not running"
+      exit 1
+    fi
+
+    set +e
+    ddev exec vendor/bin/phpunit "${test_paths[@]}"
+    local rc=$?
+    set -e
+    exit $rc
+  }
+
+  _run_changed_mode
+  exit $?
+fi
+# ── end --changed guard (no-flag path continues unchanged below) ──────────────
+
 # Parse arguments
 ACTION="${1:-help}"
 TEST_FILE="${2:-}"
@@ -24,6 +122,7 @@ show_help() {
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo ""
     echo "Usage: tdd-workflow.sh <action> [test-file] [--watch]"
+    echo "       tdd-workflow.sh --changed <src.php> [src2.php ...]"
     echo ""
     echo "Actions:"
     echo "  red      - Run test (should fail)"
@@ -33,10 +132,18 @@ show_help() {
     echo "  watch    - Watch mode with inotifywait"
     echo "  help     - Show this help"
     echo ""
+    echo "  --changed <src.php> [...]"
+    echo "           Map each changed source file to its co-located test(s) and"
+    echo "           run only those tests. Sources with no mapped test are reported"
+    echo "           as coverage gaps (not failures)."
+    echo "           Mapping: src/<Dir>/Foo.php → tests/src/{Unit,Kernel}/<Dir>/FooTest.php"
+    echo "           Limit: PHPUnit has no --findRelatedTests (that is Jest/Next.js)."
+    echo ""
     echo "Examples:"
     echo "  tdd-workflow.sh red tests/src/Unit/MyServiceTest.php"
     echo "  tdd-workflow.sh green"
     echo "  tdd-workflow.sh watch tests/src/Unit/"
+    echo "  tdd-workflow.sh --changed web/modules/custom/my_mod/src/Service/Foo.php"
     echo ""
     echo "TDD Cycle:"
     echo "  1. ${RED}RED${NC}:      Write failing test first"

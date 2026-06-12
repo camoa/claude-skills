@@ -12,6 +12,7 @@ Start Test-Driven Development (TDD) workflow with RED-GREEN-REFACTOR cycle.
 
 ```
 /code-quality:tdd [project-path]
+/code-quality:tdd --changed <src.php> [src2.php ...]
 ```
 
 ## What This Does
@@ -20,6 +21,39 @@ Start Test-Driven Development (TDD) workflow with RED-GREEN-REFACTOR cycle.
 2. Starts test watcher in continuous mode
 3. Guides through RED-GREEN-REFACTOR cycle
 4. Reports coverage changes
+
+### --changed mode
+
+Scopes test execution to changed source files only — suitable for per-WO gate runs.
+
+```
+# Run only the tests mapped from changed sources
+/code-quality:tdd --changed web/modules/custom/my_mod/src/Service/MyService.php
+
+# Multiple changed files (typical CI/gate usage)
+/code-quality:tdd --changed $(cat .changed-files.txt)
+```
+
+**Mapping convention (Drupal):**
+
+```
+changed  web/modules/custom/<mod>/src/<Dir>/Foo.php
+→ Unit   web/modules/custom/<mod>/tests/src/Unit/<Dir>/FooTest.php
+→ Kernel web/modules/custom/<mod>/tests/src/Kernel/<Dir>/FooTest.php
+```
+
+Module root = the ancestor directory whose direct child is the `src/` segment.
+
+**Mapping limit — PHPUnit has no `--findRelatedTests`:**
+
+> This flag exists in Jest (Next.js) and is used by the Next.js toolchain.
+> PHPUnit has no equivalent. The Drupal mapping here is *structural* —
+> it derives test paths from source paths by convention. It does NOT
+> perform semantic analysis of import graphs or call sites.
+
+Sources with no co-located `*Test.php` are recorded as **coverage gaps** in
+the output. A gap is informational — it is **not a test failure**. The no-`--changed`
+path runs the whole suite unchanged.
 
 ## TDD Cycle
 
