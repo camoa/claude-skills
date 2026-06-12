@@ -12,6 +12,7 @@ Run test coverage analysis and generate coverage reports.
 
 ```
 /code-quality:coverage [project-path]
+/code-quality:coverage --changed <src.php> [src2.php ...]
 ```
 
 ## What This Does
@@ -20,6 +21,52 @@ Run test coverage analysis and generate coverage reports.
 2. Runs test suite with coverage enabled
 3. Generates coverage reports
 4. Displays coverage percentage and uncovered areas
+
+### --changed mode
+
+Scopes coverage analysis to the changed source files only — suitable for
+per-WO gate runs where whole-project coverage would report pre-existing debt.
+
+```
+# Coverage for a single changed source
+/code-quality:coverage --changed web/modules/custom/my_mod/src/Service/MyService.php
+
+# Multiple changed files (typical CI/gate usage)
+/code-quality:coverage --changed $(cat .changed-files.txt)
+```
+
+What happens:
+- Maps each changed `src/*.php` to its co-located `tests/src/Unit/…/*Test.php`
+- Runs only the mapped Unit test files (not the full suite)
+- Passes `--coverage-filter <src_file>` for each changed source so coverage is
+  reported only for the changed code, not the whole module or project
+- Records sources with no co-located test as **coverage gaps** (informational, not failures)
+
+**Mapping convention (Drupal) — Unit tier only:**
+
+```
+changed  web/modules/custom/<mod>/src/<Dir>/Foo.php
+→ Unit   web/modules/custom/<mod>/tests/src/Unit/<Dir>/FooTest.php
+```
+
+**Kernel tests are NOT mapped here — task-stage only:** per-WO `--changed` runs in
+a detached build worktree (static / no Drupal bootstrap). Kernel tests need a full
+bootstrap on the **running site** and cannot run in a worktree (same constraint as
+`salesforce_eca`); mapping one here would attempt a bootstrap-dependent run and
+spuriously fail. Kernel (and e2e/VR) selection happens at the **task stage on the
+running site**, not per-WO — so `--changed` emits only the `tests/src/Unit/…`
+candidate for each changed source.
+
+**Mapping limit — PHPUnit has no `--findRelatedTests`:**
+
+> This flag exists in Jest (Next.js) and is used by the Next.js toolchain.
+> PHPUnit has no equivalent. The Drupal mapping here is *structural* —
+> it derives test paths from source paths by convention. It does NOT
+> perform semantic analysis of import graphs or call sites.
+
+Sources with no co-located `*Test.php` are recorded as **coverage gaps** in
+the JSON report (`gaps` field). A gap is informational — it is **not a test failure**.
+The no-`--changed` path runs the whole suite unchanged.
 
 ## Detection & Execution
 
