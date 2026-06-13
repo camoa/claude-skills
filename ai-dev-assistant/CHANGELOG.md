@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Cross-plugin
 - `drupal-ai-contrib` (0.1.2) and `dev-guides-navigator` (0.8.1) prose updated to the new namespace; root `README.md` + `PORTABILITY.md` updated.
 
+### Positioning
+- **Descriptions lead with what it is, and drop the "teaches" overclaim.** `plugin.json`, the marketplace entry, and both READMEs now open on *"an AI assistant for developers that focuses on getting the process right, not just getting code out fast."* Removed the "teaches best practice as you go" framing: the framework grounds its work in best-practice guides and enforces gates, it does not actively teach the developer. Copy reworked to the author's tone (no em dashes, no marketing boosters). The feature list moved below the lede. No code change.
+
 ## [4.22.0] - 2026-06-12
 
 **Closes the build_gate_correctness epic — two final children: the AI affected-test selector (the dynamic

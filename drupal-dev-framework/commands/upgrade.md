@@ -1,7 +1,7 @@
 ---
 description: "DEPRECATED PLUGIN. Runs the one-time forced migration from drupal-dev-framework to ai-dev-assistant: moves the global project store, re-stamps each registered project's session-remembrance hooks to the new paths, then tells you it is safe to uninstall this plugin. Every drupal-dev-framework command now redirects here."
 allowed-tools: Bash, Read
-argument-hint: "[--dry-run]"
+argument-hint: "[--dry-run] [--permissions]"
 ---
 
 # Upgrade to ai-dev-assistant
@@ -21,6 +21,19 @@ wiring point to the new name. It is **idempotent** — safe to re-run.
    carries old-name wiring: moves the baked hook dir
    `<project>/.claude/drupal-dev-framework/` → `<project>/.claude/ai-dev-assistant/`
    and rewrites the two hook command strings in `<project>/.claude/settings.json`.
+
+## Opt-in: stale permission entries (`--permissions`)
+
+A project's `settings.local.json` (and sometimes `settings.json`) can hold
+pre-approved `Skill(drupal-dev-framework:*)` permission grants. After the rename
+those point at skills that no longer exist, so they are harmless dead entries: the
+new `/ai-dev-assistant:*` command simply re-prompts for permission once on first use.
+
+The migration does **not** re-point them by default. Run the dry run first to see how
+many exist; if you would rather not re-approve them, re-run with `--permissions` to
+rewrite `Skill(drupal-dev-framework:*)` → `Skill(ai-dev-assistant:*)` in place. The
+rewrite is scoped to that exact `Skill(...)` token, so it never touches a `Bash(...)`
+cache-path grant or any other allowlist content, and it validates JSON before saving.
 
 ## Prerequisite
 
@@ -42,6 +55,13 @@ Show the output. Ask the user to confirm. On confirmation, run the real migratio
 ```
 
 If the user passed `--dry-run` as the command argument, run only the dry run and stop.
+
+If the dry run reports stale `Skill(drupal-dev-framework:*)` permission tokens and the
+user wants them re-pointed, add `--permissions` to the real run:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-to-ai-dev-assistant.sh" --permissions
+```
 
 ## After it completes
 

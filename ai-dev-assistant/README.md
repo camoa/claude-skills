@@ -1,8 +1,8 @@
 # AI Dev Assistant
 
-A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress). It prevents common AI pitfalls — jumping to code without understanding requirements, overlooking a pre-built library that already solves the problem, creating inconsistent architecture, or skipping tests.
+**An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. It runs each task through a disciplined **Research → Architecture → Implementation → Review** flow before code gets written: understand the problem first, reuse what already exists, follow your standards, and verify. That heads off the usual AI pitfalls, like jumping to code without understanding requirements, missing a library that already solves the problem, building inconsistent architecture, or skipping tests. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress).
 
-> **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md) — a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
+> **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md): a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
 
 > **Not using Claude Code?** This framework's value is its orchestration (commands + agents + hooks), most of which is Claude-Code-specific. See the marketplace [PORTABILITY.md](../PORTABILITY.md) for what ports + [CURSOR.md](../CURSOR.md) for the highest-fidelity option (~70-80% in Cursor 2.4+).
 
@@ -16,20 +16,20 @@ You create a **project** (a module, component, or set of related work), then bre
 
 | Phase | Command | What Happens |
 |-------|---------|--------------|
-| **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | scope contract — Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
+| **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | scope contract: Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
 | **1. Research** | `/research <task>` | Look for an existing third-party library that solves it, find framework (first-party) patterns, study existing solutions |
 | **2. Architecture** | `/design <task>` | Design approach, choose patterns, set acceptance criteria |
 | **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step |
 
 Phases apply per task, not per project. A project can have tasks at different phases simultaneously.
 
-**Task hierarchy (v3.10.0+):** large tasks can be promoted to epics with sub-tasks via `/migrate-to-epic`. Flat tasks remain first-class — hierarchy is additive and opt-in.
+**Task hierarchy (v3.10.0+):** large tasks can be promoted to epics with sub-tasks via `/migrate-to-epic`. Flat tasks remain first-class: hierarchy is additive and opt-in.
 
 **Project codePath metadata (v3.11.0+):** projects declare where their code lives (distinct from the memory folder) via `/set-code-path` or during `/new`. Used by the analysis-agent and future code-aware features.
 
 ## Installation
 
-**Requires Claude Code v2.1.110 or later** — the plugin declares `dev-guides-navigator` as a dependency in `plugin.json`, which is enforced at install time on CLI v2.1.110+. Earlier CLI versions will not resolve the dependency automatically; install `dev-guides-navigator` manually and upgrade the CLI.
+**Requires Claude Code v2.1.110 or later**: the plugin declares `dev-guides-navigator` as a dependency in `plugin.json`, which is enforced at install time on CLI v2.1.110+. Earlier CLI versions will not resolve the dependency automatically; install `dev-guides-navigator` manually and upgrade the CLI.
 
 **For `/validate:team` (v3.14.0+) specifically:** Claude Code CLI v2.1.32+ is the agent-teams minimum, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set. When unavailable, `/validate:team` gracefully falls back to `/validate:all`.
 
@@ -42,16 +42,16 @@ Phases apply per task, not per project. A project can have tasks at different ph
 ```
 
 **Declared dependencies (2 as of v3.13.0):**
-- `dev-guides-navigator` — online guide discovery with caching (60+ Drupal/CSS/design guides)
-- `code-quality-tools` (v3.13.0+) — powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0)
+- `dev-guides-navigator`: online guide discovery with caching (60+ Drupal/CSS/design guides)
+- `code-quality-tools` (v3.13.0+): powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0)
 
 Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surface at install time (CLI v2.1.110+).
 
 **Recommended companion plugins:**
-- `superpowers` — TDD enforcement, brainstorming, verification workflows
-- `drupal-dev-tools` — DDEV integration, Drupal audits
-- `code-quality-tools` — PHPStan, security scanning, SOLID/DRY analysis
-- `plugin-creation-tools` — invoked by the v4.0.0 skill-review and plugin-validate hardened gates when a task touches plugin files
+- `superpowers`: TDD enforcement, brainstorming, verification workflows
+- `drupal-dev-tools`: DDEV integration, Drupal audits
+- `code-quality-tools`: PHPStan, security scanning, SOLID/DRY analysis
+- `plugin-creation-tools`: invoked by the v4.0.0 skill-review and plugin-validate hardened gates when a task touches plugin files
 
 ## Quick Start
 
@@ -68,7 +68,7 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 ### Returning to Work
 
 ```bash
-/ai-dev-assistant:next              # That's it — picks up where you left off
+/ai-dev-assistant:next              # That's it: picks up where you left off
 ```
 
 `/next` is your main command. It selects your project, shows tasks with their current phase, and tells you exactly what to run next. Use it at the start of every session.
@@ -96,12 +96,12 @@ the framework context after compaction, `/clear`, or a new session:
 /ai-dev-assistant:install-remembrance-hook
 ```
 
-This is interactive and idempotent — it fills a session primer (framework facts
+This is interactive and idempotent: it fills a session primer (framework facts
 plus any conventions you want re-stated every session) and wires `SessionStart`
 and `SessionEnd` hooks into the project's `.claude/settings.json`. Re-run it any
 time the project name, memory path, or code path changes.
 
-Then make `/save-session` a habit before you stop working — it reviews the
+Then make `/save-session` a habit before you stop working: it reviews the
 active task for un-written progress and persists session state. The `SessionEnd`
 hook runs the same persistence script automatically as a safety net, so nothing
 is lost even if you forget.
@@ -113,13 +113,13 @@ is lost even if you forget.
 | Command | Description |
 |---------|-------------|
 | `/new [name]` | Create a project and gather requirements |
-| `/next [project]` | Continue work — select project/task, get next action |
+| `/next [project]` | Continue work: select project/task, get next action |
 | `/status [project]` | View project state and task progress |
-| `/research <task>` | Phase 1 — research existing third-party libraries, framework patterns, existing solutions |
-| `/research-team <task>` | Phase 1 — research with 3 competing AI perspectives + debate |
-| `/design <task>` | Phase 2 — design architecture, choose patterns |
-| `/implement <task>` | Phase 3 — build with TDD, step-by-step approval |
-| `/complete <task>` | Finish task — run quality gates, move to completed |
+| `/research <task>` | Phase 1: research existing third-party libraries, framework patterns, existing solutions |
+| `/research-team <task>` | Phase 1: research with 3 competing AI perspectives + debate |
+| `/design <task>` | Phase 2: design architecture, choose patterns |
+| `/implement <task>` | Phase 3: build with TDD, step-by-step approval |
+| `/complete <task>` | Finish task: run quality gates, move to completed |
 
 ### Utilities
 
@@ -129,13 +129,13 @@ is lost even if you forget.
 | `/validate:tdd` / `:solid` / `:dry` / `:security` | **(v3.13.0)** Individual quality gates wrapping `code-quality-tools` skills with task context + persistence |
 | `/validate:guides` | **(v3.13.0)** Verify research.md + architecture.md cite `dev-guides-navigator` guides |
 | `/setup-visual-regression` | **(v4.13.0)** Install `@lullabot/playwright-drupal` + Playwright, scaffold `tests/visual/`, extend `playwright.config.ts` with per-viewport visual projects, derive a viewport matrix from the theme, run AI-assisted surface discovery, prompt for a first baseline. Idempotent; `--add-surface` adds one surface, `--migrate` imports a v3.13.0 `.screenshots/` store. |
-| `/validate:visual-regression` | **(v4.13.0, reworked)** Registry-driven — runs the committed `tests/visual/` suite across every viewport; diffs each surface; classify regression / intentional / cancel. `--bootstrap` / `--update-baselines "<reason>"` (user-confirmed). Emits `_visual_regression.json` audit. Part of `/review` dispatch chain. Soft gate. |
+| `/validate:visual-regression` | **(v4.13.0, reworked)** Registry-driven: runs the committed `tests/visual/` suite across every viewport; diffs each surface; classify regression / intentional / cancel. `--bootstrap` / `--update-baselines "<reason>"` (user-confirmed). Emits `_visual_regression.json` audit. Part of `/review` dispatch chain. Soft gate. |
 | `/setup-visual-parity` | **(v4.14.0)** Add visual-parity checking on top of the visual-regression stack: install `pixelmatch` + `pngjs`, scaffold `tests/parity/`, append per-viewport `parity-chromium-*` projects, register a design reference per surface. Hard-depends on `/setup-visual-regression`. Idempotent; `--add-surface` registers one reference. |
-| `/validate:visual-parity` | **(v4.14.0, reworked)** Registry-driven — runs the committed `tests/parity/` suite, comparing each surface against its external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`). Emits a two-layer diff: a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift. `[g]/[i]/[c]` classification. Emits `_visual_parity.json` audit. Part of `/review` dispatch chain. Soft gate. |
+| `/validate:visual-parity` | **(v4.14.0, reworked)** Registry-driven: runs the committed `tests/parity/` suite, comparing each surface against its external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`). Emits a two-layer diff: a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift. `[g]/[i]/[c]` classification. Emits `_visual_parity.json` audit. Part of `/review` dispatch chain. Soft gate. |
 | `/setup-atk` | **(v4.12.0)** Install ATK `^2.0` + Playwright, scaffold `tests/e2e/`, discover site journeys, and scaffold plan-first E2E tests. Idempotent; `--add-journey` adds a single journey post-setup. |
 | `/validate:e2e` | **(v4.12.0)** Run ATK behavioral + project-custom journey tests. Emits `_e2e.json` audit + standard envelope. Part of `/review` dispatch chain. Soft gate. |
 | `/validate:all` | **(v3.13.0)** Run all 7 gates sequentially; aggregate summary; discoverability hint for unwrapped `/code-quality:*` capabilities |
-| `/validate:team` | **(v3.14.0)** Sibling to `/validate:all` — runs the 7 gates in **isolated Claude Code agent teams** (4 teammates) for honest validation free of main-session bias. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (agent-teams CLI v2.1.32+); gracefully falls back to `/validate:all` when unavailable. `--no-fallback` opts out of fallback for CI team-or-nothing runs. See `references/team-manifest-schema.md` v1.0 for the minimum-context contract. |
+| `/validate:team` | **(v3.14.0)** Sibling to `/validate:all`: runs the 7 gates in **isolated Claude Code agent teams** (4 teammates) for honest validation free of main-session bias. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (agent-teams CLI v2.1.32+); gracefully falls back to `/validate:all` when unavailable. `--no-fallback` opts out of fallback for CI team-or-nothing runs. See `references/team-manifest-schema.md` v1.0 for the minimum-context contract. |
 | `/playbook-active` | **(v3.15.0)** Display the project's active playbook configuration: subscribed sets, local playbook, recent conflicts. Read-only. |
 | `/playbook-capture` | **(v3.15.0)** Capture a new opinionated rule into the project's local user playbook. Framework drafts entry; user approves with diff preview. |
 | `/playbook-review` | **(v3.15.0)** Walk every play in the local user playbook with `[k]eep / [u]pdate / [r]emove / [q]uit`. Immediate-write semantics; `/loop`-able for periodic review. |
@@ -143,15 +143,15 @@ is lost even if you forget.
 | `/set-user-playbook` | **(v3.15.0)** Set/clear the project-local user playbook file. Three modes: explicit path, `--docs-only`, or interactive detect-and-confirm. |
 | `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
 | `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
-| `/audit-status [<task>] [--all]` | **(v4.0.0)** Read-only display of v4.0.0 hardened-gate audit state per task — surfaces gate-fire timing, user choices, bypass reasons, and missing audits (= silent skip evidence). `--all` for project-wide rollup grouped by health. |
+| `/audit-status [<task>] [--all]` | **(v4.0.0)** Read-only display of v4.0.0 hardened-gate audit state per task: surfaces gate-fire timing, user choices, bypass reasons, and missing audits (= silent skip evidence). `--all` for project-wide rollup grouped by health. |
 | `/pattern <use-case>` | Get pattern recommendations (Drupal-flavored today: FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
-| `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
-| `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
-| `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks — analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
-| `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's scope contract (`alignment.md`) — 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
+| `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class: this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
+| `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath`: where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
+| `/propose-epics` | **(v3.11.0)** Bulk-review flat in-progress tasks: analysis-agent (read-only, sonnet) scans each candidate and proposes epic decompositions with 3-5 children. Per-task accept / edit / reject / skip. Accepted proposals invoke `/migrate-to-epic` under the hood. Counterpart to `/research`'s pre-analysis hook. |
+| `/scope <task> [--phase 1\|2\|3]` | **(v3.12.0)** Author or retrofit a task's scope contract (`alignment.md`): 4-field structure (Goal / Expected result / Success criteria / Non-goals). Without `--phase`, authors Task-Level. With `--phase N`, authors the corresponding phase section (also invoked inline as the first sub-step of `/research`, `/design`, `/implement` when warranted). One-question-at-a-time conversation, author-owned, never auto-generated. Soft-nudge posture; never blocks the lifecycle. |
 | `/install-remembrance-hook` | **(v4.5.0)** Interactive, idempotent. Wires per-project `SessionStart` + `SessionEnd` hooks into `<project>/.claude/settings.json` so Claude does not forget the framework after compaction / `/clear` / a new session. Fills a user-editable session primer. Opt-in per project. |
-| `/save-session` | **(v4.5.0)** Persist in-flight session state before stopping — Claude reviews the active task for un-written progress, then runs `save-session.sh`. The `SessionEnd` hook runs the same script unconditionally as a scripted safety net. |
+| `/save-session` | **(v4.5.0)** Persist in-flight session state before stopping: Claude reviews the active task for un-written progress, then runs `save-session.sh`. The `SessionEnd` hook runs the same script unconditionally as a scripted safety net. |
 
 All commands are prefixed with `ai-dev-assistant:` (e.g., `/ai-dev-assistant:next`).
 
@@ -159,12 +159,12 @@ All commands are prefixed with `ai-dev-assistant:` (e.g., `/ai-dev-assistant:nex
 
 Instead of a single research pass, `/research-team` launches 3 competing AI agents that research independently, then debate to synthesize findings:
 
-**Feature mode** — when building something new:
-- **Build agent** — argues for custom implementation, finds core patterns
-- **Use agent** — argues for existing contrib solutions
-- **Extend agent** — argues for extending/composing existing modules
+**Feature mode** (when building something new):
+- **Build agent**: argues for custom implementation, finds core patterns
+- **Use agent**: argues for existing contrib solutions
+- **Extend agent**: argues for extending/composing existing modules
 
-**Bug mode** — when investigating issues:
+**Bug mode** (when investigating issues):
 - 3 agents each form competing hypotheses about the root cause
 - Each investigates independently, then they debate evidence
 
@@ -172,7 +172,7 @@ The debate produces a synthesized recommendation with dissenting opinions noted.
 
 ## Customizing skill visibility
 
-ai-dev-assistant ships 18 skills and 41 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it — without uninstalling the plugin.
+ai-dev-assistant ships 18 skills and 41 commands. If you never use part of the workflow, you can stop Claude from auto-invoking it, without uninstalling the plugin.
 
 **Mute an individual skill or command** with a `Skill()` deny rule. Add it through `/permissions`, or to `permissions.deny` in `.claude/settings.json` (one project) or `~/.claude/settings.json` (all projects):
 
@@ -197,7 +197,7 @@ ai-dev-assistant ships 18 skills and 41 commands. If you never use part of the w
 
 **Whole-plugin off switch:** `/plugin disable ai-dev-assistant` disables every component at once; `/plugin enable ai-dev-assistant` restores it.
 
-> **Note — `skillOverrides` does not apply here.** The `skillOverrides` setting (Claude Code v2.1.129+) controls visibility only for *non-plugin* skills — ones in a project repo or provided by an MCP server. ai-dev-assistant's skills are plugin skills, so `skillOverrides` entries for them are ignored. Use `Skill()` deny rules (above) or `/plugin` instead.
+> **Note: `skillOverrides` does not apply here.** The `skillOverrides` setting (Claude Code v2.1.129+) controls visibility only for *non-plugin* skills (ones in a project repo or provided by an MCP server). ai-dev-assistant's skills are plugin skills, so `skillOverrides` entries for them are ignored. Use `Skill()` deny rules (above) or `/plugin` instead.
 
 ## What's Inside
 
@@ -212,11 +212,11 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `architecture-validator` | sonnet | 20 | Read-only validation in isolated worktree |
 | `pattern-recommender` | sonnet | 15 | Recommends Drupal patterns with core/contrib references |
 | `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
-| `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer — proposes epic decomposition as JSON per schema v1.0 |
+| `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer: proposes epic decomposition as JSON per schema v1.0 |
 
 ### Skills (18)
 
-Skills are invoked automatically by commands and agents — 10 are user-invocable, 12 are internal:
+Skills are invoked automatically by commands and agents (10 are user-invocable, 12 are internal):
 
 | Category | Skills |
 |----------|--------|
@@ -245,7 +245,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 
 | Reference | Owner | What it pins |
 |-----------|-------|--------------|
-| `analysis-agent-schema.md` **(v3.11.0; v1.1 since v3.15.0)** | `analysis-agent` | JSON output schema (v1.0 base + v1.1 adds `play_candidates` mode for `/complete`); 8 signal codes, 7 invariants, three input modes (`folder`, `description`, `play_candidates`); backward-compatible — existing `folder` and `description` modes unchanged |
+| `analysis-agent-schema.md` **(v3.11.0; v1.1 since v3.15.0)** | `analysis-agent` | JSON output schema (v1.0 base + v1.1 adds `play_candidates` mode for `/complete`); 8 signal codes, 7 invariants, three input modes (`folder`, `description`, `play_candidates`); backward-compatible: existing `folder` and `description` modes unchanged |
 | `code-path-detection.md` **(v3.11.0)** | `/set-code-path`, `/new` | Detection strategies in priority order, three-null-states table (`unknown` / `docs-only` / `set`), safety filter (hard-reject list for system roots) |
 | `alignment-contract.md` **(v3.12.0)** | `alignment-reader` | `alignment.md` grammar v1.0, 8 warning codes, JSON output contract, em-dash canonicalization rule, versioning policy |
 | `screenshot-store-schema.md` **(v3.13.0; location reworked v4.13.0)** | `screenshot-store-reader` + `scripts/screenshot-store-{read,write}.sh` | 9-field `.meta.json` v1.0; **codePath-native layout** (`tests/visual/<surface>.spec.ts-snapshots/`, provenance sidecars in-tree) since v4.13.0; legacy `.screenshots/` is a migration source only; 6 warning codes, `role` / `captured_by` / `source` provenance fields |
@@ -253,14 +253,14 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `team-manifest-schema.md` **(v3.14.0)** | `/validate:team` + 4 teammates | Minimum-context package v1.0 written by lead before team spawn; absolute-path invariant; `visual_fanout[]` presence rule; write-once contract; fallback behavior hints; gate enum excludes `visual-parity` (deferred to v2 Set B5) |
 | `playbook-schema.md` **(v3.15.0)** | `/playbook-capture`, `/playbook-review`, `scripts/playbook-read.sh` | Recommended local playbook structure v1.0: H3-per-play with What / Rationale / When it applies / Example fields; freeform fallback; defensive parser contract |
 | `playbook-conflict-schema.md` **(v3.15.0)** | `scripts/playbook-conflicts-write.sh`, `/playbook-active` | JSONL log line v1.0 for `<project>/.claude/playbook-conflicts.log`; per-conflict citation shape (local-vs-shipped + multi-set-contradiction types); append-only contract |
-| `worktree-conventions.md` **(v3.16.0; v1.2 in v4.9.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.2: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. §11 (v4.7.0) maps the command to Claude Code's native worktree support — `claude --worktree`, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, `worktree.bgIsolation`. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
-| `gate-audit-schema.md` **(v4.0.0; v1.3 in v4.14.0)** | `scripts/gate-audit-write.sh` + the hardened gates | Unified schema v1.3 for the 11 audit file types — the 7 v4.0.0 gates (`pre-analysis`, `coverage-mapping`, `skill-review`, `plugin-validate`, `phase-command-bypass`, `dev-guides-load`, `playbook-load`) plus `review` (v1.1), `e2e` + `visual_regression` (v1.2), and `visual_parity` (v1.3); `gate_type` discriminator; per-gate `gate_specific` payloads; overwrite-on-fire lifecycle |
-| `gate-hardening-prompts.md` **(v4.0.0; v1.5 in v4.14.0)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md`, the `/review` + `/validate:*` gates | Literal mandated wording v1.5 for the 10 user-prompt surfaces — the 5 v4.0.0 surfaces plus `review-gate-fail` / `review-summary` (v1.2), `e2e-gate-fail` (v1.3), `visual-regression-gate-fail` (v1.4), and `visual-parity-gate-fail` (v1.5); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture; literal blocks verified by `tests/gate-prompts-literal.sh` |
-| `<phase>-walkthrough.md` **(v4.0.2)** | Optional reference for phase commands | Tutorial-depth walkthrough of `/research`, `/design`, `/implement`, `/complete` — rationale, version history, worked examples. Loaded only when explicitly read; no hook or skill auto-loads |
-| `post-batch-aggregation.md` **(v4.9.0)** | Opt-in project pattern (not a shipped hook) | How a project can wire a `PostToolBatch` hook to roll up `/research-team` / `/validate:team` per-teammate output into one summary. Documents why the plugin doesn't ship it (plugin-scoped `PostToolBatch` has no matcher) — mirrors code-quality-tools |
+| `worktree-conventions.md` **(v3.16.0; v1.2 in v4.9.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.2: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. §11 (v4.7.0) maps the command to Claude Code's native worktree support: `claude --worktree`, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, `worktree.bgIsolation`. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
+| `gate-audit-schema.md` **(v4.0.0; v1.3 in v4.14.0)** | `scripts/gate-audit-write.sh` + the hardened gates | Unified schema v1.3 for the 11 audit file types: the 7 v4.0.0 gates (`pre-analysis`, `coverage-mapping`, `skill-review`, `plugin-validate`, `phase-command-bypass`, `dev-guides-load`, `playbook-load`) plus `review` (v1.1), `e2e` + `visual_regression` (v1.2), and `visual_parity` (v1.3); `gate_type` discriminator; per-gate `gate_specific` payloads; overwrite-on-fire lifecycle |
+| `gate-hardening-prompts.md` **(v4.0.0; v1.5 in v4.14.0)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md`, the `/review` + `/validate:*` gates | Literal mandated wording v1.5 for the 10 user-prompt surfaces: the 5 v4.0.0 surfaces plus `review-gate-fail` / `review-summary` (v1.2), `e2e-gate-fail` (v1.3), `visual-regression-gate-fail` (v1.4), and `visual-parity-gate-fail` (v1.5); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture; literal blocks verified by `tests/gate-prompts-literal.sh` |
+| `<phase>-walkthrough.md` **(v4.0.2)** | Optional reference for phase commands | Tutorial-depth walkthrough of `/research`, `/design`, `/implement`, `/complete`: rationale, version history, worked examples. Loaded only when explicitly read; no hook or skill auto-loads |
+| `post-batch-aggregation.md` **(v4.9.0)** | Opt-in project pattern (not a shipped hook) | How a project can wire a `PostToolBatch` hook to roll up `/research-team` / `/validate:team` per-teammate output into one summary. Documents why the plugin doesn't ship it (plugin-scoped `PostToolBatch` has no matcher): mirrors code-quality-tools |
 | `forked-subagents.md` **(v4.2.0)** | Capability evaluation reference | Fork-subagent eligibility for epic decomposition; what a standard non-fork subagent loads at startup; the v4.2.0 decision not to enable forks |
 
-### Online Dev-Guides (60+ topics) — Required
+### Online Dev-Guides (60+ topics, Required)
 
 The framework **proactively loads** domain guides for your stack at the start of every phase via the required `dev-guides-navigator` plugin (the catalog is Drupal/CSS/design-heavy today):
 
@@ -270,7 +270,7 @@ The framework **proactively loads** domain guides for your stack at the start of
 | Architecture | Guides for design decisions (services, routing, caching, config) |
 | Implementation | Guides for security, SDC, JS patterns |
 
-Guides are loaded automatically — no manual invocation needed. Already-loaded guides are skipped (session-aware). The navigator provides:
+Guides are loaded automatically. No manual invocation needed. Already-loaded guides are skipped (session-aware). The navigator provides:
 - Hash-based caching so guides aren't re-fetched every session
 - KG metadata for disambiguation (e.g., "story.yml" → UI Patterns, not Storybook)
 - 1200+ atomic decision guides at [camoa.github.io/dev-guides](https://camoa.github.io/dev-guides/)
@@ -296,7 +296,7 @@ Guides are loaded automatically — no manual invocation needed. Already-loaded 
 
 ## Enforced Principles
 
-The framework doesn't just document best practices — it enforces them:
+The framework doesn't just document best practices; it enforces them:
 
 | Principle | How It's Enforced |
 |-----------|-------------------|
@@ -306,7 +306,7 @@ The framework doesn't just document best practices — it enforces them:
 | **TDD** | `tdd-companion` blocks writing code before tests |
 | **DRY** | `code-pattern-checker` flags duplication |
 | **Security** | Quality gate checks input validation, access control, CSRF, SQL injection |
-| **Quality gates** | `/complete` runs 5 gates — all must pass before task is marked done |
+| **Quality gates** | `/complete` runs 5 gates: all must pass before task is marked done |
 
 ### Always Blocked
 
@@ -318,7 +318,7 @@ The framework doesn't just document best practices — it enforces them:
 
 ## Upgrading from v2.x
 
-v3.x uses folder-based task structure. Run `/next` after upgrading — it auto-detects and offers to migrate old tasks. Or run `/ai-dev-assistant:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md).
+v3.x uses folder-based task structure. Run `/next` after upgrading: it auto-detects and offers to migrate old tasks. Or run `/ai-dev-assistant:migrate-tasks` manually. See [MIGRATION.md](./MIGRATION.md).
 
 ## Changelog
 
@@ -330,5 +330,5 @@ MIT
 
 ## Acknowledgments
 
-- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent — TDD, brainstorming, verification workflows
-- `drupal-dev-tools` — Drupal/DDEV operations
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent: TDD, brainstorming, verification workflows
+- `drupal-dev-tools`: Drupal/DDEV operations

@@ -59,7 +59,7 @@
     {
       "name": "ai-dev-assistant",
       "source": "./ai-dev-assistant",
-      "description": "Systematic phased development workflow (Research → Architecture → Implementation → Review) with enforced SOLID, TDD, DRY, and security gates. Stack-agnostic engine — stack specifics live in consumable dev-guides, recipes, and playbooks. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with change-impact dispatch, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E/visual-regression/visual-parity gates (Drupal-flavored for now).",
+      "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (Drupal-flavored for now).",
       "version": "5.0.0",
       "author": {
         "name": "camoa"
@@ -84,8 +84,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. Install ai-dev-assistant going forward.",
-      "version": "4.23.0",
+      "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. An opt-in --permissions flag also re-points stale Skill(drupal-dev-framework:*) grants. The shell exposes only /drupal-dev-framework:upgrade; install ai-dev-assistant going forward.",
+      "version": "4.24.0",
       "author": {
         "name": "camoa"
       },
@@ -119,7 +119,7 @@
     {
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
-      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside drupal-dev-framework; cites the camoa/dev-guides contribution guides as its knowledge layer.",
+      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside ai-dev-assistant; cites the camoa/dev-guides contribution guides as its knowledge layer.",
       "version": "0.1.2",
       "author": {
         "name": "camoa"
