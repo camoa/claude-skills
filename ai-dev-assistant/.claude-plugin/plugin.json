@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ai-dev-assistant",
-  "description": "Systematic phased development workflow (Research → Architecture → Implementation → Review) with agents, skills, and commands. Enforces SOLID, TDD, DRY, and security gates with work-orders, adversarial critique, and oracle integrity. Stack-agnostic orchestration engine — stack specifics live in consumable dev-guides, recipes, and playbooks.",
+  "description": "Ship the right way — and learn why as you go. Where most AI dev tools optimize for speed, ai-dev-assistant optimizes for quality with a built-in teaching layer: a guided Research → Architecture → Implementation → Review workflow whose gates enforce your standards (SOLID, TDD, DRY, security, review) while the dev-guides it loads at every phase teach best practice as you build — the gates check, the guides teach. Serious devs get their standards enforced; newcomers get guided to them. Stack-agnostic engine — stack specifics live in consumable dev-guides, recipes, and playbooks.",
   "version": "5.0.0",
   "author": {
     "name": "camoa"

@@ -1,6 +1,6 @@
 # AI Dev Assistant
 
-A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress). It prevents common AI pitfalls — jumping to code without understanding requirements, overlooking a pre-built library that already solves the problem, creating inconsistent architecture, or skipping tests.
+**Ship the right way — and learn why as you go.** Where most AI dev tools optimize for raw speed, AI Dev Assistant optimizes for quality with a built-in teaching layer. It guides AI through a disciplined **Research → Architecture → Implementation → Review** workflow: the gates enforce your standards (SOLID, TDD, DRY, security, review) while the dev-guides it loads at every phase *teach* best practice as you build — the gates check, the guides teach. Serious devs get their standards enforced; newcomers get guided to them. This prevents the common AI pitfalls — jumping to code without understanding requirements, overlooking a pre-built library that already solves the problem, creating inconsistent architecture, or skipping tests. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress).
 
 > **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md) — a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
 

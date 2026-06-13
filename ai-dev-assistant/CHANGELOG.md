@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Cross-plugin
 - `drupal-ai-contrib` (0.1.2) and `dev-guides-navigator` (0.8.1) prose updated to the new namespace; root `README.md` + `PORTABILITY.md` updated.
 
+### Positioning
+- **Descriptions lead with the solution, not the machinery.** `plugin.json`, the marketplace entry, and both READMEs now open on the adoption wedge — *"Ship the right way, and learn why as you go"*: where most AI dev tools optimize for speed, this optimizes for quality with a built-in teaching layer (the gates check, the guides teach). The phased-workflow / gate / work-order feature list moved below that lede. No code change — the rename's whole point was positioning + name + the 30-second pitch.
+
 ## [4.22.0] - 2026-06-12
 
 **Closes the build_gate_correctness epic — two final children: the AI affected-test selector (the dynamic
