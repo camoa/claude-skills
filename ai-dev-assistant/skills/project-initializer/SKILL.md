@@ -32,7 +32,7 @@ Validate the name matches pattern `^[a-z][a-z0-9_]*$`. If invalid, ask again.
 
 ### 2. Get Storage Location
 
-Read the registry at `~/.claude/drupal-dev-framework/active_projects.json`. Check if `projectsBase` is set.
+Read the registry at `~/.claude/ai-dev-assistant/active_projects.json`. Check if `projectsBase` is set.
 
 **If `projectsBase` exists** — use it as default:
 ```
@@ -133,11 +133,11 @@ Use `Write` tool:
 
 ### 7. Register Project
 
-Add project to the registry at `~/.claude/drupal-dev-framework/active_projects.json`.
+Add project to the registry at `~/.claude/ai-dev-assistant/active_projects.json`.
 
 First, ensure the directory exists:
 ```bash
-mkdir -p ~/.claude/drupal-dev-framework
+mkdir -p ~/.claude/ai-dev-assistant
 ```
 
 Then read existing registry (or create new if doesn't exist) and add the project:

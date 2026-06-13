@@ -15,7 +15,7 @@
 set -eu
 
 WORKSPACE_HASH=$(printf %s "$PWD" | md5sum | cut -d' ' -f1)
-CACHE_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+CACHE_DIR="$HOME/.claude/ai-dev-assistant/sessions"
 
 printf 'Workspace: %s\n' "$PWD"
 printf 'Hash:      %s\n' "$WORKSPACE_HASH"

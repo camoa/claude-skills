@@ -18,7 +18,7 @@ Show current project status and task progress.
 
 ## What This Does
 
-1. Checks project registry at `~/.claude/drupal-dev-framework/active_projects.json`
+1. Checks project registry at `~/.claude/ai-dev-assistant/active_projects.json`
 2. Loads `project_state.md` from project path
 3. Scans `implementation_process/` for task files
 4. Invokes `phase-detector` for each task

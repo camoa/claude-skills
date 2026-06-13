@@ -17,7 +17,7 @@ forget to run this; this command is the deliberate, reviewed save.
 ## What this does
 
 1. **Resolve the active task.** Read the per-workspace session file at
-   `~/.claude/drupal-dev-framework/sessions/<md5(cwd)>.json`. If it has no
+   `~/.claude/ai-dev-assistant/sessions/<md5(cwd)>.json`. If it has no
    `task`/`taskPath`, there is nothing task-scoped to review — skip to step 4.
 
 2. **Review in-flight state.** Read the active task's `task.md` and its phase

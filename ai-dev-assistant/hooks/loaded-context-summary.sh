@@ -58,7 +58,7 @@ CTX=""
 # the prefix cache stays warm. Invalidates when _dev-guides-load.json or
 # _playbook-load.json changes (both feed CTX).
 HASH=$(printf %s "$CTX" | md5sum | cut -d' ' -f1)
-CACHE_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+CACHE_DIR="$HOME/.claude/ai-dev-assistant/sessions"
 CACHE_FILE="$CACHE_DIR/${WORKSPACE_HASH}.last-loaded-context-summary.md5"
 if [[ -f "$CACHE_FILE" ]] && [[ "$(cat "$CACHE_FILE" 2>/dev/null)" = "$HASH" ]]; then
   [[ -n "${DDF_HOOK_DEBUG:-}" ]] && printf 'loaded-context-summary: skipped (state unchanged)\n' >&2

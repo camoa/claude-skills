@@ -27,7 +27,7 @@ This single command handles everything - it will guide you through project selec
 │   /next (no argument)                                                           │
 │         │                                                                        │
 │         ▼                                                                        │
-│   Read: ~/.claude/drupal-dev-framework/active_projects.json                     │
+│   Read: ~/.claude/ai-dev-assistant/active_projects.json                     │
 │         │                                                                        │
 │         ▼                                                                        │
 │   ┌─────────────────────────────────────────────────────────────┐               │
@@ -203,7 +203,7 @@ This single command handles everything - it will guide you through project selec
     └── completed/                # Finished tasks
         └── {task_name}/
 
-~/.claude/drupal-dev-framework/
+~/.claude/ai-dev-assistant/
 └── active_projects.json          # Project registry (Step 0 reads here)
 ```
 

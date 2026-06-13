@@ -143,7 +143,7 @@ fi
 
 # Step 5: multi_session signal — 2+ session-context files reference same project
 MULTI_SESSION_FIRED=false
-SESS_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+SESS_DIR="$HOME/.claude/ai-dev-assistant/sessions"
 if [ -d "$SESS_DIR" ]; then
   PROJECT_NAME=$(basename "$PROJECT_DIR")
   MATCHES=$(find "$SESS_DIR" -name "*.json" -exec jq -r --arg n "$PROJECT_NAME" 'select(.project == $n) | input_filename' {} \; 2>/dev/null | wc -l)

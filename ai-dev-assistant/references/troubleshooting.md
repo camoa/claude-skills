@@ -8,7 +8,7 @@ Use these when framework behavior is unexpected:
 
 | Symptom | First check |
 |---------|-------------|
-| `/next` picks the wrong task | `/ai-dev-assistant:status` (tree view + active task) and `~/.claude/drupal-dev-framework/sessions/<workspace_hash>.json` |
+| `/next` picks the wrong task | `/ai-dev-assistant:status` (tree view + active task) and `~/.claude/ai-dev-assistant/sessions/<workspace_hash>.json` |
 | Hardened gate appears to skip | `/ai-dev-assistant:audit-status <task>` — lists fired and unaudited gates per task |
 | Playbook citation fails | `/ai-dev-assistant:playbook-active` (subscribed sets, local playbook, recent conflicts) |
 | Phase artifact missing fields after upgrade | `/ai-dev-assistant:upgrade-project` (active project only — backfills + journal-resumable) |

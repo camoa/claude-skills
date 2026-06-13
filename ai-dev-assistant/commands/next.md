@@ -59,7 +59,7 @@ Do NOT walk `blocks`/`blocked_by` graph transitively here — direct relationshi
 
 When `/next` is called without a project name:
 
-1. Read registry at `~/.claude/drupal-dev-framework/active_projects.json`
+1. Read registry at `~/.claude/ai-dev-assistant/active_projects.json`
 2. List all projects (sorted by lastAccessed, newest first)
 3. Ask user to choose
 

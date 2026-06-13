@@ -92,7 +92,7 @@ Run this after each successful load, substituting `{GUIDE_ID}`:
 GUIDE_ID="{GUIDE_ID}"
 [ -n "$GUIDE_ID" ] || exit 0   # guard against empty IDs polluting the list
 WORKSPACE_HASH=$(echo -n "$PWD" | md5sum | cut -d' ' -f1)
-SESS_FILE=~/.claude/drupal-dev-framework/sessions/${WORKSPACE_HASH}.json
+SESS_FILE=~/.claude/ai-dev-assistant/sessions/${WORKSPACE_HASH}.json
 [ -s "$SESS_FILE" ] || exit 0
 jq --arg g "$GUIDE_ID" \
   'if (.loadedGuides // []) | index($g) then . else .loadedGuides = ((.loadedGuides // []) + [$g]) end' \

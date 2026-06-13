@@ -655,7 +655,7 @@ implementation of the cross-plugin session-remembrance pattern.
   free-form user reminders (pre-filled from the existing primer on re-run),
   merges a `SessionStart` and a `SessionEnd` hook entry into
   `<project>/.claude/settings.json`, and places the filled primer + a copy of
-  `save-session.sh` in `<project>/.claude/drupal-dev-framework/`.
+  `save-session.sh` in `<project>/.claude/ai-dev-assistant/`.
 
 ### Design notes
 
@@ -941,7 +941,7 @@ After v4.0.0 hardened gates shipped, post-release meta-analysis surfaced ~80K to
 
 #### Cut 2 — Conditional UserPromptSubmit hook output
 
-`hooks/context-reminder.sh` and `hooks/loaded-context-summary.sh` now md5-hash their rendered output, cache it under `~/.claude/drupal-dev-framework/sessions/<workspace_hash>.last-<hook>.md5`, and emit empty `{}` envelopes when state is unchanged turn-over-turn. Cache invalidates automatically on any state change (task.md edits, loadedGuides[] growth, project_state.md edits, active task switch). Cache write failures degrade silently to "always emit" — hooks remain best-effort.
+`hooks/context-reminder.sh` and `hooks/loaded-context-summary.sh` now md5-hash their rendered output, cache it under `~/.claude/ai-dev-assistant/sessions/<workspace_hash>.last-<hook>.md5`, and emit empty `{}` envelopes when state is unchanged turn-over-turn. Cache invalidates automatically on any state change (task.md edits, loadedGuides[] growth, project_state.md edits, active task switch). Cache write failures degrade silently to "always emit" — hooks remain best-effort.
 
 - New env var `DDF_HOOK_DEBUG=1` emits `<hook>: skipped (state unchanged)` / `<hook>: emit (state changed)` to stderr for verification.
 - Added `scripts/hook-cache-status.sh` — prints current cached hashes per hook for the active workspace.
@@ -1086,7 +1086,7 @@ Hardening earns its place when (a) there's documented evidence of bypass causing
 
 ### Added — Worktree Awareness
 
-Make git worktrees the standard mechanism for running parallel tasks on the same ai-dev-assistant project. Two Claude Code sessions on the same workspace collide on `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` and on the git working tree itself; a worktree at `.worktrees/<task_name>/` solves both — distinct `$PWD` → distinct hash → independent session. **No changes to `session-context-writer`.**
+Make git worktrees the standard mechanism for running parallel tasks on the same ai-dev-assistant project. Two Claude Code sessions on the same workspace collide on `~/.claude/ai-dev-assistant/sessions/<md5($PWD)>.json` and on the git working tree itself; a worktree at `.worktrees/<task_name>/` solves both — distinct `$PWD` → distinct hash → independent session. **No changes to `session-context-writer`.**
 
 ### New commands (2)
 
@@ -1122,7 +1122,7 @@ Make git worktrees the standard mechanism for running parallel tasks on the same
 |---|---|
 | `another_task_active` | Another task folder has `implementation.md` AND `git log --since="2 hours" --name-only` shows commits to its tracked files |
 | `dirty_tree` | `git status --porcelain` shows modified files matching another task's tracked files |
-| `multi_session` | (MEDIUM-HIGH) 2+ session-context files in `~/.claude/drupal-dev-framework/sessions/` reference the same project |
+| `multi_session` | (MEDIUM-HIGH) 2+ session-context files in `~/.claude/ai-dev-assistant/sessions/` reference the same project |
 | `--worktree` user flag | EXPLICIT |
 | `Worktree By Default: true` in `project_state.md` | EXPLICIT |
 
@@ -1931,7 +1931,7 @@ Sub-task 2 originally contemplated a 5-layer enforcement scaffolding. That resea
 - **Session-start hook** — Clears stale session context for the current workspace on every new session.
 - **Pre/PostCompact hooks** — No longer dump cached content. Now output instructions for Claude to read live `project_state.md` and `task.md` on demand.
 - **StopFailure hook** — Reads per-workspace session file instead of global `session_context.json`.
-- Session context stored under `~/.claude/drupal-dev-framework/sessions/<workspace-hash>.json` (was single global file).
+- Session context stored under `~/.claude/ai-dev-assistant/sessions/<workspace-hash>.json` (was single global file).
 
 ## [3.7.0] - 2026-03-20
 
@@ -1945,7 +1945,7 @@ Sub-task 2 originally contemplated a 5-layer enforcement scaffolding. That resea
 
 ### Added
 - **PostCompact hook** (`hooks/post-compact.sh`): Re-injects active project/task context after compaction — reads `session_context.json` and outputs project state + task details so Claude can continue without manual re-orientation
-- **StopFailure hook** (`hooks/stop-failure.sh`): Logs task failures caused by API errors to `~/.claude/drupal-dev-framework/logs/failures.log`, with project/task name from session context, so the next session can detect unclean exits
+- **StopFailure hook** (`hooks/stop-failure.sh`): Logs task failures caused by API errors to `~/.claude/ai-dev-assistant/logs/failures.log`, with project/task name from session context, so the next session can detect unclean exits
 - **`hooks.json`**: Added `PostCompact` and `StopFailure` event registrations for the two new hook scripts
 
 ### Changed
@@ -2249,7 +2249,7 @@ See [MIGRATION.md](./MIGRATION.md) for detailed guide.
 - /next command: Task-aware decision logic
 
 ### Added
-- Project registry system at `~/.claude/drupal-dev-framework/active_projects.json`
+- Project registry system at `~/.claude/ai-dev-assistant/active_projects.json`
 - project-initializer now registers projects on creation
 - session-resume lists registered projects for easy selection
 - memory-manager maintains registry

@@ -12,7 +12,7 @@ rm -f "$(ddf_session_file)"
 # check was removed once that declaration landed — install-time enforcement
 # supersedes it and makes missing-dependency failures loud instead of silent.
 
-REGISTRY="$HOME/.claude/drupal-dev-framework/active_projects.json"
+REGISTRY="$HOME/.claude/ai-dev-assistant/active_projects.json"
 
 echo "## AI Dev Assistant"
 echo ""

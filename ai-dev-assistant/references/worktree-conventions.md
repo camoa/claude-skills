@@ -10,7 +10,7 @@ This reference documents the framework's git-worktree conventions for parallel t
 
 Two Claude Code sessions on the same workspace collide on:
 
-- `~/.claude/drupal-dev-framework/sessions/<md5($PWD)>.json` — same `$PWD` = same hash = last writer wins
+- `~/.claude/ai-dev-assistant/sessions/<md5($PWD)>.json` — same `$PWD` = same hash = last writer wins
 - The git working tree itself (concurrent edits, dirty branches, conflicting commits)
 
 A worktree at `.worktrees/<task_name>/` solves both: distinct `$PWD` → distinct hash → independent session-context file. The framework treats this as the standard mechanism for parallel work, not an exotic feature.
@@ -55,7 +55,7 @@ The framework recommends a worktree on `/implement <task>` when at least one HIG
 |---|---|---|
 | `another_task_active` | HIGH | A different task folder has `implementation.md` AND `git log --since="2 hours" --name-only` shows commits to its tracked files |
 | `dirty_tree` | HIGH | `git status --porcelain` shows modified files matching another task's `implementation.md` Files Created/Modified list |
-| `multi_session` | MEDIUM-HIGH | 2+ session-context files in `~/.claude/drupal-dev-framework/sessions/` reference the same project (signal that the user has been working on this project from multiple workspaces) |
+| `multi_session` | MEDIUM-HIGH | 2+ session-context files in `~/.claude/ai-dev-assistant/sessions/` reference the same project (signal that the user has been working on this project from multiple workspaces) |
 | `--worktree` user flag | EXPLICIT | User explicitly requested |
 | `Worktree By Default: true` in `project_state.md` | EXPLICIT | Project opts into worktree-always |
 

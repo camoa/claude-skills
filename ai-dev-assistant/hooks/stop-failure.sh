@@ -2,7 +2,7 @@
 # StopFailure hook: Log task failures caused by API errors
 # Writes a failure record so the next session can detect and recover
 
-LOG_DIR="$HOME/.claude/drupal-dev-framework/logs"
+LOG_DIR="$HOME/.claude/ai-dev-assistant/logs"
 LOG_FILE="$LOG_DIR/failures.log"
 
 mkdir -p "$LOG_DIR"

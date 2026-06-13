@@ -48,7 +48,7 @@ Project
 
 ## Process
 
-1. **Locate project** - Check registry at `~/.claude/drupal-dev-framework/active_projects.json`
+1. **Locate project** - Check registry at `~/.claude/ai-dev-assistant/active_projects.json`
 2. **Read state** - Load project_state.md from the project's `path`
 3. **Check requirements** - Are project requirements gathered?
 4. **Check tasks** - Are there defined tasks? What's their status?
@@ -58,7 +58,7 @@ Project
 
 ## Project Registry
 
-The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all projects:
+The registry at `~/.claude/ai-dev-assistant/active_projects.json` tracks all projects:
 
 ```json
 {
@@ -82,7 +82,7 @@ The registry at `~/.claude/drupal-dev-framework/active_projects.json` tracks all
 When invoked without a specific project:
 
 ```
-Read registry: ~/.claude/drupal-dev-framework/active_projects.json
+Read registry: ~/.claude/ai-dev-assistant/active_projects.json
 
 Projects found?
 ├── YES → List projects (sorted by lastAccessed)

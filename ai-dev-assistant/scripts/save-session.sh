@@ -55,7 +55,7 @@ fi
 # (when set) so concurrent same-directory sessions do not collide; the marker is
 # NOT salted — it is cross-session by design ("changed since the last persist").
 WORKSPACE_HASH=$(printf %s "$CWD" | md5sum | cut -d' ' -f1)
-SESS_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+SESS_DIR="$HOME/.claude/ai-dev-assistant/sessions"
 if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
   SESS_KEY=$(printf %s "${WORKSPACE_HASH}::${CLAUDE_CODE_SESSION_ID}" | md5sum | cut -d' ' -f1)
 else

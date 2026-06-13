@@ -20,8 +20,8 @@ Into the project's working directory (`<project>/`):
 
 | Path | Purpose |
 |------|---------|
-| `<project>/.claude/drupal-dev-framework/session-primer.md` | The filled primer. **User-editable by hand.** |
-| `<project>/.claude/drupal-dev-framework/save-session.sh` | A copy of the persistence script (so the hook does not depend on the plugin install path). |
+| `<project>/.claude/ai-dev-assistant/session-primer.md` | The filled primer. **User-editable by hand.** |
+| `<project>/.claude/ai-dev-assistant/save-session.sh` | A copy of the persistence script (so the hook does not depend on the plugin install path). |
 | `<project>/.claude/settings.json` → `hooks.SessionStart` | `cat`s the primer to stdout. SessionStart stdout is injected as context — and it fires on `startup`, `resume`, `clear`, **and `compact`**, so one entry covers post-compaction re-injection too. |
 | `<project>/.claude/settings.json` → `hooks.SessionEnd` | Runs `save-session.sh` on every exit. Scripted safety net. |
 
@@ -42,7 +42,7 @@ Into the project's working directory (`<project>/`):
 ### Step 1 — Detect and confirm project facts
 
 Resolve the active project. Read the per-workspace session file
-(`~/.claude/drupal-dev-framework/sessions/<md5(cwd)>.json`) for `projectPath`;
+(`~/.claude/ai-dev-assistant/sessions/<md5(cwd)>.json`) for `projectPath`;
 if no project is active, tell the user to run `/ai-dev-assistant:next`
 first and stop.
 
@@ -70,7 +70,7 @@ Validate the install directory is an existing absolute path before continuing.
 
 ### Step 2 — Gather user-specific reminders
 
-If `<install-dir>/.claude/drupal-dev-framework/session-primer.md` already
+If `<install-dir>/.claude/ai-dev-assistant/session-primer.md` already
 exists (re-run), read its current **`## User-specific reminders`** section and
 show it as the existing value — so hand-edits are preserved by default.
 
@@ -116,23 +116,27 @@ SETTINGS="<install-dir>/.claude/settings.json"
 
 # Literal ${CLAUDE_PROJECT_DIR} — single-quoted so bash does NOT expand it.
 # Claude Code substitutes it when the hook runs.
-SS_CMD='cat "${CLAUDE_PROJECT_DIR}/.claude/drupal-dev-framework/session-primer.md" 2>/dev/null || true'
-SE_CMD='${CLAUDE_PROJECT_DIR}/.claude/drupal-dev-framework/save-session.sh'
+SS_CMD='cat "${CLAUDE_PROJECT_DIR}/.claude/ai-dev-assistant/session-primer.md" 2>/dev/null || true'
+SE_CMD='${CLAUDE_PROJECT_DIR}/.claude/ai-dev-assistant/save-session.sh'
 
+# The detection patterns below match BOTH the new (ai-dev-assistant) and the legacy
+# (drupal-dev-framework) baked paths. Do NOT narrow them to one name: matching both
+# is what lets a re-run REPLACE a pre-rename hook group in place instead of leaving a
+# stale duplicate — it is the migration re-stamp's idempotency hinge (D1).
 TMP="$SETTINGS.tmp.$$"
 jq --arg ssCmd "$SS_CMD" --arg seCmd "$SE_CMD" '
   .hooks //= {}
   | .hooks.SessionStart = (
       ((.hooks.SessionStart // []) | map(select(
         ([.hooks[]?.command // ""]
-         | map(test("ai-dev-assistant/session-primer\\.md")) | any) | not
+         | map(test("(ai-dev-assistant|drupal-dev-framework)/session-primer\\.md")) | any) | not
       )))
       + [ { hooks: [ { type: "command", command: $ssCmd, timeout: 5 } ] } ]
     )
   | .hooks.SessionEnd = (
       ((.hooks.SessionEnd // []) | map(select(
         ([.hooks[]?.command // ""]
-         | map(test("ai-dev-assistant/save-session\\.sh")) | any) | not
+         | map(test("(ai-dev-assistant|drupal-dev-framework)/save-session\\.sh")) | any) | not
       )))
       + [ { hooks: [ { type: "command", command: $seCmd, args: [], timeout: 10 } ] } ]
     )
@@ -146,7 +150,7 @@ raises it. Keep it.
 ### Step 5 — Write the primer and copy the script
 
 ```bash
-DEST="<install-dir>/.claude/drupal-dev-framework"
+DEST="<install-dir>/.claude/ai-dev-assistant"
 mkdir -p "$DEST"
 # Write the rendered primer from step 3 to $DEST/session-primer.md (overwrite).
 # Copy the script and make it executable:

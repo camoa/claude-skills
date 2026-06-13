@@ -25,7 +25,7 @@ Initialize a new development project with complete memory structure.
    - `architecture/main.md`
    - `implementation_process/in_progress/`
    - `implementation_process/completed/`
-5. Registers project in `~/.claude/drupal-dev-framework/active_projects.json` (including the `codePath` field)
+5. Registers project in `~/.claude/ai-dev-assistant/active_projects.json` (including the `codePath` field)
 6. Invokes `project-initializer` skill (v1.4.0 accepts a `code_path` arg)
 7. Invokes `requirements-gatherer` skill
 8. **Runs `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" null null`** (Bash) with the new project name and path (no task yet)

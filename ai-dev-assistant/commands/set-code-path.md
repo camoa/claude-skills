@@ -25,7 +25,7 @@ Set or update the `codePath` metadata for the active ai-dev-assistant project. `
    - With `--docs-only`: set to `(docs-only)` sentinel (null at runtime).
    - With no arg: run the detect+confirm flow (see below).
 4. **Writes to `project_state.md`** — the `**Code path:**` line (replace if exists, insert in the top metadata block if absent).
-5. **Syncs registry cache** — updates `~/.claude/drupal-dev-framework/active_projects.json`'s matching entry `codePath` field.
+5. **Syncs registry cache** — updates `~/.claude/ai-dev-assistant/active_projects.json`'s matching entry `codePath` field.
 6. **Reports** what changed.
 
 ## Detect + confirm flow (no arg provided)

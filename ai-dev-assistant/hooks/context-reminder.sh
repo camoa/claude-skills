@@ -144,7 +144,7 @@ BLOCK=$(printf %s "$BLOCK" | head -c 9500)
 # automatically when task.md, loadedGuides[], project_state.md, or active task
 # changes (all those signals are folded into BLOCK).
 HASH=$(printf %s "$BLOCK" | md5sum | cut -d' ' -f1)
-CACHE_DIR="$HOME/.claude/drupal-dev-framework/sessions"
+CACHE_DIR="$HOME/.claude/ai-dev-assistant/sessions"
 CACHE_FILE="$CACHE_DIR/${WORKSPACE_HASH}.last-context-reminder.md5"
 if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE" 2>/dev/null)" = "$HASH" ]; then
   [ -n "${DDF_HOOK_DEBUG:-}" ] && printf 'context-reminder: skipped (state unchanged)\n' >&2

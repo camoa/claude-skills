@@ -25,7 +25,7 @@
 # the caches self-heal, so neither needs per-session isolation.
 
 ddf_session_dir() {
-  printf '%s' "$HOME/.claude/drupal-dev-framework/sessions"
+  printf '%s' "$HOME/.claude/ai-dev-assistant/sessions"
 }
 
 ddf_workspace_hash() {
