@@ -57,9 +57,9 @@
       ]
     },
     {
-      "name": "drupal-dev-framework",
-      "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow (Research \u2192 Architecture \u2192 Implementation) with enforced SOLID, TDD, DRY, and security gates. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with change-impact dispatch, two-stage dev-guides detection, the Playbook System, git-worktree parallel-task awareness, agent-team validation, per-project session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (/setup-atk, /setup-visual-regression, /setup-visual-parity).",
+      "name": "ai-dev-assistant",
+      "source": "./ai-dev-assistant",
+      "description": "Systematic phased development workflow (Research \u2192 Architecture \u2192 Implementation \u2192 Review) with enforced SOLID, TDD, DRY, and security gates. Stack-agnostic engine \u2014 stack specifics live in consumable dev-guides, recipes, and playbooks. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with change-impact dispatch, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E/visual-regression/visual-parity gates (Drupal-flavored for now).",
       "version": "4.22.0",
       "author": {
         "name": "camoa"
@@ -67,10 +67,10 @@
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
       "keywords": [
-        "drupal",
         "development",
         "workflow",
         "architecture",
+        "agnostic",
         "tdd",
         "solid",
         "dry",
