@@ -7,7 +7,7 @@ user-invocable: false
 
 # Core Pattern Finder
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 Search Drupal core for implementation patterns and return file references.
 

@@ -6,7 +6,7 @@ argument-hint: "[<task>] [--all-viewports] [--show-diffs] [--add-surface <url>] 
 
 # /validate:visual-parity
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 <!-- visual-review:dispatch-ready -->
 

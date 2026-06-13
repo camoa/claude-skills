@@ -4,6 +4,8 @@ Tutorial-depth reference for the `/ai-dev-assistant:design` command. The runtime
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
+> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (`core`/`contrib` pattern references, the PHP interface sketch, Drupal pattern names like FormBase vs ListBuilder) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
+
 ---
 
 

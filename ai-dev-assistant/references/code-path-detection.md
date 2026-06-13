@@ -30,7 +30,7 @@ This is the common Pattern-1 case (claude_code_project + separate code repo): us
 
 ### Strategy 3 — Memory folder's parent-of-parent + `/docroot/modules/custom/<project>`
 
-For Drupal-heavy workflows where the memory folder sits under a site's tree. Less common; low priority. Evaluate after shipping v3.11.0 if real-world friction surfaces.
+*(Drupal)* where the memory folder sits under a site's tree. Less common; low priority. Evaluate after shipping v3.11.0 if real-world friction surfaces.
 
 ## What to show the user
 

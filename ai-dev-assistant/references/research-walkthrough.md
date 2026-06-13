@@ -4,6 +4,8 @@ Tutorial-depth reference for the `/ai-dev-assistant:research` command. The runti
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
+> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (drupal.org / contrib search, `core-pattern-finder`, the Drupal worked examples) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
+
 ---
 
 
@@ -221,8 +223,9 @@ implementation_process/in_progress/{task_name}/
     ├── <subject-b>.md      # full findings for another
     └── <subject-c>.md
 ```
-A `<subject>` is whatever was investigated as a unit — a contrib module, an
-integration approach, a core subsystem, a competing option. Each subject file
+A `<subject>` is whatever was investigated as a unit — an existing third-party
+library, an integration approach, a framework (first-party) subsystem, a
+competing option. Each subject file
 holds that subject's complete findings (what it is, how it would apply, fit
 assessment, evidence). When research genuinely covered a single subject, a
 flat single-file `research.md` is still fine — the split exists to stop

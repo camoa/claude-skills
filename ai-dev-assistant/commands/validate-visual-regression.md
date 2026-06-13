@@ -6,7 +6,7 @@ argument-hint: "[<task>] [--bootstrap] [--update-baselines \"<reason>\"] [--show
 
 # /validate:visual-regression
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 <!-- visual-review:dispatch-ready -->
 

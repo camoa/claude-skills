@@ -7,7 +7,7 @@
   Instructions that must reach Claude at runtime live in skills/.
 -->
 
-# Drupal Dev Framework - Plugin Conventions
+# AI Dev Assistant - Plugin Conventions
 
 ## Task Hierarchy (v3.10.0+)
 
@@ -79,7 +79,7 @@ The 7 hardened surfaces, by category:
 1. **Pre-analysis epic gate** at `/research` — always-on (was: signal-conditional). Invokes `analysis-agent` regardless of signals; user sees verbatim agent output before pick.
 2. **Coverage-mapping requirement** at end-of-`/research` — `## Coverage Mapping` H2 mandatory in research.md; verified by `scripts/coverage-mapping-check.sh`; refuses Phase 1 `[x]` on fail.
 3. **Skill-review** at `/complete` — fires when staged/branched changes include `skills/*/SKILL.md`; invokes `plugin-creation-tools:skill-quality-reviewer`.
-4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate --strict` (DDF dogfoods strict validation on its own plugin changes). `--skip-plugin-validate <reason>` still bypasses by explicit declaration.
+4. **Plugin-validate** at `/complete` — fires when staged/branched changes include any plugin file; invokes `/plugin-creation-tools:validate --strict` (the framework dogfoods strict validation on its own plugin changes). `--skip-plugin-validate <reason>` still bypasses by explicit declaration.
 5. **Phase-command-bypass** detected by PreToolUse hook on Write to phase artifacts — non-blocking audit when no `/research` / `/design` / `/implement` slash command is active.
 
 **Deterministic surfaces (2)** — fire shell scripts that detect+act without user prompts; bypass-by-declaration is impossible:
@@ -184,7 +184,7 @@ Per-project session-lifecycle hooks that survive compaction, `/clear`, and new s
 
 The filled primer at `<project>/.claude/ai-dev-assistant/session-primer.md` is **user-editable by hand**. Re-run `/install-remembrance-hook` if the project name, memory path, or code path changes — the primer is a static snapshot.
 
-## Worktree Workflow (v3.16.0+)
+## Worktree Workflow (v3.16.0+) (Drupal-flavored)
 
 Two Claude Code sessions on the same project workspace collide on `~/.claude/ai-dev-assistant/sessions/<md5($PWD)>.json` (last-writer-wins) and on the git working tree itself. Solution: the second session runs in a worktree at `.worktrees/<task_name>/`. Distinct `$PWD` → distinct hash → independent session-context. **No changes to `session-context-writer` — the existing hash naturally separates worktree sessions.**
 
@@ -209,7 +209,7 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 ## Playbook System (v3.15.0+)
 
-Two-layer Drupal best-practices system:
+Two-layer best-practices system (the shipped sets are Drupal-flavored today):
 
 - **Published playbook sets** — namespaced dev-guides categories like `drupal/best-practices/camoa/*`. Each guide is one concrete "do it this way, not that way" rule. Multiple authors can ship parallel sets (`drupal/best-practices/<author>/*`); users subscribe per project.
 - **Project-local user playbook** — single markdown file the user maintains. Can OVERRIDE shipped opinions (replace) or EXTEND them (cover topics shipped doesn't). Local always wins on conflict.
@@ -293,7 +293,7 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 D-A-D phases (Research → Architecture → Design) are **Type B** work — audit / review / architecture analysis. Read full source and config files; do NOT grep-first. Inherited methods, annotations, config-wired classes, and docblock metadata are invisible to a grep-first pass. See `https://camoa.github.io/dev-guides/development/reading-strategy/` via `dev-guides-navigator`. Cited inline in `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/review.md`.
 
-On very large Drupal repos, pair this read-everything posture with the upstream Claude Code monorepo/large-codebase guide ("Set up Claude Code in a monorepo or large codebase") for scoping reads to the relevant subtree.
+On very large repos, pair this read-everything posture with the upstream Claude Code monorepo/large-codebase guide ("Set up Claude Code in a monorepo or large codebase") for scoping reads to the relevant subtree.
 
 ## Effort-Adaptive Commands (v4.8.0+)
 
@@ -313,11 +313,11 @@ Claude Code 2.1.117+ ships forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`) — 
 Symptom-first triage at `references/troubleshooting.md`. For Claude Code platform-level issues (CLAUDE.md ignored, hooks not firing, MCP not connecting, plugin not loaded), the upstream `Debug Your Config` guide is the authoritative reference — uses `/context`, `/memory`, `/doctor`, `/hooks`, `/mcp`, `/skills`, `/permissions`, `/status` to inspect what actually loaded.
 
 ## Online Dev-Guides — Proactive Usage
-**ALWAYS consult dev-guides before making Drupal development decisions** unless the relevant guide was already loaded in this session.
+**ALWAYS consult dev-guides before making development decisions** unless the relevant guide was already loaded in this session.
 - Use the `dev-guides-navigator` skill for topic discovery, caching, and disambiguation
 - Do NOT fetch `llms.txt` or dev-guides URLs directly — invoke the navigator skill instead
 - The `guide-integrator` and `guide-loader` skills delegate to the navigator
-- **Phase 1 (Research):** Load guides for the task's Drupal domain (forms, entities, plugins, etc.)
+- **Phase 1 (Research):** Load guides for the task's domain (for Drupal: forms, entities, plugins, etc.)
 - **Phase 2 (Design):** Load guides for architecture decisions (services, routing, caching, config)
 - **Phase 3 (Implementation):** Load guides for security, SDC, JS patterns before writing code
 - If a guide was loaded earlier in the session, do not re-fetch — use the cached content
@@ -344,7 +344,7 @@ Session-scoped — stops when session exits. 3-day auto-expiry.
 
 Long `/review`, `/research-team`, and `/validate:team` runs can also be dispatched as **background sessions** — `claude --bg "<prompt>"`, `/background` (alias `/bg`) from inside a session, or from Agent View (`claude agents`). A background session keeps running with no terminal attached. This composes with the `channelsEnabled` push-notification tip: background-run + ping-on-done.
 
-## Sandbox and DDEV
+## Sandbox and DDEV (Drupal-flavored)
 
 If users enable Claude Code sandboxing (`/sandbox`), DDEV commands will fail because Docker socket access is restricted. Required configuration:
 
@@ -379,7 +379,7 @@ These load only when Claude works on matching files, keeping context lean.
 
 **`autoMode.hard_deny` and project settings.** Since Claude Code v2.1.142, a project's `.claude/settings.json` (or `.claude/settings.local.json`) **cannot** set `defaultMode: "auto"` — it is silently ignored, so a repository cannot grant itself auto mode. Auto mode is enabled only from the user's own `~/.claude/settings.json`. A project may still ship an `autoMode.hard_deny` array (unconditional denials — e.g. `core/`, `vendor/`, `web/sites/default/settings.php`, `.ddev/`); that list applies as a guardrail **if** the user has turned auto mode on, but it cannot itself turn auto mode on.
 
-**security-guidance plugin (complementary).** The official Claude Code `security-guidance` plugin is harness-level edit review (it flags risky edits as they happen), complementary to — not a substitute for — DDF's per-task Gate 4 (`/review`).
+**security-guidance plugin (complementary).** The official Claude Code `security-guidance` plugin is harness-level edit review (it flags risky edits as they happen), complementary to — not a substitute for — the framework's per-task Gate 4 (`/review`).
 
 ## Documentation & observability notes (v4.9.0+)
 
@@ -387,7 +387,7 @@ These load only when Claude works on matching files, keeping context lean.
 
 **OTel skill metrics.** The framework does not ship OpenTelemetry instrumentation. If it ever does, note that `claude_code.skill_activated` carries an `invocation_trigger` attribute distinguishing `user-slash` from `claude-proactive` and `nested-skill` — useful for measuring how often framework commands are user-invoked versus auto-triggered. Recorded here as a future-instrumentation footnote.
 
-## ATK E2E Gate (v4.12.0+)
+## ATK E2E Gate (v4.12.0+) (Drupal-flavored)
 
 `/setup-atk` installs **ATK `^2.0` (behavioral) + Playwright** and scaffolds `tests/e2e/`.
 `/validate:e2e` runs the gate and emits `_e2e.json` + the standard validation envelope.
@@ -400,7 +400,7 @@ Key conventions:
 - ATK's VR mode is NOT used — Task C (Lullabot) owns visual regression.
 - `/validate:a11y` and `/validate:perf` are v2-deferred.
 
-## Visual Regression Gate (v4.13.0+)
+## Visual Regression Gate (v4.13.0+) (Drupal-flavored)
 
 `/setup-visual-regression` installs **`@lullabot/playwright-drupal` + Playwright**
 and scaffolds `tests/visual/`. `/validate:visual-regression` runs the gate and
@@ -430,7 +430,7 @@ Key conventions:
 - a11y baseline pairing is **warning-only** in v1 (per-surface `a11y_block: true`
   is a v2 candidate).
 
-## Visual Parity Gate (v4.14.0+)
+## Visual Parity Gate (v4.14.0+) (Drupal-flavored)
 
 `/setup-visual-parity` adds parity checking **on top of** the visual-regression
 stack (it hard-depends on `/setup-visual-regression`): it installs

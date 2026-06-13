@@ -4,6 +4,8 @@ Tutorial-depth reference for the `/ai-dev-assistant:complete` command. The runti
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
+> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (the `settings_form` / `SettingsForm.php` worked example, `*.schema.yml` paths) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
+
 ---
 
 
@@ -116,7 +118,7 @@ If any matches → fire the gate.
 
 ### Steps
 
-1. **Invoke** `/plugin-creation-tools:validate --strict` slash command (DDF dogfoods strict validation on its own plugin changes). Capture full output verbatim.
+1. **Invoke** `/plugin-creation-tools:validate --strict` slash command (the framework dogfoods strict validation on its own plugin changes). Capture full output verbatim.
 2. **Display** the literal `prompts:plugin-validate-decision` template. Substitutions: `{{plugins_validated}}` (comma-list), `{{findings}}` (verbatim slash-command output).
 3. **Block** on user `[a]ccept / [r]emediate / [b]ypass` choice.
 4. **Write audit** to `<task>/_plugin-validate.json` via `gate-audit-write.sh`.

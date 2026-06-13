@@ -6,7 +6,7 @@ argument-hint: "[--add-journey <description>] [--skip-demo-recipe] [--skip-disco
 
 # /setup-atk
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 Installs ATK (Automated Testing Kit) `^2.0` + Playwright onto the Drupal project, scaffolds `tests/e2e/`, extends `playwright.config.ts`, seeds the surface registry, and (unless `--skip-discovery`) discovers site journeys and authors plan-first E2E tests. Full walkthrough: `references/atk-e2e-walkthrough.md`.
 

@@ -26,7 +26,7 @@ Load development references and integrate into architecture documents. Two sourc
 **PROACTIVE:** Activate at the START of every phase activity — do not wait for explicit request.
 
 Activate when:
-- **Any Phase 1 activity** — load guides for the task's Drupal domain before research
+- **Any Phase 1 activity** — load guides for the task's domain (Drupal-flavored today) before research
 - **Any Phase 2 activity** — load architecture decision guides before design
 - **Any Phase 3 activity** — load security, SDC, JS guides before implementation
 - Designing features that match reference topics
@@ -65,7 +65,7 @@ From the phase floor emitted by `dev-guides-detect.sh`:
 
 ### 2. Delegate Online Guides to Navigator
 
-For Drupal-specific architecture decisions, invoke the `dev-guides-navigator` skill with the task keywords. For each topic the navigator returns:
+For domain-specific architecture decisions, invoke the `dev-guides-navigator` skill with the task keywords. For each topic the navigator returns:
 1. Check `loadedGuides[]`. If the topic ID (e.g. `drupal/forms/form-validation`) is already present, skip re-fetching.
 2. Fetch via the navigator (which handles its own content caching of `llms.txt`).
 3. Record the topic ID via the snippet in "Record Loaded Guide".
@@ -210,9 +210,9 @@ Record each loaded shipped-set guide and the local playbook into `loadedGuides[]
 
 ## Mid-phase guide checks
 
-The preflight at phase start loads the methodology floor + the domain guides matched from the artifacts that exist *then*. Work uncovers more as it proceeds — a contrib module chosen during research, an API reached for while drafting architecture, a pattern that surfaces mid-implementation.
+The preflight at phase start loads the methodology floor + the domain guides matched from the artifacts that exist *then*. Work uncovers more as it proceeds — an existing third-party library chosen during research, an API reached for while drafting architecture, a pattern that surfaces mid-implementation.
 
-**Standing instruction:** before writing code or architecture that uses a Drupal API, a contrib module, or a pattern that is **not already represented in `loadedGuides[]`**, do a catalog lookup via the `dev-guides-navigator` skill for that topic. If a guide exists, load and apply it; record its ID per "Record Loaded Guide". If none exists, proceed.
+**Standing instruction:** before writing code or architecture that uses a framework API, an existing third-party library, or a pattern that is **not already represented in `loadedGuides[]`**, do a catalog lookup via the `dev-guides-navigator` skill for that topic. If a guide exists, load and apply it; record its ID per "Record Loaded Guide". If none exists, proceed.
 
 This is not a gate and never blocks — it is a discipline that keeps guide coverage tracking the work as it actually unfolds, instead of freezing at whatever the phase-start artifacts implied. Cheap because `loadedGuides[]` dedups: a topic already loaded is a no-op. Apply it whenever the work turns to a domain the preflight could not have seen coming.
 

@@ -21,7 +21,7 @@ Playwright snapshots; `.meta.json` provenance sidecars travel with each PNG.
 
 ## Contract
 
-**Input:** the absolute `codePath` (the Drupal project root). Optional
+**Input:** the absolute `codePath` (the project root). Optional
 `--legacy-path <memory_project_folder>` adds a `legacy_store_present` boolean
 when a v3.13.0 `.screenshots/` directory still exists there.
 

@@ -6,7 +6,7 @@ argument-hint: "[<task-name>]"
 
 # Validate: Guides
 
-Verify that this task's phase artifacts reference Drupal development guides loaded via the `dev-guides-navigator` plugin. The premise: decisions made without consulting authoritative guides drift from community consensus. Catching "no guide citations in research.md or architecture.md" early prevents downstream architectural debt.
+Verify that this task's phase artifacts reference development guides loaded via the `dev-guides-navigator` plugin. The premise: decisions made without consulting authoritative guides drift from community consensus. Catching "no guide citations in research.md or architecture.md" early prevents downstream architectural debt.
 
 This is a **framework-owned** gate — it does NOT wrap a `code-quality-tools` skill. Implementation lives here in ai-dev-assistant.
 

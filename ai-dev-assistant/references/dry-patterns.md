@@ -1,6 +1,8 @@
-# DRY Patterns for Drupal
+# DRY Patterns
 
 Don't Repeat Yourself principles enforced during Phase 3 implementation.
+
+> The DRY **extraction patterns** are stack-neutral. The base classes, file paths, and APIs shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents. For Drupal, use them as written.
 
 ## The Rule
 

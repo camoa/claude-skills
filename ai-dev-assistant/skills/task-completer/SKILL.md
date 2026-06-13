@@ -67,7 +67,7 @@ If NO, identify what's remaining and continue working.
 Invoke `code-pattern-checker` skill on modified files.
 - [ ] PHPCS passes
 - [ ] PHPStan passes (if configured)
-- [ ] No `\Drupal::service()` in new code
+- [ ] *(Drupal)* No `\Drupal::service()` in new code
 
 #### Gate 2: Tests Pass
 Ask user to confirm:

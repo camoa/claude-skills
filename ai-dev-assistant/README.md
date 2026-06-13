@@ -1,6 +1,6 @@
 # AI Dev Assistant
 
-A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow for Drupal projects. It prevents common AI pitfalls — jumping to code without understanding requirements, missing contrib solutions, creating inconsistent architecture, or skipping tests.
+A Claude Code plugin that guides AI through a disciplined **Research → Architecture → Implementation** workflow. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress). It prevents common AI pitfalls — jumping to code without understanding requirements, overlooking a pre-built library that already solves the problem, creating inconsistent architecture, or skipping tests.
 
 > **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md) — a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
 
@@ -8,7 +8,7 @@ A Claude Code plugin that guides AI through a disciplined **Research → Archite
 
 ## How It Works
 
-You create a **project** (a Drupal module, theme, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:
+You create a **project** (a module, component, or set of related work), then break it into **tasks**. Each task goes through three phases before any code is written:
 
 ```
 /new my_module → /next → [/scope] → /research → /design → /implement → /complete
@@ -17,7 +17,7 @@ You create a **project** (a Drupal module, theme, or set of related work), then 
 | Phase | Command | What Happens |
 |-------|---------|--------------|
 | **0. Alignment** *(optional, v3.12.0+)* | `/scope <task>` | scope contract — Goal / Expected result / Success criteria / Non-goals. Offered automatically when the analysis-agent detects warrant; soft-nudge, never blocks |
-| **1. Research** | `/research <task>` | Search contrib, find core patterns, study existing solutions |
+| **1. Research** | `/research <task>` | Look for an existing third-party library that solves it, find framework (first-party) patterns, study existing solutions |
 | **2. Architecture** | `/design <task>` | Design approach, choose patterns, set acceptance criteria |
 | **3. Implementation** | `/implement <task>` | Build with TDD, user approval at each step |
 
@@ -115,7 +115,7 @@ is lost even if you forget.
 | `/new [name]` | Create a project and gather requirements |
 | `/next [project]` | Continue work — select project/task, get next action |
 | `/status [project]` | View project state and task progress |
-| `/research <task>` | Phase 1 — research contrib, core patterns, existing solutions |
+| `/research <task>` | Phase 1 — research existing third-party libraries, framework patterns, existing solutions |
 | `/research-team <task>` | Phase 1 — research with 3 competing AI perspectives + debate |
 | `/design <task>` | Phase 2 — design architecture, choose patterns |
 | `/implement <task>` | Phase 3 — build with TDD, step-by-step approval |
@@ -144,7 +144,7 @@ is lost even if you forget.
 | `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
 | `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
 | `/audit-status [<task>] [--all]` | **(v4.0.0)** Read-only display of v4.0.0 hardened-gate audit state per task — surfaces gate-fire timing, user choices, bypass reasons, and missing audits (= silent skip evidence). `--all` for project-wide rollup grouped by health. |
-| `/pattern <use-case>` | Get Drupal pattern recommendations (FormBase vs ListBuilder, Entity vs Config, etc.) |
+| `/pattern <use-case>` | Get pattern recommendations (Drupal-flavored today: FormBase vs ListBuilder, Entity vs Config, etc.) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class — this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
 | `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath` — where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
@@ -262,11 +262,11 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 
 ### Online Dev-Guides (60+ topics) — Required
 
-The framework **proactively loads** Drupal domain guides at the start of every phase via the required `dev-guides-navigator` plugin:
+The framework **proactively loads** domain guides for your stack at the start of every phase via the required `dev-guides-navigator` plugin (the catalog is Drupal/CSS/design-heavy today):
 
 | Phase | What Gets Loaded |
 |-------|-----------------|
-| Research | Guides for the task's Drupal domain (forms, entities, plugins, etc.) |
+| Research | Guides for the task's domain (for Drupal: forms, entities, plugins, etc.) |
 | Architecture | Guides for design decisions (services, routing, caching, config) |
 | Implementation | Guides for security, SDC, JS patterns |
 
@@ -310,7 +310,7 @@ The framework doesn't just document best practices — it enforces them:
 
 ### Always Blocked
 
-- `\Drupal::service()` in new code (use dependency injection)
+- *(Drupal)* `\Drupal::service()` in new code (use dependency injection)
 - Business logic in forms or controllers
 - Missing access checks on routes
 - Raw SQL with user input

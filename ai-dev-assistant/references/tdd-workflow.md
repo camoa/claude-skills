@@ -1,6 +1,8 @@
-# TDD Workflow for Drupal
+# TDD Workflow
 
 Test-Driven Development principles enforced during Phase 3 implementation.
+
+> The Red-Green-Refactor **cycle** is stack-neutral. The test types, paths, templates, and commands shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents (test runner, directory layout, base classes). For Drupal, use them as written.
 
 ## The Non-Negotiable Rule
 

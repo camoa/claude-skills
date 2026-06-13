@@ -6,7 +6,7 @@ argument-hint: "[--add-surface <url>]"
 
 # /setup-visual-parity
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 Sets up committed visual-**parity** checking on the Drupal project — comparing the
 built output against an *external* design reference (a Figma export, a prod URL, an

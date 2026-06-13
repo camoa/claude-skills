@@ -1,7 +1,7 @@
 # Coverage Map Contract
 
 The artifact `recipe-loader` emits — consumed by `orchestrator_core` (and surfaced to the human for
-confirm/prune). Mirrors DDF's own `## Coverage Mapping` concept (unit → coverage, gaps flagged), on
+confirm/prune). Mirrors ai-dev-assistant's own `## Coverage Mapping` concept (unit → coverage, gaps flagged), on
 the *task-aspect* axis. Persisted to `<task_folder>/coverage-map.json` when a task folder is in
 context; also returned in-context.
 

@@ -81,7 +81,7 @@ L-1). You never read the transcript to decide anything.
   **every other** transition. (This reverses the earlier "③ flips it" posture: a loop-side flip after the
   build left a committed build under `status: ready`, defeating crash-safe rollback — the flip must
   precede the commit, so the atom owns it.)
-- ③ has created the **shared task code worktree** (one per DDF task, `/worktree --no-ddev-check`) and
+- ③ has created the **shared task code worktree** (one per ai-dev-assistant task, `/worktree --no-ddev-check`) and
   passes its path. The atom builds **within** that provided tree in ready-queue order, so a
   `blocked_by` work-order's output is already present and the dependent builds against real code.
 

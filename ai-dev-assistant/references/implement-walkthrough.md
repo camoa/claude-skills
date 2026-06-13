@@ -4,6 +4,8 @@ Tutorial-depth reference for the `/ai-dev-assistant:implement` command. The runt
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
+> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (`core`/`contrib` pattern references, the `SettingsForm` / PHPUnit worked example, `drupal_*` guides) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
+
 ---
 
 
@@ -155,7 +157,7 @@ Default: `[c]`.
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Loads architecture from `architecture.md`
 3. Loads research context from `research.md`
-4. Loads referenced patterns from core/contrib
+4. Loads referenced patterns from third-party libraries and framework (first-party) code *(Drupal: core / contrib)*
 5. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
 6. Loads methodology refs (via `guide-integrator`)
 7. Creates/updates `implementation.md` for progress tracking

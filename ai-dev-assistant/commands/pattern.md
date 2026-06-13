@@ -6,7 +6,7 @@ argument-hint: <use-case>
 
 # Pattern
 
-Get Drupal pattern recommendations for a specific use case.
+Get pattern recommendations for a specific use case (Drupal-flavored today: FormBase vs ListBuilder, Entity vs Config, etc.).
 
 ## Usage
 

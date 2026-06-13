@@ -1,5 +1,5 @@
 ---
-description: "Run all compiled work-orders for a /design-complete DDF task end-to-end via the autonomous work-order loop. Validates preconditions (compiled WOs exist, a code worktree is available), then invokes the work-order-loop skill INLINE (never Task-dispatched) to drive the ready-queue, build, gate-review, and PR-open pipeline. Trigger: 'run work orders', 'execute work orders', 'start work order loop'."
+description: "Run all compiled work-orders for a /design-complete ai-dev-assistant task end-to-end via the autonomous work-order loop. Validates preconditions (compiled WOs exist, a code worktree is available), then invokes the work-order-loop skill INLINE (never Task-dispatched) to drive the ready-queue, build, gate-review, and PR-open pipeline. Trigger: 'run work orders', 'execute work orders', 'start work order loop'."
 allowed-tools: Read, Bash, Skill
 argument-hint: <task-name>
 ---

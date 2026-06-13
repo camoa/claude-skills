@@ -6,7 +6,7 @@ argument-hint: "[<task>] [--task <name>] [--skip <reason>] [--smoke-only] [--inc
 
 # /validate:e2e
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 <!-- visual-review:dispatch-ready -->
 

@@ -4,7 +4,7 @@
 **Owner:** `commands/playbook-capture.md`, `commands/playbook-review.md`, `scripts/playbook-read.sh`
 **Consumers:** `skills/guide-integrator`, `commands/research.md`, `commands/design.md`, `commands/implement.md`, `commands/complete.md`
 
-A "playbook" is a curated collection of opinionated rules ("plays") that govern Drupal development decisions. Playbooks come in two layers:
+A "playbook" is a curated collection of opinionated rules ("plays") that govern development decisions. Playbooks come in two layers:
 
 - **Published playbook sets** — namespaced dev-guides categories (e.g., `drupal/best-practices/camoa/*`). Multiple authors coexist; users subscribe per project via `Playbook Sets` in `project_state.md`.
 - **Local project playbook** — a single markdown file the user maintains, declared via `User Playbook` in `project_state.md`. Can override published opinions or extend them with topics published sets don't cover. **Local always wins on conflict.**

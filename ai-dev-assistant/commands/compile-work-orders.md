@@ -1,5 +1,5 @@
 ---
-description: "Compile a /design-complete DDF task into N self-contained, gate-verifiable work-orders under the task's work-orders/ folder. A thin entry that invokes the work-order-compiler skill (judgment) which delegates all determinism to the wo-compile.sh kernel. For dogfooding the compiler and the slice-① end-to-end de-risk AC, independent of the orchestrator loop. Trigger: 'compile work orders', 'build work orders', 'work-order compile'."
+description: "Compile a /design-complete ai-dev-assistant task into N self-contained, gate-verifiable work-orders under the task's work-orders/ folder. A thin entry that invokes the work-order-compiler skill (judgment) which delegates all determinism to the wo-compile.sh kernel. For dogfooding the compiler and exercising the end-to-end de-risk path on its own, independent of the orchestrator loop. Trigger: 'compile work orders', 'build work orders', 'work-order compile'."
 allowed-tools: Read, Bash, Skill, Write
 argument-hint: <task-name>
 ---
@@ -9,8 +9,8 @@ argument-hint: <task-name>
 Turn one `/design`-complete task into `N` self-contained work-orders against the frozen
 `schema_version: "1.0"` contract. This command is a **thin entry** — the logic lives in the
 `work-order-compiler` skill (judgment) and the `wo-compile.sh` kernel (determinism). Production
-compilation is driven by the `lifecycle_controls` loop (③); this standalone entry exists to **dogfood
-the compiler** and exercise the slice-① de-risk AC on its own.
+compilation is driven by the `lifecycle_controls` loop; this standalone entry exists to **dogfood
+the compiler** and exercise the de-risk path on its own.
 
 ## Usage
 
@@ -56,7 +56,7 @@ the compiler** and exercise the slice-① de-risk AC on its own.
 
 It does **not** loop, dispatch, build, review, or open a PR. It compiles work-orders and surfaces
 them. Building a single work-order is the `work-order-builder` atom; sequencing/verdict/PR are the
-sibling orchestrator slices (②/③/④).
+sibling orchestrator stages.
 
 ## Related
 

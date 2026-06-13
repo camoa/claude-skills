@@ -14,7 +14,7 @@ built here** — this is the designed-projectable shape so a future L2 importer 
 ## Why it is NOT uniform "structural reuse"
 
 An earlier draft assumed field-for-field reuse across the board. Verification corrected that: only
-`parent` (a DDF field Beads also has) and the `in_progress` status value map cleanly. Everything else
+`parent` (an ai-dev-assistant field Beads also has) and the `in_progress` status value map cleanly. Everything else
 is **minted**, **rewritten to a built-in**, or **projected to Beads' dependency-edge model**.
 
 ## Field-by-field projection
@@ -55,7 +55,7 @@ read back into the work-order (③ owns every work-order `status` transition —
 
 ### `parent` — clean reuse
 
-`parent: local:<ddf_task>` reuses the DDF/bead `parent` field directly. Because we mint the id
+`parent: local:<ddf_task>` reuses the ai-dev-assistant/bead `parent` field directly. Because we mint the id
 (above), `--parent` stays available at `bd create`.
 
 ### `blocks` / `blocked_by` / `children` — dependency EDGES, not columns

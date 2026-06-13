@@ -78,7 +78,7 @@ Only if:
 - Tests stay green after changes
 ```
 
-## Drupal Test Types Quick Reference
+## Test Types Quick Reference (Drupal: Test Types)
 
 | Type | Location | Use For | Command |
 |------|----------|---------|---------|
@@ -88,7 +88,7 @@ Only if:
 
 ## Test Template
 
-When helping write tests, use this structure:
+When helping write tests, use this structure (Drupal example — `Drupal\Tests\` namespace):
 ```php
 <?php
 

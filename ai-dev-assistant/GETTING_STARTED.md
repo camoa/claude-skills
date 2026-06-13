@@ -2,11 +2,13 @@
 
 A 5-minute walkthrough. For the full reference, see [README.md](README.md).
 
+> The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress).
+
 ## What this framework does
 
-Guides Claude Code through a disciplined **Research → Architecture → Implementation** workflow for Drupal work. Instead of jumping straight to code, Claude:
+Guides Claude Code through a disciplined **Research → Architecture → Implementation** workflow. Instead of jumping straight to code, Claude:
 
-- Searches contrib modules and core patterns first
+- Looks for an existing third-party library, then framework (first-party) patterns first
 - Documents architecture decisions before implementation
 - Validates against quality gates at completion
 
@@ -51,7 +53,7 @@ This pulls `dev-guides-navigator` and `code-quality-tools` automatically (v2.1.1
 
 ## Step 2 — Start your first project
 
-A "project" is a logical unit of work — a custom Drupal module, a sub-theme, or a related set of features.
+A "project" is a logical unit of work — a module, a component, or a related set of features *(Drupal: a custom module or sub-theme)*.
 
 ```
 /ai-dev-assistant:new my_first_module
@@ -86,9 +88,9 @@ Each task goes through Research → Architecture → Implementation before code 
 ```
 
 What happens:
-- Claude scans drupal.org/contrib for existing solutions
-- Searches Drupal core for matching patterns
-- Loads relevant guides from [dev-guides](https://camoa.github.io/dev-guides/) (forms, entities, etc.)
+- Claude looks for an existing third-party library that solves it *(Drupal: scans drupal.org/contrib)*
+- Searches the framework's first-party code for matching patterns *(Drupal: core)*
+- Loads relevant guides from [dev-guides](https://camoa.github.io/dev-guides/) (for Drupal: forms, entities, etc.)
 - Writes findings to `<project>/implementation_process/in_progress/settings_form/research.md`
 
 You review. Add or correct anything. The framework asks 4 short questions to scope the task if it looks complex (Goal / Expected result / Done when / Won't do here).

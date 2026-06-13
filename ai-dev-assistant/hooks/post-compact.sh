@@ -20,7 +20,7 @@ if [ -z "$PROJECT_NAME" ] || [ ! -d "$PROJECT_PATH" ]; then
   exit 0
 fi
 
-echo "## Session Restored — Drupal Dev Framework"
+echo "## Session Restored — AI Dev Assistant"
 echo ""
 echo "You were working on project **$PROJECT_NAME**."
 

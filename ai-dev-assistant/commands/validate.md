@@ -36,7 +36,7 @@ Validate implementation against architecture and coding standards.
 - No undocumented components
 
 ### Code Standards
-- Drupal coding standards (PSR-12)
+- Coding standards *(Drupal: PSR-12)*
 - SOLID principles
 - DRY principle
 - Security best practices

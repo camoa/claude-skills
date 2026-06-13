@@ -1,6 +1,8 @@
-# Drupal Dev Framework Workflow
+# AI Dev Assistant Workflow
 
 Complete workflow diagram showing how to use this plugin.
+
+> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (drupal.org search, `\Drupal::`, `drupal/*` guides) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
 
 ## Quick Start
 
@@ -16,7 +18,7 @@ This single command handles everything - it will guide you through project selec
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        DRUPAL-DEV-FRAMEWORK WORKFLOW                            │
+│                          AI-DEV-ASSISTANT WORKFLOW                              │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -320,7 +322,7 @@ The plugin includes built-in references and online dev-guides that are **enforce
 
 | Phase | Principles Enforced | Sources |
 |-------|---------------------|---------|
-| **Research** | Drupal domain knowledge | dev-guides (proactive), contrib-researcher |
+| **Research** | Domain knowledge (Drupal-flavored today) | dev-guides (proactive), contrib-researcher |
 | **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md`, dev-guides |
 | **Implementation** | TDD (Red-Green-Refactor), DRY, Security | `references/tdd-workflow.md`, `references/dry-patterns.md`, dev-guides |
 | **Completion** | 5 Quality Gates, Purposefulness | `references/quality-gates.md`, `references/purposeful-code.md`, dev-guides `drupal/security/` |
@@ -333,7 +335,7 @@ The plugin includes built-in references and online dev-guides that are **enforce
 | **WARNING** | Can proceed, creates follow-up task |
 
 ### Always Blocking
-- `\Drupal::service()` in new code
+- *(Drupal)* `\Drupal::service()` in new code
 - Business logic in forms/controllers
 - Missing access checks on routes
 - Raw SQL with user input

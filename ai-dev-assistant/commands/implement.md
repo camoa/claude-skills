@@ -50,7 +50,7 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 
      Build the criteria/Non-goals from the parsed contract. **Never run `/goal` yourself** — only print the string. **Omit the tip silently** when `/goal` is unavailable (untrusted workspace, `disableAllHooks`, or `allowManagedHooksOnly`) or when no parsed Success criteria exist. See `references/goal-from-scope.md`.
 
-6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from core/contrib, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a Drupal API, contrib module, or pattern not already in `loadedGuides[]`, do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
+6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from the framework or third-party libraries *(Drupal: core/contrib)*, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a framework API, third-party library, or pattern not already in `loadedGuides[]` (Drupal: a Drupal API or contrib module), do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
    - **Design-drives-build nudge (v4.14.0+).** If `project_state.md` carries `**Visual Review:** enabled` AND the surface registry holds at least one surface whose `parity_reference.type` is `react-template` or `html-template`, print ONE soft-nudge line: *"A buildable design reference is registered for surface `<id>` — if this task implements that surface, load the reference as a build input, not only a `/validate:visual-parity` check."* Silent when there is no registry, no enabled visual review, or no buildable parity reference. Never blocks — a strong nudge, not enforcement.
 
 7. **Author/update implementation.md.** Standard sections: Step Plan (numbered), Files Created/Modified, Progress (`[ ]`/`[x]` per step), TDD Log, Notes, Blockers. Update `task.md` Phase 3 in-progress.
@@ -81,8 +81,8 @@ For each acceptance criterion:
 When a change is implemented and the developer signals it is done, print **one
 declinable soft-nudge** (once per change — not per file, never re-asked):
 
-> Want me to verify this change live — drive the DDEV site / `drush` / the browser to
-> confirm it actually works and renders as intended? And if the change is worth
+> Want me to verify this change live — drive the running site / the CLI / the browser to
+> confirm it actually works and renders as intended *(Drupal: the DDEV site, `drush`)*? And if the change is worth
 > protecting against regression, I can promote it to a committed gate:
 > `/setup-atk --add-journey` (behavioural), or `/setup-visual-regression --add-surface`
 > / `/setup-visual-parity --add-surface` (visual).

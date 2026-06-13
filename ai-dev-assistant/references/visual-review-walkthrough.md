@@ -1,6 +1,6 @@
 # Visual + E2E Review — Walkthrough
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 **Introduced:** ai-dev-assistant v4.11.0 (epic `visual_and_e2e_review_gates`)
 **Audience:** maintainers and users of the framework's rendered-output review gates.

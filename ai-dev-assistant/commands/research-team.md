@@ -6,7 +6,7 @@ argument-hint: <task-name>
 
 # Research Team
 
-> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
 
 Research or investigate a task using an agent team with 3 competing perspectives that debate findings.
 

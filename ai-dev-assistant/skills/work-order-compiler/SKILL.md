@@ -1,6 +1,6 @@
 ---
 name: work-order-compiler
-description: "Use when a /design-complete DDF task must become N self-contained, gate-verifiable work-orders — decomposes architecture.md Components into units, attaches falsifiable Current/Target/Acceptance + [CATEGORY]-NN requirement IDs, derives dependency edges, slices the coverage-map per unit, inlines the load-bearing build context, and emits each work-order to the task's work-orders/ folder (wo-NN-{slug}.md) against the frozen schema_version 1.0 contract. The judgment lives here; all determinism (SCC/acyclicity, fail-closed verified, drift-guard, lockfile SHA, frontmatter emit) delegates to the wo-compile.sh kernel. Invoked by an orchestrator or the /compile-work-orders command, never typed by a user."
+description: "Use when a /design-complete ai-dev-assistant task must become N self-contained, gate-verifiable work-orders — decomposes architecture.md Components into units, attaches falsifiable Current/Target/Acceptance + [CATEGORY]-NN requirement IDs, derives dependency edges, slices the coverage-map per unit, inlines the load-bearing build context, and emits each work-order to the task's work-orders/ folder (wo-NN-{slug}.md) against the frozen schema_version 1.0 contract. The judgment lives here; all determinism (SCC/acyclicity, fail-closed verified, drift-guard, lockfile SHA, frontmatter emit) delegates to the wo-compile.sh kernel. Invoked by an orchestrator or the /compile-work-orders command, never typed by a user."
 version: 0.1.0
 user-invocable: false
 model: inherit
@@ -9,7 +9,7 @@ allowed-tools: Read, Bash, Skill, Write
 
 # Work-Order Compiler
 
-Turn one `/design`-complete DDF task (`architecture.md` + `alignment.md` + `research.md` +
+Turn one `/design`-complete ai-dev-assistant task (`architecture.md` + `alignment.md` + `research.md` +
 `coverage-map.json`) into **N self-contained work-orders**, one per independently-gate-verifiable
 AC/feature. The **judgment** is yours (what the units are, where the minimal self-contained slice
 is, how to inline it). **Every deterministic safety decision delegates to the kernel** — you never

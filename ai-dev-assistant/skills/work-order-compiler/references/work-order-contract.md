@@ -19,8 +19,8 @@ the dispatch subset; ②/③/④ consume their seam slices (the ownership table 
 ## Location
 
 `<ddf_task_folder>/work-orders/wo-NN-<slug>.md` — beside `coverage-map.json` and `_review.json` (the
-established "artifact on disk, not transcript echo" pattern). `<ddf_task_folder>` is the **leaf** DDF
-task `/design` ran on (in epic → sub_epic → subtask nesting, the subtask that owns the work-orders).
+established "artifact on disk, not transcript echo" pattern). `<ddf_task_folder>` is the **leaf**
+ai-dev-assistant task `/design` ran on (in epic → sub_epic → subtask nesting, the subtask that owns the work-orders).
 
 A work-order is **one file per independently-gate-verifiable AC/feature**, each projectable 1:1 to a
 Beads bead via the MAP below. Beads is **not built here** — only designed-projectable.
@@ -36,14 +36,14 @@ The frozen field block. Every field's semantics are fixed; **inline comments are
 # ── bead-PROJECTABLE scheduling subset — structural reuse + a documented map (NOT zero-translation, H1) ──
 id: local:<ddf_task>#wo-NN          # grammar: <parent-task-id>#wo-NN — the "#wo-NN" fragment is the work-order
                                     # discriminator. MARKDOWN-canonical stable id. Projects via the id MAP below.
-kind: work-order                    # a documented 5th value, OUTSIDE the DDF task enum (epic/sub_epic/subtask/flat);
+kind: work-order                    # a documented 5th value, OUTSIDE the ai-dev-assistant task enum (epic/sub_epic/subtask/flat);
                                     # deliberate. Projects via the kind MAP.
 schema_version: "1.0"
 title: <imperative one-liner>
-parent: local:<ddf_task>            # field-for-field reuse of DDF/bead `parent` (renamed from research's parent_task, H1).
+parent: local:<ddf_task>            # field-for-field reuse of ai-dev-assistant/bead `parent` (renamed from research's parent_task, H1).
 status: ready | blocked | in_progress | done | needs_rework   # WO-native lifecycle (VERIFIED 2026-06-08: NOT
                                     # bead-aligned — Beads has no ready/done/needs_rework; the MAP translates), distinct
-                                    # from the DDF task enum (draft/in_progress/blocked/completed). needs_rework = built
+                                    # from the ai-dev-assistant task enum (draft/in_progress/blocked/completed). needs_rework = built
                                     # but a verdict requires rework (M1). ALL status transitions are owned by ③ (H-3
                                     # two-repo boundary) — the atom is read-only here. MARKDOWN-canonical; bead status
                                     # projects FROM this, never reverse (§6).
@@ -54,13 +54,13 @@ blocked_by: [local:<ddf_task>#wo-NN, ...]   # markdown-canonical structural edge
                                     #   holds over THIS set. ③ derives dispatch readiness via a READY-QUEUE (a WO is
                                     #   ready when all blocked_by are `done`, à la `bd ready` — M-5); no topo order is
                                     #   persisted. Acyclicity is what guarantees the ready-queue always terminates.
-children: null                      # work-orders are leaves; reserved for shape-parity with DDF/bead `children`.
+children: null                      # work-orders are leaves; reserved for shape-parity with ai-dev-assistant/bead `children`.
 external_ids: {}                    # reserved back-channel (the established reserve-ahead pattern). At projection,
                                     #   L2 records the minted bead id here: external_ids: { beads: "<bd-id>" }.
 
 # ── coverage / grounding — the MARKDOWN-ONLY "quality brain" superset (a bead NEVER sees these) ──
 requirements: [AUTH-01, AUTH-02]    # GSD [CATEGORY]-NN IDs this WO satisfies (traceability).
-coverage_ref: ../coverage-map.json  # the per-DDF-task recipe_loader map this slice was projected from.
+coverage_ref: ../coverage-map.json  # the per-ai-dev-assistant-task recipe_loader map this slice was projected from.
 coverage_aspects: [<aspect>, ...]   # the subset of the map's task_aspects this WO owns. (May be empty — see verified.)
 verified: true | false              # = AND(covered-entries.verified) AND (NO poisoning warning attributable to this WO).
                                     #   Poison set = recipe_body_unverified | slug_not_in_catalog (C-1: a slug a recipe
@@ -126,7 +126,7 @@ compiled_at: <iso8601>
 
 **Scheduling subset (bead-projectable).** `id` is markdown-canonical and alien to Beads' id space —
 it stays markdown-only and bridges through `external_ref` / `external_ids.beads` (the MAP). `kind:
-work-order` is a documented 5th value outside the DDF task enum. `parent` reuses DDF/bead `parent`
+work-order` is a documented 5th value outside the ai-dev-assistant task enum. `parent` reuses ai-dev-assistant/bead `parent`
 field-for-field. `status` is **WO-native** (`ready|blocked|in_progress|done|needs_rework`) and
 **every** transition is owned by ③ — the compiler is born `ready` or `blocked`, the atom never
 writes it. `blocks`/`blocked_by` are the structural edge set the H3 DAG invariant holds over; ③
@@ -230,7 +230,7 @@ critical path (a builder has no degrade contract for a mid-build cache miss).
 Projection is **markdown → bead always** (§6; a bead never writes back except its minted id into
 `external_ids.beads`). It is **NOT** uniform "structural reuse": the id is minted + bridged, the
 status + kind are rewritten to Beads built-ins, and the edges project to Beads' **dependency-edge**
-model — only `parent` (DDF field) + `in_progress` map cleanly.
+model — only `parent` (ai-dev-assistant field) + `in_progress` map cleanly.
 
 **`bd create` reality (verified, Beads HEAD 2026-06-08):** Beads **mints** the id (content-hash
 `prefix-{6-8hex}[.n.n]`); the status enum is `open | in_progress | blocked | deferred | closed |

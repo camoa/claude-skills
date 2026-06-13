@@ -2,6 +2,8 @@
 
 Ensures code is intentional, comprehensible, and not over-engineered. Verified during `/validate` and `/complete` commands.
 
+> The purposefulness **principles** are stack-neutral. The examples, APIs, and idioms shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents. For Drupal, use them as written.
+
 ## Philosophy
 
 **Good code is purposeful code.** Every line should:

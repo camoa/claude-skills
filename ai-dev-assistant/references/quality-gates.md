@@ -2,6 +2,8 @@
 
 Checkpoints enforced during `/complete` and `/validate` commands.
 
+> The five gate **concepts** are stack-neutral. The tools, commands, and checks shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents (linters, test runner, security idioms). For Drupal, use them as written.
+
 ## Gate Overview
 
 | Gate | When | What | Blocker? |
@@ -71,7 +73,7 @@ Before completing task:
 
 ### Checklist
 - [ ] Services have single responsibility
-- [ ] Dependencies injected (no `\Drupal::service()`)
+- [ ] Dependencies injected (Drupal: no `\Drupal::service()`)
 - [ ] No duplicate code blocks
 - [ ] Services built before UI
 - [ ] Tests written before implementation
@@ -120,9 +122,9 @@ Ensures code is intentional, comprehensible, and not over-engineered.
 | Comprehension | Developer can explain any block |
 
 ### Checklist
-- [ ] No unnecessary try-catch (Drupal handles most errors)
+- [ ] No unnecessary try-catch (the framework handles most errors)
 - [ ] No defensive null-checks for values that can't be null
-- [ ] All hook names are valid Drupal hooks
+- [ ] All hook / extension-point names are valid (Drupal: valid hook names)
 - [ ] All service/method calls reference real APIs
 - [ ] Comments explain reasoning, not obvious behavior
 - [ ] No "instruction-style" comments (LLM prompt artifacts)
@@ -196,7 +198,7 @@ All gates passed? Task can be completed.
 - Security vulnerabilities
 - Failing tests
 - Missing test coverage for critical paths
-- `\Drupal::service()` in new code
+- *(Drupal)* `\Drupal::service()` in new code
 - Calls to non-existent APIs/methods
 - Excessive try-catch blocks swallowing errors
 - Code developer cannot explain

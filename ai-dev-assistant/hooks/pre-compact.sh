@@ -17,7 +17,7 @@ if [ -z "$PROJECT_PATH" ] || [ ! -d "$PROJECT_PATH" ]; then
   exit 0
 fi
 
-echo "## Drupal Dev Framework — Active Session"
+echo "## AI Dev Assistant — Active Session"
 echo ""
 echo "Before compacting, read the current project state to preserve context:"
 echo ""
