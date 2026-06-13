@@ -1,5 +1,7 @@
 # ATK E2E Walkthrough
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 **Introduced:** ai-dev-assistant v4.12.0 (Task B — ATK E2E Gate)
 **Commands:** `/setup-atk` · `/validate:e2e`
 **dev-guides:** `testing/atk/` · `testing/playwright/` · `testing/ai-test-generation/`

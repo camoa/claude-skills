@@ -1,5 +1,7 @@
 # SOLID Principles for Drupal
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 Architecture principles enforced during Phase 2 design.
 
 ## Quick Reference

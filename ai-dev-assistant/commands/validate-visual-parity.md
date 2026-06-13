@@ -6,6 +6,8 @@ argument-hint: "[<task>] [--all-viewports] [--show-diffs] [--add-surface <url>] 
 
 # /validate:visual-parity
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 <!-- visual-review:dispatch-ready -->
 
 Runs the project's committed `tests/parity/` suite — every surface registered with

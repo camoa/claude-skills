@@ -1,5 +1,7 @@
 # Change-Impact Dispatch — `/review` Step 6 Procedure v1.0
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 **Introduced:** ai-dev-assistant v4.11.0 (Task A — `visual_and_e2e_review_gates`)
 **Owner:** `commands/review.md` step 6
 **Reads:** `scripts/project-state-read.sh`, `scripts/change-impact-classify.sh`,

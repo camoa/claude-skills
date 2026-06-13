@@ -11,6 +11,8 @@ maxTurns: 15
 
 # Journey Discovery Agent
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 Analyzes a Drupal site's structure — routes, forms, content types, permissions — and proposes user journeys worth testing with ATK behavioral E2E tests. Read-only. Output is consumed programmatically by `/setup-atk`.
 
 ## Input contract

@@ -11,6 +11,8 @@ maxTurns: 15
 
 # Contrib Researcher
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 Specialized agent for discovering and analyzing existing Drupal contrib solutions before building custom functionality.
 
 ## Purpose

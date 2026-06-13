@@ -11,6 +11,8 @@ maxTurns: 15
 
 # Pattern Recommender
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 Specialized agent for recommending appropriate Drupal patterns based on specific use cases.
 
 ## Purpose

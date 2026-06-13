@@ -1,5 +1,7 @@
 # Visual Parity v2 — Walkthrough
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 **ai-dev-assistant v4.14.0 (Task D — `visual_and_e2e_review_gates`)**
 
 The full rationale, examples, and workflow behind `/setup-visual-parity` +

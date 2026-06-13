@@ -6,6 +6,8 @@ argument-hint: "[<task>] [--task <name>] [--skip <reason>] [--smoke-only] [--inc
 
 # /validate:e2e
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 <!-- visual-review:dispatch-ready -->
 
 Runs ATK canned behavioral tests + project-custom journey tests. Emits `_e2e.json` (gate audit) and `validations/latest/e2e.json` (standard envelope). Part of the `/review` change-impact dispatcher chain — the `<!-- visual-review:dispatch-ready -->` marker above is what causes `/review` to call this gate.

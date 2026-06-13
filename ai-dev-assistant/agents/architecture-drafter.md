@@ -12,6 +12,8 @@ maxTurns: 30
 
 # Architecture Drafter
 
+> _Drupal-flavored component — a stack-neutral version lands in slice-1b. The Drupal specifics below are the current reference implementation._
+
 Specialized agent for creating initial architecture documents during Phase 2 of the development workflow.
 
 **Every architecture MUST include: services (Library-First), Drush commands (CLI-First), dependency injection, and test strategy. Missing any = incomplete architecture.**
