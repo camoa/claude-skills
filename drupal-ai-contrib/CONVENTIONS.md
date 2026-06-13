@@ -47,7 +47,7 @@ Both are fetched live, never hard-coded — they move fast.
 
 ## General
 - Current truth only — no historical narratives in skill/command bodies.
-- Delegate, don't reinvent: `drupal-dev-framework` (phase lifecycle), `code-quality-tools`
+- Delegate, don't reinvent: `ai-dev-assistant` (phase lifecycle), `code-quality-tools`
   (philosophy/standards review), `code-paper-test` (paper testing), `mglaman/drupalorg-cli`
   (issue/MR/CI — executable `drupalorg`; see `skills/drupal-ai-contrib/references/drupalorg-cli.md`).
   The plugin owns orchestration + evidence-gating + the contribution arc.

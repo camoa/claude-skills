@@ -168,11 +168,11 @@ Technical how-to comes from the `camoa/dev-guides` contribution guides
 `dev-guides-navigator` skill. Worker skills cite guides by slug; they never embed guide
 content or fetch dev-guides URLs directly.
 
-## Relationship to drupal-dev-framework
+## Relationship to ai-dev-assistant
 
-A contribution **is** a `drupal-dev-framework` (DDF) task. DDF owns the phase lifecycle
-and its phase gates. `drupal-ai-contrib` is a separate layer **outside** DDF — it adds
-contribution-quality commands and gates on top, without forking or modifying DDF.
+A contribution **is** an `ai-dev-assistant` task. The framework owns the phase lifecycle
+and its phase gates. `drupal-ai-contrib` is a separate layer **outside** the framework — it
+adds contribution-quality commands and gates on top, without forking or modifying it.
 
 ## Interop — delegate, never reinvent
 

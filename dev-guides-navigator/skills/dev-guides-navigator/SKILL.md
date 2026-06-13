@@ -27,7 +27,7 @@ The navigator does **not** hardcode an order. The **caller** owns ordering — t
 - When the user mentions a specific guide topic
 - When a task is a whole **capability** (one end-to-end goal) rather than a single mechanic — try **recipe search** first
 - **Maintainer mode only:** when you maintain the dev-guides source repo and guide search finds *nothing* for a topic — see **Create-on-Miss** below
-- NOT for: plugin methodology references (those are in drupal-dev-framework/references/)
+- NOT for: plugin methodology references (those are in ai-dev-assistant/references/)
 
 ## Core Workflow
 
@@ -35,7 +35,7 @@ The navigator does **not** hardcode an order. The **caller** owns ordering — t
 
 Cache file: `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-cache.json`.
 See `references/cache-format.md` for the **exact path derivation** and schema —
-other plugins (e.g. `drupal-dev-framework`) consume this cache directly, so the
+other plugins (e.g. `ai-dev-assistant`) consume this cache directly, so the
 format and location are a contract, not an implementation detail.
 
 **NEVER use WebFetch in this workflow.** All fetches use `curl -s` via Bash:
