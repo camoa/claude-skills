@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ai-dev-assistant",
-  "description": "Ship the right way — and learn why as you go. Where most AI dev tools optimize for speed, ai-dev-assistant optimizes for quality with a built-in teaching layer: a guided Research → Architecture → Implementation → Review workflow whose gates enforce your standards (SOLID, TDD, DRY, security, review) while the dev-guides it loads at every phase teach best practice as you build — the gates check, the guides teach. Serious devs get their standards enforced; newcomers get guided to them. Stack-agnostic engine — stack specifics live in consumable dev-guides, recipes, and playbooks.",
+  "description": "An AI assistant for developers focused on doing development the right way — sound process and best practices, not just raw speed. It keeps AI-assisted work disciplined (understand the problem first, reuse before building, test, review) and teaches best practice as you go. Delivered through a guided Research → Architecture → Implementation → Review workflow with enforced SOLID, TDD, DRY, and security gates. Stack-agnostic — stack specifics live in consumable dev-guides, recipes, and playbooks.",
   "version": "5.0.0",
   "author": {
     "name": "camoa"
