@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "ai-dev-assistant",
+  "description": "Systematic phased development workflow (Research → Architecture → Implementation → Review) with agents, skills, and commands. Enforces SOLID, TDD, DRY, and security gates with work-orders, adversarial critique, and oracle integrity. Stack-agnostic orchestration engine — stack specifics live in consumable dev-guides, recipes, and playbooks.",
+  "version": "5.0.0",
+  "author": {
+    "name": "camoa"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/camoa/claude-skills",
+  "keywords": [
+    "development",
+    "workflow",
+    "architecture",
+    "agnostic",
+    "tdd",
+    "solid",
+    "dry",
+    "security",
+    "agent-teams",
+    "playbook",
+    "worktree",
+    "hardening"
+  ],
+  "dependencies": [
+    "dev-guides-navigator",
+    "code-quality-tools"
+  ]
+}

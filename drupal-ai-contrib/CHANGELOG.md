@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-06-13
+
+Prose patch — track the `drupal-dev-framework` → `ai-dev-assistant` rename.
+
+### Changed
+- Namespace references updated: "a contribution **is** a `drupal-dev-framework` (DDF)
+  task" → "an `ai-dev-assistant` task"; the DDF nickname → "the framework"; interop +
+  troubleshooting table cells and the `CONVENTIONS.md` delegate line now name
+  `ai-dev-assistant`. No functional change — this plugin never invoked
+  `/drupal-dev-framework:*`; it stays Drupal-domain, layered on the (now stack-neutral)
+  ai-dev-assistant lifecycle.
+
 ## [0.1.1] - 2026-05-22
 
 First post-release bug-fix patch. Five gaps surfaced by the first live `setup`→`issue`

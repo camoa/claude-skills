@@ -22,7 +22,7 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 
 # Install individual plugins
 /plugin install dev-guides-navigator@camoa-skills
-/plugin install drupal-dev-framework@camoa-skills
+/plugin install ai-dev-assistant@camoa-skills
 /plugin install plugin-creation-tools@camoa-skills
 /plugin install brand-content-design@camoa-skills
 /plugin install code-quality-tools@camoa-skills
@@ -61,29 +61,31 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 /dev-guides-navigator style guide
 ```
 
-### drupal-dev-framework (v4.19.1)
+### ai-dev-assistant (v5.0.0)
 
-Systematic 3-phase Drupal development workflow: **Research → Architecture → Implementation**. Enforces SOLID, TDD, DRY, security, and code purposefulness through 5 quality gates. **Requires `dev-guides-navigator`** — loads Drupal domain guides proactively at every phase.
+Systematic 3-phase development workflow: **Research → Architecture → Implementation → Review**. Stack-neutral framework with deterministic, anti-bypass quality gates (SOLID, TDD, DRY, security, code purposefulness). **Requires `dev-guides-navigator`** — loads domain guides proactively at every phase. Ships with a Drupal-flavored reference implementation for the deep components; a stack-neutral generalization is in progress.
+
+> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell — it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall.
 
 ```bash
 /plugin install dev-guides-navigator@camoa-skills   # Required dependency
-/plugin install drupal-dev-framework@camoa-skills
+/plugin install ai-dev-assistant@camoa-skills
 
-/drupal-dev-framework:new my_module     # Create project
-/drupal-dev-framework:next              # Continue work (main entry point)
+/ai-dev-assistant:new my_project        # Create project
+/ai-dev-assistant:next                  # Continue work (main entry point)
 ```
 
 | Component | Contents |
 |-----------|----------|
-| Commands | 11 (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/status`, `/validate`, `/pattern`, `/migrate-tasks`) |
-| Agents | 5 with cost control (`maxTurns`) — project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher |
-| Skills | 16 (phase management, TDD companion, guide integration, context loading) |
-| References | 6 methodology docs (SOLID, TDD, DRY, Library-First, Quality Gates, Purposeful Code) |
+| Commands | 44 — the full lifecycle (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/review`, `/validate*`, work-orders, visual/E2E review, playbooks, worktrees) |
+| Agents | 10 with cost control — project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher, journey-discovery, guides-matcher, analysis, AI test selector, work-order critic |
+| Skills | 23 (phase management, TDD companion, guide integration, work-order compiler/loop, context loading) |
+| References | methodology docs (SOLID, TDD, DRY, Library-First, Quality Gates, Purposeful Code) + contracts/walkthroughs |
 | Hooks | SessionStart (dependency check + project context), PreCompact (context preservation) |
 
 Features competing agent research (`/research-team`) with Build/Use/Extend debate for features and competing hypothesis investigation for bugs.
 
-See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for full documentation.
+See [ai-dev-assistant/README.md](ai-dev-assistant/README.md) for full documentation.
 
 ### plugin-creation-tools (v2.3.0)
 
@@ -188,7 +190,7 @@ AI-assisted Drupal contribution quality — **evidence over assertion**: every g
 | Agents | 3 read-only (`fresh-context-reviewer`, `external-fact-verifier`, `ai-policy-checker`) |
 | Hooks | PostToolUse (re-verification ledger), SessionStart (contribution-workspace reminder) |
 
-The drupalci-parity gate set (`composer`/`phpcs`/`phpstan`/`phpunit`/`cspell`/`eslint`/`stylelint`) mirrors each enabled `gitlab_templates` job at its real strictness. Cites the `camoa/dev-guides` contribution guides by slug via `dev-guides-navigator`; a contribution is run as a `drupal-dev-framework` task.
+The drupalci-parity gate set (`composer`/`phpcs`/`phpstan`/`phpunit`/`cspell`/`eslint`/`stylelint`) mirrors each enabled `gitlab_templates` job at its real strictness. Cites the `camoa/dev-guides` contribution guides by slug via `dev-guides-navigator`; a contribution is run as an `ai-dev-assistant` task.
 
 See [drupal-ai-contrib/README.md](drupal-ai-contrib/README.md) for full documentation.
 

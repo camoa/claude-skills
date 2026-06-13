@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 (2026-06-13)
+
+### Changed
+- Prose patch — the consuming plugin `drupal-dev-framework` was renamed to `ai-dev-assistant`. Three documentation references updated (SKILL.md "NOT for" + the cache-consumer note, and the `references/cache-format.md` contract note). The cache format, location derivation, and all consumer-facing behavior are byte-for-byte unchanged — this is a name reference only. (The older CHANGELOG entry below keeps the historical `drupal-dev-framework` name.)
+
 ## 0.8.0 (2026-06-06)
 
 ### Added

@@ -5,7 +5,7 @@
     "email": ""
   },
   "metadata": {
-    "description": "Claude Code plugins for Drupal development workflow, dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
+    "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
     "version": "1.15.15"
   },
   "plugins": [
@@ -13,7 +13,7 @@
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + KG metadata route AI to the correct guide; all fetches use curl (never WebFetch). Two routing modes — guide search (llms.txt) and recipe search (agentic-recipes catalog, verifier-carrying capability deliveries). v0.8.0 adds maintainer-mode create-on-miss: when guide search finds nothing and the dev-guides source repo is detected, it offers to author the topic and hands off to that repo's /create-guide command (which opens a PR, never deploys). Detect + offer + hand off only; consumer mode byte-for-byte unchanged.",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "author": {
         "name": "camoa"
       },
@@ -38,7 +38,7 @@
     {
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
-      "description": "Authoritative quality gate + authoring guide for Claude Code plugins. Covers all 30 hook events, five handler types, exec form via `args`, `systemMessage` / `terminalSequence` JSON output, the 10K-character output cap, parallel-then-merge precedence, recursive `agents/` subfolder scoping (`my-plugin:review:security`), single-skill-at-root auto-discovery (v2.1.142+), v2.1.140+ `/doctor` ignored-folder semantics, experimental.themes / experimental.monitors migration, $schema field, array-only agents, channels, bin/ auto-discovery, plugin-root settings.json (agent + subagentStatusLine), userConfig with type/title schema, skillOverrides, claude plugin prune + --plugin-url + --plugin-dir, Plugin Hints, workspace-trust gating, allowCrossMarketplaceDependenciesOn, forked subagents, Agent SDK, REVIEW.md v2, Routines auto-validate. v3.5.0 shipped Hook Authoring Depth + 7 paired validator rules (H05\u2013H13) with opt-in `--fix`. v3.6.0 adds Layout & Discovery: 5 paired validator rules (A02 subfolder scoped-id awareness; A03 missing `name` on subfolder agents; ST04 redundant `skills: [\"./\"]` on auto-discovered single-skill plugins; ST05 manifest path doesn't exist; ST06 manifest override leaves a populated default folder ignored), `init_plugin.py` refactored to read the canonical `templates/plugin.json.template` (kills divergence). Auto-fix audit trail at `.claude-plugin/.validate-fixes.log`. v3.7.0 adds the cross-plugin session-remembrance pattern: `add-component remembrance-hooks` scaffolds the SessionStart+SessionEnd hook pair (no `PostCompact`), install command, `/save-session` command, and `save-session.sh` for any plugin that maintains per-project state; new R01\u2013R05 validator rules enforce pattern conformance. v3.8.0 ships gate-enabling rules for the 2026-05-29 cross-plugin rollout: S14 (warn \u2014 flags a skill `model:` pinned to a sub-1M model, which overflows when the inline skill activates from a larger conversation; the verified BUG-1 defect \u2014 agents and `opus`/`inherit` are exempt), S15 + A04 (error, `--fix` \u2014 the kebab-vs-camel split: skills use `disallowed-tools`, agents use `disallowedTools`; each silently no-ops in the wrong place), skill-level `disallowed-tools` authoring docs, and D1 deterministic `ls | wc -l` component counts (kills run-to-run count drift). v3.9.0 brings 2026-05-29 feature parity: the `MessageDisplay` hook event (count 29\u219230, recognized by H02), `defaultEnabled` documented in plugin.json + marketplace.json and recognized by M14, per-server MCP `timeout`, reference notes for the sandbox runtime (beta research preview) + Managed MCP + Agent SDK SessionStore + the `/model` picker change (Enter=save-default, `s`=session-only), and the Opus 4.8 alias refresh.",
+      "description": "Authoritative quality gate + authoring guide for Claude Code plugins. Covers all 30 hook events, five handler types, exec form via `args`, `systemMessage` / `terminalSequence` JSON output, the 10K-character output cap, parallel-then-merge precedence, recursive `agents/` subfolder scoping (`my-plugin:review:security`), single-skill-at-root auto-discovery (v2.1.142+), v2.1.140+ `/doctor` ignored-folder semantics, experimental.themes / experimental.monitors migration, $schema field, array-only agents, channels, bin/ auto-discovery, plugin-root settings.json (agent + subagentStatusLine), userConfig with type/title schema, skillOverrides, claude plugin prune + --plugin-url + --plugin-dir, Plugin Hints, workspace-trust gating, allowCrossMarketplaceDependenciesOn, forked subagents, Agent SDK, REVIEW.md v2, Routines auto-validate. v3.5.0 shipped Hook Authoring Depth + 7 paired validator rules (H05–H13) with opt-in `--fix`. v3.6.0 adds Layout & Discovery: 5 paired validator rules (A02 subfolder scoped-id awareness; A03 missing `name` on subfolder agents; ST04 redundant `skills: [\"./\"]` on auto-discovered single-skill plugins; ST05 manifest path doesn't exist; ST06 manifest override leaves a populated default folder ignored), `init_plugin.py` refactored to read the canonical `templates/plugin.json.template` (kills divergence). Auto-fix audit trail at `.claude-plugin/.validate-fixes.log`. v3.7.0 adds the cross-plugin session-remembrance pattern: `add-component remembrance-hooks` scaffolds the SessionStart+SessionEnd hook pair (no `PostCompact`), install command, `/save-session` command, and `save-session.sh` for any plugin that maintains per-project state; new R01–R05 validator rules enforce pattern conformance. v3.8.0 ships gate-enabling rules for the 2026-05-29 cross-plugin rollout: S14 (warn — flags a skill `model:` pinned to a sub-1M model, which overflows when the inline skill activates from a larger conversation; the verified BUG-1 defect — agents and `opus`/`inherit` are exempt), S15 + A04 (error, `--fix` — the kebab-vs-camel split: skills use `disallowed-tools`, agents use `disallowedTools`; each silently no-ops in the wrong place), skill-level `disallowed-tools` authoring docs, and D1 deterministic `ls | wc -l` component counts (kills run-to-run count drift). v3.9.0 brings 2026-05-29 feature parity: the `MessageDisplay` hook event (count 29→30, recognized by H02), `defaultEnabled` documented in plugin.json + marketplace.json and recognized by M14, per-server MCP `timeout`, reference notes for the sandbox runtime (beta research preview) + Managed MCP + Agent SDK SessionStore + the `/model` picker change (Enter=save-default, `s`=session-only), and the Opus 4.8 alias refresh.",
       "version": "3.9.0",
       "author": {
         "name": "camoa"
@@ -57,20 +57,20 @@
       ]
     },
     {
-      "name": "drupal-dev-framework",
-      "source": "./drupal-dev-framework",
-      "description": "Systematic 3-phase Drupal development workflow (Research \u2192 Architecture \u2192 Implementation) with enforced SOLID, TDD, DRY, and security gates. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with change-impact dispatch, two-stage dev-guides detection, the Playbook System, git-worktree parallel-task awareness, agent-team validation, per-project session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (/setup-atk, /setup-visual-regression, /setup-visual-parity).",
-      "version": "4.22.0",
+      "name": "ai-dev-assistant",
+      "source": "./ai-dev-assistant",
+      "description": "Systematic phased development workflow (Research → Architecture → Implementation → Review) with enforced SOLID, TDD, DRY, and security gates. Stack-agnostic engine — stack specifics live in consumable dev-guides, recipes, and playbooks. Covers epic/sub-task hierarchy, scope contracts, a Phase 4 /review gate with change-impact dispatch, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E/visual-regression/visual-parity gates (Drupal-flavored for now).",
+      "version": "5.0.0",
       "author": {
         "name": "camoa"
       },
       "license": "MIT",
       "repository": "https://github.com/camoa/claude-skills",
       "keywords": [
-        "drupal",
         "development",
         "workflow",
         "architecture",
+        "agnostic",
         "tdd",
         "solid",
         "dry",
@@ -79,6 +79,22 @@
         "playbook",
         "worktree",
         "hardening"
+      ]
+    },
+    {
+      "name": "drupal-dev-framework",
+      "source": "./drupal-dev-framework",
+      "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. Install ai-dev-assistant going forward.",
+      "version": "4.23.0",
+      "author": {
+        "name": "camoa"
+      },
+      "license": "MIT",
+      "repository": "https://github.com/camoa/claude-skills",
+      "keywords": [
+        "deprecated",
+        "migration",
+        "ai-dev-assistant"
       ]
     },
     {
@@ -103,8 +119,8 @@
     {
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
-      "description": "AI-assisted Drupal contribution quality \u2014 evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside drupal-dev-framework; cites the camoa/dev-guides contribution guides as its knowledge layer.",
-      "version": "0.1.1",
+      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside drupal-dev-framework; cites the camoa/dev-guides contribution guides as its knowledge layer.",
+      "version": "0.1.2",
       "author": {
         "name": "camoa"
       },
@@ -159,7 +175,7 @@
     {
       "name": "code-paper-test",
       "source": "./code-paper-test",
-      "description": "Systematically test code, skills, commands, and configs through mental execution \u2014 trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50\u2013300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration. v0.9.0 honors ${CLAUDE_EFFORT} as a floor across scenario depth and per-teammate effort, and trims SKILL.md into references.",
+      "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50–300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration. v0.9.0 honors ${CLAUDE_EFFORT} as a floor across scenario depth and per-teammate effort, and trims SKILL.md into references.",
       "version": "0.9.0",
       "author": {
         "name": "camoa"
@@ -184,7 +200,7 @@
     {
       "name": "brand-content-design",
       "source": "./brand-content-design",
-      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering. v3.5.0 adds Google Slides output (canonical PPTX\u2192Slides import via Drive) with brand-content/{brand}/{templates|presentations}/{slug} folder convention, idempotent folder creation, trash-and-recreate, .slides.url pointer files, and credentials reference (`BCD_SLIDES_*`).",
+      "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, 26 visual styles, 114 infographic templates, 19 commands, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF/PPTX generation, HTML composition, and infographic rendering. v3.5.0 adds Google Slides output (canonical PPTX→Slides import via Drive) with brand-content/{brand}/{templates|presentations}/{slug} folder convention, idempotent folder creation, trash-and-recreate, .slides.url pointer files, and credentials reference (`BCD_SLIDES_*`).",
       "version": "3.5.0",
       "author": {
         "name": "camoa"

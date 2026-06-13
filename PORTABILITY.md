@@ -53,9 +53,9 @@ Follow your tool's own docs for the most current destination path. The SKILL.md 
 | **brand-content-design** | 4 | 19 | 1 | yes | **Low–Medium** | Brand-analyst + design-system generation skills; commands provide the user-facing surface |
 | **code-quality-tools** | 1 | 13 | 0 | yes | **Low** | One overarching audit skill; the value is in 13 audit commands (Tier 2) |
 | **drupal-htmx** | 1 | 5 | 3 | yes | **Low** | HTMX-pattern skill; migration commands are the workflow (Tier 2) |
-| **drupal-dev-framework** | 22 | 36 | 7 | yes | **Skills-rich, framework-locked** | 22 skills give knowledge (alignment-reader, project-state-reader, contrib patterns, etc.); the lifecycle orchestration (research → design → implement → review with deterministic gates) is in the commands + agents + hooks |
+| **ai-dev-assistant** | 23 | 44 | 10 | yes | **Skills-rich, framework-locked** | 23 skills give knowledge (alignment-reader, project-state-reader, pattern checkers, etc.); the lifecycle orchestration (research → design → implement → review with deterministic gates) is in the commands + agents + hooks |
 
-**Honest verdict:** for `dev-guides-navigator`, Tier 1 gives you the entire plugin. For `code-quality-tools` and `drupal-htmx`, Tier 1 alone gives you a fraction of the value. For `drupal-dev-framework`, skills give you reusable knowledge but **not** the deterministic 3-phase lifecycle that's the framework's primary value proposition.
+**Honest verdict:** for `dev-guides-navigator`, Tier 1 gives you the entire plugin. For `code-quality-tools` and `drupal-htmx`, Tier 1 alone gives you a fraction of the value. For `ai-dev-assistant` (renamed from `drupal-dev-framework`), skills give you reusable knowledge but **not** the deterministic 3-phase lifecycle that's the framework's primary value proposition.
 
 ### How to install (Tier 1)
 
@@ -75,7 +75,7 @@ A skill is a *capability* — it teaches your AI how to think about something. A
 
 ### Why this exists
 
-`drupal-dev-framework`'s value isn't its 22 skills — it's the 36 commands + 7 sub-agents + lifecycle hooks + 18 deterministic shell scripts that together enforce a Research → Architecture → Implementation → Review workflow with anti-bypass gates. Skills alone are roughly 10% of that value. Tier 2 explains how to get the other 90% in tools where the surface partially maps.
+`ai-dev-assistant`'s value isn't its 23 skills — it's the 44 commands + 10 sub-agents + lifecycle hooks + deterministic shell scripts that together enforce a Research → Architecture → Implementation → Review workflow with anti-bypass gates. Skills alone are roughly 10% of that value. Tier 2 explains how to get the other 90% in tools where the surface partially maps.
 
 ### Per-tool fidelity tier table
 
@@ -100,7 +100,7 @@ Your AI handles the rest — frontmatter interpretation, body execution, sub-tas
 
 ### Honest disclosure: deterministic gate degradation
 
-`drupal-dev-framework` v4.0+ hardened its quality gates (anti-bypass clauses, mandated wording, audit JSONs) precisely because *hooks* run them — making the gates non-bypassable. In tools without hooks:
+`ai-dev-assistant` (v4.0+, as `drupal-dev-framework`) hardened its quality gates (anti-bypass clauses, mandated wording, audit JSONs) precisely because *hooks* run them — making the gates non-bypassable. In tools without hooks:
 
 - The gates degrade to **soft-nudges in the AI's prompt context**. The AI *can* skip them.
 - **There is no audit trail.** No `_pre-analysis.json` / `_coverage-mapping.json` files get written automatically.

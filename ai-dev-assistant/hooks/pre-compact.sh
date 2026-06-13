@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Pre-compact hook: Instruct Claude to preserve active project context
+# Reads per-workspace session file to find the active project
+
+DDF_DIR=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+. "$DDF_DIR/scripts/session-paths.sh"
+SESSION_FILE=$(ddf_session_file)
+
+# Only output if a framework command was used in this workspace this session
+if [ ! -f "$SESSION_FILE" ]; then
+  exit 0
+fi
+
+PROJECT_PATH=$(jq -r '.projectPath // empty' "$SESSION_FILE" 2>/dev/null)
+
+if [ -z "$PROJECT_PATH" ] || [ ! -d "$PROJECT_PATH" ]; then
+  exit 0
+fi
+
+echo "## AI Dev Assistant — Active Session"
+echo ""
+echo "Before compacting, read the current project state to preserve context:"
+echo ""
+echo "1. Read \`$PROJECT_PATH/project_state.md\` for project overview and active tasks"
+echo "2. Summarize the current task being worked on, its phase, and what was accomplished"
+echo "3. Note any decisions made or blockers encountered in this session"
+echo ""
+echo "Carry forward: project name, active task, current phase, and session progress."

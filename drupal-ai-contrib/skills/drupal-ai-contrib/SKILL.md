@@ -73,19 +73,19 @@ source of truth) and the adopted *Policy on the use of AI when contributing to D
 Both are fetched **live** per contribution by the `ai-policy-checker` agent — never
 hard-coded, never assumed; this is the fastest-moving area.
 
-## Relationship to drupal-dev-framework
+## Relationship to ai-dev-assistant
 
-A contribution **is** a `drupal-dev-framework` (DDF) task. DDF owns the phase lifecycle
+A contribution **is** an `ai-dev-assistant` task. The framework owns the phase lifecycle
 (research → architecture → implement → review → complete) and its phase gates. This
-plugin is a separate layer **outside** DDF — it adds contribution-quality commands and
-gates on top. It does not fork or modify DDF. Run the contribution as a DDF task and
-use this plugin's commands alongside it.
+plugin is a separate layer **outside** the framework — it adds contribution-quality
+commands and gates on top. It does not fork or modify the framework. Run the contribution
+as an ai-dev-assistant task and use this plugin's commands alongside it.
 
 ## Interop — delegate, never reinvent
 
 | Need | Delegate to |
 |------|-------------|
-| Phase lifecycle + phase gates | `drupal-dev-framework` |
+| Phase lifecycle + phase gates | `ai-dev-assistant` |
 | Philosophy / standards review (SOLID, DRY) | `code-quality-tools` |
 | Paper-testing before submission | `code-paper-test` |
 | Issue / MR / pipeline CLI | `mglaman/drupalorg-cli` — executable `drupalorg`, wrapped by `issue` / `submit` / `pipeline`; see `references/drupalorg-cli.md` |
@@ -115,7 +115,7 @@ use this plugin's commands alongside it.
 | Request could be two stages | Ask which stage; never guess the route. |
 | A dev-guide slug does not resolve | The navigator degrades gracefully — proceed without it; never block. |
 | Contributor asks to skip a stage | Allowed — the arc is detect-driven. Surface what evidence the skipped stage would have produced. |
-| Request is Drupal dev but not contribution | Out of scope — this is contribution quality, not general Drupal dev. Defer to `drupal-dev-framework`. |
+| Request is Drupal dev but not contribution | Out of scope — this is contribution quality, not general Drupal dev. Defer to `ai-dev-assistant`. |
 
 ## References
 

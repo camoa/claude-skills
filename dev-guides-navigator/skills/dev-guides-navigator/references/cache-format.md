@@ -1,6 +1,6 @@
 # Cache Format
 
-This file is a **contract**. Other plugins (notably `drupal-dev-framework`)
+This file is a **contract**. Other plugins (notably `ai-dev-assistant`)
 locate and parse this cache directly. Do not change the location derivation or
 the schema without updating those consumers.
 
