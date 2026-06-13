@@ -1,4 +1,4 @@
-# drupal-dev-framework — DEPRECATED
+# drupal-dev-framework: DEPRECATED
 
 This plugin has been renamed to **ai-dev-assistant**. Install that going forward.
 
@@ -15,7 +15,7 @@ plugin:
 The shell still carries every old command **name** on disk, but each one is a symlink
 to the single `upgrade` command. Claude Code resolves command symlinks to their target
 and de-duplicates them, so only **`/drupal-dev-framework:upgrade`** shows up in the `/`
-menu. This is intentional — the shell exists only to migrate you, not to keep running
+menu. This is intentional: the shell exists only to migrate you, not to keep running
 the old workflow. Use the new namespace for everything else: `/ai-dev-assistant:next`,
 `/ai-dev-assistant:research`, `/ai-dev-assistant:implement`, and so on. The command
 names are unchanged; only the `drupal-dev-framework:` namespace moved to
@@ -27,7 +27,7 @@ names are unchanged; only the `drupal-dev-framework:` namespace moved to
    `/plugin install ai-dev-assistant@camoa-skills`.
 2. **Run the migration** from the still-installed shell: `/drupal-dev-framework:upgrade`.
    It shows a `--dry-run` first, then performs the move on your confirmation. It is
-   idempotent and never deletes data — safe to re-run.
+   idempotent and never deletes data, so safe to re-run.
 3. **Disable or uninstall this shell** once the upgrade reports success, and use
    `ai-dev-assistant` from then on:
    - **Disable / re-enable** without removing it: open the `/plugin` menu →
@@ -39,5 +39,5 @@ names are unchanged; only the `drupal-dev-framework:` namespace moved to
      `/plugin` menu).
 
 After migrating, `/ai-dev-assistant:next` resumes your work exactly where
-`/drupal-dev-framework:next` left off — the project store and registered projects carry
+`/drupal-dev-framework:next` left off: the project store and registered projects carry
 over untouched.

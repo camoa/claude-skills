@@ -51,7 +51,7 @@ There's a [known bug in Claude Code](https://github.com/anthropics/claude-code/i
 
 Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/dev-guides/) site. Routes AI to the correct guide using hash-based caching and KG metadata for disambiguation.
 
-- Caches `llms.txt` with hash-based freshness check — no redundant fetches
+- Caches `llms.txt` with hash-based freshness check: no redundant fetches
 - KG metadata (`concepts`/`not` fields) prevents wrong-guide selection (e.g., "story.yml" routes to UI Patterns, not Storybook)
 - Two-hop routing: `llms.txt` → topic `index.md` → specific guide
 - 1200+ atomic decision guides across 66 topics
@@ -65,7 +65,7 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 
 **An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through **Research → Architecture → Implementation → Review**, with deterministic gates (SOLID, TDD, DRY, security, code purposefulness) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. **Requires `dev-guides-navigator`.** Stack-agnostic engine; ships with a Drupal-flavored reference implementation for the deep components (a stack-neutral generalization is in progress).
 
-> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell — it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall. The shell deliberately exposes **only** `/drupal-dev-framework:upgrade` (all old command names route to it); run everything else under the unchanged-name `ai-dev-assistant:` namespace. See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for the disable/uninstall steps.
+> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell: it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall. The shell deliberately exposes **only** `/drupal-dev-framework:upgrade` (all old command names route to it); run everything else under the unchanged-name `ai-dev-assistant:` namespace. See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for the disable/uninstall steps.
 
 ```bash
 /plugin install dev-guides-navigator@camoa-skills   # Required dependency
@@ -77,8 +77,8 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 
 | Component | Contents |
 |-----------|----------|
-| Commands | 44 — the full lifecycle (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/review`, `/validate*`, work-orders, visual/E2E review, playbooks, worktrees) |
-| Agents | 10 with cost control — project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher, journey-discovery, guides-matcher, analysis, AI test selector, work-order critic |
+| Commands | 44: the full lifecycle (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/review`, `/validate*`, work-orders, visual/E2E review, playbooks, worktrees) |
+| Agents | 10 with cost control: project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher, journey-discovery, guides-matcher, analysis, AI test selector, work-order critic |
 | Skills | 23 (phase management, TDD companion, guide integration, work-order compiler/loop, context loading) |
 | References | methodology docs (SOLID, TDD, DRY, Library-First, Quality Gates, Purposeful Code) + contracts/walkthroughs |
 | Hooks | SessionStart (dependency check + project context), PreCompact (context preservation) |
@@ -89,7 +89,7 @@ See [ai-dev-assistant/README.md](ai-dev-assistant/README.md) for full documentat
 
 ### plugin-creation-tools (v2.3.0)
 
-Complete guide for creating Claude Code plugins — skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types (command/prompt/agent/HTTP), agent isolation and cost control, marketplace distribution with 6 source types, and pushy description optimization.
+Complete guide for creating Claude Code plugins: skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types (command/prompt/agent/HTTP), agent isolation and cost control, marketplace distribution with 6 source types, and pushy description optimization.
 
 ```bash
 # Just describe what you want:
@@ -102,7 +102,7 @@ Create a plugin called "my-tools" with a deploy command
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 1 (`plugin-creation` — 30+ reference docs, templates, examples) |
+| Skills | 1 (`plugin-creation`: 30+ reference docs, templates, examples) |
 | Commands | 3 (`/create`, `/add-component`, `/validate`) |
 | Agents | 2 (`skill-quality-reviewer`, `plugin-structure-auditor`) |
 
@@ -116,7 +116,7 @@ Create branded presentations, LinkedIn carousels, infographics, and HTML pages w
 
 | Component | Contents |
 |-----------|----------|
-| Commands | 19 (brand management, templates, content creation — quick and guided modes) |
+| Commands | 19 (brand management, templates, content creation: quick and guided modes) |
 | Skills | 4 (`brand-content-design`, `visual-content`, `infographic-generator`, `html-generator`) |
 | Agents | 1 (`brand-analyst` with project memory) |
 
@@ -140,7 +140,7 @@ Code quality and security auditing for **Drupal** (via DDEV) and **Next.js** pro
 | Commands | 11 (`/setup`, `/audit`, `/review`, `/coverage`, `/security`, `/security-debate`, `/architecture-debate`, `/lint`, `/solid`, `/dry`, `/tdd`) |
 | Skills | 1 (`code-quality-audit`) |
 
-Security coverage: Drupal (10 layers — PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave, Drush, Composer audit, Security Review) and Next.js (7 layers). Optional DAST with OWASP ZAP + Nuclei.
+Security coverage: Drupal (10 layers: PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave, Drush, Composer audit, Security Review) and Next.js (7 layers). Optional DAST with OWASP ZAP + Nuclei.
 
 Features rubric-scored code review (/50 with quality gate), cross-audit correlation with prioritized action plans, and two 3-agent debate commands with isolated worktrees.
 
@@ -162,12 +162,12 @@ See [drupal-htmx/README.md](drupal-htmx/README.md) for full documentation.
 
 ### code-paper-test (v0.4.0)
 
-Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations before deployment.
+Systematically test code, skills, commands, and configs through mental execution: trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations before deployment.
 
 | Component | Contents |
 |-----------|----------|
-| Skills | 1 (`paper-test` — with data flow tracking, error propagation, config validation, severity scoring) |
-| Commands | 1 (`/test-team` — competing agent team with isolated worktrees: Happy Path + Edge Case + Red Team) |
+| Skills | 1 (`paper-test`: with data flow tracking, error propagation, config validation, severity scoring) |
+| Commands | 1 (`/test-team`: competing agent team with isolated worktrees: Happy Path + Edge Case + Red Team) |
 | References | 11 (core method, dependencies, contracts, AI auditing, hybrid testing, common flaws, advanced techniques + state machines, severity scoring, blind A/B comparison, rubric scoring, skill/config testing) |
 
 Tests code AND non-code artifacts: skills, commands, agents, YAML configs. Auto-detects skill files and switches to instruction tracing mode.
@@ -176,7 +176,7 @@ See [code-paper-test/README.md](code-paper-test/README.md) for full documentatio
 
 ### drupal-ai-contrib (v0.1.0)
 
-AI-assisted Drupal contribution quality — **evidence over assertion**: every gate passes only on a produced, captured artifact, never on an AI assertion. Mirrors the drupalci pipeline locally at CI strictness, gates on the adopted AI-contribution policy, reviews work in fresh-context agents, and confirms the real GitLab pipeline.
+AI-assisted Drupal contribution quality (**evidence over assertion**): every gate passes only on a produced, captured artifact, never on an AI assertion. Mirrors the drupalci pipeline locally at CI strictness, gates on the adopted AI-contribution policy, reviews work in fresh-context agents, and confirms the real GitLab pipeline.
 
 ```bash
 /drupal-ai-contrib:setup     # Onboard + environment-match a contribution workspace
@@ -185,7 +185,7 @@ AI-assisted Drupal contribution quality — **evidence over assertion**: every g
 
 | Component | Contents |
 |-----------|----------|
-| Commands | 6 (`/setup`, `/issue`, `/verify`, `/review`, `/submit`, `/pipeline`) — the detect-driven contribution arc |
+| Commands | 6 (`/setup`, `/issue`, `/verify`, `/review`, `/submit`, `/pipeline`): the detect-driven contribution arc |
 | Skills | 8 (`drupal-ai-contrib` umbrella/router, 6 worker skills, `contribution-guardrails` discipline) |
 | Agents | 3 read-only (`fresh-context-reviewer`, `external-fact-verifier`, `ai-policy-checker`) |
 | Hooks | PostToolUse (re-verification ledger), SessionStart (contribution-workspace reminder) |
@@ -198,11 +198,11 @@ See [drupal-ai-contrib/README.md](drupal-ai-contrib/README.md) for full document
 
 All plugins follow these conventions:
 
-- **CLAUDE.md** at plugin root — plugin-specific rules and conventions
-- **`.claude/rules/`** — path-scoped convention files
-- **Frontmatter standards** — `version`, `model` routing (haiku/sonnet/opus), `disallowedTools` on read-only agents
-- **Progressive disclosure** — SKILL.md under 500 lines; details in `references/`
-- **Imperative voice** — skills and commands give instructions, not documentation
+- **CLAUDE.md** at plugin root: plugin-specific rules and conventions
+- **`.claude/rules/`**: path-scoped convention files
+- **Frontmatter standards**: `version`, `model` routing (haiku/sonnet/opus), `disallowedTools` on read-only agents
+- **Progressive disclosure**: SKILL.md under 500 lines; details in `references/`
+- **Imperative voice**: skills and commands give instructions, not documentation
 
 ## Official Documentation
 
@@ -225,11 +225,11 @@ This marketplace was built collaboratively by Carlos Ospina and Claude (Anthropi
 
 Patterns and insights drawn from:
 
-- [Anthropic Agent Skills](https://github.com/anthropics/skills) — Official skill-creator and best practices (Apache 2.0)
-- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent — TDD approach, writing-skills methodology, and cross-platform hooks patterns (MIT)
-- [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) — Official guidelines
-- [canvas-design skill](https://github.com/anthropics/skills) — High-quality PDF generation (used by brand-content-design)
-- [pptx skill](https://github.com/anthropics/skills) — Editable PowerPoint creation (used by brand-content-design)
+- [Anthropic Agent Skills](https://github.com/anthropics/skills): Official skill-creator and best practices (Apache 2.0)
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent: TDD approach, writing-skills methodology, and cross-platform hooks patterns (MIT)
+- [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices): Official guidelines
+- [canvas-design skill](https://github.com/anthropics/skills): High-quality PDF generation (used by brand-content-design)
+- [pptx skill](https://github.com/anthropics/skills): Editable PowerPoint creation (used by brand-content-design)
 
 ## License
 
