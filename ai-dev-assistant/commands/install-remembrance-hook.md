@@ -119,24 +119,20 @@ SETTINGS="<install-dir>/.claude/settings.json"
 SS_CMD='cat "${CLAUDE_PROJECT_DIR}/.claude/ai-dev-assistant/session-primer.md" 2>/dev/null || true'
 SE_CMD='${CLAUDE_PROJECT_DIR}/.claude/ai-dev-assistant/save-session.sh'
 
-# The detection patterns below match BOTH the new (ai-dev-assistant) and the legacy
-# (drupal-dev-framework) baked paths. Do NOT narrow them to one name: matching both
-# is what lets a re-run REPLACE a pre-rename hook group in place instead of leaving a
-# stale duplicate — it is the migration re-stamp's idempotency hinge (D1).
 TMP="$SETTINGS.tmp.$$"
 jq --arg ssCmd "$SS_CMD" --arg seCmd "$SE_CMD" '
   .hooks //= {}
   | .hooks.SessionStart = (
       ((.hooks.SessionStart // []) | map(select(
         ([.hooks[]?.command // ""]
-         | map(test("(ai-dev-assistant|drupal-dev-framework)/session-primer\\.md")) | any) | not
+         | map(test("ai-dev-assistant/session-primer\\.md")) | any) | not
       )))
       + [ { hooks: [ { type: "command", command: $ssCmd, timeout: 5 } ] } ]
     )
   | .hooks.SessionEnd = (
       ((.hooks.SessionEnd // []) | map(select(
         ([.hooks[]?.command // ""]
-         | map(test("(ai-dev-assistant|drupal-dev-framework)/save-session\\.sh")) | any) | not
+         | map(test("ai-dev-assistant/save-session\\.sh")) | any) | not
       )))
       + [ { hooks: [ { type: "command", command: $seCmd, args: [], timeout: 10 } ] } ]
     )
