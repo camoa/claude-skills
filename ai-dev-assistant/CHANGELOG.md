@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-06-13
+
+**Renamed `drupal-dev-framework` → `ai-dev-assistant` — a stack-agnostic development-workflow framework.** Major bump: the plugin name and command namespace changed (`/drupal-dev-framework:*` → `/ai-dev-assistant:*`) and the local store path moved (`~/.claude/drupal-dev-framework/` → `~/.claude/ai-dev-assistant/`), so existing installs require a one-time migration (see below). Git history is preserved across the rename. This is slice-1 of the de-Drupalization: the orchestration engine is now stack-neutral; the deep components and tooling ship a **Drupal-flavored reference implementation** behind a one-line banner, with stack-neutral generalizations planned for later slices.
+
+### Changed — identity & plumbing
+- **Plugin renamed** `drupal-dev-framework` → `ai-dev-assistant` (dir, `plugin.json`, marketplace entry, namespace across all commands/skills/agents/refs, hook output banners).
+- **Store path** `~/.claude/drupal-dev-framework/` → `~/.claude/ai-dev-assistant/` across `session-paths.sh` (the cascade root) + every independent hardcoder + the per-project remembrance bake-in. The new plugin's installer is **new-name-only** (no back-compat — the old name is not tolerated in steady state).
+- **Prose neutralization (first pass)** — Drupal-domain language → stack-neutral / conditionalized across ~31 files (`contrib` → "existing third-party library"; `core` → "framework (first-party) patterns"); a one-line "Drupal-flavored reference" banner on the 5 deep components + the Layer-(iii) tooling (ATK / visual-regression / visual-parity / DDEV worktree). Functional Drupal detection (extension allowlists, risk-tiering globs, docroot detection, dev-guide floor IDs) deliberately left intact.
+
+### Migration (forced upgrade — no back-compat)
+- Existing `drupal-dev-framework` users: install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` **once** from the deprecated shell. It moves the global store, re-stamps each registered project's session-remembrance hooks to the new paths (idempotent, JSON-validated, `--dry-run` supported), and reports the old plugin safe to uninstall.
+
+### Cross-plugin
+- `drupal-ai-contrib` (0.1.2) and `dev-guides-navigator` (0.8.1) prose updated to the new namespace; root `README.md` + `PORTABILITY.md` updated.
+
 ## [4.22.0] - 2026-06-12
 
 **Closes the build_gate_correctness epic — two final children: the AI affected-test selector (the dynamic

@@ -61,7 +61,7 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 /dev-guides-navigator style guide
 ```
 
-### ai-dev-assistant (v4.22.0)
+### ai-dev-assistant (v5.0.0)
 
 Systematic 3-phase development workflow: **Research → Architecture → Implementation → Review**. Stack-neutral framework with deterministic, anti-bypass quality gates (SOLID, TDD, DRY, security, code purposefulness). **Requires `dev-guides-navigator`** — loads domain guides proactively at every phase. Ships with a Drupal-flavored reference implementation for the deep components; a stack-neutral generalization is in progress.
 

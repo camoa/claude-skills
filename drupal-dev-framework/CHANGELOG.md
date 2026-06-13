@@ -13,10 +13,11 @@ so existing installs have something to migrate *from*:
 
 - Keeps a valid `plugin.json` and a `marketplace.json` entry, so the plugin still
   resolves for anyone who has it installed.
-- Ships (in this slice's C3 stage) a single one-time **upgrade** command — every
-  other old command symlinks to it — that repoints the project store
+- Ships a single one-time **`/drupal-dev-framework:upgrade`** command — every other
+  old command symlinks to it — that moves the project store
   (`~/.claude/drupal-dev-framework/` → `~/.claude/ai-dev-assistant/`) and re-stamps
-  each registered project's session-remembrance hooks to the new paths.
+  each registered project's session-remembrance hooks to the new paths (idempotent,
+  JSON-validated, `--dry-run` supported).
 - Self-deletes after migration; users install `ai-dev-assistant` going forward.
 
 ## [4.22.0] and earlier
