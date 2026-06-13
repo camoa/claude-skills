@@ -84,8 +84,8 @@
     {
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
-      "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. The shell exposes only /drupal-dev-framework:upgrade; install ai-dev-assistant going forward.",
-      "version": "4.23.1",
+      "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. An opt-in --permissions flag also re-points stale Skill(drupal-dev-framework:*) grants. The shell exposes only /drupal-dev-framework:upgrade; install ai-dev-assistant going forward.",
+      "version": "4.24.0",
       "author": {
         "name": "camoa"
       },

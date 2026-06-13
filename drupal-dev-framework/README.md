@@ -10,6 +10,11 @@ plugin:
   `~/.claude/ai-dev-assistant/`, and
 - re-stamps each registered project's session-remembrance hooks to the new paths.
 
+It can also re-point stale `Skill(drupal-dev-framework:*)` permission grants in your
+projects' `settings.local.json`, but only as an opt-in (`--permissions`). Left alone,
+those grants are harmless: the new `/ai-dev-assistant:*` command just re-prompts for
+permission once on first use.
+
 ## Only `/drupal-dev-framework:upgrade` appears in the menu
 
 The shell still carries every old command **name** on disk, but each one is a symlink

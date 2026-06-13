@@ -12,16 +12,30 @@
 #      and rewrite the two hook command strings in `<proj>/.claude/settings.json`.
 #   2. Move the global store `~/.claude/drupal-dev-framework/` ->
 #      `~/.claude/ai-dev-assistant/` (registry + sessions + logs).
-#   3. Report safe-to-uninstall.
+#   3. (Opt-in, --permissions) Re-point stale `Skill(drupal-dev-framework:*)`
+#      permission allowlist entries in each registered project's
+#      `settings.json` / `settings.local.json` to `Skill(ai-dev-assistant:*)`.
+#      Off by default: without --permissions the script only reports how many
+#      stale entries it found, so you re-approve them once on first use instead.
+#   4. Report safe-to-uninstall.
 #
 # Usage:
-#   upgrade-to-ai-dev-assistant.sh            # perform the migration
-#   upgrade-to-ai-dev-assistant.sh --dry-run  # show what would change, write nothing
+#   upgrade-to-ai-dev-assistant.sh                 # perform the migration
+#   upgrade-to-ai-dev-assistant.sh --dry-run       # show what would change, write nothing
+#   upgrade-to-ai-dev-assistant.sh --permissions   # also re-point stale Skill() perms
+#   (flags combine, e.g. --dry-run --permissions)
 #
 set -euo pipefail
 
 DRY_RUN=0
-[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+REWRITE_PERMS=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --permissions) REWRITE_PERMS=1 ;;
+    *) printf 'unknown flag: %s\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 OLD_NAME="drupal-dev-framework"
 NEW_NAME="ai-dev-assistant"
@@ -30,9 +44,17 @@ NEW_STORE="$HOME/.claude/$NEW_NAME"
 
 say() { printf '%s\n' "$*"; }
 
+# count Skill(OLD_NAME:...) permission tokens in a file (0 if absent/unreadable)
+count_perm_tokens() {
+  grep -o "Skill($OLD_NAME:" "$1" 2>/dev/null | wc -l | tr -d ' '
+}
+
 say "== ai-dev-assistant upgrade =="
 if [ "$DRY_RUN" -eq 1 ]; then
   say "(dry run — no changes will be written)"
+fi
+if [ "$REWRITE_PERMS" -eq 1 ]; then
+  say "(--permissions — will re-point stale Skill($OLD_NAME:*) allowlist entries)"
 fi
 say ""
 
@@ -44,16 +66,18 @@ elif [ -f "$NEW_STORE/active_projects.json" ]; then
   REGISTRY="$NEW_STORE/active_projects.json"
 fi
 
-# --- per-project remembrance-hook re-stamp -----------------------------------
-restamped=0
+# --- candidate install dirs: both codePath and memory path for every project ---
+# The remembrance hook (and permission grants) may live at either location.
+DIRS=()
 if [ -n "$REGISTRY" ]; then
-  # Candidate install dirs: both codePath and memory path for every project.
-  # The remembrance hook may have been installed at either location.
-  DIRS=()
   while IFS= read -r d; do
     [ -n "$d" ] && DIRS+=("$d")
   done < <(jq -r '.projects[]? | (.codePath // empty), (.path // empty)' "$REGISTRY" 2>/dev/null | sort -u)
+fi
 
+# --- per-project remembrance-hook re-stamp -----------------------------------
+restamped=0
+if [ -n "$REGISTRY" ]; then
   for d in "${DIRS[@]:-}"; do
     [ -n "$d" ] || continue
     settings="$d/.claude/settings.json"
@@ -108,6 +132,57 @@ else
 fi
 say ""
 
+# --- (opt-in) stale Skill() permission re-point ------------------------------
+# Scoped precisely to the `Skill(OLD_NAME:` token so it never touches a
+# `Bash(...)` cache-path grant or any unrelated allowlist content.
+perm_files=0
+perm_tokens=0
+pending_files=0
+pending_tokens=0
+if [ -n "$REGISTRY" ]; then
+  for d in "${DIRS[@]:-}"; do
+    [ -n "$d" ] || continue
+    for fn in settings.json settings.local.json; do
+      pf="$d/.claude/$fn"
+      [ -f "$pf" ] || continue
+      n=$(count_perm_tokens "$pf")
+      [ "$n" -gt 0 ] || continue
+
+      if [ "$REWRITE_PERMS" -eq 1 ]; then
+        if [ "$DRY_RUN" -eq 1 ]; then
+          say "permissions: [dry-run] re-point $n Skill($OLD_NAME:*) token(s) in $fn ($d)"
+        else
+          tmp="$pf.tmp.$$"
+          sed "s#Skill($OLD_NAME:#Skill($NEW_NAME:#g" "$pf" > "$tmp"
+          if jq -e . "$tmp" >/dev/null 2>&1; then
+            mv "$tmp" "$pf"
+            say "permissions: re-pointed $n Skill() token(s) in $fn ($d)"
+          else
+            rm -f "$tmp"
+            say "permissions: ! $fn rewrite produced invalid JSON — left untouched ($d)"
+            continue
+          fi
+        fi
+        perm_files=$((perm_files + 1))
+        perm_tokens=$((perm_tokens + n))
+      else
+        pending_files=$((pending_files + 1))
+        pending_tokens=$((pending_tokens + n))
+      fi
+    done
+  done
+fi
+
+if [ "$REWRITE_PERMS" -eq 0 ] && [ "$pending_tokens" -gt 0 ]; then
+  say "Found $pending_tokens stale Skill($OLD_NAME:*) permission token(s) across $pending_files file(s)."
+  say "These are harmless: each is a pre-approved grant for a skill that no longer exists,"
+  say "so the new $NEW_NAME: command simply re-prompts for permission once on first use."
+  say "Re-run with --permissions to re-point them automatically (opt-in)."
+  say ""
+elif [ "$REWRITE_PERMS" -eq 1 ]; then
+  say ""
+fi
+
 # --- global store move (done last so the registry read above is unaffected) --
 if [ -d "$OLD_STORE" ] && [ ! -e "$NEW_STORE" ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -128,6 +203,13 @@ say ""
 
 say "== upgrade complete =="
 say "Projects re-stamped: $restamped"
+if [ "$REWRITE_PERMS" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "Permission tokens to re-point: $perm_tokens across $perm_files file(s)"
+  else
+    say "Permission tokens re-pointed: $perm_tokens across $perm_files file(s)"
+  fi
+fi
 if [ "$DRY_RUN" -eq 1 ]; then
   say ""
   say "This was a DRY RUN. Re-run without --dry-run to apply."
