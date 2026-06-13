@@ -65,7 +65,7 @@ Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/d
 
 Systematic 3-phase development workflow: **Research → Architecture → Implementation → Review**. Stack-neutral framework with deterministic, anti-bypass quality gates (SOLID, TDD, DRY, security, code purposefulness). **Requires `dev-guides-navigator`** — loads domain guides proactively at every phase. Ships with a Drupal-flavored reference implementation for the deep components; a stack-neutral generalization is in progress.
 
-> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell — it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall.
+> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell — it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall. The shell deliberately exposes **only** `/drupal-dev-framework:upgrade` (all old command names route to it); run everything else under the unchanged-name `ai-dev-assistant:` namespace. See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for the disable/uninstall steps.
 
 ```bash
 /plugin install dev-guides-navigator@camoa-skills   # Required dependency

@@ -2,6 +2,21 @@
 
 All notable changes to this plugin are documented here.
 
+## [4.23.1] — Deprecation-shell docs
+
+**Documentation only — no functional change.** Clarified the shell's command surface
+after the rename:
+
+- The shell carries every old command **name** as a symlink to the single `upgrade`
+  command. Claude Code resolves command symlinks to their target and de-duplicates
+  them, so **only `/drupal-dev-framework:upgrade` appears in the `/` menu** — by
+  design. README now states this explicitly and points the old command names at the
+  `ai-dev-assistant:` namespace (names unchanged, namespace moved).
+- Added the migrate-then-switch steps to `README.md`: install `ai-dev-assistant`
+  first, run `/drupal-dev-framework:upgrade`, then **disable or uninstall** this shell
+  via the `/plugin` menu (with the disable/re-enable note for re-running the migration
+  on another project).
+
 ## [4.23.0] — Deprecation shell
 
 **Renamed to `ai-dev-assistant`.** The full Research → Architecture → Implementation
