@@ -2,6 +2,16 @@
 
 Custom plugins and tools for Claude Code.
 
+> **Heads up (transition notice, kept through ~August 2026).** `drupal-dev-framework`
+> has been renamed to **`ai-dev-assistant`** (same workflow, broader scope, command
+> names unchanged). If you already have the old plugin installed: install
+> `ai-dev-assistant`, run `/drupal-dev-framework:upgrade` once to migrate your project
+> store and per-project wiring, then uninstall the old shell. The shell exposes only
+> `/drupal-dev-framework:upgrade`; everything else now lives under the
+> `ai-dev-assistant:` namespace. A few other plugins got minor description and tone
+> cleanups in the same pass. Full steps:
+> [drupal-dev-framework/README.md](drupal-dev-framework/README.md).
+
 ## Background
 
 I started building what I called "frameworks" over a year before Claude officially released Skills. Same concept, different name.
