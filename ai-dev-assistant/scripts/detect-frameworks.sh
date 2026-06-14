@@ -8,7 +8,8 @@
 #
 # Detected frameworks (stable output order):
 #   drupal   — composer.json require/require-dev contains drupal/core or drupal/core-recommended,
-#              OR <codePath>/web/core/lib/Drupal.php OR <codePath>/core/lib/Drupal.php exists.
+#              OR <codePath>/{web,docroot}/core/lib/Drupal.php OR <codePath>/core/lib/Drupal.php exists.
+#              (web/ = composer-template default; docroot/ = Acquia/Pantheon topology.)
 #   nextjs   — package.json .dependencies or .devDependencies contains a "next" key.
 #
 # Missing / non-dir codePath ⇒ []. Missing $1 ⇒ [].
@@ -53,6 +54,7 @@ fi
 # Fallback: bare Drupal checkout without a standard composer.json require
 if [ "$DRUPAL_FOUND" = "false" ]; then
   if [ -f "${CODE_PATH}/web/core/lib/Drupal.php" ] || \
+     [ -f "${CODE_PATH}/docroot/core/lib/Drupal.php" ] || \
      [ -f "${CODE_PATH}/core/lib/Drupal.php" ]; then
     DRUPAL_FOUND=true
   fi

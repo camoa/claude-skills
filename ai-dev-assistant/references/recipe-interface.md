@@ -41,10 +41,18 @@ captured_by: <method label recorded on the surface; e.g. axe-playwright>
 Absent ⇒ native Playwright capture; `captured_by: playwright`.
 
 ### 2. `e2e.preflight_command` — phase `e2e-setup`
-**Consumer:** `scripts/ensure-registry-preflight.sh` (seed) → `scripts/validate-e2e.sh` via
-`/validate:e2e --preflight-cmd` (run). **Not** read from the recipe at gate time — `/setup-e2e` transcribes
-the recipe's value into the project's `.visual-review/registry.yml`, and the gate reads it from there.
-**Shape** (the value the recipe supplies, written by setup into the registry):
+**Consumer:** `scripts/validate-e2e.sh` via `/validate:e2e --preflight-cmd` (run). **Not** read from the
+recipe at gate time — the gate reads it from the project's `.visual-review/registry.yml`, where setup seeds
+it. It is seeded two ways, both idempotent:
+- **Fresh setup (recipe-in-place):** `/setup-e2e` resolves and follows the `e2e-setup` recipe; the recipe's
+  own install/scaffold step writes `e2e.preflight_command` into the registry (setup-e2e.md:45 — there is no
+  separate transcription pass).
+- **Backfill (pre-seam projects):** `scripts/ensure-registry-preflight.sh <registry> <cmd>` inserts the field
+  into an existing registry that predates the seam. It is invoked only from `/upgrade-project`'s "E2E preflight
+  seam" gap (upgrade-project.md:53), which resolves the `e2e-setup` recipe, reads its declared
+  `preflight_command`, and passes it in. The helper no-ops when the field is already present.
+
+**Shape** (the value the recipe supplies, written into the registry by either path above):
 ```yaml
 e2e:
   preflight_command: "<stack-setup-command>"

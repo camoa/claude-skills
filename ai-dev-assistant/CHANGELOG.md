@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `references/recipe-resolution.md` — `## See also` now cross-links `recipe-interface.md` (transport ↔ content).
 
+### Fixed
+- **Functional-parity sweep — restore pre-de-Drupalization behavior now that gates route through recipes.** Three regressions/inaccuracies found auditing the agnostic seam against "works like before":
+  - `scripts/detect-frameworks.sh` — the bare-checkout fallback only probed `web/core/lib/Drupal.php` and `core/lib/Drupal.php`, so an **Acquia/Pantheon `docroot/` Drupal site with no `drupal/core` composer require** was silently detected as a non-Drupal project (empty frameworks ⇒ no recipe resolved ⇒ neutral floor everywhere). Added the `docroot/core/lib/Drupal.php` probe. Smoke-tested across docroot/web/none topologies.
+  - `commands/implement.md` Stage 2b — corrected a stale step reference ("recipe resolution at step 7") to step 6, where recipe resolution actually runs (the `## Load context` step). Doc-only; no behavior change.
+  - `references/recipe-interface.md` §2 (`e2e.preflight_command`) — corrected the seeding mechanism: a fresh `/setup-e2e` seeds the field **in place via the resolved e2e-setup recipe** (setup-e2e.md:45), and `scripts/ensure-registry-preflight.sh` is the idempotent **backfill** helper invoked only from `/upgrade-project`'s "E2E preflight seam" gap (upgrade-project.md:53) for pre-seam projects. The prior text wrongly described the helper as the primary seeder and `/setup-e2e` as transcribing the value.
+
 ## [5.3.1] - 2026-06-14
 
 **`commands/review.md` trimmed back under its ≤120-line body budget.** The de-Drupalization tranche (5.3.0) added the recipe-resolution wiring to the review step, pushing the command body to 157 physical lines and tripping `tests/review-command-spec.sh`. Documentation refactor only — no change to gate execution, aggregation, or `pr_ready` logic.
