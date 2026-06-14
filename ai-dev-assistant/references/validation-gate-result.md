@@ -35,7 +35,7 @@ Every `/validate:*` command emits and persists a JSON result object with this sh
 | `task` | string | Task folder name the run was scoped to |
 | `run_at` | string | ISO-8601 UTC with `Z` suffix |
 | `verdict` | enum | `"pass"` \| `"warning"` \| `"fail"` \| `"skipped"` |
-| `details` | object | Gate-specific detail structure. See §4 |
+| `details` | object | Gate-specific detail structure. See the gate details section |
 | `messages` | array of string | Human-readable findings. Shown in CLI output. Non-empty for warning/fail; usually present for pass too (e.g., "3 checks passed") |
 
 ## 3. Verdict semantics
@@ -143,7 +143,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 - `latest/<gate>.json` — most recent result per gate. `/validate:all` reads these to aggregate. `/complete` (future) may check for pending updates
 - `history.jsonl` — full run log, newest at the bottom. JSONL (one object per line) makes append cheap and git-diff legible
 
-`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see §6).
+`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see the aggregate envelope section).
 
 ## 6. Aggregate envelope (`/validate:all`)
 
@@ -280,4 +280,4 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 - `references/screenshot-store-schema.md` — the `.meta.json` schema referenced by visual gate details
 - `commands/validate-all.md` — the orchestrator that consumes per-gate envelopes and emits the aggregate
 - `commands/validate-tdd.md` (et al) — the per-gate commands that produce envelopes
-- Architecture §5.1 in `dev_framework_granular_validation/architecture.md`
+- `dev_framework_granular_validation/architecture.md`

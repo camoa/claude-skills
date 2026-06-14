@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TDD spec for scripts/wo-risk-classify.sh (C4) — architecture/kernels.md §1, AR-C corrected.
+# TDD spec for scripts/wo-risk-classify.sh (C4) — architecture/kernels.md (AR-C corrected).
 # Pure-function kernel; no live agents/git. Run: bash tests/wo-risk-classify-spec.sh
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"

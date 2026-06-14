@@ -96,7 +96,7 @@ Default: `[n]`.
 RESULT=$("${CLAUDE_PLUGIN_ROOT}/scripts/coverage-mapping-check.sh" "<task_folder>")
 ```
 
-Output per `references/gate-audit-schema.md` §5.2: `verdict: pass | fail`, `research_questions_found`, `research_questions_addressed`, `missing_questions[]`, `warnings[]`.
+Output per `references/gate-audit-schema.md`: `verdict: pass | fail`, `research_questions_found`, `research_questions_addressed`, `missing_questions[]`, `warnings[]`.
 
 ### Step 2 — Branch on verdict
 
@@ -152,9 +152,9 @@ Format:
 ```
 Research addresses these questions and criteria:
 
-  Q1 "<first 60 chars>…"  →  research.md §4 Q1 + decision log #1
-  Q2 "<first 60 chars>…"  →  research.md §4 Q2 + §5 pattern 1
-  AC #1 "<first 60 chars>…"  →  research.md §6 decision #7
+  Q1 "<first 60 chars>…"  →  research.md Q1 + decision log #1
+  Q2 "<first 60 chars>…"  →  research.md Q2 + pattern 1
+  AC #1 "<first 60 chars>…"  →  research.md decision #7
   AC #2 "<first 60 chars>…"  →  — NOT YET ADDRESSED — raise in Phase 2?
   …
 ```
@@ -366,7 +366,7 @@ For historical reference; the always-on gate above supersedes this. The soft-hoo
 If a signal fires:
 
 1. Resolve `codePath` via `project-state-reader` on the active project. If unknown, skip detect+confirm here (too intrusive at task-creation time); agent runs with `code_read: false` / `confidence: low`.
-2. Invoke `analysis-agent` (via Task tool) in **description mode** — pass `task_description_text` (the task name + full description as typed by the user), the codePath (or null), and `schema_version: "1.0"`. **Do NOT pass a task_folder** — the folder does not exist yet at pre-analysis time. See `references/analysis-agent-schema.md` §"Input modes".
+2. Invoke `analysis-agent` (via Task tool) in **description mode** — pass `task_description_text` (the task name + full description as typed by the user), the codePath (or null), and `schema_version: "1.0"`. **Do NOT pass a task_folder** — the folder does not exist yet at pre-analysis time. See `references/analysis-agent-schema.md` the "Input modes" section.
 3. Parse the agent's JSON output per `references/analysis-agent-schema.md` v1.0. Expect `task_folder: "(pre-creation)"` in the output.
 4. Branch on `decision`:
    - `epic_candidate` → ask the user: *"This task's scope looks like it might warrant being an epic. Agent proposed N children: [list]. Create as epic with these children? [y/n/standard flat task]"*. On `y`, invoke `/ai-dev-assistant:migrate-to-epic <task_name> --children "<proposed names>"` (which will create the epic directly — no flat task created first). On `n` or `standard`, proceed with flat-task research.

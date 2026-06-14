@@ -4,7 +4,7 @@
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
-The framework's hardened gates use **literal mandated wording** for user prompts. Literal-wording IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "soften this for the user" failure mode. Authoring rules (§"Template authoring rules") forbid paraphrase, reorder, pre-answer, and truncation.
+The framework's hardened gates use **literal mandated wording** for user prompts. Literal-wording IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "soften this for the user" failure mode. Authoring rules (the "Template authoring rules" section) forbid paraphrase, reorder, pre-answer, and truncation.
 
 The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prompts; no templates here.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TDD spec for scripts/wo-review-snapshot.sh (C6) — architecture/kernels.md §3.
+# TDD spec for scripts/wo-review-snapshot.sh (C6) — architecture/kernels.md.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
 export CLAUDE_PLUGIN_ROOT="$ROOT"

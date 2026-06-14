@@ -114,7 +114,7 @@ is the first-class, documented path.
 | Subtask | Ships | Status |
 |---|---|---|
 | **A — Foundation** | Surface registry schema, change-impact dispatcher in `/review`, gate-audit schema additions, the shared `playwright-base.config.ts` template, this walkthrough | **This release (v4.11.0).** Plumbing only — zero new commands, zero runtime files in any project. |
-| **B — ATK E2E** | `/setup-atk`, `/validate:e2e` | Blocked by A. |
+| **B — ATK E2E** | `/setup-e2e`, `/validate:e2e` | Blocked by A. |
 | **C — Visual Regression v2** | Reworked `validate-visual-regression` on Lullabot — batch, masks, a11y | Blocked by A. |
 | **D — Visual Parity v2** | Reworked `validate-visual-parity` on Lullabot | Blocked by A + C. |
 

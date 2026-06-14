@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ai-dev-assistant",
   "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. It runs each task through Research → Architecture → Implementation → Review before code gets written, and checks the work against your standards (SOLID, TDD, DRY, security) with gates the AI can't quietly skip. Decisions stay grounded in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks.",
-  "version": "5.0.0",
+  "version": "5.2.0",
   "author": {
     "name": "camoa"
   },

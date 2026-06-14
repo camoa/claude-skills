@@ -51,7 +51,7 @@ Inspect `.visualReview` from the Step 1 JSON.
 - `visualReview: null` (field absent) or `visualReview.enabled: false` → visual
   review is not set up. Print: `"visual review is not set up — run /setup-visual-regression first."` and stop.
 - Otherwise continue. The surface registry lives at
-  `<codePath>/.visual-review/registry.yml` (shared with `/setup-atk`). The
+  `<codePath>/.visual-review/registry.yml` (shared with `/setup-e2e`). The
   `**Visual Review:**` pointer's path is codePath-relative — resolve the
   registry against `codePath`.
 
@@ -140,6 +140,28 @@ Invoke `scripts/visual-regression-gate.sh <registry_path> <codePath>` (add
 
 Verify the script's stdout is valid JSON (`jq empty`). If not, surface stderr
 verbatim and stop.
+
+### Authenticated surfaces (stack-neutral)
+
+A surface with a non-null `auth_context: "<ctx>"` (surface-registry schema v1.2) is captured
+while logged in, by an authed project named `visual-chromium-<vp>-<ctx>`. No
+gate change is needed for these:
+
+- The gate **discovers them with the existing `visual-chromium-` prefix** — the
+  context suffix `-<ctx>` is part of the matched project name.
+- Each authed project declares `dependencies: ['visual-setup-<ctx>']`, so the
+  `visual-setup-<ctx>` project **runs automatically first** to produce the
+  `tests/visual/.auth/<ctx>.json` storageState. The setup project's name does
+  not carry the `visual-chromium-` prefix, so the gate never invokes it directly.
+- The login itself comes from `tests/visual/.auth/<ctx>.setup.ts`, which the
+  project's process recipe fills. If that stub is **unfilled**, it throws — the
+  dependency fails, the authed project does not run, and the gate **fails loudly
+  by design** (never a silent logged-out capture).
+- The authed baseline filename carries the context:
+  `<id>-1-visual-chromium-<vp>-<ctx>-linux.png` (the anonymous form is
+  `<id>-1-visual-chromium-<vp>-linux.png`). Step 6's baseline-existence check
+  enumerates whatever PNGs exist via `screenshot-store-read.sh`; it does not
+  assume the suffix shape, so authed baselines are covered with no logic change.
 
 ## Step 9: Classify each failed surface
 

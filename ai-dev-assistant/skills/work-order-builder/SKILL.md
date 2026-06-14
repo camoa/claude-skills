@@ -105,8 +105,8 @@ The kernel exits **0 IFF** `(grounding_clean OR a valid coverage_override {reaso
 status==ready`, where `grounding_clean = verified==true AND coverage_status==covered AND no null-sha
 lockfile entry AND drift_guard.symbols_resolved==true AND drift_guard.acceptance_runnable==true` (full
 contract: `../work-order-compiler/references/work-order-contract.md`). **`autonomy_safe` is NO LONGER a
-dispatch gate** (design §17, `wo-compile.sh` cmd_assert_dispatchable): autonomy is mode-keyed recipe
-behavior, not a per-WO dispatch flag — the gate floor, §16.2 critique, no-auto-merge, and human-merge are
+dispatch gate** (`wo-compile.sh` cmd_assert_dispatchable): autonomy is mode-keyed recipe
+behavior, not a per-WO dispatch flag — the gate floor, the adversarial critique, no-auto-merge, and human-merge are
 the safety net.
 **On `RC != 0`: HALT-and-escalate — do NOT spawn.** **Map** the kernel `reason` onto the frozen handle
 `halt_reason` enum — **never** forward a raw kernel string into the handle (MEDIUM-2):
@@ -246,7 +246,7 @@ transcript** (M-6).
   verdict, or → `needs_rework` + `git reset --hard checkpoint_before` on a failing one, then recomputes
   the ready-queue.
 - **②** runs `/review --headless` on the tree → `_review.json` + the shipped `overall_verdict=` line,
-  and (later) the §16.2 per-job critique. The atom reserves `review_ref` / `critique_ref` in the
+  and (later) the per-job adversarial critique. The atom reserves `review_ref` / `critique_ref` in the
   contract for ②; it never runs `/review` itself.
 
 ## See also

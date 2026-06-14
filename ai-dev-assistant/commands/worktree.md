@@ -18,7 +18,7 @@ Create a git worktree at `.worktrees/<task_name>/` on branch `feature/<task_name
 /ai-dev-assistant:worktree <task-name> --no-ddev-check              # skip DDEV name: warning
 ```
 
-See `references/worktree-conventions.md` v1.2 for the full convention — including §11, how this command relates to Claude Code's native `claude --worktree` flag, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, and `worktree.bgIsolation`.
+See `references/worktree-conventions.md` v1.2 for the full convention, including how this command relates to Claude Code's native `claude --worktree` flag, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, and `worktree.bgIsolation`.
 
 ## What this does
 
@@ -74,7 +74,7 @@ Determine BASE:
 - `--base <ref>` flag → use it
 - Default → `git rev-parse HEAD` (current commit)
 
-The HEAD default matches the `worktree.baseRef: "head"` semantic — Drupal task work often sits on uncommitted local patches a `"fresh"` base would drop. This command does not read the `worktree.baseRef` setting (that setting governs Claude Code's native `--worktree`); pass `--base origin/main` for a clean base. See `references/worktree-conventions.md` §11.4.
+The HEAD default matches the `worktree.baseRef: "head"` semantic — Drupal task work often sits on uncommitted local patches a `"fresh"` base would drop. This command does not read the `worktree.baseRef` setting (that setting governs Claude Code's native `--worktree`); pass `--base origin/main` for a clean base. See `references/worktree-conventions.md`.
 
 Determine BRANCH:
 - `--branch <name>` flag → use it
@@ -167,6 +167,6 @@ Or run /worktree-prune later to clean up when done.
 - `/ai-dev-assistant:worktree-prune` — cleanup
 - `/ai-dev-assistant:implement` — invokes worktree recommendation pre-step
 - `/ai-dev-assistant:complete` — invokes worktree merge prompt at task end
-- `references/worktree-conventions.md` — full conventions; §11 covers Claude Code's native worktree support
+- `references/worktree-conventions.md` — full conventions, including coverage of Claude Code's native worktree support
 - `superpowers:using-git-worktrees` — generic creation pattern (ai-dev-assistant adds task-aware lifecycle)
-- Claude Code's native worktree support — `https://code.claude.com/docs/en/worktrees` (the `claude --worktree` / `-w` CLI flag, PR-based worktrees, `.worktreeinclude`). The framework's `/worktree` and the native flag are complementary entry points — see `references/worktree-conventions.md` §11.
+- Claude Code's native worktree support — `https://code.claude.com/docs/en/worktrees` (the `claude --worktree` / `-w` CLI flag, PR-based worktrees, `.worktreeinclude`). The framework's `/worktree` and the native flag are complementary entry points — see `references/worktree-conventions.md`.

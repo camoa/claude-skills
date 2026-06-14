@@ -112,8 +112,7 @@ Full detail, exact JSON shapes, and halt-handling tables: `references/compiler-a
    (`poisoned > uncovered > covered`). **Carry `verified` / `coverage_status` verbatim** — do not
    re-judge them.
 
-   6b. **`autonomy_safe` + `gate_floor`** `[model]`. `autonomy_safe` is **informational only** (§17,
-   2026-06-11) — it does **NOT** gate dispatch. Autonomy is mode-keyed recipe behavior
+   6b. **`autonomy_safe` + `gate_floor`** `[model]`. `autonomy_safe` is **informational only** (2026-06-11) — it does **NOT** gate dispatch. Autonomy is mode-keyed recipe behavior
    (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in recipe authoring. You may still record whether
    matched recipes declared an autonomy-safe contract, but it never blocks. `gate_floor` = base
    `[tdd, solid, dry, security, guides]` ∪ recipe-declared gates (still compiler-produced, still read by ②).
@@ -135,7 +134,7 @@ Full detail, exact JSON shapes, and halt-handling tables: `references/compiler-a
    `compiled_from` SHAs. **A null `sha` is a cache miss: do NOT inline that ref's excerpt into the
    body, but KEEP its entry in the `lockfile` field** — the dispatch gate refuses any WO with a
    null-sha lockfile entry (`unpinned_ref`), so the kept entry is exactly what makes the unit
-   non-dispatchable (the §14.5 hard execution gate). Do NOT touch `verified` (carry it verbatim). If
+   non-dispatchable (the lockfile hard execution gate). Do NOT touch `verified` (carry it verbatim). If
    EVERY ref comes back null-sha, suspect a **cache-cwd mismatch** and escalate — don't silently block
    all (detail: `compiler-algorithm.md` step 9). Then assemble the full frontmatter object with `jq`
    and pipe it to `emit-frontmatter` for the YAML block.

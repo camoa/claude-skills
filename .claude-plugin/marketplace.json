@@ -12,8 +12,8 @@
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
-      "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + KG metadata route AI to the correct guide; all fetches use curl (never WebFetch). Two routing modes — guide search (llms.txt) and recipe search (agentic-recipes catalog, verifier-carrying capability deliveries). v0.8.0 adds maintainer-mode create-on-miss: when guide search finds nothing and the dev-guides source repo is detected, it offers to author the topic and hands off to that repo's /create-guide command (which opens a PR, never deploys). Detect + offer + hand off only; consumer mode byte-for-byte unchanged.",
-      "version": "0.8.1",
+      "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + KG metadata route AI to the correct guide; all fetches use curl (never WebFetch). Three routing modes: guide search (llms.txt), recipe search (agentic-recipes catalog, verifier-carrying capability deliveries), and process-recipe lookup (process-recipes.txt, resolved by ai-dev-assistant at lifecycle phase boundaries keyed by phase and framework). v0.9.0 adds a deterministic shared content store (scripts/dev-guides-store.sh, a zero-model bash/jq kernel): a machine-level store (~/.claude/dev-guides-store/) shared across projects holds index bodies and content blobs, with a per-project lockfile pinning guide/recipe/process-recipe shas. Two-hash revalidation (index hash gates the body, per-item sha gates each blob); a dev-guides-cache.json compat shim keeps the legacy consumer working through cutover.",
+      "version": "0.9.0",
       "author": {
         "name": "camoa"
       },
@@ -59,8 +59,8 @@
     {
       "name": "ai-dev-assistant",
       "source": "./ai-dev-assistant",
-      "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (Drupal-flavored for now).",
-      "version": "5.0.0",
+      "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (framework-agnostic setup via process recipes; Drupal payload ships in dev-guides).",
+      "version": "5.2.0",
       "author": {
         "name": "camoa"
       },

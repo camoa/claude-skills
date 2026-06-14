@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wo-review-snapshot.sh (C6) — produce the per-WO review_ref from a task-level /review run.
 #
-# Owner: gate_integration (sibling ②). Spec: architecture/kernels.md §3. Mechanism A's deterministic
+# Owner: gate_integration (sibling ②). Spec: architecture/kernels.md. Mechanism A's deterministic
 # disk side: after the loop runs `/review --headless --dry-run <task>` for a WO, this copies the
 # task-level _review.json to the per-WO review_ref, snapshots the per-gate envelopes, and REWRITES the
 # copied envelope_path pointers to the snapshot dir (closes X11 — the next per-WO run no longer clobbers

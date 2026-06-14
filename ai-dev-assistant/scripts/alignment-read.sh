@@ -10,8 +10,8 @@
 #
 # Mirrors defensive posture of project-state-read.sh (3.2) and fm-read.sh (3.1).
 #
-# Output contract: see references/alignment-contract.md §7.
-# Warning codes:   see references/alignment-contract.md §6.
+# Output contract: see references/alignment-contract.md.
+# Warning codes:   see references/alignment-contract.md.
 
 set -uo pipefail
 

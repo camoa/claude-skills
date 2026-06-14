@@ -392,7 +392,7 @@ fi
 # K3 ④-touch (safety_governor): out-of-band PAT read from WO_MERGE_PAT_FILE at call
 # time. File WINS over WO_MERGE_GH_TOKEN; -s guards an empty file (→ env fallback);
 # absent/unreadable → env fallback (current behavior). Token still redacted in stdout.
-# (kernels.md §K3 T9–T12, renamed PAT-1..PAT-4 to avoid the existing T9/T10/T11.)
+# (kernels.md T9–T12, renamed PAT-1..PAT-4 to avoid the existing T9/T10/T11.)
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── PAT-1 (kernels T9): WO_MERGE_PAT_FILE set + readable → gh gets file contents (file WINS over env);

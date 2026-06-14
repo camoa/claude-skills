@@ -2,14 +2,18 @@
 # derive-viewport-matrix.sh — derive a visual-regression viewport matrix from
 # project context (ai-dev-assistant v4.13.0, Task C).
 #
-# Usage: derive-viewport-matrix.sh <codePath> [--theme-name <name>]
+# Usage: derive-viewport-matrix.sh <codePath> [--theme-name <name>] [--css-root <dir>]
 #
-#   <codePath>      absolute path to the Drupal project root
-#   --theme-name    override custom-theme auto-detection
+#   <codePath>      absolute path to the project root
+#   --theme-name    override custom-theme auto-detection (Path 1, Drupal)
+#   --css-root      directory to scan for CSS @media queries (Path 2). Defaults to
+#                   the Drupal custom-theme dir; set it to make Path 2 framework-neutral.
 #
 # Three-path waterfall (research/breakpoint-derivation.md):
-#   Path 1 — parse <theme>.breakpoints.yml (custom theme, or radix contrib fallback)
-#   Path 2 — infer from CSS @media (min-width|max-width) queries
+#   Path 1 — parse <theme>.breakpoints.yml — the Drupal convenience path. A process
+#            recipe drives this for Drupal; other frameworks skip straight to Path 2.
+#   Path 2 — infer from CSS @media (min-width|max-width) queries under --css-root
+#            (framework-neutral; defaults to the Drupal custom-theme dir for back-compat)
 #   Path 3 — ask the user — NOT done here (interactive); the command falls through
 #
 # Output: a JSON array on stdout, suitable for registry.yml `viewports:`. Each
@@ -31,6 +35,7 @@ set -uo pipefail
 
 CODE_PATH="${1:-}"
 THEME_NAME=""
+CSS_ROOT=""
 
 if [ -z "$CODE_PATH" ]; then
   echo "derive-viewport-matrix: codePath required" >&2
@@ -44,6 +49,10 @@ while [ "$#" -gt 0 ]; do
     --theme-name)
       if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then THEME_NAME="$2"; shift 2
       else echo "derive-viewport-matrix: --theme-name requires a value" >&2; shift; fi
+      ;;
+    --css-root)
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then CSS_ROOT="$2"; shift 2
+      else echo "derive-viewport-matrix: --css-root requires a value" >&2; shift; fi
       ;;
     *) shift ;;
   esac
@@ -163,9 +172,11 @@ fi
 
 # ─── Path 2: CSS @media scan ─────────────────────────────────────────────────
 
+# Scan root is --css-root when given (framework-neutral), else the Drupal custom-theme dir.
+SCAN_DIR="${CSS_ROOT:-$CUSTOM_DIR}"
 CSS_WIDTHS=""
-if [ -d "$CUSTOM_DIR" ]; then
-  CSS_WIDTHS=$(find "$CUSTOM_DIR" -name '*.css' -not -path '*/node_modules/*' 2>/dev/null \
+if [ -d "$SCAN_DIR" ]; then
+  CSS_WIDTHS=$(find "$SCAN_DIR" -name '*.css' -not -path '*/node_modules/*' 2>/dev/null \
     | head -200 \
     | xargs grep -hoE '(min-width|max-width)[[:space:]]*:[[:space:]]*[0-9]+px' 2>/dev/null \
     | grep -oE '[0-9]+' \

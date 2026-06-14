@@ -221,7 +221,7 @@ interpolation) and write it via
 ```
 
 `user_choice` is the last classification choice (`g`/`i`/`c`), or `null` when no
-surface failed or in `--ci` mode. See `references/gate-audit-schema.md` §5.11.
+surface failed or in `--ci` mode. See `references/gate-audit-schema.md`.
 
 ## Step 11: --show-diffs
 

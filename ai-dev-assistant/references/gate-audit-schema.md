@@ -46,7 +46,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
   "bypass_reason": null,
-  "gate_specific": { /* per-gate payload — see §5 */ }
+  "gate_specific": { /* per-gate payload — see the gate-specific sections */ }
 }
 ```
 
@@ -55,12 +55,12 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 | Field | Type | Constraints |
 |---|---|---|
 | `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 11 listed in §1. Discriminator for `gate_specific` payload. |
+| `gate_type` | enum | One of the 11 listed in the gate types section. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
 | `bypass_reason` | string \| null | Populated when user passed `--skip-<gate>` flag. The string is whatever the user supplied. `null` when gate ran without bypass. |
-| `gate_specific` | object | Per-gate payload. See §5 per gate type. |
+| `gate_specific` | object | Per-gate payload. See the gate-specific sections for each gate type. |
 
 ## 5. Per-gate payload (`gate_specific`)
 
@@ -68,9 +68,9 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 - `gate_specific.retrofitted: bool` — set to `true` when the audit was written via `/upgrade-project --rerun-loaders` (deterministic loader re-fired against an old task). Distinguishes retrofit-fired audits from canonical phase-entry audits. Consumers (e.g., `/audit-status`) can surface differently if needed. Absent or `false` = canonical fire.
 - `gate_specific.replaced_corrupt: bool` — set to `true` when the audit JSON was rewritten over a previously-corrupt file (jq parse failed on prior content). Documents the rewrite cause for future debugging. Absent or `false` = first write or normal overwrite.
-- `gate_specific.grandfathered: bool` (with `bypass_reason: "grandfathered_retrofit"`) — set to `true` for `_pre-analysis.json` markers written by `/upgrade-project` on tasks that pre-date v4.0.0 and explicitly should NOT be re-run through analysis-agent. See §5.1.
+- `gate_specific.grandfathered: bool` (with `bypass_reason: "grandfathered_retrofit"`) — set to `true` for `_pre-analysis.json` markers written by `/upgrade-project` on tasks that pre-date v4.0.0 and explicitly should NOT be re-run through analysis-agent. See the pre-analysis payload section.
 
-These are optional; existing v1.0/v1.1 audits without them are valid. No schema version bump (additive optional fields per §7 versioning policy).
+These are optional; existing v1.0/v1.1 audits without them are valid. No schema version bump (additive optional fields per the versioning policy).
 
 ### 5.1 `pre-analysis`
 
@@ -148,7 +148,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 
 `user_choice` enum: `"c" | "a" | "n"`.
 
-**v4.10.0+ fields (additive, no schema version bump per §7).** The two-stage hybrid guide detection writes:
+**v4.10.0+ fields (additive, no schema version bump per the versioning policy).** The two-stage hybrid guide detection writes:
 
 - `methodology_floor[]` — the phase-aware plugin methodology guides `dev-guides-detect.sh` emits unconditionally (research → 3 refs, design → 4, implement/complete → 5). Always present; never empty.
 - `catalog_candidates[]` — Stage-1 lexical catalog matches: `{slug, title, description, triggered_by[]}` objects. Empty when the catalog cache is missing (`warnings` carries `catalog_cache_missing`).
@@ -224,7 +224,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 | `rule_source` | string | `"default"` or `"project-override"` — which ruleset the classifier used. |
 | `ai_surface_selection` | list \| absent | Optional. Per-gate AI surface selection records (see detail below). Absent when the selector did not run. |
 
-**`dispatch_plan.ai_surface_selection` (additive optional — §7 additive policy, no version bump).**
+**`dispatch_plan.ai_surface_selection` (additive optional, no version bump).**
 
 Absent from `dispatch_plan` when the `ai-test-selector` agent did not run: no visual
 review configured, the gate was not recommended, or `--skip-ai-selection` was passed.
@@ -271,8 +271,8 @@ validation envelope:
 Written by the reworked Visual Regression gate (`/validate:visual-regression`, Task C).
 Task A reserves the `gate_type` value and the `_visual_regression.json` file slot; the
 `gate_specific` payload shape is defined by Task C. Minimum expected shape mirrors
-§5.9. `gate-audit-write.sh` validates only the top-level envelope and `schema_version`,
-not the per-gate payload — so B and C may shape `gate_specific` freely within the §5
+the e2e payload shape above. `gate-audit-write.sh` validates only the top-level envelope and `schema_version`,
+not the per-gate payload, so B and C may shape `gate_specific` freely within the
 additive-field policy.
 
 ### 5.11 `visual_parity` (v1.3+)

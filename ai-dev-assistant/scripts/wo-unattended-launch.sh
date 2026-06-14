@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wo-unattended-launch.sh (K2) — the unattended launch wrapper for the autonomous run-loop.
 #
-# Owner: orchestrator_core safety_governor (④). Read-once spec: architecture/kernels.md §K2 (D5).
+# Owner: orchestrator_core safety_governor (④). Read-once spec: architecture/kernels.md (D5).
 #
 # The documented operator entry point for an UNATTENDED run. It is a RUNBOOK MECHANISM, not a
 # loop-enforced control (honest residual: a bare `claude` bypasses it). It does three things, then

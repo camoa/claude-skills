@@ -112,7 +112,7 @@ The 7 hardened surfaces, by category:
 **Components:**
 - `commands/review.md` (114/120 body lines) — orchestrator; delegates to `/validate:all` (default) or `/validate:team` (`--team`); flags `--dry-run` / `--rerun-failed` / `--no-pr-body` / `--skip-<gate> <reason>` / `--allow-dirty`
 - `references/gate-hardening-prompts.md` v1.2 — `review-gate-fail` + `review-summary` templates (byte-identical to inline literals; verified by `tests/gate-prompts-vs-inline.sh`)
-- `references/gate-audit-schema.md` v1.1 §5.8 — `_review.json` audit shape (`gate_type: "review"`)
+- `references/gate-audit-schema.md` v1.1 — `_review.json` audit shape (`gate_type: "review"`)
 - `commands/complete.md` slimmed (11→9 steps); honors `**Review Required:**` for legacy posture
 
 **Cross-references:** `references/review-phase-walkthrough.md` (full prose); `references/feedback_framework_phase_gates.md` (driver memo).
@@ -203,7 +203,7 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 **`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
 
-**Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and (§11) how the command relates to Claude Code's native `--worktree` support.
+**Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and how the command relates to Claude Code's native `--worktree` support.
 
 **Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle + Drupal/DDEV awareness. Not a hard dependency; replicated in command body.
 
@@ -389,7 +389,7 @@ These load only when Claude works on matching files, keeping context lean.
 
 ## ATK E2E Gate (v4.12.0+) (Drupal-flavored)
 
-`/setup-atk` installs **ATK `^2.0` (behavioral) + Playwright** and scaffolds `tests/e2e/`.
+`/setup-e2e` resolves the `e2e-setup` process recipe for each project framework and follows it. For a Drupal project that recipe installs **ATK `^2.0` (behavioral) + Playwright** and scaffolds `tests/e2e/`.
 `/validate:e2e` runs the gate and emits `_e2e.json` + the standard validation envelope.
 
 Key conventions:
@@ -424,7 +424,7 @@ Key conventions:
   never a silent auto-create.
 - **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-regression.md`
   is what makes `/review`'s dispatcher invoke this gate. Never remove it.
-- **Registry shared with `/setup-atk`** at `<codePath>/.visual-review/registry.yml`;
+- **Registry shared with `/setup-e2e`** at `<codePath>/.visual-review/registry.yml`;
   one `playwright.config.ts` carries both `e2e-*` and `visual-chromium-*` projects.
   Setup is idempotent + order-independent.
 - a11y baseline pairing is **warning-only** in v1 (per-surface `a11y_block: true`
@@ -462,7 +462,7 @@ Key conventions:
   `PARITY_CODE_PATH`. This closed a paper-test CRITICAL (registry → spec-source code
   injection); never reintroduce token substitution into the generated spec.
 - **`parity_reference` lives in the surface registry** (schema v1.1 — see
-  `surface-registry-schema.md` §3.4). Static references are committed under
+  `surface-registry-schema.md`). Static references are committed under
   `tests/parity/references/`; `parity-results/` (per-run captures + diffs) is
   gitignored.
 - **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-parity.md`

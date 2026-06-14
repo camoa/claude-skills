@@ -33,7 +33,7 @@ guaranteed, but off the load-bearing path.
 
 Nothing about "data never code" stops a transcript from carrying text that biases a reading judge (a
 `/goal` loop, a merge decision, a critic). The **best available mitigation** is **② per-job adversarial
-critique (§16.2)**: an *independent* fresh-context critic that re-derives the verdict from the
+**adversarial critique**: an *independent* fresh-context critic that re-derives the verdict from the
 **artifacts** (the diff, the gate envelopes), not from the builder's self-narrative. **This NARROWS the
 class — it does not close it: the diff the critic must read is itself attacker-authored, so the critic
 remains a semantic-injection target. A probabilistic mitigation (a critic-prompt hostility contract),
@@ -42,7 +42,7 @@ not a structural guarantee.** Fresh Task-tool fan-out is the unattended primitiv
 
 **Stated plainly:** the mechanical boundary is **necessary, not sufficient** for unattended high-risk
 autonomy. **Unattended operation on security-touching / high-`risk_tier` work-orders is below the
-§14.5 / §16.2 bar until ② ships.** Until then, high-risk work-orders need an attended verdict.
+the lockfile/critique bar until ② ships.** Until then, high-risk work-orders need an attended verdict.
 
 ## The five hard rules (recipe-loader discipline, applied symmetrically)
 
@@ -75,7 +75,7 @@ coverage-map string, a task artifact (C1):
 
 ## What is explicitly out of scope here
 
-Closing the **semantic** class (the §16.2 independent critique, the risk-scaled verdict, the
+Closing the **semantic** class (the independent adversarial critique, the risk-scaled verdict, the
 auto-merge gate) belongs to sibling ② `gate_integration` and ③ `lifecycle_controls`. This slice
 reserves the seam fields (`review_ref`, `critique_ref`, `risk_tier`) for them and is honest that
 high-risk unattended autonomy is not safe until ② ships.

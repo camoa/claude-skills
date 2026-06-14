@@ -20,7 +20,7 @@
 # Always emits single-line JSON to stdout. Exit 0 regardless of input
 # (warnings surface via the warnings[] array).
 #
-# Output shape (per references/screenshot-store-schema.md §7):
+# Output shape (per references/screenshot-store-schema.md):
 #   {
 #     "schema_version": "1.0",
 #     "project_path": "<codePath>",

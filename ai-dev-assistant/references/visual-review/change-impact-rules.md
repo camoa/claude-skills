@@ -19,8 +19,8 @@ The dispatcher only ever **recommends** from this table — the user opts in per
 
 The ruleset is JSON because `change-impact-classify.sh` (a shell script) parses it with
 `jq`, and the framework ships no YAML parser. The sibling surface registry is YAML
-because only Claude and the Task B/C/D commands read it (`surface-registry-schema.md`
-§6). Two formats, each matched to its reader.
+because only Claude and the Task B/C/D commands read it (`surface-registry-schema.md`).
+Two formats, each matched to its reader.
 
 ## 2. Schema
 
@@ -38,7 +38,7 @@ because only Claude and the Task B/C/D commands read it (`surface-registry-schem
 |---|---|---|
 | `schema_version` | string | `"1.0"` for v4.11.0. Consumers gate on major. |
 | `rules` | list | Ordered list of `{glob, gates}` objects. |
-| `rules[].glob` | string | A path glob (§4). |
+| `rules[].glob` | string | A path glob (see the glob section). |
 | `rules[].gates` | list | Subset of `["e2e", "visual_regression"]`. |
 | `default_gates` | list | Gates applied to a changed file that matches **no** rule. Default `[]` — unmatched files (docs, tests, CI config) recommend nothing. |
 

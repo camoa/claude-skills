@@ -169,6 +169,6 @@ $ /ai-dev-assistant:review my_task --skip-tdd "no test framework yet"
 - `commands/review.md` — runtime body (≤120 lines token-efficient)
 - `commands/complete.md` — slimmed in v4.1.0; honors `**Review Required:**` field for legacy posture
 - `references/gate-hardening-prompts.md` v1.2 — `review-gate-fail` + `review-summary` templates
-- `references/gate-audit-schema.md` v1.1 — `_review.json` shape (`gate_type: "review"`, §5.8)
+- `references/gate-audit-schema.md` v1.1 — `_review.json` shape (`gate_type: "review"`)
 - `references/validation-gate-result.md` v1.0 — per-gate envelope shape
 - `references/feedback_framework_phase_gates.md` (memo) — driver

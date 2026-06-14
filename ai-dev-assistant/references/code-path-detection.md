@@ -76,7 +76,7 @@ Regardless of source (detection, explicit arg, or interactive prompt), the follo
 - `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/var`, `/opt`, `/root`
 - Any ancestor of `$HOME` (e.g., `/home`, `/Users`)
 
-Paths outside `$HOME` but not in the hard-reject list (e.g., `/srv/myapp`, `/mnt/code`) are **warn-but-allow**: prompt for explicit confirmation (default no). See `/set-code-path` §"Acceptance / rejection rules" for the canonical rule set — all consumers of this reference MUST apply the same filter.
+Paths outside `$HOME` but not in the hard-reject list (e.g., `/srv/myapp`, `/mnt/code`) are **warn-but-allow**: prompt for explicit confirmation (default no). See `/set-code-path` the "Acceptance / rejection rules" section for the canonical rule set — all consumers of this reference MUST apply the same filter.
 
 ## Ordering is intentional
 

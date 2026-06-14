@@ -18,7 +18,7 @@ The agent accepts one of three mutually exclusive input modes (caller picks):
 
 Folder + description modes also accept `codePath` (abs path or null) and `schema_version` (expected version). In description mode: `task_folder` in the output is set to the string `"(pre-creation)"`, and `task_id` to `local:(pre-creation)`. The agent cannot read `task.md` / `research.md` / `architecture.md` / `implementation.md` in description mode — it only evaluates signals from the description text + optional code read.
 
-`play_candidates` mode is documented separately in §"play_candidates mode (v1.1+)" below — it has a different output schema (`candidates[]` instead of `decision` + `proposed_children[]`).
+`play_candidates` mode is documented separately in the "play_candidates mode (v1.1+)" section below — it has a different output schema (`candidates[]` instead of `decision` + `proposed_children[]`).
 
 Signals evaluated in description mode: `description_length_and_conjunction`, `bullet_count_clustering`, `multiple_code_areas` (if code_read). Signals that require on-disk phase artifacts (`many_heterogeneous_criteria` from task.md's AC section, `long_in_progress`, `research_architecture_fragmented`, `explicit_user_signal`) are skipped in description mode — the agent notes `"description mode: phase-artifact signals unavailable"` in `notes[]`.
 
@@ -156,7 +156,7 @@ At new-task creation time, consumers branch in two orthogonal steps:
 - If the array contains `scope_contract_recommended` → soft-nudge the user to author a scope contract (`alignment.md`) before research begins. The signal can fire with ANY decision (including `keep_flat`) because it's an orthogonal judgment about scope contract warrant, not decomposition.
 - If absent → no nudge; proceed.
 
-Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common alignment case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See §"Signal independence" above.
+Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_recommended` (most common alignment case) or `epic_candidate` + `scope_contract_recommended` (both needed) or neither. See the "Signal independence" section above.
 
 ## Example outputs
 

@@ -163,7 +163,7 @@ As of v4.0.0, the playbook load step is delegated to a single deterministic scri
 
 The script reads `project_state.md` via `project-state-read.sh`, resolves `playbookSets[]` (records intent — actual fetch from dev-guides-navigator happens here in step 6b for guide CONTENT), loads `userPlaybook` via `playbook-read.sh`, and emits a structured JSON with `playbook_sets_loaded`, `user_playbook_loaded`, `plays_by_section` count map. The integrator stores the JSON as `<task>/_playbook-load.json` audit file (per `references/gate-audit-schema.md` v1.0). This replaces the previous agent-mediated load.
 
-For each set in `playbook_sets_loaded[]`: delegate to `dev-guides-navigator` to fetch individual guide pages relevant to the current task domain. Record each loaded guide ID via the snippet in §2b. Track loaded guide titles + summaries for cross-reference.
+For each set in `playbook_sets_loaded[]`: delegate to `dev-guides-navigator` to fetch individual guide pages relevant to the current task domain. Record each loaded guide ID via the snippet in the "Record loaded guide IDs" section. Track loaded guide titles + summaries for cross-reference.
 
 #### 6d. Detect conflicts
 
@@ -206,7 +206,7 @@ For local-vs-shipped: no prompt; precedence rule applies; just announce.
 
 #### 6f. Record loaded playbook IDs
 
-Record each loaded shipped-set guide and the local playbook into `loadedGuides[]` per §2b. Local playbook ID convention: `local:userPlaybook:<basename>`.
+Record each loaded shipped-set guide and the local playbook into `loadedGuides[]` per the "Record loaded guide IDs" section. Local playbook ID convention: `local:userPlaybook:<basename>`.
 
 ## Mid-phase guide checks
 

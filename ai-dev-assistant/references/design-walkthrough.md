@@ -211,7 +211,7 @@ On `[y]`:
    - Final fallback: explicit message — "This task has no declared acceptance criteria. Walkthrough can't map without criteria; consider `/scope <task>` to add them."
 2. **For each criterion**, scan `architecture.md` (+ any `architecture/{component}.md` files from step 7) and identify the section(s) that address it. Look for:
    - Section headings that match the criterion's domain keywords
-   - Explicit callouts in the artifact (e.g., §13 "Acceptance criteria" row, §15 "Risks" mitigations)
+   - Explicit callouts in the artifact (e.g., "Acceptance criteria" row, "Risks" mitigations)
    - Cross-references to fallback flows, invariants, or open questions resolutions
 3. **Honest mapping.** If a criterion has no clear section in the artifact, mark it **"NOT YET ADDRESSED"** — do not invent a section reference. Flag it for the discussion step.
 
@@ -222,13 +222,13 @@ Format:
 ```
 Design addresses these acceptance criteria:
 
-  AC #1 "<first 60 chars of text>…"  →  architecture.md §N <short-hint>
-  AC #2 "<first 60 chars of text>…"  →  architecture.md §M + §P <short-hint>
+  AC #1 "<first 60 chars of text>…"  →  architecture.md <short-hint>
+  AC #2 "<first 60 chars of text>…"  →  architecture.md <short-hint>
   AC #3 "<first 60 chars of text>…"  →  — NOT YET ADDRESSED — raise in Phase 3?
   …
 ```
 
-Section references are lightweight (e.g., `§7 (validator-visual row)` or `§4 step 5 + §7`). The user doesn't need precise line numbers — just enough to jump to the right place.
+Section hints are lightweight (e.g., `validator-visual row` or `step 5`). The user doesn't need precise line numbers, just enough to jump to the right place.
 
 ### Step 4 — Three-way prompt
 

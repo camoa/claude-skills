@@ -46,7 +46,7 @@ status: ready | blocked | in_progress | done | needs_rework   # WO-native lifecy
                                     # from the ai-dev-assistant task enum (draft/in_progress/blocked/completed). needs_rework = built
                                     # but a verdict requires rework (M1). ALL status transitions are owned by ③ (H-3
                                     # two-repo boundary) — the atom is read-only here. MARKDOWN-canonical; bead status
-                                    # projects FROM this, never reverse (§6).
+                                    # projects FROM this, never reverse.
 blocks:     [local:<ddf_task>#wo-NN, ...]   # markdown-canonical structural edge set; projects to Beads DEPENDENCY
                                     #   edges, NOT field-for-field (see the MAP). id VALUES remap via external_ids.
 blocked_by: [local:<ddf_task>#wo-NN, ...]   # markdown-canonical structural edge set; projects to Beads DEPENDENCY
@@ -73,7 +73,7 @@ verified: true | false              # = AND(covered-entries.verified) AND (NO po
 coverage_status: covered | uncovered | poisoned   # precedence poisoned > uncovered > covered. covered = ≥1 clean
                                     #   entry; uncovered = only a task-level uncovered_aspect (guides-floor); poisoned = a
                                     #   poison warning applies. verified:true ONLY when covered. uncovered/poisoned ⇒ false.
-lockfile:                           # transitive closure by SHA (§10.5 / §14.6) — the §14.5 hard execution gate.
+lockfile:                           # transitive closure by SHA — the lockfile hard execution gate.
                                     #   SHA SOURCE = the navigator cache's per-line `(sha:…)` (M-3) — NOT a re-fetch, NOT
                                     #   the coverage-map entries (they carry no sha). `excerpt_sha` pins the INLINED slice so
                                     #   recompile-on-drift (N2) is mechanical; verified at COMPILE (recipe-loader step-5 gate)
@@ -89,16 +89,16 @@ collapsed_scc: false                # true ⇒ this WO merged a strongly-connect
 
 # ── sibling SEAM fields — carried here, behavior built by the named sibling (frozen so they start in parallel) ──
 gate_floor: [tdd, solid, dry, security, guides]   # ② reads. Set at compile = base set ∪ recipe-declared gates.
-autonomy_safe: true | false         # INFORMATIONAL ONLY (§17, 2026-06-11) — NO LONGER a dispatch gate.
+autonomy_safe: true | false         # INFORMATIONAL ONLY (2026-06-11) — NO LONGER a dispatch gate.
                                     #   Autonomy is mode-keyed RECIPE BEHAVIOR (stop-and-ask@L0 / infer-and-flag@L1-L2),
                                     #   enforced in recipe authoring, not a per-WO flag. The field may still record whether
                                     #   matched recipes declared an autonomy-safe interaction contract, but it never blocks
                                     #   dispatch. (Was: defaulted false, gated dispatch on every matched recipe declaring it.)
 review_ref:   <task>/work-orders/wo-NN._review.json   | null   # RESERVED (M1): per-WO review location ② BUILDS
                                     #   (shipped /review --headless writes a TASK-level audit; ② adds the per-WO file — L-3).
-critique_ref: <task>/work-orders/wo-NN._critique.json | null   # RESERVED (M1): ②'s §16.2 per-job critique verdict
+critique_ref: <task>/work-orders/wo-NN._critique.json | null   # RESERVED (M1): ②'s per-job adversarial critique verdict
                                     #   location (structural, not derivable — same logic as review_ref).
-risk_tier: low | medium | high | null   # RESERVED (M1): change-impact tier for ②'s risk-scaled critique (§16.2).
+risk_tier: low | medium | high | null   # RESERVED (M1): change-impact tier for ②'s risk-scaled critique.
                                     #   ERRATUM (within 1.0): the compiler does NOT populate this; ② derives the
                                     #   OPERATIVE tier from the realized post-build diff in its _critique.json sidecar.
 size_estimate: <int> | null         # RESERVED (M1): ④ budget estimate.
@@ -136,7 +136,7 @@ sequences via a **ready-queue** (no persisted topo order). `children: null` (wor
 **Quality-brain superset (markdown-only; a bead never sees these).** `requirements` (GSD
 `[CATEGORY]-NN` IDs) · `coverage_ref` / `coverage_aspects` (the recipe_loader slice this WO owns) ·
 `verified` (the fail-closed verdict, below) · `coverage_status` (`poisoned > uncovered > covered`) ·
-`lockfile` (the transitive SHA closure — the §14.5 hard execution gate; **the dispatch gate refuses
+`lockfile` (the transitive SHA closure — the lockfile hard execution gate; **the dispatch gate refuses
 any WO with a null-sha `lockfile[]` entry**) · `drift_guard` (`symbols_resolved` +
 `acceptance_runnable` — the H2 mechanical-sufficiency receipt; **the dispatch gate requires
 `symbols_resolved == true` AND `acceptance_runnable == true`**) · `collapsed_scc` (human-confirm flag
@@ -180,11 +180,11 @@ This rule is computed by `wo-compile.sh coverage-slice` at **compile** time and 
 
 ```
 grounding_clean = verified == true AND coverage_status == "covered"
-                  AND (NO lockfile[] entry has sha == null)      # §14.5: an unpinnable ref blocks dispatch
+                  AND (NO lockfile[] entry has sha == null)      # lockfile hard execution gate: an unpinnable ref blocks dispatch
                   AND drift_guard.symbols_resolved == true        # H2: "skipped" AND false BOTH fail
                   AND drift_guard.acceptance_runnable == true     # H2
 dispatchable    = (grounding_clean OR a valid coverage_override {reason, by, at})
-                  AND status == "ready"           # §17: autonomy_safe is NO LONGER a gate
+                  AND status == "ready"           # 2026-06-11: autonomy_safe is NO LONGER a gate
 override_used   = override_valid AND NOT grounding_clean
 ```
 
@@ -195,7 +195,7 @@ A valid `coverage_override` bypasses **all** grounding (coverage + lockfile + dr
 `--skip-<gate>`). Missing `verified` reads fail-closed as `false`. The `reason` is the
 first failing clause in IFF order: `verified_false | poisoned | uncovered | unpinned_ref |
 drift_skipped | drift_unresolved | acceptance_not_runnable` → `status_not_ready:<status>` →
-`dispatchable`. (§17, 2026-06-11: `autonomy_safe` is no longer a dispatch gate — autonomy is mode-keyed
+`dispatchable`. (2026-06-11: `autonomy_safe` is no longer a dispatch gate — autonomy is mode-keyed
 recipe behavior; the `autonomy_unsafe` reason is retired.)
 
 ---
@@ -209,8 +209,8 @@ code** — the dangerous failure, unattended). Sections, in order:
 
 | Section | Contents |
 |---|---|
-| `## Goal` | A falsifiable **Current / Target / Acceptance** triplet (GSD §15). Acceptance is a **runnable observation**, never "looks right". |
-| `## Scope delta` | OpenSpec `ADDED / MODIFIED / REMOVED` (§10.6). |
+| `## Goal` | A falsifiable **Current / Target / Acceptance** triplet (GSD). Acceptance is a **runnable observation**, never "looks right". |
+| `## Scope delta` | OpenSpec `ADDED / MODIFIED / REMOVED`. |
 | `## Build context` | The architecture **slice** for this unit — responsibility / interface / data-flow / paths, **pasted not referenced** — plus bounding **Non-goals** and the load-bearing research facts ("never assume a method exists"). |
 | `## Grounding` | The coverage-slice table **+ the load-bearing guide/recipe EXCERPTS the build needs, inlined at compile time** (H2 resolution; full bodies stay lazy / provenance-only in the `lockfile`). |
 | `## Files to touch` | The concrete paths the build edits. |
@@ -227,7 +227,7 @@ critical path (a builder has no degrade contract for a mid-build cache miss).
 
 ## The work-order ↔ bead MAP (H1 — ✅ VERIFIED 2026-06-08 vs Beads primary source)
 
-Projection is **markdown → bead always** (§6; a bead never writes back except its minted id into
+Projection is **markdown → bead always** (a bead never writes back except its minted id into
 `external_ids.beads`). It is **NOT** uniform "structural reuse": the id is minted + bridged, the
 status + kind are rewritten to Beads built-ins, and the edges project to Beads' **dependency-edge**
 model — only `parent` (ai-dev-assistant field) + `in_progress` map cleanly.
@@ -245,7 +245,7 @@ exclusive (compatible — we mint, so `--parent` stays free).
 | **id** | `id: local:<task>#wo-NN` | Beads **mints** the id (content-hash `prefix-{6-8hex}[.n.n]`); our `:`/`#` grammar is alien to Beads' id space ⇒ stays **markdown-only**. Bridge: WO id → Beads `external_ref`; minted `bd-…` id → WO `external_ids.beads` (N4 confirmed, bidirectional). Do **not** force `--id` (mutually exclusive with `--parent`; minting keeps `--parent` free). |
 | **kind** | `kind: work-order` | → Beads `issue_type: task` (no `work-order` type; custom types UNVERIFIED ⇒ map to the built-in `task`). |
 | **status** | `ready` / `blocked` / `in_progress` / `done` / `needs_rework` (WO-native) | `ready`→`open` (Beads has no `ready` — it is the computed `bd ready` query) · `blocked`→`blocked` · `in_progress`→`in_progress` · `done`→`closed` · `needs_rework`→ reopened `open` (no native equivalent). No `--status` at create (born `open`) ⇒ a non-`ready` WO = create-then-`bd update --status`. |
-| **quality brain** | `requirements` / `coverage_*` / `verified` / `lockfile` / `drift_guard` / `collapsed_scc` / `gate_floor` / `autonomy_safe` / `review_ref` / `critique_ref` / `risk_tier` / `size_estimate` / `coverage_override` / body | **never projected** — markdown-only; gate verdicts never live in Beads (§6). |
+| **quality brain** | `requirements` / `coverage_*` / `verified` / `lockfile` / `drift_guard` / `collapsed_scc` / `gate_floor` / `autonomy_safe` / `review_ref` / `critique_ref` / `risk_tier` / `size_estimate` / `coverage_override` / body | **never projected** — markdown-only; gate verdicts never live in Beads. |
 
 **L2 importer forward-note (not built here):** the projection above is performed by the L2 Beads
 importer when/if Beads is wired in. The WO file stays the source of truth; the bead is a downstream
@@ -262,9 +262,9 @@ mirror that records only its minted id back into `external_ids.beads`. Detail:
 | `status` (ALL transitions) | ③ (H-3 two-repo) | `assert-dispatchable` reads (here); ② reads |
 | `verified` / `coverage_status` (fail-closed) | compiler (here) | `assert-dispatchable` (kernel, here) + ③ |
 | `coverage_override` | ③ / human | `assert-dispatchable` (here) ⇒ ③ no-auto-merge |
-| `autonomy_safe` | compiler (here) | informational only (§17) — NOT a dispatch gate |
+| `autonomy_safe` | compiler (here) | informational only (2026-06-11) — NOT a dispatch gate |
 | `gate_floor` | compiler (here) | ② reads (tiering + which gates) |
-| `review_ref` / `critique_ref` / `risk_tier` | reserved — compiler emits null; ② populates (sidecars + realized tier) | ② §16.2 critique |
+| `review_ref` / `critique_ref` / `risk_tier` | reserved — compiler emits null; ② populates (sidecars + realized tier) | ② adversarial critique |
 | `size_estimate` / WO count | compiler (here) | ④ budget governor |
 | `oracle_update` | ② / human (authored in the WO; null by default) | ② critique rung — `oracle_class ∈ classes` downgrades HALT→flag; absent or mismatch → `oracle_tamper` HALT |
 
@@ -285,7 +285,7 @@ fields: ③ reads it to drive sequencing + status; ② reads the tree it points 
 { "wo_id": "local:<task>#wo-NN", "dispatched": true|false, "override_used": true|false,
   "halt_reason": null | "verified_false" | "poisoned" | "uncovered" | "unpinned_ref"
                | "drift_skipped" | "drift_unresolved" | "acceptance_not_runnable"
-               | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed" | "oracle_tamper",   # §17: "autonomy_unsafe" retired; "oracle_tamper" added 2026-06-12
+               | "sequencing_error" | "frontmatter_unreadable" | "spawn_failed" | "oracle_tamper",   # "autonomy_unsafe" retired 2026-06-11; "oracle_tamper" added 2026-06-12
   "tree": "<worktree path>", "checkpoint_before": "<sha>", "checkpoint_after": "<sha>|null",
   "produced_changes": true|false,
   "artifacts": ["<path>", "..."], "build_returned": true|false }
@@ -310,16 +310,16 @@ plus the mapped `sequencing_error` / `frontmatter_unreadable`; additive within `
 
 ## Honest scope boundary (what this contract does NOT guarantee)
 
-- `autonomy_safe` is **informational only** (§17, 2026-06-11) — it does **not** gate dispatch. Autonomy
+- `autonomy_safe` is **informational only** (2026-06-11) — it does **not** gate dispatch. Autonomy
   is mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2). It never meant the build won't
-  hallucinate — builder-output trust is caught by ②'s gates + the §16.2 per-job critique + human-merge.
+  hallucinate — builder-output trust is caught by ②'s gates + the per-job adversarial critique + human-merge.
 - The **mechanical** injection boundary (transcript → shell/JSON/path) is structurally minimized on
   the load-bearing seam (the handle is built from git/disk, never the transcript). The **semantic**
   injection boundary (a judge that must READ the transcript can be steered) is **not closeable here**
   — ②'s independent fresh-context critique **narrows it (it does not close it): the judged diff is
   itself attacker-authored, so the critic stays a semantic-injection target — a probabilistic
   mitigation, not a structural close.** **Unattended operation on high-`risk_tier` / security-touching
-  work-orders is below the §14.5/§16.2 bar until ② ships.**
+  work-orders is below the lockfile/critique bar until ② ships.**
 - **Oracle-integrity invariant.** The contract's `oracle_tamper` HALT reason enforces that the builder
   must never delete or weaken a test, VR baseline/snapshot, `phpstan-baseline.*`, or coverage threshold
   to pass a gate — only ADD tests / fix code. *Deterministic* enforcement is the path-level oracle-tamper

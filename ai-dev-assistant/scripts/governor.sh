@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # governor.sh (K1) — the ${WO_BUDGET_CMD} backend for the autonomous run-loop.
 #
-# Owner: orchestrator_core safety_governor (④). Read-once spec: architecture/kernels.md §K1 (D1–D4/D8).
+# Owner: orchestrator_core safety_governor (④). Read-once spec: architecture/kernels.md (D1–D4/D8).
 #
 # The sole backend behind ③'s reserved seam: ③'s work-order-loop calls "${WO_BUDGET_CMD}" with NO args
 # at each WO boundary (work-order-loop/SKILL.md:46) and HALT-escalates on a non-zero exit. This kernel
@@ -13,7 +13,7 @@
 # so there is no .budget file a hostile builder could zero out). HONEST: recompute-from-disk removes the
 # *dedicated* tamper surface but does NOT eliminate it — the inputs (wo-NN.run.json.attempts, _critique.json)
 # are themselves in-tree and builder-writable now that write-scope is cut, so a builder that rewrites its
-# own run-state DOWNWARD can undercount. That is an OS-sandbox-class residual (see governor-contract.md §7);
+# own run-state DOWNWARD can undercount. That is an OS-sandbox-class residual (see governor-contract.md);
 # the upward/overflow direction is clamped here (ATTEMPTS_CEIL), the downward direction is not closeable in
 # bash. The governor bounds runaway spend; it does not defend against a builder forging its own run-state.
 #   WDC = Σ over <WO_TASK_FOLDER>/work-orders/wo-*.run.json of

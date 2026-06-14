@@ -3,7 +3,7 @@
 #
 # Owner: orchestrator_core lifecycle_controls (③).
 # Internally runs K3 (wo-merge-gate.sh) and calls `gh pr create` ONLY on K3 exit 0.
-# The one supported road to a PR mechanically includes the floor check (R-1 / §5).
+# The one supported road to a PR mechanically includes the floor check (R-1).
 #
 # ③ NEVER merges — gh's merge subcommand is forbidden and absent from this kernel (AC4).
 # Branch protection is defense-in-depth; the absent-merge-call is the primary control.
@@ -22,7 +22,7 @@
 #     token); fallback when no PAT file is provisioned.
 #   Honest residual (④ AC3 narrows, not closes): a same-uid injected builder can still `cat` the PAT file;
 #     true close needs OS user/sandbox separation (the OS-sandbox precondition in governor-contract.md).
-#   If neither file nor env token is set, falls back to ambient `gh` auth (v1 gap, §14.5).
+#   If neither file nor env token is set, falls back to ambient `gh` auth (v1 gap).
 #
 # Output: one-line JSON to stdout; exit 0 IFF opened (or --print-cmd + merge_ok); 2 on bad args.
 
@@ -114,7 +114,7 @@ fi
 GH_ARGV=(pr create --title "$TITLE" --body-file "$BODY_FILE" --base "$BASE")
 [ -n "$HEAD" ] && GH_ARGV+=(--head "$HEAD")
 # MED-1: snapshot argv BEFORE label so we can retry without it if gh rejects the label.
-# The ⚠ body-append is the primary no-auto-merge signal; --label is best-effort (merge-contract §AC4).
+# The ⚠ body-append is the primary no-auto-merge signal; --label is best-effort (merge-contract).
 GH_ARGV_NO_LABEL=("${GH_ARGV[@]}")
 [ "${#LABEL_ARGS[@]}" -gt 0 ] && GH_ARGV+=("${LABEL_ARGS[@]}")
 
@@ -149,7 +149,7 @@ fi
 # Capture first-call stderr so the retry gate can inspect it without losing it.
 GH_STDERR_FILE="$TMP_DIR/gh_first_stderr.tmp"
 if [ -z "$EFFECTIVE_TOKEN" ]; then
-  printf 'wo-pr-open: no WO_MERGE_GH_TOKEN or GH_TOKEN set; relying on ambient gh auth (v1 gap -- §14.5)\n' >&2
+  printf 'wo-pr-open: no WO_MERGE_GH_TOKEN or GH_TOKEN set; relying on ambient gh auth (v1 gap)\n' >&2
   PR_URL="$("$GH_CMD" "${GH_ARGV[@]}" 2>"$GH_STDERR_FILE")"
 else
   PR_URL="$(GH_TOKEN="$EFFECTIVE_TOKEN" "$GH_CMD" "${GH_ARGV[@]}" 2>"$GH_STDERR_FILE")"

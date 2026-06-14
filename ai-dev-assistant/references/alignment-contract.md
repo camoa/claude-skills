@@ -229,5 +229,5 @@ Research note citing 2–3 core examples and one contrib pattern if relevant.
 
 - `skills/alignment-reader/SKILL.md` — skill wrapper
 - `scripts/alignment-read.sh` — parser
-- `references/analysis-agent-schema.md` §Signal codes — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
+- `references/analysis-agent-schema.md` (the "Signal codes" section) — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
 - `commands/scope.md` — primary authoring command

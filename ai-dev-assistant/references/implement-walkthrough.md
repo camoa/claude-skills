@@ -257,9 +257,9 @@ Format:
 ```
 Implementation addresses these acceptance criteria:
 
-  AC #1 "<first 60 chars>…"  →  implementation.md §Progress step 2 [complete]
-  AC #2 "<first 60 chars>…"  →  implementation.md §Progress step 5 [in-progress]
-  AC #3 "<first 60 chars>…"  →  architecture.md §6 (planned, not yet started)
+  AC #1 "<first 60 chars>…"  →  implementation.md Progress step 2 [complete]
+  AC #2 "<first 60 chars>…"  →  implementation.md Progress step 5 [in-progress]
+  AC #3 "<first 60 chars>…"  →  architecture.md (planned, not yet started)
   AC #4 "<first 60 chars>…"  →  — NOT YET ADDRESSED — add to implementation.md?
   …
 ```

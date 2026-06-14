@@ -6,7 +6,7 @@
 **Owner:** `commands/review.md` step 6
 **Reads:** `scripts/project-state-read.sh`, `scripts/change-impact-classify.sh`,
 `<task>/task.md` (`## Review Gates` block), the surface registry
-**Writes:** `dispatch_plan` into `_review.json` (`gate-audit-schema.md` §5.8)
+**Writes:** `dispatch_plan` into `_review.json` (`gate-audit-schema.md`)
 
 This is the operating procedure for `/review`'s **change-impact dispatcher**. It
 replaces v3.13.0's step 6 ("always run the visual gates soft"). `commands/review.md`
@@ -33,7 +33,7 @@ Invoke `project-state-read.sh <project_folder>`; read `visualReview`.
   has not opted in. Run **zero** new gates. Print:
   > `no visual-review surfaces configured; run /setup-* to opt in`
   **Omit the `dispatch_plan` key entirely** from the `_review.json` payload — it is
-  absent (not `{}`) when visual review is not set up (`gate-audit-schema.md` §5.8).
+  absent (not `{}`) when visual review is not set up (`gate-audit-schema.md`).
   **Stop step 6.**
 - `visualReview.registryPath: null` with a `visual_review_no_path` warning → same as
   not-set-up; print the notice and stop.
@@ -216,14 +216,14 @@ the registry has at least one surface whose `gates` list includes `visual_parity
 **or** whose `parity_reference` is non-null.
 
 Parity is reference-driven, not diff-driven: the change-impact classifier never emits
-`visual_parity` (`change-impact-rules.md` §2), so the registry is the only signal —
+`visual_parity` (per `change-impact-rules.md`), so the registry is the only signal —
 do not try to infer parity from `diff_signature`. Otherwise parity is skipped. `--include-visual-parity` / `--skip-visual-parity` override
 this. Record the outcome in `dispatch_plan.parity_auto`. If `visual_parity` is not
 shipped (Task D marker absent) → `skipped-not-shipped`.
 
 ### Step 6.8 — Write `dispatch_plan`
 
-Assemble `dispatch_plan` (`gate-audit-schema.md` §5.8) and include it in the `review`
+Assemble `dispatch_plan` (`gate-audit-schema.md`) and include it in the `review`
 payload passed to `gate-audit-write.sh` at `/review` step 10 — it is a key inside the
 existing `review` audit, not a separate gate_type:
 

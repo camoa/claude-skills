@@ -7,7 +7,7 @@
 #   - Boolean variant matrix (truthy/falsy/garbage/empty) for both bool fields
 #   - RCE regression (no eval; adversarial Code path doesn't execute)
 #
-# Run pre-PR; complements tests/upgrade-project-spec.sh §2.
+# Run pre-PR; complements tests/upgrade-project-spec.sh.
 
 set -eu
 

@@ -182,7 +182,7 @@ LOCK=$(jq -n --arg cf "$CACHE" --argjson refs "$REFS" \
   | bash "$KERNEL" lockfile-sha)                           # always exit 0
 ```
 
-**Null-sha handling (the §14.5 dispatch gate now enforces this mechanically):**
+**Null-sha handling (the lockfile dispatch gate now enforces this mechanically):**
 
 ```bash
 NULL_REFS=$(echo "$LOCK" | jq -c '[.lockfile[] | select(.sha == null)]')           # the UNPINNED refs

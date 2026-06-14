@@ -1,13 +1,13 @@
 ---
 name: work-order-critique
-description: "Use when an orchestrator must run the opt-in §16.2 adversarial-critique rung on ONE built work-order — the absent-human review layered ABOVE the deterministic gates. Derives the work-order's risk tier (wo-risk-classify.sh), decides whether critique is required (forced-on for high-risk-unattended; else the per-task/per-project dial), spawns risk-scaled INDEPENDENT fresh-context wo-critic agents that re-derive the verdict from artifacts (git diff + gate envelopes), aggregates fail-closed (wo-critique-aggregate.sh) into a per-WO _critique.json, and writes a wo-NN.HALT marker when blocking. Fan-out is the unattended primitive; never edits /review's _review.json. A judgment layer, not a gate — gates always run first."
+description: "Use when an orchestrator must run the opt-in adversarial-critique rung on ONE built work-order — the absent-human review layered ABOVE the deterministic gates. Derives the work-order's risk tier (wo-risk-classify.sh), decides whether critique is required (forced-on for high-risk-unattended; else the per-task/per-project dial), spawns risk-scaled INDEPENDENT fresh-context wo-critic agents that re-derive the verdict from artifacts (git diff + gate envelopes), aggregates fail-closed (wo-critique-aggregate.sh) into a per-WO _critique.json, and writes a wo-NN.HALT marker when blocking. Fan-out is the unattended primitive; never edits /review's _review.json. A judgment layer, not a gate — gates always run first."
 version: 0.1.0
 user-invocable: false
 model: inherit
 allowed-tools: Read, Bash, Task
 ---
 
-# Work-Order Critique (the §16.2 adversarial-critique rung)
+# Work-Order Critique (the adversarial-critique rung)
 
 The judgment layer **above** the deterministic gates. Gates always run (mechanism A); this is the
 opt-in/forced critique on top. **All verdict math is in the kernels** — this skill orchestrates, it

@@ -27,7 +27,7 @@
 # silently zeroed. The phase-aware floor replaces it deterministically.
 #
 # Output (consumed by phase commands; feeds the `dev-guides-load` audit
-# per references/gate-audit-schema.md §5.6):
+# per references/gate-audit-schema.md):
 #   {
 #     "phase": "research|design|implement|complete",
 #     "methodology_floor": ["plugin:tdd-workflow", ...],

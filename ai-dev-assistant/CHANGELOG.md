@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-06-13
+
+**Framework-agnostic setup via process recipes.**
+
+### Added
+- Process-recipe resolution architecture. The setup commands (/setup-e2e, /setup-visual-regression) are now framework-agnostic: they resolve a process recipe by (phase, framework) and follow the recipe body, instead of inlining Drupal/ATK payload. The generic gates and kernels (validate-e2e.sh, visual-regression-gate.sh, baseline-manager.sh, derive-viewport-matrix.sh, the surface-registry schema, the Playwright templates) stay in the plugin and are unchanged.
+- skills/process-recipe-loader/SKILL.md. Resolves the process recipe for a lifecycle phase across the project's frameworks in source order (repo-local, machine-local, dev-guides, research seam). Provenance is fail-closed: verified:true only for the dev-guides upstream catalog; local and machine-local bodies must be surfaced for human review before they are followed. It writes the project_state Process Recipes pin (pin-and-notify, never auto-upgrade) and delegates all fetch/cache to dev-guides-navigator.
+- scripts/detect-frameworks.sh. Detects project frameworks (drupal via composer drupal/core or core/lib/Drupal.php; nextjs via package.json next) as a single-line JSON array. Wired into fresh project creation (project-initializer) and into /upgrade-project backfill, writing the new **Frameworks:** project_state field.
+- project_state.md fields parsed by project-state-read.sh: **Frameworks:**, **Local Guides Path:**, **Process Recipes:** (the last as a pinned-recipe block, key phase/framework/slug with source and pinned_sha).
+
+### Changed
+- Renamed `/setup-atk` to `/setup-e2e`. The command is framework-agnostic now (it resolves an e2e-setup process recipe), so the ATK-specific name no longer fit. The flags are unchanged.
+- /setup-visual-parity Step 1 no longer hardcodes a Drupal package check; it verifies the generic visual-regression artifacts (tests/visual/ plus a visual-chromium project in the Playwright config).
+- project-state-read.sh: the Process Recipes block parser also terminates on a Markdown section header, so a following section bullet cannot be misparsed.
+
+### Removed
+- scripts/setup-atk.sh, scripts/setup-atk-idempotency.sh, scripts/surface-discovery.sh, agents/journey-discovery-agent.md, their test specs, and references/atk-e2e-walkthrough.md. The Drupal install, surface discovery, journey discovery, and authenticated-reach payload now live in the dev-guides process recipes (drupal_e2e_setup_atk, drupal_visual_regression_setup), which carry the journey-proposal rules and the data-only security boundary inline.
+
+### Requires
+- dev-guides-navigator 0.9.0 or later (the shared store kernel and the Mode-3 process-recipe lookup). /setup-e2e and /setup-visual-regression now reach the dev-guides process-recipes catalog over the network to resolve the framework-specific steps; the generic gates run offline as before.
+
+## [5.1.0] - 2026-06-13
+
+**Framework-agnostic e2e and visual-regression gates.** The e2e and VR gate machinery is now stack-neutral: the Drupal-specific bindings flow through generic seams instead of being hardcoded into the gate scripts. The Drupal behavior is preserved, it now flows through configuration that `/setup-atk` seeds rather than being baked into the gate.
+
+### Changed, agnostic gate seams
+- **`scripts/validate-e2e.sh`** removes the hardcoded `ddev drush atk:preflight` block. The gate now runs an optional `--preflight-cmd '<cmd>'` resolved by the calling command from project config; a non-zero preflight exit fails the gate, an absent command runs no preflight. No framework is assumed in the gate.
+- **`commands/validate-e2e.md`** reads the optional top-level `e2e.preflight_command` from the registry and passes it through `--preflight-cmd`. Description neutralized (a Playwright gate with an optional project-resolved preflight; the Drupal reference impl registers ATK's).
+- **`references/visual-review/surface-registry-schema.md` to v1.2** (additive): a new optional top-level `e2e.preflight_command` block (the seam that removed the last hardcoded Drupal preflight from the gate) and a new optional per-surface `auth_context` field (an opaque storageState reference, framework-agnostic; the Drupal recipe maps qa_accounts roles to context names).
+- **`scripts/setup-atk.sh`** seeds `schema_version: "1.2"` and an `e2e.preflight_command: "ddev drush atk:preflight"` block on fresh registries, and idempotently inserts it into existing ones. This is how the Drupal preflight reaches the now-agnostic gate.
+- **`scripts/derive-viewport-matrix.sh`** gains a `--css-root <dir>` flag that makes the CSS `@media` derivation path (Path 2) framework-neutral; it defaults to the Drupal custom-theme dir for back-compat.
+
+### Process recipes (dev-guides)
+- The Drupal e2e and visual-regression setup behavior is captured as process recipes in the dev-guides repo, the framework-specific drivers the agnostic gates execute against. The gate scripts stay in the plugin as the Drupal reference implementation until the recipe-resolution machinery lands in a later slice.
+
 ## [5.0.0] - 2026-06-13
 
 **Renamed `drupal-dev-framework` → `ai-dev-assistant` — a stack-agnostic development-workflow framework.** Major bump: the plugin name and command namespace changed (`/drupal-dev-framework:*` → `/ai-dev-assistant:*`) and the local store path moved (`~/.claude/drupal-dev-framework/` → `~/.claude/ai-dev-assistant/`), so existing installs require a one-time migration (see below). Git history is preserved across the rename. This is slice-1 of the de-Drupalization: the orchestration engine is now stack-neutral; the deep components and tooling ship a **Drupal-flavored reference implementation** behind a one-line banner, with stack-neutral generalizations planned for later slices.

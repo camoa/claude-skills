@@ -58,7 +58,7 @@ A CSS-actionable diff needs CSS on **both** sides. A flat PNG has none.
 For `figma`/`image` the gate reports the coarse pixel diff plus the *build side's own*
 computed styles, honestly labelled `css_diff_mode: "build-only"`. It never fabricates a
 reference comparison. **Prefer `html-template`/`react-template` when CSS precision
-matters** — and such a template is *buildable-from*, not only diffable-against (see §8).
+matters** — and such a template is *buildable-from*, not only diffable-against (see the build input section).
 
 ## 4. Setup — `/setup-visual-parity`
 
@@ -84,7 +84,7 @@ Per surface you supply `type`, `uri`, and optionally `compare_selectors`:
   breakage below the comp's fold is not caught (prefer a renderable reference, or a
   single-viewport run, when this matters). Figma MCP/API live integration is future-only.
 - **`html-template` / pre-rendered `react-template`** — an in-repo path; rendered
-  headless for comparison, and usable as a build input (§8).
+  headless for comparison, and usable as a build input (see the build input section).
 - **`react-template` (served)** / **`prod-url`** — an `http(s)` URL fetched live each
   run.
 - **`image`** — a static PNG/JPG path, committed like `figma`.

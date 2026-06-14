@@ -75,7 +75,7 @@ the Non-goals as a `git status` guard, and turn-bounds the loop.
 
 ## Related
 
-- `CONVENTIONS.md` § `Condition-checked autonomy with /goal` — the `/goal` primitive
+- `CONVENTIONS.md` the `Condition-checked autonomy with /goal` section — the `/goal` primitive
   and its evaluator semantics (do not duplicate here).
 - `references/alignment-contract.md` — the `alignment.md` grammar the bridge reads.
 - `/ai-dev-assistant:implement` — surfaces this suggestion once at the start of

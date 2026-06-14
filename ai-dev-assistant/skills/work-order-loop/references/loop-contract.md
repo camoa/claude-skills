@@ -44,7 +44,7 @@ sidecar) or `invalid_cap` — both escalate (write `wo-NN.HALT` with the kernel 
 **Retry is BLIND at L1 (red-team H1).** A requeued WO re-dispatches the **same** body. Feedback injection
 is rejected: editing `wo-NN.md` is outside ③'s lane (it is ①'s `compiled_from`/`excerpt_sha`-pinned
 artifact) and passing notes via the spawn prompt breaks self-containment (`work-order-contract.md`
-§Body). A deterministic failure correctly exhausts the cap → HALT → human; a transient one may clear on
+Body section). A deterministic failure correctly exhausts the cap → HALT → human; a transient one may clear on
 a fresh-context retry. A `wo-NN.feedback.md` sidecar + an ①-coordinated builder read is **reserved, not
 built** (ratify with ① if the de-risk AC shows blind retry is materially wasteful).
 

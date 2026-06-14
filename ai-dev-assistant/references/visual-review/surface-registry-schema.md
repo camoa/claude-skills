@@ -1,9 +1,10 @@
-# Surface Registry Schema v1.1
+# Surface Registry Schema v1.2
 
 **Introduced:** ai-dev-assistant v4.11.0 (Task A — `visual_and_e2e_review_gates`)
-**v1.1:** v4.14.0 (Task D) — extends the `parity_reference` object additively (§3.4, §7)
+**v1.1:** v4.14.0 (Task D) — extends the `parity_reference` object additively
+**v1.2:** v5.1.0 — adds the framework-agnostic `auth_context` surface field and the optional top-level `e2e.preflight_command`, both additive. These are the two generic seams that let the e2e/visual gates run stack-neutral while a process recipe supplies the framework-specific values.
 **Owner:** `commands/review.md` step 6 (change-impact dispatcher)
-**Consumers:** `/setup-atk` + `/validate:e2e` (Task B), the reworked
+**Consumers:** `/setup-e2e` + `/validate:e2e` (Task B), the reworked
 `validate-visual-regression` (Task C), `/setup-visual-parity` + the reworked
 `validate-visual-parity` (Task D)
 
@@ -53,10 +54,12 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 `scripts/project-state-read.sh` parses this field into
 `visualReview: {enabled, registryPath}` (or `null` when absent). See its header.
 
-## 3. Project registry schema (`registry.yml`) v1.1
+## 3. Project registry schema (`registry.yml`) v1.2
 
 ```yaml
-schema_version: "1.1"
+schema_version: "1.2"
+e2e:                             # optional top-level block
+  preflight_command: "ddev drush atk:preflight"   # framework-agnostic; value is project-specific
 viewports:                       # project default viewport matrix
   - {name: desktop, width: 1920, height: 1080}
   - {name: tablet,  device: "Galaxy Tab S4"}
@@ -67,7 +70,8 @@ surfaces:
     gates: [visual_regression, e2e]      # gate-applicability flags
     viewports: [desktop, tablet, phone]  # optional — overrides the default matrix
     masks: ["time", ".field--name-created"]   # CSS selectors, optional
-    parity_reference: null       # null | object — see §3.4
+    auth_context: null           # null | string — opaque auth context name
+    parity_reference: null       # null | object
 ```
 
 A surface that participates in visual parity carries a populated `parity_reference`
@@ -90,20 +94,45 @@ object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes
 
 | Key | Type | Required | Notes |
 |---|---|---|---|
-| `schema_version` | string | yes | `"1.0"` (v4.11.0) or `"1.1"` (v4.14.0+). Consumers gate on major; a v1.0 registry is a valid v1.1 registry (the v1.1 additions are all optional). |
-| `viewports` | list | yes | The project default viewport matrix. Each entry is a **viewport descriptor** (§3.3). |
-| `surfaces` | list | yes | Zero or more **surface entries** (§3.2). Empty list is valid (set up, no surfaces yet). |
+| `schema_version` | string | yes | `"1.0"` (v4.11.0), `"1.1"` (v4.14.0+), or `"1.2"` (v5.1.0+). Consumers gate on major; a lower-minor registry is a valid higher-minor registry (every minor addition is optional). |
+| `e2e` | object | no | Optional e2e configuration block. Absent ⇒ the e2e gate runs no preflight. |
+| `viewports` | list | yes | The project default viewport matrix. Each entry is a **viewport descriptor**. |
+| `surfaces` | list | yes | Zero or more **surface entries**. Empty list is valid (set up, no surfaces yet). |
 
 ### 3.2 Surface entry
 
 | Field | Type | Required | Contract |
 |---|---|---|---|
-| `id` | string | yes | Kebab-case, `^[a-z0-9][a-z0-9-]*$`. **Unique** within `surfaces[]`. Doubles as the screenshot-store `<component>` key (§5). |
+| `id` | string | yes | Kebab-case, `^[a-z0-9][a-z0-9-]*$`. **Unique** within `surfaces[]`. Doubles as the screenshot-store `<component>` key. |
 | `url` | string | yes | Path or absolute URL of the surface. Relative paths resolve against the Playwright `baseURL`. |
 | `gates` | list | yes | Subset of `[e2e, visual_regression, visual_parity]` — which gates apply to this surface. Empty list = registered but no gate runs it. |
 | `viewports` | list | no | List of viewport **names** (from `viewports[].name`). Absent ⇒ the project default matrix applies. |
 | `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. |
-| `parity_reference` | object \| null | no | `null`, or the **parity-reference object** (§3.4). Consumed by `/setup-visual-parity` + `/validate:visual-parity` (Task D). |
+| `auth_context` | string \| null | no | `null`/absent ⇒ anonymous capture. A non-null **opaque context name** `"<ctx>"` routes the surface through the authenticated-VR seam (wired in v1.2, no longer reserved). See the concrete contract below. Framework-agnostic: the plugin treats `<ctx>` as an opaque key and never learns how the auth was obtained; the stack's process recipe supplies the login. |
+| `parity_reference` | object \| null | no | `null`, or the **parity-reference object**. Consumed by `/setup-visual-parity` + `/validate:visual-parity` (Task D). |
+
+**`auth_context` contract (wired in v1.2).** A non-null `auth_context: "<ctx>"`
+routes the surface to the authenticated-VR seam. `/setup-visual-regression` wires
+it as follows (`<vp>` = viewport name; `<id>` = surface id):
+
+- authed visual project: `visual-chromium-<vp>-<ctx>` (one per viewport),
+  declaring `dependencies: ['visual-setup-<ctx>']` and loading
+  `storageState: tests/visual/.auth/<ctx>.json`.
+- session producer: `tests/visual/.auth/<ctx>.setup.ts`, run by the
+  `visual-setup-<ctx>` setup project to write that storageState. The plugin emits
+  this file as a throwing stub; the **stack's process recipe supplies the login**
+  and removes the throw. An unfilled stub fails the gate loudly (never a silent
+  logged-out capture).
+- authed surface spec: `tests/visual/auth/<ctx>/<id>.spec.ts` (same starter
+  template as anonymous; auth is carried by the project's storageState, not the
+  spec).
+- authed baselines: `<id>-1-visual-chromium-<vp>-<ctx>-linux.png`.
+
+`<ctx>` stays opaque to the plugin — it is a key, not a credential or a role. A
+process recipe maps its framework's roles onto these names (example: a Drupal
+recipe would map its QA-account roles → context names). The storageState JSON is
+a secret-bearing runtime artifact and is gitignored; the `<ctx>.setup.ts` is
+committed.
 
 ### 3.3 Viewport descriptor
 
@@ -144,6 +173,21 @@ project gets is written by a Task C/D `/setup-*` command, which emits v1.1). The
 optional fields (`reference_hash`, `compare_selectors`, `notes`, `last_compared_at`) are
 ignored by any v1.0 consumer.
 
+### 3.5 e2e block (v1.2)
+
+The optional top-level `e2e` object configures the e2e gate without coupling it to any framework.
+
+```yaml
+e2e:
+  preflight_command: "ddev drush atk:preflight"
+```
+
+| Field | Type | Required | Contract |
+|---|---|---|---|
+| `preflight_command` | string | no | A shell command the e2e gate runs in `codePath` **before** the Playwright tests. A non-zero exit fails the gate; the command's output is captured into `preflight_warnings`. The gate (`scripts/validate-e2e.sh`) is framework-agnostic — it runs whatever this resolves to and assumes nothing about the stack. `/validate:e2e` reads this field and passes it through as `--preflight-cmd`. Absent ⇒ no preflight runs. The **field** is generic; the **value** is project-specific — the Drupal `e2e-setup` recipe, resolved by `/setup-e2e`, seeds `ddev drush atk:preflight`; a Next.js project would register its own (or none). |
+
+This is the seam that removed the last hardcoded `ddev drush atk:preflight` from the gate: the framework-specific command now lives in project config that a process recipe writes, not in plugin code.
+
 ## 4. Task fragment (`visual-review-surfaces.yml`)
 
 A task that adds or changes review coverage drops a fragment in its task folder:
@@ -156,10 +200,10 @@ surfaces:
     gates: [e2e, visual_regression]
 ```
 
-- **Identical `surfaces:` shape** to the project registry (§3.2).
+- **Identical `surfaces:` shape** to the project registry.
 - **No `viewports:` block** — a fragment inherits the project default matrix. A surface
-  that needs a non-default matrix sets its own `viewports:` field (§3.2).
-- Merged into the project registry at `/complete` (§4.1).
+  that needs a non-default matrix sets its own `viewports:` field.
+- Merged into the project registry at `/complete`.
 
 ### 4.1 Merge semantics (research D2)
 
@@ -178,7 +222,7 @@ At `/complete`, the task fragment merges into the project registry:
 
 The v3.13.0 screenshot store keys images as `.screenshots/<component>/<viewport>.png`,
 where `<component>` is kebab-case and `<viewport>` is `WIDTHxHEIGHT`
-(`references/screenshot-store-schema.md` §3).
+(`references/screenshot-store-schema.md`).
 
 The registry is designed so Task C can bridge old store ↔ new registry **with no key
 translation**:
@@ -210,9 +254,13 @@ Task B/C/D commands — all of which parse YAML natively. The sibling
   keys.
 - v1.0 committed for v4.11.0.
 - **v1.1 committed for v4.14.0** (Task D) — the `parity_reference` object grows four
-  optional fields and its `type` enum widens (§3.4). Additive: a v1.0 consumer reading a
+  optional fields and its `type` enum widens. Additive: a v1.0 consumer reading a
   v1.1 registry ignores the new keys; a v1.1 consumer reading a v1.0-shaped
   `parity_reference` sees only `type`/`uri` and applies its defaults.
+- **v1.2 committed for v5.1.0** — adds the optional `auth_context` surface field
+  and the optional top-level `e2e.preflight_command`. Both additive: a pre-v1.2
+  consumer ignores them; the gates degrade to anonymous capture / no preflight when
+  absent. These are the generic seams that make the e2e and visual gates framework-agnostic.
 
 ## 8. Non-goals
 

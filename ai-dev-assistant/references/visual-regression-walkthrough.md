@@ -39,32 +39,31 @@ classification UX.
    root, plus the Chromium browser.
 3. Extends `playwright.config.ts` with one `visual-chromium-<viewport>` project
    per derived viewport, and tightens `maxDiffPixelRatio` to `0.005`.
-4. Derives the viewport matrix (§4).
-5. Offers to migrate a legacy `.screenshots/` store (§10).
-6. Runs AI-assisted surface discovery (§3).
+4. Derives the viewport matrix (see the viewport matrix section).
+5. Offers to migrate a legacy `.screenshots/` store (see the migration section).
+6. Runs AI-assisted surface discovery (see the surface discovery section).
 7. Scaffolds `tests/visual/` — one starter spec per surface + `README.md`.
 8. Writes `.gitattributes` (`tests/visual/**/*.png binary`).
 9. Sets `**Visual Review:** enabled .visual-review/registry.yml` in
    `project_state.md`.
-10. Prompts for a first baseline capture (§5).
+10. Prompts for a first baseline capture (see the baseline capture section).
 
 The surface registry (`<codePath>/.visual-review/registry.yml`) is **shared
-with `/setup-atk`** — running both is order-independent; each command adds only
+with `/setup-e2e`** — running both is order-independent; each command adds only
 its own `projects[]` entry and its own surfaces.
 
 ## 3. Surface discovery
 
-`/setup-visual-regression` does NOT auto-seed generic starter URLs. It runs
-`surface-discovery.sh`, which enumerates real coverage candidates and proposes
-two groups:
+`/setup-visual-regression` does NOT auto-seed generic starter URLs. Surface
+discovery is supplied by the framework's visual-regression process recipe,
+resolved via the process-recipe-loader. The recipe enumerates real coverage
+candidates and proposes two groups:
 
-- **Front-end / public pages — default-ON.** Home, View page routes (from
-  `config/sync/views.view.*.yml`), one sample URL per content type. This is
-  what changes in normal site work.
+- **Front-end / public pages — default-ON.** Home, View page routes, one sample
+  URL per content type. This is what changes in normal site work.
 - **Admin / editorial UI — default-OFF, opt-in.** `/admin/content`,
   `/admin/structure`, `/admin/appearance`. Rarely affected by normal site work
-  — enable only for a Drupal *contribution* project where the admin UI is the
-  product.
+  — enable only for a contribution project where the admin UI is the product.
 
 You edit and confirm the list before anything is written to the registry. The
 discovery step is re-runnable to pick up newly-added site pages, and
@@ -230,7 +229,7 @@ Run cross-browser tiers nightly (`schedule:`), not per-PR.
 
 ## 14. Coexistence with ATK (Task B)
 
-The E2E gate (`/setup-atk`) and the visual gate share **one Playwright install,
+The E2E gate (`/setup-e2e`) and the visual gate share **one Playwright install,
 one `playwright.config.ts`, one surface registry**. They differ only at the
 test-library layer:
 
@@ -242,7 +241,7 @@ codePath/
     └── visual/                 ← Lullabot VR tests          (testDir)
 ```
 
-Setup is idempotent and order-independent — run `/setup-atk` and
+Setup is idempotent and order-independent — run `/setup-e2e` and
 `/setup-visual-regression` in either order; each adds only its own entries.
 
 ## 15. BYO-server appendix (non-DDEV)
@@ -251,7 +250,7 @@ The gates are DDEV-first. To run against a non-DDEV site, set
 `PLAYWRIGHT_BASE_URL` to the site URL before invoking the gate. The site must
 be reachable over HTTP/HTTPS from the host running Playwright. `/setup-*` stops
 without `.ddev/config.yaml`; set up `tests/visual/` and the registry manually
-following §2–§5, or run `/setup-visual-regression` after adding a `.ddev/`
+following the setup sections, or run `/setup-visual-regression` after adding a `.ddev/`
 directory.
 
 ## 16. v2 candidates
@@ -268,4 +267,4 @@ directory.
 - `references/screenshot-store-schema.md` — store layout + `.meta.json` schema
 - `references/visual-review/surface-registry-schema.md` — the coverage manifest
 - `references/visual-review-walkthrough.md` — the epic-wide three-surface model
-- `scripts/derive-viewport-matrix.sh` · `surface-discovery.sh` · `visual-regression-gate.sh` · `baseline-manager.sh` · `migrate-screenshots-to-codepath.sh`
+- `scripts/derive-viewport-matrix.sh` · `scripts/visual-regression-gate.sh` · `scripts/baseline-manager.sh` · `scripts/migrate-screenshots-to-codepath.sh`

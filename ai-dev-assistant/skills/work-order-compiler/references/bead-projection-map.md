@@ -1,6 +1,6 @@
 # Bead Projection Map — the verified work-order ↔ bead projection
 
-The detail behind the MAP in `work-order-contract.md`. Projection is **markdown → bead always** (§6):
+The detail behind the MAP in `work-order-contract.md`. Projection is **markdown → bead always** (per the bead-projection policy):
 the work-order file is the source of truth, a Beads bead is a downstream mirror, and a bead **never**
 writes back to the work-order **except** its own minted id into `external_ids.beads`. Beads is **not
 built here** — this is the designed-projectable shape so a future L2 importer is mechanical.
@@ -78,7 +78,7 @@ Beads dependency graph.
 `requirements` / `coverage_*` / `verified` / `lockfile` / `drift_guard` / `collapsed_scc` /
 `gate_floor` / `autonomy_safe` / `review_ref` / `critique_ref` / `risk_tier` / `size_estimate` /
 `coverage_override` / the body are **markdown-only**. Gate verdicts and grounding never live in Beads
-(§6). A bead carries only the scheduling skeleton; the work-order file carries the truth.
+A bead carries only the scheduling skeleton; the work-order file carries the truth.
 
 ## L2 importer forward-note (not built here)
 

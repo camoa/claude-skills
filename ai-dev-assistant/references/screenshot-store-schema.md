@@ -8,7 +8,7 @@
 The screenshot store holds visual-regression baselines and parity references.
 Per-image `.meta.json` sidecars carry provenance, integrity hashes, and source
 info so any task can read the store and understand what each image represents.
-The 9-field `.meta.json` schema (§4) is **unchanged**; v4.13.0 changed only the
+The 9-field `.meta.json` schema is **unchanged**; v4.13.0 changed only the
 store **location** and the `<viewport>` field's value form.
 
 ## 1. Location
@@ -27,7 +27,7 @@ absolute paths in `playwright.config.ts`). Resolution Q1 in Task C `research.md`
 
 **Legacy — memory-project `.screenshots/`.** The v3.13.0 store lived in the
 memory project folder (`<project>/.screenshots/`). It is **retired for new
-projects** and serves only as a migration source — see §2b and
+projects** and serves only as a migration source — see the legacy migration section and
 `scripts/migrate-screenshots-to-codepath.sh`.
 
 ## 2. Directory layout (codePath-native)

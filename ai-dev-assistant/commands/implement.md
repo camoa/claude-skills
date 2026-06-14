@@ -39,7 +39,7 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
    - **Stage 2b (plan mode, component match — kept from v4.3.0).** If `architecture.md` exists, parse its `## Components`, `## Files Created/Modified`, and `## Files to Create` sections for planned file paths; invoke `guides-matcher` in `mode: "plan"` against the same catalog. Skip silently if architecture.md has no parseable component list — record `component_match: { skipped: true, reason: "..." }` in the audit.
    - **Union all.** methodology floor + Stage 1 `catalog_candidates[]` + Stage 2a prose matches + Stage 2b component matches, deduped by slug. Skip either Stage 2 pass silently when the catalog cache is missing (record the skip reason).
    - Display the two-group preflight prompt (`Methodology (always):` / `Domain guides matched:`); block on `[c]/[a]/[n]` (default `[c]`; semantics unchanged).
-   - Write `_dev-guides-load.json` audit (per `references/gate-audit-schema.md` §5.6) with `methodology_floor[]`, `catalog_candidates[]`, `matched_domain_guides[]` (union of both agent passes), `guides_actually_loaded[]`, and both agents' full output for replay.
+   - Write `_dev-guides-load.json` audit (per `references/gate-audit-schema.md`) with `methodology_floor[]`, `catalog_candidates[]`, `matched_domain_guides[]` (union of both agent passes), `guides_actually_loaded[]`, and both agents' full output for replay.
 
 4. **Playbook load.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. Surface conflicts once-per-session per topic. Write `_playbook-load.json` audit.
 
@@ -50,7 +50,7 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 
      Build the criteria/Non-goals from the parsed contract. **Never run `/goal` yourself** — only print the string. **Omit the tip silently** when `/goal` is unavailable (untrusted workspace, `disableAllHooks`, or `allowManagedHooksOnly`) or when no parsed Success criteria exist. See `references/goal-from-scope.md`.
 
-6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from the framework or third-party libraries *(Drupal: core/contrib)*, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a framework API, third-party library, or pattern not already in `loadedGuides[]` (Drupal: a Drupal API or contrib module), do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md §"Mid-phase guide checks").
+6. **Load context.** Read `architecture.md` (required), `research.md` (context), referenced patterns from the framework or third-party libraries *(Drupal: core/contrib)*, methodology refs (via `guide-integrator`). Activate `tdd-companion` skill. **Mid-phase guide checks apply:** before writing code that uses a framework API, third-party library, or pattern not already in `loadedGuides[]` (Drupal: a Drupal API or contrib module), do a `dev-guides-navigator` catalog lookup (see `guide-integrator` SKILL.md the "Mid-phase guide checks" section).
    - **Design-drives-build nudge (v4.14.0+).** If `project_state.md` carries `**Visual Review:** enabled` AND the surface registry holds at least one surface whose `parity_reference.type` is `react-template` or `html-template`, print ONE soft-nudge line: *"A buildable design reference is registered for surface `<id>` — if this task implements that surface, load the reference as a build input, not only a `/validate:visual-parity` check."* Silent when there is no registry, no enabled visual review, or no buildable parity reference. Never blocks — a strong nudge, not enforcement.
 
 7. **Author/update implementation.md.** Standard sections: Step Plan (numbered), Files Created/Modified, Progress (`[ ]`/`[x]` per step), TDD Log, Notes, Blockers. Update `task.md` Phase 3 in-progress.
@@ -84,7 +84,7 @@ declinable soft-nudge** (once per change — not per file, never re-asked):
 > Want me to verify this change live — drive the running site / the CLI / the browser to
 > confirm it actually works and renders as intended *(Drupal: the DDEV site, `drush`)*? And if the change is worth
 > protecting against regression, I can promote it to a committed gate:
-> `/setup-atk --add-journey` (behavioural), or `/setup-visual-regression --add-surface`
+> `/setup-e2e --add-journey` (behavioural), or `/setup-visual-regression --add-surface`
 > / `/setup-visual-parity --add-surface` (visual).
 
 The live verification itself uses Claude Code's built-in `verify` capability — this

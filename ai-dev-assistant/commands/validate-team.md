@@ -53,7 +53,7 @@ With `--no-fallback`: print the reason, exit 2, do NOT invoke `/validate:all`.
 
 "Team already resident" refusal message format:
 
-> `/validate:team` detected an existing agent team in this session. Agent teams are one-per-session. Clean up via the team's cleanup procedure (see agent-teams docs §"Clean up the team"), then re-invoke. `/validate:team` will not auto-cleanup — teams the user didn't explicitly end may have in-flight work.
+> `/validate:team` detected an existing agent team in this session. Agent teams are one-per-session. Clean up via the team's cleanup procedure (see agent-teams docs the "Clean up the team" section), then re-invoke. `/validate:team` will not auto-cleanup — teams the user didn't explicitly end may have in-flight work.
 
 ### Step 3 — Read context for manifest
 
@@ -73,7 +73,7 @@ Compose the manifest per `references/team-manifest-schema.md` v1.0 and write to:
 <task>/validations/tmp/team-manifest.json
 ```
 
-Invariants (see schema §9):
+Invariants (see the team-manifest schema):
 - All paths absolute
 - `visual_fanout[]` present only on `visual-regression` gate entries (omit the field for code/docs gates — do NOT write `visual_fanout: []`)
 - `gates[]` non-empty
@@ -93,7 +93,7 @@ Spawn each teammate with `TeamCreate`. Spawn prompts are ≤40 lines each, refer
 **Isolation:** worktree
 ```
 
-Roster (from architecture §7):
+Roster (from architecture):
 
 | Teammate | Gates owned | Model | MaxTurns | Isolation |
 |---|---|---|---|---|
@@ -102,7 +102,7 @@ Roster (from architecture §7):
 | `validator-docs` | `guides` | haiku | 10 | worktree |
 | `validator-visual` | `visual-regression` (fanned out) | sonnet | 15 | none |
 
-Each spawn prompt MUST include the absolute-path reminder (schema §10):
+Each spawn prompt MUST include the absolute-path reminder (the team-manifest schema):
 
 > When you write `<gate>.json` or append to `history.jsonl`, use the absolute paths in `manifest.envelope.latest_dir` / `manifest.envelope.history_file`. Do NOT use relative paths — you are in a worktree and relative writes will not reach the lead.
 
@@ -136,7 +136,7 @@ Do NOT wait on `TaskCompleted` hook events (deferred to v2 Set B2). The mailbox 
 When all expected gates have reported (or timeout reached — document as manual-recovery scenario):
 
 1. Read each `<task>/validations/latest/<gate>.json` envelope written by teammates.
-2. Assemble `_all.json` using the same aggregation shape `/validate:all` emits (per `references/validation-gate-result.md` §6), with one addition:
+2. Assemble `_all.json` using the same aggregation shape `/validate:all` emits (per `references/validation-gate-result.md`), with one addition:
    ```json
    "discoverability_hint": "Run produced by /validate:team (source: \"validate:team\"). For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
    ```
@@ -154,7 +154,7 @@ Print the summary table in the same format as `/validate:all` Step 7.
 ### Step 8 — Cleanup
 
 - Remove `<task>/validations/tmp/team-manifest.json`
-- Clean up the agent team per the agent-teams guide §"Clean up the team"
+- Clean up the agent team per the agent-teams guide the "Clean up the team" section
 - Leave the `tmp/` directory itself in place (may be empty)
 
 Do NOT remove per-gate envelopes in `validations/latest/` — they are persistent artifacts, same as `/validate:all` produces.
@@ -207,8 +207,8 @@ This separation is what makes `/validate:team` honest where `/validate:all` is e
 |---|---|
 | No task context | Abort; exit 2 |
 | Task folder missing | Abort; exit 2 |
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset | Fallback (§Step 2) unless `--no-fallback` |
-| `TeamCreate` fails | Fallback (§Step 2) unless `--no-fallback` |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset | Fallback (Step 2) unless `--no-fallback` |
+| `TeamCreate` fails | Fallback (Step 2) unless `--no-fallback` |
 | Team already resident | Refuse with cleanup guidance; do NOT auto-cleanup |
 | Teammate worktree creation fails (disk space, repo state, permissions) | Lead retries the spawn for that teammate with `isolation: "none"` and prints a warning: `"<teammate> worktree creation failed; spawning with isolation: none. Code-gate honest-validation is weaker for this teammate (can see uncommitted edits)."` The teammate still runs — absolute-path writes via `manifest.envelope.*` reach the lead regardless of isolation mode |
 | Teammate dies mid-run | Manifest + any partial envelopes remain; manual recovery (see `--cleanup` in v2 Set B4) |
@@ -239,13 +239,13 @@ If a teammate dies mid-run:
 1. The manifest at `<task>/validations/tmp/team-manifest.json` is still on disk
 2. Any envelopes already written to `<task>/validations/latest/<gate>.json` are valid
 3. The lead may aggregate from the available envelopes (print a message for missing gates) OR
-4. Clean up the team via agent-teams docs §"Clean up the team", remove the manifest manually, and re-invoke `/validate:team`
+4. Clean up the team via agent-teams docs the "Clean up the team" section, remove the manifest manually, and re-invoke `/validate:team`
 
 v2 Set B4 will ship a `--cleanup` subcommand to automate this.
 
 ## Session context
 
-This command does NOT update `session_context.json`. Validation runs are transient; the command body + the envelope already capture everything worth persisting (per architecture §2 Q7.7). Other `/validate:*` commands follow the same convention.
+This command does NOT update `session_context.json`. Validation runs are transient; the command body + the envelope already capture everything worth persisting (per architecture). Other `/validate:*` commands follow the same convention.
 
 ## Related
 

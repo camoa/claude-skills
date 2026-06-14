@@ -12,7 +12,7 @@ re-runs `wo-merge-gate.sh` and calls `gh pr create` **only** on a clean verdict 
 itself **re-runs** `wo-ship-gate.sh` from disk (never a cached verdict — TOCTOU-safe) and adds the per-WO
 `review_ref` + `override_used` checks ship-gate does not cover.
 
-**Honest limits (accepted §15-class residuals, backstopped by the human merge):**
+**Honest limits (accepted residuals, backstopped by the human merge):**
 - Re-running ship-gate protects against **newly-added** blockers, **not removed** ones. A builder whose
   tool reach includes the memory repo can delete a `wo-NN.HALT` (D12a/H5). Off-road `gh pr create` outside
   the loop also remains possible (prose-layer residual). Both are backstopped by branch protection + the

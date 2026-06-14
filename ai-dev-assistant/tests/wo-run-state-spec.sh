@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TDD spec for scripts/wo-run-state.sh (K2) — per-WO run-state sidecar manager.
-# Test table: T1–T12 per architecture/kernels.md §K2.
+# Test table: T1–T12 per architecture/kernels.md.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
 export CLAUDE_PLUGIN_ROOT="$ROOT"

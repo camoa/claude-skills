@@ -13,7 +13,7 @@
 #   <codePath>/tests/visual/<surface-id>.spec.ts-snapshots/<png-filename>.
 #   No rotation, no .previous tier — git holds the baseline history.
 #
-# Performs the 6-step rotation from architecture §4.4:
+# Performs the 6-step rotation from architecture:
 #   1. Compute sha256 of existing <viewport>.png (becomes prior_hash)
 #   2. Delete existing .previous.png + .previous.meta.json unconditionally
 #   3. Rename current .png → .previous.png; rename meta similarly
@@ -29,7 +29,7 @@
 #   2 — arg validation failure
 #   3 — IO error pre-rotation (safe; no partial state)
 #
-# captured_by values (from architecture §4.3):
+# captured_by values (from architecture):
 #   playwright-mcp | claude-in-chrome | figma-export | html-render | user-upload
 #
 # source_type values (parity-reference only):

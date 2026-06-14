@@ -27,7 +27,7 @@ Input (provided by the caller at invocation). Exactly ONE of the two input modes
 - `codePath` — absolute path to the project's code, OR `null` for docs-only
 - `schema_version` — expected output schema version (currently `"1.0"`, JSON string)
 
-See `references/analysis-agent-schema.md` §"Input modes" for the full contract.
+See `references/analysis-agent-schema.md` the "Input modes" section for the full contract.
 
 Output: single JSON object per `references/analysis-agent-schema.md` v1.0. Written to stdout. `schema_version` MUST be a JSON string (`"1.0"` quoted), never a number. No file modifications. No user-facing chat — the agent's output is consumed programmatically by the calling command.
 
@@ -139,7 +139,7 @@ Record all fired signals in `signals_used[]`.
 
 ### 5. Decide
 
-Apply decision rules from `references/analysis-agent-schema.md` §"Decision reasoning". **Epic-decomposition signals are a specific subset — `scope_contract_recommended` is orthogonal and does NOT count toward `epic_candidate`.**
+Apply decision rules from `references/analysis-agent-schema.md` the "Decision reasoning" section. **Epic-decomposition signals are a specific subset — `scope_contract_recommended` is orthogonal and does NOT count toward `epic_candidate`.**
 
 **Epic-decomposition signals** (count these for the `epic_candidate` decision):
 - `many_heterogeneous_criteria`, `long_in_progress`, `research_architecture_fragmented`, `explicit_user_signal`, `multiple_code_areas`, `description_length_and_conjunction`, `bullet_count_clustering`
