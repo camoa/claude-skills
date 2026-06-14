@@ -98,15 +98,19 @@ alone; the recipe globs are simply not merged (a warning is recorded, the run ne
 
 A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its phase consumes:
 
-| Recipe (by phase) | Declarations it should carry |
+| Recipe (by phase key) | Declarations it should carry |
 |---|---|
 | `visual-regression/<fw>/…` | `## Screenshot capture` (1), `## Change-impact globs` (5) |
 | `e2e-setup/<fw>/…` | `e2e.preflight_command` (2) |
-| `implement/<fw>/…` (or the design/standards recipe) | `## Routing hints` (3) |
-| `review/<fw>/…` (standards-and-tests / checks) | `## Code-quality extensions` (4), `## Change-impact globs` (5) |
+| `implement/<fw>/…` | `## Routing hints` (3) |
+| `review/<fw>/…` | `## Code-quality extensions` (4), `## Change-impact globs` (5) |
 
-`## Change-impact globs` legitimately appears in more than one phase recipe; the classifier unions all
-matching rules, so duplication across recipes is harmless.
+The key is `<phase>/<framework>/<slug>`; the **phase segment**, not the recipe's filename, decides which
+declarations apply. A declaration belongs in the recipe whose phase consumes it — e.g. `## Routing hints`
+goes in the `implement`-phase recipe (consumed at implement preflight), never in the `review` one. Run the
+linter (below) against a recipe at its declared phase to confirm. `## Change-impact globs` legitimately
+appears in both the `review` and `visual-regression` recipes; the classifier unions all matching rules, so
+that duplication is harmless.
 
 ## Checking a recipe is complete (the linter)
 
