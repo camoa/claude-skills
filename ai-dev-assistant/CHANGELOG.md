@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.1] - 2026-06-14
+
+**`commands/review.md` trimmed back under its ≤120-line body budget.** The de-Drupalization tranche (5.3.0) added the recipe-resolution wiring to the review step, pushing the command body to 157 physical lines and tripping `tests/review-command-spec.sh`. Documentation refactor only — no change to gate execution, aggregation, or `pr_ready` logic.
+
+### Changed
+- Condensed the step-5.0/5a recipe-resolution prose in `commands/review.md`; the full resolve-and-follow protocol already lives in `references/recipe-resolution.md`.
+- Relocated the verbose `--headless` full contract, the `--rerun-failed`/`--team` semantics, and the `claude ultrareview` escalation note to `references/review-phase-walkthrough.md`, which the command now points to.
+- Kept inline (test-pinned): all 13 runtime steps, the anti-bypass clause, every flag, both mandated-wording literals (`review-gate-fail` + `review-summary`, byte-identical to `references/gate-hardening-prompts.md` per `tests/gate-prompts-vs-inline.sh`), and the compact `--headless` clauses asserted by `tests/headless-review-contract-spec.sh` (`Exit codes`, the compact verdict line, `--ci`, "never exit 0 on doubt"). Body now 119 lines; full test suite 32/32 green.
+
 ## [5.3.0] - 2026-06-14
 
 **Complete de-Drupalization — the plugin is now framework-neutral end to end; Drupal appears nowhere, including illustrations.** 5.2.0 made the e2e/visual *setup* recipe-driven and genericized the kernels; this release finishes the job across every agent, command, reference, walkthrough, skill, and example, so the plugin carries no framework-specific knowledge outside functional literals (framework detection, `composer`/`package.json` probes, DDEV-as-infra). CHANGELOG history is intentionally not scrubbed.
