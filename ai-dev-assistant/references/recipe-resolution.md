@@ -109,6 +109,8 @@ above with the matching `phase` id:
 
 ## See also
 
+- `references/recipe-interface.md`: the **content** contract — what a resolved recipe body may declare
+  (the five gate declarations) so the plugin's gates can act on it. This doc is transport; that doc is content.
 - `skills/process-recipe-loader/SKILL.md`: the single resolver (source arms, trust model, the
   `project_state` short-circuit, the ask-user miss, the `project_state.md` source-record write)
 - `scripts/project-state-read.sh`: emits `frameworks`, `codePath`, `localGuidesPath`, `processRecipes`

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2026-06-14
+
+**Recipe-interface contract — the missing seam between the agnostic plugin and its dev-guides recipes.** The de-Drupalization tranche pushed all stack-specific behavior into process-recipe bodies, but never wrote down *what a recipe body must declare* for the gates to act on it. The five gate declarations (`## Screenshot capture`, `e2e.preflight_command`, `## Routing hints`, `## Code-quality extensions`, `## Change-impact globs`) were only implicit in the parsers — a recipe author had no spec, and a misspelled heading degraded silently to the neutral floor. This release makes the seam explicit and self-enforcing.
+
+### Added
+- `references/recipe-interface.md` — the **content** contract (sibling to `recipe-resolution.md`, the transport contract): per phase, the exact heading + field shape each gate greps for, the consuming parser, and the fail-open-vs-closed posture of each declaration. The source of truth a recipe author (and the dev-guides repo) builds against.
+- `tests/recipe-interface-spec.sh` — drift test pinning every declaration token to **both** its consumer and the contract, so a parser change can't silently diverge from the documentation (and vice versa). Caught two real mapping errors during authoring.
+
+### Changed
+- `references/recipe-resolution.md` — `## See also` now cross-links `recipe-interface.md` (transport ↔ content).
+
 ## [5.3.1] - 2026-06-14
 
 **`commands/review.md` trimmed back under its ≤120-line body budget.** The de-Drupalization tranche (5.3.0) added the recipe-resolution wiring to the review step, pushing the command body to 157 physical lines and tripping `tests/review-command-spec.sh`. Documentation refactor only — no change to gate execution, aggregation, or `pr_ready` logic.
