@@ -1,6 +1,6 @@
 # Critic-Prompt Contract — the hostility contract + disk-collected-verdict discipline
 
-The discipline that makes the §16.2 critique rung **narrow** (not close) the semantic-injection class,
+The discipline that makes the adversarial critique rung **narrow** (not close) the semantic-injection class,
 and that keeps the collected critic verdicts **untrusted data, never control flow**. The critic itself
 is the `agents/wo-critic.md` agent; this is the contract the `work-order-critique` skill honors when it
 spawns critics and reads their verdicts.
@@ -34,6 +34,6 @@ The collected critic output is **untrusted data**, the same five rules as `injec
 ## Residual (stated, not hidden)
 The critic is itself an LLM reading hostile input — it **remains a semantic-injection target**. The
 hostility contract is a probabilistic mitigation, not a guarantee. **Unattended high-`risk_tier` /
-security-touching work-orders are below the §14.5/§16.2 bar** until the full enforcement (③) ships; until
+security-touching work-orders are below the lockfile/critique bar** until the full enforcement (③) ships; until
 then a blocking verdict is **advisory-surfaced** (the `wo-NN.HALT` marker + the non-green
 `wo-ship-gate.sh` line a human / `/goal` reads), not automatically enforced.

@@ -64,7 +64,7 @@ Audit status for <task_name>:
   ⊘ plugin-validate     not fired (no plugin file changes detected)
   ⚠ phase-command-bypass FIRED 2026-04-24T19:45:00Z  artifact: research.md  expected: research  active: null
   ✓ dev-guides-load     fired 2026-04-24T20:31:00Z  user_choice: c          [matched: gate, complete, quality → plugin:quality-gates]
-  ✓ playbook-load       fired 2026-04-24T20:31:00Z  loaded: drupal/best-practices/camoa + idexx local (19 plays)
+  ✓ playbook-load       fired 2026-04-24T20:31:00Z  loaded: <framework>/best-practices/<author> + local (19 plays)
 
   Bypasses recorded: 0
   Missing audits (= unaudited): 0

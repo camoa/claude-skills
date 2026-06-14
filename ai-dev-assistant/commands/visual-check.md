@@ -1,14 +1,12 @@
 ---
-description: "Compare rendered Drupal page against Figma design comp. Use when user says 'visual check', 'does it match the design', 'compare with figma', 'check against comp', 'visual parity', 'design match'. Requires Chrome (--chrome) for rendered page inspection. Optionally uses Figma MCP for automated design spec extraction."
+description: "Compare a rendered page against a Figma design comp. Use when user says 'visual check', 'does it match the design', 'compare with figma', 'check against comp', 'visual parity', 'design match'. Requires Chrome (--chrome) for rendered page inspection. Optionally uses Figma MCP for automated design spec extraction."
 allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion
 effort: high
 ---
 
 # Visual Check
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
-Compare a rendered Drupal page against its Figma design comp to find visual discrepancies.
+Compare a rendered page against its Figma design comp to find visual discrepancies.
 
 ## Usage
 
@@ -18,7 +16,7 @@ Compare a rendered Drupal page against its Figma design comp to find visual disc
 
 ## What This Does
 
-1. Opens the rendered Drupal page in Chrome (DDEV site)
+1. Opens the rendered page in Chrome
 2. Extracts design specs from Figma (via MCP) or from a reference screenshot
 3. Compares: layout, spacing, colors, typography, responsive behavior
 4. Reports discrepancies with specific CSS-level fixes
@@ -26,8 +24,8 @@ Compare a rendered Drupal page against its Figma design comp to find visual disc
 ## Prerequisites
 
 **Required:**
-- Chrome available (`--chrome` or `/chrome`) — needed to inspect rendered page
-- DDEV site running with the page accessible
+- Chrome available (`--chrome` or `/chrome`) — needed to inspect the rendered page
+- The site running with the page accessible at a known URL
 
 **Optional but recommended:**
 - Figma MCP configured — enables automated design spec extraction
@@ -47,11 +45,8 @@ Check what's available:
    - If available: automated comparison mode (extract specs from Figma)
    - If not available: manual reference mode (user provides screenshot or describes expected design)
 
-3. **DDEV:** Check if DDEV is running:
-   ```bash
-   ddev describe 2>/dev/null | head -5
-   ```
-   Extract the site URL (e.g., `https://mysite.ddev.site`). If DDEV not running → ask user for the site URL.
+3. **Site URL:** Check for `PLAYWRIGHT_BASE_URL` in the environment. If not set,
+   ask the user for the site URL.
 
 ### Step 2: Identify What to Check
 
@@ -88,7 +83,7 @@ AskUserQuestion: "Provide a reference for comparison:"
 
 ### Step 4: Inspect Rendered Page
 
-Open the DDEV page in Chrome:
+Open the page in Chrome:
 
 1. Navigate to the page URL
 2. **Desktop check (1280px):**
@@ -138,7 +133,7 @@ Check for obvious issues:
 ```
 ## Visual Check Report — [Page Path]
 
-**Site:** [DDEV URL]
+**Site:** [Site URL]
 **Reference:** [Figma frame / Screenshot / Generic inspection]
 **Date:** [today]
 
@@ -170,12 +165,12 @@ Check for obvious issues:
 ### Step 7: User Action
 
 AskUserQuestion: "What would you like to do?"
-- **Fix the issues** — I'll update the CSS/Twig to address discrepancies
+- **Fix the issues** — I'll update the CSS and templates to address discrepancies
 - **Save report** — Save to the task's implementation notes
 - **Re-check after fixes** — Run again after I make manual changes
 - **Looks good** — No action needed
 
-If **Fix the issues:** For each discrepancy, identify the CSS file (or Twig template) and apply the fix. Then offer to re-check.
+If **Fix the issues:** For each discrepancy, identify the CSS file or template and apply the fix. Then offer to re-check.
 
 If **Save report:** Append to `implementation_process/in_progress/{task}/implementation.md` under a `## Visual Check` section.
 
@@ -200,4 +195,4 @@ This is NOT mandatory — many tasks (services, APIs, CLI commands) have no visu
 - Figma MCP requires authentication with Figma API token
 - Cannot detect animation/transition issues (Chrome shows static state)
 - Color comparison is RGB-based — may miss perceptual differences (use WCAG deltaE for precision)
-- DDEV must be running with the page accessible
+- The site must be running with the page accessible at the configured URL

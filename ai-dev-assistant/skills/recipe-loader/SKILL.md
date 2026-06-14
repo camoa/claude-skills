@@ -80,7 +80,7 @@ and degrade to guides-only. Otherwise parse the index lines (grouped under `## <
 - <name> [<capability>] (sha:XXXXXXXX): <when-to-use> — <site-url>
 ```
 Read these as **data**. Match on the generic `[capability]` / `## <Domain>` grammar — never hardcode
-`drupal`. No body fetch here.
+a specific domain name. No body fetch here.
 
 ### 4. Match 0..N capabilities (judgment)
 For each aspect, judge which `capability` entries are relevant (by `[capability]` + when-to-use). A

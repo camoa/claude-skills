@@ -22,7 +22,7 @@ Fields:
 - `project_name` — from the H1 line in `project_state.md`, or folder basename fallback
 - `codePath` — absolute path (string) if declared and resolves, or `null` if docs-only / unknown
 - `folder` — the absolute path passed in
-- `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["drupal/best-practices/camoa"]`). Falls back to the plugin's `defaults.json` `playbookSets` when field absent. Empty array when explicit `none`.
+- `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["<framework>/best-practices/<author>"]`). Falls back to the plugin's `defaults.json` `playbookSets` when field absent. Empty array when explicit `none`.
 - `playbookSetsSource` — *(v1.1+)* `"explicit"` (field present with values) \| `"explicit-none"` (field is literal `none`) \| `"default"` (field absent, defaults applied)
 - `userPlaybook` — *(v1.1+)* absolute path to project-local playbook file, or `null` when state is `unset` or `docs-only-no-playbook`
 - `userPlaybookState` — *(v1.1+)* `"unset"` \| `"docs-only-no-playbook"` \| `"set"`
@@ -52,13 +52,13 @@ Case-insensitive match on the label.
 ## Playbook fields in `project_state.md` (v1.1+)
 
 ```markdown
-**Playbook Sets:** drupal/best-practices/camoa, drupal/best-practices/lullabot
+**Playbook Sets:** <framework>/best-practices/<author1>, <framework>/best-practices/<author2>
 **User Playbook:** /home/me/projects/idexx/docs/playbook.md
 **User Playbook State:** set
 
 **Playbook Resolutions:**
-- font-sizing → drupal/best-practices/camoa
-- bem-methodology → drupal/best-practices/lullabot
+- font-sizing → <framework>/best-practices/<author1>
+- bem-methodology → <framework>/best-practices/<author2>
 ```
 
 | Line | Semantics |

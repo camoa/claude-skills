@@ -1,15 +1,16 @@
 {
   "schema_version": "1.0",
   "rules": [
-    { "glob": "**/*.css",      "gates": ["visual_regression"] },
-    { "glob": "**/*.scss",     "gates": ["visual_regression"] },
-    { "glob": "**/*.twig",     "gates": ["visual_regression"] },
-    { "glob": "**/*.js",       "gates": ["e2e", "visual_regression"] },
-    { "glob": "**/*.ts",       "gates": ["e2e", "visual_regression"] },
-    { "glob": "**/*.php",      "gates": ["e2e", "visual_regression"] },
-    { "glob": "**/*.yml",      "gates": ["e2e", "visual_regression"] },
-    { "glob": "**/*.module",   "gates": ["e2e"] },
-    { "glob": "**/*.info.yml", "gates": ["e2e"] }
+    { "glob": "**/*.css",  "gates": ["visual_regression"] },
+    { "glob": "**/*.scss", "gates": ["visual_regression"] },
+    { "glob": "**/*.sass", "gates": ["visual_regression"] },
+    { "glob": "**/*.less", "gates": ["visual_regression"] },
+    { "glob": "**/*.js",   "gates": ["e2e", "visual_regression"] },
+    { "glob": "**/*.mjs",  "gates": ["e2e", "visual_regression"] },
+    { "glob": "**/*.cjs",  "gates": ["e2e", "visual_regression"] },
+    { "glob": "**/*.ts",   "gates": ["e2e", "visual_regression"] },
+    { "glob": "**/*.html", "gates": ["e2e", "visual_regression"] },
+    { "glob": "**/*.htm",  "gates": ["e2e", "visual_regression"] }
   ],
   "default_gates": []
 }

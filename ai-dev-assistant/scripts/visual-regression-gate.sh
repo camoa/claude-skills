@@ -10,7 +10,7 @@
 #                       echoed into the output. This script does NOT parse YAML
 #                       (Task C D-impl-1) — the suite itself is the source of
 #                       truth for which surfaces run.
-#   <codePath>          Drupal project root; the suite is <codePath>/tests/visual/
+#   <codePath>          project root; the suite is <codePath>/tests/visual/
 #   --ci                non-interactive mode — recorded in the output; no
 #                       behavioural change here (this script never prompts).
 #   --project-pattern   Playwright project-name prefix to run. Default
@@ -97,6 +97,12 @@ fi
 
 # Discover the exact visual project names from playwright.config.ts. Playwright
 # --project matches exact names; deriving them from the config is version-safe.
+# The `[A-Za-z0-9_-]+` tail also matches authenticated projects of the form
+# `visual-chromium-<vp>-<ctx>` (the `-<ctx>` suffix is plain identifier chars), so
+# authed surfaces are discovered with no change. Their `visual-setup-<ctx>`
+# dependency project does NOT match the `visual-chromium-` prefix, so it is not
+# passed via --project here; Playwright still runs it automatically because the
+# authed project lists it in `dependencies`. Both behaviours are intentional.
 # (portable read loop — `mapfile` is bash 4+; macOS ships bash 3.2)
 PROJECTS=()
 while IFS= read -r p; do
@@ -168,6 +174,12 @@ while IFS= read -r row; do
   fi
 
   # Failed viewports — project names of failing results, prefix stripped.
+  # NOTE (authed VR, cosmetic): for an authenticated project named
+  # `visual-chromium-<vp>-<ctx>`, stripping only the `visual-chromium-` prefix
+  # yields `<vp>-<ctx>` here (not the bare `<vp>`). This is accepted as-is — it
+  # still uniquely identifies the failing project/viewport+context pair and does
+  # not affect the verdict. Do not "fix" by splitting on `-`: viewport names may
+  # themselves contain hyphens, so there is no safe split. No logic change.
   FAILED_VPS=$(jq -c --arg pre "$PROJECT_PREFIX" '
     [ .results[]
       | select(.status == "failed" or .status == "timedOut" or .status == "interrupted")

@@ -8,7 +8,7 @@
 #
 # Mirrors defensive posture of alignment-read.sh and project-state-read.sh.
 #
-# Output contract: see references/playbook-schema.md §6.
+# Output contract: see references/playbook-schema.md.
 
 set -uo pipefail
 
@@ -180,7 +180,7 @@ END {
     # Freeform fallback — entire file as one synthetic play
     printf("{\"freeform\": true, \"plays\": [{\"title\": \"%s\", \"section\": \"<root>\", \"applicability\": \"free-form\", \"source_lines\": {\"start\": 1, \"end\": NR}, \"example_blocks\": []}]}\n", file_path)
   } else {
-    # Structured emit — one play per H3, schema per references/playbook-schema.md §6
+    # Structured emit — one play per H3, schema per references/playbook-schema.md
     printf("{\"freeform\": false, \"plays\": [")
     for (i = 1; i <= play_count; i++) {
       if (i > 1) printf(",")

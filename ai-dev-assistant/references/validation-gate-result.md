@@ -35,7 +35,7 @@ Every `/validate:*` command emits and persists a JSON result object with this sh
 | `task` | string | Task folder name the run was scoped to |
 | `run_at` | string | ISO-8601 UTC with `Z` suffix |
 | `verdict` | enum | `"pass"` \| `"warning"` \| `"fail"` \| `"skipped"` |
-| `details` | object | Gate-specific detail structure. See §4 |
+| `details` | object | Gate-specific detail structure. See the gate details section |
 | `messages` | array of string | Human-readable findings. Shown in CLI output. Non-empty for warning/fail; usually present for pass too (e.g., "3 checks passed") |
 
 ## 3. Verdict semantics
@@ -76,7 +76,7 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
     "/abs/path/task/research.md",
     "/abs/path/task/architecture.md"
   ],
-  "guides_cited": ["drupal/forms/config-forms", "drupal/caching/cache-api"],
+  "guides_cited": ["<framework>/forms/config-forms", "<framework>/caching/cache-api"],
   "guides_expected_min": 1,
   "code_inference": {
     "source": "session+implementation_md+git",
@@ -86,13 +86,13 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
       "schema_version": "1.0",
       "mode": "validation",
       "matched_guides": [
-        {"slug": "drupal/services/dependency-injection", "reason": "...", "confidence": "high", "triggered_by": ["my_module.services.yml"]}
+        {"slug": "<framework>/services/dependency-injection", "reason": "...", "confidence": "high", "triggered_by": ["src/Service/DataService.php"]}
       ],
       "unmatched_files": [],
       "warnings": []
     },
-    "inferred_slugs": ["drupal/services/dependency-injection"],
-    "domain_coverage_gaps": ["drupal/services/dependency-injection"]
+    "inferred_slugs": ["<framework>/services/dependency-injection"],
+    "domain_coverage_gaps": ["<framework>/services/dependency-injection"]
   }
 }
 ```
@@ -143,7 +143,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 - `latest/<gate>.json` — most recent result per gate. `/validate:all` reads these to aggregate. `/complete` (future) may check for pending updates
 - `history.jsonl` — full run log, newest at the bottom. JSONL (one object per line) makes append cheap and git-diff legible
 
-`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see §6).
+`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see the aggregate envelope section).
 
 ## 6. Aggregate envelope (`/validate:all`)
 
@@ -219,7 +219,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
     "code_quality_tools_version": "3.0.0"
   },
   "messages": [
-    "SettingsForm::submitForm violates SRP (mixes validation + persistence + notification)",
+    "SettingsForm::submit violates SRP (mixes validation + persistence + notification)",
     "Consider splitting into SettingsFormValidator + SettingsFormPersister"
   ]
 }
@@ -231,7 +231,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 {
   "schema_version": "1.0",
   "gate": "guides",
-  "task": "custom_entity",
+  "task": "data_model_refactor",
   "run_at": "2026-04-24T15:02:00Z",
   "verdict": "fail",
   "details": {
@@ -242,7 +242,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   },
   "messages": [
     "No dev-guides citations found in research.md or architecture.md",
-    "Custom entity work typically loads drupal/entities/* guides; consider /dev-guides-navigator"
+    "Data-model work typically loads <framework>/entities/* guides; consider /dev-guides-navigator"
   ]
 }
 ```
@@ -280,4 +280,4 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 - `references/screenshot-store-schema.md` — the `.meta.json` schema referenced by visual gate details
 - `commands/validate-all.md` — the orchestrator that consumes per-gate envelopes and emits the aggregate
 - `commands/validate-tdd.md` (et al) — the per-gate commands that produce envelopes
-- Architecture §5.1 in `dev_framework_granular_validation/architecture.md`
+- `dev_framework_granular_validation/architecture.md`

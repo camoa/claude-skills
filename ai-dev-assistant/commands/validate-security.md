@@ -6,7 +6,7 @@ argument-hint: "[<task-name>]"
 
 # Validate: Security
 
-Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-specific sinks) against the current task. Wraps `/code-quality:security` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.0).
+Run the Security quality gate (Security — OWASP Top 10 style audit + framework-specific sink checks) against the current task. Wraps `/code-quality:security` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.0).
 
 ## Usage
 
@@ -29,7 +29,7 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-sp
 
 3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). Capture the output for envelope construction in step 4.
 
-4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per §"Verdict interpretation" below. Extract any actionable findings into `messages[]`. If `/code-quality:security` wrote a JSON report to `.reports/security.json` (disk-read fallback), capture its path.
+4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:security` wrote a JSON report to `.reports/security.json` (disk-read fallback), capture its path.
 
 5. **Emit the shared envelope** — produce a JSON object matching `references/validation-gate-result.md` v1.0 for the security gate.
 

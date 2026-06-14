@@ -6,7 +6,7 @@
 # Always emits single JSON object to stdout. Exit 0 for all recoverable states.
 # Non-zero ONLY for bash-level read failures.
 #
-# Output (per references/gate-audit-schema.md §5.2 gate_specific shape):
+# Output (per references/gate-audit-schema.md gate_specific shape):
 #   {
 #     "verdict": "pass | fail",
 #     "research_questions_found": <int>,

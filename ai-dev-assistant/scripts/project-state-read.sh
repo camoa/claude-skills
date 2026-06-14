@@ -20,18 +20,22 @@
 #     "worktreeByDefault": bool,
 #     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
 #     "visualReview": null | {"enabled": bool, "registryPath": "<rel>" | null},  # v4.11.0+
+#     "frameworks": ["<framework-id>", ...],  # e.g. ["nextjs","symfony"]; [] when absent
+#     "localGuidesPath": "<rel-path>" | null,  # path to local dev-guides; null when absent
+#     "processRecipes": [{"key": "<phase>/<fw>/<name>", "source": "<dev-guides|local|machine-local|research>" | null}, ...],
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
 # Warning codes:
-#   missing_arg               — script called without $1 (defensive; emit + exit 0)
-#   folder_missing            — project folder does not exist
-#   project_state_md_missing  — project_state.md not in folder
-#   code_path_unknown         — project_state.md has no Code path line (first-use case)
-#   code_path_missing         — Code path declares a directory that does not exist
-#   visual_review_bad_state   — **Visual Review:** state token is not enabled|disabled
-#   visual_review_no_path     — **Visual Review:** line has a state but no registry path
-#   visual_review_path_escape — **Visual Review:** registry path escapes the project folder
+#   missing_arg                — script called without $1 (defensive; emit + exit 0)
+#   folder_missing             — project folder does not exist
+#   project_state_md_missing   — project_state.md not in folder
+#   code_path_unknown          — project_state.md has no Code path line (first-use case)
+#   code_path_missing          — Code path declares a directory that does not exist
+#   visual_review_bad_state    — **Visual Review:** state token is not enabled|disabled
+#   visual_review_no_path      — **Visual Review:** line has a state but no registry path
+#   visual_review_path_escape  — **Visual Review:** registry path escapes the project folder
+#   process_recipe_bad_source  — a process_recipes slot has source not in dev-guides|local|research
 #
 # codePath sentinels in project_state.md:
 #   **Code path:** /abs/path    → non-null string
@@ -58,6 +62,9 @@ emit_json() {
   # $5 = playbookSets JSON array, $6 = playbookSetsSource string,
   # $7 = userPlaybook (string "null" literal for null), $8 = userPlaybookState string,
   # $9 = playbookResolutions JSON array
+  # $10 = worktreeByDefault bool string, $11 = reviewRequired bool|"null", $12 = visualReview JSON
+  # $13 = frameworks JSON array, $14 = localGuidesPath (string "null" for null),
+  # $15 = processRecipes JSON array
   jq -nc \
     --arg n "$1" --arg cp "$2" --arg d "$3" \
     --argjson w "$4" \
@@ -66,7 +73,10 @@ emit_json() {
     --argjson pr "${9:-[]}" \
     --argjson wbd "${10:-false}" \
     --arg rr "${11:-null}" \
-    --argjson vr "${12:-null}" '
+    --argjson vr "${12:-null}" \
+    --argjson fr "${13:-[]}" \
+    --arg lgp "${14:-null}" \
+    --argjson rec "${15:-[]}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -79,6 +89,9 @@ emit_json() {
       worktreeByDefault: $wbd,
       reviewRequired: (if $rr == "null" then null elif $rr == "true" then true else false end),
       visualReview: $vr,
+      frameworks: $fr,
+      localGuidesPath: (if $lgp == "null" then null else $lgp end),
+      processRecipes: $rec,
       warnings: $w
     }'
 }
@@ -107,7 +120,7 @@ DEFAULT_PB_SETS=$(get_default_playbook_sets)
 # H1 fix (v4.1.0): missing arg → defensive emit, do NOT exit 1
 if [ -z "$PROJECT_DIR" ]; then
   emit_json "(no project)" "null" "" '[{"code": "missing_arg", "detail": "path to project folder required as $1"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
   exit 0
 fi
 
@@ -126,13 +139,13 @@ parse_bool() {
 
 if [ ! -d "$PROJECT_DIR" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
   exit 0
 fi
 
 if [ ! -f "$PROJECT_STATE" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
   exit 0
 fi
 
@@ -307,7 +320,7 @@ if [ -n "$VR_RAW" ]; then
     add_warning "visual_review_no_path" "**Visual Review:** has a state but no registry path"
     VR_OUT=$(jq -nc --argjson e "$VR_ENABLED" '{enabled: $e, registryPath: null}')
   else
-    # The registry path MUST be relative (surface-registry-schema.md §2). An
+    # The registry path MUST be relative (surface-registry-schema.md). An
     # absolute path would survive the realpath prefix check below — joining
     # "$PROJ_REAL/$VR_PATH" with an absolute $VR_PATH string-concatenates to
     # "$PROJ_REAL/etc/passwd" (shell join, not Python os.path.join), which
@@ -347,6 +360,99 @@ if [ -n "$VR_RAW" ]; then
   fi
 fi
 
+# === Frameworks parsing ===
+# Comma-separated flat list, same idiom as Playbook Sets.
+FRAMEWORKS_RAW=$(awk '
+  /^\*\*[Ff]rameworks:\*\*/ {
+    sub(/^\*\*[Ff]rameworks:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+if [ -z "$FRAMEWORKS_RAW" ]; then
+  FRAMEWORKS_OUT="[]"
+else
+  FRAMEWORKS_OUT=$(echo "$FRAMEWORKS_RAW" | jq -R -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
+  [ -z "$FRAMEWORKS_OUT" ] && FRAMEWORKS_OUT="[]"
+fi
+
+# === Local Guides Path parsing ===
+# Single trimmed value, same idiom as Code path. No path-escape validation (configured dir name).
+LGP_RAW=$(awk '
+  /^\*\*[Ll]ocal [Gg]uides [Pp]ath:\*\*/ {
+    sub(/^\*\*[Ll]ocal [Gg]uides [Pp]ath:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+
+if [ -z "$LGP_RAW" ]; then
+  LGP_OUT="null"
+else
+  LGP_OUT="$LGP_RAW"
+fi
+
+# === Process Recipes parsing ===
+# Format: multi-line list under **Process Recipes:** heading
+#   - e2e-setup/nextjs/playwright → source=dev-guides
+#   - e2e-setup/symfony/panther → source=local
+# Only → and -> are accepted as key/attrs separator (= would collide with attr key=value pairs).
+# Source-only records — nothing is pinned. Lenient: any other token on the line
+# (e.g. a leftover pinned_sha=... from an older format) is ignored; we parse the
+# source and drop the rest so stale files do not break.
+# H2 fix rationale: emit key/source as TAB-separated text from awk; build JSON in jq.
+PROC_REC_LINES=$(awk '
+  BEGIN { in_block = 0 }
+  /^\*\*[Pp]rocess [Rr]ecipes:\*\*/ { in_block = 1; next }
+  in_block && (/^\*\*[A-Z]/ || /^## /) { in_block = 0 }
+  in_block && /^- / {
+    line = $0
+    sub(/^- */, "", line)
+    if (match(line, / *(→|->) */)) {
+      key = substr(line, 1, RSTART-1)
+      attrs = substr(line, RSTART+RLENGTH)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", attrs)
+      gsub(/\t/, " ", key)
+      gsub(/\t/, " ", attrs)
+      src = ""
+      n = split(attrs, pairs, /[[:space:]]+/)
+      for (i = 1; i <= n; i++) {
+        if (pairs[i] ~ /^source=/) {
+          src = substr(pairs[i], 8)
+        }
+        # Any other token (e.g. a stale pinned_sha=...) is ignored on purpose.
+      }
+      printf("%s\t%s\n", key, src)
+    }
+  }
+' "$PROJECT_STATE")
+
+# Validate sources and add warnings (must run before building the JSON array so WARNINGS is up to date)
+if [ -n "$PROC_REC_LINES" ]; then
+  while IFS=$'\t' read -r rec_key rec_src; do
+    [ -z "$rec_key" ] && continue
+    case "$rec_src" in
+      dev-guides|local|machine-local|research) ;;
+      "") add_warning "process_recipe_bad_source" "process_recipes slot '$rec_key' missing source" ;;
+      *)  add_warning "process_recipe_bad_source" "expected source dev-guides|local|machine-local|research, got: $rec_src (slot: $rec_key)" ;;
+    esac
+  done <<< "$PROC_REC_LINES"
+fi
+
+if [ -z "$PROC_REC_LINES" ]; then
+  PROCESS_RECIPES="[]"
+else
+  PROCESS_RECIPES=$(echo "$PROC_REC_LINES" | jq -R -s -c '
+    split("\n") | map(select(length > 0)) | map(split("\t")) |
+    map({
+      key: .[0],
+      source: (if .[1] == "" then null else .[1] end)
+    })')
+  [ -z "$PROCESS_RECIPES" ] && PROCESS_RECIPES="[]"
+fi
+
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
   "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT" \
-  "$VR_OUT"
+  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES"

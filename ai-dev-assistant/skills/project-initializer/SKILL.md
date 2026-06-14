@@ -88,6 +88,7 @@ Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 **Status:** Initializing
 **Path:** {full_path_to_project_folder}
 **Code path:** {absolute_code_path OR (docs-only) OR omit-entirely-if-caller-did-not-provide}
+**Frameworks:** {when code path is known: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-frameworks.sh" "<code_path>"` and write the `jq -r 'join(", ")'` result (e.g. `drupal, nextjs`); omit this line entirely when code path is unknown or the returned array is empty}
 
 ## Overview
 {To be filled during requirements gathering}
@@ -117,6 +118,7 @@ Initial setup - gathering requirements
 ```
 
 **Notes:**
+- Never write an empty or placeholder `**Frameworks:**` line. The reader treats absence as `[]`. Only write the line when `detect-frameworks.sh` returns a non-empty array.
 - The project does NOT have a phase. Each TASK has its own phase (Research → Architecture → Implementation)
 - Multiple tasks can be in `implementation_process/in_progress/` simultaneously
 - Task files in `in_progress/` contain the task's current phase and progress
@@ -196,7 +198,7 @@ Once requirements-gatherer completes and user confirms, show — in order:
 
 ```
 💡 Optional next step: configure your playbook before the first task.
-   /ai-dev-assistant:set-playbook-sets — choose opinion-set(s) (default: drupal/best-practices/camoa)
+   /ai-dev-assistant:set-playbook-sets — choose opinion-set(s) (default: <framework>/best-practices/<author>)
    /ai-dev-assistant:set-user-playbook — point at a project-local playbook.md
    Playbook loads at every phase entry; configuring now means your first task gets the active opinion-set
    from the start. Skip if you want plain dev-guides only — /next will re-surface this nudge.

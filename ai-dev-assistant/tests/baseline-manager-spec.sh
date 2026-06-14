@@ -120,7 +120,7 @@ fi
 
 # === Test 12 (regression, paper-test EC-10): execute mode with --confirmed ===
 # but NO visual-chromium-* projects → exit 2, refuses unscoped --update-snapshots
-# (would otherwise regenerate ATK's e2e snapshots). The abort happens before
+# (would otherwise regenerate the e2e snapshots). The abort happens before
 # npx is reached, so this is offline-deterministic.
 CP2="$TMPDIR/cp2"
 mkdir -p "$CP2/tests/visual" "$CP2/.visual-review"

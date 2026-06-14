@@ -1,7 +1,5 @@
 # Visual Parity v2 — Walkthrough
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 **ai-dev-assistant v4.14.0 (Task D — `visual_and_e2e_review_gates`)**
 
 The full rationale, examples, and workflow behind `/setup-visual-parity` +
@@ -10,14 +8,14 @@ The full rationale, examples, and workflow behind `/setup-visual-parity` +
 Visual **parity** compares the built output against an *external design reference* — a
 Figma export, a prod URL, an HTML/React template, a static comp. Visual **regression**
 (Task C) compares the build against its own committed baseline. They are siblings: same
-`@lullabot/playwright-drupal` + host-side Playwright stack, same surface registry, same
-soft-gate posture — they differ only in what the build is measured against.
+host-side Playwright stack, same surface registry, same soft-gate posture — they differ
+only in what the build is measured against.
 
 ## 1. What changed from v3.13.0
 
 | v3.13.0 `validate-visual-parity` | v4.14.0 |
 |---|---|
-| Ad-hoc Playwright MCP capture of the build | Committed `tests/parity/` suite, host-side Playwright + Lullabot (the Task C stack) |
+| Ad-hoc Playwright MCP capture of the build | Committed `tests/parity/` suite, host-side Playwright (the Task C stack) |
 | `<component> <viewport> <reference>` positional args | Registry-driven — surfaces with a `parity_reference` |
 | `odiff` / standalone pixelmatch | `pixelmatch` inside `parity-compare.mjs` |
 | **Bare pixel-% verdict** | **Two-layer diff** — coarse pixel-% + structured CSS-actionable diff |
@@ -58,12 +56,12 @@ A CSS-actionable diff needs CSS on **both** sides. A flat PNG has none.
 For `figma`/`image` the gate reports the coarse pixel diff plus the *build side's own*
 computed styles, honestly labelled `css_diff_mode: "build-only"`. It never fabricates a
 reference comparison. **Prefer `html-template`/`react-template` when CSS precision
-matters** — and such a template is *buildable-from*, not only diffable-against (see §8).
+matters** — and such a template is *buildable-from*, not only diffable-against (see the build input section).
 
 ## 4. Setup — `/setup-visual-parity`
 
 Parity **hard-depends** on `/setup-visual-regression` — it reuses that command's
-Lullabot install, `playwright.config.ts`, surface registry, and viewport matrix. Run
+Playwright install, `playwright.config.ts`, surface registry, and viewport matrix. Run
 visual-regression setup first; `/setup-visual-parity` refuses otherwise.
 
 `/setup-visual-parity` then: installs `pixelmatch` + `pngjs`; scaffolds `tests/parity/`
@@ -84,7 +82,7 @@ Per surface you supply `type`, `uri`, and optionally `compare_selectors`:
   breakage below the comp's fold is not caught (prefer a renderable reference, or a
   single-viewport run, when this matters). Figma MCP/API live integration is future-only.
 - **`html-template` / pre-rendered `react-template`** — an in-repo path; rendered
-  headless for comparison, and usable as a build input (§8).
+  headless for comparison, and usable as a build input (see the build input section).
 - **`react-template` (served)** / **`prod-url`** — an `http(s)` URL fetched live each
   run.
 - **`image`** — a static PNG/JPG path, committed like `figma`.
@@ -149,7 +147,7 @@ never silently accepts a changed reference.
 ## 11. CI
 
 Parity runs host-side like the regression gate — `npx playwright test --project
-parity-chromium-*` against a reachable DDEV (or `PLAYWRIGHT_BASE_URL`) site. In `--ci`
+parity-chromium-*` against a reachable site (via `PLAYWRIGHT_BASE_URL`). In `--ci`
 mode there are no classification prompts: any gap → `fail`. `prod-url` references in CI
 must be publicly reachable (v1 supports public pages only — auth-aware fetching is
 deferred).

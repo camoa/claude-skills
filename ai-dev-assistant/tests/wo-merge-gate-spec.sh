@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TDD spec for scripts/wo-merge-gate.sh (K3) — PURE merge verdict kernel.
-# Test table: T1–T11 per architecture/kernels.md §K3.
+# Test table: T1–T11 per architecture/kernels.md.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
 export CLAUDE_PLUGIN_ROOT="$ROOT"

@@ -1,13 +1,13 @@
 ---
 name: work-order-critique
-description: "Use when an orchestrator must run the opt-in §16.2 adversarial-critique rung on ONE built work-order — the absent-human review layered ABOVE the deterministic gates. Derives the work-order's risk tier (wo-risk-classify.sh), decides whether critique is required (forced-on for high-risk-unattended; else the per-task/per-project dial), spawns risk-scaled INDEPENDENT fresh-context wo-critic agents that re-derive the verdict from artifacts (git diff + gate envelopes), aggregates fail-closed (wo-critique-aggregate.sh) into a per-WO _critique.json, and writes a wo-NN.HALT marker when blocking. Fan-out is the unattended primitive; never edits /review's _review.json. A judgment layer, not a gate — gates always run first."
+description: "Use when an orchestrator must run the opt-in adversarial-critique rung on ONE built work-order — the absent-human review layered ABOVE the deterministic gates. Derives the work-order's risk tier (wo-risk-classify.sh), decides whether critique is required (forced-on for high-risk-unattended; else the per-task/per-project dial), spawns risk-scaled INDEPENDENT fresh-context wo-critic agents that re-derive the verdict from artifacts (git diff + gate envelopes), aggregates fail-closed (wo-critique-aggregate.sh) into a per-WO _critique.json, and writes a wo-NN.HALT marker when blocking. Fan-out is the unattended primitive; never edits /review's _review.json. A judgment layer, not a gate — gates always run first."
 version: 0.1.0
 user-invocable: false
 model: inherit
 allowed-tools: Read, Bash, Task
 ---
 
-# Work-Order Critique (the §16.2 adversarial-critique rung)
+# Work-Order Critique (the adversarial-critique rung)
 
 The judgment layer **above** the deterministic gates. Gates always run (mechanism A); this is the
 opt-in/forced critique on top. **All verdict math is in the kernels** — this skill orchestrates, it
@@ -40,16 +40,48 @@ git -C "<worktree>" diff <before>..<after> --name-only > "$CDIR/files.txt"
 
 The oracle-tamper guard runs **before the risk classifier and before any critic is spawned** — catching tamper
 before any critic budget is spent. It needs `--name-status` (so deletions are visible); this is a SEPARATE
-diff alongside `files.txt`.
+diff alongside `files.txt`. The guard is **fail-closed**: if the kernel exits non-zero or returns anything other
+than a well-formed verdict object (the gate could not run), the WO HALTs with `oracle_check_error` — it never
+falls through to the critics. Only a clean exit-0 verdict with `tamper_detected:false` proceeds.
+
+The kernel is framework-agnostic: it monitors **only** the oracle-file list it is handed. **Reconstruct that
+list on the fly from the active framework's first-party recipe each run** — never from a persistent project
+file a builder could empty. Read the `## Oracle files` declaration out of the resolved recipe body (the
+recipe-resolution protocol already loaded it for this task's framework + phase; union the declarations across
+the resolved recipes that apply — review/standards plus any VR/E2E recipes the project set up), emit it as the
+kernel's `--oracle-files` JSON array, and write it to `$CDIR/oracle-files.json`. The list re-derives from the
+trusted recipe every run, so there is no mutable local knob to disable monitoring. A framework that declares no
+oracle files yields an empty array — an honest "no oracle configured" verdict (`oracle_configured:false`), not
+a silent pass.
 ```bash
 # derive NAME-STATUS diff — --name-only hides deletions (D); the oracle check needs them
 git -C "<worktree>" diff <before>..<after> --name-status > "$CDIR/name-status.txt"
 
-# invoke wo-01's kernel; pass the WO file PATH (safe read for oracle_update field, H1 — never paste diff content)
-ORACLE=$(bash "$KERNEL/wo-oracle-check.sh" "<wo-file>" --diff-from "$CDIR/name-status.txt")
+# RECONSTRUCT the oracle-file list from the resolved recipe's `## Oracle files` declaration (re-derived
+# each run — NOT read from a project file). Each rule: {type, globs[], changes[], oracle_class, severity}.
+# An empty array (`[]`) is the honest "no oracle configured" state. Write it fresh every run.
+printf '%s' "$ORACLE_FILES_JSON" > "$CDIR/oracle-files.json"   # from the resolved recipe body, this run
+
+# invoke wo-01's kernel; pass the WO file PATH (safe read for oracle_update field, H1 — never paste diff
+# content) AND the freshly-reconstructed oracle-file list (the kernel hardcodes no framework knowledge).
+# Capture BOTH stdout AND the exit code: the kernel exits 2 with NO JSON on stdout on bad args / unreadable
+# inputs / a malformed --oracle-files contract.
+ORACLE=$(bash "$KERNEL/wo-oracle-check.sh" "<wo-file>" --diff-from "$CDIR/name-status.txt" \
+         --oracle-files "$CDIR/oracle-files.json"); ORACLE_RC=$?
+
+# FAIL-CLOSED guard (defense-in-depth): a non-zero exit OR stdout that is not a well-formed verdict object
+# means the oracle could NOT render a verdict — the gate did not run. Treat that as a HALT, NEVER a
+# fall-through to critics. A builder who breaks the invocation (empties the rules file to a non-array,
+# corrupts the diff, kills the kernel) must not thereby skip oracle monitoring and reach the critic stage.
+# This is a SEPARATE reason from a genuine tamper finding so ③ / a human can tell "oracle broke" from
+# "oracle caught a cheat".
+if [ "$ORACLE_RC" -ne 0 ] || ! printf '%s' "$ORACLE" | jq -e 'type=="object" and has("tamper_detected")' >/dev/null 2>&1; then
+  jq -nc --arg wo "$WO_ID" --arg r "oracle_check_error" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+     '{wo_id:$wo, reason:$r, at:$at}' > "<task>/work-orders/${WO_ID}.HALT"
+  # emit the compact line (oracle_check_error), RETURN — the loop's terminal-HALT path escalates. NOT a critic skip.
 
 # on tamper_detected → write oracle_tamper HALT (jq-built; NEVER string-concatenated) and RETURN — critics NOT spawned
-if [ "$(printf '%s' "$ORACLE" | jq -r '.tamper_detected')" = "true" ]; then
+elif [ "$(printf '%s' "$ORACLE" | jq -r '.tamper_detected')" = "true" ]; then
   jq -nc --arg wo "$WO_ID" --arg r "oracle_tamper" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
      '{wo_id:$wo, reason:$r, at:$at}' > "<task>/work-orders/${WO_ID}.HALT"
   # emit the compact line (forward oracle signals[]), RETURN — the loop's terminal-HALT path escalates

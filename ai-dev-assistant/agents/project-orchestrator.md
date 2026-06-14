@@ -206,7 +206,7 @@ Phase: {1-Research / 2-Architecture / 3-Implementation}
 |-----------|----------|
 | No requirements | `requirements-gatherer` skill |
 | No tasks defined | Ask user for task |
-| Task needs research | `contrib-researcher` agent |
+| Task needs research | `prior-art-researcher` agent |
 | Task needs architecture | `architecture-drafter` agent |
 | Task needs implementation | `task-context-loader` skill |
 | Task complete | `task-completer` skill |

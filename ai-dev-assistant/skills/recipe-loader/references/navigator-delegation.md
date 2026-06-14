@@ -42,7 +42,7 @@ Lines are grouped under `## <Domain>` headings:
 ```
 - **Match on `[<capability>]` + when-to-use** (the semantic key) — not on `<name>`.
 - `<name>` is the `recipes.<name>` cache key (used to read the body).
-- `## <Domain>` is generic (`## Drupal` exists today; the grammar is open) — **never hardcode a domain.**
+- `## <Domain>` is generic (concrete domain headers appear at runtime; the grammar is open) — **never hardcode a domain.**
 
 ## Recipe body: routing block + optional machine deps
 The body's frontmatter has two tiers, separated by a seam comment:

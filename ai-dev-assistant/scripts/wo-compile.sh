@@ -710,7 +710,7 @@ print("---")'
 #   grounding_clean = verified==true
 #                     AND coverage_status=="covered"  (the verified-claim cross-
 #                         check — verified:true is honored ONLY if coverage agrees)
-#                     AND lockfile has NO null-sha entry  (§14.5 hard execution
+#                     AND lockfile has NO null-sha entry  (lockfile hard execution
 #                         gate: an unpinnable ref BLOCKS dispatch; absent/empty
 #                         lockfile ⇒ no refs ⇒ this clause PASSES; a present-but-
 #                         non-array, or a non-object element ⇒ fail-closed)
@@ -729,9 +729,9 @@ print("---")'
 #     all pass  → "dispatchable"
 # Defaults fail-closed: a missing verified / drift receipt, or an unpinnable ref,
 # reads as not-dispatchable.
-# NOTE (design §17, 2026-06-11): autonomy_safe is NO LONGER a dispatch gate. Autonomy is
+# NOTE (design 2026-06-11): autonomy_safe is NO LONGER a dispatch gate. Autonomy is
 # mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in recipe
-# authoring. Dispatch rides on grounding + status; the gate floor, §16.2 critique,
+# authoring. Dispatch rides on grounding + status; the gate floor, the adversarial critique,
 # no-auto-merge, and human-merge are the safety net.
 # ─────────────────────────────────────────────────────────────────────────────
 cmd_assert_dispatchable() {
@@ -769,7 +769,7 @@ cmd_assert_dispatchable() {
     | (if ($dg | type) == "object" then $dg.acceptance_runnable else null end) as $dgacc
     | ($v == true) as $vtrue
     | ($cs == "covered") as $covered
-    # §14.5 lockfile gate: absent/null ⇒ no refs ⇒ PASS; a present-non-array, or
+    # Lockfile gate: absent/null ⇒ no refs ⇒ PASS; a present-non-array, or
     # any non-object element, or any null-sha element ⇒ FAIL (unpinnable ref).
     | (if ($lf == null) then true
        elif ($lf | type == "array") then ($lf | all(if type == "object" then (.sha != null) else false end))
@@ -780,7 +780,7 @@ cmd_assert_dispatchable() {
     | (override_valid($ov)) as $ovok
     | ($grounding_clean or $ovok) as $cleared   # override bypasses ALL grounding
     | ($st == "ready") as $status_ok
-    # autonomy_safe is NO LONGER a dispatch gate (design §17, 2026-06-11): autonomy is
+    # autonomy_safe is NO LONGER a dispatch gate (design 2026-06-11): autonomy is
     # mode-keyed recipe behavior (stop-and-ask@L0 / infer-and-flag@L1-L2), enforced in
     # recipe authoring — not a per-WO flag. The field may still be present but never blocks.
     | ($cleared and $status_ok) as $disp

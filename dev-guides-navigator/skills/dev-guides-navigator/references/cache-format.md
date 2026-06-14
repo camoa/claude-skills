@@ -1,18 +1,30 @@
 # Cache Format
 
-This file is a **contract**. Other plugins (notably `ai-dev-assistant`)
-locate and parse this cache directly. Do not change the location derivation or
-the schema without updating those consumers.
+> **TRANSITIONAL — COMPAT SHIM ONLY.** The canonical store and lockfile contract is
+> now `store-contract.md`. Both per-project cache files below are compat shims; they
+> will be retired after `ai-dev-assistant` cuts over to reading the shared store
+> (`~/.claude/dev-guides-store/`) and the per-project lockfile
+> (`dev-guides.lock.json`) directly. Do not build new consumers against these paths.
+
+This file documents the legacy per-project cache paths. `ai-dev-assistant` still
+reads `dev-guides-cache.json` directly at the dashed-cwd path, so the navigator
+continues to write it as a shim (see the Compat Shim section in `store-contract.md`).
+The recipes cache (`dev-guides-recipes-cache.json`) is also written as a shim, rebuilt
+from the shared store by the kernel's `legacy-recipes-shim` so the `recipe-loader`
+consumer keeps working.
 
 There are **two sibling cache files**, same directory, same path derivation:
 
-| File | Catalog | Written by | Schema |
-|------|---------|-----------|--------|
-| `dev-guides-cache.json` | guides (`llms.txt`) | guide search | `{ hash, fetched_at, content }` |
-| `dev-guides-recipes-cache.json` | agentic recipes (`agentic-recipes.txt`) | recipe search (v0.7.0+) | `{ index, recipes }` (below) |
+| File | Catalog | Status | Schema |
+|------|---------|--------|--------|
+| `dev-guides-cache.json` | guides (`llms.txt`) | **COMPAT SHIM** — navigator still writes it after revalidating the `llms` index; shape preserved for `ai-dev-assistant` | `{ hash, fetched_at, content }` |
+| `dev-guides-recipes-cache.json` | agentic recipes (`agentic-recipes.txt`) | **COMPAT SHIM** — rebuilt by the kernel's `legacy-recipes-shim` from the shared store (index + lockfile + blobs) after each recipe-search revalidate and body fetch; shape preserved for the `recipe-loader` consumer in `ai-dev-assistant` | `{ index, recipes }` (below) |
 
-The two files are independent. Recipe search (v0.7.0) added the recipes cache; it
-does **not** change the guides-cache schema.
+The two files are independent. Recipe search added the recipes cache; it does **not**
+change the guides-cache schema. The recipe bodies live in the shared blob store
+(`~/.claude/dev-guides-store/blobs/`); this cache file is a rebuilt projection of the
+store into the legacy shape, kept until `recipe-loader` cuts over to reading the
+store/lockfile directly.
 
 ## Location
 

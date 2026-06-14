@@ -1,18 +1,14 @@
 ---
-description: "Run ATK behavioral E2E tests + project-custom journey tests against the Drupal site. Emits a standard validation envelope and _e2e.json audit. gate_type: e2e. Part of the /review dispatcher chain."
+description: "Run behavioral E2E tests via Playwright against the site under test, with an optional project-resolved preflight command registered by the e2e-setup recipe. Emits a standard validation envelope and _e2e.json audit. gate_type: e2e. Part of the /review dispatcher chain."
 allowed-tools: Read, Write, Edit, Bash, Glob
 argument-hint: "[<task>] [--task <name>] [--skip <reason>] [--smoke-only] [--include-e2e]"
 ---
 
 # /validate:e2e
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 <!-- visual-review:dispatch-ready -->
 
-Runs ATK canned behavioral tests + project-custom journey tests. Emits `_e2e.json` (gate audit) and `validations/latest/e2e.json` (standard envelope). Part of the `/review` change-impact dispatcher chain — the `<!-- visual-review:dispatch-ready -->` marker above is what causes `/review` to call this gate.
-
-Full walkthrough: `references/atk-e2e-walkthrough.md`.
+Runs the project's registered behavioral tests + project-custom journey tests. Emits `_e2e.json` (gate audit) and `validations/latest/e2e.json` (standard envelope). Part of the `/review` change-impact dispatcher chain — the `<!-- visual-review:dispatch-ready -->` marker above is what causes `/review` to call this gate.
 
 ## Arguments
 
@@ -58,7 +54,7 @@ If `--skip <reason>` is present:
     }
   }
   ```
-  Note: `gate_specific.verdict` uses `"skipped"` (the §5.9 enum value for gates that did not execute). The bypass intent is captured at the top-level `user_choice`/`bypass_reason` fields. (HP-F2, HP-F3)
+  Note: `gate_specific.verdict` uses `"skipped"` (the enum value for gates that did not execute). The bypass intent is captured at the top-level `user_choice`/`bypass_reason` fields. (HP-F2, HP-F3)
 - Call `scripts/gate-audit-write.sh <task_folder> e2e '<json>'` with the jq-assembled JSON passed safely (no raw string interpolation in shell quoting).
 - Print: `E2E gate bypassed. Reason: <reason>. Recorded in _e2e.json.`
 - Exit 0.
@@ -67,11 +63,13 @@ If `--skip <reason>` is present:
 
 Read `<codePath>/.visual-review/registry.yml`. Filter surfaces where the `gates` list contains `"e2e"`. Extract the `id` values. Pass them to `scripts/validate-e2e.sh` via `--surfaces-json '[...]'`.
 
+Also read the optional top-level `e2e.preflight_command` (defined in the surface-registry schema). If present and non-empty, it is the preflight command the gate runs before the tests. The `e2e-setup` recipe resolved by `/setup-e2e` seeds this field with the framework's preflight command (the preflight command the e2e-setup recipe registered). Pass it through via `--preflight-cmd '<cmd>'`. If absent, pass nothing — no preflight runs.
+
 If the registry is absent or has no `e2e` surfaces: run without `--task` scoping (all tests in `tests/e2e/behavioral/`).
 
 ## Step 4: Invoke validate-e2e.sh
 
-Invoke `scripts/validate-e2e.sh <codePath> [--task <name>] [--smoke-only] [--surfaces-json '<json>']`.
+Invoke `scripts/validate-e2e.sh <codePath> [--task <name>] [--smoke-only] [--surfaces-json '<json>'] [--preflight-cmd '<cmd>']`.
 
 Capture stdout (the result JSON) and exit code.
 
@@ -116,7 +114,7 @@ Build the `_e2e.json` payload from the script's result JSON. Use `jq -n --arg`/`
 }
 ```
 
-Note: `gate_specific.envelope_path` is required by §5.9 (minimum alongside `verdict`). (HP-F1)
+Note: `gate_specific.envelope_path` is required by the gate-audit schema (minimum alongside `verdict`). (HP-F1)
 
 Call `scripts/gate-audit-write.sh <task_folder> e2e '<json>'` passing the jq-assembled JSON safely (via temp file or stdin, never raw single-quoted shell interpolation).
 

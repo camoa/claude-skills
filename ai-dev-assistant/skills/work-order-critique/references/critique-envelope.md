@@ -1,7 +1,7 @@
 # `_critique.json` Envelope + `wo-NN.HALT` Marker — the contract ③ reads
 
 Produced by `wo-critique-aggregate.sh` (C5) at the reserved `critique_ref`
-(`<task>/work-orders/wo-NN._critique.json`). ③ re-reads it **from disk** at merge (§7.3, never the
+(`<task>/work-orders/wo-NN._critique.json`). ③ re-reads it **from disk** at merge (never the
 transcript). The fail-closed verdict math is the kernel's — this is the shape, not the logic.
 
 ## `_critique.json`

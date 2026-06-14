@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TDD spec for scripts/wo-critique-aggregate.sh (C5) — architecture/kernels.md §2 (AR-E).
+# TDD spec for scripts/wo-critique-aggregate.sh (C5) — architecture/kernels.md (AR-E).
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
 export CLAUDE_PLUGIN_ROOT="$ROOT"

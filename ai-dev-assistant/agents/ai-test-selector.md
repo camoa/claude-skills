@@ -66,11 +66,11 @@ positive only runs an extra test.
 ### 2 — High-Confidence-Exclusion Bar
 
 A `skipped_surfaces[].reason` MUST cite concrete, verifiable evidence. Acceptable:
-> "diff is entirely in `modules/custom/foo/foo.module` which registers no route, hook, or service
+> "diff is entirely in `src/components/foo/foo.ts` which registers no route, handler, or service
 > for `/checkout` (confirmed by Grep)."
 
 Not acceptable:
-> "foo.module looks unrelated to checkout."
+> "foo.ts looks unrelated to checkout."
 
 Speculation, vibe, or file-name proximity are not high-confidence evidence. When the evidence
 cannot be stated concretely, SELECT the surface.

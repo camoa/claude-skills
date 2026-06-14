@@ -195,39 +195,39 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 ## Task-Level
 
 ### Goal
-Migrate the legacy settings form to ConfigFormBase with validated schema and admin UI tests.
+Migrate the legacy settings form to the framework's validated config form pattern with schema and admin UI tests.
 
 ### Expected result
-Admin can edit settings via /admin/config/<module>; values persist correctly; smoke tests pass on CI.
+Admin can edit settings via the module's settings page; values persist correctly; smoke tests pass on CI.
 
 ### Success criteria
-- [x] SettingsForm extends ConfigFormBase
-- [x] Config schema exists at config/schema/<module>.schema.yml
+- [x] Settings form extends the framework's base config form class
+- [x] Config schema exists at the expected path
 - [ ] Playwright smoke test covers save + error paths
-- [ ] PHPStan level 8 clean
+- [ ] Static analysis clean at the configured level
 
 ### Non-goals
 - Not changing the routing surface (existing paths remain)
-- Not migrating block config simultaneously (separate task)
+- Not migrating other config forms simultaneously (separate task)
 
 ## Phase 1 — Research
 
 ### Goal
-Identify the canonical core ConfigFormBase pattern plus any contrib enhancements.
+Identify the canonical framework settings-form pattern and any ecosystem enhancements.
 
 ### Expected result
-Research note citing 2–3 core examples and one contrib pattern if relevant.
+Research note citing 2–3 framework-core examples and one ecosystem pattern if relevant.
 
 ### Success criteria
-- [x] Core example cited (drupal/core/modules/system/src/Form/SiteInformationForm.php)
+- [x] Core example cited from the framework's own source tree
 
 ### Non-goals
-- Not evaluating alternative form frameworks (committed to core)
+- Not evaluating alternative form approaches (committed to the framework's canonical pattern)
 ```
 
 ## 11. See also
 
 - `skills/alignment-reader/SKILL.md` — skill wrapper
 - `scripts/alignment-read.sh` — parser
-- `references/analysis-agent-schema.md` §Signal codes — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
+- `references/analysis-agent-schema.md` (the "Signal codes" section) — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
 - `commands/scope.md` — primary authoring command

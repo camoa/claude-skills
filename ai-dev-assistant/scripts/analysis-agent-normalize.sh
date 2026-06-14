@@ -5,7 +5,7 @@
 #   analysis-agent-normalize.sh <json-file>
 #   <agent-output> | analysis-agent-normalize.sh -
 #
-# Enforces schema invariant 2 (references/analysis-agent-schema.md §Invariants):
+# Enforces schema invariant 2 (references/analysis-agent-schema.md, the "Invariants" section):
 # when `code_read == false`, `confidence` MUST be `"low"` — the agent cannot
 # declare high/medium confidence on docs-only input. The agent's output
 # contract states this, but agent-side enforcement is non-deterministic and has

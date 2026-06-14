@@ -2,8 +2,6 @@
 
 A 5-minute walkthrough. For the full reference, see [README.md](README.md).
 
-> The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress).
-
 ## What this framework does
 
 Guides Claude Code through a disciplined **Research → Architecture → Implementation** workflow. Instead of jumping straight to code, Claude:
@@ -20,7 +18,7 @@ The framework is opinionated by default. Two systems power that:
 
 ### Dev-guides — the published reference library
 
-A curated set of [Drupal/Next.js/CSS/methodology guides](https://camoa.github.io/dev-guides/) that Claude loads automatically when relevant. Examples: how to build a config form, when to use SDC vs Layout Builder blocks, BEM naming conventions, TDD discipline.
+A curated set of [framework, CSS, and methodology guides](https://camoa.github.io/dev-guides/) that Claude loads automatically when relevant. Examples: how to structure components, naming conventions, security patterns, TDD discipline.
 
 The framework's `guide-integrator` skill auto-detects task keywords (`form`, `entity`, `service`, `gate`, etc.) and pulls in matching guides at every phase entry — so Claude consults authoritative references before deriving from scratch. v4.0.0+ uses deterministic shell-script keyword matching (not agent judgment) so this can't be silently skipped.
 
@@ -35,7 +33,7 @@ Dev-guides pre-flight: auto-loaded plugin:quality-gates (matched on "gate")
 
 Where dev-guides are general, a **playbook** is opinionated: "do it THIS way, not that way." Two layers:
 
-- **Shipped playbook** — the framework defaults to [Carlos's Drupal best-practices](https://camoa.github.io/dev-guides/drupal/best-practices/camoa/) (20 plays covering RFS font sizing, Layout Builder selectors, SDC patterns, BEF over JS toggles, config-over-code, etc.). Subscribed automatically; opt out per project if you want.
+- **Shipped playbook** — the framework ships with a default published playbook set. [Browse it at dev-guides](https://camoa.github.io/dev-guides/) to see if it fits your project, and opt out per project if you prefer a different default.
 - **Local playbook** — your project-local file (`docs/playbook.md` or similar) that adds your team's rules OR overrides shipped opinions. Local always wins.
 
 The framework loads both layers at every phase entry and surfaces conflicts ("shipped says X, local says Y → local wins"). Configure when you start a project, or anytime via `/set-playbook-sets` and `/set-user-playbook`.
@@ -53,7 +51,7 @@ This pulls `dev-guides-navigator` and `code-quality-tools` automatically (v2.1.1
 
 ## Step 2 — Start your first project
 
-A "project" is a logical unit of work — a module, a component, or a related set of features *(Drupal: a custom module or sub-theme)*.
+A "project" is a logical unit of work: a module, a component, or a related set of features.
 
 ```
 /ai-dev-assistant:new my_first_module
@@ -88,9 +86,9 @@ Each task goes through Research → Architecture → Implementation before code 
 ```
 
 What happens:
-- Claude looks for an existing third-party library that solves it *(Drupal: scans drupal.org/contrib)*
-- Searches the framework's first-party code for matching patterns *(Drupal: core)*
-- Loads relevant guides from [dev-guides](https://camoa.github.io/dev-guides/) (for Drupal: forms, entities, etc.)
+- Claude looks for an existing third-party library that solves it
+- Searches the project's first-party codebase for matching patterns
+- Loads relevant guides from [dev-guides](https://camoa.github.io/dev-guides/)
 - Writes findings to `<project>/implementation_process/in_progress/settings_form/research.md`
 
 You review. Add or correct anything. The framework asks 4 short questions to scope the task if it looks complex (Goal / Expected result / Done when / Won't do here).
@@ -169,7 +167,7 @@ See the **Playbook** section above. Quick commands:
 
 ```
 /ai-dev-assistant:playbook-active                                   # see what's currently active
-/ai-dev-assistant:set-playbook-sets drupal/best-practices/<other>   # subscribe to a different shipped set
+/ai-dev-assistant:set-playbook-sets <framework>/best-practices/<author>   # subscribe to a different shipped set
 /ai-dev-assistant:set-user-playbook /path/to/your/playbook.md       # declare a project-local playbook
 /ai-dev-assistant:playbook-capture                                  # capture a session decision into your local playbook
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TDD spec for scripts/governor.sh (K1) — the ${WO_BUDGET_CMD} backend.
-# Test table T1–T12 per architecture/kernels.md §K1 (safety_governor ④).
+# Test table T1–T12 per architecture/kernels.md (safety_governor ④).
 # No network, no agents, no real classifier. Hermetic rules fixture via CLAUDE_PLUGIN_ROOT.
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"

@@ -12,8 +12,8 @@ Set or update the project's `**Playbook Sets:**` field in `project_state.md`. Th
 
 ```
 /ai-dev-assistant:set-playbook-sets                                       # interactive
-/ai-dev-assistant:set-playbook-sets drupal/best-practices/camoa           # single set
-/ai-dev-assistant:set-playbook-sets drupal/best-practices/camoa,drupal/best-practices/lullabot  # multiple
+/ai-dev-assistant:set-playbook-sets <framework>/best-practices/<author>           # single set
+/ai-dev-assistant:set-playbook-sets <framework>/best-practices/<author1>,<framework>/best-practices/<author2>  # multiple
 /ai-dev-assistant:set-playbook-sets none                                  # explicit opt-out
 ```
 
@@ -48,7 +48,7 @@ Use `Edit` to update the `**Playbook Sets:**` line. If the line doesn't exist, a
 
 Format:
 ```markdown
-**Playbook Sets:** drupal/best-practices/camoa, drupal/best-practices/lullabot
+**Playbook Sets:** <framework>/best-practices/<author1>, <framework>/best-practices/<author2>
 ```
 
 Or, for opt-out:

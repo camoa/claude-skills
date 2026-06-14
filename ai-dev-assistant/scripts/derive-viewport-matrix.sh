@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # derive-viewport-matrix.sh — derive a visual-regression viewport matrix from
-# project context (ai-dev-assistant v4.13.0, Task C).
+# framework-neutral inputs (ai-dev-assistant v4.13.0, Task C).
 #
-# Usage: derive-viewport-matrix.sh <codePath> [--theme-name <name>]
+# Usage: derive-viewport-matrix.sh <codePath> [--breakpoints-from <json>] [--css-root <dir>]
 #
-#   <codePath>      absolute path to the Drupal project root
-#   --theme-name    override custom-theme auto-detection
+#   <codePath>          absolute path to the project root (default --css-root scan dir)
+#   --breakpoints-from  JSON file holding a framework's already-parsed breakpoints:
+#                       [ {name, width [, height]}, ... ]. The framework's process
+#                       recipe RECONSTRUCTS this on the fly from its own native
+#                       breakpoint source each run (e.g. one framework's recipe
+#                       parses its design-system breakpoint file; another reads
+#                       its utility-CSS config).
+#                       The kernel ships NO framework-specific parser of its own — it
+#                       only applies the neutral canonical-height band, dedup, and JSON
+#                       shaping so the recipe never reimplements that logic.
+#   --css-root          directory to scan for CSS @media queries (Path 2).
+#                       Defaults to <codePath> (framework-neutral).
 #
 # Three-path waterfall (research/breakpoint-derivation.md):
-#   Path 1 — parse <theme>.breakpoints.yml (custom theme, or radix contrib fallback)
-#   Path 2 — infer from CSS @media (min-width|max-width) queries
-#   Path 3 — ask the user — NOT done here (interactive); the command falls through
+#   Path 1 — apply --breakpoints-from (recipe-supplied list). A framework recipe
+#            drives this; without it the kernel skips straight to Path 2.
+#   Path 2 — infer from CSS @media (min-width|max-width) queries under --css-root
+#            (framework-neutral).
+#   Path 3 — ask the user — NOT done here (interactive); the command falls through.
 #
 # Output: a JSON array on stdout, suitable for registry.yml `viewports:`. Each
 # entry: {name, width, height, _source}. `_source` is a private annotation for
@@ -19,18 +31,21 @@
 #
 # Exit codes:
 #   0 — viewports derived (Path 1 or Path 2). `_source` says which.
-#   2 — a breakpoints.yml file was found but could not be parsed.
-#   3 — nothing derivable (no breakpoints file AND no usable CSS @media). stdout
+#   2 — a --breakpoints-from file was given but unreadable / not a JSON array /
+#       yielded no usable entries.
+#   3 — nothing derivable (no breakpoints input AND no usable CSS @media). stdout
 #       is `[]`; the command falls through to Path 3 (ask the user).
-#   (exit 1 is reserved/unused — Path 1 failure simply continues to Path 2.)
+#   (exit 1 is reserved/unused — Path 1 absence simply continues to Path 2.)
 #
-# This script parses THEME.breakpoints.yml and CSS — NOT registry.yml. The
-# registry is read by Claude (the command), per Task C D-impl-1.
+# This kernel carries ZERO framework knowledge: it never auto-detects a theme,
+# a docroot, or a native breakpoint file format. Those belong to the framework's
+# process recipe, which feeds the result in via --breakpoints-from.
 
 set -uo pipefail
 
 CODE_PATH="${1:-}"
-THEME_NAME=""
+BREAKPOINTS_FROM=""
+CSS_ROOT=""
 
 if [ -z "$CODE_PATH" ]; then
   echo "derive-viewport-matrix: codePath required" >&2
@@ -41,24 +56,61 @@ shift || true
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --theme-name)
-      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then THEME_NAME="$2"; shift 2
-      else echo "derive-viewport-matrix: --theme-name requires a value" >&2; shift; fi
+    --breakpoints-from)
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then BREAKPOINTS_FROM="$2"; shift 2
+      else echo "derive-viewport-matrix: --breakpoints-from requires a value" >&2; shift; fi
+      ;;
+    --css-root)
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then CSS_ROOT="$2"; shift 2
+      else echo "derive-viewport-matrix: --css-root requires a value" >&2; shift; fi
       ;;
     *) shift ;;
   esac
 done
 
-if [ ! -d "$CODE_PATH" ]; then
-  echo "derive-viewport-matrix: codePath does not exist: $CODE_PATH" >&2
+# ─── Path 1: recipe-supplied breakpoints (--breakpoints-from) ─────────────────
+# A framework recipe parsed its own native breakpoint source into a neutral
+# [ {name, width [, height]}, ... ] list. The kernel applies the canonical
+# height band, dedups by resolved width (first occurrence wins, input order
+# preserved), and shapes the registry JSON. No framework-specific parsing here.
+if [ -n "$BREAKPOINTS_FROM" ]; then
+  if [ ! -f "$BREAKPOINTS_FROM" ]; then
+    echo "derive-viewport-matrix: --breakpoints-from file not found: $BREAKPOINTS_FROM" >&2
+    echo "[]"
+    exit 2
+  fi
+  if ! jq -e 'type == "array"' "$BREAKPOINTS_FROM" >/dev/null 2>&1; then
+    echo "derive-viewport-matrix: --breakpoints-from is not a JSON array: $BREAKPOINTS_FROM" >&2
+    echo "[]"
+    exit 2
+  fi
+  RESULT=$(jq -c '
+    def hb: if   . <= 480  then 812
+            elif . <= 1024 then 1024
+            elif . <= 1440 then 900
+            else 1080 end;
+    [ .[]
+      | select((.name | type) == "string" and (.width | type) == "number")
+      | (.width | floor) as $w
+      | { name: .name,
+          width: $w,
+          height: ((if (.height | type) == "number" then (.height | floor) else ($w | hb) end)),
+          _source: "breakpoints" }
+    ]
+    # dedup by width, first occurrence wins, input order preserved
+    | reduce .[] as $v ([]; if any(.[]; .width == $v.width) then . else . + [$v] end)
+  ' "$BREAKPOINTS_FROM" 2>/dev/null || echo '[]')
+
+  if [ "$(jq 'length' <<<"$RESULT" 2>/dev/null || echo 0)" -gt 0 ]; then
+    echo "$RESULT"
+    exit 0
+  fi
+  echo "derive-viewport-matrix: --breakpoints-from yielded no usable entries: $BREAKPOINTS_FROM" >&2
   echo "[]"
-  exit 3
+  exit 2
 fi
 
-# Resolve the docroot — Drupal may keep themes under web/ or at the root.
-DOCROOT="$CODE_PATH/web"
-[ -d "$DOCROOT/themes" ] || DOCROOT="$CODE_PATH"
-CUSTOM_DIR="$DOCROOT/themes/custom"
+# ─── Path 2: CSS @media scan (framework-neutral) ──────────────────────────────
 
 # Canonical height per width band (research/breakpoint-derivation.md).
 height_for_width() {
@@ -69,103 +121,11 @@ height_for_width() {
   else echo 1080; fi
 }
 
-# ─── Path 1: THEME.breakpoints.yml ───────────────────────────────────────────
-
-BREAKPOINTS_FILE=""
-SOURCE_LABEL=""
-
-if [ -n "$THEME_NAME" ]; then
-  CAND="$CUSTOM_DIR/$THEME_NAME/$THEME_NAME.breakpoints.yml"
-  [ -f "$CAND" ] && { BREAKPOINTS_FILE="$CAND"; SOURCE_LABEL="breakpoints.yml"; }
-elif [ -d "$CUSTOM_DIR" ]; then
-  # Auto-detect: use the sole custom theme that ships a breakpoints file.
-  FOUND=()
-  while IFS= read -r d; do
-    [ -z "$d" ] && continue
-    tn=$(basename "$d")
-    [ -f "$d/$tn.breakpoints.yml" ] && FOUND+=("$d/$tn.breakpoints.yml")
-  done < <(find "$CUSTOM_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
-  if [ "${#FOUND[@]}" -eq 1 ]; then
-    BREAKPOINTS_FILE="${FOUND[0]}"
-    SOURCE_LABEL="breakpoints.yml"
-  fi
-fi
-
-# Radix sub-theme fallback.
-if [ -z "$BREAKPOINTS_FILE" ]; then
-  RADIX="$DOCROOT/themes/contrib/radix/radix.breakpoints.yml"
-  [ -f "$RADIX" ] && { BREAKPOINTS_FILE="$RADIX"; SOURCE_LABEL="breakpoints.yml"; }
-fi
-
-if [ -n "$BREAKPOINTS_FILE" ]; then
-  # awk emits one TAB-separated line per breakpoint: weight<TAB>minwidth<TAB>name<TAB>fullkey
-  # name = the segment of the breakpoint key after the last dot (mytheme.mobile → mobile).
-  BP_LINES=$(awk '
-    function flush() { if (cur != "") print w "\t" mw "\t" nm "\t" cur }
-    /^[A-Za-z_][A-Za-z0-9_.-]*:[[:space:]]*$/ {
-      flush()
-      cur = $0; sub(/:[[:space:]]*$/, "", cur)
-      n = split(cur, parts, ".")
-      nm = parts[n]
-      w = 999; mw = "none"
-      next
-    }
-    /^[[:space:]]+weight:[[:space:]]*/ {
-      line = $0; sub(/^[[:space:]]+weight:[[:space:]]*/, "", line)
-      w = line + 0
-      next
-    }
-    /^[[:space:]]+mediaQuery:[[:space:]]*/ {
-      line = $0
-      if (match(line, /min-width:[[:space:]]*[0-9]+/)) {
-        seg = substr(line, RSTART, RLENGTH)
-        sub(/min-width:[[:space:]]*/, "", seg)
-        mw = seg + 0
-      }
-      next
-    }
-    END { flush() }
-  ' "$BREAKPOINTS_FILE" 2>/dev/null)
-
-  if [ -z "$BP_LINES" ]; then
-    echo "derive-viewport-matrix: $BREAKPOINTS_FILE has no parseable breakpoints" >&2
-    echo "[]"
-    exit 2
-  fi
-
-  # Build the JSON array, sorted by weight, skipping breakpoints with no
-  # min-width, deduplicating by resolved width.
-  RESULT='[]'
-  SEEN_WIDTHS=" "
-  while IFS=$'\t' read -r weight mw name fullkey; do
-    [ -z "$name" ] && continue
-    [ "$mw" = "none" ] && continue
-    if [ "$mw" -eq 0 ] 2>/dev/null; then
-      width=375
-    else
-      width="$mw"
-    fi
-    case "$SEEN_WIDTHS" in *" $width "*) continue ;; esac
-    SEEN_WIDTHS="$SEEN_WIDTHS$width "
-    height=$(height_for_width "$width")
-    RESULT=$(jq -c \
-      --arg n "$name" --argjson w "$width" --argjson h "$height" \
-      --arg s "$SOURCE_LABEL:$fullkey" \
-      '. + [{name: $n, width: $w, height: $h, _source: $s}]' <<<"$RESULT")
-  done < <(printf '%s\n' "$BP_LINES" | sort -n -k1,1)
-
-  if [ "$(jq 'length' <<<"$RESULT")" -gt 0 ]; then
-    echo "$RESULT"
-    exit 0
-  fi
-  # All breakpoints lacked a min-width — fall through to Path 2.
-fi
-
-# ─── Path 2: CSS @media scan ─────────────────────────────────────────────────
-
+# Scan root is --css-root when given, else the project root (framework-neutral).
+SCAN_DIR="${CSS_ROOT:-$CODE_PATH}"
 CSS_WIDTHS=""
-if [ -d "$CUSTOM_DIR" ]; then
-  CSS_WIDTHS=$(find "$CUSTOM_DIR" -name '*.css' -not -path '*/node_modules/*' 2>/dev/null \
+if [ -d "$SCAN_DIR" ]; then
+  CSS_WIDTHS=$(find "$SCAN_DIR" -name '*.css' -not -path '*/node_modules/*' 2>/dev/null \
     | head -200 \
     | xargs grep -hoE '(min-width|max-width)[[:space:]]*:[[:space:]]*[0-9]+px' 2>/dev/null \
     | grep -oE '[0-9]+' \
@@ -174,7 +134,7 @@ if [ -d "$CUSTOM_DIR" ]; then
 fi
 
 if [ -z "$CSS_WIDTHS" ]; then
-  echo "derive-viewport-matrix: no breakpoints.yml and no usable CSS @media queries found" >&2
+  echo "derive-viewport-matrix: no breakpoints input and no usable CSS @media queries found" >&2
   echo "[]"
   exit 3
 fi

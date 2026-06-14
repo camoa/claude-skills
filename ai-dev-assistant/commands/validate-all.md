@@ -47,7 +47,7 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
    **Non-interactive (CI) mode:** when `/validate:all` runs without a TTY or with `$CI` set (detect via `[ -t 0 ] || [ -n "$CI" ]`), pass `--ci` to `visual-regression-gate.sh`. In `--ci` mode the suite still runs, but any diff is recorded as `fail` with no classification prompt and no baseline write — defaulting to `intentional` would silently move baselines (dangerous); defaulting to `regression` is the honest CI outcome. This matches v3.13.0's CI posture (interactive classification only happens in an interactive session).
 
-5. **Aggregate into the `_all.json` envelope** (per `references/validation-gate-result.md` §6):
+5. **Aggregate into the `_all.json` envelope** (per `references/validation-gate-result.md`):
 
    ```json
    {

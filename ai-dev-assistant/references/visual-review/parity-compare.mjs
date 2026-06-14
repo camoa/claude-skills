@@ -30,7 +30,7 @@
  *
  * Runtime env:
  *   PARITY_RUN_DIR        directory the gate created for this run's artifacts (required)
- *   PARITY_CODE_PATH      the Drupal codePath — confinement root for file references
+ *   PARITY_CODE_PATH      the project codePath — confinement root for file references
  *                         (the gate exports it; falls back to process.cwd())
  *   PARITY_MAX_DIFF_RATIO coarse pixel-diff threshold (optional; default 0.05)
  */

@@ -11,10 +11,10 @@ The `guides-matcher` agent reads the cached `dev-guides-navigator` catalog and e
 `catalog_path` points at `dev-guides-cache.json` written by `dev-guides-navigator`. It is a **JSON object** with the schema `{ "hash", "fetched_at", "content" }` (see the navigator's `references/cache-format.md`). The `.content` field holds the **full `llms.txt` markdown** — a topic table whose lines look like:
 
 ```
-- [Views](https://camoa.github.io/dev-guides/drupal/views/): 23 guides — Views — routing, listing, filters…
+- [Modern CSS](https://camoa.github.io/dev-guides/css/modern/): 15 guides — CSS — grid, flexbox, custom properties…
 ```
 
-The agent parses topic entries out of that markdown: `slug` is the URL path after `dev-guides/` with the trailing slash stripped (`drupal/views`), plus the bracketed title and the trailing description. **There is no slug array** — earlier drafts of this schema implied "parse JSON, extract slugs," which never matched the real on-disk shape. A cache file with no `.content` key is treated as missing.
+The agent parses topic entries out of that markdown: `slug` is the URL path after `dev-guides/` with the trailing slash stripped (e.g. `css/modern`), plus the bracketed title and the trailing description. **There is no slug array** — earlier drafts of this schema implied "parse JSON, extract slugs," which never matched the real on-disk shape. A cache file with no `.content` key is treated as missing.
 
 ## Why a subagent
 
@@ -34,17 +34,21 @@ Callers spawn the agent with this prompt structure (pseudo-shape; real prompt is
   "catalog_path": "/abs/path/to/dev-guides-cache.json",
   "files": [
     "/abs/path/to/codePath/src/Form/SettingsForm.php",
-    "/abs/path/to/codePath/my_module.services.yml"
+    "/abs/path/to/codePath/src/Service/DataService.php"
   ],
   "context_excerpts": [
     {"source": "architecture.md#components", "text": "..."},
     {"source": "implementation.md#files-created-modified", "text": "..."}
   ],
   "artifact_excerpts": [
-    {"source": "alignment.md", "text": "Goal: we need a view to list content…"}
+    {"source": "alignment.md", "text": "Goal: we need a listing page for content…"}
   ],
-  "candidate_slugs": ["drupal/views"],
-  "already_cited": ["drupal/forms/config-forms"]
+  "candidate_slugs": ["<framework>/views"],
+  "routing_hints": [
+    {"pattern": "src/handlers/**", "role": "routing"},
+    {"pattern": "*.tmpl", "role": "theming"}
+  ],
+  "already_cited": ["<framework>/forms/config-forms"]
 }
 ```
 
@@ -54,6 +58,7 @@ Callers spawn the agent with this prompt structure (pseudo-shape; real prompt is
 - `context_excerpts[]` — optional supporting prose for `plan` / `validation`. Helps the agent disambiguate when a file path alone is ambiguous (e.g., `Foo.php` could be many things; the architecture.md excerpt clarifies).
 - `artifact_excerpts[]` — **`prose` mode only.** Objects `{source, text}` carrying phase-artifact prose (`task.md` Goal, `alignment.md`, `research.md`, `architecture.md`). This is the text the agent semantically matches against the catalog.
 - `candidate_slugs[]` — **`prose` mode only.** The catalog slugs `dev-guides-detect.sh` (Stage 1) already matched lexically. The agent treats these as a **floor** — every entry is echoed in `matched_guides[]` (re-ranked/re-justified, never dropped). The agent's job is to ADD semantic/synonym matches Stage 1's lexical scan missed.
+- `routing_hints[]` — optional; `plan` / `validation` modes. Objects `{pattern, role}` the caller reconstructs from the resolved process recipe (the recipe's `## Routing hints` declaration). They carry the framework-specific file patterns (a framework's bootstrap-file suffix, its theme-file suffix, its template suffixes) the agent no longer hardcodes — the recipe is the source of truth for its own file layout. Absent ⇒ the agent's neutral role buckets fire alone (generic conventions still match; framework-specific config/template suffixes simply fall to `unmatched_files[]`). Because the gate is a soft-nudge advisory, an absent hint set degrades a suggestion, never a verdict.
 - `already_cited[]` — slugs the gate already found in artifacts (`validation` mode). **Informational only**; the agent does NOT filter against this and MUST return its full honest match list. The caller (validate-guides) computes `domain_coverage_gaps` by comparing the agent's matches against `already_cited[]`.
 
 ## Output
@@ -66,16 +71,16 @@ Callers spawn the agent with this prompt structure (pseudo-shape; real prompt is
   "files_evaluated": 12,
   "matched_guides": [
     {
-      "slug": "drupal/forms/config-forms",
-      "reason": "src/Form/SettingsForm.php is a ConfigFormBase subclass",
+      "slug": "<framework>/forms/config-forms",
+      "reason": "src/Form/SettingsForm.php is a config-form subclass",
       "confidence": "high",
       "triggered_by": ["src/Form/SettingsForm.php"]
     },
     {
-      "slug": "drupal/services/dependency-injection",
-      "reason": "new service definition in my_module.services.yml requires DI patterns",
+      "slug": "<framework>/services/dependency-injection",
+      "reason": "new service definition in src/Service/DataService.php requires DI patterns",
       "confidence": "high",
-      "triggered_by": ["my_module.services.yml"]
+      "triggered_by": ["src/Service/DataService.php"]
     }
   ],
   "unmatched_files": [
@@ -94,7 +99,7 @@ Callers spawn the agent with this prompt structure (pseudo-shape; real prompt is
 | `catalog_size` | integer | Number of topic entries parsed from `.content` (sanity check; consumers can flag if 0) |
 | `files_evaluated` | integer | Length of input `files[]`; `0` in `prose` mode |
 | `matched_guides[]` | array | Possibly empty; never absent |
-| `matched_guides[].slug` | string | MUST exist in the input catalog. Agent does NOT invent slugs (exception: a `prose`-mode `candidate_slugs[]` seed is echoed even if absent — see Invariants) |
+| `matched_guides[].slug` | string | MUST exist in the input catalog. Agent does NOT invent slugs (exception: a `prose`-mode `candidate_slugs[]` seed is echoed even if absent — see Invariants). Slug format follows the catalog's own taxonomy (e.g. `<framework>/<category>/<topic>`). |
 | `matched_guides[].reason` | string | One-line rationale referencing file path or excerpt |
 | `matched_guides[].confidence` | enum | `"high"` \| `"medium"` \| `"low"`. Consumers may filter on this |
 | `matched_guides[].triggered_by[]` | array of string | `plan`/`validation`: subset of input `files[]` that drove the match. `prose`: excerpt `source` label(s) or the inferring term |

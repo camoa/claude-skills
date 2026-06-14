@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wo-critique-aggregate.sh (C5) — the fail-closed per-WO critique verdict kernel.
 #
-# Owner: gate_integration (sibling ②). Spec: architecture/kernels.md §2 (AR-E). Reads the critics'
+# Owner: gate_integration (sibling ②). Spec: architecture/kernels.md (AR-E). Reads the critics'
 # verdict files FROM DISK (never a transcript). Fail-closed against MALFORMED / LABEL-DRIFTED critic
 # data: it never trusts the critic's shape or labels more than the safety mandate allows. ALL verdict
 # math lives here, not in the skill prose. Deterministic + testable (tests/wo-critique-aggregate-spec.sh).

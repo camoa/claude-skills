@@ -9,7 +9,7 @@ NOT API-$** — there is no token meter to query; everything required is zero-mo
 > **No write-scope hook.** The Phase-2 `PreToolUse` write-scope hook (H1) + git pre-commit (H2) + probes
 > were **CUT** (owner, 2026-06-11). A `Write`/`Edit` hook is trivially routed around by the builder's Bash
 > (`bash -c '… > ~/.ssh/x'`, `curl`, `python3`), so it would stop only the naive case and invite false
-> confidence. True builder containment is the **OS-sandbox precondition** documented in §6 below, not a
+> confidence. True builder containment is the **OS-sandbox precondition** documented in the OS-sandbox section below, not a
 > bash hook. ④ ships no hook and makes no `hooks.json` change.
 
 ## 1. The budget unit — Weighted Dispatch Count (WDC)
@@ -62,7 +62,7 @@ Per-WO WDC ranges (cap = 3, `CRITIQUE_WEIGHT` = 2):
 
 **Illustrative starting default:** `WO_BUDGET_MAX = max(N_WOs, 3) × 8` — ≈ two opus attempts-with-critique
 per WO (or ~2.6 sonnet), with a 3-WO floor so a tiny run isn't tripped by a single legitimate retry.
-This is a **starting point to tune against the §7.1 de-risk AC, not a pinned value** — do not over-fit a cap
+This is a **starting point to tune against the de-risk AC, not a pinned value** — do not over-fit a cap
 before one real unattended run shows the true distribution (the C5 "don't build for a speculative need"
 lesson). The cap is `WO_BUDGET_MAX` env-config; re-tuning needs no kernel edit.
 
@@ -116,7 +116,7 @@ and execs nothing (testable, network-free).
 ④ **narrows** the builder's credential reach; it does **not** structurally close out-of-tree writes or
 exfiltration. Genuinely-unattended runs require an **OS sandbox** — container, restricted user, or
 `firejail` — that actually confines the filesystem and network. This is a **deployment precondition**
-(stated next to the fine-grained-PAT precondition), gated by the §7.1 de-risk AC: don't pre-build
+(stated next to the fine-grained-PAT precondition), gated by the de-risk AC: don't pre-build
 containment before one real unattended run shows what's needed. Builder safety at L1 rests on:
 credential-narrowing (K2/K3) + the budget governor (K1) + the existing no-merge-call / human-merge /
 branch-protection backstops + **this documented OS-sandbox precondition**.
@@ -125,8 +125,8 @@ branch-protection backstops + **this documented OS-sandbox precondition**.
 
 | Residual | Class | Status |
 |---|---|---|
-| Out-of-tree builder writes (`~/.ssh`, `/etc`, the memory repo) + exfil (`curl`/`python3`) | OS-sandbox | **UNCLOSED at ④** — named, not masked; closed only by §6's OS sandbox |
-| **WDC input tamper (downward) — a builder rewrites its own `wo-NN.run.json.attempts`/`_critique.json` lower to under-report spend** | OS-sandbox | **UNCLOSED at ④** — recompute-from-disk removed the *dedicated* `.budget` surface but the inputs are in-tree builder-writable now that write-scope is cut. The **upward/overflow** direction is clamped (`ATTEMPTS_CEIL` + negative-WDC backstop = fail-closed); the **downward** direction is not closeable in bash. The governor bounds *runaway* spend; it does not defend a builder forging run-state. Closed only by §6's OS sandbox. |
+| Out-of-tree builder writes (`~/.ssh`, `/etc`, the memory repo) + exfil (`curl`/`python3`) | OS-sandbox | **UNCLOSED at ④** — named, not masked; closed only by the OS sandbox |
+| **WDC input tamper (downward) — a builder rewrites its own `wo-NN.run.json.attempts`/`_critique.json` lower to under-report spend** | OS-sandbox | **UNCLOSED at ④** — recompute-from-disk removed the *dedicated* `.budget` surface but the inputs are in-tree builder-writable now that write-scope is cut. The **upward/overflow** direction is clamped (`ATTEMPTS_CEIL` + negative-WDC backstop = fail-closed); the **downward** direction is not closeable in bash. The governor bounds *runaway* spend; it does not defend a builder forging run-state. Closed only by the OS sandbox. |
 | Same-uid PAT-file read (`cat "$WO_MERGE_PAT_FILE"` by an injected builder) | OS-sandbox | **narrowed** (env-scrape closed); true close needs OS user/sandbox separation |
 | OS keychains / `libsecret` persist outside the sandboxed `HOME` | OS-sandbox | residual; `HOME` isolation does not cover them |
 | Multi-line PAT file (embedded newline) | runbook | `$( … )` strips only the *trailing* newline; the PAT file must be **single-line** (a normal fine-grained PAT is). Operator discipline. |

@@ -16,7 +16,7 @@ Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh`. The scrip
 
 **Input:** one argument — absolute path to a task folder (the one containing `alignment.md`).
 
-**Output:** single JSON object to stdout per `references/alignment-contract.md` §7. Exit code always 0 except for unrecoverable read failures (permission denied, IO error).
+**Output:** single JSON object to stdout per `references/alignment-contract.md`. Exit code always 0 except for unrecoverable read failures (permission denied, IO error).
 
 Fields:
 - `file_exists` — boolean

@@ -1,7 +1,5 @@
 # Visual + E2E Review — Walkthrough
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 **Introduced:** ai-dev-assistant v4.11.0 (epic `visual_and_e2e_review_gates`)
 **Audience:** maintainers and users of the framework's rendered-output review gates.
 **Status after Task A:** foundation only — see "What ships when" below.
@@ -18,9 +16,9 @@ and still looks right*. This epic adds three rendered-output review surfaces:
 
 | Surface | Question it answers | Truth source | Runtime |
 |---|---|---|---|
-| **E2E** (behavioral) | Does the flow still *work*? | Behavioral assertions | ATK + Playwright |
-| **Visual regression** | Did anything *change* vs. last green? | Committed baselines | `@lullabot/playwright-drupal` |
-| **Visual parity** | Does this match the *design intent*? | An external design reference | Lullabot (shared with VR) |
+| **E2E** (behavioral) | Does the flow still *work*? | Behavioral assertions | the project's E2E test suite + Playwright |
+| **Visual regression** | Did anything *change* vs. last green? | Committed baselines | the framework's VR package + Playwright |
+| **Visual parity** | Does this match the *design intent*? | An external design reference | Playwright + pixelmatch (shared with VR) |
 
 **Dual purpose.** Humans use the gates to confirm a change didn't break anything; AI
 uses them as feedback loops — to drive parity with a design and to catch and fix its
@@ -37,20 +35,20 @@ built on ad-hoc Playwright MCP capture. The epic does **not** start fresh. It:
   parity-miss-vs-deviation classification UX.
 - **REPLACES** capture (ad-hoc MCP → committed Playwright test files), invocation
   (one-component-per-call → registry-driven batch), and diff tooling.
-- **ADDS** the ATK-backed E2E gate (no behavioral testing existed), the change-impact
+- **ADDS** the E2E gate (no behavioral testing existed), the change-impact
   dispatcher, a11y baseline pairing, and mask/ignore regions.
 
 ## 3. Two runtimes, one infrastructure
 
 E2E and visual review use **different test libraries** but **one Playwright install,
-one `playwright.config.ts`, one DDEV `playwright` service, one surface registry**:
+one `playwright.config.ts`, one surface registry**:
 
 ```
 codePath/
 ├── playwright.config.ts        ← one base config (references/visual-review/playwright-base.config.ts)
 ├── tests/
-│   ├── e2e/                    ← ATK-backed behavioral tests   (Task B)
-│   └── visual/                 ← Lullabot VR + parity tests    (Task C, D)
+│   ├── e2e/                    ← behavioral tests               (Task B)
+│   └── visual/                 ← VR + parity tests              (Task C, D)
 ```
 
 The split is only at the test-library layer. `playwright.config.ts` carries one
@@ -78,8 +76,8 @@ auto-seeding — the user curates which URLs and journeys are covered.
 force them. The user opts in **per task**, once, via a `## Review Gates` block in
 `task.md`; the choice is remembered and never re-asked.
 
-- CSS / SCSS / Twig changed → `visual_regression` recommended.
-- JS / TS / PHP / YAML changed → `e2e` + `visual_regression` recommended.
+- CSS / SCSS / template files changed → `visual_regression` recommended.
+- JS / TS / server-side code / YAML changed → `e2e` + `visual_regression` recommended.
 - Docs / tests / CI-only → nothing recommended.
 - `visual_parity` is **not** part of the opt-in question — it auto-runs (soft) on
   design-implementation tasks (a task with registered parity references).
@@ -96,27 +94,25 @@ the recommender model keeps the gates wanted, not resented. Full procedure:
 - **Loud failure on missing** — a regression run with no baseline fails clearly rather
   than passing vacuously.
 - **Reason-required regeneration** — `--update-baselines "<reason>"` is mandatory.
-  Legitimate non-code triggers (prod DB refresh, contrib/core update, fixture change)
+  Legitimate non-code triggers (prod DB refresh, dependency/platform update, fixture change)
   are recognized alongside an intentional UI change.
 - **`baseline-history.jsonl`** records every regeneration — no silent writes.
 
-## 7. DDEV-first
+## 7. Site URL configuration
 
-The gates assume a **DDEV-hosted Drupal site**. `/setup-*` checks for
-`<codePath>/.ddev/config.yaml` and the base config reads `DDEV_PRIMARY_URL`. With no
-`.ddev/` directory, setup stops with a clear message and points here. A
-**bring-your-own-container** runner is supported as an appendix only — set
-`PLAYWRIGHT_BASE_URL` to your site URL and ensure a Playwright-capable container; DDEV
-is the first-class, documented path.
+The gates need the site URL to be resolvable before running. `/setup-*` reads
+`PLAYWRIGHT_BASE_URL` from the environment (set by the project's local dev tooling or
+CI). If no URL is configured, setup prompts the user. Set `PLAYWRIGHT_BASE_URL` to the
+site URL before invoking any gate.
 
 ## 8. What ships when
 
 | Subtask | Ships | Status |
 |---|---|---|
 | **A — Foundation** | Surface registry schema, change-impact dispatcher in `/review`, gate-audit schema additions, the shared `playwright-base.config.ts` template, this walkthrough | **This release (v4.11.0).** Plumbing only — zero new commands, zero runtime files in any project. |
-| **B — ATK E2E** | `/setup-atk`, `/validate:e2e` | Blocked by A. |
-| **C — Visual Regression v2** | Reworked `validate-visual-regression` on Lullabot — batch, masks, a11y | Blocked by A. |
-| **D — Visual Parity v2** | Reworked `validate-visual-parity` on Lullabot | Blocked by A + C. |
+| **B — E2E** | `/setup-e2e`, `/validate:e2e` | Blocked by A. |
+| **C — Visual Regression v2** | Reworked `validate-visual-regression` — batch, masks, a11y | Blocked by A. |
+| **D — Visual Parity v2** | Reworked `validate-visual-parity` | Blocked by A + C. |
 
 Until B/C/D merge, `/review`'s dispatcher produces a `dispatch_plan` but runs no new
 gates — opted-in gates whose subtask has not shipped record `verdict:

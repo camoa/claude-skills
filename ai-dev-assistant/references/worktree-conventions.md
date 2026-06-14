@@ -4,7 +4,7 @@
 **Owner:** `commands/worktree.md`, `commands/worktree-prune.md`, `commands/implement.md` (recommendation), `commands/complete.md` (lifecycle)
 **Consumers:** the framework's worktree commands + the helper scripts (`worktree-detect.sh`, `worktree-signals.sh`)
 
-This reference documents the framework's git-worktree conventions for parallel task execution within a single ai-dev-assistant project. It establishes directory layout, branch naming, detection signals, lifecycle paths, and DDEV/Drupal-specific concerns. Reuses the superpowers `using-git-worktrees` skill's core patterns; extends with task-aware lifecycle and Drupal awareness.
+This reference documents the framework's git-worktree conventions for parallel task execution within a single ai-dev-assistant project. It establishes directory layout, branch naming, detection signals, lifecycle paths, and framework-specific concerns. Reuses the superpowers `using-git-worktrees` skill's core patterns; extends with task-aware lifecycle and framework awareness.
 
 ## 1. Why worktrees
 
@@ -103,17 +103,16 @@ Lists existing worktrees with their state:
 
 Per worktree: `[y]es remove / [n]o keep / [q]uit`. Never bulk-removes silently. Refuses to remove worktrees with uncommitted changes (honors git's refusal); user resolves manually.
 
-## 8. DDEV compatibility
+## 8. Dev-environment tool compatibility
 
-For Drupal projects with DDEV:
+For projects with a `.ddev/config.yaml` in `codePath`:
 
-- DDEV explicitly supports worktrees ([DDEV Contributor Training, March 2026](https://ddev.com/blog/git-worktree-contributor-training/))
-- **Requires the `name:` key removed from `.ddev/config.yaml`** — DDEV will then derive the project name from each worktree's directory automatically (`.worktrees/feature-foo/` → `https://feature-foo.ddev.site`)
+- **Requires the `name:` key removed from `.ddev/config.yaml`** — the tool will then derive the project name from each worktree's directory automatically (`.worktrees/feature-foo/` → `https://feature-foo.ddev.site`)
 - Framework detects `.ddev/config.yaml` presence + parses for `name:` key + warns user before creation if set; never auto-edits the config
 
 If `name:` is set, `/worktree` warns:
 
-> DDEV is configured with `name: <x>` in `.ddev/config.yaml`. Multiple worktrees with the same DDEV name will conflict. Recommended: remove the `name:` line and commit, OR use `/worktree --no-ddev-check` to proceed anyway.
+> `.ddev/config.yaml` has `name: <x>` set. Multiple worktrees with the same name will conflict at dev-environment startup. Recommended: remove the `name:` line and commit, OR use `/worktree --no-ddev-check` to proceed anyway.
 
 User chooses [c]ontinue / [a]bort / [s]how-instructions.
 
@@ -131,7 +130,7 @@ The `/worktree` creation command refuses on:
 
 ## 10. Session-context interaction
 
-The `session-context-writer` skill (v1.5.0+) writes the session-context file through the shared `scripts/session-paths.sh` helper (`ddf_session_file`). The path is keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID. A worktree gets a distinct `$PWD` (`.worktrees/<task>/`), so its session-context file is already distinct from the main tree's; the session-ID salt (added v4.9.0, §7a of the improvement plan) additionally separates two sessions that share the **same** `$PWD` — two terminals in the main checkout, or a resumed session. Every session hook resolves the same path through the helper; the project-copied `save-session.sh` inlines an equivalent formula. When `CLAUDE_CODE_SESSION_ID` is absent the key is `md5($PWD)` exactly as before v4.9.0.
+The `session-context-writer` skill (v1.5.0+) writes the session-context file through the shared `scripts/session-paths.sh` helper (`ddf_session_file`). The path is keyed by `md5($PWD)` and — when `CLAUDE_CODE_SESSION_ID` is set — additionally by the session ID. A worktree gets a distinct `$PWD` (`.worktrees/<task>/`), so its session-context file is already distinct from the main tree's; the session-ID salt (added v4.9.0) additionally separates two sessions that share the **same** `$PWD` — two terminals in the main checkout, or a resumed session. Every session hook resolves the same path through the helper; the project-copied `save-session.sh` inlines an equivalent formula. When `CLAUDE_CODE_SESSION_ID` is absent the key is `md5($PWD)` exactly as before v4.9.0.
 
 `/worktree` pre-seeds the new session-context file with `task: null, taskPath: null, project: <name>, projectPath: <abs>` so the file exists for hooks; the user's first `/research` or `/implement` populates the task field.
 
@@ -149,7 +148,7 @@ user running framework work inside native worktrees is not surprised.
 | `claude --worktree <name>` (or `-w`) | `.claude/worktrees/<name>/` | `worktree-<name>` | Claude Code |
 
 The framework's `/worktree` is task-scoped: it resolves the task folder, runs
-Drupal/DDEV-aware setup, and pre-seeds session-context (§2, §10). The native
+framework-aware setup, and pre-seeds session-context. The native
 `--worktree` flag is session-scoped — it starts a whole Claude Code session in a
 fresh worktree. Mid-session, asking Claude to "work in a worktree" triggers the
 `EnterWorktree` tool, which creates one the same way. Native `--worktree`
@@ -167,20 +166,19 @@ not wrap this — it is a native CLI entry point, used directly.
 ### 11.3 Copying gitignored files — `.worktreeinclude`
 
 A native worktree is a fresh checkout, so gitignored files (`.env`,
-`settings.local.php`, parts of `.ddev/`) are absent. A `.worktreeinclude` file
+`settings.local.php`) are absent. A `.worktreeinclude` file
 at the project root — `.gitignore` syntax — lists gitignored files to copy into
 each new native worktree. Only files that both match a pattern AND are
-gitignored are copied, so tracked files are never duplicated. A typical Drupal
-entry:
+gitignored are copied, so tracked files are never duplicated. Example entries:
 
 ```text
 .env
-web/sites/default/settings.local.php
+.secrets
 ```
 
 `.worktreeinclude` applies to `--worktree`, `EnterWorktree`, and subagent
 worktrees. It is NOT processed when a `WorktreeCreate` hook is configured
-(§11.6). The framework's own `/worktree` runs explicit setup (`commands/worktree.md`
+(see the WorktreeCreate section below). The framework's own `/worktree` runs explicit setup (`commands/worktree.md`
 Step 7) rather than relying on `.worktreeinclude`.
 
 ### 11.4 Base ref — `worktree.baseRef` vs the framework's HEAD default
@@ -196,7 +194,7 @@ It applies to `--worktree`, the `EnterWorktree` tool, and subagent isolation.
 
 The framework's `/worktree` command does **not** read `worktree.baseRef`. It has
 its own `--base <ref>` flag and defaults `BASE` to `git rev-parse HEAD` — i.e.
-the `"head"` semantic. This is deliberate: Drupal task work frequently sits on
+the `"head"` semantic. This is deliberate: task work frequently sits on
 uncommitted local patches and feature-branch state that a `"fresh"` base would
 drop. Users who want a clean base pass `--base origin/main` explicitly.
 
@@ -212,14 +210,14 @@ drop. Users who want a clean base pass `--base origin/main` explicitly.
 
 This is a background-session mechanism, finer-grained than and independent of
 the framework's `/worktree`. A user who runs framework work in background
-sessions will accumulate native worktrees under `.claude/worktrees/` — see §11.7.
+sessions will accumulate native worktrees under `.claude/worktrees/` — see the cleanup section below.
 
 ### 11.6 Non-git VCS — `WorktreeCreate` / `WorktreeRemove`
 
 `WorktreeCreate` / `WorktreeRemove` hooks let non-git VCSs (SVN, Perforce,
-Mercurial) supply custom worktree creation and cleanup. Drupal projects are git
-in practice, so the framework neither ships nor needs these hooks — noted only
-so the relationship is complete.
+Mercurial) supply custom worktree creation and cleanup. The framework neither
+ships nor needs these hooks for standard git projects — noted only so the
+relationship is complete.
 
 ### 11.7 Cleanup boundaries
 
@@ -242,7 +240,7 @@ task-completed), the native sweep is not.
 
 - **Major bumps** (`2.0`) are breaking: changes to directory priority semantics, branch-naming default, signal-strength thresholds, lifecycle path order.
 - **Minor bumps** (`1.1`) are additive: new optional signal types, new lifecycle paths, additional refusal cases, new flags, new documentation sections.
-- v1.0 committed for v3.16.0; v1.1 (additive — §11 native worktree support) for v4.7.0; v1.2 (§10 reworded for session-ID-salted session files) for v4.9.0.
+- v1.0 committed for v3.16.0; v1.1 (additive, native worktree support) for v4.7.0; v1.2 (session-ID-salted session files) for v4.9.0.
 
 ## 13. Non-goals (deferred to v2)
 
@@ -251,6 +249,6 @@ task-completed), the native sweep is not.
 - `/migrate-to-worktree` for in-flight tasks
 - Multi-task worktree reuse (single worktree, multiple tasks)
 - Auto-edit `.ddev/config.yaml` (with backup + commit)
-- Test-baseline runs default-on for Drupal projects
+- Test-baseline runs default-on for all projects
 - Configurable worktree directory beyond `.worktrees/` / `worktrees/`
 - Distributed / cross-machine worktree-equivalent

@@ -3,11 +3,11 @@
 #
 # Usage: playbook-load-deterministic.sh <project_folder>
 #
-# Replaces the agent-mediated load step in guide-integrator §6 with a
+# Replaces the agent-mediated playbook load step in guide-integrator with a
 # deterministic invocation. Reads project_state.md via project-state-read.sh,
 # resolves playbookSets, loads userPlaybook via playbook-read.sh.
 #
-# Output (per references/gate-audit-schema.md §5.7 gate_specific shape):
+# Output (per references/gate-audit-schema.md gate_specific shape):
 #   {
 #     "playbook_sets_loaded": [...],
 #     "playbook_sets_source": "explicit | explicit-none | default",

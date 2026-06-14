@@ -13,7 +13,7 @@
 #   <codePath>/tests/visual/<surface-id>.spec.ts-snapshots/<png-filename>.
 #   No rotation, no .previous tier — git holds the baseline history.
 #
-# Performs the 6-step rotation from architecture §4.4:
+# Performs the 6-step rotation from architecture:
 #   1. Compute sha256 of existing <viewport>.png (becomes prior_hash)
 #   2. Delete existing .previous.png + .previous.meta.json unconditionally
 #   3. Rename current .png → .previous.png; rename meta similarly
@@ -29,7 +29,7 @@
 #   2 — arg validation failure
 #   3 — IO error pre-rotation (safe; no partial state)
 #
-# captured_by values (from architecture §4.3):
+# captured_by values (from architecture):
 #   playwright-mcp | claude-in-chrome | figma-export | html-render | user-upload
 #
 # source_type values (parity-reference only):
@@ -77,9 +77,12 @@ if [ "$MODE" = "write-baseline-codepath" ]; then
   case "$PNG_NAME" in
     */*|..*) emit_result "error" '[{"code":"invalid_png_name","detail":"png-filename must be a bare filename"}]' '{}'; exit 2 ;;
   esac
-  # captured_by enum — v4.13.0 adds lullabot-playwright + migrated-from-screenshots-store.
+  # captured_by enum — framework-neutral defaults (playwright / playwright-accessible)
+  # plus recipe- and migration-supplied provenance values. lullabot-playwright is
+  # retained for back-compat with stores written before the agnostic refactor and
+  # for recipes that use the Lullabot accessible-screenshot helper.
   case "$CB" in
-    playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
+    playwright|playwright-accessible|playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
     *)
       emit_result "error" '[{"code":"invalid_captured_by","detail":"captured_by not in the v4.13.0 enum"}]' '{}'
       exit 2 ;;

@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # change-impact-classify-spec.sh — verify scripts/change-impact-classify.sh (v4.11.0+).
 #
-# Covers: every default glob row, multi-match union, no-match default,
-# --files-from, missing/malformed/absent project override, exit-0-always.
+# Covers: the framework-NEUTRAL shipped floor, the --rules-from framework-glob
+# union (reconstructed on the fly from the stack recipe each run), multi-match
+# union, no-match default, --files-from, missing/malformed/absent project
+# override, missing/malformed --rules-from, exit-0-always.
 # Uses --files-from exclusively — no git fixture needed.
+#
+# Fixture globs for the framework-glob path are deliberately neutral (`.tpl`,
+# `.srv`) — they name no real framework: the kernel ships zero framework globs
+# and the test exercises the MERGE MECHANISM, not any one stack.
 #
 # Run pre-PR. Companion to tests/project-state-read-spec.sh.
 
@@ -24,12 +30,16 @@ pass_check() { printf 'OK   %s\n' "$1"; }
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# classify <label> <files-newline-string> <jq-filter> <expected> [task_folder]
+# classify <label> <files-newline-string> <jq-filter> <expected> [task_folder] [rules-from]
 classify() {
-  local label="$1" files="$2" filter="$3" expected="$4" task="${5:-/nonexistent-task}"
+  local label="$1" files="$2" filter="$3" expected="$4" task="${5:-/nonexistent-task}" rules="${6:-}"
   printf '%s\n' "$files" > "$TMPDIR/files.txt"
   local actual rc
-  actual=$(bash "$SCRIPT" "$task" --files-from "$TMPDIR/files.txt" 2>/dev/null | jq -c "$filter")
+  if [ -n "$rules" ]; then
+    actual=$(bash "$SCRIPT" "$task" --files-from "$TMPDIR/files.txt" --rules-from "$rules" 2>/dev/null | jq -c "$filter")
+  else
+    actual=$(bash "$SCRIPT" "$task" --files-from "$TMPDIR/files.txt" 2>/dev/null | jq -c "$filter")
+  fi
   rc=$?
   if [ "$rc" -ne 0 ]; then
     fail_check "$label — script exited $rc (expected 0)"
@@ -42,34 +52,56 @@ classify() {
   fi
 }
 
-# === Test 1: every default glob row → gates_recommended ===
+# === Test 1: every framework-neutral floor glob row → gates_recommended ===
 classify "css → visual_regression"   "web/style.css"          '.gates_recommended' '["visual_regression"]'
 classify "scss → visual_regression"  "theme/_x.scss"          '.gates_recommended' '["visual_regression"]'
-classify "twig → visual_regression"  "templates/node.twig"    '.gates_recommended' '["visual_regression"]'
+classify "sass → visual_regression"  "theme/_y.sass"          '.gates_recommended' '["visual_regression"]'
+classify "less → visual_regression"  "theme/_z.less"          '.gates_recommended' '["visual_regression"]'
 classify "js → e2e+vr"               "js/app.js"              '.gates_recommended' '["e2e","visual_regression"]'
+classify "mjs → e2e+vr"              "js/app.mjs"             '.gates_recommended' '["e2e","visual_regression"]'
+classify "cjs → e2e+vr"              "js/app.cjs"             '.gates_recommended' '["e2e","visual_regression"]'
 classify "ts → e2e+vr"               "src/app.ts"             '.gates_recommended' '["e2e","visual_regression"]'
-classify "php → e2e+vr"              "src/Foo.php"            '.gates_recommended' '["e2e","visual_regression"]'
-classify "yml → e2e+vr"              "config/foo.yml"         '.gates_recommended' '["e2e","visual_regression"]'
-classify "module → e2e"              "my_module.module"       '.gates_recommended' '["e2e"]'
+classify "html → e2e+vr"             "public/index.html"      '.gates_recommended' '["e2e","visual_regression"]'
 
-# === Test 2: multi-match union ===
-# *.info.yml matches BOTH **/*.yml (e2e,vr) AND **/*.info.yml (e2e) → union.
-classify "info.yml → union(e2e,vr)"  "my_module.info.yml"     '.gates_recommended' '["e2e","visual_regression"]'
+# === Test 1b: the floor ships NO framework file types — a template/server ext is no-match ===
+classify "tpl no-match (no floor)"   "templates/node.tpl"     '.gates_recommended' '[]'
+classify "srv no-match (no floor)"   "lib/handler.srv"        '.gates_recommended' '[]'
+
+# === Build a neutral framework-glob recipe fixture (reconstructed-on-the-fly stand-in) ===
+RECIPE="$TMPDIR/recipe-rules.json"
+cat > "$RECIPE" <<'EOF'
+{ "schema_version": "1.0",
+  "rules": [ { "glob": "**/*.tpl", "gates": ["visual_regression"] },
+             { "glob": "**/*.srv", "gates": ["e2e", "visual_regression"] },
+             { "glob": "**/*.info.srv", "gates": ["e2e"] } ] }
+EOF
+
+# === Test 2: --rules-from merges framework globs onto the floor ===
+classify "recipe tpl → vr"           "templates/node.tpl"     '.gates_recommended' '["visual_regression"]' /nonexistent-task "$RECIPE"
+classify "recipe srv → e2e+vr"       "lib/handler.srv"        '.gates_recommended' '["e2e","visual_regression"]' /nonexistent-task "$RECIPE"
+classify "floor still applies w/recipe" "web/style.css"       '.gates_recommended' '["visual_regression"]' /nonexistent-task "$RECIPE"
+
+# === Test 2b: rule_source reflects the recipe merge ===
+classify "rule_source default+recipe" "templates/node.tpl"    '.rule_source' '"default+recipe"' /nonexistent-task "$RECIPE"
+
+# === Test 2c: multi-match union across floor + recipe (a recipe file matching two recipe rules) ===
+# *.info.srv matches BOTH **/*.srv (e2e,vr) AND **/*.info.srv (e2e) → union.
+classify "info.srv → union(e2e,vr)"  "my_module.info.srv"     '.gates_recommended' '["e2e","visual_regression"]' /nonexistent-task "$RECIPE"
 
 # === Test 3: no-match → default_gates ([]) ===
 classify "README → no gates"         "README.md"              '.gates_recommended' '[]'
 classify "no-match files_classified" "README.md"              '.files_classified'  '1'
 
-# === Test 4: mixed diff — union across files + diff_signature ===
-classify "css+php → union"           "$(printf 'a.css\nb.php')" '.gates_recommended' '["e2e","visual_regression"]'
-classify "css+php diff_signature"    "$(printf 'a.css\nb.php')" '.diff_signature'    '["**/*.css","**/*.php"]'
-classify "css+php files_classified"  "$(printf 'a.css\nb.php')" '.files_classified'  '2'
+# === Test 4: mixed diff — floor css + recipe srv union + diff_signature ===
+classify "css+srv → union"           "$(printf 'a.css\nb.srv')" '.gates_recommended' '["e2e","visual_regression"]' /nonexistent-task "$RECIPE"
+classify "css+srv diff_signature"    "$(printf 'a.css\nb.srv')" '.diff_signature'    '["**/*.css","**/*.srv"]' /nonexistent-task "$RECIPE"
+classify "css+srv files_classified"  "$(printf 'a.css\nb.srv')" '.files_classified'  '2' /nonexistent-task "$RECIPE"
 
 # === Test 5: depth-independence (leading **/ means any depth) ===
 classify "deep css matches"          "a/b/c/d/deep.css"       '.gates_recommended' '["visual_regression"]'
 classify "root css matches"          "root.css"               '.gates_recommended' '["visual_regression"]'
 
-# === Test 6: rule_source default ===
+# === Test 6: rule_source default (no recipe, no override) ===
 classify "rule_source default"       "x.css"                  '.rule_source'       '"default"'
 
 # === Test 7: --files-from missing ===
@@ -94,7 +126,7 @@ else
   fail_check "empty --files-from file — got: $out"
 fi
 
-# === Test 9: project override (full replacement) ===
+# === Test 9: project override (full replacement of the floor) ===
 PROJ="$TMPDIR/proj"
 mkdir -p "$PROJ/.visual-review" "$PROJ/impl/task_x"
 echo "# Test Project" > "$PROJ/project_state.md"
@@ -105,6 +137,10 @@ cat > "$PROJ/.visual-review/change-impact.json" <<'EOF'
 EOF
 classify "override applies (css→e2e)" "x.css" '.gates_recommended' '["e2e"]' "$PROJ/impl/task_x"
 classify "override sets rule_source"  "x.css" '.rule_source' '"project-override"' "$PROJ/impl/task_x"
+
+# === Test 9b: override + recipe → project-override+recipe, both apply ===
+classify "override+recipe rule_source" "x.css" '.rule_source' '"project-override+recipe"' "$PROJ/impl/task_x" "$RECIPE"
+classify "override+recipe srv matches" "h.srv" '.gates_recommended' '["e2e","visual_regression"]' "$PROJ/impl/task_x" "$RECIPE"
 
 # A real one-line file list, reused below (process substitution is not a
 # regular file, so [ -f ] on it is false — the script would warn).
@@ -174,17 +210,38 @@ fi
 cat > "$PROJ/.visual-review/change-impact.json" <<'EOF'
 { "schema_version": "1.0",
   "rules": [ { "glob": "**/*.css", "gates": "visual_regression" },
-             { "glob": "**/*.php", "gates": ["e2e"] } ],
+             { "glob": "**/*.srv", "gates": ["e2e"] } ],
   "default_gates": [] }
 EOF
-printf 'a.php\n' > "$TMPDIR/onephp.txt"
-out=$(bash "$SCRIPT" "$PROJ/impl/task_x" --files-from "$TMPDIR/onephp.txt" 2>/dev/null)
+printf 'a.srv\n' > "$TMPDIR/onesrv.txt"
+out=$(bash "$SCRIPT" "$PROJ/impl/task_x" --files-from "$TMPDIR/onesrv.txt" 2>/dev/null)
 if [ "$(echo "$out" | jq -c '.gates_recommended')" = '["e2e"]' ]; then
-  pass_check "malformed rule (gates as string) does not poison the sibling .php rule"
+  pass_check "malformed rule (gates as string) does not poison the sibling .srv rule"
 else
   fail_check "malformed-rule isolation — got: $out"
 fi
 rm -f "$PROJ/.visual-review/change-impact.json"
+
+# === Test 17: --rules-from missing file → warning, floor still classifies ===
+out=$(bash "$SCRIPT" /nonexistent-task --files-from "$TMPDIR/onecss.txt" --rules-from "$TMPDIR/no-recipe.json" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.gates_recommended')" = '["visual_regression"]' ] \
+   && [ "$(echo "$out" | jq -r '.rule_source')" = "default" ] \
+   && echo "$out" | jq -e '.warnings[] | select(startswith("rules_from_missing"))' >/dev/null; then
+  pass_check "missing --rules-from → warning, floor still classifies, rule_source stays default"
+else
+  fail_check "missing --rules-from handling — got: $out"
+fi
+
+# === Test 18: --rules-from malformed (no rules array) → warning, floor still classifies ===
+echo '{ "nope": true }' > "$TMPDIR/bad-recipe.json"
+out=$(bash "$SCRIPT" /nonexistent-task --files-from "$TMPDIR/onecss.txt" --rules-from "$TMPDIR/bad-recipe.json" 2>/dev/null)
+if [ "$(echo "$out" | jq -c '.gates_recommended')" = '["visual_regression"]' ] \
+   && [ "$(echo "$out" | jq -r '.rule_source')" = "default" ] \
+   && echo "$out" | jq -e '.warnings[] | select(startswith("rules_from_malformed"))' >/dev/null; then
+  pass_check "malformed --rules-from → warning, floor still classifies, rule_source stays default"
+else
+  fail_check "malformed --rules-from handling — got: $out"
+fi
 
 if [ "$FAIL" -ne 0 ]; then
   printf '\nchange-impact-classify.sh invariants violated.\n' >&2

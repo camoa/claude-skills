@@ -10,7 +10,7 @@
 #                       echoed into the output. This script does NOT parse YAML
 #                       (the suite itself is the source of truth for which
 #                       surfaces run — same contract as visual-regression-gate.sh).
-#   <codePath>          Drupal project root; the suite is <codePath>/tests/parity/
+#   <codePath>          project root; the suite is <codePath>/tests/parity/
 #   --ci                non-interactive mode — recorded in the output; no
 #                       behavioural change here (this script never prompts).
 #   --all-viewports     run every parity-chromium-* project. Default: run only

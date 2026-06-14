@@ -1,47 +1,59 @@
 #!/usr/bin/env bash
-# wo-oracle-check.sh — Deterministic oracle tamper-detection kernel.
+# wo-oracle-check.sh — Deterministic oracle tamper-detection kernel (framework-agnostic).
 #
-# Scans a WO diff (--name-status format) against the oracle watch-table and emits a JSON verdict.
-# Mirrors the shape of wo-risk-classify.sh: shebang, set -euo pipefail, positional WO-file arg +
-# --diff-from flag, safe frontmatter read (never eval/source), all JSON via jq, verdict on stdout.
+# Scans a WO diff (--name-status format) against a CALLER-PROVIDED oracle-file list and emits a JSON
+# verdict. The kernel hardcodes NO framework knowledge: the set of oracle files (and each file's
+# watched change-types, oracle class, and severity) is handed in by the caller via --oracle-files.
+# The caller RECONSTRUCTS that list from the active framework's first-party recipe each run, so there
+# is no persistent local file a builder can empty to disable monitoring — the list re-derives from the
+# trusted recipe every run.
 #
 # Usage:
-#   wo-oracle-check.sh <wo-file> --diff-from <name-status-file>
+#   wo-oracle-check.sh <wo-file> --diff-from <name-status-file> [--oracle-files <rules-json-file>]
 #
 #   <wo-file>           positional; oracle_update.classes extracted safely via awk (no eval).
 #   --diff-from         file holding `git diff --name-status` output:
-#                       TAB-separated lines "STATUS\tpath"; rename "R###\told\tnew" → treat new as M.
+#                       TAB-separated lines "STATUS\tpath"; rename "R###\told\tnew" → old treated as D,
+#                       new as A. copy "C###\told\tnew" → new treated as A (old untouched).
+#   --oracle-files      OPTIONAL file holding the oracle-file rule list as a JSON array. When the flag
+#                       is omitted, or the array is empty, or it contains no well-formed rule, the run
+#                       is an honest "no oracle configured" state: oracle_configured:false, no signals,
+#                       tamper_detected:false (NOT a silent pass that pretends a gate ran).
+#
+# --oracle-files JSON contract (a JSON array; each element is one rule):
+#   [
+#     { "type": "<signal-type>",          # the signal.type emitted on a match (e.g. "phpstan_baseline")
+#       "globs": ["<glob>", ...],          # one or more path globs; * = within a path segment, ** = across segments
+#       "changes": ["A","M","D"],          # the change statuses this rule watches (subset of A,M,D)
+#       "oracle_class": "<class>",         # the signal.oracle_class; matched against the WO's oracle_update.classes
+#       "severity": "halt" | "flag" }      # halt = tamper unless exempted; flag = recorded, never tamper
+#   ]
+#   Rules are evaluated in array order; the FIRST rule whose status+glob matches a changed path wins.
+#   A rule missing any of type/globs/changes/oracle_class/severity is dropped (does not monitor).
 #
 # Stdout JSON:
 #   { "schema_version": "1.0",
+#     "oracle_configured": <bool>,                # false ⇒ no oracle-file rules were provided
 #     "tamper_detected": <bool>,
 #     "signals": [ { "type": <str>, "path": <str>, "change": "A|M|D",
 #                    "oracle_class": <str>, "severity": "halt|flag",
 #                    "allowed_by_scope": <bool> } ],
 #     "halt_reason": "oracle_tamper" | null }
 #
-# Exit: 0 on well-formed run (verdict in JSON). Exit 2 on bad args / unreadable inputs.
-#
-# Watch-table:
-#   baseline_write    tests/visual/*.spec.ts-snapshots/{*.png,*.meta.json}   A,M  baseline           halt
-#   vr_spec_delete    tests/visual/*.spec.ts                                  D    test-delete        halt
-#   test_delete       tests/**/*Test.php                                      D    test-delete        halt
-#                     tests/e2e/**/*.spec.ts                                  D    test-delete        halt
-#                     tests/atk/**/*.spec.ts                                  D    test-delete        halt
-#   phpstan_baseline  phpstan-baseline.neon                                  A,M  phpstan-baseline   halt
-#   phpstan_config    phpstan.neon  phpstan.neon.dist                         M    phpstan-baseline   flag
-#   registry_shrink   .visual-review/registry.yml                             M    baseline           flag
-#   coverage_threshold jest.config.*  phpunit.xml  phpunit.xml.dist           M    coverage-threshold flag
+# Exit: 0 on well-formed run (verdict in JSON). Exit 2 on bad args / unreadable inputs / malformed
+#       --oracle-files (not a JSON array).
 
-set -euo pipefail
+set -uo pipefail
 
 # --- arg parsing -------------------------------------------------------------
 WO_FILE=""
 DIFF_FROM=""
+ORACLE_FILES=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --diff-from) DIFF_FROM="${2:-}"; shift 2 || shift ;;
-    --*)         shift ;;
+    --diff-from)    DIFF_FROM="${2:-}"; shift 2 || shift ;;
+    --oracle-files) ORACLE_FILES="${2:-}"; shift 2 || shift ;;
+    --*)            shift ;;
     *)
       if [ -z "$WO_FILE" ]; then
         WO_FILE="$1"
@@ -59,6 +71,45 @@ fi
 if [ -z "$DIFF_FROM" ] || [ ! -f "$DIFF_FROM" ]; then
   printf 'wo-oracle-check: --diff-from file missing or unreadable: %s\n' "${DIFF_FROM:-<none>}" >&2
   exit 2
+fi
+
+# --- load the caller-provided oracle-file rules ------------------------------
+# When --oracle-files is given the file MUST exist (a given-but-unreadable path is a caller bug, not a
+# silent no-oracle). When the flag is ABSENT, the rule set is empty = honest "no oracle configured".
+RULES_JSON="[]"
+if [ -n "$ORACLE_FILES" ]; then
+  if [ ! -f "$ORACLE_FILES" ]; then
+    printf 'wo-oracle-check: --oracle-files file missing or unreadable: %s\n' "$ORACLE_FILES" >&2
+    exit 2
+  fi
+  RULES_JSON="$(<"$ORACLE_FILES")"
+fi
+
+# The top level must be a JSON array. A non-array is a malformed contract → exit 2 (never fail-open by
+# treating garbage as an empty list).
+if ! printf '%s' "$RULES_JSON" | jq -e 'type=="array"' >/dev/null 2>&1; then
+  printf 'wo-oracle-check: --oracle-files is not a JSON array\n' >&2
+  exit 2
+fi
+
+# Keep only well-formed rules. RULE_LINES is one TAB-separated record PER (rule, glob) pair, in array
+# order:  type \t changes-csv \t oracle_class \t severity \t glob
+RULE_LINES="$(printf '%s' "$RULES_JSON" | jq -r '
+  [ .[]
+    | select((.type|type=="string")
+             and (.oracle_class|type=="string")
+             and (.severity|type=="string")
+             and (.globs|type=="array")
+             and (.changes|type=="array")) ]
+  | .[]
+  | .type as $t | (.changes|join(",")) as $ch | .oracle_class as $oc | .severity as $sev
+  | .globs[] as $g
+  | [$t, $ch, $oc, $sev, $g] | @tsv')"
+
+# oracle_configured = at least one well-formed rule (≥1 RULE_LINES record) was provided.
+ORACLE_CONFIGURED="false"
+if [ -n "$RULE_LINES" ]; then
+  ORACLE_CONFIGURED="true"
 fi
 
 # --- safe oracle_update parser (never eval/source the WO file) ---------------
@@ -176,86 +227,29 @@ is_in_oracle_classes() {
 }
 
 # classify_path <status> <path>
-# Sets _CLS_TYPE, _CLS_ORACLE_CLASS, _CLS_SEVERITY on match and returns 0.
-# Returns 1 if the path+status combination matches no watch-table row.
+# Walks the caller-provided rule lines IN ORDER; the first rule whose watched change-set contains the
+# status AND one of whose globs matches the path wins. Sets _CLS_TYPE, _CLS_ORACLE_CLASS, _CLS_SEVERITY
+# and returns 0 on a match; returns 1 when no provided rule matches (including the empty-rules case).
 classify_path() {
   local _cp_st="$1" _cp_p="$2"
   _CLS_TYPE=""; _CLS_ORACLE_CLASS=""; _CLS_SEVERITY=""
+  [ -z "$RULE_LINES" ] && return 1
 
-  # --- A or M changes ----------------------------------------------------------
-  case "$_cp_st" in
-    A|M)
-      # baseline_write: visual snapshot images and meta files (** => nested baselines
-      # under the snapshots dir still match; the **/ => (.*/)? regex keeps flat matching)
-      if path_matches "$_cp_p" "tests/visual/*.spec.ts-snapshots/**/*.png" ||
-         path_matches "$_cp_p" "tests/visual/*.spec.ts-snapshots/**/*.meta.json"; then
-        _CLS_TYPE="baseline_write"
-        _CLS_ORACLE_CLASS="baseline"
-        _CLS_SEVERITY="halt"
-        return 0
-      fi
-      # phpstan_baseline: baseline neon file written or modified
-      if path_matches "$_cp_p" "phpstan-baseline.neon"; then
-        _CLS_TYPE="phpstan_baseline"
-        _CLS_ORACLE_CLASS="phpstan-baseline"
-        _CLS_SEVERITY="halt"
-        return 0
-      fi
-      ;;
-  esac
-
-  # --- D (delete) changes only -------------------------------------------------
-  case "$_cp_st" in
-    D)
-      # vr_spec_delete: visual spec file deleted
-      if path_matches "$_cp_p" "tests/visual/*.spec.ts"; then
-        _CLS_TYPE="vr_spec_delete"
-        _CLS_ORACLE_CLASS="test-delete"
-        _CLS_SEVERITY="halt"
-        return 0
-      fi
-      # test_delete: PHPUnit test, e2e spec, or ATK spec deleted
-      if path_matches "$_cp_p" "tests/**/*Test.php" ||
-         path_matches "$_cp_p" "tests/e2e/**/*.spec.ts" ||
-         path_matches "$_cp_p" "tests/atk/**/*.spec.ts"; then
-        _CLS_TYPE="test_delete"
-        _CLS_ORACLE_CLASS="test-delete"
-        _CLS_SEVERITY="halt"
-        return 0
-      fi
-      ;;
-  esac
-
-  # --- M (modify) only — flag-severity rows ------------------------------------
-  case "$_cp_st" in
-    M)
-      # phpstan_config: phpstan config files modified
-      if path_matches "$_cp_p" "phpstan.neon" ||
-         path_matches "$_cp_p" "phpstan.neon.dist"; then
-        _CLS_TYPE="phpstan_config"
-        _CLS_ORACLE_CLASS="phpstan-baseline"
-        _CLS_SEVERITY="flag"
-        return 0
-      fi
-      # registry_shrink: visual review registry modified
-      if path_matches "$_cp_p" ".visual-review/registry.yml"; then
-        _CLS_TYPE="registry_shrink"
-        _CLS_ORACLE_CLASS="baseline"
-        _CLS_SEVERITY="flag"
-        return 0
-      fi
-      # coverage_threshold: test runner config files modified
-      if path_matches "$_cp_p" "jest.config.*" ||
-         path_matches "$_cp_p" "phpunit.xml" ||
-         path_matches "$_cp_p" "phpunit.xml.dist"; then
-        _CLS_TYPE="coverage_threshold"
-        _CLS_ORACLE_CLASS="coverage-threshold"
-        _CLS_SEVERITY="flag"
-        return 0
-      fi
-      ;;
-  esac
-
+  local _t _ch _oc _sev _g
+  while IFS=$'\t' read -r _t _ch _oc _sev _g || [ -n "${_t:-}" ]; do
+    [ -z "$_t" ] && continue
+    # status must be one of the rule's watched changes
+    case ",$_ch," in
+      *,"$_cp_st",*) ;;
+      *) continue ;;
+    esac
+    if path_matches "$_cp_p" "$_g"; then
+      _CLS_TYPE="$_t"; _CLS_ORACLE_CLASS="$_oc"; _CLS_SEVERITY="$_sev"
+      return 0
+    fi
+  done <<RULELOOP
+$RULE_LINES
+RULELOOP
   return 1
 }
 
@@ -265,8 +259,8 @@ N_HALT=0
 _CLS_TYPE=""; _CLS_ORACLE_CLASS=""; _CLS_SEVERITY=""
 
 # process_change <status A|M|D> <path>
-# Classifies ONE (status, path) pair against the watch table; on a match appends the
-# signal to SIGNALS_JSON and bumps N_HALT for an un-exempted halt. No-op on no match.
+# Classifies ONE (status, path) pair against the provided rules; on a match appends the signal to
+# SIGNALS_JSON and bumps N_HALT for an un-exempted halt. No-op on no match.
 # Mutates globals SIGNALS_JSON / N_HALT. Returns 0 always (no match is not an error).
 process_change() {
   local _pc_status="$1" _pc_path="$2"
@@ -316,8 +310,8 @@ while IFS=$'\t' read -r _f1 _f2 _f3 || [ -n "${_f1:-}" ]; do
 
   case "$_f1" in
     # RENAME (R###, or bare R): the OLD path (_f2) is classified as D against the
-    # D-watched rows (C1 evasion — git mv of a test OUT of tests/ deletes its coverage),
-    # AND the NEW path (_f3) as A against the A-watched rows (rename INTRODUCES a baseline).
+    # D-watched rules (C1 evasion — git mv of a test OUT of its dir deletes its coverage),
+    # AND the NEW path (_f3) as A against the A-watched rules (rename INTRODUCES a baseline).
     R*)
       process_change "D" "$_f2"
       process_change "A" "$_f3"
@@ -350,7 +344,9 @@ fi
 
 # --- emit verdict on stdout (always exit 0 from here) -----------------------
 jq -nc \
+  --argjson oracle_configured "$ORACLE_CONFIGURED" \
   --argjson tamper      "$TAMPER_DETECTED" \
   --argjson signals     "$SIGNALS_JSON" \
   --argjson halt_reason "$HALT_REASON" \
-  '{"schema_version":"1.0","tamper_detected":$tamper,"signals":$signals,"halt_reason":$halt_reason}'
+  '{"schema_version":"1.0","oracle_configured":$oracle_configured,
+    "tamper_detected":$tamper,"signals":$signals,"halt_reason":$halt_reason}'

@@ -2,8 +2,6 @@
 
 Complete workflow diagram showing how to use this plugin.
 
-> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (drupal.org search, `\Drupal::`, `drupal/*` guides) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
-
 ## Quick Start
 
 ```
@@ -115,8 +113,8 @@ This single command handles everything - it will guide you through project selec
 │   │                     /research <task-name>                                │   │
 │   │                                                                          │   │
 │   │   • Creates task folder in implementation_process/in_progress/           │   │
-│   │   • Loads dev-guides for the task's Drupal domain (proactive)            │   │
-│   │   • Searches drupal.org and contrib modules                              │   │
+│   │   • Loads dev-guides for the task's domain (proactive)                   │   │
+│   │   • Searches for existing third-party solutions and first-party patterns │   │
 │   │   • Finds core patterns and examples                                     │   │
 │   │   • Writes research.md                                                   │   │
 │   │   • NO CODE in this phase                                                │   │
@@ -161,7 +159,7 @@ This single command handles everything - it will guide you through project selec
 │   │                     /complete <task-name>                                │   │
 │   │                                                                          │   │
 │   │   Quality Gates (ALL 5 must pass):                                       │   │
-│   │   ✓ Gate 1: Code standards (PHPCS, PSR-12)                              │   │
+│   │   ✓ Gate 1: Code standards                                               │   │
 │   │   ✓ Gate 2: Tests pass (user confirms)                                  │   │
 │   │   ✓ Gate 3: Architecture compliance (SOLID, Library-First, DRY)         │   │
 │   │   ✓ Gate 4: Security review                                             │   │
@@ -218,7 +216,7 @@ Each task in `in_progress/` is a folder with separate phase files:
 ```
 implementation_process/in_progress/{task_name}/
 ├── task.md              # Tracker with phase status and acceptance criteria
-├── research.md          # Phase 1 findings (contrib, core patterns, recommendation)
+├── research.md          # Phase 1 findings (existing solutions, first-party patterns, recommendation)
 ├── architecture.md      # Phase 2 design (components, dependencies, patterns)
 └── implementation.md    # Phase 3 progress (files created, TDD log, blockers)
 ```
@@ -239,7 +237,7 @@ implementation_process/in_progress/{task_name}/
 | `/complete <task>` | Run 5 quality gates, mark task done |
 | `/validate <task>` | Validate against architecture (anytime) |
 | `/pattern <use-case>` | Get pattern recommendations (anytime) |
-| `/visual-check [path]` | Compare rendered Drupal page against Figma comp (requires Chrome) |
+| `/visual-check [path]` | Compare a rendered page against a Figma comp (requires Chrome) |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folders |
 
 ---
@@ -277,7 +275,7 @@ User: "1"
      │
      ▼
 "Loading settings_form...
- Dev-guides loaded: drupal/forms/, drupal/security/
+ Dev-guides loaded: [domain guides for framework]
  Recommended: /implement settings_form"
      │
      ▼
@@ -322,10 +320,10 @@ The plugin includes built-in references and online dev-guides that are **enforce
 
 | Phase | Principles Enforced | Sources |
 |-------|---------------------|---------|
-| **Research** | Domain knowledge (Drupal-flavored today) | dev-guides (proactive), contrib-researcher |
-| **Design** | SOLID, Library-First, CLI-First | `references/solid-drupal.md`, `references/library-first.md`, dev-guides |
+| **Research** | Domain knowledge | dev-guides (proactive), prior-art-researcher |
+| **Design** | SOLID, Library-First, CLI-First | `references/solid.md`, `references/library-first.md`, dev-guides |
 | **Implementation** | TDD (Red-Green-Refactor), DRY, Security | `references/tdd-workflow.md`, `references/dry-patterns.md`, dev-guides |
-| **Completion** | 5 Quality Gates, Purposefulness | `references/quality-gates.md`, `references/purposeful-code.md`, dev-guides `drupal/security/` |
+| **Completion** | 5 Quality Gates, Purposefulness | `references/quality-gates.md`, `references/purposeful-code.md`, dev-guides |
 
 ### Blocking vs Warning
 
@@ -335,7 +333,7 @@ The plugin includes built-in references and online dev-guides that are **enforce
 | **WARNING** | Can proceed, creates follow-up task |
 
 ### Always Blocking
-- *(Drupal)* `\Drupal::service()` in new code
+- Static service location in new code (use dependency injection instead)
 - Business logic in forms/controllers
 - Missing access checks on routes
 - Raw SQL with user input
@@ -365,9 +363,9 @@ This plugin includes skills and agents that activate automatically at each phase
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `contrib-researcher` | Agent (haiku, 15 turns) | Searches drupal.org and contrib modules |
-| `core-pattern-finder` | Skill | Finds patterns in Drupal core |
-| `guide-integrator` | Skill | Loads dev-guides for the task's Drupal domain |
+| `prior-art-researcher` | Agent (sonnet, 15 turns) | Researches existing third-party solutions and first-party patterns |
+| `core-pattern-finder` | Skill | Finds first-party patterns in the project framework |
+| `guide-integrator` | Skill | Loads dev-guides for the task's domain |
 
 ### Phase 2: Architecture
 
@@ -375,7 +373,7 @@ This plugin includes skills and agents that activate automatically at each phase
 |-----------|------|---------|
 | `architecture-drafter` | Agent (opus, 30 turns) | Designs task architecture, **enforces SOLID + Library-First** |
 | `architecture-validator` | Agent (sonnet, 20 turns, isolated worktree) | Validates against principles, **blocking vs warning** |
-| `pattern-recommender` | Agent (sonnet, 15 turns) | Recommends Drupal patterns for use cases |
+| `pattern-recommender` | Agent (sonnet, 15 turns) | Recommends framework patterns for use cases |
 | `guide-integrator` | Skill | Loads dev-guides for architecture decisions + methodology refs |
 | `guide-loader` | Skill | Loads specific guide files |
 | `implementation-task-creator` | Skill | Breaks architecture into implementation tasks |
@@ -385,7 +383,7 @@ This plugin includes skills and agents that activate automatically at each phase
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `task-context-loader` | Skill | Loads full context for implementation |
-| `guide-integrator` | Skill | Loads dev-guides for security, SDC, JS patterns |
+| `guide-integrator` | Skill | Loads dev-guides for security and implementation patterns |
 | `tdd-companion` | Skill | **Enforces TDD** - blocks code before tests |
 | `code-pattern-checker` | Skill | Validates SOLID, DRY, Security, CSS standards |
 
@@ -409,7 +407,7 @@ This plugin includes skills and agents that activate automatically at each phase
 
 /research <task>
      │
-     └──▶ guide-integrator (dev-guides) ──▶ contrib-researcher ──▶ core-pattern-finder
+     └──▶ guide-integrator (dev-guides) ──▶ prior-art-researcher ──▶ core-pattern-finder
 
 /research-team <task>
      │

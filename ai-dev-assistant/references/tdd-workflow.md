@@ -1,8 +1,6 @@
 # TDD Workflow
 
-Test-Driven Development principles enforced during Phase 3 implementation.
-
-> The Red-Green-Refactor **cycle** is stack-neutral. The test types, paths, templates, and commands shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents (test runner, directory layout, base classes). For Drupal, use them as written.
+Test-Driven Development principles enforced during Phase 3 implementation. The Red-Green-Refactor cycle and the test tiers below are stack-neutral. The concrete test runner, directory layout, and base classes for a given stack live in the phase recipes (implement standards-and-tests recipe), which reference the dev-guides knowledge guides.
 
 ## The Non-Negotiable Rule
 
@@ -14,60 +12,36 @@ Before writing ANY implementation code, ask: "Is there a failing test for this?"
 
 | Phase | Action | Checkpoint |
 |-------|--------|------------|
-| **RED** | Write failing test | Test MUST fail. If it passes, test is wrong. |
+| **RED** | Write failing test | Test MUST fail. If it passes, the test is wrong. |
 | **GREEN** | Write minimal code to pass | Only enough to pass. No extras. |
 | **REFACTOR** | Improve code quality | Tests must stay green. |
 
 ## When to Apply TDD
 
-| Component | TDD Required | Test Type |
+| Component | TDD Required | Test Tier |
 |-----------|--------------|-----------|
-| Services with business logic | **YES - Always** | Unit or Kernel |
-| Form validation logic | **YES** | Unit |
-| Plugins (actions, conditions) | **YES** | Kernel |
-| Entity hooks | **YES** | Kernel |
-| Access control logic | **YES** | Kernel |
-| Simple getters/setters | Optional | Unit |
-| Twig templates | No | Functional |
+| Logic units with business rules | **YES - Always** | Unit or Integration |
+| Validation logic | **YES** | Unit |
+| Pluggable behaviors (actions, conditions) | **YES** | Integration |
+| Lifecycle hooks and event handlers | **YES** | Integration |
+| Access-control logic | **YES** | Integration |
+| Simple getters and setters | Optional | Unit |
+| Presentation templates | No | End-to-end |
 
-## Drupal Test Types
+## Test Tiers
 
-| Type | Location | Use For | Isolation |
-|------|----------|---------|-----------|
-| Unit | `tests/src/Unit/` | Pure logic, no Drupal | Full (mocked) |
-| Kernel | `tests/src/Kernel/` | Services, entities, DB | Partial (real container) |
-| Functional | `tests/src/Functional/` | Full page requests | None (full bootstrap) |
+| Tier | Use For | Isolation |
+|------|---------|-----------|
+| Unit | Pure logic, no platform bootstrap | Full (dependencies mocked) |
+| Integration | Logic against real dependencies (data store, container) | Partial (real wiring) |
+| End-to-end | Full request through the running system | None (full bootstrap) |
 
 ## Integration Over Mocks
 
-Prefer Kernel tests with real services over Unit tests with heavy mocking:
-- Use actual database, cache, entity systems
-- Mock only external APIs and third-party services
-- Drupal's `KernelTestBase` provides real DI container
-
-## Test Template
-
-```php
-<?php
-
-namespace Drupal\Tests\{module}\{Type};
-
-use Drupal\Tests\{TestBase};
-
-class {ClassName}Test extends {TestBase} {
-
-  public function test{Behavior}(): void {
-    // Arrange
-    $input = ...;
-
-    // Act
-    $result = $this->subject->method($input);
-
-    // Assert
-    $this->assertEquals($expected, $result);
-  }
-}
-```
+Prefer integration tests with real dependencies over unit tests with heavy mocking:
+- Use the actual data store, cache, and object wiring where practical.
+- Mock only external APIs and third-party services.
+- A real dependency-injection container catches wiring bugs that mocks hide.
 
 ## Enforcement Checkpoints
 
@@ -90,7 +64,7 @@ During `/implement`, verify at each step:
 
 ## User-Controlled Testing
 
-- Claude suggests test commands but does NOT auto-run
-- User executes: `ddev phpunit --filter {TestClass}`
-- User reports results back to Claude
-- Claude responds based on pass/fail
+- Claude suggests test commands but does NOT auto-run them.
+- The user executes the tests.
+- The user reports results back to Claude.
+- Claude responds based on pass or fail.

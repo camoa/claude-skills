@@ -24,6 +24,7 @@ Read-only agent. Match files (changed or planned) OR artifact prose to relevant 
 - `context_excerpts[]` — optional supporting prose (architecture.md `## Components`, `implementation.md` Files Created/Modified). Use to disambiguate ambiguous file paths (`plan` / `validation`).
 - `artifact_excerpts[]` — `prose` mode only. Objects `{source, text}` carrying phase-artifact prose (e.g. `task.md` Goal, `alignment.md`, `research.md`). The text to semantically match against the catalog.
 - `candidate_slugs[]` — `prose` mode only. The catalog slugs `dev-guides-detect.sh` already matched lexically (Stage 1). Treated as a **floor**: every entry here is echoed in `matched_guides[]` (you may re-rank/justify it, never drop it).
+- `routing_hints[]` — optional; `plan` / `validation` modes. Objects `{pattern, role}` injected by the caller from the resolved process recipe. A framework's recipe is the source of truth for which of ITS file patterns map to which neutral role (e.g. `{"pattern": "*.tmpl", "role": "theming"}`, `{"pattern": "src/handlers/**", "role": "routing"}`). The agent hardcodes no framework's file layout. Absent ⇒ only the neutral role buckets in step 2 fire.
 - `already_cited[]` — slugs the gate already extracted from artifacts (validation mode only). Informational; you do NOT filter against this — return your honest match list and let the caller compare.
 
 ## Workflow
@@ -34,37 +35,37 @@ Read-only agent. Match files (changed or planned) OR artifact prose to relevant 
    Parse the topic table out of that markdown: each topic is a line
    `- [Title](https://camoa.github.io/dev-guides/<slug>/): N guides — description`
    — extract `<slug>` (the URL path after `dev-guides/`, trailing slash
-   stripped, e.g. `drupal/views`), the title, and the description. Build a
+   stripped, e.g. `<framework>/views`), the title, and the description. Build a
    lookup table of `{slug, title, description}`. If the file is missing, has no
    `.content` key, or `.content` yields no parseable topic lines, emit
    `warnings: ["catalog_cache_missing"]` (or `"catalog_unparseable"` /
    `"catalog_size_zero"`) with empty `matched_guides`, return. (Cache-staleness
    detection is the caller's responsibility — the agent is Read+Glob only.)
 
-2. **`plan` / `validation` modes — bucket the files.** For each file in `files[]`, look at the path components, extension, and any matching `context_excerpts[]` text. Decide which catalog entries — by slug — are relevant. Apply these heuristics, BUT defer to the catalog's actual slugs and descriptions:
-   - Form-related paths (`*Form.php`, `src/Form/**`, form-builder hooks) → look for catalog slugs starting with `drupal/forms/`.
-   - Entity / field paths (`*Entity.php`, `src/Entity/**`, `*.field.*.yml`, `src/Plugin/Field/**`) → `drupal/entities/*`, `drupal/custom-field/*`.
-   - Plugin paths (`src/Plugin/**` other than Field formatters/widgets covered above) → `drupal/plugins/*`.
-   - Routing / controllers (`*.routing.yml`, `*Controller.php`, `src/Controller/**`) → `drupal/routing/*`.
-   - Services (`*.services.yml`, `src/*Service.php`, `src/EventSubscriber/**`) → `drupal/services/*`.
-   - Module bootstrap (`*.module`, `*.install`, `*.post_update.php`) → `drupal/modules/*`, `drupal/hooks/*`.
-   - Theming (`*.theme`, `templates/**/*.twig`, `*.libraries.yml`) → `drupal/twig/*`, `drupal/theming/*`.
-   - Render / cache / access (`src/Render/**`, `*Cache*.php`, `*.permissions.yml`, `src/Access/**`) → `drupal/render-api/*`, `drupal/caching/*`, `drupal/security/*`.
-   - Views, migration, JSON:API → matching catalog prefixes.
-   - SCSS/CSS → `css/*`, `design-systems/*`, `design-systems/tailwind` (when Tailwind config touched).
-   - Next.js (`*.tsx`, `app/**`, `pages/**`, `next.config.*`) → `nextjs/*`.
-   - Tests (`tests/**`, `*Test.php`, `*.spec.ts`, `*.test.ts`) → `development/tdd`.
-   - Dependency files (`composer.json`, `package.json`, `*.lock`) → ignore unless context excerpts call out a specific topic.
+2. **`plan` / `validation` modes — bucket the files by role, then role → catalog slugs.** For each file in `files[]`, look at the path components, extension, and any matching `context_excerpts[]` text. Assign a neutral ROLE, then map that role to catalog slugs covering it. Two signal sources, recipe-first; defer always to the catalog's actual slugs and descriptions:
+   - **Recipe routing hints (authoritative for framework-specific layouts).** If `routing_hints[]` is supplied, apply each `{pattern, role}` first. A framework's recipe is the source of truth for which of ITS file patterns mean "form", "data-model", "routing", "theming", etc. — the agent hardcodes no framework's file layout, so framework-specific config/template/source suffixes arrive here, not below.
+   - **Neutral role buckets (framework-independent signals).** Independent of any recipe, map by generic role:
+     - Forms (paths or class-names implying form building) → catalog slugs covering forms and form building.
+     - Data models / entities / fields → catalog slugs covering entities and custom fields.
+     - Routing / controllers / endpoints → catalog slugs covering routing.
+     - Services / DI / event subscribers → catalog slugs covering services and dependency injection.
+     - Templating / theming (template files, view-layer files) → catalog slugs covering theming and templates.
+     - Rendering / caching / access-control → catalog slugs covering rendering, caching, and security.
+     - Listing / data-views / migration / API endpoints → matching catalog prefixes (views, migration, JSON/REST API, etc.).
+     - SCSS/CSS (`*.scss`, `*.css`) → `css/*`, `design-systems/*`, `design-systems/tailwind` (when a Tailwind config is touched).
+     - Next.js (`*.tsx`, `app/**`, `pages/**`, `next.config.*`) → `nextjs/*`.
+     - Tests (`tests/**`, `*.spec.ts`, `*.test.ts`, `*Test.*`) → `development/tdd`.
+     - Dependency manifests (`composer.json`, `package.json`, `*.lock`) → ignore unless context excerpts call out a specific topic.
 
-   These heuristics are reasoning hints — the actual returned slugs MUST exist in the parsed catalog. If a heuristic suggests `drupal/forms/*` but no slug under that prefix is in the catalog, omit it.
+   These heuristics are reasoning hints — the actual returned slugs MUST exist in the parsed catalog. If no slug matching a heuristic category is in the catalog, omit it.
 
 3. **`prose` mode — semantic match.** No `files[]`. Instead:
    - **Echo the seed as a floor.** Every slug in `candidate_slugs[]` (the Stage-1 `dev-guides-detect.sh` lexical matches) MUST appear in `matched_guides[]`. Re-rank or re-justify it, but never drop it. If a seed slug is not in the parsed catalog, keep it anyway and add `warnings: ["seed_slug_not_in_catalog: <slug>"]` — Stage 1 and the catalog may be momentarily out of sync.
-   - **Add semantic / synonym matches.** Read `artifact_excerpts[]` and find catalog topics whose subject the prose clearly implies even when no literal term matched — e.g. prose about "the group module" or "organic groups" → `drupal/group` if present; "a listing page" → `drupal/views`; "REST endpoint" → `drupal/jsonapi`. These are the matches Stage 1's lexical scan misses. Mark them `confidence: medium` (or `low` for a weak inference); seed echoes keep `confidence: high`.
+   - **Add semantic / synonym matches.** Read `artifact_excerpts[]` and find catalog topics whose subject the prose clearly implies even when no literal term matched — e.g. prose about a specific module type → the corresponding catalog slug if present; "a listing page" → views-related slug; "REST endpoint" → API-related slug. These are the matches Stage 1's lexical scan misses. Mark them `confidence: medium` (or `low` for a weak inference); seed echoes keep `confidence: high`.
    - `triggered_by[]` for prose-mode matches is the excerpt `source` label(s) (e.g. `["alignment.md"]`) or the term that drove the inference.
    - **Output shape is identical to the other modes** — emit the full envelope. In prose mode `files_evaluated` is `0`, `unmatched_files` is `[]`, `warnings` is `[]` (unless a seed slug was absent). Do NOT omit these fields and do NOT add fields outside the schema (e.g. no `candidate_slugs_input`).
 
-4. **Filter by relevance.** If a heuristic matches multiple catalog slugs under the same prefix (e.g., 6 entries under `drupal/forms/`), prefer the one whose description best matches the file's specific role. Use `confidence: high` when the file path strongly implies the slug; `medium` when the prefix matches but the specific guide is judgmental; `low` when guessing from weak signals.
+4. **Filter by relevance.** If a heuristic matches multiple catalog slugs under the same prefix (e.g., 6 entries under `<framework>/forms/`), prefer the one whose description best matches the file's specific role. Use `confidence: high` when the file path strongly implies the slug; `medium` when the prefix matches but the specific guide is judgmental; `low` when guessing from weak signals.
 
 5. **Track unmatched files.** Files that produce zero catalog matches go into `unmatched_files[]`. Common: test fixtures, dotfiles, unrelated config. (`plan` / `validation` only.)
 

@@ -160,15 +160,49 @@ $ /ai-dev-assistant:review my_task --skip-tdd "no test framework yet"
 - **Conditional gate detection on already-merged branch** — merge-base diff handles this; if base branch has moved, the diff still captures branch-local changes correctly.
 - **Hard-block marker absent on a gate that should be hardened** — graceful soft-mode fallback; audit notes `kind: "soft"` for that entry.
 
+## `--rerun-failed` and `--team` semantics (detail)
+
+`--rerun-failed` reads the previous `_review.json gate_specific.gates_run[]`, filters `verdict == "fail" AND bypass_reason == null`, runs only those, then re-aggregates (overwrite). Passed-gate envelopes are preserved; soft gates keep their prior verdicts. It refuses with "no valid prior run" if `_review.json` is absent/empty/malformed/missing `gate_specific.gates_run`. An **unresolved** gate (per-gate `verdict: "skipped"`, `unresolved: true`) is **not** selected by `--rerun-failed` (which targets `verdict: fail`); the run stays correctly red (step 8 rule 2) — retry an unresolved gate with a full `/review`, not `--rerun-failed`.
+
+`--team` invokes `/validate:team` directly; the inner fallback (auto-falls back to `/validate:all` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != "1"` or `TeamCreate` fails) handles unavailability. `_review.json gate_specific.mode` records the actual mode: `"team"`, `"all"`, or `"team-fallback-to-all"`.
+
+## Headless mode (`--headless`) — full contract
+
+`--headless` makes `/review` safe to run **unattended** (an L1 orchestrator, a `/goal` loop, CI). It is **additive** — absent the flag, behaviour is byte-for-byte unchanged. It changes only the two interactive points (steps 3 and 9) and adds machine-readable output; it does **not** change gate execution, aggregation, or `pr_ready` logic, and introduces **no new bypass path**.
+
+- **No prompts.** Step 3 (`[y/N]` dirty-tree) and step 9 (`[r]/[s]/[a]` on fail) are suppressed.
+- **Step 6 (change-impact dispatch) is non-interactive** under `--headless`, and `/review` **passes the non-interactive signal into the dispatcher** (see `change-impact-dispatch.md` → *Headless mode*): never prompt for per-task visual-gate opt-in; an absent `## Review Gates` block = decline-for-this-run (skip), never a question and never written back; every step-6 visual gate is invoked in **`--ci`** mode — a diff over tolerance is recorded `fail` with **no** classification prompt and **no** baseline write (never auto-rotate a baseline under automation).
+- **Other steps stay non-interactive too.** The step-1 phase-transition nudge prints and continues (never a question); a classifier `bad_base_ref`/`no_merge_base` warning (step 6.2 / step 4) forces non-zero — an unresolved diff base means conditional gates may have silently not run.
+- **Session context on every exit.** Run step-13's `session-context-write.sh` before exiting on **both** the pass and the fail path, so a `/goal` loop keeps task context across iterations.
+- **Fail-closed.** On gate fail, write `_review.json` (`overall_verdict: "fail"` + per-gate envelopes, `pr_ready: false`) and exit non-zero. The run **never auto-bypasses** — a bypass remains only the explicit `--skip-<gate> <reason>` the caller supplies. This is what keeps *"cannot ship below the gate floor"* true under automation.
+- **Exit codes (total + fail-closed).** `0` **only** when `overall_verdict` is a clean `pass`, or `bypassed` with **zero** failing AND **zero** unresolved hard-block gates; **non-zero (`1`)** for any hard-block `fail` **or** any hard-block **unresolved** (parse-error / missing envelope) gate, or any otherwise-ambiguous verdict; `2` = arg/validation error. **Benign `skipped-not-shipped` / soft-skipped gates do NOT by themselves force non-zero** (else a fully-green run on an interim project never terminates a `/goal` loop). **Not unambiguously clean ⇒ exit non-zero** — never exit 0 on doubt. (Fail dominates bypass per step 8; unresolved is fail-closed above bypass.)
+- **Compact verdict line (stdout).** After step 10, print one line per gate plus an overall line — for a transcript-only reader such as `/goal`:
+  ```
+  <gate> verdict=<pass|fail|bypassed|skipped>
+  overall_verdict=<pass|fail|bypassed> pr_ready=<true|false> audit=<path>
+  ```
+  The verbatim per-gate envelopes stay on disk in `_review.json` (re-read at merge), not echoed in full — keeps the transcript lean.
+- **`working_tree` audit field.** Step 10's `gate_specific` gains `working_tree: "dirty"|"clean"` (additive; `gate-audit-write.sh` passes `gate_specific` through unchanged, so no script change).
+- **Composes** with `--dry-run` (CI gate-check that never marks Phase 4), `--skip-<gate>`, `--team`, `--rerun-failed`. The Phase 4 `[x]` rule (step 12) is unchanged.
+
+## When to escalate — `claude ultrareview`
+
+After `/review`'s gates pass, a high-stakes PR (production-adjacent, security-critical, or large) can get a deeper pass: `claude ultrareview <PR>` (or `/ultrareview`) runs a multi-agent reviewer fleet in a cloud sandbox that independently reproduces and verifies each finding. **Explicit user opt-in only** — never run it automatically from `/review`; it bills as usage credits (~$5–20/run beyond a small free-run allotment). The `code-quality-tools:ultrareview` skill wraps the same platform check; either entry point works.
+
+**Tip — long runs.** `/review`, `/research-team`, and `/validate:team` take minutes. Enable `channelsEnabled` in user settings for a push notification on completion. `/goal` pairs with `/review` for unattended green-until-done runs (e.g. `/goal every hard-block gate in <task>/validations/latest reports pass`) — see `CONVENTIONS.md` "Condition-checked autonomy with `/goal`".
+
+> Both mandated-wording literals (`review-gate-fail`, `review-summary`) stay **inline** in `commands/review.md` and byte-identical to `references/gate-hardening-prompts.md` — pinned there by `tests/gate-prompts-vs-inline.sh`, so they are not relocated here.
+
 ## Version history
 
 - **v4.1.0** — initial introduction. 13 runtime steps; v4.0.0 5-mechanism pattern; mandated-wording templates inline in command body (byte-identical to `gate-hardening-prompts.md` v1.2 templates per Decision Log #3 in `plumbing_docs_tests/research.md`).
+- **v5.3.1** — `commands/review.md` body trimmed back under the ≤120-line budget (the de-Drupalization recipe-resolution prose had pushed it to 157 lines). The full `--headless` contract, the `--rerun-failed`/`--team` semantics, and the `claude ultrareview` escalation note were relocated here; the command keeps every runtime step, the anti-bypass clause, all flags, and **both** mandated-wording literals (`review-gate-fail`, `review-summary`) inline (the literals are pinned inline by `tests/gate-prompts-vs-inline.sh`). It now carries a compact `--headless` section — retaining the `Exit codes`, compact-verdict-line, `--ci`, and "never exit 0 on doubt" clauses that `tests/headless-review-contract-spec.sh` asserts — plus pointers to the relocated detail. Step 5.0/5a recipe-resolution prose was condensed (full protocol stays in `references/recipe-resolution.md`).
 
 ## Related
 
 - `commands/review.md` — runtime body (≤120 lines token-efficient)
 - `commands/complete.md` — slimmed in v4.1.0; honors `**Review Required:**` field for legacy posture
 - `references/gate-hardening-prompts.md` v1.2 — `review-gate-fail` + `review-summary` templates
-- `references/gate-audit-schema.md` v1.1 — `_review.json` shape (`gate_type: "review"`, §5.8)
+- `references/gate-audit-schema.md` v1.1 — `_review.json` shape (`gate_type: "review"`)
 - `references/validation-gate-result.md` v1.0 — per-gate envelope shape
 - `references/feedback_framework_phase_gates.md` (memo) — driver

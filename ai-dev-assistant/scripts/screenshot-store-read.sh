@@ -10,7 +10,7 @@
 #
 # Usage: screenshot-store-read.sh <codePath> [--legacy-path <memory_project>]
 #
-#   <codePath>       Drupal project root; the store is <codePath>/tests/visual/
+#   <codePath>       project root; the store is <codePath>/tests/visual/
 #   --legacy-path    optional memory-project folder; when given, the output
 #                    carries `legacy_store_present: true` if a v3.13.0
 #                    `.screenshots/` directory still exists there. Lets
@@ -20,7 +20,7 @@
 # Always emits single-line JSON to stdout. Exit 0 regardless of input
 # (warnings surface via the warnings[] array).
 #
-# Output shape (per references/screenshot-store-schema.md §7):
+# Output shape (per references/screenshot-store-schema.md):
 #   {
 #     "schema_version": "1.0",
 #     "project_path": "<codePath>",

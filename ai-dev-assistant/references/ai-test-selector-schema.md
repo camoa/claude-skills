@@ -34,8 +34,8 @@ The `ai-test-selector` agent emits a single JSON object per invocation. Schema i
 | `selected_surfaces` | string[] | The affected subset to RUN. Always `⊆ candidate_surfaces`. When `degraded: true`, equals `candidate_surfaces` exactly. |
 | `skipped_surfaces` | object[] | One entry per surface in `candidate_surfaces` that is NOT in `selected_surfaces`. Shape: `{id: string, reason: string}`. When `degraded: true`, this array MUST be `[]`. |
 | `skipped_surfaces[].id` | string | Surface ID matching a registry entry in `candidate_surfaces`. |
-| `skipped_surfaces[].reason` | string | Concrete, evidence-anchored exclusion rationale (see §Reason Contract below). |
-| `degraded` | bool | `true` iff the full candidate set was selected due to thin evidence (see §Degraded Semantics). |
+| `skipped_surfaces[].reason` | string | Concrete, evidence-anchored exclusion rationale (see the "Reason Contract" section below). |
+| `degraded` | bool | `true` iff the full candidate set was selected due to thin evidence (see the "Degraded Semantics" section below). |
 | `selection_model` | string | The model used for selection reasoning. Always `"sonnet"` for the current agent version. |
 | `diff_files_analyzed` | int | Count of files in the input `diff_files` list that were considered. MUST equal `len(diff_files)`. |
 
@@ -47,11 +47,11 @@ A valid reason MUST:
 - Be verifiable by re-running the same grep/read against the worktree.
 
 **Acceptable example:**
-> "diff is entirely in `modules/custom/foo/foo.module` which registers no route, hook, or service
+> "diff is entirely in `src/components/foo/foo.ts` which registers no route, handler, or service
 > for `/checkout` (Grep confirmed no references to checkout path)."
 
 **Not acceptable:**
-> "Looks unrelated." / "foo.module seems backend-only." / "URL path doesn't match."
+> "Looks unrelated." / "foo.ts seems backend-only." / "URL path doesn't match."
 
 If a concrete reason cannot be stated, the surface MUST be selected, not skipped.
 

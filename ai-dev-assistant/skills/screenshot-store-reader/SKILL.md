@@ -25,7 +25,7 @@ Playwright snapshots; `.meta.json` provenance sidecars travel with each PNG.
 `--legacy-path <memory_project_folder>` adds a `legacy_store_present` boolean
 when a v3.13.0 `.screenshots/` directory still exists there.
 
-**Output:** single JSON object to stdout per `references/screenshot-store-schema.md` §7. Exit code always 0 except for unrecoverable read failures.
+**Output:** single JSON object to stdout per `references/screenshot-store-schema.md`. Exit code always 0 except for unrecoverable read failures.
 
 Fields:
 - `schema_version` — JSON string, currently `"1.0"`

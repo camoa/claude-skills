@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# validate-e2e.sh — run ATK behavioral E2E tests via Playwright.
+# validate-e2e.sh — run behavioral E2E tests via Playwright (framework-agnostic gate).
 #
-# Usage: validate-e2e.sh <codePath> [--task <name>] [--smoke-only] [--surfaces-json '<json>']
+# Usage: validate-e2e.sh <codePath> [--task <name>] [--smoke-only]
+#                        [--surfaces-json '<json>'] [--preflight-cmd '<cmd>']
 #
-#   <codePath>: absolute path to the Drupal project root
+#   <codePath>: absolute path to the project root
 #   --task <name>: task name (informational; used in output JSON)
 #   --smoke-only: add --grep "@smoke" to Playwright (fast subset)
 #   --surfaces-json '<json>': JSON array of surface ids with gate:e2e (passed by Claude
 #                             from registry.yml — this script does NOT parse YAML)
+#   --preflight-cmd '<cmd>': OPTIONAL shell command run in <codePath> before the tests.
+#                            A non-zero exit fails the gate; its output is captured.
+#                            The gate is framework-agnostic — the command is supplied by
+#                            the calling command from project config (whatever preflight
+#                            the framework's recipe declares). Absent =
+#                            no preflight runs.
 #
 # YAML boundary: registry.yml is parsed by the calling command (validate-e2e.md,
-# executed by Claude). Claude reads the YAML, filters gate:e2e surfaces, and passes
-# the id list as --surfaces-json. This shell script handles only structured args.
+# executed by Claude). Claude reads the YAML, filters gate:e2e surfaces, resolves the
+# preflight command, and passes them as structured args. This script parses no YAML.
 #
-# Playwright runs HOST-SIDE. Never wrap npx in ddev exec.
-# The browser reaches the DDEV site via DDEV_PRIMARY_URL / PLAYWRIGHT_BASE_URL.
+# Playwright runs HOST-SIDE. The browser reaches the site under test via
+# PLAYWRIGHT_BASE_URL (or the harness config's baseURL).
 #
 # Output: single JSON object to stdout (see schema below).
 # Exit codes:
 #   0 — pass or warning (all tests passed, or preflight warnings only)
-#   1 — fail (one or more tests failed)
+#   1 — fail (one or more tests failed, or the preflight command failed)
 #   2 — invalid arguments or missing pre-requisites
 
 set -uo pipefail
@@ -30,6 +37,7 @@ CODE_PATH="${1:?codePath required}"
 TASK_NAME=""
 SMOKE_ONLY=0
 SURFACES_JSON="[]"
+PREFLIGHT_CMD=""
 
 shift
 while [[ $# -gt 0 ]]; do
@@ -50,9 +58,17 @@ while [[ $# -gt 0 ]]; do
       SURFACES_JSON="${2:?--surfaces-json requires a value}"
       shift
       ;;
+    --preflight-cmd)
+      PREFLIGHT_CMD="${2:-}"
+      if [[ -z "$PREFLIGHT_CMD" ]]; then
+        echo "validate-e2e: --preflight-cmd requires a value" >&2
+        exit 2
+      fi
+      shift
+      ;;
     *)
       echo "validate-e2e: unknown flag: $1" >&2
-      echo "  usage: validate-e2e.sh <codePath> [--task <name>] [--smoke-only] [--surfaces-json '<json>']" >&2
+      echo "  usage: validate-e2e.sh <codePath> [--task <name>] [--smoke-only] [--surfaces-json '<json>'] [--preflight-cmd '<cmd>']" >&2
       exit 2
       ;;
   esac
@@ -76,25 +92,27 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
-# ─── ATK pre-flight ──────────────────────────────────────────────────────────
+# ─── pre-flight (configurable, framework-agnostic) ───────────────────────────
+#
+# The gate runs whatever preflight command the calling command resolved from
+# project config (whatever preflight the framework's recipe declares).
+# No framework is assumed here. Absent command ⇒ no preflight, no warning.
 
 PREFLIGHT_WARNINGS=()
 
-if command -v ddev >/dev/null 2>&1 && [[ -f "$CODE_PATH/.ddev/config.yaml" ]]; then
-  PF_OUTPUT=$(cd "$CODE_PATH" && ddev drush atk:preflight 2>&1) || {
-    echo "validate-e2e: ddev drush atk:preflight failed:" >&2
+if [[ -n "$PREFLIGHT_CMD" ]]; then
+  PF_OUTPUT=$(cd "$CODE_PATH" && bash -c "$PREFLIGHT_CMD" 2>&1) || {
+    echo "validate-e2e: preflight command failed: $PREFLIGHT_CMD" >&2
     echo "$PF_OUTPUT" >&2
     # Emit structured error JSON using jq -n to safely handle any chars (EC-F20)
     PF_FIRST_LINE=$(echo "$PF_OUTPUT" | head -1)
     jq -n \
-      --arg msg "atk_preflight_failed: $PF_FIRST_LINE" \
+      --arg msg "preflight_failed: $PF_FIRST_LINE" \
       '{"schema_version":"1.0","gate_type":"e2e","verdict":"fail","total_tests":0,
         "passed":0,"failed":0,"skipped":0,"report_path":"",
         "failed_tests":[],"preflight_warnings":[$msg]}'
     exit 1
   }
-else
-  PREFLIGHT_WARNINGS+=("ddev_not_available: skipping atk:preflight")
 fi
 
 # ─── build --grep pattern ────────────────────────────────────────────────────

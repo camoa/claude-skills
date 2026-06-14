@@ -25,7 +25,7 @@ You receive the resolved project and task values from the calling command. Write
   "task": "my_task",
   "taskPath": "/abs/path/to/task",
   "updatedAt": "2026-04-22",
-  "loadedGuides": ["drupal/forms/form-validation"],
+  "loadedGuides": ["<framework>/forms/form-validation"],
   "lastPhase": "research",
   "currentEpic": "my_epic_name"
 }

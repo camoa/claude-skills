@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wo-risk-classify.sh (C4) — classify ONE work-order's realized diff into a risk tier.
 #
-# Owner: gate_integration (sibling ②). Read-once spec: architecture/kernels.md §1 (AR-C corrected).
+# Owner: gate_integration (sibling ②). Read-once spec: architecture/kernels.md (AR-C corrected).
 # A PURE function of its inputs — the work-order-critique skill (C2) does the WO I/O and passes the
 # frozen-field values in; this kernel never parses the WO file. Deterministic + fail-closed so it is
 # testable headless (tests/wo-risk-classify-spec.sh) with zero model context.

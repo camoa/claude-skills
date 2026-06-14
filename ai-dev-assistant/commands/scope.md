@@ -49,7 +49,7 @@ This scaffolding-on-miss is required so `/next`'s brand-new-task offer (`command
 
 ### Stub scaffolding
 
-When scaffolding a missing task folder, write exactly this minimal `task.md` (Phase 1 will replace it with the fuller template at `references/research-walkthrough.md` §"Output"):
+When scaffolding a missing task folder, write exactly this minimal `task.md` (Phase 1 will replace it with the fuller template at `references/research-walkthrough.md` the "Output" section):
 
 ```markdown
 # Task: <task_name>

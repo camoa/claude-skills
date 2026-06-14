@@ -49,7 +49,7 @@ Never assume a clean start. **Before** the ready-queue, run a single **reconcili
 WO. Per WO, read `(status [wo-compile.sh frontmatter], wo-NN.run.json [wo-run-state.sh read],
 wo-NN._review.json, wo-NN._critique.json, wo-NN.HALT)`. The run-state sidecar is the authority; **never**
 trust `git log --grep` (builder-forgeable). Route each WO by the disposition table in
-`references/loop-contract.md` §Recovery — every `set-status` below is legal per the kernel's
+`references/loop-contract.md` (Recovery section) — every `set-status` below is legal per the kernel's
 transition table. **Before any disposition that may reach step 10's reset, bind
 `cp := <sidecar checkpoint_before>` (from `wo-NN.run.json`)** — `$cp` is otherwise bound only at step 5,
 which every resume path skips, so a resume into the retryable-fail branch would `reset --hard` an unbound
@@ -103,7 +103,7 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
    `high|security → top`. **Critics and gates
    stay top-model always** — an under-estimate degrades cost, never safety.
 4. **Gate the dispatch — while the WO is still `ready`.** `wo-compile.sh assert-dispatchable <wo-file>`
-   (the kernel hard-requires `status=="ready"`; §17 no longer ANDs `autonomy_safe`). On non-zero ⇒ a
+   (the kernel hard-requires `status=="ready"`; 2026-06-11 change: no longer ANDs `autonomy_safe`). On non-zero ⇒ a
    grounding/sequencing failure that can never build: write `wo-NN.HALT`
    (jq-built `{wo_id, reason, at}`) with assert-dispatchable's **`.reason`** (there is **no** handle yet),
    escalate, do **not** count an attempt and do **not** spawn. The WO is now TERMINAL.
@@ -154,7 +154,7 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
       re-dispatch; no feedback injection at L1, see `loop-contract.md`); the cap is enforced **only** at
       `dispatch` (step 5), which HALTs the WO once `attempts ≥ cap`.
 
-**Compact-line discipline (§7.3).** Forward every kernel's stderr line to the transcript
+**Compact-line discipline.** Forward every kernel's stderr line to the transcript
 **mechanically** (`2>&1`/`tee`/redirect-then-print — not by re-typing it), so the Haiku /goal evaluator,
 which reads only the transcript, sees byte-stable verdicts.
 
@@ -183,7 +183,7 @@ TERMINAL WO — `wo-NN.HALT` / sidecar `halted:true` — is never processable an
      merges**. A recorded grounding override opens the PR **flagged** (human merges with eyes open).
      Forward the `merge_gate` compact line.
   3. Print a `LOOP_COMPLETE` summary, then the composed **/goal** string for the user to paste (see
-     `loop-contract.md` §/goal — turn bound `min(20 × N_WOs, 80)`). **Never run /goal yourself** (degrade
+     `loop-contract.md` (/goal section — turn bound `min(20 × N_WOs, 80)`). **Never run /goal yourself** (degrade
      = an attended sequential loop with the same compact lines).
 
 ## Boundaries

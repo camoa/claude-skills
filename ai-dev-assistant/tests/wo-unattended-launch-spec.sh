@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TDD spec for scripts/wo-unattended-launch.sh (K2) — the unattended launch wrapper.
-# Test table T1–T5 per architecture/kernels.md §K2 (safety_governor ④).
+# Test table T1–T5 per architecture/kernels.md (safety_governor ④).
 # --print-cmd makes every test network-free + claude-free: it scrubs/wires the env, dumps the
 # REAL post-scrub environment the child `claude` would inherit, and execs NOTHING.
 set -uo pipefail

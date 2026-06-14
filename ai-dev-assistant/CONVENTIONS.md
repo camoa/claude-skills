@@ -54,8 +54,8 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 - `validate-tdd` / `validate-solid` / `validate-dry` / `validate-security` — thin wrappers over `code-quality-tools` skills; add task context + persistence + shared envelope
 - `validate-guides` — framework-owned; verifies `research.md` + `architecture.md` cite `dev-guides-navigator` guides. **Hardened in v4.1.0 to dual-mode** — soft-nudge standalone, hard-block-capable when invoked from `/review` (via `<!-- /review:hard-block -->` capability marker + `--hard-block` argv flag). **v4.3.0 adds catalog-grounded code-change inference** — gate collects changed files from session edits + `implementation.md` Files Created/Modified + git working tree, then dispatches the `guides-matcher` agent (haiku, read-only) to match them against the cached dev-guides catalog. Slugs the agent matches but no artifact citation covers → `domain_coverage_gaps[]` → demote `pass` → `warning`. Symmetric `/implement` Step 3 component-aware preflight runs `guides-matcher` in plan mode against architecture.md planned components and augments the keyword-detect auto-load list. Catalog is the only taxonomy — no parallel hardcoded map. Suppress gate inference with `--no-code-inference`. See `references/guides-matcher-schema.md`.
 - `validate-playbook-adherence` (**new in v4.1.0**) — heuristic cite-checker for loaded plays; literal-string match (`Grep -F`) per match-type; section-aware skip on `Rejected` / `Considered Alternatives` / `Out of Scope` headings; `--hard-block` / `--strict` / `--invoked-by` flags
-- `validate-visual-regression` — **reworked v4.13.0 (Task C)**: registry-driven, runs the committed `tests/visual/` suite on `@lullabot/playwright-drupal`; multi-viewport batch; a11y baseline pairing; mask regions; classification UX kept. No positional args (registry-driven). `gate_type: visual_regression`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Regression Gate` below.
-- `validate-visual-parity` — **reworked v4.14.0 (Task D)**: registry-driven, runs the committed `tests/parity/` suite on `@lullabot/playwright-drupal` + `pixelmatch`; compares the build against an external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`); emits a TWO-LAYER diff — a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift; `[g]/[i]/[c]` classification; no positional args (registry-driven); `gate_type: visual_parity`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Parity Gate` below.
+- `validate-visual-regression` — **reworked v4.13.0 (Task C)**: registry-driven, runs the committed `tests/visual/` suite on the framework's visual-regression package (installed by the process recipe); multi-viewport batch; a11y baseline pairing; mask regions; classification UX kept. No positional args (registry-driven). `gate_type: visual_regression`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Regression Gate` below.
+- `validate-visual-parity` — **reworked v4.14.0 (Task D)**: registry-driven, runs the committed `tests/parity/` suite on the framework's visual-regression package (installed by the process recipe) + `pixelmatch`; compares the build against an external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`); emits a TWO-LAYER diff — a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift; `[g]/[i]/[c]` classification; no positional args (registry-driven); `gate_type: visual_parity`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Parity Gate` below.
 - `validate-all` — sequential orchestrator; non-interactive CI mode runs visual-regression with `--ci` (any diff → `fail`, no prompts, no baseline writes); skips visual-parity (design-implementation-scoped — runs via `/review` or standalone)
 
 **Shared result envelope** (per `references/validation-gate-result.md` v1.0): every gate emits `{schema_version, gate, task, run_at, verdict, details, messages}`. Verdicts: `pass | warning | fail | skipped`. Persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append).
@@ -112,7 +112,7 @@ The 7 hardened surfaces, by category:
 **Components:**
 - `commands/review.md` (114/120 body lines) — orchestrator; delegates to `/validate:all` (default) or `/validate:team` (`--team`); flags `--dry-run` / `--rerun-failed` / `--no-pr-body` / `--skip-<gate> <reason>` / `--allow-dirty`
 - `references/gate-hardening-prompts.md` v1.2 — `review-gate-fail` + `review-summary` templates (byte-identical to inline literals; verified by `tests/gate-prompts-vs-inline.sh`)
-- `references/gate-audit-schema.md` v1.1 §5.8 — `_review.json` audit shape (`gate_type: "review"`)
+- `references/gate-audit-schema.md` v1.1 — `_review.json` audit shape (`gate_type: "review"`)
 - `commands/complete.md` slimmed (11→9 steps); honors `**Review Required:**` for legacy posture
 
 **Cross-references:** `references/review-phase-walkthrough.md` (full prose); `references/feedback_framework_phase_gates.md` (driver memo).
@@ -123,9 +123,9 @@ The `visual_and_e2e_review_gates` epic adds **three rendered-output review surfa
 `/review` validates not just that source follows the rules, but that the page works and
 looks correct:
 
-- **E2E (behavioral)** — does the flow still work? — ATK + Playwright (Task B)
-- **Visual regression** — did anything change vs. last green? — `@lullabot/playwright-drupal` (Task C)
-- **Visual parity** — does this match the design intent? — Lullabot, shared with VR (Task D)
+- **E2E (behavioral)** — does the flow still work? — the framework's behavioral-test harness (process recipe) + Playwright (Task B)
+- **Visual regression** — did anything change vs. last green? — the framework's visual-regression package (installed by the process recipe) (Task C)
+- **Visual parity** — does this match the design intent? — the framework's visual-regression package, shared with VR (Task D)
 
 **Evolve, not greenfield.** v3.13.0 already shipped `validate-visual-regression` /
 `validate-visual-parity` on ad-hoc Playwright MCP capture. The epic KEEPS the
@@ -135,7 +135,7 @@ classification UX; REPLACES capture (committed Playwright test files), invocatio
 pairing, and masks.
 
 **Two runtimes, one infrastructure.** E2E and visual review ride one Playwright
-install, one `playwright.config.ts`, one DDEV `playwright` service, one surface
+install, one `playwright.config.ts`, one playwright service, one surface
 registry — split only at the test-library layer (`tests/e2e/` vs `tests/visual/`,
 separate `projects[]` entries).
 
@@ -184,12 +184,12 @@ Per-project session-lifecycle hooks that survive compaction, `/clear`, and new s
 
 The filled primer at `<project>/.claude/ai-dev-assistant/session-primer.md` is **user-editable by hand**. Re-run `/install-remembrance-hook` if the project name, memory path, or code path changes — the primer is a static snapshot.
 
-## Worktree Workflow (v3.16.0+) (Drupal-flavored)
+## Worktree Workflow (v3.16.0+)
 
 Two Claude Code sessions on the same project workspace collide on `~/.claude/ai-dev-assistant/sessions/<md5($PWD)>.json` (last-writer-wins) and on the git working tree itself. Solution: the second session runs in a worktree at `.worktrees/<task_name>/`. Distinct `$PWD` → distinct hash → independent session-context. **No changes to `session-context-writer` — the existing hash naturally separates worktree sessions.**
 
 **Commands:**
-- `/worktree <task>` — create a worktree on `feature/<task>` from current HEAD; runs auto-detect setup; pre-seeds session-context. Refuses to double-wrap (refuses when already in a worktree). Drupal/DDEV-aware: warns about `.ddev/config.yaml` `name:` key conflict.
+- `/worktree <task>` — create a worktree on `feature/<task>` from current HEAD; runs auto-detect setup; pre-seeds session-context. Refuses to double-wrap (refuses when already in a worktree).
 - `/worktree-prune` — list and selectively remove worktrees; per-worktree confirm; honors git's refusal on uncommitted changes; force-remove requires explicit per-worktree confirmation.
 
 **Detection:** `/implement <task>` invokes `worktree-signals.sh` BEFORE Phase Transition Check. Signals (HIGH-strength only trigger): `another_task_active` (recent commits to another task's tracked files within 2 hours), `dirty_tree` (uncommitted changes matching another task), `multi_session` (medium-high; informational), `--worktree` flag, `worktreeByDefault: true` in `project_state.md`. Suppressed when already in a worktree. Soft-nudge — never blocks.
@@ -203,23 +203,23 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 **`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
 
-**Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, DDEV concerns, refusal cases, and (§11) how the command relates to Claude Code's native `--worktree` support.
+**Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, refusal cases, and how the command relates to Claude Code's native `--worktree` support.
 
-**Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle + Drupal/DDEV awareness. Not a hard dependency; replicated in command body.
+**Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle. Not a hard dependency; replicated in command body.
 
 ## Playbook System (v3.15.0+)
 
-Two-layer best-practices system (the shipped sets are Drupal-flavored today):
+Two-layer best-practices system:
 
-- **Published playbook sets** — namespaced dev-guides categories like `drupal/best-practices/camoa/*`. Each guide is one concrete "do it this way, not that way" rule. Multiple authors can ship parallel sets (`drupal/best-practices/<author>/*`); users subscribe per project.
+- **Published playbook sets** — namespaced dev-guides categories like `<framework>/best-practices/<author>/*`. Each guide is one concrete "do it this way, not that way" rule. Multiple authors can ship parallel sets; users subscribe per project.
 - **Project-local user playbook** — single markdown file the user maintains. Can OVERRIDE shipped opinions (replace) or EXTEND them (cover topics shipped doesn't). Local always wins on conflict.
 
 **`project_state.md` fields** (v3.15.0+):
-- `**Playbook Sets:** drupal/best-practices/camoa, ...` (comma-list) OR `none` (explicit opt-out) OR absent (uses the plugin's `defaults.json` `playbookSets`)
+- `**Playbook Sets:** <framework>/best-practices/<author>, ...` (comma-list) OR `none` (explicit opt-out) OR absent (uses the plugin's `defaults.json` `playbookSets`)
 - `**User Playbook:** /abs/path/to/playbook.md` paired with `**User Playbook State:** unset | docs-only-no-playbook | set`
 - `**Playbook Resolutions:**` — multi-line list recording per-topic multi-set contradiction choices
 
-**Default voice:** the plugin ships `defaults.json` with `playbookSets: ["drupal/best-practices/camoa"]` — opinionation by default. Forks of the plugin edit `defaults.json` to ship a different default. (This lived in `plugin.json` `defaults.playbookSets` through v4.5.0; moved to `defaults.json` in v4.6.0 because non-standard manifest keys trip `claude plugin validate`.)
+**Default voice:** the plugin ships `defaults.json` with a `playbookSets` default — opinionation by default. Forks of the plugin edit `defaults.json` to ship a different default. (This lived in `plugin.json` `defaults.playbookSets` through v4.5.0; moved to `defaults.json` in v4.6.0 because non-standard manifest keys trip `claude plugin validate`.)
 
 **Precedence at decision time:** project-local > active opinion-set(s) > generic dev-guides.
 
@@ -317,9 +317,9 @@ Symptom-first triage at `references/troubleshooting.md`. For Claude Code platfor
 - Use the `dev-guides-navigator` skill for topic discovery, caching, and disambiguation
 - Do NOT fetch `llms.txt` or dev-guides URLs directly — invoke the navigator skill instead
 - The `guide-integrator` and `guide-loader` skills delegate to the navigator
-- **Phase 1 (Research):** Load guides for the task's domain (for Drupal: forms, entities, plugins, etc.)
+- **Phase 1 (Research):** Load guides for the task's domain
 - **Phase 2 (Design):** Load guides for architecture decisions (services, routing, caching, config)
-- **Phase 3 (Implementation):** Load guides for security, SDC, JS patterns before writing code
+- **Phase 3 (Implementation):** Load guides for security and implementation patterns before writing code
 - If a guide was loaded earlier in the session, do not re-fetch — use the cached content
 
 ## Recurring Checks with /loop
@@ -327,8 +327,8 @@ Symptom-first triage at `references/troubleshooting.md`. For Claude Code platfor
 Users can poll deploy status or run periodic checks during long sessions:
 
 ```
-/loop 5m check if drush cr finished and the site is responding on https://mysite.ddev.site
-/loop 2m check if the config import completed
+/loop 5m check if the build finished and the dev server is responding
+/loop 2m check if the migration completed
 /loop 10m /ai-dev-assistant:status
 ```
 
@@ -344,40 +344,22 @@ Session-scoped — stops when session exits. 3-day auto-expiry.
 
 Long `/review`, `/research-team`, and `/validate:team` runs can also be dispatched as **background sessions** — `claude --bg "<prompt>"`, `/background` (alias `/bg`) from inside a session, or from Agent View (`claude agents`). A background session keeps running with no terminal attached. This composes with the `channelsEnabled` push-notification tip: background-run + ping-on-done.
 
-## Sandbox and DDEV (Drupal-flavored)
+## Sandbox posture
 
-If users enable Claude Code sandboxing (`/sandbox`), DDEV commands will fail because Docker socket access is restricted. Required configuration:
+If users enable Claude Code sandboxing (`/sandbox`), any local dev tooling that uses the Docker socket will need `excludedCommands` entries. See the upstream "Choose a sandbox environment" guide at `https://code.claude.com/docs/en/sandbox-environments` for configuration reference.
 
-```json
-{
-  "sandbox": {
-    "excludedCommands": ["ddev"],
-    "filesystem": {
-      "allowWrite": ["~/.ddev", "/tmp"]
-    }
-  }
-}
-```
+## Path-Specific Rules
 
-`ddev` must be in `excludedCommands` (not `allowWrite`) because it uses the Docker socket which sandboxing blocks at the network level.
+Recommend users create `.claude/rules/` files scoped to file types for framework-specific conventions. Rules load only when Claude works on matching files, keeping context lean. Example structure:
 
-For choosing and tuning a sandbox, see the upstream "Choose a sandbox environment" guide at `https://code.claude.com/docs/en/sandbox-environments`; the `excludedCommands: ["ddev"]` config above already covers the DDEV case.
-
-## Path-Specific Rules for Drupal Projects
-
-Recommend users create `.claude/rules/` files scoped to file types for Drupal-specific conventions:
-
-- `drupal-php.md` with `paths: ["*.php", "*.module", "*.install"]` — PHP coding standards, service injection, hook naming
-- `drupal-twig.md` with `paths: ["*.twig", "*.html.twig"]` — Twig coding standards, accessibility, escaping
-- `drupal-scss.md` with `paths: ["*.scss"]` — BEM, Bootstrap usage, mobile-first
-
-These load only when Claude works on matching files, keeping context lean.
+- One rules file per file type pattern (e.g., `paths: ["*.php"]`, `paths: ["*.scss"]`)
+- Cover coding standards, naming conventions, accessibility, and security expectations for each type
 
 ## Security & auto-mode posture (v4.9.0+)
 
 **`--dangerously-skip-permissions`.** The framework writes to `.claude/` constantly — `session_context.json`, the `_*.json` gate audits, task folders under `.claude/projects/`. Running Claude Code with `--dangerously-skip-permissions` removes the permission prompts on `.claude/`, `.git/`, and `.vscode/` writes that are the safety net for the framework's own state files. Use it only in throwaway or sandboxed environments, never on a production-adjacent checkout.
 
-**`autoMode.hard_deny` and project settings.** Since Claude Code v2.1.142, a project's `.claude/settings.json` (or `.claude/settings.local.json`) **cannot** set `defaultMode: "auto"` — it is silently ignored, so a repository cannot grant itself auto mode. Auto mode is enabled only from the user's own `~/.claude/settings.json`. A project may still ship an `autoMode.hard_deny` array (unconditional denials — e.g. `core/`, `vendor/`, `web/sites/default/settings.php`, `.ddev/`); that list applies as a guardrail **if** the user has turned auto mode on, but it cannot itself turn auto mode on.
+**`autoMode.hard_deny` and project settings.** Since Claude Code v2.1.142, a project's `.claude/settings.json` (or `.claude/settings.local.json`) **cannot** set `defaultMode: "auto"` — it is silently ignored, so a repository cannot grant itself auto mode. Auto mode is enabled only from the user's own `~/.claude/settings.json`. A project may still ship an `autoMode.hard_deny` array (unconditional denials — e.g. `vendor/`, third-party dirs, sensitive config files); that list applies as a guardrail **if** the user has turned auto mode on, but it cannot itself turn auto mode on.
 
 **security-guidance plugin (complementary).** The official Claude Code `security-guidance` plugin is harness-level edit review (it flags risky edits as they happen), complementary to — not a substitute for — the framework's per-task Gate 4 (`/review`).
 
@@ -387,22 +369,23 @@ These load only when Claude works on matching files, keeping context lean.
 
 **OTel skill metrics.** The framework does not ship OpenTelemetry instrumentation. If it ever does, note that `claude_code.skill_activated` carries an `invocation_trigger` attribute distinguishing `user-slash` from `claude-proactive` and `nested-skill` — useful for measuring how often framework commands are user-invoked versus auto-triggered. Recorded here as a future-instrumentation footnote.
 
-## ATK E2E Gate (v4.12.0+) (Drupal-flavored)
+## E2E Gate (v4.12.0+)
 
-`/setup-atk` installs **ATK `^2.0` (behavioral) + Playwright** and scaffolds `tests/e2e/`.
+`/setup-e2e` resolves the `e2e-setup` process recipe for each project framework and follows it. The recipe specifies the behavioral harness and scaffolds `tests/e2e/`. The gate itself assumes no specific harness.
 `/validate:e2e` runs the gate and emits `_e2e.json` + the standard validation envelope.
 
 Key conventions:
-- ATK canned tests live in `tests/e2e/behavioral/atk/` as a **copy** — never modify in-place. Use `--update-atk` after ATK contrib updates.
+- The behavioral harness, and any canned-test or refresh mechanics it brings, are defined by the resolved `e2e-setup` recipe — not baked into the gate.
+- Harness-supplied canned tests live under `tests/e2e/behavioral/` as a **copy** — never modify in-place; refresh them via the recipe's documented update path.
 - Journey specs (`tests/e2e/specs/<slug>.md`) are the reviewable artifact; `<slug>.spec.ts` is regenerable from them.
-- `testIdAttribute: 'data-qa-id'` must remain in the `e2e-chromium` project `use:` block in `playwright.config.ts` after any config edit — ATK's injected attributes rely on it.
+- Any test-id attribute the harness relies on (declared by the recipe) must remain in the `e2e-chromium` project `use:` block in `playwright.config.ts` after any config edit.
 - `<!-- visual-review:dispatch-ready -->` in `commands/validate-e2e.md` is what makes `/review`'s dispatcher invoke this gate. Never remove it.
-- ATK's VR mode is NOT used — Task C (Lullabot) owns visual regression.
+- A harness's own visual-regression mode (if it has one) is NOT used — Task C (the visual-regression package) owns visual regression.
 - `/validate:a11y` and `/validate:perf` are v2-deferred.
 
-## Visual Regression Gate (v4.13.0+) (Drupal-flavored)
+## Visual Regression Gate (v4.13.0+)
 
-`/setup-visual-regression` installs **`@lullabot/playwright-drupal` + Playwright**
+`/setup-visual-regression` installs **the framework's visual-regression package (installed by the process recipe) + Playwright**
 and scaffolds `tests/visual/`. `/validate:visual-regression` runs the gate and
 emits `_visual_regression.json` + the standard validation envelope. Task C of the
 `visual_and_e2e_review_gates` epic — an **evolve** of the v3.13.0 gate.
@@ -413,9 +396,10 @@ Key conventions:
   provenance sidecars travel in-tree. The v3.13.0 `.screenshots/` memory-project
   store is retired (migration source only). Resolved in Task C `research.md` Q1
   (fork option **(b+)**).
-- **Generated specs name the test exactly `'visual regression'`.** That fixes
-  Playwright's snapshot ordinal at `-1-` so baseline filenames are deterministic.
-  Renaming the test orphans every committed baseline — see `tests/visual/README.md`.
+- **Generated specs name the snapshot explicitly after the surface id**
+  (`toHaveScreenshot('<surface-id>.png')`) so baseline filenames are deterministic
+  (`<surface-id>-visual-chromium-<viewport>-linux.png`, no ordinal). Changing the
+  snapshot name orphans every committed baseline — see `tests/visual/README.md`.
 - **No baseline write without an explicit `[y]`.** `baseline-manager.sh` runs in
   plan mode first (prints the surfaces it would capture, writes nothing); the
   command shows the plan + `[y]/[n]`; only `--confirmed` runs `--update-snapshots`.
@@ -424,13 +408,13 @@ Key conventions:
   never a silent auto-create.
 - **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-regression.md`
   is what makes `/review`'s dispatcher invoke this gate. Never remove it.
-- **Registry shared with `/setup-atk`** at `<codePath>/.visual-review/registry.yml`;
+- **Registry shared with `/setup-e2e`** at `<codePath>/.visual-review/registry.yml`;
   one `playwright.config.ts` carries both `e2e-*` and `visual-chromium-*` projects.
   Setup is idempotent + order-independent.
 - a11y baseline pairing is **warning-only** in v1 (per-surface `a11y_block: true`
   is a v2 candidate).
 
-## Visual Parity Gate (v4.14.0+) (Drupal-flavored)
+## Visual Parity Gate (v4.14.0+)
 
 `/setup-visual-parity` adds parity checking **on top of** the visual-regression
 stack (it hard-depends on `/setup-visual-regression`): it installs
@@ -462,7 +446,7 @@ Key conventions:
   `PARITY_CODE_PATH`. This closed a paper-test CRITICAL (registry → spec-source code
   injection); never reintroduce token substitution into the generated spec.
 - **`parity_reference` lives in the surface registry** (schema v1.1 — see
-  `surface-registry-schema.md` §3.4). Static references are committed under
+  `surface-registry-schema.md`). Static references are committed under
   `tests/parity/references/`; `parity-results/` (per-run captures + diffs) is
   gitignored.
 - **`<!-- visual-review:dispatch-ready -->`** in `commands/validate-visual-parity.md`

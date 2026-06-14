@@ -11,7 +11,7 @@
 #      floor: Stage 2 (the guides-matcher agent) can add to it and rank it but
 #      can never zero it out. Preserves the v4.0.0 "no bypass-by-declaration"
 #      guarantee.
-#        research             → tdd-workflow, solid-drupal, dry-patterns
+#        research             → tdd-workflow, solid, dry-patterns
 #        design and later     → + library-first
 #        implement / complete → + quality-gates
 #
@@ -27,12 +27,12 @@
 # silently zeroed. The phase-aware floor replaces it deterministically.
 #
 # Output (consumed by phase commands; feeds the `dev-guides-load` audit
-# per references/gate-audit-schema.md §5.6):
+# per references/gate-audit-schema.md):
 #   {
 #     "phase": "research|design|implement|complete",
 #     "methodology_floor": ["plugin:tdd-workflow", ...],
 #     "catalog_candidates": [
-#       {"slug":"drupal/views","title":"Views","description":"...","triggered_by":["views"]}
+#       {"slug":"nextjs/routing","title":"Routing","description":"...","triggered_by":["routing"]}
 #     ],
 #     "scanned_files": [".../task.md", ".../alignment.md"],
 #     "warnings": []
@@ -71,7 +71,7 @@ esac
 # ---------------------------------------------------------------------------
 # 1. Methodology floor — phase-aware, no keyword gating
 # ---------------------------------------------------------------------------
-FLOOR=("plugin:tdd-workflow" "plugin:solid-drupal" "plugin:dry-patterns")
+FLOOR=("plugin:tdd-workflow" "plugin:solid" "plugin:dry-patterns")
 case "$PHASE" in
   design) FLOOR+=("plugin:library-first") ;;
   implement|complete) FLOOR+=("plugin:library-first" "plugin:quality-gates") ;;
@@ -89,7 +89,7 @@ for f in task.md alignment.md research.md architecture.md implementation.md; do
     if [[ "$f" == "task.md" ]]; then
       # Strip the YAML frontmatter block before scanning — its keys (e.g.
       # `blocks:`, a task-dependency field) are not prose and collide with
-      # catalog topic terms (`drupal/blocks`).
+      # catalog topic terms (a `…/blocks` catalog topic).
       SCANNED_CONTENT+=$'\n'"$(awk '
         NR==1 && /^---[[:space:]]*$/ { fm=1; next }
         fm && /^---[[:space:]]*$/    { fm=0; next }

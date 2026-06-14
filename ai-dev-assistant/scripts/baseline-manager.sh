@@ -47,7 +47,7 @@ CONFIRMED=false
 TRIGGERED_BY=""
 
 # Known baseline-recreation triggers (advisory — unknown reasons warn, not block).
-KNOWN_TRIGGERS="intentional-ui-change prod-db-refresh upstream-theme-update contrib-update core-update fixture-change bootstrap"
+KNOWN_TRIGGERS="intentional-ui-change prod-db-refresh upstream-design-update dependency-update framework-update fixture-change bootstrap"
 
 err() { echo "baseline-manager: $1" >&2; }
 
@@ -181,7 +181,7 @@ done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$
 
 # Refuse to run unscoped: with no visual-chromium-* projects, a bare
 # `npx playwright test --update-snapshots` would regenerate snapshots for ALL
-# projects — including ATK's e2e-chromium. Abort instead.
+# projects — including the e2e-chromium suite. Abort instead.
 if [ "${#PROJ_ARGS[@]}" -eq 0 ]; then
   add_warning "no_visual_projects: playwright.config.ts has no visual-chromium-* projects — refusing to run --update-snapshots unscoped"
   jq -nc --argjson w "$WARNINGS" '{stage:"execute",updated:false,playwright_exit:0,warnings:$w}'

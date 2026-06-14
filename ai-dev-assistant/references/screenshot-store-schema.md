@@ -8,7 +8,7 @@
 The screenshot store holds visual-regression baselines and parity references.
 Per-image `.meta.json` sidecars carry provenance, integrity hashes, and source
 info so any task can read the store and understand what each image represents.
-The 9-field `.meta.json` schema (§4) is **unchanged**; v4.13.0 changed only the
+The 9-field `.meta.json` schema is **unchanged**; v4.13.0 changed only the
 store **location** and the `<viewport>` field's value form.
 
 ## 1. Location
@@ -27,7 +27,7 @@ absolute paths in `playwright.config.ts`). Resolution Q1 in Task C `research.md`
 
 **Legacy — memory-project `.screenshots/`.** The v3.13.0 store lived in the
 memory project folder (`<project>/.screenshots/`). It is **retired for new
-projects** and serves only as a migration source — see §2b and
+projects** and serves only as a migration source — see the legacy migration section and
 `scripts/migrate-screenshots-to-codepath.sh`.
 
 ## 2. Directory layout (codePath-native)
@@ -38,7 +38,7 @@ projects** and serves only as a migration source — see §2b and
 └── <surface>.spec.ts-snapshots/
     ├── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.png
     ├── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.meta.json   ← provenance sidecar
-    └── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.txt          ← a11y snapshot (Lullabot)
+    └── <surface>-<ordinal>-visual-chromium-<viewport>-<platform>.txt          ← a11y snapshot (visual-regression package)
 ```
 
 Example:
@@ -47,16 +47,20 @@ Example:
 <codePath>/tests/visual/
 ├── home-hero.spec.ts
 └── home-hero.spec.ts-snapshots/
-    ├── home-hero-1-visual-chromium-desktop-linux.png
-    ├── home-hero-1-visual-chromium-desktop-linux.meta.json
-    ├── home-hero-1-visual-chromium-tablet-linux.png
-    └── home-hero-1-visual-chromium-tablet-linux.meta.json
+    ├── home-hero-visual-chromium-desktop-linux.png
+    ├── home-hero-visual-chromium-desktop-linux.meta.json
+    ├── home-hero-visual-chromium-tablet-linux.png
+    └── home-hero-visual-chromium-tablet-linux.meta.json
 ```
 
 The baseline filename is Playwright's snapshot naming —
-`<test-name>-<ordinal>-<projectName>-<platform>`. Generated specs fix the test
-name so `<ordinal>` is always `1`; the `<viewport>` is the `visual-chromium-<viewport>`
-project segment. The `.meta.json` sidecar replaces the `.png` extension.
+`<snapshot-name>-<projectName>-<platform>`. Generated specs name the snapshot
+explicitly after the surface id (`toHaveScreenshot('<surface-id>.png')`), so the
+name is deterministic; the `<viewport>` is the `visual-chromium-<viewport>`
+project segment. The `.meta.json` sidecar replaces the `.png` extension. (A
+recipe-supplied capture helper that names its snapshot anonymously will instead
+produce Playwright's `<test-name>-<ordinal>-…` form — the store reader enumerates
+whatever baseline files exist, so either shape is accepted.)
 
 ### 2b. Legacy layout (migration source only)
 
@@ -106,7 +110,7 @@ Every `.png` in the store has a sibling `.meta.json` with exactly these 9 fields
   "captured_at": "2026-04-24T14:30:00Z",
   "sha256": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "originating_task": "dev_framework_granular_validation",
-  "captured_by": "lullabot-playwright",
+  "captured_by": "playwright",
   "prior_hash": null,
   "source": null
 }
@@ -122,7 +126,7 @@ Every `.png` in the store has a sibling `.meta.json` with exactly these 9 fields
 | `captured_at` | string | ISO-8601 UTC with `Z` suffix (e.g. `2026-04-24T14:30:00Z`). Serves as approval timestamp for baselines (they're written at approval time) |
 | `sha256` | string | Lowercase hex SHA-256 of the sibling PNG. 64 chars. Integrity + provenance |
 | `originating_task` | string | Task folder name that approved/wrote this baseline. For auditing — answers "who put this here?" |
-| `captured_by` | enum | `"lullabot-playwright"` (primary for v4.13.0+ codePath-native captures) \| `"migrated-from-screenshots-store"` (set by `migrate-screenshots-to-codepath.sh`) \| `"playwright-mcp"` \| `"claude-in-chrome"` \| `"figma-export"` \| `"html-render"` \| `"user-upload"`. Identifies capture method — matters for understanding cross-run differences |
+| `captured_by` | enum | `"playwright"` (primary — the framework-neutral native capture the plugin ships) \| `"playwright-accessible"` (a process recipe supplied an accessibility-aware capture helper) \| `"lullabot-playwright"` (legacy / a recipe using the Lullabot accessible-screenshot helper; accepted for back-compat) \| `"migrated-from-screenshots-store"` (set by `migrate-screenshots-to-codepath.sh`) \| `"playwright-mcp"` \| `"claude-in-chrome"` \| `"figma-export"` \| `"html-render"` \| `"user-upload"`. Identifies capture method — matters for understanding cross-run differences |
 | `prior_hash` | string \| null | SHA-256 of the file rotated to `.previous` when this baseline was written. `null` on the first baseline (no predecessor). Enables quick integrity checks without reading `.previous.meta.json` |
 | `source` | object \| null | REQUIRED when `role: "parity_reference"`, MUST be `null` otherwise. Shape: `{type: "figma" \| "html" \| "image" \| "url", uri: "<absolute url or path>"}`. Without this, a parity reference is unidentifiable after capture |
 
@@ -254,7 +258,7 @@ Future consumers needing screenshot data should call the reader skill rather tha
   "captured_at": "2026-04-24T14:30:00Z",
   "sha256": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "originating_task": "theme_redesign",
-  "captured_by": "lullabot-playwright",
+  "captured_by": "playwright",
   "prior_hash": null,
   "source": null
 }
@@ -270,7 +274,7 @@ Future consumers needing screenshot data should call the reader skill rather tha
   "captured_at": "2026-05-15T09:12:44Z",
   "sha256": "d91ed079d493278a89a72d1e8f70144bb95a09f4c206c3a391ac44b027e65ce6",
   "originating_task": "hero_cta_update",
-  "captured_by": "lullabot-playwright",
+  "captured_by": "playwright",
   "prior_hash": "429368832b95441f1bbd64e711867207eba2cfeb679919e72bb380f8740762ca",
   "source": null
 }

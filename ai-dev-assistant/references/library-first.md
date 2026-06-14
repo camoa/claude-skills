@@ -1,70 +1,68 @@
-# Library-First & CLI-First Development
+# Library-First and CLI-First Development
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
-Architecture principles enforced during Phase 2 design.
+Architecture principles enforced during Phase 2 design. These are stack-neutral. The framework-specific instantiation lives in the phase recipes (design architecture recipe), which reference the dev-guides knowledge guides.
 
 ## Library-First Principle
 
-Build functionality as reusable services BEFORE adding UI.
+Build functionality as reusable logic units (services or libraries) BEFORE adding any UI.
 
 ### The Pattern
 
 ```
-1. MyService (src/MyService.php)
+1. Service / library unit
    ↓ Business logic, testable, reusable
-2. MyForm (src/Form/MyForm.php)
-   ↓ Uses MyService, handles UI only
-3. my_module.routing.yml
-   ↓ Exposes form at URL
+2. UI layer (form, view, controller)
+   ↓ Uses the service, handles presentation only
+3. Routing / entry point
+   ↓ Exposes the UI
 ```
 
 ### Why Library-First?
 
 | Benefit | Explanation |
 |---------|-------------|
-| Testable | Services can be unit tested in isolation |
-| Reusable | Multiple UIs can use same service |
+| Testable | Logic units can be tested in isolation |
+| Reusable | Multiple UIs can use the same logic |
 | Maintainable | Business logic separate from presentation |
-| CLI-ready | Drush commands can use same service |
+| CLI-ready | A command-line entry point can use the same logic |
 
 ### Enforcement
 
 During `/design`, verify:
 
-- [ ] Service designed BEFORE form/controller
-- [ ] Service usable without any UI
-- [ ] Business logic in service, NOT in form
-- [ ] Form only handles: display, validation, routing to service
+- [ ] Logic unit designed BEFORE the UI layer
+- [ ] Logic unit usable without any UI
+- [ ] Business logic in the logic unit, NOT in the UI layer
+- [ ] UI only handles display, validation, and routing to the logic unit
 
 ### Anti-Patterns
 
 | Bad | Good |
 |-----|------|
-| Business logic in form `submitForm()` | Form calls service method |
-| Controller does calculations | Controller calls service |
-| Database queries in form | Service handles data access |
+| Business logic in a form submit handler | Form calls a service method |
+| Controller does calculations | Controller calls a service |
+| Data queries in the UI layer | A service handles data access |
 
 ## CLI-First Principle
 
-Every feature should be accessible via Drush command.
+Every feature should be reachable from a command-line entry point, not only the UI.
 
 ### The Pattern
 
 ```
-1. MyService (business logic)
+1. Service / library unit (business logic)
    ↓
-2. MyCommand (src/Commands/MyCommand.php)
-   ↓ Exposes service via Drush
-3. MyForm (src/Form/MyForm.php)
-   ↓ Also uses same service
+2. Command-line entry point
+   ↓ Exposes the logic via CLI
+3. UI layer
+   ↓ Also uses the same logic
 ```
 
 ### Why CLI-First?
 
 | Benefit | Use Case |
 |---------|----------|
-| Automation | Cron jobs, scheduled tasks |
+| Automation | Scheduled tasks |
 | Scripting | Batch operations |
 | CI/CD | Automated deployments |
 | Testing | Quick manual verification |
@@ -74,59 +72,31 @@ Every feature should be accessible via Drush command.
 
 During `/design`, verify:
 
-- [ ] Drush command planned alongside admin UI
-- [ ] Command uses SAME service as UI
-- [ ] No UI-only features (everything CLI-accessible)
-
-### Drush Command Pattern
-
-```php
-namespace Drupal\my_module\Commands;
-
-use Drush\Commands\DrushCommands;
-
-class MyCommands extends DrushCommands {
-
-  public function __construct(
-    private readonly MyServiceInterface $myService,
-  ) {
-    parent::__construct();
-  }
-
-  /**
-   * Description of what this does.
-   *
-   * @command my_module:do-thing
-   * @aliases mdt
-   */
-  public function doThing(): void {
-    $result = $this->myService->doThing();
-    $this->io()->success("Done: $result");
-  }
-}
-```
+- [ ] A command-line entry point is planned alongside any admin UI
+- [ ] The command uses the SAME logic unit as the UI
+- [ ] No UI-only features (everything is reachable from the CLI)
 
 ## Design Phase Checklist
 
 Before completing `/design`:
 
 ### Library-First
-- [ ] Services defined for all business logic
-- [ ] Services have interfaces
-- [ ] Forms/controllers only orchestrate, don't contain logic
-- [ ] Services registered in services.yml with dependency injection
+- [ ] Logic units defined for all business logic
+- [ ] Logic units have interfaces
+- [ ] UI layers only orchestrate, they don't contain logic
+- [ ] Dependencies injected into the logic units
 
 ### CLI-First
-- [ ] Drush command planned for each major feature
-- [ ] Commands use same services as UI
-- [ ] Command arguments/options documented
+- [ ] A command-line entry point is planned for each major feature
+- [ ] Commands use the same logic units as the UI
+- [ ] Command arguments and options documented
 - [ ] No feature is UI-only
 
 ## Common Violations
 
 | Violation | Detection | Fix |
 |-----------|-----------|-----|
-| Logic in form | `submitForm()` has calculations | Move to service |
-| UI-only feature | No Drush command exists | Add command |
-| Direct DB in form | `\Drupal::database()` in form | Create data service |
-| No service layer | Form does everything | Extract service first |
+| Logic in the UI | A submit handler has calculations | Move it to a logic unit |
+| UI-only feature | No command-line entry point exists | Add one |
+| Data access in the UI | Direct queries in a form | Create a data service |
+| No logic layer | The UI does everything | Extract a logic unit first |

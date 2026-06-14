@@ -92,11 +92,11 @@ The manifest is write-once by the lead, read-only for teammates, and deleted by 
 |---|---|---|
 | `schema_version` | string | `"1.0"` at v3.14.0. JSON string. Consumers match on major |
 | `run_id` | string | ISO-8601 UTC timestamp + `-team-` + 8-char short UUID, e.g. `2026-04-24T15:00:00Z-team-a1b2c3d4`. Matches the entry appended to `history.jsonl` at Step 9 |
-| `task` | object | See §4 |
-| `gates` | array | Ordered list of gate assignments. See §5. Non-empty — a manifest with zero gates is invalid |
-| `envelope` | object | Envelope persistence paths. See §6 |
-| `screenshot_store` | object | Screenshot store location + schema version. See §7 |
-| `fallback` | object | Teammate behavior hints. See §8 |
+| `task` | object | See the task section |
+| `gates` | array | Ordered list of gate assignments. See the gates section. Non-empty — a manifest with zero gates is invalid |
+| `envelope` | object | Envelope persistence paths. See the envelope section |
+| `screenshot_store` | object | Screenshot store location + schema version. See the screenshot_store section |
+| `fallback` | object | Teammate behavior hints. See the fallback section |
 
 ## 4. `task` — task + code context
 
@@ -110,13 +110,13 @@ The manifest is write-once by the lead, read-only for teammates, and deleted by 
 
 ## 5. `gates[]` — gate assignments
 
-Each entry is one gate run. A teammate owning multiple gates appears in multiple entries (see `validator-code-1` in the §2 example — one entry for `tdd`, one for `solid`).
+Each entry is one gate run. A teammate owning multiple gates appears in multiple entries (see `validator-code-1` in the example above — one entry for `tdd`, one for `solid`).
 
 | Field | Type | Values / constraints |
 |---|---|---|
 | `gate` | enum | `"tdd"` \| `"solid"` \| `"dry"` \| `"security"` \| `"guides"` \| `"visual-regression"`. Matches `/validate:<gate>` command names. **`visual-parity` is NOT allowed** — it requires an explicit `<reference>` arg and inherits `/validate:all`'s limitation (deferred to v2 Set B5) |
 | `assigned_to` | enum | `"validator-code-1"` \| `"validator-code-2"` \| `"validator-docs"` \| `"validator-visual"`. Suggestion only — file-lock task claiming (agent-teams runtime) decides actual ownership. The field exists so the lead can report "expected owner vs actual claimer" mismatches during debugging |
-| `isolation` | enum | `"worktree"` \| `"none"`. Per teammate role from architecture §7. Worktree isolation is git-state only — filesystem writes use `envelope.*` absolute paths regardless (§10) |
+| `isolation` | enum | `"worktree"` \| `"none"`. Per teammate role from architecture. Worktree isolation is git-state only — filesystem writes use `envelope.*` absolute paths regardless |
 | `visual_fanout` | array? | **Present only when `gate == "visual-regression"`.** Enumerates the components × viewports to capture. Each element is `{ component: string, viewport: string }`. Empty array means the task has no baselines in the store — teammate emits `verdict: "skipped"` with reason. Omit the field entirely for non-visual gates — do not write `visual_fanout: []` for a code gate |
 
 ## 6. `envelope` — where teammates write results
@@ -124,14 +124,14 @@ Each entry is one gate run. A teammate owning multiple gates appears in multiple
 | Field | Type | Values / constraints |
 |---|---|---|
 | `schema_version` | string | `"1.0"` — the envelope schema version teammates MUST emit. Matches `references/validation-gate-result.md`. If the lead and teammates disagree on this, the aggregate step fails loudly |
-| `latest_dir` | string | Absolute path to `<task>/validations/latest/`. Teammates write `<gate>.json` into this directory. Absolute-path invariant (§10) applies |
+| `latest_dir` | string | Absolute path to `<task>/validations/latest/`. Teammates write `<gate>.json` into this directory. Absolute-path invariant applies |
 | `history_file` | string | Absolute path to `<task>/validations/history.jsonl`. Teammates append one JSON-line entry per gate run |
 
 ## 7. `screenshot_store` — visual teammate only
 
 | Field | Type | Values / constraints |
 |---|---|---|
-| `root` | string | Absolute path to `<project>/.screenshots/` (per `references/screenshot-store-schema.md` §1). Visual teammate reads baselines and writes `.previous.*` rotation from here |
+| `root` | string | Absolute path to `<project>/.screenshots/` (per `references/screenshot-store-schema.md`). Visual teammate reads baselines and writes `.previous.*` rotation from here |
 | `schema_version` | string | `"1.0"` — the screenshot store schema version at manifest-write time. Visual teammate refuses if it reads a different version from a `<component>/<viewport>.meta.json` |
 
 Non-visual teammates MUST NOT read this block. It is populated unconditionally by the lead (even on docs-only tasks) to keep the manifest shape invariant across runs.
@@ -180,7 +180,7 @@ lead                                            teammates
                                                 7. write <latest>/<gate>.json
                                                 8. append <history> line
                                                 9. mailbox: "<gate> complete, verdict: <v>"
-10. receive progress messages (§4 Step 6)
+10. receive progress messages
 11. wait for all gates (or timeout)
 12. aggregate → _all.json
 13. rm <tmp>/team-manifest.json                 (teammates already exited)
@@ -193,12 +193,12 @@ lead                                            teammates
 - **Minor bumps** (`1.1`) are additive: new optional fields, new enum values, clarifications that don't break existing readers.
 - **Patch bumps** do not exist for schema versioning — if the change is editorial only, do not bump. If it's a contract change of any kind, use minor or major.
 
-v1.0 is the committed shape for v3.14.0. No pre-release iterations were needed — the design is a direct lift of research §6 decisions.
+v1.0 is the committed shape for v3.14.0. No pre-release iterations were needed — the design is a direct lift of research decisions.
 
 ## 13. Non-goals (what this schema deliberately omits)
 
-- **No credentials.** The manifest MUST NOT contain environment variables, API keys, or secrets. Teammates inherit credentials from the project CLAUDE.md + MCP configs (agent-teams §"Context and communication") — not from the manifest.
-- **No per-teammate model/turns config.** Model routing and MaxTurns are set in teammate spawn prompt headers (architecture §7), not the manifest. This keeps the manifest stable when a user overrides model choice for a specific run.
-- **No streaming output specification.** Mailbox messages use a fixed format string (`"<gate> complete, verdict: <verdict>"`) documented in architecture §4 Step 6. Changing that format is a spawn-prompt change, not a schema change.
+- **No credentials.** The manifest MUST NOT contain environment variables, API keys, or secrets. Teammates inherit credentials from the project CLAUDE.md + MCP configs (agent-teams the "Context and communication" section) — not from the manifest.
+- **No per-teammate model/turns config.** Model routing and MaxTurns are set in teammate spawn prompt headers (architecture), not the manifest. This keeps the manifest stable when a user overrides model choice for a specific run.
+- **No streaming output specification.** Mailbox messages use a fixed format string (`"<gate> complete, verdict: <verdict>"`) documented in architecture. Changing that format is a spawn-prompt change, not a schema change.
 - **No `--json` flag output shape.** `/validate:team` does not emit JSON directly — `_all.json` already is JSON. (Deferred to v2 Set B3 if a direct JSON output mode ships.)
 - **No cleanup/resume subcommand shape.** Manual recovery steps live in the command body. (Deferred to v2 Set B4.)

@@ -46,7 +46,7 @@ fi
 
 # === Test 3: baseline PNG copied to codePath-native snapshot dir ===
 SNAP="$CP/tests/visual/home-hero.spec.ts-snapshots"
-if ls "$SNAP"/home-hero-1-visual-chromium-*-linux.png >/dev/null 2>&1; then
+if ls "$SNAP"/home-hero-visual-chromium-*-linux.png >/dev/null 2>&1; then
   pass_check "baseline PNG copied to <surface>.spec.ts-snapshots/"
 else
   fail_check "baseline PNG not found in $SNAP"
@@ -64,8 +64,8 @@ fi
 
 # === Test 5: stub spec generated ===
 if [ -f "$CP/tests/visual/home-hero.spec.ts" ] \
-   && grep -q 'takeAccessibleScreenshot' "$CP/tests/visual/home-hero.spec.ts"; then
-  pass_check "stub spec generated with takeAccessibleScreenshot"
+   && grep -q 'toHaveScreenshot' "$CP/tests/visual/home-hero.spec.ts"; then
+  pass_check "stub spec generated with native toHaveScreenshot capture"
 else
   fail_check "stub spec missing or malformed"
 fi

@@ -1,6 +1,6 @@
 # AI Dev Assistant
 
-**An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. It runs each task through a disciplined **Research → Architecture → Implementation → Review** flow before code gets written: understand the problem first, reuse what already exists, follow your standards, and verify. That heads off the usual AI pitfalls, like jumping to code without understanding requirements, missing a library that already solves the problem, building inconsistent architecture, or skipping tests. The orchestration engine is **stack-agnostic**; the components and guides it ships with today are **Drupal-flavored** (stack-neutral versions are in progress).
+**An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. It runs each task through a disciplined **Research → Architecture → Implementation → Review** flow before code gets written: understand the problem first, reuse what already exists, follow your standards, and verify. That heads off the usual AI pitfalls, like jumping to code without understanding requirements, missing a library that already solves the problem, building inconsistent architecture, or skipping tests. The orchestration engine is **stack-agnostic**.
 
 > **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md): a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
 
@@ -42,15 +42,14 @@ Phases apply per task, not per project. A project can have tasks at different ph
 ```
 
 **Declared dependencies (2 as of v3.13.0):**
-- `dev-guides-navigator`: online guide discovery with caching (60+ Drupal/CSS/design guides)
+- `dev-guides-navigator`: online guide discovery with caching (60+ guides across frameworks, CSS, and dev practices)
 - `code-quality-tools` (v3.13.0+): powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0)
 
 Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surface at install time (CLI v2.1.110+).
 
 **Recommended companion plugins:**
 - `superpowers`: TDD enforcement, brainstorming, verification workflows
-- `drupal-dev-tools`: DDEV integration, Drupal audits
-- `code-quality-tools`: PHPStan, security scanning, SOLID/DRY analysis
+- `code-quality-tools`: static analysis, security scanning, SOLID/DRY analysis
 - `plugin-creation-tools`: invoked by the v4.0.0 skill-review and plugin-validate hardened gates when a task touches plugin files
 
 ## Quick Start
@@ -128,23 +127,23 @@ is lost even if you forget.
 | `/validate [file]` | Check implementation against architecture decisions (architecture-fit validator) |
 | `/validate:tdd` / `:solid` / `:dry` / `:security` | **(v3.13.0)** Individual quality gates wrapping `code-quality-tools` skills with task context + persistence |
 | `/validate:guides` | **(v3.13.0)** Verify research.md + architecture.md cite `dev-guides-navigator` guides |
-| `/setup-visual-regression` | **(v4.13.0)** Install `@lullabot/playwright-drupal` + Playwright, scaffold `tests/visual/`, extend `playwright.config.ts` with per-viewport visual projects, derive a viewport matrix from the theme, run AI-assisted surface discovery, prompt for a first baseline. Idempotent; `--add-surface` adds one surface, `--migrate` imports a v3.13.0 `.screenshots/` store. |
+| `/setup-visual-regression` | **(v4.13.0)** Install the framework's visual-regression package (installed by the process recipe) + Playwright, scaffold `tests/visual/`, extend `playwright.config.ts` with per-viewport visual projects, derive a viewport matrix from project breakpoints, run AI-assisted surface discovery, prompt for a first baseline. Idempotent; `--add-surface` adds one surface, `--migrate` imports a v3.13.0 `.screenshots/` store. |
 | `/validate:visual-regression` | **(v4.13.0, reworked)** Registry-driven: runs the committed `tests/visual/` suite across every viewport; diffs each surface; classify regression / intentional / cancel. `--bootstrap` / `--update-baselines "<reason>"` (user-confirmed). Emits `_visual_regression.json` audit. Part of `/review` dispatch chain. Soft gate. |
 | `/setup-visual-parity` | **(v4.14.0)** Add visual-parity checking on top of the visual-regression stack: install `pixelmatch` + `pngjs`, scaffold `tests/parity/`, append per-viewport `parity-chromium-*` projects, register a design reference per surface. Hard-depends on `/setup-visual-regression`. Idempotent; `--add-surface` registers one reference. |
 | `/validate:visual-parity` | **(v4.14.0, reworked)** Registry-driven: runs the committed `tests/parity/` suite, comparing each surface against its external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`). Emits a two-layer diff: a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift. `[g]/[i]/[c]` classification. Emits `_visual_parity.json` audit. Part of `/review` dispatch chain. Soft gate. |
-| `/setup-atk` | **(v4.12.0)** Install ATK `^2.0` + Playwright, scaffold `tests/e2e/`, discover site journeys, and scaffold plan-first E2E tests. Idempotent; `--add-journey` adds a single journey post-setup. |
-| `/validate:e2e` | **(v4.12.0)** Run ATK behavioral + project-custom journey tests. Emits `_e2e.json` audit + standard envelope. Part of `/review` dispatch chain. Soft gate. |
+| `/setup-e2e` | **(v4.12.0)** Resolve the `e2e-setup` process recipe for each project framework and follow it to stand up a behavioral E2E harness, scaffold `tests/e2e/`, seed the surface registry, and discover site journeys. Idempotent; `--add-journey` adds a single journey post-setup. |
+| `/validate:e2e` | **(v4.12.0)** Run the framework's behavioral + project-custom journey tests. Emits `_e2e.json` audit + standard envelope. Part of `/review` dispatch chain. Soft gate. |
 | `/validate:all` | **(v3.13.0)** Run all 7 gates sequentially; aggregate summary; discoverability hint for unwrapped `/code-quality:*` capabilities |
 | `/validate:team` | **(v3.14.0)** Sibling to `/validate:all`: runs the 7 gates in **isolated Claude Code agent teams** (4 teammates) for honest validation free of main-session bias. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (agent-teams CLI v2.1.32+); gracefully falls back to `/validate:all` when unavailable. `--no-fallback` opts out of fallback for CI team-or-nothing runs. See `references/team-manifest-schema.md` v1.0 for the minimum-context contract. |
 | `/playbook-active` | **(v3.15.0)** Display the project's active playbook configuration: subscribed sets, local playbook, recent conflicts. Read-only. |
 | `/playbook-capture` | **(v3.15.0)** Capture a new opinionated rule into the project's local user playbook. Framework drafts entry; user approves with diff preview. |
 | `/playbook-review` | **(v3.15.0)** Walk every play in the local user playbook with `[k]eep / [u]pdate / [r]emove / [q]uit`. Immediate-write semantics; `/loop`-able for periodic review. |
-| `/set-playbook-sets` | **(v3.15.0)** Set or clear active playbook sets (e.g., `drupal/best-practices/camoa`). Validates each via `dev-guides-navigator`. Default subscription comes from the plugin's `defaults.json`. |
+| `/set-playbook-sets` | **(v3.15.0)** Set or clear active playbook sets (e.g., `<framework>/best-practices/<author>`). Validates each via `dev-guides-navigator`. Default subscription comes from the plugin's `defaults.json`. |
 | `/set-user-playbook` | **(v3.15.0)** Set/clear the project-local user playbook file. Three modes: explicit path, `--docs-only`, or interactive detect-and-confirm. |
-| `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. Drupal/DDEV-aware (warns about `.ddev/config.yaml` `name:` conflict). |
+| `/worktree <task>` | **(v3.16.0)** Create a git worktree at `.worktrees/<task>/` on `feature/<task>` for parallel task execution. Auto-detects composer/npm setup; pre-seeds session-context. |
 | `/worktree-prune` | **(v3.16.0)** List and selectively remove worktrees with per-item `[y]/[n]/[q]` confirm; honors git's refusal on uncommitted changes; force-remove requires explicit confirmation. |
 | `/audit-status [<task>] [--all]` | **(v4.0.0)** Read-only display of v4.0.0 hardened-gate audit state per task: surfaces gate-fire timing, user choices, bypass reasons, and missing audits (= silent skip evidence). `--all` for project-wide rollup grouped by health. |
-| `/pattern <use-case>` | Get pattern recommendations (Drupal-flavored today: FormBase vs ListBuilder, Entity vs Config, etc.) |
+| `/pattern <use-case>` | Get pattern recommendations for your project framework |
 | `/migrate-tasks` | Migrate v2.x single-file tasks to v3.0 folder structure |
 | `/migrate-to-epic <task>` | **(v3.10.0)** Convert a flat task into an epic folder with children. Transactional, 24h rollback, `--dry-run` supported. Flat tasks remain first-class: this is opt-in. See `/migrate-to-epic <task> --children "a,b,c"` or omit for interactive prompt. |
 | `/set-code-path [<path>|--docs-only]` | **(v3.11.0)** Set/update the active project's `codePath`: where its code actually lives (distinct from the memory folder). Supports explicit path, `--docs-only` sentinel, or interactive detect+confirm. Path-safety filter rejects system roots and prompts for paths outside `$HOME`. Writes `project_state.md` + syncs `active_projects.json`. |
@@ -161,7 +160,7 @@ Instead of a single research pass, `/research-team` launches 3 competing AI agen
 
 **Feature mode** (when building something new):
 - **Build agent**: argues for custom implementation, finds core patterns
-- **Use agent**: argues for existing contrib solutions
+- **Use agent**: argues for existing third-party solutions
 - **Extend agent**: argues for extending/composing existing modules
 
 **Bug mode** (when investigating issues):
@@ -210,8 +209,8 @@ Agents handle complex multi-step tasks with model routing and cost control (`max
 | `project-orchestrator` | sonnet | 25 | Routes workflow, manages projects and tasks |
 | `architecture-drafter` | opus | 30 | Designs architecture with SOLID/Library-First enforcement |
 | `architecture-validator` | sonnet | 20 | Read-only validation in isolated worktree |
-| `pattern-recommender` | sonnet | 15 | Recommends Drupal patterns with core/contrib references |
-| `contrib-researcher` | haiku | 15 | Searches drupal.org and contrib code for existing solutions |
+| `pattern-recommender` | sonnet | 15 | Recommends framework patterns with first-party and third-party references |
+| `prior-art-researcher` | sonnet | 15 | Researches existing third-party solutions and first-party patterns |
 | `analysis-agent` **(v3.11.0)** | sonnet | 10 | Read-only scope analyzer: proposes epic decomposition as JSON per schema v1.0 |
 
 ### Skills (18)
@@ -232,7 +231,7 @@ Built-in docs enforced at specific phases:
 
 | Reference | Enforces | When |
 |-----------|----------|------|
-| `solid-drupal.md` | SOLID principles (Drupal examples) | Architecture phase |
+| `solid.md` | SOLID principles | Architecture phase |
 | `library-first.md` | Library-First & CLI-First patterns | Architecture phase |
 | `tdd-workflow.md` | Red-Green-Refactor cycle | Implementation phase |
 | `dry-patterns.md` | DRY extraction patterns | Implementation phase |
@@ -253,7 +252,7 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 | `team-manifest-schema.md` **(v3.14.0)** | `/validate:team` + 4 teammates | Minimum-context package v1.0 written by lead before team spawn; absolute-path invariant; `visual_fanout[]` presence rule; write-once contract; fallback behavior hints; gate enum excludes `visual-parity` (deferred to v2 Set B5) |
 | `playbook-schema.md` **(v3.15.0)** | `/playbook-capture`, `/playbook-review`, `scripts/playbook-read.sh` | Recommended local playbook structure v1.0: H3-per-play with What / Rationale / When it applies / Example fields; freeform fallback; defensive parser contract |
 | `playbook-conflict-schema.md` **(v3.15.0)** | `scripts/playbook-conflicts-write.sh`, `/playbook-active` | JSONL log line v1.0 for `<project>/.claude/playbook-conflicts.log`; per-conflict citation shape (local-vs-shipped + multi-set-contradiction types); append-only contract |
-| `worktree-conventions.md` **(v3.16.0; v1.2 in v4.9.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.2: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, DDEV `name:` warning, refusal cases. §11 (v4.7.0) maps the command to Claude Code's native worktree support: `claude --worktree`, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, `worktree.bgIsolation`. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
+| `worktree-conventions.md` **(v3.16.0; v1.2 in v4.9.0)** | `/worktree`, `/worktree-prune`, `/implement` (recommendation), `/complete` (lifecycle) | v1.2: directory priority, branch naming, gitignore requirement, detection signals (HIGH/MEDIUM-HIGH thresholds), 3-path lifecycle, refusal cases. v4.7.0 maps the command to Claude Code's native worktree support: `claude --worktree`, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, `worktree.bgIsolation`. Reuses superpowers `using-git-worktrees` patterns + extends with task-aware lifecycle |
 | `gate-audit-schema.md` **(v4.0.0; v1.3 in v4.14.0)** | `scripts/gate-audit-write.sh` + the hardened gates | Unified schema v1.3 for the 11 audit file types: the 7 v4.0.0 gates (`pre-analysis`, `coverage-mapping`, `skill-review`, `plugin-validate`, `phase-command-bypass`, `dev-guides-load`, `playbook-load`) plus `review` (v1.1), `e2e` + `visual_regression` (v1.2), and `visual_parity` (v1.3); `gate_type` discriminator; per-gate `gate_specific` payloads; overwrite-on-fire lifecycle |
 | `gate-hardening-prompts.md` **(v4.0.0; v1.5 in v4.14.0)** | `commands/research.md`, `commands/complete.md`, `commands/audit-status.md`, the `/review` + `/validate:*` gates | Literal mandated wording v1.5 for the 10 user-prompt surfaces: the 5 v4.0.0 surfaces plus `review-gate-fail` / `review-summary` (v1.2), `e2e-gate-fail` (v1.3), `visual-regression-gate-fail` (v1.4), and `visual-parity-gate-fail` (v1.5); framework refuses to paraphrase or pre-answer; bypass-reason free-text capture; literal blocks verified by `tests/gate-prompts-literal.sh` |
 | `<phase>-walkthrough.md` **(v4.0.2)** | Optional reference for phase commands | Tutorial-depth walkthrough of `/research`, `/design`, `/implement`, `/complete`: rationale, version history, worked examples. Loaded only when explicitly read; no hook or skill auto-loads |
@@ -262,13 +261,13 @@ Machine-readable contracts consumed by skills and commands. These pin schemas an
 
 ### Online Dev-Guides (60+ topics, Required)
 
-The framework **proactively loads** domain guides for your stack at the start of every phase via the required `dev-guides-navigator` plugin (the catalog is Drupal/CSS/design-heavy today):
+The framework **proactively loads** domain guides for your stack at the start of every phase via the required `dev-guides-navigator` plugin:
 
 | Phase | What Gets Loaded |
 |-------|-----------------|
-| Research | Guides for the task's domain (for Drupal: forms, entities, plugins, etc.) |
+| Research | Guides for the task's domain |
 | Architecture | Guides for design decisions (services, routing, caching, config) |
-| Implementation | Guides for security, SDC, JS patterns |
+| Implementation | Guides for security, testing, and implementation patterns |
 
 Guides are loaded automatically. No manual invocation needed. Already-loaded guides are skipped (session-aware). The navigator provides:
 - Hash-based caching so guides aren't re-fetched every session
@@ -310,7 +309,7 @@ The framework doesn't just document best practices; it enforces them:
 
 ### Always Blocked
 
-- *(Drupal)* `\Drupal::service()` in new code (use dependency injection)
+- Static service location in new code (use dependency injection instead)
 - Business logic in forms or controllers
 - Missing access checks on routes
 - Raw SQL with user input
@@ -322,7 +321,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading: it auto-dete
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **4.22.0**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **5.4.0**.
 
 ## License
 
@@ -331,4 +330,3 @@ MIT
 ## Acknowledgments
 
 - [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent: TDD, brainstorming, verification workflows
-- `drupal-dev-tools`: Drupal/DDEV operations

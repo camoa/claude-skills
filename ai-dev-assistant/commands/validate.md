@@ -36,7 +36,7 @@ Validate implementation against architecture and coding standards.
 - No undocumented components
 
 ### Code Standards
-- Coding standards *(Drupal: PSR-12)*
+- Coding standards *(see your framework guide)*
 - SOLID principles
 - DRY principle
 - Security best practices
@@ -52,11 +52,11 @@ Validate implementation against architecture and coding standards.
 ### Architecture Check
 | Aspect | Expected | Actual | Status |
 |--------|----------|--------|--------|
-| Pattern | ConfigFormBase | ConfigFormBase | ✓ |
+| Pattern | ServiceClass | ServiceClass | ✓ |
 | Dependencies | config.factory | config.factory | ✓ |
 
 ### Code Standards
-- [x] Drupal coding standards
+- [x] Framework coding standards
 - [x] SOLID principles
 - [ ] DRY - duplicate logic found
 

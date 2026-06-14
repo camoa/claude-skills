@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2026-06-14
+
+**Recipe-interface contract — the missing seam between the agnostic plugin and its dev-guides recipes.** The de-Drupalization tranche pushed all stack-specific behavior into process-recipe bodies, but never wrote down *what a recipe body must declare* for the gates to act on it. The five gate declarations (`## Screenshot capture`, `e2e.preflight_command`, `## Routing hints`, `## Code-quality extensions`, `## Change-impact globs`) were only implicit in the parsers — a recipe author had no spec, and a misspelled heading degraded silently to the neutral floor. This release makes the seam explicit and self-enforcing.
+
+### Added
+- `references/recipe-interface.md` — the **content** contract (sibling to `recipe-resolution.md`, the transport contract): per phase, the exact heading + field shape each gate greps for, the consuming parser, and the fail-open-vs-closed posture of each declaration. The source of truth a recipe author (and the dev-guides repo) builds against.
+- `tests/recipe-interface-spec.sh` — drift test pinning every declaration token to **both** its consumer and the contract, so a parser change can't silently diverge from the documentation (and vice versa). Caught two real mapping errors during authoring.
+- `scripts/recipe-declarations-audit.sh` + `tests/recipe-declarations-audit-spec.sh` — a deterministic (zero-model bash/jq) **recipe-completeness linter**. The fail-open gate posture is deliberate (absent declaration ⇒ agnostic neutral floor) but otherwise silent; this linter makes it observable. A recipe author or dev-guides CI runs `--body <recipe.md> --phase <phase>` and gets stable JSON listing present vs absent declarations per phase (`recommended:true` + `absent` = the gaps). Informational: exit 0 even on absent recommendeds. This is the answer to "how does the dev-guides side know what to declare."
+
+### Changed
+- `references/recipe-resolution.md` — `## See also` now cross-links `recipe-interface.md` (transport ↔ content).
+
+### Fixed
+- **Functional-parity sweep — restore pre-de-Drupalization behavior now that gates route through recipes.** Three regressions/inaccuracies found auditing the agnostic seam against "works like before":
+  - `scripts/detect-frameworks.sh` — the bare-checkout fallback only probed `web/core/lib/Drupal.php` and `core/lib/Drupal.php`, so an **Acquia/Pantheon `docroot/` Drupal site with no `drupal/core` composer require** was silently detected as a non-Drupal project (empty frameworks ⇒ no recipe resolved ⇒ neutral floor everywhere). Added the `docroot/core/lib/Drupal.php` probe. Smoke-tested across docroot/web/none topologies.
+  - `commands/implement.md` Stage 2b — corrected a stale step reference ("recipe resolution at step 7") to step 6, where recipe resolution actually runs (the `## Load context` step). Doc-only; no behavior change.
+  - `references/recipe-interface.md` §2 (`e2e.preflight_command`) — corrected the seeding mechanism: a fresh `/setup-e2e` seeds the field **in place via the resolved e2e-setup recipe** (setup-e2e.md:45), and `scripts/ensure-registry-preflight.sh` is the idempotent **backfill** helper invoked only from `/upgrade-project`'s "E2E preflight seam" gap (upgrade-project.md:53) for pre-seam projects. The prior text wrongly described the helper as the primary seeder and `/setup-e2e` as transcribing the value.
+
+## [5.3.1] - 2026-06-14
+
+**`commands/review.md` trimmed back under its ≤120-line body budget.** The de-Drupalization tranche (5.3.0) added the recipe-resolution wiring to the review step, pushing the command body to 157 physical lines and tripping `tests/review-command-spec.sh`. Documentation refactor only — no change to gate execution, aggregation, or `pr_ready` logic.
+
+### Changed
+- Condensed the step-5.0/5a recipe-resolution prose in `commands/review.md`; the full resolve-and-follow protocol already lives in `references/recipe-resolution.md`.
+- Relocated the verbose `--headless` full contract, the `--rerun-failed`/`--team` semantics, and the `claude ultrareview` escalation note to `references/review-phase-walkthrough.md`, which the command now points to.
+- Kept inline (test-pinned): all 13 runtime steps, the anti-bypass clause, every flag, both mandated-wording literals (`review-gate-fail` + `review-summary`, byte-identical to `references/gate-hardening-prompts.md` per `tests/gate-prompts-vs-inline.sh`), and the compact `--headless` clauses asserted by `tests/headless-review-contract-spec.sh` (`Exit codes`, the compact verdict line, `--ci`, "never exit 0 on doubt"). Body now 119 lines; full test suite 32/32 green.
+
+## [5.3.0] - 2026-06-14
+
+**Complete de-Drupalization — the plugin is now framework-neutral end to end; Drupal appears nowhere, including illustrations.** 5.2.0 made the e2e/visual *setup* recipe-driven and genericized the kernels; this release finishes the job across every agent, command, reference, walkthrough, skill, and example, so the plugin carries no framework-specific knowledge outside functional literals (framework detection, `composer`/`package.json` probes, DDEV-as-infra). CHANGELOG history is intentionally not scrubbed.
+
+### Changed, framework-neutral agents + docs
+- Every agent stripped of Drupal-specific instruction and examples; agents defer the framework-specific HOW to the process recipe the phase command injects. `agents/contrib-researcher.md` → **`agents/prior-art-researcher.md`** (a generic prior-art researcher); the Drupal-specific prior-art HOW now lives in the dev-guides `research/<framework>/prior-art` recipe.
+- `references/solid-drupal.md` → **`references/solid.md`**; SOLID examples genericized.
+- All command/reference/walkthrough/skill/template examples genericized — no `.module` / `.theme` / `.twig` / ATK / lullabot illustrations remain outside functional literals.
+
+### Added
+- **`references/recipe-resolution.md`** — the shared resolve-and-follow protocol every phase cites (project_state-first short-circuit → source-order search on a miss → ask-user on a true miss → source-only project_state record).
+- **`agents/guides-matcher.md` `routing_hints[]` input seam** (schema v1.1, additive). A resolved process recipe injects `{pattern, role}` objects so the matcher maps a framework's own file layout onto neutral role buckets without hardcoding any framework's globs. Absent ⇒ the neutral role buckets fire alone; because the gate is a soft-nudge advisory, an absent hint set degrades a suggestion, never a verdict.
+- **Recipe-supplied screenshot-capture seam** in the visual-regression starter and migrate stubs (`__SCREENSHOT_IMPORT__` / `__SCREENSHOT_CAPTURE__`). The plugin default is now a framework-neutral native `toHaveScreenshot('<surface-id>.png')` capture; a recipe can replace it with an accessibility-aware helper.
+
+### Changed, visual-regression baseline naming (migration note)
+- Native explicit snapshot naming yields **`<surface-id>-visual-chromium-<viewport>-linux.png` with no `-1-` ordinal**. The `-1-` only ever came from an *anonymous* `toHaveScreenshot()` auto-numbering inside a framework-specific accessibility helper; the framework-neutral native default names the snapshot explicitly, so no ordinal is produced. The `validate-visual-regression` gate **enumerates** existing baselines (it does not construct names), so it tolerates both the native (`…-visual-chromium-…`) and the recipe-supplied anonymous (`…-1-visual-chromium-…`) shapes. Baselines previously captured by a recipe-supplied accessibility helper keep their `-1-` names; native-captured baselines have none — no regeneration is forced.
+
+## [5.2.0] - 2026-06-13
+
+**Framework-agnostic setup via process recipes.**
+
+### Added
+- Process-recipe resolution architecture. The setup commands (/setup-e2e, /setup-visual-regression) are now framework-agnostic: they resolve a process recipe by (phase, framework) and follow the recipe body, instead of inlining Drupal/ATK payload. The generic gates and kernels (validate-e2e.sh, visual-regression-gate.sh, baseline-manager.sh, the surface-registry schema, the Playwright templates) stay in the plugin; the kernels that still carried framework knowledge (wo-oracle-check.sh, change-impact-classify.sh, derive-viewport-matrix.sh) were genericized this release (see "Changed, framework-agnostic kernels").
+- skills/process-recipe-loader/SKILL.md. Resolves the process recipe for a lifecycle phase across the project's frameworks: project_state first (a recorded source resolves directly), then a source-order search (repo-local, machine-local, dev-guides) on a miss, then action:ask-user on a true miss. Provenance is fail-closed: verified:true only for the dev-guides upstream catalog; local and machine-local bodies must be surfaced for human review before they are followed. Nothing is pinned — the navigator serves an auto-fresh body and records its own footprint; this skill records only which source was chosen, never a version. Delegates all fetch/cache to dev-guides-navigator.
+- scripts/detect-frameworks.sh. Detects project frameworks (drupal via composer drupal/core or core/lib/Drupal.php; nextjs via package.json next) as a single-line JSON array. Wired into fresh project creation (project-initializer) and into /upgrade-project backfill, writing the new **Frameworks:** project_state field.
+- project_state.md fields parsed by project-state-read.sh: **Frameworks:**, **Local Guides Path:**, **Process Recipes:** (the last as a source-only record block, key phase/framework/slug with `source=` and no pinned sha; a stale `pinned_sha=` token from an older format is ignored).
+
+### Changed, framework-agnostic kernels (oracle + change-impact)
+- **`scripts/wo-oracle-check.sh`** no longer hardcodes a PHP/Drupal oracle-file table. It takes an optional `--oracle-files <json>` rule list (`{type, globs[], changes[], oracle_class, severity}`) and adds an `oracle_configured` output field; an empty/absent list is an honest "no oracle configured" verdict, not a silent pass. The caller (`skills/work-order-critique`) reconstructs the list on the fly from the active framework's review/standards recipe each run, so there is no persistent local file a builder can empty to disable tamper monitoring. Tamper-HALT, the `oracle_update` exemption, and rename-evasion logic are preserved (109 specs).
+- **`skills/work-order-critique/SKILL.md`** now **fails closed** on the oracle check: a non-zero kernel exit or a non-verdict (non-JSON) stdout HALTs the work-order with reason `oracle_check_error` (distinct from a genuine `oracle_tamper`), instead of falling through to the critics. Closes a defense-in-depth fail-open where a broken oracle invocation would skip monitoring.
+- **`scripts/change-impact-classify.sh`** ships a framework-neutral floor (`change-impact-rules.json` now carries only stylesheet / plain-script / markup extensions — no `.twig` / `.module` / `.info.yml` / `.php` / `.yml`). A new `--rules-from <json>` flag unions per-run framework globs onto the floor; the dispatcher reconstructs them from the stack's review recipe `## Change-impact globs` section each run (`rule_source` reports `default+recipe` / `project-override+recipe`). The Drupal globs now live in the dev-guides `review/drupal/checks` recipe, not the plugin.
+- **`references/visual-review/change-impact-dispatch.md`** step 6.2 reconstructs the framework globs from the `/review` step-5.0-resolved review recipe and passes `--rules-from`; no second resolution. When no recipe resolves, it classifies on the neutral floor alone and notes that framework globs were not applied.
+- **`scripts/derive-viewport-matrix.sh`** no longer parses Drupal's `<theme>.breakpoints.yml` (the `web/` docroot, `themes/custom` auto-detection, Radix contrib fallback, and the `--theme-name` flag are all removed). Path 1 is now a generic `--breakpoints-from <json>` seam taking a neutral `[{name, width [, height]}]` list; the framework's process recipe parses its own native breakpoint source into that list each run and the kernel applies the canonical height band, dedup, and JSON shaping (so the recipe never reimplements that logic). Path 2's CSS `@media` scan now defaults `--css-root` to the project root (was the Drupal custom-theme dir, superseding the 5.1.0 back-compat default). The Drupal breakpoint parsing moves to the dev-guides `visual-regression/drupal` setup recipe. Spec rewritten (12 invariants).
+- **`commands/setup-visual-regression.md`** drops the `--theme-name` argument; Step 4's fallback invokes `derive-viewport-matrix.sh <codePath> [--css-root <dir>]` and the recipe-driven path feeds `--breakpoints-from`.
+- **`commands/review.md`** step 5a no longer hardcodes Drupal file extensions in the code-quality-gate scope filter. The filter is now the union of a framework-neutral language floor (`.php` `.js` `.mjs` `.cjs` `.ts` `.tsx` `.vue`) and the active framework's code-quality extensions, reconstructed from the review recipe body already resolved at step 5.0 (no second resolution) — a new `## Code-quality extensions` declaration in the dev-guides `review/drupal/checks` recipe restores `.module` `.inc` `.install` `.profile` `.theme` `.engine` `.twig` for Drupal, so the effective Drupal filter is unchanged. With no recipe resolved, the neutral floor is used alone.
+
+### Changed
+- Renamed `/setup-atk` to `/setup-e2e`. The command is framework-agnostic now (it resolves an e2e-setup process recipe), so the ATK-specific name no longer fit. The flags are unchanged.
+- /setup-visual-parity Step 1 no longer hardcodes a Drupal package check; it verifies the generic visual-regression artifacts (tests/visual/ plus a visual-chromium project in the Playwright config).
+- project-state-read.sh: the Process Recipes block parser also terminates on a Markdown section header, so a following section bullet cannot be misparsed.
+
+### Removed
+- scripts/setup-atk.sh, scripts/setup-atk-idempotency.sh, scripts/surface-discovery.sh, agents/journey-discovery-agent.md, their test specs, and references/atk-e2e-walkthrough.md. The Drupal install, surface discovery, journey discovery, and authenticated-reach payload now live in the dev-guides process recipes (drupal_e2e_setup_atk, drupal_visual_regression_setup), which carry the journey-proposal rules and the data-only security boundary inline.
+
+### Requires
+- dev-guides-navigator 0.10.0 or later (the shared store kernel, guide-body caching, and the Mode-3 process-recipe lookup that returns a body_path and never streams a body). /setup-e2e and /setup-visual-regression now reach the dev-guides process-recipes catalog over the network to resolve the framework-specific steps; the generic gates run offline as before.
+
+## [5.1.0] - 2026-06-13
+
+**Framework-agnostic e2e and visual-regression gates.** The e2e and VR gate machinery is now stack-neutral: the Drupal-specific bindings flow through generic seams instead of being hardcoded into the gate scripts. The Drupal behavior is preserved, it now flows through configuration that `/setup-atk` seeds rather than being baked into the gate.
+
+### Changed, agnostic gate seams
+- **`scripts/validate-e2e.sh`** removes the hardcoded `ddev drush atk:preflight` block. The gate now runs an optional `--preflight-cmd '<cmd>'` resolved by the calling command from project config; a non-zero preflight exit fails the gate, an absent command runs no preflight. No framework is assumed in the gate.
+- **`commands/validate-e2e.md`** reads the optional top-level `e2e.preflight_command` from the registry and passes it through `--preflight-cmd`. Description neutralized (a Playwright gate with an optional project-resolved preflight; the Drupal reference impl registers ATK's).
+- **`references/visual-review/surface-registry-schema.md` to v1.2** (additive): a new optional top-level `e2e.preflight_command` block (the seam that removed the last hardcoded Drupal preflight from the gate) and a new optional per-surface `auth_context` field (an opaque storageState reference, framework-agnostic; the Drupal recipe maps qa_accounts roles to context names).
+- **`scripts/setup-atk.sh`** seeds `schema_version: "1.2"` and an `e2e.preflight_command: "ddev drush atk:preflight"` block on fresh registries, and idempotently inserts it into existing ones. This is how the Drupal preflight reaches the now-agnostic gate.
+- **`scripts/derive-viewport-matrix.sh`** gains a `--css-root <dir>` flag that makes the CSS `@media` derivation path (Path 2) framework-neutral; it defaults to the Drupal custom-theme dir for back-compat.
+
+### Process recipes (dev-guides)
+- The Drupal e2e and visual-regression setup behavior is captured as process recipes in the dev-guides repo, the framework-specific drivers the agnostic gates execute against. The gate scripts stay in the plugin as the Drupal reference implementation until the recipe-resolution machinery lands in a later slice.
+
 ## [5.0.0] - 2026-06-13
 
 **Renamed `drupal-dev-framework` → `ai-dev-assistant` — a stack-agnostic development-workflow framework.** Major bump: the plugin name and command namespace changed (`/drupal-dev-framework:*` → `/ai-dev-assistant:*`) and the local store path moved (`~/.claude/drupal-dev-framework/` → `~/.claude/ai-dev-assistant/`), so existing installs require a one-time migration (see below). Git history is preserved across the rename. This is slice-1 of the de-Drupalization: the orchestration engine is now stack-neutral; the deep components and tooling ship a **Drupal-flavored reference implementation** behind a one-line banner, with stack-neutral generalizations planned for later slices.
