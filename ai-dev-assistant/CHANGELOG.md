@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `references/recipe-interface.md` — the **content** contract (sibling to `recipe-resolution.md`, the transport contract): per phase, the exact heading + field shape each gate greps for, the consuming parser, and the fail-open-vs-closed posture of each declaration. The source of truth a recipe author (and the dev-guides repo) builds against.
 - `tests/recipe-interface-spec.sh` — drift test pinning every declaration token to **both** its consumer and the contract, so a parser change can't silently diverge from the documentation (and vice versa). Caught two real mapping errors during authoring.
+- `scripts/recipe-declarations-audit.sh` + `tests/recipe-declarations-audit-spec.sh` — a deterministic (zero-model bash/jq) **recipe-completeness linter**. The fail-open gate posture is deliberate (absent declaration ⇒ agnostic neutral floor) but otherwise silent; this linter makes it observable. A recipe author or dev-guides CI runs `--body <recipe.md> --phase <phase>` and gets stable JSON listing present vs absent declarations per phase (`recommended:true` + `absent` = the gaps). Informational: exit 0 even on absent recommendeds. This is the answer to "how does the dev-guides side know what to declare."
 
 ### Changed
 - `references/recipe-resolution.md` — `## See also` now cross-links `recipe-interface.md` (transport ↔ content).

@@ -108,12 +108,30 @@ A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its
 `## Change-impact globs` legitimately appears in more than one phase recipe; the classifier unions all
 matching rules, so duplication across recipes is harmless.
 
+## Checking a recipe is complete (the linter)
+
+Because every declaration fails open silently, "did I spell it right / did I declare it at all" is not
+observable at gate time. `scripts/recipe-declarations-audit.sh` is the deterministic linter that makes it
+observable — a recipe author (or CI in the dev-guides repo) runs it against a recipe body and sees, per
+phase, which declarations are present vs absent:
+
+```
+scripts/recipe-declarations-audit.sh --body <recipe.md> --phase review --framework drupal
+# → {"phase":"review", "declarations":[…], "summary":{"expected":2,"present":1,"absent_recommended":1}}
+```
+
+It is **informational** (exit 0 even when recommended declarations are absent — absence is a valid
+agnostic-floor choice, not a failure) and emits stable JSON for CI. `recommended:true` declarations that are
+`absent` are the ones worth a second look. This is the answer to "how does the dev-guides side know what to
+declare": run the linter, fill until the recommended set is present.
+
 ## Keeping this contract honest
 
-These declaration tokens are grepped by the consumers named above. A drift test
-(`tests/recipe-interface-spec.sh`) should assert that every token a consumer parses is documented here, so a
-parser change can't silently add an undocumented declaration. If you add a declaration to a consumer, add it
-here in the same change.
+These declaration tokens are grepped by the consumers named above. The drift test
+`tests/recipe-interface-spec.sh` asserts that every token a consumer parses is documented here, so a parser
+change can't silently add an undocumented declaration. `tests/recipe-declarations-audit-spec.sh` pins the
+linter's per-phase table to the same set. If you add a declaration to a consumer, update this doc, the
+linter table, and both tests in the same change.
 
 ## See also
 
