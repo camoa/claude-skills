@@ -32,19 +32,19 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
    Locate the task folder under `<project>/implementation_process/in_progress/**/<task-name>/`.
 
-2. **Applicability check (v3.14.2+)** — before inspecting artifacts, determine whether dev-guides apply to this task at all. The dev-guides catalog covers Drupal, Next.js, design systems (Bootstrap/Radix/Tailwind/DaisyUI), CSS, and cross-cutting methodology. For tasks whose codePath contains none of those domain markers (e.g., a Claude Code plugin marketplace, a pure docs project, a shell-script tools repo), guide citations are not expected and `fail` would be a false positive.
+2. **Applicability check (v3.14.2+)** — before inspecting artifacts, determine whether dev-guides apply to this task at all. The dev-guides catalog covers PHP frameworks, Next.js, design systems (Bootstrap/Radix/Tailwind/DaisyUI), CSS, and cross-cutting methodology. For tasks whose codePath contains none of those domain markers (e.g., a Claude Code plugin marketplace, a pure docs project, a shell-script tools repo), guide citations are not expected and `fail` would be a false positive.
 
    Read `project_state.md` for `codePath` and `codePathState`. Then:
 
    - If `codePathState == "docs-only"` OR `codePathState == "unset"` → emit `verdict: "skipped"` with reason `"task has no code path declared (state: <state>); guide citation rule does not apply"`. Skip Steps 3-5.
    - If `codePathState == "set"` → quick-scan codePath for domain markers:
-     - **Drupal:** any `*.info.yml`, `*.module`, `composer.json` containing `"drupal/core"`, or directory ending in `.theme`
+     - **PHP framework:** any `*.info.yml`, `*.module`, `composer.json` containing `"drupal/core"`, or directory ending in `.theme`
      - **Next.js:** `package.json` containing `"next"` as a dep, or `next.config.{js,ts,mjs}`
      - **Frontend/CSS:** `*.scss`, `*.css`, `tailwind.config.*`, or `package.json` containing `"react"`/`"vue"`/`"svelte"`
    - If at least one marker matches → applicable; continue.
-   - If NO markers match → emit `verdict: "skipped"` with reason `"codePath at <path> contains no Drupal/Next.js/frontend code; guide citation rule does not apply to this task type"`. Skip Steps 3-5.
+   - If NO markers match → emit `verdict: "skipped"` with reason `"codePath at <path> contains no recognized framework or frontend code; guide citation rule does not apply to this task type"`. Skip Steps 3-5.
 
-   The applicability check is intentionally generous (any marker → applicable). False positives are cheaper than false negatives — if a task even smells Drupal-or-frontend, run the citation check.
+   The applicability check is intentionally generous (any marker → applicable). False positives are cheaper than false negatives — if a task involves any supported framework or frontend domain, run the citation check.
 
    Detection is shallow (top-level + 1-deep) to keep the check fast. Implement via `Glob` + `Bash` `grep`. Cache result on `details.applicability` so consumers can see what fired.
 
@@ -55,7 +55,7 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
 4. **Extract guide citations** — scan for guide references in each artifact. Accept:
    - URLs matching `camoa.github.io/dev-guides/[a-z0-9/-]+` (the published dev-guides site)
-   - Inline mentions of guide slugs in the form `drupal/<category>/<topic>`, `design-systems/<topic>`, `nextjs/<topic>`, or similar kebab-case paths
+   - Inline mentions of guide slugs in the form `<framework>/<category>/<topic>`, `design-systems/<topic>`, `nextjs/<topic>`, or similar kebab-case paths matching the catalog's taxonomy
    - Markdown reference links `[...](https://camoa.github.io/dev-guides/...)`
    - Explicit "Loaded guide: <slug>" annotations if the `dev-guides-navigator` skill wrote them
 
@@ -82,7 +82,7 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
    **Staleness check (caller-side, not agent-side):** `stat -c %Y "$catalog_path"` to read mtime; if older than 30 days (compare to `date +%s`), append `code_inference.warnings: ["catalog_cache_stale"]` AND proceed — staleness is informational, not blocking. Suggest in the CLI summary that the user run `/dev-guides-navigator --refresh` to update the cache.
 
-   **c) Invoke `guides-matcher` agent** in `validation` mode with the union, the catalog path, optional `context_excerpts[]` from `implementation.md` Files Created/Modified, and `already_cited[]` from Step 4. Per `references/guides-matcher-schema.md` v1.0.
+   **c) Invoke `guides-matcher` agent** in `validation` mode with the union, the catalog path, optional `context_excerpts[]` from `implementation.md` Files Created/Modified, and `already_cited[]` from Step 4. Per `references/guides-matcher-schema.md`. This gate does not itself resolve a process recipe, so it passes no `routing_hints[]`; the agent's neutral role buckets match generic conventions, and framework-specific config/template suffixes fall to `unmatched_files[]` — acceptable for a soft-nudge advisory.
 
    **d) Compute `domain_coverage_gaps`** — agent's `matched_guides[].slug` MINUS prefix-match against `guides_cited[]`. Slugs the agent judged relevant but no artifact citation covers.
 
@@ -104,7 +104,7 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
      "applicability": {
        "decision": "applicable | skipped",
        "reason": "<one-line explanation>",
-       "markers_found": ["drupal", "frontend"]
+       "markers_found": ["php-framework", "frontend"]
      },
      "checked_artifacts": ["<abs path to each artifact examined>"],
      "guides_cited": ["<slug>", "<slug>"],
@@ -114,8 +114,8 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
        "sources_used": ["session", "implementation_md", "git"],
        "changed_files_count": 12,
        "matcher_output": {"matched_guides": [...], "unmatched_files": [...], "warnings": []},
-       "inferred_slugs": ["drupal/forms/config-forms", "drupal/services/dependency-injection"],
-       "domain_coverage_gaps": ["drupal/services/dependency-injection"]
+       "inferred_slugs": ["<framework>/forms/config-forms", "<framework>/services/dependency-injection"],
+       "domain_coverage_gaps": ["<framework>/services/dependency-injection"]
      }
    }
    ```
@@ -137,16 +137,16 @@ Examples of what `messages[]` contains:
 
 - `pass`: `["3 guide citations found across research.md and architecture.md", "guides-matcher: all matched slugs covered"]`
 - `warning` (phase coverage): `["2 citations in research.md but 0 in architecture.md — architecture may be under-grounded"]`
-- `warning` (domain gap, v4.3.0+): `["guides-matcher matched drupal/services/dependency-injection from changed files; no artifact citation covers it. Try /dev-guides-navigator drupal/services/dependency-injection"]`
-- `skipped (applicability)`: `["codePath at /abs/path contains no Drupal/Next.js/frontend code; guide citation rule does not apply to this task type"]` or `["task has no code path declared (state: docs-only); guide citation rule does not apply"]`
+- `warning` (domain gap, v4.3.0+): `["guides-matcher matched <framework>/services/dependency-injection from changed files; no artifact citation covers it. Try /dev-guides-navigator <framework>/services/dependency-injection"]`
+- `skipped (applicability)`: `["codePath at /abs/path contains no recognized framework or frontend code; guide citation rule does not apply to this task type"]` or `["task has no code path declared (state: docs-only); guide citation rule does not apply"]`
 - `fail`: `["No guide citations found in any phase artifact", "Suggest: /dev-guides-navigator with keywords from task.md Goal"]`
 - `skipped`: `["No phase artifacts exist yet; run /research to begin"]`
 
 ## Why this gate exists
 
-The `dev-guides-navigator` plugin exists precisely because AI-generated Drupal work drifts from community consensus when it doesn't load authoritative guides. This gate surfaces the "we didn't check" case and recommends action — it's NOT a block, just a visible signal during `/validate:all`.
+The `dev-guides-navigator` plugin exists precisely because AI-generated work drifts from community consensus when it doesn't load authoritative guides. This gate surfaces the "we didn't check" case and recommends action — it's NOT a block, just a visible signal during `/validate:all`.
 
-**Applicability auto-skip (v3.14.2+):** the gate now skips with reason when codePath has no Drupal/Next.js/frontend markers, OR when codePathState is `docs-only` / `unset`. This makes the gate safe to include in `/validate:all` and `/validate:team` runs against non-Drupal tasks (Claude Code plugin work, shell-tool repos, pure-docs projects) without producing spurious `fail` verdicts. v1 had no auto-skip and relied on user judgment about when to invoke; v3.14.2 makes that judgment explicit and machine-checkable.
+**Applicability auto-skip (v3.14.2+):** the gate now skips with reason when codePath has no recognized framework or frontend markers, OR when codePathState is `docs-only` / `unset`. This makes the gate safe to include in `/validate:all` and `/validate:team` runs against non-framework tasks (Claude Code plugin work, shell-tool repos, pure-docs projects) without producing spurious `fail` verdicts. v1 had no auto-skip and relied on user judgment about when to invoke; v3.14.2 makes that judgment explicit and machine-checkable.
 
 ## Error cases
 

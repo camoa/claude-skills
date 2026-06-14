@@ -1,10 +1,8 @@
 # Visual Regression Tests
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
-Committed visual-regression baselines powered by
-[`@lullabot/playwright-drupal`](https://www.npmjs.com/package/@lullabot/playwright-drupal)
-and Playwright. Set up by `/ai-dev-assistant:setup-visual-regression`.
+Committed visual-regression baselines powered by the framework's VR package
+(installed by the process recipe) and Playwright. Set up by
+`/ai-dev-assistant:setup-visual-regression`.
 
 > This file is scaffolded by `/setup-visual-regression`. Edit freely — it is a
 > normal project file once written.
@@ -26,27 +24,29 @@ tests/visual/
 ├── README.md                              — this file
 ├── <surface-id>.spec.ts                   — one spec per registry surface
 └── <surface-id>.spec.ts-snapshots/        — committed baselines (DO commit)
-    ├── <surface-id>-1-visual-chromium-desktop-linux.png
-    ├── <surface-id>-1-visual-chromium-desktop-linux.meta.json   ← provenance
-    └── <surface-id>-1-visual-chromium-desktop-linux.txt          ← a11y snapshot
+    ├── <surface-id>-visual-chromium-desktop-linux.png
+    ├── <surface-id>-visual-chromium-desktop-linux.meta.json   ← provenance
+    └── <surface-id>-visual-chromium-desktop-linux.txt          ← a11y snapshot
+                                              (only when a recipe supplies an
+                                               accessibility-aware capture)
 ```
 
 Baselines (`*.spec.ts-snapshots/`) **are committed**. Transient run output
 (`test-results/`, `playwright-report/`) is gitignored.
 
-## DO NOT RENAME THE TEST
+## KEEP THE SNAPSHOT NAME STABLE
 
-Every generated spec names its test exactly `'visual regression'`. That fixes
-Playwright's snapshot ordinal at `-1-`, so the baseline filename is
-deterministic:
+Every generated spec names its snapshot explicitly after the surface id
+(`toHaveScreenshot('<surface-id>.png')`, or the equivalent name a recipe-supplied
+capture passes), so the baseline filename is deterministic:
 
 ```
-<surface-id>-1-visual-chromium-<viewport>-linux.png
+<surface-id>-visual-chromium-<viewport>-linux.png
 ```
 
-Renaming the test — or adding a second screenshot call inside one test —
-changes the ordinal and **orphans every committed baseline** for that surface.
-If you need multi-shot capture, use a separate spec file.
+Changing the snapshot name — or adding a second screenshot call inside one test —
+**orphans every committed baseline** for that surface. If you need multi-shot
+capture, use a separate spec file with its own stable snapshot name.
 
 ## When to run visual regression
 
@@ -68,8 +68,8 @@ Use one of the recognized triggers so the `baseline-history.jsonl` log explains
 | `intentional-ui-change` | A deliberate design/markup change |
 | `prod-db-refresh` | Content changed, zero code change (most common non-code trigger) |
 | `upstream-theme-update` | A base/parent theme was updated |
-| `contrib-update` | A contrib module update changed rendering |
-| `core-update` | A Drupal core update changed rendering |
+| `dependency-update` | A package or dependency update changed rendering |
+| `platform-update` | A framework or platform update changed rendering |
 | `fixture-change` | Test fixture/content changed |
 | `bootstrap` | First baseline capture |
 
@@ -86,14 +86,14 @@ drift.
 | Dev host OS | Baseline capture approach |
 |---|---|
 | **Linux** (default expectation) | Host capture is canonical — matches CI `-linux.png` directly. Run `npx playwright test --update-snapshots` on the host. |
-| **macOS / Windows** | Host capture produces `-darwin.png` / `-win32.png` — CI will not find them. Use one of: (1) capture in CI and commit the result — simplest; (2) `docker run --rm -v "$(pwd)":/work mcr.microsoft.com/playwright npx playwright test --update-snapshots`; (3) `ddev exec npx playwright test --update-snapshots`. All three produce `-linux.png`. |
+| **macOS / Windows** | Host capture produces `-darwin.png` / `-win32.png` — CI will not find them. Use one of: (1) capture in CI and commit the result — simplest; (2) `docker run --rm -v "$(pwd)":/work mcr.microsoft.com/playwright npx playwright test --update-snapshots`; (3) run `npx playwright test --update-snapshots` inside a Linux container. All three produce `-linux.png`. |
 
 ## Masking dynamic regions
 
 A surface's `masks` in `.visual-review/registry.yml` are CSS selectors painted
 over before capture (timestamps, contextual links, ad slots). For regions best
-declared in the template itself, add a `data-vrt-mask` attribute in the Twig
-markup and list `[data-vrt-mask]` in the surface's `masks`.
+declared in the template itself, add a `data-vrt-mask` attribute in the
+template markup and list `[data-vrt-mask]` in the surface's `masks`.
 
 ## Repo size & Git LFS
 

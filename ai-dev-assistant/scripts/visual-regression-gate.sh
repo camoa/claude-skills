@@ -10,7 +10,7 @@
 #                       echoed into the output. This script does NOT parse YAML
 #                       (Task C D-impl-1) — the suite itself is the source of
 #                       truth for which surfaces run.
-#   <codePath>          Drupal project root; the suite is <codePath>/tests/visual/
+#   <codePath>          project root; the suite is <codePath>/tests/visual/
 #   --ci                non-interactive mode — recorded in the output; no
 #                       behavioural change here (this script never prompts).
 #   --project-pattern   Playwright project-name prefix to run. Default

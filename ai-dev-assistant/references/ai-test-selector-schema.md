@@ -47,11 +47,11 @@ A valid reason MUST:
 - Be verifiable by re-running the same grep/read against the worktree.
 
 **Acceptable example:**
-> "diff is entirely in `modules/custom/foo/foo.module` which registers no route, hook, or service
+> "diff is entirely in `src/components/foo/foo.ts` which registers no route, handler, or service
 > for `/checkout` (Grep confirmed no references to checkout path)."
 
 **Not acceptable:**
-> "Looks unrelated." / "foo.module seems backend-only." / "URL path doesn't match."
+> "Looks unrelated." / "foo.ts seems backend-only." / "URL path doesn't match."
 
 If a concrete reason cannot be stated, the surface MUST be selected, not skipped.
 

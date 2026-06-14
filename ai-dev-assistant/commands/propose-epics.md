@@ -49,7 +49,7 @@ with little cross-dependency. Proposed decomposition reduces each child to a cle
 deliverable.
 
 Proposed children:
-  1. settings_form_migration    — Move existing form to ConfigFormBase
+  1. settings_form_migration    — Extract data handling to a dedicated service class
      rationale: Self-contained lift and shift
   2. settings_form_validation   — New validation rules per new schema
      rationale: Separable once the form class is in place

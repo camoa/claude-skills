@@ -1,12 +1,12 @@
 ---
-description: "Create a git worktree for parallel task execution. Sets up `.worktrees/<task>/` on `feature/<task>` branch, runs auto-detect setup (composer install, npm install), pre-seeds session-context. Drupal/DDEV-aware. Soft-nudge — never auto-creates without confirmation. Introduced v3.16.0."
+description: "Create a git worktree for parallel task execution. Sets up `.worktrees/<task>/` on `feature/<task>` branch, runs auto-detect setup (composer install, npm install), pre-seeds session-context. Framework-aware. Soft-nudge — never auto-creates without confirmation. Introduced v3.16.0."
 allowed-tools: Read, Write, Edit, Bash, Skill
 argument-hint: <task-name> [--base <ref>] [--branch <name>] [--with-baseline] [--no-ddev-check]
 ---
 
 # Worktree
 
-Create a git worktree at `.worktrees/<task_name>/` on branch `feature/<task_name>` so this task can run in parallel with another Claude session on the same project. Reuses the superpowers `using-git-worktrees` precedent + extends with Drupal/DDEV/task-lifecycle awareness.
+Create a git worktree at `.worktrees/<task_name>/` on branch `feature/<task_name>` so this task can run in parallel with another Claude session on the same project. Reuses the superpowers `using-git-worktrees` precedent + extends with framework/task-lifecycle awareness.
 
 ## Usage
 
@@ -15,7 +15,7 @@ Create a git worktree at `.worktrees/<task_name>/` on branch `feature/<task_name
 /ai-dev-assistant:worktree <task-name> --base origin/main           # branch from a specific ref
 /ai-dev-assistant:worktree <task-name> --branch task/<custom>       # custom branch name
 /ai-dev-assistant:worktree <task-name> --with-baseline              # opt-in baseline tests
-/ai-dev-assistant:worktree <task-name> --no-ddev-check              # skip DDEV name: warning
+/ai-dev-assistant:worktree <task-name> --no-ddev-check              # skip dev-environment name-conflict check
 ```
 
 See `references/worktree-conventions.md` v1.2 for the full convention, including how this command relates to Claude Code's native `claude --worktree` flag, PR-based worktrees, `.worktreeinclude`, `worktree.baseRef`, and `worktree.bgIsolation`.
@@ -54,16 +54,16 @@ If NOT ignored:
 - `git add .gitignore && git commit -m "chore: ignore worktree directory"`
 - Proceed
 
-### Step 5 — DDEV check (Drupal-specific)
+### Step 5 — Dev-environment check
 
 If `<codePath>/.ddev/config.yaml` exists AND has a `name:` key:
 
-> Print warning: "DDEV is configured with `name: <x>` in `.ddev/config.yaml`. Multiple worktrees with the same DDEV name will conflict at `ddev start`. Recommended: remove the `name:` line and commit, OR use `--no-ddev-check` to proceed anyway."
+> Print warning: "`.ddev/config.yaml` has `name: <x>` set. Multiple worktrees with the same name will conflict at dev-environment startup. Recommended: remove the `name:` line and commit, OR use `--no-ddev-check` to proceed anyway."
 >
 > Ask: "[c]ontinue / [a]bort / [s]how-instructions"
 
 On `[a]` → exit 0 cleanly.
-On `[s]` → print: "Edit `.ddev/config.yaml` and remove the line starting with `name:`. Save, commit (`git add .ddev/config.yaml && git commit -m 'chore: remove DDEV name for worktree compatibility'`), then re-run /worktree." Then exit 0.
+On `[s]` → print: "Edit `.ddev/config.yaml` and remove the line starting with `name:`. Save, commit (`git add .ddev/config.yaml && git commit -m 'chore: remove name key for worktree compatibility'`), then re-run /worktree." Then exit 0.
 On `[c]` → continue (user knows the risk).
 
 If `--no-ddev-check` was passed, skip this step entirely.
@@ -74,7 +74,7 @@ Determine BASE:
 - `--base <ref>` flag → use it
 - Default → `git rev-parse HEAD` (current commit)
 
-The HEAD default matches the `worktree.baseRef: "head"` semantic — Drupal task work often sits on uncommitted local patches a `"fresh"` base would drop. This command does not read the `worktree.baseRef` setting (that setting governs Claude Code's native `--worktree`); pass `--base origin/main` for a clean base. See `references/worktree-conventions.md`.
+The HEAD default matches the `worktree.baseRef: "head"` semantic — task work often sits on uncommitted local patches a `"fresh"` base would drop. This command does not read the `worktree.baseRef` setting (that setting governs Claude Code's native `--worktree`); pass `--base origin/main` for a clean base. See `references/worktree-conventions.md`.
 
 Determine BRANCH:
 - `--branch <name>` flag → use it
@@ -93,8 +93,8 @@ If creation fails (existing branch with different HEAD, dirty tree blocking, etc
 
 | File present | Setup command |
 |---|---|
-| `composer.json` (Drupal/PHP) | `composer install` |
-| `package.json` (Node) | `npm install` (or `pnpm install` / `yarn install` per lockfile) |
+| `composer.json` | `composer install` |
+| `package.json` | `npm install` (or `pnpm install` / `yarn install` per lockfile) |
 
 Setup runs sequentially. Failures print but don't auto-rollback (user can fix and re-run).
 
@@ -109,7 +109,7 @@ If `--with-baseline` was passed:
 
 Print pass/fail summary. If failures and `--ignore-baseline` not passed → refuse to declare worktree ready.
 
-Default: skip baseline (Drupal/DDEV setups make this heavy).
+Default: skip baseline (opt-in only).
 
 ### Step 9 — Pre-seed session-context
 
@@ -157,7 +157,7 @@ Or run /worktree-prune later to clean up when done.
 
 ## Soft-nudge posture
 
-- Never creates without explicit confirmation when there's a DDEV `name:` warning
+- Never creates without explicit confirmation when there's a dev-environment name-conflict warning
 - Never auto-edits `.ddev/config.yaml`
 - Never `--force` removes anything
 - User can decline at every interactive step

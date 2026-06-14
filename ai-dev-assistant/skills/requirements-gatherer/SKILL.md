@@ -8,8 +8,6 @@ user-invocable: false
 
 # Requirements Gatherer
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 Ask structured questions to define project requirements.
 
 ## Activation
@@ -35,18 +33,18 @@ Ask one category at a time. Wait for response before proceeding.
 **Category 1: Project Type & Scope**
 ```
 What type of project is this?
-- [ ] New Drupal module (starting from scratch)
-- [ ] Feature for existing module
-- [ ] Core issue/patch
-- [ ] Theme or sub-theme
-- [ ] Configuration/site building
+- [ ] New module or package (starting from scratch)
+- [ ] Feature for an existing module or package
+- [ ] Framework core patch or bug fix
+- [ ] Theme, template, or UI layer
+- [ ] Configuration or site/app building
 - [ ] Other (Claude Code plugin, documentation, etc.)
 
 What does this project include?
-- [ ] A single Drupal module
-- [ ] Multiple related modules
-- [ ] A theme or sub-theme
-- [ ] Configuration/site building
+- [ ] A single module or package
+- [ ] Multiple related modules or packages
+- [ ] A theme or template layer
+- [ ] Configuration or build artifacts
 - [ ] Mix of the above
 
 Please describe:
@@ -71,18 +69,18 @@ Who will use this?
 **Category 4: Data Requirements**
 ```
 What data is involved?
-1. New content types or entities needed?
+1. New data types or entities needed?
 2. New fields on existing types?
 3. Configuration data to store?
-4. Relationships to existing content?
+4. Relationships to existing data?
 ```
 
 **Category 5: Integrations**
 ```
 What existing systems does this connect to?
-1. Existing Drupal modules to integrate with?
+1. Existing packages or modules to integrate with?
 2. External APIs or services?
-3. ECA workflows needed?
+3. Event or workflow hooks needed?
 4. Third-party libraries?
 ```
 
@@ -98,7 +96,7 @@ What interfaces are needed?
 **Category 7: Constraints**
 ```
 What limitations should we know about?
-1. Drupal version (10.x, 11.x)?
+1. Framework or runtime version?
 2. Performance requirements?
 3. Accessibility requirements (WCAG level)?
 4. Browser support needs?
@@ -120,7 +118,7 @@ After all categories, use `Edit` tool to update the Requirements section:
 ## Requirements
 
 ### Project Type
-- {new module, existing feature, core issue, theme, config, other}
+- {new module/package, existing feature, framework patch or fix, theme/template, config, other}
 
 ### Scope
 - {what project includes}
@@ -177,7 +175,7 @@ Now let's define your first task. What feature or component do you want to work 
 
 Examples:
 - "Add settings form for API configuration"
-- "Create custom entity for storing data"
+- "Define data model for storing records"
 - "Build admin dashboard"
 
 Each task will go through:

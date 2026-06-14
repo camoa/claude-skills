@@ -40,8 +40,8 @@ Format:
 Playbook configuration for <project>:
 
   Subscribed sets (<source>):
-    - drupal/best-practices/camoa
-    - drupal/best-practices/lullabot
+    - <framework>/best-practices/<author1>
+    - <framework>/best-practices/<author2>
   
   Local playbook:
     Path:   /home/me/projects/idexx/docs/playbook.md
@@ -49,12 +49,12 @@ Playbook configuration for <project>:
     Plays:  19 (warnings: 19)
   
   Multi-set resolutions:
-    - font-sizing → drupal/best-practices/camoa
-    - bem-methodology → drupal/best-practices/lullabot
+    - font-sizing → <framework>/best-practices/<author1>
+    - bem-methodology → <framework>/best-practices/<author2>
   
   Recent conflicts (last 10):
     2026-04-24T23:45:00Z [local-vs-shipped] font-sizing: winner=local
-    2026-04-23T12:00:00Z [multi-set-contradiction] bem-methodology: winner=lullabot
+    2026-04-23T12:00:00Z [multi-set-contradiction] bem-methodology: winner=<author2>
 ```
 
 When fields are absent, render `none` or `(empty)`:

@@ -80,19 +80,19 @@ For each task, use `Write` to create `{project_path}/implementation_process/in_p
 - [ ] {Criterion 2}
 - [ ] {Criterion 3}
 - [ ] All tests pass
-- [ ] Code follows Drupal standards
+- [ ] Code follows framework standards
 
 ## TDD Steps
 
 ### Step 1: Write Failing Test
 Create test file:
 ```
-tests/src/{Unit|Kernel}/{TestClass}Test.php
+tests/{unit}/{TestClass}Test.{ext}
 ```
 
 Test case:
-```php
-public function test{MethodName}(): void {
+```
+function test{MethodName}() {
   // Arrange: {setup}
   // Act: {action}
   // Assert: {expected result}
@@ -100,15 +100,15 @@ public function test{MethodName}(): void {
 ```
 
 ### Step 2: Verify Test Fails
-Run: `ddev phpunit {test_path}`
+Run: `ddev {test-runner} {test_path}`
 Expected: Test fails (class/method not found)
 
 ### Step 3: Write Minimum Implementation
-Create: `src/{Type}/{ClassName}.php`
+Create: `src/{Type}/{ClassName}.{ext}`
 Implement only enough to pass the test.
 
 ### Step 4: Verify Test Passes
-Run: `ddev phpunit {test_path}`
+Run: `ddev {test-runner} {test_path}`
 Expected: Test passes
 
 ### Step 5: Refactor
@@ -118,8 +118,8 @@ Clean up code while keeping tests green.
 | File | Action | Purpose |
 |------|--------|---------|
 | `src/{path}` | Create | Main implementation |
-| `tests/src/{path}` | Create | Test coverage |
-| `*.services.yml` | Modify | Service registration |
+| `tests/{path}` | Create | Test coverage |
+| `{service-config-file}` | Modify | Service registration |
 
 ## Pattern Reference
 Follow: `{core path from architecture}`

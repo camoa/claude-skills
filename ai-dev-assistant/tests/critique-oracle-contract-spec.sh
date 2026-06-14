@@ -33,6 +33,11 @@ check "git diff --name-status produces name-status.txt" '\-\-name-status.*name-s
 check "wo-oracle-check.sh kernel invoked"                 'wo-oracle-check\.sh'
 check "oracle check receives --diff-from name-status.txt" '\-\-diff-from.*name-status\.txt'
 
+# --- Wiring point 2b: framework-agnostic oracle-file list reconstructed on the fly + passed ---
+check "kernel receives --oracle-files list"               '\-\-oracle-files'
+check "oracle-file list reconstructed from the recipe"    'Reconstruct.*list.*recipe|## Oracle files'
+check "reconstruct-on-the-fly (not a persistent file)"    're-derive|re-derives|each run'
+
 # --- Wiring point 3: oracle_tamper HALT written on tamper_detected (jq-built, never string-concatenated) ---
 check "tamper_detected condition branch present"          'tamper_detected'
 check "oracle_tamper reason value in jq --arg"            '\-\-arg r .oracle_tamper.'

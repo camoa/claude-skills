@@ -38,30 +38,13 @@ If `--add-journey <description>` is present:
 - Resolve the e2e-setup recipe(s) using the loader invocation in Step 3, then follow **only** the journey-discovery portion of each resolved recipe, in add-one mode, for `<description>` and the existing-slugs context. Do not run the install or scaffold steps.
 - Skip the remaining steps.
 
-## Step 3: Resolve the e2e-setup process recipe(s)
+## Step 3: Resolve and follow the e2e-setup process recipe(s)
 
-Invoke the `process-recipe-loader` skill (Skill tool) with:
+Follow the shared recipe-resolution protocol in `references/recipe-resolution.md` with `phase: e2e-setup` and the active project's `<project_folder>` (resolved in Step 1). That protocol invokes the `process-recipe-loader` skill, resolves each framework's recipe (project_state-first, then source order, else `action:ask-user`), records the source in `project_state.md`, and defines how to follow each result: Read the `body_path` (never streamed), follow `verified:true` directly, surface `verified:false` for human review first, and on `action:ask-user` ask the user for a path or to research. Surface any loader `warnings[]` (for example `no_frameworks_defined`, `navigator_unavailable:<framework>`) to the user.
 
-- `phase`: `e2e-setup`
-- `project_folder`: the active project's folder (the same `<project_folder>` resolved in Step 1)
+When you follow an available recipe, supply its input contract from the resolved context and flags: `code_path` = `<codePath>`, `skip_demo_recipe` from `--skip-demo-recipe`, honor `--skip-discovery` by not running the recipe's journey-discovery step, and honor `--force` by re-running past the recipe's idempotency probe. The recipe handles the install, the `tests/e2e/` scaffold, the runner's e2e project entry, the registry and preflight seeding, and journey discovery.
 
-It loops over the project's `frameworks[]`, resolves each framework's e2e-setup recipe by source order (repo-local → machine-local → dev-guides → research seam), reports each recipe's `body_path` (an on-disk file you Read; the body is never streamed into context), tags provenance (`verified:true` only for the dev-guides upstream catalog), and records the source choice in `project_state.md` under `**Process Recipes:**`. It returns JSON:
-
-```
-{schema_version, phase, results:[{framework, key, source, sha, verified, available, body_path, recorded, notes[]}], warnings[]}
-```
-
-Surface any `warnings[]` (for example `no_frameworks_defined`, `navigator_unavailable:<framework>`) to the user.
-
-## Step 4: Follow each resolved recipe
-
-For each entry in `results[]`:
-
-- **`available:true` and `verified:true`** → Read the recipe body from the result's `body_path`, then follow it: execute its Sequence against `<codePath>`. Supply the recipe's input contract from the resolved context and flags: `code_path` = `<codePath>`, `skip_demo_recipe` from `--skip-demo-recipe`, honor `--skip-discovery` by not running the recipe's journey-discovery step, and honor `--force` by re-running past the recipe's idempotency probe. The recipe handles the install, the `tests/e2e/` scaffold, the runner's e2e project entry, the registry and preflight seeding, and journey discovery.
-- **`available:true` and `verified:false`** → the body came from a `local` or `machine-local` source and is unverified. Read it from `body_path`, present it for human review, and get explicit confirmation **before** following it. The execute-or-halt decision is yours as the orchestrator, not the loader's.
-- **`available:false`** (`source=research-needed`) → tell the user that no e2e-setup recipe exists for that framework, and offer to research or author one. Do not fabricate a recipe.
-
-## Step 5: Summary
+## Step 4: Summary
 
 Print a summary:
 

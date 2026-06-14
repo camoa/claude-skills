@@ -109,7 +109,7 @@ $ /ai-dev-assistant:upgrade-project
 Resolving active project... camoa_skills
 Project state pass — found 5 gaps:
   - Code Path: absent → /set-code-path will detect+confirm
-  - Playbook Sets: inherits "drupal/best-practices/camoa" from default
+  - Playbook Sets: inherits "<framework>/best-practices/<author>" from default
   - User Playbook: unset
   - Worktree By Default: absent (default false)
   - Review Required: absent (legacy default: false on projects with completed/ non-empty)
@@ -118,7 +118,7 @@ Project state pass — found 5 gaps:
 
 Writing journal... .upgrade-project-journal.json
 [1/5] /set-code-path interactive...
-[2/5] /set-playbook-sets drupal/best-practices/camoa
+[2/5] /set-playbook-sets <framework>/best-practices/<author>
 [3/5] /set-user-playbook (3-state interactive)
 [4/5] Direct Edit: **Worktree By Default:** false
 [5/5] Direct Edit: **Review Required:** false (legacy)

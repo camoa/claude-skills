@@ -4,12 +4,6 @@ Tutorial-depth reference for the `/ai-dev-assistant:design` command. The runtime
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
-> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (`core`/`contrib` pattern references, the PHP interface sketch, Drupal pattern names like FormBase vs ListBuilder) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
-
----
-
-
-
 Design architecture for a specific task (Phase 2 of a task).
 
 ## Usage
@@ -34,7 +28,7 @@ Never block the command on this check — the user is in control. The nudge exis
 
 ## Dev-guides pre-flight (v3.13.4+)
 
-**Run after the Phase Transition Check, before the alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover Drupal, Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across Drupal AND non-Drupal (plugin framework, docs-only, Claude Code) tasks.
+**Run after the Phase Transition Check, before the alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across all project types (plugin framework, docs-only, and tool-specific tasks).
 
 ### Step 1 — Invoke guide-integrator explicitly
 
@@ -51,7 +45,7 @@ Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
 > Auto-loaded based on task keywords:
 >   <bulleted list of loaded guides, OR "  — none auto-matched —">
 >
-> Dev-guides cover Drupal (forms, entities, plugins, services, caching, views, etc.), Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Loading relevant guides before design keeps patterns grounded in proven approaches.
+> Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Loading relevant guides before design keeps patterns grounded in proven approaches.
 >
 > **[c]ontinue** — auto-loaded set is fine, start design
 > **[a]dd** — scan the `dev-guides-navigator` catalog for more topics before I design
@@ -69,7 +63,7 @@ Default: `[c]`.
 
 - **Never blocks.** `[c]` (default) always proceeds.
 - **Discoverability > compliance.** The point is to surface available guides to users who don't know they exist — NOT to force guide consumption. `[n]` is a first-class choice.
-- **Works for non-Drupal tasks.** Plugin-framework tasks, docs-only tasks, and Claude Code framework work can still find relevant methodology and design-system guides via `[a]`.
+- **Applicable to all task types.** Plugin-framework, docs-only, and tool-specific tasks can still find relevant methodology and design-system guides via `[a]`.
 
 ## Phase 2 alignment sub-step (v3.12.0+, task-level retrofit in v3.13.1+)
 
@@ -267,9 +261,9 @@ Each task goes through:
 ## Examples
 
 ```
-/ai-dev-assistant:design settings_form
-/ai-dev-assistant:design content_entity
-/ai-dev-assistant:design field_formatter
+/ai-dev-assistant:design config_manager
+/ai-dev-assistant:design data_exporter
+/ai-dev-assistant:design report_formatter
 ```
 
 ## Output (v3.0.0)
@@ -292,18 +286,18 @@ implementation_process/in_progress/{task_name}/
 ## Components
 | Component | Type | Purpose |
 |-----------|------|---------|
-| {name} | Service/Form/Entity/etc | {purpose} |
+| {name} | Service/Handler/Repository/etc | {purpose} |
 
 ## Dependencies
 - {service}: {why needed}
-- {module}: {why needed}
+- {dependency}: {why needed}
 
 ## Pattern Reference
-Based on: `{core/contrib path}`
+Based on: `{library or framework path}`
 
 ## Interface
-```php
-// Key methods/hooks
+```
+// Key methods and signatures
 ```
 
 ## Data Flow
@@ -329,7 +323,7 @@ For complex tasks, also creates `architecture/{component}.md`:
 # Component: {Name}
 
 ## Type
-{Service / Form / Entity / Controller / etc}
+{Service / Handler / Repository / Controller / etc}
 
 ## Purpose
 {What this component does}
@@ -338,10 +332,10 @@ For complex tasks, also creates `architecture/{component}.md`:
 {Public methods and their signatures}
 
 ## Dependencies
-{Services and modules required}
+{Packages and services required}
 
 ## Pattern Reference
-{Core/contrib example to follow}
+{Library or framework example to follow}
 
 ## Acceptance Criteria
 {List of criteria for completion}

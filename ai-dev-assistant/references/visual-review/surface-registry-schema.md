@@ -59,7 +59,7 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 ```yaml
 schema_version: "1.2"
 e2e:                             # optional top-level block
-  preflight_command: "ddev drush atk:preflight"   # framework-agnostic; value is project-specific
+  preflight_command: "<stack-setup-command>"   # framework-agnostic; value is project-specific
 viewports:                       # project default viewport matrix
   - {name: desktop, width: 1920, height: 1080}
   - {name: tablet,  device: "Galaxy Tab S4"}
@@ -126,11 +126,11 @@ it as follows (`<vp>` = viewport name; `<id>` = surface id):
 - authed surface spec: `tests/visual/auth/<ctx>/<id>.spec.ts` (same starter
   template as anonymous; auth is carried by the project's storageState, not the
   spec).
-- authed baselines: `<id>-1-visual-chromium-<vp>-<ctx>-linux.png`.
+- authed baselines: `<id>-visual-chromium-<vp>-<ctx>-linux.png`.
 
 `<ctx>` stays opaque to the plugin — it is a key, not a credential or a role. A
-process recipe maps its framework's roles onto these names (example: a Drupal
-recipe would map its QA-account roles → context names). The storageState JSON is
+process recipe maps its framework's roles onto these names (example: a recipe maps
+its auth roles → context names). The storageState JSON is
 a secret-bearing runtime artifact and is gitignored; the `<ctx>.setup.ts` is
 committed.
 
@@ -179,14 +179,14 @@ The optional top-level `e2e` object configures the e2e gate without coupling it 
 
 ```yaml
 e2e:
-  preflight_command: "ddev drush atk:preflight"
+  preflight_command: "<stack-setup-command>"
 ```
 
 | Field | Type | Required | Contract |
 |---|---|---|---|
-| `preflight_command` | string | no | A shell command the e2e gate runs in `codePath` **before** the Playwright tests. A non-zero exit fails the gate; the command's output is captured into `preflight_warnings`. The gate (`scripts/validate-e2e.sh`) is framework-agnostic — it runs whatever this resolves to and assumes nothing about the stack. `/validate:e2e` reads this field and passes it through as `--preflight-cmd`. Absent ⇒ no preflight runs. The **field** is generic; the **value** is project-specific — the Drupal `e2e-setup` recipe, resolved by `/setup-e2e`, seeds `ddev drush atk:preflight`; a Next.js project would register its own (or none). |
+| `preflight_command` | string | no | A shell command the e2e gate runs in `codePath` **before** the Playwright tests. A non-zero exit fails the gate; the command's output is captured into `preflight_warnings`. The gate (`scripts/validate-e2e.sh`) is framework-agnostic — it runs whatever this resolves to and assumes nothing about the stack. `/validate:e2e` reads this field and passes it through as `--preflight-cmd`. Absent ⇒ no preflight runs. The **field** is generic; the **value** is project-specific — a project's `e2e-setup` recipe, resolved by `/setup-e2e`, seeds the appropriate command for its stack; each project registers its own (or none). |
 
-This is the seam that removed the last hardcoded `ddev drush atk:preflight` from the gate: the framework-specific command now lives in project config that a process recipe writes, not in plugin code.
+This is the seam that removed the last hardcoded preflight command from the gate: the framework-specific command now lives in project config that a process recipe writes, not in plugin code.
 
 ## 4. Task fragment (`visual-review-surfaces.yml`)
 

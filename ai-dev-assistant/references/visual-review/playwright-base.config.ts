@@ -10,9 +10,9 @@
  *
  * It documents the SHARED CONFIG CONTRACT for the epic's two runtimes:
  *
- *   - E2E (behavioral)   — ATK + Playwright                      → tests/e2e/
- *   - Visual regression  — @lullabot/playwright-drupal           → tests/visual/
- *   - Visual parity      — @lullabot/playwright-drupal+pixelmatch → tests/parity/
+ *   - E2E (behavioral)   — the framework's behavioral-test harness (process recipe) + Playwright → tests/e2e/
+ *   - Visual regression  — the framework's visual-regression package (process recipe) → tests/visual/
+ *   - Visual parity      — the framework's visual-regression package + pixelmatch   → tests/parity/
  *
  * Both runtimes ride ONE `playwright.config.ts`. They differ only at the
  * test-library layer and are separated by distinct `projects[]` + `testDir`
@@ -21,7 +21,7 @@
  *
  * DDEV-FIRST
  * ----------
- * The framework assumes a DDEV-hosted Drupal site. `/setup-*` checks for
+ * The framework assumes a DDEV-hosted site. `/setup-*` checks for
  * `<codePath>/.ddev/config.yaml` before writing this config. With no `.ddev/`
  * directory, setup stops with:
  *
@@ -109,7 +109,7 @@ export default defineConfig({
    *
    * The `storageState` file `tests/visual/.auth/<ctx>.json` is a runtime artifact
    * (gitignored). It is produced by `tests/visual/.auth/<ctx>.setup.ts`, whose
-   * login the project's process recipe supplies (example: a Drupal recipe fills
+   * login the project's process recipe supplies (example: a framework recipe fills
    * it with its role-login). The plugin treats `<ctx>` as an opaque key — it
    * never learns how the session was obtained.
    *

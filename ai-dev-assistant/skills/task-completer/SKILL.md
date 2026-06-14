@@ -17,7 +17,7 @@ Finalize tasks and update project memory.
 | Reference | Enforces |
 |-----------|----------|
 | `references/quality-gates.md` | Gates 2, 3, 4 (must ALL pass) |
-| dev-guides: https://camoa.github.io/dev-guides/drupal/security/ | Gate 4 security review |
+| framework security guide (use `/dev-guides-navigator security` to resolve for the project's stack) | Gate 4 security review |
 
 ## Activation
 
@@ -36,7 +36,7 @@ Activate when you detect:
 | Gate 1 | Code standards (invoke `code-pattern-checker`) | YES |
 | Gate 2 | Tests pass (user confirms) | YES |
 | Gate 3 | Architecture compliance | YES |
-| Gate 4 | Security review (invoke `guide-integrator` for `drupal/security/` topic; do NOT WebFetch directly) | YES |
+| Gate 4 | Security review (invoke `guide-integrator` with the framework's security topic, resolved via `/dev-guides-navigator security`; do NOT WebFetch directly) | YES |
 | Gate 5 | All acceptance criteria in `task.md` are `[x]` and `## Phase Status` shows Phases 1–3 complete | YES |
 
 ## Workflow
@@ -65,15 +65,14 @@ If NO, identify what's remaining and continue working.
 
 #### Gate 1: Code Standards
 Invoke `code-pattern-checker` skill on modified files.
-- [ ] PHPCS passes
-- [ ] PHPStan passes (if configured)
-- [ ] *(Drupal)* No `\Drupal::service()` in new code
+- [ ] Linting passes (configured for the project's language and framework)
+- [ ] Static analysis passes (if configured)
 
 #### Gate 2: Tests Pass
 Ask user to confirm:
 ```
 Tests verification (user must run):
-  ddev phpunit {test_path}
+  <project test command> {test_path}
 
 - [ ] All existing tests pass?
 - [ ] New code has test coverage?
@@ -84,14 +83,14 @@ Confirm tests pass (yes/no):
 
 #### Gate 3: Architecture Compliance
 Check against architecture/main.md:
-- [ ] SOLID principles followed (references/solid-drupal.md)
+- [ ] SOLID principles followed (references/solid.md)
 - [ ] DRY - no code duplication (references/dry-patterns.md)
 - [ ] Library-First pattern used (references/library-first.md)
 
-#### Gate 4: Security — invoke `guide-integrator` with topic `drupal/security/` for detailed security guidance (do NOT WebFetch directly)
-- [ ] Input validated via Form API
+#### Gate 4: Security — invoke `guide-integrator` with the framework's security topic (resolved via `/dev-guides-navigator security`; do NOT WebFetch directly)
+- [ ] Input validated
 - [ ] Output escaped properly
-- [ ] No raw SQL with user input
+- [ ] No raw queries built from user input
 - [ ] Access checks on all routes
 
 #### Gate 5: Task Artifacts Complete
@@ -121,11 +120,11 @@ Use `Edit` to add completion section to the task file:
 |------|--------|
 | src/... | Created |
 | tests/... | Created |
-| *.services.yml | Modified |
+| config/... | Modified |
 
 ### Test Results
 - Unit tests: {count} passing
-- Kernel tests: {count} passing
+- Integration tests: {count} passing
 - Total: All passing
 
 ### Notes

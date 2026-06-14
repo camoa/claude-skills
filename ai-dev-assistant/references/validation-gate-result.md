@@ -76,7 +76,7 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
     "/abs/path/task/research.md",
     "/abs/path/task/architecture.md"
   ],
-  "guides_cited": ["drupal/forms/config-forms", "drupal/caching/cache-api"],
+  "guides_cited": ["<framework>/forms/config-forms", "<framework>/caching/cache-api"],
   "guides_expected_min": 1,
   "code_inference": {
     "source": "session+implementation_md+git",
@@ -86,13 +86,13 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
       "schema_version": "1.0",
       "mode": "validation",
       "matched_guides": [
-        {"slug": "drupal/services/dependency-injection", "reason": "...", "confidence": "high", "triggered_by": ["my_module.services.yml"]}
+        {"slug": "<framework>/services/dependency-injection", "reason": "...", "confidence": "high", "triggered_by": ["src/Service/DataService.php"]}
       ],
       "unmatched_files": [],
       "warnings": []
     },
-    "inferred_slugs": ["drupal/services/dependency-injection"],
-    "domain_coverage_gaps": ["drupal/services/dependency-injection"]
+    "inferred_slugs": ["<framework>/services/dependency-injection"],
+    "domain_coverage_gaps": ["<framework>/services/dependency-injection"]
   }
 }
 ```
@@ -219,7 +219,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
     "code_quality_tools_version": "3.0.0"
   },
   "messages": [
-    "SettingsForm::submitForm violates SRP (mixes validation + persistence + notification)",
+    "SettingsForm::submit violates SRP (mixes validation + persistence + notification)",
     "Consider splitting into SettingsFormValidator + SettingsFormPersister"
   ]
 }
@@ -231,7 +231,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 {
   "schema_version": "1.0",
   "gate": "guides",
-  "task": "custom_entity",
+  "task": "data_model_refactor",
   "run_at": "2026-04-24T15:02:00Z",
   "verdict": "fail",
   "details": {
@@ -242,7 +242,7 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   },
   "messages": [
     "No dev-guides citations found in research.md or architecture.md",
-    "Custom entity work typically loads drupal/entities/* guides; consider /dev-guides-navigator"
+    "Data-model work typically loads <framework>/entities/* guides; consider /dev-guides-navigator"
   ]
 }
 ```

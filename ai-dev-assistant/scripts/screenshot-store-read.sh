@@ -10,7 +10,7 @@
 #
 # Usage: screenshot-store-read.sh <codePath> [--legacy-path <memory_project>]
 #
-#   <codePath>       Drupal project root; the store is <codePath>/tests/visual/
+#   <codePath>       project root; the store is <codePath>/tests/visual/
 #   --legacy-path    optional memory-project folder; when given, the output
 #                    carries `legacy_store_present: true` if a v3.13.0
 #                    `.screenshots/` directory still exists there. Lets

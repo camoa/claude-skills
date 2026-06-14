@@ -1,7 +1,5 @@
 # Visual Regression v2 — Walkthrough
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 **Introduced:** ai-dev-assistant v4.13.0 (epic `visual_and_e2e_review_gates`, Task C)
 **Audience:** maintainers and users of the framework's visual-regression gate.
 
@@ -17,11 +15,11 @@ store in the memory project. Task C **evolves** it — it does not start fresh.
 
 | | v3.13.0 | v4.13.0 |
 |---|---|---|
-| Capture | ad-hoc Playwright MCP, in-session | committed `tests/visual/*.spec.ts` + `@lullabot/playwright-drupal` |
+| Capture | ad-hoc Playwright MCP, in-session | committed `tests/visual/*.spec.ts` + the framework's VR package |
 | Invocation | `<component> <viewport>` one at a time | registry-driven multi-surface, multi-viewport batch |
 | Baselines | `.screenshots/` in the memory project | `tests/visual/*.spec.ts-snapshots/` in codePath (committed) |
 | Diff | standalone odiff / pixelmatch | pixelmatch via Playwright's `toHaveScreenshot()` |
-| a11y | — | a11y snapshot paired with every PNG (Lullabot) |
+| a11y | — | a11y snapshot paired with every PNG |
 | Masks | — | per-surface CSS selectors from the registry |
 
 **Kept verbatim:** the 9-field `.meta.json` provenance schema, the
@@ -32,11 +30,11 @@ classification UX.
 
 `/setup-visual-regression` is an idempotent 10-step wizard. It:
 
-1. Checks `<codePath>/.ddev/config.yaml` — the site under test must be
-   DDEV-managed so its URL resolves. (Playwright runs **host-side**; this is not
-   a containerization check.)
-2. Installs `@lullabot/playwright-drupal` + `@playwright/test` at the codePath
-   root, plus the Chromium browser.
+1. Checks that the site under test is reachable via `PLAYWRIGHT_BASE_URL` — the
+   URL must resolve for Playwright to run host-side. (This is not a
+   containerization check.)
+2. Installs the framework's VR package (resolved by the process recipe) +
+   `@playwright/test` at the codePath root, plus the Chromium browser.
 3. Extends `playwright.config.ts` with one `visual-chromium-<viewport>` project
    per derived viewport, and tightens `maxDiffPixelRatio` to `0.005`.
 4. Derives the viewport matrix (see the viewport matrix section).
@@ -59,11 +57,11 @@ discovery is supplied by the framework's visual-regression process recipe,
 resolved via the process-recipe-loader. The recipe enumerates real coverage
 candidates and proposes two groups:
 
-- **Front-end / public pages — default-ON.** Home, View page routes, one sample
-  URL per content type. This is what changes in normal site work.
-- **Admin / editorial UI — default-OFF, opt-in.** `/admin/content`,
-  `/admin/structure`, `/admin/appearance`. Rarely affected by normal site work
-  — enable only for a contribution project where the admin UI is the product.
+- **Front-end / public pages — default-ON.** Home, primary routes, one sample
+  URL per key content area. This is what changes in normal site work.
+- **Admin / editorial UI — default-OFF, opt-in.** Admin and back-office routes.
+  Rarely affected by normal front-end work — enable only when the admin UI is
+  the product.
 
 You edit and confirm the list before anything is written to the registry. The
 discovery step is re-runnable to pick up newly-added site pages, and
@@ -73,10 +71,10 @@ discovery step is re-runnable to pick up newly-added site pages, and
 
 The viewport matrix is **derived, not hardcoded** — a three-path waterfall:
 
-1. **Drupal theme** — parse the active custom theme's `<theme>.breakpoints.yml`
-   (Radix sub-theme falls back to `radix.breakpoints.yml`); extract `min-width`
+1. **Breakpoint configuration** — parse the project's viewport breakpoint source
+   (a design token file, style config, or equivalent); extract `min-width`
    values, apply canonical device heights.
-2. **No breakpoints file** — scan `web/themes/custom/**/*.css` for `@media`
+2. **No breakpoints source** — scan the project's CSS for `@media`
    `min-width`/`max-width` queries, cluster within 50px, propose 2–4 viewports.
 3. **Headless / admin-only / no CSS** — ask the user (defaults `375, 768, 1440`).
 
@@ -95,7 +93,7 @@ step (and `/validate:visual-regression --bootstrap`) captures first baselines �
    `npx playwright test --update-snapshots` host-side and appends
    `baseline-history.jsonl`.
 4. For each baseline PNG, a `.meta.json` provenance sidecar is written next to
-   it (`captured_by: "lullabot-playwright"`).
+   it (the `captured_by` field records the capture tool).
 
 A regression run with a missing baseline **fails loudly** with a remediation
 message — it never silently auto-creates a baseline.
@@ -109,8 +107,8 @@ message — it never silently auto-creates a baseline.
 Resolves the registry, runs the whole `tests/visual/` suite in one
 `npx playwright test` invocation across every `visual-chromium-*` project
 (one per viewport), and diffs each surface against its committed baseline. The
-DDEV site is reached over HTTP via `DDEV_PRIMARY_URL` / `PLAYWRIGHT_BASE_URL` —
-Playwright itself runs host-side.
+site is reached over HTTP via `PLAYWRIGHT_BASE_URL` — Playwright itself runs
+host-side.
 
 ## 7. Classifying a diff
 
@@ -137,8 +135,8 @@ baselines. `<reason>` is **required** and should be a recognized trigger so
 | `intentional-ui-change` | A deliberate design/markup change |
 | `prod-db-refresh` | Content changed, zero code change (most common non-code trigger) |
 | `upstream-theme-update` | Base/parent theme updated |
-| `contrib-update` | A contrib module changed rendering |
-| `core-update` | A Drupal core update changed rendering |
+| `dependency-update` | A package or dependency update changed rendering |
+| `platform-update` | A framework or platform update changed rendering |
 | `fixture-change` | Test fixture/content changed |
 | `bootstrap` | First baseline capture |
 
@@ -153,9 +151,11 @@ Baselines are committed Playwright snapshots:
 
 ```
 <codePath>/tests/visual/home-hero.spec.ts-snapshots/
-├── home-hero-1-visual-chromium-desktop-linux.png
-├── home-hero-1-visual-chromium-desktop-linux.meta.json   ← provenance sidecar
-└── home-hero-1-visual-chromium-desktop-linux.txt          ← a11y snapshot
+├── home-hero-visual-chromium-desktop-linux.png
+├── home-hero-visual-chromium-desktop-linux.meta.json   ← provenance sidecar
+└── home-hero-visual-chromium-desktop-linux.txt          ← a11y snapshot
+                                            (only when a recipe supplies an
+                                             accessibility-aware capture)
 ```
 
 - **PR-native** — a baseline change diffs alongside the code change; reviewers
@@ -182,8 +182,10 @@ is **never auto-deleted** — you remove it after verifying the migration.
 
 ## 11. a11y baseline pairing
 
-`takeAccessibleScreenshot()` writes a `.txt` accessibility-tree snapshot
-alongside every PNG. On later runs, a change in the a11y tree surfaces in the
+When a project's process recipe supplies an accessibility-aware capture helper,
+that helper writes a `.txt` accessibility-tree snapshot alongside every PNG (the
+framework-neutral native capture the plugin ships produces only the PNG). On
+later runs, a change in the a11y tree surfaces in the
 Playwright report. **v1 policy: warning-only** — a11y diffs do not hard-block
 the gate; you triage them in the normal classification flow. A future
 per-surface `a11y_block: true` registry flag can make them hard-block on
@@ -195,7 +197,7 @@ Dynamic regions (timestamps, contextual links, ad slots) produce false diffs.
 Add CSS selectors to a surface's `masks` in `registry.yml`; the generated spec
 resolves them to Playwright `Locator`s and paints them out before capture. For
 regions best declared in the template, add a `data-vrt-mask` attribute in the
-Twig markup and list `[data-vrt-mask]` in `masks`.
+template markup and list `[data-vrt-mask]` in `masks`.
 
 ## 13. CI — GitHub Actions
 
@@ -214,7 +216,7 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # Point Playwright at your CI-hosted Drupal site:
+      # Point Playwright at your CI-hosted site:
       - run: npx playwright test --project=visual-chromium-desktop --project=visual-chromium-tablet --project=visual-chromium-phone
         env:
           PLAYWRIGHT_BASE_URL: ${{ secrets.CI_SITE_URL }}
@@ -227,7 +229,7 @@ CI runs on Linux — it matches the canonical `-linux.png` baselines. Never
 auto-update baselines on `main` from CI: that silently accepts regressions.
 Run cross-browser tiers nightly (`schedule:`), not per-PR.
 
-## 14. Coexistence with ATK (Task B)
+## 14. Coexistence with the E2E gate (Task B)
 
 The E2E gate (`/setup-e2e`) and the visual gate share **one Playwright install,
 one `playwright.config.ts`, one surface registry**. They differ only at the
@@ -237,21 +239,20 @@ test-library layer:
 codePath/
 ├── playwright.config.ts        ← one config; e2e-* and visual-* projects[]
 └── tests/
-    ├── e2e/                    ← ATK behavioral tests       (testDir)
-    └── visual/                 ← Lullabot VR tests          (testDir)
+    ├── e2e/                    ← behavioral tests           (testDir)
+    └── visual/                 ← VR tests                   (testDir)
 ```
 
 Setup is idempotent and order-independent — run `/setup-e2e` and
 `/setup-visual-regression` in either order; each adds only its own entries.
 
-## 15. BYO-server appendix (non-DDEV)
+## 15. Server configuration
 
-The gates are DDEV-first. To run against a non-DDEV site, set
-`PLAYWRIGHT_BASE_URL` to the site URL before invoking the gate. The site must
-be reachable over HTTP/HTTPS from the host running Playwright. `/setup-*` stops
-without `.ddev/config.yaml`; set up `tests/visual/` and the registry manually
-following the setup sections, or run `/setup-visual-regression` after adding a `.ddev/`
-directory.
+Set `PLAYWRIGHT_BASE_URL` to the site URL before invoking the gate. The site
+must be reachable over HTTP/HTTPS from the host running Playwright. `/setup-*`
+prompts for the site URL if it cannot be resolved from the environment. To set
+up `tests/visual/` and the registry manually, follow the setup sections above
+and provide the URL when prompted.
 
 ## 16. v2 candidates
 

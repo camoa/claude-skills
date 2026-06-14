@@ -4,12 +4,6 @@ Tutorial-depth reference for the `/ai-dev-assistant:research` command. The runti
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
-> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (drupal.org / contrib search, `core-pattern-finder`, the Drupal worked examples) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
-
----
-
-
-
 Research existing solutions for a specific task (Phase 1 of a task).
 
 ## Usage
@@ -24,7 +18,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
 3. Creates `task.md` (tracker with links and acceptance criteria)
 4. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
-5. Invokes `contrib-researcher` agent for drupal.org/contrib search
+5. Invokes `prior-art-researcher` agent for package registry and community library search
 6. Invokes `core-pattern-finder` skill for core examples
 7. Stores findings in `research.md` file
 8. Updates `task.md` to mark Phase 1 as in progress
@@ -193,9 +187,9 @@ Each task goes through:
 ## Examples
 
 ```
-/ai-dev-assistant:research settings_form
-/ai-dev-assistant:research content_entity
-/ai-dev-assistant:research field_formatter
+/ai-dev-assistant:research config_manager
+/ai-dev-assistant:research data_exporter
+/ai-dev-assistant:research report_formatter
 ```
 
 ## Output (v3.0.0)
@@ -397,7 +391,7 @@ Conservative by design: pre-analysis only fires on strong signals, and even then
 
 ## Dev-guides pre-flight (v3.13.4+)
 
-**Run after the Pre-analysis hook, before the Phase 1 alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover Drupal, Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across Drupal AND non-Drupal (plugin framework, docs-only, Claude Code) tasks.
+**Run after the Pre-analysis hook, before the Phase 1 alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across all project types (plugin framework, docs-only, and tool-specific tasks).
 
 ### Step 1 — Invoke guide-integrator explicitly
 
@@ -421,7 +415,7 @@ Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
 > Auto-loaded based on task keywords:
 >   <bulleted list of loaded guides, OR "  — none auto-matched —">
 >
-> Dev-guides cover Drupal (forms, entities, plugins, services, caching, views, JSON:API, etc.), Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Loading relevant guides before research keeps findings grounded in existing knowledge and prevents re-research of known patterns.
+> Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Loading relevant guides before research keeps findings grounded in existing knowledge and prevents re-research of known patterns.
 >
 > **[c]ontinue** — auto-loaded set is fine, start research
 > **[a]dd** — scan the `dev-guides-navigator` catalog for more topics before I research
@@ -439,7 +433,7 @@ Default: `[c]`.
 
 - **Never blocks.** `[c]` (default) always proceeds.
 - **Discoverability > compliance.** `[n]` is a first-class choice.
-- **Works for non-Drupal tasks.** Plugin/framework/docs tasks can still find applicable methodology or design-system guides via `[a]`.
+- **Applicable to all task types.** Plugin-framework, docs-only, and tool-specific tasks can still find applicable methodology or design-system guides via `[a]`.
 
 ## Phase 1 alignment sub-step (v3.12.0+, retrofit-aware in v3.12.2+)
 

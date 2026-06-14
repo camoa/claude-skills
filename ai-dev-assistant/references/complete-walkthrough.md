@@ -4,12 +4,6 @@ Tutorial-depth reference for the `/ai-dev-assistant:complete` command. The runti
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
-> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (the `settings_form` / `SettingsForm.php` worked example, `*.schema.yml` paths) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
-
----
-
-
-
 Mark a task as complete and move it to the completed folder.
 
 ## Usage
@@ -179,9 +173,9 @@ After all candidates handled, continue with the existing `/complete` flow (move 
 ## Example
 
 ```
-/ai-dev-assistant:complete settings_form
+/ai-dev-assistant:complete config_manager
 
-Task: settings_form
+Task: config_manager
 
 Pre-completion check:
 ✓ Acceptance criteria: 5/5 complete
@@ -194,10 +188,10 @@ Please confirm tests pass to complete this task.
 After user confirms (v3.0.0):
 
 ```
-Task completed: settings_form
+Task completed: config_manager
 
 Updated files:
-- Moved: implementation_process/in_progress/settings_form/ → completed/settings_form/
+- Moved: implementation_process/in_progress/config_manager/ → completed/config_manager/
   - task.md
   - research.md
   - architecture.md
@@ -205,9 +199,9 @@ Updated files:
 - Updated: project_state.md
 
 Up Next:
-- content_entity (in_progress, Phase 2)
+- data_exporter (in_progress, Phase 2)
 
-Run: /ai-dev-assistant:design content_entity
+Run: /ai-dev-assistant:design data_exporter
 ```
 
 ## Task File Updates
@@ -221,9 +215,9 @@ Adds completion section to task file before moving:
 **Status:** Complete
 
 ### Files Created/Modified
-- `src/Form/SettingsForm.php` - Created
-- `config/schema/mymodule.schema.yml` - Created
-- `tests/src/Unit/SettingsFormTest.php` - Created
+- `src/handlers/config-manager.{ext}` - Created
+- `config/config-manager.{ext}` - Created
+- `tests/unit/config-manager.test.{ext}` - Created
 
 ### Summary
 {Brief summary of what was implemented}
@@ -242,7 +236,7 @@ Working on: {next_task or "None - all tasks complete"}
 File: {path or "-"}
 
 ## Completed Implementation Tasks
-- ✅ settings_form - {date}
+- ✅ config_manager - {date}
 - ✅ {previous_task} - {date}
 ```
 

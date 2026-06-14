@@ -6,7 +6,7 @@
 
 A "playbook" is a curated collection of opinionated rules ("plays") that govern development decisions. Playbooks come in two layers:
 
-- **Published playbook sets** — namespaced dev-guides categories (e.g., `drupal/best-practices/camoa/*`). Multiple authors coexist; users subscribe per project via `Playbook Sets` in `project_state.md`.
+- **Published playbook sets** — namespaced dev-guides categories (e.g., `<framework>/best-practices/<author>/*`). Multiple authors coexist; users subscribe per project via `Playbook Sets` in `project_state.md`.
 - **Local project playbook** — a single markdown file the user maintains, declared via `User Playbook` in `project_state.md`. Can override published opinions or extend them with topics published sets don't cover. **Local always wins on conflict.**
 
 This schema specifies the **recommended structure** for a local playbook file. Convention but not required — plays without the recommended structure load as raw text and Claude can still read them; they just don't surface in structured tooling like `/playbook-review` or future `/validate:playbook`.

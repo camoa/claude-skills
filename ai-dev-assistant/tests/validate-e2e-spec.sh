@@ -179,7 +179,7 @@ fi
 stub_npx_pass
 stub_ddev_ok
 rc=0
-OUT=$(bash "$SCRIPT" "$PROJ" --surfaces-json '["atk-login","atk-homepage"]' 2>/dev/null) || rc=$?
+OUT=$(bash "$SCRIPT" "$PROJ" --surfaces-json '["e2e-login","e2e-homepage"]' 2>/dev/null) || rc=$?
 if [ "$rc" -eq 0 ]; then
   pass_check "--surfaces-json → exit 0"
 else
@@ -278,7 +278,7 @@ stub_npx_pass
 stub_ddev_ok
 rc=0
 # Pass a surface id with regex metacharacters (should be skipped with warning)
-OUT=$(bash "$SCRIPT" "$PROJ" --surfaces-json '["atk-login","atk.*admin"]' 2>/tmp/rt_v1_stderr) || rc=$?
+OUT=$(bash "$SCRIPT" "$PROJ" --surfaces-json '["e2e-login","e2e.*admin"]' 2>/tmp/rt_v1_stderr) || rc=$?
 if [ "$rc" -eq 0 ]; then
   pass_check "RT-V1: invalid surface id in --surfaces-json → still exits 0"
 else

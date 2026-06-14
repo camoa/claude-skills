@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # change-impact-classify.sh — classify a code diff into recommended review gates.
 #
-# Usage: change-impact-classify.sh <task_folder> [--base <ref>] [--files-from <path>]
+# Usage: change-impact-classify.sh <task_folder> [--base <ref>] [--files-from <path>] [--rules-from <path>]
 #
 #   <task_folder>   absolute path to the task folder. Used only to locate the
 #                   project (walk up to project_state.md) for the optional
@@ -11,13 +11,25 @@
 #                   matching commands/review.md step 4.
 #   --files-from    newline-delimited file list, used INSTEAD of git diff.
 #                   Makes the classifier testable without a git fixture.
+#   --rules-from    OPTIONAL JSON file ({ "rules": [ {glob,gates[]}, ... ] }) of
+#                   ADDITIONAL, framework-specific rules to UNION onto the base
+#                   ruleset. The caller RECONSTRUCTS this list on the fly from
+#                   the active framework's first-party review recipe each run
+#                   (the `## Change-impact globs` declaration) — the kernel ships
+#                   NO framework-specific globs of its own. Because gates are
+#                   unioned across every matching rule, merge order is irrelevant.
+#                   A missing/malformed file is ignored with a warning (the base
+#                   floor still classifies); it never fails the run.
 #
 # The classifier is a RECOMMENDER input: it maps changed files to the gates a
 # change could justify (commands/review.md step 6 / change-impact-dispatch.md).
 # It never runs a gate and never blocks.
 #
-# Rules: references/visual-review/change-impact-rules.json (shipped defaults).
-# Override: <project>/.visual-review/change-impact.json (full replacement).
+# Rules: references/visual-review/change-impact-rules.json (shipped FRAMEWORK-NEUTRAL
+#        floor — stylesheet / plain-script / markup extensions only, no framework
+#        file types).
+# Framework globs: supplied per run via --rules-from from the stack's review recipe.
+# Override: <project>/.visual-review/change-impact.json (full replacement of the floor).
 # See references/visual-review/change-impact-rules.md.
 #
 # Output: single JSON object to stdout. ALWAYS exit 0 (recoverable issues
@@ -26,9 +38,9 @@
 #
 #   {
 #     "schema_version": "1.0",
-#     "diff_signature": ["**/*.css", "**/*.twig"],   # distinct matched rule globs
+#     "diff_signature": ["**/*.css", "**/*.ts"],     # distinct matched rule globs
 #     "gates_recommended": ["visual_regression"],     # sorted union over all files
-#     "rule_source": "default" | "project-override",
+#     "rule_source": "default" | "project-override" | "default+recipe" | "project-override+recipe",
 #     "files_classified": 7,
 #     "warnings": [ "<code>: <detail>", ... ]
 #   }
@@ -62,6 +74,7 @@ emit() {
 TASK_FOLDER=""
 BASE_REF=""
 FILES_FROM=""
+RULES_FROM=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --base)
@@ -71,6 +84,10 @@ while [ "$#" -gt 0 ]; do
     --files-from)
       if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then FILES_FROM="$2"; shift 2
       else add_warning "bad_arg: --files-from requires a value — ignored"; shift; fi
+      ;;
+    --rules-from)
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then RULES_FROM="$2"; shift 2
+      else add_warning "bad_arg: --rules-from requires a value — ignored"; shift; fi
       ;;
     *)
       if [ -z "$TASK_FOLDER" ]; then TASK_FOLDER="$1"; fi
@@ -135,6 +152,33 @@ RULE_LINES="$(echo "$RULES_JSON" | jq -r '
   | .glob + "\t" + ((.gates // []) | (if type == "array" then . else [] end) | join(","))
 ' 2>/dev/null || true)"
 DEFAULT_GATES="$(echo "$RULES_JSON" | jq -r '(.default_gates // []) | join(",")' 2>/dev/null || true)"
+
+# --- merge the per-run, recipe-reconstructed framework rules (--rules-from) ----
+# These are UNIONED onto the base floor: the same per-rule defensive flattening,
+# appended to RULE_LINES. Because gates are unioned across every matching rule,
+# append order does not change the result. A missing/malformed file is ignored
+# with a warning — the base floor still classifies (never fail the run).
+if [ -n "$RULES_FROM" ]; then
+  if [ ! -f "$RULES_FROM" ]; then
+    add_warning "rules_from_missing: $RULES_FROM does not exist — framework globs not merged"
+  elif ! jq -e '.rules | type == "array"' "$RULES_FROM" >/dev/null 2>&1; then
+    add_warning "rules_from_malformed: $RULES_FROM has no \`rules\` array — framework globs not merged"
+  else
+    RECIPE_RULE_LINES="$(jq -r '
+      .rules[]
+      | select((.glob | type) == "string")
+      | .glob + "\t" + ((.gates // []) | (if type == "array" then . else [] end) | join(","))
+    ' "$RULES_FROM" 2>/dev/null || true)"
+    if [ -n "$RECIPE_RULE_LINES" ]; then
+      if [ -n "$RULE_LINES" ]; then
+        RULE_LINES="$RULE_LINES"$'\n'"$RECIPE_RULE_LINES"
+      else
+        RULE_LINES="$RECIPE_RULE_LINES"
+      fi
+      RULE_SOURCE="${RULE_SOURCE}+recipe"
+    fi
+  fi
+fi
 
 # --- collect the changed-file list --------------------------------------
 FILES=""

@@ -166,7 +166,7 @@ Decompose based on what the signals revealed:
 
 Each proposed child gets:
 - `name` — `^[A-Za-z0-9_][A-Za-z0-9._-]*$` (enforced per invariant 7)
-- `scope_summary` — one line, verb-first ("Migrate form class to ConfigFormBase", "Add validation for new schema")
+- `scope_summary` — one line, verb-first ("Extract logic to a dedicated service class", "Add validation for new schema")
 - `rationale` — one line, why this child is a separable unit
 
 Target 3-5 proposed children. >5 usually means the agent is over-splitting; step back and group.

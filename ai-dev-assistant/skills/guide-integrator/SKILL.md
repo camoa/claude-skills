@@ -15,7 +15,7 @@ Load development references and integrate into architecture documents. Two sourc
 | Topic | Reference File |
 |-------|----------------|
 | Test-Driven Development | `references/tdd-workflow.md` |
-| SOLID Principles | `references/solid-drupal.md` |
+| SOLID Principles | `references/solid.md` |
 | DRY Patterns | `references/dry-patterns.md` |
 | Library-First/CLI-First | `references/library-first.md` |
 | Quality Gates | `references/quality-gates.md` |
@@ -26,7 +26,7 @@ Load development references and integrate into architecture documents. Two sourc
 **PROACTIVE:** Activate at the START of every phase activity — do not wait for explicit request.
 
 Activate when:
-- **Any Phase 1 activity** — load guides for the task's domain (Drupal-flavored today) before research
+- **Any Phase 1 activity** — load guides for the task's domain before research
 - **Any Phase 2 activity** — load architecture decision guides before design
 - **Any Phase 3 activity** — load security, SDC, JS guides before implementation
 - Designing features that match reference topics
@@ -42,22 +42,22 @@ The plugin methodology references load by a **phase-aware floor**, not by keywor
 
 | Phase | Methodology floor |
 |-------|-------------------|
-| Research | `references/tdd-workflow.md`, `references/solid-drupal.md`, `references/dry-patterns.md` |
+| Research | `references/tdd-workflow.md`, `references/solid.md`, `references/dry-patterns.md` |
 | Design (and later) | the above + `references/library-first.md` |
 | Implement / Complete | the above + `references/quality-gates.md` |
 
-Guide IDs: `plugin:tdd-workflow`, `plugin:solid-drupal`, `plugin:dry-patterns`, `plugin:library-first`, `plugin:quality-gates`.
+Guide IDs: `plugin:tdd-workflow`, `plugin:solid`, `plugin:dry-patterns`, `plugin:library-first`, `plugin:quality-gates`.
 
 **Why a floor, not keywords (v4.10.0+).** The v4.0.0 keyword table ("test" → tdd-workflow, "quality" → quality-gates, …) produced spurious matches and could be silently zeroed by an agent claiming "none matched." The phase floor is deterministic and unconditional — Stage 1 (`dev-guides-detect.sh`) always emits it; the `guides-matcher` agent (Stage 2) can add domain guides and re-rank but can never remove the floor. That is the anti-bypass guarantee.
 
-Domain dev-guides (Drupal / Next.js / design-system topics) are NOT in the floor — they come from Stage 1 `catalog_candidates[]` plus the Stage-2 `guides-matcher` agent. See the phase commands' "Dev-guides preflight" step.
+Domain dev-guides (framework, language, and design-system topics) are NOT in the floor — they come from Stage 1 `catalog_candidates[]` plus the Stage-2 `guides-matcher` agent. See the phase commands' "Dev-guides preflight" step.
 
 ## Workflow
 
 ### 1. Load Plugin References (Methodology)
 
 From the phase floor emitted by `dev-guides-detect.sh`:
-1. Check `loadedGuides[]` (see "Record Loaded Guide" below). If the ID (e.g. `plugin:solid-drupal`) is already present, skip.
+1. Check `loadedGuides[]` (see "Record Loaded Guide" below). If the ID (e.g. `plugin:solid`) is already present, skip.
 2. Identify which methodology references the phase floor includes (see Methodology Floor above).
 3. Read each floor reference file
 4. Record the guide ID via the snippet in "Record Loaded Guide"
@@ -66,7 +66,7 @@ From the phase floor emitted by `dev-guides-detect.sh`:
 ### 2. Delegate Online Guides to Navigator
 
 For domain-specific architecture decisions, invoke the `dev-guides-navigator` skill with the task keywords. For each topic the navigator returns:
-1. Check `loadedGuides[]`. If the topic ID (e.g. `drupal/forms/form-validation`) is already present, skip re-fetching.
+1. Check `loadedGuides[]`. If the topic ID (e.g. `<framework>/forms/form-validation`) is already present, skip re-fetching.
 2. Fetch via the navigator (which handles its own content caching of `llms.txt`).
 3. Record the topic ID via the snippet in "Record Loaded Guide".
 
@@ -83,8 +83,8 @@ Do NOT fetch `llms.txt` or dev-guides URLs directly — the navigator does this 
 For every guide actually loaded (methodology or dev-guide), append its ID to the per-workspace `session_context.json` `loadedGuides[]`. Idempotent — skip if already present.
 
 Guide ID conventions:
-- Plugin methodology refs: `plugin:<basename>` (e.g. `plugin:solid-drupal`, `plugin:tdd-workflow`)
-- Dev-guides topics: the topic path as returned by `dev-guides-navigator` (e.g. `drupal/forms/form-validation`, `design-systems/radix-sdc`)
+- Plugin methodology refs: `plugin:<basename>` (e.g. `plugin:solid`, `plugin:tdd-workflow`)
+- Dev-guides topics: the topic path as returned by `dev-guides-navigator` (e.g. `<framework>/forms/form-validation`, `design-systems/<topic>`)
 
 Run this after each successful load, substituting `{GUIDE_ID}`:
 
@@ -119,26 +119,26 @@ Use `Edit` to add references section to architecture file:
 ### Plugin References (Methodology)
 | Reference | Key Patterns |
 |-----------|--------------|
-| solid-drupal.md | Single responsibility, DI |
+| solid.md | Single responsibility, DI |
 | library-first.md | Service → Form → Route |
 | tdd-workflow.md | Red-Green-Refactor |
 
 ### Dev-Guides Applied (via Navigator)
 | Topic | Key Decisions |
 |-------|--------------|
-| drupal/forms/ | ConfigFormBase vs FormBase |
-| drupal/entities/ | Content entity vs config entity |
+| `<framework>/forms/` | Config-backed form vs request form |
+| `<framework>/data/` | Persistent record vs configuration record |
 
 ### Enforcement Points
 | Phase | Principle | Source |
 |-------|-----------|--------|
 | Design | Library-First | references/library-first.md |
-| Design | SOLID | references/solid-drupal.md |
-| Design | Drupal patterns | dev-guides (via navigator) |
+| Design | SOLID | references/solid.md |
+| Design | Framework patterns | dev-guides (via navigator) |
 | Implement | TDD | references/tdd-workflow.md |
 | Implement | DRY | references/dry-patterns.md |
 | Complete | Quality Gates | references/quality-gates.md |
-| Complete | Security | dev-guides drupal/security/ |
+| Complete | Security | dev-guides `<framework>/security/` |
 ```
 
 ### 5. Summarize
@@ -176,8 +176,8 @@ Emit `conflicts[]` in the return JSON:
 
 ```json
 {
-  "loaded_guides": ["plugin:solid-drupal", "drupal/forms/config-forms"],
-  "loaded_playbook_sets": ["drupal/best-practices/camoa"],
+  "loaded_guides": ["plugin:solid", "<framework>/forms/config-forms"],
+  "loaded_playbook_sets": ["<framework>/best-practices/camoa"],
   "loaded_local_playbook": { "path": "/abs/path", "play_count": 19 },
   "conflicts": [
     {

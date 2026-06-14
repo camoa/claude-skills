@@ -172,7 +172,7 @@ Consumers MUST perform both steps. A task can be `keep_flat` + `scope_contract_r
   "confidence": "high",
   "signals_used": ["many_heterogeneous_criteria", "multiple_code_areas", "research_architecture_fragmented"],
   "proposed_children": [
-    {"name": "settings_form_migration", "scope_summary": "Move existing form to ConfigFormBase", "rationale": "Self-contained lift and shift"},
+    {"name": "settings_form_migration", "scope_summary": "Extract data handling to a dedicated service class", "rationale": "Self-contained lift and shift"},
     {"name": "settings_form_validation", "scope_summary": "New validation rules per new schema", "rationale": "Separable once the form class is in place"},
     {"name": "settings_form_ui_tests", "scope_summary": "Playwright smoke tests for admin flow", "rationale": "UI layer; can ship after form work"}
   ],
@@ -233,7 +233,7 @@ A different output shape than the epic-decomposition modes — emits `candidates
   "task_folder": "/abs/path/to/task",
   "code_path": "/abs/path/to/code",
   "git_diff_since": "<commit-sha>",
-  "active_playbook_sets": ["drupal/best-practices/camoa"],
+  "active_playbook_sets": ["<framework>/best-practices/<author>"],
   "user_playbook_path": "/abs/path/to/local/playbook.md",
   "schema_version": "1.1"
 }

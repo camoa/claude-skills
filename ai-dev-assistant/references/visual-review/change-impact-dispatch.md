@@ -1,7 +1,5 @@
 # Change-Impact Dispatch — `/review` Step 6 Procedure v1.0
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 **Introduced:** ai-dev-assistant v4.11.0 (Task A — `visual_and_e2e_review_gates`)
 **Owner:** `commands/review.md` step 6
 **Reads:** `scripts/project-state-read.sh`, `scripts/change-impact-classify.sh`,
@@ -39,16 +37,40 @@ Invoke `project-state-read.sh <project_folder>`; read `visualReview`.
   not-set-up; print the notice and stop.
 - Otherwise (`enabled: true`, a `registryPath`) → continue.
 
-### Step 6.2 — Classify the diff
+### Step 6.2 — Reconstruct the framework globs, then classify the diff
 
-Invoke `change-impact-classify.sh <task_folder>` (no `--files-from` — it uses the
-merge-base diff, identical to `/review` step 4). Capture `gates_recommended[]`,
-`diff_signature[]`, `rule_source`, **and `warnings[]`**.
+**6.2.0 — Reconstruct the framework change-impact globs from the review recipe.** The
+shipped classifier floor (`change-impact-rules.json`) is framework-neutral — it carries
+only stylesheet / plain-script / markup extensions. A stack's own file types (its
+templates, server modules, config conventions) are declared in its first-party **review
+recipe** under a `## Change-impact globs` section, and are supplied to the classifier on
+the fly each run. `/review` step 5.0 already resolved the review recipe through the
+recipe-resolution protocol and has its body in context — reuse that resolution; do **not**
+resolve a second time.
+
+- For each framework whose review recipe resolved with `available:true`, read its
+  `## Change-impact globs` section. The section lists `glob → gates` rows (gates ∈
+  `{e2e, visual_regression}`). Union the rows across all resolved frameworks.
+- Assemble a `{ "rules": [ { "glob": "<glob>", "gates": [...] }, ... ] }` JSON object and
+  write it to a temp file (e.g. `_change_impact_rules.tmp`). Build it with `jq` (never
+  string interpolation) so a glob with special characters cannot break the JSON.
+- If no review recipe resolved (`no_frameworks_defined`, an unanswered `action:ask-user`,
+  or a framework that resolved nothing), **skip** `--rules-from` — the classifier runs on
+  the neutral floor alone. Note to the user that framework globs were not applied (a
+  template-only or server-module-only diff may then under-recommend), and that
+  `/upgrade-project` or setting Frameworks fixes it.
+
+**6.2.1 — Classify.** Invoke `change-impact-classify.sh <task_folder> --rules-from
+<tmpfile>` (no `--files-from` — it uses the merge-base diff, identical to `/review`
+step 4). Omit `--rules-from` when 6.2.0 produced no framework globs. Capture
+`gates_recommended[]`, `diff_signature[]`, `rule_source`, **and `warnings[]`**. Clean up
+the temp file after the classifier returns.
 
 If `warnings[]` is non-empty (e.g. `bad_base_ref`, `no_merge_base`,
-`task_folder_missing`), surface each warning to the user **before** showing the
-recommendation — a warning means the classification ran on an empty or incomplete
-diff, so "no gates recommended" may reflect a misconfiguration, not a docs-only change.
+`task_folder_missing`, `rules_from_missing`, `rules_from_malformed`), surface each
+warning to the user **before** showing the recommendation — a warning means the
+classification ran on an empty or incomplete diff (or the framework globs were not
+merged), so "no gates recommended" may reflect a misconfiguration, not a docs-only change.
 
 ### Step 6.2a — AI surface selection (e2e + visual_regression only)
 
@@ -100,13 +122,16 @@ Read the `## Review Gates` block in `task.md` (grammar below).
 - **Block present** → use the stored choice. Do **not** re-prompt.
 - **Block absent** → first `/review` for this task:
   1. Show the recommendation verbatim, e.g.:
-     > diff touches `**/*.css` → **visual_regression recommended**; no `**/*.php` /
-     > `**/*.js` → **e2e not recommended**
+     > diff touches `**/*.css` → **visual_regression recommended**; no script or
+     > behavioral file → **e2e not recommended**
 
-     When `rule_source == "project-override"`, the recommendation line MUST say so —
-     e.g. append *"(rules from this project's `.visual-review/change-impact.json`, not
-     the framework defaults)"* — so the user knows the recommendation came from a
-     project-local file, not the vetted defaults.
+     When `rule_source` contains `project-override`, the recommendation line MUST say so —
+     e.g. append *"(base rules from this project's `.visual-review/change-impact.json`, not
+     the shipped floor)"* — so the user knows the base recommendation came from a
+     project-local file, not the vetted floor. When `rule_source` contains `+recipe`
+     (`default+recipe` / `project-override+recipe`), the framework globs from the stack's
+     review recipe were merged in — the recommendation reflects the framework's own file
+     types, not just the neutral floor.
 
      **AI surface selection.** For each recommended gate where `ai_selection` is
      present (not bypassed via `--full-<gate>` / `--skip-ai-selection`), show the
@@ -229,7 +254,7 @@ existing `review` audit, not a separate gate_type:
 
 ```json
 "dispatch_plan": {
-  "diff_signature": ["**/*.css", "**/*.twig"],
+  "diff_signature": ["**/*.css", "**/*.scss"],
   "gates_recommended": ["visual_regression"],
   "gates_opted_in": ["visual_regression"],
   "gates_run": ["visual_regression"],

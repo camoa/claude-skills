@@ -1,12 +1,12 @@
 ---
-description: "Get pattern recommendations for a use case. Trigger: 'recommend pattern', 'which approach', 'Drupal pattern for', 'how should I implement'."
+description: "Get pattern recommendations for a use case. Trigger: 'recommend pattern', 'which approach', 'pattern for', 'how should I implement'."
 allowed-tools: Read, Glob, Grep, Task
 argument-hint: <use-case>
 ---
 
 # Pattern
 
-Get pattern recommendations for a specific use case (Drupal-flavored today: FormBase vs ListBuilder, Entity vs Config, etc.).
+Get pattern recommendations for a specific use case. Framework patterns are resolved from the active recipe (e.g., form base class vs list builder, entity vs config storage for PHP frameworks, or equivalent constructs in other stacks).
 
 ## Usage
 
@@ -19,13 +19,13 @@ Get pattern recommendations for a specific use case (Drupal-flavored today: Form
 1. Invokes `pattern-recommender` agent
 2. Analyzes the use case
 3. Compares available patterns
-4. Provides recommendation with core/contrib references
+4. Provides recommendation with framework-core and ecosystem references
 
 ## Common Use Cases
 
 ### Forms
 ```
-/ai-dev-assistant:pattern module settings form
+/ai-dev-assistant:pattern settings form
 /ai-dev-assistant:pattern data entry form
 /ai-dev-assistant:pattern confirmation dialog
 /ai-dev-assistant:pattern multi-step wizard
@@ -34,9 +34,9 @@ Get pattern recommendations for a specific use case (Drupal-flavored today: Form
 ### Data Storage
 ```
 /ai-dev-assistant:pattern user-generated content
-/ai-dev-assistant:pattern module configuration
+/ai-dev-assistant:pattern configuration storage
 /ai-dev-assistant:pattern high-volume logging
-/ai-dev-assistant:pattern exportable bundles
+/ai-dev-assistant:pattern exportable configurations
 ```
 
 ### Extensibility

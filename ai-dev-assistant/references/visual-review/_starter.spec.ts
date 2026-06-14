@@ -4,25 +4,35 @@
  * /setup-visual-regression copies this template once per registry surface to
  * <codePath>/tests/visual/<surface-id>.spec.ts, substituting the __TOKENS__
  * below from the surface's registry entry. Edit the generated file freely —
- * with ONE exception (see "DO NOT RENAME THE TEST").
+ * with ONE exception (see "KEEP THE SNAPSHOT NAME STABLE").
  *
  * Tokens substituted at generation time:
- *   __SURFACE_ID__   the registry surface `id` (kebab-case)
- *   __SURFACE_URL__  the registry surface `url`
- *   __VIEWPORTS__    comma-separated viewport names (informational comment)
- *   __MASKS_ARRAY__  the surface `masks` selectors, as page.locator(...) calls
- *                    (or an empty array when the surface has no masks)
+ *   __SURFACE_ID__         the registry surface `id` (kebab-case)
+ *   __SURFACE_URL__        the registry surface `url`
+ *   __VIEWPORTS__          comma-separated viewport names (informational comment)
+ *   __MASKS_ARRAY__        the surface `masks` selectors, as page.locator(...) calls
+ *                          (or an empty array when the surface has no masks)
+ *   __SCREENSHOT_IMPORT__  extra import line for a capture helper — EMPTY by
+ *                          default; a framework's process recipe may supply one
+ *                          (e.g. an accessibility-aware screenshot helper)
+ *   __SCREENSHOT_CAPTURE__ the capture call — defaults to Playwright-native
+ *                          `toHaveScreenshot`; a recipe may override it
  *
- * DO NOT RENAME THE TEST
- * ---------------------
- * The test is named exactly 'visual regression' so Playwright's snapshot
- * ordinal stays `-1-` and the baseline filename is deterministic:
- *   <surface-id>-1-visual-chromium-<viewport>-linux.png
- * Renaming the test (or adding a second screenshot call) orphans every
+ * The PLUGIN ships a framework-neutral capture. HOW a surface is captured —
+ * and whether it also writes an accessibility-tree snapshot — is supplied by
+ * your project's process recipe via the two __SCREENSHOT_*__ tokens. Nothing
+ * here assumes a framework.
+ *
+ * KEEP THE SNAPSHOT NAME STABLE
+ * ----------------------------
+ * The capture names its snapshot exactly after the surface id so the baseline
+ * filename is deterministic:
+ *   <surface-id>-visual-chromium-<viewport>-linux.png
+ * Changing the snapshot name (or adding a second capture call) orphans every
  * committed baseline for this surface. See tests/visual/README.md.
  */
-import { test } from '@playwright/test';
-import { takeAccessibleScreenshot } from '@lullabot/playwright-drupal';
+import { test, expect } from '@playwright/test';
+__SCREENSHOT_IMPORT__
 
 test.describe('__SURFACE_ID__ visual regression', () => {
   test.beforeEach(async ({ page }) => {
@@ -36,11 +46,11 @@ test.describe('__SURFACE_ID__ visual regression', () => {
   //   __VIEWPORTS__
   test('visual regression', async ({ page }) => {
     // Masks — dynamic regions painted over before capture (from registry.yml
-    // `masks`). takeAccessibleScreenshot also writes a paired a11y .txt
-    // snapshot; a11y diffs surface in the report (warning-only in v1).
+    // `masks`). A recipe-supplied capture helper may also write a paired
+    // accessibility snapshot; such a11y diffs surface in the report (warning-only in v1).
     const masks = [
       __MASKS_ARRAY__
     ];
-    await takeAccessibleScreenshot(page, '__SURFACE_ID__', { mask: masks });
+    __SCREENSHOT_CAPTURE__
   });
 });

@@ -14,7 +14,7 @@ const STORAGE_STATE = '__STORAGE_STATE__';
 
 setup('authenticate __AUTH_CONTEXT__', async ({ page }) => {
   // TODO (your process recipe fills this): perform the login for "__AUTH_CONTEXT__".
-  //   Example only (a Drupal recipe would supply): await loginAsRole(page, '<role>')
+  //   Example only (your framework's recipe supplies the real step): await login(page, '<credentials>')
   throw new Error(
     'auth setup for "__AUTH_CONTEXT__" is not implemented. Your process recipe must ' +
     'fill tests/visual/.auth/__AUTH_CONTEXT__.setup.ts with the login for this stack, ' +

@@ -1,8 +1,6 @@
 # Purposeful Code
 
-Ensures code is intentional, comprehensible, and not over-engineered. Verified during `/validate` and `/complete` commands.
-
-> The purposefulness **principles** are stack-neutral. The examples, APIs, and idioms shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents. For Drupal, use them as written.
+Ensures code is intentional, comprehensible, and not over-engineered. Verified during `/validate` and `/complete` commands. These principles are stack-neutral. The stack-specific idioms and APIs live in the phase recipes (review checks recipe), which reference the dev-guides knowledge guides.
 
 ## Philosophy
 
@@ -12,187 +10,94 @@ Ensures code is intentional, comprehensible, and not over-engineered. Verified d
 - Use real, existing APIs
 - Avoid unnecessary defensive patterns
 
-This guidance applies regardless of how code is written - whether by hand, with AI assistance, or generated. The measure is the same: does the developer understand it, and is it necessary?
+This guidance applies regardless of how code is written, whether by hand, with AI assistance, or generated. The measure is the same: does the developer understand it, and is it necessary?
 
 ## Quick Reference
 
 | Area | Good | Bad |
 |------|------|-----|
 | Error handling | Catch specific errors you can recover from | Wrap everything in try-catch |
-| Null checks | Check when value might actually be null | Check injected services for null |
-| Comments | Explain "why" | Describe "what" code does |
-| APIs | Use documented Drupal APIs | Call non-existent methods |
+| Null checks | Check when a value might actually be null | Check injected dependencies for null |
+| Comments | Explain "why" | Describe "what" the code does |
+| APIs | Use documented, existing APIs | Call methods that do not exist |
 
 ## Unnecessary Try-Catch Blocks
 
-### When Try-Catch is Appropriate
+### When Try-Catch Is Appropriate
 
-```php
-// GOOD: Handling external service failures
-try {
-  $response = $this->httpClient->get($url);
-}
-catch (RequestException $e) {
-  $this->logger->error('API request failed: @message', ['@message' => $e->getMessage()]);
-  return NULL;
-}
-```
+Wrap an operation that can genuinely fail and that you can do something about (an outbound network call, a parse of external input). Catch the specific error, then log, recover, or rethrow.
 
-### When Try-Catch is Unnecessary
+### When Try-Catch Is Unnecessary
 
-```php
-// BAD: Drupal handles entity save failures
-try {
-  $node->save();
-}
-catch (\Exception $e) {
-  // Entity save failures are framework-level - let them bubble
-}
-
-// BAD: Swallowing errors hides bugs
-try {
-  $this->processData($data);
-}
-catch (\Exception $e) {
-  // Silently failing means bugs go unnoticed
-}
-```
+- Wrapping an operation whose failure is a programming error the platform should surface. Let it bubble.
+- An empty catch block, or one that swallows the error silently. That hides bugs and makes failures invisible.
 
 ### Checklist
 - [ ] Try-catch only wraps operations that can genuinely fail
-- [ ] Caught exceptions are specific, not `\Exception`
+- [ ] Caught errors are specific, not a catch-all base type
 - [ ] Catch blocks actually handle the error (log, recover, rethrow)
 - [ ] No empty catch blocks
 
 ## Unnecessary Defensive Checks
 
-### Service Injection
+### Injected Dependencies
 
-Drupal's dependency injection guarantees services are valid when injected.
+A dependency-injection container guarantees a dependency is valid when it is injected. Checking an injected, required dependency for null guards against a state that cannot happen. Trust the container.
 
-```php
-// BAD: Services are never null after injection
-public function process(): void {
-  if ($this->entityTypeManager === NULL) {  // Never happens
-    return;
-  }
-  // ...
-}
+### Operations That Throw
 
-// GOOD: Trust the container
-public function process(): void {
-  $storage = $this->entityTypeManager->getStorage('node');
-  // ...
-}
-```
-
-### Entity Type Manager Returns
-
-```php
-// BAD: Over-defensive
-$storage = $this->entityTypeManager->getStorage('node');
-if ($storage === NULL) {  // getStorage() throws, never returns null
-  return;
-}
-
-// GOOD: Let errors surface during development
-$storage = $this->entityTypeManager->getStorage('node');
-```
+When an operation raises on failure rather than returning an empty value, a null check after it is dead code. Let the error surface during development.
 
 ### When Null Checks ARE Appropriate
 
-```php
-// GOOD: Entity loads can return NULL
-$node = $this->entityTypeManager->getStorage('node')->load($nid);
-if ($node === NULL) {
-  throw new NotFoundHttpException();
-}
-
-// GOOD: Optional dependencies
-if ($this->optionalService !== NULL) {
-  $this->optionalService->process();
-}
-```
+- A lookup that can legitimately return "not found". Check it and handle the absence.
+- An optional dependency that may genuinely be unset. Check before use.
 
 ### Checklist
-- [ ] No null checks on required injected services
-- [ ] Null checks only for genuinely nullable values (entity loads, optional deps)
+- [ ] No null checks on required injected dependencies
+- [ ] Null checks only for genuinely nullable values (lookups, optional dependencies)
 - [ ] No defensive checks for impossible states
 
 ## API Validity
 
 ### Hallucinated APIs
 
-Code that calls non-existent methods or uses non-existent hooks.
-
-```php
-// BAD: Method doesn't exist
-$node->getNonExistentMethod();
-
-// BAD: Hook doesn't exist
-function my_module_nonexistent_hook() { }
-
-// BAD: Service doesn't exist
-$container->get('imaginary.service');
-```
+Code that calls methods, hooks, services, or events that do not exist. Common with generated code that pattern-matches a plausible name instead of a real one.
 
 ### How to Verify
 
-1. **Methods**: Check interface or class definition
-2. **Hooks**: Check `*.api.php` files or core documentation
-3. **Services**: Check `*.services.yml` files
-4. **Permissions**: Check `*.permissions.yml` files
-5. **Routes**: Check `*.routing.yml` files
+1. **Methods**: Check the interface or class definition.
+2. **Extension points**: Check the platform's documented extension-point list.
+3. **Dependencies**: Check the service or module registry.
+4. **Permissions and routes**: Check the relevant declaration files.
 
 ### Common Hallucination Patterns
 
 | What's Called | Reality |
 |---------------|---------|
-| `$node->getAuthorId()` | Use `$node->getOwnerId()` |
-| `$entity->getLabel()` | Use `$entity->label()` |
-| `hook_node_create_alter()` | Hook doesn't exist |
-| `\Drupal::service('entity.manager')` | Removed in Drupal 9, use `entity_type.manager` |
+| A plausible-sounding getter | The real accessor has a different name |
+| An extension point that "should" exist | No such extension point is defined |
+| A dependency by a guessed name | The registered name differs |
+| A removed or renamed API | It was deprecated and replaced |
 
 ### Checklist
 - [ ] All method calls verified against actual interfaces
-- [ ] All hooks verified against `*.api.php` documentation
-- [ ] All services verified against `*.services.yml`
-- [ ] No deprecated APIs (check drupal.org)
+- [ ] All extension points verified against the platform's documentation
+- [ ] All dependencies verified against the registry
+- [ ] No deprecated APIs
 
 ## Comment Quality
 
 ### Good Comments
 
-```php
-// GOOD: Explains why, not what
-// We disable caching here because this block shows user-specific data
-// that changes based on their subscription status.
-$build['#cache']['max-age'] = 0;
-
-// GOOD: Documents non-obvious business rule
-// Orders over $1000 require manager approval per company policy
-if ($order->getTotal() > 1000) {
-  $order->set('requires_approval', TRUE);
-}
-```
+- Explain *why*, not *what*: the business rule, the constraint, or the non-obvious reason a choice was made.
+- Document a non-obvious rule that the code alone cannot convey.
 
 ### Bad Comments
 
-```php
-// BAD: Describes what code obviously does
-// Set the title to the node title
-$build['#title'] = $node->getTitle();
-
-// BAD: Reads like an instruction/prompt
-// Now we need to loop through the items and process each one
-foreach ($items as $item) {
-  $this->processItem($item);
-}
-
-// BAD: LLM prompt artifact
-// This function handles the user authentication logic
-public function authenticate(string $username, string $password): bool {
-```
+- Restate what the code obviously does.
+- Read like an instruction or a prompt ("now we loop through the items").
+- Describe a function's job in a comment that just paraphrases its name.
 
 ### Instruction-Style Comments (Red Flag)
 
@@ -202,14 +107,14 @@ These patterns suggest code was generated without full understanding:
 |---------|---------|
 | "Now we..." | `// Now we need to validate the data` |
 | "Let's..." | `// Let's check if the user exists` |
-| "First/Then/Next..." | `// First, get the entity` |
+| "First/Then/Next..." | `// First, get the record` |
 | "This handles..." | `// This handles the form submission` |
 | "We will..." | `// We will iterate through the results` |
 
 ### Checklist
 - [ ] Comments explain reasoning, not obvious behavior
 - [ ] No instruction-style language ("now we", "let's")
-- [ ] No comments that duplicate what code clearly shows
+- [ ] No comments that duplicate what the code clearly shows
 - [ ] Comments kept up-to-date when code changes
 
 ## Developer Comprehension
@@ -233,7 +138,7 @@ Can the developer answer these questions about any code block?
 | "It just works" | Time bomb waiting for failure |
 
 ### Checklist
-- [ ] Developer can explain purpose of each function
+- [ ] Developer can explain the purpose of each function
 - [ ] Developer can predict output for given inputs
 - [ ] Developer knows what errors could occur
 - [ ] Developer knows why specific patterns were chosen
@@ -244,15 +149,15 @@ During `/validate`, check for:
 
 1. **Try-catch audit**: Are all try-catch blocks necessary?
 2. **Null check audit**: Are all null checks for actually nullable values?
-3. **API verification**: Do all method/hook/service calls exist?
+3. **API verification**: Do all method, extension-point, and dependency calls exist?
 4. **Comment review**: Do comments explain "why"?
-5. **Comprehension check**: Can developer explain each component?
+5. **Comprehension check**: Can the developer explain each component?
 
 ### Blocking Issues
 - Calls to non-existent APIs
-- Invalid hook implementations
+- Invalid extension-point implementations
 - Instruction-style comments indicating lack of understanding
-- Developer cannot explain what code does
+- Developer cannot explain what the code does
 
 ### Warning Issues
 - Unnecessary try-catch (not swallowing errors)

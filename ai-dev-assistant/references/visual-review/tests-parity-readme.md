@@ -1,10 +1,8 @@
 # Visual Parity Tests
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
-Committed visual-**parity** checks powered by
-[`@lullabot/playwright-drupal`](https://www.npmjs.com/package/@lullabot/playwright-drupal),
-Playwright, and `pixelmatch`. Set up by `/ai-dev-assistant:setup-visual-parity`.
+Committed visual-**parity** checks powered by the framework's VR package
+(installed by the process recipe), Playwright, and `pixelmatch`. Set up by
+`/ai-dev-assistant:setup-visual-parity`.
 
 > This file is scaffolded by `/setup-visual-parity`. Edit freely — it is a
 > normal project file once written.

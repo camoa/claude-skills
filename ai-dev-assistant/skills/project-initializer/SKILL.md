@@ -198,7 +198,7 @@ Once requirements-gatherer completes and user confirms, show — in order:
 
 ```
 💡 Optional next step: configure your playbook before the first task.
-   /ai-dev-assistant:set-playbook-sets — choose opinion-set(s) (default: drupal/best-practices/camoa)
+   /ai-dev-assistant:set-playbook-sets — choose opinion-set(s) (default: <framework>/best-practices/<author>)
    /ai-dev-assistant:set-user-playbook — point at a project-local playbook.md
    Playbook loads at every phase entry; configuring now means your first task gets the active opinion-set
    from the start. Skip if you want plain dev-guides only — /next will re-surface this nudge.

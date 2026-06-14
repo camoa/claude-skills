@@ -12,8 +12,8 @@
 #   --preflight-cmd '<cmd>': OPTIONAL shell command run in <codePath> before the tests.
 #                            A non-zero exit fails the gate; its output is captured.
 #                            The gate is framework-agnostic — the command is supplied by
-#                            the calling command from project config (a Drupal project,
-#                            for example, registers `ddev drush atk:preflight`). Absent =
+#                            the calling command from project config (whatever preflight
+#                            the framework's recipe declares). Absent =
 #                            no preflight runs.
 #
 # YAML boundary: registry.yml is parsed by the calling command (validate-e2e.md,
@@ -95,7 +95,7 @@ fi
 # ─── pre-flight (configurable, framework-agnostic) ───────────────────────────
 #
 # The gate runs whatever preflight command the calling command resolved from
-# project config (e.g. a Drupal project registers `ddev drush atk:preflight`).
+# project config (whatever preflight the framework's recipe declares).
 # No framework is assumed here. Absent command ⇒ no preflight, no warning.
 
 PREFLIGHT_WARNINGS=()

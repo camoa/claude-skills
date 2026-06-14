@@ -20,9 +20,9 @@
 #     "worktreeByDefault": bool,
 #     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
 #     "visualReview": null | {"enabled": bool, "registryPath": "<rel>" | null},  # v4.11.0+
-#     "frameworks": ["<framework-id>", ...],  # e.g. ["drupal","nextjs"]; [] when absent
+#     "frameworks": ["<framework-id>", ...],  # e.g. ["nextjs","symfony"]; [] when absent
 #     "localGuidesPath": "<rel-path>" | null,  # path to local dev-guides; null when absent
-#     "processRecipes": [{"key": "<phase>/<fw>/<name>", "source": "<dev-guides|local|research>" | null}, ...],
+#     "processRecipes": [{"key": "<phase>/<fw>/<name>", "source": "<dev-guides|local|machine-local|research>" | null}, ...],
 #     "warnings": [{"code": "<code>", "detail": "..."}]
 #   }
 #
@@ -395,8 +395,8 @@ fi
 
 # === Process Recipes parsing ===
 # Format: multi-line list under **Process Recipes:** heading
-#   - e2e-setup/drupal/atk → source=dev-guides
-#   - e2e-setup/nextjs/playwright → source=local
+#   - e2e-setup/nextjs/playwright → source=dev-guides
+#   - e2e-setup/symfony/panther → source=local
 # Only → and -> are accepted as key/attrs separator (= would collide with attr key=value pairs).
 # Source-only records — nothing is pinned. Lenient: any other token on the line
 # (e.g. a leftover pinned_sha=... from an older format) is ignored; we parse the
@@ -434,9 +434,9 @@ if [ -n "$PROC_REC_LINES" ]; then
   while IFS=$'\t' read -r rec_key rec_src; do
     [ -z "$rec_key" ] && continue
     case "$rec_src" in
-      dev-guides|local|research) ;;
+      dev-guides|local|machine-local|research) ;;
       "") add_warning "process_recipe_bad_source" "process_recipes slot '$rec_key' missing source" ;;
-      *)  add_warning "process_recipe_bad_source" "expected source dev-guides|local|research, got: $rec_src (slot: $rec_key)" ;;
+      *)  add_warning "process_recipe_bad_source" "expected source dev-guides|local|machine-local|research, got: $rec_src (slot: $rec_key)" ;;
     esac
   done <<< "$PROC_REC_LINES"
 fi

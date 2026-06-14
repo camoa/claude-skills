@@ -1,16 +1,14 @@
 ---
-description: "Run behavioral E2E tests via Playwright against the site under test, with an optional project-resolved preflight command (the Drupal reference impl registers ATK's). Emits a standard validation envelope and _e2e.json audit. gate_type: e2e. Part of the /review dispatcher chain."
+description: "Run behavioral E2E tests via Playwright against the site under test, with an optional project-resolved preflight command registered by the e2e-setup recipe. Emits a standard validation envelope and _e2e.json audit. gate_type: e2e. Part of the /review dispatcher chain."
 allowed-tools: Read, Write, Edit, Bash, Glob
 argument-hint: "[<task>] [--task <name>] [--skip <reason>] [--smoke-only] [--include-e2e]"
 ---
 
 # /validate:e2e
 
-> _Drupal-flavored component — a stack-neutral version is in progress. The Drupal specifics below are the current reference implementation._
-
 <!-- visual-review:dispatch-ready -->
 
-Runs ATK canned behavioral tests + project-custom journey tests. Emits `_e2e.json` (gate audit) and `validations/latest/e2e.json` (standard envelope). Part of the `/review` change-impact dispatcher chain — the `<!-- visual-review:dispatch-ready -->` marker above is what causes `/review` to call this gate.
+Runs the project's registered behavioral tests + project-custom journey tests. Emits `_e2e.json` (gate audit) and `validations/latest/e2e.json` (standard envelope). Part of the `/review` change-impact dispatcher chain — the `<!-- visual-review:dispatch-ready -->` marker above is what causes `/review` to call this gate.
 
 ## Arguments
 
@@ -65,7 +63,7 @@ If `--skip <reason>` is present:
 
 Read `<codePath>/.visual-review/registry.yml`. Filter surfaces where the `gates` list contains `"e2e"`. Extract the `id` values. Pass them to `scripts/validate-e2e.sh` via `--surfaces-json '[...]'`.
 
-Also read the optional top-level `e2e.preflight_command` (defined in the surface-registry schema). If present and non-empty, it is the framework-agnostic preflight the gate runs before the tests. For the Drupal reference impl, the `e2e-setup` recipe resolved by `/setup-e2e` seeds it as `ddev drush atk:preflight`. Pass it through via `--preflight-cmd '<cmd>'`. If absent, pass nothing — no preflight runs.
+Also read the optional top-level `e2e.preflight_command` (defined in the surface-registry schema). If present and non-empty, it is the preflight command the gate runs before the tests. The `e2e-setup` recipe resolved by `/setup-e2e` seeds this field with the framework's preflight command (the preflight command the e2e-setup recipe registered). Pass it through via `--preflight-cmd '<cmd>'`. If absent, pass nothing — no preflight runs.
 
 If the registry is absent or has no `e2e` surfaces: run without `--task` scoping (all tests in `tests/e2e/behavioral/`).
 

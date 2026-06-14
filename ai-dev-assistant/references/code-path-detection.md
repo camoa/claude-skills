@@ -14,11 +14,11 @@ First match wins. If no strategy matches, fall back to a cold prompt (no pre-fil
 If the current working directory contains any of the following markers, propose `$PWD`:
 
 - `.git/` (any git repository)
-- `composer.json` (Drupal / PHP project)
+- `composer.json` (PHP project)
 - `package.json` (Node / JS project)
-- `sites/default/` (Drupal docroot convention)
-- `docroot/` (Drupal docroot convention, Acquia / DDEV)
-- `web/` + `composer.json` at sibling depth (Drupal recommended layout)
+- `sites/default/` (docroot convention)
+- `docroot/` (alternate docroot layout)
+- `web/` + `composer.json` at sibling depth (dual web+composer layout)
 
 Rationale: user invoked the command from where they intend the code to live. This is the common Pattern-2 case (framework-from-inside-code-base).
 
@@ -30,7 +30,7 @@ This is the common Pattern-1 case (claude_code_project + separate code repo): us
 
 ### Strategy 3 — Memory folder's parent-of-parent + `/docroot/modules/custom/<project>`
 
-*(Drupal)* where the memory folder sits under a site's tree. Less common; low priority. Evaluate after shipping v3.11.0 if real-world friction surfaces.
+Site-tree pattern where the memory folder sits under a site's tree. Less common; low priority. Evaluate after shipping v3.11.0 if real-world friction surfaces.
 
 ## What to show the user
 
@@ -49,7 +49,7 @@ Confirm? Options:
 
 The "reason" parenthetical (`git repo at $PWD`) is required so the user knows WHY the framework proposed that path. Strategy names:
 
-- Strategy 1: "git repo at $PWD" / "composer.json at $PWD" / "package.json at $PWD" / "Drupal docroot at $PWD"
+- Strategy 1: "git repo at $PWD" / "composer.json at $PWD" / "package.json at $PWD" / "docroot at $PWD"
 - Strategy 2: "sibling of memory folder at ~/workspace/<name>/"
 
 ## Fallback — no detection

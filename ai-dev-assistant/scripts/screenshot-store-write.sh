@@ -77,9 +77,12 @@ if [ "$MODE" = "write-baseline-codepath" ]; then
   case "$PNG_NAME" in
     */*|..*) emit_result "error" '[{"code":"invalid_png_name","detail":"png-filename must be a bare filename"}]' '{}'; exit 2 ;;
   esac
-  # captured_by enum — v4.13.0 adds lullabot-playwright + migrated-from-screenshots-store.
+  # captured_by enum — framework-neutral defaults (playwright / playwright-accessible)
+  # plus recipe- and migration-supplied provenance values. lullabot-playwright is
+  # retained for back-compat with stores written before the agnostic refactor and
+  # for recipes that use the Lullabot accessible-screenshot helper.
   case "$CB" in
-    playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
+    playwright|playwright-accessible|playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
     *)
       emit_result "error" '[{"code":"invalid_captured_by","detail":"captured_by not in the v4.13.0 enum"}]' '{}'
       exit 2 ;;

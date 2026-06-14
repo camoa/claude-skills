@@ -135,12 +135,12 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 ```json
 "gate_specific": {
   "phase": "research | design | implement | complete",
-  "methodology_floor": ["plugin:tdd-workflow", "plugin:solid-drupal", "plugin:dry-patterns"],
+  "methodology_floor": ["plugin:tdd-workflow", "plugin:solid", "plugin:dry-patterns"],
   "catalog_candidates": [
-    {"slug": "drupal/views", "title": "Views", "description": "...", "triggered_by": ["views"]}
+    {"slug": "<framework>/views", "title": "Views", "description": "...", "triggered_by": ["views"]}
   ],
-  "matched_domain_guides": ["drupal/views", "drupal/jsonapi"],
-  "guides_actually_loaded": ["plugin:tdd-workflow", "drupal/views"],
+  "matched_domain_guides": ["<framework>/views", "<framework>/api"],
+  "guides_actually_loaded": ["plugin:tdd-workflow", "<framework>/views"],
   "keywords_matched": [],
   "guides_to_load": []
 }
@@ -161,7 +161,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 ```json
 "gate_specific": {
   "phase": "research | design | implement",
-  "playbook_sets_loaded": ["drupal/best-practices/camoa"],
+  "playbook_sets_loaded": ["<framework>/best-practices/<author>"],
   "playbook_sets_source": "explicit | explicit-none | default",
   "user_playbook_loaded": "/abs/path/to/playbook.md or null",
   "plays_by_section": {"CSS / SCSS": 5, "Architecture": 4},
@@ -201,7 +201,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 
 ```json
 "dispatch_plan": {
-  "diff_signature": ["**/*.css", "**/*.twig"],
+  "diff_signature": ["**/*.css", "**/*.html"],
   "gates_recommended": ["visual_regression"],
   "gates_opted_in": ["visual_regression"],
   "gates_run": ["visual_regression"],
@@ -254,7 +254,7 @@ One entry per gate (`e2e` or `visual_regression`) where the agent ran. `visual_p
 
 ### 5.9 `e2e` (v1.2+)
 
-Written by the ATK-backed E2E gate (`/validate:e2e`, Task B). Task A reserves the
+Written by the E2E gate (`/validate:e2e`, Task B). Task A reserves the
 `gate_type` value and the `_e2e.json` file slot; the `gate_specific` payload shape is
 defined by Task B. Minimum expected shape — a `verdict` and a pointer to the shared
 validation envelope:

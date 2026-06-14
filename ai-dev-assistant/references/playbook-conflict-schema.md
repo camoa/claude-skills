@@ -28,7 +28,7 @@ JSONL — one valid JSON object per line. Append-only. No header, no footer, no 
   "topic": "font-sizing",
   "conflict_type": "local-vs-shipped | multi-set-contradiction",
   "playbook_set_citation": {
-    "set": "drupal/best-practices/camoa",
+    "set": "<framework>/best-practices/<author>",
     "guide": "font-sizing-rfs",
     "summary": "Use @include font-size(); never raw font-size:"
   },
@@ -64,7 +64,7 @@ JSONL — one valid JSON object per line. Append-only. No header, no footer, no 
 
 | Field | Type | Description |
 |---|---|---|
-| `set` | string | The dev-guides path slug (e.g., `drupal/best-practices/camoa`) |
+| `set` | string | The dev-guides path slug (e.g., `<framework>/best-practices/<author>`) |
 | `guide` | string | The specific guide ID within the set (e.g., `font-sizing-rfs`) |
 | `summary` | string | One-line restatement of the play, for quick reading |
 

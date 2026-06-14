@@ -6,7 +6,7 @@ argument-hint: "[<task-name>]"
 
 # Validate: Security
 
-Run the Security quality gate (Security — OWASP Top 10 style audit + Drupal-specific sinks) against the current task. Wraps `/code-quality:security` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.0).
+Run the Security quality gate (Security — OWASP Top 10 style audit + framework-specific sink checks) against the current task. Wraps `/code-quality:security` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.0).
 
 ## Usage
 

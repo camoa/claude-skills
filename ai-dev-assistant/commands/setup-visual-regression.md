@@ -1,7 +1,7 @@
 ---
 description: "Resolve the framework process recipe for the visual-regression phase, install the framework's visual-regression package plus @playwright/test, scaffold tests/visual/, extend playwright.config.ts with per-viewport visual projects, take the viewport matrix and surface list from the recipe, and prompt for a first baseline capture. Idempotent; --add-surface adds one surface post-setup, --migrate imports a v3.13.0 .screenshots/ store. Introduced v4.13.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill
-argument-hint: "[--migrate] [--add-surface <url>] [--theme-name <name>]"
+argument-hint: "[--migrate] [--add-surface <url>]"
 ---
 
 # /setup-visual-regression
@@ -26,8 +26,6 @@ Idempotent — every step no-ops cleanly when already done. Full walkthrough:
 - `--add-surface <url>` — fast path: append one surface to the registry +
   offer an immediate (confirmed) baseline capture; skips steps 1–9
 - `--migrate` — jump straight to the `.screenshots/` migration flow (step 5)
-- `--theme-name <name>` — override custom-theme auto-detection for viewport
-  derivation
 
 ## Install-location note
 
@@ -57,30 +55,23 @@ project's process recipe: which visual-regression package to install (Step 2), h
 surfaces are discovered (Step 6), how the viewport matrix is derived (Step 4), and
 how an authenticated context logs in (the Step 7a stub).
 
-Invoke the `process-recipe-loader` skill (Skill tool) with `phase=visual-regression`
-and the resolved `<project_folder>`. The loader loops the project's `frameworks[]`,
-resolves each framework's visual-regression recipe in source order (dev-guides
-primary), reports each recipe's `body_path` (an on-disk file you Read; the body is
-never streamed into context), tags provenance, and records the source choice in
-project_state itself. It returns a JSON report
-`{schema_version, phase, results:[{framework, key, source, sha, verified, available,
-body_path, recorded, notes[]}], warnings[]}`.
+Follow the shared recipe-resolution protocol in
+`references/recipe-resolution.md` with `phase: visual-regression` and the resolved
+`<project_folder>`. That protocol invokes the `process-recipe-loader` skill, resolves each
+framework's recipe (project_state-first, then source order, else `action:ask-user`), records the
+source in project_state, and defines how to follow each result: Read the `body_path` (never
+streamed), follow `verified:true` directly, surface `verified:false` for human review first, and on
+`action:ask-user` ask the user for a path or to research. Surface any loader `warnings[]` to the
+user.
 
-For each result:
+When an available recipe resolves, follow it against `codePath` for the framework-specific
+**inputs**: the recipe supplies the visual-regression package for Step 2, the surface discovery that
+replaces Step 6, the viewport derivation for Step 4, and the authenticated-context login that fills
+the Step 7a stub.
 
-- **`available:true`, `verified:true`.** Read the recipe body from the result's
-  `body_path`, then follow it against `codePath` for the framework-specific work. The
-  recipe supplies the visual-regression package for Step 2, the surface discovery that
-  replaces Step 6, the viewport derivation for Step 4, and the authenticated-context
-  login that fills the Step 7a stub.
-- **`available:true`, `verified:false`.** Read the body from `body_path`, surface it for
-  human review, and get the user's go-ahead before following it. A non-dev-guides source
-  is not trusted to execute unreviewed.
-- **`available:false`.** Tell the user no visual-regression recipe exists for that
-  framework. Offer to research one; never fabricate framework specifics. The generic
-  steps below still run: viewport derivation falls back to
-  `derive-viewport-matrix.sh` (Step 4), and surfaces must be registered by hand or
-  via `--add-surface` (there is no built-in discovery).
+**No recipe resolved** (`available:false`, `action:ask-user`): the generic steps below still run.
+Viewport derivation falls back to `derive-viewport-matrix.sh` (Step 4), and surfaces must be
+registered by hand or via `--add-surface` (there is no built-in discovery).
 
 This step runs on the full-setup path only; the `--add-surface` and `--migrate` fast
 paths reuse the scaffolding already in place and do not re-resolve the recipe.
@@ -198,16 +189,21 @@ that no longer exist.
 
 The viewport matrix depends on what the framework's design system declares, so it
 is the recipe's concern. When a recipe resolved (Step 0a), **the recipe derives
-the matrix** (it calls `derive-viewport-matrix.sh`, or reads the framework's own
-breakpoint source) and writes the accepted matrix to the registry's top-level
+the matrix** by parsing its own native breakpoint source (whatever file the
+framework's design system declares breakpoints in) into a neutral
+`[{name, width}]` list and feeding it to the generic kernel via
+`derive-viewport-matrix.sh <codePath> --breakpoints-from <json>` — the kernel applies
+the canonical height band, dedup, and JSON shaping so the recipe never reimplements
+that logic. The recipe writes the accepted matrix to the registry's top-level
 `viewports:` block. Do **not** also run the script here; that would derive twice.
 Read the matrix the recipe wrote from the registry; it drives the step 3
 `projects[]` entries.
 
 **Fallback (no recipe resolved).** When Step 0a found no recipe for a framework,
-derive the matrix here with the generic kernel:
+derive the matrix here with the generic kernel — there is no framework breakpoint
+source to feed, so the kernel scans CSS `@media` queries:
 
-Invoke `scripts/derive-viewport-matrix.sh <codePath> [--theme-name <name>]`.
+Invoke `scripts/derive-viewport-matrix.sh <codePath> [--css-root <dir>]`.
 
 - Exit 0 → show the proposed viewports with the source label the script reports.
   Prompt `[y]es / [e]dit / [s]kip`.
@@ -270,6 +266,15 @@ For each **anonymous** VR surface, generate
 - `__VIEWPORTS__` → the surface's viewport names, comma-separated
 - `__MASKS_ARRAY__` → one `page.locator('<selector>')` per `masks` entry,
   comma-separated (empty when the surface has no masks)
+- `__SCREENSHOT_IMPORT__` / `__SCREENSHOT_CAPTURE__` → the capture seam. **Default
+  (no recipe override):** `__SCREENSHOT_IMPORT__` → empty, `__SCREENSHOT_CAPTURE__`
+  → `await expect(page).toHaveScreenshot('__SURFACE_ID__.png', { mask: masks });`
+  (Playwright-native, framework-neutral). **When the resolved VR process recipe
+  declares a `## Screenshot capture` block** (a `screenshot_import` line and a
+  `screenshot_capture` line), substitute those instead — this is how a framework
+  supplies an accessibility-aware or otherwise custom capture helper. Record the
+  resulting capture method as `captured_by` in step 10 (`playwright` for the
+  native default; the recipe's declared `captured_by` value otherwise).
 
 Skip a surface whose `<id>.spec.ts` already exists (idempotent — and migration
 stubs from step 5 are kept).
@@ -332,7 +337,8 @@ runs the `dependencies` setup project automatically first).
 Generate `<codePath>/tests/visual/auth/<ctx>/<id>.spec.ts` from the **same**
 `${CLAUDE_PLUGIN_ROOT}/references/visual-review/_starter.spec.ts` template, with
 the **same** `__SURFACE_ID__` / `__SURFACE_URL__` / `__VIEWPORTS__` /
-`__MASKS_ARRAY__` substitution as step 7 — the spec is identical. The login is
+`__MASKS_ARRAY__` / `__SCREENSHOT_IMPORT__` / `__SCREENSHOT_CAPTURE__` substitution
+as step 7 — the spec is identical. The login is
 carried by the project's `storageState`, NOT by the spec; no auth code goes in
 the surface spec. Skip a surface whose `auth/<ctx>/<id>.spec.ts` already exists
 (idempotent).
@@ -391,8 +397,10 @@ On `[y]`, run the **baseline bootstrap flow** via `scripts/baseline-manager.sh`
    `<codePath>/tests/visual/<id>.spec.ts-snapshots/*.png` for the filenames
    Playwright actually wrote — do NOT assume the platform suffix. For each,
    invoke `scripts/screenshot-store-write.sh write-baseline-codepath <codePath>
-   <surface-id> <png-filename> <viewport-name> lullabot-playwright <task>`,
-   where `<viewport-name>` is the bare viewport name (the segment between
+   <surface-id> <png-filename> <viewport-name> <captured-by> <task>`,
+   where `<captured-by>` is the capture method recorded in step 7 (`playwright`
+   for the native default, or the VR recipe's declared `captured_by` value), and
+   `<viewport-name>` is the bare viewport name (the segment between
    `visual-chromium-` and `-<platform>` in the filename, e.g. `desktop`).
 
 On a non-Linux dev host, remind the user of the per-platform capture policy in

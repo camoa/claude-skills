@@ -1,8 +1,6 @@
 # DRY Patterns
 
-Don't Repeat Yourself principles enforced during Phase 3 implementation.
-
-> The DRY **extraction patterns** are stack-neutral. The base classes, file paths, and APIs shown below are the **Drupal/PHP instantiation** — substitute your stack's equivalents. For Drupal, use them as written.
+Don't Repeat Yourself principles enforced during Phase 3 implementation. The extraction patterns are stack-neutral. The base classes, file layout, and APIs for a given stack live in the phase recipes (implement standards-and-tests recipe), which reference the dev-guides knowledge guides.
 
 ## The Rule
 
@@ -12,61 +10,51 @@ Every piece of knowledge has a single, unambiguous representation.
 
 | Pattern | When to Use | Example |
 |---------|-------------|---------|
-| **Service** | Same logic in 2+ places | Business logic, calculations |
-| **Trait** | Same methods in multiple classes | Shared behaviors, logging |
-| **Base Class** | Same structure across classes | Form bases, entity bases |
-| **Twig Component** | Same markup in templates | Cards, buttons, alerts |
-| **Config** | Same values used everywhere | Settings, defaults |
+| **Service / module** | Same logic in 2+ places | Business logic, calculations |
+| **Mixin / trait** | Same methods in multiple units | Shared behaviors, logging |
+| **Base class** | Same structure across units | Shared lifecycle, common scaffolding |
+| **Shared component** | Same markup in templates | Cards, buttons, alerts |
+| **Config / constants** | Same values used everywhere | Settings, defaults |
 
-## Service Extraction
+## Logic Extraction
 
-When same logic appears in 2+ places:
+When the same logic appears in 2+ places:
 
 ```
-1. Create service in src/
-2. Define interface
-3. Register in services.yml
-4. Inject where needed
+1. Create a logic unit (service or module)
+2. Define its interface
+3. Register or import it where needed
+4. Depend on it instead of duplicating
 ```
 
 **Result**: Single source of truth, testable, maintainable.
 
-## Trait Usage
+## Shared-Behavior Extraction
 
-When same methods needed in multiple classes:
+When the same methods are needed in multiple units:
 
 ```
-1. Create trait in src/
-2. Add shared methods
-3. Use in classes that need it
+1. Create a mixin or trait
+2. Add the shared methods
+3. Use it in the units that need it
 4. Override only when necessary
 ```
 
-**Caution**: Don't overuse. Prefer composition over traits.
+**Caution**: Don't overuse. Prefer composition over inheritance.
 
 ## Base Class Leverage
 
-Use existing Drupal base classes:
+When several units share the same structure, lift the common scaffolding into a shared base class and have each unit extend it. Reach for the most specific base that already fits before writing a more generic one.
 
-| Need | Base Class |
-|------|------------|
-| Settings form | `ConfigFormBase` |
-| Entity list | `EntityListBuilder` |
-| Custom form | `FormBase` |
-| Block plugin | `BlockBase` |
-| Field formatter | `FormatterBase` |
+## Shared Component Patterns
 
-**Rule**: Only use `FormBase` when `ConfigFormBase` doesn't fit.
-
-## Twig Component Patterns
-
-When same markup repeats:
+When the same markup repeats:
 
 ```
-1. Create component in templates/components/
-2. Define clear interface (variables)
-3. Include where needed
-4. Use SDC for encapsulation
+1. Create a reusable component
+2. Define a clear interface (its variables)
+3. Include it where needed
+4. Encapsulate so callers only pass data
 ```
 
 ## Config Sharing
@@ -74,10 +62,10 @@ When same markup repeats:
 Default values and settings:
 
 ```
-1. Define in config/install/
-2. Create schema in config/schema/
-3. Load via ConfigFactory
-4. Override via config management
+1. Define the values in one place (config or constants)
+2. Give them a schema or type where the platform supports it
+3. Load them through a single accessor
+4. Override through the platform's config mechanism
 ```
 
 ## Detection During Implementation
@@ -86,11 +74,11 @@ Red flags for DRY violations:
 
 | Sign | Action |
 |------|--------|
-| Copy-pasting code | Extract to service or trait |
-| Same validation in multiple forms | Create shared validator service |
-| Identical queries in services | Create repository/query service |
-| Repeated markup | Create Twig component |
-| Magic numbers/strings | Move to config or constants |
+| Copy-pasting code | Extract to a logic unit or mixin |
+| Same validation in multiple places | Create a shared validator |
+| Identical queries in multiple units | Create a repository or query unit |
+| Repeated markup | Create a shared component |
+| Magic numbers or strings | Move to config or constants |
 
 ## Enforcement Checkpoints
 
@@ -105,7 +93,7 @@ During `/implement`:
 
 | Violation | Example | Fix |
 |-----------|---------|-----|
-| Copy-paste logic | Same 10 lines in 3 controllers | Extract to service |
-| Duplicate validation | Same rules in 2 forms | Create validator service |
-| Repeated queries | Same entity query everywhere | Create repository service |
+| Copy-paste logic | Same 10 lines in 3 places | Extract to a logic unit |
+| Duplicate validation | Same rules in 2 forms | Create a shared validator |
+| Repeated queries | Same query everywhere | Create a repository unit |
 | Hardcoded strings | Same message in 5 places | Use constants or config |

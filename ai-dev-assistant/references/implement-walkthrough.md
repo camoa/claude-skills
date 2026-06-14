@@ -4,12 +4,6 @@ Tutorial-depth reference for the `/ai-dev-assistant:implement` command. The runt
 
 **Loaded only when explicitly read.** No hook or skill auto-loads this file.
 
-> **Note:** The orchestration engine is stack-agnostic. The concrete examples below (`core`/`contrib` pattern references, the `SettingsForm` / PHPUnit worked example, `drupal_*` guides) reflect the **Drupal-flavored components** the framework ships with today; stack-neutral versions are in progress.
-
----
-
-
-
 Start implementing a specific task with full context loaded (Phase 3 of a task).
 
 ## Usage
@@ -64,7 +58,7 @@ Never block the command on this check — the user is in control. The nudge exis
 
 ## Dev-guides pre-flight (v3.13.4+)
 
-**Run after the Phase Transition Check, before the alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover Drupal, Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across Drupal AND non-Drupal (plugin framework, docs-only, Claude Code) tasks.
+**Run after the Phase Transition Check, before the alignment sub-step.** The goal: every phase command either loads dev-guides or has the user explicitly say "no guides" — never a silent skip. Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and cross-cutting methodology (TDD, SOLID, DRY, security, quality gates) — relevant across all project types (plugin framework, docs-only, and tool-specific tasks).
 
 ### Step 1 — Invoke guide-integrator explicitly
 
@@ -81,7 +75,7 @@ Regardless of whether guide-integrator auto-loaded 0, 1, or N guides, print:
 > Auto-loaded based on task keywords:
 >   <bulleted list of loaded guides, OR "  — none auto-matched —">
 >
-> Dev-guides cover Drupal (forms, entities, plugins, services, security, testing, etc.), Next.js, design systems (Bootstrap, Radix, Tailwind, DaisyUI), CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Implementation-phase guides are especially useful for security, SDC, JS, and testing patterns.
+> Dev-guides cover design systems (Bootstrap, Radix, Tailwind, DaisyUI), Next.js, CSS, and methodology (TDD, SOLID, DRY, security, quality gates). Implementation-phase guides are especially useful for security and testing patterns.
 >
 > **[c]ontinue** — auto-loaded set is fine, start coding
 > **[a]dd** — scan the `dev-guides-navigator` catalog for more topics before I implement
@@ -99,7 +93,7 @@ Default: `[c]`.
 
 - **Never blocks.** `[c]` (default) always proceeds.
 - **Discoverability > compliance.** `[n]` is a first-class choice.
-- **Works for non-Drupal tasks.** Plugin/framework tasks can still find applicable methodology guides via `[a]`.
+- **Applicable to all task types.** Plugin-framework and tool-specific tasks can still find applicable methodology guides via `[a]`.
 
 ## Phase 3 alignment sub-step (v3.12.0+, task-level retrofit in v3.13.1+)
 
@@ -157,7 +151,7 @@ Default: `[c]`.
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Loads architecture from `architecture.md`
 3. Loads research context from `research.md`
-4. Loads referenced patterns from third-party libraries and framework (first-party) code *(Drupal: core / contrib)*
+4. Loads referenced patterns from third-party libraries and framework (first-party) code, per the resolved process recipe
 5. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
 6. Loads methodology refs (via `guide-integrator`)
 7. Creates/updates `implementation.md` for progress tracking
@@ -304,22 +298,22 @@ Each task goes through:
 ## Example
 
 ```
-/ai-dev-assistant:implement settings_form
+/ai-dev-assistant:implement config_manager
 
-Loading context for: settings_form
+Loading context for: config_manager
 
-Task file: implementation_process/in_progress/settings_form.md
+Task file: implementation_process/in_progress/config_manager.md
 Phase: 3 - Implementation
 Architecture: Complete ✓
 
-Pattern reference: core/modules/system/src/Form/SiteInformationForm.php
-Guide: drupal_configuration_forms_guide.md
+Pattern reference: resolved from process recipe (see architecture.md)
+Guide: loaded via dev-guides pre-flight
 
 Acceptance Criteria:
-- [ ] Form class created
+- [ ] Handler class created
 - [ ] Config schema defined
 - [ ] Unit tests pass
-- [ ] Form saves correctly
+- [ ] Config saves correctly
 
 TDD Reminder: Write test first!
 
@@ -345,13 +339,13 @@ Creates/updates `implementation.md`:
 
 ## Progress
 - [x] Test class created
-- [x] Form class created
+- [x] Handler class created
 - [ ] Config schema
 - [ ] Integration test
 
 ## Files Created/Modified
-- `src/Form/SettingsForm.php` - Created
-- `tests/src/Unit/SettingsFormTest.php` - Created
+- `src/handlers/config-manager.{ext}` - Created
+- `tests/unit/config-manager.test.{ext}` - Created
 
 ## TDD Log
 {Test-first development notes}
