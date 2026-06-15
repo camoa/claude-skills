@@ -68,17 +68,21 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
    If the union is empty → set `code_inference.source: "none"`, `sources_used: []`, skip to Step 6 with no domain-gap signal.
 
-   **b) Locate the dev-guides catalog cache.** The `dev-guides-navigator` plugin writes it to `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-cache.json`, where `<dasherized-cwd>` is the absolute working directory with every non-alphanumeric character replaced by `-` — **not** an `md5` hash (see the navigator's `references/cache-format.md`, the contract this consumes). Derive the precise path first, glob-fallback only if absent:
+   **b) Locate the dev-guides catalog.** Prefer the **shared store** — its `indexes/llms.json` is the canonical catalog (see the navigator's `references/store-contract.md`) and shares the legacy `{hash,fetched_at,content}` shape, so the same `.content` read works on either. Honour `DEV_GUIDES_STORE_DIR`. Fall back to the **transitional per-project compat shim** `dev-guides-cache.json` at the dasherized-cwd path (`$PWD` with every non-alphanumeric character replaced by `-` — **not** an `md5` hash), then a glob, when the store is cold/absent. Degrade-safe: pick the first candidate that actually yields `.content`:
    ```bash
+   STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
    DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-   CATALOG="$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json"
-   if [ ! -f "$CATALOG" ]; then
-     for d in ~/.claude/projects/*/memory/; do
-       [ -f "${d}dev-guides-cache.json" ] && CATALOG="${d}dev-guides-cache.json" && break
-     done
-   fi
+   CATALOG=""
+   for cand in \
+     "${STORE_ROOT}/indexes/llms.json" \
+     "$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json" \
+     ~/.claude/projects/*/memory/dev-guides-cache.json; do
+     [ -f "$cand" ] || continue
+     [ -n "$(jq -r '.content // empty' "$cand" 2>/dev/null)" ] || continue
+     CATALOG="$cand"; break
+   done
    ```
-   The glob fallback (first match) mirrors the navigator's pre-compact hook. If no cache exists anywhere — or the cache file has no `.content` key (treat as missing) — emit `code_inference.warnings: ["catalog_cache_missing"]`, set `inferred_slugs: []`, do NOT demote verdict (no signal == no penalty).
+   The store is canonical; the shim glob (first match) is the transitional fallback that mirrors the navigator's pre-compact hook. If no candidate yields `.content` anywhere — emit `code_inference.warnings: ["catalog_cache_missing"]`, set `inferred_slugs: []`, do NOT demote verdict (no signal == no penalty). The same `CATALOG` value is the `catalog_path` passed to `guides-matcher` and to the staleness check below.
 
    **Staleness check (caller-side, not agent-side):** `stat -c %Y "$catalog_path"` to read mtime; if older than 30 days (compare to `date +%s`), append `code_inference.warnings: ["catalog_cache_stale"]` AND proceed — staleness is informational, not blocking. Suggest in the CLI summary that the user run `/dev-guides-navigator --refresh` to update the cache.
 

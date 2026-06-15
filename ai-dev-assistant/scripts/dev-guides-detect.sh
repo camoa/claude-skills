@@ -16,11 +16,13 @@
 #        implement / complete → + quality-gates
 #
 #   2. Catalog candidates — dev-guides topics whose distinctive terms appear in
-#      the task's accumulated artifact prose. Matched against the cached
-#      dev-guides-navigator catalog: the `content` field of dev-guides-cache.json
-#      (the full llms.txt markdown). The cache is located by the dasherized-cwd
-#      derivation documented in dev-guides-navigator's references/cache-format.md,
-#      with a ~/.claude/projects/*/memory/ glob fallback.
+#      the task's accumulated artifact prose. Matched against the `content` field
+#      of the shared store's indexes/llms.json (the full llms.txt markdown; see
+#      dev-guides-navigator references/store-contract.md), honouring
+#      DEV_GUIDES_STORE_DIR. Falls back to the transitional per-project compat
+#      shim dev-guides-cache.json (cwd-derived, then a ~/.claude/projects/*/memory/
+#      glob) when the store is cold/absent — both share the same {hash,fetched_at,
+#      content} shape.
 #
 # The previous hardcoded 5-row keyword table is gone — it produced spurious
 # matches ("quality" → quality-gates, "test" → tdd-workflow) and could be
@@ -117,24 +119,38 @@ WARNINGS=()
 [[ -n "$LC_CONTENT" ]] || WARNINGS+=("no_artifacts")
 
 # ---------------------------------------------------------------------------
-# 3. Locate the dev-guides-navigator catalog cache
-#    (dasherized-cwd derivation; glob fallback mirrors the navigator pre-compact hook)
+# 3. Locate the dev-guides catalog (llms.txt index)
+#    Shared store first (canonical — see dev-guides-navigator
+#    references/store-contract.md), honouring DEV_GUIDES_STORE_DIR; then the
+#    transitional per-project compat shim (cwd-derived, then glob). The store's
+#    indexes/llms.json shares the legacy {hash,fetched_at,content} shape, so the
+#    same `.content` read works on either. Degrade-safe: pick the first candidate
+#    that actually yields `.content` (a cold/empty store falls through to the shim).
 # ---------------------------------------------------------------------------
+STORE_ROOT="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
 DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-CACHE_FILE="$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json"
-if [[ ! -f "$CACHE_FILE" ]]; then
-  for dir in "$HOME"/.claude/projects/*/memory/; do
-    if [[ -f "${dir}dev-guides-cache.json" ]]; then
-      CACHE_FILE="${dir}dev-guides-cache.json"
-      break
-    fi
-  done
-fi
+CACHE_CANDIDATES=(
+  "${STORE_ROOT}/indexes/llms.json"
+  "$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json"
+)
+for dir in "$HOME"/.claude/projects/*/memory/; do
+  if [[ -f "${dir}dev-guides-cache.json" ]]; then
+    CACHE_CANDIDATES+=("${dir}dev-guides-cache.json")
+    break
+  fi
+done
 
+CACHE_FILE=""
 CATALOG_CONTENT=""
-if [[ -f "$CACHE_FILE" ]]; then
-  CATALOG_CONTENT=$(jq -r '.content // empty' "$CACHE_FILE" 2>/dev/null || true)
-fi
+for cand in "${CACHE_CANDIDATES[@]}"; do
+  [[ -f "$cand" ]] || continue
+  cand_content=$(jq -r '.content // empty' "$cand" 2>/dev/null || true)
+  if [[ -n "$cand_content" ]]; then
+    CACHE_FILE="$cand"
+    CATALOG_CONTENT="$cand_content"
+    break
+  fi
+done
 if [[ -z "$CATALOG_CONTENT" ]]; then
   WARNINGS+=("catalog_cache_missing")
 fi

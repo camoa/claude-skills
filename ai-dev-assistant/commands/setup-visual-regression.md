@@ -59,7 +59,7 @@ If **all** frameworks are in the non-web set → print:
 setup-visual-regression: e2e/visual-regression is not applicable to a non-web framework (<comma-list of frameworks>); skipping — no harness scaffolded.
 ```
 
-and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is empty, or if **any** framework is not in the non-web set (i.e. at least one web framework is present), proceed exactly as today — no behavior change for web projects.
+and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is empty, or if **any** framework is not in the non-web set (i.e. at least one web framework is present), proceed exactly as today — no behavior change for web projects. If this project has no `**Frameworks:**`, consider adopting frameworks first via `/upgrade-project` before running `/setup-visual-regression` — the point-of-need detect-or-ask sub-protocol (`references/recipe-resolution.md` step 6) does not cover setup commands.
 
 This guard applies to the full-setup path only. The `--add-surface` and `--migrate` fast paths bypass it (they assume a harness already exists).
 

@@ -8,7 +8,7 @@ The `guides-matcher` agent reads the cached `dev-guides-navigator` catalog and e
 
 ## The catalog cache
 
-`catalog_path` points at `dev-guides-cache.json` written by `dev-guides-navigator`. It is a **JSON object** with the schema `{ "hash", "fetched_at", "content" }` (see the navigator's `references/cache-format.md`). The `.content` field holds the **full `llms.txt` markdown** — a topic table whose lines look like:
+`catalog_path` points at the dev-guides catalog index. The caller resolves it to the shared store's `indexes/llms.json` (canonical — see the navigator's `references/store-contract.md`), honouring `DEV_GUIDES_STORE_DIR`, with the legacy `dev-guides-cache.json` compat shim as a transitional fallback. Either way it is a **JSON object** with the schema `{ "hash", "fetched_at", "content" }` — the same shape. The `.content` field holds the **full `llms.txt` markdown** — a topic table whose lines look like:
 
 ```
 - [Modern CSS](https://camoa.github.io/dev-guides/css/modern/): 15 guides — CSS — grid, flexbox, custom properties…

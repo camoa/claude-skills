@@ -57,9 +57,13 @@ pair_check "routing_hints field"               'routing_hints'         'commands
 pair_check "## Code-quality extensions heading" '## Code-quality extensions' 'commands/review.md'
 pair_check "code_quality_extensions field"      'code_quality_extensions'    'commands/review.md'
 
-# 5. Change-impact globs (phase review) — reconstructed by review.md step 6 from the
-#    recipe declaration, parsed by change-impact-classify.sh via --rules-from.
-pair_check "## Change-impact globs declaration" '## Change-impact globs' 'scripts/change-impact-classify.sh'
+# 5. Change-impact globs (phase review). The recipe-body HEADING is read by the dispatch
+#    procedure (change-impact-dispatch.md step 6.2.0 — "read its `## Change-impact globs`
+#    section"), which reconstructs a JSON rules file and hands it to the classifier via
+#    --rules-from. So the heading token must be asserted against its REAL reader (the
+#    dispatch doc), NOT a descriptive comment in the classifier; --rules-from is the real
+#    parse-path flag and stays asserted against the classifier (its arg parser + union).
+pair_check "## Change-impact globs declaration" '## Change-impact globs' 'references/visual-review/change-impact-dispatch.md'
 pair_check "--rules-from parser flag"           '--rules-from'           'scripts/change-impact-classify.sh'
 
 # Cross-reference: recipe-resolution.md (transport) must point at the content contract.

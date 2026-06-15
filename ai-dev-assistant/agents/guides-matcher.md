@@ -19,7 +19,7 @@ Read-only agent. Match files (changed or planned) OR artifact prose to relevant 
   - `plan` — caller is `/implement` preflight; `files[]` are planned components from architecture.md.
   - `validation` — caller is `/validate:guides`; `files[]` are actually-changed paths.
   - `prose` — caller is a `/research`, `/design`, or `/implement` preflight; input is `artifact_excerpts[]` (phase-artifact prose) plus `candidate_slugs[]` (the Stage-1 `dev-guides-detect.sh` seed). No `files[]`.
-- `catalog_path` — absolute path to `dev-guides-cache.json`.
+- `catalog_path` — absolute path to the dev-guides catalog index. The caller resolves this to the shared store's `indexes/llms.json` (canonical — see the navigator's `references/store-contract.md`) or, transitionally, the legacy `dev-guides-cache.json` compat shim. Both share the same `{hash,fetched_at,content}` shape, so the agent reads `.content` identically either way.
 - `files[]` — absolute paths. May be empty. Used by `plan` / `validation` only.
 - `context_excerpts[]` — optional supporting prose (architecture.md `## Components`, `implementation.md` Files Created/Modified). Use to disambiguate ambiguous file paths (`plan` / `validation`).
 - `artifact_excerpts[]` — `prose` mode only. Objects `{source, text}` carrying phase-artifact prose (e.g. `task.md` Goal, `alignment.md`, `research.md`). The text to semantically match against the catalog.
@@ -29,9 +29,11 @@ Read-only agent. Match files (changed or planned) OR artifact prose to relevant 
 
 ## Workflow
 
-1. **Read the catalog.** `Read catalog_path`. The cache is a JSON object with a
+1. **Read the catalog.** `Read catalog_path`. It is a JSON object with a
    `.content` field holding the **full `llms.txt` markdown** (per
-   dev-guides-navigator `references/cache-format.md`). It is NOT a slug array.
+   dev-guides-navigator `references/store-contract.md` — same shape whether the
+   caller resolved the shared-store index or the legacy compat shim). It is NOT a
+   slug array.
    Parse the topic table out of that markdown: each topic is a line
    `- [Title](https://camoa.github.io/dev-guides/<slug>/): N guides — description`
    — extract `<slug>` (the URL path after `dev-guides/`, trailing slash

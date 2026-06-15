@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.0] - 2026-06-15
+
+**recipe_first_class epic — point-of-need detection, eager adoption sweep, consumption integrity, and shared-store read cutover.**
+
+### Added
+- **Eager recipe-adoption sweep:** `/upgrade-project` Step 4b drives the recipe loader once per declared phase, records the source-decision map, and reports coverage gaps. No body pre-cache, no bulk-approve — execution stays lazy. `/next` gains a recipe-adoption nudge.
+
+### Changed
+- **Point-of-need framework detect-or-ask:** `recipe-resolution.md` step-6 `no_frameworks_defined` now runs a detect-or-ask sub-protocol. Attended sessions: detect → offer/ask → write `**Frameworks:**` → re-resolve once → proceed. Unattended sessions: record gap + skip. Five phase-flow commands cite it single-source; `design` and `implement` read `codePath`; setup commands get a pointer; `/next` gains a framework nudge.
+- **Shared-store read cutover (guides side):** `dev-guides-detect.sh`, `validate-guides`, `guides-matcher`, and (navigator) pre-compact read the shared store first with shim fallback (honors `DEV_GUIDES_STORE_DIR`). Recipes-side consumers explicitly kept on the shim with a documented staged retirement plan.
+
+### Fixed
+- **Recipe consumption integrity:** fixed the `## Routing hints` theater — `implement.md` supplemental step-6 plan-mode pass now consumes the resolved body; step-3 stays the recipe-absent neutral path. New `tests/recipe-consumption-spec.sh` (resolve → inject → consume → effect). Fixed `recipe-interface-spec.sh` change-impact false-positive.
+
 ## [5.5.0] - 2026-06-14
 
 **Claude Code plugin projects are now first-class.** Two targeted improvements bring `claude-code-plugins` into the framework-detection and guard-rail layers so the plugin's lifecycle commands behave correctly when a project is itself a Claude Code plugin or marketplace repo.

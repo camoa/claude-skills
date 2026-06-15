@@ -25,7 +25,7 @@ Parse `$ARGUMENTS`. If `--variant` appears (in any form: `--variant cypress`, `-
 Read the active project's state by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON:
 
 - `.codePath`: if null or unknown (`.codePath == null`, or a `code_path_unknown` / `code_path_missing` warning), prompt the user to run `/set-code-path` first and stop.
-- `.frameworks`: the project's framework list. If it is empty (`[]` or absent), do **not** assume any stack. Print: `"setup-e2e: no frameworks recorded for this project. Run /upgrade-project to backfill frameworks, or set them in project_state.md, then re-run /setup-e2e."` and stop.
+- `.frameworks`: the project's framework list. If it is empty (`[]` or absent), do **not** assume any stack. Print: `"setup-e2e: no frameworks recorded for this project. Run /upgrade-project to backfill frameworks, or set them in project_state.md, then re-run /setup-e2e."` and stop. The point-of-need detect-or-ask sub-protocol (`references/recipe-resolution.md` step 6) does not cover setup commands — adopt frameworks first via `/upgrade-project` or the recipe-adoption flow before running `/setup-e2e`.
 
 **Non-web precondition guard.** Certain frameworks have no web UI and therefore no meaningful E2E harness. After reading `.frameworks` (and only when it is non-empty), check whether every framework in the list is a member of the **non-web set**:
 
