@@ -14,6 +14,23 @@ REPORT_DIR="${REPORT_DIR:-.reports}"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
 
+# Probe whether a vendor analyzer binary is installed in the container.
+# A missing analyzer is a benign SKIP (tool absent), not an error or a failure —
+# the gate runs what IS available and records absences in the report. Only called
+# after DDEV availability has been confirmed.
+tool_present() {
+    ddev exec test -f "vendor/bin/$1" &> /dev/null
+}
+
+# Serialise a bash array to a JSON string array (empty array → []).
+to_json_array() {
+    if [ "$#" -eq 0 ]; then
+        echo "[]"
+    else
+        printf '%s\n' "$@" | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]"
+    fi
+}
+
 echo "=== SOLID Principles Analysis ==="
 echo ""
 
@@ -95,6 +112,11 @@ EOF
     WARNING_COUNT=0
     SUGGESTION_COUNT=0
 
+    # Tool-availability tracking: which analyzers actually ran vs were absent.
+    # absence ≠ failure; if NO analyzer runs, the gate verdict is "skipped" (exit 0).
+    SKIPPED_TOOLS=()
+    RAN_ANALYZERS=0
+
     echo "Relevant files (${#RELEVANT_FILES[@]}):"
     printf '  %s\n' "${RELEVANT_FILES[@]}"
     echo ""
@@ -102,65 +124,71 @@ EOF
     # =====================
     # PHPStan Analysis (LSP, DIP) — changed files only
     # =====================
-    echo "Running PHPStan (type safety, LSP, DIP)..."
-
-    PHPSTAN_JSON="${REPORT_DIR}/solid/phpstan.json"
-    set +e
-    # shellcheck disable=SC2046
-    ddev exec vendor/bin/phpstan analyse \
-        "${RELEVANT_FILES[@]}" \
-        --error-format=json \
-        --no-progress \
-        --memory-limit=1500M \
-        2>/dev/null > "$PHPSTAN_JSON"
-    PHPSTAN_EXIT=$?
-    set -e
-
     PHPSTAN_ERRORS=0
     PHPSTAN_VIOLATIONS="[]"
-    if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
-        PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
-        echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
+    PHPSTAN_JSON="${REPORT_DIR}/solid/phpstan.json"
+    if tool_present phpstan; then
+        echo "Running PHPStan (type safety, LSP, DIP)..."
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
+        set +e
+        # shellcheck disable=SC2046
+        ddev exec vendor/bin/phpstan analyse \
+            "${RELEVANT_FILES[@]}" \
+            --error-format=json \
+            --no-progress \
+            --memory-limit=1500M \
+            2>/dev/null > "$PHPSTAN_JSON"
+        PHPSTAN_EXIT=$?
+        set -e
 
-        if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
-            PHPSTAN_VIOLATIONS=$(jq '[.files | to_entries[] | .key as $file | .value.messages[] | {
-                principle: "LSP",
-                severity: "warning",
-                file: $file,
-                line: .line,
-                message: .message,
-                metric: "phpstan",
-                value: 1,
-                threshold: 0
-            }]' "$PHPSTAN_JSON" 2>/dev/null || echo "[]")
+        if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
+            PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+            echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
 
-            WARNING_COUNT=$((WARNING_COUNT + PHPSTAN_ERRORS))
+            if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
+                PHPSTAN_VIOLATIONS=$(jq '[.files | to_entries[] | .key as $file | .value.messages[] | {
+                    principle: "LSP",
+                    severity: "warning",
+                    file: $file,
+                    line: .line,
+                    message: .message,
+                    metric: "phpstan",
+                    value: 1,
+                    threshold: 0
+                }]' "$PHPSTAN_JSON" 2>/dev/null || echo "[]")
+
+                WARNING_COUNT=$((WARNING_COUNT + PHPSTAN_ERRORS))
+            fi
+        else
+            echo -e "${YELLOW}[WARN]${NC} PHPStan output not available"
         fi
     else
-        echo -e "${YELLOW}[WARN]${NC} PHPStan output not available"
+        echo -e "${YELLOW}[SKIP]${NC} phpstan not installed (tool absent)"
+        SKIPPED_TOOLS+=("phpstan")
     fi
 
     # =====================
     # PHPMD Analysis (SRP) — changed files (comma-separated)
     # =====================
-    echo "Running PHPMD (complexity, SRP)..."
-
-    PHPMD_JSON="${REPORT_DIR}/solid/phpmd.json"
-    # PHPMD takes a comma-separated list as the first positional arg
-    PHPMD_TARGETS=$(IFS=,; echo "${RELEVANT_FILES[*]}")
-    set +e
-    ddev exec vendor/bin/phpmd \
-        "$PHPMD_TARGETS" \
-        json \
-        cleancode,codesize,design,naming \
-        --exclude "*/tests/*" \
-        2>/dev/null > "$PHPMD_JSON"
-    PHPMD_EXIT=$?
-    set -e
-
     PHPMD_VIOLATIONS_COUNT=0
     PHPMD_VIOLATIONS="[]"
-    if [ -f "$PHPMD_JSON" ] && [ -s "$PHPMD_JSON" ]; then
+    PHPMD_JSON="${REPORT_DIR}/solid/phpmd.json"
+    if tool_present phpmd; then
+        echo "Running PHPMD (complexity, SRP)..."
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
+        # PHPMD takes a comma-separated list as the first positional arg
+        PHPMD_TARGETS=$(IFS=,; echo "${RELEVANT_FILES[*]}")
+        set +e
+        ddev exec vendor/bin/phpmd \
+            "$PHPMD_TARGETS" \
+            json \
+            cleancode,codesize,design,naming \
+            --exclude "*/tests/*" \
+            2>/dev/null > "$PHPMD_JSON"
+        PHPMD_EXIT=$?
+        set -e
+
+        if [ -f "$PHPMD_JSON" ] && [ -s "$PHPMD_JSON" ]; then
         PHPMD_VIOLATIONS_COUNT=$(jq '[.files[].violations[]] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
         echo "  PHPMD violations: ${PHPMD_VIOLATIONS_COUNT}"
 
@@ -184,8 +212,12 @@ EOF
             WARNING_COUNT=$((WARNING_COUNT + PHPMD_WARNINGS))
             SUGGESTION_COUNT=$((SUGGESTION_COUNT + PHPMD_SUGGESTIONS))
         fi
+        else
+            echo -e "${YELLOW}[WARN]${NC} PHPMD output not available"
+        fi
     else
-        echo -e "${YELLOW}[WARN]${NC} PHPMD output not available"
+        echo -e "${YELLOW}[SKIP]${NC} phpmd not installed (tool absent)"
+        SKIPPED_TOOLS+=("phpmd")
     fi
 
     # =====================
@@ -195,12 +227,15 @@ EOF
 
     # =====================
     # Check for static \Drupal:: calls (DIP violation) — changed files only
+    # grep is always available (not an external analyzer), so this is a real check
+    # that runs regardless of phpstan/phpmd presence.
     # =====================
     echo "Checking for static \\Drupal:: calls (DIP)..."
 
     STATIC_CALLS=0
     STATIC_VIOLATIONS="[]"
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
         STATIC_CALLS=$(ddev exec grep -l "\\\\Drupal::" "${RELEVANT_FILES[@]}" \
             2>/dev/null | wc -l || echo "0")
 
@@ -231,8 +266,16 @@ EOF
 
     TOTAL_VIOLATIONS=$(echo "$ALL_VIOLATIONS" | jq 'length' 2>/dev/null || echo "0")
 
-    # Determine overall status
-    if [ "$CRITICAL_COUNT" -gt 0 ]; then
+    SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+
+    # Determine overall status.
+    # If NO analyzer ran at all (every analyzer absent), degrade to "skipped" (exit 0)
+    # rather than reporting a hollow PASS. Otherwise the verdict comes from the
+    # checks that DID run (absence of a tool never inverts pass↔fail).
+    if [ "$RAN_ANALYZERS" -eq 0 ]; then
+        SOLID_STATUS="skipped"
+        echo -e "${YELLOW}[SKIP]${NC} No SOLID analyzers available (all tools absent) — gate skipped"
+    elif [ "$CRITICAL_COUNT" -gt 0 ]; then
         SOLID_STATUS="fail"
         echo -e "${RED}[FAIL]${NC} Found ${CRITICAL_COUNT} critical SOLID violations"
     elif [ "$WARNING_COUNT" -gt 10 ]; then
@@ -258,6 +301,9 @@ EOF
   "mode": "changed",
   "changed_file": "${CHANGED_FILE}",
   "relevant_files": ${#RELEVANT_FILES[@]},
+  "analyzers_ran": ${RAN_ANALYZERS},
+  "skipped_tools": ${SKIPPED_TOOLS_JSON},
+  "tools_absent": ${SKIPPED_TOOLS_JSON},
   "status": "${SOLID_STATUS}",
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
@@ -270,6 +316,7 @@ EOF
     echo "Report saved: ${REPORT_DIR}/solid-report.json"
 
     case "$SOLID_STATUS" in
+        skipped) exit 0 ;;
         pass) exit 0 ;;
         warning) exit 1 ;;
         fail) exit 2 ;;
@@ -292,99 +339,117 @@ WARNING_COUNT=0
 SUGGESTION_COUNT=0
 VIOLATIONS="[]"
 
+# Tool-availability tracking (see --changed path for rationale).
+SKIPPED_TOOLS=()
+RAN_ANALYZERS=0
+PHPSTAN_ERRORS=0
+PHPMD_VIOLATIONS_COUNT=0
+
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/solid"
 
 # =====================
 # PHPStan Analysis (LSP, DIP)
 # =====================
-echo "Running PHPStan (type safety, LSP, DIP)..."
-
+PHPSTAN_VIOLATIONS="[]"
 PHPSTAN_JSON="${REPORT_DIR}/solid/phpstan.json"
-set +e
-ddev exec vendor/bin/phpstan analyse \
-    "${DRUPAL_MODULES_PATH}" \
-    --error-format=json \
-    --no-progress \
-    --memory-limit=1500M \
-    2>/dev/null > "$PHPSTAN_JSON"
-PHPSTAN_EXIT=$?
-set -e
+if tool_present phpstan; then
+    echo "Running PHPStan (type safety, LSP, DIP)..."
+    RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
+    set +e
+    ddev exec vendor/bin/phpstan analyse \
+        "${DRUPAL_MODULES_PATH}" \
+        --error-format=json \
+        --no-progress \
+        --memory-limit=1500M \
+        2>/dev/null > "$PHPSTAN_JSON"
+    PHPSTAN_EXIT=$?
+    set -e
 
-if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
-    PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
-    echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
+    if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
+        PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+        echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
 
-    # Convert PHPStan errors to violations
-    if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
-        PHPSTAN_VIOLATIONS=$(jq '[.files | to_entries[] | .key as $file | .value.messages[] | {
-            principle: "LSP",
-            severity: "warning",
-            file: $file,
-            line: .line,
-            message: .message,
-            metric: "phpstan",
-            value: 1,
-            threshold: 0
-        }]' "$PHPSTAN_JSON" 2>/dev/null || echo "[]")
+        # Convert PHPStan errors to violations
+        if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
+            PHPSTAN_VIOLATIONS=$(jq '[.files | to_entries[] | .key as $file | .value.messages[] | {
+                principle: "LSP",
+                severity: "warning",
+                file: $file,
+                line: .line,
+                message: .message,
+                metric: "phpstan",
+                value: 1,
+                threshold: 0
+            }]' "$PHPSTAN_JSON" 2>/dev/null || echo "[]")
 
-        # Count by severity
-        ((WARNING_COUNT += PHPSTAN_ERRORS))
+            # Count by severity
+            ((WARNING_COUNT += PHPSTAN_ERRORS))
+        else
+            PHPSTAN_VIOLATIONS="[]"
+        fi
     else
+        echo -e "${YELLOW}[WARN]${NC} PHPStan output not available"
         PHPSTAN_VIOLATIONS="[]"
     fi
 else
-    echo -e "${YELLOW}[WARN]${NC} PHPStan output not available"
-    PHPSTAN_VIOLATIONS="[]"
+    echo -e "${YELLOW}[SKIP]${NC} phpstan not installed (tool absent)"
+    SKIPPED_TOOLS+=("phpstan")
 fi
 
 # =====================
 # PHPMD Analysis (SRP)
 # =====================
-echo "Running PHPMD (complexity, SRP)..."
-
+PHPMD_VIOLATIONS="[]"
 PHPMD_JSON="${REPORT_DIR}/solid/phpmd.json"
-set +e
-ddev exec vendor/bin/phpmd \
-    "${DRUPAL_MODULES_PATH}" \
-    json \
-    cleancode,codesize,design,naming \
-    --exclude "*/tests/*" \
-    2>/dev/null > "$PHPMD_JSON"
-PHPMD_EXIT=$?
-set -e
+if tool_present phpmd; then
+    echo "Running PHPMD (complexity, SRP)..."
+    RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
+    set +e
+    ddev exec vendor/bin/phpmd \
+        "${DRUPAL_MODULES_PATH}" \
+        json \
+        cleancode,codesize,design,naming \
+        --exclude "*/tests/*" \
+        2>/dev/null > "$PHPMD_JSON"
+    PHPMD_EXIT=$?
+    set -e
 
-if [ -f "$PHPMD_JSON" ] && [ -s "$PHPMD_JSON" ]; then
-    PHPMD_VIOLATIONS_COUNT=$(jq '[.files[].violations[]] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
-    echo "  PHPMD violations: ${PHPMD_VIOLATIONS_COUNT}"
+    if [ -f "$PHPMD_JSON" ] && [ -s "$PHPMD_JSON" ]; then
+        PHPMD_VIOLATIONS_COUNT=$(jq '[.files[].violations[]] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
+        echo "  PHPMD violations: ${PHPMD_VIOLATIONS_COUNT}"
 
-    if [ "$PHPMD_VIOLATIONS_COUNT" -gt 0 ]; then
-        # Convert PHPMD violations
-        PHPMD_VIOLATIONS=$(jq '[.files[] | .file as $file | .violations[] | {
-            principle: (if .rule | test("Complexity|NPath|Methods") then "SRP" else "design" end),
-            severity: (if .priority <= 2 then "critical" elif .priority <= 3 then "warning" else "suggestion" end),
-            file: $file,
-            line: .beginLine,
-            message: .description,
-            metric: .rule,
-            value: (.priority // 3),
-            threshold: 3
-        }]' "$PHPMD_JSON" 2>/dev/null || echo "[]")
+        if [ "$PHPMD_VIOLATIONS_COUNT" -gt 0 ]; then
+            # Convert PHPMD violations
+            PHPMD_VIOLATIONS=$(jq '[.files[] | .file as $file | .violations[] | {
+                principle: (if .rule | test("Complexity|NPath|Methods") then "SRP" else "design" end),
+                severity: (if .priority <= 2 then "critical" elif .priority <= 3 then "warning" else "suggestion" end),
+                file: $file,
+                line: .beginLine,
+                message: .description,
+                metric: .rule,
+                value: (.priority // 3),
+                threshold: 3
+            }]' "$PHPMD_JSON" 2>/dev/null || echo "[]")
 
-        # Count by severity
-        PHPMD_CRITICAL=$(jq '[.files[].violations[] | select(.priority <= 2)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
-        PHPMD_WARNINGS=$(jq '[.files[].violations[] | select(.priority == 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
-        PHPMD_SUGGESTIONS=$(jq '[.files[].violations[] | select(.priority > 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
+            # Count by severity
+            PHPMD_CRITICAL=$(jq '[.files[].violations[] | select(.priority <= 2)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
+            PHPMD_WARNINGS=$(jq '[.files[].violations[] | select(.priority == 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
+            PHPMD_SUGGESTIONS=$(jq '[.files[].violations[] | select(.priority > 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
 
-        ((CRITICAL_COUNT += PHPMD_CRITICAL))
-        ((WARNING_COUNT += PHPMD_WARNINGS))
-        ((SUGGESTION_COUNT += PHPMD_SUGGESTIONS))
+            ((CRITICAL_COUNT += PHPMD_CRITICAL)) || true
+            ((WARNING_COUNT += PHPMD_WARNINGS)) || true
+            ((SUGGESTION_COUNT += PHPMD_SUGGESTIONS)) || true
+        else
+            PHPMD_VIOLATIONS="[]"
+        fi
     else
+        echo -e "${YELLOW}[WARN]${NC} PHPMD output not available"
         PHPMD_VIOLATIONS="[]"
     fi
 else
-    echo -e "${YELLOW}[WARN]${NC} PHPMD output not available"
-    PHPMD_VIOLATIONS="[]"
+    echo -e "${YELLOW}[SKIP]${NC} phpmd not installed (tool absent)"
+    SKIPPED_TOOLS+=("phpmd")
 fi
 
 # =====================
@@ -397,8 +462,11 @@ echo "  For auto-fixes: Run rector-fix.sh"
 
 # =====================
 # Check for static Drupal:: calls (DIP violation)
+# grep is always available (not an external analyzer) — this real check runs
+# regardless of phpstan/phpmd presence.
 # =====================
 echo "Checking for static \\Drupal:: calls (DIP)..."
+RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 
 STATIC_CALLS=$(ddev exec grep -r "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
     --include="*.php" \
@@ -407,7 +475,7 @@ STATIC_CALLS=$(ddev exec grep -r "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
 
 if [ "$STATIC_CALLS" -gt 0 ]; then
     echo -e "  ${YELLOW}[WARN]${NC} Found ${STATIC_CALLS} files with static \\Drupal:: calls"
-    ((WARNING_COUNT += STATIC_CALLS))
+    ((WARNING_COUNT += STATIC_CALLS)) || true
 
     # Create DIP violations for static calls
     STATIC_VIOLATIONS=$(ddev exec grep -rn "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
@@ -437,8 +505,14 @@ ALL_VIOLATIONS=$(echo "$PHPSTAN_VIOLATIONS $PHPMD_VIOLATIONS $STATIC_VIOLATIONS"
 # Calculate metrics
 TOTAL_VIOLATIONS=$(echo "$ALL_VIOLATIONS" | jq 'length' 2>/dev/null || echo "0")
 
-# Determine overall status
-if [ "$CRITICAL_COUNT" -gt 0 ]; then
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+
+# Determine overall status. All analyzers absent → "skipped" (exit 0), never a
+# hollow PASS. Absence of a tool never inverts pass↔fail.
+if [ "$RAN_ANALYZERS" -eq 0 ]; then
+    SOLID_STATUS="skipped"
+    echo -e "${YELLOW}[SKIP]${NC} No SOLID analyzers available (all tools absent) — gate skipped"
+elif [ "$CRITICAL_COUNT" -gt 0 ]; then
     SOLID_STATUS="fail"
     echo -e "${RED}[FAIL]${NC} Found ${CRITICAL_COUNT} critical SOLID violations"
 elif [ "$WARNING_COUNT" -gt 10 ]; then
@@ -462,6 +536,9 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
     "phpstan_errors": ${PHPSTAN_ERRORS:-0},
     "phpmd_violations": ${PHPMD_VIOLATIONS_COUNT:-0}
   },
+  "analyzers_ran": ${RAN_ANALYZERS},
+  "skipped_tools": ${SKIPPED_TOOLS_JSON},
+  "tools_absent": ${SKIPPED_TOOLS_JSON},
   "status": "${SOLID_STATUS}",
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
@@ -475,6 +552,7 @@ echo "Report saved: ${REPORT_DIR}/solid-report.json"
 
 # Exit based on status
 case "$SOLID_STATUS" in
+    skipped) exit 0 ;;
     pass) exit 0 ;;
     warning) exit 1 ;;
     fail) exit 2 ;;

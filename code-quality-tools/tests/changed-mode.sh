@@ -731,6 +731,264 @@ make_no_ddev "$NO_DDEV_BIN"
 rm -rf "$NO_DDEV_BIN"
 
 # =====================
+# F1: Drupal phpunit-bootstrap config resolver (tdd-workflow.sh + coverage-report.sh)
+# Tests 28-31. A fake ddev logs the phpunit invocation so we can assert -c <cfg>.
+# Drupal Unit tests extend Drupal\Tests\UnitTestCase which only autoloads under
+# core's phpunit config; without -c phpunit load-errors. The resolver must pass
+# -c when a core config exists and fall back (no -c + WARN) when none is found.
+# =====================
+make_phpunit_log_ddev() {
+    local dir="$1"
+    mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+# Fake ddev that logs the phpunit command line to $DDEV_PHPUNIT_LOG.
+LOG="${DDEV_PHPUNIT_LOG:-/dev/null}"
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            php)
+                # Either `php -m` (pcov probe) or `php ... vendor/bin/phpunit ...` (coverage run)
+                if printf '%s ' "$@" | grep -q 'vendor/bin/phpunit'; then
+                    printf 'PHPUNIT_RUN: %s\n' "$*" >> "$LOG"
+                    echo "Lines: 100.00% (1/1)"; echo "Tests: 1"; echo "OK (1 test, 1 assertion)"
+                    exit 0
+                fi
+                echo "Core"; exit 0     # `php -m` → no pcov line
+                ;;
+            vendor/bin/phpunit)
+                if [ "${2:-}" = "--version" ]; then echo "PHPUnit 11"; exit 0; fi
+                printf 'PHPUNIT_RUN: %s\n' "$*" >> "$LOG"   # tdd run
+                echo "OK (4 tests, 4 assertions)"
+                exit 0
+                ;;
+            *) exit 0 ;;
+        esac
+        ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+
+PHPUNIT_BIN=$(mktemp -d)
+make_phpunit_log_ddev "$PHPUNIT_BIN"
+TDD_SCRIPT="${DRUPAL_SCRIPTS}/tdd-workflow.sh"
+COV_SCRIPT="${DRUPAL_SCRIPTS}/coverage-report.sh"
+
+# Build a fixture project with a module (src + mapped Unit test on disk).
+make_phpunit_fixture() {
+    local root="$1"
+    mkdir -p "${root}/docroot/modules/custom/m/src"
+    mkdir -p "${root}/docroot/modules/custom/m/tests/src/Unit"
+    printf '<?php\n' > "${root}/docroot/modules/custom/m/src/Service.php"
+    printf '<?php\n' > "${root}/docroot/modules/custom/m/tests/src/Unit/ServiceTest.php"
+}
+
+# ── Test 28: tdd --changed passes -c docroot/core/phpunit.xml.dist when present ──
+{
+    label="tdd --changed: phpunit invoked with -c docroot/core/phpunit.xml.dist"
+    WORKDIR=$(mktemp -d); make_phpunit_fixture "$WORKDIR"
+    mkdir -p "${WORKDIR}/docroot/core"; touch "${WORKDIR}/docroot/core/phpunit.xml.dist"
+    LOG=$(mktemp)
+    ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
+        bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
+    RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
+    if echo "$RUN" | grep -q -- '-c docroot/core/phpunit.xml.dist'; then
+        ok "$label"
+    else
+        fail "$label → PHPUNIT_RUN='${RUN}'"
+    fi
+    rm -rf "$WORKDIR"; rm -f "$LOG"
+}
+
+# ── Test 29: resolver prefers web/core over docroot/core ─────────────────────
+{
+    label="tdd --changed: resolver prefers web/core/phpunit.xml.dist over docroot/core"
+    WORKDIR=$(mktemp -d); make_phpunit_fixture "$WORKDIR"
+    mkdir -p "${WORKDIR}/web/core" "${WORKDIR}/docroot/core"
+    touch "${WORKDIR}/web/core/phpunit.xml.dist" "${WORKDIR}/docroot/core/phpunit.xml.dist"
+    LOG=$(mktemp)
+    ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
+        bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
+    RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
+    if echo "$RUN" | grep -q -- '-c web/core/phpunit.xml.dist'; then
+        ok "$label"
+    else
+        fail "$label → PHPUNIT_RUN='${RUN}'"
+    fi
+    rm -rf "$WORKDIR"; rm -f "$LOG"
+}
+
+# ── Test 30: no config present → no -c flag, WARN, phpunit still runs (fallback) ─
+{
+    label="tdd --changed: no core config → fallback (no -c, WARN, still runs)"
+    WORKDIR=$(mktemp -d); make_phpunit_fixture "$WORKDIR"
+    LOG=$(mktemp)
+    out=$( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
+        bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" 2>&1 ) || true
+    RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
+    if [ -n "$RUN" ] && ! echo "$RUN" | grep -q -- '-c ' && echo "$out" | grep -qi "No Drupal phpunit config found"; then
+        ok "$label"
+    else
+        fail "$label → RUN='${RUN}'; warn=$(echo "$out" | grep -ci 'No Drupal phpunit config')"
+    fi
+    rm -rf "$WORKDIR"; rm -f "$LOG"
+}
+
+# ── Test 31: coverage-report.sh --changed passes -c when a core config exists ──
+{
+    label="coverage-report.sh --changed: phpunit invoked with -c docroot/core/phpunit.xml.dist"
+    WORKDIR=$(mktemp -d); make_phpunit_fixture "$WORKDIR"
+    mkdir -p "${WORKDIR}/docroot/core"; touch "${WORKDIR}/docroot/core/phpunit.xml.dist"
+    LOG=$(mktemp); RDIR=$(mktemp -d)
+    ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" REPORT_DIR="$RDIR" \
+        bash "$COV_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
+    RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
+    if echo "$RUN" | grep -q -- '-c docroot/core/phpunit.xml.dist'; then
+        ok "$label"
+    else
+        fail "$label → PHPUNIT_RUN='${RUN}'"
+    fi
+    rm -rf "$WORKDIR" "$RDIR"; rm -f "$LOG"
+}
+
+rm -rf "$PHPUNIT_BIN"
+
+# =====================
+# F2: missing analyzer degrades to a benign SKIP (not an ERROR/FAIL)
+# Tests 32-34. A fake ddev reports the analyzer as absent; the gate must exit 0,
+# print an explicit "[SKIP] <tool> ... (tool absent)", and record the absence in
+# its JSON report — never ERROR purely because a tool is not installed.
+# =====================
+
+# ── Test 32: dry-check.sh --changed, phpcpd absent → SKIP-clean exit 0 ──────────
+make_no_phpcpd_ddev() {
+    local dir="$1"; mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            vendor/bin/phpcpd) exit 127 ;;   # absent: --version fails
+            *) exit 0 ;;
+        esac
+        ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+{
+    label="dry-check.sh --changed: phpcpd absent → SKIP-clean (exit 0, not ERROR)"
+    NOPCPD_BIN=$(mktemp -d); make_no_phpcpd_ddev "$NOPCPD_BIN"
+    tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+    exit_code=0
+    output=$(PATH="${NOPCPD_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    STATUS=$(jq -r '.status // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
+    REASON=$(jq -r '.skip_reason // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
+    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "SKIP.*phpcpd" \
+        && [ "$STATUS" = "skipped" ] && [ "$REASON" = "tool_absent" ]; then
+        ok "$label (status=${STATUS}, reason=${REASON})"
+    else
+        fail "$label → exit=${exit_code}, status='${STATUS}', reason='${REASON}', out=$(echo "$output" | tr '\n' '|')"
+    fi
+    rm -rf "$NOPCPD_BIN" "$RDIR"; rm -f "$tmpf"
+}
+
+# ── Test 33: solid-check.sh --changed, phpstan+phpmd absent → exit 0, tools_absent ──
+make_no_analyzers_ddev() {
+    local dir="$1"; mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+# Analyzers absent: `test -f vendor/bin/<tool>` fails; grep still works.
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            test) exit 1 ;;                  # tool_present → absent
+            grep) shift; grep "$@" 2>/dev/null; exit 0 ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+{
+    label="solid-check.sh --changed: phpstan+phpmd absent → exit 0, tools_absent recorded"
+    NOAN_BIN=$(mktemp -d); make_no_analyzers_ddev "$NOAN_BIN"
+    tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+    exit_code=0
+    output=$(PATH="${NOAN_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/solid-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    ABSENT=$(jq -c '.tools_absent // []' "${RDIR}/solid-report.json" 2>/dev/null || echo "[]")
+    if [ "$exit_code" -eq 0 ] \
+        && echo "$output" | grep -qi "SKIP.*phpstan.*tool absent" \
+        && echo "$output" | grep -qi "SKIP.*phpmd.*tool absent" \
+        && echo "$ABSENT" | grep -q "phpstan" && echo "$ABSENT" | grep -q "phpmd"; then
+        ok "$label (tools_absent=${ABSENT})"
+    else
+        fail "$label → exit=${exit_code}, tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"
+    fi
+    rm -rf "$NOAN_BIN" "$RDIR"; rm -f "$tmpf"
+}
+
+# ── Test 34: security-check.sh --changed, php-security-linter absent → exit 0, recorded ──
+make_psl_absent_ddev() {
+    local dir="$1"; mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+# semgrep present-but-clean; php-security-linter absent (test -f fails).
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            semgrep)
+                if [ "${2:-}" = "--version" ]; then exit 0; fi
+                echo '{"results":[]}'; exit 0 ;;
+            test) exit 1 ;;                  # `test -f vendor/bin/php-security-linter` → absent
+            grep) shift; grep "$@" 2>/dev/null; exit 0 ;;
+            *) exit 0 ;;
+        esac
+        ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+{
+    label="security-check.sh --changed: php-security-linter absent → exit 0, tools_absent recorded"
+    PSL_BIN=$(mktemp -d); make_psl_absent_ddev "$PSL_BIN"
+    WORKDIR=$(mktemp -d); mkdir -p "${WORKDIR}/web/modules/custom/m/src"
+    printf '<?php\n' > "${WORKDIR}/web/modules/custom/m/src/A.php"
+    tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+    exit_code=0
+    output=$( cd "$WORKDIR" && PATH="${PSL_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1 ) || exit_code=$?
+    ABSENT=$(jq -c '.meta.tools_absent // []' "${RDIR}/security-report.json" 2>/dev/null || echo "[]")
+    if [ "$exit_code" -eq 0 ] \
+        && echo "$output" | grep -qi "SKIP.*php-security-linter.*tool absent" \
+        && echo "$ABSENT" | grep -q "php-security-linter"; then
+        ok "$label (tools_absent=${ABSENT})"
+    else
+        fail "$label → exit=${exit_code}, tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"
+    fi
+    rm -rf "$PSL_BIN" "$WORKDIR" "$RDIR"; rm -f "$tmpf"
+}
+
+# =====================
 # Cleanup
 # =====================
 rm -rf "$FINDINGS_BIN"

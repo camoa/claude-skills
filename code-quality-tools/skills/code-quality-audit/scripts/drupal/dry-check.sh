@@ -173,10 +173,37 @@ if ! ddev describe &> /dev/null; then
 fi
 
 # Check for PHPCPD
+# A missing analyzer is a benign SKIP, not an error: phpcpd is the only analyzer
+# this gate runs, so if it is absent there is no real DRY check to perform. Degrade
+# honestly (verdict = skipped, reason = tool_absent) and exit 0 — do NOT exit non-zero
+# purely because the tool is not installed.
 if ! ddev exec vendor/bin/phpcpd --version &> /dev/null; then
-    echo -e "${RED}[ERROR]${NC} PHPCPD not found"
+    echo -e "${YELLOW}[SKIP]${NC} phpcpd not installed — DRY gate skipped (tool absent)"
     echo "  Install with: ddev composer require --dev systemsdk/phpcpd"
-    exit 2
+    mkdir -p "${REPORT_DIR}/dry"
+    cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "mode": "skipped",
+  "changed_mode": $([ -n "$CHANGED_FILES_PATH" ] && echo "true" || echo "false"),
+  "duplication_percentage": 0,
+  "total_lines": 0,
+  "duplicated_lines": 0,
+  "clone_count": 0,
+  "clones": [],
+  "rating": "skipped",
+  "status": "skipped",
+  "skip_reason": "tool_absent",
+  "tools_absent": ["phpcpd"],
+  "settings": {
+    "min_lines": ${MIN_LINES},
+    "min_tokens": ${MIN_TOKENS}
+  },
+  "generated_at": "$(date -Iseconds)"
+}
+EOF
+    echo ""
+    echo "Report saved: ${REPORT_DIR}/dry-report.json"
+    exit 0
 fi
 
 # Get PHPCPD version

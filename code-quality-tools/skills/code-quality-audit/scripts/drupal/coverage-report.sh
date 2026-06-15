@@ -28,6 +28,29 @@ DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 COVERAGE_MINIMUM="${COVERAGE_MINIMUM:-70}"
 COVERAGE_TARGET="${COVERAGE_TARGET:-80}"
 
+# ── Drupal phpunit config resolver ────────────────────────────────────────────
+# Drupal Unit tests extend Drupal\Tests\UnitTestCase, which only autoloads under
+# core's phpunit config. A bare `phpunit <test>` fails with "Class
+# Drupal\Tests\UnitTestCase not found", so phpunit MUST be invoked with -c
+# <core-config>. Paths are project-root-relative (ddev exec cwd = mounted root).
+# Tries: web/core, docroot/core, core, then project-root phpunit.xml[.dist].
+# Echoes the first match; returns 1 (empty output) if none found.
+resolve_phpunit_config() {
+    local cfg
+    for cfg in \
+        web/core/phpunit.xml.dist \
+        docroot/core/phpunit.xml.dist \
+        core/phpunit.xml.dist \
+        phpunit.xml \
+        phpunit.xml.dist; do
+        if [ -f "$cfg" ]; then
+            echo "$cfg"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ── --changed guard ───────────────────────────────────────────────────────────
 # Intercept --changed before main script body; no-flag path is byte-identical.
 if [[ "${1:-}" == "--changed" ]]; then
@@ -115,6 +138,14 @@ if [[ "${1:-}" == "--changed" ]]; then
   echo ""
 
   PHPUNIT_CMD="php ${PCOV_FLAGS} vendor/bin/phpunit"
+  # Drupal core phpunit config (autoloads Drupal\Tests\UnitTestCase)
+  _COV_CFG=$(resolve_phpunit_config || true)
+  if [ -n "$_COV_CFG" ]; then
+    echo -e "${GREEN}[CONFIG]${NC} Using Drupal phpunit config: $_COV_CFG"
+    PHPUNIT_CMD+=" -c $_COV_CFG"
+  else
+    echo -e "${YELLOW}[WARN]${NC} No Drupal phpunit config found; running without -c (Unit tests may fail to autoload)."
+  fi
   # Add mapped test paths (instead of --testsuite)
   for tp in "${_test_paths[@]}"; do
     PHPUNIT_CMD+=" $tp"
@@ -231,6 +262,14 @@ echo ""
 
 # Build PHPUnit command
 PHPUNIT_CMD="php ${PCOV_FLAGS} vendor/bin/phpunit"
+# Drupal core phpunit config (autoloads Drupal\Tests\UnitTestCase)
+_COV_CFG=$(resolve_phpunit_config || true)
+if [ -n "$_COV_CFG" ]; then
+    echo -e "${GREEN}[CONFIG]${NC} Using Drupal phpunit config: $_COV_CFG"
+    PHPUNIT_CMD+=" -c $_COV_CFG"
+else
+    echo -e "${YELLOW}[WARN]${NC} No Drupal phpunit config found; running without -c (Unit tests may fail to autoload)."
+fi
 PHPUNIT_CMD+=" --testsuite unit,kernel"
 PHPUNIT_CMD+=" --coverage-clover /var/www/html/${REPORT_DIR}/coverage/clover.xml"
 PHPUNIT_CMD+=" --coverage-text"

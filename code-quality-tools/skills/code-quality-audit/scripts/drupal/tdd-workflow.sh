@@ -24,6 +24,30 @@ NC='\033[0m'
 
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 
+# ── Drupal phpunit config resolver ────────────────────────────────────────────
+# Drupal Unit tests extend Drupal\Tests\UnitTestCase, which only autoloads under
+# core's phpunit config. A bare `phpunit <test>` fails with:
+#   Class "Drupal\Tests\UnitTestCase" not found
+# So phpunit MUST be invoked with -c <core-config>. Paths are project-root-relative
+# because `ddev exec` runs with cwd = the mounted project root (same layout on host).
+# Tries, in order: web/core, docroot/core, core, then a project-root phpunit.xml[.dist].
+# Echoes the first match (relative path); returns 1 (empty output) if none found.
+resolve_phpunit_config() {
+    local cfg
+    for cfg in \
+        web/core/phpunit.xml.dist \
+        docroot/core/phpunit.xml.dist \
+        core/phpunit.xml.dist \
+        phpunit.xml \
+        phpunit.xml.dist; do
+        if [ -f "$cfg" ]; then
+            echo "$cfg"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ── --changed guard ───────────────────────────────────────────────────────────
 # Intercept --changed before any existing argument parsing; no-flag path is
 # byte-identical to pre-change behaviour.
@@ -101,8 +125,18 @@ if [[ "${1:-}" == "--changed" ]]; then
       exit 1
     fi
 
+    local _cfg
+    _cfg=$(resolve_phpunit_config || true)
+
     set +e
-    ddev exec vendor/bin/phpunit "${test_paths[@]}"
+    if [ -n "$_cfg" ]; then
+      echo -e "${BLUE}[CONFIG]${NC} Using Drupal phpunit config: $_cfg"
+      ddev exec vendor/bin/phpunit -c "$_cfg" "${test_paths[@]}"
+    else
+      echo -e "${YELLOW}[WARN]${NC} No Drupal phpunit config found (web/core, docroot/core, core, phpunit.xml[.dist])."
+      echo "  Running phpunit without -c; Drupal Unit tests may fail to autoload Drupal\\Tests\\UnitTestCase."
+      ddev exec vendor/bin/phpunit "${test_paths[@]}"
+    fi
     local rc=$?
     set -e
     exit $rc
@@ -169,11 +203,21 @@ run_test() {
         filter="--filter $(basename "$TEST_FILE" .php)"
     fi
 
-    echo "Running: ddev exec vendor/bin/phpunit $filter"
+    local cfg cfg_flag=""
+    cfg=$(resolve_phpunit_config || true)
+    if [ -n "$cfg" ]; then
+        cfg_flag="-c $cfg"
+        echo -e "${BLUE}[CONFIG]${NC} Using Drupal phpunit config: $cfg"
+    else
+        echo -e "${YELLOW}[WARN]${NC} No Drupal phpunit config found (web/core, docroot/core, core, phpunit.xml[.dist])."
+        echo "  Running phpunit without -c; Drupal Unit tests may fail to autoload Drupal\\Tests\\UnitTestCase."
+    fi
+
+    echo "Running: ddev exec vendor/bin/phpunit $cfg_flag $filter"
     echo ""
 
     set +e
-    ddev exec vendor/bin/phpunit $filter
+    ddev exec vendor/bin/phpunit $cfg_flag $filter
     local exit_code=$?
     set -e
 
