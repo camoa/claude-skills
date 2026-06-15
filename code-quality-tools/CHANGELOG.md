@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.2] - 2026-06-14
+
+**Fix: two real defects in the Drupal gate floor, surfaced by running the gates live against a real site (idexx).**
+
+### Fixed
+- **F1 — `tdd-workflow.sh` (and `coverage-report.sh`) omitted Drupal's phpunit bootstrap.** The gate ran
+  `ddev exec vendor/bin/phpunit <test>` with **no** `-c <config>`. Drupal Unit tests extend
+  `Drupal\Tests\UnitTestCase`, which only autoloads under core's phpunit config, so a bare invocation
+  load-errored with `Class "Drupal\Tests\UnitTestCase" not found` (proven: the same test passes 4/4 with
+  `-c docroot/core/phpunit.xml.dist`, load-errors without). Added a host-side resolver
+  (`resolve_phpunit_config`) that detects the Drupal phpunit config — trying, in order,
+  `web/core/phpunit.xml.dist`, `docroot/core/phpunit.xml.dist`, `core/phpunit.xml.dist`, `phpunit.xml`,
+  `phpunit.xml.dist` (project-root-relative, since `ddev exec` cwd is the mounted project root) — and passes
+  `-c "$cfg"` to phpunit at every call site in **both** scripts (`tdd-workflow.sh` `_run_changed_mode` +
+  `run_test`; `coverage-report.sh` `--changed` + no-flag). If no config is found it prints a clear WARN and
+  runs without `-c` (preserving the old behavior as a fallback).
+- **F2 — a missing analyzer degraded inconsistently across the gates.** With analyzers absent,
+  `dry-check.sh` **ERRORed** (`[ERROR] PHPCPD not found`, non-zero) while `solid`/`security` printed PASS on
+  grep-only fallbacks. A missing tool now degrades **consistently and honestly** — run what is available, mark
+  each absent analyzer with an explicit `[SKIP] <tool> not installed (tool absent)` line, and never ERROR
+  purely because a tool is absent:
+  - `dry-check.sh` — phpcpd absent now emits `[SKIP] phpcpd not installed — DRY gate skipped (tool absent)`
+    and **exits 0** (benign skip), with `status`/`mode` = `skipped` and `skip_reason` = `tool_absent` in
+    `dry-report.json`.
+  - `solid-check.sh` / `security-check.sh` — absent analyzers (phpstan, phpmd / semgrep, php-security-linter,
+    psalm, trivy, gitleaks, security_review) now print `[SKIP] <tool> ... (tool absent)` and are recorded in
+    the JSON report (`skipped_tools` / `tools_absent`, plus `analyzers_ran`). The gate stays PASS when the
+    checks that DID run found nothing (absence ≠ failure); if **every** analyzer is absent (no real check ran)
+    the verdict is `skipped` (exit 0), never a hollow PASS. Pass↔fail is never inverted.
+
+### Tests
+- `tests/changed-mode.sh` +7 (28–34): F1 — tdd/coverage pass `-c <core-config>` when present, the resolver
+  prefers `web/core` over `docroot/core`, and falls back (no `-c` + WARN) when no config exists; F2 —
+  phpcpd-absent → dry SKIP-clean (exit 0, `status=skipped`/`tool_absent`), phpstan+phpmd-absent → solid exit 0
+  with `tools_absent` recorded, php-security-linter-absent → security exit 0 with `tools_absent` recorded.
+- Validated live against idexx (DDEV up): tdd now reports `Configuration: docroot/core/phpunit.xml.dist` and
+  4/4 OK; dry/solid/security SKIP-clean with explicit `[SKIP] ... (tool absent)` lines, all exit 0.
+
 ## [3.9.1] - 2026-06-12
 
 **Fix: `--changed` security/dry gates no longer require DDEV to skip a no-PHP change.** A faithful

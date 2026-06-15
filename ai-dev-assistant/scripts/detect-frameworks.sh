@@ -7,10 +7,14 @@
 # Exit 0 regardless of input (defensive posture; mirrors project-state-read.sh).
 #
 # Detected frameworks (stable output order):
-#   drupal   — composer.json require/require-dev contains drupal/core or drupal/core-recommended,
-#              OR <codePath>/{web,docroot}/core/lib/Drupal.php OR <codePath>/core/lib/Drupal.php exists.
-#              (web/ = composer-template default; docroot/ = Acquia/Pantheon topology.)
-#   nextjs   — package.json .dependencies or .devDependencies contains a "next" key.
+#   drupal            — composer.json require/require-dev contains drupal/core or drupal/core-recommended,
+#                       OR <codePath>/{web,docroot}/core/lib/Drupal.php OR <codePath>/core/lib/Drupal.php exists.
+#                       (web/ = composer-template default; docroot/ = Acquia/Pantheon topology.)
+#   nextjs            — package.json .dependencies or .devDependencies contains a "next" key.
+#   claude-code-plugins — <codePath>/.claude-plugin/ directory exists
+#                         (a Claude Code plugin project: individual plugins carry
+#                         .claude-plugin/plugin.json; marketplace repos carry
+#                         .claude-plugin/marketplace.json — the directory is the signal).
 #
 # Missing / non-dir codePath ⇒ []. Missing $1 ⇒ [].
 # Malformed JSON in composer.json / package.json ⇒ that signal is absent (no crash).
@@ -78,6 +82,20 @@ if [ -f "$PACKAGE_JSON" ]; then
 fi
 
 [ "$NEXTJS_FOUND" = "true" ] && DETECTED+=("nextjs")
+
+# ============================================================
+# CLAUDE-CODE-PLUGINS detection
+# ============================================================
+CLAUDE_CODE_PLUGINS_FOUND=false
+
+# .claude-plugin/ directory presence is the signal for a Claude Code plugin /
+# marketplace project. Individual plugins carry plugin.json; marketplace repos
+# carry marketplace.json — checking the directory covers both.
+if [ -d "${CODE_PATH}/.claude-plugin" ]; then
+  CLAUDE_CODE_PLUGINS_FOUND=true
+fi
+
+[ "$CLAUDE_CODE_PLUGINS_FOUND" = "true" ] && DETECTED+=("claude-code-plugins")
 
 # ============================================================
 # Emit stable-order JSON array (de-duplicated by detection order above)

@@ -48,6 +48,21 @@ The surface registry is `<codePath>/.visual-review/registry.yml` — shared with
 `/setup-e2e`. If `/setup-e2e` already created it, this command **merges** into
 it; it never clobbers the file.
 
+Also parse `.frameworks` from the `project-state-read.sh` output (same Bash call). If `.frameworks` is non-empty, apply the **non-web precondition guard** before proceeding to Step 0a:
+
+> Non-web frameworks: `claude-code-plugins`
+> (extend this list as new non-web frameworks are detected)
+
+If **all** frameworks are in the non-web set → print:
+
+```
+setup-visual-regression: e2e/visual-regression is not applicable to a non-web framework (<comma-list of frameworks>); skipping — no harness scaffolded.
+```
+
+and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is empty, or if **any** framework is not in the non-web set (i.e. at least one web framework is present), proceed exactly as today — no behavior change for web projects.
+
+This guard applies to the full-setup path only. The `--add-surface` and `--migrate` fast paths bypass it (they assume a harness already exists).
+
 ## Step 0a: Resolve the framework process recipe
 
 The framework-specific work is **not** inlined in this command. It comes from the

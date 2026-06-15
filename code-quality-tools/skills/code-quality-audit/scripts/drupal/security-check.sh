@@ -15,6 +15,15 @@ REPORT_DIR="${REPORT_DIR:-.reports}"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
 
+# Serialise a bash array to a JSON string array (empty array → []).
+to_json_array() {
+    if [ "$#" -eq 0 ]; then
+        echo "[]"
+    else
+        printf '%s\n' "$@" | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]"
+    fi
+}
+
 echo "=== Security Audit (OWASP + Drupal) ==="
 echo ""
 
@@ -126,6 +135,11 @@ if [ -n "$CHANGED_FILE" ]; then
     CUSTOM_ISSUES="[]"
     COMPOSER_VIOLATIONS="[]"
 
+    # Tool-availability tracking: which SAST analyzers ran vs were absent.
+    # absence ≠ failure; if NO analyzer runs the gate verdict is "skipped" (exit 0).
+    SKIPPED_TOOLS=()
+    RAN_ANALYZERS=0
+
     # =====================
     # [1] Semgrep SAST — changed files only
     # =====================
@@ -134,6 +148,7 @@ if [ -n "$CHANGED_FILE" ]; then
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
         if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; then
+            RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
             set +e
             if ddev describe &> /dev/null; then
                 # shellcheck disable=SC2046
@@ -172,7 +187,8 @@ if [ -n "$CHANGED_FILE" ]; then
                 fi
             fi
         else
-            echo -e "  ${YELLOW}Semgrep not installed (optional)${NC}"
+            echo -e "  ${YELLOW}[SKIP]${NC} semgrep not installed (tool absent)"
+            SKIPPED_TOOLS+=("semgrep")
         fi
     else
         echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
@@ -187,6 +203,7 @@ if [ -n "$CHANGED_FILE" ]; then
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
         if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+            RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
             set +e
             # shellcheck disable=SC2046
             ddev exec vendor/bin/php-security-linter scan \
@@ -222,7 +239,8 @@ if [ -n "$CHANGED_FILE" ]; then
                 PHPCS_ISSUES="[]"
             fi
         else
-            echo -e "  ${YELLOW}PHPCS security linter not installed (optional)${NC}"
+            echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
+            SKIPPED_TOOLS+=("php-security-linter")
         fi
     else
         echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
@@ -235,6 +253,8 @@ if [ -n "$CHANGED_FILE" ]; then
     echo -e "${BLUE}[SAST 3/3]${NC} Checking custom Drupal security patterns (changed files)..."
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
+        # grep-based pattern scan is always available — a real check that runs.
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
         # Unsafe db_query usage
         DB_QUERY_UNSAFE=$(grep -n "db_query.*\$" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
         if [ -n "$DB_QUERY_UNSAFE" ]; then
@@ -299,6 +319,7 @@ if [ -n "$CHANGED_FILE" ]; then
     echo ""
     if [ "$HAS_COMPOSER" = true ]; then
         echo -e "${BLUE}[ADVISORY]${NC} composer.json|lock changed — running composer audit..."
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
         COMPOSER_AUDIT_JSON="${REPORT_DIR}/security/composer-audit.json"
         set +e
         ddev composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
@@ -343,14 +364,23 @@ if [ -n "$CHANGED_FILE" ]; then
         --argjson custom "$CUSTOM_ISSUES" \
         '$composer + $phpcs + $semgrep + $custom')
 
-    OVERALL_STATUS="pass"
-    if [ "$CRITICAL_COUNT" -gt 0 ]; then
-        OVERALL_STATUS="fail"
-    elif [ "$HIGH_COUNT" -gt 3 ]; then
-        OVERALL_STATUS="fail"
-    elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
-        OVERALL_STATUS="warning"
+    # Status. If NO SAST analyzer ran (every analyzer absent + no eligible files),
+    # degrade to "skipped" (exit 0) rather than a hollow PASS. Otherwise the verdict
+    # comes from the checks that DID run — tool absence never inverts pass↔fail.
+    if [ "$RAN_ANALYZERS" -eq 0 ]; then
+        OVERALL_STATUS="skipped"
+    else
+        OVERALL_STATUS="pass"
+        if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            OVERALL_STATUS="fail"
+        elif [ "$HIGH_COUNT" -gt 3 ]; then
+            OVERALL_STATUS="fail"
+        elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
+            OVERALL_STATUS="warning"
+        fi
     fi
+
+    SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 
     REPORT_FILE="${REPORT_DIR}/security-report.json"
     jq -n \
@@ -361,13 +391,17 @@ if [ -n "$CHANGED_FILE" ]; then
         --argjson medium "$MEDIUM_COUNT" \
         --argjson low "$LOW_COUNT" \
         --argjson issues "$ISSUES" \
+        --argjson analyzers_ran "$RAN_ANALYZERS" \
+        --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
         --arg advisory_note "$ADVISORY_SKIP_NOTE" \
         '{
             meta: {
                 timestamp: $timestamp,
                 scan_type: "security_audit_changed",
                 mode: "changed",
+                analyzers_ran: $analyzers_ran,
                 tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
+                tools_absent: $tools_absent,
                 tools_skipped: ["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"]
             },
             summary: {
@@ -402,7 +436,11 @@ if [ -n "$CHANGED_FILE" ]; then
     echo -e "Low:      ${LOW_COUNT}"
     echo ""
 
-    if [ "$OVERALL_STATUS" = "pass" ]; then
+    if [ "$OVERALL_STATUS" = "skipped" ]; then
+        echo -e "${YELLOW}[SKIP]${NC} No security SAST analyzers available (all tools absent) — gate skipped"
+        echo -e "Report: ${REPORT_FILE}"
+        exit 0
+    elif [ "$OVERALL_STATUS" = "pass" ]; then
         echo -e "${GREEN}[PASS]${NC} Security SAST passed"
         exit 0
     elif [ "$OVERALL_STATUS" = "warning" ]; then
@@ -425,6 +463,9 @@ if ! ddev describe &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} DDEV is not running"
     exit 2
 fi
+
+# Track absent optional analyzers (honest, consistent skip reporting).
+SKIPPED_TOOLS=()
 
 echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================
@@ -546,7 +587,8 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
         PHPCS_ISSUES="[]"
     fi
 else
-    echo -e "  ${YELLOW}PHPCS security linter not installed (optional)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
+    SKIPPED_TOOLS+=("php-security-linter")
     PHPCS_ISSUES="[]"
 fi
 
@@ -619,7 +661,8 @@ EOF
         PSALM_ISSUES="[]"
     fi
 else
-    echo -e "  ${YELLOW}Psalm not installed (optional but recommended)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} psalm not installed (tool absent)"
+    SKIPPED_TOOLS+=("psalm")
     PSALM_ISSUES="[]"
 fi
 
@@ -729,7 +772,8 @@ if ddev drush pm:list --filter=security_review --format=json 2>/dev/null | jq -e
         SECREVIEW_ISSUES="[]"
     fi
 else
-    echo -e "  ${YELLOW}Security Review module not installed (optional)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} security_review module not installed (tool absent)"
+    SKIPPED_TOOLS+=("security_review")
     SECREVIEW_ISSUES="[]"
 fi
 
@@ -783,7 +827,8 @@ if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; 
         fi
     fi
 else
-    echo -e "  ${YELLOW}Semgrep not installed (optional)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} semgrep not installed (tool absent)"
+    SKIPPED_TOOLS+=("semgrep")
 fi
 
 echo ""
@@ -845,7 +890,8 @@ if command -v trivy &> /dev/null; then
         fi
     fi
 else
-    echo -e "  ${YELLOW}Trivy not installed (optional)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} trivy not installed (tool absent)"
+    SKIPPED_TOOLS+=("trivy")
 fi
 
 echo ""
@@ -885,7 +931,8 @@ if command -v gitleaks &> /dev/null; then
         fi
     fi
 else
-    echo -e "  ${YELLOW}Gitleaks not installed (optional)${NC}"
+    echo -e "  ${YELLOW}[SKIP]${NC} gitleaks not installed (tool absent)"
+    SKIPPED_TOOLS+=("gitleaks")
 fi
 
 echo ""
@@ -950,6 +997,8 @@ fi
 # =====================
 REPORT_FILE="${REPORT_DIR}/security-report.json"
 
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+
 jq -n \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg status "$OVERALL_STATUS" \
@@ -958,11 +1007,13 @@ jq -n \
     --argjson medium "$MEDIUM_COUNT" \
     --argjson low "$LOW_COUNT" \
     --argjson issues "$ISSUES" \
+    --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
-            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"]
+            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
+            tools_absent: $tools_absent
         },
         summary: {
             overall_status: $status,

@@ -88,7 +88,7 @@ Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 **Status:** Initializing
 **Path:** {full_path_to_project_folder}
 **Code path:** {absolute_code_path OR (docs-only) OR omit-entirely-if-caller-did-not-provide}
-**Frameworks:** {when code path is known: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-frameworks.sh" "<code_path>"` and write the `jq -r 'join(", ")'` result (e.g. `drupal, nextjs`); omit this line entirely when code path is unknown or the returned array is empty}
+**Frameworks:** {when code path is known: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-frameworks.sh" "<code_path>"` and write the `jq -r 'join(", ")'` result (e.g. `drupal, nextjs, claude-code-plugins`); omit this line entirely when code path is unknown or the returned array is empty}
 
 ## Overview
 {To be filled during requirements gathering}
