@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.0] - 2026-06-14
+
+**Claude Code plugin projects are now first-class.** Two targeted improvements bring `claude-code-plugins` into the framework-detection and guard-rail layers so the plugin's lifecycle commands behave correctly when a project is itself a Claude Code plugin or marketplace repo.
+
+### Added
+- `scripts/detect-frameworks.sh` — third detection arm: emits `claude-code-plugins` when `<codePath>/.claude-plugin/` directory exists. The `.claude-plugin/` directory is the signal, covering both individual plugin projects (`plugin.json`) and marketplace repos (`marketplace.json`). Stable output order: drupal, nextjs, claude-code-plugins. Header comment updated to document the new arm.
+- `tests/detect-frameworks-spec.sh` — new spec (12 checks): fixture-based coverage of every arm (empty dir, plugin-only, drupal-only, nextjs-only, drupal+plugin, nextjs+plugin, all-three, marketplace form, no-arg, non-existent, and two real-directory integration probes against the marketplace root and the plugin dir itself). All pass.
+- `commands/setup-e2e.md` — **non-web precondition guard** added after the Step 1 frameworks check: when `.frameworks` is non-empty and every framework is in the non-web set (`claude-code-plugins`, easily extensible), print a clear skip message and exit — no harness scaffolded, no recipe resolved. Empty or mixed-web project lists are unaffected; existing web-project behavior is unchanged.
+- `commands/setup-visual-regression.md` — same **non-web precondition guard** added in Step 0 (after codePath resolution, before Step 0a recipe resolution). Applies to the full-setup path only; `--add-surface` and `--migrate` fast paths bypass it. Empty or mixed-web project lists are unaffected.
+
+### Changed
+- `skills/project-initializer/SKILL.md` — cosmetic example updated from `drupal, nextjs` to `drupal, nextjs, claude-code-plugins` in the Frameworks detection note.
+- `commands/upgrade-project.md` — cosmetic example in the `**Frameworks:**` gap handler updated to `drupal, nextjs, claude-code-plugins`.
+
 ## [5.4.0] - 2026-06-14
 
 **Recipe-interface contract — the missing seam between the agnostic plugin and its dev-guides recipes.** The de-Drupalization tranche pushed all stack-specific behavior into process-recipe bodies, but never wrote down *what a recipe body must declare* for the gates to act on it. The five gate declarations (`## Screenshot capture`, `e2e.preflight_command`, `## Routing hints`, `## Code-quality extensions`, `## Change-impact globs`) were only implicit in the parsers — a recipe author had no spec, and a misspelled heading degraded silently to the neutral floor. This release makes the seam explicit and self-enforcing.

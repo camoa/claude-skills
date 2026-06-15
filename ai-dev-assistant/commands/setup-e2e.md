@@ -27,6 +27,19 @@ Read the active project's state by running `${CLAUDE_PLUGIN_ROOT}/scripts/projec
 - `.codePath`: if null or unknown (`.codePath == null`, or a `code_path_unknown` / `code_path_missing` warning), prompt the user to run `/set-code-path` first and stop.
 - `.frameworks`: the project's framework list. If it is empty (`[]` or absent), do **not** assume any stack. Print: `"setup-e2e: no frameworks recorded for this project. Run /upgrade-project to backfill frameworks, or set them in project_state.md, then re-run /setup-e2e."` and stop.
 
+**Non-web precondition guard.** Certain frameworks have no web UI and therefore no meaningful E2E harness. After reading `.frameworks` (and only when it is non-empty), check whether every framework in the list is a member of the **non-web set**:
+
+> Non-web frameworks: `claude-code-plugins`
+> (extend this list as new non-web frameworks are detected)
+
+If **all** frameworks are in the non-web set → print:
+
+```
+setup-e2e: e2e/visual-regression is not applicable to a non-web framework (<comma-list of frameworks>); skipping — no harness scaffolded.
+```
+
+and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is empty, or if **any** framework is not in the non-web set (i.e. at least one web framework is present), proceed exactly as today — no behavior change for web projects.
+
 ## Step 2: --add-journey fast path
 
 If `--add-journey <description>` is present:
