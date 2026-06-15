@@ -76,9 +76,10 @@ callers cite instead of re-describing the steps inline.
    present. When no body resolved for a framework there is no method to follow, so do not dispatch the
    generic agent and do not invent steps. Handle each no-body case explicitly:
 
-   - **`results:[]` with `no_frameworks_defined`** (the project has no frameworks recorded): tell the
-     user to run `/upgrade-project` to backfill frameworks, or to set them in `project_state.md`, then
-     skip the framework-specific step gracefully for this run.
+   - **`results:[]` with `no_frameworks_defined`** (the project has no frameworks recorded): run the
+     **framework detect-or-ask sub-protocol** below — the *need* for a recipe is the trigger to adopt a
+     framework, not a reason to silently run stack-neutral forever. Do **not** merely tell the user to run
+     `/upgrade-project` and skip.
    - **`action:ask-user`** (a true miss): ask the user for a path or to research it, per step 5, and
      proceed according to the answer. Until a body is resolved and Read, there is nothing to follow.
    - **A framework whose result is `available:false`** with no `body_path` for any other reason: skip
@@ -86,6 +87,44 @@ callers cite instead of re-describing the steps inline.
 
    The generic-agent dispatch and the follow-in-place step both require a `body_path` that was Read.
    No `body_path` means no follow-step for that framework.
+
+### Framework detect-or-ask (the `no_frameworks_defined` sub-protocol)
+
+The need IS the trigger: when a phase step needs a recipe but the project has no `**Frameworks:**`, the
+**calling command** adopts a framework at the point of need rather than skipping. This fires **only** when
+`frameworks == []` (an empty result with `no_frameworks_defined`); it never touches the `action:ask-user`
+path (frameworks set, recipe missing — that case is step 5, unchanged). It is idempotent (once a Frameworks
+line is written, `frameworks != []` so this branch cannot re-fire) and degrade-safe (decline → proceed
+stack-neutral exactly as before — no regression).
+
+0. **Attended-mode gate.** The offer in steps 1–2 is **interactive** and runs ONLY when an answer is
+   possible. In an **unattended** run (a `--headless` command, or an autonomous/loop driver), do NOT prompt:
+   record a `frameworks_unset` gap marker so the gap is not silently lost, skip the framework-specific step
+   for this run, and continue. A later attended `/next` surfaces the marker. Never block an unattended run.
+
+1. **Guard codePath.** Read `codePath` via `scripts/project-state-read.sh` (the loader's result JSON does
+   **not** carry codePath, so a command that did not already read it must read it here).
+   - **codePath unknown** → cannot detect: ASK the user (offer `/set-code-path`), or skip-with-note for this
+     run. Do not silently gate on a missing codePath.
+
+2. **Detect, then offer or ask.** Run `scripts/detect-frameworks.sh "<codePath>"` (the detector; no change).
+   - **One or more detected** → **offer**: "Detected `<list>`. Set as this project's `**Frameworks:**`? [y/N]".
+     - `y` → write the `**Frameworks:**` line into `project_state.md` using the `/upgrade-project` idiom
+       (flush-left, inserted after the last top-block metadata field — the exact format
+       `project-state-read.sh` parses; never a blank or placeholder line) → go to step 3.
+     - `n` → proceed stack-neutral for this run (no write, no regression).
+   - **Empty result** → the detector emits `[]` for a genuine no-framework project AND for a codePath/parse
+     fault alike; it does not disambiguate. Safe degrade either way: ASK the user for a framework id (a free
+     token — no allowlist), or skip. **Never** write a blank/placeholder Frameworks line.
+
+3. **Re-resolve once (loop guard).** Re-invoke the `process-recipe-loader` skill (the loader re-reads
+   `project_state.md` from disk every call, so it sees the newly written line). Use its results to proceed
+   with the framework-specific step. Re-resolve **at most once**: if it *still* returns `no_frameworks_defined`
+   (the write failed, or its format was not parseable), do **not** loop — skip-with-note and warn.
+
+This behavior lives **only** here; the phase commands cite this sub-protocol rather than re-describing it.
+The two setup commands (`/setup-e2e`, `/setup-visual-regression`) handle empty frameworks with their own
+pre-loader guards and are out of scope for this sub-protocol; they point the user to adopt frameworks first.
 
 ## Who invokes the loader (commands, not agents)
 

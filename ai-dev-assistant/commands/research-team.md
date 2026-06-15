@@ -97,7 +97,7 @@ The COMMAND owns resolution and injection. For each framework result with `avail
 The teammates treat that block as the framework search method to follow. They never resolve the recipe themselves and stay stack-neutral.
 
 **No body resolved → do not inject a method-less search.** Per `references/recipe-resolution.md` step 6, the inject step runs only when a `body_path` resolved for the framework:
-- **`results:[]` with `no_frameworks_defined`** → tell the user to run `/upgrade-project` to backfill frameworks (or set them in `project_state.md`), then run the team with the generic search discipline only (no injected method) and note the gap.
+- **`results:[]` with `no_frameworks_defined`** → follow the framework detect-or-ask sub-protocol in `references/recipe-resolution.md` step 6 (detect → offer/ask → write `**Frameworks:**` → re-resolve once → proceed; unattended: record gap + skip).
 - **`action:ask-user`** → ask the user for a path or to research it, and proceed per the answer. Until a body is resolved and Read, there is no framework method to inject.
 - **A framework that resolved nothing** → skip that framework's method with a clear note and continue with the frameworks that did resolve.
 

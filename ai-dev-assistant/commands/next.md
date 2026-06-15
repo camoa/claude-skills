@@ -194,6 +194,22 @@ After resolving the project (Step 1) but before recommending a task action, run 
 
 Print before the task-selection prompt (or before the "no tasks yet" message). Skip silently when both fields are explicit. Never block.
 
+### Framework nudge (v5.5.0+)
+
+Using the same `project-state-read.sh` result (same Bash call as the playbook nudge above), if `.codePath` is known (non-null) **AND** `.frameworks == []` (empty list), print this one-line soft-nudge once per `/next` invocation:
+
+> 💡 This project has no **Frameworks:** set — process recipes won't resolve. Run `/upgrade-project`, or it will be offered at the next phase step.
+
+Print alongside the playbook-config nudge (immediately after if both fire). Skip silently when `.codePath` is null or `.frameworks` is non-empty. Never block.
+
+### Recipe-adoption nudge (v5.6.0+)
+
+Using the same `project-state-read.sh` result (same Bash call as the nudges above), if `.frameworks != []` (frameworks set) **AND** `.processRecipes == []` (no process-recipe sources recorded yet), print this one-line soft-nudge once per `/next` invocation:
+
+> 💡 This project has **Frameworks:** set but no process recipes adopted yet. Run `/ai-dev-assistant:upgrade-project` to sweep all lifecycle phases and record which recipes resolve (a recording + visibility pass — bodies are still followed lazily per phase; nothing is pre-committed). Or they resolve lazily at the next phase step. (Optional — never blocks.)
+
+Print immediately after the framework nudge. The two are naturally exclusive on the frameworks condition: empty frameworks → the framework nudge fires (adopt frameworks first); frameworks set but no recipes → this nudge fires. Skip silently when `.frameworks` is empty (covered by the framework nudge) or `.processRecipes` is non-empty. The empty-only signal is deliberate — a project where only some phases publish recipes is a valid steady state, not a gap, so partial coverage is not nudged (no false-positive churn). Never block.
+
 ### Scope offer for brand-new tasks (v4.2.3+)
 
 When the user names a NEW task (Step 2 "User Names New Task" path — no task folder yet), BEFORE recommending `/research <task>`, surface a one-line offer to author scope first:
