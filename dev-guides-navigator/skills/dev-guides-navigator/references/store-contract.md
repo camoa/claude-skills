@@ -114,10 +114,30 @@ through the kernel's subcommands (`revalidate`, `blob-put`, `lock-set`).
 
 ---
 
-## 6. Compat Shim (transitional)
+## 6. Compat Shims (transitional) + staged retirement plan
 
-After revalidating the `llms` index, the navigator also writes the legacy
-`dev-guides-cache.json` at the dashed-cwd memory path (a plain copy of
-`indexes/llms.json` — same shape). `ai-dev-assistant` currently reads that file
-directly. The shim is dropped once `ai-dev-assistant` switches to reading the lockfile
-and store directly.
+Two per-project compat shims exist, written by the navigator from the shared store:
+
+| Shim | Writer(s) | Reader(s) | Read-cutover status |
+|------|-----------|-----------|---------------------|
+| `dev-guides-cache.json` (guides / `llms.txt`, `{hash,fetched_at,content}`) | navigator SKILL Mode-1 `cp indexes/llms.json → …`; `hooks/setup-cache.sh` (pre-warm) | `ai-dev-assistant` `scripts/dev-guides-detect.sh`, `commands/validate-guides.md` (→ `guides-matcher`), navigator `hooks/pre-compact.sh` | **READS REPOINTED.** All readers now resolve the **shared store** `indexes/llms.json` first (honouring `DEV_GUIDES_STORE_DIR`), falling back to this shim only when the store is cold/absent. Same `{hash,fetched_at,content}` shape ⇒ a plain `.content` read works on either. |
+| `dev-guides-recipes-cache.json` (recipes, `{index, recipes:{name:{sha,content}}}`) | navigator SKILL Modes 2/3 via the kernel's `legacy-recipes-shim` | `ai-dev-assistant` `skills/recipe-loader`, `skills/work-order-compiler` (kernel `wo-compile.sh lockfile-sha`) | **STILL ON SHIM.** This shim is a *denormalized projection* (index + `task_recipes` lockfile map + blobs assembled into one `{recipes:{name:{sha,content}}}` file). The store has **no** store-native equivalent file, so a direct read requires reassembling that projection (index-content + `lock-read` + `blob-get`) inside both consumers — a multi-source remap, not a path swap. Deferred to keep this cutover correct over complete. |
+
+### Why guides reads were safe to cut over in one pass
+The store's `indexes/llms.json` is byte-for-byte the same schema as the guides shim,
+so repointing is a pure path change with a degrade-safe fallback. Every guides reader
+picks the first candidate (store → cwd shim → glob shim) that actually yields `.content`.
+
+### Staged retirement plan
+1. **Now (this cutover):** guides reads repointed store-first-with-fallback; **all shim
+   writers KEPT** (the guides `cp`/`setup-cache.sh` and the `legacy-recipes-shim`). The
+   fallback still depends on the guides shim, so retiring its writer now would remove the
+   safety net for no benefit. Recipes readers untouched.
+2. **Follow-up A (recipes read cutover):** repoint `recipe-loader` and `wo-compile.sh`
+   `lockfile-sha` to read the store directly — index via `index-content agentic-recipes`,
+   per-recipe sha via `lock-read` (`task_recipes` map), body via `blob-get <sha8>` — each
+   store-first-with-shim-fallback. Only then is the recipes shim fully read-free.
+3. **Follow-up B (writer retirement):** once a release has soaked with store-first reads
+   and no fallback hits are observed, drop the guides `cp` shim + the `legacy-recipes-shim`
+   call, and stop `setup-cache.sh` writing the legacy path (or repoint it to pre-warm the
+   store index). Retire a writer **only** after every reader of that shim is store-first.

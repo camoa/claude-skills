@@ -164,7 +164,9 @@ emitted-anyway WO cannot build blind. Recording it honestly is what arms the gat
 ## Step 9 — Lockfile, provenance, emit `[kernel]`
 
 Compute the navigator cache path (cwd-derived, same contract recipe-loader reads — never glob to
-another project's cache):
+another project's cache). **Transitional:** like recipe-loader, this stays on the
+`dev-guides-recipes-cache.json` compat shim (a denormalized projection with no store-native
+equivalent); the store read cutover is Follow-up A in the navigator's `references/store-contract.md` §6.
 
 ```bash
 DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')

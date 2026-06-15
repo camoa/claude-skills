@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0 (2026-06-15)
+
+### Changed
+- **Shared-store read cutover (consumer side):** pre-compact hook reads the shared store index first (`DEV_GUIDES_STORE_DIR` honored) with shim fallback. `store-contract.md` §6 documents the staged shim-retirement plan (guides-side readers cut over; recipes-side + writers staged to follow-ups A/B).
+
 ## 0.10.1 (2026-06-14)
 
 ### Changed

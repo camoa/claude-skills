@@ -191,7 +191,9 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-**v0.10.1** (Current) — Resolve-contract correction + data-only body boundary. The
+**v0.11.0** (Current) — Shared-store read cutover: pre-compact hook reads the shared store index first (`DEV_GUIDES_STORE_DIR` honored) with shim fallback; `store-contract.md` §6 documents the staged shim-retirement plan.
+
+**v0.10.1** — Resolve-contract correction + data-only body boundary. The
 0.10.0 "uniform store-path" wording is corrected: guide search (Mode 1) and recipe search
 (Mode 2) run in the main conversation and **apply** the resolved body in place; only
 process-recipe lookup (Mode 3) returns the body's store path and never streams the body.

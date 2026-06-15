@@ -67,6 +67,11 @@ agentic-recipes index cache is fresh; do NOT fetch any body."* (concrete forms:
 `add_warn navigator_unavailable` and skip to the guides-only degrade (`references/degrade-paths.md`).
 
 ### 3. Read the cached index — cwd-derived path ONLY (no foreign glob)
+**Transitional (recipes shim):** this reader stays on the per-project
+`dev-guides-recipes-cache.json` compat shim. Unlike the guides catalog (already
+repointed to the shared store), the recipes shim is a *denormalized projection* with no
+store-native equivalent file — cutting it over needs index+lockfile+blob reassembly.
+Tracked as Follow-up A in the navigator's `references/store-contract.md` §6.
 ```bash
 CWD="${PWD}"
 DASHED=$(printf '%s' "$CWD" | sed 's/[^a-zA-Z0-9]/-/g')
