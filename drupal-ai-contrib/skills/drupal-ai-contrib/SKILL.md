@@ -2,7 +2,7 @@
 name: drupal-ai-contrib
 description: "Routes Drupal contribution work to the right contribution-quality stage and supplies the contribution knowledge layer. Use when user says 'contribute to Drupal', 'Drupal contribution', 'submit a Drupal patch', 'Drupal merge request', 'fix a Drupal core issue', 'contribute a module', 'AI-assisted Drupal contribution', or works a drupal.org / GitLab Drupal issue. Use PROACTIVELY whenever AI-assisted code is headed for a Drupal contribution — drupalci and maintainer review are unforgiving."
 version: 0.1.1
-model: sonnet
+model: inherit
 user-invocable: false
 ---
 

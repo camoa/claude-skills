@@ -2,7 +2,7 @@
 name: contribution-submit
 description: "Creates or updates a Drupal merge request and generates the AI-disclosure comment at the policy threshold. Use when the user runs /drupal-ai-contrib:submit or asks to submit, open, or update a Drupal merge request or patch. Wraps drupalorg-cli; surfaces status and RTBC guidance."
 version: 0.1.1
-model: sonnet
+model: inherit
 user-invocable: false
 ---
 

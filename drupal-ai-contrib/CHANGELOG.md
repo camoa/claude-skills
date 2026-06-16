@@ -2,6 +2,65 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-06-16
+
+BUG-1 (model-pin overflow footgun) plus Claude Code hardening. No gate logic, no
+drupalci-parity, no AI-policy/eval behavior changed — this wave is frontmatter + advisory
+guidance only.
+
+### Fixed
+
+- **BUG-1 / S14 — inline model-pin overflow.** All 8 SKILL.md files pinned
+  `model: sonnet`. A skill `model:` is an inline, current-turn override with no context
+  isolation, so a sub-1M pin overflows when the skill activates from a large conversation.
+  Changed to `model: inherit` on every skill (`contribution-guardrails`, `-issue`,
+  `-pipeline`, `-review`, `-setup`, `-submit`, `-verify`, and the `drupal-ai-contrib`
+  umbrella). The 3 agents keep `model: sonnet` — they run in fresh subagent contexts and
+  are S14-exempt.
+
+### Added
+
+- **Read-only tool restriction.** `disallowed-tools: Edit, Write` (kebab-case skill field)
+  on the 4 read-only worker skills: `contribution-review` (dispatches agents),
+  `contribution-verify` (runs gates, captures artifacts), `contribution-pipeline` (reads
+  status), `contribution-guardrails` (enforces discipline). `-setup`, `-issue`, `-submit`,
+  and the umbrella keep full access (they scaffold / run git ops / create MRs).
+- **Sandbox guidance for untrusted code execution** (`contribution-verify`). `verify`
+  runs the contributor's own `composer install` / `phpunit` / `eslint` at CI strictness —
+  untrusted code. Added a note recommending the process-level `@anthropic-ai/sandbox-runtime`
+  (constrains the whole process — Bash, file tools, MCP, hooks — not only Bash) for
+  unreviewed contributions, with a VM / Claude Code on the web pointer for fully untrusted
+  repos.
+- **Large-codebase scoping note** (`contribution-verify`) — for core / large-suite
+  contributions, scope `verify` to the changed subtree; cites the Large Codebases and
+  Monorepos guide.
+- **Complementary security layer** (`contribution-review` + `README.md`) — documents that
+  the `security-guidance` plugin (auto, watches Claude's own in-session edits) is a
+  complementary defense-in-depth layer to the per-contribution, explicitly-dispatched
+  `fresh-context-reviewer` agent — different scopes, never a replacement. Install pointer
+  included.
+
+### Changed
+
+- **`CONVENTIONS.md` release hygiene** — documents `/plugin-creation-tools:validate --strict`
+  as a required pre-release gate (promotes S14 to an error so the overflow footgun cannot
+  ship as a tolerated warning), plus the model / `disallowed-tools` skill conventions.
+- **`.claude/rules/skill-conventions.md`** — corrected the optional-frontmatter guidance
+  that recommended `sonnet` on skills (the S14 root cause) to mandate `inherit` on inline
+  skills and document the `disallowed-tools` field.
+
+### Notes
+
+- `capabilities: [...]` on the 3 agents was checked against `--strict`: **not flagged**
+  (the validator tolerates extra YAML keys), so per the rollout decision rule it was left
+  in place. It is harmless prose, though not a documented agent frontmatter field.
+
+### Bumped
+
+- Plugin `0.1.2` → `0.2.0`. All 8 skill versions unchanged at this layer (frontmatter-only
+  change). Root `marketplace.json` entry `0.1.2` → `0.2.0` and `metadata.version`
+  `1.15.19` → `1.15.20`.
+
 ## [0.1.2] - 2026-06-13
 
 Prose patch — track the `drupal-dev-framework` → `ai-dev-assistant` rename.

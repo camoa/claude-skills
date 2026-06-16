@@ -2,8 +2,9 @@
 name: contribution-review
 description: "Runs honest fresh-context review of a Drupal contribution — dispatches isolated reviewer agents with no session narrative to check the work against scope, coding standards, security, and the AI policy. Use when the user runs /drupal-ai-contrib:review or asks for an honest review, a fresh-eyes review, or a pre-submission review of a Drupal contribution. A builder cannot objectively review its own work."
 version: 0.1.0
-model: sonnet
+model: inherit
 user-invocable: false
+disallowed-tools: Edit, Write
 ---
 
 # Contribution Review (worker skill)
@@ -46,6 +47,17 @@ agent reviews against:
 
 For a large or security-critical change, dispatch multiple reviewer agents for
 perspective diversity, or delegate to `code-paper-test` for line-by-line paper testing.
+
+**Complementary security layer.** The `security-guidance` plugin and this skill cover
+*different* scopes and do not compete. `security-guidance` runs automatically on
+**Claude's own in-session edits** — a deterministic per-edit string match (no model
+involved) plus a fresh-context, security-focused review of the diff at end-of-turn and on
+commit. The `fresh-context-reviewer` agent here is **per-contribution** and **explicitly
+dispatched**, reviewing the whole contribution diff against scope, standards, security,
+and the AI policy. Run both: in-session guidance catches vulnerabilities as Claude writes
+them; the contribution review catches what survives into the diff. Neither replaces the
+other, and neither blocks — both surface findings as instructions. Install the in-session
+layer with `/plugin install security-guidance@claude-plugins-official`.
 
 ### 3. Delegate the philosophy review
 
