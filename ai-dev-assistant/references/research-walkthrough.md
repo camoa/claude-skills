@@ -149,11 +149,14 @@ Research addresses these questions and criteria:
   Q1 "<first 60 chars>…"  →  research.md Q1 + decision log #1
   Q2 "<first 60 chars>…"  →  research.md Q2 + pattern 1
   AC #1 "<first 60 chars>…"  →  research.md decision #7
+        ↳ verify: <verification note>
   AC #2 "<first 60 chars>…"  →  — NOT YET ADDRESSED — raise in Phase 2?
   …
 ```
 
 Separate Q-rows from AC-rows. Section references are lightweight — just enough to jump to the right place.
+
+When an AC carries a non-null `verification` (from the alignment-reader `success_criteria[].verification` field — the optional ` — verify:` scope-time note), print it as an indented `↳ verify: <note>` line under that AC row. Skip the line when `verification` is null. Q-rows have no verification field.
 
 ### Step 4 — Three-way prompt
 

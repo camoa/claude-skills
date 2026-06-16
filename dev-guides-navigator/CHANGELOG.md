@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1 (2026-06-15)
+
+### Fixed
+- Scrubbed a maintainer home path from the `cache-format.md` example (now placeholder `/home/user/…`), caught by the new plugin-creation-tools P-series containment gate.
+
 ## 0.11.0 (2026-06-15)
 
 ### Changed

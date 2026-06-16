@@ -27,6 +27,10 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 **Project codePath metadata (v3.11.0+):** projects declare where their code lives (distinct from the memory folder) via `/set-code-path` or during `/new`. Used by the analysis-agent and future code-aware features.
 
+**Verification per success criterion (v5.7.0+):** an `alignment.md` success criterion may carry an optional ` — verify: <how>` suffix, capturing how it will be checked up-front at scope time. Parsed into an additive `verification` field (backward compatible) and surfaced in the design/implement/research traceability walkthroughs.
+
+**Work-order-loop observability (v5.7.0+):** the autonomous loop appends one compact per-WO record (disposition, attempts, review/critique outcome, HALT state) to `work-orders/loop-obs.ndjson` via a zero-model kernel — read-only on WO artifacts, non-fatal, disk-only — so recurring failure patterns can be mined.
+
 ## Installation
 
 **Requires Claude Code v2.1.110 or later**: the plugin declares `dev-guides-navigator` as a dependency in `plugin.json`, which is enforced at install time on CLI v2.1.110+. Earlier CLI versions will not resolve the dependency automatically; install `dev-guides-navigator` manually and upgrade the CLI.

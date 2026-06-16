@@ -1,0 +1,4 @@
+# containment-scan allowlist (one ERE per line; blank lines and # comments ignored).
+# These are intentional fabricated fixtures in the leak-gate's own test spec —
+# they must contain leak-shaped strings to exercise detection, so they are not real leaks.
+tests/containment-scan-spec.sh

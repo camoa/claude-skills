@@ -217,12 +217,15 @@ Format:
 Design addresses these acceptance criteria:
 
   AC #1 "<first 60 chars of text>…"  →  architecture.md <short-hint>
+        ↳ verify: <verification note>
   AC #2 "<first 60 chars of text>…"  →  architecture.md <short-hint>
   AC #3 "<first 60 chars of text>…"  →  — NOT YET ADDRESSED — raise in Phase 3?
   …
 ```
 
 Section hints are lightweight (e.g., `validator-visual row` or `step 5`). The user doesn't need precise line numbers, just enough to jump to the right place.
+
+When a criterion carries a non-null `verification` (from the alignment-reader `success_criteria[].verification` field — the optional ` — verify:` scope-time note), print it as an indented `↳ verify: <note>` line under that AC row. Skip the line when `verification` is null. This surfaces the declared verification strategy alongside the design that addresses it.
 
 ### Step 4 — Three-way prompt
 

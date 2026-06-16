@@ -1,6 +1,6 @@
 ---
 description: Validate plugin structure, frontmatter, and best practices. Use when user says "validate plugin", "check plugin", "audit plugin", "verify plugin", "is my plugin correct", or before distributing/publishing a plugin.
-allowed-tools: Read, Glob, Grep, Bash(ls:*), Bash(find:*), Bash(wc:*)
+allowed-tools: Read, Glob, Grep, Bash(ls:*), Bash(find:*), Bash(wc:*), Bash(bash:*)
 argument-hint: "[plugin-path] [--fix] [--dry-run] [--strict]"
 context: fork
 ---
@@ -490,6 +490,24 @@ A plugin adopting the pattern should ship all four artifacts. If some but not al
 The `SessionEnd` hook entry the install command emits must set an explicit `timeout`. `SessionEnd`'s default budget is 1.5 s, and timeouts on plugin-provided hooks do **not** raise it — only a per-hook `timeout` written into the project `settings.json` does. If the emitted `SessionEnd` entry has no `timeout`, emit warn:
 
 > "The `SessionEnd` hook the install command emits has no explicit `timeout`. `SessionEnd`'s default budget is 1.5 s — too short for a save script — and plugin-provided timeouts don't raise it. Set `timeout` (the pattern uses `10`) on the entry written into the project `settings.json`."
+
+### Pre-Publish Containment (P-series)
+
+A **deterministic** leak / containment scan — the one validator check backed by a shipped bash kernel (`scripts/containment-scan.sh`) rather than model judgment, because "did a secret or someone's home path leak into this plugin?" must give the byte-identical answer every run. Inspired by PAI's ContainmentGuard (privacy enforced structurally before public release), reduced to a zero-model kernel.
+
+Run the kernel **once** against the plugin root and fold its findings into the Output Format buckets by each finding's `severity` (do **not** re-implement the scan with Grep — the kernel is the single source of truth for this check):
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/containment-scan.sh <plugin-path>        # add --strict under --strict
+```
+
+It prints JSON `{result, errors, warnings, findings:[{rule, severity, file, line, match, note}]}` and exits non-zero on any ERROR (or any WARN under `--strict`). Report each finding under Errors / Warnings by its `severity`, citing its `file:line` and `note`:
+
+- **P01 (error)** — absolute home path (`/home/<user>/…` or `/Users/<user>/…`). Embeds a username on disk: it breaks on every other machine and leaks who built the plugin. Fix with `${CLAUDE_PLUGIN_ROOT}`, `~/`, or `$HOME`. (Relative subpaths containing `home/` and placeholder usernames like `/home/user/` are not flagged.)
+- **P02 (error)** — secret / token (PEM private key, `ghp_` / `github_pat_` / `glpat-` / `sk-…` / `AKIA…` / `xox[baprs]-…` / `AIza…`). The match is **redacted** in the kernel's output. Rotate the credential and load it from env / `userConfig` instead.
+- **P03 (warn)** — personal email outside an author/owner manifest field (those are exempt, as are `.test` / `example.com` / `company.com` placeholders and `git@` SSH users). Confirm it is meant to ship publicly.
+
+A plugin may ship a `<plugin>/.containment-allow` file (one ERE per line, `#` comments allowed) to exempt legitimate fixtures (e.g. a tutorial that documents a sample path, or a test that fabricates leak-shaped strings). When the kernel is absent — e.g. validating an external plugin from a different plugin-creation-tools install — note that the P-series could not run and continue; do not substitute a hand-rolled Grep scan.
 
 ### Best Practices (warnings, not errors)
 - [ ] Skills use progressive disclosure (references for details)

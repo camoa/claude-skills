@@ -252,6 +252,7 @@ Format:
 Implementation addresses these acceptance criteria:
 
   AC #1 "<first 60 chars>…"  →  implementation.md Progress step 2 [complete]
+        ↳ verify: <verification note>
   AC #2 "<first 60 chars>…"  →  implementation.md Progress step 5 [in-progress]
   AC #3 "<first 60 chars>…"  →  architecture.md (planned, not yet started)
   AC #4 "<first 60 chars>…"  →  — NOT YET ADDRESSED — add to implementation.md?
@@ -259,6 +260,8 @@ Implementation addresses these acceptance criteria:
 ```
 
 Status annotation (`[complete]`, `[in-progress]`, `(planned)`, `— NOT YET ADDRESSED —`) is mandatory for mid-flight runs; optional for initial runs where everything is planned.
+
+When a criterion carries a non-null `verification` (from the alignment-reader `success_criteria[].verification` field — the optional ` — verify:` scope-time note), print it as an indented `↳ verify: <note>` line under that AC row. Skip the line when `verification` is null. This keeps the declared verification strategy visible next to the implementation that satisfies it.
 
 ### Step 4 — Three-way prompt
 

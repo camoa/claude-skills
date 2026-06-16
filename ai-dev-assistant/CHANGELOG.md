@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.7.0] - 2026-06-15
+
+**Two PAI-inspired additions: verification-strategy-per-criterion (scope) and a work-order-loop observability sidecar.**
+
+### Added — verification strategy per success criterion
+- `alignment.md` success criteria may carry an optional ` — verify: <how>` suffix, captured at scope time rather than emerging in Phase 4. `scripts/alignment-read.sh` parses it (byte-safe `index()`/`substr()` split, em/en-dash/hyphen delimiter tolerance) into a new additive `verification` field on each criterion (`{text, checked, verification}`; absent → `null`). Backward compatible: `schema_version` stays `"1.0"`; existing files and consumers that read only `.text`/`.checked` are unaffected. Alignment-contract grammar doc bumped to v1.1.
+- `/scope` offers it (optional, never forced, criteria stay falsifiable); the design / implement / research traceability walkthroughs surface an indented `↳ verify: …` under each mapped AC.
+- New `tests/alignment-read-spec.sh` (7 cases; first spec for this parser).
+
+### Added — work-order-loop observability sidecar
+- `scripts/wo-obs-append.sh` — a zero-model kernel that, after each WO's Step-10 verdict, appends one compact NDJSON record (disposition, attempts, review verdict, critique outcome, HALT state, checkpoints) to `work-orders/loop-obs.ndjson` so recurring failure patterns can be mined. **Read-only on every WO artifact; its sole write is the obs log; never a HALT/status/PR; non-fatal; disk-only (no transcript, so KV-cache prefix stability is preserved).** Wired as new Step 11 in `work-order-loop/SKILL.md`. New `tests/wo-obs-append-spec.sh` (11 cases). Does not touch the cap chokepoint, terminal-HALT precedence, or no-auto-merge invariants.
+
+### Fixed
+- Scrubbed a maintainer home path from a historical CHANGELOG example, caught by the new plugin-creation-tools P-series containment gate.
+
 ## [5.6.0] - 2026-06-15
 
 **recipe_first_class epic — point-of-need detection, eager adoption sweep, consumption integrity, and shared-store read cutover.**
@@ -1416,7 +1431,7 @@ Bug fix for a false-positive verdict surfaced by the v3.14.0 dog-food. No new be
 
 ### Re-dog-food on this fix
 
-`/validate:team dev_framework_isolated_validators` is expected to now return `skipped` for the `guides` gate (codePath is `/home/camoa/workspace/claude_memory/marketplaces/camoa-skills` — Claude Code plugin marketplace, no Drupal/Next.js/frontend markers).
+`/validate:team dev_framework_isolated_validators` is expected to now return `skipped` for the `guides` gate (codePath is `<marketplace-root>` — Claude Code plugin marketplace, no Drupal/Next.js/frontend markers).
 
 ## [3.14.1] - 2026-04-24
 
