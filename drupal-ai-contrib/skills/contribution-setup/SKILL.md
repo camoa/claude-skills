@@ -2,7 +2,7 @@
 name: contribution-setup
 description: "Stands up and environment-matches a Drupal contribution workspace — DDEV with the workflow-matched add-on, CI gate config (new-module scaffold or existing-module discovery), the Drupal AI skills, the drupalorg CLI, and a contribution-credentials (SSH-key) check. Use when the user runs /drupal-ai-contrib:setup or asks to set up a Drupal contribution environment. Idempotent and detect-driven — does only what is missing; never a gate, never a prerequisite."
 version: 0.1.1
-model: sonnet
+model: inherit
 user-invocable: false
 ---
 

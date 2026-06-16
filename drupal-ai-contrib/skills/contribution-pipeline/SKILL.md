@@ -2,8 +2,9 @@
 name: contribution-pipeline
 description: "Fetches the real GitLab merge-request pipeline for a Drupal contribution and gates on it — the authoritative final check. Use when the user runs /drupal-ai-contrib:pipeline or asks to check the real pipeline, the CI status, or whether a Drupal contribution is done. A contribution is not complete until the real drupalci pipeline is green."
 version: 0.1.0
-model: sonnet
+model: inherit
 user-invocable: false
+disallowed-tools: Edit, Write
 ---
 
 # Contribution Pipeline (worker skill)

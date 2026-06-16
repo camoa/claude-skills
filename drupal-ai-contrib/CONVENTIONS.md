@@ -22,6 +22,15 @@ component; the plugin eats its own dog food.
 - The umbrella skill (`drupal-ai-contrib`) and the six worker skills are
   `user-invocable: false` — invoked by their command or routed to by the umbrella.
 - `contribution-guardrails` is user-invocable — a contributor may pull it up directly.
+- `model: inherit` on every SKILL.md. A skill `model:` is an inline, current-turn
+  override with no context isolation — pinning a sub-1M tier (`sonnet`/`haiku`) overflows
+  when the skill activates from a large conversation (validator S14). Pin a tier only on
+  a Task-dispatched **agent** (fresh context), never on a skill.
+- Read-only worker skills carry `disallowed-tools: Edit, Write` (kebab-case on skills —
+  distinct from the agent `disallowedTools` camelCase field): `contribution-review`,
+  `-verify`, `-pipeline`, and `-guardrails` dispatch agents / run gates / read status and
+  never mutate contribution files. `-setup`, `-issue`, `-submit`, and the umbrella write
+  or run git ops, so they keep full tool access.
 - Body uses imperative voice — instructions for Claude, not documentation.
 - Under 500 lines per SKILL.md; push detail into `references/`.
 
@@ -76,3 +85,13 @@ over assertion, so it must apply that candor to itself.
   *illustrative*. The binding state is whatever the `ai-policy-checker` agent fetches
   live for the contribution. If a source is unreachable, the AI-policy gate is UNRUN,
   never silently passed.
+
+## Release hygiene
+
+- Run `/plugin-creation-tools:validate --strict` before every release. `--strict`
+  promotes S14 (sub-1M `model:` pins on a skill) and other warnings to errors, so the
+  inline-overflow footgun cannot slip into a release as a tolerated warning. A release is
+  clean only when `--strict` passes.
+- Bump `.claude-plugin/plugin.json`, sync the root `.claude-plugin/marketplace.json`
+  entry **and** `metadata.version`, add a `CHANGELOG.md` entry, and update `README.md` in
+  the same change. One minor bump per PR; one release = one PR.

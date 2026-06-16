@@ -2,8 +2,9 @@
 name: contribution-verify
 description: "Runs the local verification inner loop for a Drupal contribution — the drupalci-parity gate set at CI strictness, the AI-policy gate, and the eval gate, every gate passing only on a captured artifact. Use when the user runs /drupal-ai-contrib:verify or asks to verify, check, or locally test a Drupal contribution before submitting. This is the centerpiece — evidence over assertion, never a bare 'passes'."
 version: 0.1.0
-model: sonnet
+model: inherit
 user-invocable: false
+disallowed-tools: Edit, Write
 ---
 
 # Contribution Verify (worker skill)
@@ -137,3 +138,24 @@ passed.
 | `evals.json` absent or schema changed | Degrade silently — the eval gate is best-effort, never a hard dependency. |
 | A gate cannot run locally (e.g. `_MAX_PHP`) | Report UNRUN and defer to `contribution-pipeline`; never imply it passed. |
 | `phpstan` reports errors | It is `allow_failure: true` by default — report FAIL flagged non-blocking, per the project's config. |
+
+## Sandbox users — untrusted code execution
+
+`verify` runs the **contributor's own code** at CI strictness — `composer install`,
+`phpunit`, `eslint`, `phpstan` — which is untrusted-code execution against an unreviewed
+contribution (Composer scripts and a test suite both run arbitrary PHP). When verifying
+a contribution you have not yet reviewed, run it under the process-level sandbox runtime
+(`@anthropic-ai/sandbox-runtime`): unlike the built-in Bash sandbox, it wraps the
+**whole Claude Code process** — Bash, file tools, MCP servers, and hooks — in the same
+Seatbelt / bubblewrap isolation, so a malicious `composer.json` script or test fixture
+cannot reach beyond the workspace. (The attack surface here is PHPUnit / Composer,
+parallel to the `npx`-trojan risk in JS tooling.) For a *fully* untrusted repository,
+the guide steers stronger isolation — a dedicated VM or Claude Code on the web. See the
+**Sandbox Environments** guide.
+
+## Large host codebases
+
+For Drupal **core** or large-suite contributions, scope `verify` to the contribution's
+**changed subtree** rather than the entire host codebase — point the gates at the paths
+the diff actually touches so a multi-gigabyte monorepo does not dilute the signal or
+blow the time budget. See the **Large Codebases and Monorepos** guide.

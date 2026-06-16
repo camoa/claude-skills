@@ -2,7 +2,7 @@
 name: contribution-issue
 description: "Works the Drupal issue lifecycle — reviews prior work on an issue first, then creates / comments on / claims it, and checks out the issue fork + branch with three-way fork handling. Use when the user runs /drupal-ai-contrib:issue or asks to find, create, claim, or check out a Drupal issue or issue fork. Wraps drupalorg-cli."
 version: 0.1.1
-model: sonnet
+model: inherit
 user-invocable: false
 ---
 

@@ -179,4 +179,6 @@ adds contribution-quality commands and gates on top, without forking or modifyin
 `code-quality-tools` (philosophy / standards review) · `code-paper-test` (paper
 testing) · `mglaman/drupalorg-cli` (issue / MR / pipeline CLI — executable `drupalorg`)
 · `drupal_devkit` (Drupal AI skill install) · `ai_best_practices` (the canonical AI
-policy + evals).
+policy + evals) · `security-guidance` (a *complementary* in-session security layer that
+auto-reviews Claude's own edits — not a replacement for the fresh-context contribution
+review; install `/plugin install security-guidance@claude-plugins-official`).
