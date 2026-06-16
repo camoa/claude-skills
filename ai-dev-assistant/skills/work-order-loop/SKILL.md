@@ -154,6 +154,20 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
       re-dispatch; no feedback injection at L1, see `loop-contract.md`); the cap is enforced **only** at
       `dispatch` (step 5), which HALTs the WO once `attempts ≥ cap`.
 
+11. **Observability append (non-fatal, ⑤ telemetry lane).** Once step 10 has settled the WO's
+    disposition, record it for off-line failure-pattern mining. Run, **once per WO**:
+    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/wo-obs-append.sh" "<task-folder>/work-orders" "<wo-NN>"
+    --disposition <outcome>`, mapping the step-10 branch to `<outcome>`: **clean→`done`**,
+    **failing (retryable)→`needs_rework`**, **TERMINAL via `wo-NN.HALT`→`terminal_halt`**,
+    **TERMINAL via blocking critique→`terminal_escalated`**. The kernel is **READ-ONLY on all WO
+    artifacts** (it reads `wo-NN.run.json` / `wo-NN._review.json` / `wo-NN._critique.json` /
+    `wo-NN.HALT`) and its **only** write is appending one NDJSON record to
+    `work-orders/loop-obs.ndjson` — it **never** writes a HALT, never changes a WO status, never
+    calls git/gh/merge/PR. It therefore cannot affect the terminal-HALT precedence, the retry-cap
+    chokepoint, or the no-auto-merge guarantee, and the disk-only log does not perturb the KV-cache
+    prefix. **It is non-fatal:** if it fails or exits non-zero, ignore it and let the loop proceed —
+    observability never gates the run. Forward its compact stderr line mechanically (below).
+
 **Compact-line discipline.** Forward every kernel's stderr line to the transcript
 **mechanically** (`2>&1`/`tee`/redirect-then-print — not by re-typing it), so the Haiku /goal evaluator,
 which reads only the transcript, sees byte-stable verdicts.

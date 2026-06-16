@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-06-15
+
+**Pre-publish containment gate (P-series) — the first deterministic, kernel-backed validator check.**
+
+### Added — P-series containment scan
+- `scripts/containment-scan.sh` — a zero-model bash/jq kernel that greps a plugin for content that must never ship publicly: **P01 (error)** absolute home paths (`/home/<user>/…`, `/Users/<user>/…`), **P02 (error)** secrets/tokens (PEM keys, `ghp_`/`github_pat_`/`glpat-`/`sk-…`/`AKIA…`/`xox…`/`AIza…`, redacted in output), **P03 (warn)** personal emails outside author/owner manifest fields. Emits structured JSON and exits non-zero on any error (or any warn under `--strict`). Inspired by PAI's ContainmentGuard, reduced to a deterministic kernel so the answer is byte-identical every run — unlike the rest of `validate`, this check does not rely on model judgment.
+- `tests/containment-scan-spec.sh` — 11-case TDD spec (this plugin's first `tests/` harness).
+- `commands/validate.md` — new **Pre-Publish Containment (P-series)** section runs the kernel and folds findings into the existing severity buckets; `allowed-tools` gains `Bash(bash:*)` to run the shipped read-only kernel.
+- A per-plugin `.containment-allow` file (one ERE per line, `#` comments) exempts legitimate fixtures (tutorials, test fabrications).
+
+### Notes
+- Precision-tuned against the live marketplace: absolute-path detection anchors to a path boundary (relative `…/home/…` subpaths and placeholder usernames like `/home/user/` are not flagged); email exemptions cover the reserved `.test` TLD, `example.com`/`company.com` placeholders, and `git@` SSH users. The gate caught (and this release scrubs, in sibling plugins) real maintainer-home-path leaks shipped in example/doc text.
+
 ## [3.9.0] - 2026-05-31
 
 **Theme: 2026-05-29 feature parity.** Brings templates, references, and recognized-key lists up to the 2026-05-29 docs snapshot (Claude Code v2.1.154). Independent of the v3.8.0 gate-enabling work; no downstream rollout depends on it. Every claim verified against the cached guides.

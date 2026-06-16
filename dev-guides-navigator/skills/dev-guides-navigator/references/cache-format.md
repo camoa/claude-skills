@@ -42,8 +42,8 @@ DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
 CACHE_FILE="$HOME/.claude/projects/${DASHED}/memory/dev-guides-cache.json"
 ```
 
-Example: a project at `/home/camoa/workspace/brand/cotea` caches to
-`~/.claude/projects/-home-camoa-workspace-brand-cotea/memory/dev-guides-cache.json`.
+Example: a project at `/home/user/workspace/brand/cotea` caches to
+`~/.claude/projects/-home-user-workspace-brand-cotea/memory/dev-guides-cache.json`.
 
 **Glob fallback.** When a consumer cannot reconstruct the cwd-derived path
 (e.g. running from a different directory), fall back to a glob — the same

@@ -1,7 +1,7 @@
 {
   "name": "plugin-creation-tools",
   "description": "Complete authoring guide for Claude Code plugins — skills, commands, agents, 30 hook events (with the `if` pre-spawn filter, the `mcp_tool` handler type, exec form via `args`, `systemMessage` / `terminalSequence` JSON output, the 10K-character output cap, and parallel-then-merge precedence), MCP servers, plugin dependencies, plugin themes, `userConfig` schema, cross-marketplace dependencies, permission modes, the Agent SDK, REVIEW.md v2, and Routines-based auto-validate. v3.5.0 added hook authoring depth + 7 paired validator rules (H05–H13). v3.6.0 adds layout & discovery: recursive `agents/` subfolder scoping (`my-plugin:review:security`), single-skill-at-root auto-discovery (v2.1.142+), v2.1.140+ `/doctor` ignored-folder semantics, and 5 paired validator rules (A02 / A03 / ST04 / ST05 / ST06). `init_plugin.py` now reads the canonical `templates/plugin.json.template` instead of embedding a divergent string. v3.8.0 adds gate-enabling rules: S14 (warn — skill `model:` pinned to a sub-1M model overflows from a large conversation; the BUG-1 model-pin defect, agents exempt), S15/A04 (error, `--fix` — kebab-vs-camel `disallowed-tools` on skills vs `disallowedTools` on agents), skill-level `disallowed-tools` authoring docs, and deterministic component counts (D1). v3.9.0 brings 2026-05-29 feature parity: the `MessageDisplay` hook event (count 29→30; H02 recognized), `defaultEnabled` plugin/marketplace key (M14-recognized), per-server MCP `timeout`, sandbox-runtime + Managed MCP + Agent SDK SessionStore reference notes, the `/model` picker change (Enter=save-default, `s`=session), and the Opus 4.8 alias refresh.",
-  "version": "3.9.0",
+  "version": "3.10.0",
   "author": {
     "name": "camoa"
   },

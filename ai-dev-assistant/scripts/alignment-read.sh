@@ -57,7 +57,7 @@ fi
 #   {"kind":"unknown_section","heading":"<raw>"}
 #   {"kind":"field","section":"<key>","field":"<key>","body":"<prose>"}
 #   {"kind":"unknown_field","section":"<key>","heading":"<raw>"}
-#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false}
+#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false,"verification":"..."|null}
 #   {"kind":"non_goal","section":"<key>","text":"..."}
 #   {"kind":"criteria_prose","section":"<key>","body":"..."}
 #   {"kind":"non_goals_prose","section":"<key>","body":"..."}
@@ -84,7 +84,7 @@ RECORDS=$(awk '
     if (match(h, /^Phase 3 (—|–|-) Implementation$/)) return "phase_3"
     return ""
   }
-  function flush_field(   i, body, had_item) {
+  function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3) {
     if (cur_section == "" || cur_field == "") return
     if (cur_field == "success_criteria") {
       had_item = 0
@@ -96,7 +96,28 @@ RECORDS=$(awk '
           checked = (substr(text, 1, 1) ~ /[xX]/) ? "true" : "false"
           sub(/^[[:space:]xX]\][[:space:]]+/, "", text)
           text = trim(text)
-          printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s}\n", cur_section, json_escape(text), checked
+          # Optional verification suffix: "<text> — verify: <note>".
+          # Byte-safe detection via index()/substr() (em-dash is multibyte —
+          # regex split would mis-handle the multibyte boundary). Accept em-dash,
+          # en-dash, and hyphen in the delimiter position; the "verify: " token
+          # (lowercase, trailing space) is required. Split on the FIRST delimiter.
+          d1 = " — verify: "   # em-dash U+2014
+          d2 = " – verify: "   # en-dash U+2013
+          d3 = " - verify: "   # hyphen
+          p1 = index(text, d1)
+          p2 = index(text, d2)
+          p3 = index(text, d3)
+          best = 0; dl = 0
+          if (p1 > 0)                              { best = p1; dl = length(d1) }
+          if (p2 > 0 && (best == 0 || p2 < best))  { best = p2; dl = length(d2) }
+          if (p3 > 0 && (best == 0 || p3 < best))  { best = p3; dl = length(d3) }
+          if (best > 0) {
+            verif = trim(substr(text, best + dl))
+            text = trim(substr(text, 1, best - 1))
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":\"%s\"}\n", cur_section, json_escape(text), checked, json_escape(verif)
+          } else {
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":null}\n", cur_section, json_escape(text), checked
+          }
           had_item = 1
         }
       }
@@ -269,7 +290,7 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     if $r.kind == "field" and .[$r.section].present then
       .[$r.section][$r.field] = $r.body
     elif $r.kind == "criterion" and .[$r.section].present then
-      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked}]
+      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked, verification: $r.verification}]
     elif $r.kind == "non_goal" and .[$r.section].present then
       .[$r.section].non_goals += [$r.text]
     elif $r.kind == "criteria_prose" and .[$r.section].present then

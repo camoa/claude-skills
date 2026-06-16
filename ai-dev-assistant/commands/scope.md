@@ -128,7 +128,7 @@ Operate conversationally. Over however many turns feel natural:
 
 - **Goal** — what problem this solves, why it matters. One to three sentences is fine.
 - **Expected result** — what's observable/different when the task ships.
-- **Success criteria** — the falsifiable checklist. Propose items as they surface in conversation; confirm at the end.
+- **Success criteria** — the falsifiable checklist. Propose items as they surface in conversation; confirm at the end. Each criterion MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked (e.g. `- [ ] save persists — verify: playwright reload assertion`) — captured now rather than deferred to Phase 4. Optional, never required; don't force it, and never let it make a criterion less falsifiable.
 - **Non-goals** — push proactively. Common drift sources: "Are we also doing X?" / "Is adjacent thing Y in scope?" / "Does this include migrating the existing data?". Non-goals prevent scope creep later — worth pulling a few out explicitly even if the user didn't mention them.
 
 The agent MAY propose drafts for any field after gathering enough context, but always marks them as drafts and asks for correction.
@@ -177,6 +177,8 @@ Create the file with:
 ```
 
 Where `<section>` is the H2 block you just authored.
+
+**Success-criterion format.** Write each criterion as a task-list line `- [ ] <text>`. When the user declared how a criterion will be verified, append the optional suffix `- [ ] <text> — verify: <how>` (space, em-dash, space, `verify:`, space). Omit the suffix when no verification note was given. The reader parses it into `{text, checked, verification}` per `references/alignment-contract.md` §5.2.
 
 **File exists, target section doesn't:**
 

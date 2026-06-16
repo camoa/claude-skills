@@ -1,6 +1,7 @@
-# Alignment Contract — `alignment.md` Grammar v1.0
+# Alignment Contract — `alignment.md` Grammar v1.1
 
 **Introduced:** ai-dev-assistant v3.12.0
+**v1.1 adds optional per-criterion `verification`** — a success-criterion line MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked. Additive within v1.x (the emitted `schema_version` JSON value stays `"1.0"`; see §9). Consumers that ignore unknown keys are unaffected.
 **Owner:** `skills/alignment-reader/SKILL.md` + `scripts/alignment-read.sh`
 **Consumers (as of v3.12.0):** `commands/scope.md`, `commands/research.md`, `commands/design.md`, `commands/implement.md`, `agents/analysis-agent.md` (via `scope_contract_recommended` signal evaluation)
 
@@ -82,7 +83,7 @@ Four fields, in this order when written:
 |---|---|---|
 | `### Goal` | `goal` | String (prose) |
 | `### Expected result` | `expected_result` | String (prose) |
-| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool}` — task-list format |
+| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool, verification: string\|null}` — task-list format; `verification` from the optional ` — verify:` suffix (§5.2) |
 | `### Non-goals` | `non_goals` | Array of strings — bulleted list |
 
 Missing H3 → the field is emitted with `present: false, body: null` and the parser adds a `missing_field` warning keyed to section + field name.
@@ -101,12 +102,27 @@ Empty body → `{present: true, body: ""}` + warning `empty_field`.
 
 Expected as a markdown task-list where each item is on its own line:
 
-- `- [ ] <text>` → `{text: "<text>", checked: false}`
-- `- [x] <text>` or `- [X] <text>` → `{text: "<text>", checked: true}`
+- `- [ ] <text>` → `{text: "<text>", checked: false, verification: null}`
+- `- [x] <text>` or `- [X] <text>` → `{text: "<text>", checked: true, verification: null}`
 
 Parser regex: `^\s*-\s+\[([ xX])\]\s+(.+?)\s*$` (per line).
 
 Lines matching the regex are extracted into `success_criteria[]` in document order. Lines that don't match (e.g., stray prose, blank lines) are ignored.
+
+**Optional verification suffix (v1.1+).** A criterion line MAY declare *how* it will be verified by appending a trailing suffix:
+
+```markdown
+- [ ] <criterion text> — verify: <how it will be verified>
+```
+
+The delimiter is ` — verify: ` (space, em-dash U+2014, space, the literal `verify:`, space). For tolerance the reader ALSO accepts en-dash `–` and hyphen `-` in the delimiter position (matching the phase-header dash tolerance in §3), but the lowercase `verify: ` token is required. The split happens on the **first** delimiter occurrence: the text before it becomes `text` (trimmed); the text after becomes `verification` (trimmed). When no delimiter is present, `verification` is `null` and `text` is the whole line (the pre-v1.1 behavior, unchanged).
+
+Captured up-front at scope time, the suffix lets each criterion declare its verification strategy rather than deferring it to Phase 4. It is always optional; a criterion whose `text` legitimately contains an em-dash but no `verify:` token is left intact with `verification: null`.
+
+Examples:
+
+- `- [ ] Playwright smoke test covers save + error paths — verify: playwright run asserts persisted value after reload` → `{text: "Playwright smoke test covers save + error paths", checked: false, verification: "playwright run asserts persisted value after reload"}`
+- `- [x] Config schema exists at the expected path` → `{text: "Config schema exists at the expected path", checked: true, verification: null}`
 
 If the body contains prose only (no task-list lines at all), emit warning `success_criteria_not_checklist`, set `success_criteria: []`, and place the full prose into `success_criteria_prose` for the consumer to surface.
 
@@ -147,7 +163,8 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
       "goal": "Implement the feature …",
       "expected_result": "After this ships, users can …",
       "success_criteria": [
-        { "text": "Primary deliverable is live", "checked": false }
+        { "text": "Primary deliverable is live", "checked": false, "verification": "manual check of the live endpoint returns 200" },
+        { "text": "Static analysis clean at the configured level", "checked": false, "verification": null }
       ],
       "non_goals": [
         "Not refactoring adjacent components",
@@ -180,6 +197,7 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 ## 9. Versioning policy
 
 - **Adding fields within v1.x** — consumers ignore unknown keys. No schema bump needed.
+- **`verification` (v1.1)** — the per-criterion `verification` key on `success_criteria[]` items was added within v1.x as an additive field. `schema_version` remains `"1.0"`; consumers that read only `.text`/`.checked` ignore the new key and keep working.
 - **Adding new warning codes within v1.x** — consumers should treat unknown codes as informational (display, don't error).
 - **Changing field semantics or the 4-field shape** — major bump to v2.0 with migration note.
 - **Removing fields** — major bump.
