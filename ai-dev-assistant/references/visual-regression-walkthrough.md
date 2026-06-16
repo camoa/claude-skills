@@ -124,6 +124,18 @@ the `visual-regression-gate-fail` prompt:
 
 Each surface is classified before the next — prompts are never batched.
 
+**Seeing the change interactively (v5.10.2+).** The default aid is the static
+`diff_path` PNG, but the reviewer can simply **ask** to view the change — "open
+the slider", "show baseline vs current side by side", "let me swipe between
+them" — and the AI runs `npx playwright show-report` host-side. Playwright's
+HTML report renders the failed surface's image diff with **Diff / Side-by-side /
+Slider** (drag-to-reveal expected vs actual) modes — the same swipe-comparison
+UX as hosted VR tools. It is an **on-demand** action the reviewer requests, not
+an auto-launch and not a new flag (the pre-run `--show-diffs` flag opens the same
+report eagerly). Visual **parity** does not share this view — it compares the
+build against an external reference via `parity-compare.mjs` (CSS property diff),
+not Playwright's `toHaveScreenshot`, so the slider is VR-only.
+
 ## 8. Updating baselines — the trigger catalog
 
 `/validate:visual-regression --update-baselines "<reason>"` regenerates
