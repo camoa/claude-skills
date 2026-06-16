@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.0] - 2026-06-16
+
+**Closes the consumption half of the two 5.7.0 PAI adoptions: verification now drives the `/goal` clause, and the observability log is now mineable.**
+
+### Added — `/goal` bridge consumes the per-criterion `verification` note
+- `references/goal-from-scope.md` now uses a success criterion's ` — verify: <how>` note (grammar v1.1) as the concrete transcript-confirmable signal the `/goal` completion clause anchors that criterion to — turning capture-at-scope-time into an actual gate input rather than a display-only aid. A criterion without a note falls back to gate-anchored prose. The non-negotiable anchoring rule is unchanged: a gate (`/review` or `/validate:all`) must still run and surface its verdict inline; a restate-only `verify:` note never becomes a rubber-stamp. Contract §11 cross-references the bridge as the field's first consumer.
+
+### Added — work-order-loop observability reader
+- `scripts/wo-obs-report.sh` — a read-only zero-model miner over `work-orders/loop-obs.ndjson` (the 5.7.0 sidecar's output). Aggregates latest-per-WO disposition / review / critique histograms, a `halt_reasons` histogram, a `per_wo[]` summary (attempts, rework_count, ever_halted), and a **`flagged[]`** list surfacing the recurring failure patterns (terminal WOs + WOs reworked ≥ threshold, `--rework-threshold N`). `--format json|text`; empty/missing log → valid empty report (exit 0); malformed lines skipped defensively. Pointed to from the loop's Exit branches (ESCALATION + LOOP_COMPLETE) and `/run-work-orders` Related — read-only, never part of the gate/merge decision. New `tests/wo-obs-report-spec.sh` (14 cases).
+
 ## [5.7.0] - 2026-06-15
 
 **Two PAI-inspired additions: verification-strategy-per-criterion (scope) and a work-order-loop observability sidecar.**

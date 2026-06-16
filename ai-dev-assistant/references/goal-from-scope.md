@@ -18,6 +18,14 @@ fields into a `/goal` condition:
 - **Success criteria** (`success_criteria[]`) → the **completion clause**. These must
   already be gate-anchored — a criterion the evaluator can confirm from a verdict in
   the transcript, not loose prose.
+  - When a criterion carries a `verification` note (grammar v1.1 — the parsed
+    `{text, checked, verification}` item has a non-null `verification`), the bridge
+    uses that note as the concrete signal the completion clause anchors that criterion
+    to: it tells the evaluator precisely which inline gate output / observable to look
+    for. A criterion *without* a verification note (`verification: null`) falls back to
+    today's behavior — it must still be gate-anchored from its prose. The verification
+    note **refines which signal each criterion maps to; it does NOT replace** the
+    non-negotiable requirement (below) that a gate ran and surfaced its verdict inline.
 - **Non-goals** (`non_goals[]`) → a **guard clause**: "…and nothing outside the listed
   scope was modified (`git status` clean outside the named areas)."
 
@@ -34,6 +42,13 @@ and prints per-gate verdicts to the transcript) or `/ai-dev-assistant:validate:a
 (which prints a per-gate summary table). Anchor the completion clause to that
 surfaced verdict, add the Non-goals guard, and bound the run with a turn clause.
 
+A criterion's `verification` note (v1.1) is the **preferred** anchor when it names a
+confirmable inline signal — e.g. "`/review`'s e2e gate prints a passing Playwright
+run for the route" — because it makes the anchor explicit rather than leaving the
+bridge to infer it from prose. But a `verify:` note that merely restates the
+criterion ("verify: the component works") names no inline signal, so it still needs a
+real gate verdict to anchor to: never let a verification note become a rubber-stamp.
+
 ### Worked example
 
 Given a Phase-3 contract like:
@@ -41,20 +56,25 @@ Given a Phase-3 contract like:
 ```
 Success criteria:
 - [ ] /review reports all hard-block gates green for this task
-- [ ] The new component renders on its route with no console/log errors
+- [ ] The new component renders on its route with no console errors — verify: /review's e2e gate prints a passing Playwright run for the route
 Non-goals:
 - Do not touch framework core or third-party dependencies under vendor/
 - Do not change the theme's style build pipeline
 ```
 
-the bridge emits:
+the second criterion carries a `verification` note; the first does not. The bridge
+emits:
 
 ```
-/goal /ai-dev-assistant:review <task> reports overall_verdict "pass" in _review.json (all hard-block gates green) printed inline AND the Phase-3 Success criteria hold AND nothing outside the Non-goals was modified — git status shows no changes under framework core, vendor/, or the style build pipeline — or stop after 20 turns
+/goal /ai-dev-assistant:review <task> reports overall_verdict "pass" in _review.json (all hard-block gates green) printed inline AND /review's e2e gate prints a passing Playwright run for the route AND nothing outside the Non-goals was modified — git status shows no changes under framework core, vendor/, or the style build pipeline — or stop after 20 turns
 ```
 
-The condition references the `/review` verdict that lands in the transcript, folds in
-the Non-goals as a `git status` guard, and turn-bounds the loop.
+The first criterion has no `verify:` note, so it falls back to its gate-anchored prose
+— the inline `/review` `overall_verdict "pass"`. The second criterion's verification
+note becomes the specific anchored check ("`/review`'s e2e gate prints a passing
+Playwright run for the route") instead of a generic "Success criteria hold". The
+condition references the `/review` verdicts that land in the transcript, folds in the
+Non-goals as a `git status` guard, and turn-bounds the loop.
 
 ## Limits — state these plainly
 

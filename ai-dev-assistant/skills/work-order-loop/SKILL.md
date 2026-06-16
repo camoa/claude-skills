@@ -182,6 +182,10 @@ TERMINAL WO — `wo-NN.HALT` / sidecar `halted:true` — is never processable an
   STOP. Do **not** run the merge step; do **not** print `LOOP_COMPLETE`. **Escalation keys off TERMINAL
   residue, NOT off status** — a HALTed-but-`ready` WO (cap exhausted at step 5) still escalates here and
   **never** reaches the `LOOP_COMPLETE` branch, so /goal cannot fire on a failed run.
+  *(Optional, read-only triage:* `bash "${CLAUDE_PLUGIN_ROOT}/scripts/wo-obs-report.sh"
+  "<task-folder>/work-orders"` *summarizes the run's per-WO dispositions + flagged WOs (terminal /
+  repeated-rework) from the ⑤ telemetry log for triage/learning. It is a passive consumer — never part
+  of the gate or escalation decision.)*
 - **Else (every WO `done`):**
   1. Run `/review --headless --base <base> <task-folder>` **inline from cwd=`<worktree>`** (the
      authoritative task-level PR-gate; it derives the change from the worktree's
@@ -198,7 +202,10 @@ TERMINAL WO — `wo-NN.HALT` / sidecar `halted:true` — is never processable an
      Forward the `merge_gate` compact line.
   3. Print a `LOOP_COMPLETE` summary, then the composed **/goal** string for the user to paste (see
      `loop-contract.md` (/goal section — turn bound `min(20 × N_WOs, 80)`). **Never run /goal yourself** (degrade
-     = an attended sequential loop with the same compact lines).
+     = an attended sequential loop with the same compact lines). *(Optional, read-only:*
+     `bash "${CLAUDE_PLUGIN_ROOT}/scripts/wo-obs-report.sh" "<task-folder>/work-orders"` *summarizes the
+     run's per-WO dispositions + any flagged WOs from the ⑤ telemetry log for learning — passive consumer,
+     never part of the merge decision.)*
 
 ## Boundaries
 

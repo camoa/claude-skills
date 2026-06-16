@@ -73,3 +73,6 @@ does NOT run `/goal` itself — the user pastes it.
 - `skills/work-order-loop/references/loop-contract.md` — the ready-queue, legal-transition table,
   compact-line discipline, and `/goal` template the loop honors.
 - `skills/work-order-loop/references/merge-contract.md` — the honest no-auto-merge guarantee.
+- `scripts/wo-obs-report.sh <task>/work-orders` — read-only miner that summarizes a completed or
+  aborted run from `work-orders/loop-obs.ndjson` (per-WO dispositions + flagged terminal/repeated-rework
+  WOs). Optional triage/learning aid; never part of the gate or merge decision.
