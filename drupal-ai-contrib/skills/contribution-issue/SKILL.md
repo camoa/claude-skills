@@ -1,6 +1,6 @@
 ---
 name: contribution-issue
-description: "Works the Drupal issue lifecycle — reviews prior work on an issue first, then creates / comments on / claims it, and checks out the issue fork + branch with three-way fork handling. Use when the user runs /drupal-ai-contrib:issue or asks to find, create, claim, or check out a Drupal issue or issue fork. Wraps drupalorg-cli."
+description: "Works the Drupal issue lifecycle — reviews prior work on an issue first, then creates / comments on / claims it, and checks out the issue fork + branch with three-way fork handling. Use when the user runs /drupal-ai-contrib:issue or asks to find, create, claim, or check out a Drupal issue or issue fork. Wraps drupalorg-cli for no-auth reads; delegates authenticated GitLab fork/push to the drupal-gitlab skill."
 version: 0.1.1
 model: inherit
 user-invocable: false
@@ -53,21 +53,29 @@ existing work:
 
 | State | Action |
 |-------|--------|
-| **Your existing fork** | `issue:checkout` — check out your fork's issue branch |
-| **Someone else's fork/branch** | **Surface it. Do not clobber.** Coordinate via an issue comment before proceeding — their work may be ahead of yours |
-| **No fork yet** | `issue:branch` — create the issue fork + branch |
+| **Your existing fork** | Check out your fork's issue branch and continue. |
+| **Someone else's fork/branch** | **Surface it. Do not clobber.** Coordinate via an issue comment before proceeding — their work may be ahead of yours. |
+| **No fork yet** | Provision the fork **first** via `/do:fork` (issue comment) or the Drupal.org management page — a fork is **never** created by pushing or via the API (a push to a non-existent fork 404s). Then add the remote and branch. |
 
-Branch naming **must include the issue number** (per the issue-forks dev-guide). Target
-the most recent development branch (`main` for core; per-project for contrib).
+On a **migrated (GitLab) project**, delegate fork provisioning, remote setup, and push
+to the **`drupal-gitlab`** skill (its `references/merge-requests.md`) — it owns the
+`/do:fork` / `/do:access` flow and the two-host rule: **SSH** push → `git.drupal.org`;
+HTTPS / `glab` → `git.drupalcode.org` (the CDN has no SSH listener). On a **legacy-queue**
+project `glab` cannot see the issue — use `drupalorg` / the web UI. Branch naming **must
+include the issue number** (per the issue-forks dev-guide). Target the most recent
+development branch (`main` for core; per-project for contrib).
 
-### 5. Wrap drupalorg-cli — safely
+### 5. Reads via drupalorg-cli; authenticated writes via drupal-gitlab
 
-Issue/fork operations wrap `mglaman/drupalorg-cli`. The executable on `PATH` is
-**`drupalorg`** (not `drupalorg-cli` — that is only the package name); detect it with
-`command -v drupalorg`. See `${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md`
-for what the tool is, how to install it, authentication, and what it can and cannot do.
-Confirm exact subcommand names with `drupalorg list` — names can drift between
-releases; do not assume them.
+Prior-work review and issue/MR **reads** (`issue:show`, `issue:search`, `mr:list`) use
+`mglaman/drupalorg-cli` — the executable on `PATH` is **`drupalorg`** (not `drupalorg-cli`,
+which is only the package name); detect it with `command -v drupalorg`. These are no-auth
+public reads and work on both the legacy queue and migrated projects. **Authenticated
+GitLab writes — fork provisioning, branch setup, and push — are delegated to the
+`drupal-gitlab` skill** (§4). See
+`${CLAUDE_PLUGIN_ROOT}/skills/drupal-ai-contrib/references/drupalorg-cli.md` for the tool,
+install, authentication, and the hybrid split (its §Hybrid model). Confirm exact
+subcommand names with `drupalorg list` — names can drift between releases; do not assume.
 
 **Pushing needs credentials.** Reviewing and reading an issue work over public APIs,
 but creating the issue-fork branch and `git push`ing it need an **SSH key registered
@@ -100,7 +108,8 @@ state and what was done. Point the contributor at the development phase, then `v
 **Trigger:** `/drupal-ai-contrib:issue 3456789`
 **Actions:**
 1. Review confirms no prior MR or fork.
-2. Claim the issue, `issue:branch` to create the fork + issue-number branch.
+2. Claim the issue; provision the fork with `/do:fork`, then (via `drupal-gitlab`) add the
+   fork remote and create the issue-number branch.
 **Result:** A clean issue branch checked out, ready for development.
 
 ## Troubleshooting
