@@ -124,17 +124,25 @@ the `visual-regression-gate-fail` prompt:
 
 Each surface is classified before the next — prompts are never batched.
 
-**Seeing the change interactively (v5.10.2+).** The default aid is the static
-`diff_path` PNG, but the reviewer can simply **ask** to view the change — "open
-the slider", "show baseline vs current side by side", "let me swipe between
-them" — and the AI runs `npx playwright show-report` host-side. Playwright's
-HTML report renders the failed surface's image diff with **Diff / Side-by-side /
-Slider** (drag-to-reveal expected vs actual) modes — the same swipe-comparison
-UX as hosted VR tools. It is an **on-demand** action the reviewer requests, not
-an auto-launch and not a new flag (the pre-run `--show-diffs` flag opens the same
-report eagerly). Visual **parity** does not share this view — it compares the
-build against an external reference via `parity-compare.mjs` (CSS property diff),
-not Playwright's `toHaveScreenshot`, so the slider is VR-only.
+**Seeing the change interactively (v5.10.2+; wiring fixed in v5.10.3).** The
+default aid is the static `diff_path` PNG, but the reviewer can simply **ask** to
+view the change — "open the slider", "show baseline vs current side by side",
+"let me swipe between them" — and the AI runs `npx playwright show-report`
+host-side. Playwright writes the expected/actual/diff attachments **only when a
+surface fails `toHaveScreenshot`**, and its HTML report renders that failed
+surface's image diff with a **Slider** (drag-to-reveal expected vs actual) view —
+the same swipe-comparison UX as hosted VR tools. This works because a current
+`playwright-report/` exists: the gate (`scripts/visual-regression-gate.sh`) runs
+`--reporter=json,html` (with `PLAYWRIGHT_HTML_OPEN=never`), and CI / manual runs
+use the `html` reporter in `playwright-base.config.ts`. **Before v5.10.3 neither
+path produced the HTML report (config was `list`/`github` only; the gate passed
+`--reporter=json`), so `show-report` had nothing to open and the slider never
+appeared.** It is an **on-demand** action the reviewer requests, not an
+auto-launch and not a new flag (the pre-run `--show-diffs` flag opens the same
+report eagerly). Visual **parity** does not
+share this view — it compares the build against an external reference via
+`parity-compare.mjs` (CSS property diff), not Playwright's `toHaveScreenshot`, so
+the slider is VR-only.
 
 ## 8. Updating baselines — the trigger catalog
 
