@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.0"
+    "version": "2.0.1"
   },
   "plugins": [
     {
@@ -60,7 +60,7 @@
       "name": "ai-dev-assistant",
       "source": "./ai-dev-assistant",
       "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (framework-agnostic setup via process recipes; Drupal payload ships in dev-guides).",
-      "version": "5.7.0",
+      "version": "5.8.0",
       "author": {
         "name": "camoa"
       },
