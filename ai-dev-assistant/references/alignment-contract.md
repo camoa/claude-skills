@@ -249,3 +249,4 @@ Research note citing 2–3 framework-core examples and one ecosystem pattern if 
 - `scripts/alignment-read.sh` — parser
 - `references/analysis-agent-schema.md` (the "Signal codes" section) — `scope_contract_recommended` signal fires when an `alignment.md` is recommended
 - `commands/scope.md` — primary authoring command
+- `references/goal-from-scope.md` — the `/scope` → `/goal` bridge; consumes the per-criterion `verification` note (§5.2) as the anchor signal for each completion clause

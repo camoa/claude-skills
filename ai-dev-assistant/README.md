@@ -27,9 +27,9 @@ Phases apply per task, not per project. A project can have tasks at different ph
 
 **Project codePath metadata (v3.11.0+):** projects declare where their code lives (distinct from the memory folder) via `/set-code-path` or during `/new`. Used by the analysis-agent and future code-aware features.
 
-**Verification per success criterion (v5.7.0+):** an `alignment.md` success criterion may carry an optional ` — verify: <how>` suffix, capturing how it will be checked up-front at scope time. Parsed into an additive `verification` field (backward compatible) and surfaced in the design/implement/research traceability walkthroughs.
+**Verification per success criterion (v5.7.0+):** an `alignment.md` success criterion may carry an optional ` — verify: <how>` suffix, capturing how it will be checked up-front at scope time. Parsed into an additive `verification` field (backward compatible) and surfaced in the design/implement/research traceability walkthroughs. **(v5.8.0+)** the `/scope` → `/goal` bridge consumes the note as the transcript-confirmable signal each completion-clause criterion anchors to — so the verification strategy drives the autonomy condition, not just documentation.
 
-**Work-order-loop observability (v5.7.0+):** the autonomous loop appends one compact per-WO record (disposition, attempts, review/critique outcome, HALT state) to `work-orders/loop-obs.ndjson` via a zero-model kernel — read-only on WO artifacts, non-fatal, disk-only — so recurring failure patterns can be mined.
+**Work-order-loop observability (v5.7.0+):** the autonomous loop appends one compact per-WO record (disposition, attempts, review/critique outcome, HALT state) to `work-orders/loop-obs.ndjson` via a zero-model kernel — read-only on WO artifacts, non-fatal, disk-only. **(v5.8.0+)** `scripts/wo-obs-report.sh` mines that log: per-WO disposition/halt histograms and a `flagged[]` list of recurring failure patterns (terminal + repeatedly-reworked WOs), pointed to from the loop's Exit branches and `/run-work-orders`.
 
 ## Installation
 
