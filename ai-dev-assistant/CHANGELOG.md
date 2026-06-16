@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.3] - 2026-06-16
+
+**Fix: the VR slider documented in 5.10.2 never appeared — no path emitted Playwright's `html` report, so `show-report` had nothing to open.**
+
+5.10.2 documented that `npx playwright show-report` shows Playwright's before/after **Slider** at the diff-classification pause. It didn't, as shipped, on **either** path:
+1. The VR **gate** (`scripts/visual-regression-gate.sh`) ran `npx playwright test --reporter=json`. A CLI `--reporter` **replaces** the config reporter (it does not merge), so only the json reporter ran — no `playwright-report/` was produced by the gate, which is the run that immediately precedes the "open the slider" ask.
+2. The config template set `reporter: process.env.CI ? 'github' : 'list'` — no `html` reporter — so CI and manual `npx playwright test` runs produced no report either.
+
+The Slider is a real Playwright feature (HTML report image-diff view, rendered from the expected/actual/diff attachments a **failed** `toHaveScreenshot` writes); our wiring just never emitted the report that hosts it. Caught in red-team by verifying the gate's actual invocation against the Playwright reporter docs — not by trusting the config change.
+
+### Fixed
+- `scripts/visual-regression-gate.sh` — the gate now runs `npx playwright test --reporter=json,html` with `PLAYWRIGHT_JSON_OUTPUT_NAME` routing the JSON to a temp file (so the html reporter's stdout can't corrupt the parse) and `PLAYWRIGHT_HTML_OPEN=never` (so the html reporter doesn't auto-launch a browser on the failing-screenshot case). **This is the primary fix** — it makes `playwright-report/` exist on the gate path, so the on-demand "open the slider" ask and `--show-diffs` actually render Playwright's **Slider**.
+- `references/visual-review/playwright-base.config.ts` — the config reporter now also includes `html` (`open: 'never'`) alongside the console reporter, covering **CI and manual** runs (which don't pass `--reporter`): `process.env.CI ? [['github'],['html',{open:'never'}]] : [['list'],['html',{open:'never'}]]`. This also fixes a latent CI gap — the GitHub workflow uploads `playwright-report/`, but with the `github`-only reporter that artifact was empty.
+- `playwright-report/` is already gitignored (setup Step 7b) — no gitignore change needed.
+- Docs corrected to match reality on both paths: `commands/validate-visual-regression.md` Step 9 + Step 12, `references/visual-regression-walkthrough.md` §7. The view is named accurately as Playwright's **Slider**, scoped to surfaces that failed `toHaveScreenshot`.
+
+### Migration (existing VR setups)
+The gate-script fix is delivered by the plugin, so existing projects get the slider on the gate path automatically once on 5.10.3. To also get the report from **CI / manual** `npx playwright test` runs, add the `html` reporter to that project's own `playwright.config.*` (the template is copied into codePath at setup, so existing copies carry the old reporter): `reporter: [['list'], ['html', { open: 'never' }]]`.
+
 ## [5.10.2] - 2026-06-16
 
 **`/research` scope-offer floor: close the one path where no scope was offered anywhere.**

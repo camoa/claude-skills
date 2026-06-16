@@ -122,7 +122,24 @@ for p in "${PROJECTS[@]}"; do PROJ_ARGS+=("--project" "$p"); done
 # ─── run the suite ───────────────────────────────────────────────────────────
 
 PW_EXIT=0
-PW_JSON=$(cd "$CODE_PATH" && npx playwright test "${PROJ_ARGS[@]}" --reporter=json 2>/dev/null) || PW_EXIT=$?
+# Run BOTH the json reporter (this gate parses it) AND the html reporter, so
+# `npx playwright show-report` / `--show-diffs` has a CURRENT report whose
+# image-diff Slider the reviewer can open at the Step 9 classification pause. A
+# CLI `--reporter` REPLACES the config reporter (it does not merge), so the html
+# reporter added to playwright.config is NOT enough on this path — we must
+# request it here too. `PLAYWRIGHT_JSON_OUTPUT_NAME` routes the JSON to a file so
+# the html reporter's stdout never corrupts the parse; `PLAYWRIGHT_HTML_OPEN=never`
+# stops the html reporter auto-launching a browser on the failing-screenshot case.
+# (PLAYWRIGHT_JSON_OUTPUT_NAME is honored on all supported @playwright/test; on a
+# version old enough to ignore it the JSON would go to the /dev/null'd stdout and
+# this file stays empty — which degrades fail-safe to the playwright_no_json branch
+# below, never a false pass.)
+PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-$$.json")"
+( cd "$CODE_PATH" \
+  && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
+     npx playwright test "${PROJ_ARGS[@]}" --reporter=json,html >/dev/null 2>&1 ) || PW_EXIT=$?
+PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
+rm -f "$PW_JSON_FILE"
 
 if ! jq -e . >/dev/null 2>&1 <<<"$PW_JSON"; then
   add_warning "playwright_no_json: the suite produced no parseable JSON report (exit $PW_EXIT)"

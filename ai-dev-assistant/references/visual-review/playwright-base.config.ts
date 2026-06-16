@@ -47,7 +47,19 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  /* Always emit the `html` reporter alongside the console reporter: it is what
+     produces `playwright-report/`, whose image-diff view carries the **Slider**
+     (drag-to-reveal baseline↔current) widget that `--show-diffs` /
+     `npx playwright show-report` opens. `open: 'never'` keeps it from
+     auto-launching a browser mid-gate (it is opened on demand). Without the html
+     reporter, `show-report` has no report to show. NOTE: this config-level
+     reporter governs CI and manual `npx playwright test` runs; the VR *gate*
+     (`scripts/visual-regression-gate.sh`) passes `--reporter=json,html` on the
+     CLI (a CLI `--reporter` replaces the config one), so it must — and does —
+     request html itself. */
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : [['list'], ['html', { open: 'never' }]],
 
   use: {
     baseURL: BASE_URL,

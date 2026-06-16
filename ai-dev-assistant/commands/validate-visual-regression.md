@@ -174,16 +174,18 @@ For every surface in the gate output with `verdict: fail`:
   Emit the `visual-regression-gate-fail` prompt from
   `references/gate-hardening-prompts.md` substituting `{{surface_id}}`,
   `{{viewport}}`, `{{diff_percent}}`, `{{diff_pixels}}`, `{{diff_path}}`.
-  **Slider/side-by-side view is available on request (v5.10.2+):** the static
-  `{{diff_path}}` PNG is the default aid, but if the reviewer asks to *see* the
-  change interactively — e.g. "open the slider", "show baseline vs current
-  side by side", "let me swipe between them" — run `npx playwright show-report`
-  host-side and point them at the failed surface's image-diff view, which
-  offers Playwright's **Diff / Side-by-side / Slider** (drag-to-reveal) modes
-  over expected vs actual. This is an **on-demand** aid the reviewer asks for,
-  not an auto-launch and not a new flag (the pre-run `--show-diffs` flag opens
-  the same report eagerly); the gate still pauses on the same `[r]/[i]/[c]`
-  decision either way.
+  **Slider view is available on request (v5.10.2+; actually wired in v5.10.3):**
+  the static `{{diff_path}}` PNG is the default aid, but if the reviewer asks to
+  *see* the change interactively — e.g. "open the slider", "show baseline vs
+  current side by side", "let me swipe between them" — run `npx playwright
+  show-report` host-side and point them at the failed surface's image-diff view,
+  which offers Playwright's **Slider** (drag-to-reveal baseline↔current) view
+  over expected vs actual. This works because the `html` reporter is always
+  configured (`playwright-base.config.ts`), so the run produced a current
+  `playwright-report/` for `show-report` to open. This is an **on-demand** aid
+  the reviewer asks for, not an auto-launch and not a new flag (the pre-run
+  `--show-diffs` flag opens the same report eagerly); the gate still pauses on
+  the same `[r]/[i]/[c]` decision either way.
   Classify **one surface before moving to the next** (no batched prompts):
   - `[r]` Regression → `verdict: fail`, `classification: "regression"`,
     `baseline_updated: false`.
@@ -263,6 +265,17 @@ string interpolation) and write it via
 If `--show-diffs` was passed, run `npx playwright show-report` host-side from
 `codePath` (default port 9323; if busy, Playwright picks the next free port).
 Print the report URL.
+
+Every VR run produces a current `playwright-report/`, so `show-report` always has
+something to open and its image-diff view carries the **Slider** (drag-to-reveal
+baseline↔current) widget. This holds on **both** paths: the gate
+(`scripts/visual-regression-gate.sh`) runs `npx playwright test --reporter=json,html`
+(a CLI `--reporter` replaces the config one, so the gate requests html itself,
+with `PLAYWRIGHT_HTML_OPEN=never` to avoid auto-launching a browser), and CI /
+manual runs use the `html` reporter configured in `playwright-base.config.ts`.
+(Before v5.10.3 neither path emitted the html report — config was `list`/`github`
+only and the gate passed `--reporter=json` — so `show-report` had nothing to open
+and the slider never appeared. That wiring gap is fixed.)
 
 ## Step 13: Print the summary
 
