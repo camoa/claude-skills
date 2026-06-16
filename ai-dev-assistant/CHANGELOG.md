@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.1] - 2026-06-16
+
+**Parallel-conductor de-risk: an end-to-end integration harness + one cleanliness fix it surfaced.**
+
+### Added — conductor de-risk harness
+- `tests/wo-parallel-conductor-e2e-spec.sh` — a deterministic end-to-end harness that stands up a **real git repo + real ephemeral worktrees** and drives the parallel conductor's documented round loop through its **real kernels** (`wo-reconcile-table`, `wo-parallel-batch`, `wo-merge-back`, `wo-compile set-status`/`assert-dispatchable`, `wo-run-state dispatch`/`collect`), stubbing only the LLM build atom + `/review` gate. 9 assertions, all pass: disjoint co-batching, dependent-WO round sequencing, conflict-free merge-back assembly, the retry branch-collision fix, per-WO cap counting, no-auto-merge (base branch never advances), drift HALT + rollback, and clean teardown. Proves the conductor's orchestration backbone; the LLM build/gate layers are proven by their own specs, and a real-stack execution environment (e.g. DDEV-per-worktree) remains a separate concern.
+
+### Changed — drift rollback (surfaced by the harness)
+- `skills/work-order-loop-parallel/SKILL.md` step 7a: on `undeclared_file_drift`, the conductor now **rolls the merge back** (`git reset --hard $pre_merge_head`, a local branch reset to the captured pre-merge head — earlier WOs this round preserved, base/main untouched) **before** writing the terminal HALT, so a rejected WO leaves the integration branch containing **only validated WOs** (previously its declared + undeclared changes sat on the branch until human triage). The HALT-escalation / no-PR guarantee is unchanged.
+
 ## [5.10.0] - 2026-06-16
 
 **Parallel work-order conductor (the ③ slice — DB-free) + the markdown-native context-economy residuals. Settles the Beads ②/L2 ③ question: ② Beads (Dolt DB) is dropped; ③ parallel scheduling is retained but built on native Dynamic Workflows + the existing dependency-graph kernel, not a database.**
