@@ -106,9 +106,11 @@ free to write files it never declared:
 **The two nets** (defense in depth, both mandatory):
 
 - **The undeclared-co-edit detector (SKILL step 7a)** — after every clean merge-back, it diffs the merge's
-  actual file set against the batch's **declared union** and **HALTs `undeclared_file_drift`** (fail-safe,
-  terminal ⇒ Exit escalates for a human) on any merged path no batch member declared. This is the net for
-  class 1, and it fires **per round**, not just at the end.
+  actual file set against the batch's **declared union**; on any merged path no batch member declared it
+  **rolls the merge back** (`reset --hard $pre_merge_head` — so the rejected WO leaves the integration branch
+  containing only validated WOs) and **HALTs `undeclared_file_drift`** (fail-safe, terminal ⇒ Exit escalates
+  for a human). This is the net for class 1, and it fires **per round**, not just at the end. (De-risk harness
+  `tests/wo-parallel-conductor-e2e-spec.sh` exercises this end-to-end against the real kernels.)
 - **The single integrated `/review --base <base>`** on the integration branch at Exit (SKILL Exit step 1),
   which assesses the **whole assembled change** against the real `<base>` (not `ROUND_BASE`). This is the net
   for class 2 and a backstop for class 1.

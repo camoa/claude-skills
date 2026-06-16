@@ -229,8 +229,12 @@ Read each verdict as a **scalar via `jq -r`** (`.gate_specific.overall_verdict` 
   if [ "$msha" != "$pre_merge_head" ]; then
     changed=$(git -C <integration-worktree> diff --name-only "$pre_merge_head".."$msha")
     # drift = any changed path NOT declared-covered by the batch union (see step 7a for the coverage rule)
-    # On drift ⇒ write wo-NN.HALT reason=undeclared_file_drift (terminal); best-effort wo-run-state.sh halt;
-    #            DO NOT set-status done — the WO stays in_progress + HALTed and escalates at Exit.
+    # On drift ⇒ (a) ROLL BACK this WO's merge so the integration branch keeps ONLY validated WOs (a rejected
+    #            WO must leave NOTHING behind): git -C <integration-worktree> reset --hard "$pre_merge_head"
+    #            — a local branch reset to the captured pre-merge head; removes ONLY this WO's just-landed
+    #            merge (earlier WOs merged this round are preserved; never touches base/main, never the WO
+    #            worktree). (b) THEN write wo-NN.HALT reason=undeclared_file_drift (terminal) + best-effort
+    #            wo-run-state.sh halt; DO NOT set-status done — the WO stays in_progress + HALTed, escalates.
   fi
 
   # (5) No drift (or skipped) ⇒ mark done.
@@ -273,15 +277,20 @@ Using **`pre_merge_head`** (the explicitly captured pre-merge HEAD), not `msha^1
 no new merge commit, so `msha^1` is wrong; and even for a real merge the captured head is the robust base
 (the conductor knows exactly what the integration branch was before this serialized merge-back).
 
-On any non-empty `drift` ⇒ **fail-safe HALT:** write `wo-NN.HALT reason=undeclared_file_drift` (jq-built
-`{wo_id, reason, at, paths}`) and best-effort mark the sidecar `wo-run-state.sh halt`, and **do NOT then
-`set-status done`** — the WO stays `in_progress` **plus** carries a HALT marker, which makes it **TERMINAL**
+On any non-empty `drift` ⇒ **fail-safe ROLLBACK + HALT:** first **roll the merge back** —
+`git -C <integration-worktree> reset --hard "$pre_merge_head"` — so the rejected WO's changes (declared **and**
+undeclared) leave the integration branch entirely and it keeps **only validated WOs**; this is a local branch
+reset to the captured pre-merge head and removes **only this WO's** serialized merge (earlier WOs this round are
+preserved; base/main and the WO worktree are untouched). Then write `wo-NN.HALT reason=undeclared_file_drift`
+(jq-built `{wo_id, reason, at, paths}`) and best-effort mark the sidecar `wo-run-state.sh halt`, and **do NOT
+then `set-status done`** — the WO stays `in_progress` **plus** carries a HALT marker, which makes it **TERMINAL**
 (HALT-precedence dominates status, checked first at reconcile and Exit), so it **escalates** and is never
 recovered to `done`. **Chosen over a mere warning** because a clean merge cannot prove the absence of a
 cross-WO collision. This is deliberately **conservative** — it flags **any** undeclared merged path, even a
 single-WO one with no actual co-edit, since the conductor cannot distinguish the two from the merge alone (err
 toward a human look). Empty/skipped `drift` ⇒ proceed to `set-status done`. The detector is read-only on code
-(one `git diff` + a string comparison); it never merges, resets, or pushes.
+**until** it confirms drift; the only mutation it then makes is the rollback `reset --hard` of its own WO's
+merge — it never pushes and never touches another WO's work.
 
 ### 8. Observability + prune
 Per WO, **non-fatal**: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/wo-obs-append.sh" "<task-folder>/work-orders"
