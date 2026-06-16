@@ -174,6 +174,16 @@ For every surface in the gate output with `verdict: fail`:
   Emit the `visual-regression-gate-fail` prompt from
   `references/gate-hardening-prompts.md` substituting `{{surface_id}}`,
   `{{viewport}}`, `{{diff_percent}}`, `{{diff_pixels}}`, `{{diff_path}}`.
+  **Slider/side-by-side view is available on request (v5.10.2+):** the static
+  `{{diff_path}}` PNG is the default aid, but if the reviewer asks to *see* the
+  change interactively — e.g. "open the slider", "show baseline vs current
+  side by side", "let me swipe between them" — run `npx playwright show-report`
+  host-side and point them at the failed surface's image-diff view, which
+  offers Playwright's **Diff / Side-by-side / Slider** (drag-to-reveal) modes
+  over expected vs actual. This is an **on-demand** aid the reviewer asks for,
+  not an auto-launch and not a new flag (the pre-run `--show-diffs` flag opens
+  the same report eagerly); the gate still pauses on the same `[r]/[i]/[c]`
+  decision either way.
   Classify **one surface before moving to the next** (no batched prompts):
   - `[r]` Regression → `verdict: fail`, `classification: "regression"`,
     `baseline_updated: false`.
