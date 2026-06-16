@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.0] - 2026-06-16
+
+**Work-order-loop context-economy slice (the markdown-native token-economy residuals; the Beads ②/L2 ③ decision was resolved to NO — swarm is not a goal, Dynamic Workflows suffice).**
+
+### Added — consolidated reconcile read
+- `scripts/wo-reconcile-table.sh` — a read-only zero-model kernel that emits ONE compact JSON table (per-WO: status, terminal, halted, halt_reason, checkpoint_before/after, has_review, review_verdict, has_critique, critique_blocking, halt_marker_present) for the loop's on-entry reconciliation. Replaces the previous **5 sidecar reads × N work-orders** with a single kernel call — the reconcile branches and their semantics are unchanged (input-source-only). The terminal rule is encoded exactly: `wo-NN.HALT` exists **OR** `run.json halted==true`. New `tests/wo-reconcile-table-spec.sh` (14 cases).
+
+### Changed — work-order-loop context discipline
+- `skills/work-order-loop/SKILL.md`: on-entry reconcile drives off the single `wo-reconcile-table.sh` table; step-10 verdict reads use `jq -r` field-select to a scalar instead of whole-file Reads of `_review.json`/`_critique.json`; added a discipline note that per-WO build/review/critique transcripts are disposable once the obs record (step 11) is written; affirmed `/review` runs inline at depth-0 (the build atom is the sole depth-1 Task) so gate work never deepens the call tree. No change to the cap chokepoint, terminal-HALT precedence, or no-auto-merge exit.
+
+### Notes
+- Two of the audit's "5 residuals" were deliberately **not** done: verifying `/review` stays depth-1 is already satisfied by design (it's a confirmation, not a change); and resolving the oracle-file list once-per-run was **descoped as a security no-go** — the critique rung re-derives the oracle list from the recipe body every run on purpose (the oracle-tamper guard; a cached list is a tamperable artifact).
+
 ## [5.8.0] - 2026-06-16
 
 **Closes the consumption half of the two 5.7.0 PAI adoptions: verification now drives the `/goal` clause, and the observability log is now mineable.**

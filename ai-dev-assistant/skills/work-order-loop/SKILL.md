@@ -46,12 +46,19 @@ is always step two — the HALT/`halted` check is step one.
 ## On entry — L1-light recovery (reconcile from disk, idempotent)
 
 Never assume a clean start. **Before** the ready-queue, run a single **reconciliation pass** over every
-WO. Per WO, read `(status [wo-compile.sh frontmatter], wo-NN.run.json [wo-run-state.sh read],
-wo-NN._review.json, wo-NN._critique.json, wo-NN.HALT)`. The run-state sidecar is the authority; **never**
-trust `git log --grep` (builder-forgeable). Route each WO by the disposition table in
+WO. Run `wo-reconcile-table.sh <task-folder>/work-orders` **ONCE** — a READ-ONLY consolidated pass that
+returns a compact JSON array, **one row per WO**, carrying everything the disposition branches key on:
+`status`, `terminal` (`wo-NN.HALT` exists **OR** sidecar `halted:true` — the terminal rule, encoded
+exactly), `halted`, `halt_reason`, `checkpoint_before`, `checkpoint_after`, `has_run_state`,
+`has_review`, `review_verdict`, `has_critique`, `critique_blocking`, `halt_marker_present`. Drive every
+branch below off that ONE table instead of N×5 per-WO reads — **only the INPUT changes; the branches and
+their semantics are unchanged.** The run-state sidecar (`wo-NN.run.json`) is still the authority the
+table **mirrors**: for the actual reset/checkpoint actions below, use the `checkpoint_before` /
+`checkpoint_after` the table surfaces from it. **Never** trust `git log --grep` (builder-forgeable).
+Route each WO by the disposition table in
 `references/loop-contract.md` (Recovery section) — every `set-status` below is legal per the kernel's
 transition table. **Before any disposition that may reach step 10's reset, bind
-`cp := <sidecar checkpoint_before>` (from `wo-NN.run.json`)** — `$cp` is otherwise bound only at step 5,
+`cp := <row checkpoint_before>` (the table value, mirroring `wo-NN.run.json`)** — `$cp` is otherwise bound only at step 5,
 which every resume path skips, so a resume into the retryable-fail branch would `reset --hard` an unbound
 ref:
 
@@ -139,7 +146,11 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
 9. **Critique rung.** Invoke the `work-order-critique` skill **inline** → `wo-NN._critique.json`
    (+ `wo-NN.HALT` if blocking). Forward its compact line.
 10. **Verdict — from DISK only**, three-way (per-WO `_review.json` `.gate_specific.overall_verdict` +
-    `_critique.json blocking` + `wo-NN.HALT`):
+    `_critique.json blocking` + `wo-NN.HALT`). Read each verdict as a **scalar via `jq -r`**, never a
+    whole-file Read into context:
+    `jq -r '.gate_specific.overall_verdict' wo-NN._review.json` and
+    `jq -r '.blocking' wo-NN._critique.json` (the `wo-NN.HALT` check is a file-exists test). Keeping the
+    reads to single scalars is what holds the per-WO context flat:
     - **TERMINAL escalation** (a blocking judgment, **not** a retry) ⇒ if `wo-NN.HALT` is present **or**
       `_critique.json blocking==true`: **stop here** — no reset, no requeue, no status write. Ensure a
       `wo-NN.HALT` marker exists (the critique rung writes it on `blocking`; if missing, write one). The
@@ -171,6 +182,14 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
 **Compact-line discipline.** Forward every kernel's stderr line to the transcript
 **mechanically** (`2>&1`/`tee`/redirect-then-print — not by re-typing it), so the Haiku /goal evaluator,
 which reads only the transcript, sees byte-stable verdicts.
+
+**Per-WO transcript hygiene.** The verbose per-WO build/review/critique tool outputs are **disposable**
+once that WO's obs record (step 11) is written — carry forward only the compact stderr lines + the
+reconcile table, never the verbose per-WO transcripts.
+
+**Flat call tree.** `/review` runs **inline at depth-0** (command-prose from the orchestrator's main
+context, not a callable) and the critique rung runs inline too; the build atom (step 6) is the **sole
+depth-1 Task**. So the per-WO gate work never deepens the call tree — context stays flat across WOs.
 
 ## Exit — branch on terminal residue
 
