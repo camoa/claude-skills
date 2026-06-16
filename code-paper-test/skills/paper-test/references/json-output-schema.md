@@ -1,6 +1,6 @@
 # JSON Output Schema (`--json` mode)
 
-Stable, versioned schema for CI integration, aggregation, and programmatic consumption. Emitted by `/paper-test --json <file>` and `/code-paper:test-team --json <file>`.
+Stable, versioned schema for CI integration, aggregation, and programmatic consumption. Emitted by `/paper-test --json <file>` and `/code-paper-test:test-team --json <file>`.
 
 Shape follows the camoa-skills ecosystem convention established by `code-quality-tools/skills/code-quality-audit/references/json-schemas.md` — the same envelope fields (`schema_version`, `timestamp`, `target`, `status`, `summary`, `findings`) so downstream tooling can treat reports from both plugins uniformly.
 
@@ -14,6 +14,9 @@ Shape follows the camoa-skills ecosystem convention established by `code-quality
    > ```bash
    > echo "$result" | jq -e '.schema_version | test("^1\\.")' >/dev/null || exit 1
    > ```
+
+   **v1.1 (this release):** Added optional `behavior_verified` boolean on dependency-type findings; added `behaviors_verified` to the summary envelope; added `tool-reference-behavior` category. All changes are additive. CI gates pinning `^1\.` are unaffected.
+
 4. **String fields are JSON-escaped.** Newlines, quotes, and backslashes in `title`, `description`, `fix_suggestion`, and file excerpts must not corrupt the document. Validate with `echo "$OUTPUT" | jq .` before trusting it in a gate.
 5. **Severity values match the existing rubric exactly** — `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (uppercase). Do not introduce new terms. See `severity-scoring.md`.
 
@@ -23,7 +26,7 @@ All paper-test JSON reports share this shape:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "tool": "paper-test | test-team",
   "mode": "quick | structured-3-phase | test-team",
   "target_type": "code | skill | config",
@@ -39,6 +42,7 @@ All paper-test JSON reports share this shape:
     "total_findings": 0,
     "scenarios_traced": 0,
     "dependencies_verified": 0,
+    "behaviors_verified": 0,
     "contracts_verified": 0
   },
   "findings": []
@@ -64,7 +68,8 @@ Every entry in `findings[]`:
     "impact": 3,
     "reversibility": 3,
     "exploitability": 3
-  }
+  },
+  "behavior_verified": false
 }
 ```
 
@@ -75,6 +80,7 @@ Every entry in `findings[]`:
 - **`line_end`** — equals `line_start` for single-line findings. Always present.
 - **`fix_suggestion`** — one-line actionable fix. May include code snippets (remember invariant 4).
 - **`scoring_factors`** — all four keys required (`reach`, `impact`, `reversibility`, `exploitability`), each `1`, `2`, or `3`. Omit the object only for `INFO` findings where scoring doesn't apply.
+- **`behavior_verified`** — optional boolean. Present (and `false`) on findings of category `dependency-verification` or `tool-reference-behavior` when behavioral contract was not checked. Present and `true` when the behavioral contract was located and diffed with no gap. Absent on all other finding categories.
 
 ## `/paper-test --json` output
 
@@ -84,7 +90,7 @@ Example for a passing trace with one low-severity finding:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "tool": "paper-test",
   "mode": "structured-3-phase",
   "target_type": "code",
@@ -100,6 +106,7 @@ Example for a passing trace with one low-severity finding:
     "total_findings": 1,
     "scenarios_traced": 7,
     "dependencies_verified": 4,
+    "behaviors_verified": 0,
     "contracts_verified": 2
   },
   "findings": [
@@ -118,7 +125,7 @@ Example for a passing trace with one low-severity finding:
 }
 ```
 
-## `/code-paper:test-team --json` output
+## `/code-paper-test:test-team --json` output
 
 Test-team mode emits the common envelope PLUS a `team` section holding per-teammate breakdowns and the cross-challenge debate outcome. Write location: `{target_dir}/paper-test-team-report.json` (sibling to the existing `paper-test-team-report.md`). Each teammate also writes `{role}-analysis.json` in `{target_dir}` so the lead can aggregate without re-parsing markdown.
 
@@ -126,7 +133,7 @@ The example below shows the shape only — the individual counts (`confirmed_by_
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "tool": "test-team",
   "mode": "test-team",
   "target_type": "code",
@@ -142,6 +149,7 @@ The example below shows the shape only — the individual counts (`confirmed_by_
     "total_findings": 10,
     "scenarios_traced": 18,
     "dependencies_verified": 7,
+    "behaviors_verified": 0,
     "contracts_verified": 3
   },
   "team": {
@@ -203,6 +211,7 @@ When `target_type` is `"skill"` or `"config"`, `findings[].category` uses instru
 - `frontmatter-verification` — declared `allowed-tools` / `model` / `description` match the body's actual tool use and claims.
 - `context-budget` — instruction/reference size vs. likely context window at invocation time.
 - `tool-reference-existence` — does every tool, file, skill, or agent named in the body actually exist?
+- `tool-reference-behavior` — Does each referenced capability PRODUCE what the calling step consumes? Behavioral contract check for MCP output schemas, SKILL.md declared outputs, hook event payloads (§B2 in `behavioral-verification.md`)
 - `dependency-verification` — for configs, do the keys the consuming code reads actually exist and have the expected types?
 
 Example skill finding:

@@ -20,7 +20,7 @@ Use the plugin-creation-tools:skill-quality-reviewer agent on <skill/command/age
 # Step 2 — semantic pass
 /paper-test <skill/command/agent file>
 # or for skills ≥ 300 lines or agent definitions:
-/code-paper:test-team <skill/command/agent file>
+/code-paper-test:test-team <skill/command/agent file>
 ```
 
 The reviewer typically clears within a single turn; paper-test then focuses on the harder semantic problems it cannot detect. Skipping step 1 means paper-test wastes effort flagging things a grep could have caught.
@@ -331,6 +331,39 @@ ROUTING CHECK (routing.yml):
 
 ---
 
+## 8. Behavioral Output Verification (B2)
+
+For every capability reference (skill, MCP tool, agent, hook) found during existence verification in §3 / §5:
+
+```
+BEHAVIORAL CHECK: [capability name / skill / MCP tool]
+
+STEP 1 — Caller assumptions:
+  Calling step N reads: [field names from the capability's output]
+  Assumed types: [string? array? object?]
+  Success handling: [does the calling step check for failure?]
+  Assumed side effects: [file written? DB updated?]
+
+STEP 2 — Declared output contract:
+  Source: [MCP inputSchema / SKILL.md description / agent description / hook payload]
+  Declared outputs: [fields, types, optional vs required]
+
+STEP 3 — DIFF:
+  Field consumed but not declared: [YES/NO → if YES, behavioral gap]
+  Optional field accessed without null check: [YES/NO → if YES, behavioral gap]
+  Type mismatch: [YES/NO → if YES, behavioral gap]
+  Failure case handled: [YES/NO → if NO, behavioral gap]
+
+FALSE-CONFIDENCE CHECK:
+  Caller gate checks: [existence only / behavioral / both]
+  If existence only: flag as behavioral gap
+
+NO-CONTRACT FALLBACK:
+  If no declared output found: "CAPABILITY DRIFT RISK — behavioral conformance unverified"
+```
+
+---
+
 ## Quick Reference: Code vs Skill Testing
 
 | What You're Testing | Trace Method | Key Checks |
@@ -400,6 +433,7 @@ When paper-testing a skill/command/agent/config with `--json`, the schema's `tar
 | `frontmatter-verification` | `allowed-tools` / `model` / `description` match the body's actual claims (§3) |
 | `context-budget` | Skill + references vs. likely window size at invocation (§5) |
 | `tool-reference-existence` | Does every tool, file, skill, or agent named in the body exist? (§4) |
+| `tool-reference-behavior` | Does the referenced capability PRODUCE what the calling step consumes? Checks MCP output schema, SKILL.md declared outputs, hook payload shape (§8 above) |
 | `dependency-verification` | For configs: do keys the consuming code reads exist with expected types? |
 
 Severity stays on the same `CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO` rubric. Full schema: `references/json-output-schema.md`.

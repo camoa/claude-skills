@@ -5,12 +5,32 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-06-16
+
+### Added
+- **Behavioral contract verification — the second pass after existence verification.** New `references/behavioral-verification.md` holds the canonical procedures: **B1** (code/library calls) enumerates every caller assumption about a return, locates the declared contract (type stub → OpenAPI → docs → docblock → changelog), diffs assumption vs contract, and applies a **chained-object rule** (trace every property/method invoked on a returned object, not just the first return type); **B2** (plugin/MCP/hook/skill references) checks that a referenced capability *produces* what the calling step consumes, not merely that the reference resolves. Closed-source / no-contract targets get a **taint stance** (assume the return could be null, hostile, or malformed; require a validation wrapper) and the explicit label `EXISTENCE VERIFIED / BEHAVIOR UNVERIFIED`.
+- `references/dependency-verification.md` — renamed Option 3 to "Closed-Source / No-Contract — Taint Stance" and added a "Chained-Object Rule" section. The existence-layer `UNVERIFIED RISK` label is preserved; the behavioral-layer `BEHAVIOR UNVERIFIED` label is new and distinct.
+- `references/skill-and-config-testing.md` — new "§8 Behavioral Output Verification (B2)" procedure and a `tool-reference-behavior` row in the JSON category table.
+- `commands/test-team.md` — Happy Path Validator spawn gains a behavioral step 5b (B1) and a skill-mode B2 check.
+
+### Changed
+- **Report columns now distinguish existence from behavior** (the previous single `Verified?` column was a false-confidence trap). The Happy Path Analysis `## Dependency Verification` table gains `Behavior verified?` + `Contract source`; the lead synthesis splits its single Dependency Verification table into `## Existence Verification` and `## Behavioral Contract Verification` (the latter renamed from the rollout's `## Contract Verification` to avoid colliding with the pre-existing relational `## Contract Verification` table).
+- **JSON schema 1.0 → 1.1 (additive only).** Optional `behavior_verified` boolean on dependency-type findings; `behaviors_verified` in the summary envelope; `tool-reference-behavior` category. CI gates pinning `^1\.` are unaffected.
+- SKILL.md — new workflow step 6b, a behavioral distinction in "Critical: Never Assume", a skill-mode B2 note, and the new reference in the References list.
+
+### Fixed (pre-existing)
+- **Slash-command namespace corrected everywhere.** 21 references used `/code-paper:test-team`, but the plugin name is `code-paper-test`, so the command actually resolves as `/code-paper-test:test-team` — every documented invocation previously pointed at a non-existent command. Corrected across `SKILL.md` (incl. the routing table and `--json` examples), `commands/test-team.md`, `README.md`, `CHANGELOG.md`, and four `references/*.md`.
+- **S14 (BUG-1) — `skills/paper-test/SKILL.md` frontmatter `model: sonnet` → `model: inherit`.** The skill runs inline with no context isolation, so a pinned sub-1M model overflows when the skill activates from a large conversation. `inherit` runs on the session model. The `**Model:** sonnet` markers in `commands/test-team.md` are fresh-context agent spawns and are intentionally left unchanged (S14 does not apply to spawns).
+
+### Notes
+- Existence-verification discipline is unchanged — behavioral verification is added on top, never a replacement.
+
 ## [0.9.0] - 2026-05-21
 
 ### Added
-- **`${CLAUDE_EFFORT}` honored as a floor.** `/paper-test` (SKILL.md, "Effort-Adaptive Scenario Depth") scales scenarios per phase with the active effort level — `low` = happy path + one error case, `medium` = 2 per phase, `high`/`xhigh`/`max` = 3+. Effort never lowers the verification bar; every external call is still verified. `/code-paper:test-team` treats caller effort as a **floor-raiser**: each teammate runs at `max(${CLAUDE_EFFORT}, role floor)` — floors are `medium` (Happy Path Validator) and `high` (Edge Case Hunter, Red Team Attacker). A `low`/`medium` caller still gets the adversarial lenses at `high`; an `xhigh`/`max` caller bumps the whole team.
+- **`${CLAUDE_EFFORT}` honored as a floor.** `/paper-test` (SKILL.md, "Effort-Adaptive Scenario Depth") scales scenarios per phase with the active effort level — `low` = happy path + one error case, `medium` = 2 per phase, `high`/`xhigh`/`max` = 3+. Effort never lowers the verification bar; every external call is still verified. `/code-paper-test:test-team` treats caller effort as a **floor-raiser**: each teammate runs at `max(${CLAUDE_EFFORT}, role floor)` — floors are `medium` (Happy Path Validator) and `high` (Edge Case Hunter, Red Team Attacker). A `low`/`medium` caller still gets the adversarial lenses at `high`; an `xhigh`/`max` caller bumps the whole team.
 - README documentation for `teammateDefaultModel` / `teammateMode` settings as an alternative to the per-spawn `Model:` lines in `/test-team`.
-- **`references/fork-vs-fresh.md`** — decision record for why `/code-paper:test-team` spawns its three testers in fresh contexts rather than forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`): the fresh-vs-forked tradeoff table, why fresh is the default (independent reasoning is what makes the cross-challenge debate meaningful), the re-evaluation criteria, and how to opt in. Cross-linked from `references/ai-code-auditing.md` and the SKILL.md references list.
+- **`references/fork-vs-fresh.md`** — decision record for why `/code-paper-test:test-team` spawns its three testers in fresh contexts rather than forked subagents (`CLAUDE_CODE_FORK_SUBAGENT=1`): the fresh-vs-forked tradeoff table, why fresh is the default (independent reasoning is what makes the cross-challenge debate meaningful), the re-evaluation criteria, and how to opt in. Cross-linked from `references/ai-code-auditing.md` and the SKILL.md references list.
 
 ### Changed
 - **SKILL.md conciseness pass** (494 → 126 body lines, no behavior change). The full 8-step workflow, verification procedures, flaw-catalog summary, module strategy, and output template moved to the new `references/workflow.md`; SKILL.md keeps the routing, the condensed workflow, the effort guidance, and the references list.
@@ -39,13 +59,13 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 ## [0.7.0] - 2026-04-22
 
 ### Added
-- **`--json` output mode** on both `/paper-test` and `/code-paper:test-team` for CI integration and programmatic consumption. Versioned schema (`schema_version: "1.0"`) matching the camoa-skills ecosystem convention established by code-quality-tools. Severity rubric preserved (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`) — no new terms introduced.
+- **`--json` output mode** on both `/paper-test` and `/code-paper-test:test-team` for CI integration and programmatic consumption. Versioned schema (`schema_version: "1.0"`) matching the camoa-skills ecosystem convention established by code-quality-tools. Severity rubric preserved (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`) — no new terms introduced.
 - **New reference:** `skills/paper-test/references/json-output-schema.md` — full schema, finding-object shape, team-report extensions, skill/config category vocabulary, optional `rubric_score` block, CI gate patterns, and schema-versioning contract (match `^1\.`, never exact).
 - **Deterministic + Agentic pairing section** in `skill-and-config-testing.md` — documents running `plugin-creation-tools:skill-quality-reviewer` before paper-test when testing skills/commands/agents, so mechanical issues (stale SDK refs, missing imperatives, frontmatter gaps) clear cheaply before semantic analysis.
 - **SKILL.md trigger phrases** expanded: `"test this agent"`, `"walk through this code"`, `"step through this"`, `"dry run"`, `"sanity check"`, `"red team this"`, `"poke holes in this"` — cover natural phrasings the prior list missed.
 
 ### Changed
-- **`/code-paper:test-team` command** — new `--json` argument handling. Each teammate writes `{role}-analysis.json` alongside the markdown report when the flag is set; the lead aggregates per the schema into `paper-test-team-report.json` with per-teammate breakdowns (`team.happy_path` / `team.edge_case` / `team.red_team`), cross-challenge outcomes (`confirmed_by_multiple`, `disputed`, `unanimous_clean_areas`), and per-finding `found_by` / `disputed` fields.
+- **`/code-paper-test:test-team` command** — new `--json` argument handling. Each teammate writes `{role}-analysis.json` alongside the markdown report when the flag is set; the lead aggregates per the schema into `paper-test-team-report.json` with per-teammate breakdowns (`team.happy_path` / `team.edge_case` / `team.red_team`), cross-challenge outcomes (`confirmed_by_multiple`, `disputed`, `unanimous_clean_areas`), and per-finding `found_by` / `disputed` fields.
 - **PreCompact hook** now surfaces both `.md` and `.json` reports in `.reports/`.
 - **SKILL.md** frontmatter `version: 0.5.0` → `0.7.0` (corrects the intentional drift left during the v0.6.0 hook-only bump).
 

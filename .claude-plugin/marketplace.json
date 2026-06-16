@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.1"
+    "version": "2.0.2"
   },
   "plugins": [
     {
@@ -175,8 +175,8 @@
     {
       "name": "code-paper-test",
       "source": "./code-paper-test",
-      "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase single agent (50–300 lines), or 3-agent competing team with isolated worktrees (300+ lines, security-critical, skills). Supports `--json` output for CI integration. v0.9.0 honors ${CLAUDE_EFFORT} as a floor across scenario depth and per-teammate effort, and trims SKILL.md into references.",
-      "version": "0.9.0",
+      "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase (50–300), or 3-agent competing team in isolated worktrees (300+, security-critical, skills). Supports `--json` for CI. v0.10.0 adds behavioral contract verification (B1 code, B2 plugin/MCP/skill) on top of existence checks: return-shape/nullability diffing, chained-object tracing, taint-stance closed-source fallback.",
+      "version": "0.10.0",
       "author": {
         "name": "camoa"
       },
