@@ -11,7 +11,7 @@ Paper test code from 3 competing perspectives using an agent team. A Happy Path 
 ## Usage
 
 ```
-/code-paper:test-team [--json] <file-path> [file-path...]
+/code-paper-test:test-team [--json] <file-path> [file-path...]
 ```
 
 Pass `--json` to emit a CI-consumable JSON report alongside the markdown report. Schema: `skills/paper-test/references/json-output-schema.md` (`schema_version: "1.0"`).
@@ -38,7 +38,7 @@ Verify each file exists using the Read tool.
 If no arguments provided:
 > What code should the team test? Provide one or more file paths:
 > ```
-> /code-paper:test-team src/Service/PaymentService.php
+> /code-paper-test:test-team src/Service/PaymentService.php
 > ```
 
 If a file doesn't exist:

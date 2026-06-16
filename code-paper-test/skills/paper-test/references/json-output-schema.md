@@ -1,6 +1,6 @@
 # JSON Output Schema (`--json` mode)
 
-Stable, versioned schema for CI integration, aggregation, and programmatic consumption. Emitted by `/paper-test --json <file>` and `/code-paper:test-team --json <file>`.
+Stable, versioned schema for CI integration, aggregation, and programmatic consumption. Emitted by `/paper-test --json <file>` and `/code-paper-test:test-team --json <file>`.
 
 Shape follows the camoa-skills ecosystem convention established by `code-quality-tools/skills/code-quality-audit/references/json-schemas.md` — the same envelope fields (`schema_version`, `timestamp`, `target`, `status`, `summary`, `findings`) so downstream tooling can treat reports from both plugins uniformly.
 
@@ -125,7 +125,7 @@ Example for a passing trace with one low-severity finding:
 }
 ```
 
-## `/code-paper:test-team --json` output
+## `/code-paper-test:test-team --json` output
 
 Test-team mode emits the common envelope PLUS a `team` section holding per-teammate breakdowns and the cross-challenge debate outcome. Write location: `{target_dir}/paper-test-team-report.json` (sibling to the existing `paper-test-team-report.md`). Each teammate also writes `{role}-analysis.json` in `{target_dir}` so the lead can aggregate without re-parsing markdown.
 

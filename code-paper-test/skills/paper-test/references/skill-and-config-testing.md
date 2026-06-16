@@ -20,7 +20,7 @@ Use the plugin-creation-tools:skill-quality-reviewer agent on <skill/command/age
 # Step 2 — semantic pass
 /paper-test <skill/command/agent file>
 # or for skills ≥ 300 lines or agent definitions:
-/code-paper:test-team <skill/command/agent file>
+/code-paper-test:test-team <skill/command/agent file>
 ```
 
 The reviewer typically clears within a single turn; paper-test then focuses on the harder semantic problems it cannot detect. Skipping step 1 means paper-test wastes effort flagging things a grep could have caught.

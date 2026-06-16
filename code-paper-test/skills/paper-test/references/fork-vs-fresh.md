@@ -1,6 +1,6 @@
 # Decision: Forked vs Fresh Subagents for `/test-team`
 
-**Decision:** `/code-paper:test-team` spawns its three testers in **fresh
+**Decision:** `/code-paper-test:test-team` spawns its three testers in **fresh
 contexts**. This is the default and the recommended posture. Forked subagents
 are a documented opt-in, not the default.
 
@@ -47,7 +47,7 @@ or behavior changes.
 If you have a specific reason to fork (e.g. a very large target where three
 independent reads are prohibitively expensive, and you accept the weaker
 debate), set `CLAUDE_CODE_FORK_SUBAGENT=1` in the environment before invoking
-`/code-paper:test-team`. The command itself is unchanged — the env var is read
+`/code-paper-test:test-team`. The command itself is unchanged — the env var is read
 by Claude Code, not the plugin. Treat the resulting report's "Disputed
 Findings" and "Blind Spots" sections with extra skepticism: shared context
 makes unanimous agreement less meaningful.

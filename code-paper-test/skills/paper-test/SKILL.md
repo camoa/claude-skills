@@ -2,7 +2,7 @@
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "test this agent", "validate this implementation", "review this logic", "check dependencies", "check this config", "walk through this code", "step through this", "dry run", "sanity check", "red team this", "poke holes in this". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
 version: 0.10.0
-model: sonnet
+model: inherit
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
 ---
@@ -17,8 +17,8 @@ Systematically test code by mentally executing it line-by-line with concrete val
 |-------------|----------|-----|
 | **< 50 lines** | Quick trace (workflow below) | Fast, inline, sufficient for small code |
 | **50–300 lines** | Structured 3-phase | One agent, all 3 perspectives, sequential — thorough without coordination overhead |
-| **300+ lines or security-critical** | `/code-paper:test-team` (3 agents) | Context pressure justifies splitting. Cross-challenge debate catches what one agent misses. |
-| **Skill/command/agent files** | `/code-paper:test-team` | Different lenses genuinely find different things for instruction-based testing |
+| **300+ lines or security-critical** | `/code-paper-test:test-team` (3 agents) | Context pressure justifies splitting. Cross-challenge debate catches what one agent misses. |
+| **Skill/command/agent files** | `/code-paper-test:test-team` | Different lenses genuinely find different things for instruction-based testing |
 
 If the user asks for "paper test" without specifying, read the target files, count lines, and recommend the appropriate approach. For 50–300 lines, use Structured 3-Phase mode. Only recommend `/test-team` for 300+ lines, explicit "test team" requests, or security-critical code.
 
@@ -100,7 +100,7 @@ A method existing is not it returning what you assume. Existence verification is
 
 For CI integration, aggregation, or programmatic consumption, invoke with `--json` to emit a stable, versioned JSON document instead of the markdown report.
 
-- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper:test-team` (lead synthesis).
+- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper-test:test-team` (lead synthesis).
 - Schema is pinned at `schema_version: "1.0"` with an additive-only minor-version contract. CI should pin `^1\.`, not exact match.
 - Severity values match the existing rubric exactly: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`.
 - `findings` is always an array — `[]` when clean, never `null` or omitted.
@@ -110,7 +110,7 @@ For CI integration, aggregation, or programmatic consumption, invoke with `--jso
 
 ```
 /paper-test --json src/Service/UserService.php
-/code-paper:test-team --json src/Service/PaymentService.php
+/code-paper-test:test-team --json src/Service/PaymentService.php
 ```
 
 ## Pairing with `skill-quality-reviewer` for Skill Testing

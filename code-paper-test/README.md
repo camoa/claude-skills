@@ -90,7 +90,7 @@ Or use it explicitly:
 For complex or security-critical code, use the agent team command:
 
 ```
-/code-paper:test-team src/Service/PaymentService.php
+/code-paper-test:test-team src/Service/PaymentService.php
 ```
 
 Spawns 3 competing testers — Happy Path Validator, Edge Case Hunter, and Red Team Attacker — who independently analyze the code in isolated worktrees and then debate findings. Each tester has a 15-turn limit for cost control.
@@ -98,7 +98,7 @@ Spawns 3 competing testers — Happy Path Validator, Edge Case Hunter, and Red T
 Also works with skills and configs:
 
 ```
-/code-paper:test-team skills/paper-test/SKILL.md
+/code-paper-test:test-team skills/paper-test/SKILL.md
 ```
 
 Auto-detects skill files and switches to instruction tracing mode.
@@ -112,7 +112,7 @@ honest about cost in CI and smoke runs:
   path plus one error case, `medium` traces two per phase, `high`/`xhigh`/`max`
   go to full edge and adversarial coverage. Effort never lowers the
   verification bar — every external call is still verified.
-- **`/code-paper:test-team`** treats caller effort as a **floor-raiser**: each
+- **`/code-paper-test:test-team`** treats caller effort as a **floor-raiser**: each
   teammate runs at `max(caller effort, role floor)`. Role floors are `medium`
   for the Happy Path Validator and `high` for the Edge Case Hunter and Red Team
   Attacker — so the adversarial lenses are never cheapened, and a caller at
@@ -120,7 +120,7 @@ honest about cost in CI and smoke runs:
 
 ### Teammate model configuration
 
-`/code-paper:test-team` spawn prompts set `Model: sonnet` per teammate. If you
+`/code-paper-test:test-team` spawn prompts set `Model: sonnet` per teammate. If you
 prefer a single setting, set `teammateDefaultModel` in `settings.json` (e.g.
 `"sonnet"`, or `null` to inherit the lead's `/model`) — it applies to any
 teammate whose spawn prompt doesn't name a model. `teammateMode` (`auto` /
@@ -285,7 +285,7 @@ Specific checks for AI-generated code:
 - JSON schema 1.0 → 1.1 (additive): optional `behavior_verified`, summary `behaviors_verified`, new `tool-reference-behavior` category
 
 **0.9.0** — effort-adaptive depth + hygiene
-- `${CLAUDE_EFFORT}` honored as a floor across `/paper-test` (scenario depth) and `/code-paper:test-team` (per-teammate effort)
+- `${CLAUDE_EFFORT}` honored as a floor across `/paper-test` (scenario depth) and `/code-paper-test:test-team` (per-teammate effort)
 - SKILL.md conciseness pass — workflow detail extracted to `references/workflow.md`
 - `teammateDefaultModel` / `teammateMode` documentation for `/test-team`
 - Plugin-root conventions file, manifest `$schema`, exec-form hook

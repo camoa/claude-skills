@@ -6,7 +6,7 @@ AI (LLMs) generates code based on patterns, not actual knowledge of your codebas
 
 ## Forked subagents (experimental upstream)
 
-Paper-test team mode (`/code-paper:test-team`) currently spawns 3 agents in fresh contexts. Claude Code 2.1.117+ ships **forked subagents** as an experimental opt-in (`CLAUDE_CODE_FORK_SUBAGENT=1`) — a subagent that inherits the full conversation history (system prompt, tools, model, messages) instead of starting fresh. For paper-test, this is a strong fit: the Happy Path Validator, Edge Case Hunter, and Red Team Attacker all benefit from the same loaded codebase context (the target file's dependencies, config, and contracts) without each one re-reading them.
+Paper-test team mode (`/code-paper-test:test-team`) currently spawns 3 agents in fresh contexts. Claude Code 2.1.117+ ships **forked subagents** as an experimental opt-in (`CLAUDE_CODE_FORK_SUBAGENT=1`) — a subagent that inherits the full conversation history (system prompt, tools, model, messages) instead of starting fresh. For paper-test, this is a strong fit: the Happy Path Validator, Edge Case Hunter, and Red Team Attacker all benefit from the same loaded codebase context (the target file's dependencies, config, and contracts) without each one re-reading them.
 
 **Why not enabled by default in v0.8.0:**
 - Experimental upstream — schema and behavior may shift before stable.
