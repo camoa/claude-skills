@@ -86,6 +86,27 @@ over assertion, so it must apply that candor to itself.
   live for the contribution. If a source is unreachable, the AI-policy gate is UNRUN,
   never silently passed.
 
+## Structural contracts — security review & review freshness
+
+Two contracts govern the `review` → `submit` boundary (v0.4.0):
+
+- **Security-critical reviews are an explicit Task dispatch, not an aside.** When a
+  contribution is security-tagged *or* its diff touches permission / access callbacks,
+  entity or field access, `#access` form keys, input sanitization / output escaping,
+  input-built SQL/db queries, file/path handling, or XSS-/injection-adjacent code,
+  `contribution-review` **must** dispatch the security sub-review via the Task tool
+  (`/code-quality-tools:security` and/or `code-paper-test`) and **append its findings to
+  the review artifact** before returning a verdict. Evidence over assertion: "ran the
+  security sub-review" must be captured in the artifact, never merely claimed. Non-security
+  contributions are unaffected.
+- **Review freshness is checked, never blocked.** `contribution-review` stamps
+  `scripts/review-mark.sh --set` on completion; `contribution-submit` pipes the
+  contribution's changed files to `review-mark.sh` and, if any were edited after the
+  marker, surfaces a stale-review warning with an **acknowledge-and-proceed** path — never
+  a hard block (the arc is detect-driven). This is the review-stage parallel to the
+  reverify ledger's verify-stage check, and is **mtime-based** so a `verify` re-run cannot
+  mask a post-review edit.
+
 ## Release hygiene
 
 - Run `/plugin-creation-tools:validate --strict` before every release. `--strict`

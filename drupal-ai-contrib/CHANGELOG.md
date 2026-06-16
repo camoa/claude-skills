@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-06-16
+
+Structural fixes at the `review` → `submit` boundary. No gate logic, drupalci-parity,
+AI-policy, eval, or GitLab-ops behavior changed.
+
+### Added
+
+- **`scripts/review-mark.sh`** — a review-staleness marker, the review-stage parallel to
+  the `reverify` ledger. `--set` stamps "review ran now"; piping the contribution's
+  changed files in prints those edited **after** the marker. mtime-based on purpose — it
+  does not depend on the reverify ledger (which `verify` clears), so a `verify` re-run
+  after a post-review edit cannot mask the staleness. Deterministic, zero-model.
+- **Security-critical review is now an explicit Task dispatch** (`contribution-review`
+  §3). When a contribution is security-tagged or its diff touches permission/access
+  callbacks, entity/field access, `#access` form keys, input sanitization / output
+  escaping, input-built queries, file/path handling, or XSS-/injection-adjacent code, the
+  skill **must** dispatch the security sub-review via the Task tool
+  (`/code-quality-tools:security` and/or `code-paper-test`) and **append its findings to
+  the review artifact** before returning a verdict — evidence over assertion, not an
+  advisory "or delegate" aside. Non-security contributions are unaffected.
+- **Submit review-staleness check** (`contribution-submit` Preconditions). `submit` pipes
+  `git diff --name-only <target>...<branch>` to `review-mark.sh`; if any file changed
+  after the last `review`, it surfaces "Review artifact is stale — … re-run review or
+  acknowledge and proceed." Acknowledge path required; **never a hard block**.
+
+### Changed
+
+- **`contribution-review`**: the §2 advisory "or delegate to `code-paper-test`" reworded
+  to route security-critical changes to the mandatory §3 dispatch; steps renumbered
+  (3→4 philosophy, 4→5 synthesize, 5→6 report); §6 now stamps `review-mark.sh --set`
+  after producing the report; Example 2 updated to show the captured sub-review.
+- **`CONVENTIONS.md`**: new "Structural contracts" section documenting both the
+  security-critical Task-dispatch trigger and the review-freshness (warn-not-block) posture.
+
+### Notes
+
+- `commands/review.md` already carried `Task` + `Bash` in `allowed-tools` — no command
+  change needed. `contribution-review` keeps `disallowed-tools: Edit, Write`; it stamps
+  the marker via the script (Bash), in the plugin data dir, never touching contribution
+  files.
+
+### Bumped
+
+- Plugin `0.3.0` → `0.4.0`. Root `marketplace.json` entry `0.3.0` → `0.4.0` and
+  `metadata.version` `1.15.21` → `1.15.22`.
+
 ## [0.3.0] - 2026-06-16
 
 GitLab-operations hybrid swap. Authenticated GitLab writes on migrated projects now

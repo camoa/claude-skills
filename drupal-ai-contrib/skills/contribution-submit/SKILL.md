@@ -27,6 +27,14 @@ Backs `/drupal-ai-contrib:submit`. Load the knowledge layer via `dev-guides-navi
   If it prints any path, those files were edited **after** `verify` last passed — the
   green is stale. Surface the stale paths and recommend re-running `verify` before
   submitting. A pre-edit green is not evidence for the current code (guardrails Rule 3).
+- **Is the `review` still valid?** Pipe the contribution's changed files to the review
+  marker:
+  `git diff --name-only <target-branch>...<issue-fork-branch> | ${CLAUDE_PLUGIN_ROOT}/scripts/review-mark.sh`.
+  If it prints any path, those files were edited **after** `review` last ran — the review
+  artifact is stale. Surface: *"Review artifact is stale — files modified since the last
+  `/drupal-ai-contrib:review`. Re-run review, or acknowledge and proceed."* Require an
+  explicit acknowledgement; **never a hard block**. (If `review` never ran the marker is
+  absent and prints nothing — the "Has `review` been run?" point above covers that case.)
 
 If a precondition is unmet, **report it and let the contributor decide** — do not
 silently block. The contributor may have evidence from another path.
@@ -127,6 +135,7 @@ submission, including copyright and licensing.
 | Situation | Handling |
 |-----------|----------|
 | `verify` / `review` not run | Surface it; report, do not refuse — the contributor decides. |
+| Files changed since the last `review` | `review-mark.sh` prints the stale paths — surface the stale-review warning and require an acknowledgement; never block. Re-running `review` re-stamps the marker. |
 | `drupalorg` not installed | Surface the install steps from `references/drupalorg-cli.md`; do not fabricate an MR URL. |
 | `git push` to the issue fork rejected | The drupal.org SSH key is likely missing/unregistered — point at `setup` §5 and `references/drupalorg-cli.md` §Authentication. No push, no MR. |
 | MR-create call returns `200` + a list (nothing created) | The `glab api` write was misdirected to `git.drupal.org` — it must go to `git.drupalcode.org`. Re-issue and confirm a `201`. See `drupal-gitlab` → `references/merge-requests.md`. |
