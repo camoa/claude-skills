@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.9.0] - 2026-06-16
+## [5.10.0] - 2026-06-16
 
-**Work-order-loop context-economy slice (the markdown-native token-economy residuals; the Beads ②/L2 ③ decision was resolved to NO — swarm is not a goal, Dynamic Workflows suffice).**
+**Parallel work-order conductor (the ③ slice — DB-free) + the markdown-native context-economy residuals. Settles the Beads ②/L2 ③ question: ② Beads (Dolt DB) is dropped; ③ parallel scheduling is retained but built on native Dynamic Workflows + the existing dependency-graph kernel, not a database.**
 
-### Added — consolidated reconcile read
+### Added — parallel work-order conductor (`work-order-loop-parallel`)
+- A new additive skill + `/run-work-orders --parallel [--max N]` that runs independent work-orders **concurrently** under the existing gates, with **no new dependency** (no Beads/Dolt). The proven sequential `work-order-loop` is untouched.
+- `scripts/wo-parallel-batch.sh` (new, read-only kernel): selects a **maximal disjoint-file batch** from the ready set — work-orders whose `## Files to touch` declarations are pairwise non-overlapping are safe to build concurrently (conservative: when overlap is uncertain, serialize; a WO declaring no files runs solo). 23-case spec.
+- `scripts/wo-merge-back.sh` (new kernel): the **local** `git merge --no-ff` that assembles each passing WO branch into the integration/PR branch (aborts byte-clean on conflict). This is local PR-branch assembly, **not** a PR merge — `wo-pr-open.sh` stays the only GitHub path and never merges. 10-case spec.
+- Per-round flow: reconcile → disjoint batch → one ephemeral worktree+branch per WO off the integration HEAD → promote `needs_rework`/`blocked`-deps-done to `ready` → dispatch the batch as **N parallel depth-1 build atoms** (per-WO retry cap unchanged, sole-owned by `wo-run-state.sh dispatch`) → per-WO `/review`+critique → passing WOs merge back (then `done`), failing reset+`needs_rework`, terminal escalate → next round → final **integrated** `/review` → one PR, never merged.
+- **Safety:** parallel WOs touch disjoint files + separate `wo-NN.*` sidecars + separate worktrees (no shared-state race); a post-merge **drift detector** HALTs (`undeclared_file_drift`) if a build wrote an undeclared shared file; the final integrated `/review` catches semantic conflicts; the merge-back crash window is idempotent (recorded merge sha + `merge-base --is-ancestor` on resume). All sequential invariants preserved (cap, terminal-HALT precedence, no-auto-merge, disk-is-truth). Built → fresh-context adversarial red-team (found + fixed a CRITICAL ready-promotion gap that would have killed the DAG past depth-0, plus 3 HIGH integrity gaps) → re-reviewed.
+
+### Added — work-order-loop context-economy: consolidated reconcile read
 - `scripts/wo-reconcile-table.sh` — a read-only zero-model kernel that emits ONE compact JSON table (per-WO: status, terminal, halted, halt_reason, checkpoint_before/after, has_review, review_verdict, has_critique, critique_blocking, halt_marker_present) for the loop's on-entry reconciliation. Replaces the previous **5 sidecar reads × N work-orders** with a single kernel call — the reconcile branches and their semantics are unchanged (input-source-only). The terminal rule is encoded exactly: `wo-NN.HALT` exists **OR** `run.json halted==true`. New `tests/wo-reconcile-table-spec.sh` (14 cases).
 
 ### Changed — work-order-loop context discipline

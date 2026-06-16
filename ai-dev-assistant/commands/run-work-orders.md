@@ -1,7 +1,7 @@
 ---
-description: "Run all compiled work-orders for a /design-complete ai-dev-assistant task end-to-end via the autonomous work-order loop. Validates preconditions (compiled WOs exist, a code worktree is available), then invokes the work-order-loop skill INLINE (never Task-dispatched) to drive the ready-queue, build, gate-review, and PR-open pipeline. Trigger: 'run work orders', 'execute work orders', 'start work order loop'."
+description: "Run all compiled work-orders for a /design-complete ai-dev-assistant task end-to-end via the autonomous work-order loop. Validates preconditions (compiled WOs exist, a code worktree is available), then invokes the work-order-loop skill INLINE (never Task-dispatched) to drive the ready-queue, build, gate-review, and PR-open pipeline. Pass --parallel to run independent work-orders concurrently under the same gates via the work-order-loop-parallel skill (also inline-only). Trigger: 'run work orders', 'execute work orders', 'start work order loop'."
 allowed-tools: Read, Bash, Skill
-argument-hint: <task-name>
+argument-hint: <task-name> [--parallel [--max N]]
 ---
 
 # Run Work-Orders
@@ -20,11 +20,15 @@ skill **inline** via the Skill tool; it does NOT loop, dispatch, or re-implement
 ## Usage
 
 ```
-/ai-dev-assistant:run-work-orders <task-name>
+/ai-dev-assistant:run-work-orders <task-name>                       # sequential (default)
+/ai-dev-assistant:run-work-orders <task-name> --parallel            # concurrent, disjoint-file batches
+/ai-dev-assistant:run-work-orders <task-name> --parallel --max 4    # cap the concurrent batch size (default 8)
 ```
 
 `<task-name>` must match `^[a-z0-9_-]+$`. Reject path traversal (`..`, `/`) and special chars →
-exit 2. Missing arg AND no session-context task → exit 2 with usage.
+exit 2. Missing arg AND no session-context task → exit 2 with usage. `--parallel` is an optional
+flag; `--max N` (N a positive integer) only applies with `--parallel` and bounds the concurrent
+batch size. The **default (no `--parallel`) is unchanged** — the sequential `work-order-loop`.
 
 ## Runtime steps
 
@@ -43,11 +47,16 @@ exit 2. Missing arg AND no session-context task → exit 2 with usage.
    available → **offer** `/ai-dev-assistant:worktree <task>` and stop. Do NOT silently proceed
    without a worktree; do NOT hardcode `codePath`.
 
-4. **Invoke `work-order-loop` INLINE via the Skill tool.** Invoke the `work-order-loop` skill
-   via the **Skill tool** with the resolved task folder and worktree. **This MUST be an inline
-   invocation (Skill tool, depth-0) — NEVER via the Task tool.** The build atom (dispatched by
-   the loop inside) is the single supported depth-1 spawn; a Task-dispatched loop would push the
-   atom to depth-2 (unsupported). Do NOT re-implement the loop here.
+4. **Invoke the loop conductor INLINE via the Skill tool.** **Without `--parallel`** (default):
+   invoke the `work-order-loop` skill with the resolved task folder and worktree. **With
+   `--parallel`** (optionally `--max N`): invoke the `work-order-loop-parallel` skill instead,
+   passing the same task folder + the worktree as the **integration worktree**, plus the `--max N`
+   batch cap when supplied. Both paths are routed **identically**: an inline invocation (Skill
+   tool, depth-0) — **NEVER via the Task tool.** The build atom (dispatched by either loop inside)
+   is the single supported depth-1 spawn; the parallel loop only issues **N** atoms in one message
+   (still depth-1). A Task-dispatched loop would push the atoms to depth-2 (unsupported). Do NOT
+   re-implement either loop here. The parallel path is **additive** — it does not change the
+   default sequential behavior.
 
 5. **Emit the `/goal` string.** The loop prints a ready-to-paste `/goal` line; surface it to the
    user. Do NOT run `/goal` yourself — the user pastes it to launch the next attended turn.
@@ -59,13 +68,18 @@ exit 2. Missing arg AND no session-context task → exit 2 with usage.
 ## What this command does NOT do
 
 It does **not** build, dispatch, loop, review, or open a PR itself — all of that is owned by the
-`work-order-loop` skill. It does NOT auto-create a worktree silently (offer `/worktree` when
-absent). It does NOT invoke `work-order-loop` via the Task tool (hard inline-only constraint). It
-does NOT run `/goal` itself — the user pastes it.
+`work-order-loop` skill (or `work-order-loop-parallel` under `--parallel`). It does NOT auto-create
+a worktree silently (offer `/worktree` when absent). It does NOT invoke either loop via the Task
+tool (hard inline-only constraint — the parallel loop is just as inline-only as the sequential
+one). It does NOT run `/goal` itself — the user pastes it.
 
 ## Related
 
-- `work-order-loop` skill — the autonomous run-loop this command invokes inline.
+- `work-order-loop` skill — the sequential autonomous run-loop this command invokes inline (default).
+- `work-order-loop-parallel` skill — the concurrent sibling this command invokes inline under
+  `--parallel`: runs disjoint-file work-order batches at once in ephemeral per-WO worktrees, merges each
+  clean WO back into the integration branch locally (NOT a PR merge), and opens ONE PR at the end. Same
+  gates, same cap, same no-auto-merge guarantee. See `skills/work-order-loop-parallel/references/parallel-loop-contract.md`.
 - `/ai-dev-assistant:compile-work-orders` — compile a `/design`-complete task into
   work-orders (run this before `/run-work-orders`).
 - `/ai-dev-assistant:worktree` — create the code worktree and set `codePath` (run this when
