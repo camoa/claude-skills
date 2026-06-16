@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.0] - 2026-06-16
+
+**Parallel work-order conductor (the ③ slice — DB-free) + the markdown-native context-economy residuals. Settles the Beads ②/L2 ③ question: ② Beads (Dolt DB) is dropped; ③ parallel scheduling is retained but built on native Dynamic Workflows + the existing dependency-graph kernel, not a database.**
+
+### Added — parallel work-order conductor (`work-order-loop-parallel`)
+- A new additive skill + `/run-work-orders --parallel [--max N]` that runs independent work-orders **concurrently** under the existing gates, with **no new dependency** (no Beads/Dolt). The proven sequential `work-order-loop` is untouched.
+- `scripts/wo-parallel-batch.sh` (new, read-only kernel): selects a **maximal disjoint-file batch** from the ready set — work-orders whose `## Files to touch` declarations are pairwise non-overlapping are safe to build concurrently (conservative: when overlap is uncertain, serialize; a WO declaring no files runs solo). 23-case spec.
+- `scripts/wo-merge-back.sh` (new kernel): the **local** `git merge --no-ff` that assembles each passing WO branch into the integration/PR branch (aborts byte-clean on conflict). This is local PR-branch assembly, **not** a PR merge — `wo-pr-open.sh` stays the only GitHub path and never merges. 10-case spec.
+- Per-round flow: reconcile → disjoint batch → one ephemeral worktree+branch per WO off the integration HEAD → promote `needs_rework`/`blocked`-deps-done to `ready` → dispatch the batch as **N parallel depth-1 build atoms** (per-WO retry cap unchanged, sole-owned by `wo-run-state.sh dispatch`) → per-WO `/review`+critique → passing WOs merge back (then `done`), failing reset+`needs_rework`, terminal escalate → next round → final **integrated** `/review` → one PR, never merged.
+- **Safety:** parallel WOs touch disjoint files + separate `wo-NN.*` sidecars + separate worktrees (no shared-state race); a post-merge **drift detector** HALTs (`undeclared_file_drift`) if a build wrote an undeclared shared file; the final integrated `/review` catches semantic conflicts; the merge-back crash window is idempotent (recorded merge sha + `merge-base --is-ancestor` on resume). All sequential invariants preserved (cap, terminal-HALT precedence, no-auto-merge, disk-is-truth). Built → fresh-context adversarial red-team (found + fixed a CRITICAL ready-promotion gap that would have killed the DAG past depth-0, plus 3 HIGH integrity gaps) → re-reviewed.
+
+### Added — work-order-loop context-economy: consolidated reconcile read
+- `scripts/wo-reconcile-table.sh` — a read-only zero-model kernel that emits ONE compact JSON table (per-WO: status, terminal, halted, halt_reason, checkpoint_before/after, has_review, review_verdict, has_critique, critique_blocking, halt_marker_present) for the loop's on-entry reconciliation. Replaces the previous **5 sidecar reads × N work-orders** with a single kernel call — the reconcile branches and their semantics are unchanged (input-source-only). The terminal rule is encoded exactly: `wo-NN.HALT` exists **OR** `run.json halted==true`. New `tests/wo-reconcile-table-spec.sh` (14 cases).
+
+### Changed — work-order-loop context discipline
+- `skills/work-order-loop/SKILL.md`: on-entry reconcile drives off the single `wo-reconcile-table.sh` table; step-10 verdict reads use `jq -r` field-select to a scalar instead of whole-file Reads of `_review.json`/`_critique.json`; added a discipline note that per-WO build/review/critique transcripts are disposable once the obs record (step 11) is written; affirmed `/review` runs inline at depth-0 (the build atom is the sole depth-1 Task) so gate work never deepens the call tree. No change to the cap chokepoint, terminal-HALT precedence, or no-auto-merge exit.
+
+### Notes
+- Two of the audit's "5 residuals" were deliberately **not** done: verifying `/review` stays depth-1 is already satisfied by design (it's a confirmation, not a change); and resolving the oracle-file list once-per-run was **descoped as a security no-go** — the critique rung re-derives the oracle list from the recipe body every run on purpose (the oracle-tamper guard; a cached list is a tamperable artifact).
+
 ## [5.8.0] - 2026-06-16
 
 **Closes the consumption half of the two 5.7.0 PAI adoptions: verification now drives the `/goal` clause, and the observability log is now mineable.**
