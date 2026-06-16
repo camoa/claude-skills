@@ -503,9 +503,22 @@ Default: `[c]`.
      > **[y]es** — 4 questions now
      > **[n]o** — start research as-is
      Default: `[n]`.
-   - Otherwise → proceed silently (no nag).
+   - Else (`task_level.present: false`, no phase-1 scope, and pre-analysis surfaced no `scope_contract_recommended` signal) → offer the **task-level** scope **once, as a floor** (v5.10.2+). This closes the path where a task could reach research with no scope ever offered: one entered **directly** via `/research` whose always-on pre-analysis saw only weak signals. The floor deliberately offers **task-level** (not phase-1) scope — phase-level scope assumes a task-level contract already exists (`commands/scope.md` "phase-level assumes task-level"), and offering task-level here is the same offer `/design` and `/implement` make whenever `task_level.present: false`, so this is literal parity:
+     > **Before I dig into research:** this task has no scope recorded yet. Want to pin down what it's really trying to deliver first? (Quick — 4 short questions; you can skip and add it later.)
+     >
+     > ```
+     > Goal: <what this task is really about>
+     > Expected result: <what exists when it's done>
+     > Done when: <observable checks>
+     > Won't do here: <related work we're skipping>
+     > ```
+     >
+     > **[y]es** — 4 questions now
+     > **[n]o** — research as-is (we can always add this later)
+     Default: `[n]`. **On `[y]`** → execute the **task-level** flow from `commands/scope.md` (the `## Task-Level` section), exactly as step 2's `[y]` path does (NOT the `--phase 1` flow of step 4 below); after the write, refresh `alignment-reader` output and **proceed to research (do not re-evaluate this offer chain — the just-authored task-level section must not immediately trigger branch B's phase-1 offer)**. **On `[n]`/`[skip]`** → proceed to research.
+     **Soft-nudge honesty:** `[n]` is one keystroke and always respected, and the floor does NOT re-invoke `analysis-agent` (step 2 stays skipped on fresh tasks) — it adds a prompt, not a model dispatch. It is mutually exclusive with the `scope_contract_recommended` pre-analysis nudge (its guard requires that signal to be absent). It is **not** guarded against `/next`'s brand-new-task scope offer: `/next` persists nothing when the user declines (`commands/next.md` "Scope offer for brand-new tasks"), so a user who declined scope at `/next` and then runs `/research` with weak signals will see this offer a second time. That is an accepted cost of the soft-nudge posture (one extra declinable `[n]` at the highest-leverage moment), not a tracked-state suppression.
 
-4. If user says `[y]`, execute the `--phase 1` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research.
+4. If user says `[y]` to a **phase-1** offer (the branches above this floor), execute the `--phase 1` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research. (The floor branch handles its own `[y]` inline per its task-level note above.)
 
 5. If user says `[n]` / `[skip]`, proceed with research. Never block.
 

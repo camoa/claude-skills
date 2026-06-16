@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.2] - 2026-06-16
+
+**`/research` scope-offer floor: close the one path where no scope was offered anywhere.**
+
+### Changed — Phase 1 alignment sub-step
+- `references/research-walkthrough.md` "Phase 1 alignment sub-step" step 3 — the terminal branch was **proceed silently (no nag)**. It is now a **floor offer**: when a task has no task-level scope, no phase-1 scope, and pre-analysis surfaced no `scope_contract_recommended` signal, the **task-level** scope is offered **once** (default `[n]`). This closes the window where a task could reach research with scope never offered: one entered **directly** via `/research` whose always-on pre-analysis saw only weak signals.
+- The floor offers **task-level** scope (not phase-1) on purpose: phase-level scope assumes a task-level contract already exists (`commands/scope.md`), so a phase-1-only offer here would be incoherent. Offering task-level is exactly what `/design` and `/implement` do whenever `task_level.present: false` — so this is **literal parity**, same artifact, not just "some scope."
+- `commands/research.md` step 5 — summary updated to document the floor branch.
+- **Soft-nudge honesty:** the floor does **not** re-invoke `analysis-agent` (step 2 stays skipped on fresh tasks) — it adds a prompt, not a model dispatch — and `[n]` is one keystroke, always respected. It is mutually exclusive with the `scope_contract_recommended` pre-analysis nudge (its guard requires that signal absent). It is **not** guarded against `/next`'s brand-new-task offer, which persists nothing on decline — so a user who declined scope at `/next` and then runs `/research` with weak signals will see the offer again. That extra declinable `[n]` is an accepted cost of the soft-nudge posture, not a tracked-state suppression.
+
 ## [5.10.1] - 2026-06-16
 
 **Parallel-conductor de-risk: an end-to-end integration harness + one cleanliness fix it surfaced.**
