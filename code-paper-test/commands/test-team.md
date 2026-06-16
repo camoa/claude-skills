@@ -177,6 +177,13 @@ Trace the code with ideal inputs and document expected behavior. Your lens: "Doe
 5. For EVERY external call (methods, services, APIs):
    - Use Read tool to verify method exists and check signature
    - DO NOT assume — read actual source or mark as UNVERIFIED RISK
+5b. **Behavioral verification** — for each dependency confirmed to exist in step 5, run the B1 procedure:
+   - Enumerate every assumption the CALLER makes about the return: fields accessed, assumed type (required vs optional), null-checked?, error modes handled, side effects relied on.
+   - Locate the declared contract in priority order: type stub (.d.ts / .pyi / typeshed) → OpenAPI `responses` for the endpoint+status → official method docs → `@returns` / docblock → changelog as observed-behavior proxy.
+   - Extract declared outputs (required vs optional, nullable, exact types, documented errors).
+   - DIFF caller assumption vs declared: field declared? required not optional? type matches? nullable but unchecked? error mode handled? Each miss = flagged behavioral gap.
+   - **Chained-object rule:** when a call returns an object, trace EVERY property/method the caller invokes on it and verify each against the contract. Do not stop at the first return type.
+   - **Closed-source fallback:** mark "postcondition unknown — EXISTENCE VERIFIED / BEHAVIOR UNVERIFIED"; apply taint stance (assume return could be null/hostile/malformed — does code fail safely?); require a validation wrapper; flag as behavioral gap if none exists.
 6. For code contracts (extends, implements, uses, injects):
    - Read parent/base classes and interfaces
    - Verify all abstract methods implemented, signatures match
@@ -217,8 +224,8 @@ OUTPUT: {return value, side effects}
 ```
 
 ## Dependency Verification
-| # | External Call | File | Method Exists? | Signature Correct? | Issue |
-|---|-------------|------|----------------|-------------------|-------|
+| # | External Call | File | Exists? | Behavior verified? | Contract source | Issue |
+|---|-------------|------|---------|-------------------|----------------|-------|
 
 ## Contract Verification
 | # | Relationship | Base/Interface | Verified? | Issue |
@@ -240,6 +247,8 @@ If target files are skills, commands, or agents (.md with frontmatter):
 - Design 2-3 scenarios with different user messages
 - Trace what Claude would do at each step
 - Verify all tool/file/skill references exist
+- Verify each referenced capability PRODUCES what the calling step consumes — run the B2 procedure:
+  Enumerate what the calling step assumes the capability produces (fields, types, success handling). Locate the capability's declared output: MCP tool output schema, SKILL.md declared outputs, hook event payload schema. DIFF assumptions vs declaration. False-confidence check: does the gate verify production or only existence? If existence only, flag behavioral gap.
 - Check frontmatter completeness and consistency
 - Test trigger phrases (will Claude invoke this?)
 
@@ -477,9 +486,13 @@ Source files: [happy-path-analysis.md] | [edge-case-analysis.md] | [red-team-ana
 | # | Flaw | Claimed By | Disputed By | Resolution |
 |---|------|-----------|-------------|------------|
 
-## Dependency Verification
-| # | External Call | Verified? | Issue |
-|---|-------------|-----------|-------|
+## Existence Verification
+| # | External Call | Exists? | Issue |
+|---|-------------|---------|-------|
+
+## Behavioral Contract Verification
+| # | External Call | Behavior verified? | Contract source | Gap |
+|---|-------------|-------------------|----------------|-----|
 
 ## Contract Verification
 | # | Relationship | Verified? | Issue |

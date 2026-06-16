@@ -60,15 +60,16 @@ Line 15: $user = $userService->loadByEmail($email);
          → VERIFIED: Safe to assume User|null
 ```
 
-### Option 3: Mark as Unknown Risk
+### **Option 3: Closed-Source / No-Contract — Taint Stance**
 
-If you can't verify, flag it as a potential flaw source.
+If source and docs are unavailable:
 
-```php
-Line 15: $user = $userService->loadByEmail($email);
-         → UNKNOWN: Need to verify return type when not found
-         → RISK: Line 16 assumes $user is object, might be null
-```
+- Mark: `EXISTENCE VERIFIED / BEHAVIOR UNVERIFIED — taint stance applied`
+- Apply the **taint stance**: assume the return could be null, hostile, or malformed. Ask: does the code fail safely if the return is null? An empty array? An unexpected object? Check whether a validation wrapper exists between the return and the consuming code.
+- If no validation wrapper exists, flag the dependency as a **behavioral gap** (not just an unknown risk — the code actively trusts an unverifiable return).
+- Require: add a validation wrapper before trusting the return.
+
+The "UNVERIFIED RISK" label is preserved for the existence layer (method might not exist). Use "BEHAVIOR UNVERIFIED" as the distinct label for the behavioral layer (method exists but output contract unknown).
 
 ---
 
@@ -176,6 +177,32 @@ VERIFIED BEHAVIOR:
   - Empty array: when no results
   - Throws: HttpException on failure
 ```
+
+---
+
+## Chained-Object Rule
+
+When a call returns an object, trace EVERY property and method the caller invokes on that object and verify each one against the declared contract. Do not stop at the first return type.
+
+Example: `$client->request('GET', $url)->getBody()->getContents()`
+
+```
+DEPENDENCY CHECK: HttpClient::request()
+  Returns: Psr\Http\Message\ResponseInterface
+  Verified: YES (PSR-7 type stub)
+
+CHAINED: ResponseInterface::getBody()
+  Returns: Psr\Http\Message\StreamInterface
+  Verified: YES (PSR-7 type stub)
+
+CHAINED: StreamInterface::getContents()
+  Returns: string
+  Verified: YES
+  Behavioral assumption: string is valid JSON → NOT declared — behavioral gap
+  Caller does: json_decode($contents) with no error check → behavioral gap
+```
+
+Each link in the chain is a separate behavioral assumption. An unchecked assumption on the third link is as dangerous as one on the first.
 
 ---
 

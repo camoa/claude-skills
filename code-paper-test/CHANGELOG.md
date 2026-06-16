@@ -5,6 +5,22 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-06-16
+
+### Added
+- **Behavioral contract verification — the second pass after existence verification.** New `references/behavioral-verification.md` holds the canonical procedures: **B1** (code/library calls) enumerates every caller assumption about a return, locates the declared contract (type stub → OpenAPI → docs → docblock → changelog), diffs assumption vs contract, and applies a **chained-object rule** (trace every property/method invoked on a returned object, not just the first return type); **B2** (plugin/MCP/hook/skill references) checks that a referenced capability *produces* what the calling step consumes, not merely that the reference resolves. Closed-source / no-contract targets get a **taint stance** (assume the return could be null, hostile, or malformed; require a validation wrapper) and the explicit label `EXISTENCE VERIFIED / BEHAVIOR UNVERIFIED`.
+- `references/dependency-verification.md` — renamed Option 3 to "Closed-Source / No-Contract — Taint Stance" and added a "Chained-Object Rule" section. The existence-layer `UNVERIFIED RISK` label is preserved; the behavioral-layer `BEHAVIOR UNVERIFIED` label is new and distinct.
+- `references/skill-and-config-testing.md` — new "§8 Behavioral Output Verification (B2)" procedure and a `tool-reference-behavior` row in the JSON category table.
+- `commands/test-team.md` — Happy Path Validator spawn gains a behavioral step 5b (B1) and a skill-mode B2 check.
+
+### Changed
+- **Report columns now distinguish existence from behavior** (the previous single `Verified?` column was a false-confidence trap). The Happy Path Analysis `## Dependency Verification` table gains `Behavior verified?` + `Contract source`; the lead synthesis splits its single Dependency Verification table into `## Existence Verification` and `## Behavioral Contract Verification` (the latter renamed from the rollout's `## Contract Verification` to avoid colliding with the pre-existing relational `## Contract Verification` table).
+- **JSON schema 1.0 → 1.1 (additive only).** Optional `behavior_verified` boolean on dependency-type findings; `behaviors_verified` in the summary envelope; `tool-reference-behavior` category. CI gates pinning `^1\.` are unaffected.
+- SKILL.md — new workflow step 6b, a behavioral distinction in "Critical: Never Assume", a skill-mode B2 note, and the new reference in the References list.
+
+### Notes
+- Existence-verification discipline is unchanged — behavioral verification is added on top, never a replacement.
+
 ## [0.9.0] - 2026-05-21
 
 ### Added

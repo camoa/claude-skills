@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "code-paper-test",
   "description": "Systematic testing through mental execution - trace code, skills, commands, and configs line-by-line with concrete values to find bugs, missing logic, edge cases, and AI hallucinations",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "author": {
     "name": "camoa"
   },

@@ -1,7 +1,7 @@
 ---
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "test this agent", "validate this implementation", "review this logic", "check dependencies", "check this config", "walk through this code", "step through this", "dry run", "sanity check", "red team this", "poke holes in this". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
-version: 0.9.0
+version: 0.10.0
 model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 user-invocable: true
@@ -76,6 +76,7 @@ Trace the target with concrete values. The 8-step workflow:
 4. **Follow every branch** — note which branch each conditional takes and why
 5. **Track loop iterations** — trace each iteration with index and values
 6. **Verify external dependencies** — for EVERY external call, Read/Grep the actual source; never assume
+6b. **Verify behavioral contracts** — for every dependency confirmed to exist, enumerate caller assumptions about the return and diff against the declared contract. Procedures: `references/behavioral-verification.md` §B1 (code/library calls) and §B2 (plugin/MCP/hook/skill references). Closed-source fallback: apply taint stance; flag as behavioral gap if no validation wrapper exists. Chained-object rule: trace every property/method invoked on the return object, not just the return type.
 7. **Verify code contracts** — extends/implements/uses/injects — all abstract methods, signatures, services
 8. **Note output and flaws** — return value, side effects, state changes; then **untested path analysis** (branches never exercised)
 
@@ -92,6 +93,8 @@ rather than assuming it works. This is the single highest-value discipline of
 paper testing, especially for AI-generated code. Procedures: `references/workflow.md`
 (verification section), `references/dependency-verification.md`,
 `references/contract-patterns.md`.
+
+A method existing is not it returning what you assume. Existence verification is the first pass; behavioral verification is the second: locate the declared contract (type stub → OpenAPI → docs → docblock), enumerate every assumption the caller makes about the return, and diff. For closed-source targets with no contract: apply the taint stance — assume the return could be null, hostile, or malformed. See `references/behavioral-verification.md`.
 
 ## JSON Output Mode (`--json`)
 
@@ -112,7 +115,7 @@ For CI integration, aggregation, or programmatic consumption, invoke with `--jso
 
 ## Pairing with `skill-quality-reviewer` for Skill Testing
 
-When paper-testing a skill, command, or agent file, run `plugin-creation-tools:skill-quality-reviewer` first (deterministic: stale SDK refs, dropped imperatives, frontmatter gaps) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing".
+When paper-testing a skill, command, or agent file, run `plugin-creation-tools:skill-quality-reviewer` first (deterministic: stale SDK refs, dropped imperatives, frontmatter gaps) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing". In skill-mode, after verifying tool/file/skill references exist, verify each referenced capability PRODUCES what the calling step consumes — see `references/behavioral-verification.md` §B2.
 
 ## References
 
@@ -133,3 +136,4 @@ All detailed guides are in the `references/` directory:
 - `references/rubric-scoring.md` — structured grading for code quality assessment
 - `references/skill-and-config-testing.md` — testing skills, commands, agents, and configs
 - `references/json-output-schema.md` — stable JSON schema for `--json` mode (CI integration)
+- `references/behavioral-verification.md` — B1 (code/library behavioral contracts) and B2 (plugin/MCP/hook/skill output contracts)
