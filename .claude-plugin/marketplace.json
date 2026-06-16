@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.1"
+    "version": "2.0.2"
   },
   "plugins": [
     {
