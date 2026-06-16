@@ -95,11 +95,40 @@ between releases, so confirm against the install rather than assuming.
    issue queue, or its GitLab issues page if it has migrated. `contribution-issue`
    drafts the issue (title, summary, steps, component, version) and guides the
    contributor to file it, then resumes with the new issue ID.
-2. **No `mr:create`.** On GitLab a merge request is created by **pushing the
-   issue-fork branch** — `issue:branch` / `issue:checkout` set up the fork + branch;
-   the contributor develops, commits, and `git push`es, and GitLab opens the MR (the
-   push output includes a create-MR URL). `submit` then uses `mr:list` / `mr:status`
-   to confirm and report it.
+2. **No `mr:create`.** Every `mr:*` command operates on an *existing* MR (list, status,
+   diff, files, logs). Creating the cross-project (fork→upstream) merge request is
+   delegated to the **`drupal-gitlab`** skill via `glab api` (see §Hybrid model) —
+   `glab mr create` cannot do cross-project MRs. `submit` then uses `drupalorg mr:list` /
+   `mr:status` (or `glab mr view`) to confirm and report it.
+
+## Hybrid model — `drupalorg` for reads, `glab`/`drupal-gitlab` for authenticated writes
+
+As of plugin v0.3.0 the GitLab-operations layer is **hybrid**. `drupalorg` is kept for
+what it does best — no-auth public reads, the **legacy Drupal.org issue queue** (which
+`glab` cannot see), and `skill:*` / `mcp:*` ops — while **authenticated GitLab writes on
+migrated projects are delegated to the `drupal-gitlab` skill** (from `ai_best_practices`,
+already installed via `drupal_devkit`). `drupal-gitlab` encodes the auth-safety knowledge
+`drupalorg` lacks: token scopes, the two-host rule, the issue-fork API gotchas. **Never
+vendor it — reference and delegate.**
+
+| Operation | Tool | Notes |
+|-----------|------|-------|
+| Public reads: `issue:show`, `issue:search`, `mr:list`, `mr:status`, `project:issues` | **`drupalorg`** | No credentials; works on legacy queue **and** GitLab. |
+| Legacy-queue projects (not migrated to GitLab work items) | **`drupalorg`** / web UI | `glab` only sees migrated `git.drupalcode.org` work items. |
+| `skill:*` / `mcp:*` (AI-skill install, MCP server mode) | **`drupalorg`** | No `glab` equivalent. |
+| Fork provisioning + push, branch setup | **`drupal-gitlab`** | `/do:fork` or the Drupal.org UI provisions the fork (never push/API); push then goes to the fork. See `drupal-gitlab` → `references/merge-requests.md`. |
+| Merge-request **create / update** | **`drupal-gitlab`** | Cross-project (fork→upstream) MR via `glab api … /merge_requests` with `target_project_id` — **`glab mr create` cannot do cross-project MRs**. |
+| Pipeline / CI status + logs | **`drupal-gitlab`** | `glab ci status` / `glab ci trace <job>`. Pipelines fire **on push only** — API/CLI triggers (`glab ci run`) and API merges are blocked on `git.drupalcode.org` (web-UI merge only). |
+
+**The two-host rule (per the `drupal-gitlab` SKILL.md, the binding authority):** all
+HTTP/HTTPS — the web UI, `glab` subcommands, `glab api` reads **and writes**, and HTTPS
+`git push` — use **`git.drupalcode.org`** (a Fastly CDN front). Only **SSH** `git push`
+uses the origin host **`git.drupal.org`** (the CDN has no SSH listener; an SSH remote on
+`git.drupalcode.org` hangs on port 22). A `glab api` *write* misdirected to
+`git.drupal.org` is silently downgraded to a GET (`200` + a list, nothing created) — so
+confirm writes by checking for `201`, not a bare `200`. **Write-scoped tokens are not
+project-scoped** — they reach every repo you can write to; never push to a protected
+branch without explicit human approval, and default to the issue fork even as a maintainer.
 
 ## Safe invocation
 

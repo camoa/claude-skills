@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-06-16
+
+GitLab-operations hybrid swap. Authenticated GitLab writes on migrated projects now
+delegate to the `drupal-gitlab` skill (from `ai_best_practices`, driving `glab` against
+`git.drupalcode.org`); `drupalorg-cli` is kept for no-auth public reads, the legacy
+Drupal.org issue queue (which `glab` cannot see), and `skill:*`/`mcp:*` ops. No gate
+logic, drupalci-parity, AI-policy, or eval behavior changed.
+
+### Changed
+
+- **`contribution-setup`** (+ `commands/setup.md`): added a `glab` detect + auth check
+  (`command -v glab`; `glab auth status --hostname git.drupalcode.org`) with a soft
+  report (`glab auth login --hostname git.drupalcode.org`); `glab` status now appears in
+  the §7 report. The `drupal-gitlab` skill itself ships with `ai_best_practices` — no
+  install step for the skill.
+- **`contribution-pipeline`**: CI fetch rewired from a generic "GitLab API" call to
+  `glab ci status` / `glab ci view` / `glab ci trace <job>` (delegated to `drupal-gitlab`).
+  Added the two hard limits on `git.drupalcode.org` — **pipelines fire on push only**
+  (API/CLI triggers blocked; re-run by pushing a commit) and **never WebFetch a
+  JS-rendered job URL** (use `glab ci trace`).
+- **`contribution-issue`**: fork provisioning, branch setup, and push moved to
+  `drupal-gitlab` (`/do:fork` / `/do:access`, never push/API); `drupalorg issue:show` /
+  `issue:search` / `mr:list` kept for no-auth reads. Replaced the `drupalorg`
+  `issue:branch`/`issue:checkout` fork-setup calls. Added the two-host rule and the
+  legacy-queue boundary.
+- **`contribution-submit`**: MR create/update moved to `drupal-gitlab` via
+  **`glab api … /merge_requests`** with `target_project_id` — **`glab mr create` cannot
+  create cross-project (fork→upstream) MRs**, which is Drupal's model. `drupalorg
+  mr:list`/`mr:status` kept for no-auth reads. Added write-token safety (a write token is
+  not project-scoped; never push a protected branch without approval; default to the
+  issue fork) and the API-merge-blocked note (web-UI merge only).
+- **`references/drupalorg-cli.md`**: new "Hybrid model" section — the read/write split
+  table, the two-host rule, and write-token safety. Existing install/auth/safe-invocation
+  docs preserved; the "No `mr:create`" item now defers MR creation to `drupal-gitlab`.
+
+### Notes from v0.3.0
+
+- **Discrepancies surfaced against the live `drupal-gitlab` SKILL.md** (the binding
+  authority; read at `1.0.x`, ~10.9 KB). The rollout prompt's wording was corrected to
+  match the SKILL.md on three points: (1) **URL semantics** — the prompt had the write
+  host inverted; truth is all HTTP/HTTPS (incl. `glab api` writes and HTTPS git push) →
+  `git.drupalcode.org`, only **SSH** push → `git.drupal.org`; a `glab api` write
+  misdirected to `git.drupal.org` silently degrades to a `200`+list. (2) **MR create** —
+  `glab mr create` cannot do cross-project MRs; use `glab api`. (3) **Pipeline** — commands
+  are `glab ci status`/`view`/`trace` (no `glab ci list`); triggers and API merges are
+  blocked (push-only / web-UI-only).
+- **Bonus boundary** that strengthens the hybrid model: `glab` cannot see the legacy
+  Drupal.org issue queue, so `drupalorg`/web UI legitimately remains for legacy-queue
+  projects — not merely a no-auth convenience.
+
+### Bumped
+
+- Plugin `0.2.0` → `0.3.0`. Root `marketplace.json` entry `0.2.0` → `0.3.0` and
+  `metadata.version` `1.15.20` → `1.15.21`.
+
 ## [0.2.0] - 2026-06-16
 
 BUG-1 (model-pin overflow footgun) plus Claude Code hardening. No gate logic, no

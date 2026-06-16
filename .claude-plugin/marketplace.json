@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "1.15.20"
+    "version": "1.15.21"
   },
   "plugins": [
     {
@@ -119,8 +119,8 @@
     {
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
-      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. A quality layer outside ai-dev-assistant; cites the camoa/dev-guides contribution guides as its knowledge layer.",
-      "version": "0.2.0",
+      "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline), a local drupalci-parity gate set plus AI-policy and eval gates inside verify, 3 read-only agents (fresh-context review, external-fact verification, live AI-policy checking), and a PostToolUse re-verification ledger. Authenticated GitLab writes (fork push, MR create, pipeline) delegate to the drupal-gitlab skill (glab); drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant; cites the camoa/dev-guides contribution guides as its knowledge layer.",
+      "version": "0.3.0",
       "author": {
         "name": "camoa"
       },

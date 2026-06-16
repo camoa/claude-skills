@@ -24,6 +24,7 @@ Thin entry point. Onboarding is optional, idempotent, and never a gate.
    the resolved path.
 3. Present the skill's result: the detected workflow and issue system, environment
    status, the resolved gate set, AI-skill status, the `drupalorg` CLI status, the
+   `glab` CLI status (installed + authenticated for `git.drupalcode.org`), the
    contribution-credentials (SSH-key) status, and the environment-match result. If the
    SSH key is missing, name registering it as the contributor's first next step.
 

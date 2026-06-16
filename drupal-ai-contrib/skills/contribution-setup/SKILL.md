@@ -1,6 +1,6 @@
 ---
 name: contribution-setup
-description: "Stands up and environment-matches a Drupal contribution workspace — DDEV with the workflow-matched add-on, CI gate config (new-module scaffold or existing-module discovery), the Drupal AI skills, the drupalorg CLI, and a contribution-credentials (SSH-key) check. Use when the user runs /drupal-ai-contrib:setup or asks to set up a Drupal contribution environment. Idempotent and detect-driven — does only what is missing; never a gate, never a prerequisite."
+description: "Stands up and environment-matches a Drupal contribution workspace — DDEV with the workflow-matched add-on, CI gate config (new-module scaffold or existing-module discovery), the Drupal AI skills, the drupalorg CLI, the GitLab CLI (glab) for authenticated git.drupalcode.org operations, and a contribution-credentials (SSH-key) check. Use when the user runs /drupal-ai-contrib:setup or asks to set up a Drupal contribution environment. Idempotent and detect-driven — does only what is missing; never a gate, never a prerequisite."
 version: 0.1.1
 model: inherit
 user-invocable: false
@@ -77,6 +77,24 @@ that reference covers what the tool is, the recommended PHAR install, the deprec
 Composer path, and the subcommand set. Offer to install it; do not block if the
 contributor declines (`issue`/`submit` re-surface the same instructions).
 
+**The GitLab CLI (`glab`)** — authenticated GitLab writes on migrated projects (fork
+push, MR create/update, pipeline status) are delegated to the `drupal-gitlab` skill,
+which drives `glab` against `git.drupalcode.org`. The `drupal-gitlab` skill itself ships
+with `ai_best_practices` (installed above via `drupal_devkit`) — no install step for the
+skill — but `glab` is a separate binary. Detect and report it:
+
+```bash
+command -v glab                                  # installed?
+glab auth status --hostname git.drupalcode.org   # authenticated for Drupal's GitLab?
+```
+
+If `glab` is missing or not authenticated, surface the next step — install `glab`, then
+`glab auth login --hostname git.drupalcode.org` (a write-capable token is needed only for
+pushes / MR creation; reads work read-only — see the `drupal-gitlab` README for token
+scopes). Soft posture, exactly like the `drupalorg` check: report the gap, never block.
+The legacy `drupalorg` reads still work without `glab`; only migrated-project
+authenticated writes need it.
+
 ### 5. Check contribution credentials — and guide, do not assume
 
 The contribution arc needs the contributor's **drupal.org credentials** for its write
@@ -114,7 +132,8 @@ This is the mechanism that makes `verify`'s gates trustworthy — see `contribut
 
 Summarize, and for each item state ready vs. needs-action so the contributor knows
 their exact next step: workflow, issue system, environment status, the resolved gate
-set, AI-skill status, the issue/MR CLI (`drupalorg`) status, the **credentials/SSH-key**
+set, AI-skill status, the issue/MR CLI (`drupalorg`) status, the **GitLab CLI (`glab`)**
+status (installed + authenticated for `git.drupalcode.org`), the **credentials/SSH-key**
 status, the environment-match result. Point the contributor at `issue` (or, if work is
 underway, `verify`) — and if the SSH key is missing, name *that* as the first step.
 
@@ -153,6 +172,7 @@ environment is a no-op that simply reports state.
 |-----------|----------|
 | `drupal_devkit` not installed | Report how to obtain it; do not block setup. |
 | `drupalorg` not on `PATH` | Surface `references/drupalorg-cli.md` (PHAR install); offer to install; do not block. If installed via Composer global, the bin dir may just be off `PATH` — see the reference's Install note. |
+| `glab` missing or not authenticated | Report it as a next step (install `glab`; `glab auth login --hostname git.drupalcode.org`); never block. Only migrated-project authenticated writes need it — `drupalorg` reads and the legacy queue work without it. See `references/drupalorg-cli.md` §Hybrid model. |
 | No SSH key registered on the drupal.org account | Guide the contributor to add one (*drupal.org → My account → SSH keys*); report it as the next step. Read/review still works; `git push` to issue forks does not. Never block. |
 | Workflow cannot be inferred | Ask the contributor — never assume core vs. contrib. |
 | `.gitlab-ci.yml` exists but uses a non-`gitlab_templates` setup | Record what is there; `verify` mirrors the discovered jobs as-is. |

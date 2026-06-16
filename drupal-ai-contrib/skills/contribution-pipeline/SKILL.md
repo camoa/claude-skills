@@ -26,11 +26,29 @@ state, or ask). Before any API call, validate against an explicit pattern — th
 number must match `^[0-9]+$`, the project path `^[A-Za-z0-9_./-]+$` — and reject
 anything that does not match rather than calling the API with it.
 
-### 2. Fetch the pipeline — via the GitLab API
+### 2. Fetch the pipeline — `glab` via the `drupal-gitlab` skill
 
-Fetch the MR's latest pipeline and its jobs from the GitLab API. This is the produced
-artifact — the actual pipeline result, not a prediction. Credentials are the
-contributor's own; never store or transmit them.
+Fetch the MR's latest pipeline and its jobs with **`glab`**, delegated to the
+`drupal-gitlab` skill (it owns the `git.drupalcode.org` auth + host rules; see its
+`references/ci-cd.md`). This is the produced artifact — the actual pipeline result, not a
+prediction:
+
+```bash
+glab ci status                                    # pipeline status for the MR's branch
+glab ci view                                      # per-job overview
+glab ci trace <job-name>                          # stream a job's full log (debug failures)
+```
+
+Always pass `--repo "git.drupalcode.org/project/<repo>"` (or run inside the configured
+git dir) — never rely on the default host. Credentials are the contributor's own (a
+read-only token suffices for status); never store or transmit them.
+
+**Two hard limits on `git.drupalcode.org`:**
+- **Pipelines fire on push events only** — API/CLI triggers (`glab ci run`,
+  `POST /pipeline`) are blocked. To re-run CI, push a commit (an `--allow-empty` commit
+  works); never claim a re-trigger you cannot perform.
+- **Never WebFetch a GitLab job/MR URL** — the pages are JavaScript-rendered and return
+  no log. Read job logs with `glab ci trace <job>` (or `glab api … /jobs/<id>/trace`).
 
 ### 3. Read the pipeline honestly
 
@@ -78,6 +96,7 @@ is the pipeline's — never assert "should pass".
 | Situation | Handling |
 |-----------|----------|
 | No MR found for the branch | Report it; point at `/drupal-ai-contrib:submit` to create the MR first. |
-| GitLab API unreachable / unauthenticated | Report the failure; never substitute a local-green result for the real pipeline. |
+| `glab` unauthenticated / API unreachable | Report the failure (`glab auth login --hostname git.drupalcode.org`); never substitute a local-green result for the real pipeline. |
 | Pipeline still running | Report in-progress; the gate is not satisfied until jobs finish. |
+| Pipeline needs re-running | Triggers are blocked on `git.drupalcode.org` — push a commit (`--allow-empty` if no code change); pipelines fire on push only. |
 | A blocking job failed | Diagnose against the reproduction dev-guide; route back to development → `verify`. |
