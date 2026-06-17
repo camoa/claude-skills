@@ -88,6 +88,41 @@ callers cite instead of re-describing the steps inline.
    The generic-agent dispatch and the follow-in-place step both require a `body_path` that was Read.
    No `body_path` means no follow-step for that framework.
 
+7. **Surface the declaration fail-open + record the outcome (observability, v5.11.0+).** Recipe
+   resolution degrades to the framework-neutral floor *silently* when a recipe is absent or a recipe body
+   is missing a gate declaration — deliberate (stack-agnostic, never block), but until now invisible and
+   unrecorded. Make that degradation **visible and auditable**. This step **observes; it does not gate.**
+
+   - **Declaration lint.** For each framework whose body you Read in step 4, on a **declaration-bearing
+     phase** run `scripts/recipe-declarations-audit.sh --body <body_path> --phase <phase> --framework
+     <framework>` (zero-model kernel, always exit 0). The kernel scopes the expected declarations **per
+     phase** — it returns `declarations:[]` for `research` (the body is followed verbatim, nothing grepped),
+     so the lint is a no-op there and may be skipped; for the other phases it returns only the gate-consumed
+     tokens, so you do not hardcode which phase carries what. When
+     `summary.absent_recommended > 0`, surface a **one-line advisory** per absent recommended declaration —
+     e.g. *"recipe `<framework>/<phase>`: expected `<token>` absent; the gate will use the neutral floor. If
+     intended, ignore; if a typo, fix the recipe."* This is what catches a misspelled declaration
+     (`## Screenshots` vs `## Screenshot capture`) that would otherwise be silently ignored (an advisory
+     fires only for a `recommended:true` token — today that is `review`, `visual-regression`, and
+     `e2e-setup`; `research`/`design`/`implement` carry no required token, so their lint is a clean no-op).
+     **Never block** — an absent declaration is a valid agnostic-floor choice. Capture each kernel's JSON
+     for the audit below.
+   - **Record `_recipe-load.json`** — every phase run that resolves recipes and has a task folder in scope.
+     Assemble the `recipe-load` payload (`references/gate-audit-schema.md` §5.12) and write it with
+     `scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"`. Include every framework the
+     phase considered (resolved or not) with its `source`/`verified`/`available`/`body_path`, its
+     `declarations_audit` (the kernel JSON, or `null` for `research`/`design`), the surfaced `advisory`
+     (or `null`), and a `bypass` object for any no-recipe outcome (`no_frameworks_defined`,
+     `navigator_unavailable`, `recipe_not_published`, `user_declined`). This makes resolution **auditable
+     and idempotent across resume** and records the degrade-first path rather than leaving it silent.
+     The setup commands (`/setup-e2e`, `/setup-visual-regression`) may run before a task folder exists —
+     they write the audit only when a `<task_folder>` is in scope, else skip the write with a note (the
+     lint still runs).
+
+   Body-as-method adherence stays model-trust (as with SOLID/DRY and the other methodology gates) — this
+   step does not verify the recipe was *followed*. What is now deterministic: resolution **ran and was
+   recorded**, and an absent recommended declaration is **surfaced**, not silently degraded.
+
 ### Framework detect-or-ask (the `no_frameworks_defined` sub-protocol)
 
 The need IS the trigger: when a phase step needs a recipe but the project has no `**Frameworks:**`, the
@@ -152,4 +187,8 @@ above with the matching `phase` id:
   (the five gate declarations) so the plugin's gates can act on it. This doc is transport; that doc is content.
 - `skills/process-recipe-loader/SKILL.md`: the single resolver (source arms, trust model, the
   `project_state` short-circuit, the ask-user miss, the `project_state.md` source-record write)
+- `scripts/recipe-declarations-audit.sh`: the zero-model declaration lint run in step 7 (present vs
+  absent gate declarations per phase); `references/gate-audit-schema.md` §5.12: the `_recipe-load.json`
+  audit it feeds. Step 7 is what makes the otherwise-silent declaration fail-open visible and the
+  resolution outcome auditable.
 - `scripts/project-state-read.sh`: emits `frameworks`, `codePath`, `localGuidesPath`, `processRecipes`

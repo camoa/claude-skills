@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.0] - 2026-06-17
+
+**Process-recipe enforcement: make the silent degrade-first path visible and auditable (wire the orphaned linter + persist a resolution audit).**
+
+A sibling audit of the *agentic* recipe class (`recipe-loader` orphaned: no caller/gate/execute) prompted a check of the *process* recipe class, which a proposal called "fully wired and enforced." Independent audit verdict: **PARTIALLY-ENFORCED, the claim is overstated.** Process recipes are genuinely stronger than agentic on two axes (real callers in six phase commands; five structured declarations deterministically consumed by real kernels), **but** share the same soft backbone — no blocking gate, every fallback "proceeds generically," and the one script that could surface a problem was orphaned. This release closes the *observability + auditability* gaps (not the blocking-gate gap, which is deliberate — see below).
+
+### Fixed — the orphaned linter
+- `scripts/recipe-declarations-audit.sh` existed, detects absent/misspelled gate declarations in a recipe body, and was **invoked by nothing** (the exact orphan pattern the agentic audit faults in `recipe-loader`). A misspelled declaration (`## Screenshots` vs `## Screenshot capture`) silently failed *open* → recipe content ignored, degrade to the neutral floor, **no error**. It is now wired into `references/recipe-resolution.md` **step 7**: declaration-bearing phases (`implement`, `review`, `e2e-setup`, `visual-regression`) run the lint after Reading the recipe body and surface a **one-line advisory** per absent recommended declaration. Advisory, never blocks.
+
+### Added — `recipe-load` gate audit (`_recipe-load.json`)
+- New `recipe-load` gate type (`scripts/gate-audit-write.sh` + `references/gate-audit-schema.md` §5.12, schema v1.3→**v1.4**, additive). `recipe-resolution.md` step 7 now persists the resolution outcome per phase — every framework considered, its `source`/`verified`/`available`/`body_path`, the `declarations_audit`, the surfaced `advisory`, and a `bypass` object for every degrade-first branch (`no_frameworks_defined` / `navigator_unavailable` / `recipe_not_published` / `user_declined`). Each phase's resolution is now **auditable and idempotent across resume**, and the deliberate degrade-first path is **recorded rather than silent**. Honest scope: this upgrades the machine trail from a free-form model-applied `Edit` (which could fail silently) to an **atomic, schema-validated write** via `gate-audit-write.sh` — at the same model-invoked bar as the existing `_dev-guides-load.json` / `_playbook-load.json` audits (the *call* is still a step the command runs; what's now robust is the write itself + its validation). The file fires per-phase and overwrites (last phase wins, like those siblings); the durable per-phase source decisions remain in `project_state.md` (unchanged).
+- `skills/process-recipe-loader/SKILL.md` degrade-first table now notes the caller records every miss to `_recipe-load.json`.
+
+### Added — tests
+- `tests/recipe-enforcement-spec.sh` — pins the WIRING (the protocol references the lint + the audit, so the linter cannot silently re-orphan) and exercises the BEHAVIOR (gate-audit-write accepts `recipe-load`/schema-1.4 and writes the file; an unknown gate type is still rejected; the lint flags an absent recommended declaration and passes a complete one). All existing recipe specs (`recipe-interface`, `recipe-declarations-audit`, `recipe-consumption`) still pass.
+
+### Deliberately NOT changed (by design)
+- **No hard "recipe-or-block" gate.** Proceeding stack-neutral when *no recipe exists* is the intended stack-agnostic, never-block-unattended posture — forcing a block there would be a regression, not a fix. Step 7 **observes and records**; it does not gate.
+- **Body-as-method adherence stays model-trust** (like SOLID/DRY and the other methodology gates) — there is no deterministic way to verify the injected design/research *method* was followed, and this release does not pretend to.
+
 ## [5.10.3] - 2026-06-16
 
 **Fix: the VR slider documented in 5.10.2 never appeared — no path emitted Playwright's `html` report, so `show-report` had nothing to open.**

@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.3
+# Gate Audit Schema v1.4
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase).
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 11 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 12 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -27,6 +27,7 @@ Where `<gate_type>` is one of:
 - `e2e` (v1.2+)
 - `visual_regression` (v1.2+)
 - `visual_parity` (v1.3+)
+- `recipe-load` (v1.4+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -41,7 +42,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 11>",
+  "gate_type": "<one of the 12>",
   "fired_at": "2026-04-24T20:30:00Z",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
@@ -54,8 +55,8 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 11 listed in the gate types section. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+. JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 12 listed in the gate types section. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -310,6 +311,61 @@ Expected `gate_specific` shape:
 `user_choice` enum: `"g" | "i" | "c" | null` — the `[g]` build-gap / `[i]` intentional /
 `[c]` cancel classification, or `null` when no surface failed (nothing to classify) or
 in `--ci` mode.
+
+### 5.12 `recipe-load` (v1.4+)
+
+Written by the process-recipe resolution protocol (`references/recipe-resolution.md`,
+invoked from `/research`, `/design`, `/implement`, `/review`, `/setup-e2e`,
+`/setup-visual-regression`) once per phase, after frameworks resolve. Audit file
+`_recipe-load.json`, `schema_version: "1.4"`. **Fires per phase** (research → … → review),
+overwrite-on-fire like `_dev-guides-load.json` / `_playbook-load.json`, so the file reflects the
+**most recent** phase that resolved recipes, not the whole lifecycle — the durable per-phase source
+decisions live in `project_state.md`'s `**Process Recipes:**` block (§6 keeps no history here). Makes
+each phase's resolution **auditable and idempotent across resume**, and surfaces the
+otherwise-silent declaration fail-open
+(the `declarations_audit` is the `recipe-declarations-audit.sh` kernel output — present
+only for declaration-bearing phases: `implement`, `review`, `e2e-setup`,
+`visual-regression`; `null` for `research`/`design`, whose body is followed verbatim).
+`gate-audit-write.sh` validates only the envelope + `schema_version`, not this payload.
+Expected `gate_specific` shape:
+
+```json
+"gate_specific": {
+  "phase": "review",
+  "resolved_count": 1,
+  "frameworks": [
+    {
+      "framework": "drupal",
+      "source": "dev-guides | repo-local | machine-local | research | null",
+      "verified": true,
+      "available": true,
+      "body_path": "<abs path or null>",
+      "declarations_audit": { "schema_version": "1.0", "phase": "review",
+        "framework": "drupal", "declarations": [ /* … */ ],
+        "summary": {"expected": 2, "present": 1, "absent_recommended": 1} },
+      "advisory": "expected '## Change-impact globs' absent — gate uses the neutral floor"
+    }
+  ],
+  "bypass": null
+}
+```
+
+| Field | Type | Contract |
+|---|---|---|
+| `phase` | enum | The lifecycle phase that resolved recipes (`research`/`design`/`implement`/`review`/`e2e-setup`/`visual-regression`). |
+| `resolved_count` | int | Frameworks for which a `body_path` resolved (`available:true`). `0` is a valid agnostic-floor outcome, not a failure. |
+| `frameworks` | list | One entry per framework the phase considered. Empty list with `bypass.reason:"no_frameworks_defined"` when none are set. |
+| `frameworks[].source` | enum \| null | Provenance — only `dev-guides` is `verified:true`. `null` when nothing resolved. |
+| `frameworks[].declarations_audit` | object \| null | Verbatim `recipe-declarations-audit.sh` output for declaration-bearing phases; `null` otherwise. |
+| `frameworks[].advisory` | string \| null | One-line human note emitted when a `recommended:true` declaration is `absent` (the surfaced fail-open). `null` when clean. |
+| `bypass` | object \| null | `{ "reason": "no_frameworks_defined \| navigator_unavailable \| recipe_not_published \| user_declined" }` when the phase proceeded stack-neutral with no recipe; `null` on a normal resolve. Records the deliberate degrade-first path so it is auditable rather than silent. |
+
+This audit **records** the degrade-first outcome; it does **not** block. A non-blocking,
+advisory gate by design (consistent with the recipe path's stack-agnostic, never-block
+posture). Body-as-method adherence is not verified here (model-trust, as with the other
+methodology gates); what is now deterministic is that *resolution happened and was
+recorded*, and that an absent recommended declaration is *surfaced* rather than silently
+degraded.
 
 ## 6. Invariants
 
