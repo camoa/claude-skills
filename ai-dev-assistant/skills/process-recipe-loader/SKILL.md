@@ -467,7 +467,12 @@ Per-result fields:
 
 ## Degrade-first (never block)
 
-Every miss still emits a valid, honest object.
+Every miss still emits a valid, honest object. **The miss is no longer silent downstream:** the calling
+command records the resolution outcome — including every degrade in the table below — to
+`_recipe-load.json` per `references/recipe-resolution.md` step 7 (`bypass.reason` carries
+`no_frameworks_defined` / `navigator_unavailable` / `recipe_not_published` / `user_declined`), and runs the
+`recipe-declarations-audit.sh` lint to surface an absent recommended declaration as a one-line advisory.
+This skill still **never blocks**; the caller **observes and records**, it does not gate.
 
 | condition | behavior |
 |---|---|

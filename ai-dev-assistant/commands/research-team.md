@@ -101,6 +101,8 @@ The teammates treat that block as the framework search method to follow. They ne
 - **`action:ask-user`** → ask the user for a path or to research it, and proceed per the answer. Until a body is resolved and Read, there is no framework method to inject.
 - **A framework that resolved nothing** → skip that framework's method with a clear note and continue with the frameworks that did resolve.
 
+**Record the resolution (recipe-resolution.md step 7).** After resolving, write `<task>/_recipe-load.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"` (payload per `references/gate-audit-schema.md` §5.12), capturing every framework considered with its `source`/`verified`/`available`/`body_path`, plus a `bypass` object for any no-recipe outcome. Research is non-declaration-bearing, so `declarations_audit` is `null` and no lint runs. Same audit the plain `/research` writes — so the team variant does not become a silent-resolution bypass. Observability only — never blocks.
+
 ### Step 6 — Spawn Teammates
 
 Spawn 3 teammates using the appropriate prompt templates below, with the resolved recipe body injected per Step 5. After spawning:

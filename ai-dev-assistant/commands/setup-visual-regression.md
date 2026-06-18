@@ -88,6 +88,17 @@ the Step 7a stub.
 Viewport derivation falls back to `derive-viewport-matrix.sh` (Step 4), and surfaces must be
 registered by hand or via `--add-surface` (there is no built-in discovery).
 
+**Record the resolution (recipe-resolution.md step 7).** After resolving, run
+`${CLAUDE_PLUGIN_ROOT}/scripts/recipe-declarations-audit.sh --body <body_path> --phase visual-regression --framework <fw>`
+per resolved framework and surface any `absent_recommended` declaration as a one-line advisory
+(visual-regression carries the `recommended:true` `## Change-impact globs` token, so a missing/misspelled
+one is flagged here rather than silently degrading change-impact selection). Then, **only when a task
+folder is in scope**, write `_recipe-load.json` via
+`${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"`
+(per `references/gate-audit-schema.md` §5.12); `/setup-visual-regression` usually runs project-level with
+no task folder, in which case skip the write with a note (the lint still runs). Observability only —
+never blocks.
+
 This step runs on the full-setup path only; the `--add-surface` and `--migrate` fast
 paths reuse the scaffolding already in place and do not re-resolve the recipe.
 

@@ -57,6 +57,8 @@ Follow the shared recipe-resolution protocol in `references/recipe-resolution.md
 
 When you follow an available recipe, supply its input contract from the resolved context and flags: `code_path` = `<codePath>`, `skip_demo_recipe` from `--skip-demo-recipe`, honor `--skip-discovery` by not running the recipe's journey-discovery step, and honor `--force` by re-running past the recipe's idempotency probe. The recipe handles the install, the `tests/e2e/` scaffold, the runner's e2e project entry, the registry and preflight seeding, and journey discovery.
 
+**Record the resolution (recipe-resolution.md step 7).** After resolving, run `${CLAUDE_PLUGIN_ROOT}/scripts/recipe-declarations-audit.sh --body <body_path> --phase e2e-setup --framework <fw>` per resolved framework and surface any `absent_recommended` declaration as a one-line advisory (e2e-setup carries the `recommended:true` `preflight_command` field, so a missing one is flagged here). Then, **only when a task folder is in scope**, write `_recipe-load.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"` (per `references/gate-audit-schema.md` §5.12); `/setup-e2e` usually runs project-level with no task folder, in which case skip the write with a note (the lint still runs). Observability only — never blocks.
+
 ## Step 4: Summary
 
 Print a summary:
