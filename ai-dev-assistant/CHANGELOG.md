@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.13.1] - 2026-06-19
+
+### Changed — docs
+- **Evergreen README.** Removed the inline `(vN.N.N)` feature-introduced tags (~70) sprinkled through the prose and command tables — a reader doesn't need to know which release each feature landed in; that history lives in this CHANGELOG. Kept the genuine compatibility/upgrade lines (Claude Code CLI minimums, dependency version floors). No behavior change.
+
 ## [5.13.0] - 2026-06-18
 
 **Feature: a task may adopt MULTIPLE agentic recipes (multi-recipe adoption per task).**
