@@ -136,6 +136,94 @@ else
   fail_check "PARITY_MAX_DIFF_RATIO echo — out=$OUT"
 fi
 
+# === Test 12: per-surface threshold (D4) + content-floor (D8) verdict, end-to-end ===
+# Drive the REAL gate merge+verdict logic by stubbing `npx` to emit synthetic
+# .parity.json fragments into PARITY_RUN_DIR (no live Playwright). This exercises the
+# actual jq verdict expression in the gate — not a copy — so the F1 verdict-parity rule
+# (gate uses each fragment's effective max_diff_ratio, content_floor_failed forces fail,
+# a legacy fragment with no max_diff_ratio falls back to the global) is tested for real.
+CP2="$TMPDIR/cp2"; mkdir -p "$CP2/tests/parity"
+cat > "$CP2/playwright.config.ts" <<'EOF'
+import { defineConfig } from '@playwright/test';
+export default defineConfig({ projects: [{ name: 'parity-chromium-desktop' }] });
+EOF
+
+FAKEBIN="$TMPDIR/fakebin"; mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/npx" <<'EOF'
+#!/usr/bin/env bash
+# fake npx: ignore the playwright args, write the per-surface fragments the gate merges.
+mkdir -p "$PARITY_RUN_DIR"
+# 1) plain pass: under the global 0.05
+cat > "$PARITY_RUN_DIR/s-pass-desktop.parity.json" <<J
+{"surface":"s-pass","viewport":"desktop","reference_type":"html-template","pixel_diff_ratio":0.02,"max_diff_ratio":0.05,"css_diff":[],"content_floor_failed":false,"content_floor_violations":[],"skipped":false}
+J
+# 2) per-surface threshold rescues a cross-stack surface (0.30 < 0.40 → pass, would FAIL at global 0.05)
+cat > "$PARITY_RUN_DIR/s-hi-thresh-pass-desktop.parity.json" <<J
+{"surface":"s-hi-thresh-pass","viewport":"desktop","reference_type":"prod-url","pixel_diff_ratio":0.30,"max_diff_ratio":0.40,"css_diff":[],"content_floor_failed":false,"content_floor_violations":[],"skipped":false}
+J
+# 3) over even the high per-surface threshold (0.50 >= 0.40 → fail)
+cat > "$PARITY_RUN_DIR/s-hi-thresh-fail-desktop.parity.json" <<J
+{"surface":"s-hi-thresh-fail","viewport":"desktop","reference_type":"prod-url","pixel_diff_ratio":0.50,"max_diff_ratio":0.40,"css_diff":[],"content_floor_failed":false,"content_floor_violations":[],"skipped":false}
+J
+# 4) content-floor failure forces fail despite a tiny pixel diff (D8)
+cat > "$PARITY_RUN_DIR/s-floor-desktop.parity.json" <<J
+{"surface":"s-floor","viewport":"desktop","reference_type":"html-template","pixel_diff_ratio":0.01,"max_diff_ratio":0.05,"css_diff":[],"content_floor_failed":true,"content_floor_violations":["rendered height 40px < required 800px"],"skipped":false}
+J
+# 5) legacy fragment with NO max_diff_ratio → falls back to the global 0.05 (0.10 >= 0.05 → fail)
+cat > "$PARITY_RUN_DIR/s-legacy-desktop.parity.json" <<J
+{"surface":"s-legacy","viewport":"desktop","reference_type":"image","pixel_diff_ratio":0.10,"css_diff":[],"skipped":false}
+J
+exit 0
+EOF
+chmod +x "$FAKEBIN/npx"
+
+RC=0; OUT=$(PATH="$FAKEBIN:$PATH" PARITY_MAX_DIFF_RATIO='0.05' bash "$SCRIPT" /tmp/reg.yml "$CP2" 2>/dev/null) || RC=$?
+
+verdict_of() { echo "$OUT" | jq -r --arg id "$1" '.surfaces[] | select(.id == $id) | .verdict'; }
+
+if [ "$(verdict_of s-pass)" = "pass" ]; then
+  pass_check "D4: a surface under its threshold → pass"
+else
+  fail_check "D4 s-pass verdict — out=$OUT"
+fi
+if [ "$(verdict_of s-hi-thresh-pass)" = "pass" ]; then
+  pass_check "D4: per-surface max_diff_ratio rescues a cross-stack surface (0.30 < 0.40)"
+else
+  fail_check "D4 s-hi-thresh-pass — expected pass via per-surface threshold — out=$OUT"
+fi
+if [ "$(verdict_of s-hi-thresh-fail)" = "fail" ]; then
+  pass_check "D4: over even the high per-surface threshold → fail"
+else
+  fail_check "D4 s-hi-thresh-fail — out=$OUT"
+fi
+if [ "$(verdict_of s-floor)" = "fail" ]; then
+  pass_check "D8: content_floor_failed forces fail despite a tiny pixel diff"
+else
+  fail_check "D8 s-floor verdict — out=$OUT"
+fi
+if [ "$(verdict_of s-legacy)" = "fail" ]; then
+  pass_check "D4 back-compat: a fragment with no max_diff_ratio falls back to the global (0.10 >= 0.05)"
+else
+  fail_check "D4 legacy fallback — out=$OUT"
+fi
+# summary + exit code: 2 pass, 3 fail, 0 skipped → exit 1
+if echo "$OUT" | jq -e '.summary | (.surfaces_run == 5 and .passed == 2 and .failed == 3 and .skipped == 0)' >/dev/null; then
+  pass_check "D4/D8: summary counts 2 passed / 3 failed across the fragment set"
+else
+  fail_check "summary counts — out=$OUT"
+fi
+if [ "$RC" -eq 1 ]; then
+  pass_check "D4/D8: >=1 failed surface → exit 1"
+else
+  fail_check "expected exit 1 with failures, got $RC"
+fi
+# the verdict-bearing fields are surfaced in each row (output-shape extension)
+if echo "$OUT" | jq -e '.surfaces[] | select(.id == "s-floor") | has("max_diff_ratio") and has("content_floor_failed") and has("content_floor_violations")' >/dev/null; then
+  pass_check "rows carry max_diff_ratio + content_floor_failed + content_floor_violations"
+else
+  fail_check "row shape missing new fields — out=$OUT"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nvisual-parity-gate.sh invariants violated.\n' >&2
   exit 1
