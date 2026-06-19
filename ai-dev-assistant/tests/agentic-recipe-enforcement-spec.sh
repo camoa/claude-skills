@@ -109,11 +109,11 @@ fi
 # AGENTIC discovery path never emits (that's the PROCESS-recipe mechanism). The fix: /research persists
 # the adopted body into the task folder (adopted-recipe.md) + records body_path; downstream reads THAT.
 
-# (a) /research persists the body to a task-folder file AND records body_path.
-if grep -Fq -- 'adopted-recipe.md' "$RESEARCH" && grep -Fq -- 'body_path' "$RESEARCH"; then
-  pass "research.md persists the adopted body to <task_folder>/adopted-recipe.md + records body_path"
+# (a) /research persists the body to a per-recipe task-folder file AND records body_path.
+if grep -Fq -- 'adopted-recipe-' "$RESEARCH" && grep -Fq -- 'body_path' "$RESEARCH"; then
+  pass "research.md persists the adopted body to <task_folder>/adopted-recipe-<name>.md + records body_path"
 else
-  bad  "research.md does NOT persist adopted-recipe.md / record body_path (adopted recipe unfollowable)"
+  bad  "research.md does NOT persist adopted-recipe-<name>.md / record body_path (adopted recipe unfollowable)"
 fi
 
 # (b) /implement AND /review read the PERSISTED task-folder body; the phantom string is GONE from the
@@ -122,10 +122,10 @@ fi
 PHANTOM='navigator-served `body_path`'
 for cmd in implement review; do
   cf="$ROOT/commands/$cmd.md"
-  if grep -Fq -- 'adopted-recipe.md' "$cf"; then
-    pass "commands/$cmd.md reads the persisted task-folder body (adopted-recipe.md)"
+  if grep -Fq -- 'adopted-recipe-' "$cf"; then
+    pass "commands/$cmd.md reads the persisted per-recipe task-folder body (adopted-recipe-<name>.md)"
   else
-    bad  "commands/$cmd.md does NOT read <task_folder>/adopted-recipe.md (still chasing a phantom path)"
+    bad  "commands/$cmd.md does NOT read <task_folder>/adopted-recipe-<name>.md (still chasing a phantom path)"
   fi
   n=$(grep -cF -- "$PHANTOM" "$cf")
   if [ "$n" -eq 0 ]; then
@@ -149,6 +149,90 @@ if grep -Fq -- 'recipe_name' "$COVERAGE" && grep -Fq -- 'recipe_sha' "$COVERAGE"
 else
   bad  "coverage-map-contract missing recipe_name/recipe_sha — orchestrator can't persist the body"
 fi
+
+# ── v5.13.0: MULTI-recipe adoption per task (recipes[] list, per-recipe persist, competing, iterate) ──
+# A task may match MULTIPLE agentic recipes: a complementary set across distinct aspects, or one chosen
+# winner of a competing same-aspect match. The audit generalises from one object to a recipes[] list;
+# each adopted recipe persists its OWN body; competing matches ALWAYS ASK; the gate iterates per entry;
+# idempotency re-enters while ANY matched recipe is deferred.
+
+# (e) §5.13 documents a recipes[] list with a multi-element example (≥2 elements).
+SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
+if printf '%s' "$SEC513" | grep -Eq -- '"recipes"[[:space:]]*:[[:space:]]*\[' \
+   && [ "$(printf '%s' "$SEC513" | grep -c -- '"recipe_name"')" -ge 2 ]; then
+  pass "gate-audit-schema §5.13 documents a recipes[] list with a ≥2-element example (multi-recipe)"
+else
+  bad  "gate-audit-schema §5.13 is not a recipes[] list / lacks a 2-element example (still single-object)"
+fi
+
+# (f) the protocol + /research persist a PER-RECIPE filename (adopted-recipe-<name>.md).
+for f in "$PROTO" "$RESEARCH"; do
+  if grep -Fq -- 'adopted-recipe-<' "$f"; then
+    pass "$(basename "$f") uses the per-recipe filename adopted-recipe-<...>.md (multi-recipe persist)"
+  else
+    bad  "$(basename "$f") does NOT use a per-recipe adopted-recipe-<...>.md filename"
+  fi
+done
+
+# (g) /research step 2c handles competing same-aspect matches by ALWAYS ASKING (never auto-pick).
+if grep -Fq -- 'Competing' "$RESEARCH" && grep -Fiq -- 'always ask' "$RESEARCH"; then
+  pass "research.md handles competing same-aspect matches with ALWAYS ASK (no auto-pick)"
+else
+  bad  "research.md does NOT make competing matches always-ask (auto-pick risk)"
+fi
+
+# (h) the gate ITERATES every kind:recipe entry (not a single decision).
+if grep -Eq -- 'each `kind:recipe`|every `kind:recipe`|per `kind:recipe`' "$PROTO" "$RESEARCH"; then
+  pass "protocol/research iterate every kind:recipe entry (multi-recipe gate)"
+else
+  bad  "protocol/research do NOT iterate kind:recipe entries (still single-match gate)"
+fi
+
+# (i) downstream /implement + /review follow EACH adopted recipe (not just one).
+for cmd in implement review; do
+  cf="$ROOT/commands/$cmd.md"
+  if grep -Eq -- 'for EACH|each .*adopted|each `recipes\[\]`' "$cf"; then
+    pass "commands/$cmd.md follows EACH adopted recipe (multi-recipe downstream)"
+  else
+    bad  "commands/$cmd.md does NOT iterate adopted recipes (only follows one)"
+  fi
+done
+
+# (j) idempotency RE-ENTERS the gate while ANY matched recipe is deferred (generalised across the set).
+if grep -Fq -- 'every' "$RESEARCH" && grep -Fq -- 'deferred' "$RESEARCH" && grep -Eq -- 're-enter|re-surface' "$RESEARCH"; then
+  pass "research.md idempotency re-enters while any matched recipe is deferred (set-generalised)"
+else
+  bad  "research.md idempotency not generalised across the recipe set (deferred-swallow risk)"
+fi
+
+# ── v5.13.0 latent-seam closes: collision-safe filename (-<sha8>) + per-entry re-entry ──
+
+# (k) the persisted filename carries the recipe_sha slice (<sha8>) so two recipe_names that sanitise to
+#     the same <safe_name> never overwrite each other. Format declared in the protocol + /research, and
+#     the §5.13 JSON example shows a sha-suffixed body_path.
+for f in "$PROTO" "$RESEARCH"; do
+  if grep -Fq -- 'adopted-recipe-<safe_name>-<sha8>' "$f" && grep -Fq -- 'recipe_sha' "$f"; then
+    pass "$(basename "$f") uses the collision-safe filename adopted-recipe-<safe_name>-<sha8>.md"
+  else
+    bad  "$(basename "$f") filename lacks the -<sha8> slice (silent body-overwrite risk on safe_name collision)"
+  fi
+done
+if printf '%s' "$SEC513" | grep -Eq -- '"body_path"[^"]*"[^"]*adopted-recipe-[a-z0-9-]+-[0-9a-f]{8}\.md"'; then
+  pass "gate-audit-schema §5.13 example body_path carries the -<sha8> slice"
+else
+  bad  "gate-audit-schema §5.13 example body_path is not sha-suffixed (filename format drifted)"
+fi
+
+# (l) re-entry is PER-ENTRY: an already-terminal recipe is carried forward unchanged (decision + an
+#     already-run verifier preserved); only deferred/new entries are re-prompted. Guards the re-prompt
+#     wart + the verifier-reset data-loss seam.
+for f in "$PROTO" "$RESEARCH"; do
+  if grep -Fiq -- 'per-entry' "$f" && grep -Eiq -- 'carry|preserv' "$f" && grep -Fq -- 'verifier' "$f"; then
+    pass "$(basename "$f") re-entry is per-entry — carries terminal decisions + verifier forward"
+  else
+    bad  "$(basename "$f") re-entry not per-entry (re-prompts terminal recipes / resets verifier)"
+  fi
+done
 
 echo
 [ "$fail" -eq 0 ] && { echo "agentic-recipe-enforcement-spec: ALL PASS"; exit 0; } || { echo "agentic-recipe-enforcement-spec: FAILURES"; exit 1; }

@@ -1,6 +1,6 @@
 # Gate Audit Schema v1.5
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13).
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
@@ -374,47 +374,69 @@ Written by the agentic-recipe resolution protocol (`references/agentic-recipe-re
 The decision half is written by `/research` at Phase-1 entry (discovery + the
 hard-gate-with-escape); the verifier half is updated by `/review` when an adopted recipe's
 `## Verifier` runs as a gate. Audit file `_agentic-recipe.json`, `schema_version: "1.5"`.
-**Fires once per task** (overwrite-on-fire) — it records the gate decision for the task's
-matched capability, including the deliberate `used_own` escape, so the choice is **auditable,
-not silent**. `gate-audit-write.sh` validates only the envelope + `schema_version`, not this
-payload. Expected `gate_specific` shape:
+**Fires once per task** (overwrite-on-fire) — it records the gate decision for **every** capability
+the task matched, including any deliberate `used_own` escape, so the choices are **auditable, not
+silent**. `gate-audit-write.sh` validates only the envelope + `schema_version`, not this payload.
+
+**v5.13.0 generalised the payload from a single object to a `recipes[]` list** (a task may adopt
+**multiple** agentic recipes — a complementary set across distinct aspects, or one chosen winner of a
+competing same-aspect match). `gate_specific` is now `{ "recipes": [ <per-recipe object> ] }`, where each
+element is the per-recipe object shape shown below. A task that matched **no** recipe records
+`recipes: []` (the `no_match` case). This is a **shape change** to the v1.5 section shipped in 5.12.0, but
+the file is **overwrite-on-fire and barely deployed**, so **no migration is needed** — the next `/research`
+fire simply writes the new shape. `schema_version` stays `"1.5"`. Expected `gate_specific` shape (two
+elements: an adopted SEO recipe + an adopted responsive-image recipe):
 
 ```json
 "gate_specific": {
-  "capability": "seo-foundation",
-  "recipe_name": "seo_foundation_wiring",
-  "recipe_sha": "a1b2c3d4",
-  "provenance": "upstream",
-  "verified": true,
-  "decision": "adopted",
-  "reason": null,
-  "body_path": "<task_folder>/adopted-recipe.md",
-  "verifier": {
-    "ran": true,
-    "verdict": "pass",
-    "failed_checks": []
-  }
+  "recipes": [
+    {
+      "capability": "seo-foundation",
+      "recipe_name": "seo_foundation_wiring",
+      "recipe_sha": "a1b2c3d4",
+      "provenance": "upstream",
+      "verified": true,
+      "decision": "adopted",
+      "reason": null,
+      "body_path": "<task_folder>/adopted-recipe-seo-foundation-wiring-a1b2c3d4.md",
+      "verifier": { "ran": true, "verdict": "pass", "failed_checks": [] }
+    },
+    {
+      "capability": "responsive-image-wiring",
+      "recipe_name": "responsive_image_wiring",
+      "recipe_sha": "e5f6a7b8",
+      "provenance": "upstream",
+      "verified": true,
+      "decision": "adopted",
+      "reason": null,
+      "body_path": "<task_folder>/adopted-recipe-responsive-image-wiring-e5f6a7b8.md",
+      "verifier": { "ran": true, "verdict": "pass", "failed_checks": [] }
+    }
+  ]
 }
 ```
 
-| Field | Type | Contract |
+`gate_specific.recipes` is a **list**; each element carries the per-recipe fields below. (`recipes: []` =
+the `no_match` case, no canned recipe for the task.)
+
+| Field (per `recipes[]` element) | Type | Contract |
 |---|---|---|
-| `capability` | string | The task-Goal capability aspect the recipe matched. |
+| `capability` | string | The task-Goal capability aspect this recipe matched. |
 | `recipe_name` | string | The matched recipe's name (from the agentic-recipes index). |
 | `recipe_sha` | string | The index-line sha the body was integrity-checked against. |
 | `provenance` | enum | `"upstream"` (first-party catalog) or `"local"` (local/unknown store). Mirrors the coverage-map entry. |
 | `verified` | bool | Fail-closed verified flag — `true` only when sourced from the upstream catalog. A `verified:false` match is escalated (step 3) before any adoption. |
-| `decision` | enum | `"adopted"` (recipe is the task spine) \| `"used_own"` (explicit escape) \| `"deferred"` (unattended run, surfaced later) \| `"no_match"` (no canned recipe). |
-| `reason` | string \| null | Required free-text rationale for `used_own` (incl. `"unverified_recipe_declined"`); `null` otherwise. The recorded, never-silent escape. |
-| `body_path` | string \| null | **(additive, v5.12.1 — schema stays v1.5 per the additive-field policy.)** The persisted adopted-recipe body file (`<task_folder>/adopted-recipe.md`), written by `/research` at adoption (`references/agentic-recipe-resolution.md` step 4); `/implement` and `/review` Read it as the durable spine. `null` for `used_own`/`deferred`/`no_match` (no body persisted). Replaces the phantom "navigator-served `body_path`" the agentic discovery path never emitted. |
-| `verifier` | object \| null | `null` until `/review` runs the adopted recipe's `## Verifier`. Then `{ ran, verdict: "pass\|fail\|null", failed_checks: [] }` — any failed check ⇒ `verdict:"fail"` and `/review` halts (hard-block). `null` for `no_match` / `used_own` / `deferred` (no verifier to run). |
+| `decision` | enum | `"adopted"` (recipe is a task spine) \| `"used_own"` (explicit escape, incl. `"competing_not_selected"` for an unpicked competitor) \| `"deferred"` (unattended run, surfaced later). |
+| `reason` | string \| null | Required free-text rationale for `used_own` (incl. `"unverified_recipe_declined"`, `"competing_not_selected"`); `null` otherwise. The recorded, never-silent escape. |
+| `body_path` | string \| null | **(additive, v5.12.1 — schema stays v1.5 per the additive-field policy.)** The persisted adopted-recipe body file (`<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`, `<safe_name>` = `recipe_name` lowercased with non-alphanumeric runs → `-`, `<sha8>` = first 8 chars of `recipe_sha` — the sha slice keeps the filename collision-free when two distinct `recipe_name`s sanitise to the same `<safe_name>`), written by `/research` at adoption (`references/agentic-recipe-resolution.md` step 4); `/implement` and `/review` Read it as the durable spine. `null` for `used_own`/`deferred` (no body persisted). Replaces the phantom "navigator-served `body_path`" the agentic discovery path never emitted. |
+| `verifier` | object \| null | `null` until `/review` runs this adopted recipe's `## Verifier`. Then `{ ran, verdict: "pass\|fail\|null", failed_checks: [] }` — any failed check ⇒ `verdict:"fail"` and `/review` halts (hard-block). `null` for `used_own` / `deferred` (no verifier to run). **All** adopted recipes' verifiers must pass for the review to go green. `/review` read-merge-writes the full `recipes[]` list, preserving every element's decision half. |
 
-This audit **records** the gate decision — including the deliberate `used_own` escape so it
-is auditable rather than silent — and (after `/review`) the deterministic verifier outcome.
-The discovery half is degrade-first (a `no_match` never blocks); the *gate* on a verified
-match is not (you must `adopt` or record `used_own` with a reason), and an adopted recipe's
+This audit **records** the gate decisions — including any deliberate `used_own` escape so it
+is auditable rather than silent — and (after `/review`) the deterministic verifier outcome per
+adopted recipe. The discovery half is degrade-first (a `recipes: []` no_match never blocks); the *gate*
+on a verified match is not (you must `adopt` or record `used_own` with a reason), and an adopted recipe's
 verifier is a hard-block. Written by `references/agentic-recipe-resolution.md` from `/research`
-(the decision) and updated by `/review` (the verifier outcome).
+(the decisions) and updated by `/review` (the verifier outcomes).
 
 ## 6. Invariants
 
