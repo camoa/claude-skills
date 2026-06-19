@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-06-19
+
+### Changed — docs
+- **Evergreen description + README.** Removed the version-by-version changelog narration and internal validator rule IDs (S14/S15/A04/D1/ST04–ST06/H05–H13/M14/P01–P03) from the plugin/catalog description and the README capability text — they describe *what* the plugin does, not *when* each rule shipped. Release history stays in this CHANGELOG. No behavior change.
+
 ## [3.10.0] - 2026-06-15
 
 **Pre-publish containment gate (P-series) — the first deterministic, kernel-backed validator check.**

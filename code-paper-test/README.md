@@ -278,19 +278,7 @@ Specific checks for AI-generated code:
 
 ## Version
 
-**0.10.0** (Current) — behavioral contract verification
-- New `references/behavioral-verification.md` — B1 (code/library) and B2 (plugin/MCP/hook/skill) behavioral-contract procedures, layered on top of the existing existence checks (not a replacement)
-- Existence vs behavior is now surfaced distinctly: SKILL.md step 6b, the Happy Path table gains a `Behavior verified?` column, and the lead synthesis splits into Existence / Behavioral Contract tables
-- Closed-source/no-contract fallback applies a taint stance; chained-object rule traces every property/method on a returned object
-- JSON schema 1.0 → 1.1 (additive): optional `behavior_verified`, summary `behaviors_verified`, new `tool-reference-behavior` category
-
-**0.9.0** — effort-adaptive depth + hygiene
-- `${CLAUDE_EFFORT}` honored as a floor across `/paper-test` (scenario depth) and `/code-paper-test:test-team` (per-teammate effort)
-- SKILL.md conciseness pass — workflow detail extracted to `references/workflow.md`
-- `teammateDefaultModel` / `teammateMode` documentation for `/test-team`
-- Plugin-root conventions file, manifest `$schema`, exec-form hook
-
-See `CHANGELOG.md` for the full release history.
+See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Current version: **0.10.1**.
 
 ## License
 

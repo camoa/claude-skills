@@ -5,6 +5,11 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-06-19
+
+### Changed — docs
+- **Evergreen catalog description + README.** Dropped the version-narration from the catalog description, and replaced the README's embedded `## Version` changelog with a pointer to this file (the history was duplicated). Kept the capability descriptions. No behavior change.
+
 ## [0.10.0] - 2026-06-16
 
 ### Added

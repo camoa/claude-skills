@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.2 (2026-06-19)
+
+### Changed — docs
+- **Evergreen catalog description + README.** Folded the real capabilities (three routing modes, the shared content store, two-hash revalidation) into present-tense prose and dropped the v0.9.0 / v0.10.0 / v0.10.1 changelog narration from the description and README. Kept compatibility notes. No behavior change.
+
 ## 0.11.1 (2026-06-15)
 
 ### Fixed
