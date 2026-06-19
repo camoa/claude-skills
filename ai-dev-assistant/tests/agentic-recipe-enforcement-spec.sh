@@ -71,18 +71,46 @@ for cmd in implement review; do
   fi
 done
 
-# ── BEHAVIOR: gate-audit-write accepts the new agentic-recipe gate type + schema 1.5 ──
+# ── BEHAVIOR: gate-audit-write accepts the agentic-recipe gate type + schema 1.5 with the
+#    v5.13.0 recipes[] LIST shape (a 2-element multi-recipe payload), and round-trips it. ──
 PAYLOAD=$(jq -nc --arg tf "$TMP" '{
   schema_version:"1.5", gate_type:"agentic-recipe", fired_at:"2026-01-01T00:00:00Z",
   task_folder:$tf, user_choice:"a", bypass_reason:null,
-  gate_specific:{capability:"seo-foundation", recipe_name:"seo_foundation_wiring",
-    recipe_sha:"a1b2c3d4", provenance:"upstream", verified:true,
-    decision:"adopted", reason:null,
-    verifier:{ran:false, verdict:null, failed_checks:[]}}}')
+  gate_specific:{recipes:[
+    {capability:"seo-foundation", recipe_name:"seo_foundation_wiring",
+     recipe_sha:"a1b2c3d4", provenance:"upstream", verified:true,
+     decision:"adopted", reason:null,
+     body_path:($tf + "/adopted-recipe-seo-foundation-wiring-a1b2c3d4.md"),
+     verifier:{ran:false, verdict:null, failed_checks:[]}},
+    {capability:"responsive-image-wiring", recipe_name:"responsive_image_wiring",
+     recipe_sha:"e5f6a7b8", provenance:"upstream", verified:true,
+     decision:"adopted", reason:null,
+     body_path:($tf + "/adopted-recipe-responsive-image-wiring-e5f6a7b8.md"),
+     verifier:{ran:false, verdict:null, failed_checks:[]}}]}}')
 if bash "$AUDIT_WRITE" "$TMP" agentic-recipe "$PAYLOAD" >/dev/null 2>&1 && [ -f "$TMP/_agentic-recipe.json" ]; then
   pass "gate-audit-write.sh accepts agentic-recipe + schema 1.5 → wrote _agentic-recipe.json"
 else
   bad  "gate-audit-write.sh rejected agentic-recipe gate type or did not write _agentic-recipe.json"
+fi
+# round-trip the recipes[] LIST shape (the actual v5.13.0 payload, not the old single object).
+if [ -f "$TMP/_agentic-recipe.json" ] \
+   && [ "$(jq -r '.gate_specific.recipes | length' "$TMP/_agentic-recipe.json")" = "2" ] \
+   && jq -e '[.gate_specific.recipes[].recipe_name] | index("seo_foundation_wiring") != null and index("responsive_image_wiring") != null' "$TMP/_agentic-recipe.json" >/dev/null; then
+  pass "round-trip: _agentic-recipe.json carries a 2-element recipes[] with both recipe_names (v5.13.0 shape)"
+else
+  bad  "_agentic-recipe.json did NOT round-trip the 2-element recipes[] shape (false-green: still single-object?)"
+fi
+# read-merge-write preservation: /review sets element B's verifier; element A's decision half must survive.
+MERGED="$TMP/_agentic-recipe.merged.json"
+jq '.gate_specific.recipes[1].verifier = {ran:true, verdict:"pass", failed_checks:[]}' \
+   "$TMP/_agentic-recipe.json" > "$MERGED" 2>/dev/null
+if jq -e '.gate_specific.recipes[0].recipe_name == "seo_foundation_wiring"
+          and .gate_specific.recipes[0].decision == "adopted"
+          and .gate_specific.recipes[1].verifier.verdict == "pass"
+          and (.gate_specific.recipes | length) == 2' "$MERGED" >/dev/null 2>&1; then
+  pass "read-merge-write preserves element A's decision half while element B's verifier is set"
+else
+  bad  "read-merge-write dropped/clobbered an element's decision half (data-loss seam)"
 fi
 
 # guard: an unknown gate type is still rejected (the allowlist didn't go open)
@@ -175,10 +203,13 @@ for f in "$PROTO" "$RESEARCH"; do
 done
 
 # (g) /research step 2c handles competing same-aspect matches by ALWAYS ASKING (never auto-pick).
-if grep -Fq -- 'Competing' "$RESEARCH" && grep -Fiq -- 'always ask' "$RESEARCH"; then
+#     Anchor to recipe-specific tokens so the generic prior-art word "competing option" can't false-match.
+if grep -Fq -- 'competing_not_selected' "$RESEARCH" \
+   && grep -Eq -- 'SAME aspect|same aspect' "$RESEARCH" \
+   && grep -Fiq -- 'always ask' "$RESEARCH"; then
   pass "research.md handles competing same-aspect matches with ALWAYS ASK (no auto-pick)"
 else
-  bad  "research.md does NOT make competing matches always-ask (auto-pick risk)"
+  bad  "research.md does NOT make competing same-aspect matches always-ask (auto-pick risk)"
 fi
 
 # (h) the gate ITERATES every kind:recipe entry (not a single decision).
@@ -233,6 +264,55 @@ for f in "$PROTO" "$RESEARCH"; do
     bad  "$(basename "$f") re-entry not per-entry (re-prompts terminal recipes / resets verifier)"
   fi
 done
+
+# ── v5.13.0 paper-test hardening: verifier→overall_verdict, <sha8> hex-validation, untrusted body ──
+
+# (m) FIX 1: /review folds the agentic verifier into gates_run[] so it reaches overall_verdict
+#     (the sidecar alone must NOT gate). A verifier fail must flow to overall_verdict fail.
+if grep -Fq -- 'agentic-verifier' "$REVIEW" && grep -Fq -- 'gates_run[]' "$REVIEW" \
+   && grep -Fq -- 'overall_verdict' "$REVIEW"; then
+  pass "review.md folds agentic-verifier into gates_run[] → overall_verdict (not sidecar-only)"
+else
+  bad  "review.md verifier is sidecar-only — a verifier fail would leave /review green (false PASS)"
+fi
+# the schema's review payload name enum carries agentic-verifier (so the audit shape stays valid).
+if grep -Fq -- 'agentic-verifier' "$SCHEMA"; then
+  pass "gate-audit-schema review gates_run[].name enum includes agentic-verifier"
+else
+  bad  "gate-audit-schema review name enum missing agentic-verifier (audit shape invalid)"
+fi
+
+# (n) FIX 2: <sha8> is hex-validated (^[0-9a-f]{8}$) everywhere the filename rule is stated, and a
+#     non-hex/attacker-seeded sha is halt-and-escalated (path-traversal guard), with the F5 empty-safe_name
+#     fallback (adopted-recipe-<sha8>.md). recipe_sha is untrusted index-line data.
+for f in "$PROTO" "$RESEARCH" "$IMPLEMENT" "$REVIEW"; do
+  if grep -Fq -- '^[0-9a-f]{8}$' "$f"; then
+    pass "$(basename "$f") hex-validates <sha8> (^[0-9a-f]{8}$ — path-traversal guard)"
+  else
+    bad  "$(basename "$f") does NOT hex-validate <sha8> (untrusted recipe_sha → path escape)"
+  fi
+done
+if grep -Fq -- '^[0-9a-f]{8}$' "$SCHEMA" \
+   && grep -Fq -- 'adopted-recipe-<sha8>.md' "$PROTO" && grep -Fq -- 'adopted-recipe-<sha8>.md' "$RESEARCH"; then
+  pass "schema notes the hex rule + protocol/research state the F5 empty-safe_name fallback"
+else
+  bad  "missing schema hex note or the F5 (adopted-recipe-<sha8>.md) fallback"
+fi
+
+# (o) FIX 4: untrusted-body caution restated in /implement + /review; coverage-map invariant 8 updated.
+for cmd in implement review; do
+  cf="$ROOT/commands/$cmd.md"
+  if grep -Fiq -- 'untrusted upstream data' "$cf" && grep -Fq -- 'never `eval`/shell-parse' "$cf"; then
+    pass "commands/$cmd.md restates the untrusted-body caution (follow as method, never eval)"
+  else
+    bad  "commands/$cmd.md missing the untrusted-body caution"
+  fi
+done
+if grep -Fq -- 'adopted-recipe-<safe_name>-<sha8>.md' "$COVERAGE" && ! grep -Eq -- 'adopted-recipe\.md`' "$COVERAGE"; then
+  pass "coverage-map-contract invariant 8 updated to the per-recipe sha-suffixed filename (stale doc fixed)"
+else
+  bad  "coverage-map-contract still references the stale single adopted-recipe.md filename"
+fi
 
 echo
 [ "$fail" -eq 0 ] && { echo "agentic-recipe-enforcement-spec: ALL PASS"; exit 0; } || { echo "agentic-recipe-enforcement-spec: FAILURES"; exit 1; }

@@ -182,7 +182,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "dry_run": false,
   "gates_run": [
     {
-      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity",
+      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | agentic-verifier",
       "kind": "hard-block | soft",
       "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
       "envelope_path": "<task>/validations/latest/<gate>.json or null",
@@ -198,6 +198,8 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 ```
 
 `user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+
+**`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
 **`dispatch_plan` (v1.2+, optional).** `/review`'s change-impact dispatcher (v4.11.0+, `commands/review.md` step 6 / `references/visual-review/change-impact-dispatch.md`) records what it recommended, what the user opted into, and what actually ran. It is a new **optional key inside the existing `review` payload** — NOT a new `gate_type`. Absent on projects with no visual-review setup, and on `_review.json` written before v4.11.0.
 
@@ -428,7 +430,7 @@ the `no_match` case, no canned recipe for the task.)
 | `verified` | bool | Fail-closed verified flag — `true` only when sourced from the upstream catalog. A `verified:false` match is escalated (step 3) before any adoption. |
 | `decision` | enum | `"adopted"` (recipe is a task spine) \| `"used_own"` (explicit escape, incl. `"competing_not_selected"` for an unpicked competitor) \| `"deferred"` (unattended run, surfaced later). |
 | `reason` | string \| null | Required free-text rationale for `used_own` (incl. `"unverified_recipe_declined"`, `"competing_not_selected"`); `null` otherwise. The recorded, never-silent escape. |
-| `body_path` | string \| null | **(additive, v5.12.1 — schema stays v1.5 per the additive-field policy.)** The persisted adopted-recipe body file (`<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`, `<safe_name>` = `recipe_name` lowercased with non-alphanumeric runs → `-`, `<sha8>` = first 8 chars of `recipe_sha` — the sha slice keeps the filename collision-free when two distinct `recipe_name`s sanitise to the same `<safe_name>`), written by `/research` at adoption (`references/agentic-recipe-resolution.md` step 4); `/implement` and `/review` Read it as the durable spine. `null` for `used_own`/`deferred` (no body persisted). Replaces the phantom "navigator-served `body_path`" the agentic discovery path never emitted. |
+| `body_path` | string \| null | **(additive, v5.12.1 — schema stays v1.5 per the additive-field policy.)** The persisted adopted-recipe body file (`<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`, `<safe_name>` = `recipe_name` lowercased with non-alphanumeric runs → `-`, `<sha8>` = first 8 chars of `recipe_sha` which **MUST match `^[0-9a-f]{8}$`** — `recipe_sha` is untrusted, so a non-hex sha is treated as untrusted → halt-and-escalate, never built into a path; F5: empty `<safe_name>` → `adopted-recipe-<sha8>.md`; the sha slice also keeps the filename collision-free when two distinct `recipe_name`s sanitise to the same `<safe_name>`), written by `/research` at adoption (`references/agentic-recipe-resolution.md` step 4); `/implement` and `/review` Read it as the durable spine. `null` for `used_own`/`deferred` (no body persisted). Replaces the phantom "navigator-served `body_path`" the agentic discovery path never emitted. |
 | `verifier` | object \| null | `null` until `/review` runs this adopted recipe's `## Verifier`. Then `{ ran, verdict: "pass\|fail\|null", failed_checks: [] }` — any failed check ⇒ `verdict:"fail"` and `/review` halts (hard-block). `null` for `used_own` / `deferred` (no verifier to run). **All** adopted recipes' verifiers must pass for the review to go green. `/review` read-merge-writes the full `recipes[]` list, preserving every element's decision half. |
 
 This audit **records** the gate decisions — including any deliberate `used_own` escape so it

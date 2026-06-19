@@ -68,8 +68,8 @@ context; also returned in-context.
    string before keying.
 8. **`kind:recipe` carries its durable handle** — every `kind:recipe` entry MUST set
    `recipe_name` + `recipe_sha` (both present in `recipe-names.txt`). They are the orchestrator's
-   handle to persist the adopted body (write `<task_folder>/adopted-recipe.md`) and to re-fetch /
-   integrity-check it later. `guide`/`play` entries set both to `null`.
+   handle to persist the adopted body (write `<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`) and to
+   re-fetch / integrity-check it later. `guide`/`play` entries set both to `null`.
 
 ## Warning codes
 | Code | Meaning |
