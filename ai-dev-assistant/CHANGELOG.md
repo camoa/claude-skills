@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.12.0] - 2026-06-18
+
+**Land the agentic-recipe class: wire the orphaned `recipe-loader` (caller + hard-gate-with-escape + follow/verifier).**
+
+The *agentic* recipe class — verifier-carrying, capability-keyed recipes (a `## Sequence` to run plus a `## Verifier` to gate on) — was **orphaned**: the `recipe-loader` skill existed and the `dev-guides-navigator` already served the index (and kept a compat shim alive for a consumer that never existed), but there was **no caller, no gate, and no executor**, so a matched recipe never ran. This release wires the full **caller → gate → downstream → audit** path (a live exec run is deferred — see below). It is the capability-class sibling of the *process*-recipe path landed in 5.11.0, but with a different posture: discovery is degrade-first, the **gate on a verified match is hard (with an explicit, recorded escape)**, and an adopted recipe's verifier is a deterministic hard-block.
+
+### Added — the orchestrator contract
+- `references/agentic-recipe-resolution.md` is the authoritative protocol: trigger → discover (`recipe-loader` writes `coverage-map.json`) → **gate on a match** → record the decision → follow downstream. `recipe-loader` stays discovery-only; the **command** owns execute-or-halt.
+
+### Added — `/research` caller + gate (Phase-1 entry)
+- `commands/research.md` (new step 2c) invokes `recipe-loader` to decompose the task **Goal** into capability aspects, then applies the hard-gate-with-escape: a miss → proceed generically (`no_match`); a `verified:true` match → **blocking** `[a]dopt` (default — recipe becomes the task spine) / `[o]` use-my-own (**requires a free-text reason**, recorded — never silent); a `verified:false` match → **halt-and-escalate** for explicit go-ahead before any adoption; an unattended run → **defer, never block** (surfaced to a later attended run). Idempotent — a recorded `adopted`/`used_own` decision short-circuits on resume.
+
+### Added — downstream threading
+- `commands/implement.md` (step 6) — when the task has an `adopted` agentic recipe, Read its body, assemble its typed `## Input contract` (derive from the project audit, ask the operator for policy fields, **halt on any uncovered situation — never guess**), and follow its `## Sequence` as the build spine, honoring `escalation_policy` halts.
+- `commands/review.md` (new step 5.0b) — run an adopted recipe's `## Verifier` as a review gate: each check PASS/FAIL, **any failure exits non-zero ⇒ halt (hard-block)**. Additive to the existing gates; never softens a hard-block. An adopted recipe is not "done" until its own verifier passes.
+
+### Added — `agentic-recipe` gate audit (`_agentic-recipe.json`)
+- New `agentic-recipe` gate type (`scripts/gate-audit-write.sh` + `references/gate-audit-schema.md` §5.13, schema v1.4→**v1.5**, additive). Fires once per task (overwrite-on-fire); written by `/research` (the decision incl. the deliberate `used_own` escape) and updated by `/review` (the `verifier` outcome). Records the gate decision so it is **auditable, not silent**. The decision is also recorded in `project_state.md`'s `**Agentic Recipes:**` block (the durable, idempotent memory across resume).
+- `skills/recipe-loader/SKILL.md` now documents that `/research` invokes it at Phase-1 entry and that the orchestrator (not the skill) owns the gate + execute-or-halt. Its discovery-only behavior and `user-invocable: false` are unchanged.
+
+### Added — tests
+- `tests/agentic-recipe-enforcement-spec.sh` — pins the WIRING (the protocol references `recipe-loader` + the audit; `/research`, `/implement`, `/review` all reference the protocol, so the class cannot silently re-orphan) and exercises the BEHAVIOR (gate-audit-write accepts `agentic-recipe`/schema-1.5 and writes the file; an unknown gate type is still rejected; the pre-existing `recipe-load`/schema-1.4 still works). Existing `recipe-enforcement-spec` + `recipe-interface-spec` still pass (no regression).
+
+### Deferred
+- The live end-to-end **de-risk** — running a real recipe's `## Sequence`/`## Verifier` against a real site/stack — is a separate follow-up. This PR lands the **wiring** (caller + gate + downstream threading + audit); a live exec run is not part of it.
+
 ## [5.11.0] - 2026-06-17
 
 **Process-recipe enforcement: make the silent degrade-first path visible and auditable (wire the orphaned linter + persist a resolution audit).**
