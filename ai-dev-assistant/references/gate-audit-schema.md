@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.4
+# Gate Audit Schema v1.5
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task).
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 12 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 13 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -28,6 +28,7 @@ Where `<gate_type>` is one of:
 - `visual_regression` (v1.2+)
 - `visual_parity` (v1.3+)
 - `recipe-load` (v1.4+)
+- `agentic-recipe` (v1.5+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -42,7 +43,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 12>",
+  "gate_type": "<one of the 13>",
   "fired_at": "2026-04-24T20:30:00Z",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
@@ -55,8 +56,8 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 12 listed in the gate types section. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+; `"1.5"` for `gate_type: "agentic-recipe"` written by v5.12.0+. JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 13 listed in the gate types section. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -366,6 +367,52 @@ posture). Body-as-method adherence is not verified here (model-trust, as with th
 methodology gates); what is now deterministic is that *resolution happened and was
 recorded*, and that an absent recommended declaration is *surfaced* rather than silently
 degraded.
+
+### 5.13 `agentic-recipe` (v1.5+)
+
+Written by the agentic-recipe resolution protocol (`references/agentic-recipe-resolution.md`).
+The decision half is written by `/research` at Phase-1 entry (discovery + the
+hard-gate-with-escape); the verifier half is updated by `/review` when an adopted recipe's
+`## Verifier` runs as a gate. Audit file `_agentic-recipe.json`, `schema_version: "1.5"`.
+**Fires once per task** (overwrite-on-fire) — it records the gate decision for the task's
+matched capability, including the deliberate `used_own` escape, so the choice is **auditable,
+not silent**. `gate-audit-write.sh` validates only the envelope + `schema_version`, not this
+payload. Expected `gate_specific` shape:
+
+```json
+"gate_specific": {
+  "capability": "seo-foundation",
+  "recipe_name": "seo_foundation_wiring",
+  "recipe_sha": "a1b2c3d4",
+  "provenance": "upstream",
+  "verified": true,
+  "decision": "adopted",
+  "reason": null,
+  "verifier": {
+    "ran": true,
+    "verdict": "pass",
+    "failed_checks": []
+  }
+}
+```
+
+| Field | Type | Contract |
+|---|---|---|
+| `capability` | string | The task-Goal capability aspect the recipe matched. |
+| `recipe_name` | string | The matched recipe's name (from the agentic-recipes index). |
+| `recipe_sha` | string | The index-line sha the body was integrity-checked against. |
+| `provenance` | enum | `"upstream"` (first-party catalog) or `"local"` (local/unknown store). Mirrors the coverage-map entry. |
+| `verified` | bool | Fail-closed verified flag — `true` only when sourced from the upstream catalog. A `verified:false` match is escalated (step 3) before any adoption. |
+| `decision` | enum | `"adopted"` (recipe is the task spine) \| `"used_own"` (explicit escape) \| `"deferred"` (unattended run, surfaced later) \| `"no_match"` (no canned recipe). |
+| `reason` | string \| null | Required free-text rationale for `used_own` (incl. `"unverified_recipe_declined"`); `null` otherwise. The recorded, never-silent escape. |
+| `verifier` | object \| null | `null` until `/review` runs the adopted recipe's `## Verifier`. Then `{ ran, verdict: "pass\|fail\|null", failed_checks: [] }` — any failed check ⇒ `verdict:"fail"` and `/review` halts (hard-block). `null` for `no_match` / `used_own` / `deferred` (no verifier to run). |
+
+This audit **records** the gate decision — including the deliberate `used_own` escape so it
+is auditable rather than silent — and (after `/review`) the deterministic verifier outcome.
+The discovery half is degrade-first (a `no_match` never blocks); the *gate* on a verified
+match is not (you must `adopt` or record `used_own` with a reason), and an adopted recipe's
+verifier is a hard-block. Written by `references/agentic-recipe-resolution.md` from `/research`
+(the decision) and updated by `/review` (the verifier outcome).
 
 ## 6. Invariants
 
