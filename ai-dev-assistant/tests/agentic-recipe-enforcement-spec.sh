@@ -25,6 +25,8 @@ AUDIT_WRITE="$ROOT/scripts/gate-audit-write.sh"
 RESEARCH="$ROOT/commands/research.md"
 IMPLEMENT="$ROOT/commands/implement.md"
 REVIEW="$ROOT/commands/review.md"
+SCHEMA="$ROOT/references/gate-audit-schema.md"
+COVERAGE="$ROOT/skills/recipe-loader/references/coverage-map-contract.md"
 fail=0
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -100,6 +102,52 @@ if bash "$AUDIT_WRITE" "$TMP" recipe-load "$RL_PAYLOAD" >/dev/null 2>&1 && [ -f 
   pass "gate-audit-write.sh still accepts the pre-existing recipe-load + schema 1.4 (backward-compat)"
 else
   bad  "gate-audit-write.sh regressed the pre-existing recipe-load gate type"
+fi
+
+# ── v5.12.1: the adopted body is PERSISTED to the task folder + the phantom path is GONE ──
+# The 5.12.0 execute half told /implement + /review to Read a "navigator-served body_path" that the
+# AGENTIC discovery path never emits (that's the PROCESS-recipe mechanism). The fix: /research persists
+# the adopted body into the task folder (adopted-recipe.md) + records body_path; downstream reads THAT.
+
+# (a) /research persists the body to a task-folder file AND records body_path.
+if grep -Fq -- 'adopted-recipe.md' "$RESEARCH" && grep -Fq -- 'body_path' "$RESEARCH"; then
+  pass "research.md persists the adopted body to <task_folder>/adopted-recipe.md + records body_path"
+else
+  bad  "research.md does NOT persist adopted-recipe.md / record body_path (adopted recipe unfollowable)"
+fi
+
+# (b) /implement AND /review read the PERSISTED task-folder body; the phantom string is GONE from the
+#     agentic step of each. Scope the phantom grep to the literal "navigator-served `body_path`" so the
+#     legitimate PROCESS-recipe `body_path` reads elsewhere in these files are NOT matched.
+PHANTOM='navigator-served `body_path`'
+for cmd in implement review; do
+  cf="$ROOT/commands/$cmd.md"
+  if grep -Fq -- 'adopted-recipe.md' "$cf"; then
+    pass "commands/$cmd.md reads the persisted task-folder body (adopted-recipe.md)"
+  else
+    bad  "commands/$cmd.md does NOT read <task_folder>/adopted-recipe.md (still chasing a phantom path)"
+  fi
+  n=$(grep -cF -- "$PHANTOM" "$cf")
+  if [ "$n" -eq 0 ]; then
+    pass "commands/$cmd.md no longer references the phantom navigator-served body_path"
+  else
+    bad  "commands/$cmd.md still references the phantom 'navigator-served \`body_path\`' ($n hit(s))"
+  fi
+done
+
+# (c) §5.13 of the gate-audit schema gained body_path (additive; schema stays v1.5).
+SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
+if printf '%s' "$SEC513" | grep -Fq -- 'body_path'; then
+  pass "gate-audit-schema §5.13 carries body_path (additive, v1.5)"
+else
+  bad  "gate-audit-schema §5.13 missing body_path — the persisted spine is unrecorded"
+fi
+
+# (d) the coverage-map contract carries recipe_name + recipe_sha on kind:recipe entries.
+if grep -Fq -- 'recipe_name' "$COVERAGE" && grep -Fq -- 'recipe_sha' "$COVERAGE"; then
+  pass "coverage-map-contract carries recipe_name + recipe_sha (durable adopt handle)"
+else
+  bad  "coverage-map-contract missing recipe_name/recipe_sha — orchestrator can't persist the body"
 fi
 
 echo

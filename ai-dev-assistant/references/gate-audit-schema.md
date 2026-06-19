@@ -388,6 +388,7 @@ payload. Expected `gate_specific` shape:
   "verified": true,
   "decision": "adopted",
   "reason": null,
+  "body_path": "<task_folder>/adopted-recipe.md",
   "verifier": {
     "ran": true,
     "verdict": "pass",
@@ -405,6 +406,7 @@ payload. Expected `gate_specific` shape:
 | `verified` | bool | Fail-closed verified flag — `true` only when sourced from the upstream catalog. A `verified:false` match is escalated (step 3) before any adoption. |
 | `decision` | enum | `"adopted"` (recipe is the task spine) \| `"used_own"` (explicit escape) \| `"deferred"` (unattended run, surfaced later) \| `"no_match"` (no canned recipe). |
 | `reason` | string \| null | Required free-text rationale for `used_own` (incl. `"unverified_recipe_declined"`); `null` otherwise. The recorded, never-silent escape. |
+| `body_path` | string \| null | **(additive, v5.12.1 — schema stays v1.5 per the additive-field policy.)** The persisted adopted-recipe body file (`<task_folder>/adopted-recipe.md`), written by `/research` at adoption (`references/agentic-recipe-resolution.md` step 4); `/implement` and `/review` Read it as the durable spine. `null` for `used_own`/`deferred`/`no_match` (no body persisted). Replaces the phantom "navigator-served `body_path`" the agentic discovery path never emitted. |
 | `verifier` | object \| null | `null` until `/review` runs the adopted recipe's `## Verifier`. Then `{ ran, verdict: "pass\|fail\|null", failed_checks: [] }` — any failed check ⇒ `verdict:"fail"` and `/review` halts (hard-block). `null` for `no_match` / `used_own` / `deferred` (no verifier to run). |
 
 This audit **records** the gate decision — including the deliberate `used_own` escape so it

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.12.1] - 2026-06-18
+
+**Fix: an adopted agentic recipe was unfollowable (phantom `body_path`).**
+
+5.12.0 wired the agentic-recipe **search → adopt** half, but the **execute** half was dead: `/implement` and `/review` were told to "Read its body via the **navigator-served `body_path`**" — a transport the *process*-recipe path emits, which the **agentic** discovery path never produces. So a recipe could be searched, matched, and adopted, then never followed. A faithful end-to-end trace caught it. This is a PATCH that completes the just-shipped execute half.
+
+### Fixed — persist the adopted body (durable, worktree-safe)
+- `references/agentic-recipe-resolution.md` step 4: on `[a]dopt`, `/research` now reads the matched recipe's body from the navigator recipes cache (`.recipes[<recipe_name>].content`; re-fetches via `recipe-loader`/navigator if absent or sha-stale) and **writes it to `<task_folder>/adopted-recipe.md`** (Write tool). The body is now durable + task-scoped — it survives `$PWD`/worktree changes and needs no fragile re-fetch downstream. `recipe-loader` stays discovery-only; the **command** persists the body.
+- `commands/research.md` step 2c mirrors the persist-on-adopt + `body_path` record.
+
+### Fixed — downstream reads the persisted body (kill the phantom)
+- `references/agentic-recipe-resolution.md` step 5, `commands/implement.md`, `commands/review.md`: read the adopted recipe body from `<task_folder>/adopted-recipe.md` (the `body_path` recorded in `_agentic-recipe.json` at adoption) — **not** a navigator-served path. Everything else (assemble `## Input contract`, halt-on-uncovered, follow `## Sequence` / run `## Verifier`) is unchanged.
+
+### Fixed — drift fail-open
+- `references/agentic-recipe-resolution.md` step 3 + `commands/research.md` step 2c: the gate no longer keys on `entry.verified` alone. If `coverage-map.json` `warnings[]` carries `recipe_body_unverified:<name>` for the matched recipe, treat it as `verified:false` → **halt-and-escalate** regardless of the source-derived flag (a drifted/missing body is attacker-seedable).
+
+### Fixed — verifier-can't-run is fail-closed
+- `commands/review.md` step 5.0b + `references/agentic-recipe-resolution.md` step 5: the adopted recipe's `## Verifier` is typically live-site + `drush`-level. A verifier check that **cannot run** (no served site / no `drush`) is **unresolved → fail-closed HALT** (the same posture `/review` step 8 rule 2 applies to an unresolved hard-block gate), never a silent "skipped → pass".
+
+### Added — carry the durable handle + record it
+- `skills/recipe-loader/SKILL.md` + `references/coverage-map-contract.md`: each `kind:recipe` coverage-map entry now carries `recipe_name` + `recipe_sha` (the orchestrator's handle to persist + re-fetch the body); `guide`/`play` entries set both `null`.
+- `references/gate-audit-schema.md` §5.13: added `body_path` (`string|null`, the persisted `<task_folder>/adopted-recipe.md`; `null` for non-adopted decisions). Additive — schema stays **v1.5**.
+
+### Tests
+- `tests/agentic-recipe-enforcement-spec.sh`: +7 assertions (persist-on-adopt, downstream reads the persisted body, phantom string gone from both agentic steps, §5.13 `body_path`, coverage-map `recipe_name`/`recipe_sha`). All 16 pass; `recipe-enforcement-spec.sh` + `recipe-interface-spec.sh` still green.
+
 ## [5.12.0] - 2026-06-18
 
 **Land the agentic-recipe class: wire the orphaned `recipe-loader` (caller + hard-gate-with-escape + follow/verifier).**

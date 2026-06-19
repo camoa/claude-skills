@@ -16,6 +16,8 @@ context; also returned in-context.
       "aspect": "<which aspect this informs>",
       "kind": "recipe | guide | play",
       "ref": "<capability (recipe) | slug (guide/play)>",
+      "recipe_name": "<recipe name — kind:recipe only, else null>",
+      "recipe_sha": "<index-line sha — kind:recipe only, else null>",
       "relevance": "high | medium | low",
       "via": "recipe:<capability> | residual-guide-search",
       "provenance": "upstream | local",
@@ -35,6 +37,8 @@ context; also returned in-context.
 | `entries[]` | One per matched source. May be empty (then every aspect is in `uncovered_aspects`). |
 | `entries[].kind` | `recipe` (a matched capability), `guide`, or `play`. |
 | `entries[].ref` | For `recipe`: the `[capability]`. For `guide`/`play`: the catalog slug. |
+| `entries[].recipe_name` | **`kind:recipe` only** — the matched recipe's name (from `recipe-names.txt`), the durable handle the orchestrator persists + re-fetches the body by. `null` for `guide`/`play`. |
+| `entries[].recipe_sha` | **`kind:recipe` only** — the index-line sha the body was integrity-checked against (step 5). `null` for `guide`/`play`. Lets the orchestrator detect a stale cached body before persisting it. |
 | `entries[].relevance` | Ranking for confirm/prune; guards over-matching. |
 | `entries[].via` | `recipe:<capability>` (declared by a matched recipe) or `residual-guide-search`. |
 | `entries[].provenance` | Derived from the **source**: `upstream` (from the upstream catalog cache) or `local` (from a local store). NOT a fixed default. |
@@ -62,6 +66,10 @@ context; also returned in-context.
    yields two entries (no dropped aspect); a true collision keeps the lower-trust entry (a
    `verified:false` twin is never hidden by `verified:true`). Numeric/`null` `ref` is coerced to
    string before keying.
+8. **`kind:recipe` carries its durable handle** — every `kind:recipe` entry MUST set
+   `recipe_name` + `recipe_sha` (both present in `recipe-names.txt`). They are the orchestrator's
+   handle to persist the adopted body (write `<task_folder>/adopted-recipe.md`) and to re-fetch /
+   integrity-check it later. `guide`/`play` entries set both to `null`.
 
 ## Warning codes
 | Code | Meaning |
