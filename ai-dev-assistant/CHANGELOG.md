@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.13.0] - 2026-06-18
+
+**Feature: a task may adopt MULTIPLE agentic recipes (multi-recipe adoption per task).**
+
+5.12.0/5.12.1 wired and made *followable* the adoption of a **single** agentic recipe per task. A real task often touches several capabilities at once (e.g. SEO foundation **and** responsive-image wiring). 5.13.0 generalises the single-recipe design to **N** recipes: the gate iterates every matched aspect, the audit becomes a `recipes[]` list, each adopted recipe persists its own body, and each carries its own verifier. Builds directly on the 5.12.1 followable fix (per-recipe persisted bodies, no phantom `body_path`).
+
+### Two flavors of multi-match
+- **Complementary** (different aspects) → **adopt the SET**. Each `kind:recipe` entry is gated independently and becomes its own `recipes[]` element. Recipes may be **interdependent** (SEO needs the image wired first); handled by operator-confirmed ordering downstream + each recipe's own `escalation_policy: halt` — **no** formal inter-recipe dependency resolution (out of scope).
+- **Competing** (two+ entries claim the SAME aspect, different `recipe_name`) → **ALWAYS ASK** the operator to pick exactly one (or `[o]` use-my-own). Never auto-pick. Each unpicked competitor is recorded `decision:"used_own"` `reason:"competing_not_selected"`.
+
+### Changed — the gate iterates, the audit is a list
+- `references/agentic-recipe-resolution.md` steps 3–5 + `commands/research.md` step 2c: the gate now **iterates every `kind:recipe` entry** in `coverage-map.json` and records a `recipes[]` set of per-recipe decisions, not a single decision. **Idempotency generalised:** short-circuit only when **every** matched recipe is terminal (`adopted`/`used_own`) or the task matched none (`recipes: []`); if **any** is `deferred`, re-enter the gate on the next attended run.
+- `references/gate-audit-schema.md` §5.13: `gate_specific` generalised from a single object to `{ "recipes": [ <per-recipe object> ] }` (each element the existing per-recipe shape: `capability`/`recipe_name`/`recipe_sha`/`provenance`/`verified`/`decision`/`reason`/`body_path`/`verifier`). A no-match task records `recipes: []`. **A shape change to the v1.5 section shipped in 5.12.0**, but the file is overwrite-on-fire + barely deployed, so **no migration is needed** — `schema_version` stays **1.5**.
+
+### Changed — per-recipe persisted bodies + per-recipe verifiers
+- `references/agentic-recipe-resolution.md` step 4 + `commands/research.md` step 2c: each ADOPTED recipe persists its own body to `<task_folder>/adopted-recipe-<safe_name>.md` (`<safe_name>` = `recipe_name` lowercased, non-alphanumeric runs → `-`). Replaces the old single fixed `adopted-recipe.md`. Each element's `body_path` points at its per-recipe file.
+- `commands/implement.md`: follows **each** adopted recipe's `## Sequence`. When >1 recipe is adopted, **confirms an execution order with the operator** (default: coverage-map order); a recipe that halts on an unmet prerequisite signals a re-order. Keeps halt-on-uncovered.
+- `commands/review.md` step 5.0b + protocol step 5: runs **each** adopted recipe's `## Verifier` as a hard-block gate (verifier-can't-run → fail-closed HALT, unchanged). **ALL** adopted recipes' verifiers must pass. Updates each element's `verifier` via a **read-merge-write of the full `recipes[]` list**, preserving every element's decision half.
+
+### Preserved
+- A 1-match task still works — it is just a 1-element `recipes[]`. recipe-loader stays discovery-only; the **command** persists + iterates. PROCESS-recipe `body_path` usages untouched. `coverage-map-contract.md` was already N-capable (invariants 1 + 7) — no change.
+
+### Hardened (latent-seam closes, same release)
+- **Collision-safe per-recipe filename:** the persisted body is `<task_folder>/adopted-recipe-<safe_name>-<sha8>.md` (`<sha8>` = first 8 chars of `recipe_sha`) — two distinct `recipe_name`s that sanitise to the same `<safe_name>` no longer overwrite each other's body. **Per-entry re-entry:** re-entering the gate to surface a `deferred` recipe now carries each already-terminal recipe forward unchanged (decision half **and** any already-run `verifier`), re-prompting only the deferred/new entries — closes the re-prompt wart and the verifier-reset data loss.
+
+### Hardened (paper-test)
+- **Agentic verifier folded into `/review`'s `overall_verdict` (was sidecar-only).** Step 5.0b now adds one aggregate hard-block `gates_run[]` entry `agentic-verifier` (`pass` only if every adopted recipe's verifier passed; `fail` if any failed; can't-run ⇒ unresolved ⇒ fail-closed via step-8 rule 2), so a verifier FAIL now blocks the PR instead of leaving `/review` green with only a sidecar record. Emitted only when ≥1 recipe is adopted (no false gate). Schema §5.8 `gates_run[].name` enum + a note added.
+- **`<sha8>` hex-validated (path-traversal guard).** `recipe_sha` is untrusted index-line data; the filename's `<sha8>` MUST match `^[0-9a-f]{8}$`, else the entry is treated as untrusted → halt-and-escalate (a seeded `../` can no longer escape `<task_folder>`). Plus an F5 fallback: an empty `<safe_name>` → `adopted-recipe-<sha8>.md`. Stated once (protocol step 4) and referenced byte-consistently in research/implement/review + the §5.13 field.
+- **Behavior test exercises the real `recipes[]` shape.** The spec's gate-audit-write behavior test now builds a 2-element `gate_specific.recipes[]`, round-trips it (`length == 2`, both `recipe_name`s present), and adds a read-merge-write preservation micro-test (setting element B's `verifier` leaves element A's decision half intact) — was false-green against the old single-object payload. Assertion `g` (competing) tightened to recipe-specific tokens (`competing_not_selected` + "same aspect") so the generic prior-art word can't false-match.
+- **Stale doc + untrusted-body caution.** `coverage-map-contract.md` invariant 8 updated to the per-recipe sha-suffixed filename; `/implement` + `/review` restate that the adopted recipe body is untrusted upstream data — followed as a method, never `eval`/shell-parsed; its only trust anchor is the verified-upstream provenance gated at `/research`.
+
+### Tests
+- `tests/agentic-recipe-enforcement-spec.sh`: 16 original kept + multi-recipe and paper-test assertions added (recipes[] list with a ≥2-element example, per-recipe + collision-safe `-<sha8>` filename, hex-validation `^[0-9a-f]{8}$` in protocol/research/implement/review + schema, F5 fallback, competing/ALWAYS-ASK with recipe-specific anchors, gate iterates every `kind:recipe`, /implement + /review follow EACH adopted recipe, per-entry re-entry, the 2-element behavior round-trip + read-merge-write preservation, `agentic-verifier` folded into `gates_run[]`, untrusted-body caution, coverage-map stale-doc fix). All **41 pass**; `recipe-enforcement-spec.sh` (13) + `recipe-interface-spec.sh` (12) still green.
+
+## [5.12.1] - 2026-06-18
+
+**Fix: an adopted agentic recipe was unfollowable (phantom `body_path`).**
+
+5.12.0 wired the agentic-recipe **search → adopt** half, but the **execute** half was dead: `/implement` and `/review` were told to "Read its body via the **navigator-served `body_path`**" — a transport the *process*-recipe path emits, which the **agentic** discovery path never produces. So a recipe could be searched, matched, and adopted, then never followed. A faithful end-to-end trace caught it. This is a PATCH that completes the just-shipped execute half.
+
+### Fixed — persist the adopted body (durable, worktree-safe)
+- `references/agentic-recipe-resolution.md` step 4: on `[a]dopt`, `/research` now reads the matched recipe's body from the navigator recipes cache (`.recipes[<recipe_name>].content`; re-fetches via `recipe-loader`/navigator if absent or sha-stale) and **writes it to `<task_folder>/adopted-recipe.md`** (Write tool). The body is now durable + task-scoped — it survives `$PWD`/worktree changes and needs no fragile re-fetch downstream. `recipe-loader` stays discovery-only; the **command** persists the body.
+- `commands/research.md` step 2c mirrors the persist-on-adopt + `body_path` record.
+
+### Fixed — downstream reads the persisted body (kill the phantom)
+- `references/agentic-recipe-resolution.md` step 5, `commands/implement.md`, `commands/review.md`: read the adopted recipe body from `<task_folder>/adopted-recipe.md` (the `body_path` recorded in `_agentic-recipe.json` at adoption) — **not** a navigator-served path. Everything else (assemble `## Input contract`, halt-on-uncovered, follow `## Sequence` / run `## Verifier`) is unchanged.
+
+### Fixed — drift fail-open
+- `references/agentic-recipe-resolution.md` step 3 + `commands/research.md` step 2c: the gate no longer keys on `entry.verified` alone. If `coverage-map.json` `warnings[]` carries `recipe_body_unverified:<name>` for the matched recipe, treat it as `verified:false` → **halt-and-escalate** regardless of the source-derived flag (a drifted/missing body is attacker-seedable).
+
+### Fixed — verifier-can't-run is fail-closed
+- `commands/review.md` step 5.0b + `references/agentic-recipe-resolution.md` step 5: the adopted recipe's `## Verifier` is typically live-site + `drush`-level. A verifier check that **cannot run** (no served site / no `drush`) is **unresolved → fail-closed HALT** (the same posture `/review` step 8 rule 2 applies to an unresolved hard-block gate), never a silent "skipped → pass".
+
+### Added — carry the durable handle + record it
+- `skills/recipe-loader/SKILL.md` + `references/coverage-map-contract.md`: each `kind:recipe` coverage-map entry now carries `recipe_name` + `recipe_sha` (the orchestrator's handle to persist + re-fetch the body); `guide`/`play` entries set both `null`.
+- `references/gate-audit-schema.md` §5.13: added `body_path` (`string|null`, the persisted `<task_folder>/adopted-recipe.md`; `null` for non-adopted decisions). Additive — schema stays **v1.5**.
+
+### Tests
+- `tests/agentic-recipe-enforcement-spec.sh`: +7 assertions (persist-on-adopt, downstream reads the persisted body, phantom string gone from both agentic steps, §5.13 `body_path`, coverage-map `recipe_name`/`recipe_sha`). All 16 pass; `recipe-enforcement-spec.sh` + `recipe-interface-spec.sh` still green.
+
 ## [5.12.0] - 2026-06-18
 
 **Land the agentic-recipe class: wire the orphaned `recipe-loader` (caller + hard-gate-with-escape + follow/verifier).**

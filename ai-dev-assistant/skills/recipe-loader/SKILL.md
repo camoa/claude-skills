@@ -140,17 +140,23 @@ from the SOURCE — fail-closed:** an entry from the **upstream catalog cache** 
 `verified:true` (today's only first-party source); from a **local store** → `provenance:local`,
 `verified:false`; source unknown → `verified:false`. **Never default `verified:true` blindly.**
 ```bash
-add_entry(){ # aspect kind ref relevance via provenance verified(true|false)
+add_entry(){ # aspect kind ref relevance via provenance verified(true|false) [recipe_name] [recipe_sha]
   local e; e=$(jq -n --arg aspect "$1" --arg kind "$2" --arg ref "$3" --arg rel "$4" \
     --arg via "$5" --arg prov "$6" --argjson ver "$7" \
-    '{aspect:$aspect,kind:$kind,ref:$ref,relevance:$rel,via:$via,provenance:$prov,verified:$ver}')
+    --arg rn "${8:-}" --arg rs "${9:-}" \
+    '{aspect:$aspect,kind:$kind,ref:$ref,
+      recipe_name:(if $rn=="" then null else $rn end),
+      recipe_sha:(if $rs=="" then null else $rs end),
+      relevance:$rel,via:$via,provenance:$prov,verified:$ver}')
   ENTRIES=$(jq -c --argjson e "$e" '. + [$e]' <<<"$ENTRIES")
 }
 # Dedup: unique per (aspect,kind,ref); on collision keep the LEAST-trusted (verified:false wins).
 ENTRIES=$(jq 'group_by([.aspect,.kind,(.ref|tostring)]) | map(min_by(.verified))' <<<"$ENTRIES")
 ```
-Include the matched-recipe rows (`kind:recipe`, `ref:<capability>`, `via:recipe:<capability>`),
-the recipes' declared guides/plays, and the residual guides.
+Include the matched-recipe rows (`kind:recipe`, `ref:<capability>`, `via:recipe:<capability>`,
+**`recipe_name`=`$N` + `recipe_sha`=`$S` from `recipe-names.txt`** — the orchestrator's durable
+handle to persist + re-fetch the adopted body), the recipes' declared guides/plays, and the
+residual guides (`guide`/`play` rows pass no 8th/9th arg → `recipe_name`/`recipe_sha` are `null`).
 
 ### 8. Compute uncovered, emit, surface
 `uncovered_aspects` = every aspect with **no** entry — derive it explicitly and **always list it**
