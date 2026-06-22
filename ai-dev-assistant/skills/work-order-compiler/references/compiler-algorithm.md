@@ -163,14 +163,18 @@ emitted-anyway WO cannot build blind. Recording it honestly is what arms the gat
 
 ## Step 9 — Lockfile, provenance, emit `[kernel]`
 
-Compute the navigator cache path (cwd-derived, same contract recipe-loader reads — never glob to
-another project's cache). **Transitional:** like recipe-loader, this stays on the
-`dev-guides-recipes-cache.json` compat shim (a denormalized projection with no store-native
-equivalent); the store read cutover is Follow-up A in the navigator's `references/store-contract.md` §6.
+Resolve the recipe-sha source from the **project-independent shared store** — NOT a cwd-derived
+per-project cache. `lockfile-sha` only needs each recipe's **sha** (the per-line `(sha:…)` in the
+index), and the shared store's `indexes/agentic-recipes.json` `.content` carries exactly that, with no
+project/cwd keying. This closes the GAP-B-class cwd bug for the compiler too: a build/compile cwd ≠ the
+task's `codePath` no longer resolves the **caller's** project cache (a silent `sha_not_in_cache`). The
+kernel's `lookup_sha` reads either shape (shared-store `{…,content}` or the legacy shim's
+`{index:{content}}`), so this is a path swap — no lockfile/blob reassembly (the harder Follow-up A worry
+does not apply here, since only the sha is needed, never the body).
 
 ```bash
-DASHED=$(printf '%s' "$PWD" | sed 's/[^a-zA-Z0-9]/-/g')
-CACHE="$HOME/.claude/projects/${DASHED}/memory/dev-guides-recipes-cache.json"
+STORE_DIR="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
+CACHE="$STORE_DIR/indexes/agentic-recipes.json"   # shared store — project-independent, no cwd/codePath keying
 ```
 
 Assemble `refs[]` — one per candidate excerpt, with `name` = the cache key (recipe name / guide

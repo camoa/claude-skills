@@ -591,6 +591,11 @@ def main():
                 return r.get("sha")
         idx = cache.get("index")
         content = idx.get("content") if isinstance(idx, dict) else None
+        if not isinstance(content, str):
+            # shared-store shape: indexes/agentic-recipes.json is {hash,fetched_at,content}
+            # (no {index:{...}} wrapper). The index content is all lookup_sha needs — the
+            # per-line (sha:...) IS the authoritative sha, so no lockfile/blob is required.
+            content = cache.get("content")
         if isinstance(content, str):
             # index grammar: "- <name> [<capability>] (sha:XXXX): <when> — <url>"
             for line in content.splitlines():
