@@ -84,6 +84,19 @@ elif [[ "$USER_PB_STATE" == "set" ]] && [[ -n "$USER_PB" ]]; then
   WARNINGS=$(jq -nc --arg p "$USER_PB" '[{code: "user_playbook_missing", detail: ("declared path does not exist: " + $p)}]')
 fi
 
+# GAP-C observability: a declared (non-"none") playbook set that contributes 0 concrete plays in this
+# deterministic pass is a heads-up that playbook adherence MAY be vacuous downstream. This loader records
+# set INTENT and loads only a local user playbook's plays; the sets' own plays resolve via the navigator in
+# the consumer. Emit a distinct warning so a later 0-play adherence skip is not silent. An intentional
+# `**Playbook Sets:** none` opt-out (source "explicit-none") is NOT flagged.
+LOCAL_PLAYS=$(echo "$PLAYS_BY_SECTION" | jq '[.[]] | add // 0' 2>/dev/null || echo 0)
+SETS_LEN=$(echo "$PB_SETS" | jq 'length' 2>/dev/null || echo 0)
+if [[ "$PB_SOURCE" != "explicit-none" ]] && [[ "${SETS_LEN:-0}" -gt 0 ]] && [[ "${LOCAL_PLAYS:-0}" -eq 0 ]]; then
+  WARNINGS=$(echo "$WARNINGS" | jq -c --argjson n "$SETS_LEN" \
+    '. + [{code: "playbook_sets_declared_zero_local_plays",
+           detail: (($n|tostring) + " playbook set(s) declared but 0 concrete plays loaded in this deterministic pass (set plays resolve downstream via the navigator; no local user playbook is set). If the set(s) also resolve empty, the playbook-adherence gate skips vacuously — it records that distinctly rather than reading as coverage.")}]')
+fi
+
 # Compose output
 jq -nc \
   --argjson sets "$PB_SETS" \
