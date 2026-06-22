@@ -278,7 +278,7 @@ Specific checks for AI-generated code:
 
 ## Version
 
-See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Current version: **0.10.1**.
+See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Current version: **0.11.0**.
 
 ## License
 

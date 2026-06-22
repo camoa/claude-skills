@@ -18,7 +18,7 @@ Pass `--json` to emit a CI-consumable JSON report alongside the markdown report.
 
 ## What This Does
 
-Spawns a 3-teammate agent team that paper-tests the specified code files from competing perspectives. Each teammate traces the code with different input strategies, then they cross-challenge findings. The lead synthesizes a prioritized flaw report next to the target code.
+Spawns a team that paper-tests the specified code files from competing perspectives: three testers (Happy Path, Edge Case, Red Team) trace the code with different input strategies and cross-challenge findings, then a fourth **Synthesizer** teammate compiles a prioritized flaw report next to the target code (keeping the heavy reads off the lead).
 
 > **Aggregating across parallel teammates:** Claude Code 2.1.118+ ships a `PostToolBatch` hook that fires once after a batch of parallel tool calls resolves (Hooks Reference). For users who want to aggregate per-teammate JSON outputs into a single batch summary (e.g., posting one consolidated finding count to Slack instead of three), `PostToolBatch` is the right primitive. This plugin does not ship the hook — copy it into your project's `.claude/hooks.json` if needed. Reference, don't implement.
 
@@ -103,9 +103,10 @@ Create a team and these tasks:
 | 2 | Probe edge cases — boundary values, nulls, empty, large inputs | Edge Case Hunter | — |
 | 3 | Attack with adversarial inputs — injection, malformed data, race conditions | Red Team Attacker | — |
 | 4 | Cross-challenge — debate flaw severity, dispute false findings, identify blind spots | All three | 1, 2, 3 |
-| 5 | Synthesize prioritized flaw report | Lead | 4 |
+| 5 | Spawn the Synthesizer teammate, then report the saved report path | Lead | 4 |
+| 5b | Synthesize prioritized flaw report from the three analyses | Synthesizer | 4 |
 
-**Quality Gate:** Each tester must complete ALL assigned categories before marking their task done. If a tester skips categories (e.g., Edge Case Hunter tests 3 of 6 categories), the lead should flag incomplete analysis in the final report and note which categories were untested.
+**Quality Gate:** Each tester must complete ALL assigned categories before marking their task done. If a tester skips categories (e.g., Edge Case Hunter tests 3 of 6 categories), the Synthesizer should flag incomplete analysis in the final report and note which categories were untested.
 
 ### Step 5 — Spawn Teammates
 
@@ -126,20 +127,19 @@ the whole team up. When `${CLAUDE_EFFORT}` is unset (model without effort
 support), use each role's floor as-is. Substitute the resulting level into the
 `**Effort:**` line of each spawn block below.
 
-Spawn 3 teammates using the prompt templates below. Substitute `{target_dir}` with the directory computed in Step 1, `{list each file path}` with the validated targets, and interpolate `JSON_MODE={true|false}` near the top of each spawn prompt (so the teammate knows whether to emit the parallel `.json` report). After spawning:
+Spawn the **3 tester teammates** (the Synthesizer is spawned later, in Step 6) using the prompt templates below. Substitute `{target_dir}` with the directory computed in Step 1, `{list each file path}` with the validated targets, and interpolate `JSON_MODE={true|false}` near the top of each spawn prompt (so the teammate knows whether to emit the parallel `.json` report). After spawning:
 
-1. Tell the user: "Team spawned. Teammates are working — I'll synthesize when they finish."
+1. Tell the user: "Team spawned. Teammates are working — the Synthesizer will compile the report when they finish."
 2. If running inside tmux, teammates appear in split panes (visible output). Otherwise they run in-process (background).
 3. Do NOT perform testing yourself — wait for all teammates to complete before proceeding.
 
-### Step 6 — Synthesize
+### Step 6 — Synthesize (via the Synthesizer teammate)
 
-When all teammates finish:
+When tasks 1–4 are complete, **spawn the Synthesizer teammate (Task 5b)** using the Teammate 4 block below — do NOT read the three analysis files into the lead's own context. The Synthesizer reads all three analysis files in its own fresh context and writes the final report, which keeps the heavy reads off the lead (the v0.11.0 context-economy fix). Substitute `{target_dir}` and interpolate `JSON_MODE={true|false}` into the spawn prompt exactly as for the testers.
 
-- Read `{target_dir}/happy-path-analysis.md`, `{target_dir}/edge-case-analysis.md`, `{target_dir}/red-team-analysis.md`
-- Write `{target_dir}/paper-test-team-report.md` using the Output Format below
-- **If `JSON_MODE=true`:** also read `{target_dir}/happy-path-analysis.json`, `{target_dir}/edge-case-analysis.json`, `{target_dir}/red-team-analysis.json` (each teammate writes both markdown and JSON when `--json` is passed — see spawn prompts). Aggregate per the schema in `skills/paper-test/references/json-output-schema.md` and write `{target_dir}/paper-test-team-report.json`. Honor the invariants: `findings` is always an array, severity values are uppercase (`CRITICAL` etc.), `status` is `fail` if any CRITICAL or HIGH finding exists, `warning` if only MEDIUM/LOW findings, `pass` only if no MEDIUM-or-higher findings. Each aggregated finding includes `found_by` (union of teammate roles whose per-teammate JSON reported the same file + line span + category) and `disputed` (boolean — `true` iff the cross-challenge markdown report lists this finding in its "Disputed Findings" table). See the schema's "Team-specific finding fields" section for the precise field contract.
-- Tell the user: "Paper test team complete. Report saved to `{target_dir}/paper-test-team-report.md`" (append "and `paper-test-team-report.json`" when `JSON_MODE=true`).
+The Synthesizer writes `{target_dir}/paper-test-team-report.md` (and, when `JSON_MODE=true`, `{target_dir}/paper-test-team-report.json`) using the Output Format below. The JSON aggregation honors the invariants: `findings` is always an array, severity values are uppercase (`CRITICAL` etc.), `status` is `fail` if any CRITICAL or HIGH finding exists, `warning` if only MEDIUM/LOW findings, `pass` only if no MEDIUM-or-higher findings. Each aggregated finding includes `found_by` (union of teammate roles whose per-teammate JSON reported the same file + line span + category) and `disputed` (boolean — `true` iff the cross-challenge markdown report lists this finding in its "Disputed Findings" table). See the schema's "Team-specific finding fields" section for the precise field contract.
+
+When the Synthesizer completes, tell the user: "Paper test team complete. Report saved to `{target_dir}/paper-test-team-report.md`" (append "and `paper-test-team-report.json`" when `JSON_MODE=true`).
 
 ---
 
@@ -199,7 +199,7 @@ JSON shape — match `skills/paper-test/references/json-output-schema.md` exactl
 - `schema_version: "1.0"`, `tool: "test-team"`, `mode: "test-team"`, `target_type` per target type, `target_files`, `timestamp` (ISO 8601 UTC)
 - `summary` with counts by severity (CRITICAL/HIGH/MEDIUM/LOW/INFO — uppercase), `total_findings`, `scenarios_traced`, `dependencies_verified`, `contracts_verified`
 - `findings` is always an array; each finding has `severity`, `category`, `file`, `line_start`, `line_end`, `title`, `description`, `fix_suggestion`, `scoring_factors {reach, impact, reversibility, exploitability}` (1-3 each; omit only for INFO), and `found_by: ["happy_path"]`
-- Do NOT include `disputed`, `team`, or cross-challenge data — the lead aggregates those later
+- Do NOT include `disputed`, `team`, or cross-challenge data — the Synthesizer aggregates those later
 
 Use this format:
 
@@ -369,6 +369,8 @@ TARGET FILES:
 YOUR MISSION:
 Try adversarial inputs and find security/reliability holes. Your lens: "How would an attacker exploit this code?"
 
+Note: The security-guidance plugin performs in-session edit review of Claude's own code changes in real time. Your role is different: you analyze the TARGET code for adversarial vulnerabilities at test time, before any session edits occur. These are complementary, not overlapping. Do not defer to security-guidance for target-code attack analysis — that is your job.
+
 Design attack scenarios for EACH relevant category:
 1. **SQL injection** — `' OR 1=1 --`, union-based, blind SQLi
 2. **XSS** — `<script>alert(1)</script>`, event handlers, encoded payloads
@@ -455,11 +457,47 @@ To signal completion to the lead, either:
 - Or output JSON: {"continue": false} to hard-stop your turn immediately
 ```
 
+### Teammate 4: Synthesizer
+
+**Model:** inherit
+**MaxTurns:** 10
+**Isolation:** worktree
+
+```
+You are the Synthesizer for a paper testing team. The three analysis phases are complete.
+
+YOUR MISSION:
+Read the three analysis files and produce the final prioritized flaw report. You do NOT
+re-test the code — you aggregate what the three testers already found.
+
+FILES TO READ:
+  {target_dir}/happy-path-analysis.md
+  {target_dir}/edge-case-analysis.md
+  {target_dir}/red-team-analysis.md
+  [If JSON_MODE=true, also read happy-path-analysis.json, edge-case-analysis.json, red-team-analysis.json]
+
+WRITE the final report to:
+  {target_dir}/paper-test-team-report.md
+  [If JSON_MODE=true, also write {target_dir}/paper-test-team-report.json per the team
+   aggregation schema in skills/paper-test/references/json-output-schema.md]
+
+Use the Output Format defined below in this command file. Aggregate findings, de-duplicate
+across the three perspectives, record cross-challenge outcomes (Disputed Findings), and
+split the Existence Verification and Behavioral Contract Verification tables. For the JSON
+report honor the schema invariants: `findings` is always an array, severity values are
+uppercase, `status` is `fail` if any CRITICAL/HIGH finding exists, `warning` for only
+MEDIUM/LOW, `pass` only when no MEDIUM-or-higher finding exists; set `found_by` (union of
+roles that reported the same file+line span+category) and `disputed` per the cross-challenge.
+
+WHEN DONE:
+Output: {"continue": false}
+```
+
 ---
 
 ## Output Format
 
-The lead synthesizes into `{target_dir}/paper-test-team-report.md`:
+The Synthesizer (Teammate 4) synthesizes into `{target_dir}/paper-test-team-report.md`:
 
 ```markdown
 # Paper Test Team Report
