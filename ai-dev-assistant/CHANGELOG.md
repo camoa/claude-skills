@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Content-addressed body reads make index↔body drift structurally impossible (you read the body for the current index sha or nothing); the old shim sha-compare gate is retired for recipe-loader. Trust boundary unchanged (a self-consistent forged blob is still out of scope, shared with the navigator's store-trust model).
 
+### Added — GAP A: DDEV-aware worktrees + build-in-place for infra/state work-orders
+Same dogfooding run (`adrupalcouple p1_scaffold_enable`): the agent-dispatched build path couldn't build a live-DDEV task — a git worktree is a separate checkout the running DDEV (bound to the main checkout) can't see. Grounded in DDEV's own published git-worktree workflow + research that ruled out a shared DB container as unsupported/corruption-prone (ddev/ddev#8390).
+
+- **Part 1 — `/worktree --ddev-up` (opt-in).** Brings up the worktree's **own isolated DDEV** (own web+db) and seeds DB+files from main (`ddev export-db`/`import-db`/`import-files`); DB **copied, never shared**. Auto-naming via `ddev config global --omit-project-name-by-default` (machine-global; changes only the default for newly-configured projects — does not touch existing ones); a pinned `name:` hard-halts under `--ddev-up`. Seeding clears stale tarballs + `&&`-chains export→import (no stale-DB seed) and requires the main project's DDEV running. `/worktree-prune` `ddev delete --omit-snapshot`s **before** `git worktree remove`; if `ddev delete` fails it defaults to `[s]kip` and, on an explicit `[c]ontinue`, surfaces the `ddev stop --unlist <name>` registry cleanup (never silently re-orphans). `worktree-conventions.md` → v1.3.
+- **Part 2 — `/run-work-orders --in-place` (operator-gated, sequential-only).** Build-in-place for infra/state WOs whose produced *state* must land on the **canonical** integration env. Skips the worktree precondition; **refuses to build on the integration base** (no commit-to-`main`); requires a live-human `[y]` (auto-approve/`acceptEdits` is not a `[y]`) and refuses unattended; rejects `--parallel --in-place`. **Critical safety property:** in-place **never `git reset --hard`** (a reset rolls back files but not DB/module/`vendor` state → split-brain) — **both** the crash-recovery row (`loop-contract.md` recovery-disposition table) and the retryable-fail branch (`work-order-loop` step 10) convert to **HALT+escalate**; a review failure is terminal. Per-WO `/review --base <cp>` for an incremental diff. Taxonomy in `references/work-order-lifecycle.md`. First cut is task-level `--in-place`; per-WO `build_mode` is the future evolution. Gate is command-behavioral (a zero-model kernel gate is a tracked follow-up).
+
+### Tests
+New `tests/ddev-worktree-spec.sh` (19 assertions) — incl. one asserting the **recovery-disposition table row** itself (the artifact the loop routes from) carries the in-place no-reset split, not just the SKILL prose.
+
+*(This release consolidates what were two PRs (GAP B #225 + GAP A #226) into one to avoid a 3-PR merge-chain; both closed in favour of this.)*
+
 ## [5.13.1] - 2026-06-19
 
 ### Changed — docs

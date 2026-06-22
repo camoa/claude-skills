@@ -25,6 +25,13 @@ HALT (`ready→needs_rework` is ILLEGAL, so it is never set), and a blocking-cri
 `in_progress` WITH a HALT; both are terminal-by-marker and only escalate. The kernel rejects any other
 transition fail-closed.
 
+**`build_mode == in-place` (operator-gated infra/state runs):** the `in_progress → needs_rework` retryable
+transition does **not** fire and **no `git reset --hard` occurs**. A reset rolls back tracked files but not
+DB/module-enable/`vendor/` state, so it would leave a split-brain; instead a review fail (and a mid-build
+crash) is made **TERMINAL** — write `wo-NN.HALT` (`in_place_review_fail` / `in_place_crash_manual_recovery`)
+and escalate for human reconciliation of the accumulated canonical state. No requeue, no blind re-dispatch.
+The `done`/`blocked→ready`/`ready→in_progress` transitions are unchanged.
+
 ## Bounded verify→fix (D3 — crash-safe)
 
 `wo-run-state.sh dispatch` does **read-increment-write** on `attempts` and checks the cap **before**
@@ -65,7 +72,7 @@ a missing ref.
 | `blocked`, some dep not `done` | leave; the queue promotes later |
 | `ready`/`blocked`, deps done, no sidecar | dispatch fresh |
 | `ready`, sidecar present, no `checkpoint_after` | crashed after `dispatch`, before the builder's flip — the build **never committed** (`ready` ⇒ `HEAD==checkpoint_before` by construction). Re-dispatch (the increment counts; cap may HALT). **No reset.** (`ready`+`checkpoint_after` is impossible — `checkpoint_after` lands only at step 7, after the builder flipped to `in_progress`.) |
-| `in_progress`, sidecar, no `checkpoint_after` | crashed mid-build (builder had flipped) — `reset --hard "$cp"`, `needs_rework`, requeue-or-HALT. Rolls back a committed-but-uncollected build. |
+| `in_progress`, sidecar, no `checkpoint_after` | crashed mid-build (builder had flipped). **`worktree` mode:** `reset --hard "$cp"`, `needs_rework`, requeue-or-HALT — rolls back a committed-but-uncollected build. **`build_mode==in-place`: NO `reset --hard`** (it can't undo the DB/module/`vendor` state a crashed mid-build applied → split-brain) → write `wo-NN.HALT` `in_place_crash_manual_recovery`, **TERMINAL**, escalate for human reconciliation. |
 | `in_progress`, `checkpoint_after`, no `wo-NN._review.json` | build done, review never ran — resume at the review step (no rebuild, no re-dispatch) |
 | `in_progress`, `checkpoint_after`, `_review.json` present, `_critique.json` ABSENT | crashed between review and critique — resume at the **critique** step (no rebuild, no re-dispatch) |
 | `in_progress`, `_review.json` + `_critique.json` present | re-derive the verdict from the **per-WO** `_review.json` + `_critique.json` (rule 2b) — apply done/needs_rework |
@@ -79,7 +86,10 @@ reset row.
 
 **Worktree (carry #4).** The loop owns create/teardown. `git reset` always targets the **handed
 worktree** (`git -C <worktree>`), never the user's main tree, to the **sidecar** `checkpoint_before`
-(③-captured pre-spawn), and only after `merge-base --is-ancestor` validates it.
+(③-captured pre-spawn), and only after `merge-base --is-ancestor` validates it. **In `build_mode ==
+in-place` the loop owns NO worktree lifecycle (the handed path IS the canonical `codePath`) and issues NO
+`git reset` at all** — the reset rows convert to HALT (above), so this carry's reset never runs in-place;
+this is also why in-place is sequential-only and refuses `--parallel`.
 
 ## Compact-line forwarding (G3 — format-stable, mechanical)
 
