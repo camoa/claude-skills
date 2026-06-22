@@ -25,6 +25,13 @@ HALT (`ready→needs_rework` is ILLEGAL, so it is never set), and a blocking-cri
 `in_progress` WITH a HALT; both are terminal-by-marker and only escalate. The kernel rejects any other
 transition fail-closed.
 
+**`build_mode == in-place` (operator-gated infra/state runs):** the `in_progress → needs_rework` retryable
+transition does **not** fire and **no `git reset --hard` occurs**. A reset rolls back tracked files but not
+DB/module-enable/`vendor/` state, so it would leave a split-brain; instead a review fail (and a mid-build
+crash) is made **TERMINAL** — write `wo-NN.HALT` (`in_place_review_fail` / `in_place_crash_manual_recovery`)
+and escalate for human reconciliation of the accumulated canonical state. No requeue, no blind re-dispatch.
+The `done`/`blocked→ready`/`ready→in_progress` transitions are unchanged.
+
 ## Bounded verify→fix (D3 — crash-safe)
 
 `wo-run-state.sh dispatch` does **read-increment-write** on `attempts` and checks the cap **before**
@@ -79,7 +86,10 @@ reset row.
 
 **Worktree (carry #4).** The loop owns create/teardown. `git reset` always targets the **handed
 worktree** (`git -C <worktree>`), never the user's main tree, to the **sidecar** `checkpoint_before`
-(③-captured pre-spawn), and only after `merge-base --is-ancestor` validates it.
+(③-captured pre-spawn), and only after `merge-base --is-ancestor` validates it. **In `build_mode ==
+in-place` the loop owns NO worktree lifecycle (the handed path IS the canonical `codePath`) and issues NO
+`git reset` at all** — the reset rows convert to HALT (above), so this carry's reset never runs in-place;
+this is also why in-place is sequential-only and refuses `--parallel`.
 
 ## Compact-line forwarding (G3 — format-stable, mechanical)
 

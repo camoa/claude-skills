@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.16.0] - 2026-06-22
+
+### Added — GAP A: DDEV-aware worktrees + build-in-place for infra/state work-orders
+Closes GAP A (dogfooded on `adrupalcouple p1_scaffold_enable`): the agent-dispatched build path couldn't build a live-DDEV task — a git worktree is a separate checkout the running DDEV (bound to the main checkout) can't see. Grounded in DDEV's own published git-worktree workflow.
+
+**Part 1 — `/worktree --ddev-up` (opt-in).** Brings up the worktree's **own isolated DDEV** (own web+db) and seeds DB+files from the main checkout (`ddev export-db`/`import-db`/`import-files`) — the supported pattern. The DB is **copied, never shared** (pointing a worktree at the main db container is unsupported and corruption-prone; rejected). Auto-naming via `ddev config global --omit-project-name-by-default`; a pinned `name:` is a hard halt under `--ddev-up`. `/worktree-prune` now `ddev delete --omit-snapshot`s the worktree's DDEV project **before** `git worktree remove` (else an orphaned registry entry blocks the next same-name worktree — a gap DDEV's own blog glosses over). `worktree-conventions.md` → v1.3.
+
+**Part 2 — `/run-work-orders --in-place` (operator-gated, sequential-only).** A **build-in-place** mode for infra/state WOs (composer require + drush en + config import + theme build) whose produced *state* must land on the **canonical** integration env, which an isolated worktree can't reach. Builds on the main checkout's DDEV; file changes still PR-able. Skips the worktree precondition; **refuses to build on the integration base** (no commit-to-`main`); requires `[y]` confirmation and refuses unattended; rejects `--parallel --in-place`. **Critical safety property:** in-place **never `git reset --hard`** — a reset rolls back files but not DB/module-enable/`vendor/` state (split-brain), so both reset sites (crash-recovery + retryable-fail) convert to **HALT+escalate**; a review failure is terminal, never auto-reworked. Per-WO `/review` uses `--base <cp>` (this WO's checkpoint) for an incremental diff. Taxonomy: **code-authoring WO → worktree+PR; infra/state WO → build-in-place** (`references/work-order-lifecycle.md`). First cut: task-level `--in-place`; per-WO `build_mode` is the future granular evolution.
+
+### Tests
+New `tests/ddev-worktree-spec.sh` (17 assertions): the `--ddev-up` bring-up/seed/auto-naming, the prune teardown ordering, the `--in-place` gate (operator-confirm + base-refusal + `--parallel` rejection), and the never-reset / `--base <cp>` loop branches.
+
 ## [5.13.1] - 2026-06-19
 
 ### Changed — docs

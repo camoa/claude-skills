@@ -1,7 +1,7 @@
 ---
 description: "Run all compiled work-orders for a /design-complete ai-dev-assistant task end-to-end via the autonomous work-order loop. Validates preconditions (compiled WOs exist, a code worktree is available), then invokes the work-order-loop skill INLINE (never Task-dispatched) to drive the ready-queue, build, gate-review, and PR-open pipeline. Pass --parallel to run independent work-orders concurrently under the same gates via the work-order-loop-parallel skill (also inline-only). Trigger: 'run work orders', 'execute work orders', 'start work order loop'."
 allowed-tools: Read, Bash, Skill
-argument-hint: <task-name> [--parallel [--max N]]
+argument-hint: <task-name> [--parallel [--max N]] [--in-place]
 ---
 
 # Run Work-Orders
@@ -23,7 +23,10 @@ skill **inline** via the Skill tool; it does NOT loop, dispatch, or re-implement
 /ai-dev-assistant:run-work-orders <task-name>                       # sequential (default)
 /ai-dev-assistant:run-work-orders <task-name> --parallel            # concurrent, disjoint-file batches
 /ai-dev-assistant:run-work-orders <task-name> --parallel --max 4    # cap the concurrent batch size (default 8)
+/ai-dev-assistant:run-work-orders <task-name> --in-place            # infra/state task: build on the canonical env, no worktree (operator-gated)
 ```
+
+`--in-place` is the **build-in-place** mode for **infra/state** tasks (composer require + drush en + config import + theme build) whose produced *state* — DB schema, enabled-module config, built theme — must land on the **canonical** integration env, which a per-WO isolated worktree can't reach. It is **mutually exclusive with `--parallel`** (build-in-place is sequential-only) and is **operator-gated** (it mutates the running site directly; failures HALT for human inspection — no auto-rework). The default (no `--in-place`) is the unchanged **code-authoring** worktree+PR path.
 
 `<task-name>` must match `^[a-z0-9_-]+$`. Reject path traversal (`..`, `/`) and special chars →
 exit 2. Missing arg AND no session-context task → exit 2 with usage. `--parallel` is an optional
@@ -42,21 +45,45 @@ batch size. The **default (no `--parallel`) is unchanged** — the sequential `w
 
    > "No compiled work-orders found — run `/ai-dev-assistant:compile-work-orders <task>` first."
 
-3. **Precondition — a worktree is set.** Read `codePath` from the `project-state-read.sh` JSON.
-   The `work-order-loop` builds in a code worktree and owns its lifecycle. If no worktree is set or
-   available → **offer** `/ai-dev-assistant:worktree <task>` and stop. Do NOT silently proceed
-   without a worktree; do NOT hardcode `codePath`.
+   **Reject `--parallel --in-place`** — build-in-place is sequential-only (concurrent writes to one
+   checkout + one DB are an unisolatable race; infra state flows forward and cannot be batched). Exit 2
+   with: "`--in-place` cannot be combined with `--parallel` — build-in-place is sequential-only."
 
-4. **Invoke the loop conductor INLINE via the Skill tool.** **Without `--parallel`** (default):
+3. **Precondition — build path (mode-dependent).**
+   - **Default (`worktree` mode):** Read `codePath` from the `project-state-read.sh` JSON. The
+     `work-order-loop` builds in a code worktree and owns its lifecycle. If no worktree is set or
+     available → **offer** `/ai-dev-assistant:worktree <task>` and stop. Do NOT silently proceed
+     without a worktree; do NOT hardcode `codePath`.
+   - **`--in-place`:** **skip the worktree precondition** — build on the main checkout (`codePath` from
+     `project-state-read.sh`, where the canonical DDEV is bound). Reject if no `codePath` resolves (a
+     docs-only project has nothing to build in-place). **Branch safety (refuse-on-base):** in-place commits
+     land on the main checkout's **current branch** (the env state applies regardless of branch). Run
+     `git -C <codePath> branch --show-current`; if it equals the integration `<base>` (default `main`) →
+     **refuse**: "in-place would commit directly to `<base>` — create/checkout a feature branch in
+     `<codePath>` first (e.g. `git -C <codePath> checkout -b feature/<task>`), then re-run." This keeps file
+     changes PR-able and never commits to `<base>`. **Operator gate (build-in-place mutates the
+     canonical environment):** print this confirmation and block —
+     > "`--in-place` builds these work-orders directly on the canonical environment at `<codePath>`:
+     > state (DB schema, enabled modules, built theme) is applied to the running site, there is **no
+     > worktree isolation and no PR-staged rollback**, and any review failure **HALTs for manual
+     > inspection (no auto-rework)**. Proceed? `[y]/[N]`"
+
+     Default `[N]`; proceed only on `[y]`. In an **unattended/headless** run do NOT auto-confirm — refuse
+     with the gate message (build-in-place needs a human gate).
+
+4. **Invoke the loop conductor INLINE via the Skill tool.** **Without `--parallel`/`--in-place`** (default):
    invoke the `work-order-loop` skill with the resolved task folder and worktree. **With
    `--parallel`** (optionally `--max N`): invoke the `work-order-loop-parallel` skill instead,
    passing the same task folder + the worktree as the **integration worktree**, plus the `--max N`
-   batch cap when supplied. Both paths are routed **identically**: an inline invocation (Skill
-   tool, depth-0) — **NEVER via the Task tool.** The build atom (dispatched by either loop inside)
-   is the single supported depth-1 spawn; the parallel loop only issues **N** atoms in one message
-   (still depth-1). A Task-dispatched loop would push the atoms to depth-2 (unsupported). Do NOT
-   re-implement either loop here. The parallel path is **additive** — it does not change the
-   default sequential behavior.
+   batch cap when supplied. **With `--in-place`** (mutually exclusive with `--parallel`): invoke the
+   `work-order-loop` skill with `<worktree>` = `codePath` (the main checkout) and `<build_mode>` =
+   `in-place`, so the loop runs its in-place branches (no worktree create/teardown; every `reset --hard`
+   site becomes HALT+escalate; per-WO `/review --base <cp>` for incremental diffs). All paths are routed
+   **identically**: an inline invocation (Skill tool, depth-0) — **NEVER via the Task tool.** The build
+   atom (dispatched by either loop inside) is the single supported depth-1 spawn; the parallel loop only
+   issues **N** atoms in one message (still depth-1). A Task-dispatched loop would push the atoms to
+   depth-2 (unsupported). Do NOT re-implement either loop here. The parallel and in-place paths are
+   **additive** — they do not change the default sequential worktree behavior.
 
 5. **Emit the `/goal` string.** The loop prints a ready-to-paste `/goal` line; surface it to the
    user. Do NOT run `/goal` yourself — the user pastes it to launch the next attended turn.
@@ -69,9 +96,11 @@ batch size. The **default (no `--parallel`) is unchanged** — the sequential `w
 
 It does **not** build, dispatch, loop, review, or open a PR itself — all of that is owned by the
 `work-order-loop` skill (or `work-order-loop-parallel` under `--parallel`). It does NOT auto-create
-a worktree silently (offer `/worktree` when absent). It does NOT invoke either loop via the Task
-tool (hard inline-only constraint — the parallel loop is just as inline-only as the sequential
-one). It does NOT run `/goal` itself — the user pastes it.
+a worktree silently (offer `/worktree` when absent). Under `--in-place` it does NOT create a worktree
+(builds on the canonical env at `codePath`, operator-gated) and does NOT auto-rework a failing WO (a
+fail HALTs for human inspection — infra state isn't safely resettable). It does NOT invoke either loop
+via the Task tool (hard inline-only constraint — every path is inline-only). It does NOT run `/goal`
+itself — the user pastes it.
 
 ## Related
 

@@ -26,13 +26,25 @@ rules 1–5) — never parse builder prose for control flow. Detail lives in `re
 ## Inputs
 
 - `<task-folder>` — the leaf ai-dev-assistant task whose `work-orders/` you run.
-- `<worktree>` — the code worktree to build in. **You own its lifecycle** (create/attach on entry, tear
+- `<worktree>` — the code worktree to build in (**`worktree` mode**). **You own its lifecycle** (create/attach on entry, tear
   down on clean completion; keep on HALT for inspection). The build atom presupposes a handed worktree.
 - `<base>` — the integration branch the worktree was cut from and the PR targets (**default `main`**).
   Thread it to BOTH `/review --base <base>` (so its merge-base diff is the actual change, not the whole
   branch-vs-`main` divergence — on a non-`main` base, `merge-base main HEAD` is an ancient fork point and
   every PHP file in the divergence false-triggers the gate floor) AND `wo-pr-open.sh --base <base>` (so the
   PR targets the right branch). A non-`main` base that is not passed silently breaks both.
+- `<build_mode>` — `worktree` (default) | `in-place`. **`in-place` is operator-gated** (passed by
+  `run-work-orders --in-place`) for **infra/state** WOs that must mutate the **canonical** environment
+  (composer/drush/config/theme on the main checkout's DDEV), where a per-WO isolated worktree would build
+  state nothing downstream sees. Under `in-place`: `<worktree>` **is** the main checkout (`codePath`); the
+  loop does **NOT** create or tear down a worktree, and — critically — **never `git reset --hard`**. A reset
+  rolls back tracked files but NOT DB / module-enable (DB-stored in Drupal 10+) / `vendor/` state, so it
+  would leave a silent **split-brain** (filesystem at `$cp`, environment at the post-build state). Every
+  `reset --hard` site below therefore becomes **HALT + escalate**, and a review failure is **terminal (no
+  requeue)** — infra operations aren't idempotent like code edits, so a human inspects the accumulated state
+  before any re-dispatch. `in-place` is **sequential-only** (`run-work-orders` rejects `--parallel
+  --in-place`; the parallel conductor's per-WO ephemeral worktrees are structurally incompatible with shared
+  canonical state).
 
 ## Terminal-HALT — the highest-precedence predicate (check FIRST, everywhere)
 
@@ -73,10 +85,14 @@ ref:
   next `dispatch` (step 5) re-increments the attempt (the cap may HALT). **No reset needed** (nothing was
   committed). `ready` + `checkpoint_after` is structurally impossible (the sidecar gets `checkpoint_after`
   only at step 7, by which point the builder has already flipped to `in_progress`).
-- **`in_progress`, sidecar, no `checkpoint_after`** ⇒ crashed mid-build (the builder had flipped): validate
-  `git -C <worktree> merge-base --is-ancestor "$cp" HEAD`, then `git -C <worktree> reset --hard "$cp"`,
-  `set-status <wo> needs_rework` (`in_progress→needs_rework`, legal); the unconditional requeue (step 2)
-  promotes it next pass. This is the row that rolls back a committed-but-uncollected build.
+- **`in_progress`, sidecar, no `checkpoint_after`** ⇒ crashed mid-build (the builder had flipped).
+  **`worktree` mode:** validate `git -C <worktree> merge-base --is-ancestor "$cp" HEAD`, then
+  `git -C <worktree> reset --hard "$cp"`, `set-status <wo> needs_rework` (`in_progress→needs_rework`, legal);
+  the unconditional requeue (step 2) promotes it next pass. This is the row that rolls back a
+  committed-but-uncollected build. **`in-place` mode: do NOT reset** (the reset can't undo the DB/infra state
+  a crashed mid-build may already have applied → split-brain). Instead write `wo-NN.HALT` reason
+  `in_place_crash_manual_recovery`, mark the sidecar halted (`wo-run-state.sh halt`), and escalate — a human
+  reconciles the half-applied canonical state before any re-run.
 - **`in_progress`, `checkpoint_after`, no `wo-NN._review.json`** ⇒ build done, review never ran: resume at
   the review step (step 8) onward WITHOUT a rebuild and WITHOUT a second `dispatch` (no attempt
   re-increment).
@@ -140,7 +156,11 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
 8. **Per-WO review (run for EVERY dispatched WO).** Run `/review --headless --dry-run --base <base> <task-folder>`
    **inline from cwd=`<worktree>`** (command-prose, not a callable; `/review` derives the change from
    `git diff $(git merge-base main HEAD)..HEAD` in its cwd, so it MUST run in the worktree where the build
-   was committed — otherwise it assesses the unchanged main checkout), then
+   was committed — otherwise it assesses the unchanged main checkout). **`in-place` mode:** cwd is the main
+   checkout (`codePath`, already correct for `gh`), but pass **`--base <cp>`** (this WO's `checkpoint_before`
+   sha from the run-state sidecar) instead of the integration `<base>` — with no per-WO worktree isolation,
+   `merge-base <base> HEAD` would fold every prior WO's commits into this WO's diff (false positives);
+   `--base <cp>` scopes the review to this WO's incremental change. Then
    `wo-review-snapshot.sh <task-folder> <wo-NN>` → `wo-NN._review.json`. Forward the review's stdout verdict
    lines to the transcript.
 9. **Critique rung.** Invoke the `work-order-critique` skill **inline** → `wo-NN._critique.json`
@@ -158,12 +178,15 @@ deps are all `done`, or a `needs_rework` WO — step 2 promotes both to `ready`)
     - **clean** ⇒ `_review.json .gate_specific.overall_verdict=="pass"` AND `_critique.json
       blocking==false` AND no `wo-NN.HALT` ⇒ `set-status <wo-file> done` (`in_progress→done`).
     - **failing (retryable)** ⇒ a plain review fail (`.gate_specific.overall_verdict != "pass"`, **no**
-      blocking critique, **no** `wo-NN.HALT`): validate
+      blocking critique, **no** `wo-NN.HALT`). **`worktree` mode:** validate
       `git -C <worktree> merge-base --is-ancestor "$cp" HEAD` (else HALT `reset_target_invalid`), then
       `git -C <worktree> reset --hard "$cp"`, `set-status <wo-file> needs_rework`
       (`in_progress→needs_rework`). The next pass requeues it **unconditionally** (step 2 — a **blind**
       re-dispatch; no feedback injection at L1, see `loop-contract.md`); the cap is enforced **only** at
-      `dispatch` (step 5), which HALTs the WO once `attempts ≥ cap`.
+      `dispatch` (step 5), which HALTs the WO once `attempts ≥ cap`. **`in-place` mode: a review fail is
+      TERMINAL, not retryable** — do NOT `reset --hard` (it can't undo the infra state the build applied) and
+      do NOT requeue. Write `wo-NN.HALT` reason `in_place_review_fail`, mark the sidecar halted, escalate. A
+      human inspects the accumulated canonical-env state and re-dispatches from there if appropriate.
 
 11. **Observability append (non-fatal, ⑤ telemetry lane).** Once step 10 has settled the WO's
     disposition, record it for off-line failure-pattern mining. Run, **once per WO**:

@@ -1,4 +1,4 @@
-# Worktree Conventions v1.2
+# Worktree Conventions v1.3
 
 **Introduced:** ai-dev-assistant v3.16.0
 **Owner:** `commands/worktree.md`, `commands/worktree-prune.md`, `commands/implement.md` (recommendation), `commands/complete.md` (lifecycle)
@@ -103,18 +103,35 @@ Lists existing worktrees with their state:
 
 Per worktree: `[y]es remove / [n]o keep / [q]uit`. Never bulk-removes silently. Refuses to remove worktrees with uncommitted changes (honors git's refusal); user resolves manually.
 
-## 8. Dev-environment tool compatibility
+## 8. DDEV-aware worktrees (`--ddev-up`)
 
-For projects with a `.ddev/config.yaml` in `codePath`:
+For Drupal projects with a `.ddev/config.yaml` in `codePath`, `/worktree --ddev-up` gives the worktree its **own isolated DDEV project** (own web + db containers) and seeds it from the main site — the official DDEV git-worktree workflow (<https://ddev.com/blog/git-worktree-contributor-training/>). This is what makes the worktree+PR agent loop viable for **code-authoring** Drupal WOs that need a live env to verify against. (DDEV is optional Drupal-flavored wiring; the engine stays stack-agnostic — a non-`.ddev` project simply skips this.)
 
-- **Requires the `name:` key removed from `.ddev/config.yaml`** — the tool will then derive the project name from each worktree's directory automatically (`.worktrees/feature-foo/` → `https://feature-foo.ddev.site`)
-- Framework detects `.ddev/config.yaml` presence + parses for `name:` key + warns user before creation if set; never auto-edits the config
+### 8.1 Auto-naming (the name-conflict guard)
 
-If `name:` is set, `/worktree` warns:
+A DDEV project name **must be unique**; two projects sharing a `name:` collide — `ddev start` on the second refuses with `project root is already set … refusing to change it`. The fix is **auto-naming**: with no pinned `name:`, each worktree's directory becomes its project name (`.worktrees/feature-foo/` → `https://feature-foo.ddev.site`).
 
-> `.ddev/config.yaml` has `name: <x>` set. Multiple worktrees with the same name will conflict at dev-environment startup. Recommended: remove the `name:` line and commit, OR use `/worktree --no-ddev-check` to proceed anyway.
+- **Recommended global default:** `ddev config global --omit-project-name-by-default` (once) — every future worktree auto-names with no per-project edit.
+- **Or** remove the `name:` line from `.ddev/config.yaml` and commit.
+- `/worktree` detects a pinned `name:` and warns; **under `--ddev-up` a pinned `name:` is a hard halt** (no `[c]ontinue`, and `--no-ddev-check` does not bypass it) — you cannot bring up a correctly-named isolated instance with a pinned name. Never auto-edits the config.
 
-User chooses [c]ontinue / [a]bort / [s]how-instructions.
+### 8.2 Seeding (copy, never share)
+
+Each worktree gets its **own** DB — the state is **copied** from the main project, never shared. (Pointing a worktree at the main project's db container is explicitly NOT used: DDEV resets the DB host on restart, and two web containers writing one DB risks cache/schema/lock corruption — see the DDEV research in `aida-gaps.md`.) `/worktree --ddev-up` (without `--ddev-no-seed`):
+
+1. `ddev start` in the worktree (its own containers).
+2. From the **main** checkout: `ddev export-db --file=<shared>/db.sql.gz` (+ `tar` the files dir, docroot derived from `.ddev/config.yaml`).
+3. In the worktree: `ddev import-db` (+ `ddev import-files`).
+
+`--ddev-no-seed` brings the instance up empty. A DB export/import is minutes on a large site and each worktree holds its own DB volume (disk) — hence `--ddev-up` is opt-in (default OFF), never implicit.
+
+### 8.3 Teardown ordering (mandatory)
+
+`/worktree-prune` **must `ddev delete --omit-snapshot --yes` the worktree's DDEV project BEFORE `git worktree remove`.** Removing the dir first leaves an **orphaned DDEV registry entry** (DDEV still has the project root registered → the next same-name worktree fails `ddev start`). The DB is a throwaway copy, so `--omit-snapshot` skips the slow auto-snapshot.
+
+### 8.4 Infra/state WOs build in-place, NOT in a worktree
+
+The ephemeral worktree above is for **code-authoring** WOs (durable output = files, PR-able). An **infra/state** WO (composer require + drush en + config import + theme build) produces env state — DB schema, enabled modules, built theme — that must land on the **canonical** integration env. A per-worktree isolated DDEV builds it where nothing downstream sees it. Those WOs use **build-in-place** mode instead (see `references/work-order-lifecycle.md`): build on the main checkout's DDEV, operator-gated. The taxonomy: **code-authoring WO → ephemeral-worktree (`--ddev-up`) + PR; infra/state WO → build-in-place.**
 
 ## 9. Refusal cases
 
@@ -240,7 +257,7 @@ task-completed), the native sweep is not.
 
 - **Major bumps** (`2.0`) are breaking: changes to directory priority semantics, branch-naming default, signal-strength thresholds, lifecycle path order.
 - **Minor bumps** (`1.1`) are additive: new optional signal types, new lifecycle paths, additional refusal cases, new flags, new documentation sections.
-- v1.0 committed for v3.16.0; v1.1 (additive, native worktree support) for v4.7.0; v1.2 (session-ID-salted session files) for v4.9.0.
+- v1.0 committed for v3.16.0; v1.1 (additive, native worktree support) for v4.7.0; v1.2 (session-ID-salted session files) for v4.9.0; v1.3 (additive, DDEV-aware worktrees `--ddev-up` + teardown ordering + infra/state build-in-place taxonomy) for v5.16.0.
 
 ## 13. Non-goals (deferred to v2)
 
