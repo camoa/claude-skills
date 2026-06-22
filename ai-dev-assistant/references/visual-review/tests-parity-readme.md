@@ -104,6 +104,56 @@ elements whose computed styles are compared. Absent → a sensible default set
 (`h1`–`h3`, `button`/`.button`/`.cta`, `main`). Keep the list short and
 specific to the surface's key elements.
 
+## Cross-stack parity (React → Drupal)
+
+When the reference is a React component or template and the build is a Drupal
+page, the two captures come from **different rendering engines**. A non-zero
+diff floor (antialiasing, font hinting, sub-pixel layout, scrollbar gutter) is
+**expected and normal** — the goal is to make the diff salient, not drive the
+ratio to zero.
+
+The following per-surface `parity_reference` fields in `registry.yml` address
+this:
+
+- **`dimension_align`** — `crop-min` (default: compares the common/min height
+  region only) or `pad-max` (aligns both captures to the taller height,
+  bottom-padding the shorter side with magenta). Use `pad-max` for cross-stack
+  surfaces so that a missing or extra section surfaces as diff instead of being
+  cropped away.
+- **`max_diff_ratio`** — a pixel-diff ratio in the open interval (0, 1) that
+  overrides the global `PARITY_MAX_DIFF_RATIO` env var for that surface alone.
+  Cross-stack or image-heavy surfaces typically need a higher floor (e.g.
+  `0.15`). Distinct from pixelmatch's internal per-pixel sensitivity, which is
+  fixed.
+- **`masks`** — the surface's top-level `masks:` CSS-selector list from the
+  registry is forwarded into both the build and reference captures. Any element
+  marked with the attribute `data-vrt-mask` is also masked. Masked regions are
+  painted magenta before diffing, so volatile content (timestamps, seeded data)
+  never inflates the diff ratio.
+- **`content_floor`** — a minimum-rendered-content guard on the build
+  (candidate), shape `{minHeight: <px>, selectors: {<css>: <minCount>}}`. The
+  surface **fails** (not silently passes) when the candidate renders below the
+  floor — guarding the failure mode where an empty or unseeded port passes the
+  diff because there is nothing to diff.
+
+**Env var: `PARITY_REFERENCE_BASE_URL`** — when a renderable reference `uri`
+is relative, it is resolved against this URL at run time (e.g. a DDEV URL in
+development, a staging URL in CI). Absolute URIs are used as-is. When unset,
+relative renderable URIs are treated as confined file paths, the prior
+behaviour.
+
+**HTML report — Expected / Actual / Diff slider.** The engine attaches the
+expected (reference), actual (build), and diff PNGs to each surface result.
+This activates the Playwright HTML-report slider on that result, turning the
+automated pixel metric into a human-adjudicable verdict — the metric triages,
+the slider decides.
+
+**JSONL trend stream.** One JSON line per surface/run is appended to
+`parity-results/parity-stats.jsonl` (fields: `surfaceId`, `project`,
+`viewport`, `diffRatio`, `diffPixels`, `totalPixels`, `width`, `height`,
+`timestamp`). Safe under parallel workers. Path overridable via
+`PARITY_STATS_PATH`. Lives under the already-gitignored `parity-results/`.
+
 ## `react-template` v1 scope
 
 A `react-template` reference must be a **pre-rendered HTML file** (static

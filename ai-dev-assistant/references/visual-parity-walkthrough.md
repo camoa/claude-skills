@@ -41,6 +41,35 @@ non-empty. That second clause is the point: a surface with a perfect pixel score
 `font-weight 400 vs 500` drift still fails — because the build does not match the
 design intent.
 
+### Cross-stack parity (different rendering engines)
+
+When the reference is a React template and the build is a Drupal page, the two
+captures come from different rendering engines. A non-zero diff floor —
+antialiasing, font hinting, sub-pixel layout, scrollbar gutter — is expected
+and normal. The cross-stack workflow makes the diff **salient**, not zero.
+
+Opt a surface in by setting four registry fields:
+
+- **`dimension_align: pad-max`** — aligns both captures to the taller height,
+  bottom-padding the shorter side with magenta, so a missing or extra section
+  surfaces as diff instead of being cropped away (the default `crop-min`
+  compares only the common/min height region).
+- **`max_diff_ratio`** — a higher per-surface pixel-diff ratio (e.g. `0.15`)
+  overrides the global `PARITY_MAX_DIFF_RATIO` for that surface alone. This is
+  the right lever for intentionally content-divergent cross-stack surfaces;
+  raising the global ratio would affect same-stack surfaces too.
+- **`masks`** — the surface's top-level selector list plus any `data-vrt-mask`
+  elements are forwarded into both captures. Masked regions are painted magenta
+  before diffing, so volatile content never inflates the ratio.
+- **`content_floor`** *(optional)* — a minimum-rendered-content guard on the
+  build (candidate), shape `{minHeight: <px>, selectors: {<css>: <minCount>}}`.
+  Prevents the failure mode where an empty or unseeded port silently passes
+  because there is nothing to diff.
+
+The HTML report's **Expected / Actual / Diff slider** (the engine attaches all
+three PNGs per surface result) is the human-adjudication signal: the automated
+metric triages, the slider decides.
+
 ## 3. Capability is tiered by reference type
 
 A CSS-actionable diff needs CSS on **both** sides. A flat PNG has none.

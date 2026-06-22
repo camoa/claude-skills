@@ -29,6 +29,24 @@ A project that **declares** a playbook set which **resolves to 0 plays** (the se
 New `tests/ddev-worktree-spec.sh` (19 assertions) — incl. one asserting the **recovery-disposition table row** itself (the artifact the loop routes from) carries the in-place no-reset split, not just the SKILL prose. `tests/validate-playbook-adherence-spec.sh` extended with GAP-C assertions (gate skip-reason split + the loader warning fires on a declared-empty set and stays silent on `none`).
 
 *(This release consolidates what were two PRs (GAP B #225 + GAP A #226) into one to avoid a 3-PR merge-chain; both closed in favour of this.)*
+## [5.14.0] - 2026-06-19
+
+**Feature: cross-stack (React → Drupal) visual parity.** The visual-parity engine (`references/visual-review/parity-compare.mjs`, `ENGINE_VERSION` 4.14.0 → 4.15.0) gains eight additive deltas so parity is meaningful when the reference and the build come from *different* rendering engines (Vite/React vs Drupal/Twig), where an exact pixel match is impossible and a non-zero diff floor is expected. Every delta is opt-in/back-compatible — a surface that adopts none captures exactly as it did at v4.14.0. Surface-registry schema → v1.3 (additive). This upstreams the engine half of the cross-stack converter route; no converter-side code change is needed to benefit.
+
+### Fixed
+- **Masks were never forwarded into the parity capture (latent bug).** `data-vrt-mask` was documented but `page.screenshot()` was called with no `mask:`, so masked regions still contributed diff pixels. The capture now masks the surface's registry `masks` selectors **and** the universal `[data-vrt-mask]` attribute on both the build and reference sides (painted magenta `#ff00ff`).
+
+### Added
+- **`dimension_align` (per-surface):** `crop-min` (default, prior behaviour) or `pad-max` — aligns to the taller height and bottom-pads the shorter side with the mask colour, so below-the-fold divergence (a missing/extra section) surfaces as diff instead of being cropped away.
+- **`max_diff_ratio` (per-surface):** a pixel-diff ratio in (0,1) that overrides the global `PARITY_MAX_DIFF_RATIO` for one surface. The engine writes the *effective* value into the result fragment and `visual-parity-gate.sh` reads it back, so the gate verdict and the spec assertion always use the identical threshold (the F1 verdict-parity rule).
+- **`content_floor` (per-surface):** a minimum-rendered-content guard (`{minHeight, selectors:{<css>:<min>}}`) that *fails* a surface when the build renders too little — guarding the empty/unseeded-port false pass.
+- **Expected/Actual/Diff slider:** the engine writes expected (reference) + actual (build) + diff PNGs and attaches them with the `-expected.png`/`-actual.png`/`-diff.png` name suffixes that activate the Playwright HTML-report slider — the human-adjudication signal (metric triages, slider decides).
+- **JSONL trend stream:** one line per surface/run appended to `parity-results/parity-stats.jsonl` (worker-safe; path overridable via `PARITY_STATS_PATH`).
+- **`PARITY_REFERENCE_BASE_URL`:** resolves a *relative* renderable reference `uri` against a base URL at run time, so one registry runs against ddev / CI / staging unchanged (absolute URIs unchanged).
+
+### Changed
+- **Capture stabilisation:** before each screenshot the engine injects freeze CSS (no transitions/animations, transparent caret, `scroll-behavior:auto`), awaits `document.fonts.ready`, then a double `requestAnimationFrame` — strictly lowers false-positive diff.
+- `surface-registry-schema.md` → v1.3 (three optional `parity_reference` fields + `masks` now feed parity); `/setup-visual-parity` writes the new fields into `parity-surfaces.json`; the generated parity spec forwards them. New pure-logic + end-to-end gate tests cover the per-surface threshold, content-floor verdict, base-URL resolution, and pad-max alignment.
 
 ## [5.13.1] - 2026-06-19
 

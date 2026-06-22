@@ -1,8 +1,9 @@
-# Surface Registry Schema v1.2
+# Surface Registry Schema v1.3
 
 **Introduced:** ai-dev-assistant v4.11.0 (Task A — `visual_and_e2e_review_gates`)
 **v1.1:** v4.14.0 (Task D) — extends the `parity_reference` object additively
 **v1.2:** v5.1.0 — adds the framework-agnostic `auth_context` surface field and the optional top-level `e2e.preflight_command`, both additive. These are the two generic seams that let the e2e/visual gates run stack-neutral while a process recipe supplies the framework-specific values.
+**v1.3:** v5.14.0 — adds three optional `parity_reference` fields for cross-stack (React→Drupal) parity — `dimension_align`, `max_diff_ratio`, `content_floor` — and forwards the existing surface `masks` into the parity capture. All additive.
 **Owner:** `commands/review.md` step 6 (change-impact dispatcher)
 **Consumers:** `/setup-e2e` + `/validate:e2e` (Task B), the reworked
 `validate-visual-regression` (Task C), `/setup-visual-parity` + the reworked
@@ -57,7 +58,7 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 ## 3. Project registry schema (`registry.yml`) v1.2
 
 ```yaml
-schema_version: "1.2"
+schema_version: "1.3"
 e2e:                             # optional top-level block
   preflight_command: "<stack-setup-command>"   # framework-agnostic; value is project-specific
 viewports:                       # project default viewport matrix
@@ -94,7 +95,7 @@ object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes
 
 | Key | Type | Required | Notes |
 |---|---|---|---|
-| `schema_version` | string | yes | `"1.0"` (v4.11.0), `"1.1"` (v4.14.0+), or `"1.2"` (v5.1.0+). Consumers gate on major; a lower-minor registry is a valid higher-minor registry (every minor addition is optional). |
+| `schema_version` | string | yes | `"1.0"` (v4.11.0), `"1.1"` (v4.14.0+), `"1.2"` (v5.1.0+), or `"1.3"` (v5.14.0+). Consumers gate on major; a lower-minor registry is a valid higher-minor registry (every minor addition is optional). |
 | `e2e` | object | no | Optional e2e configuration block. Absent ⇒ the e2e gate runs no preflight. |
 | `viewports` | list | yes | The project default viewport matrix. Each entry is a **viewport descriptor**. |
 | `surfaces` | list | yes | Zero or more **surface entries**. Empty list is valid (set up, no surfaces yet). |
@@ -107,7 +108,7 @@ object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes
 | `url` | string | yes | Path or absolute URL of the surface. Relative paths resolve against the Playwright `baseURL`. |
 | `gates` | list | yes | Subset of `[e2e, visual_regression, visual_parity]` — which gates apply to this surface. Empty list = registered but no gate runs it. |
 | `viewports` | list | no | List of viewport **names** (from `viewports[].name`). Absent ⇒ the project default matrix applies. |
-| `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. |
+| `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. **(v1.3)** Also forwarded into the visual-**parity** capture (both sides), alongside the universal `[data-vrt-mask]` attribute selector. |
 | `auth_context` | string \| null | no | `null`/absent ⇒ anonymous capture. A non-null **opaque context name** `"<ctx>"` routes the surface through the authenticated-VR seam (wired in v1.2, no longer reserved). See the concrete contract below. Framework-agnostic: the plugin treats `<ctx>` as an opaque key and never learns how the auth was obtained; the stack's process recipe supplies the login. |
 | `parity_reference` | object \| null | no | `null`, or the **parity-reference object**. Consumed by `/setup-visual-parity` + `/validate:visual-parity` (Task D). |
 
@@ -149,7 +150,7 @@ Either an explicit pixel size **or** a Playwright device name — never both:
 | `width` / `height` | int | one form | Explicit pixel size. Both required together. |
 | `device` | string | one form | A Playwright built-in device name. Mutually exclusive with `width`/`height`. |
 
-### 3.4 Parity-reference object (v1.1)
+### 3.4 Parity-reference object (v1.1; cross-stack fields v1.3)
 
 The `parity_reference` field is `null` (the surface has no design comp) or an object
 declaring the external design reference the surface is checked against. `/setup-visual-parity`
@@ -159,11 +160,20 @@ optional** — a v1.0-shaped `{type, uri}` object remains valid.
 | Field | Type | Required | Contract |
 |---|---|---|---|
 | `type` | enum | yes | `figma` \| `react-template` \| `html-template` \| `image` \| `prod-url`. **Renderable** (`html-template`, `react-template`, `prod-url`) → both sides have a DOM → full CSS-actionable diff. **Static** (`figma`, `image`) → a flat PNG, no DOM → build-only diff. |
-| `uri` | string | yes | A **file path** (for `figma`, `image`, `html-template`, and a pre-rendered `react-template`) or an **`http(s)` URL** (for `prod-url`, or a `react-template` served by a dev server). File paths must resolve within `codePath` or be a user-confirmed absolute path; non-`http(s)` schemes are rejected for `prod-url`. |
+| `uri` | string | yes | A **file path** (for `figma`, `image`, `html-template`, and a pre-rendered `react-template`) or an **`http(s)` URL** (for `prod-url`, or a `react-template` served by a dev server). File paths must resolve within `codePath` or be a user-confirmed absolute path; non-`http(s)` schemes are rejected for `prod-url`. A **relative** renderable `uri` is resolved against the `PARITY_REFERENCE_BASE_URL` env var at run time (v1.3) so one registry runs against ddev / CI / staging unchanged; an absolute `uri` is used as-is. |
 | `reference_hash` | string \| null | no | Lowercase hex sha256 of the reference **file**. `null` for URL-only references (`prod-url`, served `react-template`) — a live URL has no stable hash. Drives "reference changed since last compare" drift detection. |
 | `compare_selectors` | list | no | CSS selectors whose computed styles are compared across build and reference. Absent ⇒ the gate's default set (headings `h1`–`h3`, `button`/`.button`/`.cta`, the main content container). |
 | `notes` | string | no | Free-text — e.g. an accepted intentional deviation recorded by `[i]` classification. Never executed; display-only. |
 | `last_compared_at` | string \| null | no | ISO-8601 UTC of the last `/validate:visual-parity` run touching this surface. Written by the gate. |
+| `dimension_align` | enum | no | **(v1.3)** `crop-min` (default) \| `pad-max`. `crop-min` compares the common (min) region — the v4.14.0 behaviour. `pad-max` aligns to the taller height and bottom-pads the shorter side with the mask colour, so below-the-fold divergence (a missing/extra section) surfaces instead of being cropped away. Cross-stack (React-vs-Drupal) callers opt into `pad-max`. |
+| `max_diff_ratio` | number | no | **(v1.3)** Per-surface coarse pixel-diff **ratio** gate in the open interval `(0,1)`. Overrides the global `PARITY_MAX_DIFF_RATIO` for this surface; absent/out-of-range ⇒ the global applies. Image-heavy or intentionally content-divergent cross-stack surfaces need a higher floor than the global default. Distinct from pixelmatch's per-**pixel** sensitivity (internal, fixed). |
+| `content_floor` | object | no | **(v1.3)** Minimum-rendered-content guard on the **build** (candidate). `{minHeight?: <px>, selectors?: {<css>: <minCount>}}`. The surface **fails** (not silently passes) when the candidate renders below the floor — guarding the failure mode where an empty/unseeded port passes the diff because there is nothing to diff. |
+
+**Masks feed parity capture (v1.3).** A surface's top-level `masks:` list (§3.2) is now
+forwarded into the parity screenshot on **both** the build and reference sides, alongside
+the universal `[data-vrt-mask]` attribute selector (which a template can carry directly).
+Masked regions are painted the mask colour before diffing, so volatile content
+(timestamps, seeded data) never inflates the diff. No new field — `masks` is reused.
 
 **v1.0 → v1.1 changes (all additive):** `type` widens from `{figma, prod, mockup}` to
 `{figma, react-template, html-template, image, prod-url}`. `prod` is renamed `prod-url`
@@ -261,6 +271,12 @@ Task B/C/D commands — all of which parse YAML natively. The sibling
   and the optional top-level `e2e.preflight_command`. Both additive: a pre-v1.2
   consumer ignores them; the gates degrade to anonymous capture / no preflight when
   absent. These are the generic seams that make the e2e and visual gates framework-agnostic.
+- **v1.3 committed for v5.14.0** — adds three optional `parity_reference` fields
+  (`dimension_align`, `max_diff_ratio`, `content_floor`) and forwards the existing
+  surface `masks` into the parity capture. All additive: a pre-v1.3 consumer ignores
+  the new fields; a surface that sets none captures exactly as it did at v4.14.0
+  (`crop-min`, global ratio, no content guard). These make cross-stack React→Drupal
+  parity salient without a converter-side change.
 
 ## 8. Non-goals
 
