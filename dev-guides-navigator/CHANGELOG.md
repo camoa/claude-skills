@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.3 (2026-06-22)
+
+### Changed — docs
+- **store-contract.md: recipe-loader cut over to the shared store (Follow-up A, partial).** Recorded that ai-dev-assistant's `recipe-loader` (5.15.0) now reads the recipe index + bodies directly from the shared store (`indexes/agentic-recipes.json` `.content` + content-addressed `blobs/<sha8>`), needing no `lock-read` because it already holds the index-line sha. `work-order-compiler` (`wo-compile.sh lockfile-sha`) still reads the legacy per-project shim (it resolves a sha *from* the lockfile). No behavior change to the navigator itself.
+
 ## 0.11.2 (2026-06-19)
 
 ### Changed — docs

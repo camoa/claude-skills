@@ -191,7 +191,7 @@ KG metadata in each topic's `index.md` prevents routing to the wrong guide:
 
 ## Version
 
-See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Current version: **0.11.2**.
+See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Current version: **0.11.3**.
 
 ## License
 
