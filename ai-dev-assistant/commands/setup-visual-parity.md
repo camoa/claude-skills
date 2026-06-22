@@ -175,6 +175,18 @@ On `[y]`, collect:
   compared. Offer the default set (`h1`–`h3`, `button`/`.button`/`.cta`, `main`); the
   user may replace it with surface-specific selectors.
 
+Cross-stack options (optional; **offer only when the reference is a different rendering
+engine than the build** — e.g. a React/Vite reference vs a Drupal/Twig build — where an
+exact pixel match is impossible). Default `[n]` each; a surface that takes none behaves
+exactly as it did at v4.14.0:
+
+- **`dimension_align`** — `pad-max` to compare full height (a missing/extra section below
+  the fold surfaces as diff) vs `crop-min` (default, compares the common region).
+- **`max_diff_ratio`** — a per-surface pixel-diff ratio in `(0,1)` that overrides the
+  global `PARITY_MAX_DIFF_RATIO` for an image-heavy / intentionally-divergent surface.
+- **`content_floor`** — a minimum-rendered-content guard, `{minHeight, selectors:{<css>:<min>}}`,
+  that **fails** the surface when the build renders too little (empty / unseeded port).
+
 For a **static** reference (`figma`/`image`): if the file is outside `tests/parity/references/`,
 copy it to `<codePath>/tests/parity/references/<id>.<ext>` so it is committed and
 team-shared; set `uri` to that path. Compute its sha256 → `reference_hash`. A static
@@ -200,11 +212,16 @@ Write the result into the surface entry:
       uri: <uri>
       reference_hash: <sha256 | null>
       compare_selectors: [<selectors>]          # omit when the default set is used
+      # cross-stack (v1.3), all optional — omit any the surface does not need:
+      dimension_align: pad-max                   # omit ⇒ crop-min (default)
+      max_diff_ratio: 0.40                        # omit ⇒ global PARITY_MAX_DIFF_RATIO
+      content_floor: {minHeight: 800, selectors: {".card": 6}}
 ```
 
-Bump the registry's `schema_version` to `"1.1"` if it is still `"1.0"` (the
-`parity_reference` object shape is the v1.1 addition — see
-`references/visual-review/surface-registry-schema.md`).
+Bump the registry's `schema_version` to the highest minor whose fields are present:
+`"1.1"` for a `parity_reference` (was `"1.0"`), or `"1.3"` when any cross-stack field
+(`dimension_align` / `max_diff_ratio` / `content_floor`) is written. Both are additive —
+see `references/visual-review/surface-registry-schema.md`.
 
 On `[s]`, stop asking and proceed with whatever has been registered so far.
 
@@ -237,7 +254,11 @@ visual-parity-v1 spec-injection hazard). Instead:
        "buildUrl": "<surface url>",
        "referenceType": "<parity_reference.type>",
        "referenceUri": "<parity_reference.uri>",
-       "compareSelectors": ["<…>"]
+       "compareSelectors": ["<…>"],
+       "maskSelectors": ["<…>"],
+       "dimensionAlign": "<crop-min | pad-max>",
+       "maxDiffRatio": <number | omit>,
+       "contentFloor": { "minHeight": <px>, "selectors": { "<css>": <minCount> } }
      }
    }
    ```
@@ -245,6 +266,16 @@ visual-parity-v1 spec-injection hazard). Instead:
    `compareSelectors` is the surface's `compare_selectors` array, or `[]` when it
    registered none (the engine then applies its default set). This file is pure
    **data** — the specs read it at run time; nothing here becomes code.
+
+   The cross-stack fields (v1.3) are all **optional** — emit a key only when the
+   surface carries the corresponding value; omit it otherwise so the engine applies
+   the v4.14.0 default. Map each from the registry surface:
+   - `maskSelectors` ← the surface's top-level **`masks`** list (the same selectors VR
+     masks). Omit/`[]` when none — the engine still masks `[data-vrt-mask]` universally.
+   - `dimensionAlign` ← `parity_reference.dimension_align` (`crop-min` default; `pad-max`
+     for cross-stack full-height comparison).
+   - `maxDiffRatio` ← `parity_reference.max_diff_ratio` (per-surface ratio gate).
+   - `contentFloor` ← `parity_reference.content_floor` (minimum-rendered-content guard).
 
 2. **Spec → verbatim copy.** Copy
    `${CLAUDE_PLUGIN_ROOT}/references/visual-review/_parity-starter.spec.ts`

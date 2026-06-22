@@ -21,6 +21,15 @@ import {
   RENDERABLE_TYPES,
   DEFAULT_MAX_DIFF_RATIO,
   ENGINE_VERSION,
+  resolveMaxDiffRatio,
+  normalizeDimensionAlign,
+  resolveReferenceUri,
+  contentFloorViolations,
+  alignRGBA,
+  cropRGBA,
+  DEFAULT_DIMENSION_ALIGN,
+  DIMENSION_ALIGN_MODES,
+  MASK_COLOR_RGBA,
 } from '../references/visual-review/parity-compare.mjs';
 
 let fail = 0;
@@ -37,7 +46,7 @@ const throws = (fn, m) => {
 };
 
 // === ENGINE_VERSION (paper-test F7) ===
-eq(ENGINE_VERSION, '4.14.0', 'ENGINE_VERSION is the machine-readable engine version');
+eq(ENGINE_VERSION, '4.15.0', 'ENGINE_VERSION is the machine-readable engine version');
 
 // === projectViewport ===
 eq(projectViewport('parity-chromium-desktop'), 'desktop', 'projectViewport strips the prefix');
@@ -149,6 +158,82 @@ const identical = compareStyles(
   ['h1'],
 );
 eq(identical.rows, [], 'compareStyles: identical styles → empty diff (parity pass)');
+
+// === resolveMaxDiffRatio (D4 — per-surface ratio gate) ===
+eq(resolveMaxDiffRatio(0.4, 0.05), 0.4, 'resolveMaxDiffRatio: a valid per-surface number overrides the global');
+eq(resolveMaxDiffRatio('0.85', 0.05), 0.85, 'resolveMaxDiffRatio: a valid numeric string overrides the global');
+eq(resolveMaxDiffRatio(undefined, 0.05), 0.05, 'resolveMaxDiffRatio: undefined → global fallback');
+eq(resolveMaxDiffRatio(null, 0.05), 0.05, 'resolveMaxDiffRatio: null → global fallback');
+eq(resolveMaxDiffRatio(0, 0.05), 0.05, 'resolveMaxDiffRatio: 0 (out of open interval) → fallback');
+eq(resolveMaxDiffRatio(1, 0.05), 0.05, 'resolveMaxDiffRatio: 1 (out of open interval) → fallback');
+eq(resolveMaxDiffRatio(1.5, 0.05), 0.05, 'resolveMaxDiffRatio: > 1 → fallback');
+eq(resolveMaxDiffRatio('nope', 0.05), 0.05, 'resolveMaxDiffRatio: non-numeric → fallback');
+
+// === normalizeDimensionAlign (D3) ===
+eq(normalizeDimensionAlign('pad-max'), 'pad-max', 'normalizeDimensionAlign: pad-max passes through');
+eq(normalizeDimensionAlign('crop-min'), 'crop-min', 'normalizeDimensionAlign: crop-min passes through');
+eq(normalizeDimensionAlign(undefined), DEFAULT_DIMENSION_ALIGN, 'normalizeDimensionAlign: undefined → default (crop-min)');
+eq(normalizeDimensionAlign('bogus'), 'crop-min', 'normalizeDimensionAlign: unknown mode → crop-min (safe default)');
+truthy(DIMENSION_ALIGN_MODES.has('crop-min') && DIMENSION_ALIGN_MODES.has('pad-max'),
+  'DIMENSION_ALIGN_MODES holds both modes');
+
+// === resolveReferenceUri (D7 — base-URL resolution) ===
+eq(resolveReferenceUri('https://prod.example/landing', 'https://base.example'),
+   'https://prod.example/landing', 'resolveReferenceUri: an absolute http(s) URI passes through unchanged');
+eq(resolveReferenceUri('/projects', 'https://react.ddev.site:8443'),
+   'https://react.ddev.site:8443/projects', 'resolveReferenceUri: relative + base → joined URL (single slash)');
+eq(resolveReferenceUri('projects', 'https://react.ddev.site/'),
+   'https://react.ddev.site/projects', 'resolveReferenceUri: trailing base slash + leading none → one slash');
+eq(resolveReferenceUri('themes/foo/design/home.html', ''),
+   'themes/foo/design/home.html', 'resolveReferenceUri: no base → relative URI returned untouched (v4.14.0 behaviour)');
+eq(resolveReferenceUri('themes/foo/design/home.html', undefined),
+   'themes/foo/design/home.html', 'resolveReferenceUri: undefined base → untouched');
+eq(resolveReferenceUri('/x', 'not-a-url'),
+   '/x', 'resolveReferenceUri: non-http base is ignored (URI returned untouched)');
+
+// === contentFloorViolations (D8 — minimum-rendered-content guard) ===
+eq(contentFloorViolations({ height: 2000, counts: {} }, { minHeight: 800 }), [],
+   'contentFloorViolations: rendered height above the floor → no violation');
+eq(contentFloorViolations({ height: 120, counts: {} }, { minHeight: 800 }),
+   ['rendered height 120px < required 800px'],
+   'contentFloorViolations: rendered height below the floor → a violation');
+eq(contentFloorViolations({ height: 0, counts: { '.card': 9 } }, { selectors: { '.card': 9 } }), [],
+   'contentFloorViolations: selector count meets the floor → no violation');
+truthy(
+  contentFloorViolations({ height: 0, counts: { '.card': 2 } }, { selectors: { '.card': 9 } })
+    .some((v) => v.includes('.card') && v.includes('2') && v.includes('9')),
+  'contentFloorViolations: selector count below the floor → a violation naming got vs required',
+);
+eq(contentFloorViolations({ height: 0, counts: {} }, null), [],
+   'contentFloorViolations: no floor → no violations');
+truthy(
+  contentFloorViolations({ height: 10, counts: { '.card': 0 } },
+    { minHeight: 800, selectors: { '.card': 3 } }).length === 2,
+  'contentFloorViolations: both a height and a selector miss → two violations',
+);
+
+// === alignRGBA (D3 — pad-max alignment) vs cropRGBA (crop-min) ===
+// A 2x2 PNG-like: 4 distinct opaque pixels (R/G/B/white), row-major RGBA.
+const png2x2 = {
+  width: 2,
+  height: 2,
+  data: Buffer.from([
+    255, 0, 0, 255,   0, 255, 0, 255,      // row 0: red, green
+    0, 0, 255, 255,   255, 255, 255, 255,  // row 1: blue, white
+  ]),
+};
+// pad to 2x3: rows 0-1 preserved, row 2 is the magenta pad colour.
+const padded = alignRGBA(png2x2, 2, 3, MASK_COLOR_RGBA);
+eq([...padded.subarray(0, 8)], [255, 0, 0, 255, 0, 255, 0, 255],
+   'alignRGBA: row 0 is preserved exactly (red, green)');
+eq([...padded.subarray(16, 24)], [255, 0, 255, 255, 255, 0, 255, 255],
+   'alignRGBA: the padded row 2 is the magenta MASK_COLOR_RGBA on both pixels');
+// crop to 1x1: just the top-left red pixel.
+eq([...alignRGBA(png2x2, 1, 1, MASK_COLOR_RGBA)], [255, 0, 0, 255],
+   'alignRGBA: cropping to 1x1 yields the top-left pixel (no pad needed)');
+// cropRGBA must remain byte-identical to the same-size crop (crop-min back-compat).
+eq([...cropRGBA(png2x2, 1, 2)], [...alignRGBA(png2x2, 1, 2, MASK_COLOR_RGBA)],
+   'cropRGBA and alignRGBA agree when the target fits inside the image (crop-min unchanged)');
 
 if (fail) {
   console.error('\nparity-compare.mjs pure-logic invariants violated.');

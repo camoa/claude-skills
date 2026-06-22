@@ -1,5 +1,5 @@
 /**
- * VISUAL PARITY SPEC — ai-dev-assistant v4.14.0 (Task D).
+ * VISUAL PARITY SPEC — ai-dev-assistant v4.14.0 (Task D); cross-stack fields v5.14.0.
  *
  * /setup-visual-parity copies this file VERBATIM (no token substitution) once per
  * registry surface that has a `parity_reference`, to <codePath>/tests/parity/<surface-id>.spec.ts.
@@ -54,6 +54,11 @@ test.describe(`${surfaceId} visual parity`, () => {
       referenceType: cfg.referenceType,
       referenceUri: cfg.referenceUri,
       compareSelectors: cfg.compareSelectors,
+      // cross-stack deltas — all optional; absent ⇒ v4.14.0 behaviour:
+      maskSelectors: cfg.maskSelectors,   // D1 — registry `masks` + universal [data-vrt-mask]
+      dimensionAlign: cfg.dimensionAlign, // D3 — 'pad-max' compares full height; default 'crop-min'
+      maxDiffRatio: cfg.maxDiffRatio,     // D4 — per-surface ratio gate; falls back to PARITY_MAX_DIFF_RATIO
+      contentFloor: cfg.contentFloor,     // D8 — minimum-rendered-content guard
     });
   });
 });

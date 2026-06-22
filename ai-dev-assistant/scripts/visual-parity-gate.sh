@@ -29,12 +29,17 @@
 # Per-surface verdict (this script is the single authority — the spec assertion
 # is only for the npx exit code):
 #   skipped              — the .parity.json has skipped:true
-#   fail                 — pixel_diff_ratio >= PARITY_MAX_DIFF_RATIO  OR  css_diff non-empty
+#   fail                 — content_floor_failed  OR  pixel_diff_ratio >= the surface's
+#                          EFFECTIVE max_diff_ratio  OR  css_diff non-empty
 #   pass                 — otherwise
+# The effective max_diff_ratio is the per-surface value parity-compare.mjs resolved (D4,
+# its own .max_diff_ratio) else the global PARITY_MAX_DIFF_RATIO — the gate reads the
+# fragment's value so its verdict matches the spec assertion exactly (paper-test F1).
 #
 # Output: a single JSON object on stdout:
 #   { "surfaces": [ {id, viewport, reference_type, verdict, pixel_diff_ratio,
-#                    css_diff_mode, css_diff_count, css_diff[], diff_path,
+#                    max_diff_ratio, css_diff_mode, css_diff_count, css_diff[],
+#                    content_floor_failed, content_floor_violations[], diff_path,
 #                    skipped, skip_reason, notes[]}, ... ],
 #     "summary": {surfaces_run, passed, failed, skipped},
 #     "registry_path", "project_pattern", "ci_mode", "all_viewports",
@@ -165,9 +170,17 @@ for p in "${RUN_PROJECTS[@]}"; do PROJ_ARGS+=("--project" "$p"); done
 RUN_STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 export PARITY_RUN_DIR="$CODE_PATH/parity-results/$RUN_STAMP"
 export PARITY_MAX_DIFF_RATIO="$MAX_DIFF_RATIO"
+# JSONL trend stream (D6): a STABLE path under parity-results/ so the stream accumulates
+# across runs — one timestamped line per surface/run. A trend reader uses the timestamps
+# to chart a surface over time; a snapshot reader may dedupe by project|surfaceId
+# (last-write-wins) for the latest state. It is under the gitignored parity-results/, so
+# it is never committed.
+export PARITY_STATS_PATH="$CODE_PATH/parity-results/parity-stats.jsonl"
 # Confinement root for parity-compare.mjs file references (paper-test A2/A3) —
 # explicit, not the implicit process CWD.
 export PARITY_CODE_PATH="$CODE_PATH"
+# PARITY_REFERENCE_BASE_URL (D7) is read by parity-compare.mjs straight from the
+# environment — npx playwright test inherits it; the gate passes it through unchanged.
 if ! mkdir -p "$PARITY_RUN_DIR"; then
   echo "visual-parity-gate: cannot create run dir $PARITY_RUN_DIR" >&2
   exit 2
@@ -208,15 +221,23 @@ for rf in "${RESULT_FILES[@]}"; do
     add_warning "incomplete_fragment: $(basename "$rf") — missing or empty .surface"
     continue
   fi
+  # The EFFECTIVE per-surface threshold (D4) is whatever parity-compare.mjs resolved and
+  # wrote into the fragment as .max_diff_ratio (per-surface override else the global). The
+  # gate reads it back so its verdict uses the IDENTICAL number the spec asserted on
+  # (paper-test F1) — it never re-derives the per-surface value. A pre-D4 fragment with no
+  # .max_diff_ratio falls back to the global $mdr. Content-floor failures (D8) fail too.
   row=$(jq -c --argjson mdr "$MAX_DIFF_RATIO" '
     {
       id:              (.surface // ""),
       viewport:        (.viewport // ""),
       reference_type:  (.reference_type // ""),
       pixel_diff_ratio: .pixel_diff_ratio,
+      max_diff_ratio:  (.max_diff_ratio // $mdr),
       css_diff_mode:   (.css_diff_mode // "build-only"),
       css_diff:        (.css_diff // []),
       css_diff_count:  ((.css_diff // []) | length),
+      content_floor_failed: (.content_floor_failed // false),
+      content_floor_violations: (.content_floor_violations // []),
       diff_path:       (.pixel_diff_path // null),
       skipped:         (.skipped // false),
       skip_reason:     (.skip_reason // null),
@@ -224,7 +245,8 @@ for rf in "${RESULT_FILES[@]}"; do
     }
     | .verdict = (
         if .skipped then "skipped"
-        elif ((.pixel_diff_ratio != null) and (.pixel_diff_ratio >= $mdr)) then "fail"
+        elif (.content_floor_failed == true) then "fail"
+        elif ((.pixel_diff_ratio != null) and (.pixel_diff_ratio >= .max_diff_ratio)) then "fail"
         elif (.css_diff_count > 0) then "fail"
         else "pass" end )
   ' <"$rf")
