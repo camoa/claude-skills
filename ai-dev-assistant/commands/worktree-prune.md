@@ -1,5 +1,5 @@
 ---
-description: "Clean up abandoned worktrees in the current project. Lists each worktree with state (branch merged? task completed?). Per-worktree confirm; never bulk-removes silently. Honors git's refusal on uncommitted changes. Introduced v3.16.0."
+description: "Clean up abandoned worktrees in the current project. Lists each worktree with state (branch merged? task completed?). Per-worktree confirm; never bulk-removes silently. Honors git's refusal on uncommitted changes. Tears down a worktree's DDEV project (`ddev delete --omit-snapshot`) before removing the dir so no orphaned DDEV registry entry is left. Introduced v3.16.0."
 allowed-tools: Read, Bash, Skill
 ---
 
@@ -60,7 +60,7 @@ Order: candidates first, then active. For each:
 Remove? [y]es / [n]o / [q]uit
 ```
 
-- `[y]` → run `git worktree remove "<path>"`. If git refuses (uncommitted changes, locked):
+- `[y]` → **first, if `<path>/.ddev/config.yaml` exists, tear the worktree's DDEV project down BEFORE removing the dir:** `( cd "<path>" && ddev delete --omit-snapshot --yes )`. This is mandatory ordering — `git worktree remove` alone leaves an **orphaned DDEV registry entry** (the dir is gone but DDEV still has the project root registered, so the next worktree of the same name fails `ddev start` with `project root is already set … refusing to change it`). `--omit-snapshot` skips the slow auto-snapshot (the worktree DB is a throwaway copy). **If `ddev delete` fails** (Docker down, stale lock), removing the dir now would re-create the **exact orphan this fix prevents** — so do NOT silently proceed: **default to `[s]kip`** (leave BOTH the worktree and its DDEV project intact for the user to resolve). Only if the user explicitly picks `[c]ontinue` removal anyway, **surface the manual registry cleanup first** — print: "the DDEV project `<name>` is still registered; the dir is about to be removed, so run `ddev stop --unlist <name>` afterward to clear the orphaned entry (else the next same-name worktree fails `ddev start`)" (`<name>` = the worktree dir basename, the auto-derived project name) — then proceed. `[s]` (default) skips this worktree entirely. Then run `git worktree remove "<path>"`. If git refuses (uncommitted changes, locked):
   - Print git's error verbatim
   - Offer `[f]orce / [n]o`
   - On `[f]` → run `git worktree remove --force "<path>"` (ONLY on explicit user confirmation)
@@ -89,6 +89,8 @@ Run `git worktree list` to verify.
 | Single worktree (only main) | Print "No worktrees to prune"; exit 0 |
 | `git worktree remove` fails on uncommitted changes | Honor refusal; offer `[f]orce`; require explicit user confirm |
 | Branch deletion fails (unmerged) | Honor git's refusal; print message; continue with worktree-only removal |
+| Worktree has `.ddev/` (created via `/worktree --ddev-up`) | `ddev delete --omit-snapshot --yes` in the worktree BEFORE `git worktree remove` — else an orphaned DDEV registry entry blocks the next same-name worktree |
+| `ddev delete` fails | Surface the error; ask `[c]ontinue removal anyway / [s]kip`; never silently leave a half-torn-down project |
 
 ## Soft-nudge posture
 

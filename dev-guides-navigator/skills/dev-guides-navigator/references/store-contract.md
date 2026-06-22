@@ -121,7 +121,7 @@ Two per-project compat shims exist, written by the navigator from the shared sto
 | Shim | Writer(s) | Reader(s) | Read-cutover status |
 |------|-----------|-----------|---------------------|
 | `dev-guides-cache.json` (guides / `llms.txt`, `{hash,fetched_at,content}`) | navigator SKILL Mode-1 `cp indexes/llms.json → …`; `hooks/setup-cache.sh` (pre-warm) | `ai-dev-assistant` `scripts/dev-guides-detect.sh`, `commands/validate-guides.md` (→ `guides-matcher`), navigator `hooks/pre-compact.sh` | **READS REPOINTED.** All readers now resolve the **shared store** `indexes/llms.json` first (honouring `DEV_GUIDES_STORE_DIR`), falling back to this shim only when the store is cold/absent. Same `{hash,fetched_at,content}` shape ⇒ a plain `.content` read works on either. |
-| `dev-guides-recipes-cache.json` (recipes, `{index, recipes:{name:{sha,content}}}`) | navigator SKILL Modes 2/3 via the kernel's `legacy-recipes-shim` | `ai-dev-assistant` `skills/recipe-loader`, `skills/work-order-compiler` (kernel `wo-compile.sh lockfile-sha`) | **STILL ON SHIM.** This shim is a *denormalized projection* (index + `task_recipes` lockfile map + blobs assembled into one `{recipes:{name:{sha,content}}}` file). The store has **no** store-native equivalent file, so a direct read requires reassembling that projection (index-content + `lock-read` + `blob-get`) inside both consumers — a multi-source remap, not a path swap. Deferred to keep this cutover correct over complete. |
+| `dev-guides-recipes-cache.json` (recipes, `{index, recipes:{name:{sha,content}}}`) | navigator SKILL Modes 2/3 via the kernel's `legacy-recipes-shim` | `ai-dev-assistant` `skills/recipe-loader` (**REPOINTED**), `skills/work-order-compiler` (kernel `wo-compile.sh lockfile-sha`, **REPOINTED**) | **READS CUT OVER (ai-dev-assistant 5.15.0).** Both consumers now read the **shared store directly** — `indexes/agentic-recipes.json` `.content` (project-independent, no cwd/codePath keying ⇒ GAP-B fixed for both). `recipe-loader` also reads bodies via the content-addressed `blobs/<sha8>`. **Neither needs `lock-read`:** the deferral assumed `wo-compile.sh` had to resolve a sha *from* the per-project lockfile, but its `lookup_sha` only needs the **sha**, and the index `(sha:…)` per-line is authoritative — so it parses the shared index content, no blob/lockfile reassembly. The shim is now **read-free** for ai-dev-assistant; the navigator still writes it (Follow-up B retires the writer after a soak). |
 
 ### Why guides reads were safe to cut over in one pass
 The store's `indexes/llms.json` is byte-for-byte the same schema as the guides shim,
@@ -133,10 +133,12 @@ picks the first candidate (store → cwd shim → glob shim) that actually yield
    writers KEPT** (the guides `cp`/`setup-cache.sh` and the `legacy-recipes-shim`). The
    fallback still depends on the guides shim, so retiring its writer now would remove the
    safety net for no benefit. Recipes readers untouched.
-2. **Follow-up A (recipes read cutover):** repoint `recipe-loader` and `wo-compile.sh`
-   `lockfile-sha` to read the store directly — index via `index-content agentic-recipes`,
-   per-recipe sha via `lock-read` (`task_recipes` map), body via `blob-get <sha8>` — each
-   store-first-with-shim-fallback. Only then is the recipes shim fully read-free.
+2. **Follow-up A (recipes read cutover) — DONE (ai-dev-assistant 5.15.0):** both consumers repointed to
+   the store. `recipe-loader` reads `indexes/agentic-recipes.json` `.content` + bodies via the
+   content-addressed `blobs/<sha8>`. `wo-compile.sh lockfile-sha` reads the same shared `.content` — its
+   `lookup_sha` only needs the **sha**, and the index `(sha:…)` per-line is authoritative, so it needs
+   **no** `lock-read`/`blob-get` (the original "needs the full projection" worry was over-stated for this
+   consumer — only the sha was ever required). The recipes shim is now **read-free** for ai-dev-assistant.
 3. **Follow-up B (writer retirement):** once a release has soaked with store-first reads
    and no fallback hits are observed, drop the guides `cp` shim + the `legacy-recipes-shim`
    call, and stop `setup-cache.sh` writing the legacy path (or repoint it to pre-warm the

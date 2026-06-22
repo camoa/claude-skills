@@ -460,6 +460,21 @@ krun "$LOCK_MISS" lockfile-sha
 assert_jq "missing compiled_from file ⇒ sha null" '.compiled_from.architecture.sha' 'null' "$OUT"
 assert_jq "missing alignment key ⇒ compiled_from_missing warning" '[.warnings[] | select(startswith("compiled_from_missing"))] | length >= 1' 'true' "$OUT"
 
+# === GAP-B-twin: resolve sha from the PROJECT-INDEPENDENT SHARED-STORE shape ===
+# The shared store's indexes/agentic-recipes.json is {hash,fetched_at,content} — NO {index:{...}} wrapper
+# and NO per-project recipes map. lockfile-sha must still resolve the sha from `.content` directly (the
+# per-line (sha:...) is authoritative). This is what lets the compiler read the cwd-independent store and
+# closes its cwd≠codePath bug (the same class as recipe-loader's GAP B). A miss must NOT silently pass.
+STORE_CACHE="$TMPDIR/shared-store-index.json"
+cat > "$STORE_CACHE" <<'EOF'
+{ "hash": "abc", "fetched_at": "2026-01-01T00:00:00Z",
+  "content": "## Domain\n- store_recipe [cap] (sha:5106a11f): when — http://z\n" }
+EOF
+LOCK_STORE=$(jq -nc --arg cf "$STORE_CACHE" '{cache_file:$cf, refs:[{ref:"store_recipe@1", name:"store_recipe", kind:"recipe", excerpt:"e"}], compiled_from:{}}')
+krun "$LOCK_STORE" lockfile-sha
+assert_jq "shared-store shape: sha resolved from .content (no index wrapper, no recipes map)" '.lockfile[0].sha' '5106a11f' "$OUT"
+assert_jq "shared-store shape: no sha_not_in_cache for a present recipe" '[.warnings[] | select(startswith("sha_not_in_cache"))] | length' '0' "$OUT"
+
 # === HIGH-B regression: a >128 KB lockfile-sha input ⇒ legal JSON, NEVER empty ===
 # A ~210 KB inlined excerpt would exceed MAX_ARG_STRLEN via the old env-var path
 # ⇒ E2BIG ⇒ empty-stdout-at-0. The temp-file path + rc-check guarantee an object.

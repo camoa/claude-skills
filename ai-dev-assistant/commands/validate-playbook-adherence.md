@@ -28,7 +28,7 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
 
 2. **Read playbook audit (defensive).** `jq -e .gate_specific <task>/_playbook-load.json 2>/dev/null` — on parse failure OR file absent, emit `verdict: "skipped"` reason `"no playbook audit found — task pre-dates v3.15.0 or playbook loader did not run"` and proceed to Step 8.
 
-3. **Applicability check.** Extract `playbook_sets_loaded // []` and `user_playbook_loaded // null` (jq defaults handle missing keys). If both empty/null → `verdict: "skipped"` reason `"no plays loaded — applicability check skipped gate"`. Proceed to Step 8.
+3. **Applicability check.** Extract `playbook_sets_loaded // []` and `user_playbook_loaded // null` (jq defaults handle missing keys). If **both** empty/null → nothing was declared → `verdict: "skipped"` reason `"no_playbook_declared"` (a genuine no-op / intentional opt-out — benign). Proceed to Step 8. **If a set IS declared (`playbook_sets_loaded` non-empty) or a user playbook is set, do NOT skip here** — proceed to Step 4; a declared playbook that *resolves to 0 plays* is a **vacuous** skip, detected and recorded distinctly at Step 8 (it is NOT the same as "nothing declared", and must not read as coverage). Also surface any `_playbook-load.json` `warnings[]` (notably `playbook_sets_declared_zero_local_plays`) into `messages[]`.
 
 4. **Enumerate cite needles.** Build `needles[] = [{play_id, filename_slug, normalized_title, tldr_prefix}]`:
    - For each `set` in `playbook_sets_loaded[]`: `Glob ~/workspace/dev-guides/docs/<set>/*.md` (skip `index.md`). Per file: `filename_slug` = basename minus `.md`; `normalized_title` = `# H1` lowercased + non-alphanum stripped; `tldr_prefix` = frontmatter `tldr` first 40 chars lowercased. Fallback: `dev-guides-navigator` skill if local cache absent.
@@ -41,7 +41,9 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
 7. **Section-aware skip.** Cite-locations falling under H2/H3 headings matching `^(##|###)\s+(rejected|not applied|considered alternatives|out of scope|anti-?patterns?)\b` (case-insensitive) DO NOT count toward `cited`. This prevents the "I considered but rejected this play" gaming vector. Implement: pre-scan each artifact for skip-section line ranges; `cite_locations` whose line falls inside a skip-range are filtered. Document caveat: only the listed heading patterns are excluded; novel "considered" sections will not.
 
 8. **Aggregate verdict.** `cited = count(needles where .cited == true after Step 7 filter)`, `total = len(needles)`, `ratio = cited/total`:
-   - `total == 0` → `verdict: "skipped"` (defensive; should be caught in Step 3)
+   - `total == 0` → `verdict: "skipped"`, but **record WHY (vacuous vs no-op) — a skip must never read as coverage:**
+     - if a playbook **was** declared (`playbook_sets_loaded` non-empty OR `user_playbook_loaded` non-null) yet **0 plays resolved** → reason `"declared_playbook_resolved_zero_plays"` and push a prominent `messages[]` warning: `"⚠ Declared playbook (<sets|user_playbook>) resolved to 0 plays — adherence was NOT verified; this skip is NOT coverage. Confirm the set is cached (dev-guides-navigator) or set a local user playbook (/ai-dev-assistant:set-user-playbook)."` (the GAP-C vacuous-skip case — the set is a name that resolved to nothing).
+     - else (nothing was declared — should already be Step 3's `no_playbook_declared`) → reason `"no_playbook_declared"` (benign).
    - `ratio == 1.0` → `verdict: "pass"`
    - `ratio >= 0.5` → `verdict: "warning"` (soft) OR `"fail"` (when `--hard-block` OR `--strict`)
    - `ratio < 0.5` → `verdict: "fail"`

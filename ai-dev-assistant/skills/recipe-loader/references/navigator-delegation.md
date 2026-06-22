@@ -9,31 +9,33 @@ grammar it parses. **Fetching is the navigator's. Matching is recipe-loader's.**
 | Refresh recipe index (two-hash) | **navigator** | invoke the navigator skill (recipe-search) |
 | Download a recipe body (download-once) | **navigator** | invoke the navigator skill (recipe-search) |
 | Residual guide-search (match + fetch a guide) | **navigator** | invoke the navigator skill (guide-search) |
-| Read the cached index for 0..N matching | recipe-loader | `jq -r '.index.content'` on the cache |
-| Read a cached recipe body's routing block + `requires_*` | recipe-loader | `jq -r '.recipes[$n].content'` |
+| Read the index for 0..N matching | recipe-loader | `jq -r '.content'` on the **shared store** `indexes/agentic-recipes.json` |
+| Read a fetched recipe body's routing block + `requires_*` | recipe-loader | `cat` the **shared blob** `blobs/<sha8>` (content-addressed by the index-line sha8) |
 | Decompose aspects, match, rank, assemble map | recipe-loader | judgment |
 
 **Never** `curl`, **never** `WebFetch`, **never** re-implement the cache freshness logic, **never**
 call or extend `guides-matcher`.
 
-## The recipes cache (a cross-plugin contract)
-File: `~/.claude/projects/<dasherized-cwd>/memory/dev-guides-recipes-cache.json`
-(`<dasherized-cwd>` = `$PWD` with every non-alphanumeric char → `-`). Documented in the navigator's
-`references/cache-format.md`. **recipe-loader uses the cwd-derived path ONLY — it never globs to
-another project's cache** (that would load the wrong / attacker-seeded catalog; see `degrade-paths.md`).
-The glob fallback documented in `cache-format.md` is the *navigator's* internal lookup, not a
-recipe-loader instruction.
+## The shared store (a cross-plugin contract)
+recipe-loader reads the **project-independent shared content store** the navigator maintains —
+NOT a per-project cwd-derived cache. Root: `$DEV_GUIDES_STORE_DIR` (default
+`~/.claude/dev-guides-store`). Documented in the navigator's `references/store-contract.md`. There is
+**one global catalog** — no `$PWD`/codePath keying — so recipe-loader can never resolve the *caller's*
+project context by accident (the GAP-B bug). The old per-project `dev-guides-recipes-cache.json` shim
+is no longer read by recipe-loader (the navigator still rebuilds it for other consumers, e.g.
+`work-order-compiler`).
 
-```json
-{
-  "index":   { "hash": "...", "fetched_at": "...", "content": "<full agentic-recipes.txt>" },
-  "recipes": { "<name>": { "sha": "...", "fetched_at": "...", "content": "<full RECIPE.md>" } }
-}
 ```
-- `index.content` — the recipe **index** recipe-loader scans for 0..N matches. Gated by
-  `agentic-recipes.hash` (the navigator's job).
-- `recipes.<name>.content` — one recipe body, gated by that recipe's per-line `(sha:XXXXXXXX)`
-  (checkable without a fetch).
+~/.claude/dev-guides-store/
+  indexes/agentic-recipes.json   # { hash, fetched_at, content:"<full agentic-recipes.txt>" }
+  blobs/<sha8>                    # one recipe body (full RECIPE.md), keyed by the index-line sha8
+```
+- `indexes/agentic-recipes.json` `.content` — the recipe **index** recipe-loader scans for 0..N
+  matches. Refreshed by the navigator's step-2 revalidate, gated by `agentic-recipes.hash`.
+- `blobs/<sha8>` — one recipe body, **content-addressed** by the index line's `(sha:XXXXXXXX)`. A
+  present blob is the body for that exact upstream version (no index↔body drift); a miss means the
+  navigator hasn't fetched it yet. recipe-loader validates `<sha8>` is exactly 8 lowercase-hex before
+  using it as a filename (traversal defense).
 
 ## Index-line grammar
 Lines are grouped under `## <Domain>` headings:
@@ -71,8 +73,8 @@ reads the cache (the contract above). Concrete invocations (free-form intent pro
   ensure the agentic-recipes index cache is fresh (compare `agentic-recipes.hash`, refetch only on
   change). Do NOT fetch any recipe body."*
 - **Fetch a matched body** (step 5): invoke `dev-guides-navigator` → *"Recipe-search: fetch the body
-  for recipe `<name>` (download-once, sha-gated). Do not fetch others."* then read it from cache with
-  `jq -r --arg n "$N" '.recipes[$n].content'`.
+  for recipe `<name>` (download-once, sha-gated). Do not fetch others."* — that populates the shared
+  blob store; then read it with `cat "$STORE_DIR/blobs/<sha8>"` (the validated 8-hex index-line sha).
 - **Residual guide-search** (step 6): invoke `dev-guides-navigator` → *"Guide-search for: <aspect>.
   Return the atomic guide(s) for this concern."*
 If the navigator skill is unavailable, see `degrade-paths.md`.
