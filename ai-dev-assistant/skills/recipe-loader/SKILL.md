@@ -63,6 +63,8 @@ From the task context, list the distinct **aspects** it touches. These are the c
 Initialise the accumulators (so every degrade path still emits a valid map):
 ```bash
 ASPECTS='[]'; ENTRIES='[]'; UNCOVERED='[]'; WARNINGS='[]'
+RECIPE_LOOKUP_STATUS="ok"   # ok|index_unavailable|navigator_unavailable — set HERE so every degrade path
+                            # (incl. a step-2 navigator skip that bypasses step 3) emits an honest status
 add_warn(){ WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }   # accumulate, never overwrite
 ```
 Build `ASPECTS` from your aspect list via `jq` (each aspect through `--arg`).
@@ -71,23 +73,37 @@ Build `ASPECTS` from your aspect list via `jq` (each aspect through `--arg`).
 Invoke `dev-guides-navigator` via the **Skill** tool with the intent *"Recipe-search: ensure the
 agentic-recipes index cache is fresh; do NOT fetch any body."* (concrete forms:
 `references/navigator-delegation.md`). Do not fetch yourself. If it is unavailable →
-`add_warn navigator_unavailable` and skip to the guides-only degrade (`references/degrade-paths.md`).
+`add_warn navigator_unavailable`, **set `RECIPE_LOOKUP_STATUS="navigator_unavailable"`**, and skip to the
+guides-only degrade (`references/degrade-paths.md`). Setting the status HERE (not only in step 3) is
+essential: a step-2 skip bypasses step 3, and an unset status would default to `ok` in step 8 —
+masquerading a *couldn't-check* as a genuine `no_match` (the exact GAP-B dishonesty this fix removes).
 
-### 3. Read the cached index — cwd-derived path ONLY (no foreign glob)
-**Transitional (recipes shim):** this reader stays on the per-project
-`dev-guides-recipes-cache.json` compat shim. Unlike the guides catalog (already
-repointed to the shared store), the recipes shim is a *denormalized projection* with no
-store-native equivalent file — cutting it over needs index+lockfile+blob reassembly.
-Tracked as Follow-up A in the navigator's `references/store-contract.md` §6.
+### 3. Read the recipe index — from the project-independent shared store
+Read the index from the **shared content store**, NOT a per-project cwd-derived cache. The store is a
+**single global catalog** (`$DEV_GUIDES_STORE_DIR`, default `~/.claude/dev-guides-store`), maintained
+by the navigator's step-2 revalidate; its `indexes/agentic-recipes.json` `.content` is the same
+`agentic-recipes.txt` markdown the old per-project shim exposed as `.index.content` (the navigator's
+`index-content agentic-recipes`). It has **no project/cwd/codePath keying**, so the index is identical
+regardless of which project's shell invoked the task. This is what closes the GAP-B bug: the old
+cwd-derived path read the *caller's* project context (a false `recipe_cache_missing` whenever the build
+cwd ≠ the task's codePath). One global catalog ⇒ the old "no foreign glob" hazard is gone by construction.
 ```bash
-CWD="${PWD}"
-DASHED=$(printf '%s' "$CWD" | sed 's/[^a-zA-Z0-9]/-/g')
-CACHE="$HOME/.claude/projects/${DASHED}/memory/dev-guides-recipes-cache.json"
-if [ -f "$CACHE" ]; then jq -r '.index.content // empty' "$CACHE"; else echo "RECIPE_CACHE_MISSING"; fi
+STORE_DIR="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
+INDEX_FILE="$STORE_DIR/indexes/agentic-recipes.json"
+# RECIPE_LOOKUP_STATUS was initialised to "ok" in step 1; only DOWNGRADE it below on an index miss
+# (never reset to "ok" here — a step-2 navigator_unavailable must survive into the emitted map).
+if [ -f "$INDEX_FILE" ]; then
+  INDEX_CONTENT=$(jq -r '.content // empty' "$INDEX_FILE")
+  [ -z "$INDEX_CONTENT" ] && { RECIPE_LOOKUP_STATUS="index_unavailable"; add_warn recipe_cache_missing; }
+else
+  RECIPE_LOOKUP_STATUS="index_unavailable"; add_warn recipe_cache_missing
+fi
 ```
-**Do NOT glob to another project's cache** — a different project's recipes are the wrong catalog and
-an attacker-seeding vector. Missing/`RECIPE_CACHE_MISSING`/empty → `add_warn recipe_cache_missing`
-and degrade to guides-only. Otherwise parse the index lines (grouped under `## <Domain>`):
+If step 2 reported the navigator unavailable, set `RECIPE_LOOKUP_STATUS="navigator_unavailable"` instead
+(the recipe layer never ran). Either non-`ok` status → degrade to guides-only, but **surface the status**
+(step 8) so the orchestrator can tell *"couldn't check"* (index/navigator unavailable) from *"checked,
+nothing matched"* (`ok` + zero recipe entries). With `$INDEX_CONTENT` present, parse its lines (grouped
+under `## <Domain>`):
 ```
 - <name> [<capability>] (sha:XXXXXXXX): <when-to-use> — <site-url>
 ```
@@ -107,18 +123,28 @@ shell-parse). For each matched recipe, invoke `dev-guides-navigator` to fetch it
 form in `references/navigator-delegation.md`), then read it behind a **mechanical** integrity gate
 (a `[ ]` test, not a comment):
 ```bash
+STORE_DIR="${DEV_GUIDES_STORE_DIR:-$HOME/.claude/dev-guides-store}"
 NAMES="${TASK_FOLDER:-/tmp}/recipe-names.txt"             # the matched-names file written above
 while IFS=$'\t' read -r N S; do                           # $N, $S are literals, never re-parsed
-  CACHED_SHA=$(jq -r --arg n "$N" '.recipes[$n].sha // "MISSING"' "$CACHE")
-  if [ "$CACHED_SHA" != "$S" ]; then                      # drift / missing → fail-closed
-    add_warn "recipe_body_unverified:$N"; continue        # body NOT read; its deps skipped
+  # $S is the index-line sha8 — untrusted index data. Validate as EXACTLY 8 lowercase-hex BEFORE
+  # using it as a blob filename (path-traversal defense; same posture as the kernel's _is_hex_key
+  # and the <sha8> rule in agentic-recipe-resolution.md). Never build a path from a malformed sha.
+  case "$S" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+    *) add_warn "recipe_body_unverified:$N"; continue ;;
+  esac
+  BLOB="$STORE_DIR/blobs/$S"                              # content-addressed: the filename IS the sha8
+  if [ -f "$BLOB" ]; then
+    cat "$BLOB"                                           # the body for this exact upstream content version
+  else
+    add_warn "recipe_body_unverified:$N"; continue        # navigator body-fetch didn't populate the blob
   fi
-  jq -r --arg n "$N" '.recipes[$n].content // empty' "$CACHE"   # safe: name only via --arg
 done < "$NAMES"
 ```
-The body enters context **only** when its cached sha equals the index-line sha. (Recipe names are
-single tokens per the index grammar; the gate catches index↔body drift, not a self-consistent
-forged cache — see "Provenance" below.)
+The body enters context **only** when a blob named by the index-line sha8 exists. Reading the
+content-addressed blob makes index↔body drift **structurally impossible** — you get the body for the
+*current* index sha or nothing (no stale-shim window). A self-consistent **forged** blob (poisoned bytes
+stored under a sha) is still out of scope — the shared trust boundary in "Provenance" below.
 From a trusted body, read the routing block + the **optional** `requires_guides:` / `requires_plays:`
 keys.
 - Present (and non-empty) → collect those slugs (`has_machine_deps:true`).
@@ -165,7 +191,8 @@ residual guides (`guide`/`play` rows pass no 8th/9th arg → `recipe_name`/`reci
 UNCOVERED=$(jq -n --argjson a "$ASPECTS" --argjson e "$ENTRIES" \
   '[$a[] | select(. as $asp | ($e | map(.aspect) | index($asp)) == null)]')   # aspects with no entry
 MAP=$(jq -n --argjson a "$ASPECTS" --argjson e "$ENTRIES" --argjson u "$UNCOVERED" --argjson w "$WARNINGS" \
-  '{schema_version:"1.0", task_aspects:$a, entries:$e, uncovered_aspects:$u, warnings:$w}')
+  --arg ls "${RECIPE_LOOKUP_STATUS:-ok}" \
+  '{schema_version:"1.1", recipe_lookup_status:$ls, task_aspects:$a, entries:$e, uncovered_aspects:$u, warnings:$w}')
 printf '%s\n' "$MAP"                                          # always return the map in context
 [ -n "$TASK_FOLDER" ] && printf '%s\n' "$MAP" > "$TASK_FOLDER/coverage-map.json"   # persist only when a task folder is set
 ```
@@ -182,7 +209,7 @@ fail-closed surfacing**: `verified:false` for anything not positively sourced fr
 catalog. That flag is what lets the orchestrator halt-and-escalate on unverified recipes — the
 execute-or-halt decision is the orchestrator's, never this skill's.
 
-**Trust boundary (documented, not closed here):** recipe-loader trusts the navigator-owned recipes cache as the upstream first-party source; it cannot detect a *wholly poisoned* cache, because the cache exposes no signature/provenance field yet. The step-5 sha gate catches index-vs-body drift, not a self-consistent forged entry. Fully closing this needs a provenance/signature field in the navigator's cache contract (its scope) plus the orchestrator treating cache-trust as a boundary. Shared with the navigator's own trust model, not introduced here.
+**Trust boundary (documented, not closed here):** recipe-loader trusts the navigator-owned shared store (`~/.claude/dev-guides-store`) as the upstream first-party source; it cannot detect a *wholly poisoned* store, because the store exposes no signature/provenance field yet. Reading the content-addressed blob by the index-line sha8 (step 5) makes index↔body drift structurally impossible, but does not catch a self-consistent forged blob (poisoned bytes stored under a sha). Fully closing this needs a provenance/signature field in the navigator's store contract (its scope) plus the orchestrator treating store-trust as a boundary. Shared with the navigator's own trust model, not introduced here.
 
 ## Example
 *Task, two aspects: "responsive images on the hero field" + "image lazy-loading".* The index has one

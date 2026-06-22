@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.0] - 2026-06-22
+
+### Fixed
+- **recipe-loader reads the project-independent shared store, not a cwd-derived cache (GAP B, found dogfooding `adrupalcouple p1_scaffold_enable`).** The recipe index and bodies were read from `~/.claude/projects/<dasherized-$PWD>/memory/dev-guides-recipes-cache.json` — keyed by the session's cwd. When the build cwd ≠ the task's `codePath` (running from one project's shell against another project's task), recipe-loader resolved the **caller's** project context and silently degraded to a false `no_match`. recipe-loader now reads the index from the shared store `indexes/agentic-recipes.json` `.content` and each body from the content-addressed `blobs/<sha8>` (validated 8-hex; traversal-guarded) — a single global catalog with no project/cwd keying, so the wrong-project bug is gone by construction. The per-project shim is no longer read by recipe-loader (still rebuilt by the navigator for `work-order-compiler`).
+
+### Added
+- **`recipe_lookup_status` on the coverage map (schema 1.1) and the agentic-recipe audit (`gate_specific.recipe_lookup_status`, additive — schema stays 1.5).** `ok | index_unavailable | navigator_unavailable` disambiguates *"checked, nothing matched"* (`ok` + `recipes: []` = genuine `no_match`) from *"couldn't check"* (a non-`ok` inconclusive lookup). `/research` no longer terminalizes an inconclusive lookup as `no_match` — it re-checks on the next attended run, same posture as a `deferred` match.
+
+### Changed
+- Content-addressed body reads make index↔body drift structurally impossible (you read the body for the current index sha or nothing); the old shim sha-compare gate is retired for recipe-loader. Trust boundary unchanged (a self-consistent forged blob is still out of scope, shared with the navigator's store-trust model).
+
 ## [5.13.1] - 2026-06-19
 
 ### Changed — docs

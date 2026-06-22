@@ -421,6 +421,15 @@ elements: an adopted SEO recipe + an adopted responsive-image recipe):
 `gate_specific.recipes` is a **list**; each element carries the per-recipe fields below. (`recipes: []` =
 the `no_match` case, no canned recipe for the task.)
 
+**Additive (v5.15.0 — schema stays `"1.5"` per the additive-field policy):** `gate_specific.recipe_lookup_status`
+∈ `{"ok","index_unavailable","navigator_unavailable"}`, copied verbatim from `coverage-map.json`. It records
+whether the recipe layer could actually be consulted, so `recipes: []` is disambiguated: `recipe_lookup_status:"ok"`
++ `recipes: []` is a genuine **checked-empty** `no_match`; a non-`ok` status means the shared-store index or the
+navigator was unavailable — an **inconclusive** lookup that `/research` does NOT terminalize (it re-checks on the
+next attended run, same as `deferred`). recipe-loader now reads the index/bodies from the **project-independent
+shared store** (`~/.claude/dev-guides-store`), not a cwd-derived per-project cache, so this status reflects the real
+catalog and never the caller's accidental project context (GAP-B fix).
+
 | Field (per `recipes[]` element) | Type | Contract |
 |---|---|---|
 | `capability` | string | The task-Goal capability aspect this recipe matched. |

@@ -9,7 +9,8 @@ context; also returned in-context.
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "recipe_lookup_status": "ok | index_unavailable | navigator_unavailable",
   "task_aspects": ["<aspect>", "..."],
   "entries": [
     {
@@ -33,6 +34,7 @@ context; also returned in-context.
 
 | Field | Notes |
 |---|---|
+| `recipe_lookup_status` | **(v1.1)** Whether the recipe layer could actually be consulted: `ok` (the shared-store index was read — a zero-`kind:recipe` map is then an honest *checked-empty* `no_match`), `index_unavailable` (the shared store `indexes/agentic-recipes.json` was absent/empty), or `navigator_unavailable` (step 2's navigator refresh failed → the recipe layer never ran). **The orchestrator MUST distinguish a non-`ok` status from a genuine `no_match`:** non-`ok` means *"couldn't check"*, not *"checked, nothing matched"* — it is **not** a terminal no_match and must re-surface on the next attended run. |
 | `task_aspects[]` | The concerns the task touches (step 1). The rows the map accounts for. |
 | `entries[]` | One per matched source. May be empty (then every aspect is in `uncovered_aspects`). |
 | `entries[].kind` | `recipe` (a matched capability), `guide`, or `play`. |
@@ -70,6 +72,12 @@ context; also returned in-context.
    `recipe_name` + `recipe_sha` (both present in `recipe-names.txt`). They are the orchestrator's
    handle to persist the adopted body (write `<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`) and to
    re-fetch / integrity-check it later. `guide`/`play` entries set both to `null`.
+9. **`recipe_lookup_status` separates "couldn't check" from "checked-empty" (v1.1)** — the index is
+   read from the **project-independent shared store** (`~/.claude/dev-guides-store`), never a
+   cwd/codePath-derived per-project path, so the recipe layer no longer resolves the *caller's* project
+   by accident. `ok` + zero `kind:recipe` entries is a true `no_match`; `index_unavailable` /
+   `navigator_unavailable` is an *inconclusive* lookup the orchestrator treats as deferrable
+   (re-check next attended run), **not** a terminal no_match.
 
 ## Warning codes
 | Code | Meaning |

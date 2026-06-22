@@ -100,11 +100,13 @@ Discovery itself is degrade-first (a miss is fine); the *gate* on a match is not
 
    - **Persist per adopted recipe into the task folder (the durable fix).** For **EACH** recipe with an
      `adopt` decision, before recording, materialise its body so it survives `$PWD`/worktree changes and
-     never depends on a re-fetch downstream. Read that recipe's body content from the navigator recipes
-     cache (`.recipes[<recipe_name>].content` — the download-once shim recipe-loader already populated,
-     keyed by the `recipe_name` from this coverage-map entry). If absent, or its cached sha is stale vs the
-     entry's `recipe_sha`, **re-invoke `recipe-loader` (or the navigator recipe-search) for
-     `<recipe_name>` to materialise it** — never fabricate a body. Then **write the body with the Write
+     never depends on a re-fetch downstream. Read that recipe's body content from the **shared blob store**
+     — `cat ~/.claude/dev-guides-store/blobs/<sha8>`, the content-addressed body keyed by the entry's
+     `recipe_sha` (validate it is exactly 8 lowercase-hex first, per the `<sha8>` rule below; the blob the
+     navigator's recipe-search download-once already populated). If the blob is absent, **re-invoke
+     `recipe-loader` (or the navigator recipe-search) for `<recipe_name>` to materialise it** — never
+     fabricate a body. (The blob is content-addressed by the index sha, so there is no "stale cached sha"
+     to compare — a present blob is the body for that exact `recipe_sha`.) Then **write the body with the Write
      tool to `<task_folder>/adopted-recipe-<safe_name>-<sha8>.md`**, where **`<safe_name>` is
      `<recipe_name>`** sanitised to a safe filename (lowercase; every run of non-alphanumeric characters
      collapsed to a single `-`) and **`<sha8>` is the first 8 characters of that entry's `recipe_sha`**.

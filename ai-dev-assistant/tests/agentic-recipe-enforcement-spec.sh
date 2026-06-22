@@ -314,5 +314,81 @@ else
   bad  "coverage-map-contract still references the stale single adopted-recipe.md filename"
 fi
 
+# ── v5.15.0 GAP-B: recipe-loader reads the project-independent shared store, not a cwd-derived cache ──
+# The recipe index + bodies were read from ~/.claude/projects/<dasherized-$PWD>/memory/<shim>, keyed by
+# the session cwd. When the build cwd ≠ the task's codePath, recipe-loader resolved the CALLER's project
+# and degraded to a false no_match. Fix: read the shared store (one global catalog, no project keying) +
+# surface recipe_lookup_status so "couldn't check" is distinct from "checked, empty".
+SKILL="$ROOT/skills/recipe-loader/SKILL.md"
+DEGRADE="$ROOT/skills/recipe-loader/references/degrade-paths.md"
+HEX8='[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'
+
+# (p) recipe-loader reads the shared store (index + content-addressed blobs).
+if grep -Fq -- 'dev-guides-store' "$SKILL" && grep -Fq -- 'indexes/agentic-recipes.json' "$SKILL" && grep -Fq -- 'blobs/' "$SKILL"; then
+  pass "recipe-loader SKILL reads the shared store (indexes/agentic-recipes.json + blobs/<sha8>)"
+else
+  bad  "recipe-loader SKILL does NOT read the shared store (index/blob read missing)"
+fi
+
+# (q) the cwd-derived shim read is GONE from recipe-loader's logic (the GAP-B root cause).
+if ! grep -Eq -- 'DASHED=|dev-guides-recipes-cache' "$SKILL"; then
+  pass "recipe-loader SKILL no longer cwd-derives a per-project cache (DASHED=/recipes-cache gone)"
+else
+  bad  "recipe-loader SKILL still cwd-derives the recipes cache (GAP-B not fixed)"
+fi
+
+# (r) recipe-loader emits recipe_lookup_status + bumps the coverage-map schema to 1.1.
+if grep -Fq -- 'recipe_lookup_status' "$SKILL" && grep -Fq -- 'schema_version:"1.1"' "$SKILL"; then
+  pass "recipe-loader SKILL emits recipe_lookup_status + coverage-map schema_version 1.1"
+else
+  bad  "recipe-loader SKILL missing recipe_lookup_status / schema_version 1.1"
+fi
+
+# (s) the body read hex-validates the index-line sha8 BEFORE building a blob path (traversal guard).
+if grep -Fq -- "$HEX8" "$SKILL"; then
+  pass "recipe-loader SKILL hex-validates the sha8 (8 lowercase-hex) before reading blobs/<sha8>"
+else
+  bad  "recipe-loader SKILL does NOT hex-validate the sha8 (untrusted index sha → path escape)"
+fi
+
+# (t) the coverage-map contract documents recipe_lookup_status + schema 1.1.
+if grep -Fq -- 'recipe_lookup_status' "$COVERAGE" && grep -Fq -- '"1.1"' "$COVERAGE"; then
+  pass "coverage-map-contract documents recipe_lookup_status (schema 1.1)"
+else
+  bad  "coverage-map-contract missing recipe_lookup_status / schema 1.1"
+fi
+
+# (u) /research distinguishes a non-ok lookup from a terminal no_match (does NOT terminalize "couldn't check").
+if grep -Fq -- 'recipe_lookup_status' "$RESEARCH" && grep -Fiq -- 'inconclusive' "$RESEARCH"; then
+  pass "research.md gates terminal no_match on recipe_lookup_status==ok (inconclusive re-checks)"
+else
+  bad  "research.md does NOT distinguish an inconclusive lookup from no_match (GAP-B honesty missing)"
+fi
+
+# (v) §5.13 documents the additive recipe_lookup_status (schema stays 1.5).
+SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
+if printf '%s' "$SEC513" | grep -Fq -- 'recipe_lookup_status'; then
+  pass "gate-audit-schema §5.13 documents the additive recipe_lookup_status"
+else
+  bad  "gate-audit-schema §5.13 missing recipe_lookup_status (audit can't disambiguate no_match)"
+fi
+
+# (w) the degrade table sets recipe_lookup_status for the index/navigator-unavailable paths.
+if grep -Fq -- 'recipe_lookup_status' "$DEGRADE"; then
+  pass "degrade-paths sets recipe_lookup_status for the unavailable paths"
+else
+  bad  "degrade-paths does NOT set recipe_lookup_status on degrade (inconclusive looks like no_match)"
+fi
+
+# (x) STATUS HONESTY (red-team fix): the status is initialised in step 1 (not only in step-3 bash that a
+#     step-2 navigator skip bypasses), AND the navigator-unavailable degrade explicitly sets it — else
+#     step 8's ${RECIPE_LOOKUP_STATUS:-ok} default would mask a couldn't-check as a genuine no_match.
+if grep -Fq -- 'RECIPE_LOOKUP_STATUS="navigator_unavailable"' "$SKILL" \
+   && [ "$(grep -c -- 'RECIPE_LOOKUP_STATUS="ok"' "$SKILL")" -ge 1 ]; then
+  pass "recipe-loader status is init'd up front + the navigator degrade sets navigator_unavailable (no ok-masking)"
+else
+  bad  "recipe-loader status not set on the navigator-skip path (would default to ok → masks couldn't-check)"
+fi
+
 echo
 [ "$fail" -eq 0 ] && { echo "agentic-recipe-enforcement-spec: ALL PASS"; exit 0; } || { echo "agentic-recipe-enforcement-spec: FAILURES"; exit 1; }
