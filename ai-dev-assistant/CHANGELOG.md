@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.15.1] - 2026-06-23
+
+### Fixed — #227 re-review residuals (MED/LOW; no data-loss path was open)
+- **Stale cwd advisory in `compiler-algorithm.md` (MED — active misdirection).** The all-null-sha remediation still told a model to "run the compiler in the same cwd as recipe-loader (whose dasherized form is `$DASHED`)" — obsolete after the Step-9 shared-store cutover and directly contradicting it. Rewritten: an all-null-sha batch now means a **stale/absent shared agentic-recipes index** → refresh it (recipe-search via the navigator / re-enter `/research`), not a cwd fix. Removes the contradiction the CHANGELOG's "fixed the same way" claim glossed over.
+- **`/worktree-prune` spurious teardown (MED).** The `ddev delete` trigger was bare `.ddev/config.yaml` existence — a repo can commit `.ddev/` without any `--ddev-up` instance, so a worktree DDEV never registered would get a spurious delete. Now gated on actual registration (`ddev describe` exit 0); unregistered → skip straight to `git worktree remove`. Also clarified the `[s]kip`-on-`ddev-delete`-failure flow (skip = leave intact + move on, no removal).
+- **In-place operator gate (MED).** Now names `bypassPermissions` alongside `acceptEdits`/`dontAsk` as "not a `[y]`" (any auto-approve mode → unattended refusal).
+- **`/worktree --no-ddev-check` + `--ddev-up` + pinned `name:` ordering (LOW-MED).** The `--no-ddev-check` "skip this step entirely" preceded the `--ddev-up` auto-naming hard-halt, so the combo could build a worktree that only fails later at `ddev start`. The hard-halt now takes precedence and `--no-ddev-check` does not skip it under `--ddev-up`.
+
+### Tests
+- **Behavioral no-unguarded-reset lint** added to `ddev-worktree-spec.sh` (now 19 assertions): every actual `reset --hard "$cp"` operation in the loop's two routing files must carry an in-place guard within ±5 lines — catches a *newly-added* unguarded destructive op, not just that guard text exists somewhere. (Addresses the re-review's "in-place surface is 0 behavioral" point; verified it flags an unguarded reset.)
+
 ## [5.15.0] - 2026-06-22
 
 ### Fixed
