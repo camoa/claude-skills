@@ -14,7 +14,7 @@ Paper test code from 3 competing perspectives using an agent team. A Happy Path 
 /code-paper-test:test-team [--json] <file-path> [file-path...]
 ```
 
-Pass `--json` to emit a CI-consumable JSON report alongside the markdown report. Schema: `skills/paper-test/references/json-output-schema.md` (`schema_version: "1.0"`).
+Pass `--json` to emit a CI-consumable JSON report alongside the markdown report. Schema: `skills/paper-test/references/json-output-schema.md` (`schema_version: "1.1"`; additive minor — CI should pin `^1\.`).
 
 ## What This Does
 
@@ -46,10 +46,12 @@ If a file doesn't exist:
 
 Stop here if no valid targets.
 
-Determine the **target directory** for output:
+Determine the **target directory** for output, resolved to an **absolute** path:
 - Single file → same directory as the file
 - Multiple files in same directory → that directory
 - Multiple files across directories → their common parent directory
+
+**`{target_dir}` MUST be absolute** (resolve it — e.g. `realpath`/`pwd` — before substituting it into any spawn prompt). Every teammate runs in its own `Isolation: worktree` checkout, so a *relative* `{target_dir}` would resolve INSIDE each teammate's worktree: the per-teammate analysis files would then be invisible across teammates (breaking the Task 4 cross-challenge, where each tester reviews the others' `*-analysis.md`) and invisible to the Synthesizer (which reads all three). An absolute path points every teammate at the same real directory.
 
 ### Step 2 — Check Prerequisites
 
@@ -104,7 +106,7 @@ Create a team and these tasks:
 | 3 | Attack with adversarial inputs — injection, malformed data, race conditions | Red Team Attacker | — |
 | 4 | Cross-challenge — debate flaw severity, dispute false findings, identify blind spots | All three | 1, 2, 3 |
 | 5 | Spawn the Synthesizer teammate, then report the saved report path | Lead | 4 |
-| 5b | Synthesize prioritized flaw report from the three analyses | Synthesizer | 4 |
+| 5b | Synthesize prioritized flaw report from the three analyses | Synthesizer | 4, 5 |
 
 **Quality Gate:** Each tester must complete ALL assigned categories before marking their task done. If a tester skips categories (e.g., Edge Case Hunter tests 3 of 6 categories), the Synthesizer should flag incomplete analysis in the final report and note which categories were untested.
 
@@ -196,7 +198,7 @@ If JSON_MODE=true (the lead will pass this in the spawn prompt), ALSO write a pa
   {target_dir}/happy-path-analysis.json
 
 JSON shape — match `skills/paper-test/references/json-output-schema.md` exactly:
-- `schema_version: "1.0"`, `tool: "test-team"`, `mode: "test-team"`, `target_type` per target type, `target_files`, `timestamp` (ISO 8601 UTC)
+- `schema_version: "1.1"`, `tool: "test-team"`, `mode: "test-team"`, `target_type` per target type, `target_files`, `timestamp` (ISO 8601 UTC)
 - `summary` with counts by severity (CRITICAL/HIGH/MEDIUM/LOW/INFO — uppercase), `total_findings`, `scenarios_traced`, `dependencies_verified`, `contracts_verified`
 - `findings` is always an array; each finding has `severity`, `category`, `file`, `line_start`, `line_end`, `title`, `description`, `fix_suggestion`, `scoring_factors {reach, impact, reversibility, exploitability}` (1-3 each; omit only for INFO), and `found_by: ["happy_path"]`
 - Do NOT include `disputed`, `team`, or cross-challenge data — the Synthesizer aggregates those later
@@ -481,13 +483,56 @@ WRITE the final report to:
   [If JSON_MODE=true, also write {target_dir}/paper-test-team-report.json per the team
    aggregation schema in skills/paper-test/references/json-output-schema.md]
 
-Use the Output Format defined below in this command file. Aggregate findings, de-duplicate
-across the three perspectives, record cross-challenge outcomes (Disputed Findings), and
-split the Existence Verification and Behavioral Contract Verification tables. For the JSON
-report honor the schema invariants: `findings` is always an array, severity values are
-uppercase, `status` is `fail` if any CRITICAL/HIGH finding exists, `warning` for only
-MEDIUM/LOW, `pass` only when no MEDIUM-or-higher finding exists; set `found_by` (union of
-roles that reported the same file+line span+category) and `disputed` per the cross-challenge.
+Aggregate findings, de-duplicate across the three perspectives, record cross-challenge
+outcomes, and split the Existence vs Behavioral Contract tables. Write the markdown report
+in EXACTLY this format (this is the canonical Output Format — keep it in sync with the
+command's "## Output Format" section):
+
+# Paper Test Team Report
+
+## Target
+{File paths tested, line counts, language}
+
+## Test Method
+Agent team with 3 competing perspectives.
+Source files: [happy-path-analysis.md] | [edge-case-analysis.md] | [red-team-analysis.md]
+
+## Summary
+| Perspective | Scenarios Run | Flaws Found | Critical |
+|-------------|---------------|-------------|----------|
+| Happy Path | {N} | {N} | {N} |
+| Edge Case | {N} | {N} | {N} |
+| Red Team | {N} | {N} | {N} |
+
+## Prioritized Flaws
+| # | Line | Flaw | Found By | Severity | Confirmed By Others? | Fix |
+|---|------|------|----------|----------|---------------------|-----|
+
+## Disputed Findings
+| # | Flaw | Claimed By | Disputed By | Resolution |
+|---|------|-----------|-------------|------------|
+
+## Existence Verification
+| # | External Call | Exists? | Issue |
+|---|-------------|---------|-------|
+
+## Behavioral Contract Verification
+| # | External Call | Behavior verified? | Contract source | Gap |
+|---|-------------|-------------------|----------------|-----|
+
+## Contract Verification
+| # | Relationship | Verified? | Issue |
+|---|-------------|-----------|-------|
+
+## Blind Spots (Unanimous Agreements)
+{Areas where all 3 agreed the code is fine — flag for human review}
+
+## Recommended Test Cases
+{Concrete test cases to write based on flaws found}
+| # | Test | Input | Expected | Covers Flaw |
+|---|------|-------|----------|-------------|
+
+For the JSON report (JSON_MODE=true) honor the schema invariants in skills/paper-test/references/json-output-schema.md: `findings` is always an array, severity values are uppercase, `status` is `fail` if any CRITICAL/HIGH finding exists, `warning` for only MEDIUM/LOW, `pass` only when no MEDIUM-or-higher finding exists; set `found_by` (union of roles that reported the same file+line span+category) and `disputed` per the cross-challenge.
 
 WHEN DONE:
 Output: {"continue": false}

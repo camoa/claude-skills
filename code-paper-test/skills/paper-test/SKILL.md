@@ -101,8 +101,8 @@ A method existing is not it returning what you assume. Existence verification is
 
 For CI integration, aggregation, or programmatic consumption, invoke with `--json` to emit a stable, versioned JSON document instead of the markdown report.
 
-- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper-test:test-team` (lead synthesis).
-- Schema is pinned at `schema_version: "1.0"` with an additive-only minor-version contract. CI should pin `^1\.`, not exact match.
+- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper-test:test-team` (Synthesizer aggregation).
+- Schema follows an additive-only minor-version contract (currently `schema_version: "1.1"`). CI should pin `^1\.`, not an exact match.
 - Severity values match the existing rubric exactly: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`.
 - `findings` is always an array — `[]` when clean, never `null` or omitted.
 - `status` is the overall gate verdict: `pass` / `warning` / `fail`. Use `pass` only when no MEDIUM-or-higher findings exist and the run completed fully.

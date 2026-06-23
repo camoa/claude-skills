@@ -39,4 +39,4 @@
 
 ## Release Hygiene
 - Run `/plugin-creation-tools:validate --strict` before every PR. `--strict` catches S14 (inline model overflow), FM01 (frontmatter parse errors), and X02 (description length) in addition to the standard checks.
-- Bump all four version locations together: `.claude-plugin/plugin.json`, the `skills/paper-test/SKILL.md` `version:` field, this plugin's entry **and** `metadata.version` in the root `marketplace.json`, and a `CHANGELOG.md` entry.
+- Bump the version everywhere it appears: `.claude-plugin/plugin.json`, the `skills/paper-test/SKILL.md` `version:` field, this plugin's entry **and** `metadata.version` in the root `marketplace.json`, the `README.md` version line, and a `CHANGELOG.md` entry.
