@@ -167,5 +167,32 @@ else
   bad  "work-order-lifecycle missing the build-mode taxonomy / --in-place invariant lift"
 fi
 
+# (15) NO-UNGUARDED-RESET lint (stronger than presence): every actual reset-to-checkpoint OPERATION
+#      (`reset --hard "$cp"` — the destructive site, NOT the explanatory "would/never reset" prose) in the
+#      two files the loop ROUTES from must have an in-place guard within ±5 lines. This catches a
+#      NEWLY-ADDED unguarded destructive op (the real split-brain safety property), not just that the
+#      guard text exists somewhere in the file.
+no_unguarded_reset() {
+  awk '
+    { line[NR]=$0 }
+    /reset --hard "\$cp"/ { r[NR]=1 }       # the actual checkpoint reset, not "would reset --hard an unbound …"
+    END {
+      bad=0
+      for (n in r) {
+        g=0
+        for (i=n-5; i<=n+5; i++) if (line[i] ~ /in-place|in_place/) g=1
+        if (!g) { bad++; printf("    unguarded reset --hard \"$cp\" at %s:%d\n", FILENAME, n) > "/dev/stderr" }
+      }
+      exit (bad>0 ? 1 : 0)
+    }' "$1"
+}
+_ur=0
+for f in "$LOOP" "$LOOPC"; do no_unguarded_reset "$f" || _ur=1; done
+if [ "$_ur" -eq 0 ]; then
+  pass "no unguarded \`reset --hard \"\$cp\"\` in the loop routing files (every checkpoint-reset has an in-place guard ±5 lines)"
+else
+  bad  "an unguarded \`reset --hard\` is reachable in-place (split-brain regression — see stderr)"
+fi
+
 echo
 [ "$fail" -eq 0 ] && { echo "ddev-worktree-spec: ALL PASS"; exit 0; } || { echo "ddev-worktree-spec: FAILURES"; exit 1; }

@@ -204,13 +204,15 @@ verdict verbatim; the grounding gate reads the separate `lockfile` / `drift_guar
 **no contradiction** with "carry verified verbatim." A human may record a `coverage_override` to
 dispatch anyway (⇒ ③ no-auto-merge). Surface the unpinned refs (+ any drift failure) for confirm/prune.
 
-**cwd amplifier — an all-null-sha batch is almost always a cache-cwd mismatch, not real drift.** The
-cache path is `$PWD`-dasherized: if the compiler runs in a **different cwd** than recipe_loader's
-populate run, the lookup misses on *every* ref ⇒ every WO blocks (`unpinned_ref`). That is
-fail-closed-correct, but do **not** present it as N WOs each "below the grounding floor." When
-`$ALL_NULL` is `true`, escalate as *"cache cwd mismatch — run the compiler in the same project
-workspace as recipe_loader (the cwd whose dasherized form is `$DASHED`)"*, not a silent all-block.
-Always compute `$CACHE` from the same cwd recipe_loader populated.
+**all-null-sha batch — almost always a stale/empty shared index, not real drift.** The sha source is the
+**project-independent shared store** (`$DEV_GUIDES_STORE_DIR/indexes/agentic-recipes.json`, Step 9) — there
+is **no** cwd/codePath keying anymore, so an all-null-sha result means the store index is **absent or
+stale** (the navigator hasn't fetched/revalidated the agentic-recipes catalog), **not** a cwd mismatch.
+That is fail-closed-correct, but do **not** present it as N WOs each "below the grounding floor." When
+`$ALL_NULL` is `true`, escalate as *"recipe-sha cache empty — refresh the shared agentic-recipes index
+(run a recipe search via the dev-guides-navigator, e.g. re-enter `/research` for this task, then
+recompile)"*, not a silent all-block. (The old "run the compiler in the same cwd as recipe-loader"
+remediation is obsolete — the shared store removed the cwd dependency; re-populating it is the fix.)
 
 Then assemble the **full frontmatter object** with `jq` (every field from `work-order-contract.md`,
 in contract order) and emit the YAML block:

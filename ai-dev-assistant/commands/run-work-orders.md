@@ -70,8 +70,9 @@ batch size. The **default (no `--parallel`) is unchanged** — the sequential `w
 
      Default `[N]`; proceed only on `[y]`. In an **unattended/headless** run do NOT auto-confirm — refuse
      with the gate message (build-in-place needs a human gate). **This confirmation requires a live
-     human `[y]` regardless of session permission mode** — an auto-approve/`acceptEdits`/`dontAsk` mode is
-     NOT a `[y]` here; treat any non-interactive context as the unattended refusal. (This gate is
+     human `[y]` regardless of session permission mode** — an `acceptEdits` / `dontAsk` / `bypassPermissions`
+     (or any other auto-approve) mode is NOT a `[y]` here; treat any non-interactive context as the
+     unattended refusal. (This gate is
      command-behavioral, not yet a deterministic kernel check — hardening it into a zero-model gate is a
      tracked follow-up; until then it is enforced by this command's prose + the loop's in-place HALT-only
      posture downstream.)
