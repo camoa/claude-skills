@@ -5,6 +5,23 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-06-22
+
+**Theme: test-team context-economy + harness hardening.**
+
+### Added
+- **4th "Synthesizer" teammate in `/code-paper-test:test-team`.** The lead no longer reads the three large analysis files (`happy-path`/`edge-case`/`red-team`) into its own active context to synthesize. A fresh-context Synthesizer teammate reads them and writes `paper-test-team-report.md` (+ the JSON report when `--json`), keeping the heavy reads off the lead — the second context-overflow vector after the inline-skill fix. Step 4 gains task `5b`; the lead's Step 5/6 role is reduced to spawning the testers then the Synthesizer.
+- **`disallowed-tools: Write, Edit` on the `paper-test` skill.** The skill is read-only analysis (`allowed-tools: Read, Glob, Grep, Bash`); banning Write/Edit at the harness level hardens it against accidental or prompt-injected writes. Not added to `test-team.md` — that command legitimately writes analysis files.
+- **Release-hygiene section in `CONVENTIONS.md`** documenting the `/plugin-creation-tools:validate --strict` pre-PR gate (catches S14 / FM01 / X02) and the four version locations to bump together.
+- **Security-guidance positioning note** in the Red Team Attacker spawn prompt and the SKILL.md Pairing section: the Red Team lens (adversarial analysis of the TARGET code at test time) complements the security-guidance plugin (review of Claude's own edits in real time) — different moments, not substitutes.
+
+### Fixed
+- **SKILL.md `version:` drift.** The 0.10.1 evergreen-docs pass bumped `plugin.json` but left the SKILL.md frontmatter at `0.10.0`; both are now `0.11.0`.
+
+### Notes
+- **S14 (`model: sonnet` → `inherit`) was already fixed in v0.10.0** (PR #215, pulled forward at review). It is a no-op here — the file already reads `model: inherit` (the "file wins" rule).
+- v0.12.0 (Agent SDK alignment) remains **not applicable** — the plugin ships no Agent SDK surface.
+
 ## [0.10.1] - 2026-06-19
 
 ### Changed — docs

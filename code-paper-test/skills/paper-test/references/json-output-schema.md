@@ -127,7 +127,7 @@ Example for a passing trace with one low-severity finding:
 
 ## `/code-paper-test:test-team --json` output
 
-Test-team mode emits the common envelope PLUS a `team` section holding per-teammate breakdowns and the cross-challenge debate outcome. Write location: `{target_dir}/paper-test-team-report.json` (sibling to the existing `paper-test-team-report.md`). Each teammate also writes `{role}-analysis.json` in `{target_dir}` so the lead can aggregate without re-parsing markdown.
+Test-team mode emits the common envelope PLUS a `team` section holding per-teammate breakdowns and the cross-challenge debate outcome. Write location: `{target_dir}/paper-test-team-report.json` (sibling to the existing `paper-test-team-report.md`). Each teammate also writes `{role}-analysis.json` in `{target_dir}` so the Synthesizer can aggregate without re-parsing markdown.
 
 The example below shows the shape only — the individual counts (`confirmed_by_multiple`, per-teammate `findings_count`, etc.) are illustrative and will not be cross-consistent with the single truncated finding shown.
 

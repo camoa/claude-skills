@@ -176,7 +176,7 @@
       "name": "code-paper-test",
       "source": "./code-paper-test",
       "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase (50–300), or a 3-agent competing team in isolated worktrees (300+, security-critical, skills). Verifies external calls for both existence and behavioral contracts (return-shape/nullability diffing, chained-object tracing, taint-stance fallback for closed-source). Supports `--json` for CI.",
-      "version": "0.10.1",
+      "version": "0.11.0",
       "author": {
         "name": "camoa"
       },

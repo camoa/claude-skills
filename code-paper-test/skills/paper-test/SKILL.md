@@ -1,9 +1,10 @@
 ---
 name: paper-test
 description: Use when testing code, skills, commands, or configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, edge cases, contract violations, and AI hallucinations. Use when user says "paper test", "trace this", "find bugs", "check for edge cases", "audit this code", "verify AI code", "test this skill", "test this agent", "validate this implementation", "review this logic", "check dependencies", "check this config", "walk through this code", "step through this", "dry run", "sanity check", "red team this", "poke holes in this". MUST verify external calls — never assume methods exist. Use proactively before deploying changes or after AI generates code.
-version: 0.10.0
+version: 0.11.0
 model: inherit
 allowed-tools: Read, Glob, Grep, Bash
+disallowed-tools: Write, Edit
 user-invocable: true
 ---
 
@@ -100,8 +101,8 @@ A method existing is not it returning what you assume. Existence verification is
 
 For CI integration, aggregation, or programmatic consumption, invoke with `--json` to emit a stable, versioned JSON document instead of the markdown report.
 
-- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper-test:test-team` (lead synthesis).
-- Schema is pinned at `schema_version: "1.0"` with an additive-only minor-version contract. CI should pin `^1\.`, not exact match.
+- Available on `/paper-test` (quick and structured-3-phase modes) and `/code-paper-test:test-team` (Synthesizer aggregation).
+- Schema follows an additive-only minor-version contract (currently `schema_version: "1.1"`). CI should pin `^1\.`, not an exact match.
 - Severity values match the existing rubric exactly: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`.
 - `findings` is always an array — `[]` when clean, never `null` or omitted.
 - `status` is the overall gate verdict: `pass` / `warning` / `fail`. Use `pass` only when no MEDIUM-or-higher findings exist and the run completed fully.
@@ -116,6 +117,8 @@ For CI integration, aggregation, or programmatic consumption, invoke with `--jso
 ## Pairing with `skill-quality-reviewer` for Skill Testing
 
 When paper-testing a skill, command, or agent file, run `plugin-creation-tools:skill-quality-reviewer` first (deterministic: stale SDK refs, dropped imperatives, frontmatter gaps) then paper-test for the semantic analysis (instruction fidelity, trigger coverage, context budget). See `references/skill-and-config-testing.md` §"Deterministic + Agentic pairing". In skill-mode, after verifying tool/file/skill references exist, verify each referenced capability PRODUCES what the calling step consumes — see `references/behavioral-verification.md` §B2.
+
+**Layering with native security review.** The Red Team Attacker lens in `/code-paper-test:test-team` complements the security-guidance plugin — security-guidance catches issues in Claude's own edits in real time; the Red Team Attacker finds adversarial vulnerabilities in the target code at analysis time. They cover different moments and are not substitutes.
 
 ## References
 
