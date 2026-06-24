@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.16.0] - 2026-06-24
+
+### Added — maintainer create-on-miss wiring (guides) + recipe-gap proposals
+Closes a long-standing gap: the navigator's guide create-on-miss offer was real but lived only in the `dev-guides-navigator` skill body, and the lifecycle's guide-discovery path (`/research` Step 3, `/design` Step 2, `/implement` Step 3) runs a deterministic script + the `guides-matcher` agent over the cached catalog — it **never invokes the navigator skill**, so the offer could never surface. A maintainer doing real projects was never prompted to author a missing guide. This wires the surfaces at the **command level**, where a prompt actually reaches the user.
+
+- **New `scripts/maintainer-mode-detect.sh`** — deterministic detector emitting `{maintainer_mode, dg_src}` from the canonical 4-part dev-guides SOURCE-repo signature (`mkdocs.yml` + `scripts/generate_llms.py` + `docs/agentic-recipes/` + a `.claude/agents/guide-*` agent; a partial signature is consumer mode). Pure read-only filesystem probe, zero model context. Behavioral spec: `tests/maintainer-mode-detect-spec.sh`.
+- **Surface 1 — GUIDE create-on-miss OFFER** (assertive, one-time, default `[n]`, non-blocking), wired into `/research` Step 3, `/design` Step 2, and `/implement` Step 3. Fires only in maintainer mode on a **genuine domain miss** (the "Domain guides matched:" group empty — methodology floor excluded; a weak match is not a miss). On `[y]`, hands off to the dev-guides repo's `/create-guide <topic>` (never authors here). The one-time decision is recorded **durably** in a new `<task>/_create-on-miss.json` sidecar (read-merge-write) — NOT the overwrite-on-fire `_dev-guides-load.json` — so a `/research` decline correctly suppresses the `/design` and `/implement` re-offer.
+- **Surface 2 — AGENTIC-RECIPE gap PROPOSE-ONLY notice** in `/research` step 2c, on the genuine `no_match` case (`recipes: []` AND `recipe_lookup_status == "ok"`). Surfaces a one-time informational "no recipe covers `<aspect>`" note (recorded in `_agentic-recipe.json` `gate_specific.recipe_gap_proposed[]`). No `[y]/[n]` offer, no authoring handoff — visibility only.
+- **Surface 3 — PROCESS-RECIPE gap PROPOSE-ONLY note** appended to the existing `recipe-resolution.md` step-5 ask-user, in maintainer mode. No extra prompt, no handoff; the existing local/research resolution is unchanged.
+- **Consumers (`maintainer_mode == false`) see none of this** — behavior is exactly as before. All three surfaces are soft-nudges that never block and never affect a gate verdict (additive audit fields only; `_dev-guides-load.json` stays schema `1.0`, `_agentic-recipe.json` stays `1.5`).
+
+Scope note: guides get a full creation handoff (the `/create-guide` endpoint exists); recipes are **propose-only by design** — there is intentionally no `/create-recipe` and no auto-create wiring. Tests: `tests/create-on-miss-wiring-spec.sh` (doc-contract) + `tests/maintainer-mode-detect-spec.sh` (behavioral).
+
 ## [5.15.2] - 2026-06-24
 
 ### Fixed — p2_tokens dogfood gaps D/E/F (found building adrupalcouple p2_tokens; all silent-degrade-reads-as-success class)
