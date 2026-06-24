@@ -57,6 +57,19 @@ else
   bad  "worktree.md does NOT hard-halt on a pinned name: under --ddev-up (silent collision)"
 fi
 
+# (4b) GAP D — under --ddev-up the pinned-`name:` halt presents `name:`-REMOVAL as THE fix and does NOT
+#       offer `--omit-project-name-by-default` as a co-equal way out (it can't clear a COMMITTED name:: the
+#       worktree inherits the same tracked config.yaml + an explicit name: overrides the global omit default
+#       → dead-end loop). Assert the corrected framing is present and the dead-end is named.
+if grep -Fiq -- 'THE fix is to remove the `name:` line' "$WT" \
+   && grep -Fiq -- 'dead-end loop' "$WT" \
+   && grep -Fiq -- 'inherits' "$WT" && grep -Fiq -- 'overrides' "$WT" \
+   && grep -Fiq -- 'forward-looking note' "$WT"; then
+  pass "worktree.md GAP-D: name:-removal is THE fix; omit-default demoted to a forward-looking note (dead-end loop named)"
+else
+  bad  "worktree.md GAP-D: still offers --omit-project-name-by-default as a co-equal fix for a committed name: (dead-end loop)"
+fi
+
 # (5) DB is COPIED, never shared (idea (b) explicitly rejected).
 if grep -Fiq -- 'copied, never shared' "$WT" || grep -Fiq -- 'copied' "$WT" && grep -Fiq -- 'NOT used' "$WT"; then
   pass "worktree.md states the DB is copied, not a shared container (idea (b) rejected)"
