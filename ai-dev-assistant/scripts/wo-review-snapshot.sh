@@ -52,7 +52,7 @@ fi
 if ! jq --arg wo "$WO" '
       if (.gate_specific.gates_run | type) == "array" then
         .gate_specific.gates_run |= map(
-          if (.envelope_path? // "") | type == "string"
+          if (.envelope_path | type) == "string"
           then .envelope_path |= gsub("/validations/latest/"; "/validations/" + $wo + "/")
           else . end)
       else . end

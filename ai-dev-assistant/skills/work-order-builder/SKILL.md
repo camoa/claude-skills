@@ -91,6 +91,8 @@ L-1). You never read the transcript to decide anything.
 KERNEL="${CLAUDE_PLUGIN_ROOT}/scripts/wo-compile.sh"
 WO="<task>/work-orders/wo-NN-<slug>.md"     # the memory-repo work-order file (read-only)
 WORKTREE="<the shared code worktree ③ handed you>"
+WO_DIR=$(cd "$(dirname "$WO")" && pwd)      # ABS dir of the WO file (memory repo): the anchor a body's
+                                            # ../task.md / ../coverage-map.json resolve against — NOT $WORKTREE
 ```
 
 ### 1. Gate — `assert-dispatchable` (fail-closed; NEVER spawn on failure)
@@ -170,6 +172,21 @@ the **Task** tool:
   to the prompt as clearly-demarcated trusted runtime context, separated from the WO body (the build
   brief) — e.g. a `BUILD ROOT (write all changes under this absolute path): <abs>` header line, a
   delimiter, then the verbatim WO body.
+- **Give the builder the WO_DIR second anchor — a body's `../` refs live in the MEMORY repo, not the
+  worktree.** A self-contained WO body should inline what it needs, but a body legitimately carries two
+  kinds of relative path: **worktree-relative** (`## Files to touch`, resolved against `BUILD ROOT`)
+  **and memory-repo-relative** — prose pointers to authoritative inputs (`Read ../task.md …`) and a
+  frontmatter `coverage_ref: ../coverage-map.json` — which resolve against the **WO file's own dir**
+  (`$WO_DIR`), a **different repo** from `cwd=$WORKTREE`. With only `BUILD ROOT`, a fresh builder
+  resolves `../task.md` from cwd=worktree → `<codePath>/.worktrees/task.md` (does not exist) and
+  **builds blind on every value the WO delegated to that ref** — a silent wrong/empty build surfaced
+  only downstream at the review/critique rung, never as a dispatch failure. So prepend a **second**
+  trusted-runtime-context anchor alongside `BUILD ROOT`:
+  `WO_DIR (resolve any ../ reference in this work-order — e.g. ../task.md, ../coverage-map.json —
+  against this absolute path, NOT against BUILD ROOT): <abs $WO_DIR>`. The builder's Read tool already
+  reaches absolute paths; it just needs to be told where the WO's siblings live. Keep the two anchors
+  visually distinct so the builder never writes build output under `$WO_DIR` (read-only) nor reads
+  inputs from under `BUILD ROOT`.
 - **Standard, not forked.** Do **not** set `CLAUDE_CODE_FORK_SUBAGENT` — a forked subagent inherits
   the parent conversation and defeats the load-bearing fresh-context guarantee. The builder must start
   in **clean context** with no parent narrative.

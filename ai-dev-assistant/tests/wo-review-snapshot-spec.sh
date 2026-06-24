@@ -56,4 +56,26 @@ T="$(mktask l11 true 1)"
 OUT="$(bash "$KERNEL" "$T" "$(printf 'wo-01\nrm -rf x')" 2>/dev/null)"; RC=$?
 [ "$RC" -eq 2 ] && [ ! -f "$T/work-orders/wo-01._review.json" ] && ok || no "L11 newline wo-id rejected"
 
+# T6 (GAP F regression) — a CSS/asset-only WO: skipped code-quality gates carry NO envelope_path
+#   (schema-valid: §5.8 "<path> or null"). A mixed gates_run with one STRING path + one explicit NULL +
+#   one KEY-ABSENT must NOT crash the rewrite (the old `(.envelope_path? // "") | type=="string"` guard
+#   type-checked the coalesced "" but then ran gsub on the RAW null → jq "null cannot be matched").
+#   Assert ok:true, review_ref written, ONLY the string path rewritten latest/→wo-06/, null/absent intact.
+T="$TMP/t6"; mkdir -p "$T/validations/latest"
+jq -nc '{schema_version:"1.0",gate:"solid",verdict:"pass"}' > "$T/validations/latest/solid.json"
+jq -nc --arg t "$T" '{schema_version:"1.2",gate_type:"review",fired_at:"x",task_folder:$t,
+  gate_specific:{overall_verdict:"pass",gates_run:[
+    {name:"solid",verdict:"pass",envelope_path:($t+"/validations/latest/solid.json")},
+    {name:"tdd",verdict:"skipped",envelope_path:null},
+    {name:"security",verdict:"skipped"}]}}' > "$T/_review.json"
+OUT="$(bash "$KERNEL" "$T" wo-06)"; RC=$?
+RR="$T/work-orders/wo-06._review.json"
+if [ "$RC" -eq 0 ] && [ "$(jq -r '.ok' <<<"$OUT")" = "true" ] && [ -f "$RR" ]; then ok; else no "T6 mixed gates_run => snapshot ok (RC=$RC OUT=$OUT)"; fi
+# only the string path rewritten; null stays null; absent stays absent
+P0="$(jq -r '.gate_specific.gates_run[0].envelope_path' "$RR" 2>/dev/null)"
+P1="$(jq -r '.gate_specific.gates_run[1].envelope_path' "$RR" 2>/dev/null)"
+P2HAS="$(jq -r '.gate_specific.gates_run[2] | has("envelope_path")' "$RR" 2>/dev/null)"
+[[ "$P0" == */validations/wo-06/solid.json ]] && [ "$P1" = "null" ] && [ "$P2HAS" = "false" ] \
+  && ok || no "T6 only string rewritten (P0=$P0 P1=$P1 absent_stays=$P2HAS)"
+
 echo "----"; echo "wo-review-snapshot-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]
