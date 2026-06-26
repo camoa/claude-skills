@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.17.0] - 2026-06-26
+
+### Added — the mechanism-challenge (GAP G): challenge a task's stated mechanism, don't just build it
+AIDA verified *faithful execution of its input*, not *whether the input's mechanism was the right one* — so a task that prescribed an anti-pattern (e.g. an `image_style` + theme-preprocess `<img>` where the native path is a media view mode + `responsive_image` formatter) shipped through every gate. The mechanism-challenge treats a task's stated implementation mechanism as a **challengeable assumption**: extract it, research the native pattern, disposition, record, and assert at review.
+
+- **`scripts/mechanism-disposition.sh`** — the deterministic decision kernel: `{grounding, mode, hint}` → `{action, blocks, decided_by}`. Verified supersede (recipe/guide) auto-applies unattended / blocks attended; unverified (web) defers; the `required` hint is never auto-swapped. Exhaustively spec'd (`tests/mechanism-disposition-spec.sh`, 18-cell matrix).
+- **Resolver cascade** (identical attended/unattended): agentic recipes → dev-guides → quick web **≤1 year** (recency double-enforced), first hit wins. Reuses `recipe-loader` / `dev-guides-navigator` / `prior-art-researcher` — no second research path, no new agent.
+- **Runs** at `/research` step 2c, `/design`, and the **`/implement` preflight backstop** (re-runs on absent or stale `mechanisms_hash` — the structural catch for an externally-seeded task that skipped scope/research/design); **asserts** at `/review` via a fail-closed aggregate gate (`name:"mechanism-challenge"`, **always emitted** — an absent record ⇒ fail), mirroring the `agentic-verifier` pattern and folding into `overall_verdict`.
+- **New `gate_type: "mechanism-challenge"`** (`_mechanism-challenge.json`, schema `1.0`, additive — `gate-audit-schema.md` §5.14); added to the `gate-audit-write.sh` allowlist.
+- **Optional `mechanism_hints` task frontmatter** (`[{approach, status}]`, read via `fm-helpers.sh`), read-if-present with prose-extraction as the floor — **decoupled** from the concurrent converter work (G-CONV-40/50): the engine challenges any task regardless of source; there is intentionally no `/create-recipe` / auto-create wiring.
+- Canonical spec: `references/mechanism-challenge.md`. Doc-contract: `tests/mechanism-challenge-wiring-spec.sh`. Built by dogfooding AIDA's own lifecycle on this task.
+
 ## [5.16.0] - 2026-06-24
 
 ### Added — maintainer create-on-miss wiring (guides) + recipe-gap proposals

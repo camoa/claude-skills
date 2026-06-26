@@ -66,6 +66,7 @@ except Exception as e:
         blocked_by: ($d.blocked_by // []),
         external_ids: ($d.external_ids // {}),
         status: ($d.status // "draft"),
+        mechanism_hints: ($d.mechanism_hints // []),
         folder: $dir,
         warnings: []
       }
@@ -79,6 +80,7 @@ except Exception as e:
         blocked_by: [],
         external_ids: {},
         status: "draft",
+        mechanism_hints: [],
         folder: $dir,
         warnings: [{code: "malformed_yaml", detail: .error}]
       }

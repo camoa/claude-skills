@@ -29,6 +29,7 @@ Where `<gate_type>` is one of:
 - `visual_parity` (v1.3+)
 - `recipe-load` (v1.4+)
 - `agentic-recipe` (v1.5+)
+- `mechanism-challenge` (own `schema_version "1.0"`; v5.17.0+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -43,7 +44,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 13>",
+  "gate_type": "<one of the 14>",
   "fired_at": "2026-04-24T20:30:00Z",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
@@ -457,6 +458,50 @@ adopted recipe. The discovery half is degrade-first (a `recipes: []` no_match ne
 on a verified match is not (you must `adopt` or record `used_own` with a reason), and an adopted recipe's
 verifier is a hard-block. Written by `references/agentic-recipe-resolution.md` from `/research`
 (the decisions) and updated by `/review` (the verifier outcomes).
+
+### 5.14 `mechanism-challenge` (v5.17.0+, GAP G)
+
+Records the mechanism-challenge: AIDA treating a task's stated implementation mechanism as a challengeable
+assumption rather than a spec (`references/mechanism-challenge.md`). Audit file `_mechanism-challenge.json`,
+own `schema_version: "1.0"`. Written at `/research` step 2c, refreshed at `/design`, and produced/refreshed
+by the `/implement` preflight backstop; **read by `/review`** which folds a fail-closed aggregate gate entry
+into `overall_verdict`. Overwrite-on-fire (latest run wins), but the per-mechanism `decided_by` carries the
+settled disposition forward; `mechanisms_hash` lets a consumer detect a stale record.
+
+```json
+"gate_specific": {
+  "challenge_ran": true,
+  "mode": "attended | unattended",
+  "mechanisms_hash": "<sha256 of the normalized extracted stated-mechanism set>",
+  "mechanisms": [
+    {
+      "mechanism_stated": "build an image_style + emit <img> from a theme preprocess",
+      "requirement": "16:9 card thumbnail from the schema_image media reference",
+      "disposition": "kept | overridden | deferred",
+      "decided_by": "human | auto | deferred",
+      "hint_status": "none | suggested | required",
+      "supersede": {
+        "pattern": "media view mode + responsive_image formatter",
+        "source": "agentic_recipe | guide | web",
+        "recipe_name": "responsive_image_wiring",
+        "verified": true,
+        "evidence_ref": "<blob sha | guide slug | url+date>",
+        "recency": "<n/a for verified | ISO date for web>",
+        "reason": "<why it supersedes, or the human's keep-reason>"
+      }
+    }
+  ]
+}
+```
+
+- `disposition` derives from the deterministic `scripts/mechanism-disposition.sh` `action`: `keep→kept`,
+  `auto_adopt→overridden`, `defer→deferred`, `surface→` the human's choice. `supersede: null` when
+  `disposition:"kept"` (no superseding pattern; optionally a `confirmed_by` source ref).
+- **Fail-closed at `/review`:** `gates_run[]` entry `name:"mechanism-challenge"` is `pass` iff the record
+  exists, `challenge_ran == true`, and no mechanism is an unresolved attended-supersede (a `deferred` whose
+  origin was attended); an **absent** record ⇒ `skipped + unresolved:true` ⇒ fail (step-8 rule 2). Mirrors
+  the `agentic-verifier` aggregate pattern (§5.8).
+- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes.
 
 ## 6. Invariants
 

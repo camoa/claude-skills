@@ -26,6 +26,7 @@ Always-present fields:
 - `blocked_by` — array of `local:<id>` strings
 - `external_ids` — object (reserved for future tracker integration; currently `{}`)
 - `status` — `draft | in_progress | blocked | completed`
+- `mechanism_hints` — array of `{approach, status}` (`status: suggested | required`); the optional mechanism-challenge contract (GAP G, `references/mechanism-challenge.md`). Defaults to `[]` when absent — read-if-present; the challenge's prose-extraction floor applies otherwise.
 - `folder` — absolute path passed in
 - `warnings` — array of `{code, detail}` entries
 
