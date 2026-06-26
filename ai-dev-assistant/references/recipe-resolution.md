@@ -70,6 +70,14 @@ callers cite instead of re-describing the steps inline.
    live and save the result to a local file (`source=research` is transient and flips to
    `source=local` once saved). Either way the loader records the chosen source, so the next phase run
    short-circuits. Never fabricate a recipe.
+   - **Maintainer recipe-gap note (v5.16.0+, propose-only — Surface 3 in
+     `references/maintainer-create-on-miss.md`).** Before the ask-user prompt, run
+     `${CLAUDE_PLUGIN_ROOT}/scripts/maintainer-mode-detect.sh`; when `maintainer_mode == true`, **append**
+     one informational line to the prompt — "💡 Maintainer note: no published `<phase>/<framework>`
+     recipe exists in the catalog; whatever you resolve here is local (`verified:false`) — consider
+     authoring a catalog recipe later (not done automatically)." This is **propose-only**: it adds no
+     extra prompt, no authoring handoff, and never blocks; the existing path/research-local resolution
+     proceeds unchanged. Consumers (`maintainer_mode == false`) never see the note.
 
 6. **No body resolved (do not dispatch a method-less agent).** The follow-step from step 4 (whether
    the command follows in place or dispatches a generic agent) runs **only** when a `body_path` is

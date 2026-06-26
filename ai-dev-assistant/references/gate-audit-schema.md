@@ -158,6 +158,8 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 
 `keywords_matched[]` / `guides_to_load[]` are **legacy** (v4.0.0 keyword-table model, removed in v4.10.0). The detector no longer populates them; they remain in the schema as `[]` so pre-v4.10.0 audit readers do not break. New consumers read `methodology_floor[]` + `catalog_candidates[]` + `matched_domain_guides[]`.
 
+**Additive (v5.16.0 — schema stays `"1.0"`):** `gate_specific.create_on_miss` — present only when the maintainer create-on-miss offer surfaced (Surface 1, `references/maintainer-create-on-miss.md`); `{ "maintainer_mode": true, "topic": "<topic>", "offered": true, "decision": "authored" | "skipped" | "dont_ask" }`. Absent for consumers (`maintainer_mode == false`) and when a domain guide matched (no genuine miss). **This is an observability mirror only — `_dev-guides-load.json` is overwrite-on-fire, so it cannot carry a decision across the `/research`→`/design` re-offer.** The durable one-time suppression record lives in the separate `<task>/_create-on-miss.json` sidecar (read-merge-write, `guides[]` keyed by `topic`). Never affects `overall_verdict`.
+
 ### 5.7 `playbook-load`
 
 ```json
@@ -429,6 +431,13 @@ navigator was unavailable — an **inconclusive** lookup that `/research` does N
 next attended run, same as `deferred`). recipe-loader now reads the index/bodies from the **project-independent
 shared store** (`~/.claude/dev-guides-store`), not a cwd-derived per-project cache, so this status reflects the real
 catalog and never the caller's accidental project context (GAP-B fix).
+
+**Additive (v5.16.0 — schema stays `"1.5"`):** `gate_specific.recipe_gap_proposed[]` — a slug list of the
+load-bearing capability aspects for which the maintainer recipe-gap **propose-only** notice surfaced (Surface 2,
+`references/maintainer-create-on-miss.md`). Written only on the genuine `no_match` case (`recipes: []` AND
+`recipe_lookup_status == "ok"`) in maintainer mode; consumed on a re-run to surface each aspect once. Propose-only:
+there is no authoring handoff and it never affects `overall_verdict` — pure observability. Absent for consumers and
+when a recipe matched.
 
 | Field (per `recipes[]` element) | Type | Contract |
 |---|---|---|
