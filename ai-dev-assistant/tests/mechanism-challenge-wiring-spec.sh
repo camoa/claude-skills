@@ -8,6 +8,7 @@
 set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"; ROOT="$DIR/.."
 KERNEL="$ROOT/scripts/mechanism-disposition.sh"
+HASHK="$ROOT/scripts/mechanisms-hash.sh"
 REF="$ROOT/references/mechanism-challenge.md"
 SCHEMA="$ROOT/references/gate-audit-schema.md"
 AUDITW="$ROOT/scripts/gate-audit-write.sh"
@@ -36,7 +37,25 @@ has "$REF" "reference: disposition matrix"                        -i 'dispositio
 has "$REF" "reference: required-hint never auto-swapped"          -i 'required.*never|never auto-swap'
 has "$REF" "reference: runs research/design/implement, asserts review" -i 'implement.*backstop|backstop'
 has "$REF" "reference: mechanisms_hash freshness"                 'mechanisms_hash'
-has "$REF" "reference: mechanism_hints optional, prose floor"     -i 'prose extraction is the floor|prose-extraction floor|never depends'
+has "$REF" "reference: mechanisms_hash computed by the kernel"     'mechanisms-hash\.sh'
+has "$REF" "reference: mechanisms_hash engine-owned"              -i 'engine-owned'
+has "$REF" "reference: mechanism_hints optional, prose floor"     -i 'prose extraction is the floor|prose floor|never depend'
+
+# --- the mechanisms-hash kernel exists, is deterministic, and is WIRED into the 3 producers ---
+[ -f "$HASHK" ] && [ -x "$HASHK" ] && echo "PASS: mechanisms-hash.sh exists + executable" || { echo "FAIL: mechanisms-hash.sh missing/not exec"; fail=1; }
+_h1="$(printf '%s\n' b a | bash "$HASHK" 2>/dev/null)"; _h2="$(printf '%s\n' a b a | bash "$HASHK" 2>/dev/null)"
+[ -n "$_h1" ] && [ "$_h1" = "$_h2" ] && echo "PASS: mechanisms-hash deterministic set semantics" || { echo "FAIL: mechanisms-hash not set-deterministic"; fail=1; }
+has "$RESEARCH"  "research computes mechanisms_hash via kernel"   'mechanisms-hash\.sh'
+has "$DESIGN"    "design computes mechanisms_hash via kernel"     'mechanisms-hash\.sh'
+has "$IMPLEMENT" "implement backstop computes hash via kernel"    'mechanisms-hash\.sh'
+
+# --- the seam contract: converter handshake body tags + the no-producer rules ---
+has "$REF" "seam: mechanism: suggested body tag"                  'mechanism: suggested'
+has "$REF" "seam: adopt_recipe: <name> body tag"                  'adopt_recipe:'
+has "$REF" "seam: adopt_recipe still re-verified (not blind)"     -i 're-verified|still.*verif'
+has "$REF" "seam: prose floor is AUTHORITATIVE for converter tasks" -i 'authoritative'
+has "$REF" "seam: converter writes NO mechanism_hints frontmatter" -i 'no .?mechanism_hints'
+has "$REF" "seam: required has no converter producer"            -i 'no converter producer|required is human-only|human-only'
 
 # --- audit plumbing: allowlist + schema section + count bump ---
 has "$AUDITW" "gate-audit-write allowlists mechanism-challenge"   'mechanism-challenge'

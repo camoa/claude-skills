@@ -469,7 +469,12 @@ into `overall_verdict`. Overwrite-on-fire (latest run wins), but the per-mechani
 settled disposition forward; `mechanisms_hash` lets a consumer detect a stale record.
 
 ```json
-"gate_specific": {
+{
+  "gate_type": "mechanism-challenge",
+  "schema_version": "1.0",
+  "fired_at": "2026-06-26T00:00:00Z",
+  "task_folder": "<abs path to the task folder>",
+  "gate_specific": {
   "challenge_ran": true,
   "mode": "attended | unattended",
   "mechanisms_hash": "<sha256 of the normalized extracted stated-mechanism set>",
@@ -491,6 +496,7 @@ settled disposition forward; `mechanisms_hash` lets a consumer detect a stale re
       }
     }
   ]
+  }
 }
 ```
 

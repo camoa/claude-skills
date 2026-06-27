@@ -80,14 +80,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 ## Anti-bypass clause (applies to gates 1-9)
 
-The following are NOT valid reasons to skip:
-
-- The user said something earlier you interpret as already-validated
-- Auto mode is active ("minimize interruptions" never overrides framework gates)
-- You're confident the gates would pass
-- The task looks "obviously" done
-- You want to spare the user the prompt
-- The user asked you to compress, summarize, or skip verbatim gate output (show-not-summarize is non-negotiable)
+The following are NOT valid reasons to skip: the user said something earlier you read as already-validated; auto mode is active ("minimize interruptions" never overrides framework gates); you're confident the gates would pass; the task looks "obviously" done; you want to spare the user the prompt; or the user asked you to compress/summarize/skip verbatim gate output (show-not-summarize is non-negotiable).
 
 If `/review` is invoked, all gates fire and their output is shown verbatim before the recorded decision is final. Skipping requires the documented `--skip-<gate>` flag with reason; bypass is recorded on disk for `/audit-status`.
 
