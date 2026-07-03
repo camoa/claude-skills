@@ -26,7 +26,7 @@ This is a **framework-owned** gate — it does NOT wrap a `code-quality-tools` s
 This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge (existing v3.13.0 behavior); when invoked from `/ai-dev-assistant:review` with `--hard-block`, the gate promotes `warning` verdicts to `fail`. The HTML comment above is the **capability marker** read by `/review` Step 4 to assign `kind: "hard-block"` in `gates_run[]`.
 
 1. **Resolve task context** — same resolution as other `/validate:*` commands:
-   (a) read `session_context.json` if present
+   (a) run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parse its JSON (`.project`, `.projectPath`, `.task`, `.taskPath`) if it resolves
    (b) walk up from `$PWD` until you find `implementation_process/`
    (c) abort with "no project context" if neither resolves
 

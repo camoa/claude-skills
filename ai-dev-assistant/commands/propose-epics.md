@@ -19,7 +19,7 @@ This is the bulk-review counterpart to the inline pre-analysis hook in `/researc
 
 ## What this does
 
-1. Resolves the active project from `session_context.json`. If no project active, asks user to run `/ai-dev-assistant:next` first.
+1. Resolves the active project by running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON (`.project`, `.projectPath`). If no project active, asks user to run `/ai-dev-assistant:next` first.
 2. **Resolves `codePath`** by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing `.codePath`. If unknown, runs the detect+confirm flow (shared with `/set-code-path`) and persists the answer.
 3. **Enumerates candidates** — every subfolder of `<project>/implementation_process/in_progress/` that is `kind: flat` (via `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"`, Bash, parse `.kind`). Skips:
    - `kind: epic` / `kind: sub_epic` (already an epic)

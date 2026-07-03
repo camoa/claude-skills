@@ -25,7 +25,7 @@ If `## Phase Status` H2 absent entirely, appends the 4-line block. If only `Phas
 
 ### Step 2 — Resolve task + project context
 
-Same pattern as `/validate:*`: prefer `session_context.json` (`projectPath` + `task`); fall back to walking up from `$PWD` until finding `implementation_process/`. If both fail, exit 2 with usage. The session-context-reader is the same primitive used by `/scope`, `/research`, `/complete`.
+Same pattern as `/validate:*`: prefer running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON (`.projectPath` + `.task`); fall back to walking up from `$PWD` until finding `implementation_process/`. If both fail, exit 2 with usage. `session-context-read.sh` is the same primitive used by `/scope`, `/research`, `/complete`.
 
 ### Step 3 — Working-tree warning
 
