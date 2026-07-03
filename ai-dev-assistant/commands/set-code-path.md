@@ -18,7 +18,7 @@ Set or update the `codePath` metadata for the active ai-dev-assistant project. `
 
 ## What this does
 
-1. Resolves the active project from `session_context.json` (`projectPath`). If no project active, prompts the user to pick one via `/ai-dev-assistant:next` first.
+1. Resolves the active project by running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON (`.project`, `.projectPath`, `.task`, `.taskPath`). If no project active, prompts the user to pick one via `/ai-dev-assistant:next` first.
 2. **Reads current value** by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON (so the confirm prompt can show what's changing).
 3. **Resolves new value:**
    - With `<path>` arg: `realpath -m` normalize; validate exists (unless `--docs-only` or the path resolves to an acceptable path that may not yet exist; in that case, warn and continue).

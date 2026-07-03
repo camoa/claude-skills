@@ -33,7 +33,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
 
 1. **Phase Transition Check.** Read `task.md` Phase Status. If Phase 3 not `[x]`, soft-nudge once. If `## Phase Status` H2 absent entirely, append it with the four standard phase lines (1 Research, 2 Architecture, 3 Implementation, 4 Review). If only Phase 4 line missing, idempotently insert before next `## ` boundary (or EOF if none).
 
-2. **Resolve task + project context.** Validate `<task-name>` charset (above). If absent, try session-context-reader; if also null, exit 2 with usage. Resolve the project folder by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON.
+2. **Resolve task + project context.** Validate `<task-name>` charset (above). If absent, try running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON (`.task`, `.taskPath`); if also null, exit 2 with usage. Resolve the project folder by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON.
 
 3. **Working-tree warning.** Run `git diff --name-only`. If non-empty AND `--allow-dirty` not set: print warning ("gates run on staged + working tree state, not committed state. Continue? [y/N]"). Default `[N]`. User declines → exit 0. **Under `--headless`:** do not prompt; proceed regardless of the dirty tree; record `working_tree: "dirty"|"clean"` in the step-10 payload (equivalent to auto-`--allow-dirty`).
 

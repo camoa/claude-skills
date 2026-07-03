@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.18.0] - 2026-07-03
+
+### Fixed
+- **Session-context resolution now has a deterministic reader.** A stale global singleton
+  (`~/.claude/ai-dev-assistant/session_context.json`) could be read instead of the correct
+  per-workspace + per-session file, causing cross-window active-project bleed. Command/skill prose
+  named the bare `session_context.json`, so a model would resolve the wrong file.
+
+### Added
+- **`scripts/session-context-read.sh`** — the read-side mirror of `session-context-write.sh`.
+  Resolves via `session-paths.sh` `ddf_session_file` (reuses the shared resolver, no hash
+  re-derivation); hit → `cat` the session JSON verbatim; miss → null-superset shape + `warnings[]`
+  (exit 0); unreadable → exit 1; **self-heals** by unconditionally deleting the stale global orphan
+  on every run. It is the "session-context-reader" primitive named in `review.md` / `next.md` /
+  `review-phase-walkthrough.md`.
+- **`tests/session-context-read-spec.sh`** — 6-case behavioral spec (distinct-resolution,
+  orphan-delete on hit+miss, miss-shape, hit-shape, repoint-completeness).
+
+### Changed
+- **18 model-facing READ-sites across 15 command/skill/reference docs** now invoke
+  `session-context-read.sh` instead of naming the bare `session_context.json`. Write-sites
+  (invoking `session-context-write.sh`) are unchanged.
+
 ## [5.17.0] - 2026-06-26
 
 ### Added — the mechanism-challenge (GAP G): challenge a task's stated mechanism, don't just build it

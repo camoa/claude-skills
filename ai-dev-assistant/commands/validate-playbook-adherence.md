@@ -24,7 +24,7 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
 
 ## What this does
 
-1. **Resolve task context** — (a) `session_context.json`; (b) walk up from `$PWD` to find `implementation_process/`; (c) abort with usage on neither. Validate task-name charset; locate task under `<project>/implementation_process/**/<task-name>/`.
+1. **Resolve task context** — (a) run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parse its JSON (`.project`, `.projectPath`, `.task`, `.taskPath`); (b) walk up from `$PWD` to find `implementation_process/`; (c) abort with usage on neither. Validate task-name charset; locate task under `<project>/implementation_process/**/<task-name>/`.
 
 2. **Read playbook audit (defensive).** `jq -e .gate_specific <task>/_playbook-load.json 2>/dev/null` — on parse failure OR file absent, emit `verdict: "skipped"` reason `"no playbook audit found — task pre-dates v3.15.0 or playbook loader did not run"` and proceed to Step 8.
 
