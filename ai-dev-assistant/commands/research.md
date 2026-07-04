@@ -68,6 +68,13 @@ Run in order. Each "gate" step writes an audit JSON; non-bypassable unless an ex
 
 12. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with resolved project + task.
 
+13. **Distill-and-drop seam (v5.18.0+, `run_mode`-aware — advisory, never blocks).** After the durable pointer is written and Phase 1 is marked `[x]`, run the end-of-phase distill seam per `references/orchestration-context-hygiene.md` §2. It sheds this phase's context residue *before* the raw exchange is compacted; the live research orchestration has already finished above.
+    - **Read `run_mode`** — `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` → `.runMode` (project dial), with an optional task override via `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` → `.run_mode` (`null` = inherit). Absent/bad → `interactive` (fail-closed; an unset mode never grants autonomy).
+    - **`interactive` (default)** → emit the one-line offer (default `[n]`): "💡 Phase 1 complete. Distill the `research.md` hub to a self-containment check + digest before compaction? `[y]` dispatches a fresh `distill-agent` (reads only disk, writes `_distill.json`); `[n]` (default) — proceed." On `[y]` dispatch; on `[n]` proceed.
+    - **`autonomous`** → **auto-run** (no human turn): dispatch `distill-agent` directly, then fold any `interaction_substitute[]` from the returned `_distill.json` into the `research.md` hub.
+    - **Dispatch `distill-agent`** (Task tool) with **paths only** (never the transcript): `artifact_path` = `<task_folder>/research.md`, `sibling_paths[]` = `task.md` + this phase's audit JSONs (`_pre-analysis.json`, `_dev-guides-load.json`, `_recipe-load.json`, `_mechanism-challenge.json`, `coverage-map.json`, `_coverage-mapping.json`) + every `research/<subject>.md`, `phase` = `research`, `run_mode`, optional `bounded_brief` (omit on the common path), `output_path` = `<task_folder>/_distill.json`.
+    - **Read back** `_distill.json` as scalars — `.self_contained` + `.artifact_pointer` (never the agent's prose). On `.self_contained == false` print ONE advisory line naming `.gaps[]` ("distill: research.md may be missing N load-bearing item(s): …"). **Never blocks** — carry only the pointer + digest onward and compact the raw exchange.
+
 ## Anti-bypass clause (applies to gates 1, 3, 4, 7; and step 2c per its contract)
 
 The following are NOT valid reasons to skip:
@@ -86,6 +93,7 @@ If a gate's signals fire, it MUST run and its output MUST be shown verbatim befo
 - Mandated user-prompt wording: `references/gate-hardening-prompts.md`
 - Audit shape: `references/gate-audit-schema.md` v1.0
 - Alignment grammar: `references/alignment-contract.md`
+- Distill-and-drop seam + `_distill.json` schema: `references/orchestration-context-hygiene.md`
 
 ## Related
 

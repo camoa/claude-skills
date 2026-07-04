@@ -271,6 +271,12 @@ Optional scope contract authored before Phase 1 via `/scope <task>`. Produces `a
 
 **Reader:** `alignment-reader` skill (haiku, user-invocable: false) parses `alignment.md` into structured JSON via `scripts/alignment-read.sh`. Defensive — never throws; emits `warnings[]` on malformed sections. Mirrors `project-state-reader` (v3.11.0) and `task-frontmatter-reader` (v3.10.0).
 
+## Context Hygiene — Distill-and-Drop (v5.18.0+)
+
+After an interactive prep phase (`/scope`, `/research`, `/design`) writes its artifact, a `run_mode`-aware end-of-phase **distill seam** delegates a self-containment CHECK + digest to a fresh `distill-agent` handed the artifact **path** (never the transcript); the orchestrator carries only the returned pointer + compact digest and compacts the raw exchange. **Interactive** → a `[y]/[n]` offer (default `[n]`, byte-mirroring `/design`'s work-order-compile offer). **Autonomous** → auto-run, and the agent additionally performs the prep-phase interaction-substitute. The agent Writes its own `<task>/_distill.json` sidecar (the `wo-critic` verdict-file pattern — **not** a `gate-audit-write.sh` `gate_type`); `self_contained: false` yields a one-line advisory nudge, **never a block**. `distill_and_drop` builds this (epic `orchestrator_context_hygiene`, design §4① / §6 row 4 / §7): the `distill-agent`, the three command seams, and a plugin-owned doctrine home. **Advisory only** — no hook, no gate, no kernel. The plugin **never** auto-edits `~/.claude/CLAUDE.md`; it ships a documented copy-paste global snippet the user opts into by hand.
+
+**Full contract:** `references/orchestration-context-hygiene.md` (the rule, the seam, the `_distill.json` schema, the `run_mode` branch, the recommended global snippet). Agent: `agents/distill-agent.md`. Seams: `commands/{scope,research,design}.md` (after `session-context-write.sh`, after the phase is marked complete).
+
 ## Agents
 - Frontmatter must include: name, description, capabilities, version, model
 - Description starts with "Use when..." for auto-delegation
