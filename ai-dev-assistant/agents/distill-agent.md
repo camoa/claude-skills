@@ -42,7 +42,8 @@ uses, softened: the input is not adversarial, but the rule is identical.
 - **`bounded_brief`** — **optional** short structured note of live-only residue the orchestrator
   assembled (like `analysis-agent`'s `task_description_text`). **Never** the raw transcript; usually
   omitted (the artifact + audit JSONs already capture the decisions).
-- **`output_path`** — abs path where you Write `_distill.json` (the task folder).
+- **`output_path`** — the **absolute FILE path** to Write the `_distill.json` sidecar to (typically
+  `<task-folder>/_distill.json`), NOT a directory. Write exactly this file.
 
 Read these with `Read` / `Grep` / read-only `Bash` (e.g. `jq -r` over an audit JSON, `wc -l`). **Do not**
 read, request, or infer the orchestrator's transcript. Your only inputs are the paths above.

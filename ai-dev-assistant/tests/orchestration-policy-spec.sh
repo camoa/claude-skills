@@ -193,6 +193,23 @@ else
   fail_check "write refuse-preserve — rc=$RC run_mode=$(jq -r '.run_mode' "$P8/orchestration-policy.json" 2>/dev/null)"
 fi
 
+# 9. Valid-JSON-but-non-object existing file → exit 2, original file preserved, NO .tmp leftover.
+#    (Guards the jq-error-exits-5-and-strands-a-.tmp bug for [], 42, "x".)
+i=0
+for bad in '[]' '42' '"x"'; do
+  i=$((i+1))
+  P9="$TMPDIR/p9_$i"; new_project "$P9" interactive
+  POL9="$P9/orchestration-policy.json"
+  printf '%s' "$bad" > "$POL9"
+  RC=0
+  bash "$WRITE" "$P9" autonomous 2>/dev/null || RC=$?
+  if [ "$RC" -eq 2 ] && [ "$(cat "$POL9")" = "$bad" ] && [ ! -e "$POL9.tmp" ]; then
+    pass_check "write: non-object JSON ($bad) → exit 2, file preserved, no .tmp leftover"
+  else
+    fail_check "write non-object ($bad) — rc=$RC content=$(cat "$POL9" 2>/dev/null) tmp=$([ -e "$POL9.tmp" ] && echo present)"
+  fi
+done
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\norchestration-policy invariants violated.\n' >&2
   exit 1

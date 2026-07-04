@@ -60,8 +60,18 @@ esac
 
 POLICY="$PROJECT_DIR/orchestration-policy.json"
 TMP="$POLICY.tmp"
+# Every failure path after this point must leave no temp behind — a jq error would otherwise
+# strand a truncated .tmp. The trap is a no-op on the happy path (mv moves TMP away first).
+trap 'rm -f "$TMP"' EXIT
 
 if [ -s "$POLICY" ] && jq -e . "$POLICY" >/dev/null 2>&1; then
+  # Refuse a valid-JSON-but-non-object existing file ([], 42, "x", …): merging over it would make jq
+  # error with its own exit code (5) and strand a .tmp. Fail clean with the contract's exit 2 and
+  # leave the existing file untouched (the valid-file-not-clobbered guarantee).
+  if ! jq -e 'type=="object"' "$POLICY" >/dev/null 2>&1; then
+    printf 'orchestration-policy-write.sh: existing %s is not a JSON object; refusing to merge\n' "$POLICY" >&2
+    exit 2
+  fi
   # Merge over existing valid JSON. Preserve the managed arrays verbatim; seed any
   # that are missing. Overwrite run_mode unless {PRESERVE}.
   jq --arg rm "$RUN_MODE_ARG" '

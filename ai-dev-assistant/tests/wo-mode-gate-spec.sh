@@ -82,6 +82,14 @@ out="$(bash "$KERNEL" "$FILEARG" 2>/dev/null)"; rc=$?
 PROOT="$(mkproj p5 interactive)"; T="$(mktask "$PROOT" s5 none confirm)"
 out="$(bash "$KERNEL" "$T" --bogus-flag 2>/dev/null)"; rc=$?
 [ "$rc" -eq 2 ] && ok || no "S5d unknown flag" "rc=$rc (want 2)"
+# S5e: a value-taking flag as the LAST token with NO value → exit 2, must NOT hang.
+# Regression guard for the `shift 2` on 1 remaining arg (no -e) infinite loop. The `timeout 5`
+# makes a re-hang surface as rc=124 → visible FAIL instead of a stuck suite.
+PROOT="$(mkproj p5e interactive)"; T="$(mktask "$PROOT" s5e none confirm)"
+for flag in --action --mode --project-root --operator-uid; do
+  timeout 5 bash "$KERNEL" "$T" "$flag" >/dev/null 2>&1; rc=$?
+  [ "$rc" -eq 2 ] && ok || no "S5e trailing $flag (no value)" "rc=$rc (want 2; 124=hang regression)"
+done
 
 # ─── S6: --print-cmd stays UNGATED (wo-pr-open --print-cmd must NOT invoke the mode gate) ───
 # mode-gate stub that ALWAYS refuses AND logs its invocation; merge-gate stub that says merge_ok.

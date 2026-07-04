@@ -70,10 +70,13 @@ shift
 PROJECT_ROOT=""; MODE_OVERRIDE=""; OPERATOR_UID=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --action)       ACTION="${2:-}";        shift 2 ;;
-    --project-root) PROJECT_ROOT="${2:-}";  shift 2 ;;
-    --mode)         MODE_OVERRIDE="${2:-}"; shift 2 ;;
-    --operator-uid) OPERATOR_UID="${2:-}";  shift 2 ;;
+    # Every value-taking flag guards that a value is actually present before consuming it. Without the
+    # guard, a trailing valueless flag makes `shift 2` a no-op on 1 remaining arg (set has no -e), so
+    # the loop never advances → infinite hang. Fail-closed: a missing value is bad args ⇒ exit 2.
+    --action)       [ $# -ge 2 ] || { printf 'wo-mode-gate: missing value for %s\n' "$1" >&2; exit 2; }; ACTION="$2";        shift 2 ;;
+    --project-root) [ $# -ge 2 ] || { printf 'wo-mode-gate: missing value for %s\n' "$1" >&2; exit 2; }; PROJECT_ROOT="$2";  shift 2 ;;
+    --mode)         [ $# -ge 2 ] || { printf 'wo-mode-gate: missing value for %s\n' "$1" >&2; exit 2; }; MODE_OVERRIDE="$2"; shift 2 ;;
+    --operator-uid) [ $# -ge 2 ] || { printf 'wo-mode-gate: missing value for %s\n' "$1" >&2; exit 2; }; OPERATOR_UID="$2";  shift 2 ;;
     *) printf 'wo-mode-gate: unknown arg: %s\n' "$1" >&2
        verdict false unknown "bad_args" "" 2 ;;
   esac
