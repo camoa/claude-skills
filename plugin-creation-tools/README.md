@@ -1,5 +1,7 @@
 # Plugin Creation Tools
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-plugin-creation-tools-plugin-creation-tools)](https://www.claudepluginhub.com/plugins/camoa-plugin-creation-tools-plugin-creation-tools?ref=badge)
+
 Complete authoring guide for Claude Code plugins — skills, commands, agents, hooks, MCP servers, themes, `userConfig`, plugin dependencies, the Agent SDK, and distribution.
 
 The plugin contains one large skill (`plugin-creation`) that progressively discloses references for every component type, plus three commands and two structural-audit agents. Aimed at plugin authors building or maintaining plugins for the public marketplace.
@@ -10,6 +12,14 @@ The plugin contains one large skill (`plugin-creation`) that progressively discl
 
 ```bash
 /plugin install plugin-creation-tools@camoa-skills
+```
+
+## Usage
+
+```bash
+/plugin-creation-tools:create my-tools --skill --agent
+/plugin-creation-tools:add-component command deploy
+/plugin-creation-tools:validate ./my-tools --strict
 ```
 
 ## Components

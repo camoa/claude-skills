@@ -1,5 +1,7 @@
 # Brand Content Design Plugin
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-brand-content-design-brand-content-design)](https://www.claudepluginhub.com/plugins/camoa-brand-content-design-brand-content-design?ref=badge)
+
 > **Current version: v3.5.0**
 
 Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
@@ -26,6 +28,14 @@ claude plugins:add brand-content-design@camoa-skills
 
 ```
 /brand                    # Start here - status, switch projects, or create new
+```
+
+**Examples:**
+```bash
+/brand-content-design:brand-init
+/brand-content-design:brand-extract
+/brand-content-design:presentation-quick
+/brand-content-design:carousel
 ```
 
 ### First Time Setup (do once per brand)

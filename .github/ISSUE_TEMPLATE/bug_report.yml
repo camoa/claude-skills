@@ -1,0 +1,72 @@
+name: Bug report
+description: Report something that isn't working as expected in one of the camoa-skills plugins.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out as much detail as you can — it makes triage much faster.
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      description: Which plugin is affected?
+      options:
+        - dev-guides-navigator
+        - plugin-creation-tools
+        - ai-dev-assistant
+        - code-quality-tools
+        - brand-content-design
+        - drupal-htmx
+        - drupal-ai-contrib
+        - code-paper-test
+        - drupal-dev-framework
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: Tell us what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The exact command(s) or actions that trigger the bug.
+      placeholder: |
+        1. Run `/plugin-name:command ...`
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / version
+      description: Plugin version (see `<plugin>/plugin.json` or the marketplace listing), Claude Code version, OS.
+      placeholder: |
+        Plugin version:
+        Claude Code version:
+        OS:
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, or anything else that might help.
+    validations:
+      required: false
