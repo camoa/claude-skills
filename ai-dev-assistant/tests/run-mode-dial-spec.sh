@@ -208,6 +208,15 @@ else
   fail_check "reminder no-session fast-gate — rc=$RC out='$OUT3'"
 fi
 
+# 4. project-initializer scaffold seeds the **Run Mode:** dial at creation (gap-audit fix:
+#    /new no longer relies solely on /upgrade-project backfill).
+INIT="$(cd "$(dirname "$0")" && pwd)/../skills/project-initializer/SKILL.md"
+if grep -q '\*\*Run Mode:\*\* interactive' "$INIT"; then
+  pass_check "project-initializer scaffold seeds **Run Mode:** interactive at creation"
+else
+  fail_check "project-initializer scaffold missing **Run Mode:** seed"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nrun_mode spine invariants violated.\n' >&2
   exit 1

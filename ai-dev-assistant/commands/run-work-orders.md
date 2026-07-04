@@ -91,11 +91,17 @@ batch size. The **default (no `--parallel`) is unchanged** — the sequential `w
    depth-2 (unsupported). Do NOT re-implement either loop here. The parallel and in-place paths are
    **additive** — they do not change the default sequential worktree behavior.
 
-   **Thread `<run_mode>` into the loop invocation on ALL THREE paths.** Set `<run_mode>` = the `.runMode`
-   value **already parsed from the Step-1 `project-state-read.sh` JSON** (zero new reads; there is **no**
-   dedicated mode CLI flag — mode is disk-scoped, never a dispatch boolean). Absent or unrecognized →
-   `interactive` (fail-closed,
-   mirroring `wo-mode-gate.sh` and the distill seam). **`run_mode` is orthogonal to the flags** — it does
+   **Thread `<run_mode>` into the loop invocation on ALL THREE paths.** Set `<run_mode>` = the **effective
+   mode, resolved monotonic-toward-strict EXACTLY as `wo-mode-gate.sh` does**, so the loop's reported posture
+   equals the kernel's enforced mode: it is `autonomous` if **either** the project `.runMode` (already parsed
+   from the Step-1 `project-state-read.sh` JSON) **or** the task-level `.run_mode`
+   (`${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>" | jq -r '.run_mode // empty'`; `null`/absent =
+   inherit) is `autonomous`; otherwise `interactive`. A task can **tighten** to `autonomous` but cannot
+   **loosen** a project's `autonomous`. There is **no** dedicated mode CLI flag — mode is disk-scoped, never a
+   dispatch boolean. Absent/unrecognized on both → `interactive` (fail-closed, mirroring `wo-mode-gate.sh` and
+   the distill seam). This is one task-frontmatter read (the earlier project-only threading missed the
+   task override, so a task tightening to `autonomous` under an `interactive` project printed the wrong Exit
+   posture while the kernel still correctly withheld the PR — gap-audit fix). **`run_mode` is orthogonal to the flags** — it does
    **not** select a loop or force a specific path; it overlays only the loop's Exit **reporting** posture on
    whichever loop the flags picked. **When `.runMode ∈ {interactive, absent}` this command executes
    byte-identically to today** — the attended / `--parallel` / `--in-place` behavior is UNCHANGED.
