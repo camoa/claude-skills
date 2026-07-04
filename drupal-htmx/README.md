@@ -1,5 +1,7 @@
 # Drupal HTMX Plugin
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-drupal-htmx-drupal-htmx)](https://www.claudepluginhub.com/plugins/camoa-drupal-htmx-drupal-htmx?ref=badge)
+
 HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
 
 > **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
@@ -56,6 +58,15 @@ The `htmx-development` skill auto-activates when discussing:
 
 ```bash
 /htmx-pattern dependent dropdown
+```
+
+### More Examples
+
+```bash
+/drupal-htmx:htmx-analyze web/modules/custom/my_module
+/drupal-htmx:htmx-migrate web/modules/custom/my_module/src/Form/MyForm.php
+/drupal-htmx:htmx-pattern dependent dropdown
+/drupal-htmx:htmx-validate web/modules/custom/my_module
 ```
 
 ### Migrate Specific Pattern

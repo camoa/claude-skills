@@ -1,5 +1,7 @@
 # Dev Guides Navigator
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-dev-guides-navigator-dev-guides-navigator)](https://www.claudepluginhub.com/plugins/camoa-dev-guides-navigator-dev-guides-navigator?ref=badge)
+
 Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/dev-guides/) site. Routes AI to the correct guide using hash-based caching and KG metadata for disambiguation.
 
 **Two modes:** the navigator routes over two separate published catalogs —
@@ -34,6 +36,13 @@ The skill triggers automatically when any development task might benefit from a 
 /dev-guides-navigator forms
 /dev-guides-navigator SOLID drupal
 /dev-guides-navigator design system bootstrap
+```
+
+**More examples:**
+```
+/dev-guides-navigator drupal form validation
+/dev-guides-navigator SDC component
+/dev-guides-navigator style guide
 ```
 
 ### What It Covers

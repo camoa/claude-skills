@@ -1,6 +1,10 @@
 # drupal-dev-framework: DEPRECATED
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-drupal-dev-framework-drupal-dev-framework)](https://www.claudepluginhub.com/plugins/camoa-drupal-dev-framework-drupal-dev-framework?ref=badge)
+
 This plugin has been renamed to **ai-dev-assistant**. Install that going forward.
+
+**Usage:** `/drupal-dev-framework:upgrade` (one-time migration to ai-dev-assistant, then uninstall this plugin).
 
 `drupal-dev-framework` remains installable only as a thin **deprecation shell** whose
 sole job is to run a **one-time upgrade** that migrates your local wiring to the new

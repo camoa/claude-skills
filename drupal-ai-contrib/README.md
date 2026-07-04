@@ -1,5 +1,7 @@
 # drupal-ai-contrib
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-drupal-ai-contrib-drupal-ai-contrib)](https://www.claudepluginhub.com/plugins/camoa-drupal-ai-contrib-drupal-ai-contrib?ref=badge)
+
 AI-assisted Drupal contribution **quality** — *evidence over assertion*.
 
 > **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
@@ -74,6 +76,15 @@ operations — the executable is `drupalorg`; install the PHAR per
 `skills/drupal-ai-contrib/references/drupalorg-cli.md`), DDEV (the local environment),
 and a drupal.org account with GitLab access. `setup` detects what is missing and points
 you at it; nothing is a hard prerequisite.
+
+## Usage
+
+```bash
+/drupal-ai-contrib:setup
+/drupal-ai-contrib:issue 3456789
+/drupal-ai-contrib:verify
+/drupal-ai-contrib:submit
+```
 
 ## The contribution arc
 
