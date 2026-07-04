@@ -91,6 +91,24 @@ batch size. The **default (no `--parallel`) is unchanged** — the sequential `w
    depth-2 (unsupported). Do NOT re-implement either loop here. The parallel and in-place paths are
    **additive** — they do not change the default sequential worktree behavior.
 
+   **Thread `<run_mode>` into the loop invocation on ALL THREE paths.** Set `<run_mode>` = the `.runMode`
+   value **already parsed from the Step-1 `project-state-read.sh` JSON** (zero new reads; there is **no**
+   dedicated mode CLI flag — mode is disk-scoped, never a dispatch boolean). Absent or unrecognized →
+   `interactive` (fail-closed,
+   mirroring `wo-mode-gate.sh` and the distill seam). **`run_mode` is orthogonal to the flags** — it does
+   **not** select a loop or force a specific path; it overlays only the loop's Exit **reporting** posture on
+   whichever loop the flags picked. **When `.runMode ∈ {interactive, absent}` this command executes
+   byte-identically to today** — the attended / `--parallel` / `--in-place` behavior is UNCHANGED.
+
+   **Autonomous invariants (documentation, NOT enforcement — named so the routing is self-documenting).**
+   The two autonomous teeth already hold with no new code here and are enforced downstream by kernels reading
+   disk, not by this command: (a) **forced fan-out critique** — `run_mode=autonomous → unattended → forced`
+   in `work-order-critique`, returning only the `.blocking` scalar; (b) **PR-refusal** — `wo-mode-gate.sh`
+   inside `wo-pr-open.sh` refuses `autonomous_irreversible` every time, so an autonomous all-green run
+   terminates at **`BRANCH_ASSEMBLED_AWAITING_HUMAN`** (a GREEN build with the PR withheld pending a human),
+   never at `LOOP_COMPLETE`-with-an-opened-PR. See `references/autonomous-recipe.md` for the verdict-only
+   reporting contract and the HALT-composition.
+
 5. **Emit the `/goal` string.** The loop prints a ready-to-paste `/goal` line; surface it to the
    user. Do NOT run `/goal` yourself — the user pastes it to launch the next attended turn.
 

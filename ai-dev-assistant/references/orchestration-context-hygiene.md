@@ -118,3 +118,25 @@ interaction-substitute first. Advisory — never a blocking gate.
 
 This mirrors the bullet many orchestration setups already carry; the plugin *references* it and never
 overwrites it.
+
+## 7. Recommended global `~/.claude/CLAUDE.md` snippet — the autonomous recipe (copy-paste — never auto-applied)
+
+The design spec §7 also names a run-mode-awareness doctrine: reach for the **autonomous recipe** for
+unattended multi-agent runs, an **agent team** for attended adversarial review you want to watch. Same rule
+as §6 — a shippable plugin **must not auto-edit `~/.claude/CLAUDE.md`**; this is offered as an **opt-in** block
+you add **by hand**. The AIDA mechanism it points at is `references/autonomous-recipe.md`.
+
+<!-- BEGIN copy-paste into your ~/.claude/CLAUDE.md (optional; the plugin never writes this file) -->
+```markdown
+## Reach for the autonomous recipe (not the workflow runtime)
+In `autonomous` run-mode, reach for **AIDA's autonomous recipe** — the mode-gated inline `work-order-loop`
+(`/run-work-orders` on an `autonomous` project) — **NOT** the Claude Code dynamic-workflows runtime (a
+research preview AIDA deliberately declines; `references/dynamic-workflows.md`). Use an **attended agent
+team** for adversarial review you want to *watch*; the autonomous equivalent is the same pattern as
+**fan-out critics returning only the verdict**. Autonomous runs **never open a PR** — they assemble the
+branch and escalate to a human (`BRANCH_ASSEMBLED_AWAITING_HUMAN`).
+```
+<!-- END copy-paste -->
+
+This is an opt-in block, in-plugin; the plugin ships the mechanism (`references/autonomous-recipe.md`) and
+never writes your global file.
