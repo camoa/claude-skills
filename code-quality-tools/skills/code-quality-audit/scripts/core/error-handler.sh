@@ -34,7 +34,7 @@ handle_error() {
     127)
       # Command not found
       echo -e "${YELLOW}💡 Suggested fixes:${NC}"
-      echo -e "${YELLOW}   1. Run setup: /code-quality:setup${NC}"
+      echo -e "${YELLOW}   1. Run setup: /code-quality-tools:setup${NC}"
       echo -e "${YELLOW}   2. Install missing tool manually${NC}"
       echo -e "${YELLOW}   3. Check PATH configuration${NC}"
       echo ""
@@ -100,7 +100,7 @@ handle_error() {
         # Generic error
         echo -e "${YELLOW}💡 General troubleshooting:${NC}"
         echo -e "${YELLOW}   1. Check error output above for specific issues${NC}"
-        echo -e "${YELLOW}   2. Verify tool installation: /code-quality:setup${NC}"
+        echo -e "${YELLOW}   2. Verify tool installation: /code-quality-tools:setup${NC}"
         echo -e "${YELLOW}   3. Check project configuration${NC}"
         echo ""
         if [ -n "$error_output" ]; then
@@ -118,7 +118,7 @@ handle_error() {
       echo -e "${YELLOW}   Suggested fixes:${NC}"
       echo -e "${YELLOW}   1. Check tool configuration files (phpstan.neon, .eslintrc.json, etc.)${NC}"
       echo -e "${YELLOW}   2. Verify .code-quality.json settings${NC}"
-      echo -e "${YELLOW}   3. Run: /code-quality:setup to regenerate config${NC}"
+      echo -e "${YELLOW}   3. Run: /code-quality-tools:setup to regenerate config${NC}"
       echo ""
       echo -e "${BLUE}📖 See: references/troubleshooting.md#configuration-issues${NC}"
       ;;

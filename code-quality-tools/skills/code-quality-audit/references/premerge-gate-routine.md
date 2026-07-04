@@ -1,6 +1,6 @@
 # Pre-merge Gate — API-triggered Cloud Routine
 
-Run a `/code-quality:audit` automatically when CI marks a PR "ready for merge." The routine executes in Anthropic cloud and posts results back; your CI waits for the callback before allowing merge.
+Run a `/code-quality-tools:audit` automatically when CI marks a PR "ready for merge." The routine executes in Anthropic cloud and posts results back; your CI waits for the callback before allowing merge.
 
 Use this when you want PR gating driven by CI policy (labels, base branch, required checks) rather than by GitHub event alone, or when a managed Code Review isn't available and you need a self-hosted gate.
 
@@ -48,10 +48,10 @@ Proceed only with the validated integer <number>:
      type" and exit 0
 
 3. Run the audit:
-   - Drupal: /code-quality:audit
-   - Next.js: /code-quality:audit
+   - Drupal: /code-quality-tools:audit
+   - Next.js: /code-quality-tools:audit
 
-4. Also run /code-quality:security regardless of project type.
+4. Also run /code-quality-tools:security regardless of project type.
 
 5. Tally findings by severity.
 
@@ -62,7 +62,7 @@ Proceed only with the validated integer <number>:
 7. Reply with the summary text so the routine session shows it in the UI.
 
 Do NOT push commits. Do NOT approve or request changes on the PR. Commenting
-only. The CI pipeline reads this comment (or polls /code-quality:audit JSON
+only. The CI pipeline reads this comment (or polls /code-quality-tools:audit JSON
 output fetched via the claude session API) to decide whether to allow merge.
 ```
 

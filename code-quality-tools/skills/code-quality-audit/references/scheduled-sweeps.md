@@ -34,8 +34,8 @@ Local files, 1-minute minimum interval, runs on your machine with direct access 
 
 Best for:
 
-- **Daily local audit.** `/code-quality:audit` at 7am against your working copy, report to `.reports/quality-YYYY-MM-DD.md` before you start coding.
-- **Hourly security watch.** `/code-quality:security` while iterating — catches regressions in near-real-time.
+- **Daily local audit.** `/code-quality-tools:audit` at 7am against your working copy, report to `.reports/quality-YYYY-MM-DD.md` before you start coding.
+- **Hourly security watch.** `/code-quality-tools:security` while iterating — catches regressions in near-real-time.
 - **Pre-commit sweep.** Run before your end-of-day commit so morning-you inherits a clean state.
 
 Template: `desktop-sweep-template.md`
@@ -58,7 +58,7 @@ Session-scoped polling. Dies when the session exits. 3-day auto-expiry. Inherits
 
 Best for:
 
-- `/loop 30m /code-quality:lint` while actively coding
+- `/loop 30m /code-quality-tools:lint` while actively coding
 - `/loop 5m "check if CI has finished on the current branch"`
 
 Not for: production quality automation — restart the session and the loop is gone.

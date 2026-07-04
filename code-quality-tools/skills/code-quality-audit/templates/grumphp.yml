@@ -1,6 +1,6 @@
 # GrumPHP configuration for code-quality-tools v3.2.0+
 #
-# Copy to your project root as `grumphp.yml`. Installed by `/code-quality:setup`
+# Copy to your project root as `grumphp.yml`. Installed by `/code-quality-tools:setup`
 # when the optional "Install GrumPHP git hooks?" prompt is accepted.
 #
 # Scope: pre-commit only checks files staged for the current commit

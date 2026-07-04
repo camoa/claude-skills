@@ -17,7 +17,7 @@ This is an **opt-in pattern** — the plugin does **not** ship a `Setup` hook. Y
 
 `Setup` hooks receive a `trigger` field (`"init"` or `"maintenance"`), have access to `CLAUDE_ENV_FILE`, and support only `command` and `mcp_tool` handler types. They **cannot block** — on a non-zero exit, execution continues (stderr reaches the user only on exit code 2, or under `--verbose`).
 
-> **`Setup` alone does not guarantee tooling is present.** Because it never fires on a normal launch, a developer who skips the init step has no tools. Keep the audit scripts' existing "tool not found → run `/code-quality:setup`" guidance as the fallback. `Setup` optimizes the CI path; it does not replace first-use detection.
+> **`Setup` alone does not guarantee tooling is present.** Because it never fires on a normal launch, a developer who skips the init step has no tools. Keep the audit scripts' existing "tool not found → run `/code-quality-tools:setup`" guidance as the fallback. `Setup` optimizes the CI path; it does not replace first-use detection.
 
 ## CI pipeline step
 
@@ -25,7 +25,7 @@ Run the dedicated init once, early in the pipeline:
 
 ```bash
 claude --init-only          # fires Setup hooks, then exits
-# … later steps run /code-quality:audit etc. with tools already installed
+# … later steps run /code-quality-tools:audit etc. with tools already installed
 ```
 
 ## Wiring the hook
@@ -66,5 +66,5 @@ Notes on `install-tools.sh`:
 ## Related
 
 - `CONVENTIONS.md` → "StopFailure Hook (CI pipelines)" — the sibling opt-in CI hook pattern
-- `commands/setup.md` — the interactive `/code-quality:setup` wizard (the local, first-time counterpart to this CI pattern)
+- `commands/setup.md` — the interactive `/code-quality-tools:setup` wizard (the local, first-time counterpart to this CI pattern)
 - `references/premerge-gate-routine.md` — running the audit itself in CI once tools are installed

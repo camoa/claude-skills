@@ -11,7 +11,7 @@ Interactive wizard to install and configure code quality tools for your project.
 ## Usage
 
 ```
-/code-quality:setup [project-path]
+/code-quality-tools:setup [project-path]
 ```
 
 ## What This Does
@@ -101,7 +101,7 @@ Select specific tools and configure thresholds individually.
 
 ## Code Intelligence Plugins (recommended)
 
-The `/code-quality:solid`, `/code-quality:dry`, and `/code-quality:review` commands go deeper when Claude Code's built-in **LSP tool** is active — it resolves references, interface implementations, and call hierarchies that grep cannot see, and it reports type errors automatically after every edit. The tool is inactive until a code-intelligence plugin **and** its language-server binary are installed:
+The `/code-quality-tools:solid`, `/code-quality-tools:dry`, and `/code-quality-tools:review` commands go deeper when Claude Code's built-in **LSP tool** is active — it resolves references, interface implementations, and call hierarchies that grep cannot see, and it reports type errors automatically after every edit. The tool is inactive until a code-intelligence plugin **and** its language-server binary are installed:
 
 | Project | Plugin | Server binary |
 |---------|--------|---------------|
@@ -118,7 +118,7 @@ This is **recommended, not required** — every command falls back to full-file 
 
 ## In-Session Security Plugin (recommended, optional)
 
-The official **security-guidance** plugin reviews Claude's *own* code edits for vulnerabilities while it works — a fast per-edit pattern match (no model call), a background end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes — and feeds findings back into the same session for Claude to fix. It is the **in-session** layer of defense in depth: it reduces what reaches the PR (Code Review / `/code-review ultra`) and the whole-codebase scan (`/code-quality:security`) without replacing either.
+The official **security-guidance** plugin reviews Claude's *own* code edits for vulnerabilities while it works — a fast per-edit pattern match (no model call), a background end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes — and feeds findings back into the same session for Claude to fix. It is the **in-session** layer of defense in depth: it reduces what reaches the PR (Code Review / `/code-review ultra`) and the whole-codebase scan (`/code-quality-tools:security`) without replacing either.
 
 This plugin's audits scan the *whole tree*; security-guidance watches Claude's *live edits*. They complement each other.
 
@@ -196,7 +196,7 @@ After installing the static-analysis tools, prompt the user:
 
 > Install GrumPHP git hooks to lint staged files on every commit? [y/N]
 
-Default is **No**. The wizard must not install hooks silently. Re-runs of `/code-quality:setup` re-ask only if hooks aren't already installed.
+Default is **No**. The wizard must not install hooks silently. Re-runs of `/code-quality-tools:setup` re-ask only if hooks aren't already installed.
 
 ### On "yes" — Drupal (GrumPHP)
 
@@ -282,9 +282,9 @@ Baseline Audit Results:
 
 Next Steps:
 1. Review baseline: .reports/baseline.json
-2. Address security issues: /code-quality:security
-3. Improve coverage: /code-quality:tdd
-4. Run full audit: /code-quality:audit
+2. Address security issues: /code-quality-tools:security
+3. Improve coverage: /code-quality-tools:tdd
+4. Run full audit: /code-quality-tools:audit
 
 Documentation: See references/setup-guide.md
 ```
@@ -308,9 +308,9 @@ See: `references/troubleshooting.md#setup-issues`
 
 ## Related Commands
 
-- `/code-quality:audit` - Run full audit after setup
-- `/code-quality:coverage` - Check test coverage
-- `/code-quality:security` - Run security scan
+- `/code-quality-tools:audit` - Run full audit after setup
+- `/code-quality-tools:coverage` - Check test coverage
+- `/code-quality-tools:security` - Run security scan
 
 ## Implementation Note
 

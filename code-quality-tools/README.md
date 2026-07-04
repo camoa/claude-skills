@@ -1,5 +1,7 @@
 # Code Quality Tools
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-code-quality-tools-code-quality-tools)](https://www.claudepluginhub.com/plugins/camoa-code-quality-tools-code-quality-tools?ref=badge)
+
 Code quality and security auditing plugin for Claude Code. Provides TDD, SOLID, DRY, and OWASP security checks for **Drupal** (via DDEV) and **Next.js** projects with Semgrep, Trivy, and Gitleaks.
 
 > **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
@@ -32,7 +34,7 @@ Then it routes to the correct toolchain — PHPStan/PHPMD/Psalm for Drupal, ESLi
 Run the interactive setup wizard — it detects your project type and installs the right tools:
 
 ```
-/code-quality:setup
+/code-quality-tools:setup
 ```
 
 Or install manually:
@@ -65,23 +67,31 @@ npm install --save-dev \
 
 **System tools (both):** [Semgrep](https://semgrep.dev/docs/getting-started/), [Trivy](https://trivy.dev/latest/getting-started/installation/), [Gitleaks](https://github.com/gitleaks/gitleaks#installing)
 
-**Code intelligence (optional, recommended):** install a code-intelligence plugin — `php-lsp` (Drupal) or `typescript-lsp` (Next.js) — plus its language-server binary to make `/code-quality:solid`, `:dry`, and `:review` resolve inherited and config-wired relationships semantically via Claude Code's LSP tool. Recommended, not required: the commands fall back to full-file reads when no LSP plugin is present. See `skills/code-quality-audit/references/code-intelligence.md`.
+**Code intelligence (optional, recommended):** install a code-intelligence plugin — `php-lsp` (Drupal) or `typescript-lsp` (Next.js) — plus its language-server binary to make `/code-quality-tools:solid`, `:dry`, and `:review` resolve inherited and config-wired relationships semantically via Claude Code's LSP tool. Recommended, not required: the commands fall back to full-file reads when no LSP plugin is present. See `skills/code-quality-audit/references/code-intelligence.md`.
 
 ### 3. Run Commands
 
 | Command | Purpose | When to Use |
 |---------|---------|-------------|
-| `/code-quality:audit` | Full audit + cross-tool synthesis (`--json` for CI) | Before commits/releases |
-| `/code-quality:review` | Rubric-scored code review (/50 scale, `--json` for CI) | PR reviews, code assessment |
-| `/code-quality:ultrareview` | Cloud multi-agent deep review (paid after free quota) | Pre-merge on substantial changes |
-| `/code-quality:security` | Security scan (10 Drupal, 7 Next.js; `--json` for CI) | Pre-deployment |
-| `/code-quality:generate-review-md` | Generate v2 REVIEW.md (injection model) | One-time per project |
-| `/code-quality:coverage` | Test coverage | During TDD |
-| `/code-quality:lint` | Code standards | Quick checks |
-| `/code-quality:solid` | Architecture check | Refactoring |
-| `/code-quality:dry` | Find duplication | Code cleanup |
-| `/code-quality:tdd` | TDD workflow (test watcher) | Development |
-| `/code-quality:setup` | Install and configure tools | First-time setup |
+| `/code-quality-tools:audit` | Full audit + cross-tool synthesis (`--json` for CI) | Before commits/releases |
+| `/code-quality-tools:review` | Rubric-scored code review (/50 scale, `--json` for CI) | PR reviews, code assessment |
+| `/code-quality-tools:ultrareview` | Cloud multi-agent deep review (paid after free quota) | Pre-merge on substantial changes |
+| `/code-quality-tools:security` | Security scan (10 Drupal, 7 Next.js; `--json` for CI) | Pre-deployment |
+| `/code-quality-tools:generate-review-md` | Generate v2 REVIEW.md (injection model) | One-time per project |
+| `/code-quality-tools:coverage` | Test coverage | During TDD |
+| `/code-quality-tools:lint` | Code standards | Quick checks |
+| `/code-quality-tools:solid` | Architecture check | Refactoring |
+| `/code-quality-tools:dry` | Find duplication | Code cleanup |
+| `/code-quality-tools:tdd` | TDD workflow (test watcher) | Development |
+| `/code-quality-tools:setup` | Install and configure tools | First-time setup |
+
+**Examples:**
+```bash
+/code-quality-tools:audit
+/code-quality-tools:review web/modules/custom/my_module
+/code-quality-tools:security
+/code-quality-tools:security-debate
+```
 
 ### Agent Team Commands (Multi-Perspective Debate)
 
@@ -89,8 +99,8 @@ These spawn 3-agent teams that analyze from competing perspectives, cross-challe
 
 | Command | Agents | Best For |
 |---------|--------|----------|
-| `/code-quality:security-debate` | Defender + Red Team + Compliance | Validating 10+ security findings |
-| `/code-quality:architecture-debate` | Pragmatist + Purist + Maintainer | Contentious design decisions |
+| `/code-quality-tools:security-debate` | Defender + Red Team + Compliance | Validating 10+ security findings |
+| `/code-quality-tools:architecture-debate` | Pragmatist + Purist + Maintainer | Contentious design decisions |
 
 Each agent runs in an isolated worktree with scoped tool access and cost-controlled turns.
 
@@ -117,7 +127,7 @@ Once installed, Claude responds to natural language:
 
 ### Code Review Scoring
 
-`/code-quality:review` grades code on a /50 rubric:
+`/code-quality-tools:review` grades code on a /50 rubric:
 
 **Content (Does it work?) — /25:**
 - Correctness, Completeness, Edge cases, Error handling, Security
@@ -129,7 +139,7 @@ Once installed, Claude responds to natural language:
 
 ### Cross-Audit Synthesis
 
-`/code-quality:audit` doesn't just run tools — it correlates findings:
+`/code-quality-tools:audit` doesn't just run tools — it correlates findings:
 - **Hot spots:** Files flagged by multiple tools = highest priority
 - **Cross-category risks:** Security issue + missing tests + SOLID violation = compounding risk
 - **Prioritized action plan:** Top 5 fixes that resolve the most findings
@@ -137,7 +147,7 @@ Once installed, Claude responds to natural language:
 
 ### Security Debate
 
-`/code-quality:security-debate` spawns 3 agents after a security audit:
+`/code-quality-tools:security-debate` spawns 3 agents after a security audit:
 - **Defender:** Validates findings, identifies false positives, checks framework mitigations
 - **Red Team:** Chains findings into attack scenarios, searches CVEs, finds audit gaps
 - **Compliance:** Maps to OWASP Top 10 / CWE, identifies coverage blind spots
@@ -146,7 +156,7 @@ Output: `.reports/security-debate.md` with debated severity ratings and prioriti
 
 ### Architecture Debate
 
-`/code-quality:architecture-debate` spawns 3 agents for design decisions:
+`/code-quality-tools:architecture-debate` spawns 3 agents for design decisions:
 - **Pragmatist:** "Does it ship? Is refactoring worth the cost?"
 - **Purist:** "What SOLID/DRY violations exist? How should this be structured?"
 - **Maintainer:** "Can I debug this at 2am? Can a new dev understand it?"
@@ -202,10 +212,10 @@ These layers are the **whole-codebase / CI SAST** stage of Claude Code's defense
 
 | Stage | Tool | Covers |
 |---|---|---|
-| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Vulns in code Claude writes, fixed the same session — `/code-quality:setup` offers to install it |
+| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Vulns in code Claude writes, fixed the same session — `/code-quality-tools:setup` offers to install it |
 | On demand — diff | native `/security-review` | One generic, diff-scoped vuln pass |
-| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context (tune via `/code-quality:generate-review-md`) |
-| Whole-codebase / CI | **this plugin** (`/code-quality:security` + debates) | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
+| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context (tune via `/code-quality-tools:generate-review-md`) |
+| Whole-codebase / CI | **this plugin** (`/code-quality-tools:security` + debates) | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
 
 The native layers reduce what reaches these scans; they do **not** replace them — `/security-review` is generic and diff-only, with no whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate.
 
@@ -262,7 +272,7 @@ Both assume DDEV (uses `ddev/github-action-setup-ddev@v1`). For non-DDEV project
 
 ### Git pre-commit hook (Drupal, optional)
 
-`/code-quality:setup` will prompt — default **No** — to install **GrumPHP** with `phpcs + phpstan` running on **staged files only** (`context: git-staged-files`). The template lives at `templates/grumphp.yml`. Excluded by design: PHPCPD (directory-scoped, slow on every commit), PHPUnit (full suite — keep that in CI), PHPMD (noisy; opt in by editing the template).
+`/code-quality-tools:setup` will prompt — default **No** — to install **GrumPHP** with `phpcs + phpstan` running on **staged files only** (`context: git-staged-files`). The template lives at `templates/grumphp.yml`. Excluded by design: PHPCPD (directory-scoped, slow on every commit), PHPUnit (full suite — keep that in CI), PHPMD (noisy; opt in by editing the template).
 
 To install later without re-running setup:
 
@@ -274,7 +284,7 @@ ddev exec vendor/bin/grumphp git:init
 
 ## Watch-mode & Scheduled Sweeps
 
-- **In-session security** — the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit pattern match, end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes). It's the in-session counterpart to this plugin's whole-tree scans — it reduces what reaches the PR and the whole-codebase scan without replacing either. `/code-quality:setup` offers to install it (`/plugin install security-guidance@claude-plugins-official`; needs Claude Code 2.1.144+, python3, git). See the layering table under "Security Layers".
+- **In-session security** — the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit pattern match, end-of-turn diff review, and a deeper agentic review on each commit/push Claude makes). It's the in-session counterpart to this plugin's whole-tree scans — it reduces what reaches the PR and the whole-codebase scan without replacing either. `/code-quality-tools:setup` offers to install it (`/plugin install security-guidance@claude-plugins-official`; needs Claude Code 2.1.144+, python3, git). See the layering table under "Security Layers".
 - **Watch-mode linting** activates while the `code-quality-audit` skill is loaded — edits to `composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, or `tsconfig.json` re-run the lint. Disable mid-session: `export CLAUDE_CODE_QUALITY_WATCH=0`.
 - **Scheduled sweeps** — pick a surface (Desktop / Cloud Routine / `/loop`) based on whether the audit needs local file access, machine-off reliability, or in-session polling. Templates in `skills/code-quality-audit/references/scheduled-sweeps.md`, `desktop-sweep-template.md`, `cloud-routine-sweep.md`.
 - **Pre-merge CI gate** — Cloud Routine with API trigger callable from GitHub Actions / GitLab CI. Full template in `skills/code-quality-audit/references/premerge-gate-routine.md`.

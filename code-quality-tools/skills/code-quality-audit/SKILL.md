@@ -31,19 +31,19 @@ Run quality and security audits for **Drupal** and **Next.js** projects with con
 ## Quick Commands
 
 **For direct access, use these commands:**
-- `/code-quality:setup` - First-time setup wizard (install and configure tools)
-- `/code-quality:audit` - Run full audit (all 22 operations)
-- `/code-quality:coverage` - Check test coverage
-- `/code-quality:security` - Security scan (10 layers for Drupal, 7 for Next.js)
-- `/code-quality:lint` - Code standards check
-- `/code-quality:solid` - Architecture and SOLID principles check
-- `/code-quality:dry` - Find code duplication
-- `/code-quality:tdd` - Start TDD workflow (test watcher mode)
-- `/code-quality:review` - Rubric-scored code review (/50 scale with quality gate)
-- `/code-quality:ultrareview` - Cloud multi-agent deep review with pre-flight checks (5-10min, paid after free quota)
-- `/code-quality:generate-review-md` - Generate v2 REVIEW.md for Claude Code's managed Code Review
-- `/code-quality:architecture-debate` - Architecture debate (Pragmatist + Purist + Maintainer)
-- `/code-quality:security-debate` - Security debate (Defender + Red Team + Compliance)
+- `/code-quality-tools:setup` - First-time setup wizard (install and configure tools)
+- `/code-quality-tools:audit` - Run full audit (all 22 operations)
+- `/code-quality-tools:coverage` - Check test coverage
+- `/code-quality-tools:security` - Security scan (10 layers for Drupal, 7 for Next.js)
+- `/code-quality-tools:lint` - Code standards check
+- `/code-quality-tools:solid` - Architecture and SOLID principles check
+- `/code-quality-tools:dry` - Find code duplication
+- `/code-quality-tools:tdd` - Start TDD workflow (test watcher mode)
+- `/code-quality-tools:review` - Rubric-scored code review (/50 scale with quality gate)
+- `/code-quality-tools:ultrareview` - Cloud multi-agent deep review with pre-flight checks (5-10min, paid after free quota)
+- `/code-quality-tools:generate-review-md` - Generate v2 REVIEW.md for Claude Code's managed Code Review
+- `/code-quality-tools:architecture-debate` - Architecture debate (Pragmatist + Purist + Maintainer)
+- `/code-quality-tools:security-debate` - Security debate (Defender + Red Team + Compliance)
 
 **For conversational workflows, continue reading...**
 
@@ -77,9 +77,9 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 - **`--json` output is model-generated.** The schema documents required shape + JSON-escape (`invariant 4` in `references/json-schemas.md`) but enforcement relies on the model following the contract. Consumers should `jq .` before trusting the document.
 - **`FileChanged` matcher is literal-filename.** Unlisted variants (e.g., `phpstan.local.neon`, custom names) won't fire — populate `watchPaths` dynamically from a `CwdChanged` hook if you need broader source-file watching.
 
-> **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality:review` when you need a structured, scored, and documented assessment.
+> **Note — Claude Code's built-in `/simplify`:** Claude Code ships a built-in `/simplify` skill for quick single-pass code review. `/code-quality-tools:review` is different: it runs automated tools (PHPStan/ESLint), scores across 10 rubric categories with a /50 scale, enforces a quality gate (PASS 35+/FAIL), and writes a persisted report. Use `/simplify` for fast ad-hoc feedback; use `/code-quality-tools:review` when you need a structured, scored, and documented assessment.
 
-> **Note — the `security-guidance` plugin and native `/security-review`:** This skill's security flows (`/code-quality:security`, the debates) are the **whole-codebase / CI SAST** layer — framework-aware multi-tool scans across the whole tree. They sit *below* two native layers in Claude Code's defense-in-depth model: the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit / end-of-turn / commit — auto, no command; offered by `/code-quality:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. The native layers reduce what reaches a whole-tree scan; they do **not** replace it — `/security-review` cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run this skill's security audit for the framework-specific, whole-codebase coverage native review does not perform.
+> **Note — the `security-guidance` plugin and native `/security-review`:** This skill's security flows (`/code-quality-tools:security`, the debates) are the **whole-codebase / CI SAST** layer — framework-aware multi-tool scans across the whole tree. They sit *below* two native layers in Claude Code's defense-in-depth model: the official **security-guidance** plugin reviews Claude's *own* edits as it writes (per-edit / end-of-turn / commit — auto, no command; offered by `/code-quality-tools:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. The native layers reduce what reaches a whole-tree scan; they do **not** replace it — `/security-review` cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run this skill's security audit for the framework-specific, whole-codebase coverage native review does not perform.
 
 ## When to Use
 
@@ -166,7 +166,7 @@ When this skill drives an audit, scale depth to the session's effort level. The 
 | `low` | Fast lint only — coding-standards pass; skip security, SOLID, DRY, coverage |
 | `medium` | Lint + coverage + SOLID + DRY; skip the deep security battery |
 | `high` | Full audit — all 22 operations (the effective default) |
-| `xhigh` / `max` | Full audit, then offer `/code-quality:security-debate` for a 3-agent review of the security findings |
+| `xhigh` / `max` | Full audit, then offer `/code-quality-tools:security-debate` for a 3-agent review of the security findings |
 
 Treat an unset or unrecognized value as `high` (full audit) — never silently skip coverage or security because the level could not be read.
 

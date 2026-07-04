@@ -11,7 +11,7 @@ Check code against coding standards and style guidelines.
 ## Usage
 
 ```
-/code-quality:lint [project-path]
+/code-quality-tools:lint [project-path]
 ```
 
 ## What This Does
@@ -80,12 +80,12 @@ npm run lint -- --fix
 ## Error Handling
 
 Common issues:
-- **"Linter not found"**: Run `/code-quality:setup`
+- **"Linter not found"**: Run `/code-quality-tools:setup`
 - **"Too many violations"**: Start with auto-fix, then review remaining
 
 See: `references/troubleshooting.md#linting-issues`
 
 ## Related Commands
 
-- `/code-quality:audit` - Full audit (includes linting)
-- `/code-quality:setup` - Install linting tools
+- `/code-quality-tools:audit` - Full audit (includes linting)
+- `/code-quality-tools:setup` - Install linting tools

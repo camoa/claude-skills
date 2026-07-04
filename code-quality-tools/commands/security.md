@@ -1,5 +1,5 @@
 ---
-description: Run comprehensive security audit for Drupal/Next.js projects. Use when user says "security audit", "check vulnerabilities", "OWASP check", "is this secure", "find security issues", "Semgrep scan", "Trivy scan", "Gitleaks check". Runs 10 Drupal layers or 7 Next.js layers. For multi-perspective analysis, use /code-quality:security-debate after this.
+description: Run comprehensive security audit for Drupal/Next.js projects. Use when user says "security audit", "check vulnerabilities", "OWASP check", "is this secure", "find security issues", "Semgrep scan", "Trivy scan", "Gitleaks check". Runs 10 Drupal layers or 7 Next.js layers. For multi-perspective analysis, use /code-quality-tools:security-debate after this.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: "[--json] [project-path]"
 ---
@@ -13,8 +13,8 @@ Run a comprehensive security scan across multiple layers.
 ## Usage
 
 ```
-/code-quality:security [project-path]           # writes .reports/security-*.md + chat summary
-/code-quality:security --json [project-path]    # CI mode — single stable JSON on stdout
+/code-quality-tools:security [project-path]           # writes .reports/security-*.md + chat summary
+/code-quality-tools:security --json [project-path]    # CI mode — single stable JSON on stdout
 ```
 
 ## CI Mode (--json)
@@ -24,7 +24,7 @@ When invoked with `--json`, emit schema `v1.0` JSON on stdout. Each finding incl
 Gate on `.summary.critical` + `.summary.high`:
 
 ```bash
-result=$(/code-quality:security --json)
+result=$(/code-quality-tools:security --json)
 CRIT=$(echo "$result" | jq '.summary.critical')
 HIGH=$(echo "$result" | jq '.summary.high')
 if [ "$CRIT" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
@@ -122,33 +122,33 @@ To customize, create `.code-quality.json`:
 
 ## Run in the background
 
-To run a security scan without blocking your session, dispatch it as a background session: `claude --bg "/code-quality:security"`. It keeps running with no terminal attached — monitor it with `claude agents` and pull results with `claude logs <id>`.
+To run a security scan without blocking your session, dispatch it as a background session: `claude --bg "/code-quality-tools:security"`. It keeps running with no terminal attached — monitor it with `claude agents` and pull results with `claude logs <id>`.
 
 ## Error Handling
 
 Common issues:
-- **"Security tool not found"**: Run `/code-quality:setup`
+- **"Security tool not found"**: Run `/code-quality-tools:setup`
 - **"Too many findings"**: Review `.reports/security.json` for details
 
 See: `references/troubleshooting.md#security-scan-issues`
 
 ## How This Fits — Security Layering (defense in depth)
 
-`/code-quality:security` is the **whole-codebase / CI SAST** layer — a multi-tool scan (Semgrep, Trivy, Gitleaks, Psalm taint, Drush/Composer advisories, Roave, Socket) across the entire tree, framework-aware for Drupal/Next.js. It is one layer in Claude Code's defense-in-depth model; the earlier layers are **native** and complementary:
+`/code-quality-tools:security` is the **whole-codebase / CI SAST** layer — a multi-tool scan (Semgrep, Trivy, Gitleaks, Psalm taint, Drush/Composer advisories, Roave, Socket) across the entire tree, framework-aware for Drupal/Next.js. It is one layer in Claude Code's defense-in-depth model; the earlier layers are **native** and complementary:
 
 | Stage | Tool | Covers |
 |---|---|---|
-| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Common vulns in code Claude writes, fixed the same session. `/code-quality:setup` offers to install it. |
+| In session — Claude's own edits | **security-guidance** plugin (auto, no command) | Common vulns in code Claude writes, fixed the same session. `/code-quality-tools:setup` offers to install it. |
 | On demand — diff | native `/security-review` | One generic, diff-scoped vuln pass on the current branch |
-| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context; tune via `/code-quality:generate-review-md` |
-| Whole-codebase / CI | **`/code-quality:security`** (this command) + the debates | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
+| On the PR | **Code Review** / `/code-review ultra` | Multi-agent correctness + security with full-codebase context; tune via `/code-quality-tools:generate-review-md` |
+| Whole-codebase / CI | **`/code-quality-tools:security`** (this command) + the debates | Framework-aware multi-tool SAST + OWASP debate native review does not perform |
 
-The native diff-scoped layers reduce what reaches this scan — they do **not** replace it. `/security-review` is generic and diff-only; it cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run `/code-quality:security` for the whole-tree, framework-specific coverage.
+The native diff-scoped layers reduce what reaches this scan — they do **not** replace it. `/security-review` is generic and diff-only; it cannot do whole-repo Drupal/Next.js SAST, taint analysis, dependency CVEs, or multi-agent OWASP debate. Run `/code-quality-tools:security` for the whole-tree, framework-specific coverage.
 
 ## Related Commands
 
-- `/code-quality:audit` - Full audit (includes security)
-- `/code-quality:setup` - Install security tools (also offers the in-session **security-guidance** plugin)
-- `/code-quality:security-debate` - Multi-perspective debate analysis of security findings (requires agent teams)
-- `/code-quality:generate-review-md` - Configure the PR-stage managed Code Review (`REVIEW.md`)
+- `/code-quality-tools:audit` - Full audit (includes security)
+- `/code-quality-tools:setup` - Install security tools (also offers the in-session **security-guidance** plugin)
+- `/code-quality-tools:security-debate` - Multi-perspective debate analysis of security findings (requires agent teams)
+- `/code-quality-tools:generate-review-md` - Configure the PR-stage managed Code Review (`REVIEW.md`)
 - native `/security-review` - on-demand generic diff-scoped vuln pass (complements, does not replace, this whole-codebase scan)
