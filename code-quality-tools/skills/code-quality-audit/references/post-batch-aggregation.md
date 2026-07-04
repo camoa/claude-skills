@@ -6,7 +6,7 @@
 
 `PostToolBatch` fires after a full batch of parallel tool calls resolves, **before the next model call**. There is no matcher — it fires once per batch. Compare to `PostToolUse`, which fires once per individual tool call.
 
-For audit / review workflows that fan out across many files (`/code-quality:audit`, `/code-quality:security`, `/code-quality:solid`, `/code-quality:dry`), per-tool firing is noisy: each lint result emits its own hook event, the user sees N separate summaries, and per-tool aggregation has to be reconstructed downstream. `PostToolBatch` lets a single handler aggregate across all tool calls in the batch and emit one summary.
+For audit / review workflows that fan out across many files (`/code-quality-tools:audit`, `/code-quality-tools:security`, `/code-quality-tools:solid`, `/code-quality-tools:dry`), per-tool firing is noisy: each lint result emits its own hook event, the user sees N separate summaries, and per-tool aggregation has to be reconstructed downstream. `PostToolBatch` lets a single handler aggregate across all tool calls in the batch and emit one summary.
 
 ## When to use
 
@@ -19,7 +19,7 @@ For audit / review workflows that fan out across many files (`/code-quality:audi
 
 - Per-tool gating where you need to block individual tool calls — that's `PreToolUse`.
 - Per-tool error alerting where each failure should fire independently — that's `PostToolUse` / `PostToolUseFailure`.
-- Single-tool flows (`/code-quality:lint` on one file) — the batch is size 1; standard `PostToolUse` is simpler.
+- Single-tool flows (`/code-quality-tools:lint` on one file) — the batch is size 1; standard `PostToolUse` is simpler.
 
 ## Worked example — batch summary aggregator
 

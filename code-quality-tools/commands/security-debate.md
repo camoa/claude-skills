@@ -11,7 +11,7 @@ Analyze security audit results from 3 competing perspectives using an agent team
 ## Usage
 
 ```
-/code-quality:security-debate [project-path]
+/code-quality-tools:security-debate [project-path]
 ```
 
 ## What This Does
@@ -28,7 +28,7 @@ Look for `.reports/security-report.json` in the project root (or `$ARGUMENTS` pa
 
 If not found:
 > No security report found at `.reports/security-report.json`.
-> Run `/code-quality:security` first to generate the audit report.
+> Run `/code-quality-tools:security` first to generate the audit report.
 
 Stop here if not found.
 
@@ -38,7 +38,7 @@ Verify agent teams are available by attempting to create a team. If creation fai
 
 > Agent teams are not available in this environment.
 >
-> **Fallback:** Your security audit results are in `.reports/security-report.json`. Run `/code-quality:security` for standard single-pass analysis.
+> **Fallback:** Your security audit results are in `.reports/security-report.json`. Run `/code-quality-tools:security` for standard single-pass analysis.
 
 Stop here if not available.
 
@@ -342,12 +342,12 @@ The lead synthesizes into `.reports/security-debate.md`:
 
 ## Where This Fits (defense in depth)
 
-This debate is the **whole-codebase, multi-agent OWASP** layer — it has **no native equivalent**. It sits above the native diff/in-session layers: the official **security-guidance** plugin reviews Claude's *own* edits in session (auto, no command; offered by `/code-quality:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. Neither chains findings into attack scenarios, maps OWASP/CWE coverage, or challenges severity across competing perspectives. Run those native layers to reduce what reaches a scan; run this debate to pressure-test the whole-tree findings `/code-quality:security` produced.
+This debate is the **whole-codebase, multi-agent OWASP** layer — it has **no native equivalent**. It sits above the native diff/in-session layers: the official **security-guidance** plugin reviews Claude's *own* edits in session (auto, no command; offered by `/code-quality-tools:setup`), and native `/security-review` runs one generic, diff-scoped pass on demand. Neither chains findings into attack scenarios, maps OWASP/CWE coverage, or challenges severity across competing perspectives. Run those native layers to reduce what reaches a scan; run this debate to pressure-test the whole-tree findings `/code-quality-tools:security` produced.
 
 ## Related Commands
 
-- `/code-quality:security` - Run security audit (prerequisite — generates the report this command debates)
-- `/code-quality:audit` - Full audit (includes security)
-- `/code-quality:architecture-debate` - Architecture and SOLID debate (Pragmatist + Purist + Maintainer)
-- `/code-quality:review` - Rubric-scored code review
+- `/code-quality-tools:security` - Run security audit (prerequisite — generates the report this command debates)
+- `/code-quality-tools:audit` - Full audit (includes security)
+- `/code-quality-tools:architecture-debate` - Architecture and SOLID debate (Pragmatist + Purist + Maintainer)
+- `/code-quality-tools:review` - Rubric-scored code review
 - native `/security-review` - generic diff-scoped vuln pass; the **security-guidance** plugin covers Claude's own in-session edits. Both complement — neither replaces — this whole-codebase debate layer.

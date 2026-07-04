@@ -92,8 +92,8 @@ parameters:
 
 **Option 3 - Run smaller checks:**
 ```bash
-/code-quality:lint      # Just linting
-/code-quality:security  # Just security
+/code-quality-tools:lint      # Just linting
+/code-quality-tools:security  # Just security
 ```
 
 ### "Permission denied"
@@ -190,9 +190,9 @@ npm install --save-dev @testing-library/jest-dom
 **Solution:**
 1. Run specific checks instead of full audit:
    ```bash
-   /code-quality:lint      # Fast
-   /code-quality:coverage  # Medium
-   /code-quality:security  # Slow
+   /code-quality-tools:lint      # Fast
+   /code-quality-tools:coverage  # Medium
+   /code-quality-tools:security  # Slow
    ```
 
 2. Exclude directories (phpstan.neon, .eslintignore):
@@ -244,7 +244,7 @@ grumphp:
 
 **Option 1 - Fix issues:**
 ```bash
-/code-quality:lint   # See what's failing
+/code-quality-tools:lint   # See what's failing
 ```
 
 **Option 2 - Skip hooks (use sparingly):**

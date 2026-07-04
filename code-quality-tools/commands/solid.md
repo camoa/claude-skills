@@ -1,5 +1,5 @@
 ---
-description: Check SOLID principles and architecture quality for Drupal/Next.js projects. Use when user says "SOLID check", "single responsibility", "architecture quality", "dependency inversion", "check principles", "code complexity", "find violations". For debated analysis, use /code-quality:architecture-debate.
+description: Check SOLID principles and architecture quality for Drupal/Next.js projects. Use when user says "SOLID check", "single responsibility", "architecture quality", "dependency inversion", "check principles", "code complexity", "find violations". For debated analysis, use /code-quality-tools:architecture-debate.
 allowed-tools: Read, Bash, Grep, Glob
 argument-hint: optional|project-path
 ---
@@ -23,7 +23,7 @@ The LSP tool needs no permission and is inert when no plugin is installed — **
 ## Usage
 
 ```
-/code-quality:solid [project-path]
+/code-quality-tools:solid [project-path]
 ```
 
 ## What This Does
@@ -102,11 +102,11 @@ To customize, create `.code-quality.json`:
 
 Common issues:
 - **"High complexity everywhere"**: Start with highest offenders
-- **"Tool not found"**: Run `/code-quality:setup`
+- **"Tool not found"**: Run `/code-quality-tools:setup`
 
 See: `references/troubleshooting.md#solid-check-issues`
 
 ## Related Commands
 
-- `/code-quality:audit` - Full audit (includes SOLID)
-- `/code-quality:dry` - Check duplication (related to SRP)
+- `/code-quality-tools:audit` - Full audit (includes SOLID)
+- `/code-quality-tools:dry` - Check duplication (related to SRP)

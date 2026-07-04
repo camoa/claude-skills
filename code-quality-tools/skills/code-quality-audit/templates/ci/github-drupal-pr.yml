@@ -180,7 +180,7 @@ jobs:
           SEMGREP_TOTAL=$(jq '(.results | length) // 0' .reports/semgrep.json 2>/dev/null || echo 0)
 
           # Naive rubric: start at 50, deduct for issues. Replace with
-          # /code-quality:review --json when wiring real rubric scorer.
+          # /code-quality-tools:review --json when wiring real rubric scorer.
           SCORE=$((50 - PHPSTAN_ERR - PHPCS_ERR / 2 - SEMGREP_HIGH * 3))
           [ "$SCORE" -lt 0 ] && SCORE=0
           if [ "$SCORE" -ge 35 ]; then GATE="PASS"; else GATE="FAIL"; fi

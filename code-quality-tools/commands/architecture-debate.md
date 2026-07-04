@@ -11,7 +11,7 @@ Analyze code architecture from 3 competing perspectives using an agent team. A P
 ## Usage
 
 ```
-/code-quality:architecture-debate <file-or-directory-path>
+/code-quality-tools:architecture-debate <file-or-directory-path>
 ```
 
 ## What This Does
@@ -29,8 +29,8 @@ Parse `$ARGUMENTS` as a file or directory path. Verify it exists using the Read 
 If no arguments provided:
 > What code should the team review? Provide a file or directory path:
 > ```
-> /code-quality:architecture-debate src/Service/
-> /code-quality:architecture-debate web/modules/custom/my_module
+> /code-quality-tools:architecture-debate src/Service/
+> /code-quality-tools:architecture-debate web/modules/custom/my_module
 > ```
 
 If path doesn't exist:
@@ -42,7 +42,7 @@ Verify agent teams are available by attempting to create a team. If creation fai
 
 > Agent teams are not available in this environment.
 >
-> **Fallback:** Use `/code-quality:solid` for automated SOLID analysis, or ask Claude to "review architecture of {path}".
+> **Fallback:** Use `/code-quality-tools:solid` for automated SOLID analysis, or ask Claude to "review architecture of {path}".
 
 Stop here if not available.
 
@@ -372,6 +372,6 @@ Issues where the team agreed to leave as-is:
 
 ## Related Commands
 
-- `/code-quality:review` — Single-agent rubric-scored code review (faster, no debate)
-- `/code-quality:solid` — Automated SOLID check (tools only)
-- `/code-quality:security-debate` — Security-focused 3-agent debate
+- `/code-quality-tools:review` — Single-agent rubric-scored code review (faster, no debate)
+- `/code-quality-tools:solid` — Automated SOLID check (tools only)
+- `/code-quality-tools:security-debate` — Security-focused 3-agent debate

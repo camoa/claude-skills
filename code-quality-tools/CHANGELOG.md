@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.3] - 2026-07-04
+
+### Fixed — command namespace corrected (`/code-quality:` → `/code-quality-tools:`)
+
+The plugin's `plugin.json` name is `code-quality-tools`, so its commands invoke as
+`/code-quality-tools:<command>` — but the README, command docs, skills, and agents still used the
+old `/code-quality:` prefix (234 references across 29 files, stale from the `code-quality` →
+`code-quality-tools` rename), telling users to run commands that don't resolve. Corrected every
+`/code-quality:` reference to `/code-quality-tools:`. Left untouched: references to Claude Code's
+built-in `/code-review ultra` (wrapped by `ultrareview`, a different command) and the `code-quality`
+keyword strings.
+
+### Added
+- ClaudePluginHub badge + a usage-examples block in the README (deferred from the
+  marketplace-community-health docs pass because of the namespace bug above).
+
 ## [3.9.2] - 2026-06-14
 
 **Fix: two real defects in the Drupal gate floor, surfaced by running the gates live against a real site (idexx).**
@@ -123,7 +139,7 @@ First release of the 2026-05-29 feature wave. Stops pointing the cloud-review wr
 
 ### Changed
 
-- **Cloud-review wrapper repointed to canonical `/code-review ultra`.** `commands/ultrareview.md` targeted the **deprecated alias** `/ultrareview` throughout (description, body, hand-off step, platform-refusal + cost notices, See-also). All **interactive** references now point to `/code-review ultra` (the canonical form per the Ultrareview guide — `/ultrareview` remains a working alias, noted inline). The headless **`claude ultrareview` CLI subcommand is kept unchanged** (still the documented non-interactive form; exit-code contract `0`/`1`/`130` intact). `plugin.json` + root `marketplace.json` descriptions: "an /ultrareview cloud-review wrapper" → "a /code-review ultra cloud-review wrapper". The `/code-quality:ultrareview` command name and file are **kept** for back-compat; only the built-in target changed. Cross-links in `audit.md` / `review.md` / `generate-review-md.md` / `SKILL.md` / `README.md` were verified to reference only the kept CLI, the kept plugin-command name, or the `commands/ultrareview.md` file path — no interactive-target edit was needed there.
+- **Cloud-review wrapper repointed to canonical `/code-review ultra`.** `commands/ultrareview.md` targeted the **deprecated alias** `/ultrareview` throughout (description, body, hand-off step, platform-refusal + cost notices, See-also). All **interactive** references now point to `/code-review ultra` (the canonical form per the Ultrareview guide — `/ultrareview` remains a working alias, noted inline). The headless **`claude ultrareview` CLI subcommand is kept unchanged** (still the documented non-interactive form; exit-code contract `0`/`1`/`130` intact). `plugin.json` + root `marketplace.json` descriptions: "an /ultrareview cloud-review wrapper" → "a /code-review ultra cloud-review wrapper". The `/code-quality-tools:ultrareview` command name and file are **kept** for back-compat; only the built-in target changed. Cross-links in `audit.md` / `review.md` / `generate-review-md.md` / `SKILL.md` / `README.md` were verified to reference only the kept CLI, the kept plugin-command name, or the `commands/ultrareview.md` file path — no interactive-target edit was needed there.
 
 ### Added
 
@@ -140,7 +156,7 @@ Marketplace metadata bumped 1.15.11 → 1.15.12.
 
 ### Fixed
 
-- **`README.md` and `commands/setup.md` no longer install the abandoned `sebastian/phpcpd`.** Both manual-install / Quick Install blocks listed `sebastian/phpcpd`, which is marked **abandoned** on Packagist (Sebastian Bergmann archived phpcpd) — so following the README or running `/code-quality:setup` Quick Install produced a Composer deprecation warning. Switched both to the maintained community fork `systemsdk/phpcpd`, which the plugin's own `scripts/core/install-tools.sh`, `scripts/drupal/dry-check.sh`, CI template, and `references/dry-detection.md` already use. The fork is a drop-in replacement — same `vendor/bin/phpcpd` binary and CLI flags — so no script or command logic changed.
+- **`README.md` and `commands/setup.md` no longer install the abandoned `sebastian/phpcpd`.** Both manual-install / Quick Install blocks listed `sebastian/phpcpd`, which is marked **abandoned** on Packagist (Sebastian Bergmann archived phpcpd) — so following the README or running `/code-quality-tools:setup` Quick Install produced a Composer deprecation warning. Switched both to the maintained community fork `systemsdk/phpcpd`, which the plugin's own `scripts/core/install-tools.sh`, `scripts/drupal/dry-check.sh`, CI template, and `references/dry-detection.md` already use. The fork is a drop-in replacement — same `vendor/bin/phpcpd` binary and CLI flags — so no script or command logic changed.
 
 Marketplace metadata bumped 1.14.54 → 1.14.55.
 
@@ -176,7 +192,7 @@ Third release of the modernization roadmap. Three additive items — effort-scal
 
 ### Added
 
-- **Adaptive audit depth (`${CLAUDE_EFFORT}`)** — `skills/code-quality-audit/SKILL.md` gains an "Adaptive Audit Depth" section that scales the audit to the session effort level: `low` → fast lint only, `medium` → lint + coverage + SOLID/DRY, `high` → full audit (the effective default), `xhigh`/`max` → full audit + a `/code-quality:security-debate` offer. An unset/unrecognized level falls back to `high` — depth never silently drops because the level could not be read. `commands/audit.md` carries a prose "Adaptive Depth" pointer to the ladder. **Pilot scope (v3.5.0):** wired into the audit flow only — `lint-changed.sh` and per-command effort gates are deliberately left for a later "broaden" cycle once the pilot is observed. *Grounding note:* the cached Skills guide documents `${CLAUDE_EFFORT}` strictly as a **skill-content** string substitution; it is therefore placed in `SKILL.md` (skill content), and `audit.md` uses a plain-prose behavioral instruction rather than the literal token, which the guides do not support inside slash-command bodies.
+- **Adaptive audit depth (`${CLAUDE_EFFORT}`)** — `skills/code-quality-audit/SKILL.md` gains an "Adaptive Audit Depth" section that scales the audit to the session effort level: `low` → fast lint only, `medium` → lint + coverage + SOLID/DRY, `high` → full audit (the effective default), `xhigh`/`max` → full audit + a `/code-quality-tools:security-debate` offer. An unset/unrecognized level falls back to `high` — depth never silently drops because the level could not be read. `commands/audit.md` carries a prose "Adaptive Depth" pointer to the ladder. **Pilot scope (v3.5.0):** wired into the audit flow only — `lint-changed.sh` and per-command effort gates are deliberately left for a later "broaden" cycle once the pilot is observed. *Grounding note:* the cached Skills guide documents `${CLAUDE_EFFORT}` strictly as a **skill-content** string substitution; it is therefore placed in `SKILL.md` (skill content), and `audit.md` uses a plain-prose behavioral instruction rather than the literal token, which the guides do not support inside slash-command bodies.
 - **`/goal` autonomous loops** — `commands/tdd.md` gains a "Drive the GREEN phase with `/goal`" subsection (worked condition, transcript-checkable end-state rule, trust/`disableAllHooks`/`allowManagedHooksOnly` requirements); `commands/audit.md` gains an "Autonomous remediation with `/goal`" subsection (fix-verify-fix loop paired with `--json` as the proof step). Both state plainly that `/goal` is an interactive / headless-`-p` convenience and **not** a CI gate — the CI primitives remain `audit --json` and `claude ultrareview --json`.
 - **`skills/code-quality-audit/references/setup-hook-pattern.md`** — new reference documenting the `Setup` hook event (fires on `--init-only` / `--init -p` / `--maintenance -p`; `init`/`maintenance` matcher; `trigger` field; cannot block; `command`/`mcp_tool` handlers only) as the one-time CI tool-bootstrap pattern. Exec form (`args` array). Opt-in, **not shipped** — honest about the Hooks Reference caveat that `Setup` never fires on a normal launch (first-use detection stays the fallback) and that `${CLAUDE_PLUGIN_ROOT}` resolves only in plugin-shipped hooks, not a project's own `settings.json`. Corrects the capability-analysis `args: ["--ci"]` example — `install-tools.sh` takes no positional arguments (it is env-var driven).
 
@@ -256,7 +272,7 @@ Two new opt-in surfaces for reviewing code at PR time without adding noise to ex
 
 **New: `skills/code-quality-audit/templates/grumphp.yml`** — pre-commit hook template. phpcs (Drupal,DrupalPractice) + phpstan, both `context: git-staged-files`, so the hook only checks files staged for the current commit. Intentionally excludes phpcpd (directory-scoped, slow), phpunit (full suite — keep in CI), phpmd (noisy on legacy code; opt-in via template edit).
 
-**Updated: `commands/setup.md`** — wizard now prompts "Install GrumPHP git hooks to lint staged files on every commit? [y/N]" (default No). On yes: runs `ddev composer require --dev phpro/grumphp`, copies the template, runs `vendor/bin/grumphp git:init`, and verifies with an empty commit. Re-runs of `/code-quality:setup` only re-ask when hooks aren't already installed. Setup also now documents the two GitHub Actions templates as the CI alternative.
+**Updated: `commands/setup.md`** — wizard now prompts "Install GrumPHP git hooks to lint staged files on every commit? [y/N]" (default No). On yes: runs `ddev composer require --dev phpro/grumphp`, copies the template, runs `vendor/bin/grumphp git:init`, and verifies with an empty commit. Re-runs of `/code-quality-tools:setup` only re-ask when hooks aren't already installed. Setup also now documents the two GitHub Actions templates as the CI alternative.
 
 **Updated: `README.md`** — new "CI & Git Hooks (opt-in)" section above "Watch-mode & Scheduled Sweeps" with a comparison table for the two workflow templates, the `FAIL_ON_GATE` env var, and manual install steps for GrumPHP.
 
@@ -266,7 +282,7 @@ No behavior change to existing commands or hooks. Existing `templates/ci/github-
 
 ### Skill visibility hygiene (Tier 2 of multi-plugin command-naming research)
 
-Set `user-invocable: false` on `skills/code-quality-audit/SKILL.md` (was explicit `true`). The umbrella skill was substring-matching `/audit` and `/code` in the typeahead, but the user-facing entry points are the slash commands (`/code-quality:audit`, `:review`, `:security`, `:solid`, `:dry`, `:tdd`, etc.) — the skill itself is plugin-internal context.
+Set `user-invocable: false` on `skills/code-quality-audit/SKILL.md` (was explicit `true`). The umbrella skill was substring-matching `/audit` and `/code` in the typeahead, but the user-facing entry points are the slash commands (`/code-quality-tools:audit`, `:review`, `:security`, `:solid`, `:dry`, `:tdd`, etc.) — the skill itself is plugin-internal context.
 
 Per `Comprehensive Guide Skills in Claude Code.md` line 290 + 496: `user-invocable: false` controls menu visibility only; Claude can still invoke the skill autonomously, and parent commands can still load it via the Skill tool. No behavior change.
 
@@ -286,21 +302,21 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 - `skills/code-quality-audit/SKILL.md` line count remains under the 500-line soft cap.
 
 ### Out of scope (deferred)
-- **OTEL span instrumentation** — no current OTEL surface in this plugin. The 2026-04-25 Monitoring docs added a full span-attribute schema (gated behind `ENABLE_BETA_TRACING_DETAILED=1`); evaluating an instrumentation pass for `/code-quality:audit` and `/code-quality:security` deferred to a later cycle.
+- **OTEL span instrumentation** — no current OTEL surface in this plugin. The 2026-04-25 Monitoring docs added a full span-attribute schema (gated behind `ENABLE_BETA_TRACING_DETAILED=1`); evaluating an instrumentation pass for `/code-quality-tools:audit` and `/code-quality-tools:security` deferred to a later cycle.
 - **JSON schema v2** — existing v1 contracts are stable; no breaking changes warranted by the doc refresh.
 - **Default-on `PostToolBatch` hook** — until upstream adds skill-scoping or a matcher field, plugin-scoped is too noisy. Documented optional pattern only.
 
 ## [3.0.0] - 2026-04-20
 
 ### Added
-- **REVIEW.md v2 injection-model generator** — `/code-quality:generate-review-md` now emits the injection-model structure (severity overrides, nit caps, skip directives, mandatory-check lists, verification bar, summary-format directives). Starter templates for Drupal and Next.js in `references/review-md-v2.md`.
-- **`/code-quality:ultrareview` command** — wrapper around the built-in `/ultrareview` with pre-flight platform compatibility check (fails cleanly on Bedrock/Vertex/Foundry/ZDR), cost transparency notice (Pro/Max 3 free one-time then $5–$20 per run; Team/Enterprise all paid as extra usage), and GitHub remote check for PR mode.
+- **REVIEW.md v2 injection-model generator** — `/code-quality-tools:generate-review-md` now emits the injection-model structure (severity overrides, nit caps, skip directives, mandatory-check lists, verification bar, summary-format directives). Starter templates for Drupal and Next.js in `references/review-md-v2.md`.
+- **`/code-quality-tools:ultrareview` command** — wrapper around the built-in `/ultrareview` with pre-flight platform compatibility check (fails cleanly on Bedrock/Vertex/Foundry/ZDR), cost transparency notice (Pro/Max 3 free one-time then $5–$20 per run; Team/Enterprise all paid as extra usage), and GitHub remote check for PR mode.
 - **Skill-scoped `FileChanged` hook** — watch-mode linting runs only when the `code-quality-audit` skill is active. Matcher covers common linter-config files (composer.json, package.json, phpstan.neon*, psalm.xml, eslint.config.*, tsconfig.json). Dispatches to `hooks/lint-changed.sh` which runs PHPStan (via DDEV) or ESLint per project type. Force-disable mid-session with `CLAUDE_CODE_QUALITY_WATCH=0`.
 - **Skill-scoped `PermissionDenied` hook** — returns `{retry: true}` scoped to `Read|Grep|Glob` (non-destructive) so audit flows don't stall on auto-mode classifier denials for read-only tools.
 - **Scheduled quality sweep templates** — Desktop Scheduled Task template (primary, local files + DDEV access, 1-min interval) in `references/desktop-sweep-template.md`; Cloud Routine fallback with full footgun list in `references/cloud-routine-sweep.md`; surface comparison with decision tree in `references/scheduled-sweeps.md`.
 - **API-triggered pre-merge gate** — Cloud Routine template with `curl` example, GitHub Actions and GitLab CI snippets, bearer-token lifecycle and daily-cap guidance in `references/premerge-gate-routine.md`.
 - **Check-run JSON consumption** — `gh`+`jq` parsing pattern with a starter GitHub Actions quality-gate workflow that fails merge when `normal > 0`. Documents that the JSON `normal` key corresponds to the UI's "Important" severity (backwards compat). See `references/check-run-json.md`.
-- **`--json` CI mode** on `/code-quality:audit`, `/code-quality:review`, and `/code-quality:security` — emits a stable schema v1.0 JSON document on stdout for CI gating. Schemas documented in `references/json-schemas.md`. Scoped to these three commands only; `/lint`, `/coverage` already emit tool-native JSON, `/solid`, `/dry`, `/tdd` are interactive.
+- **`--json` CI mode** on `/code-quality-tools:audit`, `/code-quality-tools:review`, and `/code-quality-tools:security` — emits a stable schema v1.0 JSON document on stdout for CI gating. Schemas documented in `references/json-schemas.md`. Scoped to these three commands only; `/lint`, `/coverage` already emit tool-native JSON, `/solid`, `/dry`, `/tdd` are interactive.
 
 ### Changed
 - **Severity label** — Code Review's human-facing "Normal" renamed to **"Important"** across `/review` and related docs. JSON key stays `normal` for backwards compatibility.
@@ -328,14 +344,14 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 ## [2.9.0] - 2026-03-20
 
 ### Added
-- **`/code-quality:generate-review-md` command** — Analyzes codebase patterns (linter configs, CLAUDE.md rules, CI config, git history) and generates a `REVIEW.md` for Claude Code's managed Code Review service. Supports Drupal, Next.js, React, Python, and general projects. Detects existing conventions to avoid duplication. Produces Always Check, Style, Security, and Skip sections.
-- **`/loop` patterns documented** in CLAUDE.md — Shows how to use Claude Code's built-in `/loop` for recurring quality checks: `/loop 30m /code-quality:lint`, `/loop 1h /code-quality:security`. Session-scoped, 3-day auto-expiry.
-- **SKILL.md** updated with `/code-quality:generate-review-md` in Quick Commands list.
+- **`/code-quality-tools:generate-review-md` command** — Analyzes codebase patterns (linter configs, CLAUDE.md rules, CI config, git history) and generates a `REVIEW.md` for Claude Code's managed Code Review service. Supports Drupal, Next.js, React, Python, and general projects. Detects existing conventions to avoid duplication. Produces Always Check, Style, Security, and Skip sections.
+- **`/loop` patterns documented** in CLAUDE.md — Shows how to use Claude Code's built-in `/loop` for recurring quality checks: `/loop 30m /code-quality-tools:lint`, `/loop 1h /code-quality-tools:security`. Session-scoped, 3-day auto-expiry.
+- **SKILL.md** updated with `/code-quality-tools:generate-review-md` in Quick Commands list.
 
 ## [2.8.0] - 2026-03-20
 
 ### Added
-- **`/simplify` distinction note** in SKILL.md: Documents how Claude Code's built-in `/simplify` differs from `/code-quality:review` (rubric scoring, quality gate, persisted report vs quick ad-hoc feedback)
+- **`/simplify` distinction note** in SKILL.md: Documents how Claude Code's built-in `/simplify` differs from `/code-quality-tools:review` (rubric scoring, quality gate, persisted report vs quick ad-hoc feedback)
 - **`effort: high` on all debate agents**: All 6 agent spawn prompts in `security-debate.md` and `architecture-debate.md` now declare `effort: high` for deeper analysis
 - **`StopFailure` hook guidance** in CLAUDE.md: Documents how users can configure the `StopFailure` event in their project's `.claude/hooks.json` for CI failure alerting (e.g., Slack webhook on audit failure)
 - **`REVIEW.md` convention** in `commands/review.md`: Documents that a `REVIEW.md` file at project root customizes Claude's review behavior, consistent with Claude Code's Code Review feature
@@ -352,8 +368,8 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 ### Added
 
 **Track A — Approach Improvements**
-- **`/code-quality:review`** — Rubric-scored code review with 10-category assessment (Content + Structure), /50 scale, quality gate (PASS 35+/FAIL)
-- **`/code-quality:architecture-debate`** — 3-agent architecture debate (Pragmatist + Purist + Maintainer) with isolated worktrees and quality gate enforcement
+- **`/code-quality-tools:review`** — Rubric-scored code review with 10-category assessment (Content + Structure), /50 scale, quality gate (PASS 35+/FAIL)
+- **`/code-quality-tools:architecture-debate`** — 3-agent architecture debate (Pragmatist + Purist + Maintainer) with isolated worktrees and quality gate enforcement
 - **Cross-audit synthesis** in `/audit` — correlates findings across tools into hot spots, cross-category risks, and prioritized action plan (`.reports/audit-synthesis.md`)
 
 **Track B — Agent Team Enhancement**
@@ -394,7 +410,7 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 ## [2.4.0] - 2026-02-11
 
 ### Added
-- `/code-quality:security-debate` command — multi-perspective security debate using agent teams
+- `/code-quality-tools:security-debate` command — multi-perspective security debate using agent teams
   - Defender agent validates findings, identifies false positives and exploitability
   - Red Team agent constructs attack scenarios, finds gaps audit missed
   - Compliance Checker agent maps to OWASP Top 10 / CWE standards with coverage matrix
@@ -404,7 +420,7 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 
 ### Fixed
 - `commands/security.md` — corrected report filename from `.reports/security.json` to `.reports/security-report.json`
-- `commands/security.md` — added discoverability link to `/code-quality:security-debate`
+- `commands/security.md` — added discoverability link to `/code-quality-tools:security-debate`
 
 ---
 
@@ -426,14 +442,14 @@ Closes the 2026-04-25 Claude Code doc-refresh deltas affecting this plugin (snap
 
 ### Added
 - **8 Slash Commands** for direct operation access
-  - `/code-quality:setup` - Install and configure tools
-  - `/code-quality:audit` - Run full audit (all 22 operations)
-  - `/code-quality:coverage` - Test coverage analysis
-  - `/code-quality:security` - Security scan (10 Drupal layers, 7 Next.js layers)
-  - `/code-quality:lint` - Code standards check
-  - `/code-quality:solid` - SOLID principles check
-  - `/code-quality:dry` - Code duplication detection
-  - `/code-quality:tdd` - TDD workflow (test watcher mode)
+  - `/code-quality-tools:setup` - Install and configure tools
+  - `/code-quality-tools:audit` - Run full audit (all 22 operations)
+  - `/code-quality-tools:coverage` - Test coverage analysis
+  - `/code-quality-tools:security` - Security scan (10 Drupal layers, 7 Next.js layers)
+  - `/code-quality-tools:lint` - Code standards check
+  - `/code-quality-tools:solid` - SOLID principles check
+  - `/code-quality-tools:dry` - Code duplication detection
+  - `/code-quality-tools:tdd` - TDD workflow (test watcher mode)
 - **Project Auto-Detection** - Automatically detects Drupal vs Next.js projects
 - **Intelligent Error Handling** - Contextual error messages with recovery guidance
 - **Troubleshooting Guide** - Common issues and solutions (`references/troubleshooting.md`)

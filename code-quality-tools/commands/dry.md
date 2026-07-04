@@ -19,7 +19,7 @@ The LSP tool needs no permission and is inert when no plugin is installed — fa
 ## Usage
 
 ```
-/code-quality:dry [project-path] [--changed <file>]
+/code-quality-tools:dry [project-path] [--changed <file>]
 ```
 
 `--changed <file>`: path to a newline-delimited list of changed files (e.g. from
@@ -79,7 +79,7 @@ check to be meaningful. Instead, the post-scan verdict is filtered:
 | ≥1 file in changed-files list | **FAIL** — fix before merging |
 | All files outside changed-files list | **INFO** — pre-existing debt, not blocking |
 
-Run without `--changed` (e.g. `/code-quality:audit`, `--full-audit`) to restore
+Run without `--changed` (e.g. `/code-quality-tools:audit`, `--full-audit`) to restore
 whole-tree failing behavior on all clones.
 
 ## Duplication Thresholds
@@ -112,12 +112,12 @@ To customize, create `.code-quality.json`:
 ## Error Handling
 
 Common issues:
-- **"Tool not found"**: Run `/code-quality:setup`
+- **"Tool not found"**: Run `/code-quality-tools:setup`
 - **"High duplication"**: Prioritize by impact (frequently changed code first)
 
 See: `references/troubleshooting.md#dry-check-issues`
 
 ## Related Commands
 
-- `/code-quality:audit` - Full audit (includes DRY)
-- `/code-quality:solid` - Architecture check (related)
+- `/code-quality-tools:audit` - Full audit (includes DRY)
+- `/code-quality-tools:solid` - Architecture check (related)

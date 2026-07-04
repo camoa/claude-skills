@@ -13,8 +13,8 @@ Run a comprehensive code quality and security audit on your project.
 ## Usage
 
 ```
-/code-quality:audit [project-path]           # interactive, writes .reports/*.md + chat summary
-/code-quality:audit --json [project-path]    # CI mode — emits a single stable JSON document on stdout
+/code-quality-tools:audit [project-path]           # interactive, writes .reports/*.md + chat summary
+/code-quality-tools:audit --json [project-path]    # CI mode — emits a single stable JSON document on stdout
 ```
 
 ## CI Mode (--json)
@@ -38,7 +38,7 @@ When invoked with `--json`, emit a single stable JSON document on stdout (schema
 Gate a pipeline on overall status:
 
 ```bash
-result=$(/code-quality:audit --json "$TARGET")
+result=$(/code-quality-tools:audit --json "$TARGET")
 echo "$result" | jq -e '.status != "fail"' >/dev/null || { echo "$result" | jq; exit 1; }
 ```
 
@@ -53,7 +53,7 @@ Full schema + field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audi
 
 ## Adaptive Depth
 
-Audit depth scales with the session's effort level — at `low`, run a fast lint pass; at `medium`, lint + coverage + SOLID/DRY; at `high` (the effective default), the full audit; at `xhigh`/`max`, the full audit followed by an offer to run `/code-quality:security-debate`. An unset or unrecognized level falls back to the full audit — depth never silently drops below `high` because the level could not be read. The full ladder lives in the `code-quality-audit` skill's "Adaptive Audit Depth" section. (Pilot, v3.5.0 — wired into the audit flow only.)
+Audit depth scales with the session's effort level — at `low`, run a fast lint pass; at `medium`, lint + coverage + SOLID/DRY; at `high` (the effective default), the full audit; at `xhigh`/`max`, the full audit followed by an offer to run `/code-quality-tools:security-debate`. An unset or unrecognized level falls back to the full audit — depth never silently drops below `high` because the level could not be read. The full ladder lives in the `code-quality-audit` skill's "Adaptive Audit Depth" section. (Pilot, v3.5.0 — wired into the audit flow only.)
 
 ## Detection & Execution
 
@@ -132,13 +132,13 @@ For recurring sweeps (daily, weekly, hourly security watch), pick a surface base
 
 Surface comparison and decision tree: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/scheduled-sweeps.md`.
 
-**Run it without blocking.** A full audit is a ~10-minute run. `claude --bg "/code-quality:audit"` dispatches it as a background session that keeps running with no terminal attached while you keep working — monitor it with `claude agents` (the agent-view TUI) and pull results in a script with `claude logs <id>`. This is on-demand-async; the scheduled surfaces above are clock-driven.
+**Run it without blocking.** A full audit is a ~10-minute run. `claude --bg "/code-quality-tools:audit"` dispatches it as a background session that keeps running with no terminal attached while you keep working — monitor it with `claude agents` (the agent-view TUI) and pull results in a script with `claude logs <id>`. This is on-demand-async; the scheduled surfaces above are clock-driven.
 
 ## Wire to CI
 
 For CI-triggered pre-merge audits (fire from GitHub Actions / GitLab CI on PR labels or merge-ready signal), use a Cloud Routine with an API trigger. Full `curl` + workflow snippets + bearer-token lifecycle in `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/references/premerge-gate-routine.md`.
 
-Two complementary gates: run the cheap local `/code-quality:audit --json` on every push; reserve the verified-findings cloud review for release branches via the headless `claude ultrareview --json` subcommand (exit-code contract + gating snippet in `commands/ultrareview.md` → "CI / Headless Mode").
+Two complementary gates: run the cheap local `/code-quality-tools:audit --json` on every push; reserve the verified-findings cloud review for release branches via the headless `claude ultrareview --json` subcommand (exit-code contract + gating snippet in `commands/ultrareview.md` → "CI / Headless Mode").
 
 ## Autonomous remediation with `/goal`
 
@@ -146,20 +146,20 @@ After an audit produces a findings list, the built-in `/goal` command turns fix-
 
 ```
 /goal every critical and high finding in .reports/audit-synthesis.md is resolved,
-verified by re-running /code-quality:audit --json and confirming zero findings
+verified by re-running /code-quality-tools:audit --json and confirming zero findings
 with severity high or critical — or stop after 15 turns
 ```
 
 The condition must name a **transcript-checkable end state** — the evaluator does not run tools itself, it reads what Claude surfaced. Pair it with `--json` so the proof is a machine-checkable document, not a prose claim. Bound the loop with an explicit `stop after N turns` clause.
 
-`/goal` requires an accepted workspace-trust dialog and is unavailable when `disableAllHooks` or `allowManagedHooksOnly` is set. It is an interactive / headless-`-p` convenience — **not** a CI gate. For CI, use the non-interactive gates instead: `/code-quality:audit --json` per push and `claude ultrareview --json` on release branches.
+`/goal` requires an accepted workspace-trust dialog and is unavailable when `disableAllHooks` or `allowManagedHooksOnly` is set. It is an interactive / headless-`-p` convenience — **not** a CI gate. For CI, use the non-interactive gates instead: `/code-quality-tools:audit --json` per push and `claude ultrareview --json` on release branches.
 
 ## Related Commands
 
-- `/code-quality:review` - Rubric-scored code review (/50 scale)
-- `/code-quality:ultrareview` - Cloud multi-agent deep review (pre-merge, paid after free quota)
-- `/code-quality:coverage` - Test coverage only
-- `/code-quality:security` - Security audit only
-- `/code-quality:security-debate` - Debate security findings with 3-agent team
-- `/code-quality:architecture-debate` - Debate architecture with 3-agent team
-- `/code-quality:lint` - Linting check only
+- `/code-quality-tools:review` - Rubric-scored code review (/50 scale)
+- `/code-quality-tools:ultrareview` - Cloud multi-agent deep review (pre-merge, paid after free quota)
+- `/code-quality-tools:coverage` - Test coverage only
+- `/code-quality-tools:security` - Security audit only
+- `/code-quality-tools:security-debate` - Debate security findings with 3-agent team
+- `/code-quality-tools:architecture-debate` - Debate architecture with 3-agent team
+- `/code-quality-tools:lint` - Linting check only

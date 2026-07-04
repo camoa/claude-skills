@@ -11,8 +11,8 @@ Run test coverage analysis and generate coverage reports.
 ## Usage
 
 ```
-/code-quality:coverage [project-path]
-/code-quality:coverage --changed <src.php> [src2.php ...]
+/code-quality-tools:coverage [project-path]
+/code-quality-tools:coverage --changed <src.php> [src2.php ...]
 ```
 
 ## What This Does
@@ -29,10 +29,10 @@ per-WO gate runs where whole-project coverage would report pre-existing debt.
 
 ```
 # Coverage for a single changed source
-/code-quality:coverage --changed web/modules/custom/my_mod/src/Service/MyService.php
+/code-quality-tools:coverage --changed web/modules/custom/my_mod/src/Service/MyService.php
 
 # Multiple changed files (typical CI/gate usage)
-/code-quality:coverage --changed $(cat .changed-files.txt)
+/code-quality-tools:coverage --changed $(cat .changed-files.txt)
 ```
 
 What happens:
@@ -99,11 +99,11 @@ To customize, create `.code-quality.json`:
 
 Common issues:
 - **"No tests found"**: Add tests to `tests/` directory
-- **"Coverage tool not installed"**: Run `/code-quality:setup`
+- **"Coverage tool not installed"**: Run `/code-quality-tools:setup`
 
 See: `references/troubleshooting.md#coverage-issues`
 
 ## Related Commands
 
-- `/code-quality:audit` - Full audit (includes coverage)
-- `/code-quality:tdd` - TDD workflow with coverage
+- `/code-quality-tools:audit` - Full audit (includes coverage)
+- `/code-quality-tools:tdd` - TDD workflow with coverage

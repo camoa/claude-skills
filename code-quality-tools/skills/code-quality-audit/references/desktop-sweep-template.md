@@ -33,8 +33,8 @@ Run a code-quality sweep.
 2. Create `.reports/` if it doesn't exist; append `.reports/` to `.gitignore` if missing.
 
 3. Run the full audit:
-   - Drupal: `/code-quality:audit`
-   - Next.js: `/code-quality:audit`
+   - Drupal: `/code-quality-tools:audit`
+   - Next.js: `/code-quality-tools:audit`
 
 4. Write the summary to `.reports/quality-sweep-$(date +%Y-%m-%d).md` with:
    - Project type detected
@@ -55,7 +55,7 @@ Run a code-quality sweep.
 
 ### Hourly security watch
 
-Frequency: Hourly. Replace step 3 with `/code-quality:security`. Drop the date-stamped filename in favor of `.reports/security-latest.md` (overwrite) so you're not spammed with files.
+Frequency: Hourly. Replace step 3 with `/code-quality-tools:security`. Drop the date-stamped filename in favor of `.reports/security-latest.md` (overwrite) so you're not spammed with files.
 
 ### Pre-commit sweep
 
@@ -63,7 +63,7 @@ Frequency: Weekdays, 5:30 PM. Add this as step 7:
 
 ```markdown
 7. If findings are clean, print "Safe to commit. End-of-day state is clean."
-   If findings exist, print the top 3 and suggest `/code-quality:review` paths.
+   If findings exist, print the top 3 and suggest `/code-quality-tools:review` paths.
 ```
 
 ### Weekly deep review
@@ -72,10 +72,10 @@ Frequency: Weekly, Monday 6 AM. Replace step 3 with a chained run:
 
 ```markdown
 3. Run in sequence:
-   - /code-quality:audit         (full)
-   - /code-quality:solid src/    (architecture)
-   - /code-quality:dry           (duplication)
-   - /code-quality:coverage      (test coverage)
+   - /code-quality-tools:audit         (full)
+   - /code-quality-tools:solid src/    (architecture)
+   - /code-quality-tools:dry           (duplication)
+   - /code-quality-tools:coverage      (test coverage)
 ```
 
 Budget ~15 minutes; Desktop doesn't enforce a time limit but API cost scales with depth.

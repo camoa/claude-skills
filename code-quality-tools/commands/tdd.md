@@ -11,8 +11,8 @@ Start Test-Driven Development (TDD) workflow with RED-GREEN-REFACTOR cycle.
 ## Usage
 
 ```
-/code-quality:tdd [project-path]
-/code-quality:tdd --changed <src.php> [src2.php ...]
+/code-quality-tools:tdd [project-path]
+/code-quality-tools:tdd --changed <src.php> [src2.php ...]
 ```
 
 ## What This Does
@@ -28,10 +28,10 @@ Scopes test execution to changed source files only — suitable for per-WO gate 
 
 ```
 # Run only the tests mapped from changed sources
-/code-quality:tdd --changed web/modules/custom/my_mod/src/Service/MyService.php
+/code-quality-tools:tdd --changed web/modules/custom/my_mod/src/Service/MyService.php
 
 # Multiple changed files (typical CI/gate usage)
-/code-quality:tdd --changed $(cat .changed-files.txt)
+/code-quality-tools:tdd --changed $(cat .changed-files.txt)
 ```
 
 **Mapping convention (Drupal) — Unit tier only:**
@@ -149,12 +149,12 @@ Write the condition as a **transcript-checkable end state**: the evaluator does 
 ## Error Handling
 
 Common issues:
-- **"Test watcher not starting"**: Run `/code-quality:setup`
+- **"Test watcher not starting"**: Run `/code-quality-tools:setup`
 - **"Tests too slow"**: Review test isolation, mock external dependencies
 
 See: `references/troubleshooting.md#tdd-workflow-issues`
 
 ## Related Commands
 
-- `/code-quality:coverage` - Check overall coverage
-- `/code-quality:audit` - Full audit (includes tests)
+- `/code-quality-tools:coverage` - Check overall coverage
+- `/code-quality-tools:audit` - Full audit (includes tests)

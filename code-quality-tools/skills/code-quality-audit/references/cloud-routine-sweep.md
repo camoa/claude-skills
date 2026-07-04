@@ -32,8 +32,8 @@ Run a code-quality sweep on this repository.
 
 2. Run the full audit (tools the cloud image has pre-installed are used;
    anything missing is skipped with a note):
-   - Drupal: /code-quality:audit
-   - Next.js: /code-quality:audit
+   - Drupal: /code-quality-tools:audit
+   - Next.js: /code-quality-tools:audit
 
 3. Generate a summary:
    - Project type detected

@@ -17,8 +17,8 @@ If a code-intelligence plugin is installed (`php-lsp` for Drupal, `typescript-ls
 ## Usage
 
 ```
-/code-quality:review <file-or-directory-path>            # writes scored markdown report
-/code-quality:review --json <file-or-directory-path>     # CI mode — single stable JSON on stdout
+/code-quality-tools:review <file-or-directory-path>            # writes scored markdown report
+/code-quality-tools:review --json <file-or-directory-path>     # CI mode — single stable JSON on stdout
 ```
 
 ## CI Mode (--json)
@@ -32,7 +32,7 @@ When invoked with `--json`, emit schema `v1.0` JSON on stdout and skip writing t
 Gate on `.summary.gate`:
 
 ```bash
-result=$(/code-quality:review --json "$TARGET")
+result=$(/code-quality-tools:review --json "$TARGET")
 echo "$result" | jq -e '.summary.gate == "PASS"' >/dev/null || exit 1
 ```
 
@@ -57,8 +57,8 @@ Parse `$ARGUMENTS` as a file or directory path. Verify it exists.
 If no arguments provided:
 > What code should I review? Provide a file or directory path:
 > ```
-> /code-quality:review src/Service/PaymentService.php
-> /code-quality:review web/modules/custom/my_module
+> /code-quality-tools:review src/Service/PaymentService.php
+> /code-quality-tools:review web/modules/custom/my_module
 > ```
 
 If path doesn't exist:
@@ -183,7 +183,7 @@ Claude Code's managed Code Review service injects `REVIEW.md` verbatim as the hi
 
 Severity labels: 🔴 **Important** (blocks merge), 🟡 **Nit**, 🟣 **Pre-existing**. The JSON check-run output keys Important findings as `normal` for backwards compatibility — see `skills/code-quality-audit/references/check-run-json.md` for CI gating.
 
-For authoring REVIEW.md, see `skills/code-quality-audit/references/review-md-v2.md` — covers severity overrides, nit caps, skip directives, verification bars, and starter templates for Drupal and Next.js. Generate one with `/code-quality:generate-review-md`.
+For authoring REVIEW.md, see `skills/code-quality-audit/references/review-md-v2.md` — covers severity overrides, nit caps, skip directives, verification bars, and starter templates for Drupal and Next.js. Generate one with `/code-quality-tools:generate-review-md`.
 
 ## CI Integration
 
@@ -191,10 +191,10 @@ To gate merges on Code Review findings, parse the **Claude Code Review** check r
 
 ## See also
 
-- `/code-quality:audit` — Full automated audit (tools only, no rubric)
-- `/code-quality:solid` — SOLID principles check only
-- `/code-quality:security` — Security audit only
-- `/code-quality:generate-review-md` — generate a v2 REVIEW.md tailored to the project
-- `/code-quality:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
+- `/code-quality-tools:audit` — Full automated audit (tools only, no rubric)
+- `/code-quality-tools:solid` — SOLID principles check only
+- `/code-quality-tools:security` — Security audit only
+- `/code-quality-tools:generate-review-md` — generate a v2 REVIEW.md tailored to the project
+- `/code-quality-tools:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
 - `@claude review once` — GitHub PR comment that triggers one managed Code Review without subscribing the PR to future push-triggered reviews. Requires the managed Code Review service enabled on the repository. Useful for long-running PRs with frequent rebases.
 - `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to act on review findings in the original session's context.

@@ -10,7 +10,7 @@ Generate a project-tailored `REVIEW.md` that Claude Code's managed Code Review s
 ## Usage
 
 ```
-/code-quality:generate-review-md
+/code-quality-tools:generate-review-md
 ```
 
 ## What This Does

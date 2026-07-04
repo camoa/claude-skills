@@ -13,8 +13,8 @@ Wrap Claude Code's built-in `/code-review ultra` with pre-flight platform compat
 ## Usage
 
 ```
-/code-quality:ultrareview           # review current branch diff vs default (includes uncommitted)
-/code-quality:ultrareview 1234      # review GitHub PR #1234 (clones from GitHub)
+/code-quality-tools:ultrareview           # review current branch diff vs default (includes uncommitted)
+/code-quality-tools:ultrareview 1234      # review GitHub PR #1234 (clones from GitHub)
 ```
 
 PR mode requires a `github.com` remote on the repository. If the repo is too large to bundle, push the branch and use PR mode.
@@ -58,13 +58,13 @@ If an env-detectable platform matches, STOP and respond:
 > `/code-review ultra` is not available on {platform}. It runs on Claude Code on the web infrastructure, which is not reachable from Bedrock/Vertex/Foundry and is unavailable to organizations with Zero Data Retention enabled.
 >
 > Alternatives:
-> - `/code-quality:review <path>` — local single-pass rubric review
+> - `/code-quality-tools:review <path>` — local single-pass rubric review
 > - `@claude review once` — one-off GitHub-side review (requires managed Code Review enabled on the repo)
-> - `/code-quality:audit` — full local audit (PHPStan/ESLint + security scans)
+> - `/code-quality-tools:audit` — full local audit (PHPStan/ESLint + security scans)
 
 If no env var matched, proceed — but tell the user:
 
-> Pre-flight only detects Bedrock and Vertex locally. If you're on Foundry, a ZDR organization, or authenticated with an API key only, the built-in `/code-review ultra` will refuse at session launch. If that happens, run `/login` and sign in with Claude.ai, or fall back to `/code-quality:review`.
+> Pre-flight only detects Bedrock and Vertex locally. If you're on Foundry, a ZDR organization, or authenticated with an API key only, the built-in `/code-review ultra` will refuse at session launch. If that happens, run `/login` and sign in with Claude.ai, or fall back to `/code-quality-tools:review`.
 
 ### Step 2 — Cost Transparency
 
@@ -104,7 +104,7 @@ git remote -v | grep -q 'github.com' || echo "NO_GITHUB"
 
 If missing, STOP:
 
-> PR mode requires a `github.com` remote. Either push your branch to GitHub and retry, or run `/code-quality:ultrareview` (no arguments) to review your local branch diff instead.
+> PR mode requires a `github.com` remote. Either push your branch to GitHub and retry, or run `/code-quality-tools:ultrareview` (no arguments) to review your local branch diff instead.
 
 ### Step 4 — Hand Off to the Built-in /code-review ultra
 
@@ -158,11 +158,11 @@ jq -e '[.bugs[]? | select(.severity=="high" or .severity=="critical")] | length 
 
 ### Cost discipline for CI
 
-A run that fails or is stopped **still consumes** one of the three free Pro/Max runs; paid runs bill $5–$20 as usage credits. Reserve `claude ultrareview` for merge-ready / release branches — do **not** wire it to `on: push`. For every-push gating use the cheaper local `/code-quality:audit --json`; use `claude ultrareview --json` only as a release-gate step. The Step 1 pre-flight platform constraints (Bedrock/Vertex/Foundry/ZDR/API-key-only) apply to the subcommand identically — it has the same authentication and usage-credit requirements as `/code-review ultra`.
+A run that fails or is stopped **still consumes** one of the three free Pro/Max runs; paid runs bill $5–$20 as usage credits. Reserve `claude ultrareview` for merge-ready / release branches — do **not** wire it to `on: push`. For every-push gating use the cheaper local `/code-quality-tools:audit --json`; use `claude ultrareview --json` only as a release-gate step. The Step 1 pre-flight platform constraints (Bedrock/Vertex/Foundry/ZDR/API-key-only) apply to the subcommand identically — it has the same authentication and usage-credit requirements as `/code-review ultra`.
 
-## When to Use This vs `/code-quality:review`
+## When to Use This vs `/code-quality-tools:review`
 
-| `/code-quality:review <path>` | `/code-quality:ultrareview` |
+| `/code-quality-tools:review <path>` | `/code-quality-tools:ultrareview` |
 |---|---|
 | Local, single-pass | Cloud, multi-agent fleet |
 | Seconds to a few minutes | 5–10 minutes |
@@ -172,8 +172,8 @@ A run that fails or is stopped **still consumes** one of the three free Pro/Max 
 
 ## See also
 
-- `/code-quality:review` — local rubric-scored single-pass review
-- `/code-quality:audit` — full local audit (all tools, no rubric)
-- `/code-quality:generate-review-md` — tune managed Code Review (separate from ultrareview)
+- `/code-quality-tools:review` — local rubric-scored single-pass review
+- `/code-quality-tools:audit` — full local audit (all tools, no rubric)
+- `/code-quality-tools:generate-review-md` — tune managed Code Review (separate from ultrareview)
 - `skills/code-quality-audit/references/scheduled-sweeps.md` — scheduling reviews across local and cloud surfaces
 - `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to pick up review or fix work on a PR; distinct from `/code-review ultra <PR>`, which clones a PR fresh to review it.

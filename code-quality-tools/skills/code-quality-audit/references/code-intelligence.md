@@ -44,7 +44,7 @@ Verify it is active: `/plugin` lists the loaded LSP servers; a "diagnostics foun
 
 ## What each command gains
 
-### `/code-quality:solid`
+### `/code-quality-tools:solid`
 
 SOLID's hardest checks are exactly the ones grep cannot do:
 
@@ -52,11 +52,11 @@ SOLID's hardest checks are exactly the ones grep cannot do:
 - **Dependency Inversion** — `find-references` on a concrete class shows whether high-level modules depend on it directly instead of on an abstraction.
 - **Single Responsibility** — `call-hierarchy` gives real fan-in/fan-out, instead of inferring "reasons to change" from file size.
 
-### `/code-quality:dry`
+### `/code-quality-tools:dry`
 
 PHPCPD and jscpd find **textual** clones. `find-references` finds **semantic** duplication they miss entirely — e.g. the same service resolved inline at 14 call sites is a DRY/DIP violation even though the surrounding text differs at every site.
 
-### `/code-quality:review`
+### `/code-quality-tools:review`
 
 The rubric's *Separation of concerns* and *Testability* categories otherwise rest on the reviewer's impression. `call-hierarchy` shows whether a controller/form method reaches into a data layer N levels deep; `find-references` and definition resolution show how dependencies are actually wired — evidence instead of impression.
 
