@@ -63,7 +63,7 @@ Follow these exactly:
    "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-to-epic.sh" "$PROJECT_PATH" "$TASK_NAME" [--dry-run] [<child1> <child2> ...]
    ```
 
-   Resolve `$PROJECT_PATH` from session context (`session_context.json` `projectPath`) or from `pwd` if no project is active. The script handles all file surgery; this command does not touch disk directly.
+   Resolve `$PROJECT_PATH` by running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON `.projectPath`, or from `pwd` if no project is active. The script handles all file surgery; this command does not touch disk directly.
 
 4. **If dry-run**, print the script's plan output verbatim and stop.
 

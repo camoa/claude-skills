@@ -19,11 +19,11 @@ Run the TDD (Red-Green-Refactor discipline) quality gate against the current tas
 ## What this does
 
 1. **Resolve task context** — resolve the project folder in this order:
-   (a) read `session_context.json` if present — it carries the active project's absolute path
+   (a) run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parse its JSON (`.project`, `.projectPath`, `.task`, `.taskPath`) if it resolves — it carries the active project's absolute path
    (b) walk up from `$PWD` until you find a directory containing `implementation_process/`
    (c) abort with "no project context — run /ai-dev-assistant:next first, or cd to a project workspace" if neither resolves
 
-   Then resolve the task folder: if `<task-name>` arg is given, locate it under `<project>/implementation_process/in_progress/**/<task-name>/` (glob handles both flat and sub-epic nesting). If no arg, use the task from `session_context.json`. If the task doesn't resolve, abort with candidate suggestions.
+   Then resolve the task folder: if `<task-name>` arg is given, locate it under `<project>/implementation_process/in_progress/**/<task-name>/` (glob handles both flat and sub-epic nesting). If no arg, use the task from the `session-context-read.sh` output (`.task`/`.taskPath`). If the task doesn't resolve, abort with candidate suggestions.
 
 2. **Verify dependency** — confirm `code-quality-tools` plugin is installed. Check: `ls ~/.claude/plugins/cache/camoa-skills/code-quality-tools/` returns a non-empty directory. Minimum supported version: **3.0.0** (earlier versions may work but are untested against this wrapper). If missing, abort with install instructions.
 

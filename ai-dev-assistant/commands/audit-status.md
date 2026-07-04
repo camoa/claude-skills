@@ -20,7 +20,7 @@ Read-only display of v4.0.0 hardened-gate audit state per task. Surfaces gate-fi
 
 ### Step 1 — Resolve scope
 
-- No arg → use `task` from current `session_context.json`
+- No arg → run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parse its JSON `.task`/`.taskPath` for the current task
 - `<task-name>` → resolve task folder under the current project's `implementation_process/in_progress/**/<task-name>/`
 - `--all` → enumerate all task folders under `implementation_process/{in_progress,completed}/**`
 

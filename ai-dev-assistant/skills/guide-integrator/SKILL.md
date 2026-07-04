@@ -34,7 +34,7 @@ Activate when:
 - Architecture drafting for any feature
 - Auto-triggered by `architecture-drafter` agent
 
-**Skip if:** The relevant guide is already listed in `loadedGuides[]` of the per-workspace `session_context.json` (see "Record Loaded Guide" below). The conversation context is an unreliable fallback; the file is the source of truth.
+**Skip if:** The relevant guide is already listed in `loadedGuides[]` — run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parse its JSON `.loadedGuides` for the per-workspace session (see "Record Loaded Guide" below). The conversation context is an unreliable fallback; the file is the source of truth.
 
 ## Methodology Floor (Plugin References)
 
