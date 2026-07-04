@@ -14,6 +14,12 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/loaded-context-summary.sh",
             "args": [],
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-mode-reminder.sh",
+            "args": [],
+            "timeout": 5
           }
         ]
       }

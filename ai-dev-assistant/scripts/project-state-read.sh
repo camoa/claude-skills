@@ -18,6 +18,7 @@
 #     "userPlaybookState": "unset" | "docs-only-no-playbook" | "set",
 #     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
 #     "worktreeByDefault": bool,
+#     "runMode": "interactive" | "autonomous",   # spine_memory — absent/bad → "interactive" (never autonomous)
 #     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
 #     "visualReview": null | {"enabled": bool, "registryPath": "<rel>" | null},  # v4.11.0+
 #     "frameworks": ["<framework-id>", ...],  # e.g. ["nextjs","symfony"]; [] when absent
@@ -36,6 +37,7 @@
 #   visual_review_no_path      — **Visual Review:** line has a state but no registry path
 #   visual_review_path_escape  — **Visual Review:** registry path escapes the project folder
 #   process_recipe_bad_source  — a process_recipes slot has source not in dev-guides|local|research
+#   run_mode_bad_value         — **Run Mode:** value not in interactive|autonomous (coerced to interactive)
 #
 # codePath sentinels in project_state.md:
 #   **Code path:** /abs/path    → non-null string
@@ -46,6 +48,13 @@
 #   **Visual Review:** enabled .visual-review/registry.yml   → {enabled:true,  registryPath:"..."}
 #   **Visual Review:** disabled .visual-review/registry.yml  → {enabled:false, registryPath:"..."}
 #   (absent)                                                 → null (feature not set up)
+#
+# Run Mode field (spine_memory):
+#   **Run Mode:** interactive   → runMode: "interactive"
+#   **Run Mode:** autonomous    → runMode: "autonomous"
+#   (absent)                    → runMode: "interactive" (self-contained safe default)
+#   (any other value)           → runMode: "interactive" + warning run_mode_bad_value
+#                                 (FAIL-CLOSED: an unset/garbage mode NEVER grants autonomy)
 #
 # No writes. No side effects. This script only reads.
 
@@ -64,7 +73,7 @@ emit_json() {
   # $9 = playbookResolutions JSON array
   # $10 = worktreeByDefault bool string, $11 = reviewRequired bool|"null", $12 = visualReview JSON
   # $13 = frameworks JSON array, $14 = localGuidesPath (string "null" for null),
-  # $15 = processRecipes JSON array
+  # $15 = processRecipes JSON array, $16 = runMode string (default "interactive")
   jq -nc \
     --arg n "$1" --arg cp "$2" --arg d "$3" \
     --argjson w "$4" \
@@ -76,7 +85,8 @@ emit_json() {
     --argjson vr "${12:-null}" \
     --argjson fr "${13:-[]}" \
     --arg lgp "${14:-null}" \
-    --argjson rec "${15:-[]}" '
+    --argjson rec "${15:-[]}" \
+    --arg rm "${16:-interactive}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -87,6 +97,7 @@ emit_json() {
       userPlaybookState: $ups,
       playbookResolutions: $pr,
       worktreeByDefault: $wbd,
+      runMode: $rm,
       reviewRequired: (if $rr == "null" then null elif $rr == "true" then true else false end),
       visualReview: $vr,
       frameworks: $fr,
@@ -120,7 +131,7 @@ DEFAULT_PB_SETS=$(get_default_playbook_sets)
 # H1 fix (v4.1.0): missing arg → defensive emit, do NOT exit 1
 if [ -z "$PROJECT_DIR" ]; then
   emit_json "(no project)" "null" "" '[{"code": "missing_arg", "detail": "path to project folder required as $1"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
@@ -139,13 +150,13 @@ parse_bool() {
 
 if [ ! -d "$PROJECT_DIR" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
 if [ ! -f "$PROJECT_STATE" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]"
+    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
@@ -289,6 +300,24 @@ RR_RAW=$(awk '
   }
 ' "$PROJECT_STATE")
 RR_OUT=$(parse_bool "$RR_RAW")
+
+# === Run Mode parsing (spine_memory) ===
+# Enum: interactive|autonomous. Absent → interactive. Bad → warn + coerce interactive (never autonomous).
+# Fail-closed: an unset or garbage mode MUST NEVER silently grant autonomy (design §6 row 1 / §8).
+RM_RAW=$(awk '
+  /^\*\*[Rr]un [Mm]ode:\*\*/ {
+    sub(/^\*\*[Rr]un [Mm]ode:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+RM_NORM=$(printf '%s' "$RM_RAW" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+case "$RM_NORM" in
+  interactive|autonomous) RM_OUT="$RM_NORM" ;;
+  "")                     RM_OUT="interactive" ;;
+  *)                      RM_OUT="interactive"
+                          add_warning "run_mode_bad_value" "expected interactive|autonomous, got: $RM_RAW" ;;
+esac
 
 # === Visual Review parsing (v4.11.0+) ===
 # Grammar: **Visual Review:** <state> <relative-path>
@@ -455,4 +484,4 @@ fi
 
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
   "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT" \
-  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES"
+  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES" "$RM_OUT"

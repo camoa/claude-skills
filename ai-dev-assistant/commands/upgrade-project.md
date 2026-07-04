@@ -25,7 +25,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
 
 1. **Resolve active project + preflight.** Validate `<project-name>` matches `^[a-z][a-z0-9_]*$` (charset; exit 2 with usage on mismatch — path-traversal mitigation). Resolve via `session_context.json`; else walk up from `$PWD` to find `implementation_process/`, capped at `$HOME` or 5 levels (whichever first; exit 2 if exhausted). When BOTH resolve, compare; mismatch → prompt user to confirm before proceeding (defense vs spoofed session-context). Verify required scripts exist + executable: `project-state-read.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `coverage-mapping-check.sh`, `gate-audit-write.sh`, `fm-helpers.sh`. Verify `/set-code-path`, `/set-playbook-sets`, `/set-user-playbook` command files present. Exit 2 on any preflight failure.
 
-2. **Project-state pass — gap detection.** Run `bash scripts/project-state-read.sh <project>`. Inspect emitted JSON. For `**Review Required:**`, also direct-grep (`grep -i '^\*\*[Rr]eview [Rr]equired:\*\*'`) as fallback for older readers. Build `gaps[]` for: `**Code Path:**` (absent / `code_path_unknown`), `**Playbook Sets:**` (`playbook_sets_source: "default"` = implicit), `**User Playbook:**` + state (`unset`), `**Worktree By Default:**` (absent), `**Review Required:**` (absent), `**Frameworks:**` (`frameworks == []` and codePath is known), **E2E preflight seam** (see below).
+2. **Project-state pass — gap detection.** Run `bash scripts/project-state-read.sh <project>`. Inspect emitted JSON. For `**Review Required:**` and `**Run Mode:**` (spine_memory), also direct-grep the dial line (`grep -i '^\*\*[Rr]eview [Rr]equired:\*\*'` / `grep -i '^\*\*[Rr]un [Mm]ode:\*\*'`) — the reader always emits `.runMode` (defaults `interactive`) so JSON-absence can't detect a missing *line*; gap fires only when the grep finds nothing (idempotent, never reads/trusts an existing autonomous value). Build `gaps[]` for: `**Code Path:**` (absent / `code_path_unknown`), `**Playbook Sets:**` (`playbook_sets_source: "default"` = implicit), `**User Playbook:**` + state (`unset`), `**Worktree By Default:**` (absent), `**Review Required:**` (absent), `**Run Mode:**` (line absent), `**Orchestration policy:**` (`<project>/orchestration-policy.json` absent beside `project_state.md`), `**Frameworks:**` (`frameworks == []` and codePath is known), **E2E preflight seam** (see below).
 
 3. **Project-state pass — single batch prompt** (verbatim; **H5 fix**: do NOT interpolate raw `project_state.md` content into the prompt — show field NAMES + a sanitized resolved-value summary only, max 60 chars per value, control-chars stripped, brackets escaped). Under `--dry-run`, the prompt becomes "would-have-applied" (M9): same content, header changed to "Found {N} project-state gaps (DRY RUN — no writes will occur):". Verbatim form:
    ```
@@ -35,6 +35,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
      - User Playbook:       unset
      - Worktree By Default: absent (default false)
      - Review Required:     absent (legacy default: false on projects with completed/ non-empty)
+     - Run Mode:            absent → interactive + seed orchestration-policy.json (NEVER autonomous)
 
    How to proceed?
    [a]pply all — confirm current resolved values as explicit (lossless)
@@ -49,6 +50,7 @@ Bring the active project on par with what a fresh project would scaffold today. 
    - `**User Playbook:**` → invoke `/ai-dev-assistant:set-user-playbook`
    - `**Worktree By Default:**` → direct `Edit` insert `**Worktree By Default:** false` (no setter exists; literal value, no interpolation)
    - `**Review Required:**` → direct `Edit` insert with computed legacy default (literal value)
+   - `**Run Mode:**` (spine_memory) → direct `Edit` insert the literal line `**Run Mode:** interactive` (no interpolation, mirrors the Worktree/Review inserts); then seed the policy sibling when absent via `bash "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-policy-write.sh" "<project_folder>" interactive` (idempotent, preserves arrays). **MUST write `interactive`; MUST NEVER write `autonomous`** — no legacy project is silently granted autonomy by an upgrade.
    - `**Frameworks:**` → skip silently when codePath is unknown or `code_path_unknown`. Otherwise run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-frameworks.sh" "<codePath>"`. If the result is a non-empty JSON array, direct `Edit` insert `**Frameworks:** <jq -r 'join(", ")' of the array>` (e.g. `drupal, nextjs, claude-code-plugins`) after the last existing metadata field in the top block (same insertion approach as `**Worktree By Default:**`). If the result is empty, skip silently. Never write an empty or placeholder line.
    - `**E2E preflight seam:**` → detected when (a) `**Code Path:**` is known (skip if `code_path_unknown`), (b) `<codePath>/.visual-review/registry.yml` exists, (c) that file does NOT contain `preflight_command:` (any indentation), AND (d) `<codePath>/tests/e2e/` directory exists (signals an e2e harness was set up). The agnostic e2e gate only executes the preflight when the registry carries `e2e.preflight_command`; without this field, projects set up before the seam existed silently skip the preflight. Remediation: resolve the project's `e2e-setup` process recipe (per `references/recipe-resolution.md`, using the `**Frameworks:**` value backfilled above) and read its declared `preflight_command`. With a command in hand, run `bash scripts/ensure-registry-preflight.sh "<codePath>/.visual-review/registry.yml" "<preflight_command_from_recipe>"` (the helper is idempotent — no-ops when the field is already present). If no `e2e-setup` recipe resolves, or the resolved recipe declares no `preflight_command`, SKIP this gap with a flagged note ("e2e preflight seam: no framework recipe declared a preflight_command — set `e2e.preflight_command` in the registry manually if the harness needs one"). NEVER inject a framework-specific preflight command by assumption — a wrong command would fail every e2e run. Under `--dry-run`: report "would resolve e2e-setup recipe and run ensure-registry-preflight.sh for <project> (<registryPath>)" without resolving or invoking the script.
    After each write, mark `done: true` in journal. On any failure: stop, leave journal + lock, surface "partial state — run with `--resume` to continue from {next-undone-op}". On full success, delete journal + release lock. `--resume` re-acquires lock and skips `done: true` entries.
@@ -116,16 +118,14 @@ Bring the active project on par with what a fresh project would scaffold today. 
 - **Recipe-adoption sweep is idempotent + non-blocking** (Step 4b): relies on the loader's idempotent `write_source_record` (unchanged line = no Edit), reports "already" vs "newly recorded" from a pre-sweep snapshot, never prompts (every miss = "no recipe yet"), never pre-caches or follows bodies, never approves `verified:false` recipes.
 - **Symlink rejection** at task level (Step 5).
 - **Audit JSON validation** before treating as present (Step 5; corrupt → rewrite with `replaced_corrupt: true`).
-- **Bounded $PWD walk-up** (Step 1; capped at $HOME / 5 levels).
-- **Charset enforced** on `<project-name>` (Step 1).
+- **Step 1 guards**: bounded $PWD walk-up (capped at $HOME / 5 levels) + charset-enforced `<project-name>`.
 - **Glob filtered** to exclude `.migration-tmp/*` and nested `completed/*` (Step 5).
-- **Already-explicit / already-current**: silent skip.
-- **`/set-*` failure**: journal preserves partial state for resume.
+- **Already-explicit / already-current** → silent skip; **`/set-*` failure** → journal preserves partial state for `--resume`.
 
 ## Pointers
 
 - Wizard delegates to: `/set-code-path`, `/set-playbook-sets`, `/set-user-playbook`
-- Reader: `scripts/project-state-read.sh` (extended in v4.1.0 to parse `**Review Required:**` with truthy variants)
+- Reader: `scripts/project-state-read.sh` (parses `**Review Required:**` truthy variants; `**Run Mode:**` → `.runMode`, spine_memory). Policy slot: `scripts/orchestration-policy-{read,write}.sh` + `references/orchestration-policy-schema.md`
 - Audit writer: `scripts/gate-audit-write.sh` (accepts `gate_specific.retrofitted: true` + `replaced_corrupt: true` additive flags)
 - Source-of-truth scaffolders: `commands/new.md` + `skills/project-initializer` (project-side); `references/research-walkthrough.md` Step 2 + `scripts/fm-helpers.sh write_stub_task_md` (task-side)
 
