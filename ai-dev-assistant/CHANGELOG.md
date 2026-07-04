@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.19.1] - 2026-07-04
+
+### Fixed — `migrate-to-epic` no longer drops a task's `references/` (and other sibling dirs)
+
+`scripts/migrate-to-epic.sh` flat→epic promotion preserved loose files into `shared/` and the
+hardcoded `research/` / `architecture/` split-artifact subdirs, but its sibling loop was `[ -f ]`-only
+— so any **other** subdirectory (e.g. `references/`) matched neither branch and was lost into the 24h
+`.old-<task>` rollback dir. Surfaced by dogfooding the 5.19.0 epic, whose own design-contract doc lived
+under `references/` and had to be hand-recovered. The loop now preserves arbitrary sibling **files and
+directories** into `shared/`; the dry-run enumerates them honestly. Adds `tests/migrate-to-epic-spec.sh`
+(new — asserts a `references/` file survives a migration; a genuine regression test: 12/0 fixed, 8/4 on
+the pre-fix script).
+
 ## [5.19.0] - 2026-07-04
 
 ### Added — orchestrator context hygiene & run_mode spine (epic: 4 children)
