@@ -1,5 +1,7 @@
 # Paper Test
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-code-paper-test-code-paper-test)](https://www.claudepluginhub.com/plugins/camoa-code-paper-test-code-paper-test?ref=badge)
+
 Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, logic errors, missing code, edge cases, AI hallucinations, and contract violations before deployment.
 
 > **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
@@ -256,6 +258,13 @@ FLAW FOUND:
   Severity: HIGH (Reach: 2, Impact: 2, Reversibility: 1, Exploitability: 2 = 7)
   FIX: Initialize $discount = 0 at start of function
 ```
+
+**Run it with the competing-team command:**
+```bash
+/code-paper-test:test-team scripts/deploy.sh
+/code-paper-test:test-team src/Service/Foo.php src/Service/Bar.php
+```
+Or invoke the single-agent skill directly: "paper test this function for edge cases".
 
 ## AI Code Auditing
 

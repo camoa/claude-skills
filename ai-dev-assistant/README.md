@@ -1,5 +1,7 @@
 # AI Dev Assistant
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-ai-dev-assistant-ai-dev-assistant)](https://www.claudepluginhub.com/plugins/camoa-ai-dev-assistant-ai-dev-assistant?ref=badge)
+
 **An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. It runs each task through a disciplined **Research → Architecture → Implementation → Review** flow before code gets written: understand the problem first, reuse what already exists, follow your standards, and verify. That heads off the usual AI pitfalls, like jumping to code without understanding requirements, missing a library that already solves the problem, building inconsistent architecture, or skipping tests. The orchestration engine is **stack-agnostic**.
 
 > **New here?** Read [GETTING_STARTED.md](GETTING_STARTED.md): a 5-minute walkthrough that takes you from install to your first task. This README is the reference.
@@ -77,6 +79,15 @@ Both enforced via `plugin.json` `dependencies`. Missing-dependency failures surf
 ```
 
 `/next` is your main command. It selects your project, shows tasks with their current phase, and tells you exactly what to run next. Use it at the start of every session.
+
+### Examples
+
+```bash
+/ai-dev-assistant:new my_module
+/ai-dev-assistant:next
+/ai-dev-assistant:research my_task    # → /design → /implement → /review → /complete
+/ai-dev-assistant:research-team my_task
+```
 
 ### Adding More Tasks
 
