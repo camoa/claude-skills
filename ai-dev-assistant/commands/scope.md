@@ -216,6 +216,16 @@ Default answer: `[y]` (the warnings don't block; the user may have intentionally
 
 After writing (or cleanly cancelling), run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash) with the resolved project + task so compaction hooks can restore focus. **Omit the 5th arg** (epic) so the preserve-sentinel `{CURRENT_EPIC_OR_NULL}` applies and the existing `currentEpic` is kept.
 
+## Distill-and-drop seam (v5.18.0+, `run_mode`-aware — advisory, never blocks)
+
+**Only after a successful write** (skip entirely on `[c]`ancel — there is no new artifact to distill). Run the end-of-phase distill seam per `references/orchestration-context-hygiene.md` §2. It sheds this phase's context residue *before* the raw exchange is compacted; the live alignment conversation has already finished above.
+
+- **Read `run_mode`** — `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` → `.runMode` (project dial), with an optional task override via `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` → `.run_mode` (`null` = inherit). Absent/bad → `interactive` (fail-closed; an unset mode never grants autonomy).
+- **`interactive` (default)** → emit the one-line offer (default `[n]`): "💡 Scope contract written. Distill `alignment.md` to a self-containment check + digest before compaction? `[y]` dispatches a fresh `distill-agent` (reads only disk, writes `_distill.json`); `[n]` (default) — proceed." On `[y]` dispatch; on `[n]` proceed.
+- **`autonomous`** → **auto-run** (no human turn): dispatch `distill-agent` directly, then fold any `interaction_substitute[]` from the returned `_distill.json` into `alignment.md`.
+- **Dispatch `distill-agent`** (Task tool) with **paths only** (never the transcript): `artifact_path` = `<task_folder>/alignment.md`, `sibling_paths[]` = `task.md` **plus whatever else is present** — this seam runs before `/research`, so the set is normally sparse (a stub `task.md`, no audit JSONs yet); missing paths are tolerated, never fatal. `phase` = `scope`, `run_mode`, optional `bounded_brief` (omit on the common path), `output_path` = `<task_folder>/_distill.json`.
+- **Read back** `_distill.json` as scalars — `.self_contained` + `.artifact_pointer` (never the agent's prose). On `.self_contained == false` print ONE advisory line naming `.gaps[]` ("distill: alignment.md may be missing N load-bearing item(s): …"). **Never blocks** — carry only the pointer + digest onward and compact the raw exchange.
+
 ## Next-step hint
 
 After a successful write, print:
@@ -245,6 +255,8 @@ Optionally add one line (never auto-runs `/goal`): `"You can later drive impleme
 - `/ai-dev-assistant:research` — pre-analysis hook branches on `scope_contract_recommended` and calls this command inline
 - `/ai-dev-assistant:design`, `/ai-dev-assistant:implement` — call with `--phase 2` / `--phase 3` as first sub-step
 - `analysis-agent` — emits `scope_contract_recommended` signal that triggers the soft nudge
+- `references/orchestration-context-hygiene.md` — the end-of-phase distill-and-drop seam + `_distill.json` schema
+- `distill-agent` — the fresh-context self-containment check dispatched by the distill seam
 
 ## Discoverability
 

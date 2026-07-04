@@ -97,7 +97,10 @@ TIER=$(bash "$KERNEL/wo-risk-classify.sh" "<wo-file>" --files-from "$CDIR/files.
 
 **2 — run decision (AR-D: `unattended` DEFAULTS true).**
 ```
-unattended := (the input is boolean ? it : true)          # fail-closed
+runMode    := project-state-read.sh <project-root> | jq -r '.runMode'   # absent/bad → interactive (fail-closed)
+unattended := (runMode == "autonomous") OR (the input is boolean ? it : true)
+#             autonomous authoritatively forces unattended=true; interactive/absent keeps the existing
+#             default-true floor — interactive NEVER downgrades forced-on critique (orchestrator_context_hygiene Q6).
 forced   = unattended AND (TIER=="high" OR verified=="false" OR override_used=="true")
 dialed   = read the dial:  task.md `## Critique` block  >  project_state `**Critique:**`  >  off
 required = forced OR dialed

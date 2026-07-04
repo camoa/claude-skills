@@ -38,6 +38,13 @@ all reused unchanged).
   it to the **final** integrated `/review --base <base>` AND `wo-pr-open.sh --base <base>`. **Do NOT** use it
   for the **per-WO** review — those diff against the round's integration HEAD (see step 6), so each per-WO
   review sees only that WO's change, not the whole branch divergence.
+- `<run_mode>` — `interactive` (default) | `autonomous`. Threaded by `run-work-orders` from the on-disk
+  `.runMode` (absent/bad → `interactive`, fail-closed). **ADVISORY, reporting-only** — it selects the Exit
+  message on an all-green run, nothing else. It does **NOT** drive any gate: the PR-refusal is owned by
+  `wo-mode-gate.sh` inside `wo-pr-open.sh` re-reading disk fail-closed, and the forced fan-out critique is
+  owned by `work-order-critique` re-reading disk — both compose off the same disk fact regardless of what is
+  passed here (plugin-root `references/autonomous-recipe.md`). If mis-passed, the kernels still refuse (disk
+  is truth); only the message would be less specific.
 
 ## Terminal-HALT — the highest-precedence predicate (check FIRST, everywhere)
 
@@ -349,10 +356,23 @@ never processable and never blocks the exit).
      `wo-pr-open.sh "$TASK_ABS" --base <base> --head "$(git -C <integration-worktree> rev-parse --abbrev-ref HEAD)"`.
      The choke point re-runs `wo-merge-gate.sh` and calls `gh pr create` **only** on a clean verdict; it
      **NEVER** merges (`gh pr create` only, never `gh pr merge`). A recorded grounding override opens the PR
-     **flagged**. Forward the `merge_gate` compact line.
-  3. Print a `LOOP_COMPLETE` summary, then the composed **/goal** string for the user to paste (see
-     `work-order-loop/references/loop-contract.md` /goal section — turn bound `min(20 × N_WOs, 80)`). **Never
-     run /goal yourself.**
+     **flagged**. Forward the `merge_gate` compact line. **In `autonomous` `<run_mode>` this call ALWAYS
+     refuses:** `wo-mode-gate.sh` inside `wo-pr-open.sh` returns
+     `mode_gate allowed=false mode=autonomous reason=autonomous_irreversible` (exit 1, `gh` never called) —
+     the **expected, correct** terminal state, not a failure (plugin-root `references/autonomous-recipe.md`).
+  3. **Report the terminal outcome, branching on `<run_mode>`:**
+     - **`interactive` / absent (UNCHANGED):** print a `LOOP_COMPLETE` summary, then the composed **/goal**
+       string for the user to paste (see `work-order-loop/references/loop-contract.md` /goal section — turn
+       bound `min(20 × N_WOs, 80)`). **Never run /goal yourself.**
+     - **`autonomous`:** the mode-gate has refused (above). Do **NOT** print `LOOP_COMPLETE` (it implies an
+       opened PR, structurally impossible here) and do **NOT** surface the refusal as a bare non-green
+       `merge_gate` failure. Instead print the named outcome **`BRANCH_ASSEMBLED_AWAITING_HUMAN`** — all N
+       work-orders GREEN (build + integrated task-level `/review` passed); the integration branch `<head>` on
+       base `<base>` is assembled and ready; **PR withheld by the run-mode gate** (`autonomous_irreversible`)
+       because an autonomous run has no operator to authorize an irreversible out-of-band step, so opening the
+       PR is the human's turn. Then emit the composed **/goal** string so the human resumes attended (re-runs
+       the gate under interactive mode with a confirm artifact and opens the PR). This is a **clean escalation
+       of a GREEN build**, distinct from the `ESCALATION` (HALT / dead-branch) failure branch above.
 
 ## INVARIANTS — stated explicitly; never violated
 

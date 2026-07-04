@@ -55,12 +55,20 @@ Phase 2 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 Default `[n]` — proceed to `/ai-dev-assistant:implement` as usual. Never blocks.
 
+11. **Distill-and-drop seam (v5.18.0+, `run_mode`-aware — advisory, never blocks).** After the compile offer, run the end-of-phase distill seam per `references/orchestration-context-hygiene.md` §2. It sheds this phase's context residue *before* the raw exchange is compacted; it never disturbs the live design conversation (already finished above).
+    - **Read `run_mode`** — `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` → `.runMode` (project dial), with an optional task override via `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` → `.run_mode` (`null` = inherit). Absent/bad → `interactive` (fail-closed; an unset mode never grants autonomy).
+    - **`interactive` (default)** → emit the one-line offer (default `[n]`): "💡 Phase 2 complete. Distill `architecture.md` to a self-containment check + digest before compaction? `[y]` dispatches a fresh `distill-agent` (reads only disk, writes `_distill.json`); `[n]` (default) — proceed." On `[y]` dispatch; on `[n]` proceed.
+    - **`autonomous`** → **auto-run** (no human turn): dispatch `distill-agent` directly, then fold any `interaction_substitute[]` from the returned `_distill.json` into `architecture.md`.
+    - **Dispatch `distill-agent`** (Task tool) with **paths only** (never the transcript): `artifact_path` = `<task_folder>/architecture.md`, `sibling_paths[]` = `task.md` + this phase's audit JSONs (`_dev-guides-load.json`, `_recipe-load.json`, `_mechanism-challenge.json`, `_playbook-load.json`) + `alignment.md` + `research.md`, `phase` = `design`, `run_mode`, optional `bounded_brief` (omit on the common path), `output_path` = `<task_folder>/_distill.json`.
+    - **Read back** `_distill.json` as scalars — `.self_contained` + `.artifact_pointer` (never the agent's prose). On `.self_contained == false` print ONE advisory line naming `.gaps[]` ("distill: architecture.md may be missing N load-bearing item(s): …"). **Never blocks** — carry only the pointer + digest onward and compact the raw exchange.
+
 ## Pointers
 
 - Full walkthrough: `references/design-walkthrough.md`
 - Mandated wording: `references/gate-hardening-prompts.md`
 - Audit shape: `references/gate-audit-schema.md` v1.0
 - Alignment grammar: `references/alignment-contract.md`
+- Distill-and-drop seam + `_distill.json` schema: `references/orchestration-context-hygiene.md`
 
 ## Related
 

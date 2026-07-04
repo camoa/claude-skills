@@ -15,14 +15,14 @@ fm_read() {
 
   if [ ! -d "$task_dir" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], folder: $dir, warnings: [{code: "folder_missing", detail: "task folder does not exist"}]}'
+      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "folder_missing", detail: "task folder does not exist"}]}'
     return 0
   fi
 
   local task_md="$task_dir/task.md"
   if [ ! -f "$task_md" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], folder: $dir, warnings: [{code: "task_md_missing", detail: "task.md not found in folder"}]}'
+      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "task_md_missing", detail: "task.md not found in folder"}]}'
     return 0
   fi
 
@@ -31,7 +31,7 @@ fm_read() {
 
   if [ -z "$fm" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], folder: $dir, warnings: []}'
+      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: []}'
     return 0
   fi
 
@@ -50,7 +50,7 @@ except Exception as e:
 
   if [ -z "$parsed" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], folder: $dir, warnings: [{code: "parser_unavailable", detail: "python3 missing or failed"}]}'
+      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "parser_unavailable", detail: "python3 missing or failed"}]}'
     return 0
   fi
 
@@ -67,6 +67,7 @@ except Exception as e:
         external_ids: ($d.external_ids // {}),
         status: ($d.status // "draft"),
         mechanism_hints: ($d.mechanism_hints // []),
+        run_mode: ($d.run_mode // null),
         folder: $dir,
         warnings: []
       }
@@ -81,6 +82,7 @@ except Exception as e:
         external_ids: {},
         status: "draft",
         mechanism_hints: [],
+        run_mode: null,
         folder: $dir,
         warnings: [{code: "malformed_yaml", detail: .error}]
       }
