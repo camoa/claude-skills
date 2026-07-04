@@ -12,6 +12,7 @@
 #
 # Testability hooks (override for no-network / no-real-gh testing):
 #   ${WO_MERGE_GATE_CMD:-<dir>/wo-merge-gate.sh}
+#   ${WO_MODE_GATE_CMD:-<dir>/wo-mode-gate.sh}   — the fail-closed run-mode gate (autonomous ⇒ HALT)
 #   ${WO_GH_CMD:-gh}
 #
 # Token precedence (R-2 / D6 + ④ K3): out-of-band PAT FILE → fine-grained env PAT → ambient gh auth.
@@ -143,6 +144,21 @@ if [ "$PRINT_CMD" -eq 1 ]; then
   printf '%s\n' "$MG_JSON"
   [ "$MERGE_OK" = "true" ]
   exit $?
+fi
+
+# ── Step 3.5: run-mode gate (autonomous ⇒ HALT-escalate; interactive ⇒ require operator confirm) ──
+# The ONLY irreversible out-of-band step is the gh call below. Gate it HERE so --print-cmd (which
+# exited above at the PRINT_CMD block) stays ungated + network-free. Fail-closed: any non-zero gate
+# result ⇒ NO gh call — refuse the same way a failed merge-gate refuses (mirrors Step 1).
+MODE_GATE_CMD="${WO_MODE_GATE_CMD:-$SELF_DIR/wo-mode-gate.sh}"
+MODE_JSON="$("$MODE_GATE_CMD" "$TASK" --action pr-open)"
+MODE_EXIT=$?
+if [ "$MODE_EXIT" -ne 0 ]; then
+  _MODE_SAFE="$(jq -c '.' <<<"${MODE_JSON:-null}" 2>/dev/null || echo 'null')"
+  jq -nc --argjson mg "$_MODE_SAFE" --argjson ma "$AUTO_MERGE" \
+    '{"opened":false,"pr_url":null,"merge_ok":true,"auto_merge_allowed":$ma,
+      "reason":"mode_gate_failed","mode_gate":$mg}'
+  exit 1
 fi
 
 # ── Execute: open the PR ──────────────────────────────────────────────────────

@@ -9,6 +9,20 @@ KERNEL="$ROOT/scripts/wo-pr-open.sh"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 
+# ─── Stub: run-mode gate ALLOW (mode-gate is an injected collaborator, mocked here exactly like ──
+# WO_MERGE_GATE_CMD). These tests exercise gh/token/label behavior, orthogonal to the mode gate;
+# a passthrough allow-stub keeps them focused. The mode gate's own fail-closed matrix is proven in
+# wo-mode-gate-spec.sh. Exported so every execute-path invocation inherits it; --print-cmd and the
+# merge/pr_body refuse paths exit BEFORE the gate, so they are unaffected.
+MODE_STUB_ALLOW="$TMP/mode-allow.sh"
+cat > "$MODE_STUB_ALLOW" <<'STUB'
+#!/usr/bin/env bash
+echo '{"action":"pr-open","mode":"interactive","allowed":true,"reason":"confirmed","halt_reason":null,"confirm_artifact":""}'
+exit 0
+STUB
+chmod +x "$MODE_STUB_ALLOW"
+export WO_MODE_GATE_CMD="$MODE_STUB_ALLOW"
+
 # ─── Stub: merge-gate OK (merge_ok=true, auto_merge_allowed=true) ─────────────
 MG_STUB_OK="$TMP/mg-ok.sh"
 cat > "$MG_STUB_OK" <<'STUB'
