@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.19.0] - 2026-07-04
+
+### Added — orchestrator context hygiene & run_mode spine (epic: 4 children)
+
+A `run_mode` (`interactive` | `autonomous`) spine that keeps an orchestrating session's context
+clean across a whole-application build, plus the mechanisms that hang off it. Additive; the
+attended path is unchanged.
+
+- **run_mode spine + orchestration-policy slot.** `run_mode` dial in `project_state.md` and task
+  frontmatter, surfaced by `project-state-read.sh` (`.runMode`, enum-validated, fail-closed to
+  `interactive` — never `autonomous`) and the frontmatter reader (all defensive envelopes);
+  `/upgrade-project` backfills it (`interactive` for legacy projects). New `orchestration-policy.json`
+  sibling with `orchestration-policy-read.sh` / `-write.sh` (defensive, jq-merge, refuses out-of-enum),
+  a schema doc, and an advisory `run-mode-reminder.sh` hook (visibility-only, never blocks).
+- **Distill-and-drop seam.** A `run_mode`-aware, advisory distill step at the end of `/scope`,
+  `/research`, `/design` via a thin `distill-agent` (paths-in, disk-digest-out — a self-containment
+  *check*, never a rewrite, never a gate). Doctrine in `references/orchestration-context-hygiene.md`.
+- **Fail-closed irreversible gate.** `wo-mode-gate.sh` kernel (not a hook) reads `run_mode` and refuses
+  irreversible out-of-band steps: `autonomous` ⇒ HALT; `interactive` ⇒ require an operator-written
+  `.pr-confirm`, else fail closed. Wired into `wo-pr-open.sh` before any `gh`; `run_mode=autonomous`
+  feeds the existing forced-critique floor. OS-sandbox boundary stated honestly (design §8).
+- **Autonomous routing + verdict-only recipe.** `/run-work-orders` routes on `run_mode`; the autonomous
+  path is AIDA's own inline loop mode-gated on (NOT the dynamic-workflows runtime — §5 containment held),
+  naming the `BRANCH_ASSEMBLED_AWAITING_HUMAN` terminal outcome. `references/autonomous-recipe.md`.
+
+Each child was built and adversarially reviewed by fresh-context agents (incl. an attacker-mindset
+security pass on the gate). New specs: `run-mode-dial-spec.sh`, `orchestration-policy-spec.sh`,
+`distill-agent-spec.sh`, `wo-mode-gate-spec.sh`, `autonomous-recipe-spec.sh`.
+
 ## [5.17.0] - 2026-06-26
 
 ### Added — the mechanism-challenge (GAP G): challenge a task's stated mechanism, don't just build it
