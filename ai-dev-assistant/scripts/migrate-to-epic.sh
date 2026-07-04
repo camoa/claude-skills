@@ -328,6 +328,27 @@ if [ "$DRY_RUN" = "true" ]; then
   for f in research.md architecture.md implementation.md; do
     [ -f "$TASK_DIR/$f" ] && echo "    - $f"
   done
+  for d in research architecture; do
+    [ -d "$TASK_DIR/$d" ] && echo "    - $d/ (split-artifact subdir)"
+  done
+  # Other sibling files/dirs (e.g. references/, audit JSONs) are preserved into shared/.
+  # Mirror the live FILE/DIR split EXACTLY so the plan matches the action (a loose file named
+  # `research`/`shared`/etc. is preserved live, so it must show here too).
+  for p in "$TASK_DIR"/*; do
+    [ -e "$p" ] || continue
+    n=$(basename "$p")
+    if [ -f "$p" ]; then
+      case "$n" in
+        task.md|research.md|architecture.md|implementation.md) ;;
+        *) echo "    - shared/$n" ;;
+      esac
+    elif [ -d "$p" ]; then
+      case "$n" in
+        research|architecture|shared|in_progress|completed) ;;
+        *) echo "    - shared/$n/" ;;
+      esac
+    fi
+  done
   echo "  Would move original to .old-$TASK_NAME for 24h rollback"
   exit 0
 fi
@@ -388,17 +409,31 @@ else
     [ -d "$TASK_DIR/$subdir" ] && cp -r "$TASK_DIR/$subdir" "$TEMP_ROOT/$TASK_NAME/$subdir"
   done
 
-  # Preserve any OTHER top-level files from the original (e.g. mechanisms-map.md,
-  # decision logs, planning docs). They are epic-wide cross-cutting artifacts →
-  # destination is shared/. Paper-test integration finding 2026-04-22: the
-  # earlier version lost these files into the 24h rollback dir.
-  for srcfile in "$TASK_DIR"/*; do
-    [ -f "$srcfile" ] || continue
-    name=$(basename "$srcfile")
-    case "$name" in
-      task.md|research.md|architecture.md|implementation.md) ;;  # already handled
-      *) cp "$srcfile" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
-    esac
+  # Preserve any OTHER top-level entries from the original — regular FILES
+  # (e.g. mechanisms-map.md, decision logs, audit JSONs) AND directories
+  # (e.g. references/) — as epic-wide cross-cutting artifacts → destination is
+  # shared/. Two integration findings drove this:
+  #   2026-04-22 (paper-test): the earlier version lost loose FILES to the 24h rollback dir.
+  #   2026-07-04 (dogfood): a task's references/ SUBDIR was still lost — the loop was
+  #     `[ -f ]`-only, and the subdir preservation above is a hardcoded research/architecture
+  #     list, so any other directory matched neither and fell into the rollback dir.
+  # Handle both, so an arbitrary sibling file OR directory survives the migration.
+  for srcpath in "$TASK_DIR"/*; do
+    [ -e "$srcpath" ] || continue                    # guard: no glob match
+    name=$(basename "$srcpath")
+    if [ -f "$srcpath" ]; then
+      case "$name" in
+        task.md|research.md|architecture.md|implementation.md) ;;  # already handled above
+        *) cp "$srcpath" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;
+      esac
+    elif [ -d "$srcpath" ]; then
+      case "$name" in
+        research|architecture) ;;                     # already copied to the epic root above
+        shared|in_progress|completed)                 # collide with the epic scaffold we create — cannot preserve
+          echo "  WARN: sibling dir '$name/' collides with the epic scaffold name — NOT preserved. Rename it before migrating if it holds data." >&2 ;;
+        *) cp -r "$srcpath" "$TEMP_ROOT/$TASK_NAME/shared/$name" ;;  # e.g. references/ → shared/references/
+      esac
+    fi
   done
 fi
 
