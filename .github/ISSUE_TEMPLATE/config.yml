@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and general discussion
+    url: https://github.com/camoa/claude-skills/discussions
+    about: Have a question or want to discuss an idea before filing an issue? Use Discussions instead.
+  - name: Plugin documentation
+    url: https://github.com/camoa/claude-skills#readme
+    about: Check the repo README for plugin descriptions, installation, and links to each plugin's own README before opening an issue.

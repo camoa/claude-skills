@@ -1,0 +1,57 @@
+name: Feature request
+description: Suggest a new capability or improvement for one of the camoa-skills plugins.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe the problem before the solution — it helps us evaluate the right fix.
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      description: Which plugin is this request for?
+      options:
+        - dev-guides-navigator
+        - plugin-creation-tools
+        - ai-dev-assistant
+        - code-quality-tools
+        - brand-content-design
+        - drupal-htmx
+        - drupal-ai-contrib
+        - code-paper-test
+        - drupal-dev-framework
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem are you trying to solve? What's missing or awkward today?
+      placeholder: Tell us what's frustrating or missing.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Sketch the command/skill/behavior if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches or workarounds you've considered.
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else that would help us understand the request.
+    validations:
+      required: false
