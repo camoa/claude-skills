@@ -53,6 +53,10 @@ check "Do NOT run /goal itself"                          'Do NOT run.*goal|do no
 # --- Session context persistence ---
 check "session-context-write.sh persists context"       'session-context-write\.sh'
 
+# --- run_mode threading (gap-audit fix: task-level override, not project-only) ---
+check "run_mode threads task-level .run_mode via fm-read" 'fm-read\.sh.*run_mode|run_mode.*fm-read\.sh'
+check "run_mode resolved monotonic-toward-strict (matches wo-mode-gate)" 'monotonic-toward-strict|tighten.*autonomous|cannot.*loosen'
+
 if [ "$fail" -eq 0 ]; then
   echo "ALL PASS — run-work-orders contract present in run-work-orders.md"
   exit 0

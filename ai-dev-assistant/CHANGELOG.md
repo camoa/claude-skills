@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.19.2] - 2026-07-04
+
+### Fixed — run_mode wiring loose ends (from the orchestrator_context_hygiene gap-audit)
+
+- `/run-work-orders` now resolves `run_mode` **monotonic-toward-strict from BOTH the project `.runMode`
+  AND the task-level `.run_mode`** (via `fm-read.sh`), exactly as `wo-mode-gate.sh` does — so the loop's
+  reported Exit posture matches the kernel's enforced mode. Previously it threaded only the project dial,
+  so a task tightening to `autonomous` under an `interactive` project printed the wrong Exit posture
+  (the kernel still correctly withheld the PR — cosmetic, but now consistent).
+- `project-initializer` seeds `**Run Mode:** interactive` into `project_state.md` at project creation, so
+  new projects carry the spine explicitly instead of relying on the `/upgrade-project` backfill (readers
+  already fail-closed to `interactive`, so this is non-breaking).
+- Specs: `run-work-orders-contract-spec.sh` asserts the task-override threading; `run-mode-dial-spec.sh`
+  asserts the initializer seed.
+
 ## [5.19.1] - 2026-07-04
 
 ### Fixed — `migrate-to-epic` no longer drops a task's `references/` (and other sibling dirs)
