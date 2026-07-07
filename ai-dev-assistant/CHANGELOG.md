@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.19.3] - 2026-07-04
+
+### Changed — `/upgrade-project` recipe-adoption sweep extracted to a reference
+
+Moved the detailed Step-4b recipe-adoption-sweep mechanics (guard, idempotency snapshot, per-phase
+loader loop, non-blocking miss mapping, coverage-map table) out of `commands/upgrade-project.md` and
+into `references/recipe-adoption-sweep.md`, leaving a concise summary + pointer in the command. Pure
+progressive-disclosure refactor — behavior unchanged; brings the command body under the ≤120-line
+convention (was 131, now 105), greening `upgrade-project-spec.sh` (the whole ai-dev-assistant suite is
+now green). No content lost — every sub-heading is preserved in the reference.
+
 ## [5.19.2] - 2026-07-04
 
 ### Fixed — run_mode wiring loose ends (from the orchestrator_context_hygiene gap-audit)
