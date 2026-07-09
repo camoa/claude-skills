@@ -1,7 +1,7 @@
 ---
 description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. Soft-nudge posture: never blocks the task lifecycle. Introduced v3.12.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
-argument-hint: <task-name> [--phase 1|2|3]
+argument-hint: <task-name> [--phase 1|2|3] [--grill]
 ---
 
 # Scope
@@ -15,16 +15,17 @@ Author the alignment contract for a task. Produces `alignment.md` in the task fo
 /ai-dev-assistant:scope <task-name> --phase 1    # author phase-level contract (also callable inline from /research /design /implement)
 /ai-dev-assistant:scope <task-name> --phase 2
 /ai-dev-assistant:scope <task-name> --phase 3
+/ai-dev-assistant:scope <task-name> --grill      # relentless one-question-at-a-time interrogation (opt-in; see "Grilling mode" below)
 ```
 
-Without `--phase`, authors the `## Task-Level` section. With `--phase N`, authors the corresponding `## Phase N — <Research|Architecture|Implementation>` section.
+Without `--phase`, authors the `## Task-Level` section. With `--phase N`, authors the corresponding `## Phase N — <Research|Architecture|Implementation>` section. `--grill` composes with either form — it changes how the conversation is *run*, not which section it produces.
 
 ## What this does
 
 1. Resolves `<task-name>` to a task folder using the usual resolver (in-progress folder, epic subfolder, etc.). If the folder does not exist, **scaffold a minimal task stub** (see "Task resolution" below) so brand-new tasks can author scope before `/research` runs.
 2. Runs `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parses its JSON to read the current state of `alignment.md` (if any).
 3. **Overwrite guard** — if the target section already exists, asks before overwriting.
-4. Runs the alignment conversation — **one question at a time**, author-authored, never auto-generated.
+4. Runs the alignment conversation — **one question at a time**, author-authored, never auto-generated. Without `--grill`, this is the gentle default described in "alignment conversation — Task-Level" below, byte-for-byte unchanged from prior versions. With `--grill`, runs in **relentless mode** — see "Grilling mode (`--grill`, opt-in)" below.
 5. Writes the section to `alignment.md` (creates the file with H1 + metadata if absent).
 6. Runs `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"` (Bash) with resolved project + task.
 7. Prints next-step hint.
@@ -133,6 +134,22 @@ Operate conversationally. Over however many turns feel natural:
 
 The agent MAY propose drafts for any field after gathering enough context, but always marks them as drafts and asks for correction.
 
+### Grilling mode (`--grill`, opt-in)
+
+**Default (no `--grill`) is byte-for-byte unchanged** — the gentle Step 3 flow above, with the agent proposing drafts and the user correcting them at whatever pace feels natural. `--grill` is a strictly additive, opt-in intensity dial borrowed from `mattpocock/skills`' `grilling` — relentless one-question-at-a-time interrogation — layered onto Step 3 only. It changes *how hard the agent pushes*, never *what gets written* or *whether the task can proceed*.
+
+When `--grill` is passed, run Step 3 in **relentless mode** instead of the gentle default:
+
+- **One question at a time, and state your recommended answer.** Never ask an open blank-slate question. For every question, propose a concrete recommended answer drawn from context (task.md, prior fields already gathered, common patterns for this kind of task) and ask the user to confirm, correct, or override it. The user reacts to a proposal, not a blank field.
+- **Walk every branch of the decision tree.** Don't stop at the minimum four answers. Chase dependencies between decisions — if a Success Criterion implies a follow-on decision, ask about it before moving on. Proactively push the "are we also doing X?" / "is adjacent thing Y in scope?" probes from the Non-goals guidance in Step 3 as a *sustained* line of questioning, not a single pass: each surfaced Non-goal may itself imply a further branch ("if X is out of scope, does that also rule out Y?"). Keep digging until each branch bottoms out — the user has nothing left to add and no more adjacent scope questions remain unasked.
+- **Don't conclude until shared understanding is reached.** Mirrors grilling's "do not enact until I confirm" — do not treat the interview as done just because the four fields are technically populated. Keep probing until the user's answers and the agent's understanding demonstrably match, not just until the checklist is full.
+
+**Reconciliation with the never-blocks contract (read this before enabling `--grill`).** `--grill` intensifies the *interview* — it does **not** gate the lifecycle. "Don't conclude until shared understanding is reached" governs when the *scope contract* (the draft shown in Step 4) is considered ready to finalize; it is not a new blocking condition on `/research` or the task itself. Concretely:
+
+- The user can `[c]ancel` out of a `--grill` conversation at any point, exactly as in the gentle flow, and proceed with the task unscoped.
+- The output is still the same optional 4-field `alignment.md` and the same Step 5 `[y]es / [e]dit / [c]ancel` confirm — `--grill` does not add a new gate, a new required field, or a new confirm state.
+- `/scope --grill` still never blocks `/research` or any other phase command. A cancelled or skipped grill session leaves the task exactly as able to proceed as a cancelled or skipped gentle session.
+
 ### Step 4 — Assemble a draft and show it
 
 When the 4 fields feel substantively covered, assemble the full `## Task-Level` section and show it verbatim to the user. Not a summary — the actual markdown that would be written.
@@ -157,6 +174,8 @@ Scope-adjusted wording:
 - **Non-goals** — investigations / design decisions / implementation scope explicitly deferred to a later phase or task
 
 The phase-level agent MUST assume task-level scope already exists and NOT re-ask task-level questions. Phase-level is narrower: "given the task-level contract, what does THIS phase alone deliver?"
+
+`--grill` applies the same way here as at task-level: same relentless mode (one question at a time with a stated recommended answer, walk every branch, don't conclude until shared understanding is reached), same never-blocks reconciliation, scoped to this phase's narrower question set. Default (no `--grill`) is unchanged.
 
 Confirm prompt:
 > "Here's the Phase N scope (shown above). Write it to `alignment.md` as a `## Phase N — <Research|Architecture|Implementation>` section, edit a specific field, or cancel? [y]es / [e]dit / [c]ancel"
@@ -271,3 +290,4 @@ Optionally add one line (never auto-runs `/goal`): `"You can later drive impleme
 - Do not block the task lifecycle. If the user says no, proceed without writing.
 - Do not write partial sections. A section is either fully written (all 4 fields present, even if empty) or not written at all — the reader's `empty_field` warning is for humans who chose to leave a field blank, not for interrupted writes.
 - Do not merge multiple phase sections in one invocation. `--phase` takes a single value.
+- Do not let `--grill` block the task lifecycle. It intensifies the interview, never the gate — `[c]ancel` still exits cleanly at any point, and `/scope --grill` still never blocks `/research` or the task.

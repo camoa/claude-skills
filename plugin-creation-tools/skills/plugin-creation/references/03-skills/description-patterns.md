@@ -77,6 +77,8 @@ description: PayFlow payment processing for e-commerce. Use specifically
 for online payment workflows, not for general financial queries.
 ```
 
+> **Scoped to descriptions.** This negation pattern is for routing/scope boundaries in `description:` only — it doesn't extend to skill **body** instructions, where negation is a smell rather than a tool (see `writing-skillmd.md` § Negation in the Body). A description says "don't load me for X" once, before execution starts; a body instruction that says "don't do X" re-primes X on every read.
+
 ## Pushy Descriptions
 
 Claude tends to undertrigger skills — it errs on the side of NOT loading a skill when unsure. Combat this by making descriptions slightly "pushy" with more trigger phrases and explicit keywords.

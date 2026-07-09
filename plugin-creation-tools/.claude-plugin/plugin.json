@@ -1,7 +1,7 @@
 {
   "name": "plugin-creation-tools",
   "description": "Authoring toolkit and quality gate for Claude Code plugins. Scaffolds and audits every component — skills, commands, agents, hooks, MCP servers, themes, dependencies, userConfig, and Routines — with a deterministic `validate` command (opt-in auto-fix), a pre-publish containment scan that catches leaked home paths and secrets, and the `plugin-creation` authoring skill. Tracks the current plugin spec: hook handler types and pre-spawn filters, exec-form args, JSON output controls, subfolder agent scoping, single-skill auto-discovery, and cross-marketplace dependencies.",
-  "version": "3.10.1",
+  "version": "3.11.0",
   "author": {
     "name": "camoa"
   },

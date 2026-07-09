@@ -338,7 +338,7 @@ v3.x uses folder-based task structure. Run `/next` after upgrading: it auto-dete
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **5.19.3**.
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current version: **5.20.0**.
 
 ## License
 

@@ -43,6 +43,25 @@ When you want to create a document, you should first think about what you need.
 If you're making a report, you might want to start with a template...
 ```
 
+### Negation in the Body
+
+A prohibition — "do NOT do X" — activates the concept of X in the model's attention at least as much as it suppresses it: the sentence puts X in front of the model, half-priming the very behavior the ban was meant to prevent. State the **positive target** instead — what Claude should do, not what it shouldn't.
+
+| Avoid (negation) | Prefer (positive target) |
+|---|---|
+| "Do NOT write directly to the output file." | "Write to a temp file, then rename into place." |
+| "Don't guess the schema." | "Read the schema file before generating queries." |
+| "Never skip the validation step." | "Run validation as the last step before returning." |
+
+Reserve a bare "don't" for a **guardrail paired with the positive** — a short warning appended after the instruction already states what to do, not standing alone as the only guidance:
+
+```markdown
+Write to a temp file, then rename into place. Don't write directly to the
+target path — a partial write on failure corrupts it.
+```
+
+**This is a body-instructions rule, distinct from description negation.** The `description:` field uses negation deliberately and correctly for scope boundaries — "NOT for simple data exploration" tells Claude *when not to load the skill at all* (see `description-patterns.md` § Negative Triggers). That's a routing decision made once, before task execution starts. Negation-as-smell applies to the **body** — the instructions Claude executes turn-by-turn — where the prohibited concept re-enters active attention every time the model reads the line. Descriptions: negation is a legitimate tool. Bodies: state the positive target.
+
 ## Recommended Structure
 
 ```markdown
