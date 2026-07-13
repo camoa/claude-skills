@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.20.0] - 2026-07-07
+
+### Changed — docs
+- Rewrote README problem-first with a worked example and added docs/usage.md; added root PHILOSOPHY.md reference. Positioning pass.
+
+### Added — `/which` intent-based command router (M4)
+
+- `commands/which.md` — a new static router that answers "which command fits this SITUATION or
+  intent?" given a plain-language description, distinct from `/next`'s state-based "what's next on
+  my active task?" Matches a described situation against a Situation → Command Map (starting from
+  nothing, investigating, building, reviewing, finishing, setup, just looking) and returns a
+  Command / Why / Alternatives recommendation. Never invokes the command it names — a map, not an
+  implementation. `tests/which-router-contract-spec.sh` asserts the map's coverage and the
+  never-executes contract. Green.
+
+### Added — `/prototype` throwaway-spike command (M10)
+
+- `commands/prototype.md` — a new command that builds a disposable spike to answer ONE
+  design/logic question before committing to a real approach, borrowing the `prototype` pattern
+  from `mattpocock/skills`, adapted framework-agnostic: a runnable terminal program for a
+  logic/state question, or `>=2` radically different toggleable variants for a UI/shape question.
+  Spikes live under a gitignored `<codePath>/.prototypes/<slug>/`, are never committed, never
+  promoted to production, and feed `/design` and mechanism-challenge only as prose evidence.
+  `tests/prototype-contract-spec.sh` — doc-contract test asserting the isolated-location,
+  runnable-output, and never-promote contract. Green.
+
+### Added — `/glossary` project-level naming glossary (M11)
+
+- `commands/glossary.md` — a new command authoring a project-root `glossary.md`, a lean
+  term-to-one-line-definition scratch vocabulary keeping naming consistent across a project's
+  tasks, modeled on `mattpocock/skills`' `domain-modeling` `CONTEXT.md` pattern. Distinct from
+  per-task `architecture.md` (design rationale) and from the user-ownable guides layer (portable
+  reference material). `/research`, `/design`, and `/implement` each gain a soft, non-blocking
+  phase-entry read of `glossary.md` when it exists. `tests/glossary-contract-spec.sh` — doc-contract
+  test asserting the project-root scoping, lean-entry format, and soft phase-entry read. Green.
+
+### Added — `/review` two-axis Standards-vs-Spec structure (M2)
+
+- `/ai-dev-assistant:review` gains an explicit **Spec axis** (step 5.0d), borrowing
+  `mattpocock/skills`' `code-review` two-axis idea: **Standards** (the existing gate battery —
+  SOLID/DRY/TDD/security/guides/…) answers "does the code follow the repo's standards?"; **Spec**
+  answers the orthogonal question "does the change faithfully implement what the originating
+  task's `alignment.md` contract actually asked for?" **The two axes are never merged into one
+  score** — a change can pass every Standards gate and still surface a Spec fail, and that is
+  now visible rather than masked by a green gate row.
+- Spec reads the task's `alignment.md` Task-Level `### Success criteria` (+ `architecture.md` if
+  present) and dispatches the new `agents/spec-axis-reviewer.md` (Task tool, read-only, generic —
+  same injected-context pattern as `architecture-validator`) to judge **(a) missing
+  requirements** — a criterion with no corresponding implementation — and **(b) scope creep** —
+  substantive diff hunks untraceable to any criterion or architecture decision. Generalizes
+  `wo-critic`'s `meets-ac` lens from one work-order's `## Done =` checklist to the whole task
+  change. Verdict `pass | fail | skipped`, persisted to `<task_folder>/_spec.json`
+  (`gate-audit-schema.md` §5.15, new `spec` gate_type).
+- **Folds into `overall_verdict` as a distinct contributor, never collapsed.** Spec becomes ONE
+  more named `gates_run[]` entry (`name: "spec"`, `kind: "hard-block"`) — a Spec `fail` triggers
+  step 8 rule 1 exactly like any other hard-block gate, but stays independently attributable
+  (never read as a generic Standards-battery failure). **No `alignment.md`** ⇒ `verdict:
+  "skipped"` with a reason (never fabricated criteria) — a benign skip shaped like
+  `skipped-not-shipped`, not `unresolved`, so it does not force step 8 rule 2's fail-closed path.
+  **Under `--headless`:** no prompt — a Spec fail is fail-closed like every other hard-block gate
+  (non-zero exit, appears in the compact per-gate verdict line).
+- The `review-summary` mandated-wording template now carries distinct `## Standards` and
+  `## Spec` blocks (`gate-hardening-prompts.md` v1.6, byte-identical to the inline literal in
+  `commands/review.md`, verified by `tests/gate-prompts-vs-inline.sh`) — the existing per-gate
+  Standards output (`{{gates_run_table}}`) is unchanged, Spec is reported alongside it, never
+  blended in.
+- Full contract: `references/spec-axis-review.md` (new).
+- `tests/review-two-axis-contract-spec.sh` — doc-contract test (mirrors
+  `run-work-orders-contract-spec.sh`) asserting `commands/review.md` carries the Standards/Spec
+  axis clauses, the never-merged statement, the `alignment.md` success-criteria read, the
+  missing-requirements + scope-creep checks, the benign no-`alignment.md` skip semantics, and the
+  `--headless` fail-closed behavior. Green (16/16). `run-work-orders-contract-spec.sh` re-run
+  clean — no regression.
+
+### Added — `/scope` grilling-depth dial (M3)
+
+- `/ai-dev-assistant:scope` gains an opt-in `--grill` flag (argument-hint + Usage updated) that
+  runs the Task-Level and Phase-level alignment conversation in **relentless mode**, borrowing the
+  intensity of `mattpocock/skills`' `grilling` (one-question-at-a-time interrogation): each question
+  states a concrete recommended answer instead of asking blank, the agent walks every branch of the
+  decision tree (chasing dependencies, proactively pushing "are we also doing X?" / "is Y in scope?"
+  probes to surface Non-goals) rather than stopping at the minimum four fields, and the interview
+  doesn't conclude until shared understanding is reached — mirroring grilling's "do not enact until
+  I confirm."
+- **Never-blocks contract preserved and stated explicitly.** `--grill` intensifies the *interview*,
+  not the lifecycle gate: `[c]ancel` still exits cleanly at any point and the task proceeds unscoped;
+  the output is still the same optional 4-field `alignment.md` and the same `[y]/[e]/[c]` confirm;
+  `/scope --grill` still never blocks `/research` or the task. Default (no `--grill`) is
+  byte-for-byte unchanged — the existing gentle 4-field flow.
+- `tests/scope-grill-contract-spec.sh` — doc-contract test (mirrors
+  `run-work-orders-contract-spec.sh`) asserting `commands/scope.md` carries the `--grill`
+  argument-hint, the relentless-mode clauses, the explicit never-blocks reconciliation, and the
+  default-unchanged statement. Green.
+
+### Added — opt-in dangerous-command guardrail (M8)
+
+- `hooks/block-dangerous-commands.sh` — a `PreToolUse` guardrail script that blocks a fixed
+  list of destructive git/shell command patterns (`git push`, `git reset --hard`,
+  `git clean -f`/`-fd`/`-x`, `git branch -D`, `git checkout .`, `git restore .`,
+  `push --force`, `--force-with-lease`, `reset --hard`, `rm -rf /`, `rm -rf ~`, `rm -rf .`)
+  before Bash executes them. Fail-open by design (missing `jq`, empty stdin, or a non-Bash
+  payload always allows) — this is a convenience gate, not a security boundary, and never
+  blocks the whole session on a parse error. `AIDA_ALLOW_DANGEROUS=1` overrides all checks.
+  **Not wired into `hooks.json`** — installing it always-on would hijack every installer's
+  git, so it ships opt-in only.
+- `/install-guardrails` — opt-in, idempotent installer mirroring `/install-remembrance-hook`'s
+  structure. Copies the script into the user's chosen `.claude/` (project or user-level) and
+  merges a `PreToolUse` → `Bash` matcher into that `settings.json` via a self-contained jq
+  filter (never duplicates on re-run; leaves other plugins' hooks and matchers untouched).
+- `tests/block-dangerous-commands-spec.sh` — behavioral spec asserting block/allow/override
+  exit codes against sample hook-JSON payloads. Green (5/5).
+
 ## [5.19.3] - 2026-07-04
 
 ### Changed — `/upgrade-project` recipe-adoption sweep extracted to a reference

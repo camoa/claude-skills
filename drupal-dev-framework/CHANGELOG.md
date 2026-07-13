@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here.
 
+## [4.24.1] — Deprecation-notice docs tightening
+
+Tightened the deprecation-notice README (problem-first, no em dashes). Positioning pass.
+
 ## [4.24.0] — Opt-in permission re-point
 
 **New `--permissions` flag on the upgrade script.** Registered projects can carry

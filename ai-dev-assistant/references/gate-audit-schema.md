@@ -6,7 +6,7 @@
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 13 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 15 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -30,6 +30,7 @@ Where `<gate_type>` is one of:
 - `recipe-load` (v1.4+)
 - `agentic-recipe` (v1.5+)
 - `mechanism-challenge` (own `schema_version "1.0"`; v5.17.0+)
+- `spec` (own `schema_version "1.0"`; v5.20.0+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -58,7 +59,7 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 | Field | Type | Constraints |
 |---|---|---|
 | `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+; `"1.5"` for `gate_type: "agentic-recipe"` written by v5.12.0+. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 13 listed in the gate types section. Discriminator for `gate_specific` payload. |
+| `gate_type` | enum | One of the 15 listed in the gate types section. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
@@ -507,6 +508,45 @@ settled disposition forward; `mechanisms_hash` lets a consumer detect a stale re
   exists, `challenge_ran == true`, and no mechanism is an unresolved attended-supersede (a `deferred` whose
   origin was attended); an **absent** record ⇒ `skipped + unresolved:true` ⇒ fail (step-8 rule 2). Mirrors
   the `agentic-verifier` aggregate pattern (§5.8).
+- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes.
+
+### 5.15 `spec` (v5.20.0+, M2 — the Spec axis)
+
+Records the Spec-axis verdict: does the change faithfully implement the task's `alignment.md` contract,
+independent from the Standards gate battery (`references/spec-axis-review.md` for full semantics). Audit
+file `_spec.json`, own `schema_version: "1.0"`. Written by `/review` step 5.0d, which dispatches
+`agents/spec-axis-reviewer.md` and captures its returned verdict — the agent itself writes nothing.
+
+```json
+{
+  "gate_type": "spec",
+  "schema_version": "1.0",
+  "fired_at": "2026-07-09T00:00:00Z",
+  "task_folder": "<abs path to the task folder>",
+  "gate_specific": {
+    "verdict": "pass | fail | skipped",
+    "alignment_present": true,
+    "missing_requirements": [ { "criterion": "<text>", "finding": "<what's missing>" } ],
+    "scope_creep": [ { "change": "<file/hunk summary>", "finding": "<why it's untraceable>" } ],
+    "skip_reason": null
+  }
+}
+```
+
+- **Verdict rule (missing-requirements hard, scope-creep advisory):** `verdict` is `"fail"` **iff
+  `missing_requirements[]` is non-empty**. `scope_creep[]` never drives the verdict on its own — a
+  scope-creep-only result (`missing_requirements: []`, `scope_creep` non-empty) is `verdict: "pass"`, with
+  the scope-creep entries still carried in the payload and surfaced as warnings in `/review`'s `## Spec`
+  block. Deliberate de-risking of the inherently subjective scope-creep judgment under `--headless`
+  autonomy — missing-requirements remains the hard, objective signal. Full rationale:
+  `references/spec-axis-review.md`.
+- `verdict: "skipped"` with `skip_reason` populated (never `null`) is the **benign** no-`alignment.md` path
+  — shaped like `skipped-not-shipped`, never `unresolved`.
+- `/review` folds this into `gates_run[]` as ONE entry `name: "spec"`, `kind: "hard-block"` — a `fail`
+  triggers step 8 rule 1 like any other hard-block gate, but the entry's own name keeps it independently
+  attributable, never collapsed into the Standards battery's aggregate signal. `gates_run_table` (the
+  `review-summary` rendering, `references/gate-hardening-prompts.md`) excludes this `name:"spec"` entry —
+  it renders only via `spec_verdict_line`, never duplicated into the Standards table.
 - Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes.
 
 ## 6. Invariants

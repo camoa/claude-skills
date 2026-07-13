@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.23"
+    "version": "2.0.25"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + knowledge-graph metadata route the AI to the right guide; all fetches use curl (never WebFetch), and a fetched body is data, never commands. Three routing modes: guide search (llms.txt), recipe search (the agentic-recipes catalog of verifier-carrying capability deliveries), and process-recipe lookup (resolved by ai-dev-assistant at phase boundaries, keyed by phase and framework). A deterministic shared content store holds index bodies and blobs with two-hash revalidation, re-fetching a body only when its sha changes.",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "author": {
         "name": "camoa"
       },
@@ -39,7 +39,7 @@
       "name": "plugin-creation-tools",
       "source": "./plugin-creation-tools",
       "description": "Authoring toolkit and quality gate for Claude Code plugins. Scaffolds and audits every component — skills, commands, agents, hooks, MCP servers, themes, dependencies, userConfig, and Routines — with a deterministic `validate` command (opt-in auto-fix), a pre-publish containment scan that catches leaked home paths and secrets, and the `plugin-creation` authoring skill. Tracks the current plugin spec: hook handler types and pre-spawn filters, exec-form args, JSON output controls, subfolder agent scoping, single-skill auto-discovery, and cross-marketplace dependencies.",
-      "version": "3.10.1",
+      "version": "3.11.0",
       "author": {
         "name": "camoa"
       },
@@ -60,7 +60,7 @@
       "name": "ai-dev-assistant",
       "source": "./ai-dev-assistant",
       "description": "An AI assistant for developers that focuses on getting the process right, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through Research → Architecture → Implementation → Review, with deterministic gates (SOLID, TDD, DRY, security, code-purposefulness, a Phase-4 review) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. Stack-agnostic, so stack specifics live in consumable dev-guides, recipes, and playbooks. Under the hood it covers epic and sub-task hierarchy, scope contracts, change-impact dispatch, work-orders with adversarial critique and oracle integrity, two-stage dev-guides detection, the Playbook System, git-worktree awareness, agent-team validation, session-remembrance hooks, and committed-Playwright E2E, visual-regression, and visual-parity gates (framework-agnostic setup via process recipes; Drupal payload ships in dev-guides).",
-      "version": "5.19.3",
+      "version": "5.20.0",
       "author": {
         "name": "camoa"
       },
@@ -85,7 +85,7 @@
       "name": "drupal-dev-framework",
       "source": "./drupal-dev-framework",
       "description": "DEPRECATED — renamed to ai-dev-assistant. Installable only to run a one-time upgrade that repoints your project store at the new plugin and re-stamps per-project session-remembrance hooks, then is safe to uninstall. An opt-in --permissions flag also re-points stale Skill(drupal-dev-framework:*) grants. The shell exposes only /drupal-dev-framework:upgrade; install ai-dev-assistant going forward.",
-      "version": "4.24.0",
+      "version": "4.24.1",
       "author": {
         "name": "camoa"
       },
@@ -101,7 +101,7 @@
       "name": "drupal-htmx",
       "source": "./drupal-htmx",
       "description": "HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+. Includes analyzers, pattern recommendations, and validation.",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "author": {
         "name": "camoa"
       },
@@ -120,7 +120,7 @@
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
       "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline) with a local drupalci-parity gate set plus AI-policy and eval gates, and 3 read-only fresh-context review agents. Authenticated GitLab writes delegate to the drupal-gitlab skill (glab); drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant, built on the camoa/dev-guides contribution guides.",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "author": {
         "name": "camoa"
       },
@@ -144,7 +144,7 @@
       "name": "code-quality-tools",
       "source": "./code-quality-tools",
       "description": "Code quality and security auditing for Drupal (PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Provides full audits with cross-tool synthesis, rubric-scored code review, 3-agent security and architecture debates, REVIEW.md v2 generation, a /code-review ultra cloud-review wrapper with a headless CLI gating path, optional LSP code-intelligence for deeper SOLID/DRY/review analysis, watch-mode linting, scheduled sweeps, and --json output for CI pipelines.",
-      "version": "3.9.3",
+      "version": "3.9.4",
       "author": {
         "name": "camoa"
       },
@@ -176,7 +176,7 @@
       "name": "code-paper-test",
       "source": "./code-paper-test",
       "description": "Systematically test code, skills, commands, and configs through mental execution — trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations. Smart routing: quick trace (<50 lines), structured 3-phase (50–300), or a 3-agent competing team in isolated worktrees (300+, security-critical, skills). Verifies external calls for both existence and behavioral contracts (return-shape/nullability diffing, chained-object tracing, taint-stance fallback for closed-source). Supports `--json` for CI.",
-      "version": "0.11.0",
+      "version": "0.11.1",
       "author": {
         "name": "camoa"
       },
@@ -201,7 +201,7 @@
       "name": "brand-content-design",
       "source": "./brand-content-design",
       "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, a style-recommendation engine, 26 visual styles, 114 infographic templates, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF, PPTX, and Google Slides output (canonical PPTX→Slides import via Drive for design fidelity), HTML composition, and infographic rendering.",
-      "version": "3.5.0",
+      "version": "3.5.1",
       "author": {
         "name": "camoa"
       },

@@ -2,6 +2,17 @@
 
 Unified philosophy combining Anthropic's skill-creator principles with the guide-framework-maintainer approach.
 
+## Why Skills Exist: Predictability
+
+A skill's job is to wrangle determinism out of a stochastic system. The model is non-deterministic by nature — the same prompt can take a different path on different runs. A skill's root virtue is **predictability**: the same *process* every time the skill fires, not identical output. Two runs of a well-written skill should reach for the same tool, check the same condition, and follow the same order of steps — even when the prose they produce differs.
+
+Several of the levers below serve that goal directly:
+- **Progressive disclosure** keeps the process legible — Claude reads the same workflow steps instead of reconstructing them from scattered context each time.
+- **Degrees of freedom** (below) matches how tightly a step must be pinned down to how fragile it actually is — a narrow bridge gets guardrails, an open field doesn't need them.
+- **Leading words** (below) anchor a recurring step in the process to one cheap, stable token instead of re-deriving it from prose on every occurrence.
+
+When editing a skill, ask whether the change alters which process Claude follows, or only how that process is phrased. Only the former is worth spending tokens on — the same question the no-op test (under Challenge Every Token, below) asks of individual lines.
+
 ## The Iron Laws
 
 1. **Claude is already very smart** - Only add context Claude doesn't already have
@@ -79,6 +90,30 @@ Do not modify the script without testing.
 | Multiple skills need same info | Create shared reference, link from both |
 | Code exists in codebase | Reference file path, don't copy |
 
+## Leading Words
+
+A **leading word** compresses a recurring behavioral pattern into one evocative, already-pretrained token — *tight* loop, *seam*, *deep module*, *tracer bullet* — and is then reused **as that token**, never re-explained as a full sentence each time it recurs. This is a steering technique, not a naming convention.
+
+It works because the token recruits priors the model already holds from training — "tight loop" already carries change-one-thing/verify/repeat connotations without restating them. Define the term once, then let bare repetition of the word do the steering:
+
+```markdown
+## Iterating on the query
+
+Work this as a **tight loop**: change one filter, re-run, check the row
+count, repeat. Don't batch multiple filter changes before checking output.
+
+...
+
+## Handling a failed query
+
+If a tight loop surfaces a null-count spike, stop and inspect before
+continuing to the next filter.
+```
+
+The second mention doesn't re-explain "tight loop" — it just uses it, because the definition already landed once. Compare that to restating the behavior in full at every recurrence, which pays a paragraph's worth of tokens each time instead of a word's worth.
+
+**Use a leading word when**: the pattern recurs 3+ times in one skill body, carries enough behavioral content to be worth a paragraph unabridged, and maps onto a term the model already has priors for (a software-engineering idiom, a well-known metaphor). Don't coin a private jargon term for a pattern used once — that's ceremony, not compression, and an unfamiliar token carries no priors to recruit.
+
 ## Context Window Budget
 
 The "context window as public good" principle has specific, upstream-documented budget numbers. Plugin authors should design around all of them:
@@ -116,13 +151,20 @@ Front-load your skill description: the first sentence matters most because it's 
 
 ## Challenge Every Token
 
-Before including content, ask:
+Before including content, apply **the no-op test**: does this line change what the model does versus what it would do without it? If no, delete it — you're paying context for nothing. The test is model-relative (a no-op for Opus may not be one for Haiku) and is settled by running the skill, not by debating whether the line "seems useful."
+
+The test covers two kinds of redundancy:
+
+- **Knowledge redundancy** — the line restates something the model already knows (an API's shape, a well-known convention). This is the original framing of point 1 below.
+- **Behavioral redundancy** — the line asks for something the model would already do by default (e.g. "read the file before editing it"). Same test, harder to spot: it's easy to notice a restated fact, easy to miss an instruction that changes nothing about the actual process.
+
+Concrete checks that fall out of the test:
 
 1. **Does Claude already know this?** → Remove if yes
 2. **Can I reference instead of reproduce?** → Reference if possible
 3. **Is this decision-focused or tutorial-focused?** → Keep only decisions
 4. **Is one example enough?** → Remove extras
-5. **Does this justify its token cost?** → Remove if doubtful
+5. **Does this justify its token cost?** → Run the no-op test; remove if it fails
 
 ## Lean Documentation
 
@@ -166,4 +208,4 @@ Other env vars (terminal config, OTEL, voice, etc.) are end-user concerns and do
 
 The core philosophy is: **Minimum viable context for maximum effectiveness**.
 
-Skills succeed when they provide only what Claude needs, exactly when Claude needs it, in the most token-efficient form possible.
+Skills succeed when they provide only what Claude needs, exactly when Claude needs it, in the most token-efficient form possible — in service of the goal stated at the top: the same process, run after run.

@@ -1,588 +1,99 @@
-# Brand Content Design Plugin
+# Brand Content Design
 
 [![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-brand-content-design-brand-content-design)](https://www.claudepluginhub.com/plugins/camoa-brand-content-design-brand-content-design?ref=badge)
 
-> **Current version: v3.5.0**
+Every deck, carousel, and one-pager drifts a little further from the brand. Colors get eyeballed instead of pulled from the palette, the tone shifts slide to slide, and the fifth presentation this quarter looks like it came from a different company than the first. That drift is not carelessness: it is what happens when every piece of content starts from a blank page instead of a shared source of truth.
 
-Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md), skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
 
-> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+This plugin fixes the starting point. You extract your brand once into `brand-philosophy.md` (colors, type, voice, and an Aaker personality profile), build a template or design system once per content type, and every presentation, carousel, infographic, or HTML page after that is generated from those same files. The palette, the constraints, and the voice do not have to be remembered or re-explained; they are read from disk every time. Twenty-six visual styles, 15 HTML component types, and 114 infographic templates give you range within that constraint, and a built-in accessibility pass (WCAG AA contrast, no text overlap, safe zones) checks every output before you see it.
 
-## The Flow
+## See it in action
+
+Four real commands, one brand, one carousel. Output trimmed to what matters.
+
+```text
+$ /brand-content-design:brand-init
+  Project name? acme-labs
+  → acme-labs/ created (brand-philosophy.md placeholder, input/, templates/, output folders)
+
+$ /brand-content-design:brand-extract
+  Found in input/: 3 screenshots, 1 logo, 1 PDF of brand guidelines.
+  Anything else? (website URL, verbal description, or "use the files")
+  → use the files
+  → brand-philosophy.md written: colors, type, voice, Aaker personality scores
+
+$ /brand-content-design:template-carousel
+  Create new or edit existing? → Create new
+  Platform? → LinkedIn (1080x1350)
+  Style? → Swiss (strict grid, mathematical precision)
+  → templates/carousels/product-launch/ saved (template.md, canvas-philosophy.md, sample.pdf)
+
+$ /brand-content-design:carousel-quick
+  Which template? → product-launch
+  Paste your outline or content: [pasted 6 bullet points]
+  → carousels/2026-07-13-product-launch/product-launch.pdf (6 cards, brand colors, WCAG AA checked)
+```
+
+Nothing here invented the brand or the message. The palette and the voice came from `brand-philosophy.md`, the structure and style constraints came from the template you built once, and you supplied the content. What changed is that the fifth carousel looks like the first one.
+
+## When to reach for it
+
+- You are producing more than one piece of branded content (a deck, a set of LinkedIn carousels, a landing page) and want them visually and verbally consistent without re-explaining the brand each time.
+- You need a quick one-off (`*-quick` commands) as much as a considered, step-by-step piece (the guided commands): both read from the same brand and template files.
+- You are extending into a new content type on an existing brand (an HTML page after presentations, an infographic after carousels): the brand extraction step happens once and every content type after that reuses it.
+
+It is not the right tool for a single ungoverned piece of content where brand consistency does not matter, or for editing raw HTML/CSS by hand outside the design-system flow.
+
+## How it works
 
 ```
 Brand Guidelines → Templates / Design Systems → Content
 ```
 
-1. **Brand Guidelines** - Extract your visual & verbal identity once
-2. **Templates / Design Systems** - Create reusable structures (templates for slides/cards/infographics, design systems for HTML pages)
-3. **Content** - Generate presentations/carousels/infographics/HTML pages from your templates and design systems
+1. **Brand Guidelines**: extract your visual and verbal identity once (`/brand-extract`) from screenshots, PDFs, a website URL, or a description.
+2. **Templates / Design Systems**: build a reusable structure once per content type (`/template-presentation`, `/template-carousel`, `/template-infographic`, `/design-html`).
+3. **Content**: generate as many presentations, carousels, infographics, or HTML pages as you need from those templates, guided or quick.
+
+Full workflow, the complete command reference, the 26 visual styles, the HTML component catalog, and the infographic template categories are in [docs/usage.md](docs/usage.md).
 
 ## Installation
 
 ```bash
-claude plugins:add brand-content-design@camoa-skills
+/plugin marketplace add https://github.com/camoa/claude-skills
+/plugin install brand-content-design@camoa-skills
 ```
 
-## Quick Start
+**Bundled (no separate install needed):** the `visual-content`, `infographic-generator`, and `html-generator` skills that do the actual generation.
 
-```
-/brand                    # Start here - status, switch projects, or create new
-```
+**Built-in (Claude.ai Pro/Max/Team/Enterprise):** the `pptx` skill (PDF to editable PowerPoint) and `pdf` skill (multi-page PDF creation) that this plugin's outputs depend on.
 
-**Examples:**
-```bash
-/brand-content-design:brand-init
-/brand-content-design:brand-extract
-/brand-content-design:presentation-quick
-/brand-content-design:carousel
-```
+**Logo format:** PNG or JPG only; SVG logos are auto-converted during `/brand-extract`.
 
-### First Time Setup (do once per brand)
-```
-/brand-init               # 1. Create project structure
-/brand-extract            # 2. Extract brand colors, fonts, voice
-/brand-palette            # 3. (Optional) Generate alternative palettes
-/template-presentation    # 4. Create your first presentation template
-/template-carousel        # 5. Create your first carousel template
-/template-infographic     # 6. Create your first infographic template
-/design-html              # 7. Create an HTML design system for web pages
-```
-
-### Creating Content (repeat as needed)
-```
-/outline <template-name>  # (Optional) Get outline structure + AI prompt
-/presentation             # Create presentation from template
-/carousel                 # Create carousel from template
-/infographic              # Create infographic from template
-/html-page                # Create HTML page from design system
-/html-page-quick          # Quick HTML page creation
-```
-
-### Managing Your Brand
-```
-/brand                    # Check status, switch projects
-/brand-assets             # Add/update logos, fonts after setup
-/brand-palette            # Generate new color palettes anytime
-```
-
-## Workflow (Detailed)
-
-### 1. Initialize a Project
-
-```
-/brand-init
-```
-
-Creates a project folder with this structure:
-```
-{brand-name}/
-├── brand-philosophy.md   # Your brand's visual & verbal DNA
-├── assets/               # Processed assets ready for use
-├── templates/
-│   ├── presentations/    # Reusable presentation templates
-│   ├── carousels/        # Reusable carousel templates
-│   ├── infographics/     # Reusable infographic templates
-│   └── html/             # HTML design systems (with component libraries)
-├── presentations/        # Generated presentations
-├── carousels/            # Generated carousels
-├── infographics/         # Generated infographics
-├── html-pages/           # Generated HTML pages
-└── input/                # Source files
-    ├── logos/            # Logo files (SVG, PNG, AI, EPS)
-    ├── icons/            # Icon sets, favicons
-    ├── images/           # Brand photography, illustrations
-    ├── fonts/            # Custom font files
-    ├── screenshots/      # For brand analysis
-    └── documents/        # For brand analysis
-```
-
-### 2. Extract Brand Philosophy
-
-```
-/brand-extract
-```
-
-Analyzes your brand from multiple sources:
-- **Files** in `input/` folder (screenshots, PDFs, logos)
-- **Website URL** - paste your site to analyze
-- **Verbal description** - describe your brand in chat
-- **Existing guidelines** - paste brand docs directly
-
-Generates `brand-philosophy.md` with your visual identity, voice, core principles, and **Brand Depth** (Aaker personality scores, color profile, emotional profile, spatial profile, brand maturity).
-
-### 3. Create Templates (Required before creating content)
-
-```
-/template-presentation    # Guided wizard for presentation templates
-/template-carousel        # Guided wizard for carousel templates
-/template-infographic     # Guided wizard for infographic templates
-```
-
-Templates define:
-- Slide/card/infographic structure and sequence
-- Visual style (from 26 styles across 6 aesthetic families for presentations/carousels)
-- Color palette (brand colors or saved alternative palette)
-- Visual design philosophy (canvas-philosophy.md)
-- Sample PPTX/PDF/PNG for reference
-
-**You need at least one template before you can create content.**
-
-### 4. Prepare Content with Outline (Optional)
-
-```
-/outline <template-name>  # Get outline template + AI prompt
-```
-
-Generates two files for your template:
-- **outline-template.md** - Fill-in-the-blank structure matching your slides/cards
-- **outline-prompt.txt** - Prompt to use in Claude Projects or any AI chat
-  - Includes slide/card type definitions (purpose, content requirements, word limits)
-  - External AI will understand exactly what each slide/card type needs
-
-**Workflow:**
-1. Run `/outline my-template` to get the prompt
-2. Open Claude Projects (or any AI) where you have your content/context
-3. Paste the `outline-prompt.txt` content
-4. Add your raw content where indicated (`[PASTE YOUR CONTENT HERE]`)
-5. AI returns a structured outline matching your template's slide/card sequence
-6. Copy the AI's output
-7. Run `/presentation` or `/carousel`, select your template
-8. Paste the structured outline when asked for content
-
-**Why this works:** The prompt teaches the external AI your template's exact structure and constraints, so its output maps perfectly to `/presentation` or `/carousel`.
-
-### 5. Create Content (using your templates)
-
-**Guided mode** (step-by-step):
-```
-/presentation             # Select template, provide content
-/carousel                 # Select template, provide content
-/infographic              # Select template, provide content
-```
-
-**Quick mode** (paste and go):
-```
-/presentation-quick       # Select template, paste content
-/carousel-quick           # Select template, paste content
-/infographic-quick        # Select template, paste content
-```
-
-## Commands Reference
+## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/brand` | Main entry - status, switch projects, or init |
-| `/brand-init` | Create new brand project |
-| `/brand-extract` | Generate brand philosophy from sources |
-| `/brand-assets` | Manage assets (add logos, icons, fonts after extraction) |
-| `/brand-palette` | Generate alternative color palettes from brand colors |
-| `/template-presentation` | Create or edit presentation template |
-| `/template-carousel` | Create or edit carousel template |
-| `/template-infographic` | Create or edit infographic template |
-| `/outline <template>` | Get outline template + AI prompt |
-| `/presentation` | Create presentation (guided) |
-| `/presentation-quick` | Create presentation (quick) |
-| `/carousel` | Create carousel (guided) |
-| `/carousel-quick` | Create carousel (quick) |
-| `/infographic` | Create infographic (guided) |
-| `/infographic-quick` | Create infographic (quick) |
-| `/design-html` | Create or edit an HTML design system |
-| `/html-page` | Create HTML page from design system (guided) |
-| `/html-page-quick` | Create HTML page from design system (quick) |
-| `/content-type-new` | Add new content type |
-
-## Components
-
-### Agent
-| Agent | Model | Features |
-|-------|-------|----------|
-| `brand-analyst` | sonnet | `memory: project`, scoped `tools: Read, Glob, WebFetch, Write` |
-
-### Skills (4)
-| Skill | Model | Invocation |
-|-------|-------|------------|
-| `brand-content-design` | sonnet | User + Claude (main router) |
-| `visual-content` | opus | Claude only (`user-invocable: false`) — artistic output |
-| `infographic-generator` | sonnet | Claude only (`user-invocable: false`) — template generation |
-| `html-generator` | opus | Claude only (`user-invocable: false`) — HTML page generation |
-
-## Visual Style System
-
-Choose from **26 distinct visual styles** across 6 aesthetic families when creating templates and design systems:
-
-### Japanese Zen (7 styles)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Minimal** | Max whitespace, single focal point | Executive, data presentations |
-| **Dramatic** | Asymmetrical, bold contrast | Pitch decks, launches |
-| **Organic** | Natural flow, subtle depth | Storytelling, tips |
-| **Wabi-Sabi** | Imperfect beauty, texture | Artisan, craft brands |
-| **Shibui** | Quiet elegance, ultra-refined | Luxury, professional |
-| **Iki** | B&W + pop color, editorial | Fashion, editorial |
-| **Ma** | 70%+ whitespace, floating elements | Meditation, luxury |
-
-### Scandinavian Nordic (2 styles)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Hygge** | Warm, cozy, inviting | Wellness, community |
-| **Lagom** | Balanced "just enough" | Corporate, balance |
-
-### European Modernist (2 styles)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Swiss** | Strict grid, mathematical precision | Tech, corporate |
-| **Memphis** | Bold colors, playful chaos | Creative, youth brands |
-
-### East Asian Harmony (2 styles)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Yeo-baek** | Extreme emptiness, Korean purity | Premium, meditation |
-| **Feng Shui** | Yin-Yang balance, energy flow | Wellness, harmony |
-
-### Contemporary Professional (5 styles — new in v3.0.0)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Tech-Modern** | Clean, systematic, data-aware | SaaS decks, product demos |
-| **Data-Forward** | Numbers as visual anchors | Quarterly reviews, analytics |
-| **Corporate-Confident** | Authoritative, polished | Board presentations, annual reports |
-| **Pitch-Velocity** | High-energy, momentum-driven | Fundraising, sales pitches |
-| **Narrative-Clean** | Story-driven, editorial clarity | Case studies, thought leadership |
-
-### Digital Native (8 styles — web-specific, new in v2.1.0)
-| Style | Character | Best For |
-|-------|-----------|----------|
-| **Neobrutalist** | Raw, thick borders, hard shadows | Creative, dev portfolios |
-| **Glassmorphism** | Frosted glass, translucent, blur | SaaS, premium tech |
-| **Dark Mode** | Layered darkness, elevated surfaces | Tech, dashboards |
-| **Bento Grid** | Asymmetric card grid, modular | SaaS features, portfolios |
-| **Retro / Y2K** | Neon gradients, chrome, pixel | Creative, music, gaming |
-| **Kinetic** | Motion-driven, animated reveals | Storytelling, launches |
-| **Neumorphism** | Soft UI, extruded elements | Dashboards, tools |
-| **3D / Immersive** | Perspective, parallax, depth | Premium products |
-
-Each style has enforced constraints (whitespace/padding, word limits, element counts) to ensure authentic visual output.
-
-## Visual Components
-
-Enhance carousels and presentations with **visual components** - available based on your chosen style:
-
-| Component | Description | Supported Styles |
-|-----------|-------------|------------------|
-| **Cards** | Rounded containers for content grouping | Dramatic, Organic, Hygge, Memphis, Feng Shui, Iki, Lagom, Swiss |
-| **Icons** | 1900+ Lucide icons for visual accents | Dramatic, Organic, Hygge, Memphis, Feng Shui, Iki, Lagom, Swiss |
-| **Gradients** | Linear/radial backgrounds for depth | Dramatic, Organic, Hygge, Memphis, Feng Shui |
-
-### Component Support by Style
-
-| Style | Cards | Icons | Gradients |
-|-------|:-----:|:-----:|:---------:|
-| Dramatic | ✓ | ✓ | ✓ |
-| Organic | ✓ | ✓ | ✓ |
-| Hygge | ✓ | ✓ | ✓ |
-| Memphis | ✓ | ✓ | ✓ |
-| Feng Shui | ✓ | ✓ | ✓ |
-| Tech-Modern | ✓ | ✓ | ◐ |
-| Data-Forward | ✓ | ◐ | ✗ |
-| Corporate-Confident | ✓ | ✗ | ✗ |
-| Pitch-Velocity | ✓ | ✓ | ✓ |
-| Narrative-Clean | ◐ | ✗ | ✗ |
-| Iki | ✓ | ✓ | ✗ |
-| Lagom | ✓ | ✓ | ✗ |
-| Swiss | ✓ | ✓ | ✗ |
-| Minimal | ◐ | ✗ | ✗ |
-| Wabi-Sabi | ◐ | ✗ | ✗ |
-| Shibui | ◐ | ✗ | ✗ |
-| Ma | ✗ | ✗ | ✗ |
-| Yeo-baek | ✗ | ✗ | ✗ |
-
-**◐** = Subtle/limited support (border-only cards)
-
-When creating templates with `/template-carousel` or `/template-presentation`, you'll be asked which visual components to enable based on your selected style.
-
-## Color Palette System
-
-Generate alternative color palettes from your brand colors:
-
-```
-/brand-palette
-```
-
-Choose between two approaches:
-
-### Derived Palettes (Color Theory)
-
-Mathematical derivations from your brand colors. Select which source colors to use:
-- **Primary only** - Generate from main brand color
-- **All brand colors** - Generate from each color, combine results
-- **Pick specific** - Choose which colors to use
-
-#### Harmony-Based (Color Wheel)
-| Type | Description | Use Case |
-|------|-------------|----------|
-| **Monochromatic** | Single hue, varying lightness | Safe, cohesive |
-| **Analogous** | Adjacent colors | Harmonious, comfortable |
-| **Complementary** | Opposite colors | High contrast, CTAs |
-| **Split-Complementary** | Base + two adjacent to complement | Contrast with less tension |
-| **Triadic** | Three equally spaced | Balanced, vibrant |
-| **Tetradic** | Four colors (rectangle) | Rich, complex |
-
-#### Tonal Variations
-| Type | Description | Use Case |
-|------|-------------|----------|
-| **Tints** | Source + white | Soft backgrounds |
-| **Shades** | Source + black | Bold emphasis |
-| **Tones** | Source + gray | Sophisticated, subtle |
-| **Interpolation** | Gradients between source colors | Data viz, smooth transitions |
-
-### Alternative Palettes (Mood-Based)
-
-Completely different colors that maintain your brand's feeling. Transforms your **entire palette**:
-
-| Type | Description | Use Case |
-|------|-------------|----------|
-| **Pastel** | Lighten + desaturate | Gentle campaigns |
-| **Bold** | High saturation, strong contrast | Impact, announcements |
-| **Earthy** | Natural equivalents | Sustainable, authentic |
-| **Vibrant** | Bright, saturated | Youth, energy |
-| **Muted** | Desaturated, refined | Luxury, sophistication |
-| **Monochrome** | Grayscale + one accent | Editorial, dramatic |
-| **Custom** | Describe a mood | Seasonal campaigns |
-
-**17 palette types total** (10 derived + 7 alternative). Generated palettes are saved to `brand-philosophy.md` for use in content creation.
-
-## Infographic System
-
-Create data visualizations, process diagrams, timelines, and comparisons using **114 built-in templates** powered by @antv/infographic.
-
-### Template Categories
-
-| Category | Templates | Use Cases |
-|----------|-----------|-----------|
-| **Sequence** | 43 | Timelines, steps, processes, roadmaps, flows |
-| **List** | 23 | Tips, features, grids, pyramids, sectors |
-| **Hierarchy** | 25 | Org charts, tree structures, taxonomies |
-| **Compare** | 17 | VS, before/after, pros/cons, SWOT |
-| **Quadrant** | 3 | 2x2 matrices, priority grids |
-| **Relation** | 2 | Networks, circular connections |
-| **Chart** | 1 | Statistics, metrics, bar charts |
-
-### Template Asset Types
-
-Templates come in three varieties based on visual assets:
-
-| Type | Identifier | Description | Complexity |
-|------|------------|-------------|------------|
-| **Text-only** | (default) | Labels and descriptions only | Easiest - just provide content |
-| **Icon-based** | `icon` in name | Uses icon syntax `icon:rocket` | Medium - choose from icon library |
-| **Illustrated** | `-illus` suffix | Requires custom SVG illustrations | Advanced - create SVGs per item |
-
-**Recommendations:**
-- Start with **text-only** templates (100+ options)
-- Use **icon-based** for visual appeal without custom art (8 templates)
-- Use **illustrated** only when you have custom SVG assets (9 templates)
-
-### Text Guidelines (Avoiding Overlap)
-
-Infographic templates have limited space. Follow these guidelines:
-
-| Element | Max Length | Example |
-|---------|------------|---------|
-| **Labels** | 1-2 words | "Cloud", "Security" |
-| **Descriptions** | 2-4 words | "Infrastructure design" |
-| **Title** | 3-5 words | "Our Services" |
-
-If content is longer:
-1. Use a template with more space (grid vs row)
-2. Increase canvas width (1200px+)
-3. Use column/done-list templates (more vertical space)
-
-### Background Presets
-
-| Preset | Effect | Best For |
-|--------|--------|----------|
-| `solid` | Clean solid color | Minimalist |
-| `spotlight` | Radial gradient from center | Focus emphasis |
-| `spotlight-dots` | Gradient + dot pattern | Modern tech |
-| `spotlight-grid` | Gradient + grid overlay | Technical |
-| `tech-matrix` | Tech-style gradient + grid | Data/engineering |
-| `diagonal-crosshatch` | Diagonal gradient + crosshatch | Creative |
-
-### Infographic Workflow
-
-```
-1. /template-infographic    # Choose category → design → style → save template
-2. /infographic             # Select template → provide content → generate PNG/SVG
-```
-
-Or quick mode:
-```
-/infographic-quick          # Select template → paste content → get PNG
-```
-
-### Output Specifications
-
-- **Dimensions**: Configurable (default 1920x1080 for slides, 1080x1080 for social)
-- **Formats**: PNG (recommended), SVG (vector)
-- **Location**: `infographics/{date}-{name}/`
-
-## HTML Design System
-
-Create branded HTML pages using a **design-system-based** approach. Unlike templates (fixed structure → fill content), a design system defines visual identity + reusable components → compose unlimited page types.
-
-### Key Differences from Presentations/Carousels
-
-| Aspect | Presentation/Carousel | HTML Pages |
-|--------|----------------------|------------|
-| Structure | Fixed slide/card sequence | Flexible component selection |
-| Reuse | One template → one structure | One design system → unlimited pages |
-| Output | PDF / PPTX | Single standalone `.html` file |
-| Growth | Static templates | Component library grows over time |
-
-### How It Works
-
-```
-1. /design-html         # Create a design system (tokens + component catalog)
-2. /html-page           # Select components, provide content, generate page
-3. Components saved     # Each new component added to library for reuse
-4. Next page            # Reuse existing components + generate new ones
-```
-
-### Output Format
-
-Single standalone `.html` file with:
-- Embedded CSS (no external stylesheets)
-- CSS custom properties for brand tokens
-- Mobile-first responsive (375px → 768px → 1200px)
-- CSS-first interactivity + minimal vanilla JS when needed
-- WCAG AA accessibility
-- Google Fonts with system font fallbacks
-- Convertibility-ready structure (prop/slot metadata for future SDC, React, etc.)
-
-### 15 Component Types
-
-Navigation, Hero, Feature Grid, Content Block, Testimonials, CTA, Stats Bar, Team Grid, FAQ Accordion, Pricing Cards, Gallery, Process Steps, Contact, Footer, Logo Bar — each with multiple variants.
-
-### 10 Page Category Presets
-
-Landing Page, About/Company, Portfolio, Event, Pricing, Blog/Article, Documentation, Coming Soon, Contact, Custom.
-
-## Brand Depth (Aaker Personality)
-
-`/brand-extract` now captures deep brand data beyond visual identity:
-
-| Section | What It Captures | How It's Used |
-|---------|-----------------|---------------|
-| **Personality (Aaker)** | 5-dimension scores (0-5) with evidence | Style recommendation, component weighting, color intensity, canvas philosophy tone |
-| **Color Profile** | Harmony type, temperature, saturation | Design system token derivation |
-| **Emotional Profile** | Emotion words, visual mood | Canvas philosophy manifesto writing |
-| **Spatial & Surface** | Spacing rhythm, border radius, shadows, density | Design system element placement |
-| **Brand Maturity** | Growing / Established / Iconic | Brand signal preservation corridor |
-
-Personality flows through the entire creation pipeline:
-- **Style recommendation** reads pre-populated Aaker scores (skips voice-trait derivation)
-- **Template creators** weight component suggestions, color intensity, and background presets by personality
-- **Canvas philosophy** tone is modulated by primary dimension (Minimal + Competence = precision; Minimal + Sincerity = warmth)
-- **Visual-content skill** uses personality in component decision gates and color application
-
-All personality integration is backward-compatible: brand-philosophy.md files without Brand Depth still work (fallback to voice-trait derivation).
-
-## Three-Layer Philosophy System
-
-```
-Layer 1: BRAND PHILOSOPHY (brand-philosophy.md)
-├── Visual DNA: colors, typography, imagery style
-├── Verbal DNA: voice, tone, vocabulary
-└── Core Principles: always/never rules
-
-Layer 2: CONTENT TYPE GUIDES (plugin references)
-├── Presentation Zen principles
-├── Carousel best practices
-├── 26 visual styles with constraints
-└── Automatically updated with plugin
-
-Layer 3: TEMPLATE + CANVAS PHILOSOPHY (per template)
-├── template.md: structure, slide sequence
-├── canvas-philosophy.md: visual design philosophy + style constraints
-└── sample.pdf: visual reference
-```
-
-## Output Specifications
-
-### Presentations
-- Dimensions: 1920x1080 (16:9)
-- Format: PDF + PPTX
-- Location: `presentations/{date}-{name}/`
-
-### LinkedIn Carousels
-- Dimensions: 1080x1350 (4:5 portrait)
-- Format: Multi-page PDF
-- Location: `carousels/{date}-{name}/`
-
-### Instagram Carousels
-- Dimensions: 1080x1080 (1:1 square)
-- Format: PDF or PNG sequence
-
-## Accessibility & Quality Enforcement
-
-All generated content automatically enforces:
-
-| Check | Standard | Action |
-|-------|----------|--------|
-| **Contrast ratio** | WCAG AA (4.5:1 minimum) | Auto-fixes with safe colors |
-| **No text overlap** | Elements never collide | Validates bounding boxes |
-| **Safe zones** | 50px presentations, 5% carousels | Enforces margins |
-| **Gradient text** | Readable at both ends | Validates contrast range |
-| **Word limits** | Per style constraints | Prevents text walls |
-
-**Logo format**: PNG or JPG only (SVG auto-converted during `/brand-extract`)
-
-## Dependencies
-
-This plugin uses these skills for visual output:
-
-| Skill | Purpose | Status |
-|-------|---------|--------|
-| **visual-content** | Generate presentations/carousels from canvas philosophy | Bundled (no install needed) |
-| **infographic-generator** | Generate infographics from @antv/infographic | Bundled (no install needed) |
-| **html-generator** | Generate HTML pages and components from design system | Bundled (no install needed) |
-| **pptx** | Convert PDF to editable PowerPoint | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
-| **pdf** | Create multi-page PDFs | Built-in (Claude.ai Pro/Max/Team/Enterprise) |
-
-The `visual-content` skill is bundled with this plugin - it uses artistic philosophy language to create museum-quality visual output following your brand and template constraints.
-
-The `infographic-generator` skill provides 114 data visualization templates with brand theming and custom backgrounds.
-
-The `html-generator` skill creates standalone HTML components and composed pages using design tokens, responsive CSS, and WCAG AA accessibility.
-
-## Configuration
-
-### Effort-adaptive variant selection
-
-Presentations, carousels, and HTML pages each have a **guided** command and a
-**quick** command. When you don't name a variant ("make a presentation"), the
-router picks one from the active effort level (`${CLAUDE_EFFORT}`): `low` →
-the `*-quick` variants, `medium` and above → the guided wizards. Naming a
-variant explicitly always overrides this.
-
-The quick end of that gradient pairs naturally with the built-in **Proactive**
-output style — `low` effort plus the Proactive style yields fully autonomous
-quick-content generation with minimal prompting.
-
-### Skill visibility (`skillOverrides`)
-
-The umbrella `brand-content-design` skill is already `user-invocable: false`
-(the user-facing entry points are the `/brand` dashboard and the verb commands).
-To further tune any of this plugin's skills without editing them, the
-`skillOverrides` setting in `.claude/settings.json` (Claude Code v2.1.129+)
-takes per-skill values `"on"`, `"name-only"`, `"user-invocable-only"`, or
-`"off"`.
-
-## Tips
-
-- **Start with `/brand`** - it adapts to your context
-- **Templates are required** - create at least one before making content
-- **One template, many outputs** - create a template once, use it for dozens of presentations/carousels
-- **Use `/outline`** - helps structure your content to match the template
-- **Quick mode** for rapid iteration, **guided mode** for important pieces
-- **Brand philosophy evolves** - re-run `/brand-extract` as your brand matures
+| `/brand` | Status, switch projects, or start new. |
+| `/brand-init` | Create a new brand project folder structure. |
+| `/brand-extract` | Extract brand elements from your sources into `brand-philosophy.md`. |
+| `/brand-assets` | Add or update logos, icons, fonts after extraction. |
+| `/brand-palette` | Generate alternative color palettes (17 types) from your brand colors. |
+| `/template-presentation`, `/template-carousel`, `/template-infographic` | Guided wizards for reusable templates. |
+| `/design-html` | Create or edit an HTML design system (tokens plus component catalog). |
+| `/outline <template>` | Get a fill-in-the-blank outline and an AI prompt for a template. |
+| `/presentation`, `/carousel`, `/infographic`, `/html-page` | Guided content generation from a template or design system. |
+| `/presentation-quick`, `/carousel-quick`, `/infographic-quick`, `/html-page-quick` | Quick, paste-and-go content generation. |
+| `/content-type-new` | Add a new content type. |
+
+The full reference with every field, style, and enforcement rule is in [docs/usage.md](docs/usage.md).
+
+## More
+
+- **Deeper how-to:** [docs/usage.md](docs/usage.md). Prerequisites, "it's working if", and where this plugin fits with the rest of the marketplace.
+- **Philosophy:** [../PHILOSOPHY.md](../PHILOSOPHY.md). Why the marketplace's plugins are built this way.
+- **Changelog:** [CHANGELOG.md](./CHANGELOG.md).
+
+## License
+
+MIT

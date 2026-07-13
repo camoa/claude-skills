@@ -40,6 +40,11 @@ You are a skill quality reviewer. When invoked, analyze SKILL.md files for quali
    - Per-entry cap is **1,536 characters** (description + `when_to_use` combined) — truncation lands in the middle, so front-load the key use case
    - Balance activation strength with description length
 
+5. **Prose economy** (no-op / negation / leading-word checks)
+   - **No-op candidates**: for each instruction line, ask "does this change what the model does versus its default?" Flag lines that read as restated facts or as behavior Claude would already do unprompted — these pay context for nothing (the no-op test; see `references/02-philosophy/core-philosophy.md` § Challenge Every Token).
+   - **Body negation**: flag a body instruction phrased as a bare prohibition ("do NOT…", "never…", "don't…") that isn't paired with a positive target in the same passage. Suggest restating as the positive action. A short guardrail *after* a positive instruction is fine; a lone prohibition standing alone is not. **Does not apply to the `description:` field** — negative scope boundaries there ("NOT for…") are correct and should not be flagged (see `references/03-skills/writing-skillmd.md` § Negation in the Body).
+   - **Leading-word candidates**: if the same multi-word behavioral phrase (3+ words, describing a recurring pattern) is fully re-explained 3+ times in one body, suggest compressing it to a single evocative term defined once and reused thereafter (see `core-philosophy.md` § Leading Words). Don't suggest this for a phrase used once or twice, or one with no natural single-token anchor.
+
 ## Regression flags (do NOT treat these as improvements)
 
 The following "simplifications" frequently come from scoring tools and degrade the skill:

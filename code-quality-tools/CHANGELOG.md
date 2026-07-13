@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.4] - 2026-07-13
+
+### Changed — docs
+- Rewrote README as problem-first with a runnable worked example and added docs/usage.md (What it does / When to reach for it / Prerequisites / It's working if / Where it fits). Marketplace positioning-and-usage-docs pass.
+
 ## [3.9.3] - 2026-07-04
 
 ### Fixed — command namespace corrected (`/code-quality:` → `/code-quality-tools:`)

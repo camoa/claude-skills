@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.4 (2026-07-13)
+
+### Changed — docs
+- **Positioning-and-usage-docs pass.** Rewrote README as problem-first with a runnable worked example and added docs/usage.md (What it does / When to reach for it / Prerequisites / It's working if / Where it fits). Marketplace positioning-and-usage-docs pass.
+
 ## 0.11.3 (2026-06-22)
 
 ### Changed — docs

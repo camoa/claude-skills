@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-07-07
+
+### Changed — docs
+- Rewrote README problem-first with a worked example and added docs/usage.md. Positioning pass.
+
+### Added — authoring doctrine
+- **Predictability as a skill's purpose.** `core-philosophy.md` opens with a new "Why Skills Exist: Predictability" section framing the same-process-every-run goal that progressive disclosure, degrees of freedom, and leading words all serve.
+- **Leading words.** New `core-philosophy.md` § Leading Words — compress a recurring behavioral pattern into one evocative, already-pretrained token (*tight* loop, *seam*, *deep module*) and reuse it as that token instead of re-explaining the pattern every time it recurs.
+- **The no-op test.** Sharpened (not duplicated) the existing `core-philosophy.md` § Challenge Every Token: generalizes "does Claude already know this?" from knowledge redundancy to behavioral redundancy — does this line change what the model does versus its default? If no, delete it.
+- **Negation as a body failure mode.** New `writing-skillmd.md` § Negation in the Body — a body prohibition ("do NOT...") half-primes the banned behavior; prefer stating the positive target. Explicitly reconciled with `description-patterns.md` § Negative Triggers (scope-boundary negation in descriptions remains correct) via a cross-reference in both files, so the two negation rules read as complementary, not contradictory.
+- `agents/skill-quality-reviewer.md` gains a "Prose economy" checklist item covering no-op candidates, body-negation flags, and leading-word compression candidates — regression-flag logic (preserve intentional `PROACTIVELY`/`MUST`/`NEVER`) is unchanged.
+- `scripts/prose-economy-audit.sh` — a thin reporter that lists every `SKILL.md` under a directory with its body line count against the existing S10/S11 thresholds (`commands/validate.md`), plus an informational word count, sorted worst-first. Reuses validate's thresholds rather than reimplementing them; validate remains the source of truth for pass/fail gating.
+
 ## [3.10.1] - 2026-06-19
 
 ### Changed — docs

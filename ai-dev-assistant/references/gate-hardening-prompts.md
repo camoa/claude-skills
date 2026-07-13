@@ -1,6 +1,6 @@
-# Gate Hardening Prompts v1.5
+# Gate Hardening Prompts v1.6
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions).
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
@@ -20,7 +20,7 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `plugin-validate-decision` | `/complete` on plugin file staged change | `plugins_validated`, `findings` | **none** — user MUST pick |
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 | `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
-| `review-summary` (v1.2+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
+| `review-summary` (v1.2+; two-axis v1.6+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `spec_verdict_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
 | `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
 | `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 | `visual-parity-gate-fail` (v1.5+) | `/validate:visual-parity` per failed surface | `surface_id`, `viewport`, `diff_percent`, `css_diff_mode`, `css_diff_count`, `css_diff_list`, `diff_path` | `[c]` |
@@ -163,11 +163,15 @@ No default. You MUST pick one.
 ```
 /review {{task_name}} complete.
 Mode: {{mode}}    Overall verdict: {{overall_verdict}}    PR ready: {{pr_ready}}
-Gates run:
+## Standards
 {{gates_run_table}}
+## Spec
+{{spec_verdict_line}} — never merged into the Standards score above
 Audit: {{audit_path}}
 {{pr_body_line_or_empty}}
 ```
+
+`{{gates_run_table}}` renders every `gates_run[]` entry **EXCEPT** `name:"spec"` — that entry is excluded from the Standards table and renders ONLY via `{{spec_verdict_line}}`, never duplicated into both blocks. `{{spec_verdict_line}}` format: `Spec: <pass|fail|skipped> — <N> missing requirement(s), <M> scope-creep warning(s)[; skipped: <reason>]`, where `<N>` is `missing_requirements[]` length and `<M>` is `scope_creep[]` length (both read from `_spec.json`'s `gate_specific`), and the trailing `; skipped: <reason>` clause is present only when `verdict == "skipped"` (using `skip_reason`).
 
 ## Template ID: `e2e-gate-fail`
 
@@ -240,6 +244,7 @@ Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport 
 
 ## Changelog
 
+- **v1.6 (v5.20.0):** additive; `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution (M2); also documents that `{{gates_run_table}}` excludes the `name:"spec"` gates_run[] entry (rendered only via `{{spec_verdict_line}}`) and defines `{{spec_verdict_line}}`'s format, fixing M1 (spec entry double-rendering into both the Standards table and the Spec block). The M1 documentation addition is prose-only — no template literal changed beyond the two-axis block additions.
 - **v1.5 (2026-05-21, v4.14.0):** additive; adds `visual-parity-gate-fail` template for `/validate:visual-parity` (Task D). Existing 9 templates byte-identical to v1.4 baseline.
 - **v1.4 (2026-05-21, v4.13.0):** additive; adds `visual-regression-gate-fail` template for `/validate:visual-regression` (Task C). Existing 8 templates byte-identical to v1.3 baseline.
 - **v1.3 (2026-05-21, v4.12.0):** additive; adds `e2e-gate-fail` template for `/validate:e2e` (Task B). Existing 7 templates byte-identical to v1.2 baseline.
