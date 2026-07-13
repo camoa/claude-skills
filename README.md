@@ -1,29 +1,22 @@
 # Claude Skills
 
-Custom plugins and tools for Claude Code.
+A marketplace of Claude Code plugins built on one idea: **AI is fast; these tools make the parts it likes to skip hard to skip.** The gates enforce your standards, the guides keep the AI working from current best practice instead of stale training data, and you make every decision. The reasoning behind that is in [PHILOSOPHY.md](PHILOSOPHY.md).
 
-> **Heads up (transition notice, kept through ~August 2026).** `drupal-dev-framework`
-> has been renamed to **`ai-dev-assistant`** (same workflow, broader scope, command
-> names unchanged). If you already have the old plugin installed: install
-> `ai-dev-assistant`, run `/drupal-dev-framework:upgrade` once to migrate your project
-> store and per-project wiring, then uninstall `drupal-dev-framework`
-> (`/plugin uninstall drupal-dev-framework@camoa-skills`). The shell exposes only
-> `/drupal-dev-framework:upgrade`; everything else now lives under the
-> `ai-dev-assistant:` namespace. A few other plugins got minor description and tone
-> cleanups in the same pass. Full steps:
-> [drupal-dev-framework/README.md](drupal-dev-framework/README.md).
+## What it looks like in practice
 
-## Background
+The flagship, `ai-dev-assistant`, run on a single task:
 
-I started building what I called "frameworks" over a year before Claude officially released Skills. Same concept, different name.
+```text
+$ /ai-dev-assistant:scope rss_feed      # you set the goal and success criteria (or confirm a draft)
+$ /ai-dev-assistant:research rss_feed   # finds drupal/views_rss already covers ~80%: reuse, don't rebuild
+$ /ai-dev-assistant:design rss_feed     # approach and acceptance criteria
+$ /ai-dev-assistant:implement rss_feed  # test-first
+$ /ai-dev-assistant:review rss_feed     # tdd / solid / security gates pass, PR body written
+```
 
-The idea came from frustration. I was tired of repeating the same instructions every conversation. Instead of starting fresh each time, I asked AI to analyze our successful interactions and create frameworks capturing recurring requirements and preferences. These became reusable project knowledge.
+It never picked your architecture for you. It just refused to skip the scope, the existing-solution check, the tests, or the review, and it left everything it did on disk, so a decision that later looks wrong is a file you open. That is the idea behind all of these plugins.
 
-This approach produced results: 3 published Drupal contrib modules, 17+ blog articles, automated social media campaigns, and phase-based editorial workflows.
-
-When Claude released Skills officially, I recognized what I'd been building. This repository translates those frameworks into proper Skills with tooling.
-
-I wrote more about this methodology in [My Journey with AI Tools](https://adrupalcouple.us/my-journey-ai-tools-practical-tips-recent-discussion).
+None of it is perfect. The AI still slips a step past us now and then, and when it does, that gap becomes the next gate we add. See [PHILOSOPHY.md](PHILOSOPHY.md) for the fuller picture.
 
 ## Installation
 
@@ -31,216 +24,83 @@ I wrote more about this methodology in [My Journey with AI Tools](https://adrupa
 # Add the marketplace
 /plugin marketplace add https://github.com/camoa/claude-skills
 
-# Install individual plugins
+# Install the plugins you want
+/plugin install ai-dev-assistant@camoa-skills        # pulls dev-guides-navigator automatically
 /plugin install dev-guides-navigator@camoa-skills
-/plugin install ai-dev-assistant@camoa-skills
 /plugin install plugin-creation-tools@camoa-skills
-/plugin install brand-content-design@camoa-skills
 /plugin install code-quality-tools@camoa-skills
-/plugin install drupal-htmx@camoa-skills
 /plugin install code-paper-test@camoa-skills
 /plugin install drupal-ai-contrib@camoa-skills
+/plugin install drupal-htmx@camoa-skills
+/plugin install brand-content-design@camoa-skills
 ```
+
+Each plugin's README has its own requirements, worked examples, and a `docs/usage.md`. Versions and component counts live there and in each `CHANGELOG.md`, not here, so this page does not go stale.
 
 ## Using these plugins outside Claude Code
 
-Skills in this marketplace conform to the open [agentskills.io](https://agentskills.io/specification) standard and work in Cursor, Codex CLI, VS Code Copilot, Gemini CLI, Cline, OpenCode, and more. Commands, agents, and hooks are Claude-Code-specific by format but can be emulated. See **[PORTABILITY.md](PORTABILITY.md)** for the full guide and **[CURSOR.md](CURSOR.md)** for Cursor-specific notes.
+The skills conform to the open [agentskills.io](https://agentskills.io/specification) standard and work in Cursor, Codex CLI, VS Code Copilot, Gemini CLI, Cline, OpenCode, and more. Commands, agents, and hooks are Claude-Code-specific by format but can be emulated. See **[PORTABILITY.md](PORTABILITY.md)** for the full guide and **[CURSOR.md](CURSOR.md)** for the highest-fidelity option.
 
-## Known Issues
+## The plugins, by the problem each solves
 
-### Skills not auto-discovered on startup
+### Building software
 
-There's a [known bug in Claude Code](https://github.com/anthropics/claude-code/issues/10113) affecting git-based marketplaces. Skills may fail to load during initialization with "no such file or directory" errors because Claude Code looks for skill files in the wrong location.
+**[ai-dev-assistant](ai-dev-assistant/README.md)**: *The AI jumps straight to code: it skips understanding the problem, misses a library that already exists, drifts from your standards, and forgets the tests.* Runs any coding task through a required scope contract, then research, design, implement, and review, with gates it cannot quietly skip. Works on any stack (process recipes carry the framework specifics) and on Claude Code plugin work too. This is the flagship; most of the others plug into its gates.
 
-**Workaround:** Skills still work when invoked via the `Skill` tool (slash commands). The issue only affects automatic discovery at startup.
+**[dev-guides-navigator](dev-guides-navigator/README.md)**: *The model writes code from whatever it remembered at training time, which is often out of date.* Routes each task to the current best-practice guide from a catalog of 1200+ atomic decision guides, hash-cached so nothing is re-fetched. Required by `ai-dev-assistant`; useful on its own.
 
-**Status:** Awaiting fix from Anthropic.
+**[plugin-creation-tools](plugin-creation-tools/README.md)**: *Building a Claude Code plugin means guessing at the structure of skills, commands, agents, hooks, and MCP servers.* An authoring and audit toolkit with a `validate` gate that catches structural problems (and leaked home-paths or secrets) before you publish.
 
-## Plugins
+### Checking the work
 
-### dev-guides-navigator (v0.1.0)
+**[code-quality-tools](code-quality-tools/README.md)**: *Is this code actually safe and sound, or does it just run?* TDD, SOLID, and DRY checks plus multi-layer security scanning (Semgrep, Trivy, Gitleaks, and more) for Drupal and Next.js. Powers `ai-dev-assistant`'s quality gates.
 
-Smart guide discovery and routing for the [dev-guides](https://camoa.github.io/dev-guides/) site. Routes AI to the correct guide using hash-based caching and KG metadata for disambiguation.
+**[code-paper-test](code-paper-test/README.md)**: *Does this code, skill, or config actually do what it claims, before you run it in anger?* Mental-execution testing that traces logic line by line with concrete values, plus an adversarial test-team, to surface bugs, edge cases, and AI hallucinations. Part of the review method for plugin work.
 
-- Caches `llms.txt` with hash-based freshness check: no redundant fetches
-- KG metadata (`concepts`/`not` fields) prevents wrong-guide selection (e.g., "story.yml" routes to UI Patterns, not Storybook)
-- Two-hop routing: `llms.txt` → topic `index.md` → specific guide
-- 1200+ atomic decision guides across 66 topics
+### Drupal
 
-```bash
-# Invoked automatically before design/dev tasks, or manually:
-/dev-guides-navigator style guide
-```
+**[drupal-ai-contrib](drupal-ai-contrib/README.md)**: *AI-assisted Drupal.org contributions get bounced for unverified claims and policy misses.* Evidence-over-assertion gates that mirror the drupalci pipeline locally at CI strictness and check the AI-contribution policy, so a contribution passes only on a produced artifact, never an assertion.
 
-### ai-dev-assistant (v5.0.0)
+**[drupal-htmx](drupal-htmx/README.md)**: *Migrating Drupal AJAX to HTMX by hand is fiddly and easy to get wrong.* HTMX patterns and an AJAX-to-HTMX migration path for Drupal 11.3+.
 
-**An AI assistant for developers that focuses on getting the process right**, not just getting code out fast. Most AI dev tools optimize for speed. This one keeps the work disciplined: understand the problem before coding, reuse what already exists, follow your standards, and verify. It runs each task through **Research → Architecture → Implementation → Review**, with deterministic gates (SOLID, TDD, DRY, security, code purposefulness) the AI can't quietly skip, and grounds its decisions in best-practice guides instead of whatever the model guessed. **Requires `dev-guides-navigator`.** Stack-agnostic engine; ships with a Drupal-flavored reference implementation for the deep components (a stack-neutral generalization is in progress).
+### Content and brand
 
-> **Renamed from `drupal-dev-framework`.** Already using the old plugin? Install `ai-dev-assistant`, then run `/drupal-dev-framework:upgrade` once from the deprecated shell: it migrates your project store and per-project hooks to the new name, after which the old plugin is safe to uninstall. The shell deliberately exposes **only** `/drupal-dev-framework:upgrade` (all old command names route to it); run everything else under the unchanged-name `ai-dev-assistant:` namespace. See [drupal-dev-framework/README.md](drupal-dev-framework/README.md) for the disable/uninstall steps.
+**[brand-content-design](brand-content-design/README.md)**: *Every deck, carousel, and one-pager drifts a little further from the brand.* Branded presentations, carousels, infographics, and HTML pages generated from one shared brand and design system.
 
-```bash
-/plugin install dev-guides-navigator@camoa-skills   # Required dependency
-/plugin install ai-dev-assistant@camoa-skills
+### Deprecated
 
-/ai-dev-assistant:new my_project        # Create project
-/ai-dev-assistant:next                  # Continue work (main entry point)
-```
+**drupal-dev-framework** is the old name of `ai-dev-assistant`, kept only as a one-time migration shell. If you are still on it, [its README](drupal-dev-framework/README.md) has the `/drupal-dev-framework:upgrade` steps; otherwise you can ignore it.
 
-| Component | Contents |
-|-----------|----------|
-| Commands | 44: the full lifecycle (`/new`, `/next`, `/research`, `/research-team`, `/design`, `/implement`, `/complete`, `/review`, `/validate*`, work-orders, visual/E2E review, playbooks, worktrees) |
-| Agents | 10 with cost control: project-orchestrator, architecture-drafter, architecture-validator (isolated worktree), pattern-recommender, contrib-researcher, journey-discovery, guides-matcher, analysis, AI test selector, work-order critic |
-| Skills | 23 (phase management, TDD companion, guide integration, work-order compiler/loop, context loading) |
-| References | methodology docs (SOLID, TDD, DRY, Library-First, Quality Gates, Purposeful Code) + contracts/walkthroughs |
-| Hooks | SessionStart (dependency check + project context), PreCompact (context preservation) |
+## Background
 
-Features competing agent research (`/research-team`) with Build/Use/Extend debate for features and competing hypothesis investigation for bugs.
+I started building what I called "frameworks" over a year before Claude officially released Skills. Same concept, different name. The idea came from frustration: I was tired of repeating the same instructions every conversation, so I asked AI to analyze our successful interactions and capture the recurring requirements and preferences as reusable project knowledge. That produced real work: 3 published Drupal contrib modules, 17+ blog articles, automated social campaigns, and phase-based editorial workflows. When Claude released Skills officially, I recognized what I had been building, and this repository translates those frameworks into proper Skills with tooling. More on the methodology: [My Journey with AI Tools](https://adrupalcouple.us/my-journey-ai-tools-practical-tips-recent-discussion).
 
-See [ai-dev-assistant/README.md](ai-dev-assistant/README.md) for full documentation.
+## Contributing
 
-### plugin-creation-tools (v2.3.0)
+Conventions, plugin structure, and the review bar are in [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). In short: `CONVENTIONS.md` at each plugin root (not a plugin-root `CLAUDE.md`, which Claude Code does not load), path-scoped `.claude/rules/`, version and model routing in frontmatter, and progressive disclosure (SKILL.md lean, detail in `references/`).
 
-Complete guide for creating Claude Code plugins: skills, commands, agents, hooks, MCP servers, and configuration. Covers 18 hook events, 4 hook types (command/prompt/agent/HTTP), agent isolation and cost control, marketplace distribution with 6 source types, and pushy description optimization.
-
-```bash
-# Just describe what you want:
-Create a plugin called "my-tools" with a deploy command
-
-# Or use specific commands:
-/plugin-creation-tools:create my-tools --skill --agent --hook
-/plugin-creation-tools:validate ./my-tools
-```
-
-| Component | Contents |
-|-----------|----------|
-| Skills | 1 (`plugin-creation`: 30+ reference docs, templates, examples) |
-| Commands | 3 (`/create`, `/add-component`, `/validate`) |
-| Agents | 2 (`skill-quality-reviewer`, `plugin-structure-auditor`) |
-
-### brand-content-design (v2.8.0)
-
-Create branded presentations, LinkedIn carousels, infographics, and HTML pages with consistent visual identity.
-
-```bash
-/brand-content-design:brand-init        # Start a new brand project
-```
-
-| Component | Contents |
-|-----------|----------|
-| Commands | 19 (brand management, templates, content creation: quick and guided modes) |
-| Skills | 4 (`brand-content-design`, `visual-content`, `infographic-generator`, `html-generator`) |
-| Agents | 1 (`brand-analyst` with project memory) |
-
-Features 21 visual styles, 114 infographic templates, HTML design systems with 15 component types, and 17 color palette types.
-
-See [brand-content-design/README.md](brand-content-design/README.md) for full documentation.
-
-### code-quality-tools (v2.7.0)
-
-Code quality and security auditing for **Drupal** (via DDEV) and **Next.js** projects.
-
-```bash
-/code-quality-tools:audit               # Full audit with synthesis
-/code-quality-tools:review              # Rubric-scored code review
-/code-quality-tools:security-debate     # 3-agent security debate
-/code-quality-tools:architecture-debate # 3-agent architecture debate
-```
-
-| Component | Contents |
-|-----------|----------|
-| Commands | 11 (`/setup`, `/audit`, `/review`, `/coverage`, `/security`, `/security-debate`, `/architecture-debate`, `/lint`, `/solid`, `/dry`, `/tdd`) |
-| Skills | 1 (`code-quality-audit`) |
-
-Security coverage: Drupal (10 layers: PHPStan, Psalm, PHPMD, Semgrep, Trivy, Gitleaks, Roave, Drush, Composer audit, Security Review) and Next.js (7 layers). Optional DAST with OWASP ZAP + Nuclei.
-
-Features rubric-scored code review (/50 with quality gate), cross-audit correlation with prioritized action plans, and two 3-agent debate commands with isolated worktrees.
-
-See [code-quality-tools/README.md](code-quality-tools/README.md) for full documentation.
-
-
-### drupal-htmx (v1.4.0)
-
-HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+.
-
-| Component | Contents |
-|-----------|----------|
-| Commands | 5 (`/htmx`, `/htmx-analyze`, `/htmx-migrate`, `/htmx-pattern`, `/htmx-validate`) |
-| Agents | 3 (`ajax-analyzer`, `htmx-recommender`, `htmx-validator`) |
-| Skills | 1 (`htmx-development`) |
-| References | 4 (quick-reference, htmx-implementation, migration-patterns, ajax-reference) |
-
-See [drupal-htmx/README.md](drupal-htmx/README.md) for full documentation.
-
-### code-paper-test (v0.4.0)
-
-Systematically test code, skills, commands, and configs through mental execution: trace logic line-by-line with concrete values to find bugs, AI hallucinations, edge cases, and contract violations before deployment.
-
-| Component | Contents |
-|-----------|----------|
-| Skills | 1 (`paper-test`: with data flow tracking, error propagation, config validation, severity scoring) |
-| Commands | 1 (`/test-team`: competing agent team with isolated worktrees: Happy Path + Edge Case + Red Team) |
-| References | 11 (core method, dependencies, contracts, AI auditing, hybrid testing, common flaws, advanced techniques + state machines, severity scoring, blind A/B comparison, rubric scoring, skill/config testing) |
-
-Tests code AND non-code artifacts: skills, commands, agents, YAML configs. Auto-detects skill files and switches to instruction tracing mode.
-
-See [code-paper-test/README.md](code-paper-test/README.md) for full documentation.
-
-### drupal-ai-contrib (v0.1.0)
-
-AI-assisted Drupal contribution quality (**evidence over assertion**): every gate passes only on a produced, captured artifact, never on an AI assertion. Mirrors the drupalci pipeline locally at CI strictness, gates on the adopted AI-contribution policy, reviews work in fresh-context agents, and confirms the real GitLab pipeline.
-
-```bash
-/drupal-ai-contrib:setup     # Onboard + environment-match a contribution workspace
-/drupal-ai-contrib:verify    # Local drupalci-parity + AI-policy + eval gates
-```
-
-| Component | Contents |
-|-----------|----------|
-| Commands | 6 (`/setup`, `/issue`, `/verify`, `/review`, `/submit`, `/pipeline`): the detect-driven contribution arc |
-| Skills | 8 (`drupal-ai-contrib` umbrella/router, 6 worker skills, `contribution-guardrails` discipline) |
-| Agents | 3 read-only (`fresh-context-reviewer`, `external-fact-verifier`, `ai-policy-checker`) |
-| Hooks | PostToolUse (re-verification ledger), SessionStart (contribution-workspace reminder) |
-
-The drupalci-parity gate set (`composer`/`phpcs`/`phpstan`/`phpunit`/`cspell`/`eslint`/`stylelint`) mirrors each enabled `gitlab_templates` job at its real strictness. Cites the `camoa/dev-guides` contribution guides by slug via `dev-guides-navigator`; a contribution is run as an `ai-dev-assistant` task.
-
-See [drupal-ai-contrib/README.md](drupal-ai-contrib/README.md) for full documentation.
-
-## Plugin Conventions
-
-All plugins follow these conventions:
-
-- **CLAUDE.md** at plugin root: plugin-specific rules and conventions
-- **`.claude/rules/`**: path-scoped convention files
-- **Frontmatter standards**: `version`, `model` routing (haiku/sonnet/opus), `disallowedTools` on read-only agents
-- **Progressive disclosure**: SKILL.md under 500 lines; details in `references/`
-- **Imperative voice**: skills and commands give instructions, not documentation
-
-## Official Documentation
+## Official documentation
 
 - [Agent Skills Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
 - [Agent Skills Overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
 - [Claude Code Skills](https://code.claude.com/docs/en/skills)
 - [Anthropic Skills Repository](https://github.com/anthropics/skills)
 
-## Related Tools
+## Related tools
 
 | Tool | Purpose | Install |
 |------|---------|---------|
 | [Anthropic skill-creator](https://github.com/anthropics/skills) | Official skill creator | `/plugin install example-skills@anthropic-agent-skills` |
 | [Superpowers](https://github.com/obra/superpowers-marketplace) | TDD skill development | `/plugin marketplace add obra/superpowers-marketplace` |
-| [Skill Seeker MCP](https://github.com/camoa/skill-seeker) | Automated doc scraping | See repo README |
 
 ## Acknowledgments
 
-This marketplace was built collaboratively by Carlos Ospina and Claude (Anthropic). The methodology, frameworks, and domain expertise came from Carlos. Claude contributed code generation, research synthesis, documentation structure, and pattern implementation.
+Built collaboratively by Carlos Ospina and Claude (Anthropic). The methodology, frameworks, and domain expertise came from Carlos; Claude contributed code generation, research synthesis, documentation structure, and pattern implementation. Patterns and insights drawn from:
 
-Patterns and insights drawn from:
-
-- [Anthropic Agent Skills](https://github.com/anthropics/skills): Official skill-creator and best practices (Apache 2.0)
-- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent: TDD approach, writing-skills methodology, and cross-platform hooks patterns (MIT)
-- [Anthropic Platform Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices): Official guidelines
-- [canvas-design skill](https://github.com/anthropics/skills): High-quality PDF generation (used by brand-content-design)
-- [pptx skill](https://github.com/anthropics/skills): Editable PowerPoint creation (used by brand-content-design)
+- [Anthropic Agent Skills](https://github.com/anthropics/skills): official skill-creator and best practices (Apache 2.0)
+- [Superpowers](https://github.com/obra/superpowers-marketplace) by Jesse Vincent: TDD approach, writing-skills methodology, cross-platform hooks patterns (MIT)
+- [canvas-design skill](https://github.com/anthropics/skills): high-quality PDF generation (used by brand-content-design)
+- [pptx skill](https://github.com/anthropics/skills): editable PowerPoint creation (used by brand-content-design)
 
 ## License
 
