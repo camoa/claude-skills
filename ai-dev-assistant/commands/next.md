@@ -210,15 +210,20 @@ Using the same `project-state-read.sh` result (same Bash call as the nudges abov
 
 Print immediately after the framework nudge. The two are naturally exclusive on the frameworks condition: empty frameworks → the framework nudge fires (adopt frameworks first); frameworks set but no recipes → this nudge fires. Skip silently when `.frameworks` is empty (covered by the framework nudge) or `.processRecipes` is non-empty. The empty-only signal is deliberate — a project where only some phases publish recipes is a valid steady state, not a gap, so partial coverage is not nudged (no false-positive churn). Never block.
 
-### Scope offer for brand-new tasks (v4.2.3+)
+### Scope contract for brand-new tasks (v5.21.0+, required artifact + adaptive elicitation)
 
-When the user names a NEW task (Step 2 "User Names New Task" path — no task folder yet), BEFORE recommending `/research <task>`, surface a one-line offer to author scope first:
+When the user names a NEW task (Step 2 "User Names New Task" path, no task folder yet), a scope contract (`alignment.md`: Goal / Expected result / Success criteria / Non-goals) is authored BEFORE `/research`. For a new task the **artifact is required**; the **elicitation intensity is not**. This is the one deliberate exception to the soft-nudge posture, and it is scoped to NEW tasks only: existing tasks keep the soft retrofit nudge below, unchanged, and no legacy task is migrated.
 
-> 💡 Want to author a scope contract first (Goal / Expected result / Success criteria / Non-goals)? `/ai-dev-assistant:scope <task>` runs a 4-question conversation and creates `alignment.md`. Recommended for tasks with multiple outcome dimensions or unclear scope. `[y]` runs `/scope` now; `[n]` (default) proceeds to `/research`.
+Route by how much is already known. Every path ends in `/scope`'s own `[y]es / [e]dit / [c]ancel` confirm, so the contract is never authored silently:
 
-Default `[n]` — soft-nudge per the v3.12.0+ contract; `/scope` is optional, never required. On `[y]`, hand off to `/ai-dev-assistant:scope <task>` and stop (the user re-runs `/next` after `/scope` completes). On `[n]` or empty input, proceed to the existing `/research <task>` recommendation.
+> 💡 New task `<task>`. Before research, let's pin a scope contract (Goal / Expected result / Success criteria / Non-goals). `[y]` draft it from what you've already told me and confirm (fast); `[i]` interview me; `[g]` grill me (`--grill`).
 
-This is the highest-value moment for `/scope`: nothing has been written yet. The Alignment retrofit suggestion below covers the orthogonal case of an existing task that didn't get a scope contract earlier.
+- **Goal already clear** (stated this session, or the task name plus the user's message make it plain): hand to `/ai-dev-assistant:scope <task>`, which uses **draft-and-confirm** (Step 2): it drafts the four fields from what is known and asks for a single confirm, not a four-question interview.
+- **Goal unclear**: hand to `/ai-dev-assistant:scope <task>` (light interview) or `/ai-dev-assistant:scope <task> --grill` (relentless).
+
+Then, once `alignment.md` exists, proceed to `/research <task>`. The requirement is the contract's existence, satisfied as cheaply as one confirm when the goal is clear. It is never a forced heavy interview, and the interview depth is always the user's choice. A `[c]ancel` inside `/scope` is an explicit user override, not the silent default the old behavior had.
+
+This is the highest-leverage moment for scope: nothing has been written yet. The Alignment retrofit suggestion below covers the orthogonal, and still soft, case of an EXISTING task that never got a scope contract.
 
 ### Work-order awareness (v4.19.0+)
 

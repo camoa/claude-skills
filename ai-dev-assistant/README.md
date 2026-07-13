@@ -205,7 +205,7 @@ A passing gate means the disciplined step ran (the tests exist and pass, the sta
 - **Philosophy:** [PHILOSOPHY.md](../PHILOSOPHY.md). Why the framework works the way it does.
 - **Deeper how-to:** [docs/usage.md](docs/usage.md). Prerequisites, "it's working if", reading the trace, autonomous runs, the full command reference.
 - **Upgrading from v2.x:** run `/next` after upgrading (it offers to migrate old tasks), or `/ai-dev-assistant:migrate-tasks`. See [MIGRATION.md](./MIGRATION.md).
-- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.20.1**.
+- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.21.0**.
 
 ## License
 

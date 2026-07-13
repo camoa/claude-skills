@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.21.0] - 2026-07-13
+
+### Added
+- **New-task scope-contract requirement** (alignment_required_adaptive_elicitation). For a NEW task, the scope contract (`alignment.md`) is now a required artifact before `/research`, authored via draft-and-confirm (a single confirm when the goal is already clear) or the interview / `--grill` when it is not. The requirement is the artifact, not a heavy interview: the elicitation intensity stays soft and is the user's choice. Enforced at `/next` (brand-new-task routing) and `/research` (new step 2a gate); `/scope` itself still never blocks. EXISTING/legacy tasks are unchanged and NOT gated (no migration). Guarded by `tests/scope-required-new-task-spec.sh`.
+- `tests/critique-refs-resolve-spec.sh` (fix_dangling_critique_refs): guards that every `references/*.md` path cited in `work-order-critique/SKILL.md` resolves on disk.
+
 ## [5.20.1] - 2026-07-13
 
 ### Changed — docs
