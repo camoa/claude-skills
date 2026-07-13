@@ -17,6 +17,7 @@ Reach for it for any task that creates code: a feature, a module, a component, a
 - **`code-quality-tools` v3.13.0+** for the `/validate:tdd|solid|dry|security` wrappers.
 - A **project memory folder** (created by `/new`) and, for code-aware features, a **codePath** set via `/set-code-path` or during `/new`.
 - Git, if you want worktrees or the work-order runs (both use real branches and worktrees).
+- **Recommended for anything beyond a trusted local project:** run inside an isolated environment (a [dev container](https://containers.dev/), or Claude Code's sandbox). The framework executes real shell commands with your filesystem and network and does not sandbox them itself.
 
 ## It's working if
 

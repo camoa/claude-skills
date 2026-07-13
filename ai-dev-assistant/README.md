@@ -107,6 +107,10 @@ Phases apply per task, not per project: a project can have tasks at different ph
 
 For `/validate:team` specifically: CLI v2.1.32+ and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. When unavailable it falls back to `/validate:all`.
 
+## Running safely
+
+This framework drives real tools. It runs shell commands with your actual filesystem and network access, and it does not sandbox them itself. For anything beyond a trusted local project, run it inside an isolated environment rather than directly on your host. Two existing options, with no extra tooling from us: a [dev container](https://containers.dev/) (the VS Code / CLI devcontainer standard), or Claude Code's own sandboxing. This is the same "AI is fast, we are responsible" posture the gates take, applied to what actually executes.
+
 ## Quick start
 
 ```bash
@@ -194,12 +198,14 @@ The framework does not just document best practices; it enforces them.
 
 **Always blocked:** static service location in new code, business logic in forms or controllers, missing access checks on routes, raw SQL with user input, and writing implementation before tests.
 
+A passing gate means the disciplined step ran (the tests exist and pass, the standards were checked), not that the tests are sufficient or the software is correct. Whether the tests capture the real requirement is the harder, still-unsolved problem (evals and test-sufficiency); the gates raise the floor, they do not certify correctness. See [PHILOSOPHY.md](../PHILOSOPHY.md).
+
 ## More
 
 - **Philosophy:** [PHILOSOPHY.md](../PHILOSOPHY.md). Why the framework works the way it does.
 - **Deeper how-to:** [docs/usage.md](docs/usage.md). Prerequisites, "it's working if", reading the trace, autonomous runs, the full command reference.
 - **Upgrading from v2.x:** run `/next` after upgrading (it offers to migrate old tasks), or `/ai-dev-assistant:migrate-tasks`. See [MIGRATION.md](./MIGRATION.md).
-- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.20.0**.
+- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.20.1**.
 
 ## License
 

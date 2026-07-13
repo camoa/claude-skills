@@ -18,6 +18,10 @@ There is a second reason, pointing the other way. An optional practice only reac
 
 The structure never makes a design call for you. You pick the approach, the pattern, the trade-off. What it refuses is the half-done version: research that skipped the existing-solution check, an architecture with no acceptance criteria, code with no tests, a "done" that was never reviewed. Put plainly, you own the *what*, and the framework owns the *that-it-actually-happened*. The scope contract (`/scope`) is where this is most literal: you write the goal and the success criteria, and every later phase is held to what you wrote, not to what the AI felt like doing.
 
+## What a green gate proves, and what it does not
+
+A passing review means the disciplined steps actually happened: the tests exist and run, the standards were checked, the security gate looked, the review ran. It does not mean the tests are the *right* tests, or that the software does what the business actually needs. Whether your tests capture the real requirement, and whether the thing you built is the thing that was wanted, is the harder problem (evals and test-sufficiency), and it is unsolved across the industry, not just here. Green gates raise the floor. They are not a certificate of correctness, and we do not claim they are.
+
 ## Everything the AI does gets challenged
 
 We treat it as an assistant, not an oracle. It is fast and useful and confidently wrong often enough that nothing it produces should be trusted just because it sounds right. So challenge is built in, not bolted on. A stated mechanism gets challenged against the native pattern before it is adopted (mechanism-challenge). A built work-order gets an independent, fresh-context critic that reads the diff as hostile (wo-critic). Research can run as competing agents that debate instead of one confident pass (research-team). Validation can run in isolated teams free of the main session's bias (validate-team). The point is the same everywhere: make the AI argue with itself before you have to.
