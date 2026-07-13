@@ -100,7 +100,7 @@ Phases apply per task, not per project: a project can have tasks at different ph
 ```
 
 **Declared dependencies (2):**
-- `dev-guides-navigator`: online guide discovery with caching (60+ guides across frameworks, CSS, and dev practices).
+- `dev-guides-navigator`: online guide discovery with caching (1200+ atomic guides across frameworks, CSS, and dev practices).
 - `code-quality-tools` (v3.13.0+): powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0).
 
 **Recommended companions:** `superpowers` (TDD, brainstorming, verification), `code-quality-tools` (static analysis, security), `plugin-creation-tools` (invoked by the skill-review and plugin-validate gates when a task touches plugin files), `code-paper-test` (behavioral, mental-execution verification of skills and commands during plugin review).

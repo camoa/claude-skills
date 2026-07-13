@@ -2,11 +2,37 @@
 
 [![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/camoa-plugin-creation-tools-plugin-creation-tools)](https://www.claudepluginhub.com/plugins/camoa-plugin-creation-tools-plugin-creation-tools?ref=badge)
 
-Complete authoring guide for Claude Code plugins — skills, commands, agents, hooks, MCP servers, themes, `userConfig`, plugin dependencies, the Agent SDK, and distribution.
+Building a Claude Code plugin means guessing at the structure of skills, commands, agents, hooks, and MCP servers: which frontmatter fields matter, which hook events exist, whether `disallowed-tools` goes on a skill or an agent (it is not the same field on both), whether a manifest key is current or deprecated. Get a detail wrong and the failure is silent: a skill with broken frontmatter loads with no metadata, a hook typo is dropped at runtime, a leaked home path or token ships to a public marketplace and nobody notices until someone else does.
 
-The plugin contains one large skill (`plugin-creation`) that progressively discloses references for every component type, plus three commands and two structural-audit agents. Aimed at plugin authors building or maintaining plugins for the public marketplace.
+This plugin is a scaffolder and a gate. `create` and `add-component` generate each component type from templates that already encode the current spec, so you are filling in a shape instead of inventing one. `validate` then checks the result: frontmatter that actually parses as YAML (not just eyeballed), the right field on the right component type, manifest keys against the documented schema, all 30 hook events, and a deterministic pre-publish scan for absolute home paths and leaked secrets. The one large `plugin-creation` skill sits underneath both, auto-triggered whenever you are building any of this, with progressive-disclosure references for every component type so the detail loads only when you need it.
 
-> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md) — skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+> **Not using Claude Code?** See the marketplace [PORTABILITY.md](../PORTABILITY.md): skills work in Cursor, Codex CLI, Copilot, Gemini CLI, Cline, and more.
+
+## See it in action
+
+```text
+$ /plugin-creation-tools:create rss-tools --skill --command
+  Plugin scaffolded at rss-tools/: skill + command stubs, plugin.json, README.md
+
+$ /plugin-creation-tools:add-component command publish
+  commands/publish.md created from the command template
+
+$ /plugin-creation-tools:validate rss-tools --strict
+  ## Plugin Validation: rss-tools v0.1.0
+  ### Errors (must fix)
+  - S04 skills/rss-tools/SKILL.md: description has no trigger phrase ("Use when…")
+  ### Result: FAIL
+```
+
+The scaffold does not make the skill description correct for you: it left a placeholder, and `validate` caught it before this went anywhere near a marketplace. Fix the description, re-run `validate`, and the gate is what tells you it is actually fixable, not just "looks done."
+
+## When to reach for it
+
+- **Starting a new plugin or a new component on an existing one.** `create` and `add-component` scaffold skills, commands, agents, hooks, MCP servers, and themes from templates that track the current plugin spec, so you are not reconstructing frontmatter schemas from memory.
+- **Before you open a PR or publish to a marketplace.** `validate` is the gate: structure, frontmatter, dependency graph, hook events, and a deterministic containment scan for leaked home paths and secrets. Read the output as an audit, not a lecture, it tells you what is wrong and, for a tagged subset of rules, can fix it for you with `--fix`.
+- **When a task in `ai-dev-assistant` touches plugin files.** That framework's review method pulls this plugin in automatically for skill, command, agent, and hook structure, so plugin work runs the same Research → Architecture → Implementation → Review lifecycle as any other code.
+
+It is not needed for a one-off prompt you are not going to distribute. It earns its keep the moment a component is going in front of someone else, or you want the confidence that a structural mistake will not ship quietly.
 
 ## Installation
 
@@ -14,61 +40,23 @@ The plugin contains one large skill (`plugin-creation`) that progressively discl
 /plugin install plugin-creation-tools@camoa-skills
 ```
 
-## Usage
-
-```bash
-/plugin-creation-tools:create my-tools --skill --agent
-/plugin-creation-tools:add-component command deploy
-/plugin-creation-tools:validate ./my-tools --strict
-```
-
-## Components
+## What's inside
 
 | Component | Name | Purpose |
 |-----------|------|---------|
-| Skill | `plugin-creation` | Progressive-disclosure authoring guide. Auto-triggered when creating skills, commands, agents, hooks, MCP servers, themes, or plugin manifests. |
-| Command | `/plugin-creation-tools:create` | Scaffold a new plugin (selects components interactively). |
-| Command | `/plugin-creation-tools:add-component` | Add a skill / command / agent / hook / MCP / **theme** to an existing plugin. |
-| Command | `/plugin-creation-tools:validate` | Validate plugin structure, frontmatter, dependency graph, hook events (30), `experimental.themes` / `experimental.monitors` manifest migration, `mcp_tool` server references, themes, `userConfig` schema, cross-marketplace allowlists, the skill model-pin footgun, kebab-vs-camel `disallowed-tools` (with `--fix`), deterministic component counts, and a deterministic pre-publish containment scan (absolute home paths, secrets/tokens, personal emails — via the `scripts/containment-scan.sh` kernel). |
-| Agent | `plugin-structure-auditor` | Deep structural audit (Architecture / Cross-Component Consistency / Performance) — areas the validator does not cover. Read-only. |
-| Agent | `skill-quality-reviewer` | Review skill description quality, SKILL.md structure, progressive-disclosure patterns, regression flags (stripped imperatives, dropped `` !`command` `` injections). Read-only. |
+| Skill | `plugin-creation` | Progressive-disclosure authoring guide, auto-triggered when creating skills, commands, agents, hooks, MCP servers, themes, or plugin manifests. |
+| Command | `/plugin-creation-tools:create` | Scaffold a new plugin with the components you choose. |
+| Command | `/plugin-creation-tools:add-component` | Add a skill, command, agent, hook, MCP server, or theme to an existing plugin. |
+| Command | `/plugin-creation-tools:validate` | Structure, frontmatter, dependency-graph, hook-event, and manifest validation, plus a deterministic pre-publish containment scan. Supports `--fix`, `--dry-run`, `--strict`. |
+| Agent | `plugin-structure-auditor` | Read-only deep structural audit: architecture balance, cross-component consistency, performance footguns. |
+| Agent | `skill-quality-reviewer` | Read-only review of skill description quality, SKILL.md structure, and progressive-disclosure patterns. |
 
-## What's covered
-
-The bundled references map to every section of the upstream Claude Code docs that affects plugin authoring (snapshot at commit `c142d14`):
-
-- **Hooks** — all 30 events (including `Setup` for `--init-only` / `--init -p` / `--maintenance -p` one-time preparation, `MessageDisplay` for reformatting/redacting assistant text on screen, and `WorktreeCreate` / `WorktreeRemove` for replacing default git worktree behavior with custom VCS logic) with payloads, decision controls, and matcher behavior; five handler types (`command` / `http` / `mcp_tool` / `prompt` / `agent`); **exec form vs shell form** with the `args` field (preferred whenever a path placeholder appears); the `if` pre-spawn filter; the `effort.level` adaptive-effort input + `$CLAUDE_EFFORT` env var; `updatedToolOutput` (supersedes MCP-only `updatedMCPToolOutput`); **JSON output return fields** (`systemMessage`, `terminalSequence`, `additionalContext`, 10,000-character output cap, no controlling terminal as of v2.1.139); **parallel-then-merge execution** with `deny > defer > ask > allow` PreToolUse precedence; cross-platform polyglot wrapper; permission-mode-per-hook table.
-- **Skills** — frontmatter schema (incl. kebab `disallowed-tools` and the `model:` inline-override-no-isolation semantics), voice and structure, progressive disclosure, dynamic context injection (`` !`command` ``), preload caveats, char/line caps, the sub-1M model-pin footgun (use a Task-dispatched agent or `inherit` instead).
-- **Agents** — frontmatter, model selection, tool restrictions, scoped hooks/MCP, agent teams, forked subagents (experimental), `--agent` main-session behavior.
-- **Configuration** — `plugin.json` (themes, `userConfig` with `type`/`title`, dependencies with semver ranges, `${user_config.KEY}` substitution); `marketplace.json` (sources, `allowCrossMarketplaceDependenciesOn`, `claude plugin tag`); `settings.json` (hierarchy, `prUrlTemplate`, `enabledPlugins`); permission modes; plugin themes.
-- **Agent SDK** — overview, migration from the old Claude Code SDK, custom tools, subagents, permissions, structured outputs, tool search, observability, agent loop.
-- **Distribution** — packaging, marketplace strategies, semantic versioning, REVIEW.md v2, Routines-based auto-validate.
-
-## Workflow
-
-1. Run `/plugin-creation-tools:create` to scaffold a new plugin, or invoke the `plugin-creation` skill on an existing one.
-2. Add components with `/plugin-creation-tools:add-component <type> <name>`.
-3. Run `/plugin-creation-tools:validate` before opening a PR — it catches schema, frontmatter, dependency, and hook-event issues.
-4. For structural review (architecture balance, naming consistency, performance footguns), invoke the `plugin-structure-auditor` agent.
-5. For skill description quality, invoke the `skill-quality-reviewer` agent.
-
-## Distribution housekeeping
-
-- After significant uninstalls, run `claude plugin prune --dry-run` to see auto-installed dependencies no other plugin needs; `claude plugin uninstall <name> --prune` does it in one step.
-- `claude --plugin-url <zip-url>` loads a packaged plugin for the current session only — handy for previewing a pre-release without writing to `~/.claude/plugins`.
-- Users who want to mute a single skill from a *non-plugin* source can use the `skillOverrides` setting (four states: `on` / `name-only` / `user-invocable-only` / `off`); for plugin-shipped skills, the right escape hatch is `/plugin disable`. Surface this distinction in your own plugin README so users know which lever to pull.
-
-## Quality gates this plugin enforces on itself
-
-- `/plugin-creation-tools:validate` is run on every PR.
-- `skill-quality-reviewer` and `plugin-structure-auditor` are run before any version bump.
-- Skill descriptions preserve `PROACTIVELY` / `MUST` / `NEVER` imperatives and `` !`command` `` dynamic-context injections across revisions.
-- Hook event count and handler-type count are kept in sync between `SKILL.md`, `commands/validate.md`, and the references.
+The bundled references cover every component type against the upstream Claude Code plugin docs, hooks (all 30 events, five handler types), skills, agents, configuration (`plugin.json`, `marketplace.json`, `settings.json`, themes), the Agent SDK, and distribution. The full breakdown, prerequisites, and a checklist for knowing it worked are in [docs/usage.md](docs/usage.md).
 
 ## Compatibility
 
-Targets Claude Code as of release **2.1.154** (2026-05-29 doc snapshot). Most content is forward-compatible; new features in later releases are added in subsequent minor versions.
+Targets Claude Code as of release **2.1.154** (2026-05-29 doc snapshot). Most content is forward-compatible; new features in later releases are added in subsequent minor versions. See [CHANGELOG.md](CHANGELOG.md) for the doc-snapshot commit and Claude Code release range each version covers.
 
-## Changelog
+## License
 
-See [`CHANGELOG.md`](CHANGELOG.md) — every release notes the upstream doc-snapshot commit it covers and the Claude Code release range, plus explicit deferral notes for any upstream deltas intentionally left out of scope.
+MIT

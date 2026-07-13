@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-07-13
+
+### Changed
+
+- Rewrote README as problem-first with a runnable worked example and added docs/usage.md (What it does / When to reach for it / Prerequisites / It's working if / Where it fits). Marketplace positioning-and-usage-docs pass.
+
 ## [0.4.0] - 2026-06-16
 
 Structural fixes at the `review` → `submit` boundary. No gate logic, drupalci-parity,

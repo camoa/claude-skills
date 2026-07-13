@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.20.0] - 2026-07-07
 
+### Changed — docs
+- Rewrote README problem-first with a worked example and added docs/usage.md; added root PHILOSOPHY.md reference. Positioning pass.
+
 ### Added — `/which` intent-based command router (M4)
 
 - `commands/which.md` — a new static router that answers "which command fits this SITUATION or

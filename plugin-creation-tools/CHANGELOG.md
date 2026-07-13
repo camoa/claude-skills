@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.11.0] - 2026-07-07
 
+### Changed — docs
+- Rewrote README problem-first with a worked example and added docs/usage.md. Positioning pass.
+
 ### Added — authoring doctrine
 - **Predictability as a skill's purpose.** `core-philosophy.md` opens with a new "Why Skills Exist: Predictability" section framing the same-process-every-run goal that progressive disclosure, degrees of freedom, and leading words all serve.
 - **Leading words.** New `core-philosophy.md` § Leading Words — compress a recurring behavioral pattern into one evocative, already-pretrained token (*tight* loop, *seam*, *deep module*) and reuse it as that token instead of re-explaining the pattern every time it recurs.

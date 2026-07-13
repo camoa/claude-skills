@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "drupal-htmx",
   "description": "HTMX development guidance and AJAX-to-HTMX migration tools for Drupal 11.3+. Includes analyzers, pattern recommendations, and validation.",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "author": {
     "name": "camoa"
   },
