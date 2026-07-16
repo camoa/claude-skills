@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.21.0] - 2026-07-13
+
+### Added
+- **New-task scope-contract requirement** (alignment_required_adaptive_elicitation). For a NEW task, the scope contract (`alignment.md`) is now a required artifact before `/research`, authored via draft-and-confirm (a single confirm when the goal is already clear) or the interview / `--grill` when it is not. The requirement is the artifact, not a heavy interview: the elicitation intensity stays soft and is the user's choice. Enforced at `/next` (brand-new-task routing) and `/research` (new step 2a gate); `/scope` itself still never blocks. EXISTING/legacy tasks are unchanged and NOT gated (no migration). Guarded by `tests/scope-required-new-task-spec.sh`.
+- `tests/critique-refs-resolve-spec.sh` (fix_dangling_critique_refs): guards that every `references/*.md` path cited in `work-order-critique/SKILL.md` resolves on disk.
+
+## [5.20.1] - 2026-07-13
+
+### Changed — docs
+- Honesty and safety doc fixes (docs_honesty_and_safety). PHILOSOPHY.md and README now state plainly that a green gate proves the disciplined steps ran (tests exist and pass, standards checked), NOT that the tests are sufficient or the software correct; the evals / test-sufficiency gap is unsolved industry-wide and the framework does not claim to close it. Added a "Running safely" note: the framework runs real shell commands with filesystem and network access and does not sandbox itself, so run it in a dev container or Claude Code's sandbox for anything beyond a trusted local project. Points at existing solutions, no new tooling.
+
 ## [5.20.0] - 2026-07-07
 
 ### Changed — docs

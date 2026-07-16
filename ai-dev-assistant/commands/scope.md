@@ -1,5 +1,5 @@
 ---
-description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. Soft-nudge posture: never blocks the task lifecycle. Introduced v3.12.0."
+description: "Author or retrofit a task's scope contract (alignment.md) through a structured 4-field conversation — Goal / Expected result / Success criteria / Non-goals. Runs before /research for new tasks, or on-demand for retrofitting existing tasks. For a NEW task the contract (the artifact) is required; the elicitation intensity stays soft (draft-and-confirm when the goal is clear, interview or --grill otherwise). Retrofitting an EXISTING task is a soft nudge that never blocks. Introduced v3.12.0; new-task artifact requirement v5.21.0."
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill, Task
 argument-hint: <task-name> [--phase 1|2|3] [--grill]
 ---
@@ -287,7 +287,7 @@ Optionally add one line (never auto-runs `/goal`): `"You can later drive impleme
 ## Do NOT
 
 - Do not auto-generate any of the 4 fields. Claude MAY propose a draft, but user's reply is the final text.
-- Do not block the task lifecycle. If the user says no, proceed without writing.
+- Do not block the task lifecycle from inside `/scope`: this command authors the contract, it never gates a phase itself. For a RETROFIT of an existing task, if the user says no, proceed without writing. (For a NEW task the contract is required before `/research`, but that requirement is enforced by `/next` and `/research` step 2a, not by `/scope`; the elicitation here stays soft, and draft-and-confirm satisfies it in a single confirm.)
 - Do not write partial sections. A section is either fully written (all 4 fields present, even if empty) or not written at all — the reader's `empty_field` warning is for humans who chose to leave a field blank, not for interrupted writes.
 - Do not merge multiple phase sections in one invocation. `--phase` takes a single value.
 - Do not let `--grill` block the task lifecycle. It intensifies the interview, never the gate — `[c]ancel` still exits cleanly at any point, and `/scope --grill` still never blocks `/research` or the task.
