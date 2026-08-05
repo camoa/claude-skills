@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.5] - 2026-08-05
+
+### Fixed
+
+- **Security and SOLID gates aborted mid-scan on clean projects.** Under `set -e`,
+  `((VAR += X))` returns exit status 1 whenever the expression evaluates to 0, and
+  `((VAR++))` does so on the very first increment because post-increment returns the
+  old value. 63 such sites across `drupal/security-check.sh`, `drupal/solid-check.sh`,
+  `nextjs/security-check.sh`, `nextjs/solid-check.sh` and `core/full-audit.sh` ended
+  the script early. In the Drupal security gate the first site sits in the
+  composer-audit layer, so a project with no high-severity advisories, the healthy
+  case, silently skipped layers 3-10: phpcs security, psalm taint, the custom Drupal
+  patterns, semgrep, trivy and gitleaks. All converted to `VAR=$((VAR + X))`, the form
+  the `--changed` path already used.
+- **A failing security audit was recorded as a warning.** `core/full-audit.sh` read
+  `security-check.sh`'s exit code with the 0/1/2 convention the other gates use, but
+  that script exits 0 for pass *and* warning and 1 for fail, so a failure was mapped to
+  `warning` and a warning to `pass`. It now takes the verdict from
+  `summary.overall_status` in the report the gate writes, falling back to the exit code
+  only when no report exists.
+- **Custom Drupal pattern findings were not locatable, and their counts disagreed with
+  the issues they emitted.** Each of the three patterns incremented its severity counter
+  by the grep line count while appending exactly one issue object carrying
+  `file: "Multiple files"` and `line: 0`, so `summary.by_severity` and `issues[]` could
+  not be reconciled. A shared `pattern_issues` helper now emits one issue per hit with
+  the real file and line, and callers derive the count from that array's length. Fixed
+  in both the standard path and the `--changed` path, which carried the same defect.
+- **`db_query` pattern matched the safe placeholder form.** `db_query.*$` matched any
+  line containing a `$` anywhere, including
+  `db_query('... :id', [':id' => $id])`, so a handful of correct calls alone crossed the
+  `>3 high` fail threshold. Tightened to match interpolation inside a double-quoted
+  first argument or concatenation onto it, and verified against a fixture that a comma
+  inside the query string does not defeat the match.
+- **Single changed file produced a line number where a filename belonged.** `grep -n`
+  omits the filename when given exactly one file, so a one-file diff parsed the line
+  number as the path. All pattern greps now pass `-H`.
+
+### Added
+
+- `scripts/tests/security-counting-spec.sh` — 11 hermetic assertions pinning the above:
+  no hazardous arithmetic remains in any gate script, the abort it guards against is
+  real, `pattern_issues` emits reconciling counts and locatable findings, and the
+  tightened `db_query` pattern excludes the safe form. No DDEV, no network, no PHP.
+
 ## [3.9.4] - 2026-07-13
 
 ### Changed — docs

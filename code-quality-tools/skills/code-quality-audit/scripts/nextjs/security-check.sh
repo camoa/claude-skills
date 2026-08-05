@@ -72,10 +72,10 @@ if [ -f "$NPM_AUDIT_JSON" ] && [ -s "$NPM_AUDIT_JSON" ]; then
         NPM_MEDIUM=$(echo "$NPM_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
         NPM_LOW=$(echo "$NPM_VIOLATIONS" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
 
-        ((CRITICAL_COUNT += NPM_CRITICAL))
-        ((HIGH_COUNT += NPM_HIGH))
-        ((MEDIUM_COUNT += NPM_MEDIUM))
-        ((LOW_COUNT += NPM_LOW))
+        CRITICAL_COUNT=$((CRITICAL_COUNT + NPM_CRITICAL))
+        HIGH_COUNT=$((HIGH_COUNT + NPM_HIGH))
+        MEDIUM_COUNT=$((MEDIUM_COUNT + NPM_MEDIUM))
+        LOW_COUNT=$((LOW_COUNT + NPM_LOW))
     else
         echo -e "  ${GREEN}No package vulnerabilities${NC}"
     fi
@@ -118,8 +118,8 @@ if npm list eslint-plugin-security &> /dev/null; then
             ESLINT_HIGH=$(echo "$ESLINT_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
             ESLINT_MEDIUM=$(echo "$ESLINT_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
 
-            ((HIGH_COUNT += ESLINT_HIGH))
-            ((MEDIUM_COUNT += ESLINT_MEDIUM))
+            HIGH_COUNT=$((HIGH_COUNT + ESLINT_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + ESLINT_MEDIUM))
         else
             echo -e "  ${GREEN}No ESLint security issues${NC}"
         fi
@@ -164,9 +164,9 @@ if command -v semgrep &> /dev/null; then
             SEMGREP_MEDIUM=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
             SEMGREP_LOW=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
 
-            ((HIGH_COUNT += SEMGREP_HIGH))
-            ((MEDIUM_COUNT += SEMGREP_MEDIUM))
-            ((LOW_COUNT += SEMGREP_LOW))
+            HIGH_COUNT=$((HIGH_COUNT + SEMGREP_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + SEMGREP_MEDIUM))
+            LOW_COUNT=$((LOW_COUNT + SEMGREP_LOW))
         else
             echo -e "  ${GREEN}No Semgrep issues${NC}"
         fi
@@ -225,10 +225,10 @@ if command -v trivy &> /dev/null; then
             TRIVY_MEDIUM=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
             TRIVY_LOW=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
 
-            ((CRITICAL_COUNT += TRIVY_CRITICAL))
-            ((HIGH_COUNT += TRIVY_HIGH))
-            ((MEDIUM_COUNT += TRIVY_MEDIUM))
-            ((LOW_COUNT += TRIVY_LOW))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + TRIVY_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + TRIVY_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + TRIVY_MEDIUM))
+            LOW_COUNT=$((LOW_COUNT + TRIVY_LOW))
         else
             echo -e "  ${GREEN}No Trivy issues${NC}"
         fi
@@ -268,7 +268,7 @@ if command -v gitleaks &> /dev/null; then
                 remediation: "Remove secret from code, rotate credentials, and use secret management"
             }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
 
-            ((CRITICAL_COUNT += SECRET_COUNT))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
         else
             echo -e "  ${GREEN}No secrets detected${NC}"
         fi
@@ -290,7 +290,7 @@ if [ -d "$SRC_PATH" ]; then
     if [ -n "$DANGEROUS_HTML" ]; then
         echo -e "  ${YELLOW}Found dangerouslySetInnerHTML usage${NC}"
         CUSTOM_COUNT=$(echo "$DANGEROUS_HTML" | wc -l)
-        ((MEDIUM_COUNT += CUSTOM_COUNT))
+        MEDIUM_COUNT=$((MEDIUM_COUNT + CUSTOM_COUNT))
     fi
 
     # Check for eval() usage
@@ -298,7 +298,7 @@ if [ -d "$SRC_PATH" ]; then
     if [ -n "$EVAL_USAGE" ]; then
         echo -e "  ${YELLOW}Found eval() usage${NC}"
         EVAL_COUNT=$(echo "$EVAL_USAGE" | wc -l)
-        ((HIGH_COUNT += EVAL_COUNT))
+        HIGH_COUNT=$((HIGH_COUNT + EVAL_COUNT))
     fi
 
     # Check for window.location href XSS
@@ -306,7 +306,7 @@ if [ -d "$SRC_PATH" ]; then
     if [ -n "$HREF_XSS" ]; then
         echo -e "  ${YELLOW}Found window.location.href assignments (potential XSS)${NC}"
         HREF_COUNT=$(echo "$HREF_XSS" | wc -l)
-        ((MEDIUM_COUNT += HREF_COUNT))
+        MEDIUM_COUNT=$((MEDIUM_COUNT + HREF_COUNT))
     fi
 
     if [ -z "$DANGEROUS_HTML" ] && [ -z "$EVAL_USAGE" ] && [ -z "$HREF_XSS" ]; then
@@ -343,7 +343,7 @@ if npx socket-npm --version &> /dev/null 2>&1; then
             owasp: "A08:2021",
             remediation: "Review Socket CLI output: npx socket-npm audit"
         }]')
-        ((MEDIUM_COUNT += 1))
+        MEDIUM_COUNT=$((MEDIUM_COUNT + 1))
     else
         echo -e "  ${GREEN}No supply chain issues detected${NC}"
     fi
@@ -362,7 +362,7 @@ else
         remediation: "Run: npm install -D @socketsecurity/cli"
     }]')
 
-    ((LOW_COUNT += 1))
+    LOW_COUNT=$((LOW_COUNT + 1))
 fi
 
 # =====================

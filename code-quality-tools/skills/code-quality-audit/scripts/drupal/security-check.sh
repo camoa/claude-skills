@@ -24,6 +24,32 @@ to_json_array() {
     fi
 }
 
+# Turn `grep -Hn` output into one issue object per hit, carrying the real file and
+# line. Callers derive their severity count from the length of this array so the
+# counters and issues[] cannot disagree.
+# Usage: pattern_issues "<grep output>" <category> <severity> <message> <owasp> <remediation>
+pattern_issues() {
+    printf '%s\n' "$1" | jq -R -s \
+        --arg category "$2" \
+        --arg severity "$3" \
+        --arg message "$4" \
+        --arg owasp "$5" \
+        --arg remediation "$6" '
+        split("\n")
+        | map(select(length > 0))
+        | map(select(test("^[^:]+:[0-9]+:")))
+        | map(capture("^(?<file>[^:]+):(?<line>[0-9]+):"))
+        | map({
+            category: $category,
+            severity: $severity,
+            file: .file,
+            line: (.line | tonumber),
+            message: $message,
+            owasp: $owasp,
+            remediation: $remediation
+          })' 2>/dev/null || echo "[]"
+}
+
 echo "=== Security Audit (OWASP + Drupal) ==="
 echo ""
 
@@ -255,55 +281,50 @@ if [ -n "$CHANGED_FILE" ]; then
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
         # grep-based pattern scan is always available — a real check that runs.
         RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
-        # Unsafe db_query usage
-        DB_QUERY_UNSAFE=$(grep -n "db_query.*\$" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        # -H is required: with a single changed file, grep -n omits the filename and
+        # the parsed "file" would be the line number.
+        DB_QUERY_UNSAFE=$(grep -EHn 'db_query([^"]*"[^"]*\$|.*\.[[:space:]]*\$)' "${RELEVANT_FILES[@]}" 2>/dev/null || true)
         if [ -n "$DB_QUERY_UNSAFE" ]; then
-            DB_COUNT=$(echo "$DB_QUERY_UNSAFE" | wc -l)
-            echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
-            HIGH_COUNT=$((HIGH_COUNT + DB_COUNT))
-            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-                category: "SQL Injection Risk",
-                severity: "high",
-                file: "Multiple files (changed set)",
-                line: 0,
-                message: "Potentially unsafe db_query() with variable concatenation",
-                owasp: "A03:2021",
-                remediation: "Use placeholders or query builder"
-            }]')
+            DB_ISSUES=$(pattern_issues "$DB_QUERY_UNSAFE" \
+                "SQL Injection Risk" "high" \
+                "Potentially unsafe db_query() with variable concatenation" \
+                "A03:2021" "Use placeholders or query builder")
+            DB_COUNT=$(echo "$DB_ISSUES" | jq 'length')
+            if [ "$DB_COUNT" -gt 0 ]; then
+                echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
+                HIGH_COUNT=$((HIGH_COUNT + DB_COUNT))
+                CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$DB_ISSUES" '. + $add')
+            fi
         fi
 
-        # Twig |raw filter
-        RAW_FILTER=$(grep -n "|raw" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        # Twig |raw filter. Basic regex on purpose: under -E the '|' would be alternation.
+        RAW_FILTER=$(grep -Hn "|raw" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
         if [ -n "$RAW_FILTER" ]; then
-            RAW_COUNT=$(echo "$RAW_FILTER" | wc -l)
-            echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter${NC}"
-            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
-            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-                category: "XSS Risk",
-                severity: "medium",
-                file: "Changed files",
-                line: 0,
-                message: "Use of |raw filter may expose XSS vulnerabilities",
-                owasp: "A03:2021",
-                remediation: "Remove |raw or ensure input is sanitized"
-            }]')
+            RAW_ISSUES=$(pattern_issues "$RAW_FILTER" \
+                "XSS Risk" "medium" \
+                "Use of |raw filter may expose XSS vulnerabilities" \
+                "A03:2021" "Remove |raw or ensure input is sanitized")
+            RAW_COUNT=$(echo "$RAW_ISSUES" | jq 'length')
+            if [ "$RAW_COUNT" -gt 0 ]; then
+                echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter${NC}"
+                MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
+                CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$RAW_ISSUES" '. + $add')
+            fi
         fi
 
         # unserialize() on user input
-        UNSERIALIZE=$(grep -n "unserialize.*\$_" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
+        UNSERIALIZE=$(grep -Hn "unserialize.*\$_" "${RELEVANT_FILES[@]}" 2>/dev/null || true)
         if [ -n "$UNSERIALIZE" ]; then
-            UNSER_COUNT=$(echo "$UNSERIALIZE" | wc -l)
-            echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
-            HIGH_COUNT=$((HIGH_COUNT + UNSER_COUNT))
-            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-                category: "Insecure Deserialization",
-                severity: "high",
-                file: "Changed files",
-                line: 0,
-                message: "unserialize() on user input can lead to RCE",
-                owasp: "A08:2021",
-                remediation: "Use JSON or validate serialized data"
-            }]')
+            UNSER_ISSUES=$(pattern_issues "$UNSERIALIZE" \
+                "Insecure Deserialization" "high" \
+                "unserialize() on user input can lead to RCE" \
+                "A08:2021" "Use JSON or validate serialized data")
+            UNSER_COUNT=$(echo "$UNSER_ISSUES" | jq 'length')
+            if [ "$UNSER_COUNT" -gt 0 ]; then
+                echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
+                HIGH_COUNT=$((HIGH_COUNT + UNSER_COUNT))
+                CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$UNSER_ISSUES" '. + $add')
+            fi
         fi
 
         if [ "$CUSTOM_ISSUES" = "[]" ]; then
@@ -493,7 +514,7 @@ if [ -f "$DRUSH_SECURITY_JSON" ] && [ -s "$DRUSH_SECURITY_JSON" ]; then
             remediation: "Update to recommended version: \(.recommended)"
         }]' "$DRUSH_SECURITY_JSON" 2>/dev/null || echo "[]")
 
-        ((CRITICAL_COUNT += ADVISORY_COUNT))
+        CRITICAL_COUNT=$((CRITICAL_COUNT + ADVISORY_COUNT))
     else
         echo -e "  ${GREEN}No security advisories${NC}"
         DRUSH_VIOLATIONS="[]"
@@ -533,8 +554,8 @@ if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s "$COMPOSER_AUDIT_JSON" ]; then
         # Count by severity
         HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
         MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-        ((HIGH_COUNT += HIGH_VULNS))
-        ((MEDIUM_COUNT += MED_VULNS))
+        HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
+        MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
     else
         echo -e "  ${GREEN}No package vulnerabilities${NC}"
         COMPOSER_VIOLATIONS="[]"
@@ -577,8 +598,8 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
 
             PHPCS_HIGH=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
             PHPCS_MED=$(echo "$PHPCS_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-            ((HIGH_COUNT += PHPCS_HIGH))
-            ((MEDIUM_COUNT += PHPCS_MED))
+            HIGH_COUNT=$((HIGH_COUNT + PHPCS_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + PHPCS_MED))
         else
             echo -e "  ${GREEN}No PHPCS security issues${NC}"
         fi
@@ -650,9 +671,9 @@ EOF
             PSALM_HIGH=$(echo "$PSALM_ISSUES" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
             PSALM_MED=$(echo "$PSALM_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
             PSALM_LOW=$(echo "$PSALM_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
-            ((HIGH_COUNT += PSALM_HIGH))
-            ((MEDIUM_COUNT += PSALM_MED))
-            ((LOW_COUNT += PSALM_LOW))
+            HIGH_COUNT=$((HIGH_COUNT + PSALM_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + PSALM_MED))
+            LOW_COUNT=$((LOW_COUNT + PSALM_LOW))
         else
             echo -e "  ${GREEN}No taint analysis issues${NC}"
         fi
@@ -675,59 +696,51 @@ CUSTOM_ISSUES="[]"
 
 # SQL Injection patterns
 if [ -d "${DRUPAL_MODULES_PATH}" ]; then
-    # Unsafe db_query usage
-    DB_QUERY_UNSAFE=$(grep -rn "db_query.*\$" "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" --include="*.inc" 2>/dev/null || true)
+    # Unsafe db_query usage. The pattern matches interpolation inside a double-quoted
+    # first argument, or concatenation onto it, so the safe placeholder-array form
+    # (db_query('... :id', [':id' => $id])) no longer counts as a finding.
+    DB_QUERY_UNSAFE=$(grep -rEHn 'db_query([^"]*"[^"]*\$|.*\.[[:space:]]*\$)' "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" --include="*.inc" 2>/dev/null || true)
     if [ -n "$DB_QUERY_UNSAFE" ]; then
-        DB_COUNT=$(echo "$DB_QUERY_UNSAFE" | wc -l)
-        echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
-        ((HIGH_COUNT += DB_COUNT))
-
-        # Add to issues (simplified)
-        CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-            category: "SQL Injection Risk",
-            severity: "high",
-            file: "Multiple files",
-            line: 0,
-            message: "Potentially unsafe db_query() with variable concatenation",
-            owasp: "A03:2021",
-            remediation: "Use placeholders or query builder"
-        }]')
+        DB_ISSUES=$(pattern_issues "$DB_QUERY_UNSAFE" \
+            "SQL Injection Risk" "high" \
+            "Potentially unsafe db_query() with variable concatenation" \
+            "A03:2021" "Use placeholders or query builder")
+        DB_COUNT=$(echo "$DB_ISSUES" | jq 'length')
+        if [ "$DB_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${DB_COUNT} potentially unsafe db_query() calls${NC}"
+            HIGH_COUNT=$((HIGH_COUNT + DB_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$DB_ISSUES" '. + $add')
+        fi
     fi
 
-    # Twig |raw filter
-    RAW_FILTER=$(grep -rn "|raw" "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" --include="*.twig" 2>/dev/null || true)
+    # Twig |raw filter. Kept as a basic-regex grep: under -E the '|' would be alternation.
+    RAW_FILTER=$(grep -rHn "|raw" "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" --include="*.twig" 2>/dev/null || true)
     if [ -n "$RAW_FILTER" ]; then
-        RAW_COUNT=$(echo "$RAW_FILTER" | wc -l)
-        echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter in Twig${NC}"
-        ((MEDIUM_COUNT += RAW_COUNT))
-
-        CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-            category: "XSS Risk",
-            severity: "medium",
-            file: "Twig templates",
-            line: 0,
-            message: "Use of |raw filter may expose XSS vulnerabilities",
-            owasp: "A03:2021",
-            remediation: "Remove |raw or ensure input is sanitized"
-        }]')
+        RAW_ISSUES=$(pattern_issues "$RAW_FILTER" \
+            "XSS Risk" "medium" \
+            "Use of |raw filter may expose XSS vulnerabilities" \
+            "A03:2021" "Remove |raw or ensure input is sanitized")
+        RAW_COUNT=$(echo "$RAW_ISSUES" | jq 'length')
+        if [ "$RAW_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter in Twig${NC}"
+            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$RAW_ISSUES" '. + $add')
+        fi
     fi
 
     # unserialize() on user input
-    UNSERIALIZE=$(grep -rn "unserialize.*\$_" "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" 2>/dev/null || true)
+    UNSERIALIZE=$(grep -rHn "unserialize.*\$_" "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" 2>/dev/null || true)
     if [ -n "$UNSERIALIZE" ]; then
-        UNSER_COUNT=$(echo "$UNSERIALIZE" | wc -l)
-        echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
-        ((HIGH_COUNT += UNSER_COUNT))
-
-        CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq '. + [{
-            category: "Insecure Deserialization",
-            severity: "high",
-            file: "Multiple files",
-            line: 0,
-            message: "unserialize() on user input can lead to RCE",
-            owasp: "A08:2021",
-            remediation: "Use JSON or validate serialized data"
-        }]')
+        UNSER_ISSUES=$(pattern_issues "$UNSERIALIZE" \
+            "Insecure Deserialization" "high" \
+            "unserialize() on user input can lead to RCE" \
+            "A08:2021" "Use JSON or validate serialized data")
+        UNSER_COUNT=$(echo "$UNSER_ISSUES" | jq 'length')
+        if [ "$UNSER_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${UNSER_COUNT} potentially unsafe unserialize() calls${NC}"
+            HIGH_COUNT=$((HIGH_COUNT + UNSER_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$UNSER_ISSUES" '. + $add')
+        fi
     fi
 fi
 
@@ -763,7 +776,7 @@ if ddev drush pm:list --filter=security_review --format=json 2>/dev/null | jq -e
                 remediation: "Check Drupal security review report"
             }]' "$SECREVIEW_JSON" 2>/dev/null || echo "[]")
 
-            ((MEDIUM_COUNT += FAILED_CHECKS))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + FAILED_CHECKS))
         else
             echo -e "  ${GREEN}All security review checks passed${NC}"
             SECREVIEW_ISSUES="[]"
@@ -819,9 +832,9 @@ if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; 
             SEMGREP_MEDIUM=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
             SEMGREP_LOW=$(echo "$SEMGREP_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
 
-            ((HIGH_COUNT += SEMGREP_HIGH))
-            ((MEDIUM_COUNT += SEMGREP_MEDIUM))
-            ((LOW_COUNT += SEMGREP_LOW))
+            HIGH_COUNT=$((HIGH_COUNT + SEMGREP_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + SEMGREP_MEDIUM))
+            LOW_COUNT=$((LOW_COUNT + SEMGREP_LOW))
         else
             echo -e "  ${GREEN}No Semgrep issues${NC}"
         fi
@@ -881,10 +894,10 @@ if command -v trivy &> /dev/null; then
             TRIVY_MEDIUM=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
             TRIVY_LOW=$(echo "$TRIVY_ISSUES" | jq '[.[] | select(.severity == "low")] | length' 2>/dev/null || echo "0")
 
-            ((CRITICAL_COUNT += TRIVY_CRITICAL))
-            ((HIGH_COUNT += TRIVY_HIGH))
-            ((MEDIUM_COUNT += TRIVY_MEDIUM))
-            ((LOW_COUNT += TRIVY_LOW))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + TRIVY_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + TRIVY_HIGH))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + TRIVY_MEDIUM))
+            LOW_COUNT=$((LOW_COUNT + TRIVY_LOW))
         else
             echo -e "  ${GREEN}No Trivy issues${NC}"
         fi
@@ -925,7 +938,7 @@ if command -v gitleaks &> /dev/null; then
                 remediation: "Remove secret from code, rotate credentials, and use secret management"
             }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
 
-            ((CRITICAL_COUNT += SECRET_COUNT))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
         else
             echo -e "  ${GREEN}No secrets detected${NC}"
         fi
@@ -961,7 +974,7 @@ else
         remediation: "Run: ddev composer require --dev roave/security-advisories:dev-master"
     }]')
 
-    ((LOW_COUNT += 1))
+    LOW_COUNT=$((LOW_COUNT + 1))
 fi
 
 # =====================
