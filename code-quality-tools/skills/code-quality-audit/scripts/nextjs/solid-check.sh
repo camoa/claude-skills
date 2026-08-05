@@ -92,7 +92,7 @@ if npx madge --version &> /dev/null 2>&1; then
             echo ""
             # Show first 3 chains
             jq -r '.[0:3][] | "  Chain: " + (. | join(" -> "))' "${CIRCULAR_REPORT}" 2>/dev/null || true
-            ((CRITICAL_COUNT += CIRCULAR_DEPS))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + CIRCULAR_DEPS))
         else
             echo -e "${GREEN}[PASS]${NC} No circular dependencies found"
         fi
@@ -135,7 +135,7 @@ if npx eslint --version &> /dev/null 2>&1; then
             echo ""
             # Show first 5 violations
             jq -r '[.[].messages[] | select(.ruleId == "complexity" or .ruleId == "max-lines-per-function")][0:5] | .[] | "  \(.ruleId) in \(.message)"' "${COMPLEXITY_REPORT}" 2>/dev/null || true
-            ((WARNING_COUNT += COMPLEXITY_VIOLATIONS))
+            WARNING_COUNT=$((WARNING_COUNT + COMPLEXITY_VIOLATIONS))
         else
             echo -e "${GREEN}[PASS]${NC} Complexity within limits"
         fi
@@ -170,7 +170,7 @@ while IFS= read -r -d '' file; do
             echo "," >> "${LARGE_FILES_REPORT}"
         fi
         echo "  {\"file\": \"${file}\", \"lines\": ${lines}, \"max\": ${MAX_FILE_LINES}}" >> "${LARGE_FILES_REPORT}"
-        ((LARGE_FILES++))
+        LARGE_FILES=$((LARGE_FILES + 1))
     fi
 done < <(find "${SOURCE_DIR}" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) ! -path "*/node_modules/*" ! -path "*/.next/*" ! -name "*.test.*" ! -name "*.spec.*" -print0 2>/dev/null)
 
@@ -184,7 +184,7 @@ if [ "$LARGE_FILES" -gt 0 ]; then
     echo "  - Consider splitting into smaller, focused modules"
     echo ""
     jq -r '.[] | "  \(.file): \(.lines) lines"' "${LARGE_FILES_REPORT}" 2>/dev/null | head -5
-    ((WARNING_COUNT += LARGE_FILES))
+    WARNING_COUNT=$((WARNING_COUNT + LARGE_FILES))
 else
     echo -e "${GREEN}[PASS]${NC} All files within size limits"
 fi
@@ -219,16 +219,16 @@ EOF
         echo "  Strict mode helps enforce:"
         echo "  - Liskov Substitution (proper type contracts)"
         echo "  - Dependency Inversion (interface-based programming)"
-        ((TS_ISSUES++))
-        ((WARNING_COUNT++))
+        TS_ISSUES=$((TS_ISSUES + 1))
+        WARNING_COUNT=$((WARNING_COUNT + 1))
     else
         echo -e "${GREEN}[PASS]${NC} TypeScript strict mode enabled"
     fi
 
     if [ "$STRICT" != "true" ] && [ "$NO_IMPLICIT_ANY" != "true" ]; then
         echo -e "${YELLOW}[WARN]${NC} noImplicitAny not enabled"
-        ((TS_ISSUES++))
-        ((WARNING_COUNT++))
+        TS_ISSUES=$((TS_ISSUES + 1))
+        WARNING_COUNT=$((WARNING_COUNT + 1))
     fi
 else
     echo -e "${YELLOW}[SKIP]${NC} No tsconfig.json found"

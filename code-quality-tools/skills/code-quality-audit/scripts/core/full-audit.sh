@@ -153,10 +153,10 @@ if [ -f "${SCRIPTS_DIR}/coverage-report.sh" ]; then
         exit_code=$?
         if [ $exit_code -eq 1 ]; then
             COVERAGE_STATUS="warning"
-            ((WARNING_COUNT++))
+            WARNING_COUNT=$((WARNING_COUNT + 1))
         else
             COVERAGE_STATUS="fail"
-            ((CRITICAL_COUNT++))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
         fi
     fi
     update_status "$COVERAGE_STATUS"
@@ -185,10 +185,10 @@ if [ -f "${SCRIPTS_DIR}/solid-check.sh" ]; then
         exit_code=$?
         if [ $exit_code -eq 1 ]; then
             SOLID_STATUS="warning"
-            ((WARNING_COUNT++))
+            WARNING_COUNT=$((WARNING_COUNT + 1))
         else
             SOLID_STATUS="fail"
-            ((CRITICAL_COUNT++))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
         fi
     fi
     update_status "$SOLID_STATUS"
@@ -218,10 +218,10 @@ if [ "$PROJECT_TYPE" == "nextjs" ]; then
             exit_code=$?
             if [ $exit_code -eq 1 ]; then
                 LINT_STATUS="warning"
-                ((WARNING_COUNT++))
+                WARNING_COUNT=$((WARNING_COUNT + 1))
             else
                 LINT_STATUS="fail"
-                ((CRITICAL_COUNT++))
+                CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
             fi
         fi
         update_status "$LINT_STATUS"
@@ -251,10 +251,10 @@ if [ -f "${SCRIPTS_DIR}/dry-check.sh" ]; then
         exit_code=$?
         if [ $exit_code -eq 1 ]; then
             DRY_STATUS="warning"
-            ((WARNING_COUNT++))
+            WARNING_COUNT=$((WARNING_COUNT + 1))
         else
             DRY_STATUS="fail"
-            ((CRITICAL_COUNT++))
+            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
         fi
     fi
     update_status "$DRY_STATUS"
@@ -278,18 +278,26 @@ SECURITY_STATUS="unknown"
 if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
     echo -e "${BLUE}[Step 6/6]${NC} Running security audit..."
     if [ -f "${SCRIPTS_DIR}/security-check.sh" ]; then
-        if "${SCRIPTS_DIR}/security-check.sh" 2>/dev/null; then
+        # security-check.sh does not use the 0/1/2 convention the other gates use:
+        # it exits 0 for BOTH pass and warning, and 1 for fail. Reading its exit code
+        # like a sibling gate records a failing scan as "warning" and a warning as
+        # "pass". Take the verdict from the report it writes, which carries the
+        # authoritative value, and fall back to the exit code only if no report exists
+        # (the scan aborted before writing one).
+        security_exit=0
+        "${SCRIPTS_DIR}/security-check.sh" 2>/dev/null || security_exit=$?
+        if [ -f "${REPORT_DIR}/security-report.json" ]; then
+            SECURITY_STATUS=$(jq -r '.summary.overall_status // "unknown"' \
+                "${REPORT_DIR}/security-report.json" 2>/dev/null || echo "unknown")
+        elif [ "$security_exit" -eq 0 ]; then
             SECURITY_STATUS="pass"
         else
-            exit_code=$?
-            if [ $exit_code -eq 1 ]; then
-                SECURITY_STATUS="warning"
-                ((WARNING_COUNT++))
-            else
-                SECURITY_STATUS="fail"
-                ((CRITICAL_COUNT++))
-            fi
+            SECURITY_STATUS="fail"
         fi
+        case "$SECURITY_STATUS" in
+            warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
+            fail)    CRITICAL_COUNT=$((CRITICAL_COUNT + 1)) ;;
+        esac
         update_status "$SECURITY_STATUS"
 
         # Merge security report

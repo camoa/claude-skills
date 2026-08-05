@@ -384,7 +384,7 @@ if tool_present phpstan; then
             }]' "$PHPSTAN_JSON" 2>/dev/null || echo "[]")
 
             # Count by severity
-            ((WARNING_COUNT += PHPSTAN_ERRORS))
+            WARNING_COUNT=$((WARNING_COUNT + PHPSTAN_ERRORS))
         else
             PHPSTAN_VIOLATIONS="[]"
         fi
@@ -437,9 +437,9 @@ if tool_present phpmd; then
             PHPMD_WARNINGS=$(jq '[.files[].violations[] | select(.priority == 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
             PHPMD_SUGGESTIONS=$(jq '[.files[].violations[] | select(.priority > 3)] | length' "$PHPMD_JSON" 2>/dev/null || echo "0")
 
-            ((CRITICAL_COUNT += PHPMD_CRITICAL)) || true
-            ((WARNING_COUNT += PHPMD_WARNINGS)) || true
-            ((SUGGESTION_COUNT += PHPMD_SUGGESTIONS)) || true
+            CRITICAL_COUNT=$((CRITICAL_COUNT + PHPMD_CRITICAL)) || true
+            WARNING_COUNT=$((WARNING_COUNT + PHPMD_WARNINGS)) || true
+            SUGGESTION_COUNT=$((SUGGESTION_COUNT + PHPMD_SUGGESTIONS)) || true
         else
             PHPMD_VIOLATIONS="[]"
         fi
@@ -475,7 +475,7 @@ STATIC_CALLS=$(ddev exec grep -r "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
 
 if [ "$STATIC_CALLS" -gt 0 ]; then
     echo -e "  ${YELLOW}[WARN]${NC} Found ${STATIC_CALLS} files with static \\Drupal:: calls"
-    ((WARNING_COUNT += STATIC_CALLS)) || true
+    WARNING_COUNT=$((WARNING_COUNT + STATIC_CALLS)) || true
 
     # Create DIP violations for static calls
     STATIC_VIOLATIONS=$(ddev exec grep -rn "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
