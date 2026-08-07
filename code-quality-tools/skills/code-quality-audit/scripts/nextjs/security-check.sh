@@ -14,6 +14,16 @@ NC='\033[0m'
 REPORT_DIR="${REPORT_DIR:-.reports}"
 SRC_PATH="${SRC_PATH:-src}"
 
+# Render a bash array as a JSON array. Mirrors the Drupal security-check helper so both
+# reports express "this tool did not run" the same way to downstream consumers.
+to_json_array() {
+    if [ "$#" -eq 0 ]; then
+        echo "[]"
+    else
+        printf '%s\n' "$@" | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]"
+    fi
+}
+
 echo "=== Security Audit (Next.js/React) ==="
 echo ""
 
@@ -35,6 +45,10 @@ HIGH_COUNT=0
 MEDIUM_COUNT=0
 LOW_COUNT=0
 ISSUES="[]"
+
+# Analyzers that did not produce a usable result. A tool in here contributed no counts,
+# so a zero from it must not be read as a clean tree.
+SKIPPED_TOOLS=()
 
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
@@ -247,34 +261,78 @@ GITLEAKS_ISSUES="[]"
 
 if command -v gitleaks &> /dev/null; then
     set +e
-    # Run Gitleaks on the repository
-    gitleaks detect --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
+    # Drop any report from a previous run: a failed run writes no report, and a stale
+    # one would otherwise be parsed as if it were this run's result. This sits INSIDE
+    # the set +e bracket because `rm` fails on an unwritable report directory, which
+    # under set -e would abort the entire security audit.
+    rm -f "$GITLEAKS_JSON" 2>/dev/null
+    GITLEAKS_STALE=0
+    if [ -e "$GITLEAKS_JSON" ]; then
+        GITLEAKS_STALE=1
+    fi
+
+    # Run Gitleaks on the repository. --redact keeps matched secret values out of the
+    # report file, which is written inside the tree being audited.
+    gitleaks detect --redact --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
     GITLEAKS_EXIT=$?
     set -e
 
-    if [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
-        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null || echo "0")
-        if [ "$SECRET_COUNT" -gt 0 ]; then
-            echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+    # Exit status alone cannot tell "found leaks" from "failed to run". Verified against
+    # gitleaks 8.30.1: exit 0 means it ran and found nothing, but exit 1 means EITHER it
+    # found leaks OR it errored — a bad config, an unwritable --report-path, a missing
+    # --source and a bad --report-format all exit 1, because gitleaks fatals through
+    # os.Exit(1). Only a PARSEABLE report distinguishes the two. Exit >= 2 is a
+    # shell-level failure (126/127, 128+N), which produces no report either.
+    GITLEAKS_FAILED=0
+    SECRET_COUNT=0
 
-            # Convert to violations format
-            GITLEAKS_ISSUES=$(jq '[.[] | {
-                category: "Gitleaks Secret",
-                severity: "critical",
-                file: .File,
-                line: .StartLine,
-                message: ("Potential secret detected: " + .Description),
-                owasp: "A02:2021",
-                remediation: "Remove secret from code, rotate credentials, and use secret management"
-            }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
-
-            CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
-        else
-            echo -e "  ${GREEN}No secrets detected${NC}"
+    if [ "$GITLEAKS_STALE" -eq 1 ]; then
+        # A report from an earlier run could not be removed, so this run's report
+        # cannot be told apart from it. Unprovable provenance is not a clean tree.
+        GITLEAKS_FAILED=1
+    elif [ "$GITLEAKS_EXIT" -ge 2 ]; then
+        GITLEAKS_FAILED=1
+    elif [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
+        set +e
+        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null)
+        JQ_EXIT=$?
+        set -e
+        # A report that is present but unparseable is not evidence of a clean tree.
+        # Swallowing jq's failure into 0 would report clean while gitleaks is saying
+        # the opposite.
+        if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$SECRET_COUNT" =~ ^[0-9]+$ ]]; then
+            GITLEAKS_FAILED=1
+            SECRET_COUNT=0
         fi
+    elif [ "$GITLEAKS_EXIT" -ne 0 ]; then
+        # Exit 1 with no report at all: gitleaks errored rather than found anything.
+        GITLEAKS_FAILED=1
+    fi
+
+    if [ "$GITLEAKS_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}Gitleaks produced no usable report (exit ${GITLEAKS_EXIT}) - secret scan did not complete${NC}"
+        SKIPPED_TOOLS+=("gitleaks")
+    elif [ "$SECRET_COUNT" -gt 0 ]; then
+        echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+
+        # Convert to violations format
+        GITLEAKS_ISSUES=$(jq '[.[] | {
+            category: "Gitleaks Secret",
+            severity: "critical",
+            file: .File,
+            line: .StartLine,
+            message: ("Potential secret detected: " + .Description),
+            owasp: "A02:2021",
+            remediation: "Remove secret from code, rotate credentials, and use secret management"
+        }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
+
+        CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
+    else
+        echo -e "  ${GREEN}No secrets detected${NC}"
     fi
 else
     echo -e "  ${YELLOW}Gitleaks not installed (optional)${NC}"
+    SKIPPED_TOOLS+=("gitleaks")
 fi
 
 echo ""
@@ -395,6 +453,8 @@ fi
 # =====================
 REPORT_FILE="${REPORT_DIR}/security-report.json"
 
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+
 jq -n \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg status "$OVERALL_STATUS" \
@@ -403,12 +463,14 @@ jq -n \
     --argjson medium "$MEDIUM_COUNT" \
     --argjson low "$LOW_COUNT" \
     --argjson issues "$ISSUES" \
+    --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
             project_type: "nextjs",
-            tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"]
+            tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"],
+            tools_absent: $tools_absent
         },
         summary: {
             overall_status: $status,

@@ -28,10 +28,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${SCRIPT_DIR}/.."
 SOLID="${ROOT}/drupal/solid-check.sh"
 SEC="${ROOT}/drupal/security-check.sh"
+NEXTSEC="${ROOT}/nextjs/security-check.sh"
 ENVSH="${ROOT}/core/detect-environment.sh"
 FULL="${ROOT}/core/full-audit.sh"
 
-for f in "$SOLID" "$SEC" "$ENVSH" "$FULL"; do
+for f in "$SOLID" "$SEC" "$NEXTSEC" "$ENVSH" "$FULL"; do
   [[ -f "$f" ]] || { echo "FATAL: missing $f" >&2; exit 2; }
 done
 
@@ -84,16 +85,21 @@ assert_eq "no PHPSTAN_ERRORS assignment still reads .totals.errors" "0" "$STALE"
 echo ""
 echo "B: gitleaks never writes unredacted secret values"
 
-INVOCATIONS=$(grep -nE '^[[:space:]]*gitleaks (detect|git|dir)' "$SEC" || true)
-if [[ -z "$INVOCATIONS" ]]; then
-  bad "found at least one gitleaks invocation in security-check.sh"
-else
-  missing=0
-  while IFS= read -r line; do
-    echo "$line" | grep -q -- '--redact' || missing=$((missing + 1))
-  done <<< "$INVOCATIONS"
-  assert_eq "every gitleaks invocation carries --redact" "0" "$missing"
-fi
+# Both stacks scan for secrets, and the contract ("no matched secret value appears in
+# any report file") is not qualified by project type, so both are asserted.
+for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+  stack="${target%%:*}"; file="${target#*:}"
+  INVOCATIONS=$(grep -nE '^[[:space:]]*gitleaks (detect|git|dir)' "$file" || true)
+  if [[ -z "$INVOCATIONS" ]]; then
+    bad "[$stack] found at least one gitleaks invocation in security-check.sh"
+  else
+    missing=0
+    while IFS= read -r line; do
+      echo "$line" | grep -q -- '--redact' || missing=$((missing + 1))
+    done <<< "$INVOCATIONS"
+    assert_eq "[$stack] every gitleaks invocation carries --redact" "0" "$missing"
+  fi
+done
 
 # ── C. report directory is not committable (item 8) ──────────────────────────
 echo ""
@@ -197,34 +203,38 @@ fi
 echo ""
 echo "D: a gitleaks that fails to run is reported, not counted as clean"
 
-# Range ends at the top-level `else` on purpose: that else is the tool-ABSENT branch,
-# which already records a skip. Including it would make the assertion below pass for
-# the wrong reason. We are testing the ran-but-failed path only.
-BLOCK=$(sed -n '/GITLEAKS_EXIT=\$?/,/^else/p' "$SEC")
-USES=$(echo "$BLOCK" | grep -c 'GITLEAKS_EXIT' || true)
-if [[ "$USES" -ge 2 ]]; then
-  ok "GITLEAKS_EXIT is read after being assigned"
-else
-  bad "GITLEAKS_EXIT is read after being assigned (assigned only, never used)"
-fi
-
-if echo "$BLOCK" | grep -q 'SKIPPED_TOOLS+=("gitleaks")'; then
-  ok "a failed gitleaks is recorded in SKIPPED_TOOLS"
-else
-  bad "a failed gitleaks is recorded in SKIPPED_TOOLS"
-fi
-
-# The assertions above are textual. The ones below EXECUTE the real block against a
-# stubbed gitleaks, because the discriminator being tested is behavioral.
+# Both stacks run a gitleaks block, and /code-quality-tools:security routes by project
+# type (commands/security.md). A fix applied to only one file leaves the other stack
+# with the defect, so every assertion in this section runs against BOTH.
 #
 # Load-bearing fact, verified against gitleaks 8.30.1: every gitleaks-level error exits
 # 1, not >=2 — bad config, unwritable --report-path, missing --source and bad
 # --report-format all exit 1, because gitleaks fatals through os.Exit(1). Exit status
 # alone therefore cannot separate "found leaks" from "failed to run". Only a PARSEABLE
 # report can, which is why a present-but-garbage report must not read as clean.
-GITLEAKS_BLOCK="$TMP/gitleaks_block.sh"
-sed -n '/^GITLEAKS_JSON=/,/^fi$/p' "$SEC" > "$GITLEAKS_BLOCK"
+for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+  stack="${target%%:*}"; file="${target#*:}"
 
+  # Range ends at the top-level `else` on purpose: that else is the tool-ABSENT branch,
+  # which already records a skip. Including it would make the assertion below pass for
+  # the wrong reason. We are testing the ran-but-failed path only.
+  BLOCK=$(sed -n '/GITLEAKS_EXIT=\$?/,/^else/p' "$file")
+  USES=$(echo "$BLOCK" | grep -c 'GITLEAKS_EXIT' || true)
+  if [[ "$USES" -ge 2 ]]; then
+    ok "[$stack] GITLEAKS_EXIT is read after being assigned"
+  else
+    bad "[$stack] GITLEAKS_EXIT is read after being assigned (assigned only, never used)"
+  fi
+
+  if echo "$BLOCK" | grep -q 'SKIPPED_TOOLS+=("gitleaks")'; then
+    ok "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
+  else
+    bad "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
+  fi
+done
+
+# The assertions above are textual. The ones below EXECUTE the real block against a
+# stubbed gitleaks, because the discriminator being tested is behavioral.
 STUBDIR="$TMP/stub"; mkdir -p "$STUBDIR"
 cat > "$STUBDIR/gitleaks" <<'STUB'
 #!/usr/bin/env bash
@@ -244,64 +254,101 @@ STUB
 chmod +x "$STUBDIR/gitleaks"
 
 # Runs the real block under a stubbed gitleaks; echoes "<critical>|<skipped>|<output>".
+# Runs through `bash -c` rather than an inline subshell for the same reason run_isolated
+# in section C does: bash neutralises `set -e` inside any command whose status is
+# tested, so a `( ... )` harness would keep running past an abort the real script dies
+# on. The block is sourced under a real `set -e` here, exactly as the script runs it.
+GITLEAKS_RC=0
 run_gitleaks_block() {
-  local stub_exit="$1" stub_report="$2" dir
+  local block="$1" stub_exit="$2" stub_report="$3" dir out
   dir="$(mktemp -d "$TMP/gl.XXXXXX")"
   mkdir -p "$dir/security"
-  (
-    PATH="$STUBDIR:$PATH"
-    export STUB_EXIT="$stub_exit" STUB_REPORT="$stub_report"
-    RED=''; GREEN=''; YELLOW=''; BLUE=''; NC=''
-    REPORT_DIR="$dir"
+  out="$dir/out.txt"
+  GITLEAKS_RC=0
+  PATH="$STUBDIR:$PATH" STUB_EXIT="$stub_exit" STUB_REPORT="$stub_report" \
+  REPORT_DIR="$dir" bash -c '
+    set -e
+    RED=""; GREEN=""; YELLOW=""; BLUE=""; NC=""
     CRITICAL_COUNT=0
     SKIPPED_TOOLS=()
-    # Do NOT wrap this in $(...): a command substitution is a subshell, and the
+    # Do NOT wrap the source in $(...): a command substitution is a subshell, and the
     # counters the block mutates would be discarded instead of asserted on.
-    source "$GITLEAKS_BLOCK" > "$dir/out.txt" 2>&1
-    printf '%s|%s|%s' "$CRITICAL_COUNT" \
-      "${SKIPPED_TOOLS[*]+${SKIPPED_TOOLS[*]}}" "$(tr '\n' ' ' < "$dir/out.txt")"
-  )
+    . "$1" > "$2" 2>&1
+    printf "%s|%s" "$CRITICAL_COUNT" "${SKIPPED_TOOLS[*]+${SKIPPED_TOOLS[*]}}" >> "$2".res
+  ' _ "$block" "$out" >/dev/null 2>&1 || GITLEAKS_RC=$?
+  printf '%s|%s' "$(cat "$out".res 2>/dev/null || echo '|')" "$(tr '\n' ' ' < "$out" 2>/dev/null)"
 }
 
-# D1 (the regression under review): gitleaks says it found leaks, and the report is
-# present and non-empty but NOT valid JSON. jq fails; swallowing that into 0 reports a
-# clean tree while the tool is telling us the opposite.
-GARBAGE=$(run_gitleaks_block 1 'not json at all {{{')
-if echo "$GARBAGE" | grep -q 'No secrets detected'; then
-  bad "an unparseable gitleaks report does not report clean | got: $GARBAGE"
-else
-  ok "an unparseable gitleaks report does not report clean"
-fi
-assert_eq "an unparseable gitleaks report records a skip" \
-  "gitleaks" "$(echo "$GARBAGE" | cut -d'|' -f2)"
-assert_eq "an unparseable gitleaks report contributes no critical count" \
-  "0" "$(echo "$GARBAGE" | cut -d'|' -f1)"
+for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+  stack="${target%%:*}"; file="${target#*:}"
+  BLOCKFILE="$TMP/gitleaks_block_${stack}.sh"
+  sed -n '/^GITLEAKS_JSON=/,/^fi$/p' "$file" > "$BLOCKFILE"
+  if [[ ! -s "$BLOCKFILE" ]]; then
+    bad "[$stack] extracted the gitleaks block from $(basename "$(dirname "$file")")/security-check.sh"
+    continue
+  fi
 
-# D2: a truncated REAL report is the realistic form of the same defect.
-TRUNCATED=$(run_gitleaks_block 1 '[{"File":"a.py","StartLine":1,"Descrip')
-assert_eq "a truncated gitleaks report records a skip, not a clean tree" \
-  "gitleaks" "$(echo "$TRUNCATED" | cut -d'|' -f2)"
+  # D1 (the regression under review): gitleaks says it found leaks, and the report is
+  # present and non-empty but NOT valid JSON. jq fails; swallowing that into 0 reports
+  # a clean tree while the tool is telling us the opposite.
+  GARBAGE=$(run_gitleaks_block "$BLOCKFILE" 1 'not json at all {{{')
+  if echo "$GARBAGE" | grep -q 'No secrets detected'; then
+    bad "[$stack] an unparseable gitleaks report does not report clean | got: $GARBAGE"
+  else
+    ok "[$stack] an unparseable gitleaks report does not report clean"
+  fi
+  assert_eq "[$stack] an unparseable gitleaks report records a skip" \
+    "gitleaks" "$(echo "$GARBAGE" | cut -d'|' -f2)"
+  assert_eq "[$stack] an unparseable gitleaks report contributes no critical count" \
+    "0" "$(echo "$GARBAGE" | cut -d'|' -f1)"
 
-# D3: gitleaks-level failure exits 1 with no report at all (verified above). This must
-# not read as clean either.
-NOREPORT=$(run_gitleaks_block 1 '__NONE__')
-assert_eq "exit 1 with no report at all records a skip" \
-  "gitleaks" "$(echo "$NOREPORT" | cut -d'|' -f2)"
+  # D2: a truncated REAL report is the realistic form of the same defect.
+  TRUNCATED=$(run_gitleaks_block "$BLOCKFILE" 1 '[{"File":"a.py","StartLine":1,"Descrip')
+  assert_eq "[$stack] a truncated gitleaks report records a skip, not a clean tree" \
+    "gitleaks" "$(echo "$TRUNCATED" | cut -d'|' -f2)"
 
-# D4/D5: the fix must not over-fire. A genuinely clean run and a genuine finding must
-# both still behave, or "record a skip" would be trivially satisfiable.
-CLEAN=$(run_gitleaks_block 0 '[]')
-assert_eq "a clean run still reports clean and records no skip" \
-  "0||" "$(echo "$CLEAN" | cut -d'|' -f1,2)|"
-if echo "$CLEAN" | grep -q 'No secrets detected'; then
-  ok "a clean run still prints the clean message"
-else
-  bad "a clean run still prints the clean message | got: $CLEAN"
-fi
+  # D3: a gitleaks-level failure exits 1 with no report at all. Not clean either.
+  NOREPORT=$(run_gitleaks_block "$BLOCKFILE" 1 '__NONE__')
+  assert_eq "[$stack] exit 1 with no report at all records a skip" \
+    "gitleaks" "$(echo "$NOREPORT" | cut -d'|' -f2)"
 
-FOUND=$(run_gitleaks_block 1 '[{"File":"a.py","StartLine":1,"Description":"AWS key"}]')
-assert_eq "a real finding is still counted as critical" \
-  "1|" "$(echo "$FOUND" | cut -d'|' -f1,2)"
+  # D4/D5: the fix must not over-fire. A genuinely clean run and a genuine finding must
+  # both still behave, or "records a skip" would be trivially satisfiable.
+  CLEAN=$(run_gitleaks_block "$BLOCKFILE" 0 '[]')
+  assert_eq "[$stack] a clean run still reports clean and records no skip" \
+    "0|" "$(echo "$CLEAN" | cut -d'|' -f1,2)"
+  if echo "$CLEAN" | grep -q 'No secrets detected'; then
+    ok "[$stack] a clean run still prints the clean message"
+  else
+    bad "[$stack] a clean run still prints the clean message | got: $CLEAN"
+  fi
+
+  FOUND=$(run_gitleaks_block "$BLOCKFILE" 1 '[{"File":"a.py","StartLine":1,"Description":"AWS key"}]')
+  assert_eq "[$stack] a real finding is still counted as critical" \
+    "1|" "$(echo "$FOUND" | cut -d'|' -f1,2)"
+
+  # D6: clearing a stale report must not be able to kill the gate. `rm` fails on an
+  # unwritable report directory, and under `set -e` outside the set +e bracket that
+  # aborts the whole security run mid-scan. Assert on the process exit status.
+  if [[ "$(id -u)" -eq 0 ]]; then
+    echo "  SKIP: [$stack] unwritable report dir assertion (running as root)"
+  else
+    RODIR="$(mktemp -d "$TMP/glro.XXXXXX")"
+    mkdir -p "$RODIR/security"
+    printf '[]' > "$RODIR/security/gitleaks.json"
+    chmod 500 "$RODIR/security"
+    RO_RC=0
+    PATH="$STUBDIR:$PATH" STUB_EXIT=0 STUB_REPORT='[]' REPORT_DIR="$RODIR" bash -c '
+      set -e
+      RED=""; GREEN=""; YELLOW=""; BLUE=""; NC=""
+      CRITICAL_COUNT=0
+      SKIPPED_TOOLS=()
+      . "$1"
+    ' _ "$BLOCKFILE" >/dev/null 2>&1 || RO_RC=$?
+    chmod 700 "$RODIR/security"
+    assert_eq "[$stack] an unwritable report dir does not abort the security gate" "0" "$RO_RC"
+  fi
+done
 
 # ── E. verdict is never pass when nothing ran (item 3) ───────────────────────
 echo ""

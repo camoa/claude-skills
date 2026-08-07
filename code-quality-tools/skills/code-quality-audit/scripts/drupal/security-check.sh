@@ -916,11 +916,19 @@ GITLEAKS_JSON="${REPORT_DIR}/security/gitleaks.json"
 GITLEAKS_ISSUES="[]"
 
 if command -v gitleaks &> /dev/null; then
-    # Drop any report from a previous run: a failed run writes no report, and a stale
-    # one would otherwise be parsed as if it were this run's result.
-    rm -f "$GITLEAKS_JSON"
-
     set +e
+    # Drop any report from a previous run: a failed run writes no report, and a stale
+    # one would otherwise be parsed as if it were this run's result. This sits INSIDE
+    # the set +e bracket because `rm` fails on an unwritable report directory, which
+    # under set -e would abort the entire security gate. A stale report that cannot be
+    # removed is itself the false-clean case, so it is treated as a failed run below
+    # rather than trusted.
+    rm -f "$GITLEAKS_JSON" 2>/dev/null
+    GITLEAKS_STALE=0
+    if [ -e "$GITLEAKS_JSON" ]; then
+        GITLEAKS_STALE=1
+    fi
+
     # Run Gitleaks on the repository. --redact keeps matched secret values out of the
     # report file, which is written inside the tree being audited.
     gitleaks detect --redact --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
@@ -936,7 +944,11 @@ if command -v gitleaks &> /dev/null; then
     GITLEAKS_FAILED=0
     SECRET_COUNT=0
 
-    if [ "$GITLEAKS_EXIT" -ge 2 ]; then
+    if [ "$GITLEAKS_STALE" -eq 1 ]; then
+        # A report from an earlier run could not be removed, so this run's report
+        # cannot be told apart from it. Unprovable provenance is not a clean tree.
+        GITLEAKS_FAILED=1
+    elif [ "$GITLEAKS_EXIT" -ge 2 ]; then
         GITLEAKS_FAILED=1
     elif [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
         set +e
