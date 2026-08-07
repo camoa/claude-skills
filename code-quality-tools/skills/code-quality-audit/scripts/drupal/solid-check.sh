@@ -142,8 +142,16 @@ EOF
         set -e
 
         if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
-            PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+            # Code findings live in .totals.file_errors. .totals.errors counts global
+            # errors, meaning the analysis itself failed to configure or run, and is
+            # zero on a run that found hundreds of real defects. Reading it as the
+            # finding count reported a confident clean result.
+            PHPSTAN_ERRORS=$(jq '.totals.file_errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+            PHPSTAN_GLOBAL_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
             echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
+            if [ "$PHPSTAN_GLOBAL_ERRORS" -gt 0 ]; then
+                echo -e "  ${YELLOW}PHPStan reported ${PHPSTAN_GLOBAL_ERRORS} global error(s) — analysis may be misconfigured, findings may be incomplete${NC}"
+            fi
 
             if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
                 PHPSTAN_VIOLATIONS=$(jq '[.files | to_entries[] | .key as $file | .value.messages[] | {
@@ -367,8 +375,15 @@ if tool_present phpstan; then
     set -e
 
     if [ -f "$PHPSTAN_JSON" ] && [ -s "$PHPSTAN_JSON" ]; then
-        PHPSTAN_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+        # See the note at the --changed call site: .totals.file_errors holds the code
+        # findings; .totals.errors holds global/config errors and is 0 on a run with
+        # hundreds of real defects.
+        PHPSTAN_ERRORS=$(jq '.totals.file_errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
+        PHPSTAN_GLOBAL_ERRORS=$(jq '.totals.errors // 0' "$PHPSTAN_JSON" 2>/dev/null || echo "0")
         echo "  PHPStan errors: ${PHPSTAN_ERRORS}"
+        if [ "$PHPSTAN_GLOBAL_ERRORS" -gt 0 ]; then
+            echo -e "  ${YELLOW}PHPStan reported ${PHPSTAN_GLOBAL_ERRORS} global error(s) — analysis may be misconfigured, findings may be incomplete${NC}"
+        fi
 
         # Convert PHPStan errors to violations
         if [ "$PHPSTAN_ERRORS" -gt 0 ]; then
