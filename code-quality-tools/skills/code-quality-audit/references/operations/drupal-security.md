@@ -90,7 +90,8 @@ The audit performs 10 complementary security checks:
 - **Coverage:** 800+ patterns, entropy analysis
 - **Status:** ✅ Actively maintained
 - **Installation:** See `scripts/core/install-tools.sh`
-- **Command:** `gitleaks detect --no-git`
+- **Command:** `gitleaks detect --redact --no-git`
+- `--redact` masks matched values in the report. Without it the report file holds every discovered secret in plaintext.
 
 ### 10. Roave Security Advisories
 - **Type:** Composer prevention layer

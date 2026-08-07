@@ -49,11 +49,27 @@ update_status() {
 
 # Resolve the final verdict. OVERALL_STATUS starts at "pass" and update_status() only
 # ever downgrades it, so "pass" is the value the run starts at rather than one it earns:
-# a suite that aborted before any gate ran still reported "pass". A gate status of
-# "unknown" or "skipped" means that gate produced no result; if none of them produced
-# one the run proved nothing and the verdict is "unknown", whatever the accumulator
-# holds. Once at least one gate produced a result the existing precedence stands
-# (fail beats warning beats pass).
+# a suite that aborted before any gate ran still reported "pass".
+#
+# Two kinds of non-result are distinguished, because they are not the same claim:
+#
+#   "unknown"  the gate never ran. Either it does not apply to this project type (the
+#              lint gate is Next.js-only, the security gate is Drupal-only, so one of
+#              them is "unknown" on every single run) or its script is missing. Nothing
+#              was promised, so nothing is owed. No consequence beyond not counting.
+#   "skipped"  the gate RAN and declared that it could not cover its ground. That is a
+#              deliberate statement about coverage, not an accident of project type,
+#              and it is the one an audit must not paper over.
+#
+# So: if no gate produced a result the run proved nothing and the verdict is "unknown",
+# whatever the accumulator holds. If some gate produced a result but another explicitly
+# skipped, the audit is incomplete and cannot certify a pass — a would-be "pass" is
+# capped at "warning". Everything else keeps the existing precedence (fail beats
+# warning beats pass); an explicit skip never upgrades a fail or a warning.
+#
+# The cap is what gives a skipped gate a consequence at the aggregate. Without it
+# /audit reports "Overall: PASS" on a run whose security gate covered nothing, which
+# is the same false clean one level up.
 #
 # Self-contained on purpose (reads no globals, echoes the verdict) so the spec can
 # extract and source it in isolation.
@@ -62,10 +78,14 @@ resolve_overall_status() {
     local current="$1"
     shift
     local produced=0
+    local incomplete=0
     local gate
     for gate in "$@"; do
         case "$gate" in
-            unknown|skipped|"")
+            unknown|"")
+                ;;
+            skipped)
+                incomplete=$((incomplete + 1))
                 ;;
             *)
                 produced=$((produced + 1))
@@ -74,6 +94,8 @@ resolve_overall_status() {
     done
     if [ "$produced" -eq 0 ]; then
         echo "unknown"
+    elif [ "$incomplete" -gt 0 ] && [ "$current" = "pass" ]; then
+        echo "warning"
     else
         echo "$current"
     fi
@@ -350,7 +372,9 @@ if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
     echo ""
 fi
 
-# A verdict of "pass" requires that at least one gate actually produced a result.
+# A verdict of "pass" requires that at least one gate produced a result AND that no
+# gate reported it could not cover its ground. A gate that explicitly skipped caps the
+# audit at "warning": the run is incomplete, and an incomplete run cannot certify a pass.
 OVERALL_STATUS=$(resolve_overall_status "$OVERALL_STATUS" \
     "$COVERAGE_STATUS" "$SOLID_STATUS" "$LINT_STATUS" "$DRY_STATUS" "$SECURITY_STATUS")
 
@@ -400,6 +424,14 @@ echo "  Critical:  ${CRITICAL_COUNT}"
 echo "  Warnings:  ${WARNING_COUNT}"
 echo ""
 echo -e "  Overall:   $([ "$OVERALL_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || ([ "$OVERALL_STATUS" == "warning" ] && echo "${YELLOW}WARNING${NC}" || ([ "$OVERALL_STATUS" == "fail" ] && echo "${RED}FAIL${NC}" || echo "${YELLOW}UNKNOWN - no gate produced a result${NC}")))"
+# Name the reason when the verdict was capped, so "WARNING" with zero warnings counted
+# is not a puzzle. Only gates that ran and declared incomplete coverage cap it.
+for capped_gate in "coverage:${COVERAGE_STATUS}" "SOLID:${SOLID_STATUS}" \
+    "lint:${LINT_STATUS}" "DRY:${DRY_STATUS}" "security:${SECURITY_STATUS}"; do
+    if [ "${capped_gate#*:}" = "skipped" ]; then
+        echo -e "             ${YELLOW}(the ${capped_gate%%:*} gate covered no ground - this run cannot certify a pass)${NC}"
+    fi
+done
 echo ""
 echo "  Reports:"
 echo "    JSON: ${REPORT_DIR}/audit-report.json"

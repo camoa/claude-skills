@@ -13,12 +13,26 @@ the security scan writing the secrets it found into a committable path.
 
 ### Changed
 
+Two CI-visible behavior changes ship here. Read both before upgrading.
+
+- **A security scan that could not cover its ground no longer reports `pass`, and
+  `/audit` no longer exits 0 on it.** When a tool is installed but produces no usable
+  result — it crashed, wrote an unparseable report, or left a stale one — the security
+  gate now resolves to `skipped` and `full-audit.sh` caps a would-be `pass` at
+  `warning`. Since `warning` already exited 1 under the existing
+  `pass=0 / warning=1 / fail=2` contract, **a run with no real security coverage now
+  exits 1 where it exited 0.** That is the intended consequence: such a run proved
+  nothing. A tool that is simply *not installed* is expected absence and does **not**
+  trigger this — `tools_absent[]` records what was never there, the new
+  `tools_failed[]` records what was there and failed, and only the second downgrades a
+  verdict. A default machine without psalm, semgrep, trivy or gitleaks still reports
+  `pass`.
 - **`overall_score` can now be `unknown`, and a run where nothing executed reports it
-  rather than `pass`.** This is a behavior change, not a pure bug fix. A CI job gating
-  on `.status != "fail"` stays green. A job gating on `== "pass"` will start failing on
-  runs where no gate produced a result — which is correct, because those runs proved
-  nothing, but it will surface as newly-red pipelines. `schemas/audit-report.schema.json`
-  already permitted `unknown`; `SKILL.md`'s documented sample now says so too.
+  rather than `pass`.** A CI job gating on `.status != "fail"` stays green. A job gating
+  on `== "pass"` will start failing on runs where no gate produced a result — correct,
+  because those runs proved nothing, but it surfaces as newly-red pipelines.
+  `schemas/audit-report.schema.json` already permitted `unknown`; `SKILL.md`'s sample
+  now says so, and its `security_score` sample gains `skipped`.
 
 ### Fixed
 
@@ -60,7 +74,40 @@ the security scan writing the secrets it found into a committable path.
 
 ### Added
 
-- `scripts/tests/false-clean-spec.sh` — 27 hermetic assertions, no DDEV, no network, no
+- **A recorded skip now has consequences.** Both security gates previously recorded
+  skipped tools in `tools_absent[]` and then derived the verdict from severity counts
+  alone, so gitleaks could fail on both stacks and the gate still reported `pass`. The
+  verdict now consumes the failure set. The report carries two **disjoint** arrays:
+  `tools_absent[]` lists only tools explicitly declared absent in a "not installed"
+  branch (expected — never there), and `tools_failed[]` is derived as *everything the
+  scan did not cover* minus that declared set (unexpected — present, ran, produced
+  nothing usable). Only `tools_failed[]` downgrades a verdict. Deriving it by
+  subtraction makes the default fail-closed: a newly added skip counts against the
+  verdict unless someone explicitly declares that absence expected.
+- **Seven more analyzers had their exit status assigned and never read.** In
+  `nextjs/security-check.sh`: npm-audit, eslint, semgrep and trivy. In
+  `drupal/security-check.sh`: semgrep, trivy, psalm, php-security-linter and
+  security_review, including the two in the `--changed` CI path. Each carried the same
+  jq-swallowed-to-zero and stale-report exposure as the gitleaks block. Exit thresholds
+  are deliberately **not** uniform: semgrep and trivy fail from 1 because their exit
+  tables were verified; psalm, php-security-linter and security_review only from 126,
+  because they exit non-zero on *findings* and a lower threshold would convert every
+  real finding into a fake tool failure.
+- **`composer audit` could only succeed when there was nothing to find.**
+  `ddev composer audit` treats the exit 1 that `composer audit` returns on advisories as
+  a command failure and emits nothing, so the audit produced output only when the answer
+  was zero. Now `ddev exec composer audit`. `drush pm:security` had the same swallow and
+  got the same fix; a healthy site that emits nothing is read as clean, not as failed.
+- **"PCOV available" was reported whether or not pcov was present.** `grep -c` prints its
+  count *and* exits 1 on zero matches, so `|| echo "0"` produced a two-line value that
+  broke every numeric test on it and fell through to the success branch.
+- **The shipped CI template wrote unredacted secrets to a SARIF file.**
+  `templates/ci/github-drupal.yml` invoked gitleaks without `--redact`. The file is not
+  uploaded today, so nothing leaked, but adding an `upload-artifact` step would have
+  shipped every discovered secret. Two reference docs documented the unredacted command
+  and now show `--redact`.
+
+- `scripts/tests/false-clean-spec.sh` — 203 hermetic assertions, no DDEV, no network, no
   PHP. Covers all of the above, including the hostile cases: an unparseable and a
   truncated gitleaks report, an unwritable and a symlinked `.gitignore`, pattern
   metacharacters in `REPORT_DIR`, and that the report skeleton cannot start at a passing

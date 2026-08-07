@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.8.0
+version: 3.9.6
 model: inherit
 allowed-tools: Read, Bash, Grep, Glob
 disallowed-tools: Write, Edit
@@ -266,7 +266,7 @@ All reports must follow `schemas/audit-report.schema.json`:
     "coverage_score": "pass|warning|fail",
     "solid_score": "pass|warning|fail",
     "dry_score": "pass|warning|fail",
-    "security_score": "pass|warning|fail"
+    "security_score": "pass|warning|fail|skipped"
   },
   "coverage": { "line_coverage": 75.5, "files_analyzed": 45 },
   "solid": { "violations": [] },

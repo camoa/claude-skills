@@ -140,7 +140,10 @@ jobs:
 
       - name: Gitleaks Secret Detection
         run: |
-          gitleaks detect --no-git --report-format sarif --report-path gitleaks-results.sarif
+          # --redact: the SARIF is written into the workspace. It is not uploaded today,
+          # but the moment an upload-artifact step is added, unredacted matched secrets
+          # would ship with it. Redacting costs nothing and removes the footgun.
+          gitleaks detect --redact --no-git --report-format sarif --report-path gitleaks-results.sarif
         continue-on-error: true
 
       # =====================

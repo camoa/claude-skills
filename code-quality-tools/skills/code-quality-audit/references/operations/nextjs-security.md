@@ -63,7 +63,8 @@ The audit performs 7 complementary security checks:
 - **Type:** Secret detection
 - **Coverage:** 800+ patterns, entropy analysis
 - **Status:** ✅ Actively maintained
-- **Command:** `gitleaks detect --no-git`
+- **Command:** `gitleaks detect --redact --no-git`
+- `--redact` masks matched values in the report. Without it the report file holds every discovered secret in plaintext.
 
 ### 6. Custom React/Next.js Patterns
 - **Type:** Regex-based detection

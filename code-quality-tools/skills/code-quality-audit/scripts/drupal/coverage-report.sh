@@ -72,7 +72,16 @@ if [[ "${1:-}" == "--changed" ]]; then
   fi
 
   # Check for PCOV
-  PCOV_AVAILABLE=$(ddev exec php -m 2>/dev/null | grep -c pcov || echo "0")
+  # Probe with grep -q, not `grep -c ... || echo 0`: grep -c prints its count AND
+  # exits 1 when the count is zero, so the fallback appends a second line and the
+  # value becomes $'0\n0'. Every numeric test on it then dies with "integer
+  # expression expected" — a non-zero status, which takes the else branch and
+  # reports "PCOV available" precisely when pcov is missing.
+  # The pattern tolerates surrounding whitespace rather than anchoring on `pcov`
+  # alone: `[[:space:]]` covers CR, so a container emitting CRLF does not read as
+  # "absent".
+  PCOV_AVAILABLE=0
+  if ddev exec php -m 2>/dev/null | grep -qiE '^[[:space:]]*pcov[[:space:]]*$'; then PCOV_AVAILABLE=1; fi
   if [ "$PCOV_AVAILABLE" -eq 0 ]; then
     echo -e "${YELLOW}[WARN]${NC} PCOV not available, coverage will be slower"
     PCOV_FLAGS=""
@@ -233,7 +242,15 @@ if ! ddev describe &> /dev/null; then
 fi
 
 # Check for PCOV
-PCOV_AVAILABLE=$(ddev exec php -m 2>/dev/null | grep -c pcov || echo "0")
+# Probe with grep -q, not `grep -c ... || echo 0`: grep -c prints its count AND
+# exits 1 when the count is zero, so the fallback appends a second line and the
+# value becomes $'0\n0'. Every numeric test on it then dies with "integer
+# expression expected" — a non-zero status, which takes the else branch and
+# reports "PCOV available" precisely when pcov is missing.
+# The pattern tolerates surrounding whitespace rather than anchoring on `pcov` alone:
+# `[[:space:]]` covers CR, so a container emitting CRLF does not read as "absent".
+PCOV_AVAILABLE=0
+if ddev exec php -m 2>/dev/null | grep -qiE '^[[:space:]]*pcov[[:space:]]*$'; then PCOV_AVAILABLE=1; fi
 if [ "$PCOV_AVAILABLE" -eq 0 ]; then
     echo -e "${YELLOW}[WARN]${NC} PCOV not available, coverage will be slower"
     echo "  Add to .ddev/config.yaml:"

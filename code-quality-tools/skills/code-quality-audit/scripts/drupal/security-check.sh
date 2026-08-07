@@ -24,6 +24,138 @@ to_json_array() {
     fi
 }
 
+# Resolve the gate verdict from the severity counts AND the coverage of the scan.
+#
+# A verdict of "pass" is a claim that the tree is clean, and that claim is only
+# supportable when the scan covered its ground. A suite where most analyzers were absent
+# reports zero findings because it did not look, not because there is nothing to find.
+# Any tool recorded as absent therefore downgrades a would-be "pass" to "skipped" — the
+# value the --changed envelope already uses for "this gate produced no result to trust".
+#
+# Only a would-be pass is downgraded. "warning" and "fail" already say the tree is not
+# clean, and they carry findings the partial scan did produce; rewriting them as
+# "skipped" would discard real evidence. A finding is a finding whatever else failed
+# to run.
+#
+# The narrower rule — downgrade only when a whole CATEGORY (secrets, dependencies,
+# taint) is left uncovered — was considered and rejected: it needs a category map that
+# must be kept in sync with every tool added, and it blesses "one of the two secret
+# scanners ran" as full coverage. Stating absence plainly costs nothing operationally,
+# because "skipped" keeps the exit 0 that a pass would have had.
+#
+# Self-contained on purpose (reads no globals, echoes the verdict) so the spec can
+# extract and source it in isolation.
+#   resolve_security_status <critical> <high> <medium> <skipped_tool_count>
+resolve_security_status() {
+    local critical="$1" high="$2" medium="$3" skipped="$4"
+    if [ "$critical" -gt 0 ]; then
+        echo "fail"
+    elif [ "$high" -gt 3 ]; then
+        echo "fail"
+    elif [ "$high" -gt 0 ] || [ "$medium" -gt 10 ]; then
+        echo "warning"
+    elif [ "$skipped" -gt 0 ]; then
+        echo "skipped"
+    else
+        echo "pass"
+    fi
+}
+
+# Drop any report left by an earlier run, before the tool gets a chance to write a new
+# one. A failed run writes no report, and a report from an earlier successful run would
+# then be parsed as if it were this run's result. Sets TOOL_STALE=1 when the old report
+# could not be removed, which leaves this run's result unprovable.
+#
+# Only needed for analyzers that write out of band (psalm --report, trivy --output).
+# The others are shell redirections, which truncate the file before the tool runs.
+#
+# Call this from inside a `set +e` bracket: `rm` fails on an unwritable report directory,
+# and under `set -e` that would abort the entire security audit mid-scan.
+clear_stale_report() {
+    TOOL_STALE=0
+    rm -f "$1" 2>/dev/null
+    if [ -e "$1" ]; then
+        TOOL_STALE=1
+    fi
+    return 0
+}
+
+# Decide which of three outcomes an analyzer produced, and how many findings it reported:
+#
+#   TOOL_FAILED=0 TOOL_COUNT=0   it ran and found nothing
+#   TOOL_FAILED=0 TOOL_COUNT=N   it ran and found N things
+#   TOOL_FAILED=1                it did not produce a usable result
+#
+# Byte-identical to the helper in nextjs/security-check.sh, deliberately: the two gates
+# claim to reach the same verdict from the same evidence, and that claim is only true if
+# they classify a tool's outcome the same way.
+#
+# An exit status alone cannot decide this. For some tools a non-zero exit means "found
+# things" and for others it means "failed to run", and several write a well-formed report
+# even when they failed — so the count has to be read out of the report and checked, not
+# swallowed into a zero. A zero that came from a tool that never ran is a clean result
+# nobody earned. Each caller states its own threshold because the tools disagree; see the
+# comment at each call site for what was verified about that tool.
+#
+# DO NOT "tidy" the thresholds into a single consistent value. They differ because the
+# evidence differs, and flattening them re-introduces a defect this branch has now hit
+# four separate times (gitleaks fatalling through os.Exit(1), npm ENOLOCK writing a
+# well-formed error document, eslint exiting 1 on ordinary lint errors, semgrep exiting
+# 0 with its real problem in .errors):
+#   fail_from 1    semgrep, trivy — those exact binaries' exit tables were verified
+#                  (semgrep 1.172.0, trivy 0.73.0), and neither changes its status on
+#                  findings, so ANY non-zero really does mean the run failed.
+#   fail_from 126  php-security-linter, psalm, security_review — exit tables NOT verified
+#                  here, and psalm and drush both exit non-zero when they FIND something.
+#                  A low threshold there would convert every real finding into a fake
+#                  "tool failed". Only shell-level failures (126/127, 128+N) are read
+#                  from the status; the report decides everything else.
+#
+# $1 report path, $2 the tool's exit status, $3 the lowest exit status that means "failed
+# to run" for this tool, $4 the jq expression that counts findings in the report.
+resolve_tool_result() {
+    local report="$1" exit_status="$2" fail_from="$3" count_expr="$4"
+    local count
+
+    TOOL_FAILED=0
+    TOOL_COUNT=0
+
+    if [ "${TOOL_STALE:-0}" -eq 1 ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    if [ "$exit_status" -ge "$fail_from" ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    # Every one of these tools emits a JSON document on a run that completed — an empty
+    # findings list is still a document — so a missing or empty report means the run did
+    # not complete, whatever it exited. For the redirection-based callers this is true by
+    # construction: `> file` creates the file before the tool runs, so an empty file means
+    # the tool produced no output at all.
+    if [ ! -f "$report" ] || [ ! -s "$report" ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    # The `!` keeps `set -e` from aborting here, so a jq failure is handled rather than
+    # fatal. A report that is present but unparseable, or one whose count field is absent
+    # so jq yields null instead of a number, is not evidence of a clean tree.
+    if ! count=$(jq "$count_expr" "$report" 2>/dev/null); then
+        TOOL_FAILED=1
+        return 0
+    fi
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    TOOL_COUNT="$count"
+    return 0
+}
+
 # Turn `grep -Hn` output into one issue object per hit, carrying the real file and
 # line. Callers derive their severity count from the length of this array so the
 # counters and issues[] cannot disagree.
@@ -164,6 +296,18 @@ if [ -n "$CHANGED_FILE" ]; then
     # Tool-availability tracking: which SAST analyzers ran vs were absent.
     # absence ≠ failure; if NO analyzer runs the gate verdict is "skipped" (exit 0).
     SKIPPED_TOOLS=()
+    # The tools that were never installed. Most analyzers here are optional by design and
+    # missing on a normal machine, so their absence is expected and must NOT bear on the
+    # verdict: treating "never installed" as failed coverage would put every real run at
+    # "skipped", and a verdict that fires on every run carries no information.
+    #
+    # The tools that DID fail are derived as SKIPPED_TOOLS minus ABSENT_TOOLS rather than
+    # listed a second time by hand. Two consequences, both wanted: the failed list cannot
+    # drift out of sync with the recorded skips, and the default is fail-CLOSED — a tool
+    # that records a skip counts against the verdict unless a branch explicitly declares its
+    # absence expected. drush pm:security and composer audit have no absent branch at all
+    # (DDEV is a hard prerequisite here), so a failure in either is correctly a failure.
+    ABSENT_TOOLS=()
     RAN_ANALYZERS=0
 
     # =====================
@@ -173,10 +317,23 @@ if [ -n "$CHANGED_FILE" ]; then
     SEMGREP_JSON="${REPORT_DIR}/security/semgrep.json"
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
-        if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; then
+        # Pick the runner by where semgrep ACTUALLY is, not by whether DDEV is up.
+        # The old guard was `in-container OR on-host` and then dispatched on `ddev
+        # describe`, so semgrep installed on the host but not in the container passed the
+        # guard and was then invoked inside the container, where it does not exist. That
+        # used to fail quietly; now that a non-zero semgrep exit is a recorded failure it
+        # would fail CI on a perfectly reasonable setup.
+        SEMGREP_RUNNER=""
+        if ddev exec semgrep --version &> /dev/null; then
+            SEMGREP_RUNNER="container"
+        elif command -v semgrep &> /dev/null; then
+            SEMGREP_RUNNER="host"
+        fi
+
+        if [ -n "$SEMGREP_RUNNER" ]; then
             RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
             set +e
-            if ddev describe &> /dev/null; then
+            if [ "$SEMGREP_RUNNER" = "container" ]; then
                 # shellcheck disable=SC2046
                 ddev exec semgrep scan --config=auto --json \
                     "${RELEVANT_FILES[@]}" > "$SEMGREP_JSON" 2>/dev/null
@@ -188,8 +345,20 @@ if [ -n "$CHANGED_FILE" ]; then
             SEMGREP_EXIT=$?
             set -e
 
-            if [ -f "$SEMGREP_JSON" ] && [ -s "$SEMGREP_JSON" ]; then
-                VULN_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' "$SEMGREP_JSON" 2>/dev/null || echo "0")
+            # Verified against semgrep 1.172.0: findings do NOT change the exit status
+            # unless --error is passed, so exit 0 means it ran and ANY non-zero means it
+            # failed. It still writes a report in those cases, with results empty and the
+            # real problem in .errors, so the report alone reads as a clean tree. This is
+            # the CI/pre-merge path, so an unread exit here is a false clean on every
+            # merge.
+            resolve_tool_result "$SEMGREP_JSON" "$SEMGREP_EXIT" 1 \
+                '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length'
+
+            if [ "$TOOL_FAILED" -eq 1 ]; then
+                echo -e "  ${YELLOW}[SKIP]${NC} semgrep produced no usable report (exit ${SEMGREP_EXIT})"
+                SKIPPED_TOOLS+=("semgrep")
+            else
+                VULN_COUNT="$TOOL_COUNT"
                 if [ "$VULN_COUNT" -gt 0 ]; then
                     echo -e "  ${YELLOW}Found ${VULN_COUNT} Semgrep findings${NC}"
                     SEMGREP_ISSUES=$(jq '[.results[] | {
@@ -215,9 +384,15 @@ if [ -n "$CHANGED_FILE" ]; then
         else
             echo -e "  ${YELLOW}[SKIP]${NC} semgrep not installed (tool absent)"
             SKIPPED_TOOLS+=("semgrep")
+            ABSENT_TOOLS+=("semgrep")
         fi
     else
+        # No eligible files is a real non-result and has to land in a bucket like any
+        # other, or a scan that examined nothing reports the same "pass" as one that
+        # examined everything. Expected, so it does not move the verdict.
         echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
+        SKIPPED_TOOLS+=("semgrep")
+        ABSENT_TOOLS+=("semgrep")
     fi
 
     # =====================
@@ -239,7 +414,18 @@ if [ -n "$CHANGED_FILE" ]; then
             PHPCS_SEC_EXIT=$?
             set -e
 
-            if [ -f "$PHPCS_SECURITY_JSON" ] && [ -s "$PHPCS_SECURITY_JSON" ]; then
+            # Exit table for yousha/php-security-linter not verified here, so only a
+            # shell-level failure is read from the status; the report decides the rest.
+            # The redirection creates the file before the tool runs, so an empty file
+            # means it emitted nothing at all.
+            resolve_tool_result "$PHPCS_SECURITY_JSON" "$PHPCS_SEC_EXIT" 126 \
+                '[.files // {} | to_entries[] | .value.messages[]] | length'
+
+            if [ "$TOOL_FAILED" -eq 1 ]; then
+                echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter produced no usable report (exit ${PHPCS_SEC_EXIT})"
+                SKIPPED_TOOLS+=("php-security-linter")
+                PHPCS_ISSUES="[]"
+            else
                 PHPCS_ISSUES=$(jq '[.files // {} | to_entries[] | .key as $file | .value.messages[] | {
                     category: ("PHPCS Security - " + (.source // "Unknown")),
                     severity: (if .type == "ERROR" then "high" else "medium" end),
@@ -260,16 +446,16 @@ if [ -n "$CHANGED_FILE" ]; then
                 else
                     echo -e "  ${GREEN}No PHPCS security issues${NC}"
                 fi
-            else
-                echo -e "  ${GREEN}No PHPCS security issues${NC}"
-                PHPCS_ISSUES="[]"
             fi
         else
             echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
             SKIPPED_TOOLS+=("php-security-linter")
+            ABSENT_TOOLS+=("php-security-linter")
         fi
     else
         echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
+        SKIPPED_TOOLS+=("php-security-linter")
+        ABSENT_TOOLS+=("php-security-linter")
     fi
 
     # =====================
@@ -332,6 +518,8 @@ if [ -n "$CHANGED_FILE" ]; then
         fi
     else
         echo -e "  ${YELLOW}No SAST-eligible files — skipping custom patterns${NC}"
+        SKIPPED_TOOLS+=("custom_patterns")
+        ABSENT_TOOLS+=("custom_patterns")
     fi
 
     # =====================
@@ -343,36 +531,65 @@ if [ -n "$CHANGED_FILE" ]; then
         RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
         COMPOSER_AUDIT_JSON="${REPORT_DIR}/security/composer-audit.json"
         set +e
-        ddev composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
+        # `ddev exec composer`, not `ddev composer`: composer audit exits 1 whenever it
+        # finds advisories, and `ddev composer` treats any non-zero exit as a failed
+        # command — it prints its own error and emits nothing on stdout. The file would
+        # be empty and this block would report "unavailable" exactly when there IS
+        # something to report. `ddev exec` passes stdout through unchanged.
+        # No --locked: that audits composer.lock instead of the installed tree, so on a
+        # drifted checkout it audits a declaration rather than the code that runs.
+        ddev exec composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
         COMPOSER_EXIT=$?
         set -e
 
+        # Exit status cannot discriminate here: composer audit exits 1 both when it
+        # finds advisories and when it fails outright. Only a PARSEABLE report can, so
+        # the status is carried for diagnostics and parseability decides the verdict.
+        COMPOSER_FAILED=0
         if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s "$COMPOSER_AUDIT_JSON" ]; then
-            VULN_COUNT=$(jq '[.advisories // {} | to_entries[]] | length' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "0")
-            if [ "$VULN_COUNT" -gt 0 ]; then
-                echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
-                COMPOSER_VIOLATIONS=$(jq '[.advisories // {} | to_entries[] | .value[] | {
-                    category: "Composer Vulnerability",
-                    severity: (if .severity == "high" or .severity == "critical" then "high" else "medium" end),
-                    file: .packageName,
-                    line: 0,
-                    message: (.title + " (" + .cve + ")"),
-                    owasp: "A06:2021",
-                    remediation: .link
-                }]' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "[]")
-
-                HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
-                MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-                HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
-                MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
-            else
-                echo -e "  ${GREEN}No package vulnerabilities${NC}"
+            set +e
+            VULN_COUNT=$(jq '[.advisories // {} | to_entries[]] | length' "$COMPOSER_AUDIT_JSON" 2>/dev/null)
+            JQ_EXIT=$?
+            set -e
+            # A present-but-unparseable report is not evidence of a clean tree.
+            if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$VULN_COUNT" =~ ^[0-9]+$ ]]; then
+                COMPOSER_FAILED=1
+                VULN_COUNT=0
             fi
         else
-            echo -e "  ${YELLOW}Composer audit unavailable${NC}"
+            # composer audit writes a JSON document whenever it can run at all,
+            # whatever its exit status, so no output means it did not run.
+            COMPOSER_FAILED=1
+            VULN_COUNT=0
+        fi
+
+        if [ "$COMPOSER_FAILED" -eq 1 ]; then
+            echo -e "  ${YELLOW}[SKIP]${NC} composer audit produced no usable report (exit ${COMPOSER_EXIT})"
+            SKIPPED_TOOLS+=("composer_audit")
+        elif [ "$VULN_COUNT" -gt 0 ]; then
+            echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
+            COMPOSER_VIOLATIONS=$(jq '[.advisories // {} | to_entries[] | .value[] | {
+                category: "Composer Vulnerability",
+                severity: (if .severity == "high" or .severity == "critical" then "high" else "medium" end),
+                file: .packageName,
+                line: 0,
+                message: (.title + " (" + .cve + ")"),
+                owasp: "A06:2021",
+                remediation: .link
+            }]' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "[]")
+
+            HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+            MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+            HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
+            MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
+        else
+            echo -e "  ${GREEN}No package vulnerabilities${NC}"
         fi
     else
+        # Scoped out by design in this mode, but still a layer that produced nothing.
         echo -e "${YELLOW}[SKIP]${NC} composer audit — composer.json/lock not in changed set"
+        SKIPPED_TOOLS+=("composer_audit")
+        ABSENT_TOOLS+=("composer_audit")
     fi
 
     # =====================
@@ -387,21 +604,31 @@ if [ -n "$CHANGED_FILE" ]; then
 
     # Status. If NO SAST analyzer ran (every analyzer absent + no eligible files),
     # degrade to "skipped" (exit 0) rather than a hollow PASS. Otherwise the verdict
-    # comes from the checks that DID run — tool absence never inverts pass↔fail.
+    # comes from the checks that DID run, and from whether a tool that WAS there failed
+    # to report. Tool absence never inverts pass↔fail and never downgrades on its own:
+    # SKIPPED_TOOLS holds both kinds here, and ABSENT_TOOLS names the ones whose absence
+    # was expected, so the difference is what bears on the verdict. The whole-project
+    # layers this mode omits by design are declared separately again, in tools_skipped
+    # and the advisory note.
+    # tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
+    # says. tools_absent = the layer never ran and that was expected (tool not installed,
+    # nothing eligible to scan, target path absent) — it does not move the verdict.
+    # tools_failed = the layer was there and returned nothing usable (crashed, unparseable
+    # report, stale report) — a zero from it is not evidence, so it downgrades a would-be
+    # pass to "skipped". Every non-produced result lands in exactly one of the two; the
+    # union is "everything this scan did not cover".
+    SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+    ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+    FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
+        --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+    FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
+
     if [ "$RAN_ANALYZERS" -eq 0 ]; then
         OVERALL_STATUS="skipped"
     else
-        OVERALL_STATUS="pass"
-        if [ "$CRITICAL_COUNT" -gt 0 ]; then
-            OVERALL_STATUS="fail"
-        elif [ "$HIGH_COUNT" -gt 3 ]; then
-            OVERALL_STATUS="fail"
-        elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
-            OVERALL_STATUS="warning"
-        fi
+        OVERALL_STATUS=$(resolve_security_status \
+            "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
     fi
-
-    SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 
     REPORT_FILE="${REPORT_DIR}/security-report.json"
     jq -n \
@@ -413,7 +640,8 @@ if [ -n "$CHANGED_FILE" ]; then
         --argjson low "$LOW_COUNT" \
         --argjson issues "$ISSUES" \
         --argjson analyzers_ran "$RAN_ANALYZERS" \
-        --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
+        --argjson tools_absent "$ABSENT_TOOLS_JSON" \
+        --argjson tools_failed "$FAILED_TOOLS_JSON" \
         --arg advisory_note "$ADVISORY_SKIP_NOTE" \
         '{
             meta: {
@@ -423,6 +651,7 @@ if [ -n "$CHANGED_FILE" ]; then
                 analyzers_ran: $analyzers_ran,
                 tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
                 tools_absent: $tools_absent,
+                tools_failed: $tools_failed,
                 tools_skipped: ["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"]
             },
             summary: {
@@ -458,7 +687,14 @@ if [ -n "$CHANGED_FILE" ]; then
     echo ""
 
     if [ "$OVERALL_STATUS" = "skipped" ]; then
-        echo -e "${YELLOW}[SKIP]${NC} No security SAST analyzers available (all tools absent) — gate skipped"
+        if [ "$RAN_ANALYZERS" -eq 0 ]; then
+            echo -e "${YELLOW}[SKIP]${NC} No security SAST analyzers available (all tools absent) — gate skipped"
+        else
+            # Zero findings from an incomplete scan. Reported as a skip rather than a
+            # pass because the analyzers that were absent found nothing by not looking.
+            echo -e "${YELLOW}[SKIP]${NC} No findings, but ${FAILED_COUNT} installed tool(s) returned no usable result — coverage incomplete, not a clean verdict"
+            echo -e "Tools that failed: $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")')"
+        fi
         echo -e "Report: ${REPORT_FILE}"
         exit 0
     elif [ "$OVERALL_STATUS" = "pass" ]; then
@@ -485,8 +721,23 @@ if ! ddev describe &> /dev/null; then
     exit 2
 fi
 
-# Track absent optional analyzers (honest, consistent skip reporting).
+# Every analyzer that contributed no counts, whatever the reason. Reported as
+# tools_absent[] so a reader can see which layers this scan did not include.
 SKIPPED_TOOLS=()
+
+# The tools that were never installed. Most analyzers here are optional by design and
+# missing on a normal machine, so their absence is expected and must NOT bear on the
+# verdict: treating "never installed" as failed coverage would put every real run at
+# "skipped", and a verdict that fires on every run carries no information.
+#
+# The tools that DID fail are derived as SKIPPED_TOOLS minus ABSENT_TOOLS rather than
+# listed a second time by hand. Two consequences, both wanted: the failed list cannot
+# drift out of sync with the recorded skips, and the default is fail-CLOSED — a tool
+# that records a skip counts against the verdict unless a branch explicitly declares its
+# absence expected. drush pm:security and composer audit have no absent branch at all
+# (DDEV is a hard prerequisite here), so a failure in either is correctly a failure.
+ABSENT_TOOLS=()
+
 
 echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================
@@ -494,33 +745,78 @@ echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
 # =====================
 DRUSH_SECURITY_JSON="${REPORT_DIR}/security/drush-security.json"
 set +e
-ddev drush pm:security --format=json > "$DRUSH_SECURITY_JSON" 2>/dev/null
+# `ddev exec drush`, not `ddev drush`: the same swallow class as composer audit.
+# drush pm:security exits non-zero when it finds advisories, and `ddev drush` treats
+# any non-zero exit as a failed command, printing its own error and emitting nothing
+# on stdout. `ddev exec` passes stdout through unchanged.
+ddev exec drush pm:security --format=json > "$DRUSH_SECURITY_JSON" 2>/dev/null
 DRUSH_EXIT=$?
 set -e
 
+# As with composer audit, the exit status cannot tell "found advisories" apart from
+# "failed to run". Parseability decides; the status is carried for diagnostics.
+# Ordering here is SAFETY-CRITICAL and deliberately not the same as the other layers.
+#
+# drush pm:security has no not-installed branch (DDEV is a hard prerequisite), so
+# anything classed as a failure here lands in tools_failed, degrades the gate to
+# "skipped", caps /audit at "warning" and exits 1. If "wrote nothing" were the failure
+# signal, then a healthy Drupal site with ZERO advisories — the overwhelmingly common
+# case, and the primary target platform — would fail its audit on every run. drush
+# commands can legitimately return early and print nothing when a result set is empty.
+#
+# So empty output is NOT read as failure. A parseable report decides when there is one;
+# otherwise a clean exit means "ran, found nothing" and only a non-zero exit WITH no
+# usable output is a failure. On a healthy site the gate therefore reaches pass whether
+# drush prints "[]" or prints nothing at all.
+#
+# UNVERIFIED, and stated so it can be confirmed: whether `drush pm:security
+# --format=json` emits an empty JSON document or emits nothing on an advisory-free site
+# could not be checked here, because it needs a live DDEV project. This branch is
+# written so that BOTH answers reach the same, correct verdict. It errs OPEN for drush
+# specifically: a drush that fails while exiting 0 would be read as clean. That is the
+# deliberate trade — erring closed here breaks every healthy site, which is a worse and
+# far more likely failure than the case it would catch.
+DRUSH_FAILED=0
+ADVISORY_COUNT=0
 if [ -f "$DRUSH_SECURITY_JSON" ] && [ -s "$DRUSH_SECURITY_JSON" ]; then
-    ADVISORY_COUNT=$(jq 'length' "$DRUSH_SECURITY_JSON" 2>/dev/null || echo "0")
-    if [ "$ADVISORY_COUNT" -gt 0 ]; then
-        echo -e "  ${RED}Found ${ADVISORY_COUNT} security advisories${NC}"
-
-        # Convert to violations format
-        DRUSH_VIOLATIONS=$(jq '[.[] | {
-            category: "Drupal Security Advisory",
-            severity: "critical",
-            file: .name,
-            line: 0,
-            message: (.title + " - " + .link),
-            owasp: "A06:2021",
-            remediation: "Update to recommended version: \(.recommended)"
-        }]' "$DRUSH_SECURITY_JSON" 2>/dev/null || echo "[]")
-
-        CRITICAL_COUNT=$((CRITICAL_COUNT + ADVISORY_COUNT))
-    else
-        echo -e "  ${GREEN}No security advisories${NC}"
-        DRUSH_VIOLATIONS="[]"
+    set +e
+    ADVISORY_COUNT=$(jq 'length' "$DRUSH_SECURITY_JSON" 2>/dev/null)
+    JQ_EXIT=$?
+    set -e
+    if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$ADVISORY_COUNT" =~ ^[0-9]+$ ]]; then
+        DRUSH_FAILED=1
+        ADVISORY_COUNT=0
     fi
+elif [ "$DRUSH_EXIT" -eq 0 ]; then
+    # Ran to completion and printed nothing: no advisories.
+    ADVISORY_COUNT=0
 else
-    echo -e "  ${YELLOW}Drush security check unavailable${NC}"
+    # Non-zero AND nothing usable to read. Nothing was learned about this site.
+    DRUSH_FAILED=1
+    ADVISORY_COUNT=0
+fi
+
+if [ "$DRUSH_FAILED" -eq 1 ]; then
+    echo -e "  ${YELLOW}[SKIP]${NC} drush pm:security produced no usable report (exit ${DRUSH_EXIT})"
+    SKIPPED_TOOLS+=("drush_pm_security")
+    DRUSH_VIOLATIONS="[]"
+elif [ "$ADVISORY_COUNT" -gt 0 ]; then
+    echo -e "  ${RED}Found ${ADVISORY_COUNT} security advisories${NC}"
+
+    # Convert to violations format
+    DRUSH_VIOLATIONS=$(jq '[.[] | {
+        category: "Drupal Security Advisory",
+        severity: "critical",
+        file: .name,
+        line: 0,
+        message: (.title + " - " + .link),
+        owasp: "A06:2021",
+        remediation: "Update to recommended version: \(.recommended)"
+    }]' "$DRUSH_SECURITY_JSON" 2>/dev/null || echo "[]")
+
+    CRITICAL_COUNT=$((CRITICAL_COUNT + ADVISORY_COUNT))
+else
+    echo -e "  ${GREEN}No security advisories${NC}"
     DRUSH_VIOLATIONS="[]"
 fi
 
@@ -531,37 +827,69 @@ echo -e "${BLUE}[2/10]${NC} Checking composer package vulnerabilities..."
 # =====================
 COMPOSER_AUDIT_JSON="${REPORT_DIR}/security/composer-audit.json"
 set +e
-ddev composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
+# `ddev exec composer`, not `ddev composer`: composer audit exits 1 whenever it finds
+# advisories, and `ddev composer` treats any non-zero exit as a failed command — it
+# prints its own error and emits nothing on stdout. The file would be empty and this
+# block would report "unavailable" exactly when there IS something to report.
+# `ddev exec` passes stdout through unchanged.
+#
+# Deliberately NOT --locked. That audits composer.lock instead of the installed
+# packages, so on a drifted checkout — a lock declaring one version while vendor/ and
+# the docroot hold another, which happens after a failed composer install — it audits
+# a declaration rather than the code that actually runs, and can report clean while a
+# vulnerable package sits in vendor/. Lock-vs-installed drift is its own problem and
+# is tracked separately; auditing the installed tree is the security-correct default.
+ddev exec composer audit --format=json > "$COMPOSER_AUDIT_JSON" 2>/dev/null
 COMPOSER_EXIT=$?
 set -e
 
+# Exit status cannot discriminate here: composer audit exits 1 both when it finds
+# advisories and when it fails outright. Only a PARSEABLE report can, so the status is
+# carried for diagnostics and parseability decides the verdict.
+COMPOSER_FAILED=0
 if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s "$COMPOSER_AUDIT_JSON" ]; then
-    VULN_COUNT=$(jq '[.advisories // {} | to_entries[]] | length' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "0")
-    if [ "$VULN_COUNT" -gt 0 ]; then
-        echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
-
-        # Convert to violations format
-        COMPOSER_VIOLATIONS=$(jq '[.advisories // {} | to_entries[] | .value[] | {
-            category: "Composer Vulnerability",
-            severity: (if .severity == "high" or .severity == "critical" then "high" else "medium" end),
-            file: .packageName,
-            line: 0,
-            message: (.title + " (" + .cve + ")"),
-            owasp: "A06:2021",
-            remediation: .link
-        }]' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "[]")
-
-        # Count by severity
-        HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
-        MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
-        HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
-        MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
-    else
-        echo -e "  ${GREEN}No package vulnerabilities${NC}"
-        COMPOSER_VIOLATIONS="[]"
+    set +e
+    VULN_COUNT=$(jq '[.advisories // {} | to_entries[]] | length' "$COMPOSER_AUDIT_JSON" 2>/dev/null)
+    JQ_EXIT=$?
+    set -e
+    # A present-but-unparseable report is not evidence of a clean tree. Swallowing
+    # jq's failure into 0 would print the clean message while the tool said nothing.
+    if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$VULN_COUNT" =~ ^[0-9]+$ ]]; then
+        COMPOSER_FAILED=1
+        VULN_COUNT=0
     fi
 else
-    echo -e "  ${YELLOW}Composer audit unavailable${NC}"
+    # composer audit writes a JSON document whenever it can run at all, whatever its
+    # exit status, so no output means it did not run.
+    COMPOSER_FAILED=1
+    VULN_COUNT=0
+fi
+
+if [ "$COMPOSER_FAILED" -eq 1 ]; then
+    echo -e "  ${YELLOW}[SKIP]${NC} composer audit produced no usable report (exit ${COMPOSER_EXIT})"
+    SKIPPED_TOOLS+=("composer_audit")
+    COMPOSER_VIOLATIONS="[]"
+elif [ "$VULN_COUNT" -gt 0 ]; then
+    echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
+
+    # Convert to violations format
+    COMPOSER_VIOLATIONS=$(jq '[.advisories // {} | to_entries[] | .value[] | {
+        category: "Composer Vulnerability",
+        severity: (if .severity == "high" or .severity == "critical" then "high" else "medium" end),
+        file: .packageName,
+        line: 0,
+        message: (.title + " (" + .cve + ")"),
+        owasp: "A06:2021",
+        remediation: .link
+    }]' "$COMPOSER_AUDIT_JSON" 2>/dev/null || echo "[]")
+
+    # Count by severity
+    HIGH_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "high")] | length' 2>/dev/null || echo "0")
+    MED_VULNS=$(echo "$COMPOSER_VIOLATIONS" | jq '[.[] | select(.severity == "medium")] | length' 2>/dev/null || echo "0")
+    HIGH_COUNT=$((HIGH_COUNT + HIGH_VULNS))
+    MEDIUM_COUNT=$((MEDIUM_COUNT + MED_VULNS))
+else
+    echo -e "  ${GREEN}No package vulnerabilities${NC}"
     COMPOSER_VIOLATIONS="[]"
 fi
 
@@ -581,7 +909,19 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
     PHPCS_SEC_EXIT=$?
     set -e
 
-    if [ -f "$PHPCS_SECURITY_JSON" ] && [ -s "$PHPCS_SECURITY_JSON" ]; then
+    # The exit table for yousha/php-security-linter was not verified here, so only a
+    # shell-level failure (126/127, 128+N) is read from the status; everything else is
+    # decided by the report. It writes a JSON document whenever it runs, and the
+    # redirection above creates the file before it starts, so an empty file means it
+    # produced no output at all.
+    resolve_tool_result "$PHPCS_SECURITY_JSON" "$PHPCS_SEC_EXIT" 126 \
+        '[.files // {} | to_entries[] | .value.messages[]] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter produced no usable report (exit ${PHPCS_SEC_EXIT})"
+        SKIPPED_TOOLS+=("php-security-linter")
+        PHPCS_ISSUES="[]"
+    else
         PHPCS_ISSUES=$(jq '[.files // {} | to_entries[] | .key as $file | .value.messages[] | {
             category: ("PHPCS Security - " + (.source // "Unknown")),
             severity: (if .type == "ERROR" then "high" else "medium" end),
@@ -603,13 +943,11 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
         else
             echo -e "  ${GREEN}No PHPCS security issues${NC}"
         fi
-    else
-        echo -e "  ${GREEN}No PHPCS security issues${NC}"
-        PHPCS_ISSUES="[]"
     fi
 else
     echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
     SKIPPED_TOOLS+=("php-security-linter")
+    ABSENT_TOOLS+=("php-security-linter")
     PHPCS_ISSUES="[]"
 fi
 
@@ -645,6 +983,9 @@ EOF
     fi
 
     set +e
+    # psalm writes out of band via --report, so a report from an earlier run would
+    # otherwise be read as this run's result.
+    clear_stale_report "$PSALM_TAINT_JSON"
     ddev exec vendor/bin/psalm --taint-analysis \
         --report="${PSALM_TAINT_JSON}" \
         --output-format=json \
@@ -653,16 +994,55 @@ EOF
     PSALM_EXIT=$?
     set -e
 
-    if [ -f "$PSALM_TAINT_JSON" ] && [ -s "$PSALM_TAINT_JSON" ]; then
+    # psalm exits non-zero when it finds issues, so the status cannot separate "found
+    # taint" from "failed"; only a shell-level failure is read from it.
+    #
+    # UNVERIFIED ASSUMPTION, stated so it can be confirmed or narrowed: this treats a
+    # missing or empty --report file as a FAILED run, which assumes psalm writes that
+    # file whenever a run completes — including a run that finds nothing. That could not
+    # be checked here because psalm is not installed in this environment. It is the only
+    # one of the five where "no report" is not true by construction; the other four are
+    # shell redirections, where `> file` creates the file before the tool starts.
+    #
+    # It errs CLOSED: if the assumption is wrong, a clean psalm run is reported as a
+    # skipped tool and the gate says "incomplete" when it was actually complete. The code
+    # this replaced erred OPEN — it printed "No taint analysis issues" for a psalm that
+    # never ran. On a security gate, over-reporting incompleteness is the safe direction.
+    # A maintainer with psalm installed should confirm the write-on-clean behaviour and
+    # narrow this if it holds.
+    resolve_tool_result "$PSALM_TAINT_JSON" "$PSALM_EXIT" 126 'length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} psalm produced no usable report (exit ${PSALM_EXIT})"
+        SKIPPED_TOOLS+=("psalm")
+        PSALM_ISSUES="[]"
+    else
+        # `|| echo "[]"` here would be a false clean in the OTHER direction: this
+        # transform can fail on a report full of REAL findings, and swallowing that into
+        # an empty array prints "No taint analysis issues" for a psalm that found taint.
+        # `.type | contains("Sql")` is the specific hazard — psalm omits .type on some
+        # issue shapes, and `null | contains(...)` aborts the whole expression, so one
+        # such entry zeroes every finding in the file. Capture jq's status and treat a
+        # transform failure as a failed run, the way the gitleaks block does.
+        set +e
         PSALM_ISSUES=$(jq '[.[] | {
             category: ("Psalm Taint - " + (.type // "Unknown")),
             severity: (if (.severity // 0) <= 3 then "high" elif (.severity // 0) <= 5 then "medium" else "low" end),
             file: .file_path,
             line: .line_from,
             message: .message,
-            owasp: (if (.type | contains("Sql")) then "A03:2021" elif (.type | contains("Html") or (.type | contains("Xss"))) then "A03:2021" else "Various" end),
+            owasp: (if ((.type // "") | contains("Sql")) then "A03:2021" elif ((.type // "") | contains("Html")) or ((.type // "") | contains("Xss")) then "A03:2021" else "Various" end),
             remediation: "Sanitize tainted input before use"
-        }]' "$PSALM_TAINT_JSON" 2>/dev/null || echo "[]")
+        }]' "$PSALM_TAINT_JSON" 2>/dev/null)
+        PSALM_JQ_EXIT=$?
+        set -e
+
+        if [ "$PSALM_JQ_EXIT" -ne 0 ]; then
+            echo -e "  ${YELLOW}[SKIP]${NC} psalm report could not be parsed into findings — taint results not counted"
+            SKIPPED_TOOLS+=("psalm")
+            PSALM_ISSUES="[]"
+            PSALM_COUNT=0
+        else
 
         PSALM_COUNT=$(echo "$PSALM_ISSUES" | jq 'length' 2>/dev/null || echo "0")
         if [ "$PSALM_COUNT" -gt 0 ]; then
@@ -677,13 +1057,12 @@ EOF
         else
             echo -e "  ${GREEN}No taint analysis issues${NC}"
         fi
-    else
-        echo -e "  ${GREEN}No taint analysis issues${NC}"
-        PSALM_ISSUES="[]"
+        fi
     fi
 else
     echo -e "  ${YELLOW}[SKIP]${NC} psalm not installed (tool absent)"
     SKIPPED_TOOLS+=("psalm")
+    ABSENT_TOOLS+=("psalm")
     PSALM_ISSUES="[]"
 fi
 
@@ -744,7 +1123,16 @@ if [ -d "${DRUPAL_MODULES_PATH}" ]; then
     fi
 fi
 
-if [ "$CUSTOM_ISSUES" = "[]" ]; then
+if [ ! -d "${DRUPAL_MODULES_PATH}" ]; then
+    # The pattern layer scanned nothing because the configured path does not exist —
+    # an empty site, or DRUPAL_MODULES_PATH pointing somewhere wrong. Either way it
+    # produced no coverage and must say so instead of contributing a silent zero.
+    # Recorded as expected: a site with no custom modules is a legitimate setup, so
+    # this is visible in tools_absent without moving the verdict.
+    echo -e "  ${YELLOW}[SKIP]${NC} ${DRUPAL_MODULES_PATH} does not exist — no custom code scanned"
+    SKIPPED_TOOLS+=("custom_patterns")
+    ABSENT_TOOLS+=("custom_patterns")
+elif [ "$CUSTOM_ISSUES" = "[]" ]; then
     echo -e "  ${GREEN}No custom pattern violations${NC}"
 fi
 
@@ -761,8 +1149,19 @@ if ddev drush pm:list --filter=security_review --format=json 2>/dev/null | jq -e
     SECREVIEW_EXIT=$?
     set -e
 
-    if [ -f "$SECREVIEW_JSON" ] && [ -s "$SECREVIEW_JSON" ]; then
-        FAILED_CHECKS=$(jq '[.[] | select(.result == "fail")] | length' "$SECREVIEW_JSON" 2>/dev/null || echo "0")
+    # drush security-review reports failing checks as data, not as an exit status, and
+    # the drush exit table was not verified here — so only a shell-level failure is read
+    # from the status and the report decides the rest. The redirection creates the file
+    # before drush runs, so an empty file means it emitted nothing.
+    resolve_tool_result "$SECREVIEW_JSON" "$SECREVIEW_EXIT" 126 \
+        '[.[] | select(.result == "fail")] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} security-review produced no usable report (exit ${SECREVIEW_EXIT})"
+        SKIPPED_TOOLS+=("security_review")
+        SECREVIEW_ISSUES="[]"
+    else
+        FAILED_CHECKS="$TOOL_COUNT"
         if [ "$FAILED_CHECKS" -gt 0 ]; then
             echo -e "  ${YELLOW}${FAILED_CHECKS} security review checks failed${NC}"
 
@@ -781,12 +1180,11 @@ if ddev drush pm:list --filter=security_review --format=json 2>/dev/null | jq -e
             echo -e "  ${GREEN}All security review checks passed${NC}"
             SECREVIEW_ISSUES="[]"
         fi
-    else
-        SECREVIEW_ISSUES="[]"
     fi
 else
     echo -e "  ${YELLOW}[SKIP]${NC} security_review module not installed (tool absent)"
     SKIPPED_TOOLS+=("security_review")
+    ABSENT_TOOLS+=("security_review")
     SECREVIEW_ISSUES="[]"
 fi
 
@@ -798,10 +1196,20 @@ echo -e "${BLUE}[7/10]${NC} Running Semgrep SAST (multi-language)..."
 SEMGREP_JSON="${REPORT_DIR}/security/semgrep.json"
 SEMGREP_ISSUES="[]"
 
-if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; then
+# Pick the runner by where semgrep ACTUALLY is, not by whether DDEV is up. See the
+# matching comment in the --changed branch: `in-container OR on-host` followed by a
+# dispatch on `ddev describe` invokes a host-only semgrep inside the container.
+SEMGREP_RUNNER=""
+if ddev exec semgrep --version &> /dev/null; then
+    SEMGREP_RUNNER="container"
+elif command -v semgrep &> /dev/null; then
+    SEMGREP_RUNNER="host"
+fi
+
+if [ -n "$SEMGREP_RUNNER" ]; then
     set +e
     # Run Semgrep with auto config (includes security rules)
-    if ddev describe &> /dev/null; then
+    if [ "$SEMGREP_RUNNER" = "container" ]; then
         ddev exec semgrep scan --config=auto --json \
             "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" > "$SEMGREP_JSON" 2>/dev/null
     else
@@ -811,8 +1219,18 @@ if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; 
     SEMGREP_EXIT=$?
     set -e
 
-    if [ -f "$SEMGREP_JSON" ] && [ -s "$SEMGREP_JSON" ]; then
-        VULN_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' "$SEMGREP_JSON" 2>/dev/null || echo "0")
+    # Verified against semgrep 1.172.0 (same fact the Next.js gate records): findings do
+    # NOT change the exit status unless --error is passed, so exit 0 means it ran and ANY
+    # non-zero means it failed. It still writes a report in those cases, with results
+    # empty and the real problem in .errors, so the report alone reads as a clean tree.
+    resolve_tool_result "$SEMGREP_JSON" "$SEMGREP_EXIT" 1 \
+        '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} semgrep produced no usable report (exit ${SEMGREP_EXIT})"
+        SKIPPED_TOOLS+=("semgrep")
+    else
+        VULN_COUNT="$TOOL_COUNT"
         if [ "$VULN_COUNT" -gt 0 ]; then
             echo -e "  ${YELLOW}Found ${VULN_COUNT} Semgrep findings${NC}"
 
@@ -842,6 +1260,7 @@ if ddev exec semgrep --version &> /dev/null || command -v semgrep &> /dev/null; 
 else
     echo -e "  ${YELLOW}[SKIP]${NC} semgrep not installed (tool absent)"
     SKIPPED_TOOLS+=("semgrep")
+    ABSENT_TOOLS+=("semgrep")
 fi
 
 echo ""
@@ -854,13 +1273,25 @@ TRIVY_ISSUES="[]"
 
 if command -v trivy &> /dev/null; then
     set +e
+    # trivy writes out of band via --output, so clear any report from an earlier run.
+    clear_stale_report "$TRIVY_JSON"
     # Run Trivy on filesystem (dependency + secret scanning)
     trivy fs --scanners vuln,secret --format json --output "$TRIVY_JSON" . 2>/dev/null
     TRIVY_EXIT=$?
     set -e
 
-    if [ -f "$TRIVY_JSON" ] && [ -s "$TRIVY_JSON" ]; then
-        VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]?, .Results[]?.Secrets[]?] | length' "$TRIVY_JSON" 2>/dev/null || echo "0")
+    # Verified against trivy 0.73.0 (same fact the Next.js gate records): findings do NOT
+    # change the exit status unless --exit-code is passed, so exit 0 means it ran and ANY
+    # non-zero means it failed. A bad scanner name, a missing target and an unwritable
+    # --output all exit 1 and write no report at all.
+    resolve_tool_result "$TRIVY_JSON" "$TRIVY_EXIT" 1 \
+        '[.Results[]?.Vulnerabilities[]?, .Results[]?.Secrets[]?] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} trivy produced no usable report (exit ${TRIVY_EXIT})"
+        SKIPPED_TOOLS+=("trivy")
+    else
+        VULN_COUNT="$TOOL_COUNT"
         if [ "$VULN_COUNT" -gt 0 ]; then
             echo -e "  ${YELLOW}Found ${VULN_COUNT} Trivy findings${NC}"
 
@@ -905,6 +1336,7 @@ if command -v trivy &> /dev/null; then
 else
     echo -e "  ${YELLOW}[SKIP]${NC} trivy not installed (tool absent)"
     SKIPPED_TOOLS+=("trivy")
+    ABSENT_TOOLS+=("trivy")
 fi
 
 echo ""
@@ -991,6 +1423,7 @@ if command -v gitleaks &> /dev/null; then
 else
     echo -e "  ${YELLOW}[SKIP]${NC} gitleaks not installed (tool absent)"
     SKIPPED_TOOLS+=("gitleaks")
+    ABSENT_TOOLS+=("gitleaks")
 fi
 
 echo ""
@@ -1041,21 +1474,30 @@ ISSUES=$(jq -n \
 # =====================
 # Determine overall status
 # =====================
-OVERALL_STATUS="pass"
-if [ "$CRITICAL_COUNT" -gt 0 ]; then
-    OVERALL_STATUS="fail"
-elif [ "$HIGH_COUNT" -gt 3 ]; then
-    OVERALL_STATUS="fail"
-elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
-    OVERALL_STATUS="warning"
-fi
+# The severity counts are only half the verdict. The failed set — the analyzers that
+# were present and still returned nothing usable — is what a zero cannot be trusted
+# from. Absent-by-design tools stay in tools_absent[] and are reported, but they do not
+# move the verdict; see resolve_security_status().
+# tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
+# says. tools_absent = the layer never ran and that was expected (tool not installed,
+# nothing eligible to scan, target path absent) — it does not move the verdict.
+# tools_failed = the layer was there and returned nothing usable (crashed, unparseable
+# report, stale report) — a zero from it is not evidence, so it downgrades a would-be
+# pass to "skipped". Every non-produced result lands in exactly one of the two; the
+# union is "everything this scan did not cover".
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
+    --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
+
+OVERALL_STATUS=$(resolve_security_status \
+    "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
 
 # =====================
 # Generate final report
 # =====================
 REPORT_FILE="${REPORT_DIR}/security-report.json"
-
-SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 
 jq -n \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -1065,13 +1507,15 @@ jq -n \
     --argjson medium "$MEDIUM_COUNT" \
     --argjson low "$LOW_COUNT" \
     --argjson issues "$ISSUES" \
-    --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
+    --argjson tools_absent "$ABSENT_TOOLS_JSON" \
+    --argjson tools_failed "$FAILED_TOOLS_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
             tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
-            tools_absent: $tools_absent
+            tools_absent: $tools_absent,
+            tools_failed: $tools_failed
         },
         summary: {
             overall_status: $status,
@@ -1102,7 +1546,15 @@ echo -e "Medium:   ${MEDIUM_COUNT}"
 echo -e "Low:      ${LOW_COUNT}"
 echo ""
 
-if [ "$OVERALL_STATUS" = "pass" ]; then
+if [ "$OVERALL_STATUS" = "skipped" ]; then
+    # Zero findings, but the scan did not cover its ground. Exits 0 like the pass it
+    # would otherwise have been — the consequence is carried by the status, which
+    # full-audit.sh reads from the report and does not count as a produced result.
+    echo -e "${YELLOW}⚠ Security audit incomplete — no findings, but ${FAILED_COUNT} installed tool(s) returned no usable result${NC}"
+    echo -e "Tools that failed: $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")')"
+    echo -e "Report: ${REPORT_FILE}"
+    exit 0
+elif [ "$OVERALL_STATUS" = "pass" ]; then
     echo -e "${GREEN}✓ Security audit passed${NC}"
     exit 0
 elif [ "$OVERALL_STATUS" = "warning" ]; then

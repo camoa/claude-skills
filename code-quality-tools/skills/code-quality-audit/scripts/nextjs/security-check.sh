@@ -24,6 +24,116 @@ to_json_array() {
     fi
 }
 
+# Resolve the gate verdict from the severity counts AND the coverage of the scan.
+# Mirrors the Drupal security-check helper so both stacks reach the same verdict from
+# the same evidence; /code-quality-tools:security routes by project type, so a rule
+# applied to one file only would leave the other stack able to claim clean.
+#
+# A verdict of "pass" is a claim that the tree is clean, and a tool that produced no
+# usable result contributed a zero by not looking. So a would-be "pass" is downgraded
+# to "skipped" — the value the Drupal --changed envelope already uses for "this gate
+# produced no result to trust".
+#
+# The fourth argument is the count of UNEXPECTED failures (SKIPPED_TOOLS minus
+# ABSENT_TOOLS), not of every absent tool. An optional analyzer that was never installed
+# is expected absence: most machines do not have semgrep, trivy or
+# eslint-plugin-security, and counting those would put every real run at "skipped",
+# which is a verdict carrying no information. What does count is a tool that was present
+# and still returned nothing usable.
+#
+# Only a would-be pass is downgraded. "warning" and "fail" already say the tree is not
+# clean, and they carry findings the partial scan did produce; rewriting them as
+# "skipped" would discard real evidence.
+#
+# Self-contained on purpose (reads no globals, echoes the verdict) so the spec can
+# extract and source it in isolation.
+#   resolve_security_status <critical> <high> <medium> <failed_tool_count>
+resolve_security_status() {
+    local critical="$1" high="$2" medium="$3" skipped="$4"
+    if [ "$critical" -gt 0 ]; then
+        echo "fail"
+    elif [ "$high" -gt 3 ]; then
+        echo "fail"
+    elif [ "$high" -gt 0 ] || [ "$medium" -gt 10 ]; then
+        echo "warning"
+    elif [ "$skipped" -gt 0 ]; then
+        echo "skipped"
+    else
+        echo "pass"
+    fi
+}
+
+# Drop any report left by an earlier run, before the tool gets a chance to write a new
+# one. A failed run writes no report, and a report from an earlier successful run would
+# then be parsed as if it were this run's result. Sets TOOL_STALE=1 when the old report
+# could not be removed, which leaves this run's result unprovable.
+#
+# Call this from inside a `set +e` bracket: `rm` fails on an unwritable report directory,
+# and under `set -e` that would abort the entire security audit mid-scan.
+clear_stale_report() {
+    TOOL_STALE=0
+    rm -f "$1" 2>/dev/null
+    if [ -e "$1" ]; then
+        TOOL_STALE=1
+    fi
+    return 0
+}
+
+# Decide which of three outcomes an analyzer produced, and how many findings it reported:
+#
+#   TOOL_FAILED=0 TOOL_COUNT=0   it ran and found nothing
+#   TOOL_FAILED=0 TOOL_COUNT=N   it ran and found N things
+#   TOOL_FAILED=1                it did not produce a usable result
+#
+# An exit status alone cannot decide this. For some tools a non-zero exit means "found
+# things" and for others it means "failed to run", and several write a well-formed report
+# even when they failed — so the count has to be read out of the report and checked, not
+# swallowed into a zero. A zero that came from a tool that never ran is a clean result
+# nobody earned. Each caller states its own threshold because the tools disagree; see the
+# comment at each call site for what was verified about that tool.
+#
+# $1 report path, $2 the tool's exit status, $3 the lowest exit status that means "failed
+# to run" for this tool, $4 the jq expression that counts findings in the report.
+resolve_tool_result() {
+    local report="$1" exit_status="$2" fail_from="$3" count_expr="$4"
+    local count
+
+    TOOL_FAILED=0
+    TOOL_COUNT=0
+
+    if [ "${TOOL_STALE:-0}" -eq 1 ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    if [ "$exit_status" -ge "$fail_from" ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    # Every one of these tools writes its report on a run that completed, so a missing or
+    # empty report means the run did not complete, whatever it exited.
+    if [ ! -f "$report" ] || [ ! -s "$report" ]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    # The `!` keeps `set -e` from aborting here, so a jq failure is handled rather than
+    # fatal. A report that is present but unparseable, or one whose count field is absent
+    # so jq yields null instead of a number, is not evidence of a clean tree.
+    if ! count=$(jq "$count_expr" "$report" 2>/dev/null); then
+        TOOL_FAILED=1
+        return 0
+    fi
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        TOOL_FAILED=1
+        return 0
+    fi
+
+    TOOL_COUNT="$count"
+    return 0
+}
+
 echo "=== Security Audit (Next.js/React) ==="
 echo ""
 
@@ -46,9 +156,23 @@ MEDIUM_COUNT=0
 LOW_COUNT=0
 ISSUES="[]"
 
-# Analyzers that did not produce a usable result. A tool in here contributed no counts,
-# so a zero from it must not be read as a clean tree.
+# Every analyzer that contributed no counts, whatever the reason. Reported as
+# tools_absent[] so a reader can see which layers this scan did not include.
 SKIPPED_TOOLS=()
+
+# The tools that were never installed. Most analyzers here are optional by design and
+# missing on a normal machine, so their absence is expected and must NOT bear on the
+# verdict: treating "never installed" as failed coverage would put every real run at
+# "skipped", and a verdict that fires on every run carries no information.
+#
+# The tools that DID fail are then derived as SKIPPED_TOOLS minus ABSENT_TOOLS, rather
+# than listed a second time by hand. Two consequences, both wanted:
+#   - the failed list cannot drift out of sync with the recorded skips;
+#   - the default is fail-CLOSED. A tool that records a skip counts against the verdict
+#     unless a branch explicitly declares its absence expected. For a security gate,
+#     over-reporting incompleteness is the safe direction; the "default machine" cases
+#     in false-clean-spec.sh section H catch it immediately if a branch is misfiled.
+ABSENT_TOOLS=()
 
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
@@ -59,13 +183,30 @@ echo -e "${BLUE}[1/7]${NC} Checking npm package vulnerabilities..."
 # =====================
 NPM_AUDIT_JSON="${REPORT_DIR}/security/npm-audit.json"
 set +e
+clear_stale_report "$NPM_AUDIT_JSON"
 npm audit --json > "$NPM_AUDIT_JSON" 2>/dev/null
 NPM_EXIT=$?
 set -e
 
+# Verified against npm 11.6.0: exit 1 means EITHER it found vulnerabilities OR it failed.
+# With no lockfile it exits 1 and writes {"error":{"code":"ENOLOCK",...}} to stdout, which
+# lands in the report as well-formed JSON — so neither the exit status nor "is the report
+# parseable" separates the two. What does separate them is whether the report carries a
+# numeric vulnerability count, which the error object does not: the count expression
+# yields null there, and the old code compared that null against 0 and printed "No package
+# vulnerabilities". Exit >= 2 is a shell-level failure (126/127, 128+N).
 NPM_VIOLATIONS="[]"
-if [ -f "$NPM_AUDIT_JSON" ] && [ -s "$NPM_AUDIT_JSON" ]; then
-    VULN_COUNT=$(jq '.metadata.vulnerabilities | (.critical + .high + .moderate + .low)' "$NPM_AUDIT_JSON" 2>/dev/null || echo "0")
+resolve_tool_result "$NPM_AUDIT_JSON" "$NPM_EXIT" 2 \
+    '.metadata.vulnerabilities | (.critical + .high + .moderate + .low)'
+
+if [ "$TOOL_FAILED" -eq 1 ]; then
+    echo -e "  ${YELLOW}npm audit produced no usable report (exit ${NPM_EXIT}) - dependency scan did not complete${NC}"
+    # npm is a hard prerequisite of this gate (it exits 2 above when npm is missing), so
+    # npm audit failing is never expected absence: it is not in ABSENT_TOOLS and so
+    # counts as a failure.
+    SKIPPED_TOOLS+=("npm_audit")
+else
+    VULN_COUNT="$TOOL_COUNT"
     if [ "$VULN_COUNT" -gt 0 ]; then
         echo -e "  ${RED}Found ${VULN_COUNT} package vulnerabilities${NC}"
 
@@ -93,8 +234,6 @@ if [ -f "$NPM_AUDIT_JSON" ] && [ -s "$NPM_AUDIT_JSON" ]; then
     else
         echo -e "  ${GREEN}No package vulnerabilities${NC}"
     fi
-else
-    echo -e "  ${YELLOW}npm audit unavailable${NC}"
 fi
 
 echo ""
@@ -108,18 +247,34 @@ ESLINT_ISSUES="[]"
 # Check if eslint-plugin-security is installed
 if npm list eslint-plugin-security &> /dev/null; then
     set +e
+    clear_stale_report "$ESLINT_JSON"
     npx eslint --format json --ext .js,.jsx,.ts,.tsx . > "$ESLINT_JSON" 2>/dev/null
     ESLINT_EXIT=$?
     set -e
 
-    if [ -f "$ESLINT_JSON" ] && [ -s "$ESLINT_JSON" ]; then
-        # Filter for security-related rules
-        SECURITY_COUNT=$(jq '[.[] | .messages[] | select(.ruleId | startswith("security/") or startswith("no-secrets/"))] | length' "$ESLINT_JSON" 2>/dev/null || echo "0")
+    # Verified against eslint 10.8.1: exit 1 means it RAN and found lint errors, which is
+    # a finding and not a failure. Only exit >= 2 is fatal — a bad config or no matching
+    # files — and eslint leaves the report empty in those cases.
+    #
+    # The rule filter is null-safe on purpose. A file eslint cannot parse produces a
+    # message with ruleId null, and `null | startswith(...)` fails the whole expression;
+    # one syntax error anywhere in the tree used to zero out the security count for the
+    # entire project.
+    resolve_tool_result "$ESLINT_JSON" "$ESLINT_EXIT" 2 \
+        '[.[] | .messages[] | select((.ruleId // "") | startswith("security/") or startswith("no-secrets/"))] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}ESLint produced no usable report (exit ${ESLINT_EXIT}) - security lint did not complete${NC}"
+        # Reached only inside the "eslint-plugin-security is installed" branch, so the
+        # tool was there and failed. The else branch below is the expected absence.
+        SKIPPED_TOOLS+=("eslint_security")
+    else
+        SECURITY_COUNT="$TOOL_COUNT"
         if [ "$SECURITY_COUNT" -gt 0 ]; then
             echo -e "  ${YELLOW}Found ${SECURITY_COUNT} ESLint security findings${NC}"
 
             # Convert to violations format
-            ESLINT_ISSUES=$(jq '[.[] | .filePath as $file | .messages[] | select(.ruleId | startswith("security/") or startswith("no-secrets/")) | {
+            ESLINT_ISSUES=$(jq '[.[] | .filePath as $file | .messages[] | select((.ruleId // "") | startswith("security/") or startswith("no-secrets/")) | {
                 category: "ESLint Security",
                 severity: (if .severity == 2 then "high" else "medium" end),
                 file: $file,
@@ -140,6 +295,8 @@ if npm list eslint-plugin-security &> /dev/null; then
     fi
 else
     echo -e "  ${YELLOW}eslint-plugin-security not installed (optional)${NC}"
+    SKIPPED_TOOLS+=("eslint_security")
+    ABSENT_TOOLS+=("eslint_security")
 fi
 
 echo ""
@@ -152,13 +309,25 @@ SEMGREP_ISSUES="[]"
 
 if command -v semgrep &> /dev/null; then
     set +e
+    clear_stale_report "$SEMGREP_JSON"
     # Run Semgrep with auto config (includes React/JS/TS security rules)
     semgrep scan --config=auto --json --output "$SEMGREP_JSON" . 2>/dev/null
     SEMGREP_EXIT=$?
     set -e
 
-    if [ -f "$SEMGREP_JSON" ] && [ -s "$SEMGREP_JSON" ]; then
-        VULN_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' "$SEMGREP_JSON" 2>/dev/null || echo "0")
+    # Verified against semgrep 1.172.0: findings do NOT change the exit status unless
+    # --error is passed, so exit 0 means it ran and ANY non-zero means it failed — 2 for
+    # an invalid scanning root, 7 when every rule fails to load. It still writes a report
+    # in those cases, with results empty and the real problem in .errors, so the report on
+    # its own reads as a clean tree.
+    resolve_tool_result "$SEMGREP_JSON" "$SEMGREP_EXIT" 1 \
+        '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}Semgrep produced no usable report (exit ${SEMGREP_EXIT}) - SAST scan did not complete${NC}"
+        SKIPPED_TOOLS+=("semgrep")
+    else
+        VULN_COUNT="$TOOL_COUNT"
         if [ "$VULN_COUNT" -gt 0 ]; then
             echo -e "  ${YELLOW}Found ${VULN_COUNT} Semgrep findings${NC}"
 
@@ -187,6 +356,8 @@ if command -v semgrep &> /dev/null; then
     fi
 else
     echo -e "  ${YELLOW}Semgrep not installed (optional)${NC}"
+    SKIPPED_TOOLS+=("semgrep")
+    ABSENT_TOOLS+=("semgrep")
 fi
 
 echo ""
@@ -199,13 +370,24 @@ TRIVY_ISSUES="[]"
 
 if command -v trivy &> /dev/null; then
     set +e
+    clear_stale_report "$TRIVY_JSON"
     # Run Trivy on filesystem (dependency + secret scanning)
     trivy fs --scanners vuln,secret --format json --output "$TRIVY_JSON" . 2>/dev/null
     TRIVY_EXIT=$?
     set -e
 
-    if [ -f "$TRIVY_JSON" ] && [ -s "$TRIVY_JSON" ]; then
-        VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]?, .Results[]?.Secrets[]?] | length' "$TRIVY_JSON" 2>/dev/null || echo "0")
+    # Verified against trivy 0.73.0: findings do NOT change the exit status unless
+    # --exit-code is passed, so exit 0 means it ran and ANY non-zero means it failed. A
+    # bad scanner name, a missing target and an unwritable --output all exit 1 and write
+    # no report at all, which is why the report path is cleared before the run.
+    resolve_tool_result "$TRIVY_JSON" "$TRIVY_EXIT" 1 \
+        '[.Results[]?.Vulnerabilities[]?, .Results[]?.Secrets[]?] | length'
+
+    if [ "$TOOL_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}Trivy produced no usable report (exit ${TRIVY_EXIT}) - dependency and secret scan did not complete${NC}"
+        SKIPPED_TOOLS+=("trivy")
+    else
+        VULN_COUNT="$TOOL_COUNT"
         if [ "$VULN_COUNT" -gt 0 ]; then
             echo -e "  ${YELLOW}Found ${VULN_COUNT} Trivy findings${NC}"
 
@@ -249,6 +431,8 @@ if command -v trivy &> /dev/null; then
     fi
 else
     echo -e "  ${YELLOW}Trivy not installed (optional)${NC}"
+    SKIPPED_TOOLS+=("trivy")
+    ABSENT_TOOLS+=("trivy")
 fi
 
 echo ""
@@ -333,6 +517,7 @@ if command -v gitleaks &> /dev/null; then
 else
     echo -e "  ${YELLOW}Gitleaks not installed (optional)${NC}"
     SKIPPED_TOOLS+=("gitleaks")
+    ABSENT_TOOLS+=("gitleaks")
 fi
 
 echo ""
@@ -370,6 +555,13 @@ if [ -d "$SRC_PATH" ]; then
     if [ -z "$DANGEROUS_HTML" ] && [ -z "$EVAL_USAGE" ] && [ -z "$HREF_XSS" ]; then
         echo -e "  ${GREEN}No custom pattern violations${NC}"
     fi
+else
+    # SRC_PATH does not exist, so this layer scanned nothing. Recorded as expected —
+    # a project laying its source out differently is legitimate — but recorded, so a
+    # scan that examined no source cannot look identical to one that examined all of it.
+    echo -e "  ${YELLOW}${SRC_PATH} does not exist — no source scanned for custom patterns${NC}"
+    SKIPPED_TOOLS+=("custom_patterns")
+    ABSENT_TOOLS+=("custom_patterns")
 fi
 
 echo ""
@@ -439,21 +631,30 @@ ISSUES=$(jq -n \
 # =====================
 # Determine overall status
 # =====================
-OVERALL_STATUS="pass"
-if [ "$CRITICAL_COUNT" -gt 0 ]; then
-    OVERALL_STATUS="fail"
-elif [ "$HIGH_COUNT" -gt 3 ]; then
-    OVERALL_STATUS="fail"
-elif [ "$HIGH_COUNT" -gt 0 ] || [ "$MEDIUM_COUNT" -gt 10 ]; then
-    OVERALL_STATUS="warning"
-fi
+# The severity counts are only half the verdict. The failed set — the analyzers that
+# were present and still returned nothing usable — is what a zero cannot be trusted
+# from. Absent-by-design tools stay in tools_absent[] and are reported, but they do not
+# move the verdict; see resolve_security_status().
+# tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
+# says. tools_absent = the layer never ran and that was expected (tool not installed,
+# nothing eligible to scan, target path absent) — it does not move the verdict.
+# tools_failed = the layer was there and returned nothing usable (crashed, unparseable
+# report, stale report) — a zero from it is not evidence, so it downgrades a would-be
+# pass to "skipped". Every non-produced result lands in exactly one of the two; the
+# union is "everything this scan did not cover".
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
+ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
+    --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
+
+OVERALL_STATUS=$(resolve_security_status \
+    "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
 
 # =====================
 # Generate final report
 # =====================
 REPORT_FILE="${REPORT_DIR}/security-report.json"
-
-SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 
 jq -n \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -463,14 +664,16 @@ jq -n \
     --argjson medium "$MEDIUM_COUNT" \
     --argjson low "$LOW_COUNT" \
     --argjson issues "$ISSUES" \
-    --argjson tools_absent "$SKIPPED_TOOLS_JSON" \
+    --argjson tools_absent "$ABSENT_TOOLS_JSON" \
+    --argjson tools_failed "$FAILED_TOOLS_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
             project_type: "nextjs",
             tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"],
-            tools_absent: $tools_absent
+            tools_absent: $tools_absent,
+            tools_failed: $tools_failed
         },
         summary: {
             overall_status: $status,
@@ -501,7 +704,15 @@ echo -e "Medium:   ${MEDIUM_COUNT}"
 echo -e "Low:      ${LOW_COUNT}"
 echo ""
 
-if [ "$OVERALL_STATUS" = "pass" ]; then
+if [ "$OVERALL_STATUS" = "skipped" ]; then
+    # Zero findings, but the scan did not cover its ground. Exits 0 like the pass it
+    # would otherwise have been — the consequence is carried by the status, not by a
+    # new exit code.
+    echo -e "${YELLOW}⚠ Security audit incomplete — no findings, but ${FAILED_COUNT} installed tool(s) returned no usable result${NC}"
+    echo -e "Tools that failed: $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")')"
+    echo -e "Report: ${REPORT_FILE}"
+    exit 0
+elif [ "$OVERALL_STATUS" = "pass" ]; then
     echo -e "${GREEN}✓ Security audit passed${NC}"
     exit 0
 elif [ "$OVERALL_STATUS" = "warning" ]; then

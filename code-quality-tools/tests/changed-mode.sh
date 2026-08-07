@@ -471,6 +471,14 @@ case "$1" in
                 printf '{"files":{"%s":{"messages":[{"type":"WARNING","source":"Test.Rule","line":5,"message":"test psl medium"}]}}}\n' "${files[0]:-unknown}"
                 exit 0
                 ;;
+            composer)
+                # Only `ddev exec composer audit` can report findings. `ddev composer`
+                # (below) swallows them, so the audit is logged from here only.
+                case "${2:-}" in
+                    audit) printf 'COMPOSER_AUDIT: ran\n' >> "$LOG"; echo '{"advisories":{}}'; exit 0 ;;
+                    *)     exit 0 ;;
+                esac
+                ;;
             test) exit 0 ;;   # 'test -f vendor/bin/php-security-linter' → installed
             grep) shift; grep "$@" ;;
             *) exit 0 ;;
@@ -478,7 +486,11 @@ case "$1" in
         ;;
     composer)
         case "$2" in
-            audit) printf 'COMPOSER_AUDIT: ran\n' >> "$LOG"; echo '{"advisories":{}}'; exit 0 ;;
+            # Reproduces the real `ddev composer audit`: composer audit exits 1 when it
+            # finds advisories, ddev treats that as a failed command, prints its own
+            # error and emits NOTHING on stdout. A regression back to this invocation
+            # therefore logs no audit and Test 22 fails, as it should.
+            audit) echo "Composer [audit] failed, composer command failed: exit status 1" >&2; exit 1 ;;
             show)  exit 1 ;;
             *)     exit 0 ;;
         esac
