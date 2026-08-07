@@ -136,6 +136,61 @@ else
   else
     ok "no .gitignore created outside a git working tree"
   fi
+
+  # The remaining C cases run the function in a SEPARATE bash process with
+  # `set -e`, the way the real script runs it, so an unguarded failing command
+  # aborts and the caller sees it. An inline subshell would not do: bash
+  # neutralises `set -e` inside any command whose exit status is tested, so a
+  # `( set -e; ... ) || rc=$?` harness keeps running past the failure and
+  # reports 0. Adding an ignore entry is defence in depth and must degrade
+  # quietly, so these assert on the process exit status, not on output.
+  # An empty REPORT_DIR is equivalent to unset — the function uses `:-`.
+  run_isolated() {
+    local dir="$1"
+    local rd="${2-}"
+    REPORT_DIR="$rd" bash -c '
+      cd "$1" || exit 9
+      set -e
+      GREEN=""; NC=""; YELLOW=""; RED=""
+      . "$2"
+      setup_report_dir
+    ' _ "$dir" "$TMP/setup_report_dir.sh" >/dev/null 2>&1
+  }
+
+  # C4: an unwritable .gitignore must not take the whole audit down.
+  if [[ "$(id -u)" -eq 0 ]]; then
+    echo "  SKIP: unwritable .gitignore assertions (running as root)"
+  else
+    RO="$TMP/readonly"; mkdir -p "$RO"; git -C "$RO" init -q 2>/dev/null
+    printf 'vendor/\n' > "$RO/.gitignore"
+    chmod 444 "$RO/.gitignore"
+    RO_RC=0
+    run_isolated "$RO" || RO_RC=$?
+    assert_eq "an unwritable .gitignore does not abort setup_report_dir" "0" "$RO_RC"
+    assert_eq "an unwritable .gitignore is left untouched" "vendor/" "$(cat "$RO/.gitignore")"
+    chmod 644 "$RO/.gitignore"
+  fi
+
+  # C5: REPORT_DIR is interpolated into gitignore's PATTERN language. A raw
+  # metacharacter can un-ignore or over-ignore unrelated paths, so the entry must
+  # be escaped or refused outright — never written through verbatim.
+  META="$TMP/meta"; mkdir -p "$META"; git -C "$META" init -q 2>/dev/null
+  run_isolated "$META" 'rep*orts' || true
+  META_CONTENT=""
+  [[ -f "$META/.gitignore" ]] && META_CONTENT="$(cat "$META/.gitignore")"
+  case "$META_CONTENT" in
+    *'\*'*) ok "a metacharacter REPORT_DIR is escaped, not written raw" ;;
+    *'*'*)  bad "a metacharacter REPORT_DIR is escaped or refused | wrote raw pattern: $META_CONTENT" ;;
+    *)      ok "a metacharacter REPORT_DIR is refused, not written raw" ;;
+  esac
+
+  # C6: a symlinked .gitignore would land the write outside the repository.
+  SYM="$TMP/symlink"; mkdir -p "$SYM"; git -C "$SYM" init -q 2>/dev/null
+  OUTSIDE="$TMP/outside-the-repo-gitignore"
+  printf 'vendor/\n' > "$OUTSIDE"
+  ln -s "$OUTSIDE" "$SYM/.gitignore"
+  run_isolated "$SYM" || true
+  assert_eq "a symlinked .gitignore is not written through" "vendor/" "$(cat "$OUTSIDE")"
 fi
 
 # ── D. gitleaks failure is not a silent zero (item 9) ────────────────────────
@@ -159,6 +214,95 @@ else
   bad "a failed gitleaks is recorded in SKIPPED_TOOLS"
 fi
 
+# The assertions above are textual. The ones below EXECUTE the real block against a
+# stubbed gitleaks, because the discriminator being tested is behavioral.
+#
+# Load-bearing fact, verified against gitleaks 8.30.1: every gitleaks-level error exits
+# 1, not >=2 — bad config, unwritable --report-path, missing --source and bad
+# --report-format all exit 1, because gitleaks fatals through os.Exit(1). Exit status
+# alone therefore cannot separate "found leaks" from "failed to run". Only a PARSEABLE
+# report can, which is why a present-but-garbage report must not read as clean.
+GITLEAKS_BLOCK="$TMP/gitleaks_block.sh"
+sed -n '/^GITLEAKS_JSON=/,/^fi$/p' "$SEC" > "$GITLEAKS_BLOCK"
+
+STUBDIR="$TMP/stub"; mkdir -p "$STUBDIR"
+cat > "$STUBDIR/gitleaks" <<'STUB'
+#!/usr/bin/env bash
+# Stub gitleaks: writes STUB_REPORT (unless __NONE__) to --report-path, exits STUB_EXIT.
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --report-path) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [ -n "$out" ] && [ "${STUB_REPORT:-__NONE__}" != "__NONE__" ]; then
+  printf '%s' "$STUB_REPORT" > "$out"
+fi
+exit "${STUB_EXIT:-0}"
+STUB
+chmod +x "$STUBDIR/gitleaks"
+
+# Runs the real block under a stubbed gitleaks; echoes "<critical>|<skipped>|<output>".
+run_gitleaks_block() {
+  local stub_exit="$1" stub_report="$2" dir
+  dir="$(mktemp -d "$TMP/gl.XXXXXX")"
+  mkdir -p "$dir/security"
+  (
+    PATH="$STUBDIR:$PATH"
+    export STUB_EXIT="$stub_exit" STUB_REPORT="$stub_report"
+    RED=''; GREEN=''; YELLOW=''; BLUE=''; NC=''
+    REPORT_DIR="$dir"
+    CRITICAL_COUNT=0
+    SKIPPED_TOOLS=()
+    # Do NOT wrap this in $(...): a command substitution is a subshell, and the
+    # counters the block mutates would be discarded instead of asserted on.
+    source "$GITLEAKS_BLOCK" > "$dir/out.txt" 2>&1
+    printf '%s|%s|%s' "$CRITICAL_COUNT" \
+      "${SKIPPED_TOOLS[*]+${SKIPPED_TOOLS[*]}}" "$(tr '\n' ' ' < "$dir/out.txt")"
+  )
+}
+
+# D1 (the regression under review): gitleaks says it found leaks, and the report is
+# present and non-empty but NOT valid JSON. jq fails; swallowing that into 0 reports a
+# clean tree while the tool is telling us the opposite.
+GARBAGE=$(run_gitleaks_block 1 'not json at all {{{')
+if echo "$GARBAGE" | grep -q 'No secrets detected'; then
+  bad "an unparseable gitleaks report does not report clean | got: $GARBAGE"
+else
+  ok "an unparseable gitleaks report does not report clean"
+fi
+assert_eq "an unparseable gitleaks report records a skip" \
+  "gitleaks" "$(echo "$GARBAGE" | cut -d'|' -f2)"
+assert_eq "an unparseable gitleaks report contributes no critical count" \
+  "0" "$(echo "$GARBAGE" | cut -d'|' -f1)"
+
+# D2: a truncated REAL report is the realistic form of the same defect.
+TRUNCATED=$(run_gitleaks_block 1 '[{"File":"a.py","StartLine":1,"Descrip')
+assert_eq "a truncated gitleaks report records a skip, not a clean tree" \
+  "gitleaks" "$(echo "$TRUNCATED" | cut -d'|' -f2)"
+
+# D3: gitleaks-level failure exits 1 with no report at all (verified above). This must
+# not read as clean either.
+NOREPORT=$(run_gitleaks_block 1 '__NONE__')
+assert_eq "exit 1 with no report at all records a skip" \
+  "gitleaks" "$(echo "$NOREPORT" | cut -d'|' -f2)"
+
+# D4/D5: the fix must not over-fire. A genuinely clean run and a genuine finding must
+# both still behave, or "record a skip" would be trivially satisfiable.
+CLEAN=$(run_gitleaks_block 0 '[]')
+assert_eq "a clean run still reports clean and records no skip" \
+  "0||" "$(echo "$CLEAN" | cut -d'|' -f1,2)|"
+if echo "$CLEAN" | grep -q 'No secrets detected'; then
+  ok "a clean run still prints the clean message"
+else
+  bad "a clean run still prints the clean message | got: $CLEAN"
+fi
+
+FOUND=$(run_gitleaks_block 1 '[{"File":"a.py","StartLine":1,"Description":"AWS key"}]')
+assert_eq "a real finding is still counted as critical" \
+  "1|" "$(echo "$FOUND" | cut -d'|' -f1,2)"
+
 # ── E. verdict is never pass when nothing ran (item 3) ───────────────────────
 echo ""
 echo "E: overall verdict is not 'pass' when no gate produced a result"
@@ -177,6 +321,38 @@ else
     "$(resolve_overall_status fail pass unknown unknown unknown unknown)"
   assert_eq "skipped counts as not-run" "unknown" \
     "$(resolve_overall_status pass skipped skipped skipped skipped skipped)"
+fi
+
+# resolve_overall_status only runs if the script survives to the end. full-audit.sh is
+# `set -e` and every per-gate merge jq between the skeleton write and the summary jq is
+# a bare command, so a gate emitting malformed JSON kills the run and leaves the
+# SKELETON on disk as the report. The skeleton is therefore a verdict a consumer reads,
+# and it must not read as a pass. Executes the real heredoc rather than grepping it.
+SKEL="$TMP/skeleton.sh"
+awk '
+  index($0, "cat > \"${REPORT_DIR}/audit-report.json\" << EOF") == 1 { inblock = 1 }
+  inblock { print }
+  inblock && $0 == "EOF" && NR > 1 { exit }
+' "$FULL" > "$SKEL"
+
+if [[ ! -s "$SKEL" ]]; then
+  bad "extracted the audit-report.json skeleton heredoc from full-audit.sh"
+else
+  SKEL_SCORE=$(bash -c '
+    set -u
+    REPORT_DIR="$1"; mkdir -p "$REPORT_DIR"
+    PROJECT_TYPE="drupal"; TIMESTAMP="1970-01-01T00:00:00+00:00"
+    COVERAGE_MINIMUM=70; COVERAGE_TARGET=80; DUPLICATION_MAX=5; COMPLEXITY_MAX=10
+    # shellcheck source=/dev/null
+    source "$2"
+    jq -r ".summary.overall_score" "$REPORT_DIR/audit-report.json"
+  ' _ "$TMP/skel" "$SKEL" 2>/dev/null | tail -1)
+
+  if [[ "$SKEL_SCORE" == "pass" ]]; then
+    bad "report skeleton does not start at a passing verdict | skeleton writes overall_score '$SKEL_SCORE', so an aborted run reports a pass"
+  else
+    ok "report skeleton does not start at a passing verdict (writes '$SKEL_SCORE')"
+  fi
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

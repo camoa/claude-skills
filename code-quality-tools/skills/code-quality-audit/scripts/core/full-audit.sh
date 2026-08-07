@@ -47,6 +47,38 @@ update_status() {
     esac
 }
 
+# Resolve the final verdict. OVERALL_STATUS starts at "pass" and update_status() only
+# ever downgrades it, so "pass" is the value the run starts at rather than one it earns:
+# a suite that aborted before any gate ran still reported "pass". A gate status of
+# "unknown" or "skipped" means that gate produced no result; if none of them produced
+# one the run proved nothing and the verdict is "unknown", whatever the accumulator
+# holds. Once at least one gate produced a result the existing precedence stands
+# (fail beats warning beats pass).
+#
+# Self-contained on purpose (reads no globals, echoes the verdict) so the spec can
+# extract and source it in isolation.
+#   resolve_overall_status <current> <s1> <s2> <s3> <s4> <s5>
+resolve_overall_status() {
+    local current="$1"
+    shift
+    local produced=0
+    local gate
+    for gate in "$@"; do
+        case "$gate" in
+            unknown|skipped|"")
+                ;;
+            *)
+                produced=$((produced + 1))
+                ;;
+        esac
+    done
+    if [ "$produced" -eq 0 ]; then
+        echo "unknown"
+    else
+        echo "$current"
+    fi
+}
+
 # Step 1: Detect environment
 echo -e "${BLUE}[Step 1/6]${NC} Detecting environment..."
 if ! "${SCRIPT_DIR}/detect-environment.sh" > /dev/null 2>&1; then
@@ -90,7 +122,10 @@ fi
 echo -e "${GREEN}[OK]${NC} Tools available"
 echo ""
 
-# Initialize aggregated report
+# Initialize aggregated report. overall_score starts at "unknown", not "pass": this
+# skeleton is what a consumer reads if the run dies before the summary jq below (every
+# per-gate merge jq is a bare command under `set -e`, so a gate emitting malformed JSON
+# kills the script and leaves this file exactly as written). It must not read as a pass.
 TIMESTAMP=$(date -Iseconds)
 cat > "${REPORT_DIR}/audit-report.json" << EOF
 {
@@ -107,7 +142,7 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
     }
   },
   "summary": {
-    "overall_score": "pass",
+    "overall_score": "unknown",
     "coverage_score": "unknown",
     "solid_score": "unknown",
     "lint_score": "unknown",
@@ -315,6 +350,10 @@ if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
     echo ""
 fi
 
+# A verdict of "pass" requires that at least one gate actually produced a result.
+OVERALL_STATUS=$(resolve_overall_status "$OVERALL_STATUS" \
+    "$COVERAGE_STATUS" "$SOLID_STATUS" "$LINT_STATUS" "$DRY_STATUS" "$SECURITY_STATUS")
+
 # Update summary in report
 jq --arg overall "$OVERALL_STATUS" \
    --arg coverage "$COVERAGE_STATUS" \
@@ -360,16 +399,19 @@ echo ""
 echo "  Critical:  ${CRITICAL_COUNT}"
 echo "  Warnings:  ${WARNING_COUNT}"
 echo ""
-echo -e "  Overall:   $([ "$OVERALL_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || ([ "$OVERALL_STATUS" == "warning" ] && echo "${YELLOW}WARNING${NC}" || echo "${RED}FAIL${NC}"))"
+echo -e "  Overall:   $([ "$OVERALL_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || ([ "$OVERALL_STATUS" == "warning" ] && echo "${YELLOW}WARNING${NC}" || ([ "$OVERALL_STATUS" == "fail" ] && echo "${RED}FAIL${NC}" || echo "${YELLOW}UNKNOWN - no gate produced a result${NC}")))"
 echo ""
 echo "  Reports:"
 echo "    JSON: ${REPORT_DIR}/audit-report.json"
 echo "    Markdown: ${REPORT_DIR}/audit-report.md"
 echo ""
 
-# Exit with appropriate code
+# Exit with appropriate code. "unknown" exits non-zero: nothing ran, so the run
+# cannot claim success. It shares the warning code rather than the fail code so a
+# caller gating on "not a failure" behaves as it did before.
 case "$OVERALL_STATUS" in
     pass) exit 0 ;;
     warning) exit 1 ;;
     fail) exit 2 ;;
+    *) exit 1 ;;
 esac

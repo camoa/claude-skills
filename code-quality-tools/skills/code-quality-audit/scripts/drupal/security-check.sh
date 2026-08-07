@@ -916,32 +916,65 @@ GITLEAKS_JSON="${REPORT_DIR}/security/gitleaks.json"
 GITLEAKS_ISSUES="[]"
 
 if command -v gitleaks &> /dev/null; then
+    # Drop any report from a previous run: a failed run writes no report, and a stale
+    # one would otherwise be parsed as if it were this run's result.
+    rm -f "$GITLEAKS_JSON"
+
     set +e
-    # Run Gitleaks on the repository
-    gitleaks detect --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
+    # Run Gitleaks on the repository. --redact keeps matched secret values out of the
+    # report file, which is written inside the tree being audited.
+    gitleaks detect --redact --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
     GITLEAKS_EXIT=$?
     set -e
 
-    if [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
-        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null || echo "0")
-        if [ "$SECRET_COUNT" -gt 0 ]; then
-            echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+    # Exit status alone cannot tell "found leaks" from "failed to run". Verified against
+    # gitleaks 8.30.1: exit 0 means it ran and found nothing, but exit 1 means EITHER it
+    # found leaks OR it errored — a bad config, an unwritable --report-path, a missing
+    # --source and a bad --report-format all exit 1, because gitleaks fatals through
+    # os.Exit(1). Only a PARSEABLE report distinguishes the two. Exit >= 2 is a
+    # shell-level failure (126/127, 128+N), which produces no report either.
+    GITLEAKS_FAILED=0
+    SECRET_COUNT=0
 
-            # Convert to violations format
-            GITLEAKS_ISSUES=$(jq '[.[] | {
-                category: "Gitleaks Secret",
-                severity: "critical",
-                file: .File,
-                line: .StartLine,
-                message: ("Potential secret detected: " + .Description),
-                owasp: "A02:2021",
-                remediation: "Remove secret from code, rotate credentials, and use secret management"
-            }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
-
-            CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
-        else
-            echo -e "  ${GREEN}No secrets detected${NC}"
+    if [ "$GITLEAKS_EXIT" -ge 2 ]; then
+        GITLEAKS_FAILED=1
+    elif [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
+        set +e
+        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null)
+        JQ_EXIT=$?
+        set -e
+        # A report that is present but unparseable is not evidence of a clean tree.
+        # Swallowing jq's failure into 0 would report clean while gitleaks is saying
+        # the opposite.
+        if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$SECRET_COUNT" =~ ^[0-9]+$ ]]; then
+            GITLEAKS_FAILED=1
+            SECRET_COUNT=0
         fi
+    elif [ "$GITLEAKS_EXIT" -ne 0 ]; then
+        # Exit 1 with no report at all: gitleaks errored rather than found anything.
+        GITLEAKS_FAILED=1
+    fi
+
+    if [ "$GITLEAKS_FAILED" -eq 1 ]; then
+        echo -e "  ${YELLOW}[SKIP]${NC} gitleaks produced no usable report (exit ${GITLEAKS_EXIT})"
+        SKIPPED_TOOLS+=("gitleaks")
+    elif [ "$SECRET_COUNT" -gt 0 ]; then
+        echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+
+        # Convert to violations format
+        GITLEAKS_ISSUES=$(jq '[.[] | {
+            category: "Gitleaks Secret",
+            severity: "critical",
+            file: .File,
+            line: .StartLine,
+            message: ("Potential secret detected: " + .Description),
+            owasp: "A02:2021",
+            remediation: "Remove secret from code, rotate credentials, and use secret management"
+        }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
+
+        CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
+    else
+        echo -e "  ${GREEN}No secrets detected${NC}"
     fi
 else
     echo -e "  ${YELLOW}[SKIP]${NC} gitleaks not installed (tool absent)"

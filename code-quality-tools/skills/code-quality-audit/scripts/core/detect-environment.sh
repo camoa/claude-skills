@@ -136,6 +136,111 @@ setup_report_dir() {
         echo -e "${GREEN}[OK]${NC} Report directory exists: ${report_dir}"
     fi
 
+    # Reports quote findings out of the audited source, so the directory must not
+    # be committable by accident. This is defence in depth in a repository we do
+    # not own: it never aborts the audit, never writes through a symlink, never
+    # invents a pattern it cannot write safely, and only ever appends.
+    local in_work_tree=""
+    in_work_tree="$(git rev-parse --is-inside-work-tree 2>/dev/null || true)"
+
+    if [ "${in_work_tree}" = "true" ]; then
+        local gitignore=".gitignore"
+        local entry="${report_dir%/}"
+        entry="${entry#./}"
+        local skip_reason=""
+
+        # Ask git, not this file: the path may already be covered by a parent
+        # .gitignore, .git/info/exclude or a global excludesfile, in which case
+        # writing anything here would just be a stray edit.
+        if [ -z "${entry}" ]; then
+            skip_reason="empty"
+        elif git check-ignore -q "${report_dir}" 2>/dev/null; then
+            skip_reason="already-ignored"
+        fi
+
+        # A gitignore entry is a repo-relative pattern, so an absolute REPORT_DIR
+        # is deliberately never written: rewriting it into one is not safe to
+        # guess. Say so only when it actually sits inside this work tree, where it
+        # would otherwise go unprotected. Absolute and outside the tree needs no
+        # entry at all, so that case stays silent.
+        if [ -z "${skip_reason}" ]; then
+            case "${entry}" in
+                /*)
+                    local top=""
+                    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+                    skip_reason="absolute-outside-work-tree"
+                    if [ -n "${top}" ]; then
+                        case "${entry}/" in
+                            "${top}"/*) skip_reason="absolute-inside-work-tree" ;;
+                        esac
+                    fi
+                    ;;
+            esac
+        fi
+
+        # REPORT_DIR is interpolated into gitignore's PATTERN language, where
+        # * ? [ ] \ are wildcards, a leading # is a comment, a leading ! negates
+        # (which would UN-ignore paths), and a trailing space is stripped. Refuse
+        # rather than guess an escaping for a value holding any of them.
+        if [ -z "${skip_reason}" ]; then
+            case "${entry}" in
+                *'*'*|*'?'*|*'['*|*']'*|*'\'*|*$'\n'*|'#'*|'!'*|*' ')
+                    skip_reason="unsafe-pattern"
+                    ;;
+            esac
+        fi
+
+        # Writing through a symlink would land the entry outside the repository.
+        if [ -z "${skip_reason}" ] && [ -L "${gitignore}" ]; then
+            skip_reason="symlink"
+        fi
+
+        # An existing literal entry may be overridden by a later negation, so git
+        # can report the path as not ignored while the line is already there.
+        # Appending a duplicate would not help, so scan before writing.
+        if [ -z "${skip_reason}" ] && [ -f "${gitignore}" ]; then
+            if [ -r "${gitignore}" ]; then
+                local line=""
+                local trimmed=""
+                while IFS= read -r line || [ -n "${line}" ]; do
+                    trimmed="${line%$'\r'}"
+                    trimmed="${trimmed#/}"
+                    trimmed="${trimmed%/}"
+                    if [ "${trimmed}" = "${entry}" ]; then
+                        skip_reason="already-listed"
+                        break
+                    fi
+                done 2>/dev/null < "${gitignore}" || skip_reason="unreadable"
+            else
+                skip_reason="unreadable"
+            fi
+        fi
+
+        if [ -z "${skip_reason}" ]; then
+            # Do not glue the entry onto a last line that has no newline.
+            local lead=""
+            if [ -s "${gitignore}" ] && [ -n "$(tail -c 1 "${gitignore}" 2>/dev/null)" ]; then
+                lead=$'\n'
+            fi
+            # Never fatal. `2>/dev/null` is placed BEFORE the append so a failed
+            # redirection stays quiet, and testing it in an `if` keeps `set -e`
+            # from killing the whole environment detection over an ignore entry.
+            if printf '%s%s/\n' "${lead}" "${entry}" 2>/dev/null >> "${gitignore}"; then
+                echo -e "${GREEN}[OK]${NC} Added ${entry}/ to ${gitignore}"
+            else
+                skip_reason="unwritable"
+            fi
+        fi
+
+        case "${skip_reason}" in
+            ''|already-ignored|already-listed|absolute-outside-work-tree) ;;
+            *)
+                echo -e "${YELLOW}[WARN]${NC} Could not gitignore ${report_dir} (${skip_reason})"
+                echo "  Keep audit reports out of your commits: they can quote matched secrets"
+                ;;
+        esac
+    fi
+
     export REPORT_DIR="${report_dir}"
 }
 

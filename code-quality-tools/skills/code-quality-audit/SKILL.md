@@ -262,7 +262,7 @@ All reports must follow `schemas/audit-report.schema.json`:
     "thresholds": { "coverage_minimum": 70, "duplication_max": 5 }
   },
   "summary": {
-    "overall_score": "pass|warning|fail",
+    "overall_score": "pass|warning|fail|unknown",
     "coverage_score": "pass|warning|fail",
     "solid_score": "pass|warning|fail",
     "dry_score": "pass|warning|fail",

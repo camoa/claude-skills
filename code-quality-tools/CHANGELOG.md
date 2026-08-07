@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.6] - 2026-08-07
+
+Four defects found by running the suite against a live client Drupal 11 site. Three
+share one shape: a check that reports a clean result it did not earn. The fourth is
+the security scan writing the secrets it found into a committable path.
+
+### Changed
+
+- **`overall_score` can now be `unknown`, and a run where nothing executed reports it
+  rather than `pass`.** This is a behavior change, not a pure bug fix. A CI job gating
+  on `.status != "fail"` stays green. A job gating on `== "pass"` will start failing on
+  runs where no gate produced a result — which is correct, because those runs proved
+  nothing, but it will surface as newly-red pipelines. `schemas/audit-report.schema.json`
+  already permitted `unknown`; `SKILL.md`'s documented sample now says so too.
+
+### Fixed
+
+- **PHPStan findings were read from the wrong field, so a run finding hundreds of real
+  defects reported zero.** `.totals.errors` counts global errors, meaning the analysis
+  itself failed to configure or run, and is `0` on a run with 211 code findings. The
+  finding count now comes from `.totals.file_errors` at both call sites, and a non-zero
+  `.totals.errors` is surfaced separately as a possible misconfiguration instead of
+  being silently reported as clean.
+- **The security audit wrote discovered secrets, unredacted, into the audited repo.**
+  `gitleaks` was invoked without `--redact`, so the report held every matched secret in
+  full, at `${REPORT_DIR}/security/gitleaks.json` — inside the working tree, in a
+  directory nothing ignored. Verified: `git check-ignore .reports` returned no match.
+  Every invocation now redacts, and the report directory is added to `.gitignore` at
+  creation. A tool for finding committed secrets could previously cause you to commit
+  secrets.
+- **A gitleaks run that failed reported nothing at all.** Its exit status was captured
+  and never read, and the report-file test had no `else`, so a failure printed neither a
+  finding nor an error while the summary counted it as zero. Exit status is now read.
+  Note gitleaks fatals through `os.Exit(1)`, so a bad config, an unwritable report path
+  and a missing source all exit `1` — the same code as "found leaks" — which means only
+  a parseable report distinguishes the two. A present-but-unparseable report is now
+  treated as a failed run and recorded as a skipped tool, not as clean.
+- **A stale report could mask a failed scan.** A `gitleaks.json` left by an earlier clean
+  run survived a later failed run, so the block parsed `[]` and printed "No secrets
+  detected". The report is removed before each run.
+- **`overall_score: pass` when no check ran.** `full-audit.sh` initialized the verdict to
+  `pass` and `update_status()` only ever downgraded, so `pass` was never a verdict the
+  suite reached — it was the value it started at and failed to overwrite. Two paths are
+  now closed: the verdict is derived from gates that produced a result, and the report
+  skeleton written before any gate runs starts at `unknown`, so a run that dies partway
+  no longer leaves a passing report on disk.
+- **Report-directory gitignoring is defence-in-depth and never fatal.** Writing to a
+  `.gitignore` in a repository the tool does not own is guarded: it does nothing outside
+  a git working tree, refuses a `REPORT_DIR` containing gitignore pattern metacharacters
+  rather than guessing an escaping, refuses to write through a symlink, asks
+  `git check-ignore` before writing so an already-ignored directory produces no stray
+  file, and treats an unwritable `.gitignore` as a warning rather than aborting the run.
+
+### Added
+
+- `scripts/tests/false-clean-spec.sh` — 27 hermetic assertions, no DDEV, no network, no
+  PHP. Covers all of the above, including the hostile cases: an unparseable and a
+  truncated gitleaks report, an unwritable and a symlinked `.gitignore`, pattern
+  metacharacters in `REPORT_DIR`, and that the report skeleton cannot start at a passing
+  verdict. Assertions that test "does not abort under `set -e`" run the code in a
+  separate `bash` process, because `set -e` is suppressed inside any command whose exit
+  status is tested and that suppression propagates into subshells — a harness written the
+  obvious way passes against the defective code.
+
 ## [3.9.5] - 2026-08-05
 
 ### Fixed
