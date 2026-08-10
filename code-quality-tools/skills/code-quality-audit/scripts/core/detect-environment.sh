@@ -109,20 +109,108 @@ detect_nextjs() {
     return 1
 }
 
-# Check for custom modules path
-check_modules_path() {
-    local default_path="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+# The detected Drupal root, expressed relative to the project root.
+#
+# detect_drupal already works out where the web root is — docroot/ on an Acquia-layout
+# project, web/ on a composer-template one — so the custom-code paths must be derived
+# from THAT and not guessed independently, or every docroot-layout project is told to
+# look in a web/ that does not exist.
+#
+# Relative on purpose: the gates treat these as project-root-relative paths
+# (coverage-report.sh builds /var/www/html/${DRUPAL_MODULES_PATH} for the container,
+# and the grep-based gates run from the project root), so the absolute DRUPAL_ROOT
+# must never leak into them.
+#
+# This script is its own process, so exporting is not how the values travel. They
+# reach the gates two ways: the caller's own environment when a gate is run directly,
+# and environment.json, which full-audit.sh reads back and re-exports before running
+# any gate. Under /audit that re-export is the only path, so a value resolved here and
+# not written to environment.json reaches nothing.
+drupal_root_prefix() {
+    local rel="${DRUPAL_ROOT}"
 
-    if [ -d "${default_path}" ]; then
-        echo -e "${GREEN}[OK]${NC} Custom modules found at: ${default_path}"
-        export DRUPAL_MODULES_PATH="${default_path}"
-    elif [ -d "modules/custom" ]; then
-        echo -e "${YELLOW}[WARN]${NC} Custom modules at non-standard path: modules/custom"
-        export DRUPAL_MODULES_PATH="modules/custom"
-    else
-        echo -e "${YELLOW}[WARN]${NC} No custom modules directory found"
-        echo "  Expected: ${default_path}"
+    # Nothing detected to derive from — keep the historical default rather than
+    # inventing a layout.
+    if [ -z "${rel}" ]; then
+        printf '%s' "web"
+        return 0
     fi
+
+    case "${rel}" in
+        "${PROJECT_ROOT}")   rel="" ;;
+        "${PROJECT_ROOT}"/*) rel="${rel#"${PROJECT_ROOT}"/}" ;;
+    esac
+
+    # detect_drupal composes "${PROJECT_ROOT}/${path}" over a search list whose first
+    # entry is ".", so a root-layout project arrives here as "." or "./web".
+    while [ "${rel}" != "${rel#./}" ]; do
+        rel="${rel#./}"
+    done
+    rel="${rel%/}"
+    if [ "${rel}" = "." ]; then
+        rel=""
+    fi
+
+    printf '%s' "${rel}"
+}
+
+# Resolve one custom-code path (modules or themes) and export it.
+#
+# An explicit value always wins and is never second-guessed: the caller who exported
+# it knows their layout better than this detection does, and silently substituting a
+# different directory would scope every gate at something the caller did not ask for.
+# It is still reported as missing when it does not exist, because that is a typo worth
+# seeing rather than a clean scan of nothing.
+#
+# The path is exported even when no directory was found, so environment.json always
+# names what was actually looked for rather than going blank. An empty field is worse
+# than a wrong one: it is what full-audit.sh re-exports to the gates, and a gate handed
+# nothing falls back to its own web/... default — silently undoing the resolution on
+# exactly the layouts that needed it. (It also used to end the audit outright: that
+# read was a bare `VAR=$(grep ...)` under `set -e` and an empty field made grep exit 1.
+# That read is now non-fatal, so this is about the value, not the crash.)
+resolve_custom_path() {
+    local var_name="$1" kind="$2"
+    local explicit="${!var_name-}"
+    local prefix derived
+
+    # Written as an `if` rather than `[ -n ... ] && ...`: this script runs under
+    # `set -e`, and a trailing AND-list whose test fails would hand the enclosing
+    # function a non-zero status.
+    prefix="$(drupal_root_prefix)"
+    if [ -n "${prefix}" ]; then
+        prefix="${prefix}/"
+    fi
+    derived="${prefix}${kind}/custom"
+
+    if [ -n "${explicit}" ]; then
+        if [ -d "${explicit}" ]; then
+            echo -e "${GREEN}[OK]${NC} Custom ${kind} found at: ${explicit}"
+        else
+            echo -e "${YELLOW}[WARN]${NC} No custom ${kind} directory found"
+            echo "  Expected: ${explicit}"
+        fi
+        export "${var_name}=${explicit}"
+        return 0
+    fi
+
+    if [ -d "${derived}" ]; then
+        echo -e "${GREEN}[OK]${NC} Custom ${kind} found at: ${derived}"
+        export "${var_name}=${derived}"
+    elif [ -d "${kind}/custom" ]; then
+        echo -e "${YELLOW}[WARN]${NC} Custom ${kind} at non-standard path: ${kind}/custom"
+        export "${var_name}=${kind}/custom"
+    else
+        echo -e "${YELLOW}[WARN]${NC} No custom ${kind} directory found"
+        echo "  Expected: ${derived}"
+        export "${var_name}=${derived}"
+    fi
+}
+
+# Check for custom modules and themes paths
+check_custom_paths() {
+    resolve_custom_path DRUPAL_MODULES_PATH modules
+    resolve_custom_path DRUPAL_THEMES_PATH themes
 }
 
 # Create report directory
@@ -260,7 +348,7 @@ main() {
     fi
 
     if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
-        check_modules_path
+        check_custom_paths
     fi
 
     setup_report_dir
@@ -290,6 +378,7 @@ main() {
   "drupal_root": "${DRUPAL_ROOT}",
   "nextjs_root": "${NEXTJS_ROOT}",
   "drupal_modules_path": "${DRUPAL_MODULES_PATH}",
+  "drupal_themes_path": "${DRUPAL_THEMES_PATH}",
   "ddev_available": ${DDEV_AVAILABLE},
   "env_ready": ${ENV_READY},
   "report_dir": "${REPORT_DIR}",

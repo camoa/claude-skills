@@ -53,10 +53,16 @@ update_status() {
 #
 # Two kinds of non-result are distinguished, because they are not the same claim:
 #
-#   "unknown"  the gate never ran. Either it does not apply to this project type (the
-#              lint gate is Next.js-only, the security gate is Drupal-only, so one of
-#              them is "unknown" on every single run) or its script is missing. Nothing
-#              was promised, so nothing is owed. No consequence beyond not counting.
+#   "unknown"  the gate never ran — it does not apply to this project type, it is not
+#              wired up, or its script is missing. Nothing was promised, so nothing is
+#              owed. No consequence beyond not counting.
+#              The security gate is genuinely Drupal-only. LINT is a different case and
+#              this comment used to misdescribe it: lint is only WIRED for Next.js
+#              (Step 4b below), so lint_score reads "unknown" on every Drupal run even
+#              though scripts/drupal/lint-check.sh exists, /code-quality-tools:lint
+#              runs it standalone, and the audit command documents lint as part of the
+#              audit. That is an unwired gate, not a gate that does not apply. Tracked
+#              as its own defect; deliberately NOT papered over here.
 #   "skipped"  the gate RAN and declared that it could not cover its ground. That is a
 #              deliberate statement about coverage, not an accident of project type,
 #              and it is the one an audit must not paper over.
@@ -110,13 +116,43 @@ if ! "${SCRIPT_DIR}/detect-environment.sh" > /dev/null 2>&1; then
     fi
 fi
 
+# Read one string field out of environment.json without taking the run down.
+#
+# `grep` exits 1 when the field is absent OR empty, and a bare `VAR=$(grep ...)` under
+# `set -e` ends the audit right there with no message at all. That is not theoretical:
+# drupal_modules_path is legitimately empty on every Next.js project, so `/audit` on a
+# Next.js codebase died at this step, and any environment.json written before these
+# fields existed does the same. `[^"]*` rather than `[^"]+` so an empty field reads
+# back as an empty string instead of as a failed match.
+read_env_field() {
+    grep -oP "\"$2\":\s*\"\K[^\"]*" "$1" 2>/dev/null | head -1 || true
+}
+
 # Load environment
 if [ -f "${REPORT_DIR}/environment.json" ]; then
-    PROJECT_TYPE=$(grep -oP '"project_type":\s*"\K[^"]+' "${REPORT_DIR}/environment.json")
-    DRUPAL_MODULES_PATH=$(grep -oP '"drupal_modules_path":\s*"\K[^"]+' "${REPORT_DIR}/environment.json")
+    PROJECT_TYPE=$(read_env_field "${REPORT_DIR}/environment.json" project_type)
+    DRUPAL_MODULES_PATH=$(read_env_field "${REPORT_DIR}/environment.json" drupal_modules_path)
+    DRUPAL_THEMES_PATH=$(read_env_field "${REPORT_DIR}/environment.json" drupal_themes_path)
 else
     echo -e "${RED}[ERROR]${NC} Environment file not found"
     exit 2
+fi
+
+# EXPORT, not just assign. Every gate below runs as its own process, so a plain
+# assignment reaches none of them: each would fall back to its own
+# `${DRUPAL_MODULES_PATH:-web/modules/custom}` default and scan a tree that
+# detect-environment.sh already established is not where this project keeps its code.
+# On a docroot-layout (Acquia) project that means the whole audit examines nothing
+# while reporting normally.
+#
+# Only exported when non-empty. An empty value carries no information — every consumer
+# defaults with `:-`, so exporting an empty string would at best be a no-op and at
+# worst blank out a value the caller deliberately set in their own shell.
+if [ -n "$DRUPAL_MODULES_PATH" ]; then
+    export DRUPAL_MODULES_PATH
+fi
+if [ -n "$DRUPAL_THEMES_PATH" ]; then
+    export DRUPAL_THEMES_PATH
 fi
 
 echo -e "${GREEN}[OK]${NC} Project type: ${PROJECT_TYPE}"
@@ -236,18 +272,42 @@ echo ""
 echo -e "${BLUE}[Step 4/6]${NC} Running SOLID analysis..."
 SOLID_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/solid-check.sh" ]; then
-    if "${SCRIPTS_DIR}/solid-check.sh" 2>/dev/null; then
-        SOLID_STATUS="pass"
-    else
-        exit_code=$?
-        if [ $exit_code -eq 1 ]; then
-            SOLID_STATUS="warning"
-            WARNING_COUNT=$((WARNING_COUNT + 1))
-        else
-            SOLID_STATUS="fail"
-            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
-        fi
+    # solid-check.sh exits 0 for BOTH "pass" and "skipped", so its exit code cannot
+    # express the difference and reading it alone records a gate that covered no ground
+    # as a clean pass. The gate now downgrades itself to "skipped" when an analyzer was
+    # present and returned nothing usable (tools_failed[]) — that downgrade is worthless
+    # unless the aggregate can see it, because "skipped" is what caps a would-be pass at
+    # "warning" in resolve_overall_status below.
+    #
+    # Same mechanism the security gate already uses: take the verdict from the report
+    # the gate writes, fall back to the exit code only when the report yields none.
+    #
+    # Clearing any previous report first is what makes reading it sound. Without this, a
+    # gate that dies before writing is judged by the LAST run's report, so a stale
+    # "pass" survives a crash — a false clean built out of the fix for one. `|| true`
+    # because an unwritable report directory must not take the audit down under `set -e`.
+    rm -f "${REPORT_DIR}/solid-report.json" 2>/dev/null || true
+    solid_exit=0
+    "${SCRIPTS_DIR}/solid-check.sh" 2>/dev/null || solid_exit=$?
+    SOLID_STATUS=""
+    if [ -f "${REPORT_DIR}/solid-report.json" ]; then
+        SOLID_STATUS=$(jq -r '.status // empty' \
+            "${REPORT_DIR}/solid-report.json" 2>/dev/null || true)
     fi
+    if [ -z "$SOLID_STATUS" ]; then
+        # No usable verdict — no report, or one too malformed to read. Judge by the exit
+        # code rather than by "unknown": the gate DID run, and "unknown" is the bucket
+        # for gates that never ran, which carries no consequence at the aggregate.
+        case "$solid_exit" in
+            0) SOLID_STATUS="pass" ;;
+            1) SOLID_STATUS="warning" ;;
+            *) SOLID_STATUS="fail" ;;
+        esac
+    fi
+    case "$SOLID_STATUS" in
+        warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
+        fail)    CRITICAL_COUNT=$((CRITICAL_COUNT + 1)) ;;
+    esac
     update_status "$SOLID_STATUS"
 
     # Merge SOLID report
@@ -264,6 +324,12 @@ fi
 echo -e "SOLID: $([ "$SOLID_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || echo "${YELLOW}${SOLID_STATUS}${NC}")"
 
 # Step 4b: Run lint check for Next.js (ESLint + TypeScript)
+#
+# Next.js only, and not by design as far as anything in this repository states:
+# scripts/drupal/lint-check.sh exists and is a full phpcs/phpcbf gate, but no Drupal
+# path reaches it, so an /audit of a Drupal project never runs a coding-standards check
+# at all. Left as-is here on purpose rather than widened as a side effect of an
+# unrelated fix — see the note in resolve_overall_status above.
 LINT_STATUS="unknown"
 if [ "$PROJECT_TYPE" == "nextjs" ]; then
     echo ""

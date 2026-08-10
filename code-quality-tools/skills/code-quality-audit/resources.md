@@ -60,6 +60,31 @@ composer require --dev \
 
 > **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
 
+#### Upgrading to phpstan-drupal 2.1.0
+
+2.1.0 enables nine rules by default that were previously opt-in:
+`testClassSuffixNameRule`, `dependencySerializationTraitPropertyRule`,
+`accessResultConditionRule`, `cacheableDependencyRule`, `hookFormAlterRule`,
+`loggerFromFactoryPropertyAssignmentRule`, `entityStorageDirectInjectionRule`,
+`symfonyYamlParseRule`, `entityOperationsCacheabilityRule`.
+
+Expect a step increase in findings on the first run after upgrading, on a codebase
+that did not change. These are newly reported defects, not newly introduced ones.
+
+**Breaking change for an existing config**: the `hookRules` parameter was renamed to
+`hookFormAlterRule`. PHPStan rejects a configuration file that still uses the old key,
+so this fails at startup. Rename it before upgrading.
+
+Two further changes surface findings in untouched code: `ContainerInterface::has()` now
+returns `bool` instead of being inferred always-true (restore with
+`drupal: bleedingEdge: containerHasAlwaysTrue: true`), and a long-standing inverted type
+check in the `LoadIncludes` rule was fixed, so its errors now fire on code using
+concrete `ModuleHandler` classes.
+
+To suppress one rule, disable that rule (`drupal: rules: <name>: false`). Do not add
+`excludePaths` for `tests/`, `*.module` or `*.install` - those patterns make several of
+the default rules structurally unable to fire. See `templates/drupal/phpstan.neon`.
+
 ### Optional
 
 - [PHPMetrics](https://github.com/phpmetrics/PhpMetrics) - Visual reports

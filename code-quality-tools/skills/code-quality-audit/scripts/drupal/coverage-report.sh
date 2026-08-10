@@ -2,6 +2,39 @@
 # coverage-report.sh - Run PHPUnit with PCOV coverage
 # Part of code-quality-audit skill
 #
+# SCOPE (no flags): ${DRUPAL_MODULES_PATH} — this project's custom code, the same
+#   path lint-check.sh, solid-check.sh and dry-check.sh check. It is passed to
+#   PHPUnit as a path argument, so discovery follows the path.
+#
+#   It used to be `--testsuite unit,kernel` with no path, which is NOT this
+#   project's code: under core's phpunit config those suites are built by
+#   core/tests/TestSuites/*TestSuite.php, whose addTestsBySuiteNamespace() adds
+#   core's own tests AND scans every extension root returned by
+#   drupal_phpunit_contrib_extension_directory_roots() — core/modules,
+#   core/profiles, core/themes, modules (contrib included), profiles, themes and
+#   sites/*/modules. So the run executed core's and every contrib module's unit
+#   and kernel tests. On a real client project that ran for minutes at sustained
+#   CPU and had to be killed; full-audit.sh calls this at step 3, which is the
+#   likely mechanism behind an audit that stopped there.
+#
+#   `pcov.directory` did already narrow which FILES were instrumented, so the
+#   reported percentage was about custom code. What it could not narrow is which
+#   TESTS were discovered and executed, which is where the time went.
+#
+# --full-suite (or COVERAGE_FULL_SUITE=1):
+#   Explicit opt-in to the old whole-installation run (--testsuite unit,kernel).
+#
+#   TIER NOTE: a path argument and --testsuite are mutually exclusive in PHPUnit,
+#   so the scoped default cannot also say "unit,kernel". Discovery under the path
+#   is by test file, which means a custom module carrying tests/src/Functional
+#   now has those tests discovered too — they were previously excluded by the
+#   testsuite names. That is bounded by the project's own code, and a functional
+#   test with no SIMPLETEST_BASE_URL errors loudly rather than reporting clean.
+#   A single path argument is used rather than one per tier because a single path
+#   is accepted by every PHPUnit that Drupal 9/10/11 pins, and a multi-path
+#   invocation silently ignoring the extra paths on an older PHPUnit would shrink
+#   the scope without saying so.
+#
 # --changed <src.php> [src2.php ...]:
 #   Scopes coverage to the changed source files.
 #   Runs only the co-located Unit tests mapped from each changed source, and
@@ -193,9 +226,16 @@ if [[ "${1:-}" == "--changed" ]]; then
     echo -e "${GREEN}[PASS]${NC} Coverage ${COVERAGE_PCT}% meets target ${COVERAGE_TARGET}%"
   fi
 
-  TESTS_TOTAL=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Tests:\s*\K\d+' | head -1 || echo "0")
-  TESTS_PASSED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'OK \(\K\d+' | head -1 || echo "$TESTS_TOTAL")
-  TESTS_FAILED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Failures:\s*\K\d+' | head -1 || echo "0")
+  # `cmd | grep -oP ... | head -1 || echo 0` never reaches its fallback: the
+  # pipeline's status is head's, which is 0 even when grep matched nothing. So a
+  # run with no "Tests:" line leaves these EMPTY, and the heredoc below then emits
+  # `"test_count": ,` — invalid JSON. Default after assigning instead.
+  TESTS_TOTAL=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Tests:\s*\K\d+' | head -1)
+  TESTS_TOTAL="${TESTS_TOTAL:-0}"
+  TESTS_PASSED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'OK \(\K\d+' | head -1)
+  TESTS_PASSED="${TESTS_PASSED:-$TESTS_TOTAL}"
+  TESTS_FAILED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Failures:\s*\K\d+' | head -1)
+  TESTS_FAILED="${TESTS_FAILED:-0}"
 
   # Serialise gap files for JSON
   GAP_JSON=$(printf '%s\n' "${_gap_files[@]+"${_gap_files[@]}"}" | \
@@ -230,7 +270,16 @@ EOF
     fail)    exit 2 ;;
   esac
 fi
-# ── end --changed guard (no-flag path continues unchanged below) ──────────────
+# ── end --changed guard ───────────────────────────────────────────────────────
+
+# ── --full-suite opt-in ───────────────────────────────────────────────────────
+# The whole-installation run is opt-in, not the default. See the SCOPE note at the
+# top of this file for what "the whole installation" actually means here.
+COVERAGE_FULL_SUITE="${COVERAGE_FULL_SUITE:-0}"
+if [[ "${1:-}" == "--full-suite" ]]; then
+    COVERAGE_FULL_SUITE=1
+    shift
+fi
 
 echo "=== Coverage Analysis (PHPUnit + PCOV) ==="
 echo ""
@@ -275,6 +324,25 @@ mkdir -p "${REPORT_DIR}/coverage"
 # Run PHPUnit with coverage
 echo ""
 echo "Running PHPUnit with coverage..."
+if [ "$COVERAGE_FULL_SUITE" == "1" ]; then
+    echo "  Scope: --full-suite (core's unit+kernel testsuites: core, contrib and custom)"
+else
+    echo "  Scope: ${DRUPAL_MODULES_PATH}"
+    # Checked on the HOST while PHPUnit runs in the CONTAINER — the same equivalence
+    # the rest of this script already relies on (resolve_phpunit_config stats
+    # web/core/phpunit.xml.dist here and passes the same relative path there).
+    #
+    # A missing path is announced but NOT turned into an early exit 0 the way
+    # lint-check.sh reports an unscannable tree. full-audit.sh reads this gate's exit
+    # status and maps 0 to "pass", so exiting 0 on a path that was never measured
+    # would report clean coverage for code nobody looked at. Falling through instead
+    # leaves PHPUnit with nothing to run, no "Lines:" in its output, 0% coverage and
+    # exit 2 — wrong in the loud direction.
+    if [ ! -d "${DRUPAL_MODULES_PATH}" ]; then
+        echo -e "  ${YELLOW}[WARN]${NC} ${DRUPAL_MODULES_PATH} does not exist — PHPUnit will find nothing here."
+        echo "         Set DRUPAL_MODULES_PATH to this project's custom code."
+    fi
+fi
 echo ""
 
 # Build PHPUnit command
@@ -287,7 +355,15 @@ if [ -n "$_COV_CFG" ]; then
 else
     echo -e "${YELLOW}[WARN]${NC} No Drupal phpunit config found; running without -c (Unit tests may fail to autoload)."
 fi
-PHPUNIT_CMD+=" --testsuite unit,kernel"
+# The scope is recorded in the JSON report: a coverage number is only meaningful
+# alongside what was actually run to produce it.
+if [ "$COVERAGE_FULL_SUITE" == "1" ]; then
+    COVERAGE_SCOPE="full-suite"
+    PHPUNIT_CMD+=" --testsuite unit,kernel"
+else
+    COVERAGE_SCOPE="${DRUPAL_MODULES_PATH}"
+    PHPUNIT_CMD+=" ${DRUPAL_MODULES_PATH}"
+fi
 PHPUNIT_CMD+=" --coverage-clover /var/www/html/${REPORT_DIR}/coverage/clover.xml"
 PHPUNIT_CMD+=" --coverage-text"
 
@@ -324,9 +400,24 @@ else
 fi
 
 # Parse test counts from output
-TESTS_TOTAL=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Tests:\s*\K\d+' | head -1 || echo "0")
-TESTS_PASSED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'OK \(\K\d+' | head -1 || echo "$TESTS_TOTAL")
-TESTS_FAILED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Failures:\s*\K\d+' | head -1 || echo "0")
+#
+# `cmd | grep -oP ... | head -1 || echo 0` never reaches its fallback: the
+# pipeline's status is head's, which is 0 even when grep matched nothing. So a run
+# that prints no "Tests:" line leaves these EMPTY and the heredoc below emits
+# `"test_count": ,` — invalid JSON. full-audit.sh then merges this file with
+# `jq -s`, which fails, and full-audit.sh runs under `set -e` with that jq's status
+# untested, so the whole audit aborts at step 3 of 6 with no summary.
+#
+# Scoping the run to ${DRUPAL_MODULES_PATH} makes the empty case ORDINARY rather
+# than exotic: a project whose custom modules carry no tests gets "No tests
+# executed" and no "Tests:" line. Fixing the scope without fixing this would trade
+# a run that takes forever for a run that kills the audit.
+TESTS_TOTAL=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Tests:\s*\K\d+' | head -1)
+TESTS_TOTAL="${TESTS_TOTAL:-0}"
+TESTS_PASSED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'OK \(\K\d+' | head -1)
+TESTS_PASSED="${TESTS_PASSED:-$TESTS_TOTAL}"
+TESTS_FAILED=$(echo "$COVERAGE_OUTPUT" | grep -oP 'Failures:\s*\K\d+' | head -1)
+TESTS_FAILED="${TESTS_FAILED:-0}"
 
 # Find uncovered files from clover.xml if available
 UNCOVERED_FILES="[]"
@@ -341,6 +432,7 @@ fi
 # Generate JSON report
 cat > "${REPORT_DIR}/coverage-report.json" << EOF
 {
+  "scope": "${COVERAGE_SCOPE}",
   "line_coverage": ${COVERAGE_PCT},
   "branch_coverage": null,
   "files_analyzed": 0,

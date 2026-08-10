@@ -925,7 +925,7 @@ case "$1" in
     exec)
         shift
         case "$1" in
-            test) exit 1 ;;                  # tool_present → absent
+            test) exit 1 ;;                  # not in the repo's vendor/bin → absent
             grep) shift; grep "$@" 2>/dev/null; exit 0 ;;
             *) exit 1 ;;
         esac
@@ -934,6 +934,20 @@ case "$1" in
 esac
 SH
     chmod +x "${dir}/ddev"
+    # solid-check.sh also looks for an analyzer on the host PATH and in composer's
+    # global bin dir, so "absent" is only true if those come up empty too. This stub
+    # reports an empty global bin dir; without it the test asserts absence while the
+    # machine running it may well have phpmd installed globally, and the result then
+    # depends on the developer's laptop rather than on the code.
+    cat > "${dir}/composer" <<'SH'
+#!/bin/bash
+if [ "${1:-}" = "global" ] && [ "${2:-}" = "config" ]; then
+    printf '%s\n' "${STUB_EMPTY_BIN:-/nonexistent}"
+    exit 0
+fi
+exit 1
+SH
+    chmod +x "${dir}/composer"
 }
 {
     label="solid-check.sh --changed: phpstan+phpmd absent → exit 0, tools_absent recorded"
@@ -941,7 +955,10 @@ SH
     tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
     RDIR=$(mktemp -d)
     exit_code=0
-    output=$(PATH="${NOAN_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+    # PATH is narrowed to the stub dir plus the system bin dirs (jq, date and grep live
+    # there) instead of inheriting the full developer PATH, so a phpstan or phpmd
+    # installed on this machine cannot turn an absence test into a presence test.
+    output=$(PATH="${NOAN_BIN}:/usr/bin:/bin" REPORT_DIR="$RDIR" \
         bash "${DRUPAL_SCRIPTS}/solid-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     ABSENT=$(jq -c '.tools_absent // []' "${RDIR}/solid-report.json" 2>/dev/null || echo "[]")
     if [ "$exit_code" -eq 0 ] \
