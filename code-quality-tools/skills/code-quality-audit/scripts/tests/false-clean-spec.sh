@@ -47,6 +47,12 @@
 #               `set -e` whenever the field was empty, which it is on every Next.js
 #               project; and the SOLID gate's "skipped" verdict could not reach the
 #               aggregate, because the gate exits 0 for both pass and skipped.
+#   T  (item 16) a secret finding carries its history. Phase 1 says WHERE a secret is;
+#               only phase 2 says whether it has already been committed, which is what
+#               decides between editing a file and rotating a credential. Every case
+#               runs against a real temp repository with a real history, and the same
+#               run asserts the value the pass had to handle reached no file, no
+#               printed line and no process argv.
 #
 # Where an assertion can be proved by executing the real code, it is: the phpstan
 # expression is extracted from the script and evaluated, and setup_report_dir /
@@ -4770,6 +4776,804 @@ else
   bad "[hard stop] and names the lockfile mismatch | got: $(tr '\n' ' ' < "$S_STOP/out.txt" 2>/dev/null)"
 fi
 assert_eq "[hard stop] no gate ran on the drifted tree" "NO-GATE-RAN" "$(p_gates "$S_STOP")"
+
+
+# ── T. a secret finding carries its history (item 16) ────────────────────────
+echo ""
+echo "T: a secret finding says whether it is already in git history"
+
+# Phase 1 answers "there is a key in this file". That does not decide what to do
+# about it. Never committed -> edit the file and you are done. In history for two
+# years across 44 commits -> rotate at the provider, and editing the file achieves
+# nothing at all. Same finding, opposite remediation. Phase 2 is what tells them
+# apart, and these cases pin BOTH that it answers correctly and that answering does
+# not leak the value it had to handle to answer.
+#
+# The secrets below are synthetic random strings in real credential FORMATS, chosen
+# because gitleaks 8.30.1 actually fires on them (its default config allowlists the
+# well-known documentation examples, so AKIAIOSFODNN7EXAMPLE and friends produce no
+# finding and would make every case here vacuous). They are not credentials.
+T_SEC_A='ghp_OhbVrpoiVgRV5IfLBcbfnoGMbJmTPSIAoCLr'
+T_SEC_B='ghp_KLzdocJ2isAjIhKtJ0RlgLKOmxgJTeKdNnFR'
+T_SEC_C='AIzaSyau2RJtBRnlWmTSHf6pWkLUyifDLkDmWJ6'
+T_SEC_D='ghp_u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8d'
+
+HELPER="${ROOT}/core/secret-history.sh"
+TT="$TMP/hist"; mkdir -p "$TT"
+
+if [[ ! -f "$HELPER" ]]; then
+  bad "core/secret-history.sh exists"
+else
+  ok "core/secret-history.sh exists"
+fi
+
+# Both stacks must reach it. /code-quality-tools:security routes by project type, so
+# a confirmation pass wired into one script only leaves the other stack reporting a
+# location with no history. T7 proves the wiring behaviorally; this catches the
+# cheaper form of the same break.
+for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+  stack="${target%%:*}"; file="${target#*:}"
+  if grep -q 'secret-history.sh' "$file"; then
+    ok "[$stack] security-check.sh sources core/secret-history.sh"
+  else
+    bad "[$stack] security-check.sh sources core/secret-history.sh"
+  fi
+done
+
+# Every case below runs the helper in a SEPARATE bash process under `set -e`, the
+# way the security gate runs it. An inline subshell would not do: bash neutralises
+# `set -e` inside any command whose status is tested, so a helper that aborts in
+# production would keep going here and the harness would report a pass.
+hist_run() {   # <repo_dir> <report_json> [extra env assignments...]
+  local repo="$1" report="$2"; shift 2
+  env "$@" bash -c '
+    set -e
+    cd "$2" || exit 9
+    . "$1"
+    cqt_secret_history_json "$3" .
+  ' _ "$HELPER" "$repo" "$report" 2>/dev/null
+}
+
+# Runs the real gitleaks over a directory and leaves the REDACTED report outside it,
+# so a later scan of the same directory does not read the previous report back in.
+hist_scan() {  # <dir> <report_path>
+  ( cd "$1" && gitleaks detect --no-git --redact --report-format json \
+      --report-path "$2" >/dev/null 2>&1 || true )
+}
+
+# One committer identity and one fixed timestamp everywhere, so "the right author
+# and the right date" are values the fixture chose, not values read back out of the
+# thing under test.
+hist_commit() {  # <repo> <message> <iso-date>
+  GIT_AUTHOR_DATE="$3" GIT_COMMITTER_DATE="$3" \
+  git -C "$1" -c user.name='Ada Lovelace' -c user.email='ada@example.com' \
+    -c commit.gpgsign=false commit -qm "$2"
+}
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "  SKIP: section T value-recovery and end-to-end cases (gitleaks not installed)"
+  T_HAVE_GITLEAKS=0
+else
+  T_HAVE_GITLEAKS=1
+fi
+
+if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
+  # ── T1: the value is recovered from the working tree, not from the report ───
+  #
+  # Every gitleaks invocation in this suite carries --redact (section B), so the
+  # report holds "REDACTED" and the value has to come from the file gitleaks
+  # points at. That makes the column convention load-bearing, and gitleaks' columns
+  # are NOT what the field names suggest: verified against 8.30.1, the reported
+  # start is one PAST the true byte offset except when the match begins the line,
+  # and the offsets are BYTES, so a non-ASCII character earlier in the line shifts
+  # a character-based extraction.
+  #
+  # The expected values here are the literals the fixture wrote. They are not
+  # derived from the report, from the helper, or from a second run of the
+  # extraction, so a consistently wrong extraction cannot satisfy them.
+  # The four positions are chosen to separate gitleaks' bias rule from the rule it
+  # LOOKS like: the bias is absent on the first line of a file, not on a match that
+  # starts at column 1. A fixture holding only the column-1 case satisfies both
+  # readings, and the wrong one shifts every first-line secret by a byte.
+  T1="$TT/extract"; mkdir -p "$T1"
+  {
+    printf 'const a = "%s";\n' "$T_SEC_A"
+    printf '%s\n' "$T_SEC_B"
+    printf 'const é = "%s";\n' "$T_SEC_C"
+  } > "$T1/app.js"
+  printf '%s\n' "$T_SEC_D" > "$T1/top.js"
+  hist_scan "$T1" "$TT/extract.json"
+
+  T1_N=$(jq 'length' "$TT/extract.json" 2>/dev/null || echo 0)
+  assert_eq "gitleaks reports all four fixture secrets (premise for T1)" "4" "$T1_N"
+
+  extract_at() {  # <file> <start_line> -> the recovered value
+    local f="$1" line="$2" fields
+    fields=$(jq -r --arg f "$f" --arg l "$line" '
+      [ .[] | select(.File == $f and (.StartLine|tostring) == $l) ][0]
+      | [ (.StartLine|tostring), (.EndLine|tostring), (.StartColumn|tostring),
+          (.EndColumn|tostring), (.Match // "") ] | @tsv' "$TT/extract.json" 2>/dev/null)
+    [[ -n "$fields" ]] || { printf 'NO-FINDING'; return 0; }
+    local sl el sc ec match
+    IFS=$'\t' read -r sl el sc ec match <<<"$fields"
+    local out
+    out=$(cd "$T1" && bash -c '
+      set -e
+      . "$1"
+      cqt_secret_extract_value "$2" "$3" "$4" "$5" "$6" "$7"
+    ' _ "$HELPER" "$f" "$sl" "$el" "$sc" "$ec" "$match" 2>/dev/null) || out=''
+    [[ -n "$out" ]] || { printf 'NOT-EXTRACTED'; return 0; }
+    printf '%s' "${out#*$'\037'}"
+  }
+
+  assert_eq "the value is recovered when the match starts at byte 1 of the file" \
+    "$T_SEC_D" "$(extract_at top.js 1)"
+  # The case the "column 1" reading of the bias gets wrong: first line, but the
+  # secret sits partway along it.
+  assert_eq "the value is recovered partway along the FIRST line of a file" \
+    "$T_SEC_A" "$(extract_at app.js 1)"
+  assert_eq "the value is recovered when it begins a later line" \
+    "$T_SEC_B" "$(extract_at app.js 2)"
+  # This one carries a trailing quote inside gitleaks' Match, so it also pins that
+  # the leftover characters --redact leaves around "REDACTED" are stripped back off
+  # and used to verify the alignment, and it is the case a character-based
+  # extraction gets wrong because of the é earlier in the line.
+  assert_eq "the value is recovered past a multi-byte character and a match suffix" \
+    "$T_SEC_C" "$(extract_at app.js 3)"
+
+  # ── T2: N commits, the right first commit, date and author ─────────────────
+  #
+  # Constructed so the answer is known before anything runs: the secret is added in
+  # c1, added again in a second file in c3, and removed in c4. Three commits change
+  # the number of occurrences; c2 touches an unrelated file and must NOT count, or
+  # "commit_count" would just be "commits in the repo".
+  T2="$TT/repo-n"; mkdir -p "$T2"; git -C "$T2" init -q
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T2/a.js"
+  git -C "$T2" add -A; hist_commit "$T2" c1 "2020-01-02T03:04:05+00:00"
+  T2_C1=$(git -C "$T2" rev-parse HEAD)
+  printf 'unrelated\n' > "$T2/other.txt"
+  git -C "$T2" add -A; hist_commit "$T2" c2 "2021-02-03T00:00:00+00:00"
+  printf 'const t2 = "%s";\n' "$T_SEC_A" > "$T2/b.js"
+  git -C "$T2" add -A; hist_commit "$T2" c3 "2021-03-03T00:00:00+00:00"
+  git -C "$T2" rm -q b.js; hist_commit "$T2" c4 "2021-04-03T00:00:00+00:00"
+  hist_scan "$T2" "$TT/repo-n.json"
+  T2_OUT=$(hist_run "$T2" "$TT/repo-n.json")
+  T2_GET() { printf '%s' "$T2_OUT" | jq -r "[.[]][0].$1 // \"NULL\"" 2>/dev/null || echo ERR; }
+
+  assert_eq "a committed secret is reported as found" "found" "$(T2_GET history_status)"
+  assert_eq "commit_count counts the commits that changed the number of occurrences" \
+    "3" "$(T2_GET commit_count)"
+  assert_eq "first_seen_commit is the commit that introduced it" \
+    "$T2_C1" "$(T2_GET first_seen_commit)"
+  assert_eq "first_seen_date is that commit's author date" \
+    "2020-01-02T03:04:05+00:00" "$(T2_GET first_seen_date)"
+  assert_eq "author is that commit's author" "Ada Lovelace" "$(T2_GET author)"
+
+  # Second, independent oracle for the same number: git's own pickaxe. The walk in
+  # secret-history.sh refuses `git log -S` because the value would be world-readable
+  # in argv (see T6), but the MATCHING RULE is meant to be identical to -S, and this
+  # is the check that it is. The value goes into argv here on purpose: it is a
+  # fixture string, and the point of the case is to compare against git.
+  T2_PICKAXE=$(git -C "$T2" log --all -S"$T_SEC_A" --format=%H | grep -c . || true)
+  assert_eq "the count agrees with git's own pickaxe" "$T2_PICKAXE" "$(T2_GET commit_count)"
+
+  # ── T3: not in history is a DIFFERENT answer from could not check ───────────
+  T3="$TT/repo-clean"; mkdir -p "$T3"; git -C "$T3" init -q
+  printf 'nothing here\n' > "$T3/a.txt"
+  git -C "$T3" add -A; hist_commit "$T3" c1 "2022-01-01T00:00:00+00:00"
+  printf 'const t = "%s";\n' "$T_SEC_B" > "$T3/staged.js"
+  hist_scan "$T3" "$TT/repo-clean.json"
+  T3_OUT=$(hist_run "$T3" "$TT/repo-clean.json")
+  assert_eq "a secret that was never committed is reported as not in history" \
+    "not_in_history" "$(printf '%s' "$T3_OUT" | jq -r '[.[]][0].history_status // "NULL"')"
+  assert_eq "and carries a real zero, because the walk did look" \
+    "0" "$(printf '%s' "$T3_OUT" | jq -r '[.[]][0].commit_count // "NULL"')"
+
+  # ── T4: history means every ref, not just the branch you are standing on ───
+  # The secret lives only on a side branch. A HEAD-only walk reports nothing, which
+  # would read as "never committed" and send the user to edit a file instead of
+  # rotating a credential that is sitting in a pushed branch.
+  T4="$TT/repo-branch"; mkdir -p "$T4"; git -C "$T4" init -q
+  printf 'base\n' > "$T4/base.txt"
+  git -C "$T4" add -A; hist_commit "$T4" c1 "2022-02-01T00:00:00+00:00"
+  git -C "$T4" checkout -q -b side
+  printf 'const t = "%s";\n' "$T_SEC_C" > "$T4/leak.js"
+  git -C "$T4" add -A; hist_commit "$T4" c2 "2022-02-02T00:00:00+00:00"
+  T4_SIDE=$(git -C "$T4" rev-parse HEAD)
+  git -C "$T4" checkout -q -
+  # Present in the working tree as an untracked file, which is what phase 1 sees.
+  printf 'const t = "%s";\n' "$T_SEC_C" > "$T4/leak.js"
+  hist_scan "$T4" "$TT/repo-branch.json"
+  T4_OUT=$(hist_run "$T4" "$TT/repo-branch.json")
+  assert_eq "a secret committed only on another branch is still found" \
+    "found" "$(printf '%s' "$T4_OUT" | jq -r '[.[]][0].history_status // "NULL"')"
+  assert_eq "and is attributed to that branch's commit" \
+    "$T4_SIDE" "$(printf '%s' "$T4_OUT" | jq -r '[.[]][0].first_seen_commit // "NULL"')"
+  # Non-vacuity: a HEAD-only pickaxe really does miss it, so the case is about --all
+  # and not about the walk finding things in general.
+  assert_eq "premise: a HEAD-only pickaxe finds nothing here" \
+    "0" "$(git -C "$T4" log -S"$T_SEC_C" --format=%H | grep -c . || true)"
+
+  # ── T5: no history, and a truncated history, are reported as unknown ────────
+  # A zero from either would be read as "never committed, just edit the file".
+  T5A="$TT/plain"; mkdir -p "$T5A"
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T5A/a.js"
+  hist_scan "$T5A" "$TT/plain.json"
+  T5A_OUT=$(hist_run "$T5A" "$TT/plain.json")
+  assert_eq "a directory that is not a git repo reports unknown, not zero" \
+    "unknown|no_git_repo|null" \
+    "$(printf '%s' "$T5A_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+  T5B="$TT/empty"; mkdir -p "$T5B"; git -C "$T5B" init -q
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T5B/a.js"
+  hist_scan "$T5B" "$TT/empty.json"
+  T5B_OUT=$(hist_run "$T5B" "$TT/empty.json")
+  assert_eq "a repository with no commits reports unknown, not zero" \
+    "unknown|no_commits|null" \
+    "$(printf '%s' "$T5B_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+  # Shallow clone. The secret IS in the origin's history and is NOT in the depth-1
+  # clone's, so a walk that trusts what it can see would answer "not in history"
+  # about a credential that has been pushed. The full clone of the SAME origin is
+  # asserted alongside it: without that contrast, "unknown" could be satisfied by a
+  # helper that never finds anything.
+  T5O="$TT/origin"; mkdir -p "$T5O"; git -C "$T5O" init -q
+  printf 'const t = "%s";\n' "$T_SEC_B" > "$T5O/config.js"
+  git -C "$T5O" add -A; hist_commit "$T5O" c1 "2023-01-01T00:00:00+00:00"
+  printf 'rotated\n' > "$T5O/config.js"
+  git -C "$T5O" add -A; hist_commit "$T5O" c2 "2023-01-02T00:00:00+00:00"
+  for i in 3 4 5; do
+    printf 'x%s\n' "$i" > "$T5O/f$i.txt"
+    git -C "$T5O" add -A; hist_commit "$T5O" "c$i" "2023-01-0${i}T00:00:00+00:00"
+  done
+  T5S="$TT/shallow"
+  if git clone -q --depth 1 "file://$T5O" "$T5S" >/dev/null 2>&1 \
+     && [[ "$(git -C "$T5S" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    printf 'const t = "%s";\n' "$T_SEC_B" > "$T5S/config.js"
+    hist_scan "$T5S" "$TT/shallow.json"
+    T5S_OUT=$(hist_run "$T5S" "$TT/shallow.json")
+    assert_eq "a shallow clone reports unknown, not 'never committed'" \
+      "unknown|shallow_clone|null" \
+      "$(printf '%s' "$T5S_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+    T5F="$TT/full"
+    git clone -q "file://$T5O" "$T5F" >/dev/null 2>&1
+    printf 'const t = "%s";\n' "$T_SEC_B" > "$T5F/config.js"
+    hist_scan "$T5F" "$TT/full.json"
+    T5F_OUT=$(hist_run "$T5F" "$TT/full.json")
+    assert_eq "and the same history, cloned in full, proves the secret is really there" \
+      "found|2" \
+      "$(printf '%s' "$T5F_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.commit_count)"')"
+  else
+    echo "  SKIP: shallow-clone case (git could not produce a shallow clone here)"
+  fi
+
+  # ── T6: many findings cost one walk, and the value never reaches argv ───────
+  #
+  # Both halves come off the same run. Every external command the helper invokes is
+  # replaced by a wrapper that appends its full argv to a log and then execs the real
+  # binary, so the log is the record of everything this feature published to
+  # /proc/<pid>/cmdline, which is world-readable on a shared machine.
+  T6="$TT/repo-many"; mkdir -p "$T6"; git -C "$T6" init -q
+  printf 'a = "%s"\nb = "%s"\n' "$T_SEC_A" "$T_SEC_C" > "$T6/a.py"
+  printf 'c = "%s"\n' "$T_SEC_A" > "$T6/b.py"
+  git -C "$T6" add -A; hist_commit "$T6" c1 "2024-05-06T07:08:09+00:00"
+  hist_scan "$T6" "$TT/repo-many.json"
+  T6_FINDINGS=$(jq 'length' "$TT/repo-many.json" 2>/dev/null || echo 0)
+  assert_eq "premise: three findings over two distinct values" "3" "$T6_FINDINGS"
+
+  T6BIN="$TT/bin"; mkdir -p "$T6BIN"
+  T6LOG="$TT/argv.log"; : > "$T6LOG"
+  for t in git awk sed jq timeout; do
+    real=$(command -v "$t" || true)
+    [[ -n "$real" ]] || continue
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf 'printf "%%s\\n" "%s $*" >> %q\n' "$t" "$T6LOG"
+      printf 'exec %q "$@"\n' "$real"
+    } > "$T6BIN/$t"
+    chmod +x "$T6BIN/$t"
+  done
+  T6_OUT=$(hist_run "$T6" "$TT/repo-many.json" "PATH=$T6BIN:$PATH")
+  assert_eq "every finding gets its own answer" \
+    "found:1 found:1 found:1" \
+    "$(printf '%s' "$T6_OUT" | jq -r '[.[] | "\(.history_status):\(.commit_count)"] | join(" ")')"
+  # One walk for three findings. Attribution is O(history), not O(history x
+  # findings) — the property that makes confirmation affordable at all.
+  assert_eq "three findings cost exactly one history walk" \
+    "1" "$(grep -c '^git .*[[:space:]]log[[:space:]]' "$T6LOG" || true)"
+  # An empty log would satisfy any "no secret in argv" check trivially, so the log
+  # is asserted non-empty first. This is the assertion that cannot be allowed to
+  # pass by producing nothing.
+  T6_LINES=$(grep -c . "$T6LOG" || true)
+  if [[ "$T6_LINES" -lt 5 ]]; then
+    bad "argv log captured the helper's commands (only $T6_LINES lines - the wrappers did not run)"
+  else
+    ok "argv log captured the helper's commands ($T6_LINES lines)"
+  fi
+  assert_eq "no secret value is passed as a command-line argument" \
+    "0|0" \
+    "$(printf '%s|%s' "$(grep -cF "$T_SEC_A" "$T6LOG" || true)" "$(grep -cF "$T_SEC_C" "$T6LOG" || true)")"
+
+  # A walk that was cut short saw part of history, so what it did not find is
+  # unproven. Reported as budget_exceeded, never as zero commits. The stub replaces
+  # timeout(1) with its own kill status, which is the one state a real timing test
+  # cannot produce reliably.
+  T6TO="$TT/tobin"; mkdir -p "$T6TO"
+  printf '#!/usr/bin/env bash\nexit 124\n' > "$T6TO/timeout"; chmod +x "$T6TO/timeout"
+  T6TO_OUT=$(hist_run "$T6" "$TT/repo-many.json" "PATH=$T6TO:$PATH")
+  assert_eq "a walk killed on its time budget reports unknown, not zero" \
+    "unknown|budget_exceeded|null" \
+    "$(printf '%s' "$T6TO_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+  # ── T6b: the cases where the value cannot be recovered exactly ─────────────
+  #
+  # A private key is matched across several lines, so there is no single column
+  # span to lift it out of. Rather than report nothing about the finding that most
+  # needs a rotation decision, the walk uses the longest line the match covers and
+  # the report names that narrowing in history_reason, so the number is never
+  # presented as an exact confirmation it is not.
+  T8="$TT/repo-pem"; mkdir -p "$T8"; git -C "$T8" init -q
+  printf -- '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAy8Dbv8prpJ/0kKhlGeJYozo2t60EG8L0561g13R29LvMR5hy\nvGZlGJpmn65+A4xHXInJYiPuKzrKUnApeLZ+vw1HocOAZtWK0z3r26uA8kQYOKX9\n-----END RSA PRIVATE KEY-----\n' > "$T8/id_rsa"
+  git -C "$T8" add -A; hist_commit "$T8" "key" "2018-03-04T05:06:07+00:00"
+  hist_scan "$T8" "$TT/repo-pem.json"
+  T8_MULTILINE=$(jq '[.[] | select(.EndLine > .StartLine)] | length' "$TT/repo-pem.json" 2>/dev/null || echo 0)
+  assert_eq "premise: gitleaks reports the private key as a multi-line match" "1" "$T8_MULTILINE"
+  T8_OUT=$(hist_run "$T8" "$TT/repo-pem.json")
+  assert_eq "a committed private key is found, and says the match was narrowed" \
+    "found|multiline_line|1" \
+    "$(printf '%s' "$T8_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+  # A finding whose file is gone by the time confirmation runs has no value to
+  # search for. That is a "could not check", not a "never committed" — the file
+  # having been deleted is no evidence at all about what is in history.
+  #
+  # Two findings, one recoverable and one not, because the two are answered on
+  # different paths: with nothing recoverable at all the walk never runs, and only a
+  # mixed report exercises the branch that has to keep the unrecoverable finding
+  # honest while the walk answers the other one. The answers are also matched back
+  # to their findings BY POSITION here, which is the contract the gate relies on
+  # when it merges these fields into the issues array.
+  T9="$TT/repo-gone"; mkdir -p "$T9"; git -C "$T9" init -q
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T9/a.js"
+  printf 'const u = "%s";\n' "$T_SEC_B" > "$T9/b.js"
+  git -C "$T9" add -A; hist_commit "$T9" "leak" "2018-04-05T06:07:08+00:00"
+  hist_scan "$T9" "$TT/repo-gone.json"
+  rm -f "$T9/a.js"
+  T9_OUT=$(hist_run "$T9" "$TT/repo-gone.json")
+  T9_IA=$(jq -r '[.[] | .File] | index("a.js") // "NONE"' "$TT/repo-gone.json")
+  T9_IB=$(jq -r '[.[] | .File] | index("b.js") // "NONE"' "$TT/repo-gone.json")
+  if [[ "$T9_IA" == "NONE" || "$T9_IB" == "NONE" ]]; then
+    bad "premise: gitleaks reported both fixture files (a.js=$T9_IA b.js=$T9_IB)"
+  else
+    ok "premise: gitleaks reported both fixture files"
+    assert_eq "a finding whose file is gone reports unknown, not 'never committed'" \
+      "unknown|value_unavailable|null" \
+      "$(printf '%s' "$T9_OUT" | jq -r --argjson i "$T9_IA" '.[$i] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+    assert_eq "and the finding beside it is still answered from the same walk" \
+      "found|1" \
+      "$(printf '%s' "$T9_OUT" | jq -r --argjson i "$T9_IB" '.[$i] | "\(.history_status)|\(.commit_count)"')"
+  fi
+
+  # Turning the pass off must not manufacture an answer either.
+  T9D_OUT=$(hist_run "$T2" "$TT/repo-n.json" "CQT_SECRET_HISTORY=0")
+  assert_eq "with the pass disabled the finding says unknown, not zero" \
+    "unknown|disabled|null" \
+    "$(printf '%s' "$T9D_OUT" | jq -r '[.[]][0] | "\(.history_status)|\(.history_reason)|\(.commit_count)"')"
+
+  # ── T10: the walk is cross-checked against git's own pickaxe on the diff
+  #         shapes where the two rules can actually disagree ──────────────────
+  #
+  # T2 already compares commit_count against `git log -S`, but it does so on ONE
+  # fixture whose shape (add / add again in another file / remove) is precisely the
+  # case where a line-counting rule and git's blob-counting rule cannot diverge.
+  # That is an oracle applied where it can never fire, and every T fixture that DOES
+  # exercise the risky direction asserts a literal instead — T3 expects
+  # not_in_history/0, which is also what a walk that saw no patch text at all
+  # produces. Ask of that expectation what else produces it, and the answer is "the
+  # two false cleans below".
+  #
+  # The design decision that makes this file risky is specific: it refuses
+  # `git log -S` (the value would be world-readable in argv, see T6) and re-derives
+  # -S semantics from RENDERED PATCH TEXT. So everything that changes how git
+  # renders a patch — .gitattributes, content that looks like a patch header,
+  # binary blobs, renames, merges — is a place the re-derivation can part company
+  # with the thing it is imitating, and that is where the oracle belongs.
+  #
+  # Every case asserts a four-part tuple:
+  #   <gitleaks findings>|<history_status>|<commit_count>|<pickaxe commits>
+  # The first element refuses a vacuous pass: a fixture where phase 1 found nothing
+  # would satisfy any claim about phase 2. The last is the independent oracle. The
+  # middle two are what the FIXTURE chose, so a helper that is consistently wrong
+  # cannot satisfy them by agreeing with itself.
+  T10="$TT/oracle"; mkdir -p "$T10"
+
+  t10_repo() {  # <name> -> path to a fresh repo
+    local d="$T10/$1"; rm -rf "$d"; mkdir -p "$d"; git -C "$d" init -q; printf '%s' "$d"
+  }
+
+  hist_merge() {  # <repo> <branch> <iso-date>
+    GIT_AUTHOR_DATE="$3" GIT_COMMITTER_DATE="$3" \
+    git -C "$1" -c user.name='Ada Lovelace' -c user.email='ada@example.com' \
+      -c commit.gpgsign=false merge -q --no-ff -m "merge $2" "$2" >/dev/null 2>&1
+  }
+
+  # <repo> <report-path> <secret> -> "findings|status|commit_count|pickaxe"
+  # The secret reaches argv only in the pickaxe call, on purpose and only here: it
+  # is a fixture string and comparing against git is the whole point of the case.
+  hist_oracle() {
+    local repo="$1" report="$2" secret="$3" out found st cnt pick
+    hist_scan "$repo" "$report"
+    found=$(jq 'length' "$report" 2>/dev/null || echo 0)
+    out=$(hist_run "$repo" "$report")
+    st=$(printf '%s' "$out" | jq -r '[.[]][0].history_status // "NULL"' 2>/dev/null || echo ERR)
+    cnt=$(printf '%s' "$out" | jq -r '[.[]][0].commit_count // "NULL"' 2>/dev/null || echo ERR)
+    pick=$(git -C "$repo" log --all -S"$secret" --format=%H | grep -c . || true)
+    printf '%s|%s|%s|%s' "$found" "$st" "$cnt" "$pick"
+  }
+
+  # A `-diff` or `binary` attribute makes git print "Binary files ... differ" and no
+  # content lines at all, so a walk that counts occurrences in the rendered patch
+  # sees nothing and reports a REAL zero — and the report then rewrites the
+  # remediation to say no rotation is forced, about a credential that is committed.
+  # `*.cfg binary` and `*.json -diff` are ordinary entries, and config files are
+  # exactly where tokens live. git's pickaxe reads blobs, not rendered patches,
+  # which is why it is the right oracle for this shape.
+  T10A=$(t10_repo attr-path-minus-diff)
+  printf 'config.json -diff\n' > "$T10A/.gitattributes"
+  printf '{"token": "%s"}\n' "$T_SEC_A" > "$T10A/config.json"
+  git -C "$T10A" add -A; hist_commit "$T10A" c1 "2024-01-01T00:00:00+00:00"
+  assert_eq "a committed secret is found even when .gitattributes marks its path -diff" \
+    "1|found|1|1" "$(hist_oracle "$T10A" "$TT/o-attr-path.json" "$T_SEC_A")"
+
+  T10B=$(t10_repo attr-glob-binary)
+  printf '*.cfg binary\n' > "$T10B/.gitattributes"
+  printf 'token = "%s"\n' "$T_SEC_B" > "$T10B/app.cfg"
+  git -C "$T10B" add -A; hist_commit "$T10B" c1 "2024-01-02T00:00:00+00:00"
+  assert_eq "a committed secret is found even when .gitattributes marks its glob binary" \
+    "1|found|1|1" "$(hist_oracle "$T10B" "$TT/o-attr-glob.json" "$T_SEC_B")"
+
+  T10C=$(t10_repo attr-star-minus-diff)
+  printf '* -diff\n' > "$T10C/.gitattributes"
+  printf 'token = "%s"\n' "$T_SEC_C" > "$T10C/settings.py"
+  git -C "$T10C" add -A; hist_commit "$T10C" c1 "2024-01-03T00:00:00+00:00"
+  assert_eq "a committed secret is found even when .gitattributes turns diffs off repo-wide" \
+    "1|found|1|1" "$(hist_oracle "$T10C" "$TT/o-attr-star.json" "$T_SEC_C")"
+
+  # Over-fire guard for the fix above, and the one case that could be broken by it:
+  # forcing git to render every blob as text must not manufacture history for a
+  # secret that has none. Same attribute, secret never committed.
+  T10D=$(t10_repo attr-uncommitted)
+  printf '* -diff\n' > "$T10D/.gitattributes"
+  printf 'nothing\n' > "$T10D/placeholder.txt"
+  git -C "$T10D" add -A; hist_commit "$T10D" c1 "2024-01-04T00:00:00+00:00"
+  printf 'token = "%s"\n' "$T_SEC_D" > "$T10D/settings.py"
+  assert_eq "and a secret that was never committed still reports a real zero under the same attribute" \
+    "1|not_in_history|0|0" "$(hist_oracle "$T10D" "$TT/o-attr-none.json" "$T_SEC_D")"
+
+  # Content that LOOKS like a patch header. The file-header skip exists so a secret
+  # appearing in a FILENAME is not attributed to a commit, but a rule that matches on
+  # the first three bytes of a line cannot tell `+++ b/path` (a header) from a real
+  # added line whose content begins with `++`. The added case is a false clean: the
+  # introducing commit becomes invisible.
+  T10E=$(t10_repo content-plusplus)
+  printf '++ %s\n' "$T_SEC_A" > "$T10E/w.txt"
+  git -C "$T10E" add -A; hist_commit "$T10E" c1 "2024-02-01T00:00:00+00:00"
+  assert_eq "a secret introduced on a line beginning '++' is attributed to its commit" \
+    "1|found|1|1" "$(hist_oracle "$T10E" "$TT/o-plusplus.json" "$T_SEC_A")"
+
+  # The `---` half of the same rule undercounts rather than blanking: a REMOVED line
+  # whose content begins with `--` renders as `--- ...`. `--` is the comment prefix in
+  # SQL, Lua, Haskell and Ada, so a commented-out credential being deleted is an
+  # ordinary event, and the deletion is the commit that most needs counting.
+  T10F=$(t10_repo content-minusminus)
+  printf -- '-- token %s\n' "$T_SEC_B" > "$T10F/schema.sql"
+  git -C "$T10F" add -A; hist_commit "$T10F" c1 "2024-02-02T00:00:00+00:00"
+  printf 'select 1;\n' > "$T10F/schema.sql"
+  git -C "$T10F" add -A; hist_commit "$T10F" c2 "2024-02-03T00:00:00+00:00"
+  printf -- '-- token %s\n' "$T_SEC_B" > "$T10F/schema.sql"
+  assert_eq "removing a line beginning '--' counts as a commit that changed the occurrences" \
+    "1|found|2|2" "$(hist_oracle "$T10F" "$TT/o-minusminus.json" "$T_SEC_B")"
+
+  # A rename block carries no `@@` and no content lines at all, so it is the shape
+  # that tells a state-based header skip apart from a first-bytes one: a skip that
+  # never re-arms would start counting `--- a/path` lines as content from here on.
+  T10G=$(t10_repo rename)
+  printf 'token = "%s"\n' "$T_SEC_C" > "$T10G/old.py"
+  git -C "$T10G" add -A; hist_commit "$T10G" c1 "2024-03-01T00:00:00+00:00"
+  git -C "$T10G" mv old.py new.py; hist_commit "$T10G" c2 "2024-03-02T00:00:00+00:00"
+  assert_eq "a rename does not add or lose a commit" \
+    "1|found|1|1" "$(hist_oracle "$T10G" "$TT/o-rename.json" "$T_SEC_C")"
+
+  # A merge commit's diff is not printed by `git log -p` and not counted by the
+  # pickaxe either. The secret arrives on the merged branch, so both must attribute
+  # it to that branch's commit exactly once — not zero (the branch is not HEAD's
+  # first parent history in isolation) and not twice (the merge is not a second
+  # introduction).
+  T10H=$(t10_repo merge)
+  printf 'base\n' > "$T10H/base.txt"
+  git -C "$T10H" add -A; hist_commit "$T10H" c1 "2024-04-01T00:00:00+00:00"
+  git -C "$T10H" checkout -q -b side
+  printf 'token = "%s"\n' "$T_SEC_D" > "$T10H/leak.py"
+  git -C "$T10H" add -A; hist_commit "$T10H" c2 "2024-04-02T00:00:00+00:00"
+  git -C "$T10H" checkout -q -
+  printf 'more\n' > "$T10H/base.txt"
+  git -C "$T10H" add -A; hist_commit "$T10H" c3 "2024-04-03T00:00:00+00:00"
+  hist_merge "$T10H" side "2024-04-04T00:00:00+00:00"
+  assert_eq "a secret merged in from a branch is counted once, on the branch's commit" \
+    "1|found|1|1" "$(hist_oracle "$T10H" "$TT/o-merge.json" "$T_SEC_D")"
+
+  # T4 already asserts the branch case; this adds the oracle to it, because "found"
+  # and "the right sha" do not by themselves pin the COUNT on a non-HEAD ref.
+  assert_eq "a secret on a non-HEAD branch agrees with the pickaxe over --all" \
+    "1|found|1|1" "$(hist_oracle "$T4" "$TT/o-branch.json" "$T_SEC_C")"
+
+  # A genuinely binary blob in the same history. Forcing text rendering means git
+  # now streams this blob through the walk, so this is the case that would break if
+  # the fix for the attribute shapes were applied carelessly: the text secret beside
+  # it must still be attributed, and the binary file must not become a finding.
+  # The blob's bytes are fixed rather than random, so the case cannot pass or fail
+  # by luck.
+  T10I=$(t10_repo binary-blob)
+  : > "$T10I/blob.bin"
+  for _i in $(seq 1 2048); do printf '\000\001\002\377\376ABCDEF\n'; done > "$T10I/blob.bin"
+  printf 'token = "%s"\n' "$T_SEC_A" > "$T10I/app.py"
+  git -C "$T10I" add -A; hist_commit "$T10I" c1 "2024-05-01T00:00:00+00:00"
+  assert_eq "premise: git treats the fixture blob as binary" \
+    "1" "$(git -C "$T10I" show --stat --oneline HEAD -- blob.bin 2>/dev/null | grep -c 'Bin ' || true)"
+  assert_eq "a text secret is still attributed when a binary blob shares its history" \
+    "1|found|1|1" "$(hist_oracle "$T10I" "$TT/o-binary.json" "$T_SEC_A")"
+
+  # The reason the header skip exists at all, which nothing asserted until now: a
+  # needle that appears only in a FILENAME must not be attributed to a commit. The
+  # token here is in the name of a committed file and in the content of an
+  # uncommitted one, so `+++ b/<token>.txt` is in the patch stream while the token
+  # has never been inside a blob. git's pickaxe reads blobs, so its 0 is the right
+  # answer and the shared expectation is not a coincidence between two broken rules.
+  # Removing the skip turns this into found/1 against a pickaxe 0, which is what
+  # gives the zero below its teeth.
+  T10J=$(t10_repo filename-only)
+  printf 'unrelated content\n' > "$T10J/${T_SEC_A}.txt"
+  git -C "$T10J" add -A; hist_commit "$T10J" c1 "2024-06-01T00:00:00+00:00"
+  printf 'token = "%s"\n' "$T_SEC_A" > "$T10J/app.py"
+  assert_eq "a needle that only ever appeared in a filename is not attributed to a commit" \
+    "1|not_in_history|0|0" "$(hist_oracle "$T10J" "$TT/o-filename.json" "$T_SEC_A")"
+
+  # ── T11: answering the question must not publish the answer's input ────────
+  #
+  # The file's header states the value "is never printed, so it cannot reach a log
+  # or a terminal transcript". xtrace publishes every assignment bash makes, and it
+  # is not something a user has to type: an exported SHELLOPTS=xtrace is inherited
+  # by every bash descendant, and CI logs are persisted artifacts. Section T could
+  # not see this — hist_run ends `2>/dev/null` and the e2e stderr check runs with
+  # xtrace off — so these cases keep their own stderr.
+  #
+  # Each case asserts THREE things together: that the trace was really on (a
+  # refutation against a silent stream proves nothing), that the helper still
+  # produced the right answer with tracing suppressed, and that the value is absent.
+  xtrace_run() {  # <mode: shellopts|dashx> <repo> <report> <errfile> -> the JSON
+    local mode="$1" repo="$2" report="$3" err="$4"
+    if [[ "$mode" == "shellopts" ]]; then
+      env SHELLOPTS=xtrace bash -c '
+        cd "$2" || exit 9
+        . "$1"
+        cqt_secret_history_json "$3" .
+      ' _ "$HELPER" "$repo" "$report" 2>"$err" || true
+    else
+      bash -x -c '
+        cd "$2" || exit 9
+        . "$1"
+        cqt_secret_history_json "$3" .
+      ' _ "$HELPER" "$repo" "$report" 2>"$err" || true
+    fi
+  }
+
+  for xmode in shellopts dashx; do
+    XERR="$TT/xtrace-$xmode.err"
+    XOUT=$(xtrace_run "$xmode" "$T2" "$TT/repo-n.json" "$XERR")
+    # Non-vacuity, both halves: the stream exists, and it is a trace OF THIS HELPER
+    # rather than of the wrapper alone.
+    XBYTES=$(wc -c < "$XERR" 2>/dev/null | tr -d ' ')
+    if [[ "${XBYTES:-0}" -gt 0 ]]; then
+      ok "[$xmode] premise: the run produced a trace to inspect ($XBYTES bytes)"
+    else
+      bad "[$xmode] premise: the run produced a trace to inspect (stderr was empty)"
+    fi
+    assert_eq "[$xmode] premise: the trace really covers the helper's own code" \
+      "yes" "$(grep -q 'cqt_secret_history' "$XERR" 2>/dev/null && echo yes || echo no)"
+    # Suppressing the trace must not change the answer.
+    assert_eq "[$xmode] the helper still answers correctly with the trace suppressed" \
+      "found|3" \
+      "$(printf '%s' "$XOUT" | jq -r '[.[]][0] | "\(.history_status)|\(.commit_count)"' 2>/dev/null || echo ERR)"
+    assert_eq "[$xmode] the secret value never reaches the trace" \
+      "0" "$(grep -cF "$T_SEC_A" "$XERR" 2>/dev/null || true)"
+  done
+
+  # The extraction function on its own, which is where the value is first held and
+  # where the critic measured the leak. Called directly, not through the entry
+  # point, so a guard placed only on the caller does not satisfy this.
+  XEERR="$TT/xtrace-extract.err"
+  XEOUT=$(cd "$T1" && env SHELLOPTS=xtrace bash -c '
+    . "$1"
+    cqt_secret_extract_value "$2" 1 1 "$3" "$4" "$5"
+  ' _ "$HELPER" top.js \
+      "$(jq -r '[.[] | select(.File == "top.js")][0].StartColumn' "$TT/extract.json")" \
+      "$(jq -r '[.[] | select(.File == "top.js")][0].EndColumn' "$TT/extract.json")" \
+      "$(jq -r '[.[] | select(.File == "top.js")][0].Match' "$TT/extract.json")" \
+      2>"$XEERR" || true)
+  assert_eq "premise: the extraction under trace still returns the value" \
+    "$T_SEC_D" "${XEOUT#*$'\037'}"
+  if [[ -s "$XEERR" ]]; then
+    ok "premise: the extraction produced a trace to inspect"
+  else
+    bad "premise: the extraction produced a trace to inspect (stderr was empty)"
+  fi
+  assert_eq "the extraction does not trace the value it recovered" \
+    "0" "$(grep -cF "$T_SEC_D" "$XEERR" 2>/dev/null || true)"
+
+  # ── T12: "is this a working tree" is answered by git's ANSWER, not its status ─
+  #
+  # `git rev-parse --is-inside-work-tree` prints "false" and exits 0 inside a .git
+  # directory and in a bare repository. A check written on the exit status calls both
+  # answerable, and the helper then reports value_unavailable — an honest status
+  # arrived at for the wrong reason, with the wrong reason shown to the user.
+  repo_state_of() {  # <dir> -> the reason string, or "(answerable)"
+    local out
+    out=$(bash -c '
+      set -e
+      . "$1"
+      cqt_secret_history_repo_state "$2"
+    ' _ "$HELPER" "$1" 2>/dev/null) || out='ERR'
+    [[ -n "$out" ]] || out='(answerable)'
+    printf '%s' "$out"
+  }
+  assert_eq "the .git directory of a repository is not a working tree" \
+    "no_git_repo" "$(repo_state_of "$T2/.git")"
+  # Cloned from a repository that HAS commits, so "no_git_repo" here cannot be
+  # reached by falling through to the empty-repository branch instead.
+  T12BARE="$TT/bare.git"; git clone -q --bare "$T2" "$T12BARE" >/dev/null 2>&1
+  assert_eq "a bare repository is not a working tree" \
+    "no_git_repo" "$(repo_state_of "$T12BARE")"
+  # Over-fire guards: the two shapes that must stay answerable, or the fix above
+  # would be indistinguishable from a check that refuses everything.
+  assert_eq "over-fire guard: an ordinary working tree is still answerable" \
+    "(answerable)" "$(repo_state_of "$T2")"
+  T12WT="$TT/linked-wt"
+  if git -C "$T2" worktree add -q --detach "$T12WT" >/dev/null 2>&1; then
+    assert_eq "over-fire guard: a linked worktree is still answerable" \
+      "(answerable)" "$(repo_state_of "$T12WT")"
+  else
+    echo "  SKIP: linked-worktree case (git worktree add failed here)"
+  fi
+
+  # ── T13: a walk that ran out of budget says so on every surface ─────────────
+  #
+  # T6TO pins the JSON. These pin what a reader actually sees, because that is where
+  # the false clean would land: the two user-facing renderings must both say the
+  # question was not answered, and must not carry the "no rotation is forced"
+  # sentence that belongs to a REAL zero.
+  T13H='[{"history_status":"unknown","history_reason":"budget_exceeded","commit_count":null,"first_seen_commit":null,"first_seen_date":null,"author":null}]'
+  T13I='[{"file":"config.js","line":1,"category":"Gitleaks Secret","remediation":"Remove secret from code, rotate credentials, and use secret management"}]'
+  T13_ATTACHED=$(bash -c '
+    set -e
+    . "$1"
+    cqt_secret_history_attach "$2" "$3"
+  ' _ "$HELPER" "$T13I" "$T13H" 2>/dev/null || printf 'ERR')
+  T13_REM=$(printf '%s' "$T13_ATTACHED" | jq -r '.[0].remediation // "MISSING"' 2>/dev/null || echo ERR)
+  assert_eq "a budget_exceeded finding is told to assume the secret may already be committed" \
+    "yes" "$(case "$T13_REM" in *"may already be committed"*) echo yes ;; *) echo "no: $T13_REM" ;; esac)"
+  assert_eq "and names the budget as the reason the question went unanswered" \
+    "yes" "$(case "$T13_REM" in *budget_exceeded*) echo yes ;; *) echo "no: $T13_REM" ;; esac)"
+  assert_eq "and never carries the sentence that belongs to a real zero" \
+    "yes" "$(case "$T13_REM" in *"no rotation is forced"*) echo "no: $T13_REM" ;; *) echo yes ;; esac)"
+  T13_LINE=$(bash -c '
+    set -e
+    . "$1"
+    cqt_secret_history_report "$2"
+  ' _ "$HELPER" "$T13_ATTACHED" 2>/dev/null || printf 'ERR')
+  assert_eq "the human summary reports it as could-not-check, not as working-tree-only" \
+    "config.js:1 - history could not be checked (budget_exceeded)" "$T13_LINE"
+
+  # The budget is a real argument to a real timeout(1), and its default is the one
+  # documented in the helper's header. T6's argv log is the record of what the walk
+  # actually invoked, captured on a run with no CQT_SECRET_HISTORY_TIMEOUT set, so
+  # this reads the production default rather than a copy of it.
+  assert_eq "the history walk runs under the documented default time budget" \
+    "1" "$(grep -c '^timeout 300 git ' "$T6LOG" || true)"
+
+  # ── T7: the gate itself, end to end ────────────────────────────────────────
+  #
+  # Everything above tests the helper. This tests that a real run of
+  # security-check.sh is different because of it — the fields reach the report a
+  # consumer reads, the remediation changes, and the value the pass had to handle
+  # does not appear in any file the run wrote or in anything it printed.
+  #
+  # Real gitleaks, real git history, real gate. Only the tools that need a live DDEV
+  # or npm project are stubbed.
+  run_gate_with_history() {   # <script> <workdir> ; echoes the report path
+    local script="$1" work="$2" bin rdir
+    bin="$(mktemp -d "$TMP/hbin.XXXXXX")"
+    rdir="$work/.reports"
+    cp "$DSTUB/ddev" "$DSTUB/npm" "$DSTUB/npx" "$bin/"
+    cp "$(command -v gitleaks)" "$bin/gitleaks"
+    ( cd "$work" \
+      && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" \
+         STUB_TOOLS_PRESENT=0 STUB_NEXT_TOOLS=0 \
+         SEC_MOUNT="$work" SEC_CROOT="$work.container" \
+         bash "$script" ) > "$work/gate-stdout.txt" 2>&1 || true
+    printf '%s' "$rdir/security-report.json"
+  }
+
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; script="${target#*:}"
+    W="$TT/e2e-$stack"; mkdir -p "$W"; git -C "$W" init -q
+    printf 'const token = "%s";\n' "$T_SEC_A" > "$W/config.js"
+    git -C "$W" add -A; hist_commit "$W" "leak" "2019-07-08T09:10:11+00:00"
+    W_SHA=$(git -C "$W" rev-parse HEAD)
+    REPORT=$(run_gate_with_history "$script" "$W")
+
+    if [[ ! -f "$REPORT" ]]; then
+      bad "[$stack] e2e: the gate wrote a report"
+      continue
+    fi
+    ISSUE='[.issues[] | select(.category == "Gitleaks Secret" and .file == "config.js")][0]'
+    assert_eq "[$stack] e2e: the secret finding carries its first commit, date, author and count" \
+      "$W_SHA|2019-07-08T09:10:11+00:00|Ada Lovelace|1" \
+      "$(jq -r "$ISSUE | \"\(.first_seen_commit)|\(.first_seen_date)|\(.author)|\(.commit_count)\"" "$REPORT" 2>/dev/null || echo ERR)"
+    # The reason the fields are there at all: the advice has to change.
+    if jq -r "$ISSUE | .remediation // \"\"" "$REPORT" 2>/dev/null | grep -qi 'rotate'; then
+      ok "[$stack] e2e: a secret already in history is told to rotate, not to edit"
+    else
+      bad "[$stack] e2e: a secret already in history is told to rotate | got: $(jq -r "$ISSUE | .remediation // \"MISSING\"" "$REPORT" 2>/dev/null)"
+    fi
+    # The whole point of --redact is that the audit does not become the thing that
+    # writes the credential somewhere. Confirmation had to handle the value to do
+    # its job, so this asserts across EVERY file the run wrote, not just the report
+    # the fields landed in.
+    LEAKED=$(grep -rlF "$T_SEC_A" "$W/.reports" 2>/dev/null | wc -l | tr -d ' ')
+    assert_eq "[$stack] e2e: no file written by the run contains the secret value" "0" "$LEAKED"
+    assert_eq "[$stack] e2e: nothing the run printed contains the secret value" \
+      "0" "$(grep -cF "$T_SEC_A" "$W/gate-stdout.txt" 2>/dev/null || true)"
+    # Non-vacuity for the two refutations above: the run really did have the value
+    # in front of it, and really did produce output.
+    assert_eq "[$stack] e2e: premise - the secret is in the audited tree" \
+      "1" "$(grep -cF "$T_SEC_A" "$W/config.js" || true)"
+    if [[ -s "$W/gate-stdout.txt" ]]; then
+      ok "[$stack] e2e: premise - the gate produced output to check"
+    else
+      bad "[$stack] e2e: premise - the gate produced output to check (it printed nothing)"
+    fi
+  done
+
+  # ── T7b: the diff-rendering shape, through the real gate ───────────────────
+  #
+  # T10 proves the helper. This proves the GATE, because a fix can be right in its
+  # own file and inert on the path a user actually runs. `* -diff` in .gitattributes
+  # is the shape that made a committed credential come back as "It has not reached
+  # git history, so no rotation is forced by this finding", so the refutation is
+  # aimed at the remediation string the report carries rather than at an internal
+  # status: that sentence is the harm.
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; script="${target#*:}"
+    W2="$TT/e2e-attr-$stack"; mkdir -p "$W2"; git -C "$W2" init -q
+    printf '* -diff\n' > "$W2/.gitattributes"
+    printf 'const token = "%s";\n' "$T_SEC_B" > "$W2/config.js"
+    git -C "$W2" add -A; hist_commit "$W2" "leak" "2019-08-09T10:11:12+00:00"
+    W2_SHA=$(git -C "$W2" rev-parse HEAD)
+    REPORT2=$(run_gate_with_history "$script" "$W2")
+    if [[ ! -f "$REPORT2" ]]; then
+      bad "[$stack] e2e: the gate wrote a report for the -diff fixture"
+      continue
+    fi
+    ISSUE2='[.issues[] | select(.category == "Gitleaks Secret" and .file == "config.js")][0]'
+    assert_eq "[$stack] e2e: a committed secret under a -diff attribute is still attributed" \
+      "found|$W2_SHA|1" \
+      "$(jq -r "$ISSUE2 | \"\(.history_status)|\(.first_seen_commit)|\(.commit_count)\"" "$REPORT2" 2>/dev/null || echo ERR)"
+    REM2=$(jq -r "$ISSUE2 | .remediation // \"MISSING\"" "$REPORT2" 2>/dev/null || echo ERR)
+    assert_eq "[$stack] e2e: and the report never tells the reader that no rotation is forced" \
+      "yes" "$(case "$REM2" in *"no rotation is forced"*) echo "no: $REM2" ;; *) echo yes ;; esac)"
+  done
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

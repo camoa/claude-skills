@@ -17,6 +17,12 @@ NC='\033[0m'
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
+# Phase 2 of secret scanning: for a secret phase 1 already found, when did it enter
+# history and by whom. Shared with nextjs/security-check.sh so both stacks answer the
+# question the same way. See the file header for why the matched value never reaches
+# a file, a log line or any process's argv.
+# shellcheck source=../core/secret-history.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/secret-history.sh"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
 
@@ -1470,6 +1476,32 @@ else
     echo -e "  ${YELLOW}[SKIP]${NC} gitleaks not installed (tool absent)"
     SKIPPED_TOOLS+=("gitleaks")
     ABSENT_TOOLS+=("gitleaks")
+fi
+
+# =====================
+# Secret history — phase 2, confirmation
+# =====================
+# Deliberately OUTSIDE the gitleaks block above. That block is the phase-1 scan of
+# the working tree; this is a different job with a different failure mode, and
+# neither must be able to take the other down.
+#
+# What it adds to each secret finding: first_seen_commit, first_seen_date, author
+# and commit_count. Without them a finding is a location, and a location does not
+# decide the remediation — never committed means edit the file, in history for two
+# years means rotate at the provider and editing the file achieves nothing.
+#
+# It never moves the VERDICT (a secret is critical either way) and never records a
+# skipped tool, so a project with no git history cannot turn a completed secret scan
+# into an incomplete one. Every failure degrades to an explicit "could not check".
+if [ "$GITLEAKS_ISSUES" != "[]" ]; then
+    echo -e "  ${BLUE}[HISTORY]${NC} Confirming which findings already reached git history..."
+    set +e
+    GITLEAKS_HISTORY=$(cqt_secret_history_json "$GITLEAKS_JSON" ".")
+    GITLEAKS_ISSUES=$(cqt_secret_history_attach "$GITLEAKS_ISSUES" "$GITLEAKS_HISTORY")
+    set -e
+    while IFS= read -r HISTORY_LINE; do
+        [ -n "$HISTORY_LINE" ] && printf '    %s\n' "$HISTORY_LINE"
+    done < <(cqt_secret_history_report "$GITLEAKS_ISSUES")
 fi
 
 echo ""
