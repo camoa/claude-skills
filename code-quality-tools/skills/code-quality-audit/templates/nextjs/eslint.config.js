@@ -63,6 +63,9 @@ export default tseslint.config(
       'dist/**',
       'build/**',
       'coverage/**',
+      'build/coverage/**',
+      // Only produced on the REPORT_DIR_IN_REPO=1 opt-in path, or left over from an
+      // older version of this plugin. Kept so neither one gets linted.
       '.reports/**',
     ],
   }

@@ -7,13 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.9.6] - 2026-08-07
 
-Four defects found by running the suite against a live client Drupal 11 site. Three
-share one shape: a check that reports a clean result it did not earn. The fourth is
-the security scan writing the secrets it found into a committable path.
+A sweep of the defects found by running this suite against a live client Drupal 11
+site. Most share one shape: a check that reported a clean result it did not earn.
+The rest are the security scan writing discovered secrets into a committable path,
+and reports being written into the repository being audited at all.
 
 ### Changed
 
-Two CI-visible behavior changes ship here. Read both before upgrading.
+Three CI-visible behavior changes ship here. Read all three before upgrading.
+
+- **Reports are no longer written inside the repository being audited.** The default
+  was a relative `.reports/`, so audit output landed in whatever tree was being
+  scanned — somebody else's repository on client work, not gitignored, sweepable by
+  `git add .`, and travelling on a branch despite being a point-in-time finding about
+  one commit. Resolution order is now: an explicitly set `REPORT_DIR` wins; otherwise
+  an `ai-dev-assistant` project folder when one is registered for the current
+  directory, under `<project>/audits/<date>/`; otherwise
+  `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`.
+  In-repo output is still available via `REPORT_DIR_IN_REPO=1` and is gitignored at
+  creation. Every run announces where it wrote.
+  **If you read `.reports/audit-report.json` from CI or tooling, that path is gone
+  unless you set one of those two variables.** The shipped PR-CI template keeps
+  in-repo output deliberately — an ephemeral runner's workspace is the right place —
+  and says so where it does it.
 
 - **A security scan that could not cover its ground no longer reports `pass`, and
   `/audit` no longer exits 0 on it.** When a tool is installed but produces no usable
@@ -107,7 +123,43 @@ Two CI-visible behavior changes ship here. Read both before upgrading.
   shipped every discovered secret. Two reference docs documented the unredacted command
   and now show `--redact`.
 
-- `scripts/tests/false-clean-spec.sh` — 203 hermetic assertions, no DDEV, no network, no
+- **Themes were never linted.** `lint-check.sh` read `DRUPAL_MODULES_PATH` and ignored
+  `DRUPAL_THEMES_PATH`. On the project that surfaced this, 493 errors and 27 warnings
+  across 58 theme files were invisible — 37% of its standards findings. `full-audit.sh`
+  also never invoked the lint gate at all, so this only ever ran standalone.
+- **Modules and themes paths were not derived from the Drupal root just detected.**
+  `detect-environment.sh` resolved the root correctly and then defaulted the modules
+  path to `web/modules/custom` independently, so every docroot-layout (Acquia) project
+  reported "No custom modules directory found" while the tool already knew the root was
+  `docroot`. The derived values are now exported to the gates, which previously never
+  received them.
+- **Coverage ran Drupal core's and every contrib module's suite.** The default used
+  core's phpunit config with `--testsuite unit,kernel` rather than scoping to the
+  project's own code, so the number it worked toward was core's coverage. A full-
+  installation run is now explicit (`--full-suite` / `COVERAGE_FULL_SUITE=1`) and the
+  report records which scope produced the number.
+- **Globally installed analyzers were invisible.** Tools were resolved only from
+  `vendor/bin`, so `composer global require` installs were skipped — which matters when
+  adding dev dependencies to a client's `composer.json` is not acceptable. `phpunit` and
+  `rector` are deliberately not widened: they bootstrap the application and need the
+  project's own autoloader. That asymmetry is now recorded where it lives.
+- **The shipped `phpstan.neon` defeated the rules it was meant to run.** It excluded
+  `tests/`, `*.module` and `*.install`; a bare `excludePaths` is shorthand for
+  `analyseAndScan`, so those files were not read even for symbol discovery, producing
+  wrong answers elsewhere rather than merely fewer here. It silently disabled rules
+  phpstan-drupal enables by default, including `TestClassSuffixNameRule` and
+  `hookFormAlterRule` (new defaults in 2.1.0) and `BrowserTestBaseDefaultThemeRule`
+  (default-on far longer). `excludePaths` is now absent by design, the deprecated
+  `drupal_root` key is removed, and the level moves 8 → 5: phpstan-drupal registers its
+  rules independently of the analysis level, so Drupal-specific coverage is unchanged
+  and only PHPStan's generic type checking relaxes. Note 2.1.0 renamed `hookRules` to
+  `hookFormAlterRule` — PHPStan rejects a config still using the old key.
+- **No drift check between `composer.lock` and what is installed.** A lockfile
+  declaring Drupal 11.3.13 over a `vendor/` holding 10.5.6 produced findings that
+  compared Drupal 11 custom code against Drupal 10 core, and had to be discarded once
+  discovered. The mismatch is now detected and surfaced.
+
+- `scripts/tests/false-clean-spec.sh` — 429 hermetic assertions, no DDEV, no network, no
   PHP. Covers all of the above, including the hostile cases: an unparseable and a
   truncated gitleaks report, an unwritable and a symlinked `.gitignore`, pattern
   metacharacters in `REPORT_DIR`, and that the report skeleton cannot start at a passing

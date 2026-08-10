@@ -119,10 +119,10 @@ Or use `scripts/core/install-tools.sh` which installs all tools automatically.
 ### Full Security Audit
 ```bash
 # Run all 7 security layers
-bash skills/code-quality-audit/scripts/nextjs/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 
 # View report
-cat .reports/security-report.json | jq .
+cat "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest)/security-report.json" | jq .
 ```
 
 ### Report Structure

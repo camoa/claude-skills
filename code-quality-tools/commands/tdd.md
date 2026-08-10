@@ -85,11 +85,11 @@ REPEAT → Next feature
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+!bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/tdd-workflow.sh`
-- **Next.js**: `bash scripts/nextjs/tdd-workflow.sh`
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh"`
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/tdd-workflow.sh"`
 
 ## Interactive Mode
 

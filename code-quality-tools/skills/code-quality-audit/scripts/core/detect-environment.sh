@@ -10,6 +10,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# shellcheck source=../core/report-dir.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+
 # Default values
 PROJECT_TYPE="unknown"
 PROJECT_ROOT="${PWD}"
@@ -17,6 +20,14 @@ DRUPAL_ROOT=""
 NEXTJS_ROOT=""
 DDEV_AVAILABLE="false"
 ENV_READY="false"
+DRUPAL_VERSION=""
+
+# The composer.lock / installed-tree comparison. "unchecked" is the honest starting
+# value: it is not "match", because claiming a match for a comparison that never ran is
+# the same false clean this suite exists to catch.
+VERSION_DRIFT="unchecked"
+VERSION_DRIFT_REASON="not applicable"
+COMPOSER_LOCK_CORE_VERSION=""
 
 echo "=== Code Quality Audit - Environment Detection ==="
 echo ""
@@ -68,10 +79,12 @@ detect_drupal() {
 
             PROJECT_TYPE="drupal"
 
-            # Check Drupal version
+            # Check Drupal version. Kept in its own variable rather than the shared
+            # VERSION, which detect_nextjs overwrites moments later: this value is the
+            # left-hand side of the composer.lock comparison below.
             if [ -f "${DRUPAL_ROOT}/core/lib/Drupal.php" ]; then
-                VERSION=$(grep -oP "const VERSION = '\K[^']+" "${DRUPAL_ROOT}/core/lib/Drupal.php" 2>/dev/null || echo "unknown")
-                echo "  Drupal version: ${VERSION}"
+                DRUPAL_VERSION=$(grep -oP "const VERSION = '\K[^']+" "${DRUPAL_ROOT}/core/lib/Drupal.php" 2>/dev/null || echo "unknown")
+                echo "  Drupal version: ${DRUPAL_VERSION}"
             fi
 
             return 0
@@ -213,123 +226,151 @@ check_custom_paths() {
     resolve_custom_path DRUPAL_THEMES_PATH themes
 }
 
-# Create report directory
+# Create report directory.
+#
+# The whole rule — resolution order, creation, permissions, the gitignore entry — lives
+# in core/report-dir.sh, because sixteen scripts resolved REPORT_DIR independently and
+# NONE of them called this function. Anything owned here alone would have applied to the
+# environment detection and to nothing else.
 setup_report_dir() {
-    local report_dir="${REPORT_DIR:-.reports}"
+    cqt_report_dir_init
+    cqt_announce_report_dir
+}
 
-    if [ ! -d "${report_dir}" ]; then
-        mkdir -p "${report_dir}"
-        echo -e "${GREEN}[OK]${NC} Created report directory: ${report_dir}"
+# Compare what composer.lock says is installed against what is actually on disk.
+#
+# The project this check was written for had composer.lock pinning Drupal 11.3.13 while
+# vendor/ and docroot/core held 10.5.6, because an earlier `composer install` had failed
+# on an expired token in auth.json. This script read 10.5.6 correctly and wrote it to
+# environment.json; nothing compared the two. Every gate then ran against the mismatch,
+# comparing Drupal 11 custom code against Drupal 10 core, and every finding had to be
+# thrown away once the cause was found.
+#
+# Sets VERSION_DRIFT to one of:
+#   match      both versions are concrete and equal
+#   drift      both are concrete and differ
+#   unchecked  no comparison was possible, with the reason recorded alongside
+#
+# "unchecked" is deliberately not a soft "probably fine". It is what the record says
+# whenever the comparison could not be made, so a consumer can tell "we looked and it
+# was fine" from "we never looked".
+check_version_drift() {
+    VERSION_DRIFT="unchecked"
+
+    if [ ! -f "composer.lock" ]; then
+        VERSION_DRIFT_REASON="no composer.lock in the project root"
+        return 0
+    fi
+
+    # jq rather than a grep for a version string: composer.lock lists every package, and
+    # a pattern loose enough to find drupal/core's version finds other packages' too. A
+    # false drift stop on somebody else's repository is worse than no check at all.
+    if ! command -v jq &> /dev/null; then
+        VERSION_DRIFT_REASON="jq is not available to read composer.lock"
+        return 0
+    fi
+
+    # "we read the file and it does not pin drupal/core" and "we never got to read the
+    # file" are different findings, and only one of them is about the file's CONTENT.
+    # They used to be the same line: jq's failure was swallowed by `|| echo ""`, so an
+    # unreadable, an empty and a corrupt lockfile were all reported as
+    # "composer.lock does not pin drupal/core" — a statement about content that had never
+    # been established. version_drift is deliberately "unchecked" for both, because it
+    # records whether a comparison happened; version_drift_reason is the field that is
+    # supposed to say WHY, and it is the one an operator acts on.
+    if [ ! -r "composer.lock" ]; then
+        VERSION_DRIFT_REASON="composer.lock could not be read"
+        return 0
+    fi
+    if [ ! -s "composer.lock" ]; then
+        VERSION_DRIFT_REASON="composer.lock is empty"
+        return 0
+    fi
+
+    # Status captured rather than discarded. `X=$(cmd) || rc=$?` is safe under `set -e`:
+    # the assignment's status is the command substitution's, and testing it is what makes
+    # it not fatal.
+    local lock_read=0
+    COMPOSER_LOCK_CORE_VERSION=$(jq -r '
+        [ (.packages // [])[], (."packages-dev" // [])[] ]
+        | map(select(.name == "drupal/core"))
+        | .[0].version // ""
+    ' composer.lock 2>/dev/null) || lock_read=$?
+    if [ "${lock_read}" -ne 0 ]; then
+        # Covers both a file that is not JSON and a file that is JSON of the wrong shape
+        # (packages as an object, say). The reason names what happened rather than
+        # guessing which, because the remedy is the same: look at the file.
+        COMPOSER_LOCK_CORE_VERSION=""
+        VERSION_DRIFT_REASON="composer.lock could not be parsed"
+        return 0
+    fi
+    COMPOSER_LOCK_CORE_VERSION="${COMPOSER_LOCK_CORE_VERSION#v}"
+
+    if [ -z "${COMPOSER_LOCK_CORE_VERSION}" ]; then
+        VERSION_DRIFT_REASON="composer.lock does not pin drupal/core"
+        return 0
+    fi
+
+    if [ -z "${DRUPAL_VERSION}" ] || [ "${DRUPAL_VERSION}" = "unknown" ]; then
+        VERSION_DRIFT_REASON="the installed core version could not be read"
+        return 0
+    fi
+
+    # A development branch carries no comparable version: composer.lock says 11.3.x-dev
+    # while Drupal.php says 11.3.13, and they do not disagree. Stopping every run on a
+    # project tracking a dev branch is the fastest way to have this check turned off for
+    # good.
+    case "${COMPOSER_LOCK_CORE_VERSION}${DRUPAL_VERSION}" in
+        *dev*)
+            VERSION_DRIFT_REASON="a development branch is pinned (${COMPOSER_LOCK_CORE_VERSION} / ${DRUPAL_VERSION})"
+            return 0
+            ;;
+    esac
+
+    if [ "${COMPOSER_LOCK_CORE_VERSION}" = "${DRUPAL_VERSION}" ]; then
+        VERSION_DRIFT="match"
+        VERSION_DRIFT_REASON="composer.lock and the installed core agree"
     else
-        echo -e "${GREEN}[OK]${NC} Report directory exists: ${report_dir}"
+        VERSION_DRIFT="drift"
+        VERSION_DRIFT_REASON="composer.lock pins ${COMPOSER_LOCK_CORE_VERSION}, the installed core is ${DRUPAL_VERSION}"
+    fi
+    return 0
+}
+
+# A hard stop, not a warning.
+#
+# No gate downstream can be right about a tree whose core is not the core its
+# dependencies were resolved against, so continuing produces findings whose only possible
+# use is to be discarded — and a warning at step 1 of six is not what anyone reads six
+# steps later. The remedy is one command, and it is named.
+#
+# Overridable, because this is somebody else's repository and because a version
+# comparison can be wrong in ways the person at the keyboard can see and this script
+# cannot. Overriding does not buy a clean bill of health: the drift stays recorded in
+# environment.json, and full-audit.sh reads it back and caps the verdict.
+enforce_version_drift() {
+    [ "${VERSION_DRIFT}" = "drift" ] || return 0
+
+    echo ""
+    echo -e "${RED}[STOP]${NC} The installed code does not match composer.lock"
+    echo "  composer.lock pins drupal/core ${COMPOSER_LOCK_CORE_VERSION}"
+    echo "  the tree on disk is running ${DRUPAL_VERSION}"
+    echo ""
+    echo "  Every check below would compare this project's code against a core it was"
+    echo "  not resolved against, so its findings could not be trusted. Run"
+    echo "  'composer install' (a previous one probably failed, often on credentials in"
+    echo "  auth.json) and audit again."
+    echo ""
+
+    if [ "${ALLOW_VERSION_DRIFT:-0}" = "1" ]; then
+        echo -e "${YELLOW}[WARN]${NC} Continuing anyway: ALLOW_VERSION_DRIFT=1"
+        echo "  This run cannot certify a pass. The drift is recorded in environment.json."
+        echo ""
+        return 0
     fi
 
-    # Reports quote findings out of the audited source, so the directory must not
-    # be committable by accident. This is defence in depth in a repository we do
-    # not own: it never aborts the audit, never writes through a symlink, never
-    # invents a pattern it cannot write safely, and only ever appends.
-    local in_work_tree=""
-    in_work_tree="$(git rev-parse --is-inside-work-tree 2>/dev/null || true)"
-
-    if [ "${in_work_tree}" = "true" ]; then
-        local gitignore=".gitignore"
-        local entry="${report_dir%/}"
-        entry="${entry#./}"
-        local skip_reason=""
-
-        # Ask git, not this file: the path may already be covered by a parent
-        # .gitignore, .git/info/exclude or a global excludesfile, in which case
-        # writing anything here would just be a stray edit.
-        if [ -z "${entry}" ]; then
-            skip_reason="empty"
-        elif git check-ignore -q "${report_dir}" 2>/dev/null; then
-            skip_reason="already-ignored"
-        fi
-
-        # A gitignore entry is a repo-relative pattern, so an absolute REPORT_DIR
-        # is deliberately never written: rewriting it into one is not safe to
-        # guess. Say so only when it actually sits inside this work tree, where it
-        # would otherwise go unprotected. Absolute and outside the tree needs no
-        # entry at all, so that case stays silent.
-        if [ -z "${skip_reason}" ]; then
-            case "${entry}" in
-                /*)
-                    local top=""
-                    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-                    skip_reason="absolute-outside-work-tree"
-                    if [ -n "${top}" ]; then
-                        case "${entry}/" in
-                            "${top}"/*) skip_reason="absolute-inside-work-tree" ;;
-                        esac
-                    fi
-                    ;;
-            esac
-        fi
-
-        # REPORT_DIR is interpolated into gitignore's PATTERN language, where
-        # * ? [ ] \ are wildcards, a leading # is a comment, a leading ! negates
-        # (which would UN-ignore paths), and a trailing space is stripped. Refuse
-        # rather than guess an escaping for a value holding any of them.
-        if [ -z "${skip_reason}" ]; then
-            case "${entry}" in
-                *'*'*|*'?'*|*'['*|*']'*|*'\'*|*$'\n'*|'#'*|'!'*|*' ')
-                    skip_reason="unsafe-pattern"
-                    ;;
-            esac
-        fi
-
-        # Writing through a symlink would land the entry outside the repository.
-        if [ -z "${skip_reason}" ] && [ -L "${gitignore}" ]; then
-            skip_reason="symlink"
-        fi
-
-        # An existing literal entry may be overridden by a later negation, so git
-        # can report the path as not ignored while the line is already there.
-        # Appending a duplicate would not help, so scan before writing.
-        if [ -z "${skip_reason}" ] && [ -f "${gitignore}" ]; then
-            if [ -r "${gitignore}" ]; then
-                local line=""
-                local trimmed=""
-                while IFS= read -r line || [ -n "${line}" ]; do
-                    trimmed="${line%$'\r'}"
-                    trimmed="${trimmed#/}"
-                    trimmed="${trimmed%/}"
-                    if [ "${trimmed}" = "${entry}" ]; then
-                        skip_reason="already-listed"
-                        break
-                    fi
-                done 2>/dev/null < "${gitignore}" || skip_reason="unreadable"
-            else
-                skip_reason="unreadable"
-            fi
-        fi
-
-        if [ -z "${skip_reason}" ]; then
-            # Do not glue the entry onto a last line that has no newline.
-            local lead=""
-            if [ -s "${gitignore}" ] && [ -n "$(tail -c 1 "${gitignore}" 2>/dev/null)" ]; then
-                lead=$'\n'
-            fi
-            # Never fatal. `2>/dev/null` is placed BEFORE the append so a failed
-            # redirection stays quiet, and testing it in an `if` keeps `set -e`
-            # from killing the whole environment detection over an ignore entry.
-            if printf '%s%s/\n' "${lead}" "${entry}" 2>/dev/null >> "${gitignore}"; then
-                echo -e "${GREEN}[OK]${NC} Added ${entry}/ to ${gitignore}"
-            else
-                skip_reason="unwritable"
-            fi
-        fi
-
-        case "${skip_reason}" in
-            ''|already-ignored|already-listed|absolute-outside-work-tree) ;;
-            *)
-                echo -e "${YELLOW}[WARN]${NC} Could not gitignore ${report_dir} (${skip_reason})"
-                echo "  Keep audit reports out of your commits: they can quote matched secrets"
-                ;;
-        esac
-    fi
-
-    export REPORT_DIR="${report_dir}"
+    echo "  Set ALLOW_VERSION_DRIFT=1 to run anyway."
+    exit 3
 }
 
 # Main detection flow
@@ -349,6 +390,7 @@ main() {
 
     if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
         check_custom_paths
+        check_version_drift
     fi
 
     setup_report_dir
@@ -382,9 +424,20 @@ main() {
   "ddev_available": ${DDEV_AVAILABLE},
   "env_ready": ${ENV_READY},
   "report_dir": "${REPORT_DIR}",
+  "version_drift": "${VERSION_DRIFT}",
+  "version_drift_reason": "${VERSION_DRIFT_REASON}",
+  "composer_lock_core_version": "${COMPOSER_LOCK_CORE_VERSION}",
+  "installed_core_version": "${DRUPAL_VERSION}",
   "detected_at": "$(date -Iseconds)"
 }
 EOF
+
+    # The record is written BEFORE the stop, so the reason for the stop survives it.
+    # full-audit.sh reads version_drift back from this file: on a hard stop to say what
+    # actually happened instead of blaming the environment, and on an override to cap
+    # the verdict at "warning" through the same vocabulary a gate uses when it could not
+    # cover its ground.
+    enforce_version_drift
 
     echo "=== Environment Summary ==="
     echo "Project Type: ${PROJECT_TYPE}"

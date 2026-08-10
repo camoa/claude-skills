@@ -11,7 +11,7 @@ For audit / review workflows that fan out across many files (`/code-quality-tool
 ## When to use
 
 - Aggregating findings across a batch of parallel `Bash` invocations of linters/scanners (PHPStan + Psalm + PHPMD running in parallel).
-- Logging a single timestamped batch row to `.reports/batch-log.jsonl` instead of N rows per tool.
+- Logging a single timestamped batch row to `$REPORT_DIR/batch-log.jsonl` (resolved by `report-dir.sh --print`, outside the audited repository) instead of N rows per tool.
 - Posting a single Slack summary on batch completion instead of per-tool fragments.
 - Triggering a state sync (e.g., refreshing a check-run JSON) once after all parallel scanners settle.
 

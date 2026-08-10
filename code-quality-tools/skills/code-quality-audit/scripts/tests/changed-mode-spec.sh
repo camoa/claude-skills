@@ -242,6 +242,13 @@ echo "G8: Script-level — --changed guard interception + all-gaps exit 0"
 TDD_SH="${SCRIPT_DIR}/../drupal/tdd-workflow.sh"
 COV_SH="${SCRIPT_DIR}/../drupal/coverage-report.sh"
 
+# These two runs invoke the real gates from THIS directory. Their report directory is
+# no longer ./.reports — it resolves to an ai-dev-assistant project folder when one is
+# registered for this checkout, which is correct behaviour and wrong for a test suite:
+# a spec run would leave an empty audit directory in the project record. Pinning it to
+# the fixture keeps the suite hermetic. Exported so both gates see it.
+export REPORT_DIR="${TMPDIR_FIXTURE}/reports"
+
 # A .php under /src/ with NO co-located test in the fixture → pure gap.
 GAP_SRC="${MOD_ROOT}/src/Service/UnmappedGapService.php"
 

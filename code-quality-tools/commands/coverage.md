@@ -70,16 +70,18 @@ The no-`--changed` path runs the whole suite unchanged.
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+!bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/coverage-report.sh` (PHPUnit with coverage)
-- **Next.js**: `bash scripts/nextjs/coverage-report.sh` (Jest with coverage)
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/coverage-report.sh"` (PHPUnit with coverage)
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/coverage-report.sh"` (Jest with coverage)
 
 ## Output
 
-- JSON report: `.reports/coverage.json`
-- HTML report: `.reports/coverage/index.html`
+- JSON report: `$REPORT_DIR/coverage-report.json`
+- HTML/raw coverage: `$REPORT_DIR/coverage/`
+
+`$REPORT_DIR` is announced by the script on start; it is not inside the audited repository.
 - Coverage percentage in chat
 
 ## Thresholds

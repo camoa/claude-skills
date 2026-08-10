@@ -106,6 +106,18 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 
 ## Quick Reference
 
+Script paths below and throughout `references/` name a file **inside this plugin**, which
+is not the directory an audit runs from. Invoke one as
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/<path from the table>"
+```
+
+with the working directory left on the project being audited — every script scans its own
+cwd, so `cd`-ing into the plugin would audit the plugin. `${CLAUDE_PLUGIN_ROOT}` is the
+plugin's install directory, substituted by Claude Code; outside a session, substitute your
+checkout of this plugin.
+
 ### Drupal Scripts
 | Task | Script | Details |
 |------|--------|---------|
@@ -136,11 +148,25 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 **Drupal:**
 1. Locate Drupal root: check `web/core/lib/Drupal.php` or `docroot/core/lib/Drupal.php`
 2. Verify DDEV: `ddev describe`
-3. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
 
 **Next.js:**
 1. Verify npm: `npm --version`
-2. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
+
+### Report directory — do not create one
+
+**Never run `mkdir -p .reports`, and never add `.reports/` to the audited repository's `.gitignore`.** Reports quote lines out of the audited source and name the files a secret scanner matched in, so they do not belong on a branch that travels. `.reports` inside the repository is no longer where they go.
+
+Every script under `scripts/` resolves its own report directory by sourcing `scripts/core/report-dir.sh`, creates it, and prints `Report directory: <path>` when it starts. Read that line rather than assuming a path. Resolution order: an explicitly set `REPORT_DIR`; else the `ai-dev-assistant` project folder registered for this working directory, under `<project>/audits/<date>/`; else outside the repository under `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`. `.reports/` is reachable only by asking for it with `REPORT_DIR_IN_REPO=1`, and is gitignored at creation.
+
+When you need the path yourself — to read a report back, or to tell the user where to look — ask the same file instead of writing a directory name down:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --print    # where the next run writes; creates nothing
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure   # same path, created with mode 0700; use before writing
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest   # where the last run wrote; exits 1 if none yet
+```
+
+A non-zero `--latest` means no audit has been run here, not that an audit came back clean. Say so, and offer to run one.
 
 > **Sandbox users:** If the built-in **sandboxed Bash tool** (`/sandbox`) is enabled, bash scripts that invoke linters (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) require their binary paths to be whitelisted. Add the tool binaries to your `allowedPaths` (e.g., `vendor/bin/phpstan`, `/usr/local/bin/semgrep`). DDEV-proxied commands run inside the container and are unaffected.
 >

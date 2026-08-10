@@ -139,11 +139,13 @@ ddev drush pm:enable security_review
 
 ### Full Security Audit
 ```bash
-# Run all 10 security layers
-ddev exec bash skills/code-quality-audit/scripts/drupal/security-check.sh
+# Run all 10 security layers. Run it on the HOST, from the project you are auditing:
+# the script is the driver and proxies each tool through `ddev exec` itself. Wrapping it
+# in `ddev exec` puts a host path in front of a container that has no such path.
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # View report
-cat .reports/security-report.json | jq .
+cat "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest)/security-report.json" | jq .
 ```
 
 ### Report Structure

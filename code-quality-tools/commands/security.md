@@ -13,7 +13,7 @@ Run a comprehensive security scan across multiple layers.
 ## Usage
 
 ```
-/code-quality-tools:security [project-path]           # writes .reports/security-*.md + chat summary
+/code-quality-tools:security [project-path]           # writes security reports outside the repo + chat summary
 /code-quality-tools:security --json [project-path]    # CI mode — single stable JSON on stdout
 ```
 
@@ -82,7 +82,7 @@ Based on detection result, execute:
 Pass a newline-delimited file of changed paths to run a **SAST-only** scan scoped to those files:
 
 ```bash
-bash scripts/drupal/security-check.sh --changed .changed-files.txt
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh" --changed .changed-files.txt
 ```
 
 **What runs:** `semgrep` + `php-security-linter` + custom grep patterns (on changed files). If `composer.json` or `composer.lock` is in the changed list, `composer audit` also runs.
@@ -103,8 +103,10 @@ A `messages[]` entry in the report records this skip with instructions to run th
 
 ## Output
 
-- JSON report: `.reports/security-report.json`
-- Markdown summary: `.reports/security-summary.md`
+- JSON report: `$REPORT_DIR/security-report.json`
+- Per-tool raw output: `$REPORT_DIR/security/*.json` (semgrep, trivy, gitleaks, psalm-taint, composer-audit, ...)
+
+`$REPORT_DIR` is the directory `security-check.sh` resolves and announces as `Report directory: <path>` when it starts; it is **not** `.reports` inside the audited repository. `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --print` names it without running a scan; `--latest` names the previous run's.
 - Grouped by severity (critical → low)
 
 ## Severity Thresholds
@@ -128,7 +130,7 @@ To run a security scan without blocking your session, dispatch it as a backgroun
 
 Common issues:
 - **"Security tool not found"**: Run `/code-quality-tools:setup`
-- **"Too many findings"**: Review `.reports/security.json` for details
+- **"Too many findings"**: Review `$REPORT_DIR/security-report.json` for details
 
 See: `references/troubleshooting.md#security-scan-issues`
 

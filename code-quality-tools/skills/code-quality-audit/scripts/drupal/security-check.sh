@@ -11,9 +11,46 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-REPORT_DIR="${REPORT_DIR:-.reports}"
+# Where reports go is decided in one place, and it is never inside the audited
+# repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
+# shellcheck source=../core/report-dir.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+cqt_report_dir_init
+cqt_announce_report_dir
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
+
+# ── host filesystem vs container filesystem ───────────────────────────────────
+#
+# Nearly every in-container tool here writes to STDOUT and is captured by a host-side
+# redirection. The `> "$FILE"` in those lines runs in THIS shell, on the host, so $FILE is
+# a host path and the call works whatever REPORT_DIR is.
+#
+# Psalm is the exception. It writes its findings out of band, to the path given to
+# --report=, and that path is read by the CONTAINER. The container shares one directory
+# with the host — the bind mount at /var/www/html, which is the audited repository — so a
+# host-absolute REPORT_DIR names nothing the container can write and nothing the host can
+# read back. It worked only while REPORT_DIR was the relative `.reports`, i.e. only while
+# this tool wrote into the repository it was auditing; with the out-of-repo default the
+# taint gate quietly stops producing a report at all and is recorded as a skipped tool on
+# every run. Same defect, same fix, same reasoning as drupal/coverage-report.sh: the
+# container writes somewhere container-local and the bytes cross on ddev exec's stdout.
+#
+# $$ is the host PID, so two audits of one project do not collide in there.
+CQT_CONTAINER_STAGE="/tmp/cqt-security-$$"
+
+# Bring a file the container wrote across to the host. Never fatal, and never left behind
+# empty: a transport that exits 0 having delivered nothing would be read downstream as an
+# analyzer that ran and found nothing, which is the false-clean shape this gate exists to
+# refuse. Returns non-zero when nothing usable arrived, and the caller's existing
+# missing-report handling takes it from there.
+cqt_fetch_from_container() {
+    local src="$1" dest="$2"
+    ddev exec test -s "${src}" >/dev/null 2>&1 || return 1
+    ddev exec cat "${src}" > "${dest}" 2>/dev/null || { rm -f "${dest}" 2>/dev/null; return 1; }
+    [ -s "${dest}" ] || { rm -f "${dest}" 2>/dev/null; return 1; }
+    return 0
+}
 
 # Serialise a bash array to a JSON string array (empty array → []).
 to_json_array() {
@@ -986,12 +1023,21 @@ EOF
     # psalm writes out of band via --report, so a report from an earlier run would
     # otherwise be read as this run's result.
     clear_stale_report "$PSALM_TAINT_JSON"
+    # --report is read by the CONTAINER; PSALM_TAINT_JSON is a HOST path. See the
+    # host/container note at the top of this file.
+    PSALM_TAINT_CONTAINER="${CQT_CONTAINER_STAGE}/psalm-taint.json"
+    ddev exec mkdir -p "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
     ddev exec vendor/bin/psalm --taint-analysis \
-        --report="${PSALM_TAINT_JSON}" \
+        --report="${PSALM_TAINT_CONTAINER}" \
         --output-format=json \
         --no-cache \
         2>/dev/null
     PSALM_EXIT=$?
+    # Carried across before the status is judged. A psalm that wrote a report and exited
+    # non-zero is a psalm that found taint, and the report has to be here for the
+    # resolve_tool_result call below to read it.
+    cqt_fetch_from_container "${PSALM_TAINT_CONTAINER}" "${PSALM_TAINT_JSON}"
+    ddev exec rm -rf "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
     set -e
 
     # psalm exits non-zero when it finds issues, so the status cannot separate "found

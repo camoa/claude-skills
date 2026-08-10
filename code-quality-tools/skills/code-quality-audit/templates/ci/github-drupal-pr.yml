@@ -95,6 +95,14 @@ jobs:
           # Re-installing them on every PR wastes CI minutes and can cause
           # transient resolver conflicts.
 
+      # In-repo .reports below is deliberate and is NOT the defect the report-dir
+      # resolver fixes. CI runs against an ephemeral checkout that is discarded after
+      # the job, nothing is committed from it, and the directory is uploaded as a
+      # build artifact at the end of this workflow. The resolver's out-of-repo default
+      # exists to keep reports off a developer's branch; there is no branch here.
+      # These steps invoke phpcs/phpstan/semgrep directly and never source the
+      # resolver, so they are self-consistent.
+
       # =====================
       # PHPCS — changed files only (single invocation)
       # =====================

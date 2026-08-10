@@ -59,7 +59,7 @@ To invoke this plugin's installer directly instead, point at `install-tools.sh`:
 
 Notes on `install-tools.sh`:
 
-- It takes **no positional arguments** — it is driven by environment variables (`PROJECT_TYPE`, `REPORT_DIR`, `DDEV_AVAILABLE`). Set them in the hook environment or let it auto-detect from `.reports/environment.json`.
+- It takes **no positional arguments** — it is driven by environment variables (`PROJECT_TYPE`, `REPORT_DIR`, `DDEV_AVAILABLE`). Set them in the hook environment or let it auto-detect from the `environment.json` written by `detect-environment.sh` into the resolved report directory (`scripts/core/report-dir.sh --print`), which is outside the audited repository.
 - For Drupal it requires a running DDEV container and exits non-zero if DDEV is absent. A `Setup` hook cannot block, so a failed install will not stop the session — have the pipeline verify tool availability after `--init-only` and fail there if needed.
 - `${CLAUDE_PLUGIN_ROOT}` resolves **only inside plugin-shipped hooks**. A hook in your project's own `settings.json` must use a real path (or a CI variable) instead.
 

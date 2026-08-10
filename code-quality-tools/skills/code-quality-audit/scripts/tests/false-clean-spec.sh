@@ -205,10 +205,17 @@ done
 echo ""
 echo "C: the report directory cannot be committed by accident"
 
-# Source only the function under test, not the whole script (it runs a main()).
-sed -n '/^setup_report_dir()/,/^}/p' "$ENVSH" > "$TMP/setup_report_dir.sh"
-if [[ ! -s "$TMP/setup_report_dir.sh" ]]; then
-  bad "extracted setup_report_dir() from detect-environment.sh"
+# The rule now lives in core/report-dir.sh, which every script sources; setup_report_dir()
+# is a two-line wrapper around it. Sourcing the library is therefore sourcing the unit
+# under test, and it avoids extracting a function out of a script that runs a main().
+#
+# Every case below sets REPORT_DIR_IN_REPO=1. .reports/ is no longer the default — it is
+# an explicit opt-in (section Q) — and the opt-in is precisely the path that can be
+# committed, so it is the path that has to be gitignored. Section R asserts the opt-in is
+# still covered end to end; these cases are about the mechanics.
+CQT_LIB="${ROOT}/core/report-dir.sh"
+if [[ ! -f "$CQT_LIB" ]]; then
+  bad "core/report-dir.sh is available to source"
 else
   # C1 + C2: inside a git repo, the directory ends up ignored, idempotently.
   REPO="$TMP/repo"; mkdir -p "$REPO"; git -C "$REPO" init -q 2>/dev/null
@@ -216,9 +223,12 @@ else
     cd "$REPO" || exit 1
     # shellcheck source=/dev/null
     GREEN=''; NC=''; YELLOW=''; RED=''
-    source "$TMP/setup_report_dir.sh"
-    setup_report_dir >/dev/null 2>&1
-    setup_report_dir >/dev/null 2>&1   # second run must not duplicate
+    unset REPORT_DIR REPORT_DIR_ORIGIN
+    export REPORT_DIR_IN_REPO=1
+    source "$CQT_LIB"
+    cqt_report_dir_init >/dev/null 2>&1
+    unset REPORT_DIR REPORT_DIR_ORIGIN
+    cqt_report_dir_init >/dev/null 2>&1   # second run must not duplicate
   )
   if git -C "$REPO" check-ignore -q .reports 2>/dev/null; then
     ok "report directory is gitignored after creation"
@@ -233,9 +243,11 @@ else
   (
     cd "$PLAIN" || exit 1
     GREEN=''; NC=''; YELLOW=''; RED=''
+    unset REPORT_DIR REPORT_DIR_ORIGIN
+    export REPORT_DIR_IN_REPO=1
     # shellcheck source=/dev/null
-    source "$TMP/setup_report_dir.sh"
-    setup_report_dir >/dev/null 2>&1
+    source "$CQT_LIB"
+    cqt_report_dir_init >/dev/null 2>&1
   )
   if [[ -f "$PLAIN/.gitignore" ]]; then
     bad "no .gitignore created outside a git working tree"
@@ -254,13 +266,13 @@ else
   run_isolated() {
     local dir="$1"
     local rd="${2-}"
-    REPORT_DIR="$rd" bash -c '
+    env -u REPORT_DIR_ORIGIN REPORT_DIR="$rd" REPORT_DIR_IN_REPO=1 bash -c '
       cd "$1" || exit 9
       set -e
       GREEN=""; NC=""; YELLOW=""; RED=""
       . "$2"
-      setup_report_dir
-    ' _ "$dir" "$TMP/setup_report_dir.sh" >/dev/null 2>&1
+      cqt_report_dir_init
+    ' _ "$dir" "$CQT_LIB" >/dev/null 2>&1
   }
 
   # C4: an unwritable .gitignore must not take the whole audit down.
@@ -485,7 +497,7 @@ else
   SKEL_SCORE=$(bash -c '
     set -u
     REPORT_DIR="$1"; mkdir -p "$REPORT_DIR"
-    PROJECT_TYPE="drupal"; TIMESTAMP="1970-01-01T00:00:00+00:00"
+    PROJECT_TYPE="drupal"; TIMESTAMP="1970-01-01T00:00:00+00:00"; VERSION_DRIFT="unchecked"
     COVERAGE_MINIMUM=70; COVERAGE_TARGET=80; DUPLICATION_MAX=5; COMPLEXITY_MAX=10
     # shellcheck source=/dev/null
     source "$2"
@@ -575,6 +587,11 @@ run_pcov_block() {
     set -e
     RED=""; GREEN=""; YELLOW=""; NC=""
     DRUPAL_MODULES_PATH="web/modules/custom"
+    # The container form of that path is resolved once, above both probes, because the
+    # probes are extracted and run standalone here. Bound so the extracted block is not
+    # executed with a hole in it — what the value should BE is asserted behaviourally by
+    # the pcov.directory argv guard in section M.
+    DRUPAL_MODULES_PATH_CONTAINER="/var/www/html/web/modules/custom"
     PCOV_AVAILABLE=""; PCOV_FLAGS="__UNSET__"
     . "$1" > "$2" 2> "$3"
     printf "%s" "$PCOV_AVAILABLE" > "$4"
@@ -832,6 +849,22 @@ DSTUB="$TMP/ddevstub"; mkdir -p "$DSTUB"
 cat > "$DSTUB/ddev" <<'STUB'
 #!/usr/bin/env bash
 present="${STUB_TOOLS_PRESENT:-0}"
+
+# `ddev exec` runs in the CONTAINER's filesystem, which is not the host's. Container
+# paths resolve under $SEC_CROOT, except under /var/www/html — the bind mount — which
+# resolves into the project directory $SEC_MOUNT. Modelling this is what lets an
+# assertion see the difference between a tool that writes to stdout (captured by a
+# host-side redirection, so any host path works) and one that writes out of band to a
+# path it was handed (psalm --report), where a host-absolute path names nothing the
+# container can write and nothing the host can read back.
+cpath() {
+  case "$1" in
+    /var/www/html)   printf '%s' "${SEC_MOUNT:-.}" ;;
+    /var/www/html/*) printf '%s/%s' "${SEC_MOUNT:-.}" "${1#/var/www/html/}" ;;
+    /*)              printf '%s%s' "${SEC_CROOT:-}" "$1" ;;
+    *)               printf '%s/%s' "${SEC_MOUNT:-.}" "$1" ;;
+  esac
+}
 sub="${1-}"; shift 2>/dev/null || true
 case "$sub" in
   describe) exit 0 ;;
@@ -881,7 +914,30 @@ case "$sub" in
           [ "${STUB_DRUSH_SILENT:-0}" = 1 ] && exit 0
           printf '[]\n'; exit 0; }
         exit 0 ;;
-      test) [ "$present" = 1 ] && exit 0; exit 1 ;;
+      test)
+        # A RELATIVE path here is a tool-presence probe — `test -f vendor/bin/psalm`,
+        # `test -f psalm.xml` — and is answered by the scenario. An ABSOLUTE path is a
+        # real question about the container's filesystem, which is what the copy-out step
+        # asks before fetching a report, so it is answered from the modelled filesystem.
+        case "${3-}" in
+          /*) test "${2-}" "$(cpath "$3")"; exit $? ;;
+        esac
+        [ "$present" = 1 ] && exit 0; exit 1 ;;
+      mkdir)
+        shift
+        while [ $# -gt 0 ]; do
+          case "$1" in -*) shift ;; *) mkdir -p "$(cpath "$1")" 2>/dev/null; shift ;; esac
+        done
+        exit 0 ;;
+      rm)
+        shift
+        while [ $# -gt 0 ]; do
+          case "$1" in -*) shift ;; *) rm -rf "$(cpath "$1")" 2>/dev/null; shift ;; esac
+        done
+        exit 0 ;;
+      cat)
+        cat "$(cpath "${2-}")" 2>/dev/null
+        exit $? ;;
       vendor/bin/php-security-linter)
         # psl:           ran, emitted nothing (trips the missing-report arm)
         # psl_127:       VALID empty report + exit 127 — only the exit-status arm sees
@@ -914,7 +970,8 @@ case "$sub" in
         if [ "${STUB_FAIL_TOOL:-}" = "psalm_find_ex1" ]; then
           for a in "$@"; do
             case "$a" in --report=*)
-              printf '[{"type":"TaintedSql","severity":1,"file_path":"a.php","line_from":9,"message":"tainted sql"}]' > "${a#--report=}" ;;
+              r="$(cpath "${a#--report=}")"; mkdir -p "${r%/*}" 2>/dev/null
+              printf '[{"type":"TaintedSql","severity":1,"file_path":"a.php","line_from":9,"message":"tainted sql"}]' > "$r" ;;
             esac
           done
           exit 1
@@ -923,16 +980,22 @@ case "$sub" in
         #                downstream of resolve_tool_result succeeds on that report, so
         #                this state is visible ONLY to the exit-status check itself.
         if [ "${STUB_FAIL_TOOL:-}" = "psalm_127" ]; then
-          for a in "$@"; do case "$a" in --report=*) printf '[]' > "${a#--report=}" ;; esac; done
+          for a in "$@"; do
+            case "$a" in --report=*)
+              r="$(cpath "${a#--report=}")"; mkdir -p "${r%/*}" 2>/dev/null
+              printf '[]' > "$r" ;;
+            esac
+          done
           exit 127
         fi
         for a in "$@"; do
           case "$a" in
             --report=*)
+              r="$(cpath "${a#--report=}")"; mkdir -p "${r%/*}" 2>/dev/null
               if [ "${STUB_FAIL_TOOL:-}" = "psalm_jq" ]; then
-                printf '[1,2,3]' > "${a#--report=}"
+                printf '[1,2,3]' > "$r"
               else
-                printf '[]' > "${a#--report=}"
+                printf '[]' > "$r"
               fi ;;
           esac
         done
@@ -1052,6 +1115,12 @@ run_security_gate() {
   work="$(mktemp -d "$TMP/gate.XXXXXX")"
   rdir="$work/.reports"
   mkdir -p "$work/markers"
+  # The container's own filesystem, deliberately NOT under $work: $work is the project,
+  # i.e. the bind mount, and the two being different places is the whole point. Anything
+  # a container tool writes to a path outside /var/www/html lands here and is invisible
+  # to the host unless the gate fetches it.
+  local croot="$work.container"
+  mkdir -p "$croot"
   bin="$(mktemp -d "$TMP/bin.XXXXXX")"
   cp "$DSTUB/ddev" "$DSTUB/npm" "$DSTUB/npx" "$bin/"
   [ "$tools_present" = 1 ] && cp "$DSTUB/trivy" "$bin/"
@@ -1079,6 +1148,7 @@ run_security_gate() {
        STUB_DRUSH_SILENT="${STUB_DRUSH_SILENT:-0}" \
        STUB_SEMGREP_WHERE="${STUB_SEMGREP_WHERE:-}" STUB_MARKER_DIR="$work/markers" \
        STUB_EXIT="$gexit" STUB_REPORT="$report" \
+       SEC_MOUNT="$work" SEC_CROOT="$croot" \
        bash "$script" ) >/dev/null 2>&1 || rc=$?
   status=$(jq -r '.summary.overall_status // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo "MISSING")
   failed=$(jq -r '(.meta.tools_failed // []) | join(",")' "$rdir/security-report.json" 2>/dev/null || echo "MISSING")
@@ -1409,6 +1479,8 @@ fi
 # clean gates plus a skipped security gate printed "Overall: PASS" and exited 0.
 FA_ROOT="$TMP/fa"; mkdir -p "$FA_ROOT/core" "$FA_ROOT/drupal"
 cp "$FULL" "$FA_ROOT/core/full-audit.sh"
+# full-audit.sh sources the report-directory rule out of its own core/ directory.
+cp "${ROOT}/core/report-dir.sh" "$FA_ROOT/core/report-dir.sh" 2>/dev/null || true
 
 cat > "$FA_ROOT/core/detect-environment.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -2206,9 +2278,14 @@ make_drupal_fixture() {
 # Extra arguments are env assignments for that run. DRUPAL_MODULES_PATH and
 # DRUPAL_THEMES_PATH are cleared first so a value leaking in from the spec's own
 # environment cannot decide the answer. Echoes the output with ANSI colour stripped.
+# REPORT_DIR is named explicitly rather than left to the default. This section is about
+# the modules/themes paths, and the default no longer resolves to .reports inside the
+# fixture (section Q) — env_field below reads the fixture's own directory, so pinning it
+# keeps these assertions about what they are about.
 run_detect() {
   local dir="$1"; shift
-  env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u REPORT_DIR "$@" \
+  env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u REPORT_DIR_ORIGIN \
+    REPORT_DIR=.reports "$@" \
     bash -c 'cd "$1" || exit 9; "$2"' _ "$dir" "$ENVSH" 2>&1 \
     | sed $'s/\033\\[[0-9;]*m//g'
 }
@@ -2640,18 +2717,73 @@ echo "M: coverage runs this project's custom code, not core's and contrib's suit
 COV_STUBDIR="$TMP/cov_stub"; mkdir -p "$COV_STUBDIR"
 cat > "$COV_STUBDIR/ddev" <<'STUB'
 #!/usr/bin/env bash
-# Stub ddev. Records the argv of the phpunit run ONE ARGUMENT PER LINE, so an
-# assertion can tell a standalone `web/modules/custom` argument from the same text
-# inside `-d pcov.directory=/var/www/html/web/modules/custom`. The defect leaves that
-# pcov argument in place, so a substring match would be green on the defect.
+# Stub ddev. Two jobs.
+#
+# (1) Records the argv of the phpunit run ONE ARGUMENT PER LINE, so an assertion can
+# tell a standalone `web/modules/custom` argument from the same text inside
+# `-d pcov.directory=/var/www/html/web/modules/custom`. The defect leaves that pcov
+# argument in place, so a substring match would be green on the defect.
+#
+# (2) Models the thing that makes `ddev exec` different from running a command: it runs
+# in ANOTHER FILESYSTEM. Container paths resolve under $COV_CROOT — the container's own
+# disk, which the host cannot see — except under /var/www/html, the bind mount, which
+# resolves into the project directory $COV_MOUNT. A stub that simply ran everything on
+# the host would make every host path a container tool is handed appear to work, and no
+# assertion could then see a container writing to a path the host will never read.
+cpath() {
+  case "$1" in
+    /var/www/html)   printf '%s' "$COV_MOUNT" ;;
+    /var/www/html/*) printf '%s/%s' "$COV_MOUNT" "${1#/var/www/html/}" ;;
+    /*)              printf '%s%s' "$COV_CROOT" "$1" ;;
+    *)               printf '%s/%s' "$COV_MOUNT" "$1" ;;
+  esac
+}
 case "${1-}" in
   describe) exit 0 ;;
   exec)
     shift
     if [ "${1-}" = "php" ] && [ "${2-}" = "-m" ]; then printf '[PHP Modules]\npcov\n'; exit 0; fi
     if [ "${1-}" = "vendor/bin/phpunit" ] && [ "${2-}" = "--version" ]; then echo "PHPUnit 9.6.0"; exit 0; fi
+    case "${1-}" in
+      mkdir)
+        shift
+        while [ $# -gt 0 ]; do
+          case "$1" in -*) shift ;; *) mkdir -p "$(cpath "$1")" 2>/dev/null; shift ;; esac
+        done
+        exit 0 ;;
+      rm)
+        shift
+        while [ $# -gt 0 ]; do
+          case "$1" in -*) shift ;; *) rm -rf "$(cpath "$1")" 2>/dev/null; shift ;; esac
+        done
+        exit 0 ;;
+      test)
+        shift
+        [ -n "${2-}" ] || exit 1
+        test "$1" "$(cpath "$2")"
+        exit $? ;;
+      cat)
+        shift
+        cat "$(cpath "${1-}")" 2>/dev/null
+        exit $? ;;
+    esac
     : > "$COV_ARGV_FILE"
     for a in "$@"; do printf '%s\n' "$a" >> "$COV_ARGV_FILE"; done
+    # PHPUnit writes the coverage report itself, at the path it was given, in the
+    # filesystem it can see. Whether the host can then read that file is the question.
+    # COV_NO_CLOVER models the ordinary failure: PHPUnit ran and produced no coverage
+    # report at all (no pcov, a crash, no tests). The gate must not then present an
+    # older report as this run's.
+    prev=""
+    for a in "$@"; do
+      if [ "$prev" = "--coverage-clover" ] && [ "${COV_NO_CLOVER:-0}" != "1" ]; then
+        target="$(cpath "$a")"
+        mkdir -p "${target%/*}" 2>/dev/null
+        printf '<?xml version="1.0"?>\n<coverage><project><file name="src/Foo.php"/></project></coverage>\n' \
+          > "$target" 2>/dev/null
+      fi
+      prev="$a"
+    done
     printf '%s\n' "${COV_PHPUNIT_OUTPUT:-No tests executed!}"
     exit 0 ;;
 esac
@@ -2682,11 +2814,38 @@ make_cov_run() {
   : > "$dir/$webroot/modules/custom/my_module/src/Foo.php"
   : > "$dir/$webroot/modules/custom/my_module/tests/src/Unit/FooTest.php"
 
+  # The container's own filesystem, kept OUTSIDE the fixture: the fixture is the audited
+  # repository, i.e. the bind mount, and the whole point is that the two are different
+  # places. Anything the container writes to a non-/var/www/html path lands here, where
+  # the host side of the run cannot see it unless it explicitly fetches it.
+  local croot="$TMP/croot_$tag"
+  rm -rf "$croot" >/dev/null 2>&1
+  mkdir -p "$croot" >/dev/null 2>&1
+
+  # REPORT_DIR is pinned to the fixture: cov_json reads <dir>/.reports, and the default
+  # no longer lands there (section Q). Placed before "${envs[@]}" so a caller can still
+  # override it.
   ( cd "$dir" && env PATH="$COV_STUBDIR:$PATH" COV_ARGV_FILE="$dir/argv" \
+      COV_MOUNT="$dir" COV_CROOT="$croot" \
+      REPORT_DIR="$dir/.reports" \
       "${envs[@]+"${envs[@]}"}" bash "$COV" "${args[@]+"${args[@]}"}" ) \
     > "$dir/out" 2>&1
   printf '%s' "$?" > "$dir/rc"
   printf '%s' "$dir"
+}
+
+# Every clover.xml anywhere under the fixture (the audited repository), as paths relative
+# to it, sorted and comma-joined. NONE when there is no such file.
+#
+# The report is supposed to arrive at .reports/coverage/clover.xml on the HOST and the
+# repository is supposed to be left alone, so both halves of the answer are in one string:
+# a fix that copies the file out but also leaves one in the tree, and a fix that keeps the
+# tree clean by never producing a report at all, are both visible here and neither can be
+# mistaken for the other.
+cov_clover_in_repo() {
+  local dir="$1" found=""
+  found="$(cd "$dir" && find . -name clover.xml -printf '%P\n' 2>/dev/null | sort | paste -sd, -)"
+  printf '%s' "${found:-NONE}"
 }
 
 # Counts argv entries equal to PAT, as whole lines and as a fixed string. Answers
@@ -2824,6 +2983,117 @@ assert_eq "[cov, over-fire guard — passes on the defect too] --changed did not
   "0" "$(cov_argc "$COV_CHANGED" 'web/modules/custom')"
 assert_eq "[cov, over-fire guard — passes on the defect too] --changed still passes no --testsuite" \
   "0" "$(cov_argc "$COV_CHANGED" '--testsuite')"
+
+# M11: the coverage report crosses the container boundary, and the audited repository is
+# left alone doing it.
+#
+# PHPUnit runs in the DDEV web container. --coverage-clover names a path the CONTAINER
+# writes, and the container's only shared directory is the bind mount at /var/www/html,
+# which IS the audited repository. The gate used to pass
+# /var/www/html/${REPORT_DIR}/coverage/clover.xml, which was coherent for exactly as long
+# as REPORT_DIR was the relative `.reports` — that is, for as long as this tool wrote its
+# reports into the tree it was auditing. Once REPORT_DIR became a host-absolute path
+# outside the repo (section Q), the same expression started naming a directory INSIDE the
+# audited repository AND nowhere the host would look, so coverage silently produced
+# nothing and the audited tree collected a report it never asked for.
+#
+# The stub above models the split: a container path resolves under $COV_CROOT unless it is
+# under /var/www/html. That is what makes these assertions capable of failing. Both halves
+# of the outcome are asserted as ONE value, because either alone is satisfiable by the
+# wrong thing: "nothing in the repo" is also true of a run that produced no report at all,
+# and "a report exists" says nothing about where else one was left.
+COV_CLOVER_REL=".reports/coverage/clover.xml"
+assert_eq "[cov] the clover report is fetched out of the container to the host report directory, and nowhere else" \
+  "$COV_CLOVER_REL" "$(cov_clover_in_repo "$COV_DEFAULT")"
+assert_eq "[cov] --changed fetches its clover report out of the container the same way" \
+  "$COV_CLOVER_REL" "$(cov_clover_in_repo "$COV_CHANGED")"
+
+# M12: and with REPORT_DIR where it now actually lands — OUTSIDE the audited repository —
+# the same thing holds. This is the shape M11 cannot cover: with REPORT_DIR inside the
+# fixture, a naive host-side write would still land at the expected relative path. Here
+# the destination is somewhere the container has never heard of, so the file can only
+# arrive by having been carried across.
+COV_OUT_DIR="$TMP/cov_outside_reports"
+rm -rf "$COV_OUT_DIR"
+COV_OUTSIDE="$(make_cov_run outside web REPORT_DIR="$COV_OUT_DIR" --)"
+assert_eq "[cov] with the report directory outside the repo, clover arrives there" \
+  "yes" "$([ -s "$COV_OUT_DIR/coverage/clover.xml" ] && printf 'yes' || printf 'no')"
+assert_eq "[cov] and the audited repository is left without a clover report of its own" \
+  "NONE" "$(cov_clover_in_repo "$COV_OUTSIDE")"
+# The BYTES, not just a file of the right name. The uncovered-files block downstream
+# reads this path back off the host, so what matters is that the host holds what the
+# container produced — a fetch that created an empty file, or that a later step
+# overwrote, would satisfy "a clover.xml exists" and nothing else.
+assert_eq "[cov] the bytes the host reads back are the ones the container wrote" \
+  "yes" "$(grep -q 'src/Foo.php' "$COV_OUT_DIR/coverage/clover.xml" 2>/dev/null && printf 'yes' || printf 'no')"
+
+# M13: a clover from an EARLIER run must not survive into this one's report directory.
+# The fetch can legitimately come back with nothing — no pcov, a PHPUnit that died — and
+# the uncovered-files block downstream reads whatever is at that path with no idea how old
+# it is, so a run that measured nothing would report the previous run's files as its own.
+COV_STALE_DIR="$TMP/cov_stale_reports"
+rm -rf "$COV_STALE_DIR"; mkdir -p "$COV_STALE_DIR/coverage"
+printf '<?xml version="1.0"?>\n<coverage><project><file name="src/Ancient.php"/></project></coverage>\n' \
+  > "$COV_STALE_DIR/coverage/clover.xml"
+COV_STALE="$(make_cov_run stale web REPORT_DIR="$COV_STALE_DIR" COV_NO_CLOVER=1 --)"
+assert_eq "[cov] a run that produced no coverage does not leave the previous run's clover in place" \
+  "absent" "$([ -e "$COV_STALE_DIR/coverage/clover.xml" ] && printf 'present' || printf 'absent')"
+# Over-fire guard: "clear the stale file" must not have become "clear the file". A FRESH
+# run into the SAME report directory the stale one just had cleared, this time producing
+# coverage, has to leave its own report there.
+#
+# It has to be a fresh run rather than a re-read of M12's artifact. Re-reading M12's
+# output directory asserts nothing about the clearing at all — that run never touched
+# this directory — so it could only fail if M12 had already failed, which makes it noise
+# rather than a guard. The BYTES are checked too: the ancient file this section seeded
+# names src/Ancient.php and the container writes src/Foo.php, so "a clover.xml is there"
+# cannot be satisfied by the stale one having survived after all.
+COV_STALE_KEEP="$(make_cov_run stale_keep web REPORT_DIR="$COV_STALE_DIR" --)"
+assert_eq "[cov, over-fire guard] a later run that DID produce coverage still lands its clover in the same directory" \
+  "yes" "$([ -s "$COV_STALE_DIR/coverage/clover.xml" ] && printf 'yes' || printf 'no')"
+assert_eq "[cov, over-fire guard] and it is this run's clover, not the one the stale run cleared" \
+  "yes" "$(grep -q 'src/Foo.php' "$COV_STALE_DIR/coverage/clover.xml" 2>/dev/null && printf 'yes' || printf 'no')"
+assert_eq "[cov, over-fire guard] and that run left no clover in the audited repository either" \
+  "NONE" "$(cov_clover_in_repo "$COV_STALE_KEEP")"
+
+# M14: a modules path the CONTAINER has no name for stops the gate, rather than
+# instrumenting nothing and reporting the result as a percentage.
+#
+# cqt_container_path translates a project path into the container's view of it. An
+# absolute DRUPAL_MODULES_PATH that is not inside the repository has no such view: the
+# bind mount is the repository and nothing else is shared. The function said so — two WARN
+# lines — and then RETURNED THE HOST PATH ANYWAY, so `-d pcov.directory=<host path>` went
+# to the container regardless, named a directory that does not exist there, and pcov
+# instrumented no files. The percentage that came back was measured over nothing, and this
+# gate's exit status is read by full-audit.sh. A warning at the top of a gate is not a
+# refusal at the bottom of it.
+#
+# Four things in one value, because the exit status alone does NOT discriminate: the old
+# behaviour also ended in exit 2, by way of 0% coverage failing the minimum. What
+# separates them is whether PHPUnit was invoked at all, whether the unusable path reached
+# its argv, and whether the run said why it stopped.
+COV_ABSMODS="$TMP/cov_absmods_outside"; mkdir -p "$COV_ABSMODS"
+COV_ABS="$(make_cov_run absmods web DRUPAL_MODULES_PATH="$COV_ABSMODS" --)"
+assert_eq "[cov] a modules path the container cannot see stops the gate instead of measuring nothing" \
+  "2|NO-ARGV|absent|named" \
+  "$(cat "$COV_ABS/rc" 2>/dev/null || printf 'NO-RC')|$(cov_argc "$COV_ABS" 'vendor/bin/phpunit')|$(grep -qF -- "$COV_ABSMODS" "$COV_ABS/argv" 2>/dev/null && printf 'present' || printf 'absent')|$(grep -q 'Coverage cannot be scoped' "$COV_ABS/out" 2>/dev/null && printf 'named' || printf 'unnamed')"
+
+# The --changed path carries its own copy of the PCOV block and therefore its own call to
+# the guard. Asserted separately because a fix applied to one entry point and not the other
+# is the shape this suite has already been bitten by; the mapped-test invocation is what
+# would otherwise run, so NO-ARGV is the observable here too.
+COV_ABS_CHANGED="$(make_cov_run absmods_changed web DRUPAL_MODULES_PATH="$COV_ABSMODS" \
+  -- --changed web/modules/custom/my_module/src/Foo.php)"
+assert_eq "[cov] --changed mode refuses the same unusable modules path" \
+  "2|NO-ARGV|named" \
+  "$(cat "$COV_ABS_CHANGED/rc" 2>/dev/null || printf 'NO-RC')|$(cov_argc "$COV_ABS_CHANGED" 'vendor/bin/phpunit')|$(grep -q 'Coverage cannot be scoped' "$COV_ABS_CHANGED/out" 2>/dev/null && printf 'named' || printf 'unnamed')"
+
+# M14b: over-fire guard — the refusal must not fire on the ordinary project-relative path,
+# or the gate would have stopped working entirely and every assertion above it would be
+# reporting on a run that never happened.
+assert_eq "[cov, over-fire guard] the ordinary relative modules path is not refused" \
+  "not-refused" \
+  "$(grep -q 'Coverage cannot be scoped' "$COV_DEFAULT/out" 2>/dev/null && printf 'refused' || printf 'not-refused')"
 
 # ── O. the shipped phpstan template does not defeat phpstan-drupal's own rules ──
 echo ""
@@ -3122,15 +3392,22 @@ echo "P: full-audit hands the gates the paths it resolved, and cannot hide a ski
 
 P_ROOT="$TMP/pa_root"; mkdir -p "$P_ROOT/core" "$P_ROOT/drupal" "$P_ROOT/nextjs"
 cp "$FULL" "$P_ROOT/core/full-audit.sh"
+# full-audit.sh sources the report-directory rule from its own core/ directory, so the
+# sandbox needs the real one. Copied rather than stubbed: the resolution it performs is
+# part of what these runs exercise.
+cp "${ROOT}/core/report-dir.sh" "$P_ROOT/core/report-dir.sh" 2>/dev/null || true
 
 cat > "$P_ROOT/core/detect-environment.sh" <<'STUB'
 #!/usr/bin/env bash
 # Emits the environment.json the run under test is supposed to consume. The path fields
 # are injected verbatim so a legacy document that lacks them entirely can be modelled.
+# P_DETECT_EXIT models a detection that WROTE its findings and then stopped the run
+# (the lockfile-drift hard stop does exactly that), so the caller can be observed
+# reacting to the file rather than only to the status.
 mkdir -p "${REPORT_DIR:-.reports}"
 printf '{"project_type": "%s"%s}\n' "${P_PTYPE:-drupal}" "${P_FIELDS:-}" \
   > "${REPORT_DIR:-.reports}/environment.json"
-exit 0
+exit "${P_DETECT_EXIT:-0}"
 STUB
 printf '#!/usr/bin/env bash\nexit 0\n' > "$P_ROOT/core/install-tools.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$P_ROOT/core/report-processor.sh"
@@ -3175,6 +3452,7 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$P_BIN/ddev"; chmod +x "$P_BIN/ddev"
 # there.
 run_p_audit() {
   local ptype="$1" fields="$2" solid_status="$3" solid_exit="$4" solid_write="$5" stale="$6"
+  local detect_exit="${7:-0}"
   local work rc=0
   work="$(mktemp -d "$TMP/pa.XXXXXX")"
   mkdir -p "$work/.reports"
@@ -3186,7 +3464,7 @@ run_p_audit() {
   ( cd "$work" || exit 9
     env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH \
       PATH="$P_BIN:/usr/bin:/bin" REPORT_DIR="$work/.reports" \
-      P_PTYPE="$ptype" P_FIELDS="$fields" \
+      P_PTYPE="$ptype" P_FIELDS="$fields" P_DETECT_EXIT="$detect_exit" \
       P_SOLID_STATUS="$solid_status" P_SOLID_EXIT="$solid_exit" P_SOLID_WRITE="$solid_write" \
       bash "$P_ROOT/core/full-audit.sh"
   ) > "$work/out.txt" 2>&1 || rc=$?
@@ -3289,6 +3567,1209 @@ assert_eq "[stale report] a crashed gate is not judged by the previous run's rep
   "fail" "$(p_field "$P_STALE" solid_score)"
 assert_eq "[stale report] the crashed gate fails the run rather than passing it" \
   "fail" "$(p_field "$P_STALE" overall_score)"
+
+# ── Q. where a report goes is resolved in one place, in a fixed order (item 15) ──
+echo ""
+echo "Q: the report directory is resolved by the documented order"
+
+# Every script resolved its own output as REPORT_DIR="${REPORT_DIR:-.reports}" — a
+# RELATIVE path, so the default landed inside whatever repository was being audited.
+# That is somebody else's tree, it is committable, and it does not accumulate across
+# repos. The resolution order is now:
+#
+#   1. $REPORT_DIR, when explicitly set.
+#   2. the ai-dev-assistant project folder registered for this working directory,
+#      under <project>/audits/<date>/.
+#   3. otherwise outside the repo entirely, under
+#      $XDG_STATE_HOME/code-quality-tools/<project-name>/<timestamp>/.
+#   4. .reports/ ONLY as an explicit opt-in (REPORT_DIR_IN_REPO=1), gitignored at
+#      creation.
+#
+# The rule lives in core/report-dir.sh and every script sources it, because the old
+# one-line default appeared in sixteen scripts independently and nothing routed through
+# detect-environment.sh's setup_report_dir(). Section R asserts that routing.
+LIB="${ROOT}/core/report-dir.sh"
+
+# The fixtures and helpers below are shared with sections R and S, which drive the
+# SHIPPED scripts rather than the library, so they are built unconditionally. Only the
+# assertions that source the library directly sit behind the existence guard.
+Q_HOME="$TMP/q_home"; mkdir -p "$Q_HOME/.claude/ai-dev-assistant"
+Q_CODE="$TMP/q_code"; mkdir -p "$Q_CODE/sub/deeper"
+Q_PROJ="$TMP/q_proj/demo"; mkdir -p "$Q_PROJ"
+Q_CODE_R="$(cd "$Q_CODE" && pwd -P)"
+Q_PROJ_R="$(cd "$Q_PROJ" && pwd -P)"
+
+# Resolves in a SEPARATE bash process, the way a gate does. HOME is redirected so the
+# registry lookup reads a fixture and not the developer's own machine, and REPORT_DIR
+# / REPORT_DIR_ORIGIN / REPORT_DIR_IN_REPO are cleared so a value leaking in from the
+# spec's own environment cannot decide the answer. Extra arguments are env assignments
+# for that run; `env` applies them after the unsets, so a caller can still set
+# REPORT_DIR deliberately. Echoes "<path>|<origin>".
+q_resolve() {
+  local dir="$1"; shift
+  env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" "$@" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_resolve_report_dir
+             printf "%s|%s" "${REPORT_DIR}" "${REPORT_DIR_ORIGIN}"' \
+    _ "$dir" "$LIB" 2>/dev/null
+}
+q_path()   { printf '%s' "${1%%|*}"; }
+q_origin() { printf '%s' "${1##*|}"; }
+# Names the relationship instead of asserting an exact string, so "it landed in the
+# repo" is reported as that rather than as an opaque mismatch.
+q_where() {
+  local base="$1" got="$2"
+  case "$got" in
+    "")        printf 'EMPTY' ;;
+    "$base"|"$base"/*) printf 'inside' ;;
+    /*)        printf 'outside' ;;
+    *)         printf 'relative' ;;
+  esac
+}
+
+# Writes an ai-dev-assistant registry into the fixture HOME. Arguments are
+# <name>:<codePath>:<projectPath>[:<lastAccessed>] records; a codePath of "-" omits the
+# field, which several real records do, and lastAccessed is omitted when not given —
+# also as several real records do.
+q_registry() {
+  local file="$1"; shift
+  local body="" spec name code path seen
+  mkdir -p "$(dirname "$file")"
+  for spec in "$@"; do
+    name="${spec%%:*}"; spec="${spec#*:}"
+    code="${spec%%:*}"; spec="${spec#*:}"
+    case "$spec" in
+      *:*) path="${spec%%:*}"; seen="${spec#*:}" ;;
+      *)   path="$spec"; seen="" ;;
+    esac
+    if [ "$code" = "-" ]; then
+      body="${body}${body:+,}{\"name\":\"${name}\",\"path\":\"${path}\"${seen:+,\"lastAccessed\":\"${seen}\"}}"
+    else
+      body="${body}${body:+,}{\"name\":\"${name}\",\"codePath\":\"${code}\",\"path\":\"${path}\"${seen:+,\"lastAccessed\":\"${seen}\"}}"
+    fi
+  done
+  printf '{"version":"1.1","projectsBase":"%s","projects":[%s]}\n' \
+    "$TMP/q_proj" "$body" > "$file"
+}
+
+Q_REG="$Q_HOME/.claude/ai-dev-assistant/active_projects.json"
+Q_LEGACY="$Q_HOME/.claude/drupal-dev-framework/active_projects.json"
+
+if [[ ! -f "$LIB" ]]; then
+  bad "core/report-dir.sh exists (the single place the rule lives)"
+else
+  ok "core/report-dir.sh exists (the single place the rule lives)"
+
+
+  # Q1 (step 1): an explicit REPORT_DIR is returned untouched. This one passed before
+  # the change too — it is the invariant the whole redesign rests on (the plumbing was
+  # already there), so it is here as a regression guard, not as evidence of the fix.
+  rm -f "$Q_REG" "$Q_LEGACY"
+  Q1="$(q_resolve "$Q_CODE" REPORT_DIR="$TMP/q_explicit")"
+  assert_eq "[step 1, regression guard] an explicit REPORT_DIR wins and is unchanged" \
+    "$TMP/q_explicit|explicit" "$Q1"
+
+  # Q2 (step 3): no registered project and no opt-in — the default must be OUTSIDE the
+  # directory being audited. This is the defect.
+  Q2="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 3] with no project registered the default is outside the audited tree" \
+    "outside" "$(q_where "$Q_CODE_R" "$(q_path "$Q2")")"
+  assert_eq "[step 3] and it says so" "state" "$(q_origin "$Q2")"
+  Q2_ROOT="$Q_HOME/.local/state/code-quality-tools"
+  assert_eq "[step 3] under the XDG state root, keyed by project name" \
+    "inside" "$(q_where "$Q2_ROOT/q_code" "$(q_path "$Q2")")"
+
+  # Q3: XDG_STATE_HOME is honoured rather than $HOME/.local/state being hardcoded.
+  Q3="$(q_resolve "$Q_CODE" XDG_STATE_HOME="$TMP/q_xdg")"
+  assert_eq "[step 3] XDG_STATE_HOME decides the state root when set" \
+    "inside" "$(q_where "$TMP/q_xdg/code-quality-tools" "$(q_path "$Q3")")"
+
+  # Q4 (step 2): a registered ai-dev-assistant project for this working directory wins
+  # over the state directory, and the report lands beside task.md.
+  q_registry "$Q_REG" "demo:${Q_CODE_R}:${Q_PROJ_R}"
+  Q4="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] a registered project folder takes the report" \
+    "${Q_PROJ_R}/audits/$(date +%Y-%m-%d)|project" "$Q4"
+
+  # Q5: matching is by containment, not equality — an audit run from a subdirectory of
+  # the registered codePath is the same engagement.
+  Q5="$(q_resolve "$Q_CODE/sub/deeper")"
+  assert_eq "[step 2] a subdirectory of the registered codePath matches the same project" \
+    "${Q_PROJ_R}/audits/$(date +%Y-%m-%d)|project" "$Q5"
+
+  # Q6: a prefix that is not a path component must NOT match. "$Q_CODE-other" starts
+  # with the codePath as a STRING while being an unrelated directory, and handing an
+  # audit of one client's repo to another client's project folder is the worst outcome
+  # this resolution can produce.
+  Q_SIBLING="${Q_CODE}-other"; mkdir -p "$Q_SIBLING"
+  Q6="$(q_resolve "$Q_SIBLING")"
+  assert_eq "[step 2] a sibling sharing a string prefix is not treated as the project" \
+    "state" "$(q_origin "$Q6")"
+
+  # Q7: nested registrations resolve to the most specific one. Registering both a
+  # repository and a module inside it is normal, and the module is the better answer.
+  Q_INNER_CODE="$Q_CODE_R/sub"
+  Q_INNER_PROJ="$TMP/q_proj/inner"; mkdir -p "$Q_INNER_PROJ"
+  q_registry "$Q_REG" "demo:${Q_CODE_R}:${Q_PROJ_R}" "inner:${Q_INNER_CODE}:$(cd "$Q_INNER_PROJ" && pwd -P)"
+  Q7="$(q_resolve "$Q_CODE/sub/deeper")"
+  assert_eq "[step 2] the longest matching codePath wins, not whichever is listed first" \
+    "$(cd "$Q_INNER_PROJ" && pwd -P)/audits/$(date +%Y-%m-%d)|project" "$Q7"
+
+  # Q7b: several projects registered against ONE codePath is the ordinary case, not an
+  # exotic one — a repository worked on across successive efforts gets a project record
+  # per effort, and the machine this was written on has three against a single path.
+  # Length cannot separate them, and this used to break the tie on lastAccessed.
+  #
+  # That tiebreak is gone. lastAccessed is written by another tool at another time; it is
+  # missing from many real records and stale in many others, and on the repository this
+  # was written in it selects a project that is not the engagement in progress. A rule
+  # that is usually right is the wrong shape here, because being wrong means one client's
+  # findings are filed under another client's name with nothing to show for it.
+  #
+  # The fixture deliberately KEEPS the lastAccessed fields: the assertion is not "there
+  # was no way to choose", it is "there was an obvious way to choose and it is not used".
+  # That is what stops the tiebreak being quietly reinstated.
+  Q_RECENT="$TMP/q_proj/recent"; mkdir -p "$Q_RECENT"
+  Q_RECENT_R="$(cd "$Q_RECENT" && pwd -P)"
+  q_registry "$Q_REG" "old:${Q_CODE_R}:${Q_PROJ_R}:2026-01-01" "current:${Q_CODE_R}:${Q_RECENT_R}:2026-08-01"
+  Q7B="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] two projects on one codePath decline, even with a lastAccessed that could rank them" \
+    "state" "$(q_origin "$Q7B")"
+
+  # Q7c: the same with no lastAccessed at all, which is what many real records look like.
+  # Declining costs a convenience; guessing files one client's findings under another's.
+  q_registry "$Q_REG" "a:${Q_CODE_R}:${Q_PROJ_R}" "b:${Q_CODE_R}:${Q_RECENT_R}"
+  Q7C="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] an unresolvable tie declines rather than picking one" \
+    "state" "$(q_origin "$Q7C")"
+
+  # Q7d: over-fire guard, and labelled as one — it cannot tell the tiebreak from its
+  # absence. Two records naming the SAME folder are not a tie, and must still resolve,
+  # or "decline on ambiguity" would quietly become "decline whenever duplicated".
+  q_registry "$Q_REG" "a:${Q_CODE_R}:${Q_PROJ_R}" "b:${Q_CODE_R}:${Q_PROJ_R}"
+  Q7D="$(q_resolve "$Q_CODE")"
+  assert_eq "[duplicate records, over-fire guard] two records for one folder still resolve" \
+    "${Q_PROJ_R}/audits/$(date +%Y-%m-%d)|project" "$Q7D"
+
+  # Q8: records without a codePath are common in the real registry. They must be skipped
+  # rather than crashing the lookup or matching everything.
+  q_registry "$Q_REG" "nocode:-:${Q_PROJ_R}" "demo:${Q_CODE_R}:${Q_PROJ_R}"
+  Q8="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] a record with no codePath is skipped, not matched" \
+    "project" "$(q_origin "$Q8")"
+
+  # Q9: a registered project whose folder no longer exists is not a place to write. A
+  # wrong project folder is worse than none, so fall through rather than create one.
+  q_registry "$Q_REG" "gone:${Q_CODE_R}:$TMP/q_proj/does-not-exist"
+  Q9="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] a project folder that does not exist falls through to step 3" \
+    "state" "$(q_origin "$Q9")"
+
+  # Q10: the legacy drupal-dev-framework registry is still consulted.
+  rm -f "$Q_REG"
+  q_registry "$Q_LEGACY" "demo:${Q_CODE_R}:${Q_PROJ_R}"
+  Q10="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] the legacy drupal-dev-framework registry is read too" \
+    "project" "$(q_origin "$Q10")"
+  rm -f "$Q_LEGACY"
+
+  # Q11: without jq the registry cannot be read reliably. Guessing at a project folder
+  # by grepping JSON is how an audit ends up in the wrong client's directory, so the
+  # lookup declines and step 3 takes over. Proven by running with a PATH that resolves
+  # date and git but not jq.
+  q_registry "$Q_REG" "demo:${Q_CODE_R}:${Q_PROJ_R}"
+  Q_NOJQ="$TMP/q_nojq"; mkdir -p "$Q_NOJQ"
+  for q_t in bash sh env date git mkdir chmod grep sed cat tail head ls rm dirname basename pwd; do
+    q_src="$(command -v "$q_t" 2>/dev/null || true)"
+    [ -n "$q_src" ] && ln -sf "$q_src" "$Q_NOJQ/$q_t"
+  done
+  Q11="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" PATH="$Q_NOJQ" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_resolve_report_dir
+             printf "%s|%s" "${REPORT_DIR}" "${REPORT_DIR_ORIGIN}"' _ "$Q_CODE" "$LIB" 2>/dev/null)"
+  assert_eq "[step 2] no jq means the registry is not read at all, not guessed at" \
+    "state" "$(q_origin "$Q11")"
+  assert_eq "[step 2] and declining still lands outside the audited tree" \
+    "outside" "$(q_where "$Q_CODE_R" "$(q_path "$Q11")")"
+  rm -f "$Q_REG"
+
+  # Q12 (step 4): .reports/ is reachable, but only by asking for it.
+  Q12="$(q_resolve "$Q_CODE" REPORT_DIR_IN_REPO=1)"
+  assert_eq "[step 4] REPORT_DIR_IN_REPO=1 opts back in to .reports" \
+    ".reports|in-repo-opt-in" "$Q12"
+
+  # Q13: a child process must reach the SAME directory as its parent. full-audit.sh
+  # resolves, then runs detect-environment.sh and every gate as separate processes; if
+  # each re-resolved, the step-3 timestamp would differ per process and full-audit would
+  # look for an environment.json that a child wrote somewhere else.
+  #
+  # Asserted on the child's raw ENVIRONMENT, not on what a child that re-resolves comes
+  # up with. The obvious form of this assertion — resolve in the parent, resolve again in
+  # a child, compare the two paths — does not discriminate: the timestamp has one-second
+  # granularity, so an unexported REPORT_DIR yields the same string almost every time and
+  # the assertion passes on the broken version. Verified by mutation: dropping the export
+  # left that form green. Reading the variable out of the child's environment cannot be
+  # satisfied by a coincidence of timing.
+  Q13="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_resolve_report_dir
+             expected="$REPORT_DIR"
+             seen="$(bash -c '"'"'printf "%s" "${REPORT_DIR-UNSET}"'"'"')"
+             if [ "$seen" = "$expected" ]; then printf "inherited"; else printf "%s" "$seen"; fi' \
+    _ "$Q_CODE" "$LIB" 2>/dev/null)"
+  assert_eq "a child process is handed the resolved directory in its environment" \
+    "inherited" "$Q13"
+
+  # Q14: and the reason is handed down with it, so the child's own "where the report
+  # went" line does not report every inherited value as one the caller typed. Same
+  # reasoning as Q13 for reading the environment directly.
+  Q14="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_resolve_report_dir
+             bash -c '"'"'printf "%s" "${REPORT_DIR_ORIGIN-UNSET}"'"'"'' \
+    _ "$Q_CODE" "$LIB" 2>/dev/null)"
+  assert_eq "the inherited origin travels too, so it is not relabelled as explicit" \
+    "state" "$Q14"
+
+  # Q15: and a child that sources the library keeps what it was handed rather than
+  # resolving again. This is the behaviour full-audit.sh depends on; Q13 is what makes it
+  # observable, since without the export this comparison would usually agree by accident.
+  Q15="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_resolve_report_dir
+             parent="$REPORT_DIR"
+             child="$(bash -c ". \"$2\"; cqt_resolve_report_dir; printf %s \"\$REPORT_DIR\"")"
+             if [ "$parent" = "$child" ]; then printf "same"; else printf "%s != %s" "$parent" "$child"; fi' \
+    _ "$Q_CODE" "$LIB" 2>/dev/null)"
+  assert_eq "a child that sources the library resolves to the inherited directory" \
+    "same" "$Q15"
+
+  # ── the registry is another tool's file, so its records are checked, not trusted ──
+  #
+  # Step 2 hands the report directory to a value read out of JSON somebody else writes.
+  # Three shapes of record defeat the invariant this whole file exists for, and none of
+  # them is exotic enough to leave to chance.
+
+  # Q16: codePath "/" matches every directory on the machine. One such record — a
+  # mis-typed setup, a default that was never filled in — would capture every audit run
+  # anywhere and file them all under one project. The tie rules cannot help: it is a
+  # single record, so there is nothing to tie with.
+  q_registry "$Q_REG" "everything:/:${Q_PROJ_R}"
+  Q16="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] a codePath of / does not capture the audit" "state" "$(q_origin "$Q16")"
+
+  # Q17: a RELATIVE project path. It resolves against whatever directory the process
+  # happens to be in, and REPORT_DIR is EXPORTED to every gate full-audit.sh runs — so the
+  # one thing a relative answer guarantees is that different parts of one audit disagree
+  # about where the report is. A relative path that lands inside the tree is already
+  # refused by the containment check below, which is why the fixture uses one that escapes
+  # it: `../q_rel_out` really exists, is really writable, and really is outside the audited
+  # directory, so nothing except "a project path must be absolute" can turn it down. That
+  # is what makes this assertion capable of failing — verified by mutation: with the
+  # absolute check removed and an inside-the-tree fixture, this stayed green.
+  Q_RELOUT="$TMP/q_rel_out"; mkdir -p "$Q_RELOUT"
+  q_registry "$Q_REG" "rel:${Q_CODE_R}:../q_rel_out"
+  Q17="$(q_resolve "$Q_CODE")"
+  assert_eq "[step 2] a relative project path is refused, not resolved against the caller's cwd" \
+    "state" "$(q_origin "$Q17")"
+
+  # Q18: an ABSOLUTE project path that points INSIDE the audited repository. Absolute is
+  # not the same as outside, and "the registry said so" is not a reason to write a report
+  # into somebody else's checkout. The folder here really exists and is writable, so the
+  # only thing that can refuse it is the containment check.
+  Q_INREPO="$TMP/q_inrepo"; mkdir -p "$Q_INREPO/notes"
+  git -C "$Q_INREPO" init -q 2>/dev/null
+  Q_INREPO_R="$(cd "$Q_INREPO" && pwd -P)"
+  q_registry "$Q_REG" "inside:${Q_INREPO_R}:${Q_INREPO_R}/notes"
+  Q18="$(q_resolve "$Q_INREPO")"
+  assert_eq "[step 2] a project folder inside the audited repository is refused" \
+    "state" "$(q_origin "$Q18")"
+  assert_eq "[step 2] and the report still lands outside the tree" \
+    "outside" "$(q_where "$Q_INREPO_R" "$(q_path "$Q18")")"
+
+  # Q19: over-fire guard, and labelled as one — it cannot tell the containment check from
+  # its absence. The same repository with the project folder just OUTSIDE it must still
+  # resolve, or "refuse a folder inside the tree" would have become "refuse everything".
+  Q_BESIDE="$TMP/q_beside"; mkdir -p "$Q_BESIDE"
+  Q_BESIDE_R="$(cd "$Q_BESIDE" && pwd -P)"
+  q_registry "$Q_REG" "beside:${Q_INREPO_R}:${Q_BESIDE_R}"
+  Q19="$(q_resolve "$Q_INREPO")"
+  assert_eq "[over-fire guard] a project folder beside the repository still resolves" \
+    "${Q_BESIDE_R}/audits/$(date +%Y-%m-%d)|project" "$Q19"
+  rm -f "$Q_REG"
+fi
+
+# ── R. nothing lands in the audited repository unless it was asked for (item 15) ──
+echo ""
+echo "R: the audited repository is left alone, and the run says where the report went"
+
+# R1: the invariant, over the situations that actually occur. A git repository, a
+# repository that already has a .reports/ from an older version of this tool, and a
+# plain directory. None of them may receive the default.
+if [[ -f "$LIB" ]]; then
+  for r_case in gitrepo legacy plain; do
+    R_DIR="$TMP/r_$r_case"; mkdir -p "$R_DIR"
+    case "$r_case" in
+      gitrepo) git -C "$R_DIR" init -q 2>/dev/null ;;
+      legacy)  git -C "$R_DIR" init -q 2>/dev/null; mkdir -p "$R_DIR/.reports" ;;
+    esac
+    R_DIR_R="$(cd "$R_DIR" && pwd -P)"
+    R_GOT="$(q_path "$(q_resolve "$R_DIR")")"
+    assert_eq "[$r_case] the default report directory is not inside the audited tree" \
+      "outside" "$(q_where "$R_DIR_R" "$R_GOT")"
+  done
+
+  # R2: the directory is created private. Reports quote lines out of the audited source
+  # and name the files gitleaks matched in, so world-readable is the wrong default on a
+  # shared machine. Asserted on the DIRECTORY, not on individual files: every tool in
+  # the suite writes its own files here (tee, jest --coverageDirectory, jq), so a
+  # per-file chmod would have to enumerate them and would go stale on the next one.
+  R_PERM="$TMP/r_perm/nested"
+  env -u REPORT_DIR_ORIGIN HOME="$Q_HOME" REPORT_DIR="$R_PERM" \
+    bash -c '. "$1"; cqt_report_dir_init' _ "$LIB" >/dev/null 2>&1
+  assert_eq "a created report directory is not world- or group-readable" \
+    "700" "$(stat -c '%a' "$R_PERM" 2>/dev/null || printf 'MISSING')"
+
+  # R2b: the out-of-repo path carries a timestamp, so the run directory is unguessable.
+  # A fixed "latest" entry point is what keeps the reports readable back — otherwise the
+  # only way to find them is to scrape the console line. Asserted through the symlink,
+  # so it has to actually resolve to the directory that was written.
+  #
+  # Each fixture run WRITES a file, because that is what a run is. The pointer moves at
+  # the end of a run that produced a report, not at the start of one that created a
+  # directory; R2d below is the other half of that.
+  #
+  # The third argument is the ORIGIN the run declares, defaulting to the out-of-repo
+  # state path these two assertions are about. R2c below passes "project" through it:
+  # the pointer is gated on BOTH the origin and on something having been written, and a
+  # fixture that writes nothing satisfies the emptiness test before the origin test is
+  # ever reached, so it would pass with the origin guard deleted.
+  r_fake_run() {
+    env -u REPORT_DIR_ORIGIN HOME="$Q_HOME" REPORT_DIR="$1" REPORT_DIR_ORIGIN="${3:-state}" \
+      R_WRITE="${2-}" \
+      bash -c '. "$1"
+               cqt_prepare_report_dir
+               [ -n "${R_WRITE:-}" ] && printf "{}" > "${REPORT_DIR}/${R_WRITE}"
+               exit 0' _ "$LIB" >/dev/null 2>&1
+  }
+  R_L1="$TMP/r_latest/first"; R_L2="$TMP/r_latest/second"
+  r_fake_run "$R_L1" report.json
+  r_fake_run "$R_L2" report.json
+  assert_eq "the newest out-of-repo run is reachable by a fixed name" \
+    "$(cd "$R_L2" && pwd -P)" "$(cd "$TMP/r_latest/latest" 2>/dev/null && pwd -P || printf 'NO-POINTER')"
+
+  # R2d: and a run that wrote NOTHING does not take the name away from the one that did.
+  #
+  # The pointer used to be laid down one line after the mkdir, on the strength of a
+  # directory having been created. Every script in the suite creates that directory,
+  # including ones that go on to write no report at all — rector-fix.sh when rector is
+  # missing, install-tools.sh on several paths, and (until this change) the Next.js TDD
+  # workflow, which never had a report to write. `latest` then named an empty directory
+  # and the last real report became unreachable by the only fixed name it had.
+  R_L3="$TMP/r_latest/third"
+  r_fake_run "$R_L3"
+  assert_eq "a run that produced no report leaves the pointer on the run that did" \
+    "$(cd "$R_L2" && pwd -P)" "$(cd "$TMP/r_latest/latest" 2>/dev/null && pwd -P || printf 'NO-POINTER')"
+  # The empty run's directory does exist — this is about the pointer, not about whether
+  # the directory was created. Stated so the assertion above cannot be read as the
+  # weaker claim that nothing happened.
+  assert_eq "the empty run's directory was still created (this is about the pointer)" \
+    "yes" "$([ -d "$R_L3" ] && printf 'yes' || printf 'no')"
+
+  # R2c: and the pointer is not laid down inside somebody's project record, which is a
+  # directory we do not own and which needs no pointer — <project>/audits/<date> is
+  # already a name you can predict.
+  #
+  # Driven through r_fake_run, and WRITING a report, for the same reason R2b does. The
+  # pointer has two conditions — the origin is the state path, and the run produced
+  # something — and a fixture that writes nothing is turned away by the second one
+  # before the first is consulted. This assertion is about the first, so the run has to
+  # get past the second: measured by mutation, deleting the origin guard from
+  # report-dir.sh left the earlier write-nothing version of this assertion green.
+  R_LP="$TMP/r_latest_proj/audits/2026-01-01"
+  r_fake_run "$R_LP" report.json project
+  assert_eq "no pointer is written into a project folder" \
+    "absent" "$([ -e "$TMP/r_latest_proj/audits/latest" ] && printf 'present' || printf 'absent')"
+  # Stated separately so the assertion above cannot be read as the weaker claim that the
+  # run did nothing at all: it wrote its report, and only the pointer was withheld.
+  assert_eq "the project run did write its report (this is about the pointer)" \
+    "yes" "$([ -s "$R_LP/report.json" ] && printf 'yes' || printf 'no')"
+
+  # R3: the opt-in path is the one that can be committed, so that is the one that gets
+  # the gitignore entry. Same machinery section C exercises, reached through the opt-in
+  # rather than through a default that no longer exists.
+  R_OPT="$TMP/r_optin"; mkdir -p "$R_OPT"; git -C "$R_OPT" init -q 2>/dev/null
+  env -u REPORT_DIR -u REPORT_DIR_ORIGIN HOME="$Q_HOME" REPORT_DIR_IN_REPO=1 \
+    bash -c 'cd "$1" || exit 9; . "$2"; cqt_report_dir_init' _ "$R_OPT" "$LIB" >/dev/null 2>&1
+  if git -C "$R_OPT" check-ignore -q .reports 2>/dev/null; then
+    ok "the in-repo opt-in still gitignores what it creates"
+  else
+    bad "the in-repo opt-in still gitignores what it creates"
+  fi
+
+  # R4: with the resolution above, where the report went is no longer obvious, so it is
+  # printed. The directory is taken OUT of the line the run printed and then judged, the
+  # same rule R6 states for itself: recomputing the expected value by calling the
+  # resolver again would embed a second copy of the rule in the spec, and a consistently
+  # wrong resolver agrees with itself. Measured, not assumed — with the default reverted
+  # to `.reports`, the earlier recompute-and-compare version of this assertion stayed
+  # green, in a section titled "the audited repository is left alone" and with the report
+  # landing in the audited repository.
+  #
+  # Three things are judged, because the line is only worth printing if all three hold:
+  # that a directory was named at all, that it is outside the tree being audited, and
+  # that the line says which rule produced it. Asserted as ONE value so a run that
+  # printed nothing cannot satisfy any of them by vacuity.
+  R_PLAIN_R="$(cd "$TMP/r_plain" && pwd -P)"
+  R_SAY="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+    HOME="$Q_HOME" \
+    bash -c 'cd "$1" || exit 9
+             . "$2"
+             cqt_report_dir_init
+             cqt_announce_report_dir' _ "$TMP/r_plain" "$LIB" 2>/dev/null)"
+  R_SAY_PATH="$(printf '%s\n' "$R_SAY" | grep -oE 'Report directory: [^ ]+' | head -1)"
+  R_SAY_PATH="${R_SAY_PATH#Report directory: }"
+  R_SAY_WHY="unlabelled"
+  case "$R_SAY" in
+    *"(outside the audited repository)"*) R_SAY_WHY="outside the audited repository" ;;
+    *"("*")"*) R_SAY_WHY="$(printf '%s' "${R_SAY##*(}" | sed 's/).*//')" ;;
+  esac
+  assert_eq "the run prints where the report went, outside the audited tree, and says which rule chose it" \
+    "outside|outside the audited repository" \
+    "$(q_where "$R_PLAIN_R" "$R_SAY_PATH")|$R_SAY_WHY"
+fi
+
+# R5: the seam is only correct if every script goes through it AT RUNTIME.
+#
+# Sixteen scripts carried their own `REPORT_DIR="${REPORT_DIR:-.reports}"`, and NONE of
+# them called detect-environment.sh's setup_report_dir() — that function created and
+# gitignored a directory only the environment detection itself used. A fix applied there
+# alone would have changed nothing for /code-quality-tools:security or any other gate.
+#
+# This assertion used to be a grep for the string `report-dir.sh` in each file, and that
+# is exactly the shape this whole spec exists to refuse: every one of those files carries
+# a `# shellcheck source=../core/report-dir.sh` COMMENT directly above the `source` line,
+# so the comment alone satisfied the grep. Measured, not assumed — deleting the real
+# `source` line and the init call from nextjs/security-check.sh left the suite at 397
+# passed, 0 failed. The assertion could not tell the wiring from a note about the wiring.
+#
+# So each script is now RUN, in its own fixture, with REPORT_DIR unset and nothing on PATH
+# to let it do real work, and asked where it decided to write. The observable is the line
+# the script itself prints; a script that resolved its own `.reports` prints no such line,
+# and a script whose routing was deleted prints no such line either.
+#
+# The grep survives ONLY as the roster — it decides which scripts get driven, so a new
+# script that uses REPORT_DIR is picked up rather than forgotten. Every script it names is
+# then driven, and the count driven is asserted against the count found, so the roster
+# cannot quietly shrink to nothing and read as success.
+
+# A PATH with the tools these scripts legitimately need and none of the tools they gate
+# on. ddev, npm and npx must NOT resolve: every script then stops shortly after resolving
+# its report directory, which is the only part being observed here.
+R5_BIN="$TMP/r5_bin"; mkdir -p "$R5_BIN"
+for r5_t in bash sh env date git jq mkdir chmod grep sed awk cat tail head ls rm ln \
+            find sort tr wc cut basename dirname pwd stat printf touch mv cp id xargs bc; do
+  r5_src="$(command -v "$r5_t" 2>/dev/null || true)"
+  [ -n "$r5_src" ] && ln -sf "$r5_src" "$R5_BIN/$r5_t"
+done
+R5_LEAK=""
+for r5_t in ddev npm npx composer drush; do
+  PATH="$R5_BIN" command -v "$r5_t" >/dev/null 2>&1 && R5_LEAK="${R5_LEAK}${R5_LEAK:+,}${r5_t}"
+done
+assert_eq "[R5 premise] the narrowed PATH really does hide the tools these gates need" \
+  "" "$R5_LEAK"
+
+# Runs one shipped script in a throwaway project of the right shape, under a fixture HOME
+# with no ai-dev-assistant registry (so step 3 decides) and a fixture XDG_STATE_HOME (so
+# the answer is predictable without recomputing the rule here).
+#
+# `env -i` rather than a list of unsets: the point is that NOTHING from this spec's own
+# environment can decide the script's answer, and an unset list can only remove the
+# variables somebody remembered.
+#
+# Echoes "<where>|<created>|<repo>":
+#   where    inside  — the directory it named is under the fixture state root
+#            outside/relative/EMPTY — anywhere else, reported as what it was
+#            NO-LINE — it never said, which is what an unrouted script does
+#   created  yes/no  — that directory exists on disk afterwards
+#   repo     absent/present — whether a .reports appeared in the audited tree
+r5_probe() {
+  local rel="$1" kind="$2" pattern="$3"
+  local tag="${rel//\//_}"
+  local dir="$TMP/r5/$tag" home="$TMP/r5/home_$tag" state="$TMP/r5/state_$tag"
+  rm -rf "$dir" "$home" "$state" 2>/dev/null
+  mkdir -p "$home/.claude" "$state" "$dir"
+  case "$kind" in
+    drupal)
+      mkdir -p "$dir/web/core/lib" "$dir/web/modules/custom" "$dir/web/themes/custom"
+      printf "const VERSION = '10.5.0';\n" > "$dir/web/core/lib/Drupal.php" ;;
+    nextjs)
+      printf 'module.exports = {}\n' > "$dir/next.config.js"
+      printf '{"name":"x","dependencies":{"next":"14.0.0"}}\n' > "$dir/package.json" ;;
+  esac
+  git -C "$dir" init -q 2>/dev/null
+
+  local out=""
+  out="$(timeout 120 env -i PATH="$R5_BIN" HOME="$home" XDG_STATE_HOME="$state" \
+    "$R5_BIN/bash" -c 'cd "$1" || exit 9; "$2"' _ "$dir" "$ROOT/$rel" 2>&1 \
+    | sed $'s/\033\\[[0-9;]*m//g')"
+
+  local named=""
+  named="$(printf '%s\n' "$out" | grep -oE "${pattern}[^ ]+" | head -1)"
+  named="${named#"${pattern}"}"
+  # The extractor for report-processor.sh names a FILE inside the directory.
+  case "$named" in */audit-report.json) named="${named%/audit-report.json}" ;; esac
+
+  local where="NO-LINE"
+  [ -n "$named" ] && where="$(q_where "$state/code-quality-tools" "$named")"
+  # Written HERE, at the end of the probe, and by the probe rather than by the loop that
+  # calls it: what this records is that this script was really driven to completion, which
+  # is a different fact from "the loop reached this element". The assertion after the loop
+  # compares this list against the roster. Its predecessor compared a counter incremented
+  # once per element against the length of the array it was iterating, which is the same
+  # number by construction and could not fail whatever the loop or the probe did.
+  printf '%s\n' "$rel" >> "$TMP/r5_driven"
+  printf '%s|%s|%s' \
+    "$where" \
+    "$([ -n "$named" ] && [ -d "$named" ] && printf 'yes' || printf 'no')" \
+    "$([ -e "$dir/.reports" ] && printf 'present' || printf 'absent')"
+}
+
+# The roster. Derived from the source, so a script added later is driven rather than
+# missed, and then checked against the list it is expected to be.
+#
+# It used to be asserted for SIZE, `-ge 15` against a roster of exactly 15. That catches a
+# roster that collapsed to nothing and nothing else: a change that drops one script and
+# adds another keeps the count and leaves one script unprotected, and the failure message
+# is a number rather than a name. The expected list below has to be edited deliberately
+# when the suite gains or loses a script, which is the point — the edit is where somebody
+# decides that the new script's routing is covered.
+#
+# nextjs/tdd-workflow.sh and drupal/tdd-workflow.sh are deliberately NOT here: neither
+# writes a report, and the Next.js one had its REPORT_DIR reference removed rather than
+# rerouted. A grep-derived roster is what makes that visible instead of assumed.
+R_ALL=()
+while IFS= read -r r_f; do R_ALL+=("$r_f"); done < <(
+  cd "$ROOT" && grep -rl 'REPORT_DIR' --include='*.sh' core drupal nextjs 2>/dev/null \
+    | grep -v '/report-dir.sh$' | sort
+)
+R_EXPECTED=(
+  core/detect-environment.sh core/full-audit.sh core/install-tools.sh
+  core/report-processor.sh
+  drupal/coverage-report.sh drupal/dry-check.sh drupal/lint-check.sh
+  drupal/rector-fix.sh drupal/security-check.sh drupal/solid-check.sh
+  nextjs/coverage-report.sh nextjs/dry-check.sh nextjs/lint-check.sh
+  nextjs/security-check.sh nextjs/solid-check.sh
+)
+assert_eq "[roster] the scripts that reference REPORT_DIR are exactly the ones this section expects" \
+  "$(printf '%s\n' "${R_EXPECTED[@]}" | sort | tr '\n' ' ')" \
+  "$(printf '%s\n' "${R_ALL[@]+"${R_ALL[@]}"}" | sort | tr '\n' ' ')"
+
+# Still worth one grep of its own: an unrouted script would fail the runtime probe below,
+# but a script that sources the rule AND keeps its own `.reports` fallback would pass the
+# probe and still carry the defect in a branch this fixture does not reach.
+R_STRAY=""
+for r_f in "${R_ALL[@]+"${R_ALL[@]}"}"; do
+  if grep -q 'REPORT_DIR:-\.reports' "$ROOT/$r_f" 2>/dev/null; then
+    R_STRAY="${R_STRAY}${R_STRAY:+,}${r_f}"
+  fi
+done
+assert_eq "[contract, not behavioural] no script keeps its own in-repo .reports default" \
+  "" "$R_STRAY"
+
+rm -f "$TMP/r5_driven"
+for r_f in "${R_ALL[@]+"${R_ALL[@]}"}"; do
+  case "$r_f" in
+    nextjs/*) r5_kind=nextjs ;;
+    *)        r5_kind=drupal ;;
+  esac
+  # report-processor.sh converts a report that already exists, so it resolves without
+  # creating anything — deliberately, or every format conversion would leave an empty run
+  # directory behind. It says where it looked when the input is not there, and that is the
+  # observable. `no` for created is the CORRECT answer for this one script.
+  case "$r_f" in
+    core/report-processor.sh) r5_pattern='Error: Input file not found: '; r5_want='inside|no|absent' ;;
+    *)                        r5_pattern='Report directory: ';            r5_want='inside|yes|absent' ;;
+  esac
+  # full-audit.sh is the one script on this roster that SPAWNS others, and the children
+  # source the same rule and print an identically shaped line. This probe takes the first
+  # match in the combined output, so for that one script it cannot tell the parent's
+  # resolution from a child's: with the parent's routing deleted entirely, the child
+  # re-resolves on its own and this probe still reads `inside|yes|absent`. Labelled as a
+  # guard here rather than left claiming something it cannot see; R5b below is the
+  # assertion that fails on that defect.
+  case "$r_f" in
+    core/full-audit.sh)
+      r5_label="[runtime, over-fire guard — a child prints the same line, see R5b]" ;;
+    *)
+      r5_label="[runtime]" ;;
+  esac
+  assert_eq "$r5_label $r_f resolves its report directory through the shared rule, and leaves the repo alone" \
+    "$r5_want" "$(r5_probe "$r_f" "$r5_kind" "$r5_pattern")"
+done
+# The roster against what the PROBE recorded, so a script that was skipped — by a guard
+# added to the probe, by a `continue` added to the loop, by a probe that died before
+# finishing — is named rather than merely counted.
+assert_eq "[runtime] every script on the roster was actually driven" \
+  "$(printf '%s\n' "${R_ALL[@]+"${R_ALL[@]}"}" | sort | tr '\n' ' ')" \
+  "$(sort -u "$TMP/r5_driven" 2>/dev/null | tr '\n' ' ')"
+
+# R5b: full-audit.sh's OWN resolution, and the agreement between it and the processes it
+# spawns. This is the property report-dir.sh's header names as the reason REPORT_DIR is
+# exported at all: full-audit.sh runs detect-environment.sh and every gate as separate
+# processes, and without the export each re-resolves, the timestamped default differs per
+# process, and the driver then looks for an environment.json a child wrote somewhere else.
+#
+# The roster probe above cannot see any of that. It takes the first "Report directory:"
+# line out of the combined output of parent and children, and the children print the same
+# line — so "somebody in this process tree resolved a good path" is all it establishes.
+# Measured, not assumed: with `. report-dir.sh`, cqt_report_dir_init and
+# cqt_announce_report_dir all deleted from full-audit.sh, the roster probe still read
+# `inside|yes|absent`.
+#
+# So what is asserted here is the agreement itself, in three parts that a broken parent
+# cannot satisfy by accident:
+#
+#   attribution  the FIRST announcement is printed before the parent's own "[Step 1/6]"
+#                line, which is printed before any child is spawned. A parent that
+#                resolved nothing contributes no line and the first one is a child's.
+#   agreement    every announcement in the run names the SAME directory. One line means
+#                no child ever announced, which is not agreement and is not accepted as
+#                it; two that differ is the per-process re-resolution the export exists
+#                to prevent.
+#   handover     environment.json is at the path the PARENT announced. The child writes
+#                it at the path the child resolved, and step 1 of full-audit.sh reads it
+#                back at the path the parent resolved, so this is the same disagreement
+#                observed where it actually bites rather than in the console output.
+#
+# Plus the two things the roster probe was covering for this script: the parent's own
+# directory is outside the audited tree, and no .reports appeared in it.
+#
+# Echoes "<attribution>|<agreement>|<handover>|<where>|<repo>".
+r5b_full_audit() {
+  local dir="$TMP/r5b/proj" home="$TMP/r5b/home" state="$TMP/r5b/state"
+  rm -rf "$TMP/r5b" 2>/dev/null
+  mkdir -p "$home/.claude" "$state" \
+           "$dir/web/core/lib" "$dir/web/modules/custom" "$dir/web/themes/custom"
+  printf "const VERSION = '10.5.0';\n" > "$dir/web/core/lib/Drupal.php"
+  git -C "$dir" init -q 2>/dev/null
+  local dir_r=""; dir_r="$(cd "$dir" && pwd -P)"
+
+  local out=""
+  out="$(timeout 120 env -i PATH="$R5_BIN" HOME="$home" XDG_STATE_HOME="$state" \
+    "$R5_BIN/bash" -c 'cd "$1" || exit 9; "$2"' _ "$dir" "$ROOT/core/full-audit.sh" 2>&1 \
+    | sed $'s/\033\\[[0-9;]*m//g')"
+
+  # Every announced directory, in the order printed, without recomputing the rule.
+  local said="" first="" n=0 differ=0
+  while IFS= read -r said; do
+    said="${said#Report directory: }"
+    n=$((n + 1))
+    if [ "$n" -eq 1 ]; then first="$said"; elif [ "$said" != "$first" ]; then differ=1; fi
+  done < <(printf '%s\n' "$out" | grep -oE 'Report directory: [^ ]+')
+
+  # Line numbers rather than a range match, so an output with no "[Step 1/6]" at all is
+  # reported as that instead of letting the whole output count as "before step 1".
+  local at_say="" at_step=""
+  at_say="$(printf '%s\n' "$out" | grep -n 'Report directory: ' | head -1 | cut -d: -f1)"
+  at_step="$(printf '%s\n' "$out" | grep -n '\[Step 1/6\]' | head -1 | cut -d: -f1)"
+
+  local attribution="no-line" parent=""
+  if [ -z "$at_say" ]; then
+    attribution="no-line"
+  elif [ -z "$at_step" ]; then
+    attribution="no-step-marker"
+  elif [ "$at_say" -lt "$at_step" ]; then
+    attribution="parent-first"
+    parent="$first"
+  else
+    attribution="child-only"
+  fi
+
+  local agreement="agree"
+  if [ "$n" -eq 0 ]; then agreement="no-line"
+  elif [ "$n" -eq 1 ]; then agreement="only-one-announcement"
+  elif [ "$differ" -eq 1 ]; then agreement="disagree"
+  fi
+
+  printf '%s|%s|%s|%s|%s' \
+    "$attribution" \
+    "$agreement" \
+    "$([ -n "$parent" ] && [ -f "$parent/environment.json" ] && printf 'present' || printf 'absent')" \
+    "$([ -n "$parent" ] && q_where "$dir_r" "$parent" || printf 'NO-PARENT-LINE')" \
+    "$([ -e "$dir/.reports" ] && printf 'present' || printf 'absent')"
+}
+assert_eq "[runtime] full-audit.sh resolves the run's report directory itself, and every process it spawns uses that one" \
+  "parent-first|agree|present|outside|absent" "$(r5b_full_audit)"
+
+# R6: the behavioural half. The SHIPPED detect-environment.sh, run with REPORT_DIR unset
+# in a Drupal fixture, must write its environment.json OUTSIDE the fixture. Asserted
+# positively — the file has to exist at the resolved path — because "no .reports appeared
+# in the fixture" is also what a script that died before writing produces.
+R_FIX="$TMP/r_detect"
+mkdir -p "$R_FIX/web/core/lib" "$R_FIX/web/modules/custom"
+printf "const VERSION = '10.5.0';\n" > "$R_FIX/web/core/lib/Drupal.php"
+git -C "$R_FIX" init -q 2>/dev/null
+R_FIX_R="$(cd "$R_FIX" && pwd -P)"
+R_OUT="$(env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u REPORT_DIR \
+  -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME HOME="$Q_HOME" \
+  bash -c 'cd "$1" || exit 9; "$2"' _ "$R_FIX" "$ENVSH" 2>&1 | sed $'s/\033\\[[0-9;]*m//g')"
+# The resolved directory, taken from the line the run printed rather than recomputed:
+# recomputing would embed a second copy of the rule in the spec and could agree with a
+# broken script by coincidence.
+R_WROTE="$(printf '%s\n' "$R_OUT" | grep -oE 'Report directory: [^ ]+' | head -1)"
+R_WROTE="${R_WROTE#Report directory: }"
+assert_eq "[shipped script] detect-environment.sh named a report directory" \
+  "outside" "$(q_where "$R_FIX_R" "$R_WROTE")"
+assert_eq "[shipped script] and environment.json is actually there" \
+  "yes" "$([ -n "$R_WROTE" ] && [ -f "$R_WROTE/environment.json" ] && printf 'yes' || printf 'no')"
+assert_eq "[shipped script] nothing was created inside the audited tree" \
+  "absent" "$([ -e "$R_FIX/.reports" ] && printf 'present' || printf 'absent')"
+
+# R7: a tool that READS a report needs the opposite answer from one that writes it.
+#
+# report-processor.sh converts an audit report to Markdown and defaulted both its paths to
+# ${REPORT_DIR}/audit-report.{json,md}. That was right while REPORT_DIR was `.reports` and
+# is unanswerable now: resolving for yourself yields a directory named after this second,
+# which is empty by construction, so the default input is a path that cannot contain the
+# input. Run by hand, the conversion could only ever fail.
+#
+# The fixture is a state root with one finished run in it, reached the way a person would
+# reach it: no arguments, nothing in the environment.
+R_RP="$TMP/r_rp"
+R_RP_HOME="$R_RP/home"; R_RP_STATE="$R_RP/state"; R_RP_CODE="$R_RP/repo"
+rm -rf "$R_RP"
+mkdir -p "$R_RP_HOME/.claude" "$R_RP_CODE"
+git -C "$R_RP_CODE" init -q 2>/dev/null
+R_RP_RUN="$R_RP_STATE/code-quality-tools/repo/20260101T000000"
+mkdir -p "$R_RP_RUN"
+printf '{"meta":{"project_type":"drupal"},"summary":{"overall_score":"pass"}}\n' \
+  > "$R_RP_RUN/audit-report.json"
+ln -sfn "$R_RP_RUN" "$R_RP_STATE/code-quality-tools/repo/latest"
+timeout 60 env -i PATH="$R5_BIN" HOME="$R_RP_HOME" XDG_STATE_HOME="$R_RP_STATE" \
+  "$R5_BIN/bash" -c 'cd "$1" || exit 9; "$2"' _ "$R_RP_CODE" "$ROOT/core/report-processor.sh" \
+  >/dev/null 2>&1 || true
+assert_eq "[shipped script] report-processor.sh with no arguments converts the last run's report" \
+  "yes" "$([ -s "$R_RP_RUN/audit-report.md" ] && printf 'yes' || printf 'no')"
+
+# R8: and the partner that makes R7 discriminating rather than merely satisfiable. A gate
+# HANDED a report directory by full-audit.sh must convert the run IN PROGRESS — `latest`
+# still names the previous run until this one finishes having written something. A fix
+# that simply always followed `latest` would pass R7 and silently convert last week's
+# report in the middle of today's audit.
+R_RP_NOW="$R_RP_STATE/code-quality-tools/repo/20260202T000000"
+mkdir -p "$R_RP_NOW"
+printf '{"meta":{"project_type":"nextjs"},"summary":{"overall_score":"fail"}}\n' \
+  > "$R_RP_NOW/audit-report.json"
+timeout 60 env -i PATH="$R5_BIN" HOME="$R_RP_HOME" XDG_STATE_HOME="$R_RP_STATE" \
+  REPORT_DIR="$R_RP_NOW" REPORT_DIR_ORIGIN=state \
+  "$R5_BIN/bash" -c 'cd "$1" || exit 9; "$2"' _ "$R_RP_CODE" "$ROOT/core/report-processor.sh" \
+  >/dev/null 2>&1 || true
+# Asserted on the CONTENT, not on the file's existence: R7 already left an audit-report.md
+# next to the pointer, so "a file appeared" cannot tell the two runs apart.
+assert_eq "[shipped script] a handed-down report directory converts that run, not the pointer's" \
+  "yes|nextjs" \
+  "$([ -s "$R_RP_NOW/audit-report.md" ] && printf 'yes' || printf 'no')|$(grep -oE '\((drupal|nextjs)\)' "$R_RP_NOW/audit-report.md" 2>/dev/null | head -1 | tr -d '()')"
+
+# R9: a RELATIVE value in the environment the state path is built from.
+#
+# The out-of-repo default is assembled from XDG_STATE_HOME, or HOME, or TMPDIR. Every one
+# of those is an environment value, and a relative one resolves against the process's
+# working directory — which during an audit IS the audited repository. So the branch whose
+# entire purpose is to keep reports out of the tree put them back into it:
+# XDG_STATE_HOME=x created <repo>/x/code-quality-tools/..., appended that path to the
+# audited repository's .gitignore (a new line per run, since each run's timestamp
+# differs), and printed "(outside the audited repository)" about it. Only the no-HOME
+# branch was guarded, and it was guarded with the reason all four of them needed.
+#
+# The freedesktop basedir spec says a relative XDG_* value is invalid and must be ignored,
+# so this is a configuration somebody can have, not a contrivance.
+#
+# Three things are asserted per case, plus the fourth that makes this section worth having:
+#
+#   where       the directory the run NAMED, classified against the fixture repo. Taken
+#               out of the line the run printed; never recomputed by calling the resolver
+#               again, which would only prove the resolver agrees with itself.
+#   created     the audited repository's top-level entries are the ones it started with.
+#   gitignore   its .gitignore is byte-for-byte what the fixture wrote.
+#   honest      whether the LABEL on that line agrees with `where`. The run is allowed to
+#               say "outside the audited repository" only when this spec, measuring for
+#               itself, also says outside. A tool that breaks its invariant is a bug; one
+#               that breaks it while printing the opposite is the failure this whole
+#               section exists to refuse, so the claim is checked as well as the fact.
+#
+# Asserted as ONE tuple: a run that printed nothing would otherwise satisfy "nothing was
+# created" and "the .gitignore is untouched" by having done nothing at all.
+R9_HOME="$TMP/r9_home"; mkdir -p "$R9_HOME/.claude"
+R9_IGNORE='node_modules/'
+
+# Env assignments are given as arguments; @DIR@ in any of them is replaced with the
+# fixture repository's own path, for the case that points a state root at it.
+r9_run() {
+  local tag="$1"; shift
+  local dir="$TMP/r9/$tag"
+  rm -rf "$dir"; mkdir -p "$dir"
+  git -C "$dir" init -q 2>/dev/null
+  printf '%s\n' "$R9_IGNORE" > "$dir/.gitignore"
+  local dir_r=""; dir_r="$(cd "$dir" && pwd -P)"
+
+  local a="" ; local -a args=()
+  for a in "$@"; do args+=("${a//@DIR@/$dir_r}"); done
+
+  local before=""; before="$(cd "$dir" && ls -A | sort | tr '\n' ' ')"
+
+  # A separate process, with the three variables under test removed first and only the
+  # case's own assignments put back — so nothing leaking in from this spec's environment
+  # can decide the answer, and the case is exactly what it says it is.
+  local out=""
+  out="$(env -u REPORT_DIR -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO \
+             -u XDG_STATE_HOME -u HOME -u TMPDIR "${args[@]+"${args[@]}"}" \
+         bash -c 'cd "$1" || exit 9
+                  . "$2"
+                  cqt_report_dir_init
+                  cqt_announce_report_dir' _ "$dir" "$LIB" 2>/dev/null \
+       | sed $'s/\033\\[[0-9;]*m//g')"
+
+  local named=""
+  named="$(printf '%s\n' "$out" | grep -oE 'Report directory: [^ ]+' | head -1)"
+  named="${named#Report directory: }"
+  local where=""; where="$(q_where "$dir_r" "$named")"
+
+  local claim="NO-LINE"
+  case "$out" in
+    *"(outside the audited repository)"*) claim="outside" ;;
+    *"Report directory: "*)               claim="other" ;;
+  esac
+  local honest="LABEL-$claim-BUT-$where"
+  if [ "$claim" = "outside" ] && [ "$where" = "outside" ]; then
+    honest="honest"
+  elif [ "$claim" = "other" ] && [ "$where" != "outside" ]; then
+    honest="honest"
+  fi
+
+  local after=""; after="$(cd "$dir" && ls -A | sort | tr '\n' ' ')"
+  local created="clean"
+  [ "$after" = "$before" ] || created="$after"
+  local ign="untouched"
+  [ "$(cat "$dir/.gitignore" 2>/dev/null)" = "$R9_IGNORE" ] || ign="MODIFIED"
+
+  printf '%s|%s|%s|%s' "$where" "$created" "$ign" "$honest"
+}
+
+R9_WANT="outside|clean|untouched|honest"
+assert_eq "[relative env] a relative XDG_STATE_HOME does not put the report in the audited repository" \
+  "$R9_WANT" "$(r9_run relxdg HOME="$R9_HOME" XDG_STATE_HOME=x)"
+assert_eq "[relative env] XDG_STATE_HOME='.' does not put the report in the audited repository" \
+  "$R9_WANT" "$(r9_run dotxdg HOME="$R9_HOME" XDG_STATE_HOME=.)"
+assert_eq "[relative env] a relative HOME does not put the report in the audited repository" \
+  "$R9_WANT" "$(r9_run relhome HOME=relhome)"
+assert_eq "[relative env] a relative TMPDIR with no HOME does not put the report in the audited repository" \
+  "$R9_WANT" "$(r9_run reltmp TMPDIR=tmprel)"
+# No HOME and no TMPDIR is the branch that WAS guarded, and it is asserted here for the
+# same reason the others are rather than being taken on trust from the comment above it.
+assert_eq "[relative env] no HOME and no TMPDIR still lands outside the audited repository" \
+  "$R9_WANT" "$(r9_run nohome)"
+# Absolute is not the same as outside. A state root pointed at the checkout itself is the
+# one shape of this defect that produces an absolute path, so a guard that only tested for
+# a leading slash would pass it.
+assert_eq "[relative env] a state root pointed at the audited repository itself is refused too" \
+  "$R9_WANT" "$(r9_run xdgisrepo HOME="$R9_HOME" XDG_STATE_HOME=@DIR@)"
+
+# And outside is not the same as absolute either, which is why a containment test cannot
+# be the whole guard: `../somewhere` climbs out of the audited tree, so it satisfies "not
+# inside" while still being a RELATIVE value. REPORT_DIR is exported to every gate
+# full-audit.sh runs, and those processes do not all share a working directory — the one
+# thing a relative answer guarantees is that parts of a single audit disagree about where
+# the report is. Section Q refuses a relative project path from the registry for exactly
+# this reason (Q17); the environment deserves no more trust than the registry.
+#
+# Measured, not assumed: with only the containment test in place this case resolved to
+# `../r9_escape/code-quality-tools/...` and was accepted.
+assert_eq "[relative env] a relative state root that escapes the tree is still refused for being relative" \
+  "$R9_WANT" "$(r9_run relescape HOME="$R9_HOME" XDG_STATE_HOME=../r9_escape)"
+
+# R9b: and the location half of that line is measured, not decorative. Every assertion
+# above is satisfied by an announcement that never claims "outside" at all, and by a
+# containment test that always answers "no". Here the directory really IS inside the
+# audited tree — put there by an explicit REPORT_DIR, which is allowed — so the line has
+# to say so. Asserted on the whole label rather than a substring, so "explicit REPORT_DIR"
+# cannot drift into a bare location claim or the other way round.
+#
+# The fixture's REPORT_DIR is ABSOLUTE and inside the tree, rather than relative: q_where
+# reports a relative path as "relative", which is the honest thing for it to say about a
+# string, but it leaves this assertion unable to state the thing it is about.
+R9B_DIR="$TMP/r9/explicit_inside"
+rm -rf "$R9B_DIR"; mkdir -p "$R9B_DIR"
+git -C "$R9B_DIR" init -q 2>/dev/null
+R9B_DIR_R="$(cd "$R9B_DIR" && pwd -P)"
+R9B_OUT="$(env -u REPORT_DIR_ORIGIN -u REPORT_DIR_IN_REPO -u XDG_STATE_HOME \
+             HOME="$R9_HOME" REPORT_DIR="$R9B_DIR_R/in_the_tree" \
+           bash -c 'cd "$1" || exit 9
+                    . "$2"
+                    cqt_report_dir_init
+                    cqt_announce_report_dir' _ "$R9B_DIR" "$LIB" 2>/dev/null \
+         | sed $'s/\033\\[[0-9;]*m//g')"
+R9B_PATH="$(printf '%s\n' "$R9B_OUT" | grep -oE 'Report directory: [^ ]+' | head -1)"
+R9B_PATH="${R9B_PATH#Report directory: }"
+R9B_LABEL="unlabelled"
+case "$R9B_OUT" in
+  *"Report directory: "*"("*")"*) R9B_LABEL="$(printf '%s' "${R9B_OUT##*Report directory: }" | sed 's/^[^(]*(//; s/).*//')" ;;
+esac
+assert_eq "[relative env, over-fire guard] a directory that IS inside the tree is described as inside" \
+  "inside|explicit REPORT_DIR, inside the audited repository" \
+  "$(q_where "$R9B_DIR_R" "$R9B_PATH")|$R9B_LABEL"
+
+# ── S. installed code is compared against composer.lock (item 6) ─────────────
+echo ""
+echo "S: a tree that does not match its lockfile stops the run"
+
+# The project this suite was built against had composer.lock pinning Drupal 11.3.13
+# while vendor/ and docroot/core held 10.5.6, because an earlier composer install had
+# failed on an expired token. detect-environment.sh read the on-disk version correctly
+# and wrote it to environment.json; nothing compared it to the lockfile. Every gate then
+# ran happily, comparing Drupal 11 custom code against Drupal 10 core, and every finding
+# had to be discarded.
+#
+# This is a HARD STOP rather than a warning. The gates downstream have no way to be
+# right about a tree whose core is not the core its dependencies were resolved against,
+# so continuing produces findings whose only possible use is to be thrown away — and a
+# warning printed at step 1 of six is not what anyone reads. It is overridable with
+# ALLOW_VERSION_DRIFT=1, because it is not this tool's place to refuse outright on
+# somebody else's repository, and because a version comparison can be wrong in ways the
+# person at the keyboard can see and this script cannot. Overriding does not buy a pass:
+# the drift is recorded and caps the audit verdict through the same "skipped" vocabulary
+# a gate uses when it cannot cover its ground.
+
+# Builds a Drupal fixture with an on-disk core version and, optionally, a composer.lock
+# pinning one. <lock> of "-" writes no lockfile at all.
+s_fixture() {
+  local dir="$1" disk="$2" lock="$3"
+  rm -rf "$dir"
+  mkdir -p "$dir/web/core/lib" "$dir/web/modules/custom"
+  printf "const VERSION = '%s';\n" "$disk" > "$dir/web/core/lib/Drupal.php"
+  if [ "$lock" != "-" ]; then
+    printf '{"packages":[{"name":"drupal/core","version":"%s"},{"name":"other/thing","version":"1.0.0"}],"packages-dev":[]}\n' \
+      "$lock" > "$dir/composer.lock"
+  fi
+}
+
+# Runs the SHIPPED detect-environment.sh in a fixture, in its own process, with the
+# report directory pointed at the fixture so environment.json can be read back. Extra
+# arguments are env assignments. Records output in <dir>/out and status in <dir>/rc.
+s_run() {
+  local dir="$1"; shift
+  local rc=0
+  env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u ALLOW_VERSION_DRIFT \
+    REPORT_DIR="$dir/.reports" HOME="$Q_HOME" "$@" \
+    bash -c 'cd "$1" || exit 9; "$2"' _ "$dir" "$ENVSH" \
+    > "$dir/out" 2>&1 || rc=$?
+  printf '%s' "$rc" > "$dir/rc"
+}
+s_rc()    { cat "$1/rc" 2>/dev/null || printf 'MISSING'; }
+s_out()   { sed $'s/\033\\[[0-9;]*m//g' "$1/out" 2>/dev/null || printf ''; }
+s_field() {
+  grep -oP "\"$2\":\s*\"\K[^\"]*" "$1/.reports/environment.json" 2>/dev/null | head -1 \
+    || printf 'NO-ENVIRONMENT-JSON'
+}
+
+# S1: the matching case. Nothing is stopped, and the comparison is RECORDED as having
+# happened — "no drift reported" and "no drift checked" are the same output otherwise,
+# which is the false-clean shape this whole suite exists to catch.
+S_OK="$TMP/s_match"
+s_fixture "$S_OK" 10.5.6 10.5.6
+s_run "$S_OK"
+assert_eq "[match] the lockfile and the installed core agree, and that is recorded" \
+  "match" "$(s_field "$S_OK" version_drift)"
+assert_eq "[match] the run is not stopped (1 = the usual no-DDEV exit, not the drift stop)" \
+  "1" "$(s_rc "$S_OK")"
+assert_eq "[match] both versions are recorded, not just the verdict" \
+  "10.5.6|10.5.6" "$(s_field "$S_OK" composer_lock_core_version)|$(s_field "$S_OK" installed_core_version)"
+
+# S2: the reported defect. 11.3.13 in the lockfile, 10.5.6 on disk.
+S_DRIFT="$TMP/s_drift"
+s_fixture "$S_DRIFT" 10.5.6 11.3.13
+s_run "$S_DRIFT"
+assert_eq "[drift] a lockfile/tree mismatch is recorded as drift" \
+  "drift" "$(s_field "$S_DRIFT" version_drift)"
+assert_eq "[drift] and stops the run with its own status, not the no-DDEV one" \
+  "3" "$(s_rc "$S_DRIFT")"
+if [[ "$(s_out "$S_DRIFT")" == *"11.3.13"* && "$(s_out "$S_DRIFT")" == *"10.5.6"* ]]; then
+  ok "[drift] the message names both versions so the mismatch can be acted on"
+else
+  bad "[drift] the message names both versions | got: $(s_out "$S_DRIFT" | tr '\n' ' ')"
+fi
+assert_eq "[drift] environment.json is written before the stop, so the reason survives" \
+  "11.3.13|10.5.6" \
+  "$(s_field "$S_DRIFT" composer_lock_core_version)|$(s_field "$S_DRIFT" installed_core_version)"
+
+# S3: the override. It continues, and it still records the drift.
+S_ALLOW="$TMP/s_allow"
+s_fixture "$S_ALLOW" 10.5.6 11.3.13
+s_run "$S_ALLOW" ALLOW_VERSION_DRIFT=1
+assert_eq "[override] ALLOW_VERSION_DRIFT=1 does not stop the run" "1" "$(s_rc "$S_ALLOW")"
+assert_eq "[override] the drift is still recorded, not forgiven" \
+  "drift" "$(s_field "$S_ALLOW" version_drift)"
+
+# S4: no lockfile is not a mismatch. It is also not a match — saying "match" here would
+# claim a comparison that never happened.
+S_NOLOCK="$TMP/s_nolock"
+s_fixture "$S_NOLOCK" 10.5.6 -
+s_run "$S_NOLOCK"
+assert_eq "[no lockfile] recorded as unchecked, not as a match" \
+  "unchecked" "$(s_field "$S_NOLOCK" version_drift)"
+assert_eq "[no lockfile] and nothing is stopped" "1" "$(s_rc "$S_NOLOCK")"
+
+# S5: a lockfile pinned to a dev branch carries no comparable version. Stopping a run
+# on 11.3.x-dev vs 11.3.13 would fire on every project tracking a development branch,
+# which is the fastest way to have the check disabled permanently.
+S_DEV="$TMP/s_dev"
+s_fixture "$S_DEV" 11.3.13 11.3.x-dev
+s_run "$S_DEV"
+assert_eq "[dev branch] a dev lockfile pin is unchecked, not drift" \
+  "unchecked" "$(s_field "$S_DEV" version_drift)"
+assert_eq "[dev branch] and nothing is stopped" "1" "$(s_rc "$S_DEV")"
+
+# S6: without jq the lockfile cannot be parsed. Declining is correct; a grep for a
+# version string in composer.lock matches the wrong package sooner or later, and a
+# false drift stop on somebody else's repo is worse than no check.
+S_NOJQ="$TMP/s_nojq"
+s_fixture "$S_NOJQ" 10.5.6 11.3.13
+S_NOJQ_BIN="$TMP/s_nojq_bin"; mkdir -p "$S_NOJQ_BIN"
+for s_t in bash sh env date git mkdir chmod grep sed cat tail head ls rm dirname basename pwd; do
+  s_src="$(command -v "$s_t" 2>/dev/null || true)"
+  [ -n "$s_src" ] && ln -sf "$s_src" "$S_NOJQ_BIN/$s_t"
+done
+s_run "$S_NOJQ" PATH="$S_NOJQ_BIN"
+assert_eq "[no jq] the lockfile is not parsed by hand, it is left unchecked" \
+  "unchecked" "$(s_field "$S_NOJQ" version_drift)"
+assert_eq "[no jq] and nothing is stopped" "1" "$(s_rc "$S_NOJQ")"
+
+# S7: a Next.js project has no Drupal core to compare. The check must not fire, and must
+# not claim a comparison happened.
+S_NEXT="$TMP/s_next"
+rm -rf "$S_NEXT"; mkdir -p "$S_NEXT"
+printf 'module.exports = {}\n' > "$S_NEXT/next.config.js"
+printf '{"name":"x","dependencies":{"next":"14.0.0"}}\n' > "$S_NEXT/package.json"
+s_run "$S_NEXT"
+assert_eq "[next.js] no Drupal core means no comparison, recorded as unchecked" \
+  "unchecked" "$(s_field "$S_NEXT" version_drift)"
+assert_eq "[next.js] and the run completes normally (0 = env ready)" "0" "$(s_rc "$S_NEXT")"
+
+# S11: "unchecked" is one verdict covering two different situations, and the REASON is
+# the field that separates them.
+#
+# version_drift deliberately merges "not applicable" and "could not check" into
+# `unchecked`; version_drift_reason is what an operator reads to find out which. For a
+# missing lockfile and a missing jq it said so. For a lockfile that could not be PARSED it
+# said "composer.lock does not pin drupal/core" — a statement about the file's content,
+# made about a file whose content had never been read, because jq's failure was swallowed
+# by `|| echo ""` and an empty result has only one branch. A corrupt lockfile, an
+# unreadable one, an empty one and a perfectly good one listing no drupal/core all
+# produced the same sentence, and only the last one was true.
+#
+# Each case is asserted as reason AND verdict together: the verdict must stay `unchecked`
+# for all four, so an assertion that only read the reason could be satisfied by a fix that
+# started claiming the comparison had happened.
+s_reason() {
+  local dir="$1" disk="$2"; shift 2
+  rm -rf "$dir"
+  mkdir -p "$dir/web/core/lib" "$dir/web/modules/custom"
+  printf "const VERSION = '%s';\n" "$disk" > "$dir/web/core/lib/Drupal.php"
+}
+
+S_CORRUPT="$TMP/s_corrupt"
+s_reason "$S_CORRUPT" 10.5.6
+printf 'this is not json\n' > "$S_CORRUPT/composer.lock"
+s_run "$S_CORRUPT"
+assert_eq "[unchecked] a lockfile that is not JSON says so, rather than reporting on content it never read" \
+  "unchecked|composer.lock could not be parsed" \
+  "$(s_field "$S_CORRUPT" version_drift)|$(s_field "$S_CORRUPT" version_drift_reason)"
+
+S_EMPTYLOCK="$TMP/s_emptylock"
+s_reason "$S_EMPTYLOCK" 10.5.6
+: > "$S_EMPTYLOCK/composer.lock"
+s_run "$S_EMPTYLOCK"
+assert_eq "[unchecked] an empty lockfile says so" \
+  "unchecked|composer.lock is empty" \
+  "$(s_field "$S_EMPTYLOCK" version_drift)|$(s_field "$S_EMPTYLOCK" version_drift_reason)"
+
+# The content here is VALID and pins a matching version, so the only thing that can
+# produce anything other than "match" is the file being unreadable.
+S_UNREAD="$TMP/s_unread"
+s_reason "$S_UNREAD" 10.5.6
+printf '{"packages":[{"name":"drupal/core","version":"10.5.6"}],"packages-dev":[]}\n' \
+  > "$S_UNREAD/composer.lock"
+chmod 000 "$S_UNREAD/composer.lock" 2>/dev/null || true
+if [ -r "$S_UNREAD/composer.lock" ]; then
+  # Stated as a failure rather than skipped: the case is not being tested, and a suite
+  # that says nothing about that is claiming coverage it does not have. Running the
+  # tests as root is the usual cause.
+  bad "[unchecked premise] the unreadable fixture is still readable, so the unreadable case proved nothing"
+else
+  s_run "$S_UNREAD"
+  assert_eq "[unchecked] a lockfile that could not be read says so, and is not described as unpinned" \
+    "unchecked|composer.lock could not be read" \
+    "$(s_field "$S_UNREAD" version_drift)|$(s_field "$S_UNREAD" version_drift_reason)"
+fi
+chmod 644 "$S_UNREAD/composer.lock" 2>/dev/null || true
+
+# The over-fire guard for the three above: the sentence they used to borrow still has to
+# be produced by the one case it is actually true of.
+S_NOCORE="$TMP/s_nocore"
+s_reason "$S_NOCORE" 10.5.6
+printf '{"packages":[{"name":"other/thing","version":"1.0.0"}],"packages-dev":[]}\n' \
+  > "$S_NOCORE/composer.lock"
+s_run "$S_NOCORE"
+assert_eq "[unchecked, over-fire guard] a readable lockfile with no drupal/core is still reported as unpinned" \
+  "unchecked|composer.lock does not pin drupal/core" \
+  "$(s_field "$S_NOCORE" version_drift)|$(s_field "$S_NOCORE" version_drift_reason)"
+
+# S8: the consequence has to reach the caller, which is the whole point of section P's
+# lesson. An override run must not be able to report "pass": every gate below step 1
+# examined a tree that does not match its lockfile. Reuses section P's sandbox, so this
+# is the REAL full-audit.sh reading the REAL environment.json field.
+S_CAP="$(run_p_audit drupal \
+  ', "drupal_modules_path": "web/modules/custom", "version_drift": "drift"' pass 0 1 0)"
+assert_eq "[override] an all-green audit on a drifted tree cannot report pass" \
+  "warning" "$(p_field "$S_CAP" overall_score)"
+assert_eq "[override] and the drift is carried into the report, not just printed" \
+  "drift" "$(jq -r '.meta.version_drift // "MISSING"' "$S_CAP/.reports/audit-report.json" 2>/dev/null || printf 'MISSING')"
+if [[ "$(cat "$S_CAP/out.txt" 2>/dev/null)" == *"composer.lock"* ]]; then
+  ok "[override] the summary names the reason the verdict was capped"
+else
+  bad "[override] the summary names the reason the verdict was capped | got: $(tr '\n' ' ' < "$S_CAP/out.txt" 2>/dev/null)"
+fi
+
+# S9: over-fire guard, and labelled as one — it cannot distinguish the fix from its
+# absence on its own. A run with no drift must still be able to reach "pass", or the
+# cap above would be indistinguishable from a tool that never passes anything.
+S_NOCAP="$(run_p_audit drupal \
+  ', "drupal_modules_path": "web/modules/custom", "version_drift": "match"' pass 0 1 0)"
+assert_eq "[no drift, over-fire guard] a clean run still reaches pass" \
+  "pass" "$(p_field "$S_NOCAP" overall_score)"
+
+# S10: without the override, detect-environment.sh stops and /audit must say WHY.
+# "Environment detection failed" on a drifted tree sends the reader to DDEV.
+S_STOP="$(run_p_audit drupal \
+  ', "drupal_modules_path": "web/modules/custom", "version_drift": "drift"' pass 0 1 0 3)"
+assert_eq "[hard stop] /audit does not continue when environment detection stopped" \
+  "3" "$(p_rc "$S_STOP")"
+if [[ "$(cat "$S_STOP/out.txt" 2>/dev/null)" == *"composer.lock"* ]]; then
+  ok "[hard stop] and names the lockfile mismatch rather than blaming the environment"
+else
+  bad "[hard stop] and names the lockfile mismatch | got: $(tr '\n' ' ' < "$S_STOP/out.txt" 2>/dev/null)"
+fi
+assert_eq "[hard stop] no gate ran on the drifted tree" "NO-GATE-RAN" "$(p_gates "$S_STOP")"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

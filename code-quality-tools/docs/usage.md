@@ -6,7 +6,7 @@ The [README](../README.md) is the shop window. This is the how: what the plugin 
 
 It runs the checks that separate "it runs" from "it is actually sound": TDD, SOLID, and DRY analysis, plus multi-layer security scanning (Semgrep, Trivy, Gitleaks, and framework-specific SAST) for Drupal and Next.js. Every command auto-detects your project type from real signals (`composer.json` with `drupal/core`, `.ddev/config.yaml`, `next.config.js`, a `next` dependency in `package.json`), so you never tell it which stack you are in, and a monorepo with both runs both toolchains.
 
-`/review` scores code on a `/50` rubric, split evenly between Content (correctness, completeness, edge cases, error handling, security) and Structure (readability, separation of concerns, DRY, testability, extensibility); the quality gate is 35+/50 with no category below 2. `/audit` runs the individual tools and then correlates the results: files flagged by more than one tool are the hot spots, and a security issue sitting next to missing tests and a SOLID violation is called out as compounding risk, not three separate line items. `/security-debate` and `/architecture-debate` spawn 3-agent teams (Defender/Red Team/Compliance; Pragmatist/Purist/Maintainer) that cross-challenge each other's findings before you see a synthesized verdict, each agent in its own worktree with scoped tools and cost-controlled turns. All reports write to git-ignored `.reports/`.
+`/review` scores code on a `/50` rubric, split evenly between Content (correctness, completeness, edge cases, error handling, security) and Structure (readability, separation of concerns, DRY, testability, extensibility); the quality gate is 35+/50 with no category below 2. `/audit` runs the individual tools and then correlates the results: files flagged by more than one tool are the hot spots, and a security issue sitting next to missing tests and a SOLID violation is called out as compounding risk, not three separate line items. `/security-debate` and `/architecture-debate` spawn 3-agent teams (Defender/Red Team/Compliance; Pragmatist/Purist/Maintainer) that cross-challenge each other's findings before you see a synthesized verdict, each agent in its own worktree with scoped tools and cost-controlled turns. Reports are written outside the repository being audited: to the `ai-dev-assistant` project folder registered for it when there is one (`<project>/audits/<date>/`), otherwise to `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`. They quote the audited source and name the files a secret scanner matched in, which is why they do not sit on a branch that travels. Set `REPORT_DIR` to choose a location, or `REPORT_DIR_IN_REPO=1` to opt back in to an in-repo `.reports/` that is gitignored at creation.
 
 ## When to reach for it
 
@@ -29,10 +29,16 @@ The honest limit: a gate can tell you a rubric score fell below 35, that a tool 
 ## It's working if
 
 - `/code-quality-tools:setup` correctly names your stack (Drupal or Next.js, or both for a monorepo) without you telling it.
-- After a run, the matching report exists under `.reports/`: `audit-report.json` and `audit-synthesis.md` for `/audit`, `security-report.json` for `/security`, `code-review-{name}.md` for `/review`, and so on.
+- Every run prints `Report directory: <path>` when it starts, and the matching report exists there: `audit-report.json` and `audit-synthesis.md` for `/audit`, `security-report.json` for `/security`, `code-review-{name}.md` for `/review`, and so on. To find the last run's directory again without re-running anything:
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest
+  ```
+
+  A non-zero exit there means nothing has been audited in this project yet, which is not the same as a clean result.
 - `/audit` names actual hot-spot files, not a generic pass/fail; `/review` prints a `/50` score with a per-category breakdown, not just a verdict.
 - `/security` reports a layer count matching your stack (10 for Drupal, 7 for Next.js) and a Critical/High tally you can act on.
-- `/security-debate` and `/architecture-debate` produce `.reports/security-debate.md` / `.reports/architecture-debate.md` with a synthesized, cross-challenged verdict, not three unreconciled opinions stapled together.
+- `/security-debate` and `/architecture-debate` produce `security-debate.md` / `architecture-debate.md` in that same report directory, with a synthesized, cross-challenged verdict, not three unreconciled opinions stapled together.
 - If watch-mode is active, editing `composer.json`, `package.json`, `phpstan.neon*`, `psalm.xml`, `eslint.config.*`, or `tsconfig.json` re-triggers lint automatically; `CLAUDE_CODE_QUALITY_WATCH=0` turns that off mid-session if it is not what you want.
 
 If a command reports the wrong stack, check for a stale `.ddev/config.yaml` or a leftover `next.config.js` from a prior scaffold; the detection is signal-based and will follow whatever config files are actually present.

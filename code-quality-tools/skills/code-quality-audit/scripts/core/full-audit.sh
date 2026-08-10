@@ -13,7 +13,15 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
-REPORT_DIR="${REPORT_DIR:-.reports}"
+
+# Resolved HERE, before anything else runs, and exported by the resolver. This script is
+# the driver: detect-environment.sh, install-tools.sh and every gate below are separate
+# processes that source the same rule, so the export is what makes them agree. Without
+# it each would re-resolve, the timestamped default would differ per process, and this
+# script would then look for an environment.json a child wrote in a different directory.
+# shellcheck source=../core/report-dir.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+cqt_report_dir_init
 
 # Thresholds (can be overridden via environment)
 COVERAGE_MINIMUM="${COVERAGE_MINIMUM:-70}"
@@ -24,6 +32,8 @@ COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║        Code Quality & Security Audit - Full Analysis         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+cqt_announce_report_dir
 echo ""
 
 # Track overall status
@@ -79,7 +89,7 @@ update_status() {
 #
 # Self-contained on purpose (reads no globals, echoes the verdict) so the spec can
 # extract and source it in isolation.
-#   resolve_overall_status <current> <s1> <s2> <s3> <s4> <s5>
+#   resolve_overall_status <current> <status>...
 resolve_overall_status() {
     local current="$1"
     shift
@@ -107,15 +117,6 @@ resolve_overall_status() {
     fi
 }
 
-# Step 1: Detect environment
-echo -e "${BLUE}[Step 1/6]${NC} Detecting environment..."
-if ! "${SCRIPT_DIR}/detect-environment.sh" > /dev/null 2>&1; then
-    if ! "${SCRIPT_DIR}/detect-environment.sh"; then
-        echo -e "${RED}[ERROR]${NC} Environment detection failed"
-        exit 2
-    fi
-fi
-
 # Read one string field out of environment.json without taking the run down.
 #
 # `grep` exits 1 when the field is absent OR empty, and a bare `VAR=$(grep ...)` under
@@ -128,11 +129,33 @@ read_env_field() {
     grep -oP "\"$2\":\s*\"\K[^\"]*" "$1" 2>/dev/null | head -1 || true
 }
 
+# Step 1: Detect environment
+echo -e "${BLUE}[Step 1/6]${NC} Detecting environment..."
+if ! "${SCRIPT_DIR}/detect-environment.sh" > /dev/null 2>&1; then
+    if ! "${SCRIPT_DIR}/detect-environment.sh"; then
+        # detect-environment.sh stops the run outright when the installed tree does not
+        # match composer.lock. It writes environment.json before stopping, so the reason
+        # is on disk: say it here rather than reporting "Environment detection failed",
+        # which sends the reader to DDEV for a problem that is about composer.
+        if [ -f "${REPORT_DIR}/environment.json" ] &&
+           [ "$(read_env_field "${REPORT_DIR}/environment.json" version_drift)" = "drift" ]; then
+            echo -e "${RED}[STOP]${NC} $(read_env_field "${REPORT_DIR}/environment.json" version_drift_reason)"
+            echo "  No gate was run: findings from a tree that does not match composer.lock"
+            echo "  cannot be trusted. Run 'composer install', or set ALLOW_VERSION_DRIFT=1"
+            echo "  to audit anyway (the run will not be able to report a pass)."
+            exit 3
+        fi
+        echo -e "${RED}[ERROR]${NC} Environment detection failed"
+        exit 2
+    fi
+fi
+
 # Load environment
 if [ -f "${REPORT_DIR}/environment.json" ]; then
     PROJECT_TYPE=$(read_env_field "${REPORT_DIR}/environment.json" project_type)
     DRUPAL_MODULES_PATH=$(read_env_field "${REPORT_DIR}/environment.json" drupal_modules_path)
     DRUPAL_THEMES_PATH=$(read_env_field "${REPORT_DIR}/environment.json" drupal_themes_path)
+    VERSION_DRIFT=$(read_env_field "${REPORT_DIR}/environment.json" version_drift)
 else
     echo -e "${RED}[ERROR]${NC} Environment file not found"
     exit 2
@@ -153,6 +176,22 @@ if [ -n "$DRUPAL_MODULES_PATH" ]; then
 fi
 if [ -n "$DRUPAL_THEMES_PATH" ]; then
     export DRUPAL_THEMES_PATH
+fi
+
+# Reaching this line with drift recorded means detect-environment.sh was told to
+# continue anyway (ALLOW_VERSION_DRIFT=1); without the override it exits and the branch
+# above already stopped the run. The override buys a run, not a clean bill of health:
+# every gate below is about to examine a tree whose core is not the core its
+# dependencies were resolved against, which is precisely a scan that cannot cover its
+# ground. That is what "skipped" means here, and a skipped result caps a would-be pass
+# at "warning" in resolve_overall_status.
+#
+# An environment.json written before this field existed reads back empty, which is
+# neither a match nor drift and carries no consequence.
+VERSION_DRIFT="${VERSION_DRIFT:-}"
+DRIFT_STATUS="unknown"
+if [ "$VERSION_DRIFT" = "drift" ]; then
+    DRIFT_STATUS="skipped"
 fi
 
 echo -e "${GREEN}[OK]${NC} Project type: ${PROJECT_TYPE}"
@@ -190,6 +229,7 @@ cat > "${REPORT_DIR}/audit-report.json" << EOF
   "meta": {
     "project_type": "${PROJECT_TYPE}",
     "project_path": "$(pwd)",
+    "version_drift": "${VERSION_DRIFT}",
     "timestamp": "${TIMESTAMP}",
     "tool_versions": {},
     "thresholds": {
@@ -441,8 +481,12 @@ fi
 # A verdict of "pass" requires that at least one gate produced a result AND that no
 # gate reported it could not cover its ground. A gate that explicitly skipped caps the
 # audit at "warning": the run is incomplete, and an incomplete run cannot certify a pass.
+# DRIFT_STATUS rides along with the five gate verdicts because it is the same kind of
+# claim: a run that could not cover its ground. It contributes nothing when there is no
+# drift ("unknown"), and caps a would-be pass at "warning" when there is.
 OVERALL_STATUS=$(resolve_overall_status "$OVERALL_STATUS" \
-    "$COVERAGE_STATUS" "$SOLID_STATUS" "$LINT_STATUS" "$DRY_STATUS" "$SECURITY_STATUS")
+    "$COVERAGE_STATUS" "$SOLID_STATUS" "$LINT_STATUS" "$DRY_STATUS" "$SECURITY_STATUS" \
+    "$DRIFT_STATUS")
 
 # Update summary in report
 jq --arg overall "$OVERALL_STATUS" \
@@ -492,6 +536,9 @@ echo ""
 echo -e "  Overall:   $([ "$OVERALL_STATUS" == "pass" ] && echo "${GREEN}PASS${NC}" || ([ "$OVERALL_STATUS" == "warning" ] && echo "${YELLOW}WARNING${NC}" || ([ "$OVERALL_STATUS" == "fail" ] && echo "${RED}FAIL${NC}" || echo "${YELLOW}UNKNOWN - no gate produced a result${NC}")))"
 # Name the reason when the verdict was capped, so "WARNING" with zero warnings counted
 # is not a puzzle. Only gates that ran and declared incomplete coverage cap it.
+if [ "$DRIFT_STATUS" = "skipped" ]; then
+    echo -e "             ${YELLOW}(the installed code does not match composer.lock - every gate above examined a tree that cannot be trusted, so this run cannot certify a pass)${NC}"
+fi
 for capped_gate in "coverage:${COVERAGE_STATUS}" "SOLID:${SOLID_STATUS}" \
     "lint:${LINT_STATUS}" "DRY:${DRY_STATUS}" "security:${SECURITY_STATUS}"; do
     if [ "${capped_gate#*:}" = "skipped" ]; then

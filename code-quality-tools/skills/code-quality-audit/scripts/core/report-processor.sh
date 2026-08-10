@@ -4,9 +4,22 @@
 
 set -e
 
-REPORT_DIR="${REPORT_DIR:-.reports}"
-INPUT_FILE="${1:-${REPORT_DIR}/audit-report.json}"
-OUTPUT_FILE="${2:-${REPORT_DIR}/audit-report.md}"
+# Resolve only. This script converts a report that already exists; it is normally called
+# with both paths as arguments, and creating a directory as a side effect of a format
+# conversion would leave empty run directories behind for every invocation.
+#
+# The defaults come from cqt_report_dir_for_reading, not from REPORT_DIR. REPORT_DIR
+# answers "where does this run write", and a run that resolves it for itself gets a fresh
+# timestamped directory — which is empty by construction, so `${REPORT_DIR}/audit-report.json`
+# names a file that cannot be there. A run that was HANDED REPORT_DIR by full-audit.sh
+# gets the run in progress, which is the one it must convert. The distinction is the
+# whole point of the helper.
+# shellcheck source=../core/report-dir.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+cqt_resolve_report_dir
+CQT_READ_DIR="$(cqt_report_dir_for_reading)"
+INPUT_FILE="${1:-${CQT_READ_DIR}/audit-report.json}"
+OUTPUT_FILE="${2:-${CQT_READ_DIR}/audit-report.md}"
 
 # Check for jq
 if ! command -v jq &> /dev/null; then
