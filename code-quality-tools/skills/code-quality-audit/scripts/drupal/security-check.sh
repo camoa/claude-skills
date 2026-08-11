@@ -23,6 +23,13 @@ cqt_announce_report_dir
 # a file, a log line or any process's argv.
 # shellcheck source=../core/secret-history.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/secret-history.sh"
+# Phases 1 and 3: which ground the secret scan covers (working tree, a bounded
+# commit range, or all of history), how each gitleaks command line is built, and how
+# far a finding reaches once a build artifact is deployed to a second repository.
+# Sourced unconditionally so a missing library is a loud failure here rather than a
+# silently narrower scan later.
+# shellcheck source=../core/secret-scan.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/secret-scan.sh"
 DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
 DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
 
@@ -1393,84 +1400,339 @@ fi
 
 echo ""
 echo -e "${BLUE}[9/10]${NC} Running Gitleaks secret detection..."
+# --- cqt:secret-scan-block:start ---
 # =====================
-# Gitleaks Secret Detection
+# Gitleaks Secret Detection — phases 1 and 3
 # =====================
+# WHAT GROUND THIS COVERS is a decision, and it used to be made silently. The old
+# invocation was the legacy `gitleaks detect` spelling with version control switched
+# off, which is what `gitleaks dir` is now: the working tree and nothing else, with
+# no line of output saying so. A credential
+# committed in one release and gitignored in the next was invisible to it, and
+# "0 findings" read as proof of a clean repository rather than of a clean checkout.
+#
+# core/secret-scan.sh resolves the ground (tree by default, or a bounded commit
+# range, or all of history on request), builds every gitleaks command line, and
+# merges overlapping passes. This block runs the working-tree pass, decides whether
+# what came back is a RESULT or a FAILURE, and asks the library for the extra pass
+# when one was asked for. The default stays the working tree because full-history
+# discovery is not affordable on a repository that ever committed vendor/ — 2,368
+# commits and 224.84 MiB of history took longer than a ten-minute limit on the
+# project this came from.
 GITLEAKS_JSON="${REPORT_DIR}/security/gitleaks.json"
 GITLEAKS_ISSUES="[]"
 
+# What the MACHINE-READABLE report records about the ground this scan covered.
+# security-report.json used to be byte-identical between a working-tree-only scan and
+# a full-history one, and between a filtered scan and an unfiltered one: every word
+# about scope went to the terminal and none of it to the artifact that full-audit.sh
+# and every later reader actually consume. The [SCOPE] and [FILTER] lines printed
+# below are built from the SAME strings these fields carry.
+#
+# What that does NOT amount to, stated rather than implied away: the console and the
+# file are not guaranteed to say the same thing. [SCOPE] is printed BEFORE the scan
+# runs, because a reader watching a long pass needs to know what it is watching, and
+# a pass that then fails rewrites these fields. On a failed run the terminal
+# therefore holds a scope line describing the intended ground while the file records
+# "nothing was scanned: ...". The console is not left misleading - the [SKIP] line
+# follows it, and that is the whole reason the ordering is acceptable - but the two
+# artifacts differ, and the FILE is the one that carries the corrected answer.
+GITLEAKS_SCOPE_TEXT="gitleaks is not installed, so no secret scan was performed"
+GITLEAKS_SCOPE_MODE="none"
+GITLEAKS_SCOPE_RANGE=""
+GITLEAKS_SCOPE_STATUS="absent"
+GITLEAKS_SCOPE_HISTORY="false"
+GITLEAKS_ALLOWLIST_NAME="none"
+GITLEAKS_ALLOWLIST_CONFIG=""
+
 if command -v gitleaks &> /dev/null; then
-    set +e
-    # Drop any report from a previous run: a failed run writes no report, and a stale
-    # one would otherwise be parsed as if it were this run's result. This sits INSIDE
-    # the set +e bracket because `rm` fails on an unwritable report directory, which
-    # under set -e would abort the entire security gate. A stale report that cannot be
-    # removed is itself the false-clean case, so it is treated as a failed run below
-    # rather than trusted.
-    rm -f "$GITLEAKS_JSON" 2>/dev/null
-    GITLEAKS_STALE=0
-    if [ -e "$GITLEAKS_JSON" ]; then
-        GITLEAKS_STALE=1
+    # core/secret-scan.sh is sourced at the top of this script, so the plan resolves
+    # on every real run. The guard is here because the audit suite also extracts
+    # this block and executes it on its own against a stubbed gitleaks to check the
+    # failure discrimination below; with no plan resolved the ground is the shipped
+    # default, the working tree, which is what the literal invocation further down
+    # scans.
+    GITLEAKS_LIB=0
+    GITLEAKS_MODE="tree"
+    GITLEAKS_RANGE=""
+    GITLEAKS_RANGE_KIND=""
+    GITLEAKS_PLAN="ok"
+    GITLEAKS_PLAN_REASON=""
+    if declare -F cqt_gitleaks_plan >/dev/null 2>&1 && declare -F cqt_gitleaks_argv >/dev/null 2>&1; then
+        GITLEAKS_LIB=1
+        cqt_gitleaks_plan "."
+        GITLEAKS_MODE="$CQT_GL_MODE"
+        GITLEAKS_RANGE="$CQT_GL_RANGE"
+        GITLEAKS_RANGE_KIND="$CQT_GL_RANGE_KIND"
+        GITLEAKS_PLAN="$CQT_GL_STATUS"
+        GITLEAKS_PLAN_REASON="$CQT_GL_REASON"
     fi
 
-    # Run Gitleaks on the repository. --redact keeps matched secret values out of the
-    # report file, which is written inside the tree being audited.
-    gitleaks detect --redact --report-format json --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null
-    GITLEAKS_EXIT=$?
-    set -e
+    GITLEAKS_SCOPE_MODE="$GITLEAKS_MODE"
+    GITLEAKS_SCOPE_RANGE="$GITLEAKS_RANGE"
+    GITLEAKS_SCOPE_STATUS="$GITLEAKS_PLAN"
 
-    # Exit status alone cannot tell "found leaks" from "failed to run". Verified against
-    # gitleaks 8.30.1: exit 0 means it ran and found nothing, but exit 1 means EITHER it
-    # found leaks OR it errored — a bad config, an unwritable --report-path, a missing
-    # --source and a bad --report-format all exit 1, because gitleaks fatals through
-    # os.Exit(1). Only a PARSEABLE report distinguishes the two. Exit >= 2 is a
-    # shell-level failure (126/127, 128+N), which produces no report either.
-    GITLEAKS_FAILED=0
-    SECRET_COUNT=0
-
-    if [ "$GITLEAKS_STALE" -eq 1 ]; then
-        # A report from an earlier run could not be removed, so this run's report
-        # cannot be told apart from it. Unprovable provenance is not a clean tree.
-        GITLEAKS_FAILED=1
-    elif [ "$GITLEAKS_EXIT" -ge 2 ]; then
-        GITLEAKS_FAILED=1
-    elif [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
-        set +e
-        SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null)
-        JQ_EXIT=$?
-        set -e
-        # A report that is present but unparseable is not evidence of a clean tree.
-        # Swallowing jq's failure into 0 would report clean while gitleaks is saying
-        # the opposite.
-        if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$SECRET_COUNT" =~ ^[0-9]+$ ]]; then
-            GITLEAKS_FAILED=1
-            SECRET_COUNT=0
-        fi
-    elif [ "$GITLEAKS_EXIT" -ne 0 ]; then
-        # Exit 1 with no report at all: gitleaks errored rather than found anything.
-        GITLEAKS_FAILED=1
-    fi
-
-    if [ "$GITLEAKS_FAILED" -eq 1 ]; then
-        echo -e "  ${YELLOW}[SKIP]${NC} gitleaks produced no usable report (exit ${GITLEAKS_EXIT})"
+    if [ "$GITLEAKS_PLAN" != "ok" ]; then
+        # The requested scan cannot be run. Running a NARROWER one and reporting the
+        # result as if the requested one had happened is the whole defect: an
+        # unresolvable diff base must not silently become "scan everything", a base
+        # equal to HEAD must not silently become "an empty range we scanned", and a
+        # quoted value that gitleaks word-splits into a no-op must not silently
+        # become "scanned, found nothing".
+        echo -e "  ${YELLOW}[SKIP]${NC} gitleaks: ${GITLEAKS_PLAN_REASON} (${GITLEAKS_PLAN})"
         SKIPPED_TOOLS+=("gitleaks")
-    elif [ "$SECRET_COUNT" -gt 0 ]; then
-        echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
-
-        # Convert to violations format
-        GITLEAKS_ISSUES=$(jq '[.[] | {
-            category: "Gitleaks Secret",
-            severity: "critical",
-            file: .File,
-            line: .StartLine,
-            message: ("Potential secret detected: " + .Description),
-            owasp: "A02:2021",
-            remediation: "Remove secret from code, rotate credentials, and use secret management"
-        }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
-
-        CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
+        GITLEAKS_SCOPE_TEXT="nothing was scanned: ${GITLEAKS_PLAN_REASON}"
     else
-        echo -e "  ${GREEN}No secrets detected${NC}"
+        # Every pass is wrapped in timeout(1), never in gitleaks' own --timeout.
+        # Measured on 8.30.1: gitleaks given its own budget writes a well-formed
+        # EMPTY report, logs "partial scan completed" and exits 1, so a reader that
+        # sees "report present, parses, length 0" calls a truncated scan a clean
+        # tree. timeout(1) exits 124 and writes nothing, which cannot be mistaken
+        # for a result. Without timeout(1) there is no budget at all, and the scope
+        # line below says that rather than naming a limit nothing enforces.
+        GITLEAKS_RUNNER=()
+        GITLEAKS_BUDGET_NOTE="no budget: timeout(1) is not installed, so CQT_SECRET_SCAN_TIMEOUT is not enforced"
+        if command -v timeout >/dev/null 2>&1; then
+            GITLEAKS_RUNNER=(timeout "${CQT_SECRET_SCAN_TIMEOUT:-300}")
+            GITLEAKS_BUDGET_NOTE="budget ${CQT_SECRET_SCAN_TIMEOUT:-300}s per pass"
+        fi
+
+        # "Gitleaks: 0 findings" means two different things with and without
+        # history, so the run says which one it did before it says what it found.
+        # The budget note is on EVERY mode, not only the two history branches: a
+        # working-tree or diff pass runs under the same timeout(1) or under no
+        # budget at all, and a scope line that mentions a limit in one mode and
+        # stays silent about it in another is telling the reader the limit does not
+        # apply there.
+        case "$GITLEAKS_MODE" in
+            history)
+                if [ -n "$GITLEAKS_RANGE" ]; then
+                    GITLEAKS_SCOPE_TEXT="working tree plus the git history selected by '${GITLEAKS_RANGE}'; commits outside it were not scanned (${GITLEAKS_BUDGET_NOTE})"
+                else
+                    GITLEAKS_SCOPE_TEXT="working tree plus every commit reachable from every ref (${GITLEAKS_BUDGET_NOTE})"
+                fi
+                GITLEAKS_SCOPE_HISTORY="true"
+                ;;
+            diff)
+                # CQT_SECRET_SCAN_LOG_OPTS DISCARDS the resolved base: gitleaks takes
+                # one --log-opts string and the operator's is the one git sees. So a
+                # diff run carrying a selector did not scan "the commit range X with
+                # history before the base left out" — with --all it read ALL of
+                # history. Over-covering rather than under-covering, but the sentence
+                # was untrue, and a scope line that misdescribes the ground is the
+                # defect this whole block exists to remove.
+                if [ "${GITLEAKS_RANGE_KIND:-}" = "selector" ]; then
+                    GITLEAKS_SCOPE_TEXT="working tree plus the git history selected by '${GITLEAKS_RANGE}', which REPLACED the diff base; commits outside that selection were not scanned (${GITLEAKS_BUDGET_NOTE})"
+                else
+                    GITLEAKS_SCOPE_TEXT="working tree plus the commit range ${GITLEAKS_RANGE}; git history before the base was not scanned (${GITLEAKS_BUDGET_NOTE})"
+                fi
+                GITLEAKS_SCOPE_HISTORY="true"
+                ;;
+            *)
+                GITLEAKS_SCOPE_TEXT="working tree only; git history was not scanned. Use CQT_SECRET_SCAN=diff with CQT_SECRET_SCAN_BASE=<ref> for a bounded range, or CQT_SECRET_SCAN=history for every commit (${GITLEAKS_BUDGET_NOTE})"
+                GITLEAKS_SCOPE_HISTORY="false"
+                ;;
+        esac
+        echo -e "  ${BLUE}[SCOPE]${NC} ${GITLEAKS_SCOPE_TEXT}"
+
+        # An allowlist SUPPRESSES findings, so a run with one in force can print
+        # "No secrets detected" about a repository that holds secrets in every
+        # suppressed path. Undisclosed suppression is the exact shape this gate
+        # exists to refuse, so the run names the config that is filtering it.
+        #
+        # The disclosure USED TO be tied to CQT_SECRET_SCAN_ALLOWLIST=vendored, on
+        # the reasoning that our opt-in is the only way a config reaches the command
+        # line. It is the only way one reaches the COMMAND LINE and not the only way
+        # one reaches the SCAN: measured on gitleaks 8.30.1, a .gitleaks.toml in the
+        # scanned directory and a GITLEAKS_CONFIG environment variable each take
+        # effect on their own, turning a one-finding repository into a zero-finding
+        # report while our argv named no config at all. Reporting allowlist:"none"
+        # there was a positive false claim about a suppressed live credential, so
+        # what is asked for now is what is IN FORCE. See cqt_gitleaks_effective_config.
+        if [ "$GITLEAKS_LIB" -eq 1 ]; then
+            GITLEAKS_ALLOWLIST_PAIR="$(cqt_gitleaks_effective_config ".")"
+            GITLEAKS_ALLOWLIST_NAME="${GITLEAKS_ALLOWLIST_PAIR%%|*}"
+            GITLEAKS_ALLOWLIST_CONFIG="${GITLEAKS_ALLOWLIST_PAIR#*|}"
+            if [ "$GITLEAKS_ALLOWLIST_NAME" = "none" ]; then
+                GITLEAKS_ALLOWLIST_CONFIG=""
+            else
+                echo -e "  ${YELLOW}[FILTER]${NC} an allowlist config is in force (${GITLEAKS_ALLOWLIST_CONFIG}); findings in the paths it matches were SUPPRESSED and are not counted below"
+            fi
+        fi
+
+        set +e
+        # Drop any report from a previous run: a failed run writes no report, and a
+        # stale one would otherwise be parsed as if it were this run's result. This
+        # sits INSIDE the set +e bracket because `rm` fails on an unwritable report
+        # directory, which under set -e would abort the entire security gate. A stale
+        # report that cannot be removed is itself the false-clean case, so it is
+        # treated as a failed run below rather than trusted.
+        rm -f "$GITLEAKS_JSON" 2>/dev/null
+        GITLEAKS_STALE=0
+        if [ -e "$GITLEAKS_JSON" ]; then
+            GITLEAKS_STALE=1
+        fi
+        # A per-mode report from an earlier run is dropped for the same reason. The
+        # extra pass merges its own gitleaks-<mode>.json into gitleaks.json and then
+        # deletes it, but a history run followed by a tree run would otherwise leave
+        # last week's gitleaks-history.json sitting next to a current tree-only
+        # report, where nothing marks it as belonging to a different scan.
+        if declare -F cqt_gitleaks_clear_extra >/dev/null 2>&1; then
+            cqt_gitleaks_clear_extra "$GITLEAKS_JSON"
+        fi
+
+        # The command line comes from cqt_gitleaks_argv, which is the single place
+        # gitleaks' flags are decided — the opt-in vendored allowlist is added
+        # there, so a block that assembled its own command line would ignore it.
+        # The literal invocation in the else branch is the same working-tree pass
+        # written out, and it is what runs when this block is executed on its own
+        # with the library not sourced. Each form is what one part of the audit
+        # suite executes, so neither is dead code. The suite now asserts the two are
+        # ARGUMENT-FOR-ARGUMENT EQUAL, so a change to the builder that is not
+        # mirrored here fails the spec instead of drifting quietly.
+        GITLEAKS_ARGV=()
+        if [ "$GITLEAKS_LIB" -eq 1 ]; then
+            while IFS= read -r GITLEAKS_ARG; do
+                GITLEAKS_ARGV+=("$GITLEAKS_ARG")
+            done < <(cqt_gitleaks_argv tree "." "$GITLEAKS_JSON")
+        fi
+        if [ "${#GITLEAKS_ARGV[@]}" -gt 0 ]; then
+            "${GITLEAKS_RUNNER[@]}" "${GITLEAKS_ARGV[@]}" 2>/dev/null
+            GITLEAKS_EXIT=$?
+        else
+            "${GITLEAKS_RUNNER[@]}" \
+                gitleaks dir . --redact --report-format json --report-path "$GITLEAKS_JSON" --no-banner 2>/dev/null
+            GITLEAKS_EXIT=$?
+        fi
+        set -e
+
+        # Exit status alone cannot tell "found leaks" from "failed to run". Verified
+        # against gitleaks 8.30.1: exit 0 means it ran and found nothing, but exit 1
+        # means EITHER it found leaks OR it errored — a bad config, an unwritable
+        # --report-path, a missing --source and a bad --report-format all exit 1,
+        # because gitleaks fatals through os.Exit(1). Only a PARSEABLE report
+        # distinguishes the two. Exit >= 2 is a shell-level failure (126/127,
+        # 128+N), which produces no report either.
+        GITLEAKS_FAILED=0
+        GITLEAKS_FAIL_REASON=""
+        # The EXTRA pass is tracked separately from the working-tree pass, because
+        # they fail independently and only one of them can invalidate a finding. See
+        # the block below the working-tree verdict for why they were conflated and
+        # what that cost.
+        GITLEAKS_HISTORY_FAILED=0
+        GITLEAKS_HISTORY_FAIL_REASON=""
+        SECRET_COUNT=0
+
+        if [ "$GITLEAKS_STALE" -eq 1 ]; then
+            # A report from an earlier run could not be removed, so this run's report
+            # cannot be told apart from it. Unprovable provenance is not a clean tree.
+            GITLEAKS_FAILED=1
+            GITLEAKS_FAIL_REASON="a report from an earlier run could not be removed"
+        elif [ "$GITLEAKS_EXIT" -eq 124 ] || [ "$GITLEAKS_EXIT" -eq 137 ]; then
+            GITLEAKS_FAILED=1
+            GITLEAKS_FAIL_REASON="the scan ran past its budget (CQT_SECRET_SCAN_TIMEOUT=${CQT_SECRET_SCAN_TIMEOUT:-300}s) and was killed, so nothing was proven"
+        elif [ "$GITLEAKS_EXIT" -ge 2 ]; then
+            GITLEAKS_FAILED=1
+            GITLEAKS_FAIL_REASON="gitleaks exited ${GITLEAKS_EXIT}"
+        elif [ -f "$GITLEAKS_JSON" ] && [ -s "$GITLEAKS_JSON" ]; then
+            set +e
+            SECRET_COUNT=$(jq 'length' "$GITLEAKS_JSON" 2>/dev/null)
+            JQ_EXIT=$?
+            set -e
+            # A report that is present but unparseable is not evidence of a clean
+            # tree. Swallowing jq's failure into 0 would report clean while gitleaks
+            # is saying the opposite.
+            if [ "$JQ_EXIT" -ne 0 ] || ! [[ "$SECRET_COUNT" =~ ^[0-9]+$ ]]; then
+                GITLEAKS_FAILED=1
+                SECRET_COUNT=0
+                GITLEAKS_FAIL_REASON="the report is present but does not parse"
+            elif [ "$GITLEAKS_EXIT" -ne 0 ] && [ "$SECRET_COUNT" -eq 0 ]; then
+                # gitleaks exits 0 when it ran and found nothing, so a non-zero exit
+                # alongside an empty report is a failed or truncated scan. This is
+                # the shape a partial scan takes, and reading it as a clean tree is
+                # the most expensive way to be wrong here.
+                GITLEAKS_FAILED=1
+                SECRET_COUNT=0
+                GITLEAKS_FAIL_REASON="gitleaks exited ${GITLEAKS_EXIT} and wrote an empty report — a failed or partial scan, not a clean tree"
+            fi
+        elif [ "$GITLEAKS_EXIT" -ne 0 ]; then
+            # Exit 1 with no report at all: gitleaks errored rather than found anything.
+            GITLEAKS_FAILED=1
+            GITLEAKS_FAIL_REASON="gitleaks exited ${GITLEAKS_EXIT} and wrote no report"
+        fi
+
+        # The pass beyond the working tree, when one was asked for. It runs before
+        # the verdict below so SECRET_COUNT is the DEDUPLICATED total across both
+        # passes: the same secret is reported by the tree pass and again by every
+        # commit that introduced it, and a run that added those up would triple-count
+        # what a one-pass run counted once.
+        if [ "$GITLEAKS_FAILED" -eq 0 ] && [ "$GITLEAKS_LIB" -eq 1 ] && [ "$GITLEAKS_MODE" != "tree" ]; then
+            set +e
+            cqt_gitleaks_extra_scan "." "$GITLEAKS_JSON"
+            set -e
+            if [ "$CQT_GL_EXTRA_STATUS" != "ok" ]; then
+                # A history pass that did not finish says nothing about history, and
+                # a working-tree result presented as a history result is the false
+                # clean in its most convincing form. So the HISTORY claim is withdrawn
+                # below — but the working-tree findings are NOT.
+                #
+                # This used to set GITLEAKS_FAILED=1 and SECRET_COUNT=0, which erased
+                # findings the working-tree pass had already made and written to
+                # $GITLEAKS_JSON. One live secret in the tree, three runs: `tree`
+                # reported it, a `diff` over a deletion-only range reported Critical:0,
+                # and a tree pass killed on its budget reported Critical:0 — with
+                # security/gitleaks.json holding the finding and security-report.json
+                # holding zero Gitleaks issues, in the same directory, from the same
+                # run. A 300s budget kill on a large repository is ordinary, so this
+                # was not a rare path. A finding that was actually made is not
+                # unmade by an ADDITIONAL pass failing.
+                GITLEAKS_HISTORY_FAILED=1
+                GITLEAKS_HISTORY_FAIL_REASON="$CQT_GL_EXTRA_REASON"
+            else
+                SECRET_COUNT="$CQT_GL_MERGED_COUNT"
+            fi
+        fi
+
+        if [ "$GITLEAKS_FAILED" -eq 1 ]; then
+            echo -e "  ${YELLOW}[SKIP]${NC} gitleaks produced no usable report: ${GITLEAKS_FAIL_REASON} (exit ${GITLEAKS_EXIT})"
+            SKIPPED_TOOLS+=("gitleaks")
+            # The ground the run INTENDED to cover is not the ground it covered. The
+            # artifact records the failure, not the intention.
+            GITLEAKS_SCOPE_STATUS="failed"
+            GITLEAKS_SCOPE_HISTORY="false"
+            GITLEAKS_SCOPE_TEXT="nothing was scanned: ${GITLEAKS_FAIL_REASON}"
+        else
+            if [ "$GITLEAKS_HISTORY_FAILED" -eq 1 ]; then
+                # Strictly more information than the old zero: the tree findings
+                # stand and are reported below, AND the run says history is not
+                # covered. The tool is still recorded as skipped, so the aggregate
+                # verdict cannot come back "pass" off a run that only half happened.
+                echo -e "  ${YELLOW}[SKIP]${NC} gitleaks ${GITLEAKS_MODE} pass: ${GITLEAKS_HISTORY_FAIL_REASON}. The working-tree findings below stand; git history was NOT covered."
+                SKIPPED_TOOLS+=("gitleaks")
+                GITLEAKS_SCOPE_STATUS="history_failed"
+                GITLEAKS_SCOPE_HISTORY="false"
+                GITLEAKS_SCOPE_TEXT="working tree only; the ${GITLEAKS_MODE} pass did not complete, so no history was covered: ${GITLEAKS_HISTORY_FAIL_REASON}"
+            fi
+
+            if [ "$SECRET_COUNT" -gt 0 ]; then
+                echo -e "  ${RED}Found ${SECRET_COUNT} potential secrets${NC}"
+
+                # Convert to violations format
+                GITLEAKS_ISSUES=$(jq '[.[] | {
+                    category: "Gitleaks Secret",
+                    severity: "critical",
+                    file: .File,
+                    line: .StartLine,
+                    message: ("Potential secret detected: " + .Description),
+                    owasp: "A02:2021",
+                    remediation: "Remove secret from code, rotate credentials, and use secret management"
+                }]' "$GITLEAKS_JSON" 2>/dev/null || echo "[]")
+
+                CRITICAL_COUNT=$((CRITICAL_COUNT + SECRET_COUNT))
+            elif [ "$GITLEAKS_HISTORY_FAILED" -eq 0 ]; then
+                echo -e "  ${GREEN}No secrets detected${NC}"
+            fi
+        fi
     fi
 else
     echo -e "  ${YELLOW}[SKIP]${NC} gitleaks not installed (tool absent)"
@@ -1481,9 +1743,9 @@ fi
 # =====================
 # Secret history — phase 2, confirmation
 # =====================
-# Deliberately OUTSIDE the gitleaks block above. That block is the phase-1 scan of
-# the working tree; this is a different job with a different failure mode, and
-# neither must be able to take the other down.
+# Deliberately OUTSIDE the gitleaks block above. That block is the scan; this is a
+# different job with a different failure mode, and neither must be able to take the
+# other down.
 #
 # What it adds to each secret finding: first_seen_commit, first_seen_date, author
 # and commit_count. Without them a finding is a location, and a location does not
@@ -1493,16 +1755,76 @@ fi
 # It never moves the VERDICT (a secret is critical either way) and never records a
 # skipped tool, so a project with no git history cannot turn a completed secret scan
 # into an incomplete one. Every failure degrades to an explicit "could not check".
+#
+# The backfill after it is what stops a history-only finding being reported as
+# "history could not be checked". Phase 2 recovers the secret VALUE from the
+# working-tree file and walks history for it, so a file that is no longer in the
+# tree gives it nothing to work with — while the history pass that produced the
+# finding already knows the commit, the author and the date. See
+# cqt_gitleaks_history_backfill for why phase 2 still wins wherever it answered.
 if [ "$GITLEAKS_ISSUES" != "[]" ]; then
     echo -e "  ${BLUE}[HISTORY]${NC} Confirming which findings already reached git history..."
     set +e
     GITLEAKS_HISTORY=$(cqt_secret_history_json "$GITLEAKS_JSON" ".")
+    GITLEAKS_HISTORY=$(cqt_gitleaks_history_backfill "$GITLEAKS_HISTORY" "$GITLEAKS_JSON")
     GITLEAKS_ISSUES=$(cqt_secret_history_attach "$GITLEAKS_ISSUES" "$GITLEAKS_HISTORY")
     set -e
     while IFS= read -r HISTORY_LINE; do
         [ -n "$HISTORY_LINE" ] && printf '    %s\n' "$HISTORY_LINE"
     done < <(cqt_secret_history_report "$GITLEAKS_ISSUES")
 fi
+
+# =====================
+# Deploy artifact — how far a finding reaches (item 17)
+# =====================
+# `acli push:artifact` commits the built tree to a SECOND git repository with its
+# own remote, its own clones and its own access list. A credential in exported
+# config therefore lives in two histories, and every deploy writes it into the
+# second one again until the value leaves config. "Found in 44 commits" against the
+# source repository alone understates the blast radius and prescribes a remediation
+# that leaves the credential live.
+#
+# Detection is about THIS repository — an Acquia remote, or a project-local acli
+# config — never about the machine. See cqt_deploy_artifact_detect.
+if [ "$GITLEAKS_ISSUES" != "[]" ]; then
+    set +e
+    GITLEAKS_DEPLOY=$(cqt_deploy_artifact_detect ".")
+    if [ -n "$GITLEAKS_DEPLOY" ]; then
+        GITLEAKS_DEPLOY_REMOTES=$(cqt_deploy_artifact_remotes ".")
+        GITLEAKS_ISSUES=$(cqt_deploy_artifact_annotate "$GITLEAKS_ISSUES" "$GITLEAKS_DEPLOY" "$GITLEAKS_DEPLOY_REMOTES")
+        # Conditional, because the detection knows this project deploys through an
+        # artifact and does NOT know which files the build ships. A finding in
+        # test/fixtures/mock.js reaches no `acli push:artifact` tree, and asserting a
+        # blast radius the code cannot establish is the same over-reach
+        # cqt_deploy_artifact_detect refuses when it declines to read ~/.acquia-cli.yml.
+        # The remotes are already redacted of any embedded credential; see
+        # cqt_deploy_artifact_remotes.
+        echo -e "  ${YELLOW}[DEPLOY]${NC} This project deploys through an Acquia build artifact, so findings in files that reach the build artifact also land in the deploy repository: ${GITLEAKS_DEPLOY_REMOTES}"
+    fi
+    set -e
+fi
+
+# =====================
+# What the artifact records about the ground covered
+# =====================
+# Terminal output is read once, by whoever was watching. security-report.json is what
+# full-audit.sh consumes and what anyone reads afterwards, and it carried no trace of
+# whether history was scanned or whether an allowlist had suppressed findings — so two
+# runs covering completely different ground produced byte-identical artifacts. Every
+# field below is the value the [SCOPE] and [FILTER] lines were built from, so the two
+# cannot disagree.
+GITLEAKS_SCOPE_JSON=$(jq -n \
+    --arg mode "$GITLEAKS_SCOPE_MODE" \
+    --arg range "$GITLEAKS_SCOPE_RANGE" \
+    --arg status "$GITLEAKS_SCOPE_STATUS" \
+    --arg scope "$GITLEAKS_SCOPE_TEXT" \
+    --arg allowlist "$GITLEAKS_ALLOWLIST_NAME" \
+    --arg allowlist_config "$GITLEAKS_ALLOWLIST_CONFIG" \
+    --argjson history_scanned "$GITLEAKS_SCOPE_HISTORY" \
+    '{mode: $mode, range: $range, status: $status, history_scanned: $history_scanned,
+      allowlist: $allowlist, allowlist_config: $allowlist_config, scope: $scope}' \
+    2>/dev/null || printf '%s' '{"mode":"unknown","status":"unknown","history_scanned":false,"allowlist":"unknown","scope":"the scope record could not be built"}')
+# --- cqt:secret-scan-block:end ---
 
 echo ""
 echo -e "${BLUE}[10/10]${NC} Verifying Roave Security Advisories (prevention layer)..."
@@ -1587,13 +1909,15 @@ jq -n \
     --argjson issues "$ISSUES" \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
+    --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
             tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
             tools_absent: $tools_absent,
-            tools_failed: $tools_failed
+            tools_failed: $tools_failed,
+            secret_scan: $secret_scan
         },
         summary: {
             overall_status: $status,

@@ -8,13 +8,23 @@
 # "Scan for secrets" is three jobs with wildly different costs:
 #
 #   phase 1  WORKING TREE   what secrets are in the code right now. Seconds.
-#                           `gitleaks detect --no-git` already does this.
+#                           `gitleaks dir`, built by core/secret-scan.sh.
 #   phase 2  CONFIRMATION   for a secret we ALREADY know about, when did it enter
 #                           history, in which commits, by whom. This file.
 #   phase 3  DISCOVERY      what secrets are in history that are no longer in the
 #                           tree. Expensive; the only phase that needs a
-#                           full-history scanner. NOT implemented here, and the
-#                           phase-1 invocation keeps its --no-git.
+#                           full-history scanner. Implemented in
+#                           core/secret-scan.sh as an opt-in
+#                           (CQT_SECRET_SCAN=history) or a bounded commit range
+#                           (CQT_SECRET_SCAN=diff), never as the default.
+#
+# Phase 3 changes what this file is handed. A finding that is only in HISTORY has no
+# file in the working tree, so cqt_secret_extract_value has nothing to read and this
+# file correctly answers "unknown (value_unavailable)" for it. That answer is not the
+# last word: cqt_gitleaks_history_backfill in core/secret-scan.sh then fills the
+# commit, author and date in from the history scan that produced the finding, and it
+# does so ONLY where this file could not answer, because a full walk from here covers
+# all of history while a bounded pass only knows the range it was given.
 #
 # A phase-1 finding on its own is not actionable. "There is an API key in
 # PreferencesController.php" leaves the only question that decides the remediation
@@ -459,6 +469,13 @@ cqt_secret_history_scan() {
 # commit_count is null - not 0 - whenever the answer is unknown. A zero means "we
 # looked and it is not in history"; anything else is a different claim.
 #
+# Null also reaches a finding that IS in history, on one path this function does not
+# take: cqt_gitleaks_history_backfill in core/secret-scan.sh answers for a finding
+# whose file is gone from the working tree, and it knows the introducing commit
+# without knowing how many commits carry the value. So a reader must treat null as
+# "not established", never as zero, and cqt_secret_history_report renders it that
+# way rather than printing a number.
+#
 # Call it in a command substitution. It never fails and never emits a secret.
 #   cqt_secret_history_json <gitleaks_report_json> [repo_dir]
 cqt_secret_history_json() {
@@ -700,7 +717,19 @@ cqt_secret_history_report() {
         (.file // "?") + ":" + ((.line // 0) | tostring) + " - " +
         (if .history_status == "found" then
             "in git history since " + ((.first_seen_date // "?") | .[0:10]) +
-            " (" + ((.commit_count // 0) | tostring) + " commit(s), first by " +
+            # A null count is NOT rendered as a number. It arrives when the
+            # attribution came from the history SCAN rather than from the phase 2
+            # walk: a finding whose file is gone from the tree has no value to walk
+            # for. The old "// 0" turned that into "0 commit(s)" on the same line
+            # that says the secret IS in history, and before that it was a
+            # fabricated 1. This line is what a human acts on, so the gap is stated
+            # here and not only in the JSON.
+            #
+            # NOTE for editors: this jq program is inside a single-quoted bash
+            # string, so no apostrophe may appear anywhere in these comments.
+            (if (.commit_count == null)
+             then " (commit count not established, first by "
+             else " (" + (.commit_count | tostring) + " commit(s), first by " end) +
             (.author // "unknown") + ") - ROTATE, editing the file is not enough"
          elif .history_status == "not_in_history" then
             "not in git history (working tree only) - remove before committing"

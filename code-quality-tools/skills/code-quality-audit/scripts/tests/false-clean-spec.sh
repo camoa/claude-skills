@@ -53,6 +53,16 @@
 #               runs against a real temp repository with a real history, and the same
 #               run asserts the value the pass had to handle reached no file, no
 #               printed line and no process argv.
+#   U  (items 7, 10, 11, 17) what ground the secret scan covers, and how far a
+#               finding reaches. The scan ran --no-git, so a secret committed and
+#               later removed — the case gitleaks exists for — was never looked for;
+#               dropping --no-git on its own makes the suite unusable on a repository
+#               that ever committed its vendor directory, so the tree is the default,
+#               a bounded commit range is the CI answer, and full history is a
+#               budgeted opt-in. The pathspec that LOOKS like scoping and is a silent
+#               no-op is refused. And on Acquia the deploy artifact is a second git
+#               history with its own remote, which changes both the blast radius and
+#               the remediation.
 #
 # Where an assertion can be proved by executing the real code, it is: the phpstan
 # expression is extracted from the script and evaluated, and setup_report_dir /
@@ -76,6 +86,7 @@ ENVSH="${ROOT}/core/detect-environment.sh"
 FULL="${ROOT}/core/full-audit.sh"
 COV="${ROOT}/drupal/coverage-report.sh"
 LINT="${ROOT}/drupal/lint-check.sh"
+SCANLIB="${ROOT}/core/secret-scan.sh"
 
 for f in "$SOLID" "$SEC" "$NEXTSEC" "$ENVSH" "$FULL" "$COV" "$LINT"; do
   [[ -f "$f" ]] || { echo "FATAL: missing $f" >&2; exit 2; }
@@ -107,6 +118,16 @@ refute_contains() {
   else
     ok "$desc"
   fi
+}
+
+# "does this text contain that literal", with NOTHING as its own answer. A refutation
+# written as a bare case-match reports success when the thing under test produced no
+# text at all, which is the false-clean shape one level up; every negative assertion
+# built on this is therefore paired with a positive one over the same string, so an
+# empty or errored result cannot satisfy it.
+u_has() {   # <haystack> <literal> ; yes | no | NOTHING
+  if [ -z "$1" ]; then printf 'NOTHING'; return 0; fi
+  if printf '%s' "$1" | grep -qF -- "$2"; then printf 'yes'; else printf 'no'; fi
 }
 
 TMP="$(mktemp -d)"
@@ -206,6 +227,30 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
     assert_eq "[$stack] every gitleaks invocation carries --redact" "0" "$missing"
   fi
 done
+
+# The grep above can only see command lines that are WRITTEN OUT in the two gate
+# scripts, and after the scope work only one of those is left: the literal fallback
+# used when the library is not sourced. Every command line a real run executes is
+# BUILT by core/secret-scan.sh, which that grep cannot reach at all, so the contract
+# is checked where the command lines are actually made — by calling the builder and
+# reading what it produced. A grep would also pass on a file containing no gitleaks
+# invocations at all; this cannot, because it asserts the invocation is there.
+if [[ -f "$SCANLIB" ]]; then
+  for pass in tree history diff; do
+    # A range is set so the history and diff passes build their real, fully populated
+    # command line rather than a degenerate one.
+    LIB_ARGV=$(CQT_GL_RANGE="deadbeef..HEAD" bash -c '
+      set -e
+      . "$1"
+      cqt_gitleaks_argv "$2" "." "/tmp/cqt-redact-probe.json" | tr "\n" " "
+    ' _ "$SCANLIB" "$pass" 2>/dev/null || printf '')
+    assert_eq "[lib] the $pass command line core/secret-scan.sh builds is a gitleaks run that redacts" \
+      "yes|yes|yes" \
+      "$(u_has "$LIB_ARGV" 'gitleaks ')|$(u_has "$LIB_ARGV" '--report-format json')|$(u_has "$LIB_ARGV" '--redact')"
+  done
+else
+  bad "[lib] core/secret-scan.sh is present, so its command lines can be checked for --redact"
+fi
 
 # ── C. report directory is not committable (item 8) ──────────────────────────
 echo ""
@@ -5572,6 +5617,1352 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
     REM2=$(jq -r "$ISSUE2 | .remediation // \"MISSING\"" "$REPORT2" 2>/dev/null || echo ERR)
     assert_eq "[$stack] e2e: and the report never tells the reader that no rotation is forced" \
       "yes" "$(case "$REM2" in *"no rotation is forced"*) echo "no: $REM2" ;; *) echo yes ;; esac)"
+  done
+fi
+
+# ── U. what ground the secret scan covers, and how far a finding reaches ─────
+#     (items 7, 10, 11, 17)
+echo ""
+echo "U: the secret scan says what it covered, and covers what it says"
+
+# Item 7: the scan ran `gitleaks detect --no-git`, so git history was never read. A
+# secret committed and later removed — the case gitleaks exists for — was invisible.
+# The project this came from had auth.json with a 93-character GitHub token committed
+# in 82947f1b8 and gitignored afterwards: absent from the tree, present in every clone.
+#
+# Item 11 is why item 7 cannot simply be "drop --no-git". Measured on that repository:
+# 2,368 commits, 253,505 packed objects, 224.84 MiB of history, core/vendor/contrib all
+# committed before a Composer migration. A full-history scan ran for many minutes at
+# several hundred percent CPU and was killed at ten. So: the working tree by default,
+# a bounded commit range for CI, and full history as a budgeted opt-in.
+#
+# Item 11 also records a correction that is the reason this section exists in the shape
+# it does. Excluding vendored paths with a git pathspec through --log-opts DOES NOT
+# WORK: gitleaks splits that flag on whitespace before handing it to `git log`, and
+# pathspec quoting does not survive the split. Measured there: 0 `+++ b/vendor/` lines
+# when the pathspec was quoted properly to `git log`, 3,375 when passed as one
+# --log-opts string; a 1h07m run over 4.01 GB that reported no error and was not scoped
+# at all. U5 below reproduces the no-op from the other side and pins that the tool
+# refuses to construct one.
+#
+# Item 10 (the `detect --no-git` -> `dir` spelling) rides along, because the choice
+# between `git` and `dir` IS the history-versus-tree decision. U0 pins that it is a
+# rename and not a change of coverage.
+#
+# Item 17: on Acquia, `acli push:artifact` commits the built tree to a SECOND git
+# repository with its own remote, clones and access list. A credential in exported
+# config therefore lives in two histories, and every deploy re-commits it until the
+# value leaves config. Reporting "found in 44 commits" against the source repo alone
+# understates the blast radius and prescribes the wrong remediation.
+
+GLTPL="${ROOT}/../templates/gitleaks-vendored-allowlist.toml"
+
+if [[ -f "$SCANLIB" ]]; then
+  ok "core/secret-scan.sh exists"
+else
+  bad "core/secret-scan.sh exists"
+fi
+for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+  stack="${target%%:*}"; file="${target#*:}"
+  if grep -q 'secret-scan.sh' "$file"; then
+    ok "[$stack] security-check.sh sources core/secret-scan.sh"
+  else
+    bad "[$stack] security-check.sh sources core/secret-scan.sh"
+  fi
+done
+
+# The four synthetic secrets are in real credential FORMATS for the same reason as
+# section T: gitleaks 8.30.1 allowlists the documentation examples, so a fixture built
+# from AKIAIOSFODNN7EXAMPLE produces no finding and every case below would be vacuous.
+# They are not credentials.
+U_TREE='ghp_ZmQ4TtaRcXbPvKeWnLdJyHsGuAiOq2B3xC7v'
+U_GONE='ghp_Nb7KpXwLzRfTdQmYcHvJeAiUsOg1B4tZn6Wy'
+U_LATE='ghp_Vq3HnRtBcZmXpLdWyKfJgAsEuOi9T5aN2bYx'
+U_CONF='ghp_Jd8YwMzTbKqRnVpXcLfHgAeSuOi4B1tZ7mNy'
+
+UU="$TMP/scan"; mkdir -p "$UU"
+
+# One committer identity and fixed dates, so every expected value is one the fixture
+# chose rather than one read back out of the thing under test.
+u_commit() {  # <repo> <message> <iso-date>
+  GIT_AUTHOR_DATE="$3" GIT_COMMITTER_DATE="$3" \
+  git -C "$1" -c user.name='Ada Lovelace' -c user.email='ada@example.com' \
+    -c commit.gpgsign=false commit -qm "$2"
+}
+
+# Resolve the plan in a SEPARATE process under a real `set -e`, the way the gate runs
+# it. Echoes "<status>|<mode>|<range>". Extra arguments are env assignments.
+u_plan() {  # <repo> [env...]
+  local repo="$1"; shift
+  env "$@" bash -c '
+    set -e
+    . "$1"
+    cd "$2"
+    cqt_gitleaks_plan "."
+    printf "%s|%s|%s" "$CQT_GL_STATUS" "$CQT_GL_MODE" "$CQT_GL_RANGE"
+  ' _ "$SCANLIB" "$repo" 2>/dev/null || printf 'ERR||'
+}
+
+# The argv the shipped builder produces for one pass, space-joined. Read from the
+# builder rather than from a copy of it, so the assertion and the invocation cannot
+# drift apart.
+u_argv() {  # <repo> <pass> [env...]
+  local repo="$1" pass="$2"; shift 2
+  env "$@" bash -c '
+    set -e
+    . "$1"
+    cd "$2"
+    cqt_gitleaks_plan "."
+    cqt_gitleaks_argv "$3" "." "/tmp/cqt-argv-probe.json" | tr "\n" " "
+  ' _ "$SCANLIB" "$repo" "$pass" 2>/dev/null || printf 'ERR'
+}
+
+# Run the SHIPPED secret-scan block of a real security-check.sh against a real
+# repository with the real gitleaks. Echoes a work directory holding:
+#   out.txt          everything the block printed
+#   out.txt.res      "<critical count>|<skipped tools>"
+#   out.txt.issues   the GITLEAKS_ISSUES array the block leaves behind
+#
+# `bash -c` in a separate process, not an inline subshell: bash suppresses `set -e`
+# inside any command whose status is tested, so a block that aborts in production
+# would keep going in a `( ... )` harness and the assertion would report a pass.
+U_BLOCK_START='# --- cqt:secret-scan-block:start ---'
+U_BLOCK_END='# --- cqt:secret-scan-block:end ---'
+u_extract_block() {  # <script> <label> ; echoes the block file path
+  local script="$1" label="$2"
+  local out="$TMP/u_block_${label}.sh"
+  awk -v s="$U_BLOCK_START" -v e="$U_BLOCK_END" '
+    index($0, s) { on = 1; next }
+    index($0, e) { on = 0 }
+    on { print }
+  ' "$script" > "$out"
+  printf '%s' "$out"
+}
+#
+# u_run_block_in takes the report directory as an argument so a SECOND run can land
+# in the same one. That is the only way to see what a run leaves behind for the next
+# run to trip over, which is a whole class of defect a fresh directory per case hides.
+u_run_block_in() {  # <reportdir> <blockfile> <repo> [env...]
+  local dir="$1" blockfile="$2" repo="$3"; shift 3
+  mkdir -p "$dir/security"
+  env "$@" REPORT_DIR="$dir" bash -c '
+    set -e
+    RED=""; GREEN=""; YELLOW=""; BLUE=""; NC=""
+    CRITICAL_COUNT=0
+    SKIPPED_TOOLS=()
+    ABSENT_TOOLS=()
+    cd "$4"
+    . "$2"
+    . "$3"
+    . "$1" > "$5" 2>&1
+    printf "%s" "${GITLEAKS_ISSUES:-MISSING}" > "$5".issues
+    printf "%s" "${GITLEAKS_SCOPE_JSON:-MISSING}" > "$5".scope
+    printf "%s|%s" "$CRITICAL_COUNT" "${SKIPPED_TOOLS[*]+${SKIPPED_TOOLS[*]}}" > "$5".res
+  ' _ "$blockfile" "$SCANLIB" "$HELPER" "$repo" "$dir/out.txt" >/dev/null 2>&1 || true
+  printf '%s' "$dir"
+}
+u_run_block() {  # <blockfile> <repo> [env...]
+  local blockfile="$1" repo="$2"; shift 2
+  local dir
+  dir="$(mktemp -d "$TMP/ublk.XXXXXX")"
+  u_run_block_in "$dir" "$blockfile" "$repo" "$@"
+}
+# u_has() is defined near the top of this file, because section B uses it too.
+u_files() {   # <workdir> ; the File values in the merged report, sorted and joined
+  jq -r '[.[].File] | sort | join(",")' "$1/security/gitleaks.json" 2>/dev/null \
+    || printf 'NO-REPORT'
+}
+u_res()  { cut -d'|' -f1,2 < "$1/out.txt.res" 2>/dev/null || printf 'NO-RES'; }
+u_out()  { tr '\n' ' ' < "$1/out.txt" 2>/dev/null || printf ''; }
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "  SKIP: section U behavioral cases (gitleaks not installed)"
+  U_HAVE_GITLEAKS=0
+else
+  U_HAVE_GITLEAKS=1
+fi
+
+if [[ "$U_HAVE_GITLEAKS" == "1" ]]; then
+  # ── U0: item 10 is a rename, not a change of coverage ──────────────────────
+  #
+  # `gitleaks detect --no-git` is the 8.x spelling of `gitleaks dir`. That is the
+  # claim the migration rests on, and it is the kind of claim this branch has been
+  # wrong about five times from names and docs alone. Both spellings are run against
+  # one fixture and their findings compared. The fixture carries a gitignored file on
+  # purpose: if `dir` honoured .gitignore and `detect --no-git` did not, the rename
+  # would quietly stop scanning exactly the files people put credentials in.
+  U0="$UU/spelling"; mkdir -p "$U0"
+  printf 'GITHUB_TOKEN=%s\n' "$U_TREE" > "$U0/.env"
+  printf 'const k = "%s";\n' "$U_GONE" > "$U0/app.js"
+  printf '.env\n' > "$U0/.gitignore"
+  ( cd "$U0" && gitleaks dir . --redact --report-format json \
+      --report-path "$UU/spell-dir.json" --no-banner >/dev/null 2>&1 || true )
+  ( cd "$U0" && gitleaks detect --no-git --redact --report-format json \
+      --report-path "$UU/spell-detect.json" --no-banner >/dev/null 2>&1 || true )
+  U0_DIR=$(jq -r '[.[].File] | sort | join(",")' "$UU/spell-dir.json" 2>/dev/null || echo ERR)
+  U0_DET=$(jq -r '[.[].File] | sort | join(",")' "$UU/spell-detect.json" 2>/dev/null || echo ERR)
+  # Asserted against the literal expected set, not just against each other: two
+  # spellings that both found NOTHING would agree perfectly and prove nothing.
+  assert_eq "premise: the fixture holds a tracked and a gitignored secret" \
+    ".env,app.js" "$U0_DIR"
+  assert_eq "gitleaks dir covers exactly what detect --no-git covered" "$U0_DIR" "$U0_DET"
+
+  # ── U1: the default is the working tree, and it says so ────────────────────
+  #
+  # The fixture separates the three questions that the one word "scan" used to cover:
+  #   tracked.js  a secret in the tree AND in history
+  #   removed.js  a secret in history and NOT in the tree   <- item 7's case
+  #   late.js     a secret committed after the diff base    <- item 11's CI case
+  U1="$UU/repo"; mkdir -p "$U1"; git -C "$U1" init -q
+  printf 'const t = "%s";\n' "$U_TREE" > "$U1/tracked.js"
+  printf 'const g = "%s";\n' "$U_GONE" > "$U1/removed.js"
+  git -C "$U1" add -A; u_commit "$U1" c1 "2024-01-02T03:04:05+00:00"
+  U1_C1=$(git -C "$U1" rev-parse HEAD)
+  git -C "$U1" rm -q removed.js; u_commit "$U1" c2 "2024-02-02T00:00:00+00:00"
+  U1_BASE=$(git -C "$U1" rev-parse HEAD)
+  printf 'const l = "%s";\n' "$U_LATE" > "$U1/late.js"
+  git -C "$U1" add -A; u_commit "$U1" c3 "2024-03-02T00:00:00+00:00"
+  U1_HEAD=$(git -C "$U1" rev-parse HEAD)
+
+  # ── fixtures for the cases below, built once ───────────────────────────────
+  #
+  # U11: a .gitattributes `-diff` attribute. `gitleaks git` drives `git log -p`, and
+  # that attribute makes git print "Binary files a/x and b/x differ" with NO content
+  # lines, so the pass reads nothing, writes a well-formed [] and exits 0. `*.json
+  # -diff` and `*.cfg binary` are ordinary entries and config files are where tokens
+  # live, so this is not a corner.
+  U11="$UU/attr"; mkdir -p "$U11"; git -C "$U11" init -q
+  printf 'const t = "%s";\n' "$U_TREE" > "$U11/tracked.js"
+  printf 'const g = "%s";\n' "$U_GONE" > "$U11/removed.js"
+  printf '* -diff\n' > "$U11/.gitattributes"
+  git -C "$U11" add -A; u_commit "$U11" c1 "2024-01-02T03:04:05+00:00"
+  U11_C1=$(git -C "$U11" rev-parse HEAD)
+  git -C "$U11" rm -q removed.js; u_commit "$U11" c2 "2024-02-02T00:00:00+00:00"
+
+  # U13: THE ROTATED CREDENTIAL. Two different values at the same file, line and rule
+  # in two commits — the most common thing history holds. Both are live at the
+  # provider until each is separately revoked, and both are in every clone.
+  U13="$UU/rotate"; mkdir -p "$U13"; git -C "$U13" init -q
+  printf 'const k = "%s";\n' "$U_GONE" > "$U13/key.js"
+  git -C "$U13" add -A; u_commit "$U13" old "2024-01-02T00:00:00+00:00"
+  U13_OLD=$(git -C "$U13" rev-parse HEAD)
+  printf 'const k = "%s";\n' "$U_TREE" > "$U13/key.js"
+  git -C "$U13" add -A; u_commit "$U13" new "2024-02-02T00:00:00+00:00"
+  U13_NEW=$(git -C "$U13" rev-parse HEAD)
+  U13_COMMITS=$(printf '%s\n%s\n' "$U13_OLD" "$U13_NEW" | sort | paste -sd, -)
+
+  # U14: ONE credential whose line number moved. The mirror image of U13 — same value,
+  # different coordinates — and the case where over-reporting is the accepted cost of
+  # never dropping U13's second credential.
+  U14="$UU/moved"; mkdir -p "$U14"; git -C "$U14" init -q
+  printf 'const k = "%s";\n' "$U_TREE" > "$U14/key.js"
+  git -C "$U14" add -A; u_commit "$U14" c1 "2024-01-02T00:00:00+00:00"
+  printf '// a\n// b\nconst k = "%s";\n' "$U_TREE" > "$U14/key.js"
+  git -C "$U14" add -A; u_commit "$U14" c2 "2024-02-02T00:00:00+00:00"
+
+  # U20: THE COMMIT COUNT. One secret that stays in the working tree while the number
+  # of its occurrences changes in three commits, and one that leaves the tree
+  # entirely, in the same repository:
+  #
+  #   c1  keep.js (U_TREE) and gone.js (U_GONE) added   U_TREE 0->1   U_GONE 0->1
+  #   c2  dup.js (U_TREE) added                         U_TREE 1->2
+  #   c3  dup.js and gone.js removed                    U_TREE 2->1   U_GONE 1->0
+  #
+  # So git's own pickaxe answers 3 for the tree secret and 2 for the one that left,
+  # and both numbers are properties of the FIXTURE rather than readings taken off the
+  # thing under test. The merge emits one record per introduction event, which is 1
+  # for every record regardless of either number, and that 1 used to be copied
+  # straight into the user-visible commit_count for a history-only finding.
+  U20="$UU/count"; mkdir -p "$U20"; git -C "$U20" init -q
+  printf 'const k = "%s";\n' "$U_TREE" > "$U20/keep.js"
+  printf 'const g = "%s";\n' "$U_GONE" > "$U20/gone.js"
+  git -C "$U20" add -A; u_commit "$U20" c1 "2024-01-02T00:00:00+00:00"
+  printf 'const d = "%s";\n' "$U_TREE" > "$U20/dup.js"
+  git -C "$U20" add -A; u_commit "$U20" c2 "2024-02-02T00:00:00+00:00"
+  git -C "$U20" rm -q dup.js gone.js; u_commit "$U20" c3 "2024-03-02T00:00:00+00:00"
+  # The oracle is git, run against the fixture values on purpose: these are fixture
+  # strings, not credentials, so putting them in argv here costs nothing. The walk in
+  # core/secret-history.sh refuses `git log -S` for a real value because argv is
+  # world-readable, but its MATCHING RULE is meant to be identical to -S.
+  U20_PICK_TREE=$(git -C "$U20" log --all -S"$U_TREE" --format=%H | grep -c . || true)
+  U20_PICK_GONE=$(git -C "$U20" log --all -S"$U_GONE" --format=%H | grep -c . || true)
+  # If the fixture ever stops producing these numbers, every U20 case below is
+  # asserting about a repository that does not pose the question.
+  assert_eq "premise: the fixture holds a secret in 3 commits and one in 2, per git's pickaxe" \
+    "3|2" "$U20_PICK_TREE|$U20_PICK_GONE"
+
+  # U19: every secret under a path the shipped allowlist matches, so the opt-in turns
+  # a two-finding repository into a zero-finding report. That is the shape where an
+  # undisclosed allowlist is indistinguishable from a clean scan.
+  U19REPO="$UU/vendored"; mkdir -p "$U19REPO/vendor/acme" "$U19REPO/web/core/lib"
+  git -C "$U19REPO" init -q
+  printf 'const a = "%s";\n' "$U_TREE" > "$U19REPO/vendor/acme/a.js"
+  printf 'const b = "%s";\n' "$U_GONE" > "$U19REPO/web/core/lib/b.js"
+  git -C "$U19REPO" add -A; u_commit "$U19REPO" c1 "2024-01-02T00:00:00+00:00"
+
+  # The premise behind U11, measured against gitleaks itself rather than assumed from
+  # the attribute's documentation. Both halves are asserted, because a run that found
+  # nothing twice would agree perfectly and show nothing.
+  ( cd "$U11" && gitleaks git . --redact --report-format json \
+      --report-path "$UU/attr-plain.json" --no-banner >/dev/null 2>&1 || true )
+  ( cd "$U11" && gitleaks git . --log-opts="--text --no-textconv -p -U0 --all" \
+      --redact --report-format json --report-path "$UU/attr-text.json" --no-banner >/dev/null 2>&1 || true )
+  assert_eq "measured: a '-diff' attribute empties git log -p, and --text is what puts the content back" \
+    "0|2" \
+    "$(jq 'length' "$UU/attr-plain.json" 2>/dev/null || echo ERR)|$(jq 'length' "$UU/attr-text.json" 2>/dev/null || echo ERR)"
+
+  # The premise behind U13: gitleaks really does report two records at ONE set of
+  # coordinates, distinguished only by commit and by the entropy of the value. If the
+  # fixture ever stopped producing that shape, every U13 assertion would be vacuous.
+  ( cd "$U13" && gitleaks git . --log-opts="--text --no-textconv -p -U0 --all" \
+      --redact --report-format json --report-path "$UU/rot-raw.json" --no-banner >/dev/null 2>&1 || true )
+  assert_eq "measured: a rotated credential is two records at the same file:line:rule, with different commits and different entropies" \
+    "2|1|2|2" \
+    "$(jq -r '"\(length)|\([.[].StartLine]|unique|length)|\([.[].Commit]|unique|length)|\([.[].Entropy]|unique|length)"' "$UU/rot-raw.json" 2>/dev/null || echo ERR)"
+  # And the matched value is genuinely unavailable to key on, which is why entropy is
+  # what the merge uses. --redact is not negotiable, so this constraint is permanent.
+  assert_eq "measured: --redact leaves no value to deduplicate on" \
+    "REDACTED|REDACTED" \
+    "$(jq -r '[.[].Secret]|unique|join(",")' "$UU/rot-raw.json" 2>/dev/null || echo ERR)|$(jq -r '[.[].Match]|unique|join(",")' "$UU/rot-raw.json" 2>/dev/null || echo ERR)"
+
+  # ── a gitleaks that reports how much ground it covered ─────────────────────
+  #
+  # The pair below differs in ONE number: the bytes the git pass says it scanned.
+  # Everything else — a well-formed empty report, exit 0, a clean working-tree pass —
+  # is identical, so any assertion that separates them is separating exactly the
+  # coverage claim and nothing else.
+  u_bytes_stub() {  # <dir> <bytes the git pass reports>
+    mkdir -p "$1"
+    cat > "$1/gitleaks" <<STUB
+#!/usr/bin/env bash
+mode="\$1"
+out=""
+while [ \$# -gt 0 ]; do
+  case "\$1" in --report-path) out="\$2"; shift 2 ;; *) shift ;; esac
+done
+[ -n "\$out" ] && printf '[]' > "\$out"
+if [ "\$mode" = "git" ]; then
+  printf 'INF 0 commits scanned.\nINF scanned ~$2 bytes ($2) in 26ms\nINF no leaks found\n' >&2
+else
+  printf 'INF scanned ~128 bytes (128 bytes) in 26ms\nINF no leaks found\n' >&2
+fi
+exit 0
+STUB
+    chmod +x "$1/gitleaks"
+  }
+  u_bytes_stub "$TMP/u_zerobytes" 0
+  u_bytes_stub "$TMP/u_somebytes" 4096
+
+  # ── a PATH with no timeout(1) on it ────────────────────────────────────────
+  #
+  # PREPENDING a stub cannot make timeout absent, because the real one is still
+  # further down the PATH. The whole PATH is replaced instead, with a symlink farm
+  # holding everything these scripts legitimately need and nothing named timeout.
+  U18BIN="$TMP/nobudget"; mkdir -p "$U18BIN"
+  for u18t in bash sh env git gitleaks jq awk gawk grep sed tr cut sort uniq wc head tail \
+              cat rm mkdir rmdir mktemp dirname basename ls date chmod find xargs id \
+              printf expr paste tee touch cp mv; do
+    u18p="$(command -v "$u18t" 2>/dev/null)" && ln -sf "$u18p" "$U18BIN/$u18t"
+  done
+  # If this premise stops holding, every "no budget" assertion below is asserting
+  # about a run that had a budget after all.
+  assert_eq "premise: the no-budget PATH resolves gitleaks and git but not timeout" \
+    "yes|yes|no" \
+    "$(PATH="$U18BIN" command -v gitleaks >/dev/null 2>&1 && echo yes || echo no)|$(PATH="$U18BIN" command -v git >/dev/null 2>&1 && echo yes || echo no)|$(PATH="$U18BIN" command -v timeout >/dev/null 2>&1 && echo yes || echo no)"
+
+  assert_eq "with nothing set, the plan is the working tree" \
+    "ok|tree|" "$(u_plan "$U1")"
+  # One assertion over three properties of the same argv. Split apart, the negative
+  # half ("--no-git is gone") is satisfied by an argv builder that produced nothing
+  # at all, which is exactly what a missing helper does.
+  U1_ARGV=$(u_argv "$U1" tree)
+  assert_eq "the working-tree pass is 'gitleaks dir', redacting, with no legacy --no-git" \
+    "yes|yes|no" \
+    "$(u_has "$U1_ARGV" 'gitleaks dir ')|$(u_has "$U1_ARGV" '--redact')|$(u_has "$U1_ARGV" '--no-git')"
+
+  # The neighbouring scripts must not keep the old spelling either. A fix that lands
+  # in the helper and leaves a second call site behind is the shape this branch has
+  # paid for five times.
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; file="${target#*:}"
+    assert_eq "[$stack] no --no-git invocation is left in security-check.sh" \
+      "0" "$(grep -c -- '--no-git' "$file" || true)"
+  done
+
+  # ── U0a: the SHIPPED ARTIFACTS that tell a user what to run carry it too ───
+  #
+  # The guard above reads security-check.sh, which is where the fix landed. That is
+  # not where a user gets a command from. templates/ci/github-drupal.yml is INSTALLED
+  # as .github/workflows/quality.yml by commands/setup.md and then runs on every push
+  # and every pull request, and references/operations/*-security.md is what names the
+  # command in prose. All three kept `gitleaks detect --no-git` after the fix shipped,
+  # and commit 7f84ec6 on this branch edited that exact template line to add --redact
+  # while leaving `detect --no-git` standing — so a guard scoped to one file is
+  # measured, not theorised, to miss this.
+  #
+  # Prose ABOUT the old spelling must stay legal: these files now tell a reader why
+  # not to use it, and a guard that forbade the explanation would push the project
+  # back to silence. So each artifact is reduced to what it PRESCRIBES first:
+  #
+  #   a workflow  every line that is not a YAML comment. A workflow is executed, so a
+  #               non-comment line naming --no-git is an invocation — including a
+  #               backslash continuation, which a "starts with gitleaks" match misses.
+  #   a reference the `**Command...:**` bullets plus the fenced code blocks, which are
+  #               the two places a reader copies out of.
+  #
+  # Every negative below is paired with a POSITIVE one, because an extractor that
+  # matched NOTHING — a moved file, a renamed heading, a path typo — satisfies
+  # "contains no --no-git" for free, and that vacuous pass is the same false clean
+  # this whole file is about.
+  u_yaml_effective() {  # <file> ; the executable part of a workflow
+    grep -vE '^[[:space:]]*#' "$1" 2>/dev/null || true
+  }
+  u_md_prescribed() {   # <file> ; the copy-and-paste part of a reference doc
+    awk '
+      /^[[:space:]]*```/ { fence = !fence; next }
+      fence             { print; next }
+      /\*\*Command/     { print }
+    ' "$1" 2>/dev/null || true
+  }
+
+  U_CITPL="${ROOT}/../templates/ci/github-drupal.yml"
+  U_WF="$(u_yaml_effective "$U_CITPL")"
+  assert_eq "premise: the shipped CI workflow exists and prescribes a gitleaks scan" \
+    "yes|yes" \
+    "$([ -f "$U_CITPL" ] && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks[[:space:]]' && echo yes || echo no)"
+  # One assertion over three properties of the same file: what it runs, and the two
+  # spellings it must not run. Split apart, the negative halves pass on an empty file.
+  assert_eq "the shipped CI workflow scans git history, with no legacy spelling left" \
+    "yes|0|0" \
+    "$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks git[[:space:]]' && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_WF" | grep -c 'gitleaks detect' || true)"
+  # A checkout at the default fetch-depth of 1 gives `gitleaks git` a one-commit
+  # clone, and a one-commit history that reports no leaks is a false clean. The scan
+  # line being right is not enough if the workflow never fetched the history.
+  assert_eq "and it fetches the history that scan needs" \
+    "yes" "$(printf '%s\n' "$U_WF" | grep -qE 'fetch-depth:[[:space:]]*0' && echo yes || echo no)"
+
+  for target in "drupal:${ROOT}/../references/operations/drupal-security.md" \
+                "nextjs:${ROOT}/../references/operations/nextjs-security.md"; do
+    stack="${target%%:*}"; file="${target#*:}"
+    U_MD="$(u_md_prescribed "$file")"
+    assert_eq "[$stack] premise: the security reference exists and prescribes a gitleaks command" \
+      "yes|yes" \
+      "$([ -f "$file" ] && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks ' && echo yes || echo no)"
+    assert_eq "[$stack] the security reference prescribes both grounds, with no legacy spelling" \
+      "yes|yes|0|0" \
+      "$(printf '%s\n' "$U_MD" | grep -q 'gitleaks git ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks dir ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_MD" | grep -c 'gitleaks detect' || true)"
+  done
+
+  # And a sweep, so a template or reference added LATER cannot reintroduce the
+  # spelling in a file nobody thought to name above. The file count is asserted for
+  # the same reason as every premise here: a find over a mistyped path visits nothing
+  # and reports zero hits.
+  U_SWEEP_FILES=0; U_SWEEP_HITS=0
+  while IFS= read -r u_sf; do
+    [ -n "$u_sf" ] || continue
+    U_SWEEP_FILES=$((U_SWEEP_FILES + 1))
+    case "$u_sf" in
+      *.yml|*.yaml) U_SWEEP_TXT="$(u_yaml_effective "$u_sf")" ;;
+      *)            U_SWEEP_TXT="$(u_md_prescribed "$u_sf")" ;;
+    esac
+    U_SWEEP_N=$(printf '%s\n' "$U_SWEEP_TXT" | grep -c -e '--no-git' -e 'gitleaks detect' || true)
+    case "$U_SWEEP_N" in ''|*[!0-9]*) U_SWEEP_N=0 ;; esac
+    U_SWEEP_HITS=$((U_SWEEP_HITS + U_SWEEP_N))
+  done < <(find "${ROOT}/../templates" "${ROOT}/../references" -type f \
+             \( -name '*.yml' -o -name '*.yaml' -o -name '*.md' \) 2>/dev/null | sort)
+  assert_eq "no shipped template or reference prescribes the legacy spelling" \
+    "yes|0" "$([ "$U_SWEEP_FILES" -gt 0 ] && echo yes || echo no)|$U_SWEEP_HITS"
+
+  # ── U2: the default does not read history, and the run says which it was ───
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; file="${target#*:}"
+    U_BF=$(u_extract_block "$file" "$stack")
+    if [[ ! -s "$U_BF" ]]; then
+      bad "[$stack] the secret-scan block is delimited and extractable"
+      continue
+    fi
+    ok "[$stack] the secret-scan block is delimited and extractable"
+
+    U2W=$(u_run_block "$U_BF" "$U1")
+    assert_eq "[$stack] the default scan reports the two secrets that are in the tree" \
+      "late.js,tracked.js" "$(u_files "$U2W")"
+    assert_eq "[$stack] and counts them, with no tool recorded as skipped" \
+      "2|" "$(u_res "$U2W")"
+    # "Gitleaks: 0 findings" means two different things with and without history, so
+    # the run has to say which one it did.
+    assert_eq "[$stack] and the output states that git history was not scanned" \
+      "yes" "$(case "$(u_out "$U2W")" in *"history"*"not scanned"*) echo yes ;; *) echo "no: $(u_out "$U2W")" ;; esac)"
+
+    # ── U3: full history is opt-in, and finding it is what the opt-in buys ───
+    U3W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] the history opt-in finds the secret that is only in history" \
+      "late.js,removed.js,tracked.js" "$(u_files "$U3W")"
+    # The finding that is not in the tree still has to carry a history, and it comes
+    # from the scan itself rather than from the phase-2 confirmation pass, which
+    # cannot recover a value from a file that no longer exists.
+    U3_GONE='[.[] | select(.file == "removed.js")][0]'
+    assert_eq "[$stack] and attributes it to the commit that introduced it" \
+      "found|$U1_C1|Ada Lovelace" \
+      "$(jq -r "$U3_GONE | \"\(.history_status)|\(.first_seen_commit)|\(.author)\"" "$U3W/out.txt.issues" 2>/dev/null || echo ERR)"
+    assert_eq "[$stack] and tells the reader to rotate rather than to edit a file" \
+      "yes" "$(case "$(jq -r "$U3_GONE | .remediation // \"\"" "$U3W/out.txt.issues" 2>/dev/null)" in *[Rr]otate*) echo yes ;; *) echo no ;; esac)"
+    # Item 16 composes rather than collides: a tree finding still gets its answer
+    # from the phase-2 walk, and a history-only finding is never reported as
+    # "history could not be checked" just because its file is gone.
+    U3_TREE='[.[] | select(.file == "tracked.js")][0]'
+    assert_eq "[$stack] a tree finding keeps its phase-2 confirmation under the opt-in" \
+      "found|$U1_C1" \
+      "$(jq -r "$U3_TREE | \"\(.history_status)|\(.first_seen_commit)\"" "$U3W/out.txt.issues" 2>/dev/null || echo ERR)"
+    assert_eq "[$stack] and no finding is reported as unknown in a full-history run" \
+      "3|0" \
+      "$(jq -r '"\(length)|\([.[] | select(.history_status == "unknown")] | length)"' "$U3W/out.txt.issues" 2>/dev/null || echo ERR)"
+
+    # ── U20: the count is either walked or admitted, never invented ──────────
+    #
+    # A history-only finding cannot be counted here. Phase 2 counts by recovering the
+    # secret VALUE from the working-tree file and walking history for it, and this
+    # finding's file is gone from the tree, so there is nothing to recover. The scan
+    # that produced it knows the introducing commit and does not know how many
+    # commits carry the value.
+    #
+    # What was emitted anyway was `commit_count: 1` and "(1 commit(s), first by ...)",
+    # a POSITIVE claim nothing had counted — on the exact case the feature exists for,
+    # a token committed and later gitignored, and in the direction that understates
+    # blast radius. "1 commit" reads as "one rewrite cleans this up".
+    #
+    # The count is NOT recovered by reading the introducing blob back out of git: that
+    # puts a matched secret into a variable again, which is the hazard
+    # core/secret-history.sh exists to contain, for a number that changes no action.
+    U20W=$(u_run_block "$U_BF" "$U20" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] premise: the history run sees the tree secret and both that left it" \
+      "dup.js,gone.js,keep.js" "$(u_files "$U20W")"
+    U20_GONE='[.[] | select(.file == "gone.js")][0]'
+    U20_KEEP='[.[] | select(.file == "keep.js")][0]'
+    # history_status and history_reason ride along so a MISSING record cannot pass
+    # this: jq answers null for every field of a record that is not there, and null
+    # is what the honest count looks like.
+    assert_eq "[$stack] a history-only finding admits the count rather than inventing one" \
+      "found|history_scan|null|2" \
+      "$(jq -r "$U20_GONE | \"\(.history_status)|\(.history_reason)|\(.commit_count)\"" "$U20W/out.txt.issues" 2>/dev/null || echo ERR)|$U20_PICK_GONE"
+    # The JSON is not what a human acts on. Renaming a field while the console still
+    # prints "(1 commit(s))" would leave the harm exactly where it was.
+    U20_LINE=$(grep -F 'gone.js:1 - in git history' "$U20W/out.txt" 2>/dev/null | head -1)
+    assert_eq "[$stack] and the line a human reads says so, without a number and still telling them to rotate" \
+      "yes|no|yes" \
+      "$(case "$U20_LINE" in *"commit count not established"*) echo yes ;; *) echo "no: ${U20_LINE:-NO-LINE}" ;; esac)|$(case "$U20_LINE" in *"commit(s)"*) echo yes ;; *) echo no ;; esac)|$(case "$U20_LINE" in *ROTATE*) echo yes ;; *) echo no ;; esac)"
+    # The over-fire guard. "Emit null always" satisfies both assertions above and
+    # destroys the number the feature is for, so the finding phase 2 CAN answer for
+    # has to come back with the count git itself gives — 3, not 1, and not null.
+    assert_eq "[$stack] a tree-seen finding still carries the count phase 2 actually walked" \
+      "found||3|3" \
+      "$(jq -r "$U20_KEEP | \"\(.history_status)|\(.history_reason)|\(.commit_count)\"" "$U20W/out.txt.issues" 2>/dev/null || echo ERR)|$U20_PICK_TREE"
+    U20_KLINE=$(grep -F 'keep.js:1 - in git history' "$U20W/out.txt" 2>/dev/null | head -1)
+    assert_eq "[$stack] and its console line still prints that number" \
+      "yes" \
+      "$(case "$U20_KLINE" in *"(3 commit(s)"*) echo yes ;; *) echo "no: ${U20_KLINE:-NO-LINE}" ;; esac)"
+
+    # ── U4: the CI answer is a bounded commit range ──────────────────────────
+    U4W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE="$U1_BASE")
+    assert_eq "[$stack] a diff-scoped run does not reach back past its base" \
+      "late.js,tracked.js" "$(u_files "$U4W")"
+    assert_eq "[$stack] and records no skip, because it did the scan it advertised" \
+      "2|" "$(u_res "$U4W")"
+
+    # ── U5: a diff run whose base cannot be resolved is not a full-history run ─
+    #
+    # The tempting fallback is "no base, so scan everything". On the repository this
+    # came from that is an hour of CPU nobody asked for, silently, on every CI run.
+    # The other tempting fallback is "no base, so scan the tree and call it a diff
+    # scan", which reports a result for a scan that was never performed.
+    assert_eq "[$stack] an unresolvable base is refused at plan time" \
+      "no_base|diff|" "$(u_plan "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=no-such-ref)"
+    U5W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=no-such-ref)
+    refute_contains "[$stack] an unresolvable base does not report a clean tree" \
+      "$(u_out "$U5W")" 'No secrets detected'
+    assert_eq "[$stack] an unresolvable base records a skip rather than scanning everything" \
+      "0|gitleaks" "$(u_res "$U5W")"
+
+    # ── U6: a scan that ran out of budget is not a clean scan ────────────────
+    #
+    # Two mechanisms, because they fail differently and only one of them is obvious.
+    U6BIN="$TMP/u_to_$stack"; mkdir -p "$U6BIN"
+    printf '#!/usr/bin/env bash\nexit 124\n' > "$U6BIN/timeout"; chmod +x "$U6BIN/timeout"
+    U6W=$(u_run_block "$U_BF" "$U1" "PATH=$U6BIN:$PATH")
+    refute_contains "[$stack] a scan killed on its budget does not report a clean tree" \
+      "$(u_out "$U6W")" 'No secrets detected'
+    assert_eq "[$stack] a scan killed on its budget records a skip" \
+      "0|gitleaks" "$(u_res "$U6W")"
+    assert_eq "[$stack] and says the budget is why, rather than blaming the tool" \
+      "yes" "$(case "$(u_out "$U6W")" in *budget*) echo yes ;; *) echo "no: $(u_out "$U6W")" ;; esac)"
+
+    # The second mechanism is the dangerous one, and it is measured rather than
+    # imagined. gitleaks 8.30.1 given its OWN --timeout does not fail loudly when the
+    # budget expires: it writes a well-formed, EMPTY report, logs "partial scan
+    # completed" to stderr, and exits 1. A block that reads "report present, parses,
+    # length 0" calls that a clean tree. Stub reproduces exactly that triple.
+    U6B="$TMP/u_partial_$stack"; mkdir -p "$U6B"
+    cat > "$U6B/gitleaks" <<'PARTIAL'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --report-path) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$out" ] && printf '[]' > "$out"
+printf 'WRN scanned ~10800000 bytes (10.80 MB)\nWRN partial scan completed in 3.01s\nWRN no leaks found in partial scan\n' >&2
+exit 1
+PARTIAL
+    chmod +x "$U6B/gitleaks"
+    U6BW=$(u_run_block "$U_BF" "$U1" "PATH=$U6B:$PATH")
+    refute_contains "[$stack] a partial scan that wrote an empty report is not a clean tree" \
+      "$(u_out "$U6BW")" 'No secrets detected'
+    assert_eq "[$stack] a partial scan records a skip" \
+      "0|gitleaks" "$(u_res "$U6BW")"
+
+    # ── U7: the pathspec no-op is refused, not passed through ────────────────
+    U7W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=history \
+            "CQT_SECRET_SCAN_LOG_OPTS=--all -- ':(exclude)vendor'")
+    refute_contains "[$stack] a pathspec in --log-opts does not produce a clean report" \
+      "$(u_out "$U7W")" 'No secrets detected'
+    assert_eq "[$stack] a pathspec in --log-opts is refused and recorded as a skip" \
+      "0|gitleaks" "$(u_res "$U7W")"
+    # And a legitimate commit range through the same door still works, or the guard
+    # would be satisfiable by rejecting everything.
+    U7OK=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=history \
+             "CQT_SECRET_SCAN_LOG_OPTS=${U1_BASE}..HEAD")
+    assert_eq "[$stack] a plain commit range through the same door is accepted" \
+      "late.js,tracked.js" "$(u_files "$U7OK")"
+
+    # ── U11: the run says what ground it covered, for the two non-default modes ─
+    #
+    # Only the tree branch was covered before. Replacing the diff or history scope
+    # line with "working tree plus every commit in the entire repository history" —
+    # a scope line that lies in the DANGEROUS direction, claiming more ground than
+    # was covered — left the suite fully green. The whole point of these lines is
+    # that the run says what it looked at, so each branch is pinned to the ground it
+    # names and to the ground it explicitly says it did NOT cover.
+    U11_HOUT=$(u_out "$U3W")
+    assert_eq "[$stack] a full-history run says it covered every commit, and does not claim a range" \
+      "yes|yes|no|no" \
+      "$(u_has "$U11_HOUT" '[SCOPE]')|$(u_has "$U11_HOUT" 'every commit reachable from every ref')|$(u_has "$U11_HOUT" 'history was not scanned')|$(u_has "$U11_HOUT" 'commit range')"
+    U11_DOUT=$(u_out "$U4W")
+    assert_eq "[$stack] a diff-scoped run names its range and says history before the base was not scanned" \
+      "yes|yes|yes|no" \
+      "$(u_has "$U11_DOUT" '[SCOPE]')|$(u_has "$U11_DOUT" "commit range ${U1_BASE}..HEAD")|$(u_has "$U11_DOUT" 'history before the base was not scanned')|$(u_has "$U11_DOUT" 'every commit reachable')"
+    # A bounded history pass is a third scope line, and it must name the selector it
+    # was given rather than the unbounded sentence.
+    U11_ROUT=$(u_out "$U7OK")
+    assert_eq "[$stack] a bounded history run names the selector and does not claim every commit" \
+      "yes|yes|no" \
+      "$(u_has "$U11_ROUT" '[SCOPE]')|$(u_has "$U11_ROUT" "the git history selected by '${U1_BASE}..HEAD'")|$(u_has "$U11_ROUT" 'every commit reachable')"
+
+    # ── U12: the budget note is on EVERY scope line, not only the history ones ──
+    #
+    # Without timeout(1) there is no budget at all. Two of the four scope branches
+    # said so and two said nothing, so on the same machine a tree or diff run read as
+    # though the limit did not apply to it. Asserted under a PATH that genuinely has
+    # no timeout on it, and paired with the findings the run still has to produce, so
+    # a broken symlink farm fails instead of quietly satisfying the negative half.
+    U12T=$(u_run_block "$U_BF" "$U1" "PATH=$U18BIN")
+    assert_eq "[$stack] a tree run with no timeout(1) says there is no budget, and still scans" \
+      "2||yes|no" \
+      "$(u_res "$U12T")|$(u_has "$(u_out "$U12T")" 'no budget')|$(u_has "$(u_out "$U12T")" 'budget 300s')"
+    U12D=$(u_run_block "$U_BF" "$U1" "PATH=$U18BIN" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE="$U1_BASE")
+    assert_eq "[$stack] a diff run with no timeout(1) says there is no budget, and still scans" \
+      "2||yes|no" \
+      "$(u_res "$U12D")|$(u_has "$(u_out "$U12D")" 'no budget')|$(u_has "$(u_out "$U12D")" 'budget 300s')"
+    # The other direction, or the two assertions above would also pass on a run that
+    # simply never mentions a budget.
+    assert_eq "[$stack] and with timeout(1) present the scope line names the limit instead" \
+      "yes|no" \
+      "$(u_has "$(u_out "$U2W")" 'budget 300s')|$(u_has "$(u_out "$U2W")" 'no budget')"
+
+    # ── U13: a .gitattributes '-diff' attribute must not blind the history pass ──
+    #
+    # Measured above: the attribute makes git emit "Binary files ... differ" and no
+    # content, so an unflagged `gitleaks git` reads zero bytes, finds nothing, writes
+    # [] and exits 0 — a clean history it never read. removed.js is the item-7 case
+    # exactly: committed, deleted, absent from the tree, present in every clone.
+    U13W=$(u_run_block "$U_BF" "$U11" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] a history pass is not blinded by a -diff attribute" \
+      "removed.js,tracked.js" "$(u_files "$U13W")"
+    assert_eq "[$stack] and both secrets are counted, with no tool recorded as skipped" \
+      "2|" "$(u_res "$U13W")"
+    # The standing constraint, over the path that section T never reaches: the history
+    # pass now captures gitleaks' stderr to read the byte count out of it, and that
+    # capture must not become the thing that writes a credential to disk. Every
+    # invocation carries --redact, and the log is deleted; this is what says so.
+    # Paired with the count above and repeated here, so a run that produced no files
+    # at all cannot satisfy the negative half.
+    assert_eq "[$stack] and nothing the history pass left behind contains either secret value" \
+      "2|0|0" \
+      "$(u_res "$U13W" | cut -d'|' -f1)|$(grep -rlF "$U_TREE" "$U13W" 2>/dev/null | grep -c . || true)|$(grep -rlF "$U_GONE" "$U13W" 2>/dev/null | grep -c . || true)"
+
+    # ── U14: a history pass that read ZERO BYTES is not a clean history ─────────
+    #
+    # The belt to the braces above. These two stubs differ in one number — the bytes
+    # the git pass reports scanning — and agree on everything else: a well-formed
+    # empty report, exit 0, and a working-tree pass that succeeded. So the assertion
+    # separates the coverage claim and nothing else.
+    U14Z=$(u_run_block "$U_BF" "$U1" "PATH=$TMP/u_zerobytes:$PATH" CQT_SECRET_SCAN=history)
+    refute_contains "[$stack] a history pass that scanned zero bytes does not report a clean tree" \
+      "$(u_out "$U14Z")" 'No secrets detected'
+    assert_eq "[$stack] a history pass that scanned zero bytes records a skip and says so" \
+      "0|gitleaks|yes" \
+      "$(u_res "$U14Z")|$(u_has "$(u_out "$U14Z")" 'ZERO bytes')"
+    U14S=$(u_run_block "$U_BF" "$U1" "PATH=$TMP/u_somebytes:$PATH" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] and an identical pass that did scan bytes is an ordinary clean result" \
+      "0||yes" \
+      "$(u_res "$U14S")|$(u_has "$(u_out "$U14S")" 'No secrets detected')"
+
+    # ── U15: the rotated credential is two credentials ─────────────────────────
+    #
+    # Keying identity on file:rule:startline identifies a LOCATION, not a secret.
+    # Both values collapsed into one record: the old credential vanished from the
+    # report entirely and the survivor carried the wrong commit. It is still live at
+    # the provider unless separately revoked.
+    U15W=$(u_run_block "$U_BF" "$U13" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] a rotated credential is reported twice, not collapsed into one" \
+      "key.js,key.js|2|" "$(u_files "$U15W")|$(u_res "$U15W")"
+    # Both commits, or the count could be right for the wrong reason — two records
+    # both attributed to the newer commit would still count two.
+    assert_eq "[$stack] and each record is attributed to the commit that introduced ITS value" \
+      "$U13_COMMITS" \
+      "$(jq -r '[.[].first_seen_commit] | sort | join(",")' "$U15W/out.txt.issues" 2>/dev/null || echo ERR)"
+
+    # ── U16: one secret whose line moved is over-reported, never dropped ────────
+    #
+    # The accepted cost of U15. Removing StartLine from the key would merge these two
+    # and would also re-merge U15's two credentials, so the count can exceed the
+    # number of distinct credentials and the library says so where it is built.
+    U16W=$(u_run_block "$U_BF" "$U14" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] a secret whose line number moved is counted at both lines rather than dropped" \
+      "key.js,key.js|1,3|2|" \
+      "$(u_files "$U16W")|$(jq -r '[.[].StartLine] | sort | join(",")' "$U16W/security/gitleaks.json" 2>/dev/null || echo ERR)|$(u_res "$U16W")"
+
+    # ── U17: a base equal to HEAD is an empty range, not a completed diff scan ──
+    #
+    # CQT_SECRET_SCAN_BASE=$CI_COMMIT_SHA is an ordinary CI misconfiguration. The
+    # library already refused this for the DERIVED base; the operator-supplied one
+    # went straight through and produced a scope line announcing a range scan over
+    # zero commits.
+    assert_eq "[$stack] a base equal to HEAD is refused at plan time" \
+      "empty_range|diff|" "$(u_plan "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=HEAD)"
+    U17W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=HEAD)
+    assert_eq "[$stack] and the run records a skip instead of announcing a range it never scanned" \
+      "0|gitleaks|yes|no" \
+      "$(u_res "$U17W")|$(u_has "$(u_out "$U17W")" 'resolves to HEAD')|$(u_has "$(u_out "$U17W")" '[SCOPE]')"
+    # The same hazard through the other door.
+    assert_eq "[$stack] a --log-opts selector that selects no commit is refused too" \
+      "empty_range|history|" \
+      "$(u_plan "$U1" CQT_SECRET_SCAN=history "CQT_SECRET_SCAN_LOG_OPTS=${U1_HEAD}..HEAD")"
+    # The emptiness check asks git, so git's own refusal has to be distinguishable
+    # from "this range is empty" — otherwise a typo'd selector is reported as a range
+    # that legitimately covers nothing.
+    assert_eq "[$stack] a selector git itself rejects is reported as a bad selector, not as an empty range" \
+      "bad_log_opts|history|" \
+      "$(u_plan "$U1" CQT_SECRET_SCAN=history CQT_SECRET_SCAN_LOG_OPTS=--no-such-git-flag)"
+    # OVER-FIRE GUARD: a base that is not HEAD still plans, or the refusal above would
+    # be satisfiable by refusing every explicit base.
+    assert_eq "[$stack] an ordinary explicit base still plans a real range" \
+      "ok|diff|${U1_BASE}..HEAD" \
+      "$(u_plan "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE="$U1_BASE")"
+
+    # ── U18: the guard refuses quoting, which is what fails, and permits the ────
+    #         unquoted pathspec, which is measured to work
+    #
+    # The old guard refused a bare `--` token and a `:`-prefixed token as well, and
+    # told the operator that "gitleaks splits --log-opts on whitespace, so a pathspec
+    # silently changes what is scanned" — untrue of what they had typed, since that
+    # form survives the split intact and scopes correctly.
+    assert_eq "[$stack] an unquoted pathspec through --log-opts is accepted" \
+      "ok|history|--all -- :(exclude)removed.js" \
+      "$(u_plan "$U1" CQT_SECRET_SCAN=history "CQT_SECRET_SCAN_LOG_OPTS=--all -- :(exclude)removed.js")"
+    U18W=$(u_run_block "$U_BF" "$U1" CQT_SECRET_SCAN=history \
+             "CQT_SECRET_SCAN_LOG_OPTS=--all -- :(exclude)removed.js")
+    # And it SCOPES: the same fixture that yields three findings unscoped yields the
+    # two outside the excluded path. Asserted against U3's value in one tuple, so
+    # "the pathspec was honoured" cannot be satisfied by a run that found nothing.
+    assert_eq "[$stack] and it scopes the pass instead of being a no-op" \
+      "late.js,removed.js,tracked.js|late.js,tracked.js|2|" \
+      "$(u_files "$U3W")|$(u_files "$U18W")|$(u_res "$U18W")"
+    # The quoted form is still refused, and the reason now describes what actually
+    # fails. Paired with the positive half so a missing reason cannot satisfy it.
+    assert_eq "[$stack] the quoted form is still refused, as quoting rather than as a pathspec" \
+      "quoted_log_opts|history|" \
+      "$(u_plan "$U1" CQT_SECRET_SCAN=history "CQT_SECRET_SCAN_LOG_OPTS=--all -- ':(exclude)vendor'")"
+    U18Q=$(u_out "$U7W")
+    assert_eq "[$stack] and the refusal blames the quote characters, not the pathspec" \
+      "yes|yes|no" \
+      "$(u_has "$U18Q" '[SKIP]')|$(u_has "$U18Q" 'contains a quote character')|$(u_has "$U18Q" 'looks like a git pathspec')"
+
+    # ── U19: an allowlist SUPPRESSES findings, so the run says one is in force ──
+    #
+    # With every secret under a vendored path, the allowlisted run printed a literal
+    # "No secrets detected" and a [SCOPE] line byte-identical to the unfiltered run's.
+    # Undisclosed suppression is the exact shape this suite exists to refuse.
+    U19W=$(u_run_block "$U_BF" "$U19REPO" CQT_SECRET_SCAN_ALLOWLIST=vendored)
+    U19N=$(u_run_block "$U_BF" "$U19REPO")
+    assert_eq "[$stack] an allowlist that suppresses everything is disclosed, and the unfiltered run is not" \
+      "0||yes|2||no" \
+      "$(u_res "$U19W")|$(u_has "$(u_out "$U19W")" '[FILTER]')|$(u_res "$U19N")|$(u_has "$(u_out "$U19N")" '[FILTER]')"
+    assert_eq "[$stack] and the disclosure names the config file and says findings were suppressed" \
+      "yes|yes" \
+      "$(u_has "$(u_out "$U19W")" 'gitleaks-vendored-allowlist.toml')|$(u_has "$(u_out "$U19W")" 'SUPPRESSED')"
+
+    # ── U20: the literal fallback invocation and the built argv cannot drift ────
+    #
+    # The block runs a command line built by cqt_gitleaks_argv, and falls back to a
+    # LITERAL invocation when the library is not sourced — which is not dead code,
+    # because section D executes this block without the library. Nothing compared the
+    # two, so a change to the builder would leave the literal mirror stale while the
+    # whole suite stayed green. Two empty or missing forms are also "equal", so the
+    # equality is asserted alongside the content that makes it meaningful.
+    U20_LIT_SRC=$(sed -n 's|^[[:space:]]*\(gitleaks dir .*\)[[:space:]]2>/dev/null$|\1|p' "$file")
+    assert_eq "[$stack] the block carries exactly one literal fallback invocation" \
+      "1" "$(printf '%s\n' "$U20_LIT_SRC" | grep -c 'gitleaks dir' || true)"
+    U20_LIT=$(GITLEAKS_JSON="/tmp/cqt-argv-probe.json" bash -c "printf '%s ' $U20_LIT_SRC" 2>/dev/null || printf '')
+    assert_eq "[$stack] the literal fallback and cqt_gitleaks_argv are argument-for-argument equal" \
+      "yes|yes|equal" \
+      "$(u_has "$U1_ARGV" 'gitleaks dir ')|$(u_has "$U1_ARGV" '--redact')|$(if [[ -n "$U1_ARGV" && "$U1_ARGV" == "$U20_LIT" ]]; then echo equal; else echo "differ: built='$U1_ARGV' literal='$U20_LIT'"; fi)"
+
+    # ── U21: a per-mode report does not survive into the next run ──────────────
+    #
+    # The extra pass wrote security/gitleaks-<mode>.json and left it there. A later
+    # tree-mode run does not produce one and did not clear it, so last week's history
+    # report sat beside this week's tree report with nothing marking it as belonging
+    # to a different scan. Two runs into the SAME report directory, because a fresh
+    # directory per case cannot see this at all.
+    U21D=$(mktemp -d "$TMP/u21.XXXXXX")
+    u_run_block_in "$U21D" "$U_BF" "$U1" CQT_SECRET_SCAN=history >/dev/null
+    assert_eq "[$stack] a history run leaves only the merged report behind" \
+      "gitleaks.json|late.js,removed.js,tracked.js" \
+      "$(ls "$U21D/security" 2>/dev/null | sort | paste -sd, -)|$(u_files "$U21D")"
+    u_run_block_in "$U21D" "$U_BF" "$U1" >/dev/null
+    assert_eq "[$stack] and a later tree run into the same directory finds no stale history report" \
+      "gitleaks.json|late.js,tracked.js" \
+      "$(ls "$U21D/security" 2>/dev/null | sort | paste -sd, -)|$(u_files "$U21D")"
+    # The same directory with a per-mode report PLANTED in it, which is what a run
+    # killed part-way through leaves behind — the extra pass deletes its own file on
+    # the way out, so nothing else in this suite reaches the case where one survived.
+    # A tree run does not produce a history report and must not leave one standing.
+    printf '[{"File":"stale.js","StartLine":1,"RuleID":"stale","Entropy":1}]' \
+      > "$U21D/security/gitleaks-history.json"
+    u_run_block_in "$U21D" "$U_BF" "$U1" >/dev/null
+    assert_eq "[$stack] and a per-mode report left over from an interrupted run is cleared, not adopted" \
+      "gitleaks.json|late.js,tracked.js" \
+      "$(ls "$U21D/security" 2>/dev/null | sort | paste -sd, -)|$(u_files "$U21D")"
+  done
+
+  # ── U22: the ground covered has to reach the ARTIFACT, not just the terminal ─
+  #
+  # Every scope and filter line above is stdout, read once by whoever was watching.
+  # security-report.json is what full-audit.sh consumes and what anyone reads
+  # afterwards, and it was byte-comparable between a working-tree-only scan and a
+  # full-history one, and between an allowlisted scan and an unfiltered one. A fix
+  # that is correct in its own file and never reaches the artifact is the failure
+  # this branch has already paid for five times, so this runs the WHOLE gate — not
+  # the extracted block — and reads the file it wrote.
+  u_run_full() {  # <script> <repo> [env...] ; echoes the report dir
+    local script="$1" repo="$2"; shift 2
+    local w bin rdir
+    w="$(mktemp -d "$TMP/ufull.XXXXXX")"
+    rdir="$(mktemp -d "$TMP/ufrep.XXXXXX")"
+    bin="$(mktemp -d "$TMP/ufbin.XXXXXX")"
+    cp -R "$repo/." "$w/" 2>/dev/null
+    cp "$DSTUB/ddev" "$DSTUB/npm" "$DSTUB/npx" "$bin/" 2>/dev/null
+    ln -sf "$(command -v gitleaks)" "$bin/gitleaks" 2>/dev/null
+    ( cd "$w" && env "$@" PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" \
+        STUB_TOOLS_PRESENT=0 STUB_NEXT_TOOLS=0 \
+        SEC_MOUNT="$w" SEC_CROOT="${w}.container" \
+        bash "$script" ) >/dev/null 2>&1 || true
+    printf '%s' "$rdir"
+  }
+  # "<mode>|<history_scanned>|<allowlist>|<status>|<critical>" out of the artifact.
+  # The critical count rides along in every tuple so a run that never happened, or a
+  # gate that wrote no report, cannot satisfy the scope half.
+  # history_scanned is read with an explicit null test, NOT with `//`: jq treats the
+  # boolean false as an empty value, so `false // "MISSING"` is "MISSING" and the one
+  # value that matters most here would be unreadable.
+  u_full_scope() {  # <reportdir>
+    jq -r '"\(.meta.secret_scan.mode // "MISSING")|\(.meta.secret_scan.history_scanned | if . == null then "MISSING" else tostring end)|\(.meta.secret_scan.allowlist // "MISSING")|\(.meta.secret_scan.status // "MISSING")|\(.summary.by_severity.critical // "MISSING")"' \
+      "$1/security-report.json" 2>/dev/null || printf 'NO-REPORT'
+  }
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; file="${target#*:}"
+    assert_eq "[$stack] the artifact records a working-tree-only scan as one" \
+      "tree|false|none|ok|2" "$(u_full_scope "$(u_run_full "$file" "$U1")")"
+    assert_eq "[$stack] and records a full-history scan as a different scan, not the same one" \
+      "history|true|none|ok|3" \
+      "$(u_full_scope "$(u_run_full "$file" "$U1" CQT_SECRET_SCAN=history)")"
+    # The allowlist pair: identical repository, identical mode, and the only thing
+    # separating a two-finding report from a zero-finding one is a suppression the
+    # artifact now names.
+    assert_eq "[$stack] the artifact records an unfiltered scan of the vendored fixture" \
+      "tree|false|none|ok|2" "$(u_full_scope "$(u_run_full "$file" "$U19REPO")")"
+    assert_eq "[$stack] and records that an allowlist, not a clean repository, produced the zero" \
+      "tree|false|vendored|ok|0" \
+      "$(u_full_scope "$(u_run_full "$file" "$U19REPO" CQT_SECRET_SCAN_ALLOWLIST=vendored)")"
+    # A refused plan must reach the artifact as a refusal too, or the file says
+    # "tree, ok" about a run that scanned nothing.
+    assert_eq "[$stack] and a refused plan is recorded as a refusal, not as a completed scan" \
+      "diff|false|none|empty_range|0" \
+      "$(u_full_scope "$(u_run_full "$file" "$U1" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=HEAD)")"
+  done
+
+  # The guard is aimed at a real failure, and this is the measurement that says so.
+  # Passing a properly quoted pathspec through --log-opts does not scope the scan; it
+  # silently changes what was scanned and reports success either way. Run directly
+  # against gitleaks, not against our code, because the claim is about gitleaks.
+  U8_A=$(cd "$U1" && gitleaks git . --log-opts="--all -- ':(exclude)removed.js'" \
+           --redact --report-format json --report-path "$UU/nop-a.json" --no-banner 2>&1 | tr '\n' ' ')
+  U8_B=$(cd "$U1" && gitleaks git . --log-opts="--all" \
+           --redact --report-format json --report-path "$UU/nop-b.json" --no-banner 2>&1 | tr '\n' ' ')
+  U8_AN=$(jq 'length' "$UU/nop-a.json" 2>/dev/null || echo ERR)
+  U8_BN=$(jq 'length' "$UU/nop-b.json" 2>/dev/null || echo ERR)
+  assert_eq "measured: an unscoped --log-opts run sees the whole history" "3" "$U8_BN"
+  # The pathspec form does not scope: it produces a DIFFERENT number from the honest
+  # scan, with no error, which is the property that makes it dangerous either way.
+  if [[ "$U8_AN" == "$U8_BN" ]]; then
+    bad "measured: a pathspec through --log-opts silently changes the scan (got the same $U8_AN findings, so this fixture no longer demonstrates it)"
+  else
+    ok "measured: a pathspec through --log-opts silently changes the scan ($U8_AN findings vs $U8_BN, no error reported)"
+  fi
+  refute_contains "measured: and gitleaks reports no error while doing it" "$U8_A" '(ERR|FTL|error)'
+
+  # ── U9: the deploy artifact is a second history (item 17) ──────────────────
+  #
+  # Drupal and Acquia specific, and the kind of thing a Drupal-aware audit can know
+  # that a generic scanner cannot. `acli push:artifact` commits the built tree to a
+  # separate repository with its own remote and its own access list, so a credential
+  # in exported config lives in two histories and every deploy writes it again.
+  U9_BF=$(u_extract_block "$SEC" "drupal")
+  u9_fixture() {  # <dir> <origin url> [acquia url]
+    local dir="$1" origin="$2" acquia="${3:-}"
+    mkdir -p "$dir/config/sync" "$dir/web/modules/custom/mymod"
+    git -C "$dir" init -q 2>/dev/null
+    printf 'key: "%s"\n' "$U_CONF" > "$dir/config/sync/mymod.settings.yml"
+    printf '<?php $k = "%s";\n' "$U_TREE" > "$dir/web/modules/custom/mymod/mymod.module"
+    git -C "$dir" remote add origin "$origin" 2>/dev/null
+    [ -n "$acquia" ] && git -C "$dir" remote add acquia "$acquia" 2>/dev/null
+    git -C "$dir" add -A 2>/dev/null
+    u_commit "$dir" c1 "2025-05-06T07:08:09+00:00"
+  }
+  U9A="$UU/acquia"; mkdir -p "$U9A"
+  u9_fixture "$U9A" "git@github.com:acme/site.git" \
+    "site@svn-1234.prod.hosting.acquia.com:site.git"
+  U9AW=$(u_run_block "$U9_BF" "$U9A")
+  U9_CONF_SEL='[.[] | select(.file | test("config/sync"))][0]'
+  U9_MOD_SEL='[.[] | select(.file | test("mymod.module"))][0]'
+  assert_eq "premise: the Acquia fixture produced a config finding and a module finding" \
+    "2" "$(jq -r 'length' "$U9AW/out.txt.issues" 2>/dev/null || echo ERR)"
+  assert_eq "an Acquia remote makes every finding carry the deploy repository" \
+    "acquia|acquia" \
+    "$(jq -r "\"\($U9_CONF_SEL.deploy_artifact // \"none\")|\($U9_MOD_SEL.deploy_artifact // \"none\")\"" "$U9AW/out.txt.issues" 2>/dev/null || echo ERR)"
+  U9_REM=$(jq -r "$U9_CONF_SEL | .remediation // \"MISSING\"" "$U9AW/out.txt.issues" 2>/dev/null || echo ERR)
+  # Both remotes, because remediation that names one of them leaves the credential
+  # live in the other, and the config exclusion, because until the value leaves
+  # exported config the next deploy re-commits it whatever else was done.
+  assert_eq "the config finding's remediation names both remotes and the config exclusion" \
+    "yes|yes|yes" \
+    "$(u_has "$U9_REM" 'acquia.com')|$(u_has "$U9_REM" 'github.com')|$(u_has "$U9_REM" 'config_split')"
+  # The module finding is deployed to the same second remote, but config_ignore /
+  # config_split is not its remediation. Advice that does not apply is how a report
+  # stops being read. Paired with the positive half over the same string, so a
+  # missing remediation cannot satisfy the negative one.
+  U9_MREM=$(jq -r "$U9_MOD_SEL | .remediation // \"MISSING\"" "$U9AW/out.txt.issues" 2>/dev/null || echo ERR)
+  assert_eq "a finding outside exported config still names the deploy remote, without config_split" \
+    "yes|no" "$(u_has "$U9_MREM" 'acquia.com')|$(u_has "$U9_MREM" 'config_split')"
+
+  # The other half, and the one that decides whether this is usable: it must not fire
+  # on a project that has nothing to do with Acquia. A flag that appears everywhere
+  # gets ignored everywhere.
+  U9B="$UU/plain"; mkdir -p "$U9B"
+  u9_fixture "$U9B" "git@github.com:acme/site.git"
+  U9BW=$(u_run_block "$U9_BF" "$U9B")
+  assert_eq "premise: the non-Acquia fixture produced the same two findings" \
+    "2" "$(jq -r 'length' "$U9BW/out.txt.issues" 2>/dev/null || echo ERR)"
+  assert_eq "a project with no Acquia remote gets no deploy-artifact flag at all" \
+    "0" "$(jq -r '[.[] | select(has("deploy_artifact"))] | length' "$U9BW/out.txt.issues" 2>/dev/null || echo ERR)"
+  U9B_REM=$(jq -r "$U9_CONF_SEL | .remediation // \"MISSING\"" "$U9BW/out.txt.issues" 2>/dev/null || echo ERR)
+  assert_eq "and it still gets the ordinary remediation, with nothing about a second remote" \
+    "yes|no" "$(u_has "$U9B_REM" 'Rotate')|$(u_has "$U9B_REM" 'acquia')"
+
+  # An acli configuration belonging to the PROJECT is the second detection route. A
+  # config in $HOME is not: that says the person has Acquia credentials, not that
+  # this repository deploys there, and using it would flag every project on the box.
+  U9C="$UU/acli"; mkdir -p "$U9C"
+  u9_fixture "$U9C" "git@github.com:acme/site.git"
+  printf 'cloud_app_uuid: 0000-1111\n' > "$U9C/.acquia-cli.yml"
+  U9CW=$(u_run_block "$U9_BF" "$U9C")
+  assert_eq "a project-local acli config is enough to detect the deploy artifact" \
+    "acquia" "$(jq -r "$U9_CONF_SEL | .deploy_artifact // \"none\"" "$U9CW/out.txt.issues" 2>/dev/null || echo ERR)"
+fi
+
+# The allowlist template is shipped but never applied on its own. An allowlist
+# SUPPRESSES findings, so a default that silently filters is the same false clean this
+# suite exists to refuse; it is opt-in, and the run says which config was in force.
+if [[ -f "$GLTPL" ]]; then
+  ok "the vendored-path allowlist template is shipped"
+else
+  bad "the vendored-path allowlist template is shipped"
+fi
+if [[ "$U_HAVE_GITLEAKS" == "1" ]]; then
+  U10_DEFAULT=$(u_argv "$U1" tree)
+  assert_eq "the default scan is a real scan that applies no allowlist of ours" \
+    "yes|no" "$(u_has "$U10_DEFAULT" 'gitleaks dir ')|$(u_has "$U10_DEFAULT" '--config')"
+  U10_OPTIN=$(u_argv "$U1" tree CQT_SECRET_SCAN_ALLOWLIST=vendored)
+  assert_eq "and asking for it is what puts it on the command line" \
+    "yes|yes" \
+    "$(u_has "$U10_OPTIN" '--config')|$(u_has "$U10_OPTIN" 'gitleaks-vendored-allowlist')"
+fi
+
+# ── V. the secret scan does not itself leak, and does not claim what it cannot ──
+echo ""
+echo "V: the scan leaks nothing of its own, and every claim it prints is one it can make"
+
+# Section U proves the scan covers the ground it names. This section covers a
+# different class, found by a security review of that work: places where the scan
+# WROTE OUT a credential itself, ASSERTED something the code cannot establish, or
+# DISCARDED a finding it had already made. Every case here was green across all 677
+# assertions of sections A-U, so none of them is pinned by anything above.
+#
+#   V1  the deploy-artifact note pasted `git remote -v` into a sentence. Remote URLs
+#       carry userinfo, and the GitLab-CI/Acquia-pipelines pattern puts a live token
+#       there, so the gate wrote a working credential to the terminal, into
+#       .issues[].remediation and into the meta block - the three channels
+#       core/secret-history.sh exists to keep a secret out of.
+#   V2  meta.secret_scan.allowlist:"none" was decided from OUR opt-in alone.
+#       Measured, gitleaks also loads <source>/.gitleaks.toml and GITLEAKS_CONFIG,
+#       so the field claimed "nothing filtered this" about repositories whose
+#       committed secret had been silently suppressed.
+#   V3  a failed history pass zeroed the working-tree findings, so gitleaks.json and
+#       security-report.json in one directory gave opposite answers about a
+#       confirmed live secret.
+#   V4  the merge keyed identity partly on entropy, which is a function of character
+#       FREQUENCIES only. Two credentials sharing almost no characters collide, and
+#       the older one was dropped from the report entirely.
+#   V5  a bounded commit range of pure deletions scans zero bytes honestly and was
+#       reported as a blinded pass.
+#   V6  a diff run carrying CQT_SECRET_SCAN_LOG_OPTS printed a bounded-range
+#       sentence about a pass that had read all of history.
+#   V7  the deploy note asserted a blast radius the detection cannot know.
+#   V8  the console/file guarantee, stated as what it actually is.
+
+if [[ "$U_HAVE_GITLEAKS" == "1" ]]; then
+
+  # ── fixtures ───────────────────────────────────────────────────────────────
+
+  # V1: a remote URL carrying a live token, on the deployment platform this feature
+  # was written for. Not contrived: `https://gitlab-ci-token:<PAT>@<host>/<repo>.git`
+  # is what a GitLab CI job and an Acquia pipeline put in .git/config.
+  V1_TOK='glpat-AbCdEfGhIjKlMnOpQrSt'
+  V1REPO="$UU/credremote"; mkdir -p "$V1REPO/config/sync"
+  git -C "$V1REPO" init -q
+  printf 'key: "%s"\n' "$U_CONF" > "$V1REPO/config/sync/mymod.settings.yml"
+  git -C "$V1REPO" remote add origin \
+    "https://gitlab-ci-token:${V1_TOK}@svn-1234.prod.hosting.acquia.com/myapp.git" 2>/dev/null
+  git -C "$V1REPO" add -A
+  u_commit "$V1REPO" c1 "2025-05-06T07:08:09+00:00"
+  # If git ever stopped printing the credential, every V1 assertion would be vacuous.
+  assert_eq "premise: git prints the credential embedded in a remote URL verbatim" \
+    "yes" "$(u_has "$(git -C "$V1REPO" remote -v 2>/dev/null | tr '\n' ' ')" "$V1_TOK")"
+
+  # V2: one repository, one extra file. The pair differs only by a .gitleaks.toml
+  # that suppresses every finding, which is the shape an undisclosed filter takes.
+  V2REPO="$UU/repocfg"; mkdir -p "$V2REPO"; git -C "$V2REPO" init -q
+  printf 'const k = "%s";\n' "$U_TREE" > "$V2REPO/live.js"
+  git -C "$V2REPO" add -A
+  u_commit "$V2REPO" c1 "2025-01-01T00:00:00+00:00"
+  V2SUPP="$UU/repocfg-suppressed"
+  cp -R "$V2REPO" "$V2SUPP"
+  cat > "$V2SUPP/.gitleaks.toml" <<'V2TOML'
+title = "cqt spec fixture"
+[extend]
+useDefault = true
+[[allowlists]]
+description = "suppress every js file"
+paths = ['''.*\.js$''']
+V2TOML
+  # The premise the whole case rests on, measured against gitleaks rather than read
+  # off its documentation: a config nobody passed on the command line suppresses a
+  # real finding. Both halves asserted, so a fixture that found nothing either way
+  # would fail instead of agreeing with itself.
+  ( cd "$V2REPO" && gitleaks dir . --redact --report-format json \
+      --report-path "$UU/v2-plain.json" --no-banner >/dev/null 2>&1 || true )
+  ( cd "$V2SUPP" && gitleaks dir . --redact --report-format json \
+      --report-path "$UU/v2-repo.json" --no-banner >/dev/null 2>&1 || true )
+  ( cd "$V2REPO" && GITLEAKS_CONFIG="$V2SUPP/.gitleaks.toml" gitleaks dir . --redact \
+      --report-format json --report-path "$UU/v2-env.json" --no-banner >/dev/null 2>&1 || true )
+  assert_eq "measured: gitleaks loads <source>/.gitleaks.toml and GITLEAKS_CONFIG on its own, with no --config from us" \
+    "1|0|0" \
+    "$(jq 'length' "$UU/v2-plain.json" 2>/dev/null || echo ERR)|$(jq 'length' "$UU/v2-repo.json" 2>/dev/null || echo ERR)|$(jq 'length' "$UU/v2-env.json" 2>/dev/null || echo ERR)"
+
+  # V4: THE NON-ANAGRAM ENTROPY COLLISION. Shannon entropy depends on character
+  # FREQUENCIES, not on which characters they are, so two values sharing no
+  # characters at all collide exactly. These two are each 18 distinct characters
+  # doubled, drawn from disjoint alphabets; the only characters they have in common
+  # are the four of the rule prefix. The previous merge comment described the hole as
+  # "an anagram, a reordered token", which these are not.
+  V4_A='ghp_aabbccddeeffiijjkkllmmnnqqrrssttuuvv'
+  V4_B='ghp_00112233445566778899AABBCCDDEEFFGGHH'
+  printf '%s' "$V4_A" | fold -w1 | sort -u > "$TMP/v4a.chars"
+  printf '%s' "$V4_B" | fold -w1 | sort -u > "$TMP/v4b.chars"
+  V4_SHARED=$(comm -12 "$TMP/v4a.chars" "$TMP/v4b.chars" | wc -l | tr -d ' \n')
+  V4REPO="$UU/collide"; mkdir -p "$V4REPO"; git -C "$V4REPO" init -q
+  printf 'const k = "%s";\n' "$V4_A" > "$V4REPO/key.js"
+  git -C "$V4REPO" add -A; u_commit "$V4REPO" old "2024-01-02T00:00:00+00:00"
+  V4_OLD=$(git -C "$V4REPO" rev-parse HEAD)
+  printf 'const k = "%s";\n' "$V4_B" > "$V4REPO/key.js"
+  git -C "$V4REPO" add -A; u_commit "$V4REPO" new "2024-02-02T00:00:00+00:00"
+  V4_NEW=$(git -C "$V4REPO" rev-parse HEAD)
+  V4_COMMITS=$(printf '%s\n%s\n' "$V4_OLD" "$V4_NEW" | sort | paste -sd, -)
+  ( cd "$V4REPO" && gitleaks git . --log-opts="--text --no-textconv -p -U0 --all" \
+      --redact --report-format json --report-path "$UU/collide-raw.json" --no-banner >/dev/null 2>&1 || true )
+  # U13's premise asserts a rotated pair with DIFFERENT entropies. This is the same
+  # shape with ONE entropy, which is what the old key could not survive. The shared
+  # character count is in the tuple so "they must be anagrams" cannot be believed.
+  assert_eq "measured: two different credentials at one location can carry ONE entropy while sharing only the rule prefix" \
+    "2|1|2|1|4" \
+    "$(jq -r '"\(length)|\([.[].StartLine]|unique|length)|\([.[].Commit]|unique|length)|\([.[].Entropy]|unique|length)"' "$UU/collide-raw.json" 2>/dev/null || echo ERR)|$V4_SHARED"
+
+  # V5: a commit range whose only change is a DELETION. It adds no content, so
+  # gitleaks scans zero bytes and finds nothing - honestly. live.js stays in the tree
+  # throughout, so the working-tree pass has a real finding to report either way.
+  V5REPO="$UU/puredel"; mkdir -p "$V5REPO"; git -C "$V5REPO" init -q
+  printf 'const k = "%s";\n' "$U_TREE" > "$V5REPO/live.js"
+  printf 'ordinary text\n' > "$V5REPO/gone.txt"
+  git -C "$V5REPO" add -A; u_commit "$V5REPO" c1 "2025-01-01T00:00:00+00:00"
+  V5_BASE=$(git -C "$V5REPO" rev-parse HEAD)
+  git -C "$V5REPO" rm -q gone.txt; u_commit "$V5REPO" c2 "2025-02-01T00:00:00+00:00"
+  V5_RAWERR=$( cd "$V5REPO" && gitleaks git . \
+      --log-opts="--full-history --text --no-textconv -p -U0 ${V5_BASE}..HEAD" \
+      --redact --report-format json --report-path "$UU/pd.json" --no-banner 2>&1 | tr '\n' ' ' )
+  # The measurement that chose the check. --numstat is the obvious one and it is the
+  # WRONG one: a `-diff` attribute makes git report a file as binary, which prints
+  # "-" for both counts even under --text, so it cannot separate blinded from empty.
+  # --diff-filter=AM is answered from the tree diff and is not affected.
+  assert_eq "measured: a pure-deletion range scans zero bytes, and --diff-filter=AM is what tells that apart from a blinded pass" \
+    "0|yes||yes" \
+    "$(jq 'length' "$UU/pd.json" 2>/dev/null || echo ERR)|$(u_has "$V5_RAWERR" 'scanned ~0 bytes')|$(cd "$V5REPO" && git log --format= --name-only --diff-filter=AM "${V5_BASE}..HEAD" 2>/dev/null | tr -d ' \n')|$(u_has "$(cd "$V5REPO" && git log --format= --numstat --text "${V5_BASE}..HEAD" 2>/dev/null | tr '\n' ' ')" 'gone.txt')"
+
+  # ── harnesses ──────────────────────────────────────────────────────────────
+
+  # Run the shipped block with bash's xtrace on for the WHOLE process, capturing
+  # stdout and stderr into one transcript. SHELLOPTS is exported rather than typed,
+  # which is how this is reached in practice: a CI job sets it once and every bash
+  # descendant inherits it, and the job log is a persisted artifact. Verified above
+  # that an exported SHELLOPTS=xtrace does reach a grandchild shell.
+  v_run_block_traced() {  # <blockfile> <repo> ; echoes the transcript path
+    local blockfile="$1" repo="$2" dir
+    dir="$(mktemp -d "$TMP/vtrace.XXXXXX")"
+    mkdir -p "$dir/security"
+    env SHELLOPTS=xtrace REPORT_DIR="$dir" bash -c '
+      RED=""; GREEN=""; YELLOW=""; BLUE=""; NC=""
+      CRITICAL_COUNT=0
+      SKIPPED_TOOLS=()
+      ABSENT_TOOLS=()
+      cd "$4"
+      . "$2"
+      . "$3"
+      . "$1"
+    ' _ "$blockfile" "$SCANLIB" "$HELPER" "$repo" > "$dir/trace.txt" 2>&1 || true
+    printf '%s' "$dir/trace.txt"
+  }
+
+  # u_run_full with a stub binary planted so it SHADOWS the real gitleaks. Needed
+  # because the whole-gate harness builds its own PATH, and the V3 case has to fail
+  # one pass while the other genuinely succeeds.
+  v_run_full_stub() {  # <stubdir> <script> <repo> [env...] ; echoes the report dir
+    local stub="$1" script="$2" repo="$3"; shift 3
+    local w bin rdir
+    w="$(mktemp -d "$TMP/vfull.XXXXXX")"
+    rdir="$(mktemp -d "$TMP/vfrep.XXXXXX")"
+    bin="$(mktemp -d "$TMP/vfbin.XXXXXX")"
+    cp -R "$repo/." "$w/" 2>/dev/null
+    cp "$DSTUB/ddev" "$DSTUB/npm" "$DSTUB/npx" "$bin/" 2>/dev/null
+    ln -sf "$(command -v gitleaks)" "$bin/gitleaks" 2>/dev/null
+    # The stub REPLACES whatever is already there. The link is REMOVED first and not
+    # copied onto: `cp` over a symlink writes THROUGH it to the target, which here is
+    # the machine's real gitleaks binary. Measured - the copy was refused only
+    # because this host keeps that binary read-only, and on a host where it is
+    # writable a test harness would have overwritten the tool it is testing with.
+    local v3f
+    for v3f in "$stub"/*; do
+      [ -e "$v3f" ] || continue
+      rm -f "${bin}/$(basename "$v3f")"
+      cp "$v3f" "$bin/" 2>/dev/null
+    done
+    ( cd "$w" && env "$@" PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" \
+        STUB_TOOLS_PRESENT=0 STUB_NEXT_TOOLS=0 \
+        SEC_MOUNT="$w" SEC_CROOT="${w}.container" \
+        bash "$script" ) >/dev/null 2>&1 || true
+    printf '%s' "$rdir"
+  }
+  # How many Gitleaks findings the WHOLE gate wrote into its machine-readable report,
+  # and what it recorded about the ground covered.
+  v_full_secrets() {  # <reportdir>
+    jq -r '"\([.issues[]? | select(.category == "Gitleaks Secret")] | length)|\(.summary.by_severity.critical // "MISSING")|\(.meta.secret_scan.status // "MISSING")"' \
+      "$1/security-report.json" 2>/dev/null || printf 'NO-REPORT'
+  }
+
+  for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
+    stack="${target%%:*}"; file="${target#*:}"
+    V_BF=$(u_extract_block "$file" "v_$stack")
+
+    # ── V1: the gate must not write out a credential of its own ───────────────
+    #
+    # Every channel, not the first one found: the terminal, .issues[].remediation,
+    # anything else under the report directory, and the xtrace transcript.
+    V1W=$(u_run_block "$V_BF" "$V1REPO")
+    V1_SEL='[.[] | select(.file | test("config/sync"))][0]'
+    V1_REM=$(jq -r "$V1_SEL | .remediation // \"MISSING\"" "$V1W/out.txt.issues" 2>/dev/null || echo ERR)
+    # The positive halves are what stop "0 occurrences" being satisfied by a run that
+    # produced nothing: the finding was made, the deploy route was detected, and the
+    # host survived the redaction with its scheme intact.
+    assert_eq "[$stack] the deploy note still names the host, with the userinfo removed" \
+      "acquia|yes|no" \
+      "$(jq -r "$V1_SEL | .deploy_artifact // \"none\"" "$V1W/out.txt.issues" 2>/dev/null || echo ERR)|$(u_has "$V1_REM" 'https://svn-1234.prod.hosting.acquia.com/myapp.git')|$(u_has "$V1_REM" "$V1_TOK")"
+    assert_eq "[$stack] and NOTHING the block wrote - console, issues or scope record - carries the credential" \
+      "1|0" \
+      "$(jq -r 'length' "$V1W/out.txt.issues" 2>/dev/null || echo ERR)|$(grep -rlF "$V1_TOK" "$V1W" 2>/dev/null | grep -c . || true)"
+    # The whole gate, not the extracted block: a redaction correct in its own file and
+    # absent from the real path is the failure this branch has already paid for.
+    V1R=$(u_run_full "$file" "$V1REPO")
+    assert_eq "[$stack] and the report directory the WHOLE gate writes carries the finding but not the credential" \
+      "1|0" \
+      "$(jq -r '[.issues[]? | select(.category == "Gitleaks Secret")] | length' "$V1R/security-report.json" 2>/dev/null || echo ERR)|$(grep -rlF "$V1_TOK" "$V1R" 2>/dev/null | grep -c . || true)"
+    # xtrace publishes every assignment and every case subject. The positive half
+    # proves the transcript really is a trace that reached the deploy functions, so a
+    # harness that never enabled tracing fails instead of satisfying the count.
+    V1T=$(v_run_block_traced "$V_BF" "$V1REPO")
+    assert_eq "[$stack] and it does not appear under xtrace either, which is inherited rather than typed" \
+      "yes|0" \
+      "$(u_has "$(tr '\n' ' ' < "$V1T" 2>/dev/null)" 'cqt_deploy_artifact')|$(grep -cF "$V1_TOK" "$V1T" 2>/dev/null || true)"
+
+    # ── V7: the deploy note asserts only what the detection can know ──────────
+    #
+    # It knows this project deploys through an artifact. It does not know which files
+    # the build ships, and test/fixtures/mock.js reaches no `acli push:artifact` tree.
+    assert_eq "[$stack] the deploy note is conditional on reaching the artifact, not an unconditional blast radius" \
+      "yes|no|yes|no" \
+      "$(u_has "$(u_out "$V1W")" 'findings in files that reach the build artifact')|$(u_has "$(u_out "$V1W")" 'every finding above also lives in the deploy repository')|$(u_has "$V1_REM" 'a value in a file that reaches the built tree')|$(u_has "$V1_REM" 'so the value reaches a SECOND git repository')"
+
+    # ── V2: a config nobody passed still suppresses, so it is disclosed ───────
+    #
+    # The pair is one repository and one extra file. Everything else - mode, tree
+    # scan, exit status - is identical, so what separates a one-finding report from a
+    # zero-finding one is exactly the suppression.
+    V2A=$(u_run_block "$V_BF" "$V2REPO")
+    V2B=$(u_run_block "$V_BF" "$V2SUPP")
+    assert_eq "[$stack] a repo-local .gitleaks.toml that suppresses everything is disclosed; the unfiltered twin is not" \
+      "1||no|0||yes" \
+      "$(u_res "$V2A")|$(u_has "$(u_out "$V2A")" '[FILTER]')|$(u_res "$V2B")|$(u_has "$(u_out "$V2B")" '[FILTER]')"
+    assert_eq "[$stack] and the disclosure names the config and says findings were suppressed" \
+      "yes|yes" \
+      "$(u_has "$(u_out "$V2B")" '.gitleaks.toml')|$(u_has "$(u_out "$V2B")" 'SUPPRESSED')"
+    # The field that made the false claim. "none" about the suppressed run is the
+    # defect; both halves are asserted so the fix cannot be "call everything filtered".
+    assert_eq "[$stack] and the scope record says which one filtered, instead of 'none' for both" \
+      "none|repo" \
+      "$(jq -r '.allowlist // "MISSING"' "$V2A/out.txt.scope" 2>/dev/null || echo ERR)|$(jq -r '.allowlist // "MISSING"' "$V2B/out.txt.scope" 2>/dev/null || echo ERR)"
+    V2C=$(u_run_block "$V_BF" "$V2REPO" "GITLEAKS_CONFIG=$V2SUPP/.gitleaks.toml")
+    assert_eq "[$stack] GITLEAKS_CONFIG suppresses just as silently, and is disclosed as its own source" \
+      "0||yes|env" \
+      "$(u_res "$V2C")|$(u_has "$(u_out "$V2C")" '[FILTER]')|$(jq -r '.allowlist // "MISSING"' "$V2C/out.txt.scope" 2>/dev/null || echo ERR)"
+    # And it reaches security-report.json, which is what any later reader consumes.
+    assert_eq "[$stack] and meta.secret_scan in the gate's own report separates the filtered run from the clean one" \
+      "tree|false|none|ok|1 / tree|false|repo|ok|0" \
+      "$(u_full_scope "$(u_run_full "$file" "$V2REPO")") / $(u_full_scope "$(u_run_full "$file" "$V2SUPP")")"
+
+    # ── V3: a failed EXTRA pass must not unmake a finding already made ────────
+    #
+    # The stub delegates the working-tree pass to the REAL gitleaks, so its findings
+    # are genuine, and fails only the history pass. That is the case under test: two
+    # passes, one succeeded, and the one that failed is the additional one.
+    V3BIN="$TMP/v3_$stack"; mkdir -p "$V3BIN"
+    cat > "$V3BIN/gitleaks" <<V3STUB
+#!/usr/bin/env bash
+if [ "\$1" = "git" ]; then
+  printf 'ERR failed to open repository\n' >&2
+  exit 2
+fi
+exec $(command -v gitleaks) "\$@"
+V3STUB
+    chmod +x "$V3BIN/gitleaks"
+    V3W=$(u_run_block "$V_BF" "$U1" "PATH=$V3BIN:$PATH" CQT_SECRET_SCAN=history)
+    # The heart of it: gitleaks.json and the issues array sat in one directory giving
+    # opposite answers about the same secret. Both are read here, so agreement is the
+    # assertion rather than a count that could be right in one file and empty in the other.
+    assert_eq "[$stack] a failed history pass keeps the working-tree findings, and the two artifacts agree" \
+      "late.js,tracked.js|late.js,tracked.js|2|gitleaks" \
+      "$(u_files "$V3W")|$(jq -r '[.[].file] | sort | join(",")' "$V3W/out.txt.issues" 2>/dev/null || echo ERR)|$(u_res "$V3W")"
+    assert_eq "[$stack] and it withdraws the history claim rather than reporting a clean tree" \
+      "yes|yes|no" \
+      "$(u_has "$(u_out "$V3W")" '[SKIP]')|$(u_has "$(u_out "$V3W")" 'git history was NOT covered')|$(u_has "$(u_out "$V3W")" 'No secrets detected')"
+    assert_eq "[$stack] and the scope record says the tree was covered and the history was not" \
+      "history|false|history_failed" \
+      "$(jq -r '"\(.mode)|\(.history_scanned|tostring)|\(.status)"' "$V3W/out.txt.scope" 2>/dev/null || echo ERR)"
+    V3R=$(v_run_full_stub "$V3BIN" "$file" "$U1" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] and the whole gate writes those findings into security-report.json instead of zero" \
+      "2|2|history_failed" "$(v_full_secrets "$V3R")"
+
+    # ── V4: entropy is not identity, so it is not what keeps two values apart ──
+    V4W=$(u_run_block "$V_BF" "$V4REPO" CQT_SECRET_SCAN=history)
+    assert_eq "[$stack] a rotated credential whose entropy collides is still two findings, not one" \
+      "key.js,key.js|2|" "$(u_files "$V4W")|$(u_res "$V4W")"
+    # Both commits, or two records both attributed to the newer commit would still
+    # count two while the older credential had been dropped.
+    assert_eq "[$stack] and each record is attributed to the commit that introduced ITS value" \
+      "$V4_COMMITS" \
+      "$(jq -r '[.[].first_seen_commit] | sort | join(",")' "$V4W/out.txt.issues" 2>/dev/null || echo ERR)"
+
+    # ── V5: zero bytes over a range that had nothing to offer is not a failure ─
+    V5W=$(u_run_block "$V_BF" "$V5REPO" CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE="$V5_BASE")
+    assert_eq "[$stack] a bounded range of pure deletions is a clean range, and the tree finding still counts" \
+      "live.js|1||no" \
+      "$(u_files "$V5W")|$(u_res "$V5W")|$(u_has "$(u_out "$V5W")" 'ZERO bytes')"
+    # OVER-FIRE GUARD, and the reason the check is --diff-filter=AM rather than "was
+    # the range bounded". Same zero-byte stub, same bounded mode, but this range DID
+    # add a file, so zero bytes means something stopped the pass reading it.
+    V5G=$(u_run_block "$V_BF" "$U1" "PATH=$TMP/u_zerobytes:$PATH" \
+            CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE="$U1_BASE")
+    assert_eq "[$stack] and a bounded range that DID add a file, scanning zero bytes, is still refused" \
+      "0|gitleaks|yes" \
+      "$(u_res "$V5G")|$(u_has "$(u_out "$V5G")" 'ZERO bytes')"
+
+    # ── V6: a diff run whose base was replaced says so ────────────────────────
+    #
+    # CQT_SECRET_SCAN_LOG_OPTS discards the resolved base, so the pass reads whatever
+    # the selector names. The file list is in the tuple because removed.js exists only
+    # in history BEFORE the base: finding it is the proof that the old sentence
+    # ("history before the base was not scanned") was false rather than merely vague.
+    V6W=$(u_run_block "$V_BF" "$U1" CQT_SECRET_SCAN=diff \
+            CQT_SECRET_SCAN_BASE="$U1_BASE" "CQT_SECRET_SCAN_LOG_OPTS=--all")
+    assert_eq "[$stack] a diff run whose --log-opts replaced the base describes what it actually scanned" \
+      "late.js,removed.js,tracked.js|yes|no" \
+      "$(u_files "$V6W")|$(u_has "$(u_out "$V6W")" "selected by '--all'")|$(u_has "$(u_out "$V6W")" 'history before the base was not scanned')"
+    V6S=$(jq -r '.scope // ""' "$V6W/out.txt.scope" 2>/dev/null || printf 'ERR')
+    assert_eq "[$stack] and the artifact carries the same corrected sentence, not the diff wording" \
+      "yes|no" \
+      "$(u_has "$V6S" "selected by '--all'")|$(u_has "$V6S" 'history before the base was not scanned')"
+
+    # ── V8: what the console/file relationship actually is ────────────────────
+    #
+    # [SCOPE] is printed BEFORE the pass runs, so a run that then fails leaves the
+    # terminal holding a line about the ground it INTENDED to cover. The console is
+    # not left misleading, because [SKIP] follows it; but the two artifacts do differ,
+    # and the FILE is the one carrying the corrected answer. The comment in
+    # security-check.sh now says exactly this, and this is what says it is true.
+    V8BIN="$TMP/v8_$stack"; mkdir -p "$V8BIN"
+    printf '#!/usr/bin/env bash\nexit 124\n' > "$V8BIN/timeout"; chmod +x "$V8BIN/timeout"
+    V8W=$(u_run_block "$V_BF" "$U1" "PATH=$V8BIN:$PATH")
+    V8S=$(jq -r '.scope // ""' "$V8W/out.txt.scope" 2>/dev/null || printf 'ERR')
+    assert_eq "[$stack] on a failed run the console keeps its scope line and the FILE carries the corrected answer" \
+      "yes|yes|failed|yes" \
+      "$(u_has "$(u_out "$V8W")" '[SCOPE]')|$(u_has "$(u_out "$V8W")" '[SKIP]')|$(jq -r '.status // "MISSING"' "$V8W/out.txt.scope" 2>/dev/null || echo ERR)|$(u_has "$V8S" 'nothing was scanned')"
   done
 fi
 

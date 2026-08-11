@@ -1,0 +1,67 @@
+# gitleaks config: drop findings that come from vendored third-party code.
+#
+# OPT-IN. Nothing applies this by default. Set CQT_SECRET_SCAN_ALLOWLIST=vendored
+# to put it on the gitleaks command line, or pass it yourself with
+# `gitleaks ... --config path/to/this/file`. It is opt-in because an allowlist
+# SUPPRESSES findings: a scan that silently filtered would report a clean tree for
+# a repository it never fully looked at, which is the failure this tool exists to
+# refuse. When it is in force the security gate prints a [FILTER] line naming this
+# file, and security-report.json records meta.secret_scan.allowlist, so a suppressed
+# finding is never suppressed silently.
+#
+# ── what this buys, and what it does not ──────────────────────────────────────
+#
+# It buys READABILITY. Scanning a Drupal repository that committed core, vendor/
+# and contrib before its Composer migration produces hundreds of findings from
+# third-party test fixtures and documentation example keys that nobody on the
+# project wrote - 583 from vendor/aws/aws-sdk-php, 447 from modules/contrib and 205
+# from core/assets in one measured run. Those bury the handful that matter.
+#
+# It does NOT buy SPEED WHERE SPEED IS THE PROBLEM. Measured on gitleaks 8.30.1
+# against a fixture holding one allowlisted file and one ordinary file of equal
+# size:
+#
+#   gitleaks dir  without this config   108 bytes scanned, 2 findings
+#   gitleaks dir  with this config       54 bytes scanned, 1 finding
+#   gitleaks git  without this config   108 bytes scanned, 2 findings
+#   gitleaks git  with this config      108 bytes scanned, 1 finding
+#
+# So a DIRECTORY scan does skip the allowlisted path, and a HISTORY scan does not -
+# every blob is still read and the allowlist only removes the findings. History is
+# the pass that is slow, and this file does not make it faster. If a history scan is
+# too slow, bound the range instead (CQT_SECRET_SCAN=diff with
+# CQT_SECRET_SCAN_BASE). A git pathspec through --log-opts does bound a history pass,
+# but ONLY UNQUOTED: gitleaks splits that flag on whitespace and passes the pieces to
+# git without a shell, so quote characters arrive literally and the pathspec matches
+# nothing. Measured on 8.30.1: `--all -- :(exclude)removed.js` scoped correctly,
+# `--all -- ':(exclude)removed.js'` scanned zero bytes and exited 0.
+#
+# It does NOT make a suppressed path safe. A credential that a project committed
+# INTO a vendored directory is hidden by this file. That is the trade being made,
+# and it is the reason the default scan applies no allowlist at all.
+
+[extend]
+# Keep every default gitleaks rule. This file only adds allowlisting; it disables
+# no rule and narrows no rule's pattern.
+useDefault = true
+
+[[allowlists]]
+description = "Third-party code that the project does not author: Composer vendor, npm, Drupal core and contrib, and built asset bundles."
+# Matched against the file path of each finding. Paths are repository-relative and
+# use forward slashes in both `gitleaks dir` and `gitleaks git` output, so one set
+# of patterns covers the working tree and history alike.
+paths = [
+  '''(^|/)vendor/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)bower_components/''',
+  '''(^|/)core/(assets|lib|modules|profiles|scripts|tests|themes)/''',
+  '''(^|/)web/core/''',
+  '''(^|/)docroot/core/''',
+  '''(^|/)modules/contrib/''',
+  '''(^|/)themes/contrib/''',
+  '''(^|/)profiles/contrib/''',
+  '''(^|/)libraries/''',
+  '''(^|/)\.yarn/''',
+  '''(^|/)dist/''',
+  '''(^|/)build/''',
+]
