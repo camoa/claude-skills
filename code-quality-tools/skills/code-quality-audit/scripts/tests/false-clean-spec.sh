@@ -4995,7 +4995,7 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
   assert_eq "first_seen_commit is the commit that introduced it" \
     "$T2_C1" "$(T2_GET first_seen_commit)"
   assert_eq "first_seen_date is that commit's author date" \
-    "2020-01-02T03:04:05+00:00" "$(T2_GET first_seen_date)"
+    "2020-01-02T03:04:05Z" "$(T2_GET first_seen_date)"
   assert_eq "author is that commit's author" "Ada Lovelace" "$(T2_GET author)"
 
   # Second, independent oracle for the same number: git's own pickaxe. The walk in
@@ -5005,6 +5005,30 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
   # fixture string, and the point of the case is to compare against git.
   T2_PICKAXE=$(git -C "$T2" log --all -S"$T_SEC_A" --format=%H | grep -c . || true)
   assert_eq "the count agrees with git's own pickaxe" "$T2_PICKAXE" "$(T2_GET commit_count)"
+
+  # ── T2b: the date is UTC, and its spelling is not the local git's opinion ───
+  #
+  # Every other fixture commits at +00:00, which is the one offset where "render
+  # the author's offset" and "render UTC" agree - so none of them can tell the two
+  # apart, and none of them noticed that `%aI` was letting the environment pick the
+  # format. Two things went wrong at once and this case pins both. (1) git 2.45.0
+  # changed how `%aI` spells a zero offset, from "+00:00" to "Z"; the assertions
+  # above passed on git 2.43 and failed on the CI runner for no reason in this
+  # repository. (2) `%aI` reports the author's own offset, so a commit made in
+  # +05:30 was written into the same report field in a different shape from a
+  # commit made in UTC, and gitleaks - the other producer of this field - had
+  # already converted its own to UTC. The author date below is deliberately NOT
+  # UTC: 03:04:05+05:30 is 21:34:05Z on the PREVIOUS day, so a run that forgets to
+  # convert cannot coincidentally match, and neither can one that stamps a literal
+  # Z onto an unconverted local time.
+  T2B="$TT/repo-offset"; mkdir -p "$T2B"; git -C "$T2B" init -q
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T2B/a.js"
+  git -C "$T2B" add -A; hist_commit "$T2B" c1 "2020-01-02T03:04:05+05:30"
+  hist_scan "$T2B" "$TT/repo-offset.json"
+  T2B_OUT=$(hist_run "$T2B" "$TT/repo-offset.json")
+  assert_eq "first_seen_date is UTC, not the author's local offset" \
+    "2020-01-01T21:34:05Z" \
+    "$(printf '%s' "$T2B_OUT" | jq -r '[.[]][0].first_seen_date // "NULL"' 2>/dev/null || echo ERR)"
 
   # ── T3: not in history is a DIFFERENT answer from could not check ───────────
   T3="$TT/repo-clean"; mkdir -p "$T3"; git -C "$T3" init -q
@@ -5567,7 +5591,7 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
     fi
     ISSUE='[.issues[] | select(.category == "Gitleaks Secret" and .file == "config.js")][0]'
     assert_eq "[$stack] e2e: the secret finding carries its first commit, date, author and count" \
-      "$W_SHA|2019-07-08T09:10:11+00:00|Ada Lovelace|1" \
+      "$W_SHA|2019-07-08T09:10:11Z|Ada Lovelace|1" \
       "$(jq -r "$ISSUE | \"\(.first_seen_commit)|\(.first_seen_date)|\(.author)|\(.commit_count)\"" "$REPORT" 2>/dev/null || echo ERR)"
     # The reason the fields are there at all: the advice has to change.
     if jq -r "$ISSUE | .remediation // \"\"" "$REPORT" 2>/dev/null | grep -qi 'rotate'; then

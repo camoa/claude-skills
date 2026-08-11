@@ -363,9 +363,28 @@ cqt_secret_history_scan() {
         # binary blobs are streamed through the walk; that is bounded by the same
         # timeout as everything else, and a binary blob cannot produce a phase-1
         # finding to confirm in the first place, so nothing is lost by reading it.
+        #
+        # The date is NOT `%aI`. `%aI` renders the author's own UTC offset, and how
+        # it renders a ZERO offset changed in git 2.45.0: older git writes
+        # "+00:00", 2.45.0 and newer write "Z". Same instant, two spellings, chosen
+        # by whichever git happens to be installed - so `first_seen_date` in
+        # security-report.json had a shape that depended on the machine rather than
+        # on this code, and a consumer parsing it saw the format change under it on
+        # a git upgrade. `%aI` also keeps the author's local offset for non-UTC
+        # commits, so two findings in one report could disagree about how an
+        # instant is written. `TZ=UTC` + an explicit `format-local:` strftime string
+        # pins one spelling on every git that has `format-local` (2.7.0, 2016) and
+        # on every machine timezone. `TZ=UTC` is load-bearing, not decoration:
+        # `format-local` means "render in the local zone", so without it the
+        # machine's zone would be stamped with a literal Z and the value would be
+        # wrong, not merely differently spelled. UTC-with-Z is the target because
+        # it is also exactly what gitleaks writes into the same field on the other
+        # path through this library (core/secret-scan.sh), which converts to UTC;
+        # the two producers of first_seen_date now agree byte for byte.
         # shellcheck disable=SC2086
-        $runner git -C "$repo" log --all --no-color --no-textconv --text -p -U0 \
-            --format="${marker}%H%x1f%aI%x1f%an%x1f%at" 2>/dev/null || rc=$?
+        TZ=UTC $runner git -C "$repo" log --all --no-color --no-textconv --text -p -U0 \
+            --date=format-local:%Y-%m-%dT%H:%M:%SZ \
+            --format="${marker}%H%x1f%ad%x1f%an%x1f%at" 2>/dev/null || rc=$?
         printf '%sEXIT%s\n' "$marker" "$rc"
     } | CQT_NEEDLES="$needles" awk -v marker="$marker" '
         function flush(  i) {
@@ -465,6 +484,10 @@ cqt_secret_history_scan() {
 #                     disabled | multiline_line,
 #     commit_count: N|null, first_seen_commit: sha|null,
 #     first_seen_date: iso|null, author: name|null }
+#
+# first_seen_date is the author date as UTC, spelled YYYY-MM-DDTHH:MM:SSZ, always.
+# Not the author's local offset, and not "+00:00" - see the note on the git log
+# invocation for why the spelling is pinned here rather than left to git.
 #
 # commit_count is null - not 0 - whenever the answer is unknown. A zero means "we
 # looked and it is not in history"; anything else is a different claim.
