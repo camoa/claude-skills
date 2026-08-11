@@ -17,14 +17,16 @@ Before opening a PR: `make ci`.
 New test: put it where that plugin already keeps its tests. `make test`
 picks it up.
 
-## macOS
+## Before `make test` works
 
-`make test` needs bash 4 or newer. macOS ships bash 3.2, and some tests
-fail on it for that reason alone. Install a current bash first:
-
-```
-brew install bash
-```
+- **bash 4 or newer.** macOS ships bash 3.2 and some tests fail on it for
+  that reason alone. `brew install bash`.
+- **PyYAML.** `ai-dev-assistant/scripts/fm-helpers.sh` reads task
+  frontmatter with it. Without it the reader returns nulls and the tests
+  that depend on it fail. `pip install pyyaml`.
+- **shellcheck**, for `make lint` only. `brew install shellcheck`.
+- **git history.** Some tests compare a file against its version on
+  `main`, so a shallow clone fails them.
 
 ## Where things live
 
