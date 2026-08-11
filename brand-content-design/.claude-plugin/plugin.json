@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "brand-content-design",
   "version": "3.5.1",
-  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, a style-recommendation engine, 26 visual styles, 114 infographic templates, design systems, visual components, and Presentation Zen principles. Routes to specialized skills for PDF, PPTX, and Google Slides output (canonical PPTX→Slides import via Drive for design fidelity), HTML composition, and infographic rendering.",
+  "description": "Create branded visual content (presentations, carousels, infographics, HTML pages) with Aaker personality-driven design, style recommendation engine, visual components, 26 visual styles, design systems, and Presentation Zen principles",
   "author": {
     "name": "camoa"
   },

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "drupal-ai-contrib",
-  "description": "AI-assisted Drupal contribution quality — evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline) with a local drupalci-parity gate set plus AI-policy and eval gates, and 3 read-only fresh-context review agents. Authenticated GitLab writes delegate to the drupal-gitlab skill (glab); drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant, built on the camoa/dev-guides contribution guides.",
+  "description": "AI-assisted Drupal contribution quality — evidence over assertion. Mirrors the drupalci pipeline locally at CI strictness, gates on the adopted AI-contribution policy, reviews work in fresh-context agents, and confirms the real GitLab pipeline so AI-assisted contributions pass drupalci and survive maintainer review.",
   "version": "0.4.1",
   "author": {
     "name": "camoa"

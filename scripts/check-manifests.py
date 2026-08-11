@@ -4,9 +4,14 @@
 Rules:
   1. Every plugin folder (one holding .claude-plugin/plugin.json) has an
      entry in .claude-plugin/marketplace.json.
-  2. The version matches between the two files.
-  3. The description matches between the two files.
+  2. Every entry in marketplace.json has a plugin folder.
+  3. The version matches between the two files.
   4. plugin.json declares "$schema".
+
+The two descriptions are deliberately NOT compared. The catalog entry is the
+browse-and-choose pitch and plugin.json is the terse identity line; this repo
+keeps them different on purpose, and Claude Code defines precedence only for
+"version" (plugin.json wins) and "defaultEnabled" (marketplace wins).
 
 Exit 0 when everything matches, 1 otherwise.
 """
@@ -54,11 +59,6 @@ def main():
             problems.append(
                 f"{folder}: version {manifest.get('version')} in plugin.json, "
                 f"{entry.get('version')} in marketplace.json"
-            )
-
-        if manifest.get("description") != entry.get("description"):
-            problems.append(
-                f"{folder}: description differs between plugin.json and marketplace.json"
             )
 
     listed = set(entries)
