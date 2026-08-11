@@ -1597,6 +1597,65 @@ else
   bad "[contract] full-audit reads the security verdict from the report, not the exit code"
 fi
 
+# H3c: the timestamp the driver stamps on the report it writes.
+#
+# This value came from `date -Iseconds` until now, along with twenty sibling calls across
+# the gates. Two faults in one call, and WHERE the call sits decides how it fails. `-I` is
+# a GNU coreutils extension; BSD and macOS `date` reject it. Here it is a BARE assignment
+# under `set -e` that runs BEFORE any gate, so on macOS the driver dies on that line and
+# writes no report at all. The twenty siblings sit inside heredocs, where a failing command
+# substitution does NOT trip `set -e`, so they degrade quietly to an empty field instead.
+# This one is asserted because it is the one whose failure is total.
+#
+# The second fault shows on GNU too: `-Iseconds` renders LOCAL time with a numeric offset,
+# never a trailing Z — `+00:00` even when the zone IS UTC. So the same instant is spelled
+# differently on two machines, and differently from every other timestamp this tool emits
+# (drupal/ and nextjs/ security-check.sh, core/secret-history.sh all write UTC-with-Z).
+#
+# Classified rather than regex-refuted so "the driver wrote nothing" is its own answer: a
+# bare pattern check would report success when full-audit died before writing the report,
+# which is the false-clean shape one level up.
+fa_timestamp_shape() {   # <value> -> utc-z | local-offset | empty | MISSING | other:<value>
+  case "$1" in
+    MISSING) printf 'MISSING'; return 0 ;;
+    '')      printf 'empty';   return 0 ;;
+  esac
+  if [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    printf 'utc-z'
+  elif [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:?[0-9]{2}$ ]]; then
+    printf 'local-offset'
+  else
+    printf 'other:%s' "$1"
+  fi
+}
+
+# Run the real driver under a zone five and a half hours off UTC. The offset is what
+# separates "UTC" from "local time wearing a Z": a driver that stamped the local clock and
+# appended Z would satisfy the shape assertion and only be caught by the hour comparison.
+FA_TS_DIR="$(mktemp -d "$TMP/fats.XXXXXX")"
+FA_TS_H0="$(date -u +%Y-%m-%dT%H)"
+( cd "$FA_TS_DIR" \
+  && PATH="$FA_BIN:/usr/bin:/bin" REPORT_DIR="$FA_TS_DIR/.reports" \
+     TZ="Asia/Kolkata" STUB_SEC_STATUS="pass" \
+     bash "$FA_ROOT/core/full-audit.sh" ) >/dev/null 2>&1 || true
+FA_TS_H1="$(date -u +%Y-%m-%dT%H)"
+FA_TS="$(jq -r '.meta.timestamp // "MISSING"' "$FA_TS_DIR/.reports/audit-report.json" \
+         2>/dev/null || echo MISSING)"
+
+assert_eq "full-audit stamps meta.timestamp as UTC with a trailing Z, not a local offset" \
+  "utc-z" "$(fa_timestamp_shape "$FA_TS")"
+
+# The instant, not just the spelling. Bracketed by UTC-now taken either side of the run so
+# an hour rolling over mid-run cannot make this flaky. (If the machine has no zoneinfo
+# database, TZ falls back to UTC and this degrades to a tautology rather than a false
+# failure — the shape assertion above still holds.)
+case "${FA_TS%%:*}" in
+  "$FA_TS_H0"|"$FA_TS_H1")
+    ok "full-audit's timestamp is the UTC instant, not the local clock relabelled" ;;
+  *)
+    bad "full-audit's timestamp is the UTC instant, not the local clock relabelled | got '$FA_TS', UTC hour was '$FA_TS_H0'..'$FA_TS_H1'" ;;
+esac
+
 # ── I. the other nextjs analyzers are not silent zeros either ────────────────
 echo ""
 echo "I: npm audit / eslint / semgrep / trivy distinguish 'clean' from 'did not run'"

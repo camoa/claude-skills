@@ -122,7 +122,7 @@ if [ "$FIX_MODE" == false ]; then
     "errors": ${TS_ERRORS}
   },
   "status": "${LINT_STATUS}",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

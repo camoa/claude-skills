@@ -66,7 +66,7 @@ if [ "$1" == "--changed" ]; then
   "errors": 0,
   "warnings": 0,
   "status": "skipped",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
         exit 0
@@ -133,7 +133,7 @@ EOF
   "errors": ${CHANGED_ERRORS},
   "warnings": ${CHANGED_WARNINGS},
   "status": "${CHANGED_STATUS}",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
@@ -222,7 +222,7 @@ if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
   "errors": 0,
   "warnings": 0,
   "status": "skipped",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
     exit 0
@@ -333,7 +333,7 @@ else
   "errors": ${ERRORS},
   "warnings": ${WARNINGS},
   "status": "${LINT_STATUS}",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
