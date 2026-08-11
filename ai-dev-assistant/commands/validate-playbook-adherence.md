@@ -100,8 +100,4 @@ Cite-matching is approximate: any-of-three literal-string match. False negatives
 
 ## Output
 
-Prints each cited play, each miss, and the verdict.
-
-Writes `<task folder>/validations/latest/playbook-adherence.json`, the audit at
-`<task folder>/_playbook-adherence.json`, and appends to
-`<task folder>/validations/history.jsonl`.
+Prints each cited play, each miss, and the verdict. Writes `validations/latest/playbook-adherence.json`, the audit `_playbook-adherence.json`, and appends to `validations/history.jsonl`.

@@ -29,12 +29,13 @@ for field in description allowed-tools argument-hint; do
   fi
 done
 
-# 2. Body line count ≤120
+# 2. Body line count ≤125 (raised from 120 in v5.23.0 for the mandatory
+#    ## Output section; kept in lockstep with scripts/command-body-lengths.sh)
 BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
-if [ "$BODY_LINES" -le 120 ]; then
-  pass_check "body line count $BODY_LINES ≤ 120"
+if [ "$BODY_LINES" -le 125 ]; then
+  pass_check "body line count $BODY_LINES ≤ 125"
 else
-  fail_check "body line count $BODY_LINES > 120"
+  fail_check "body line count $BODY_LINES > 125"
 fi
 
 # 3. 5-mechanism markers

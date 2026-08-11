@@ -111,8 +111,4 @@ Bring the active project on par with what a fresh project would scaffold today. 
 
 ## Output
 
-Prints each gap it found and what it backfilled.
-
-Backfills missing fields on `project_state.md` and missing audit files on
-in-progress tasks. Writes a journal at `<project>/.upgrade-project-journal.json`
-so an interrupted run resumes with `--resume`. Active project only.
+Prints each gap found and what it backfilled. Writes fields onto `project_state.md`, missing audit files onto in-progress tasks, and a journal at `<project>/.upgrade-project-journal.json` so `--resume` works. Active project only.
