@@ -7,12 +7,22 @@ PLUGINS := ai-dev-assistant brand-content-design code-paper-test \
            code-quality-tools dev-guides-navigator drupal-ai-contrib \
            drupal-dev-framework drupal-htmx plugin-creation-tools
 
+# Plugins that actually own tests. `make test-<plugin>` exists for all nine,
+# but run-tests.sh fails a run that executed nothing ("nothing ran, so
+# nothing passed"), so the targets for the rest cannot succeed today. `make
+# help` says which is which rather than advertising six targets that only
+# ever exit 1. Derived from the tree, not hardcoded, so it stops being true
+# the moment someone adds a test.
+TESTED_PLUGINS := $(sort $(foreach p,$(PLUGINS),\
+  $(if $(shell git ls-files '$(p)' 2>/dev/null | grep -E '/tests/.*\.sh$$|-spec\.sh$$|-spec\.mjs$$' | head -1),$(p))))
+UNTESTED_PLUGINS := $(filter-out $(TESTED_PLUGINS),$(PLUGINS))
+
 .PHONY: help test lint lint-baseline validate manifests ci \
         $(addprefix test-,$(PLUGINS))
 
 help:
 	@echo "make test              run every test in the repo"
-	@echo "make test-<plugin>     run one plugin's tests"
+	@echo "make test-<plugin>     run one plugin's tests (see below)"
 	@echo "make lint              shellcheck, against scripts/lint-baseline.txt"
 	@echo "make lint-baseline     rewrite that baseline (deliberate, then commit)"
 	@echo "make validate          check the catalog and each plugin with the claude CLI"
@@ -22,6 +32,16 @@ help:
 	@echo "lint reports a warning that is not in the baseline as a failure."
 	@echo "A baseline warning that is gone is reported as fixed and passes."
 	@echo "validate fails on errors; warnings print without failing."
+	@echo ""
+	@echo "make test-<plugin> works for: $(TESTED_PLUGINS)"
+	@echo ""
+	@echo "For these, test-<plugin> cannot pass today and exits 1:"
+	@echo "  $(UNTESTED_PLUGINS)"
+	@echo "That is the zero-test floor reporting honestly, not a bug: a run"
+	@echo "that executed nothing has not passed anything. Adding a test file"
+	@echo "under the plugin moves it to the working list automatically."
+	@echo "(brand-content-design is the odd one out: its tests need pytest"
+	@echo "and npm install, and they skip - not run - without them.)"
 	@echo ""
 	@echo "plugins: $(PLUGINS)"
 

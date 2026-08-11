@@ -107,7 +107,7 @@ START=$(( $(date +%s) - 1300 ))
 krun WO_TASK_FOLDER="$T" WO_BUDGET_MAX=100 WO_RUN_STARTED_AT="$START" \
      WO_BUDGET_SOFT_SECS=1200 WO_BUDGET_HARD_SECS=1800
 reason="$(jq -r '.reason' <<<"$OUT" 2>/dev/null || echo err)"
-if [ "$RC" -eq 0 ] && [ "$reason" = "ok" ] && echo "$ERR" | grep -qi 'soft'; then pass_check
+if [ "$RC" -eq 0 ] && [ "$reason" = "ok" ] && grep -qi 'soft' <<< "$ERR" ; then pass_check
 else fail_check "T7" "rc=$RC reason=$reason soft_in_stderr=$(echo "$ERR" | grep -ci soft)"; fi
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ else fail_check "T12" "governor wrote files: $(diff <(echo "$before") <(echo "$a
 # T13 (compact line): stderr carries `budget_governor ok=<b> wdc=<n> max=<n> reason=<r>`
 T="$(mktask t13)"; seed_run "$T" wo-01 1; seed_critique "$T" wo-01 low
 krun WO_TASK_FOLDER="$T" WO_BUDGET_MAX=100
-if echo "$ERR" | grep -qE '^budget_governor ok=(true|false) wdc=[0-9]+ max=[0-9]+ reason='; then pass_check
+if grep -qE '^budget_governor ok=(true|false) wdc=[0-9]+ max=[0-9]+ reason=' <<< "$ERR" ; then pass_check
 else fail_check "T13" "compact line missing/malformed on stderr: $ERR"; fi
 
 # ──────────────────────────────────────────────────────────────────────────────

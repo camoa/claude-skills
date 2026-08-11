@@ -165,7 +165,7 @@ done
 
 # (c) §5.13 of the gate-audit schema gained body_path (additive; schema stays v1.5).
 SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
-if printf '%s' "$SEC513" | grep -Fq -- 'body_path'; then
+if grep -Fq -- 'body_path' <<< "$SEC513" ; then
   pass "gate-audit-schema §5.13 carries body_path (additive, v1.5)"
 else
   bad  "gate-audit-schema §5.13 missing body_path — the persisted spine is unrecorded"
@@ -186,7 +186,7 @@ fi
 
 # (e) §5.13 documents a recipes[] list with a multi-element example (≥2 elements).
 SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
-if printf '%s' "$SEC513" | grep -Eq -- '"recipes"[[:space:]]*:[[:space:]]*\[' \
+if grep -Eq -- '"recipes"[[:space:]]*:[[:space:]]*\[' <<< "$SEC513" \
    && [ "$(printf '%s' "$SEC513" | grep -c -- '"recipe_name"')" -ge 2 ]; then
   pass "gate-audit-schema §5.13 documents a recipes[] list with a ≥2-element example (multi-recipe)"
 else
@@ -248,7 +248,7 @@ for f in "$PROTO" "$RESEARCH"; do
     bad  "$(basename "$f") filename lacks the -<sha8> slice (silent body-overwrite risk on safe_name collision)"
   fi
 done
-if printf '%s' "$SEC513" | grep -Eq -- '"body_path"[^"]*"[^"]*adopted-recipe-[a-z0-9-]+-[0-9a-f]{8}\.md"'; then
+if grep -Eq -- '"body_path"[^"]*"[^"]*adopted-recipe-[a-z0-9-]+-[0-9a-f]{8}\.md"' <<< "$SEC513" ; then
   pass "gate-audit-schema §5.13 example body_path carries the -<sha8> slice"
 else
   bad  "gate-audit-schema §5.13 example body_path is not sha-suffixed (filename format drifted)"
@@ -367,7 +367,10 @@ fi
 
 # (v) §5.13 documents the additive recipe_lookup_status (schema stays 1.5).
 SEC513="$(awk '/^### 5.13 /{f=1} /^## 6\. /{f=0} f' "$SCHEMA")"
-if printf '%s' "$SEC513" | grep -Fq -- 'recipe_lookup_status'; then
+# Here-string, not `printf ... | grep -Fq`. Under `set -o pipefail` that pipeline
+# fails intermittently (~6% of runs): grep -q exits on its first match, printf is
+# killed by SIGPIPE, and the pipeline reports 141 even though the text matched.
+if grep -Fq -- 'recipe_lookup_status' <<< "$SEC513"; then
   pass "gate-audit-schema §5.13 documents the additive recipe_lookup_status"
 else
   bad  "gate-audit-schema §5.13 missing recipe_lookup_status (audit can't disambiguate no_match)"

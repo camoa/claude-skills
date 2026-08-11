@@ -48,7 +48,7 @@ max_line="$(echo "$OUT"   | grep -E '^WO_BUDGET_MAX=' | head -1)"
 started="$(echo "$OUT"    | grep -E '^WO_RUN_STARTED_AT=' | head -1 | sed 's/^WO_RUN_STARTED_AT=//')"
 task_line="$(echo "$OUT"  | grep -E '^WO_TASK_FOLDER=' | head -1)"
 if [ "$RC" -eq 0 ] \
-   && echo "$cmd_line" | grep -q '/scripts/governor.sh$' \
+   && grep -q '/scripts/governor.sh$' <<< "$cmd_line" \
    && [ "$max_line" = "WO_BUDGET_MAX=42" ] \
    && [[ "$started" =~ ^[0-9]+$ ]] \
    && [ "$task_line" = "WO_TASK_FOLDER=$T" ]; then pass_check

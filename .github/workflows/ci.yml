@@ -17,8 +17,33 @@ jobs:
       - name: Fetch main
         run: git fetch --no-tags origin main:main || true
 
+      # Pinned, not `apt-get install shellcheck`. The runner image already
+      # carries a shellcheck, so the apt step was redundant; worse, both apt
+      # and the preinstalled copy float with the image. scripts/lint-baseline.txt
+      # records the warnings of ONE shellcheck version, and versions add,
+      # remove and renumber checks, so a baseline compared against a different
+      # build CAN report warnings that are really just a version bump.
+      # (Measured on this tree at the time of pinning: 0.9.0, 0.10.0 and
+      # 0.11.0 all produce the same 35 pairs, so the hazard is latent here
+      # rather than live. The pin is what keeps it latent.)
+      # The version here and the header in the baseline must agree;
+      # lint-shell.sh checks that they do and names both when they don't.
       - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        env:
+          SHELLCHECK_VERSION: '0.11.0'
+          SHELLCHECK_SHA256: '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198'
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL --retry 3 -o shellcheck.tar.xz "$url"
+          # Hard failure: sha256sum -c exits non-zero on a mismatch and
+          # `set -e` fails the job. It never warns and continues.
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          rm -rf shellcheck.tar.xz "shellcheck-v${SHELLCHECK_VERSION}"
+          # /usr/local/bin precedes the preinstalled copy on PATH; prove it.
+          shellcheck --version
 
       - name: Set up Python
         uses: actions/setup-python@v5

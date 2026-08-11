@@ -201,7 +201,7 @@ fi
 #     non-terminal [wo-02]; wo-04 is ready-but-terminal so it is NOT counted ready).
 D="$(mkwo t9)"; seed_fixture "$D"
 ERR="$(bash "$SUT" "$D" 2>&1 >/dev/null)"
-if printf '%s' "$ERR" | grep -q 'wo-reconcile-table wos=5 terminal=2 ready=1'; then
+if grep -q 'wo-reconcile-table wos=5 terminal=2 ready=1' <<< "$ERR" ; then
   pass_check "T9 stderr line: wos=5 terminal=2 ready=1 (ready-but-terminal excluded)"
 else
   fail_check "T9 stderr counts" "err=$ERR"

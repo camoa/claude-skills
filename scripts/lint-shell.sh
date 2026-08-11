@@ -11,6 +11,13 @@
 # baseline fails the build. A baseline pair that no longer occurs is reported
 # as fixed and does not fail, so cleaning up a script never breaks CI.
 #
+# Its first line is "# shellcheck <version>", the version that produced it.
+# A baseline is only meaningful against the shellcheck that generated it:
+# versions add, remove and renumber checks, so a different build reports
+# "new" warnings that are really just a version difference. This script
+# compares the two and names both versions when they disagree, rather than
+# leaving someone to work out why an untouched file suddenly fails.
+#
 # The key is file + code on purpose, never a line number. Keying on lines
 # makes every unrelated edit shift the baseline, which trains people to
 # regenerate it reflexively, and a baseline that is always regenerated stops
@@ -52,6 +59,20 @@ if ! command -v shellcheck >/dev/null 2>&1; then
   printf 'lint: (brew install shellcheck / apt-get install shellcheck) to run it.\n'
   exit 0
 fi
+
+# "version: 0.11.0" out of `shellcheck --version`. Not a pipeline: see the
+# note on the here-string below.
+SC_VERSION=""
+while IFS= read -r _line; do
+  case "$_line" in
+    version:*)
+      SC_VERSION="${_line#version:}"
+      SC_VERSION="${SC_VERSION# }"
+      break
+      ;;
+  esac
+done <<< "$(shellcheck --version 2>/dev/null)"
+[ -n "$SC_VERSION" ] || SC_VERSION="unknown"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   IN_GIT=1
@@ -133,9 +154,14 @@ sed -n 's/^\(.*\):[0-9][0-9]*:[0-9][0-9]*: [a-z]*: .*\[\(SC[0-9][0-9]*\)\]$/\1:\
 CUR_N=$(wc -l < "$CUR" | tr -d ' ')
 
 if [ "$UPDATE" -eq 1 ]; then
-  cp "$CUR" "$BASELINE"
-  printf 'lint: baseline rewritten. %s scripts checked, %s pair(s) recorded in %s\n' \
-    "$TOTAL" "$CUR_N" "$BASELINE"
+  # The version header goes first, so the file records which shellcheck
+  # produced it and a later run can tell whether it is comparable.
+  {
+    printf '# shellcheck %s\n' "$SC_VERSION"
+    cat "$CUR"
+  } > "$BASELINE"
+  printf 'lint: baseline rewritten with shellcheck %s. %s scripts checked, %s pair(s) recorded in %s\n' \
+    "$SC_VERSION" "$TOTAL" "$CUR_N" "$BASELINE"
   printf 'lint: review the diff before committing it.\n'
   exit 0
 fi
@@ -146,7 +172,50 @@ if [ ! -f "$BASELINE" ]; then
   exit 1
 fi
 
-sort -u "$BASELINE" > "$BSORT"
+# The recorded version, read without a pipeline so the loop can `break` on
+# the header without the upstream taking SIGPIPE under `pipefail`.
+BASE_VERSION=""
+while IFS= read -r _line; do
+  case "$_line" in
+    '# shellcheck '*) BASE_VERSION="${_line#\# shellcheck }"; break ;;
+  esac
+done < "$BASELINE"
+
+# Mismatch handling, split on purpose:
+#   CI     - hard failure. The workflow pins the version, so a disagreement
+#            means the pin and the baseline have drifted apart. That is a
+#            repo bug, and any verdict this run produced is meaningless.
+#   local  - loud warning, then carry on. A contributor's shellcheck is not
+#            the repo's business until it actually changes the result, and
+#            blocking them on it would be a confusing failure for a reason
+#            unrelated to their change. If it DOES change the result, the
+#            new-warnings failure below names the mismatch as the suspect.
+VERSION_MISMATCH=0
+if [ -z "$BASE_VERSION" ]; then
+  VERSION_MISMATCH=1
+  printf 'lint: %s has no "# shellcheck <version>" header, so there is no way\n' "$BASELINE" >&2
+  printf 'lint: to tell which shellcheck produced it. Regenerate it with\n' >&2
+  printf 'lint: "make lint-baseline" and commit the result.\n' >&2
+elif [ "$BASE_VERSION" != "$SC_VERSION" ]; then
+  VERSION_MISMATCH=1
+  printf 'lint: shellcheck version mismatch.\n' >&2
+  printf 'lint:   running here: %s\n' "$SC_VERSION" >&2
+  printf 'lint:   baseline was built with: %s (per the header in %s)\n' \
+    "$BASE_VERSION" "$BASELINE" >&2
+  printf 'lint: shellcheck versions add, remove and renumber checks, so these\n' >&2
+  printf 'lint: two are not comparable. Either install %s, or regenerate the\n' "$BASE_VERSION" >&2
+  printf 'lint: baseline with "make lint-baseline" and commit the diff.\n' >&2
+fi
+
+if [ "$VERSION_MISMATCH" -eq 1 ] && [ -n "${CI:-}" ]; then
+  printf 'lint: FAILED, the pinned CI shellcheck and the baseline disagree.\n' >&2
+  printf 'lint: .github/workflows/ci.yml pins the version; the baseline header\n' >&2
+  printf 'lint: must match it. Fix them together.\n' >&2
+  exit 1
+fi
+
+# The header is a comment, not a pair, so it must not reach the comparison.
+sed '/^#/d' "$BASELINE" | sort -u > "$BSORT"
 BASE_N=$(wc -l < "$BSORT" | tr -d ' ')
 
 comm -23 "$CUR" "$BSORT" > "$NEWF"   # present now, not in the baseline
@@ -173,6 +242,11 @@ if [ "$NEW_N" -gt 0 ]; then
     printf '  NEW    %s\n' "$pair" >&2
     grep -F "$path:" "$RAW" | grep -F "[$code]" | sed 's/^/           /' >&2
   done < "$NEWF"
+  if [ "$VERSION_MISMATCH" -eq 1 ]; then
+    printf 'lint: NOTE, your shellcheck (%s) is not the one that built the\n' "$SC_VERSION" >&2
+    printf 'lint: baseline (%s). That is the likely cause of the warnings above,\n' "$BASE_VERSION" >&2
+    printf 'lint: not your change. Check against %s before acting on them.\n' "$BASE_VERSION" >&2
+  fi
   printf 'lint: fix these. If they are genuinely acceptable, run\n' >&2
   printf 'lint: "make lint-baseline" and say why in the commit message.\n' >&2
   exit 1

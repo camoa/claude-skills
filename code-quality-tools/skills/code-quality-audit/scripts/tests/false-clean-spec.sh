@@ -113,7 +113,7 @@ refute_contains() {
   local desc="$1" haystack="$2" pattern="$3"
   if [[ -z "$haystack" ]]; then
     bad "$desc | NOTHING was produced, so this refutation proves nothing"
-  elif echo "$haystack" | grep -qE "$pattern"; then
+  elif grep -qE "$pattern" <<< "$haystack" ; then
     bad "$desc | got: $haystack"
   else
     ok "$desc"
@@ -127,7 +127,11 @@ refute_contains() {
 # empty or errored result cannot satisfy it.
 u_has() {   # <haystack> <literal> ; yes | no | NOTHING
   if [ -z "$1" ]; then printf 'NOTHING'; return 0; fi
-  if printf '%s' "$1" | grep -qF -- "$2"; then printf 'yes'; else printf 'no'; fi
+  # Here-string, not a pipe into `grep -qF`: under `set -o pipefail` grep exits on
+  # its first match, the upstream printf takes SIGPIPE, and the pipeline reports 141
+  # even though the text matched. On a multi-line haystack that flakes a few percent
+  # of runs, and this helper is used on whole command outputs.
+  if grep -qF -- "$2" <<< "$1"; then printf 'yes'; else printf 'no'; fi
 }
 
 TMP="$(mktemp -d)"
@@ -222,7 +226,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
   else
     missing=0
     while IFS= read -r line; do
-      echo "$line" | grep -q -- '--redact' || missing=$((missing + 1))
+      grep -q -- '--redact' <<< "$line" || missing=$((missing + 1))
     done <<< "$INVOCATIONS"
     assert_eq "[$stack] every gitleaks invocation carries --redact" "0" "$missing"
   fi
@@ -389,7 +393,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
     bad "[$stack] GITLEAKS_EXIT is read after being assigned (assigned only, never used)"
   fi
 
-  if echo "$BLOCK" | grep -q 'SKIPPED_TOOLS+=("gitleaks")'; then
+  if grep -q 'SKIPPED_TOOLS+=("gitleaks")' <<< "$BLOCK" ; then
     ok "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
   else
     bad "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
@@ -477,7 +481,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
   CLEAN=$(run_gitleaks_block "$BLOCKFILE" 0 '[]')
   assert_eq "[$stack] a clean run still reports clean and records no skip" \
     "0|" "$(echo "$CLEAN" | cut -d'|' -f1,2)"
-  if echo "$CLEAN" | grep -q 'No secrets detected'; then
+  if grep -q 'No secrets detected' <<< "$CLEAN" ; then
     ok "[$stack] a clean run still prints the clean message"
   else
     bad "[$stack] a clean run still prints the clean message | got: $CLEAN"
@@ -703,7 +707,7 @@ for site in 1 2; do
   ABS_VAL="$(cat "$ABS/val" 2>/dev/null || true)"
   refute_contains "[pcov site $site] pcov absent does not report available" \
     "$ABS_OUT" 'PCOV available'
-  if echo "$ABS_OUT" | grep -q 'PCOV not available'; then
+  if grep -q 'PCOV not available' <<< "$ABS_OUT" ; then
     ok "[pcov site $site] pcov absent prints the not-available warning"
   else
     bad "[pcov site $site] pcov absent prints the not-available warning | got: $ABS_OUT"
@@ -713,7 +717,7 @@ for site in 1 2; do
   # itself, and it is what breaks every numeric test downstream.
   assert_eq "[pcov site $site] pcov absent yields a single-line probe result" \
     "1" "$(printf '%s' "$ABS_VAL" | wc -l | tr -d ' ' | awk '{print $1 + 1}')"
-  if echo "$ABS_ERR" | grep -q 'integer expression expected'; then
+  if grep -q 'integer expression expected' <<< "$ABS_ERR" ; then
     bad "[pcov site $site] the probe result survives a numeric test | stderr: $ABS_ERR"
   else
     ok "[pcov site $site] the probe result survives a numeric test"
@@ -742,7 +746,7 @@ for site in 1 2; do
   PRE="$(run_pcov_block "$BLK" present)"
   PRE_OUT="$(cat "$PRE/out" 2>/dev/null || true)"
   PRE_VAL="$(cat "$PRE/val" 2>/dev/null || true)"
-  if echo "$PRE_OUT" | grep -q 'PCOV available'; then
+  if grep -q 'PCOV available' <<< "$PRE_OUT" ; then
     ok "[pcov site $site] pcov present still reports available"
   else
     bad "[pcov site $site] pcov present still reports available | got: $PRE_OUT"
@@ -766,7 +770,7 @@ for site in 1 2; do
   # whitespace instead of assuming LF.
   CRLF="$(run_pcov_block "$BLK" present_crlf)"
   CRLF_OUT="$(cat "$CRLF/out" 2>/dev/null || true)"
-  if echo "$CRLF_OUT" | grep -q 'PCOV available'; then
+  if grep -q 'PCOV available' <<< "$CRLF_OUT" ; then
     ok "[pcov site $site] a CR-terminated pcov line still reports available"
   else
     bad "[pcov site $site] a CR-terminated pcov line still reports available | got: $CRLF_OUT"
@@ -1818,7 +1822,7 @@ for spec in "${TOOLS[@]}"; do
     BELOW=$(run_tool_block "$BLOCKFILE" "$below_exit" "$clean_rep" "$basename")
     assert_eq "[$tool] exit $below_exit is a finding, not a failure: no skip, no counts" \
       "0|0|0|0|" "$(echo "$BELOW" | cut -d'|' -f2-6)"
-    if echo "$BELOW" | grep -q "$cleanmsg"; then
+    if grep -q "$cleanmsg" <<< "$BELOW" ; then
       ok "[$tool] exit $below_exit with a clean report still reports clean"
     else
       bad "[$tool] exit $below_exit with a clean report still reports clean | got: $BELOW"
@@ -1853,7 +1857,7 @@ for spec in "${TOOLS[@]}"; do
   CLEAN=$(run_tool_block "$BLOCKFILE" 0 "$clean_rep" "$basename")
   assert_eq "[$tool] a clean run records no skip and no counts" "0|0|0|0|" \
     "$(echo "$CLEAN" | cut -d'|' -f2-6)"
-  if echo "$CLEAN" | grep -q "$cleanmsg"; then
+  if grep -q "$cleanmsg" <<< "$CLEAN" ; then
     ok "[$tool] a clean run still prints the clean message"
   else
     bad "[$tool] a clean run still prints the clean message | got: $CLEAN"
@@ -1873,7 +1877,7 @@ if [[ -s "$ESLINT_BLOCK" ]]; then
   NULLRULE=$(run_tool_block "$ESLINT_BLOCK" 1 "$ESLINT_FATALMSG" 'eslint-security.json')
   assert_eq "[eslint] a null ruleId does not fail the count expression" "0|0|0|0|" \
     "$(echo "$NULLRULE" | cut -d'|' -f2-6)"
-  if echo "$NULLRULE" | grep -q 'No ESLint security issues'; then
+  if grep -q 'No ESLint security issues' <<< "$NULLRULE" ; then
     ok "[eslint] a null ruleId reads as no security findings, not as a failure"
   else
     bad "[eslint] a null ruleId reads as no security findings, not as a failure | got: $NULLRULE"
@@ -1990,7 +1994,7 @@ for dep in "composer_audit:^COMPOSER_AUDIT_JSON=:composer_audit" \
   CLEANRUN=$(run_dep_block "$BLOCKFILE" 0 "$CLEAN_DOC")
   assert_eq "[$name] a clean run records no skip and no counts" \
     "0|0|" "$(echo "$CLEANRUN" | cut -d'|' -f1,2,3)"
-  if echo "$CLEANRUN" | grep -qE 'No package vulnerabilities|No security advisories'; then
+  if grep -qE 'No package vulnerabilities|No security advisories' <<< "$CLEANRUN" ; then
     ok "[$name] a clean run still prints the clean message"
   else
     bad "[$name] a clean run still prints the clean message | got: $CLEANRUN"
@@ -6029,17 +6033,17 @@ STUB
   U_WF="$(u_yaml_effective "$U_CITPL")"
   assert_eq "premise: the shipped CI workflow exists and prescribes a gitleaks scan" \
     "yes|yes" \
-    "$([ -f "$U_CITPL" ] && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks[[:space:]]' && echo yes || echo no)"
+    "$([ -f "$U_CITPL" ] && echo yes || echo no)|$(grep -qE '^[[:space:]]*gitleaks[[:space:]]' <<< "$U_WF" && echo yes || echo no)"
   # One assertion over three properties of the same file: what it runs, and the two
   # spellings it must not run. Split apart, the negative halves pass on an empty file.
   assert_eq "the shipped CI workflow scans git history, with no legacy spelling left" \
     "yes|0|0" \
-    "$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks git[[:space:]]' && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_WF" | grep -c 'gitleaks detect' || true)"
+    "$(grep -qE '^[[:space:]]*gitleaks git[[:space:]]' <<< "$U_WF" && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_WF" | grep -c 'gitleaks detect' || true)"
   # A checkout at the default fetch-depth of 1 gives `gitleaks git` a one-commit
   # clone, and a one-commit history that reports no leaks is a false clean. The scan
   # line being right is not enough if the workflow never fetched the history.
   assert_eq "and it fetches the history that scan needs" \
-    "yes" "$(printf '%s\n' "$U_WF" | grep -qE 'fetch-depth:[[:space:]]*0' && echo yes || echo no)"
+    "yes" "$(grep -qE 'fetch-depth:[[:space:]]*0' <<< "$U_WF" && echo yes || echo no)"
 
   for target in "drupal:${ROOT}/../references/operations/drupal-security.md" \
                 "nextjs:${ROOT}/../references/operations/nextjs-security.md"; do
@@ -6047,10 +6051,10 @@ STUB
     U_MD="$(u_md_prescribed "$file")"
     assert_eq "[$stack] premise: the security reference exists and prescribes a gitleaks command" \
       "yes|yes" \
-      "$([ -f "$file" ] && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks ' && echo yes || echo no)"
+      "$([ -f "$file" ] && echo yes || echo no)|$(grep -q 'gitleaks ' <<< "$U_MD" && echo yes || echo no)"
     assert_eq "[$stack] the security reference prescribes both grounds, with no legacy spelling" \
       "yes|yes|0|0" \
-      "$(printf '%s\n' "$U_MD" | grep -q 'gitleaks git ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks dir ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_MD" | grep -c 'gitleaks detect' || true)"
+      "$(grep -q 'gitleaks git ' <<< "$U_MD" && echo yes || echo no)|$(grep -q 'gitleaks dir ' <<< "$U_MD" && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_MD" | grep -c 'gitleaks detect' || true)"
   done
 
   # And a sweep, so a template or reference added LATER cannot reintroduce the

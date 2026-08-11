@@ -156,9 +156,9 @@ T="$(mktask t1 with_body)"
 out="$(WO_MERGE_GATE_CMD="$MG_STUB_OK" bash "$KERNEL" "$T" --print-cmd 2>/dev/null)"
 rc=$?
 if [ "$rc" -eq 0 ] \
-   && echo "$out" | grep -q 'pr create' \
-   && echo "$out" | grep -q 'PR_BODY.md' \
-   && ! echo "$out" | grep -q 'pr merge'; then
+   && grep -q 'pr create' <<< "$out" \
+   && grep -q 'PR_BODY.md' <<< "$out" \
+   && ! grep -q 'pr merge' <<< "$out" ; then
   pass "T1"
 else
   fail "T1" "rc=$rc; looking for [pr create], [PR_BODY.md], no [pr merge] in: $(echo "$out" | head -3)"
@@ -206,7 +206,7 @@ fi
 T="$(mktask t4 with_body)"
 out="$(WO_MERGE_GATE_CMD="$MG_STUB_NO_AUTO" bash "$KERNEL" "$T" --print-cmd 2>/dev/null)"
 rc=$?
-if [ "$rc" -eq 0 ] && echo "$out" | grep -q 'DO NOT auto-merge'; then
+if [ "$rc" -eq 0 ] && grep -q 'DO NOT auto-merge' <<< "$out" ; then
   pass "T4"
 else
   fail "T4" "rc=$rc; 'DO NOT auto-merge' not found in print-cmd output: $(echo "$out" | head -5)"
@@ -252,7 +252,7 @@ opened="$(jq -r '.opened' <<<"$out" 2>/dev/null || echo err)"
 err_out="$(cat "$STDERR_FILE" 2>/dev/null || echo '')"
 if [ "$rc" -eq 0 ] \
    && [ "$opened" = "true" ] \
-   && echo "$err_out" | grep -qi 'v1'; then
+   && grep -qi 'v1' <<< "$err_out" ; then
   pass "T6"
 else
   fail "T6" "rc=$rc opened=$opened; v1 in stderr=$(echo "$err_out" | grep -ci 'v1' || true)"
@@ -273,7 +273,7 @@ out="$(WO_MERGE_GATE_CMD="$MG_STUB_OK" \
 rc=$?
 stub_argv="$(grep '^ARGV:' "$GH_LOG" 2>/dev/null | head -1 || echo '')"
 # rc=0 means 'exit 99' in the base metachar was NOT eval'd; stub log must show the literal value
-if [ "$rc" -eq 0 ] && echo "$stub_argv" | grep -qF "$BASE_META"; then
+if [ "$rc" -eq 0 ] && grep -qF "$BASE_META" <<< "$stub_argv" ; then
   pass "T7"
 else
   fail "T7" "rc=$rc (99=injection executed, 0=inert); stub argv contains base literally=$(echo "$stub_argv" | grep -cF "$BASE_META" || true)"
@@ -318,7 +318,7 @@ opened="$(jq -r '.opened' <<<"$out" 2>/dev/null || echo err)"
 argv_line="$(grep '^ARGV:' "$GH_LOG" 2>/dev/null | head -1 || echo '')"
 if [ "$rc" -eq 0 ] \
    && [ "$opened" = "true" ] \
-   && echo "$argv_line" | grep -q -- '--label'; then
+   && grep -q -- '--label' <<< "$argv_line" ; then
   pass "T10"
 else
   fail "T10" "rc=$rc opened=$opened label_in_argv=$(echo "$argv_line" | grep -c -- '--label' || true); argv: $argv_line"
@@ -347,7 +347,7 @@ argv_line="$(grep '^ARGV:' "$GH_LOG" 2>/dev/null | head -1 || echo '')"
 # Fallback title must contain 'Work-order run:' (the defined fallback prefix)
 if [ "$rc" -eq 0 ] \
    && [ "$opened" = "true" ] \
-   && echo "$argv_line" | grep -qF 'Work-order run:'; then
+   && grep -qF 'Work-order run:' <<< "$argv_line" ; then
   pass "T11"
 else
   fail "T11" "rc=$rc opened=$opened; fallback title not found in argv: $argv_line"
@@ -371,7 +371,7 @@ reason_k4a="$(jq -r '.reason' <<<"$out" 2>/dev/null || echo err)"
 call_count_k4a="$(grep -c '^ARGV:' "$GH_LOG" 2>/dev/null || echo 0)"
 if [ "$rc" -ne 0 ] \
    && [ "$opened_k4a" = "false" ] \
-   && echo "$reason_k4a" | grep -q 'gh_failed' \
+   && grep -q 'gh_failed' <<< "$reason_k4a" \
    && [ "$call_count_k4a" -eq 1 ]; then
   pass "K4-A"
 else

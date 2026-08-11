@@ -213,7 +213,7 @@ D="$(mkwo t13)"
 mkwo_file "$D" wo-01 ready "" "src/a/foo.php"
 mkwo_file "$D" wo-02 ready "" "src/a/foo.php"
 ERR="$(bash "$SUT" "$D" 2>&1 >/dev/null)"
-if printf '%s' "$ERR" | grep -q 'wo-parallel-batch ready=2 batch=1 deferred=1 max=8'; then
+if grep -q 'wo-parallel-batch ready=2 batch=1 deferred=1 max=8' <<< "$ERR" ; then
   pass_check "T13 stderr line: ready=2 batch=1 deferred=1 max=8"
 else fail_check "T13 stderr line" "err=$ERR"; fi
 

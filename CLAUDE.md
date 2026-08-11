@@ -50,9 +50,22 @@ picks it up.
 - **PyYAML.** `ai-dev-assistant/scripts/fm-helpers.sh` reads task
   frontmatter with it. Without it the reader returns nulls and the tests
   that depend on it fail. `pip install pyyaml`.
-- **shellcheck**, for `make lint` only. `brew install shellcheck`.
+- **gitleaks.** `code-quality-tools`' secret-scanning spec gates whole
+  sections on `command -v gitleaks`. Without the binary those sections do
+  not run, and the spec still exits 0 and still prints a passing total, so
+  nothing tells you they were skipped. Measured on this tree: **742
+  assertions with gitleaks, 458 without — 284 silently disappear, and both
+  runs report "0 failed".** Everything about secret detection, history
+  scanning and redaction is in the missing 284. `brew install gitleaks`.
+- **shellcheck**, for `make lint` only. `brew install shellcheck`. The
+  version matters: `scripts/lint-baseline.txt` names the version that
+  produced it on its first line, and `make lint` says so when yours
+  differs. CI pins the same version in `.github/workflows/ci.yml`.
 - **git history.** Some tests compare a file against its version on
   `main`, so a shallow clone fails them.
+
+None of these dependencies fail loudly on their own. A green `make test`
+on a machine missing gitleaks is a smaller green than it looks.
 
 ## Where things live
 

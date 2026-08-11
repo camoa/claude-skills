@@ -190,7 +190,7 @@ fi
 # T10: --format text prints a summary containing "Flagged".
 D="$(mkwo t10)"; seed_fixture "$D"
 OUT="$(bash "$SUT" "$D" --format text 2>/dev/null)"; RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q 'Flagged' && printf '%s' "$OUT" | grep -q 'dispositions:'; then
+if [ "$RC" -eq 0 ] && grep -q 'Flagged' <<< "$OUT" && grep -q 'dispositions:' <<< "$OUT" ; then
   pass_check "T10 --format text: human summary containing 'Flagged'"
 else
   fail_check "T10 --format text" "rc=$RC out=$OUT"
