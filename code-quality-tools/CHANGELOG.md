@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.9.6] - 2026-08-07
+## [3.9.6] - 2026-08-10
 
 A sweep of the defects found by running this suite against a live client Drupal 11
 site. Most share one shape: a check that reported a clean result it did not earn.
@@ -159,11 +159,99 @@ Three CI-visible behavior changes ship here. Read all three before upgrading.
   compared Drupal 11 custom code against Drupal 10 core, and had to be discarded once
   discovered. The mismatch is now detected and surfaced.
 
-- `scripts/tests/false-clean-spec.sh` — 429 hermetic assertions, no DDEV, no network, no
+### Secret scanning: what ground it covers, and how far a finding reaches
+
+- **The secret scan now states what it covered, and still covers the working tree by
+  default.** `gitleaks detect --no-git` — the 8.x-era spelling of `gitleaks dir` — read the
+  working tree and nothing else, and said so nowhere, so "0 findings" read as proof of a
+  clean repository when it was proof of a clean checkout. A secret committed and later
+  gitignored is the case gitleaks exists to catch and was invisible: on the project that
+  surfaced this, a 93-character GitHub token committed in `82947f1b8` and gitignored
+  afterwards. Gone from the tree, present in every clone. Every run now prints a `[SCOPE]`
+  line naming the ground it covered and the ground it did not, and records the same values
+  in `meta.secret_scan` so the answer survives into the JSON artifact rather than living
+  only in a terminal.
+- **Git history is opt-in, because it is not affordable by default.** Measured on that same
+  repository: 2,368 commits, 253,505 packed objects, 224.84 MiB of history, with core,
+  `vendor/` and contrib all committed before a Composer migration. A full-history scan ran
+  for many minutes at several hundred percent CPU and was killed at ten. Two bounded modes:
+  `CQT_SECRET_SCAN=diff` with `CQT_SECRET_SCAN_BASE=<ref>` adds a commit range to the tree
+  scan and is the CI answer; `CQT_SECRET_SCAN=history` adds every reachable commit.
+  Documented in `SKILL.md`, `docs/usage.md`, `commands/security.md` and both
+  `references/operations/*-security.md`.
+- **Every pass is bounded by `timeout(1)`** (`CQT_SECRET_SCAN_TIMEOUT`, default 300s), never
+  by gitleaks' own `--timeout`. Given its own budget gitleaks writes a well-formed *empty*
+  report, logs "partial scan completed" and exits 1, so a reader checking "report present,
+  parses, length 0" calls a truncated scan a clean tree. `timeout(1)` exits 124 and writes
+  nothing, which cannot be mistaken for a result. Where `timeout(1)` is unavailable the
+  scope line says there is no budget rather than naming a limit nothing enforces.
+- **A history pass that scanned zero bytes is a failure, not a clean history.** A `-diff` or
+  `binary` attribute in `.gitattributes` makes `git log -p` emit "Binary files ... differ"
+  instead of content, so the scan silently covers nothing and exits 0. Every history pass
+  therefore carries `--text --no-textconv`. A bounded range that legitimately added no lines
+  is told apart from a blinded one by asking git which files the range added.
+- **A secret found in a deploy-artifact project is reported against both remotes.**
+  `acli push:artifact` commits the built tree to a second git repository with its own
+  remote, clones and access list, so a credential in exported config lives in two histories
+  and every deploy writes it again. With an Acquia remote or a project-local
+  `.acquia-cli.yml`, findings carry `deploy_artifact` and remediation naming both remotes;
+  a finding inside exported config also gets the `config_split` / `config_ignore` exclusion,
+  which a finding outside it does not. A `~/.acquia-cli.yml` is deliberately not a detection
+  route: it says the operator has Acquia credentials, not that this repository deploys there.
+- **`templates/gitleaks-vendored-allowlist.toml`**, opt-in via
+  `CQT_SECRET_SCAN_ALLOWLIST=vendored`, filters third-party fixtures and example keys out of
+  a report. Never applied by default, because an allowlist suppresses findings. Whenever any
+  gitleaks config is in force — ours, a repo-local `.gitleaks.toml`, or `$GITLEAKS_CONFIG`,
+  the last two of which gitleaks loads without appearing on any command line — the run prints
+  a `[FILTER]` line and records it. It reduces a directory scan's cost as well as its output;
+  it does not reduce a history scan's, because every blob is still read.
+- **The shipped CI template ran the defect this release fixes.**
+  `templates/ci/github-drupal.yml` invoked `gitleaks detect --redact --no-git`, and
+  `references/operations/*-security.md` documented that command. The template now runs a
+  merge-base-scoped history scan on `pull_request`. Three further defects in that step: it
+  checked out with the default `fetch-depth: 1`, against which a history scan is a
+  guaranteed false clean; its summary row read `steps.gitleaks.outcome` while no step
+  carried `id: gitleaks`, so it printed "completed" either way; and gitleaks is not
+  preinstalled on GitHub-hosted runners, so the step could only ever have failed on a
+  missing binary. There is now a checksum-pinned install step, and the scan is no longer
+  `continue-on-error` — a discovered credential is already in every clone, and rotation does
+  not happen against a green check.
+
+### Scoping a history scan: what does not work
+
+Excluding vendored paths with a git pathspec through `--log-opts` **does not work, and fails
+silently.** gitleaks splits that flag on whitespace before handing it to `git log`, and
+pathspec quoting does not survive the split. Measured on one commit touching `vendor/`: 0
+`+++ b/vendor/` lines when the pathspec was quoted properly to `git log`, 3,375 when passed
+as a single `--log-opts` string. At scale the "scoped" run took 1 hour 7 minutes over 4.01 GB
+and was still full of `aws-sdk-php`, contrib and `core/assets`. It looked scoped, was not, and
+reported no error. A `--log-opts` value containing quote characters is now refused with a
+recorded skip. An unquoted pathspec, re-measured and confirmed to survive the split and scope
+correctly, is permitted.
+
+### Fixed
+
+- **Secret findings said which file, never which history.** A location does not decide the
+  remediation: never committed means edit the file, in history for two years means rotate at
+  the provider and editing the file achieves nothing. Findings now carry the introducing
+  commit, date and author. The value is recovered from working-tree coordinates and never
+  from the redacted report, and it is never passed as a command-line argument —
+  `/proc/<pid>/cmdline` is world-readable, so the obvious `git log -S "<value>"` would
+  publish the secret to every user on the machine for the duration of the walk. The walk
+  streams `git log -p` instead, and the value is kept out of xtrace, which is inherited
+  rather than typed.
+- **A count is no longer reported for a finding whose commits were never counted.** A
+  history-only finding, whose file is gone from the working tree, cannot be walked by the
+  confirmation pass. It now reports `commit_count: null` and reads "commit count not
+  established" rather than asserting a number.
+
+- `scripts/tests/false-clean-spec.sh` — 742 hermetic assertions, no DDEV, no network, no
   PHP. Covers all of the above, including the hostile cases: an unparseable and a
   truncated gitleaks report, an unwritable and a symlinked `.gitignore`, pattern
-  metacharacters in `REPORT_DIR`, and that the report skeleton cannot start at a passing
-  verdict. Assertions that test "does not abort under `set -e`" run the code in a
+  metacharacters in `REPORT_DIR`, a `.gitattributes` attribute that blinds a history scan,
+  a pathspec that word-splits into a no-op, a rotated credential at unchanged coordinates,
+  a credential embedded in a remote URL, and that the report skeleton cannot start at a
+  passing verdict. Assertions that test "does not abort under `set -e`" run the code in a
   separate `bash` process, because `set -e` is suppressed inside any command whose exit
   status is tested and that suppression propagates into subshells — a harness written the
   obvious way passes against the defective code.

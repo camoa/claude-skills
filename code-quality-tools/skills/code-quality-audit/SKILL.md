@@ -209,6 +209,32 @@ To audit specific modules or components instead of the entire project:
 
 Intelligent detection: Claude detects current directory and user intent.
 
+## Secret scan ground (`CQT_SECRET_SCAN`)
+
+"Run gitleaks" is a choice of ground, not one operation, and the security gate makes it explicit. The default is the **working tree**, and the run prints a `[SCOPE]` line saying so; `security-report.json` carries the same values, so a reader of the artifact can tell a working-tree scan from a full-history one. `Gitleaks: 0 findings` after a tree scan means the checkout is clean, **not** that the repository is.
+
+Full history is an opt-in because it is expensive, and the number is measured rather than assumed: on the repository this came from (2,368 commits, 253,505 packed objects, 224.84 MiB of history, core/vendor/contrib all committed before a Composer migration) a full-history pass ran for many minutes at several hundred percent CPU and was killed at ten. Set it deliberately, and give it a budget.
+
+| Variable | Values | Cost and effect |
+|----------|--------|-----------------|
+| `CQT_SECRET_SCAN` | `tree` (default), `diff`, `history` | `tree` = `gitleaks dir`, the working tree, seconds. `diff` = a bounded commit range, the CI answer, proportional to the range. `history` = every commit reachable from every ref, the only pass that finds a secret that was committed and later removed, and the only genuinely expensive one. |
+| `CQT_SECRET_SCAN_BASE` | a git ref | `diff` base. Unset, it is derived from the first resolvable upstream ref. If none resolves, the scan is **refused and recorded as a skip** rather than silently widened to everything. |
+| `CQT_SECRET_SCAN_LOG_OPTS` | a string | Passed to `gitleaks --log-opts` on a `history` or `diff` pass. **No quote characters:** gitleaks word-splits this value before handing it to `git log`, so quoting is lost and a quoted pathspec scans zero bytes, finds nothing and exits 0. A value containing a quote is refused. Ranges and unquoted pathspecs work. |
+| `CQT_SECRET_SCAN_ALLOWLIST` | `vendored` | Applies `templates/gitleaks-vendored-allowlist.toml`. It **suppresses findings**, so it is opt-in and the run prints a `[FILTER]` line naming whichever config is in force. It makes the report readable; it does **not** make a history pass faster, because every blob is still read. |
+| `CQT_SECRET_SCAN_ALLOWLIST_FILE` | a path | Use this gitleaks config instead of the shipped one. |
+| `CQT_SECRET_SCAN_TIMEOUT` | seconds (default `300`) | Budget for any one pass, enforced with `timeout(1)`, not gitleaks' own `--timeout`: gitleaks given its own timeout writes a well-formed **empty** report and exits 1, which a caller cannot tell from a clean tree. `timeout(1)` exits 124 and writes nothing. On a machine without `timeout(1)` there is no budget, and the scope line says that instead of naming a limit nothing enforces. |
+
+```bash
+# What a PR build should run: only what this branch added.
+CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=origin/main bash scripts/drupal/security-check.sh
+
+# The pass that finds a credential that was committed and later gitignored.
+CQT_SECRET_SCAN=history CQT_SECRET_SCAN_TIMEOUT=1800 \
+  CQT_SECRET_SCAN_ALLOWLIST=vendored bash scripts/drupal/security-check.sh
+```
+
+Full table, with the measured `--log-opts` failure modes: [Drupal](references/operations/drupal-security.md) / [Next.js](references/operations/nextjs-security.md).
+
 ---
 
 # Operations
