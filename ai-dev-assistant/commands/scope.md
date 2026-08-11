@@ -291,3 +291,10 @@ Optionally add one line (never auto-runs `/goal`): `"You can later drive impleme
 - Do not write partial sections. A section is either fully written (all 4 fields present, even if empty) or not written at all — the reader's `empty_field` warning is for humans who chose to leave a field blank, not for interrupted writes.
 - Do not merge multiple phase sections in one invocation. `--phase` takes a single value.
 - Do not let `--grill` block the task lifecycle. It intensifies the interview, never the gate — `[c]ancel` still exits cleanly at any point, and `/scope --grill` still never blocks `/research` or the task.
+
+## Output
+
+Prints the scope conversation and the finished contract to the terminal.
+
+Writes `<task folder>/alignment.md`, the scope contract. In autonomous mode
+also writes `<task folder>/_distill.json`, the end-of-phase digest sidecar.

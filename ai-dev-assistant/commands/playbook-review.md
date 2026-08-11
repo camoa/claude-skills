@@ -110,3 +110,10 @@ Designed to fit `/loop` for periodic review:
 - `/ai-dev-assistant:playbook-capture` — add a new play
 - `/ai-dev-assistant:playbook-active` — read-only view
 - `references/playbook-schema.md` — recommended structure
+
+## Output
+
+Prints one play at a time with keep, update, remove, or quit.
+
+Writes each edit to the local user playbook file immediately, so quitting
+mid-review keeps the decisions already made.

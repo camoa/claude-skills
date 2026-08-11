@@ -194,3 +194,12 @@ that reference *this* plugin's primer / script.
 
 - `/ai-dev-assistant:save-session` — the judgement-first persistence command.
 - `/ai-dev-assistant:next` — resume work; see current phase and task.
+
+## Output
+
+Prints what it installed and where.
+
+Writes the filled primer to `<project>/.claude/ai-dev-assistant/session-primer.md`,
+copies `save-session.sh` beside it, and merges SessionStart and SessionEnd
+entries into `<project>/.claude/settings.json`. Idempotent. The primer is a
+static snapshot you can edit by hand.

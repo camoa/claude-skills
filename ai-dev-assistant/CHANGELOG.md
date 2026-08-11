@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.23.0] - 2026-08-11
+
+### Changed
+
+- Every command now carries an `## Output` section naming what it writes and where, per the marketplace-wide rule in `OUTPUTS.md`. 38 commands gained one; no behavior changed.
+- Phase-command body budgets raised for `research` (100 to 105) and `review` (120 to 125) to fit that section. The other three phase commands absorbed it within their existing budget.
+
 ## [5.22.0] - 2026-08-11
 
 ### Changed

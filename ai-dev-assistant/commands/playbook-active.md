@@ -80,3 +80,10 @@ When fields are absent, render `none` or `(empty)`:
 - `/ai-dev-assistant:set-user-playbook` — change local playbook path
 - `/ai-dev-assistant:playbook-capture` — add new plays
 - `/ai-dev-assistant:playbook-review` — walk existing plays
+
+## Output
+
+Prints the project's playbook state to the terminal: subscribed sets, the
+local playbook file, and recent conflict-log entries.
+
+Read-only. Writes nothing.

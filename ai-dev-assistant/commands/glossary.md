@@ -78,3 +78,10 @@ Before writing, if the file would exceed **~40 terms** or **~120 lines**, print 
 - `/ai-dev-assistant:research <task>` / `/design <task>` / `/implement <task>` — each phase-entry context-load step does a soft, non-blocking read of `glossary.md` when it exists.
 - `architecture/main.md` / `<task>/architecture.md` — per-task design; NOT where naming lives.
 - `/ai-dev-assistant:playbook-capture` — captures opinionated build rules (a different artifact: playbook is "how to build it," glossary is "what things are called").
+
+## Output
+
+Prints the glossary to the terminal.
+
+Creates `glossary.md` in the project folder the first time, then appends terms
+to it. Re-running on an existing file never recreates or rewrites the header.

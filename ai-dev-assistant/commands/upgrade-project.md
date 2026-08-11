@@ -108,3 +108,11 @@ Bring the active project on par with what a fresh project would scaffold today. 
 - `/ai-dev-assistant:set-code-path` / `:set-playbook-sets` / `:set-user-playbook` — invoked by this wizard
 - `/ai-dev-assistant:complete` — Step 3 honors `**Review Required:**` (set this via `/upgrade-project`)
 - `/ai-dev-assistant:validate-playbook-adherence` — surfaces implicit-inheritance hint when Playbook Sets defaults
+
+## Output
+
+Prints each gap it found and what it backfilled.
+
+Backfills missing fields on `project_state.md` and missing audit files on
+in-progress tasks. Writes a journal at `<project>/.upgrade-project-journal.json`
+so an interrupted run resumes with `--resume`. Active project only.

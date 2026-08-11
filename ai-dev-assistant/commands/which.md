@@ -133,3 +133,10 @@ Some situations resolve to a short sequence, not one command:
 - `/ai-dev-assistant:next` — state-based "what's next on my active task" (the complement to this command)
 - `/ai-dev-assistant:status` — full project/task overview
 - `/ai-dev-assistant:pattern <use-case>` — narrower pattern-choice recommender (Phase 2 tool; `/which` is the broader command-level router)
+
+## Output
+
+Prints the situation-to-command map to the terminal, or the one command that
+fits the situation you described.
+
+Writes nothing.

@@ -84,3 +84,10 @@ The command automatically:
 
 - `/ai-dev-assistant:next` - Continue working (auto-detects project)
 - `/ai-dev-assistant:status` - View project status
+
+## Output
+
+Prints the created project's name and paths to the terminal.
+
+Writes the project folder with `project_state.md` and `architecture/main.md`,
+and registers the project in `~/.claude/ai-dev-assistant/active_projects.json`.

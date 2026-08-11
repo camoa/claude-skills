@@ -122,3 +122,11 @@ If single-task mode shows `⚠` for `phase-command-bypass`, ask: `[d]etails / [a
 - `/ai-dev-assistant:research`, `:design`, `:implement`, `:complete` — the phase commands that fire the audited gates
 - `references/gate-audit-schema.md` v1.0 — schema for the 7 audit file types
 - `references/gate-hardening-prompts.md` v1.0 — prompts surfaced by audit-status when bypasses are acknowledged
+
+## Output
+
+Prints the audit state of a task to the terminal: which hardened gates fired,
+which were bypassed, the reason given for each bypass, and which audits are
+missing. `--all` prints a project-wide rollup grouped by health.
+
+Read-only. Writes nothing.

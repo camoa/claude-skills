@@ -69,3 +69,12 @@ Print a summary:
 - Surface registry surfaces added
 - Any framework left without a recipe (`research-needed`)
 - Next steps: `run /ai-dev-assistant:validate:e2e` · `add more journeys with --add-journey` · `review specs in tests/e2e/specs/`
+
+## Output
+
+Prints the recipe it resolved and every file it scaffolded.
+
+Writes the behavioral test harness into `<codePath>`: `tests/e2e/`, journey
+specs under `tests/e2e/specs/`, and the `e2e-*` projects in
+`playwright.config.ts`. Records the surface registry path in `project_state.md`
+and writes `<task folder>/_recipe-load.json`.

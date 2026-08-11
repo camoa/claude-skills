@@ -178,3 +178,11 @@ between unrelated spikes is safe and expected.
   command uses (see Step 2's disposable-location rationale)
 - `references/mechanism-challenge.md` — the mechanism-challenge contract this command can feed
   with empirical evidence, without writing to its audit file
+
+## Output
+
+Prints what the prototype showed and the decision it supports.
+
+Writes the throwaway prototype under the task folder, and records the answer
+in `<task folder>/research.md` or `architecture.md`. The prototype code is not
+meant to ship.

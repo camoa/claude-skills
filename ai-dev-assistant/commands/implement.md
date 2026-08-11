@@ -117,3 +117,7 @@ non-functional change.
 - `/ai-dev-assistant:complete <task>` — mark task done
 - `/ai-dev-assistant:validate <task>` — validate against architecture
 - `/ai-dev-assistant:worktree <task>` — isolate in `.worktrees/<task>/`
+
+## Output
+
+Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired. Prints progress and test results.

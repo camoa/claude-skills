@@ -77,3 +77,7 @@ Default `[n]` — proceed to `/ai-dev-assistant:implement` as usual. Never block
 - `/ai-dev-assistant:pattern <use-case>` — pattern recommendations
 - `/ai-dev-assistant:validate <task>` — validate design
 - `/ai-dev-assistant:compile-work-orders <task>` — decompose architecture into work-orders for independent-agent build (see `references/work-order-lifecycle.md`)
+
+## Output
+
+Writes `architecture.md` and one `_<gate>.json` per gate that fired. Prints the decisions and gate results.

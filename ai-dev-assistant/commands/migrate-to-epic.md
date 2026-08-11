@@ -264,3 +264,11 @@ Pass child names (--children "<name> …") to expand it.
 - `/ai-dev-assistant:next` — honors the new parent/child relationship when suggesting next action
 - `/ai-dev-assistant:complete` — epic completion awareness
 - `/ai-dev-assistant:propose-epics` (v3.11.0+) — calls this command under the hood when the user accepts an agent's proposal
+
+## Output
+
+Prints the plan, then the result of the conversion.
+
+Restructures the task folder into an epic: `task.md` gains epic frontmatter,
+and subtasks move under `in_progress/`. `--dry-run` prints the plan and writes
+nothing. The conversion is transactional, so a failure rolls back.
