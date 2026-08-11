@@ -13,7 +13,7 @@ Add to `composer.json`:
     "test:unit": "phpunit --testsuite unit",
     "test:kernel": "phpunit --testsuite kernel",
     "test:coverage": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text",
-    "test:coverage-html": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-html .reports/coverage",
+    "test:coverage-html": "php -d pcov.enabled=1 vendor/bin/phpunit --coverage-html ${REPORT_DIR:-build/coverage}",
 
     "quality:phpstan": "phpstan analyse web/modules/custom",
     "quality:phpmd": "phpmd web/modules/custom text phpmd.xml",
@@ -23,6 +23,10 @@ Add to `composer.json`:
   }
 }
 ```
+
+## Coverage output location
+
+`test:coverage-html` is the project's own PHPUnit target, not a plugin report, so nothing resolves a directory for it. It honours `REPORT_DIR` when this plugin's scripts set one, which keeps HTML coverage out of the repository on an audit run. Run bare, it falls back to `build/coverage` in the working directory — gitignore that path if you keep it. The plugin's own coverage gate (`scripts/{drupal,nextjs}/coverage-report.sh`) does not use this script and always writes to the resolved report directory.
 
 ## Usage
 

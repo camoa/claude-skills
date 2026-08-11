@@ -33,7 +33,7 @@ The most natural approach - just navigate to the directory you want to audit.
 cd web/modules/custom/my_module
 
 # Run security check (script automatically scans current context)
-ddev exec ../../../../scripts/drupal/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # Script will scan from your current directory
 ```
@@ -44,7 +44,7 @@ ddev exec ../../../../scripts/drupal/security-check.sh
 cd src/components/auth
 
 # Run security check
-bash ../../../skills/code-quality-audit/scripts/nextjs/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 ```
 
 **Why this works:**
@@ -63,27 +63,27 @@ Override default paths using environment variables.
 ```bash
 # Override modules path
 DRUPAL_MODULES_PATH=web/modules/custom/my_module \
-  ./scripts/drupal/security-check.sh
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # Override themes path
 DRUPAL_THEMES_PATH=web/themes/custom/my_theme \
-  ./scripts/drupal/security-check.sh
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # Override both
 DRUPAL_MODULES_PATH=web/modules/custom/my_module \
 DRUPAL_THEMES_PATH=web/themes/custom/my_theme \
-  ./scripts/drupal/security-check.sh
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 ```
 
 ### Next.js Variables
 ```bash
 # Override source path
 SRC_PATH=src/components/auth \
-  ./scripts/nextjs/security-check.sh
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 
 # Or for multiple paths
 SRC_PATH="src/components/auth src/lib/auth" \
-  ./scripts/nextjs/security-check.sh
+  bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 ```
 
 ### Persistent Override
@@ -104,10 +104,10 @@ Run from project root without any overrides.
 
 ```bash
 # Drupal - scans all custom modules and themes
-./scripts/drupal/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # Next.js - scans entire src directory
-./scripts/nextjs/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 ```
 
 **Default paths:**
@@ -149,11 +149,12 @@ pwd  # /var/www/html/web/modules/custom/my_module
 cd web/modules/custom/my_awesome_module
 
 # Run all quality checks on just this module
-ddev exec ../../../../scripts/drupal/security-check.sh
-ddev exec ../../../../scripts/drupal/solid-check.sh
-ddev exec ../../../../scripts/drupal/dry-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/dry-check.sh"
 
-# Results saved to .reports/ scoped to this module
+# Results are scoped to this module and saved to $REPORT_DIR (resolved by
+# scripts/core/report-dir.sh; outside the audited repository)
 ```
 
 ### Example 2: Testing Specific Component
@@ -162,14 +163,18 @@ ddev exec ../../../../scripts/drupal/dry-check.sh
 cd src/components/auth
 
 # Run security check
-SRC_PATH=. bash ../../../scripts/nextjs/security-check.sh
+SRC_PATH=. bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 
 # Or just run from component directory
-bash ../../../scripts/nextjs/security-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/security-check.sh"
 ```
 
 ### Example 3: CI/CD for Monorepo
-```bash
+
+`${CLAUDE_PLUGIN_ROOT}` is a Claude Code substitution and does **not** exist in CI. A
+runner has no installed plugin, so check this one out and point at that checkout:
+
+```yaml
 # .github/workflows/module-quality.yml
 env:
   DRUPAL_MODULES_PATH: web/modules/custom/${{ matrix.module }}
@@ -180,8 +185,19 @@ jobs:
       matrix:
         module: [module_a, module_b, module_c]
     steps:
-      - run: ./scripts/drupal/security-check.sh
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: camoa/claude-skills
+          path: .code-quality-tools
+      - run: bash .code-quality-tools/code-quality-tools/skills/code-quality-audit/scripts/drupal/security-check.sh
 ```
+
+Reports land wherever the resolver decides on the runner, which is outside the checkout.
+Set `REPORT_DIR` to a path you then upload as a build artifact, or `REPORT_DIR_IN_REPO=1`
+for an in-repo `.reports/` — an ephemeral runner has no branch for a report to ride on,
+which is why the shipped [CI template](../templates/ci/github-drupal-pr.yml) takes the
+in-repo route.
 
 ---
 
@@ -202,15 +218,11 @@ jobs:
 
 ## Report Naming
 
-When scoping to a specific module/component, reports can be prefixed:
+Scoping changes *what* is analyzed, not what the report is called. A scoped run writes the same fixed filenames into `$REPORT_DIR`:
 
 ```bash
-# Module-specific reports
-.reports/my_module-security-report.json
-.reports/my_module-solid-report.json
-
-# Component-specific reports
-.reports/auth-component-security.json
+$REPORT_DIR/security-report.json
+$REPORT_DIR/solid-report.json
 ```
 
-Scripts automatically detect scoped runs and adjust report names.
+Successive runs are kept apart by the report directory, which carries a timestamp (or a date, under an `ai-dev-assistant` project), not by a per-scope filename prefix. To keep two scopes side by side deliberately, set `REPORT_DIR` explicitly for each run.

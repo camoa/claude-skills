@@ -11,7 +11,12 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPORT_DIR="${REPORT_DIR:-.reports}"
+# Where reports go is decided in one place, and it is never inside the audited
+# repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
+# shellcheck source=../core/report-dir.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+cqt_report_dir_init
+cqt_announce_report_dir
 
 echo "=== Code Quality Audit - Install Tools ==="
 echo ""

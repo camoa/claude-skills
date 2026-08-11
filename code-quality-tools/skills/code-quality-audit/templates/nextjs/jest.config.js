@@ -51,7 +51,15 @@ const customJestConfig = {
   },
 
   coverageReporters: ['text', 'lcov', 'json-summary'],
-  coverageDirectory: '.reports/coverage',
+
+  // Honour REPORT_DIR when this plugin's coverage gate sets it, so coverage output
+  // follows the report directory out of the repository instead of landing in it.
+  // (coverage-report.sh also passes --coverageDirectory explicitly, which wins over
+  // this value; this line is what a bare `npx jest --coverage` gets.) The fallback is
+  // a local build path, not '.reports' - gitignore it if you keep it.
+  coverageDirectory: process.env.REPORT_DIR
+    ? `${process.env.REPORT_DIR}/coverage`
+    : 'build/coverage',
 
   // Transform ignore patterns
   transformIgnorePatterns: [

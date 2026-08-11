@@ -9,7 +9,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-REPORT_DIR="${REPORT_DIR:-.reports}"
+# No report directory is resolved here, and none is created. This script drives the
+# RED-GREEN-REFACTOR loop through Jest and writes no report of its own — it was sourcing
+# the shared rule and calling its init anyway, which created an empty timestamped run
+# directory on every invocation, printed a "Report directory:" line naming a directory
+# nothing would ever be written to, and moved the `latest` pointer away from the last run
+# that did produce a report. Wiring that only has side effects is worse than none.
 
 # Check for npm
 if ! command -v npm &> /dev/null; then

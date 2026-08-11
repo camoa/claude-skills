@@ -442,9 +442,14 @@ dast-monthly:
 set -e
 
 STAGING_URL="https://staging.example.com"
-REPORT_DIR="security-reports/$(date +%Y-%m-%d)"
 
+# DAST output names hosts and reproduces findings against a live target, so it does not
+# belong in the repository. Ask the suite where reports go; --ensure resolves and creates
+# with mode 0700. ${CLAUDE_PLUGIN_ROOT} is the plugin's install directory, substituted by
+# Claude Code; in a plain shell, set it to your checkout of this plugin first.
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure)/dast"
 mkdir -p "$REPORT_DIR"
+REPORT_DIR="$(cd "$REPORT_DIR" && pwd)"
 
 echo "Starting DAST Security Audit for Pre-Release..."
 echo "Target: $STAGING_URL"
@@ -454,7 +459,7 @@ echo ""
 # 1. OWASP ZAP Baseline Scan
 echo "[1/3] Running OWASP ZAP Baseline Scan..."
 docker run --rm \
-  -v $(pwd)/$REPORT_DIR:/zap/wrk/:rw \
+  -v "$REPORT_DIR":/zap/wrk/:rw \
   zaproxy/zap-stable \
   zap-baseline.py \
   -t "$STAGING_URL" \

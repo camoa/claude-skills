@@ -74,7 +74,13 @@ ddev exec php -d pcov.enabled=1 \
     -d pcov.directory=/var/www/html/web/modules/custom \
     vendor/bin/phpunit \
     --coverage-text \
-    --coverage-clover reports/coverage.xml
+    --coverage-clover "$REPORT_DIR/coverage/clover.xml"
+```
+
+Resolve `REPORT_DIR` first — reports do not go inside the audited repository:
+
+```bash
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure)" && mkdir -p "$REPORT_DIR/coverage"
 ```
 
 ### Running with Xdebug (Branch Coverage)
@@ -85,7 +91,7 @@ ddev xdebug on
 
 # Run with branch coverage
 XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
-    --coverage-html reports/coverage \
+    --coverage-html "$REPORT_DIR/coverage" \
     --path-coverage
 ```
 
@@ -138,20 +144,22 @@ export COVERAGE_TARGET=80    # Goal
 
     <coverage>
         <report>
-            <clover outputFile="reports/coverage/clover.xml"/>
-            <html outputDirectory="reports/coverage/html"/>
+            <clover outputFile="build/coverage/clover.xml"/>
+            <html outputDirectory="build/coverage/html"/>
             <text outputFile="php://stdout"/>
         </report>
     </coverage>
 </phpunit>
 ```
 
+These paths are the project's own PHPUnit output and land in the working directory, so gitignore `build/coverage`. They are not where this plugin files its reports: `scripts/{drupal,nextjs}/coverage-report.sh` passes `--coverage-clover` on the command line, which overrides the config block and writes into the resolved report directory instead.
+
 ## Coverage Reports
 
 ### Clover XML (CI Integration)
 
 ```bash
-ddev exec vendor/bin/phpunit --coverage-clover reports/coverage.xml
+ddev exec vendor/bin/phpunit --coverage-clover "$REPORT_DIR/coverage/clover.xml"
 ```
 
 Used by: Codecov, Coveralls, SonarQube
@@ -159,10 +167,10 @@ Used by: Codecov, Coveralls, SonarQube
 ### HTML Report (Manual Review)
 
 ```bash
-ddev exec vendor/bin/phpunit --coverage-html reports/coverage
+ddev exec vendor/bin/phpunit --coverage-html "$REPORT_DIR/coverage"
 ```
 
-Open `reports/coverage/index.html` in browser.
+Open `$REPORT_DIR/coverage/index.html` in a browser. `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest` prints the last run's directory.
 
 ### Text Report (Console)
 

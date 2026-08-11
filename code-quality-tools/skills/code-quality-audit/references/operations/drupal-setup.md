@@ -15,7 +15,7 @@ Setup and configuration operations for Drupal code quality tools.
 
 When user says "setup tools", "install PHPStan", "install testing tools":
 
-1. Create `.reports/` directory, add to `.gitignore`
+1. Do **not** create a reports directory. `install-tools.sh` sources `scripts/core/report-dir.sh`, which resolves the location outside the audited repository and creates it
 2. Check installed: `ddev exec vendor/bin/phpstan --version`
 3. Install missing:
    ```bash
@@ -54,7 +54,7 @@ When user says "check {module_name}", "audit my_module":
 
 1. Verify module exists: `ls -la web/modules/custom/{module_name}`
 2. Run all checks scoped to that path
-3. Save reports with prefix: `.reports/{module_name}-*.json`
+3. Reports keep their fixed names (`security-report.json`, `solid-report.json`, ...) in `$REPORT_DIR`. The scripts do not prefix report filenames by scope; successive runs are kept apart by the timestamped report directory, not by the filename
 
 ---
 

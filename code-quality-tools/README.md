@@ -19,13 +19,15 @@ $ /code-quality-tools:setup
 $ /code-quality-tools:audit
   Running: SOLID, DRY, coverage, security...
   Hot spots: 2 files flagged by 3+ tools (highest priority)
-  → .reports/audit-report.json + .reports/audit-synthesis.md written
+  → audit-report.json + audit-synthesis.md written to ~/.local/state/code-quality-tools/acme-site/20260810T0912/
 
 $ /code-quality-tools:security
   10 layers (Drupal): Drush pm:security, Composer audit, Psalm taint analysis, Semgrep, Trivy, Gitleaks...
   Critical: 0   High: 1
-  → .reports/security-report.json written
+  → security-report.json written (same run directory)
 ```
+
+Reports land outside the repository being audited, because they quote its source and name the files a secret scanner matched in. The run prints where it wrote; `--latest` on the resolver finds it again.
 
 Nothing here decided your architecture or waved off the one High finding. `/setup` detected the stack and asked before installing anything beyond the core toolchain; `/audit` told you which files multiple tools independently flagged, which is where the compounding risk usually lives; `/security` gave you a number, not a vibe. Full report shapes and the review-scoring rubric are in [docs/usage.md](docs/usage.md).
 

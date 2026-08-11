@@ -13,7 +13,7 @@ Run a comprehensive code quality and security audit on your project.
 ## Usage
 
 ```
-/code-quality-tools:audit [project-path]           # interactive, writes .reports/*.md + chat summary
+/code-quality-tools:audit [project-path]           # interactive, writes reports outside the repo + chat summary
 /code-quality-tools:audit --json [project-path]    # CI mode — emits a single stable JSON document on stdout
 ```
 
@@ -48,7 +48,7 @@ Full schema + field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audi
 
 1. Auto-detects project type (Drupal or Next.js)
 2. Runs full audit suite (all 22 operations)
-3. Generates reports in `.reports/` directory
+3. Generates reports in the run's report directory (printed on start; **not** inside the audited repository)
 4. Displays summary in chat
 
 ## Adaptive Depth
@@ -69,9 +69,29 @@ Based on detection result, execute:
 
 ## Output
 
-- JSON reports: `.reports/*.json`
-- Markdown summary: `.reports/audit-summary.md`
+Written to `$REPORT_DIR`, the directory `full-audit.sh` resolves and announces as `Report directory: <path>` when it starts. It is **not** `.reports` inside the audited repository. See [Report location](#report-location) below.
+
+- JSON reports: `$REPORT_DIR/*.json` (`audit-report.json`, plus per-gate `environment.json`, `security-report.json`, `solid-report.json`, `dry-report.json`, `lint-report.json`, `coverage-report.json`)
+- Markdown summary: `$REPORT_DIR/audit-report.md`
 - Chat summary with key findings
+
+## Report location
+
+Resolve where the report goes rather than assuming a directory — reports are deliberately not written inside the audited repository. `--ensure` resolves *and* creates it, with the 0700 that keeps quoted source and matched-secret filenames off a shared machine; do not `mkdir` it yourself:
+
+```bash
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure)" && echo "$REPORT_DIR"
+```
+
+Resolution order: an explicitly set `REPORT_DIR`; else the `ai-dev-assistant` project folder registered for this directory, under `<project>/audits/<date>/`; else `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`. Set `REPORT_DIR_IN_REPO=1` to opt back in to `.reports/`, which is then gitignored at creation. Reports quote audited source and name the files a secret scanner matched in, which is why in-repo is opt-in rather than the default.
+
+To read a previous run back, ask for that instead — `--print` names where the *next* run writes, which for the timestamped layout does not exist yet:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest
+```
+
+A non-zero exit means no audit has run here yet. That is not a clean result — say so, and offer to run one.
 
 ## Error Handling
 
@@ -88,7 +108,7 @@ After all tools complete, correlate findings across tools:
 3. **Prioritize** — Rank by compound severity, not individual tool severity
 4. **Action plan** — Top 5 fixes that resolve the most findings
 
-Write synthesis to `.reports/audit-synthesis.md`:
+Write synthesis to `$REPORT_DIR/audit-synthesis.md` (resolve `$REPORT_DIR` as shown under [Report location](#report-location)):
 
 ```markdown
 # Audit Synthesis
@@ -145,7 +165,8 @@ Two complementary gates: run the cheap local `/code-quality-tools:audit --json` 
 After an audit produces a findings list, the built-in `/goal` command turns fix-verify-fix into an autonomous loop — Claude keeps working turn after turn until a fresh evaluator model confirms the condition from the transcript:
 
 ```
-/goal every critical and high finding in .reports/audit-synthesis.md is resolved,
+/goal every critical and high finding in the audit-synthesis.md written by the last
+run (the path /code-quality-tools:audit printed) is resolved,
 verified by re-running /code-quality-tools:audit --json and confirming zero findings
 with severity high or critical — or stop after 15 turns
 ```

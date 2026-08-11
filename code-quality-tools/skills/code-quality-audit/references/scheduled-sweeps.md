@@ -34,7 +34,7 @@ Local files, 1-minute minimum interval, runs on your machine with direct access 
 
 Best for:
 
-- **Daily local audit.** `/code-quality-tools:audit` at 7am against your working copy, report to `.reports/quality-YYYY-MM-DD.md` before you start coding.
+- **Daily local audit.** `/code-quality-tools:audit` at 7am against your working copy, report to `$REPORT_DIR/quality-YYYY-MM-DD.md` (resolved by `report-dir.sh --print`, outside the audited repository) before you start coding.
 - **Hourly security watch.** `/code-quality-tools:security` while iterating — catches regressions in near-real-time.
 - **Pre-commit sweep.** Run before your end-of-day commit so morning-you inherits a clean state.
 

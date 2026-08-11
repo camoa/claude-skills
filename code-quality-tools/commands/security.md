@@ -13,7 +13,7 @@ Run a comprehensive security scan across multiple layers.
 ## Usage
 
 ```
-/code-quality-tools:security [project-path]           # writes .reports/security-*.md + chat summary
+/code-quality-tools:security [project-path]           # writes security reports outside the repo + chat summary
 /code-quality-tools:security --json [project-path]    # CI mode — single stable JSON on stdout
 ```
 
@@ -65,6 +65,21 @@ Schema: `skills/code-quality-audit/references/json-schemas.md`.
 - ESLint security plugins
 - madge (circular dependencies)
 
+## Secret scan ground (`CQT_SECRET_SCAN`)
+
+The Gitleaks layer scans the **working tree** by default and prints a `[SCOPE]` line naming the ground it covered; `security-report.json` records the same values. A secret that was committed and later gitignored is not in the tree, so a default run cannot see it. Reading history is an explicit opt-in because a full-history pass on a repository that committed `vendor/` runs for many minutes (measured: 2,368 commits / 224.84 MiB, killed at ten).
+
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `CQT_SECRET_SCAN` | `tree` (default), `diff`, `history` | Working tree (seconds), a bounded commit range (the CI answer), or every commit reachable from every ref (the only pass that finds an already-removed secret, and the expensive one). |
+| `CQT_SECRET_SCAN_BASE` | a git ref | `diff` base. Unresolvable base = the scan is refused and recorded as a skip, never widened silently. |
+| `CQT_SECRET_SCAN_LOG_OPTS` | a string | Extra `git log` options for a `history`/`diff` pass. No quote characters: gitleaks word-splits the value, so a quoted pathspec scans zero bytes and exits 0. |
+| `CQT_SECRET_SCAN_ALLOWLIST` | `vendored` | Apply the shipped vendored-path allowlist. Suppresses findings, so the run prints a `[FILTER]` line. Does not speed up a history pass. |
+| `CQT_SECRET_SCAN_ALLOWLIST_FILE` | a path | Use this gitleaks config instead of the shipped one. |
+| `CQT_SECRET_SCAN_TIMEOUT` | seconds (default `300`) | Per-pass budget, enforced with `timeout(1)`. Without `timeout(1)` on PATH there is no budget and the scope line says so. |
+
+Report the `[SCOPE]` line to the user rather than summarising a secret result as clean. Full detail: [Drupal](../skills/code-quality-audit/references/operations/drupal-security.md) / [Next.js](../skills/code-quality-audit/references/operations/nextjs-security.md).
+
 ## Detection & Execution
 
 Use `${CLAUDE_PLUGIN_ROOT}` to reach the scripts regardless of cwd:
@@ -82,7 +97,7 @@ Based on detection result, execute:
 Pass a newline-delimited file of changed paths to run a **SAST-only** scan scoped to those files:
 
 ```bash
-bash scripts/drupal/security-check.sh --changed .changed-files.txt
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh" --changed .changed-files.txt
 ```
 
 **What runs:** `semgrep` + `php-security-linter` + custom grep patterns (on changed files). If `composer.json` or `composer.lock` is in the changed list, `composer audit` also runs.
@@ -103,8 +118,10 @@ A `messages[]` entry in the report records this skip with instructions to run th
 
 ## Output
 
-- JSON report: `.reports/security-report.json`
-- Markdown summary: `.reports/security-summary.md`
+- JSON report: `$REPORT_DIR/security-report.json`
+- Per-tool raw output: `$REPORT_DIR/security/*.json` (semgrep, trivy, gitleaks, psalm-taint, composer-audit, ...)
+
+`$REPORT_DIR` is the directory `security-check.sh` resolves and announces as `Report directory: <path>` when it starts; it is **not** `.reports` inside the audited repository. `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --print` names it without running a scan; `--latest` names the previous run's.
 - Grouped by severity (critical → low)
 
 ## Severity Thresholds
@@ -128,7 +145,7 @@ To run a security scan without blocking your session, dispatch it as a backgroun
 
 Common issues:
 - **"Security tool not found"**: Run `/code-quality-tools:setup`
-- **"Too many findings"**: Review `.reports/security.json` for details
+- **"Too many findings"**: Review `$REPORT_DIR/security-report.json` for details
 
 See: `references/troubleshooting.md#security-scan-issues`
 

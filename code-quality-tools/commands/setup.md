@@ -178,7 +178,6 @@ Creates `.code-quality.json`:
     "security_severity": "medium"
   },
   "reports": {
-    "directory": ".reports/",
     "formats": ["json", "markdown", "html"],
     "retention_days": 30
   },
@@ -256,7 +255,7 @@ After installation, runs initial audit to establish baseline:
 - Current duplication level
 - SOLID score
 
-Baseline saved to `.reports/baseline.json`
+Baseline saved to `$REPORT_DIR/baseline.json`, where `$REPORT_DIR` is what the scripts resolve and announce on start. There is no report-directory key in `.code-quality.json`: the location is decided by `scripts/core/report-dir.sh` and overridden with the `REPORT_DIR` environment variable, or with `REPORT_DIR_IN_REPO=1` to opt back in to an in-repo `.reports/`. It is out of the repository by default because reports quote audited source and name the files a secret scanner matched in.
 
 ## Output & Next Steps
 
@@ -281,7 +280,7 @@ Baseline Audit Results:
   SOLID Score: 85/100
 
 Next Steps:
-1. Review baseline: .reports/baseline.json
+1. Review baseline: $REPORT_DIR/baseline.json
 2. Address security issues: /code-quality-tools:security
 3. Improve coverage: /code-quality-tools:tdd
 4. Run full audit: /code-quality-tools:audit

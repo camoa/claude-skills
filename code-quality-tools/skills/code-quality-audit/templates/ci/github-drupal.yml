@@ -29,6 +29,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # The secret scan below reads git HISTORY, not just the checked-out tree.
+          # actions/checkout defaults to fetch-depth: 1, which leaves a single commit
+          # in the clone, and a one-commit history that reports no leaks is a false
+          # clean rather than a clean repository. The merge-base a pull_request build
+          # scopes with is also not resolvable without it.
+          fetch-depth: 0
 
       - name: Setup DDEV
         uses: ddev/github-action-setup-ddev@v1
@@ -138,10 +145,73 @@ jobs:
           trivy fs --scanners vuln,secret --format sarif --output trivy-results.sarif .
         continue-on-error: true
 
-      - name: Gitleaks Secret Detection
+      - name: Install Gitleaks
         run: |
-          gitleaks detect --no-git --report-format sarif --report-path gitleaks-results.sarif
-        continue-on-error: true
+          set -euo pipefail
+          # Pinned, and the tarball is checksum-verified before anything out of it
+          # runs. This is the step that decides whether a credential reaches the
+          # remote, so it does not execute an unverified download to do it. gitleaks
+          # is not preinstalled on GitHub-hosted runners; without this step the scan
+          # below fails on a missing binary, which is now a red build rather than a
+          # silent pass.
+          GITLEAKS_VERSION=8.30.1
+          GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          curl -sSLf -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Gitleaks Secret Detection
+        id: gitleaks
+        run: |
+          set -euo pipefail
+          # WHAT GROUND IS COVERED is the decision this step makes, and the old
+          # `gitleaks detect --no-git` made it silently and narrowly. That spelling is
+          # `gitleaks dir`: the working tree, and nothing else. A credential committed
+          # in one release and gitignored in the next is invisible to it, which is the
+          # case gitleaks exists for. `gitleaks git` reads history.
+          #
+          # --log-opts is ONE STRING that gitleaks splits on whitespace before handing
+          # it to `git log`, so shell quote characters inside it reach git as literal
+          # characters. A quoted pathspec there scans zero bytes, finds nothing and
+          # exits 0. A plain commit range has no quoting to lose, which is why a range
+          # is what CI scopes with.
+          #
+          # --text --no-textconv: `gitleaks git` drives `git log -p`, and a `-diff` or
+          # `binary` attribute in .gitattributes makes git print "Binary files differ"
+          # and no content lines, so the pass reads zero bytes and calls the history
+          # clean. `*.json -diff` is an ordinary entry and config files are where
+          # tokens live. These flags are the same ones the plugin's own scan uses.
+          #
+          # --redact: the SARIF is written into the workspace. It is not uploaded
+          # today, but the moment an upload-artifact step is added, unredacted matched
+          # secrets would ship with it. Redacting costs nothing and removes the footgun.
+          LOG_FLAGS="--full-history --text --no-textconv -p -U0"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --quiet origin "${{ github.base_ref }}"
+            RANGE="$(git merge-base "origin/${{ github.base_ref }}" HEAD)..HEAD"
+          else
+            # A push build is an ephemeral runner with a full clone, which is the one
+            # place a full-history pass is affordable. It is not free: on a repository
+            # that committed vendor/ before a Composer migration this runs for many
+            # minutes. Replace --all with a range if that is your repository.
+            RANGE="--all"
+          fi
+          echo "Secret scan ground: git history, ${RANGE}"
+          gitleaks git . \
+            --log-opts="${LOG_FLAGS} ${RANGE}" \
+            --redact --report-format sarif --report-path gitleaks-results.sarif \
+            --no-banner
+        # Deliberately NOT continue-on-error. Semgrep, Trivy and the Drush advisories
+        # above are advisory scanners whose findings are triaged; a matched secret is
+        # not a finding to triage. It is a live credential that is already in every
+        # clone of this repository, and the remediation is rotation at the provider,
+        # which nobody performs against a green check. Suppressing the exit status of
+        # the one step whose entire subject is finding secrets makes the step
+        # decorative. False positives belong in a .gitleaks.toml allowlist, which
+        # gitleaks loads from the repository root automatically.
+        continue-on-error: false
 
       # =====================
       # Tests with Coverage

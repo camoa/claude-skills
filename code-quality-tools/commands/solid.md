@@ -57,18 +57,18 @@ The LSP tool needs no permission and is inert when no plugin is installed — **
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+!bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/solid-check.sh`
-- **Next.js**: `bash scripts/nextjs/solid-check.sh`
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh"`
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/solid-check.sh"`
 
 ## Change-Scoped Mode (`--changed`)
 
 Pass a newline-delimited file of changed paths to scope `phpstan`, `phpmd`, and the `\Drupal::` grep to those files only:
 
 ```bash
-bash scripts/drupal/solid-check.sh --changed .changed-files.txt
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh" --changed .changed-files.txt
 ```
 
 Behaviour:
@@ -76,7 +76,7 @@ Behaviour:
 - If the filtered set is empty → exits `0` with status `skipped` (no whole-tree scan).
 - `phpmd` receives a comma-separated file list (its required format for file-level targeting).
 - Report gains `"mode": "changed"` and `"relevant_files": N`.
-- Compatible with CI patterns: `bash scripts/drupal/solid-check.sh --changed .changed-files.txt`
+- Compatible with CI patterns: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh" --changed .changed-files.txt`
 
 ## Complexity Thresholds
 
@@ -93,7 +93,7 @@ To customize, create `.code-quality.json`:
 
 ## Output
 
-- JSON report: `.reports/solid.json`
+- JSON report: `$REPORT_DIR/solid-report.json`, plus per-tool raw output under `$REPORT_DIR/solid/` (`$REPORT_DIR` is announced by the script on start; it is not inside the audited repository)
 - SOLID score (0-100)
 - Violations by principle with examples
 - Refactoring suggestions

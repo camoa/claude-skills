@@ -1,8 +1,33 @@
 #!/usr/bin/env bash
 # Pre-compact hook: Instruct Claude to read audit reports instead of dumping content
+#
+# This hook used to look for `.reports` in the working directory. That was where every
+# script wrote until the report directory moved out of the audited repository, so after
+# the move the hook found nothing and every audit run silently lost its context at
+# compaction. It now asks the same file the scripts source, which is the only way to
+# stay correct without keeping a second copy of the resolution rule here.
+#
+# `--latest` and not `--print`: this hook is a READER. `--print` answers where the NEXT
+# run would write, which for the out-of-repo layout is a timestamped directory that does
+# not exist yet.
 
-# Find .reports directory
-REPORTS_DIR=".reports"
+REPORTS_DIR=""
+
+# Resolve relative to this file rather than $CLAUDE_PLUGIN_ROOT: the variable is set for
+# plugin-shipped hooks, but a copy of this hook wired into a project's own settings.json
+# gets no such variable, and a wrong path here fails the same silent way the old
+# `.reports` default did.
+SEAM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../skills/code-quality-audit/scripts/core" 2>/dev/null && pwd)"
+if [ -n "$SEAM_DIR" ] && [ -r "$SEAM_DIR/report-dir.sh" ]; then
+  REPORTS_DIR=$(bash "$SEAM_DIR/report-dir.sh" --latest 2>/dev/null || true)
+fi
+
+# Fallbacks for reports this resolution cannot claim: an in-repo `.reports` from the
+# opt-in path or from a checkout audited by an older version of this plugin. Still real
+# reports, still worth pointing at.
+if [ -z "$REPORTS_DIR" ] || [ ! -d "$REPORTS_DIR" ]; then
+  REPORTS_DIR=".reports"
+fi
 if [ ! -d "$REPORTS_DIR" ]; then
   REPORTS_DIR=$(find . -maxdepth 2 -type d -name ".reports" 2>/dev/null | head -1)
 fi

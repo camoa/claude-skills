@@ -26,7 +26,7 @@ Run `scripts/core/full-audit.sh` or execute manually:
    - PHPCPD: `ddev exec vendor/bin/phpcpd {path} --min-lines=10`
    - Static calls: `grep -rn "\\Drupal::" {path} --include="*.php"`
    - Coverage: `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text`
-3. Save `.reports/audit-report.json` following `schemas/audit-report.schema.json`
+3. Save `$REPORT_DIR/audit-report.json` following `schemas/audit-report.schema.json`
 4. Show summary with PASS/WARN/FAIL per category
 5. Provide top 3-5 recommendations
 
@@ -57,7 +57,7 @@ Run `scripts/drupal/coverage-report.sh` or:
    | Form validation | 85%+ |
    | Simple CRUD, getters/setters | 60-70% |
 
-4. Save `.reports/coverage-report.json` following schema
+4. Save `$REPORT_DIR/coverage-report.json` following schema
 5. Compare against code-type targets, not just blanket 70%
 
 ---
@@ -80,7 +80,7 @@ Run `scripts/drupal/solid-check.sh` or:
    | Static `\Drupal::` in services | DIP | Critical |
    | Type errors | LSP | Warning |
 
-5. Save `.reports/solid-report.json` following schema
+5. Save `$REPORT_DIR/solid-report.json` following schema
 
 ---
 
@@ -106,7 +106,7 @@ Run `scripts/drupal/dry-check.sh` or:
    - Would need many parameters (wrong abstraction)
    - Similar but different reasons to change
 
-4. Save `.reports/dry-report.json` following schema
+4. Save `$REPORT_DIR/dry-report.json` following schema
 5. Rate: <5% excellent | 5-10% acceptable | >10% needs refactoring
 
 ---
@@ -118,12 +118,12 @@ When user says "lint code", "check coding standards", "run phpcs":
 Run `scripts/drupal/lint-check.sh` or:
 
 1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path} --report=json`
-2. Save `.reports/lint-report.json`
+2. Save `$REPORT_DIR/lint-report.json`
 3. Show summary with error/warning counts
 
 **Auto-fix mode:**
 ```bash
-scripts/drupal/lint-check.sh --fix
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh" --fix
 # or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice {path}
 ```
 
@@ -138,10 +138,10 @@ Run `scripts/drupal/rector-fix.sh` or:
 1. Dry run first: `ddev exec vendor/bin/rector process {path} --dry-run`
 2. Show proposed changes
 3. If user confirms: `ddev exec vendor/bin/rector process {path}`
-4. Save output to `.reports/rector/`
+4. Save output to `$REPORT_DIR/rector/`
 
 **Usage:**
 ```bash
-scripts/drupal/rector-fix.sh          # Dry run (preview changes)
-scripts/drupal/rector-fix.sh --apply  # Apply fixes
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/rector-fix.sh"          # Dry run (preview changes)
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/rector-fix.sh" --apply  # Apply fixes
 ```

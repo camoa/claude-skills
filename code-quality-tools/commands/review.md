@@ -44,7 +44,7 @@ Schema: `skills/code-quality-audit/references/json-schemas.md`.
 2. Runs relevant automated tools (PHPStan/ESLint, security scan)
 3. Applies rubric scoring across 10 categories (Content + Structure)
 4. Produces scored report with quality gate decision
-5. Writes report to `.reports/code-review-{name}.md`
+5. Writes report to `code-review-{name}.md` in the resolved report directory (**not** inside the audited repository)
 
 ## Instructions
 
@@ -117,7 +117,13 @@ Apply the following rubric. Score each category 1-5:
 
 ### Step 5 — Write Report
 
-Write to `.reports/code-review-{filename-or-dirname}.md`:
+Resolve where the report goes rather than assuming a directory — reports are deliberately not written inside the audited repository. `--ensure` resolves *and* creates it, with the 0700 that keeps quoted source and matched-secret filenames off a shared machine; do not `mkdir` it yourself:
+
+```bash
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure)" && echo "$REPORT_DIR"
+```
+
+Then write to `$REPORT_DIR/code-review-{filename-or-dirname}.md`:
 
 ```markdown
 # Code Review Report
@@ -174,7 +180,7 @@ Write to `.reports/code-review-{filename-or-dirname}.md`:
 ### Step 6 — Report to User
 
 > Code review complete. Score: **{total}/50** — **{grade}**
-> Report saved to `.reports/code-review-{name}.md`
+> Report saved to `$REPORT_DIR/code-review-{name}.md`
 > {if FAIL: "Quality gate FAILED. See action items for required fixes."}
 
 ## REVIEW.md Convention
