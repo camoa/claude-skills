@@ -8,11 +8,37 @@ validator directly.
 | Run all tests | `make test` |
 | Run one plugin's tests | `make test-<plugin>` |
 | Check shell scripts | `make lint` |
+| Rewrite the lint baseline | `make lint-baseline` |
 | Check plugin structure | `make validate` |
-| Check versions and descriptions | `make manifests` |
+| Check plugin manifests | `make manifests` |
 | Everything, same as the PR check | `make ci` |
 
-Before opening a PR: `make ci`.
+Before opening a PR: `make ci`. It runs all four checks even when one
+fails, so one run shows every problem. CI runs the same four the same way.
+
+## What each check can fail on
+
+- `make lint` compares shellcheck against `scripts/lint-baseline.txt`, a
+  committed list of `<path>:<CODE>` pairs. A pair that is not in the
+  baseline fails. A baseline pair that no longer occurs is reported as
+  fixed and passes. Regenerating is deliberate: `make lint-baseline`, then
+  commit the diff. The baseline keys on file and code, never line number,
+  so unrelated edits do not disturb it. It also means a file going from
+  one instance of a code to five does not fail.
+- `make validate` fails on validator errors; validator warnings print
+  without failing. It checks the catalog as well as each plugin folder.
+- Neither `lint` nor `validate` can pass without doing work. Zero scripts
+  found, zero plugins found, or a missing baseline all fail. When
+  shellcheck or the `claude` CLI is missing they skip locally and say so,
+  but fail outright when `CI` is set, so a CI step never goes green
+  without checking anything.
+- `make validate` does not catch a plugin folder missing from the catalog,
+  and treats a version disagreement with the catalog as a warning only.
+  `make manifests` is the check that fails on both.
+
+Only `make test` and `make lint` scan files, and both only look at
+git-tracked ones. A brand-new script or test is not picked up until it is
+`git add`ed.
 
 New test: put it where that plugin already keeps its tests. `make test`
 picks it up.
@@ -40,5 +66,6 @@ picks it up.
 
 Four files move together in one commit: `plugin.json`, `CHANGELOG.md`,
 `README.md`, and the plugin's entry in `.claude-plugin/marketplace.json`.
-`make manifests` checks the version and description agree. Full rules are
-in `CONTRIBUTING.md`.
+`make manifests` checks the version agrees between `plugin.json` and the
+catalog entry. The two `description` fields are deliberately different and
+are not compared. Full rules are in `CONTRIBUTING.md`.

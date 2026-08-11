@@ -33,14 +33,53 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Check versions and descriptions
+      # `make validate` runs `claude plugin validate`, which reads manifests
+      # off disk and needs no account and no API key (verified: it exits 0
+      # with a scrubbed HOME and no ANTHROPIC_API_KEY). Without this step the
+      # validate script has no CLI, and it now fails rather than skip when CI
+      # is set, so the step would go red instead of quietly green.
+      - name: Install the claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      # The four checks below each run even when an earlier one failed, so a
+      # single run reports every problem instead of stopping at the first.
+      # `make ci` aggregates the same way, which is what keeps the promise in
+      # CLAUDE.md that `make ci` is the same as the PR check.
+      - name: Check plugin manifests
+        if: ${{ !cancelled() }}
         run: make manifests
 
       - name: Check shell scripts
+        if: ${{ !cancelled() }}
         run: make lint
 
       - name: Check plugin structure
+        if: ${{ !cancelled() }}
         run: make validate
 
+      # code-quality-tools' secret scanning gates on `command -v gitleaks`.
+      # Without the binary those sections skip and the run still reports zero
+      # failures, so install it before the tests, not after.
+      # Also !cancelled(): "Run tests" now runs even after an earlier check
+      # failed, and a test run without gitleaks silently skips the secret
+      # scanning rather than failing. This step has to keep pace with it.
+      - name: Install gitleaks
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o gitleaks.tar.gz "$url"
+          # Hard failure: sha256sum -c exits non-zero on a mismatch and
+          # `set -e` fails the job. It never warns and continues.
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tar.gz gitleaks
+          gitleaks version
+
       - name: Run tests
+        if: ${{ !cancelled() }}
         run: make test
