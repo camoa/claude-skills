@@ -57,17 +57,20 @@ If `/code-quality:security` emits JSON via a `--json` flag (future enhancement),
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "security",
   "task": "<task_name>",
   "run_at": "<ISO-8601 UTC>",
+  "timestamp": "<ISO-8601 UTC>",
   "verdict": "pass",
+  "status": "pass",
   "details": {
     "source": "code-quality-tools:security",
     "raw_output_path": "<path to .reports/security.json if produced, else null>",
     "code_quality_tools_version": "<version from plugin.json of code-quality-tools>"
   },
-  "messages": ["<top findings>"]
+  "messages": ["<top findings>"],
+  "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
 }
 ```
 

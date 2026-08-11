@@ -51,22 +51,33 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
    ```json
    {
-     "schema_version": "1.0",
+     "schema_version": "1.1",
      "run_at": "<ISO-8601 UTC>",
+     "timestamp": "<ISO-8601 UTC>",
      "task": "<task_name>",
+     "status": "fail",
      "gates": [
-       {"gate": "tdd", "verdict": "pass"},
-       {"gate": "solid", "verdict": "warning", "messages": ["..."]},
-       {"gate": "dry", "verdict": "pass"},
-       {"gate": "security", "verdict": "pass"},
-       {"gate": "guides", "verdict": "fail", "messages": ["..."]},
-       {"gate": "visual-regression", "verdict": "skipped", "messages": ["No baselines in store"]},
-       {"gate": "visual-parity", "verdict": "skipped", "messages": ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
+       {"gate": "tdd", "verdict": "pass", "status": "pass"},
+       {"gate": "solid", "verdict": "warning", "status": "warning", "messages": ["..."]},
+       {"gate": "dry", "verdict": "pass", "status": "pass"},
+       {"gate": "security", "verdict": "pass", "status": "pass"},
+       {"gate": "guides", "verdict": "fail", "status": "fail", "messages": ["..."]},
+       {"gate": "visual-regression", "verdict": "skipped", "status": "skipped", "messages": ["No baselines in store"]},
+       {"gate": "visual-parity", "verdict": "skipped", "status": "skipped", "messages": ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
      ],
      "summary": {"pass": 3, "warning": 1, "fail": 1, "skipped": 2, "total": 7},
+     "findings": [
+       {"severity": "MEDIUM", "title": "solid: ..."},
+       {"severity": "HIGH", "title": "guides: ..."}
+     ],
      "discoverability_hint": "For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
    }
    ```
+
+   The aggregate's own `status` is the worst gate status present: `fail` if any
+   gate failed, else `warning` if any warned, else `pass`. `findings[]` collects
+   every gate's findings with the gate name prefixed onto each `title`. Both are
+   always present, `findings` always an array.
 
 6. **Persist** — write aggregate to:
    - `<task_folder>/validations/latest/_all.json` (overwrite)

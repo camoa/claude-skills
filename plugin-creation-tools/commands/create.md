@@ -47,3 +47,12 @@ After creating, guide the user to:
 
 - **Plugin name**: first non-`--` token in `$ARGUMENTS` (equivalently `$0` — `$N` is 0-based). Hyphen-case, e.g. `my-tools`.
 - **Component flags**: the `--skill` / `--command` / `--agent` / `--hook` / `--mcp` tokens in `$ARGUMENTS`.
+
+## Output
+
+Prints what it created to the terminal: the plugin root, every component
+scaffolded, and the next step.
+
+Writes a new plugin folder at the path you name, holding
+`.claude-plugin/plugin.json`, `README.md`, and one folder per component you
+selected. Writes nothing outside that folder.

@@ -1,4 +1,4 @@
-# Validation Gate Result Envelope v1.0
+# Validation Gate Result Envelope v1.1
 
 **Introduced:** ai-dev-assistant v3.13.0
 **Owner:** `commands/validate-*.md`
@@ -6,15 +6,35 @@
 
 Every `/validate:*` command emits and persists a JSON result object with this shape, regardless of whether it wraps a `code-quality-tools` skill or implements its own check (guides, visual-parity, visual-regression). A shared envelope keeps consumers (`/validate:all`, future reports, `/complete` hooks) simple.
 
+## 0. Cross-plugin field names (v1.1)
+
+`code-quality-tools` and `code-paper-test` report results as `status`, `findings`, and `timestamp`. This envelope used `verdict`, `messages`, and `run_at` for the same three ideas, so a tool reading both plugins needed two code paths.
+
+As of v1.1 every envelope carries **both** sets. The pairs hold the same information:
+
+| Shared name | ai-dev-assistant name | Relationship |
+|---|---|---|
+| `status` | `verdict` | Same string, always equal |
+| `timestamp` | `run_at` | Same ISO-8601 UTC string, always equal |
+| `findings` | `messages` | `findings` is the structured form. See below |
+
+`messages[]` holds human-readable strings. `findings[]` holds one object per message: `{"severity": <string>, "title": <the message string>}`. Severity comes from the verdict: `fail` → `HIGH`, `warning` → `MEDIUM`, `pass` and `skipped` → `INFO`. `findings` is always an array, never `null` and never absent, so `jq '.findings[]'` is safe on a clean run.
+
+The ai-dev-assistant names are **not** deprecated in v1.1. Anything reading `verdict`, `messages`, or `run_at` keeps working unchanged. Prefer the shared names in new code.
+
+One difference remains: this envelope's `status` can be `skipped`, which the other two plugins do not emit. Treat an unknown status as non-blocking.
+
 ## 1. Shape
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "tdd",
   "task": "dev_framework_granular_validation",
   "run_at": "2026-04-24T15:00:00Z",
+  "timestamp": "2026-04-24T15:00:00Z",
   "verdict": "pass",
+  "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
     "raw_output_path": "/abs/path/.reports/tdd.json"
@@ -22,6 +42,10 @@ Every `/validate:*` command emits and persists a JSON result object with this sh
   "messages": [
     "Red-Green-Refactor cycle observed across 3 commits",
     "All new logic has tests"
+  ],
+  "findings": [
+    {"severity": "INFO", "title": "Red-Green-Refactor cycle observed across 3 commits"},
+    {"severity": "INFO", "title": "All new logic has tests"}
   ]
 }
 ```
@@ -30,13 +54,16 @@ Every `/validate:*` command emits and persists a JSON result object with this sh
 
 | Field | Type | Values / constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` at v3.13.0. JSON string. Consumers match on major |
+| `schema_version` | string | `"1.1"` at v5.22.0. JSON string. Consumers match on major (`^1\.`) |
 | `gate` | string | Gate identifier: `tdd` \| `solid` \| `dry` \| `security` \| `guides` \| `visual-parity` \| `visual-regression`. Matches the `/validate:<gate>` command name |
 | `task` | string | Task folder name the run was scoped to |
 | `run_at` | string | ISO-8601 UTC with `Z` suffix |
+| `timestamp` | string | Same value as `run_at`. The cross-plugin name |
 | `verdict` | enum | `"pass"` \| `"warning"` \| `"fail"` \| `"skipped"` |
+| `status` | enum | Same value as `verdict`. The cross-plugin name |
 | `details` | object | Gate-specific detail structure. See the gate details section |
 | `messages` | array of string | Human-readable findings. Shown in CLI output. Non-empty for warning/fail; usually present for pass too (e.g., "3 checks passed") |
+| `findings` | array of object | One `{severity, title}` per entry in `messages`. Always an array, never `null`, never absent. The cross-plugin name |
 
 ## 3. Verdict semantics
 
@@ -149,13 +176,15 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "run_at": "2026-04-24T15:30:00Z",
+  "timestamp": "2026-04-24T15:30:00Z",
   "task": "dev_framework_granular_validation",
+  "status": "warning",
   "gates": [
-    {"gate": "tdd", "verdict": "pass"},
-    {"gate": "solid", "verdict": "warning", "messages": ["1 class exceeds 200 lines"]},
-    {"gate": "visual-regression", "verdict": "pass"}
+    {"gate": "tdd", "verdict": "pass", "status": "pass"},
+    {"gate": "solid", "verdict": "warning", "status": "warning", "messages": ["1 class exceeds 200 lines"]},
+    {"gate": "visual-regression", "verdict": "pass", "status": "pass"}
   ],
   "summary": {
     "pass": 5,
@@ -164,25 +193,40 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
     "skipped": 1,
     "total": 7
   },
+  "findings": [
+    {"severity": "MEDIUM", "title": "solid: 1 class exceeds 200 lines"}
+  ],
   "discoverability_hint": "See also: /code-quality:lint, :coverage, :review, :audit, :ultrareview"
 }
 ```
 
+The aggregate's own `status` is the worst gate status present: `fail` if any gate failed, else `warning` if any warned, else `pass`. Its `findings[]` collects every gate's findings, each `title` prefixed with the gate name.
+
 ## 7. Invariants
 
-1. `schema_version` is always present and always `"1.0"` at v3.13.0
+1. `schema_version` is always present and matches `^1\.`
 2. `gate` matches one of the 7 known IDs OR `_all` for aggregate
 3. `verdict` is one of the 4 enum values
 4. `details.source` prefix identifies provenance: `code-quality-tools:*` for wrappers, `framework:*` for owned gates
 5. `messages[]` is always an array (possibly empty); never absent
+6. `findings[]` is always an array (possibly empty); never absent, never `null`
+7. `status == verdict` and `timestamp == run_at` in every envelope
 
 ## 8. Versioning policy
 
-- Adding fields at v1.x — consumers ignore unknowns. No bump
+Matches `code-paper-test`'s policy so both plugins version the same way.
+
+- Adding fields — bump the minor (`1.0` → `1.1`). Back-compatible
 - Adding new `gate` values — additive within v1.x
-- Adding new `verdict` values — requires major bump
+- Adding new `verdict` / `status` values — additive within v1.x; treat unknown values as non-blocking
 - Adding new `details.source` values — additive
-- Removing any field or changing semantics — major bump
+- Removing any field, or changing what one means — major bump
+
+Pin with `^1\.`, not `== "1.1"`:
+
+```bash
+jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
+```
 
 ## 9. Examples by gate
 
@@ -190,17 +234,22 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "tdd",
   "task": "fix_login_redirect",
   "run_at": "2026-04-24T15:00:00Z",
+  "timestamp": "2026-04-24T15:00:00Z",
   "verdict": "pass",
+  "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
     "raw_output_path": "/abs/path/.reports/tdd.json",
     "code_quality_tools_version": "3.0.0"
   },
-  "messages": ["Red-Green-Refactor cycle observed across 3 commits"]
+  "messages": ["Red-Green-Refactor cycle observed across 3 commits"],
+  "findings": [
+    {"severity": "INFO", "title": "Red-Green-Refactor cycle observed across 3 commits"}
+  ]
 }
 ```
 
@@ -208,11 +257,13 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "solid",
   "task": "settings_form_refactor",
   "run_at": "2026-04-24T15:01:00Z",
+  "timestamp": "2026-04-24T15:01:00Z",
   "verdict": "warning",
+  "status": "warning",
   "details": {
     "source": "code-quality-tools:solid",
     "raw_output_path": "/abs/path/.reports/solid.json",
@@ -221,6 +272,10 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   "messages": [
     "SettingsForm::submit violates SRP (mixes validation + persistence + notification)",
     "Consider splitting into SettingsFormValidator + SettingsFormPersister"
+  ],
+  "findings": [
+    {"severity": "MEDIUM", "title": "SettingsForm::submit violates SRP (mixes validation + persistence + notification)"},
+    {"severity": "MEDIUM", "title": "Consider splitting into SettingsFormValidator + SettingsFormPersister"}
   ]
 }
 ```
@@ -229,11 +284,13 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "guides",
   "task": "data_model_refactor",
   "run_at": "2026-04-24T15:02:00Z",
+  "timestamp": "2026-04-24T15:02:00Z",
   "verdict": "fail",
+  "status": "fail",
   "details": {
     "source": "framework:guides",
     "checked_artifacts": ["/abs/path/research.md", "/abs/path/architecture.md"],
@@ -243,6 +300,10 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   "messages": [
     "No dev-guides citations found in research.md or architecture.md",
     "Data-model work typically loads <framework>/entities/* guides; consider /dev-guides-navigator"
+  ],
+  "findings": [
+    {"severity": "HIGH", "title": "No dev-guides citations found in research.md or architecture.md"},
+    {"severity": "HIGH", "title": "Data-model work typically loads <framework>/entities/* guides; consider /dev-guides-navigator"}
   ]
 }
 ```
@@ -251,11 +312,13 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "visual-regression",
   "task": "hero_cta_update",
   "run_at": "2026-04-24T15:03:00Z",
+  "timestamp": "2026-04-24T15:03:00Z",
   "verdict": "pass",
+  "status": "pass",
   "details": {
     "source": "framework:visual-regression",
     "component": "home-hero",
@@ -271,6 +334,10 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   "messages": [
     "Diff detected (4.2%). User classified as intentional; baseline rotated",
     "Previous baseline archived as .previous.png (prior_hash: 42936883...)"
+  ],
+  "findings": [
+    {"severity": "INFO", "title": "Diff detected (4.2%). User classified as intentional; baseline rotated"},
+    {"severity": "INFO", "title": "Previous baseline archived as .previous.png (prior_hash: 42936883...)"}
   ]
 }
 ```

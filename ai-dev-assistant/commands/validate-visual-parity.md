@@ -174,6 +174,7 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` > `pass`;
   "surfaces": [
     {"id": "marketing-landing", "viewport": "desktop", "reference_type": "html-template",
      "verdict": "fail", "classification": "build-gap", "reference_updated": false,
+     "status": "fail", "classification": "build-gap", "reference_updated": false,
      "pixel_diff_ratio": 0.042, "css_diff_mode": "full", "css_diff_count": 3,
      "css_diff": [
        {"selector": ".hero-title", "property": "font-weight", "build": "400", "reference": "500"}
@@ -205,6 +206,7 @@ interpolation) and write it via
   "bypass_reason": null,
   "gate_specific": {
     "verdict": "pass | warning | fail | skipped",
+    "status": "pass | warning | fail | skipped",
     "envelope_path": "<task>/validations/latest/visual-parity.json",
     "surfaces_run": 3,
     "surfaces_passed": 2,

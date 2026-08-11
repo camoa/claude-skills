@@ -5,6 +5,12 @@ All notable changes to the brand-content-design plugin.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] - 2026-08-11
+
+### Changed
+
+- `/template-infographic` now documents what it writes and where.
+
 ## [Unreleased]
 
 ## [3.5.1] - 2026-07-13

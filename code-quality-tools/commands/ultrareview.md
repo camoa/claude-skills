@@ -177,3 +177,11 @@ A run that fails or is stopped **still consumes** one of the three free Pro/Max 
 - `/code-quality-tools:generate-review-md` — tune managed Code Review (separate from ultrareview)
 - `skills/code-quality-audit/references/scheduled-sweeps.md` — scheduling reviews across local and cloud surfaces
 - `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to pick up review or fix work on a PR; distinct from `/code-review ultra <PR>`, which clones a PR fresh to review it.
+
+## Output
+
+Prints the pre-flight check result and the cost note, then hands off to the
+built-in `/code-review ultra`. Findings arrive later through `/tasks`, not
+from this command.
+
+Writes nothing to disk. The cloud review reports separately.

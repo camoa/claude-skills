@@ -100,3 +100,11 @@ $form['category'] = ['#type' => 'select'];
 - Always backup before migrating
 - Test without JavaScript after migration
 - Run `/htmx-validate` to check result
+
+## Output
+
+Prints the before and after code for each pattern it migrates, and a summary
+of what changed.
+
+Edits the files you point it at, in place. Writes no report file. Run it on a
+clean working tree so `git diff` shows exactly what it changed.

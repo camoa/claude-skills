@@ -222,6 +222,7 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` >
   "surfaces": [
     {"id": "home-hero", "url": "/", "viewports": ["desktop","tablet","phone"],
      "verdict": "pass", "classification": null, "baseline_updated": false,
+     "status": "pass", "classification": null, "baseline_updated": false,
      "a11y_diff_path": null}
   ],
   "diff_tolerance": 0.005,
@@ -247,6 +248,7 @@ string interpolation) and write it via
   "bypass_reason": null,
   "gate_specific": {
     "verdict": "pass | warning | fail | skipped",
+    "status": "pass | warning | fail | skipped",
     "envelope_path": "<task>/validations/latest/visual-regression.json",
     "surfaces_run": 3,
     "surfaces_passed": 2,

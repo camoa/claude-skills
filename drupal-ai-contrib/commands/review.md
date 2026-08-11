@@ -30,3 +30,12 @@ Thin entry point. A builder cannot objectively review its own work.
 
 The worker skill dispatches the `fresh-context-reviewer` agent (no build narrative) and
 delegates the SOLID / DRY philosophy review to `code-quality-tools`.
+
+## Output
+
+Prints a findings report to the terminal: per finding a severity of blocker,
+should-fix or suggestion, a `file:line`, and a concrete fix. Ends with a
+plain verdict, either ready for `submit` or another development pass needed.
+
+Stamps a review-time marker in the plugin data directory so `submit` can spot
+files edited after the last review. Writes nothing to the contribution tree.

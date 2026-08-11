@@ -52,8 +52,9 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
 
    ```json
    {
-     "schema_version": "1.0", "gate": "playbook-adherence", "task": "<name>",
+     "schema_version": "1.1", "gate": "playbook-adherence", "task": "<name>",
      "run_at": "<ISO-8601 UTC>", "verdict": "<...>",
+     "timestamp": "<ISO-8601 UTC>", "verdict": "<...>",
      "details": {
        "source": "framework:playbook-adherence",
        "invoked_by": "review | cli | validate-all | validate-team",
@@ -63,7 +64,8 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
        "cite_locations": {"<play_id>": [{"file","line","match_type"}, ...]},
        "skipped_sections": [{"file","heading","line_range"}, ...]
      },
-     "messages": [...]
+     "messages": [...],
+     "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
    }
    ```
 

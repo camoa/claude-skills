@@ -46,6 +46,7 @@ If `--skip <reason>` is present:
     "bypass_reason": "<reason>",
     "gate_specific": {
       "verdict": "skipped",
+      "status": "skipped",
       "total_tests": 0,
       "passed": 0,
       "failed": 0,
@@ -80,13 +81,16 @@ Before proceeding: verify the script's stdout is valid JSON by running `jq empty
 Write the result to `<task_folder>/validations/latest/e2e.json` per `references/validation-gate-result.md` v1.0:
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "e2e",
   "task": "<task>",
   "run_at": "<ISO timestamp>",
+  "timestamp": "<ISO timestamp>",
   "verdict": "<pass|fail|warning>",
+  "status": "<pass|fail|warning>",
   "details": "<script result JSON>",
-  "messages": []
+  "messages": [],
+  "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
 }
 ```
 
@@ -102,6 +106,7 @@ Build the `_e2e.json` payload from the script's result JSON. Use `jq -n --arg`/`
   "task_folder": "<abs task folder>",
   "gate_specific": {
     "verdict": "<pass|fail|warning>",
+    "status": "<pass|fail|warning>",
     "total_tests": <n>,
     "passed": <n>,
     "failed": <n>,

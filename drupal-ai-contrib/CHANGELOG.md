@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] - 2026-08-11
+
+### Changed
+
+- All six commands now document what they write and where. None of them write into the contribution tree.
+
 ## [0.4.1] - 2026-07-13
 
 ### Changed
