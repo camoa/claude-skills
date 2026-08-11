@@ -30,13 +30,15 @@ Run a code-quality sweep.
    - `package.json` with `next` → Next.js
    - Else → abort with "Unsupported project type"
 
-2. Create `.reports/` if it doesn't exist; append `.reports/` to `.gitignore` if missing.
+2. Do NOT create a reports directory in the repository. Resolve where reports go with
+   `bash <plugin>/skills/code-quality-audit/scripts/core/report-dir.sh --ensure`, and use
+   that path as REPORT_DIR below. It is outside the audited repository by design.
 
 3. Run the full audit:
    - Drupal: `/code-quality-tools:audit`
    - Next.js: `/code-quality-tools:audit`
 
-4. Write the summary to `.reports/quality-sweep-$(date +%Y-%m-%d).md` with:
+4. Write the summary to $REPORT_DIR/quality-sweep-$(date +%Y-%m-%d).md with:
    - Project type detected
    - Tools run and their exit status
    - Top 10 findings ranked by severity
@@ -48,14 +50,14 @@ Run a code-quality sweep.
 6. Do NOT commit or push. The working tree stays as I left it.
 
 7. Summary line in stdout: "Quality sweep complete. N findings. See
-   .reports/quality-sweep-YYYY-MM-DD.md"
+   $REPORT_DIR/quality-sweep-YYYY-MM-DD.md"
 ```
 
 ## Variations
 
 ### Hourly security watch
 
-Frequency: Hourly. Replace step 3 with `/code-quality-tools:security`. Drop the date-stamped filename in favor of `.reports/security-latest.md` (overwrite) so you're not spammed with files.
+Frequency: Hourly. Replace step 3 with `/code-quality-tools:security`. Drop the date-stamped filename in favor of `$REPORT_DIR/security-latest.md` (overwrite) so you're not spammed with files.
 
 ### Pre-commit sweep
 

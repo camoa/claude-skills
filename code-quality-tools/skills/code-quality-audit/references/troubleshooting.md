@@ -148,7 +148,7 @@ npm install --save-dev @testing-library/jest-dom
 **Cause:** First scan often finds many issues
 
 **Solution:**
-1. Review `.reports/security.json` for details
+1. Review `$REPORT_DIR/security-report.json` for details — `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest` prints the directory
 2. Prioritize critical/high severity first
 3. Filter by severity:
    ```json

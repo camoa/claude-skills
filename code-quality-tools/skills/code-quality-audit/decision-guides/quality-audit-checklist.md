@@ -43,7 +43,7 @@ Run before merging PRs:
 
 ```bash
 # Full audit (~5-10min)
-./scripts/core/full-audit.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/full-audit.sh"
 ```
 
 **Pass criteria:**
@@ -76,7 +76,7 @@ XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
 
 **Command:**
 ```bash
-./scripts/drupal/coverage-report.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/coverage-report.sh"
 ```
 
 **Interpret results:**
@@ -99,7 +99,7 @@ XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
 
 **Command:**
 ```bash
-./scripts/drupal/solid-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh"
 ```
 
 **Interpret results:**
@@ -123,7 +123,7 @@ XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
 
 **Command:**
 ```bash
-./scripts/drupal/dry-check.sh
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/dry-check.sh"
 ```
 
 **Interpret results:**
@@ -148,7 +148,7 @@ XDEBUG_MODE=coverage ddev exec vendor/bin/phpunit \
 
 **Command:**
 ```bash
-./scripts/drupal/tdd-workflow.sh cycle
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh" cycle
 ```
 
 **Checklist:**

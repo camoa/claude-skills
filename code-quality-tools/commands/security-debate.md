@@ -1,6 +1,6 @@
 ---
 description: Debate security audit findings with competing agent team (Defender + Red Team + Compliance). Use when user says "debate security", "security from 3 perspectives", "is this vulnerability real", "security team review", "red team this", "challenge security findings", "false positive check". Best for 10+ findings where severity needs validation. Each agent runs in isolated worktree.
-allowed-tools: Read, Write, Glob, Grep, WebSearch, WebFetch
+allowed-tools: Read, Write, Glob, Grep, WebSearch, WebFetch, Bash
 argument-hint: optional|project-path
 ---
 
@@ -16,18 +16,36 @@ Analyze security audit results from 3 competing perspectives using an agent team
 
 ## What This Does
 
-Spawns a 3-teammate agent team that debates the results of a prior security audit. Each teammate writes their analysis to a separate file. The lead synthesizes a final `.reports/security-debate.md` with debated severity ratings, attack scenarios, false positives, and OWASP coverage.
+Spawns a 3-teammate agent team that debates the results of a prior security audit. Each teammate writes their analysis to a separate file. The lead synthesizes a final `security-debate.md` in the audit's report directory, with debated severity ratings, attack scenarios, false positives, and OWASP coverage.
 
 ## Instructions
 
 When this command is invoked with `$ARGUMENTS`:
 
+### Step 0 — Resolve the report directory
+
+Reports do not live in the audited repository. Ask the suite where the last `/code-quality-tools:security` run wrote, rather than guessing a path — from the project root, or `$ARGUMENTS` if a path was given:
+
+```bash
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest)" \
+  && REPORT_DIR="$(cd "$REPORT_DIR" && pwd)" && echo "$REPORT_DIR"
+```
+
+Use that value as `{report_dir}` everywhere below, including in the spawn prompts. It must be **absolute**: teammates run in isolated worktrees, so a relative path would give each teammate its own private directory and the lead would find nothing to synthesize. The `cd`/`pwd` above is what guarantees that.
+
+A non-zero exit means no audit has ever been run here — not that one came back clean:
+
+> No security report found: no audit has been run in this project yet.
+> Run `/code-quality-tools:security` first to generate the audit report.
+
+Stop here on a non-zero exit.
+
 ### Step 1 — Check Report Exists
 
-Look for `.reports/security-report.json` in the project root (or `$ARGUMENTS` path if provided).
+Look for `{report_dir}/security-report.json`.
 
 If not found:
-> No security report found at `.reports/security-report.json`.
+> No security report found at `{report_dir}/security-report.json`.
 > Run `/code-quality-tools:security` first to generate the audit report.
 
 Stop here if not found.
@@ -38,13 +56,13 @@ Verify agent teams are available by attempting to create a team. If creation fai
 
 > Agent teams are not available in this environment.
 >
-> **Fallback:** Your security audit results are in `.reports/security-report.json`. Run `/code-quality-tools:security` for standard single-pass analysis.
+> **Fallback:** Your security audit results are in `{report_dir}/security-report.json`. Run `/code-quality-tools:security` for standard single-pass analysis.
 
 Stop here if not available.
 
 ### Step 3 — Assess Report Size
 
-Read `.reports/security-report.json` and count findings.
+Read `{report_dir}/security-report.json` and count findings.
 
 If fewer than 10 findings:
 > Found {N} findings. For small reports, single-agent analysis may be sufficient.
@@ -63,7 +81,7 @@ If the project is Drupal, WebFetch relevant security guides to provide richer co
 5. **If findings include CSRF:** `https://camoa.github.io/dev-guides/drupal/security/csrf-protection/index.md`
 6. **If findings include input validation:** `https://camoa.github.io/dev-guides/drupal/security/input-validation-and-sanitization/index.md`
 
-Save fetched content to `.reports/security-context.md` and include its path in the spawn prompts so teammates can reference it.
+Save fetched content to `{report_dir}/security-context.md` and include its path in the spawn prompts so teammates can reference it.
 
 ### Step 4 — Create Shared Task List
 
@@ -93,9 +111,9 @@ Spawn 3 teammates using the prompt templates below. After spawning:
 
 When all teammates finish:
 
-- Read `.reports/defender-analysis.md`, `.reports/red-team-analysis.md`, `.reports/compliance-analysis.md`
-- Write `.reports/security-debate.md` using the Output Format below
-- Tell the user: "Security debate complete. Assessment saved to `.reports/security-debate.md`"
+- Read `{report_dir}/defender-analysis.md`, `{report_dir}/red-team-analysis.md`, `{report_dir}/compliance-analysis.md`
+- Write `{report_dir}/security-debate.md` using the Output Format below
+- Tell the user: "Security debate complete. Assessment saved to `{report_dir}/security-debate.md`"
 
 ---
 
@@ -113,10 +131,10 @@ When all teammates finish:
 You are the Defender for a security audit debate team.
 
 REPORT LOCATION:
-{project_path}/.reports/security-report.json
+{report_dir}/security-report.json
 
 DRUPAL SECURITY CONTEXT (if available):
-{project_path}/.reports/security-context.md
+{report_dir}/security-context.md
 
 YOUR MISSION:
 Validate each audit finding and identify false positives. Your lens: "Is this finding actually exploitable in context?"
@@ -128,7 +146,7 @@ For each finding:
 4. Classify each as: Confirmed (exploitable), Likely (plausible), Unlikely (false positive), False Positive
 
 WRITE your analysis to:
-  {project_path}/.reports/defender-analysis.md
+  {report_dir}/defender-analysis.md
 
 Use this format:
 
@@ -173,10 +191,10 @@ Mark your task as completed.
 You are the Red Team Attacker for a security audit debate team.
 
 REPORT LOCATION:
-{project_path}/.reports/security-report.json
+{report_dir}/security-report.json
 
 DRUPAL SECURITY CONTEXT (if available):
-{project_path}/.reports/security-context.md
+{report_dir}/security-context.md
 
 YOUR MISSION:
 Construct attack scenarios and find what the audit missed. Your lens: "What attack chains exist and what's missing?"
@@ -188,7 +206,7 @@ Construct attack scenarios and find what the audit missed. Your lens: "What atta
 5. Think like an attacker: what's the path of least resistance into this system?
 
 WRITE your analysis to:
-  {project_path}/.reports/red-team-analysis.md
+  {report_dir}/red-team-analysis.md
 
 Use this format:
 
@@ -237,10 +255,10 @@ Mark your task as completed.
 You are the Compliance Checker for a security audit debate team.
 
 REPORT LOCATION:
-{project_path}/.reports/security-report.json
+{report_dir}/security-report.json
 
 DRUPAL SECURITY CONTEXT (if available):
-{project_path}/.reports/security-context.md
+{report_dir}/security-context.md
 
 YOUR MISSION:
 Map findings to OWASP Top 10 and CWE standards. Your lens: "Where are we uncovered against standards?"
@@ -252,7 +270,7 @@ Map findings to OWASP Top 10 and CWE standards. Your lens: "Where are we uncover
 5. Identify which OWASP categories have zero coverage — these are blind spots
 
 WRITE your analysis to:
-  {project_path}/.reports/compliance-analysis.md
+  {report_dir}/compliance-analysis.md
 
 Use this format:
 
@@ -295,7 +313,7 @@ Mark your task as completed.
 
 ## Output Format
 
-The lead synthesizes into `.reports/security-debate.md`:
+The lead synthesizes into `{report_dir}/security-debate.md`:
 
 ```markdown
 # Security Debate Assessment

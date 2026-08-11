@@ -90,7 +90,33 @@ The audit performs 10 complementary security checks:
 - **Coverage:** 800+ patterns, entropy analysis
 - **Status:** ✅ Actively maintained
 - **Installation:** See `scripts/core/install-tools.sh`
-- **Command:** `gitleaks detect --no-git`
+- **Command (default, working tree):** `gitleaks dir . --redact --report-format json --report-path <report> --no-banner`
+- **Command (history or a commit range):** `gitleaks git . --log-opts="--full-history --text --no-textconv -p -U0 <range|--all>" --redact --report-format json --report-path <report> --no-banner`
+- `--redact` masks matched values in the report. Without it the report file holds every discovered secret in plaintext.
+- `gitleaks detect --no-git` is the legacy 8.x spelling of `gitleaks dir`: it reads the working tree and nothing else. A credential committed in one release and gitignored in the next is invisible to it. Do not use it.
+- `--text --no-textconv` are not optional on a history pass. `gitleaks git` drives `git log -p`, and a `-diff` or `binary` attribute in `.gitattributes` makes git print no content lines, so the pass reads zero bytes and reports a clean history.
+
+#### Choosing the ground the scan covers
+
+The scan says which ground it covered on a `[SCOPE]` line, and records the same values in `security-report.json`. The default is the working tree, because full-history discovery is not affordable on a repository that ever committed `vendor/`: measured at 2,368 commits and 224.84 MiB of history, a full pass ran for many minutes at several hundred percent CPU and was killed at ten.
+
+| Variable | Values | What it does |
+|----------|--------|--------------|
+| `CQT_SECRET_SCAN` | `tree` (default), `diff`, `history` | The ground. `tree` is the working tree, seconds. `diff` is a bounded commit range, the CI answer. `history` is every commit reachable from every ref, and is the only pass that finds a secret that was committed and later removed. |
+| `CQT_SECRET_SCAN_BASE` | a git ref | `diff` mode base. Unset, it is derived from the first resolvable upstream ref; if none resolves the scan is refused and recorded as a skip rather than silently widened. |
+| `CQT_SECRET_SCAN_LOG_OPTS` | a string | Passed to `gitleaks --log-opts` for a `history` or `diff` pass. No quote characters: gitleaks word-splits this value before handing it to `git log`, so quoting is lost and a quoted pathspec silently scans nothing. Ranges and unquoted pathspecs work. |
+| `CQT_SECRET_SCAN_ALLOWLIST` | `vendored` | Apply the shipped vendored-path allowlist (`templates/gitleaks-vendored-allowlist.toml`) so vendored findings do not drown the report. It suppresses findings, so it is opt-in and the run prints a `[FILTER]` line naming the config whenever one is in force. It does not make a history pass faster: every blob is still read. |
+| `CQT_SECRET_SCAN_ALLOWLIST_FILE` | a path | Use this gitleaks config instead of the shipped one. |
+| `CQT_SECRET_SCAN_TIMEOUT` | seconds (default `300`) | Budget for any one pass, enforced with `timeout(1)` rather than gitleaks' own `--timeout`, because gitleaks given its own timeout writes a well-formed EMPTY report and exits 1, which a reader cannot tell from a clean tree. On a machine without `timeout(1)` there is no budget and the scope line says so. |
+
+```bash
+# CI: scope to what this branch added.
+CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=origin/main bash scripts/drupal/security-check.sh
+
+# Before a release, or when investigating: all of history, with a 30-minute budget.
+CQT_SECRET_SCAN=history CQT_SECRET_SCAN_TIMEOUT=1800 \
+  CQT_SECRET_SCAN_ALLOWLIST=vendored bash scripts/drupal/security-check.sh
+```
 
 ### 10. Roave Security Advisories
 - **Type:** Composer prevention layer
@@ -138,11 +164,13 @@ ddev drush pm:enable security_review
 
 ### Full Security Audit
 ```bash
-# Run all 10 security layers
-ddev exec bash skills/code-quality-audit/scripts/drupal/security-check.sh
+# Run all 10 security layers. Run it on the HOST, from the project you are auditing:
+# the script is the driver and proxies each tool through `ddev exec` itself. Wrapping it
+# in `ddev exec` puts a host path in front of a container that has no such path.
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/security-check.sh"
 
 # View report
-cat .reports/security-report.json | jq .
+cat "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest)/security-report.json" | jq .
 ```
 
 ### Report Structure

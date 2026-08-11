@@ -256,12 +256,30 @@ npx jest --coverage
 | Tool | Version | PHP Requirement |
 |------|---------|-----------------|
 | PHPStan | 2.x | PHP 7.4+ |
+| phpstan-drupal | 2.1+ | PHP 7.4+ |
 | phpstan-deprecation-rules | Latest | PHP 7.4+ |
 | PHPMD | Latest | PHP 8.1+ |
 | PHPCPD | 8.x | PHP 8.3+ |
 | Drupal Coder | 9.x | PHP 8.1+ |
 
 > **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
+
+> **phpstan-drupal 2.1.0 raises the floor.** Nine rules that were opt-in are now on by
+> default (`testClassSuffixNameRule`, `dependencySerializationTraitPropertyRule`,
+> `accessResultConditionRule`, `cacheableDependencyRule`, `hookFormAlterRule`,
+> `loggerFromFactoryPropertyAssignmentRule`, `entityStorageDirectInjectionRule`,
+> `symfonyYamlParseRule`, `entityOperationsCacheabilityRule`), so the first run after
+> upgrading reports more findings on unchanged code.
+>
+> **Breaking**: the `hookRules` config key is now `hookFormAlterRule`; PHPStan rejects a
+> config that still uses the old key. Also new: `ContainerInterface::has()` returns
+> `bool` rather than being inferred always-true, and a fixed inverted type check makes
+> the `LoadIncludes` rule fire on code it used to skip.
+>
+> Disable an individual rule with `drupal: rules: <name>: false`. Do not silence these
+> with `excludePaths` for `tests/`, `*.module` or `*.install`: those patterns leave
+> several of the default rules with nothing to analyse. See
+> `templates/drupal/phpstan.neon`.
 
 ### Node.js Ecosystem
 

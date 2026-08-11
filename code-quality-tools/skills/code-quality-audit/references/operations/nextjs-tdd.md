@@ -26,7 +26,7 @@ Run `scripts/nextjs/tdd-workflow.sh` with phases:
 ### RED Phase (Test Must Fail)
 
 ```bash
-scripts/nextjs/tdd-workflow.sh red [test-file]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/tdd-workflow.sh" red [test-file]
 ```
 
 1. Write a failing test
@@ -50,7 +50,7 @@ describe('Button', () => {
 ### GREEN Phase (Minimal Code to Pass)
 
 ```bash
-scripts/nextjs/tdd-workflow.sh green [test-file]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/tdd-workflow.sh" green [test-file]
 ```
 
 1. Write **only enough code** to make the test pass
@@ -68,7 +68,7 @@ export function Button({ children }: { children: React.ReactNode }) {
 ### REFACTOR Phase (Clean Up, Stay Green)
 
 ```bash
-scripts/nextjs/tdd-workflow.sh refactor [test-file]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/tdd-workflow.sh" refactor [test-file]
 ```
 
 1. Improve naming, extract components
@@ -96,7 +96,7 @@ export function Button({ children, variant = 'primary' }: ButtonProps) {
 For continuous TDD:
 
 ```bash
-scripts/nextjs/tdd-workflow.sh watch
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/tdd-workflow.sh" watch
 # or: npx jest --watch
 ```
 

@@ -42,7 +42,7 @@ Determine test type from `decision-guides/test-type-selection.md`:
 ### RED Phase (Test Must Fail)
 
 ```bash
-scripts/drupal/tdd-workflow.sh red [TestFile.php]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh" red [TestFile.php]
 ```
 
 1. Write a failing test
@@ -60,7 +60,7 @@ public function testUserCanSubmitForm() {
 ### GREEN Phase (Minimal Code to Pass)
 
 ```bash
-scripts/drupal/tdd-workflow.sh green [TestFile.php]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh" green [TestFile.php]
 ```
 
 1. Write **only enough code** to make the test pass
@@ -78,7 +78,7 @@ public function buildForm(array $form, FormStateInterface $form_state) {
 ### REFACTOR Phase (Clean Up, Stay Green)
 
 ```bash
-scripts/drupal/tdd-workflow.sh refactor [TestFile.php]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh" refactor [TestFile.php]
 ```
 
 1. Improve naming, extract methods
@@ -106,7 +106,7 @@ private function addFormElements(array $form): array {
 For continuous TDD:
 
 ```bash
-scripts/drupal/tdd-workflow.sh watch
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh" watch
 ```
 
 Watches for file changes and reruns tests automatically.

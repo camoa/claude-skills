@@ -61,11 +61,11 @@ Duplication leads to:
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+!bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/dry-check.sh [--changed <file>]`
-- **Next.js**: `bash scripts/nextjs/dry-check.sh`
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/dry-check.sh" [--changed <file>]`
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/dry-check.sh"`
 
 ### Change-scoped mode (per-WO gating)
 
@@ -97,7 +97,7 @@ To customize, create `.code-quality.json`:
 
 ## Output
 
-- JSON report: `.reports/dry.json`
+- JSON report: `$REPORT_DIR/dry-report.json`, plus per-tool raw output under `$REPORT_DIR/dry/` (`$REPORT_DIR` is announced by the script on start; it is not inside the audited repository)
 - Duplication percentage
 - Duplicated blocks with file locations
 - Refactoring suggestions (extract method, create utility)

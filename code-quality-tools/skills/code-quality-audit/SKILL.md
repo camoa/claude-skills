@@ -1,7 +1,7 @@
 ---
 name: code-quality-audit
 description: Use when checking code quality, running security audits, testing coverage, finding SOLID/DRY violations, or setting up quality tools. Use when user says "audit this code", "check security", "run PHPStan", "code quality", "find violations", "SOLID check", "DRY check", "test coverage", "lint this", "security review", "is this production ready", "check for vulnerabilities", "code review", "grade this code", "watch mode lint", "deep review", "ultrareview", "schedule quality sweep". Supports Drupal (PHPStan, PHPMD, Psalm, Semgrep, Trivy, Gitleaks via DDEV) and Next.js (ESLint, Jest, Semgrep, Trivy, Gitleaks). Use proactively before deployment or after significant code changes.
-version: 3.8.0
+version: 3.9.6
 model: inherit
 allowed-tools: Read, Bash, Grep, Glob
 disallowed-tools: Write, Edit
@@ -106,6 +106,18 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 
 ## Quick Reference
 
+Script paths below and throughout `references/` name a file **inside this plugin**, which
+is not the directory an audit runs from. Invoke one as
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/<path from the table>"
+```
+
+with the working directory left on the project being audited — every script scans its own
+cwd, so `cd`-ing into the plugin would audit the plugin. `${CLAUDE_PLUGIN_ROOT}` is the
+plugin's install directory, substituted by Claude Code; outside a session, substitute your
+checkout of this plugin.
+
 ### Drupal Scripts
 | Task | Script | Details |
 |------|--------|---------|
@@ -136,11 +148,25 @@ Unset the variable (or set to anything other than `0`) to re-enable.
 **Drupal:**
 1. Locate Drupal root: check `web/core/lib/Drupal.php` or `docroot/core/lib/Drupal.php`
 2. Verify DDEV: `ddev describe`
-3. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
 
 **Next.js:**
 1. Verify npm: `npm --version`
-2. Create reports directory: `mkdir -p .reports && echo ".reports/" >> .gitignore`
+
+### Report directory — do not create one
+
+**Never run `mkdir -p .reports`, and never add `.reports/` to the audited repository's `.gitignore`.** Reports quote lines out of the audited source and name the files a secret scanner matched in, so they do not belong on a branch that travels. `.reports` inside the repository is no longer where they go.
+
+Every script under `scripts/` resolves its own report directory by sourcing `scripts/core/report-dir.sh`, creates it, and prints `Report directory: <path>` when it starts. Read that line rather than assuming a path. Resolution order: an explicitly set `REPORT_DIR`; else the `ai-dev-assistant` project folder registered for this working directory, under `<project>/audits/<date>/`; else outside the repository under `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`. `.reports/` is reachable only by asking for it with `REPORT_DIR_IN_REPO=1`, and is gitignored at creation.
+
+When you need the path yourself — to read a report back, or to tell the user where to look — ask the same file instead of writing a directory name down:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --print    # where the next run writes; creates nothing
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure   # same path, created with mode 0700; use before writing
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --latest   # where the last run wrote; exits 1 if none yet
+```
+
+A non-zero `--latest` means no audit has been run here, not that an audit came back clean. Say so, and offer to run one.
 
 > **Sandbox users:** If the built-in **sandboxed Bash tool** (`/sandbox`) is enabled, bash scripts that invoke linters (PHPStan, ESLint, Semgrep, Trivy, Gitleaks) require their binary paths to be whitelisted. Add the tool binaries to your `allowedPaths` (e.g., `vendor/bin/phpstan`, `/usr/local/bin/semgrep`). DDEV-proxied commands run inside the container and are unaffected.
 >
@@ -182,6 +208,32 @@ To audit specific modules or components instead of the entire project:
 3. **Full scan** (default) - Run from project root
 
 Intelligent detection: Claude detects current directory and user intent.
+
+## Secret scan ground (`CQT_SECRET_SCAN`)
+
+"Run gitleaks" is a choice of ground, not one operation, and the security gate makes it explicit. The default is the **working tree**, and the run prints a `[SCOPE]` line saying so; `security-report.json` carries the same values, so a reader of the artifact can tell a working-tree scan from a full-history one. `Gitleaks: 0 findings` after a tree scan means the checkout is clean, **not** that the repository is.
+
+Full history is an opt-in because it is expensive, and the number is measured rather than assumed: on the repository this came from (2,368 commits, 253,505 packed objects, 224.84 MiB of history, core/vendor/contrib all committed before a Composer migration) a full-history pass ran for many minutes at several hundred percent CPU and was killed at ten. Set it deliberately, and give it a budget.
+
+| Variable | Values | Cost and effect |
+|----------|--------|-----------------|
+| `CQT_SECRET_SCAN` | `tree` (default), `diff`, `history` | `tree` = `gitleaks dir`, the working tree, seconds. `diff` = a bounded commit range, the CI answer, proportional to the range. `history` = every commit reachable from every ref, the only pass that finds a secret that was committed and later removed, and the only genuinely expensive one. |
+| `CQT_SECRET_SCAN_BASE` | a git ref | `diff` base. Unset, it is derived from the first resolvable upstream ref. If none resolves, the scan is **refused and recorded as a skip** rather than silently widened to everything. |
+| `CQT_SECRET_SCAN_LOG_OPTS` | a string | Passed to `gitleaks --log-opts` on a `history` or `diff` pass. **No quote characters:** gitleaks word-splits this value before handing it to `git log`, so quoting is lost and a quoted pathspec scans zero bytes, finds nothing and exits 0. A value containing a quote is refused. Ranges and unquoted pathspecs work. |
+| `CQT_SECRET_SCAN_ALLOWLIST` | `vendored` | Applies `templates/gitleaks-vendored-allowlist.toml`. It **suppresses findings**, so it is opt-in and the run prints a `[FILTER]` line naming whichever config is in force. It makes the report readable; it does **not** make a history pass faster, because every blob is still read. |
+| `CQT_SECRET_SCAN_ALLOWLIST_FILE` | a path | Use this gitleaks config instead of the shipped one. |
+| `CQT_SECRET_SCAN_TIMEOUT` | seconds (default `300`) | Budget for any one pass, enforced with `timeout(1)`, not gitleaks' own `--timeout`: gitleaks given its own timeout writes a well-formed **empty** report and exits 1, which a caller cannot tell from a clean tree. `timeout(1)` exits 124 and writes nothing. On a machine without `timeout(1)` there is no budget, and the scope line says that instead of naming a limit nothing enforces. |
+
+```bash
+# What a PR build should run: only what this branch added.
+CQT_SECRET_SCAN=diff CQT_SECRET_SCAN_BASE=origin/main bash scripts/drupal/security-check.sh
+
+# The pass that finds a credential that was committed and later gitignored.
+CQT_SECRET_SCAN=history CQT_SECRET_SCAN_TIMEOUT=1800 \
+  CQT_SECRET_SCAN_ALLOWLIST=vendored bash scripts/drupal/security-check.sh
+```
+
+Full table, with the measured `--log-opts` failure modes: [Drupal](references/operations/drupal-security.md) / [Next.js](references/operations/nextjs-security.md).
 
 ---
 
@@ -262,11 +314,11 @@ All reports must follow `schemas/audit-report.schema.json`:
     "thresholds": { "coverage_minimum": 70, "duplication_max": 5 }
   },
   "summary": {
-    "overall_score": "pass|warning|fail",
+    "overall_score": "pass|warning|fail|unknown",
     "coverage_score": "pass|warning|fail",
     "solid_score": "pass|warning|fail",
     "dry_score": "pass|warning|fail",
-    "security_score": "pass|warning|fail"
+    "security_score": "pass|warning|fail|skipped"
   },
   "coverage": { "line_coverage": 75.5, "files_analyzed": 45 },
   "solid": { "violations": [] },

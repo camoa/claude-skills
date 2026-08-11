@@ -5,6 +5,257 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.6] - 2026-08-10
+
+A sweep of the defects found by running this suite against a live client Drupal 11
+site. Most share one shape: a check that reported a clean result it did not earn.
+The rest are the security scan writing discovered secrets into a committable path,
+and reports being written into the repository being audited at all.
+
+### Changed
+
+Three CI-visible behavior changes ship here. Read all three before upgrading.
+
+- **Reports are no longer written inside the repository being audited.** The default
+  was a relative `.reports/`, so audit output landed in whatever tree was being
+  scanned — somebody else's repository on client work, not gitignored, sweepable by
+  `git add .`, and travelling on a branch despite being a point-in-time finding about
+  one commit. Resolution order is now: an explicitly set `REPORT_DIR` wins; otherwise
+  an `ai-dev-assistant` project folder when one is registered for the current
+  directory, under `<project>/audits/<date>/`; otherwise
+  `${XDG_STATE_HOME:-$HOME/.local/state}/code-quality-tools/<project>/<timestamp>/`.
+  In-repo output is still available via `REPORT_DIR_IN_REPO=1` and is gitignored at
+  creation. Every run announces where it wrote.
+  **If you read `.reports/audit-report.json` from CI or tooling, that path is gone
+  unless you set one of those two variables.** The shipped PR-CI template keeps
+  in-repo output deliberately — an ephemeral runner's workspace is the right place —
+  and says so where it does it.
+
+- **A security scan that could not cover its ground no longer reports `pass`, and
+  `/audit` no longer exits 0 on it.** When a tool is installed but produces no usable
+  result — it crashed, wrote an unparseable report, or left a stale one — the security
+  gate now resolves to `skipped` and `full-audit.sh` caps a would-be `pass` at
+  `warning`. Since `warning` already exited 1 under the existing
+  `pass=0 / warning=1 / fail=2` contract, **a run with no real security coverage now
+  exits 1 where it exited 0.** That is the intended consequence: such a run proved
+  nothing. A tool that is simply *not installed* is expected absence and does **not**
+  trigger this — `tools_absent[]` records what was never there, the new
+  `tools_failed[]` records what was there and failed, and only the second downgrades a
+  verdict. A default machine without psalm, semgrep, trivy or gitleaks still reports
+  `pass`.
+- **`overall_score` can now be `unknown`, and a run where nothing executed reports it
+  rather than `pass`.** A CI job gating on `.status != "fail"` stays green. A job gating
+  on `== "pass"` will start failing on runs where no gate produced a result — correct,
+  because those runs proved nothing, but it surfaces as newly-red pipelines.
+  `schemas/audit-report.schema.json` already permitted `unknown`; `SKILL.md`'s sample
+  now says so, and its `security_score` sample gains `skipped`.
+
+### Fixed
+
+- **PHPStan findings were read from the wrong field, so a run finding hundreds of real
+  defects reported zero.** `.totals.errors` counts global errors, meaning the analysis
+  itself failed to configure or run, and is `0` on a run with 211 code findings. The
+  finding count now comes from `.totals.file_errors` at both call sites, and a non-zero
+  `.totals.errors` is surfaced separately as a possible misconfiguration instead of
+  being silently reported as clean.
+- **The security audit wrote discovered secrets, unredacted, into the audited repo.**
+  `gitleaks` was invoked without `--redact`, so the report held every matched secret in
+  full, at `${REPORT_DIR}/security/gitleaks.json` — inside the working tree, in a
+  directory nothing ignored. Verified: `git check-ignore .reports` returned no match.
+  Every invocation now redacts, and the report directory is added to `.gitignore` at
+  creation. A tool for finding committed secrets could previously cause you to commit
+  secrets.
+- **A gitleaks run that failed reported nothing at all.** Its exit status was captured
+  and never read, and the report-file test had no `else`, so a failure printed neither a
+  finding nor an error while the summary counted it as zero. Exit status is now read.
+  Note gitleaks fatals through `os.Exit(1)`, so a bad config, an unwritable report path
+  and a missing source all exit `1` — the same code as "found leaks" — which means only
+  a parseable report distinguishes the two. A present-but-unparseable report is now
+  treated as a failed run and recorded as a skipped tool, not as clean.
+- **A stale report could mask a failed scan.** A `gitleaks.json` left by an earlier clean
+  run survived a later failed run, so the block parsed `[]` and printed "No secrets
+  detected". The report is removed before each run.
+- **`overall_score: pass` when no check ran.** `full-audit.sh` initialized the verdict to
+  `pass` and `update_status()` only ever downgraded, so `pass` was never a verdict the
+  suite reached — it was the value it started at and failed to overwrite. Two paths are
+  now closed: the verdict is derived from gates that produced a result, and the report
+  skeleton written before any gate runs starts at `unknown`, so a run that dies partway
+  no longer leaves a passing report on disk.
+- **Report-directory gitignoring is defence-in-depth and never fatal.** Writing to a
+  `.gitignore` in a repository the tool does not own is guarded: it does nothing outside
+  a git working tree, refuses a `REPORT_DIR` containing gitignore pattern metacharacters
+  rather than guessing an escaping, refuses to write through a symlink, asks
+  `git check-ignore` before writing so an already-ignored directory produces no stray
+  file, and treats an unwritable `.gitignore` as a warning rather than aborting the run.
+
+### Added
+
+- **A recorded skip now has consequences.** Both security gates previously recorded
+  skipped tools in `tools_absent[]` and then derived the verdict from severity counts
+  alone, so gitleaks could fail on both stacks and the gate still reported `pass`. The
+  verdict now consumes the failure set. The report carries two **disjoint** arrays:
+  `tools_absent[]` lists only tools explicitly declared absent in a "not installed"
+  branch (expected — never there), and `tools_failed[]` is derived as *everything the
+  scan did not cover* minus that declared set (unexpected — present, ran, produced
+  nothing usable). Only `tools_failed[]` downgrades a verdict. Deriving it by
+  subtraction makes the default fail-closed: a newly added skip counts against the
+  verdict unless someone explicitly declares that absence expected.
+- **Seven more analyzers had their exit status assigned and never read.** In
+  `nextjs/security-check.sh`: npm-audit, eslint, semgrep and trivy. In
+  `drupal/security-check.sh`: semgrep, trivy, psalm, php-security-linter and
+  security_review, including the two in the `--changed` CI path. Each carried the same
+  jq-swallowed-to-zero and stale-report exposure as the gitleaks block. Exit thresholds
+  are deliberately **not** uniform: semgrep and trivy fail from 1 because their exit
+  tables were verified; psalm, php-security-linter and security_review only from 126,
+  because they exit non-zero on *findings* and a lower threshold would convert every
+  real finding into a fake tool failure.
+- **`composer audit` could only succeed when there was nothing to find.**
+  `ddev composer audit` treats the exit 1 that `composer audit` returns on advisories as
+  a command failure and emits nothing, so the audit produced output only when the answer
+  was zero. Now `ddev exec composer audit`. `drush pm:security` had the same swallow and
+  got the same fix; a healthy site that emits nothing is read as clean, not as failed.
+- **"PCOV available" was reported whether or not pcov was present.** `grep -c` prints its
+  count *and* exits 1 on zero matches, so `|| echo "0"` produced a two-line value that
+  broke every numeric test on it and fell through to the success branch.
+- **The shipped CI template wrote unredacted secrets to a SARIF file.**
+  `templates/ci/github-drupal.yml` invoked gitleaks without `--redact`. The file is not
+  uploaded today, so nothing leaked, but adding an `upload-artifact` step would have
+  shipped every discovered secret. Two reference docs documented the unredacted command
+  and now show `--redact`.
+
+- **Themes were never linted.** `lint-check.sh` read `DRUPAL_MODULES_PATH` and ignored
+  `DRUPAL_THEMES_PATH`. On the project that surfaced this, 493 errors and 27 warnings
+  across 58 theme files were invisible — 37% of its standards findings. `full-audit.sh`
+  also never invoked the lint gate at all, so this only ever ran standalone.
+- **Modules and themes paths were not derived from the Drupal root just detected.**
+  `detect-environment.sh` resolved the root correctly and then defaulted the modules
+  path to `web/modules/custom` independently, so every docroot-layout (Acquia) project
+  reported "No custom modules directory found" while the tool already knew the root was
+  `docroot`. The derived values are now exported to the gates, which previously never
+  received them.
+- **Coverage ran Drupal core's and every contrib module's suite.** The default used
+  core's phpunit config with `--testsuite unit,kernel` rather than scoping to the
+  project's own code, so the number it worked toward was core's coverage. A full-
+  installation run is now explicit (`--full-suite` / `COVERAGE_FULL_SUITE=1`) and the
+  report records which scope produced the number.
+- **Globally installed analyzers were invisible.** Tools were resolved only from
+  `vendor/bin`, so `composer global require` installs were skipped — which matters when
+  adding dev dependencies to a client's `composer.json` is not acceptable. `phpunit` and
+  `rector` are deliberately not widened: they bootstrap the application and need the
+  project's own autoloader. That asymmetry is now recorded where it lives.
+- **The shipped `phpstan.neon` defeated the rules it was meant to run.** It excluded
+  `tests/`, `*.module` and `*.install`; a bare `excludePaths` is shorthand for
+  `analyseAndScan`, so those files were not read even for symbol discovery, producing
+  wrong answers elsewhere rather than merely fewer here. It silently disabled rules
+  phpstan-drupal enables by default, including `TestClassSuffixNameRule` and
+  `hookFormAlterRule` (new defaults in 2.1.0) and `BrowserTestBaseDefaultThemeRule`
+  (default-on far longer). `excludePaths` is now absent by design, the deprecated
+  `drupal_root` key is removed, and the level moves 8 → 5: phpstan-drupal registers its
+  rules independently of the analysis level, so Drupal-specific coverage is unchanged
+  and only PHPStan's generic type checking relaxes. Note 2.1.0 renamed `hookRules` to
+  `hookFormAlterRule` — PHPStan rejects a config still using the old key.
+- **No drift check between `composer.lock` and what is installed.** A lockfile
+  declaring Drupal 11.3.13 over a `vendor/` holding 10.5.6 produced findings that
+  compared Drupal 11 custom code against Drupal 10 core, and had to be discarded once
+  discovered. The mismatch is now detected and surfaced.
+
+### Secret scanning: what ground it covers, and how far a finding reaches
+
+- **The secret scan now states what it covered, and still covers the working tree by
+  default.** `gitleaks detect --no-git` — the 8.x-era spelling of `gitleaks dir` — read the
+  working tree and nothing else, and said so nowhere, so "0 findings" read as proof of a
+  clean repository when it was proof of a clean checkout. A secret committed and later
+  gitignored is the case gitleaks exists to catch and was invisible: on the project that
+  surfaced this, a 93-character GitHub token committed in `82947f1b8` and gitignored
+  afterwards. Gone from the tree, present in every clone. Every run now prints a `[SCOPE]`
+  line naming the ground it covered and the ground it did not, and records the same values
+  in `meta.secret_scan` so the answer survives into the JSON artifact rather than living
+  only in a terminal.
+- **Git history is opt-in, because it is not affordable by default.** Measured on that same
+  repository: 2,368 commits, 253,505 packed objects, 224.84 MiB of history, with core,
+  `vendor/` and contrib all committed before a Composer migration. A full-history scan ran
+  for many minutes at several hundred percent CPU and was killed at ten. Two bounded modes:
+  `CQT_SECRET_SCAN=diff` with `CQT_SECRET_SCAN_BASE=<ref>` adds a commit range to the tree
+  scan and is the CI answer; `CQT_SECRET_SCAN=history` adds every reachable commit.
+  Documented in `SKILL.md`, `docs/usage.md`, `commands/security.md` and both
+  `references/operations/*-security.md`.
+- **Every pass is bounded by `timeout(1)`** (`CQT_SECRET_SCAN_TIMEOUT`, default 300s), never
+  by gitleaks' own `--timeout`. Given its own budget gitleaks writes a well-formed *empty*
+  report, logs "partial scan completed" and exits 1, so a reader checking "report present,
+  parses, length 0" calls a truncated scan a clean tree. `timeout(1)` exits 124 and writes
+  nothing, which cannot be mistaken for a result. Where `timeout(1)` is unavailable the
+  scope line says there is no budget rather than naming a limit nothing enforces.
+- **A history pass that scanned zero bytes is a failure, not a clean history.** A `-diff` or
+  `binary` attribute in `.gitattributes` makes `git log -p` emit "Binary files ... differ"
+  instead of content, so the scan silently covers nothing and exits 0. Every history pass
+  therefore carries `--text --no-textconv`. A bounded range that legitimately added no lines
+  is told apart from a blinded one by asking git which files the range added.
+- **A secret found in a deploy-artifact project is reported against both remotes.**
+  `acli push:artifact` commits the built tree to a second git repository with its own
+  remote, clones and access list, so a credential in exported config lives in two histories
+  and every deploy writes it again. With an Acquia remote or a project-local
+  `.acquia-cli.yml`, findings carry `deploy_artifact` and remediation naming both remotes;
+  a finding inside exported config also gets the `config_split` / `config_ignore` exclusion,
+  which a finding outside it does not. A `~/.acquia-cli.yml` is deliberately not a detection
+  route: it says the operator has Acquia credentials, not that this repository deploys there.
+- **`templates/gitleaks-vendored-allowlist.toml`**, opt-in via
+  `CQT_SECRET_SCAN_ALLOWLIST=vendored`, filters third-party fixtures and example keys out of
+  a report. Never applied by default, because an allowlist suppresses findings. Whenever any
+  gitleaks config is in force — ours, a repo-local `.gitleaks.toml`, or `$GITLEAKS_CONFIG`,
+  the last two of which gitleaks loads without appearing on any command line — the run prints
+  a `[FILTER]` line and records it. It reduces a directory scan's cost as well as its output;
+  it does not reduce a history scan's, because every blob is still read.
+- **The shipped CI template ran the defect this release fixes.**
+  `templates/ci/github-drupal.yml` invoked `gitleaks detect --redact --no-git`, and
+  `references/operations/*-security.md` documented that command. The template now runs a
+  merge-base-scoped history scan on `pull_request`. Three further defects in that step: it
+  checked out with the default `fetch-depth: 1`, against which a history scan is a
+  guaranteed false clean; its summary row read `steps.gitleaks.outcome` while no step
+  carried `id: gitleaks`, so it printed "completed" either way; and gitleaks is not
+  preinstalled on GitHub-hosted runners, so the step could only ever have failed on a
+  missing binary. There is now a checksum-pinned install step, and the scan is no longer
+  `continue-on-error` — a discovered credential is already in every clone, and rotation does
+  not happen against a green check.
+
+### Scoping a history scan: what does not work
+
+Excluding vendored paths with a git pathspec through `--log-opts` **does not work, and fails
+silently.** gitleaks splits that flag on whitespace before handing it to `git log`, and
+pathspec quoting does not survive the split. Measured on one commit touching `vendor/`: 0
+`+++ b/vendor/` lines when the pathspec was quoted properly to `git log`, 3,375 when passed
+as a single `--log-opts` string. At scale the "scoped" run took 1 hour 7 minutes over 4.01 GB
+and was still full of `aws-sdk-php`, contrib and `core/assets`. It looked scoped, was not, and
+reported no error. A `--log-opts` value containing quote characters is now refused with a
+recorded skip. An unquoted pathspec, re-measured and confirmed to survive the split and scope
+correctly, is permitted.
+
+### Fixed
+
+- **Secret findings said which file, never which history.** A location does not decide the
+  remediation: never committed means edit the file, in history for two years means rotate at
+  the provider and editing the file achieves nothing. Findings now carry the introducing
+  commit, date and author. The value is recovered from working-tree coordinates and never
+  from the redacted report, and it is never passed as a command-line argument —
+  `/proc/<pid>/cmdline` is world-readable, so the obvious `git log -S "<value>"` would
+  publish the secret to every user on the machine for the duration of the walk. The walk
+  streams `git log -p` instead, and the value is kept out of xtrace, which is inherited
+  rather than typed.
+- **A count is no longer reported for a finding whose commits were never counted.** A
+  history-only finding, whose file is gone from the working tree, cannot be walked by the
+  confirmation pass. It now reports `commit_count: null` and reads "commit count not
+  established" rather than asserting a number.
+
+- `scripts/tests/false-clean-spec.sh` — 742 hermetic assertions, no DDEV, no network, no
+  PHP. Covers all of the above, including the hostile cases: an unparseable and a
+  truncated gitleaks report, an unwritable and a symlinked `.gitignore`, pattern
+  metacharacters in `REPORT_DIR`, a `.gitattributes` attribute that blinds a history scan,
+  a pathspec that word-splits into a no-op, a rotated credential at unchanged coordinates,
+  a credential embedded in a remote URL, and that the report skeleton cannot start at a
+  passing verdict. Assertions that test "does not abort under `set -e`" run the code in a
+  separate `bash` process, because `set -e` is suppressed inside any command whose exit
+  status is tested and that suppression propagates into subshells — a harness written the
+  obvious way passes against the defective code.
+
 ## [3.9.5] - 2026-08-05
 
 ### Fixed

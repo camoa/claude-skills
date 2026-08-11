@@ -22,7 +22,7 @@ Run `scripts/core/full-audit.sh` (auto-detects Next.js) or manually:
 2. Coverage check (Jest)
 3. DRY check (jscpd)
 4. SOLID check (madge, complexity)
-5. Aggregate results into `.reports/audit-report.json`
+5. Aggregate results into `$REPORT_DIR/audit-report.json`
 
 **Thresholds:**
 | Metric | Pass | Warning | Fail |
@@ -42,7 +42,7 @@ Run `scripts/nextjs/lint-check.sh` or:
 
 ### ESLint
 ```bash
-npx eslint . --format json > .reports/lint-report.json
+npx eslint . --format json > "$REPORT_DIR/lint-report.json"
 ```
 
 ### TypeScript
@@ -52,7 +52,7 @@ npx tsc --noEmit
 
 ### Auto-fix Mode
 ```bash
-scripts/nextjs/lint-check.sh --fix
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/lint-check.sh" --fix
 # or: npx eslint . --fix
 ```
 
@@ -68,7 +68,7 @@ Run `scripts/nextjs/coverage-report.sh` or:
 npx jest --coverage --coverageReporters=json-summary
 ```
 
-Reports saved to `.reports/coverage/`
+Reports saved to `$REPORT_DIR/coverage/`
 
 **Coverage Targets:**
 | Code Type | Target |
@@ -88,7 +88,7 @@ When user says "check duplication", "DRY check":
 Run `scripts/nextjs/dry-check.sh` or:
 
 ```bash
-npx jscpd src --reporters json --output .reports/dry/
+npx jscpd src --reporters json --output "$REPORT_DIR/dry/"
 ```
 
 **Rule of Three Guidance** (same as Drupal):
@@ -150,7 +150,7 @@ Check `tsconfig.json` for strict settings:
 
 ### Report Structure
 
-Save `.reports/solid-report.json` with:
+Save `$REPORT_DIR/solid-report.json` with:
 - Per-principle status (pass/warning/fail)
 - Circular dependency chains
 - Complexity violations

@@ -12,25 +12,138 @@
 # Note: phpstan/extension-installer auto-loads extensions.
 #       Do NOT add an includes: block - it causes duplicate loading errors.
 #
+# ---------------------------------------------------------------------------
+# phpstan-drupal 2.1.0: expect more findings on the first run
+# ---------------------------------------------------------------------------
+#
+# 2.1.0 turned nine rules on by default that were previously opt-in:
+#
+#   testClassSuffixNameRule            dependencySerializationTraitPropertyRule
+#   accessResultConditionRule          cacheableDependencyRule
+#   hookFormAlterRule                  loggerFromFactoryPropertyAssignmentRule
+#   entityStorageDirectInjectionRule   symfonyYamlParseRule
+#   entityOperationsCacheabilityRule
+#
+# Upgrading to 2.1.0 produces a step increase in reported findings on a codebase
+# that did not change. These are newly reported defects, not newly introduced
+# ones. Budget time for the first run after the upgrade.
+#
+# If one rule is genuinely wrong for your codebase, turn off THAT rule. Do not
+# lower the level and do not add excludePaths (see the excludePaths note below):
+#
+#   parameters:
+#       drupal:
+#           rules:
+#               cacheableDependencyRule: false
+#
+# BREAKING CHANGE for an existing config: the `hookRules` key was renamed to
+# `hookFormAlterRule`. PHPStan REJECTS a configuration file that still uses the
+# old key, so this fails at startup rather than degrading quietly. If you have
+# `hookRules` anywhere in your phpstan.neon, rename it before upgrading.
+#
+# Two further 2.1.0 changes surface findings in code you did not touch:
+#
+#   - ContainerInterface::has() now returns bool instead of being inferred as
+#     always-true for known services. Guards such as
+#     `if ($container->has('some.service'))` stop being reported as redundant.
+#     This reflects runtime reality: modules get uninstalled and site builds
+#     vary. Restore the old inference with:
+#         drupal: { bleedingEdge: { containerHasAlwaysTrue: true } }
+#
+#   - A three-year-old inverted type check in the LoadIncludes rule was fixed.
+#     Code using concrete ModuleHandler classes was being skipped; loadIncludes.*
+#     errors now fire on it.
+#
+#   - ClassResolverInterface::getInstanceFromDefinition(Foo::class) now narrows
+#     its return type to Foo. Usually correct, but wrong when a service
+#     definition substitutes a different class. Disable with:
+#         drupal: { classResolverReturnType: false }
+#
 
 parameters:
-    # Analysis level (0-10, higher = stricter)
-    # Level 8 is recommended for SOLID compliance
-    level: 8
+    # Analysis level (0-10, higher = stricter).
+    #
+    # 5 is the shipped default because this template is normally copied into an
+    # EXISTING codebase. Level 8+ adds the mixed/nullable strictness that
+    # generates most of the noise in legacy Drupal code, and a first run that
+    # prints thousands of findings gets silenced rather than fixed.
+    #
+    # Raising this is the correct way to tighten the gate. Climb 5 -> 6 -> 8 as
+    # you clear each level. Never reach for excludePaths instead.
+    #
+    # Lowering the level costs nothing in DRUPAL-SPECIFIC coverage. phpstan-drupal
+    # registers its rules independently of the analysis level: they are not part
+    # of PHPStan's conf/config.levelN.neon chain, so nothing about them is gated
+    # on the level. Every rule named in the header above therefore fires at level
+    # 0 exactly as it does at level 8. (The nine 2.1.0 rules are conditional, but
+    # on their own `drupal: rules: <name>` parameters, which default to true -
+    # not on the level.)
+    #
+    # It does cost PHPStan's OWN generic type checking: missing return types,
+    # unresolvable property types and incompatible signatures are what levels 6-8
+    # add, and those are real findings this file is choosing not to surface yet.
+    # That trade is deliberate. This template is normally adopted by a codebase
+    # that has never been analysed, and a gate whose first run is unusable gets
+    # switched off rather than acted on. Climb the ladder instead of starting at
+    # the top; the exclusions this file used to carry are what starting at the
+    # top actually produced last time.
+    #
+    # Note for the SOLID gate (scripts/drupal/solid-check.sh): it invokes phpstan
+    # with no --level and no --configuration, so it uses whatever config PHPStan
+    # discovers in your project root - this file, if you copied it here. With no
+    # config at all PHPStan falls back to level 0, so adopting this file at 5
+    # raises the gate's strictness relative to not adopting it.
+    level: 5
 
-    # Paths to analyse
+    # Paths to analyse.
+    #
+    # LAYOUT: this assumes the composer-template layout with the web root at
+    # web/. On an Acquia-style layout the web root is docroot/, so change this to
+    # docroot/modules/custom. There is no way for a static config file to detect
+    # which layout a project uses.
+    #
+    # This mostly matters for a hand-run `phpstan analyse` with no arguments.
+    # When paths are passed on the command line they REPLACE this list rather
+    # than merging with it, so the audit scripts in this skill - which pass
+    # ${DRUPAL_MODULES_PATH} explicitly - are unaffected by the value here.
     paths:
         - web/modules/custom
 
-    # Paths to exclude
-    excludePaths:
-        - web/modules/custom/*/tests/*
-        - web/modules/custom/*/*.module
-        - web/modules/custom/*/*.install
+    # excludePaths: DELIBERATELY ABSENT. Do not add one.
+    #
+    # This template used to exclude tests/, *.module and *.install. That silently
+    # defeated rules that phpstan-drupal enables by default:
+    #
+    #   - Excluding */tests/* hides every test class, so TestClassSuffixNameRule
+    #     (new in 2.1.0), BrowserTestBaseDefaultThemeRule and
+    #     TestClassesProtectedPropertyModulesRule have nothing left to check.
+    #     Those last two have been default-on for far longer than 2.1.0.
+    #
+    #   - Excluding *.module hides ProceduralHookEntityOperationCacheabilityRule,
+    #     which is one of the three rule classes behind
+    #     entityOperationsCacheabilityRule (new in 2.1.0) and which bails out
+    #     unless the file it is looking at ends in .module or .inc. It also
+    #     blunts ModuleLoadInclude and LoadIncludes, whose findings 2.1.0 just
+    #     un-suppressed.
+    #
+    # A bare excludePaths list is shorthand for `analyseAndScan`, so an excluded
+    # file is not even read for symbol discovery. PHPStan then does not know the
+    # module's procedural functions exist at all, which produces wrong answers
+    # elsewhere rather than merely fewer answers here.
+    #
+    # If a specific message is genuinely unfixable, silence THAT message in
+    # ignoreErrors below. Excluding a file silences every present and future rule
+    # for it, including ones that have not been written yet.
 
-    # Drupal root for context
-    drupal:
-        drupal_root: web
+    # drupal_root: DELIBERATELY ABSENT. Do not add one.
+    #
+    # This template used to hardcode `drupal: drupal_root: web`, which is wrong
+    # for every docroot-layout (Acquia) project. It is also obsolete: setting it
+    # triggers an E_USER_DEPRECATED ("The drupal_root parameter is deprecated.
+    # Remove it from your configuration. Drupal Root is discovered
+    # automatically.") and the value is then ignored - phpstan-drupal resolves
+    # the root through webflo/drupal-finder against the composer runtime either
+    # way. Leaving the key out is both layout-agnostic and un-deprecated.
 
     # Treat phpdoc types as certain
     treatPhpDocTypesAsCertain: false
@@ -38,7 +151,11 @@ parameters:
     # Report unused parameters
     reportUnmatchedIgnoredErrors: true
 
-    # Ignore specific errors (add as needed)
+    # Ignore specific errors (add as needed).
+    #
+    # This is the right tool for suppressing a known-unfixable finding: it is
+    # scoped to one message, and reportUnmatchedIgnoredErrors above turns a stale
+    # entry into a hard error instead of letting it rot silently.
     ignoreErrors:
         # Drupal magic methods
         - '#Call to an undefined method Drupal\\Core\\Entity\\EntityInterface::#'

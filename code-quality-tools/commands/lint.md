@@ -36,18 +36,18 @@ Check code against coding standards and style guidelines.
 
 ## Detection & Execution
 
-!cd skills/code-quality-audit && bash scripts/core/detect-project.sh
+!bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-project.sh"
 
 Based on detection result, executes:
-- **Drupal**: `bash scripts/drupal/lint-check.sh`
-- **Next.js**: `bash scripts/nextjs/lint-check.sh`
+- **Drupal**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh"`
+- **Next.js**: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/nextjs/lint-check.sh"`
 
 ## Change-Scoped Mode (`--changed`)
 
 Pass a newline-delimited file of changed paths to scope `phpcs` to those files only:
 
 ```bash
-bash scripts/drupal/lint-check.sh --changed .changed-files.txt
+bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh" --changed .changed-files.txt
 ```
 
 Behaviour:
@@ -55,7 +55,7 @@ Behaviour:
 - If the filtered set is empty → exits `0` with status `skipped` (no whole-tree scan).
 - Report gains `"mode": "changed"` and `"relevant_files": N`.
 - The `--fix` flag is **not** supported in `--changed` mode; use the full-path invocation for auto-fix.
-- Compatible with CI patterns: `bash scripts/drupal/lint-check.sh --changed .changed-files.txt`
+- Compatible with CI patterns: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh" --changed .changed-files.txt`
 
 ## Auto-Fix
 
@@ -73,7 +73,7 @@ npm run lint -- --fix
 
 ## Output
 
-- JSON report: `.reports/lint.json`
+- JSON report: `$REPORT_DIR/lint-report.json`, plus per-tool raw output under `$REPORT_DIR/lint/` (`$REPORT_DIR` is announced by the script on start; it is not inside the audited repository)
 - Violations by file with line numbers
 - Auto-fix suggestions
 

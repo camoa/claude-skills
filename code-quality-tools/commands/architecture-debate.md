@@ -1,6 +1,6 @@
 ---
 description: Debate architecture and SOLID findings with competing agent team (Pragmatist + Purist + Maintainer). Use when user says "debate architecture", "SOLID debate", "is this over-engineered", "should I refactor", "architecture review with debate", "code structure debate", "design review". Best for contentious design decisions where reasonable people disagree.
-allowed-tools: Read, Write, Glob, Grep
+allowed-tools: Read, Write, Glob, Grep, Bash
 argument-hint: <file-or-directory-path>
 ---
 
@@ -16,11 +16,22 @@ Analyze code architecture from 3 competing perspectives using an agent team. A P
 
 ## What This Does
 
-Spawns a 3-teammate agent team that debates the architecture of the specified code. Each teammate analyzes from a different perspective, then they cross-challenge. The lead synthesizes a balanced `.reports/architecture-debate.md` with agreed improvements and accepted trade-offs.
+Spawns a 3-teammate agent team that debates the architecture of the specified code. Each teammate analyzes from a different perspective, then they cross-challenge. The lead synthesizes a balanced `architecture-debate.md` in the run's report directory, with agreed improvements and accepted trade-offs.
 
 ## Instructions
 
 When this command is invoked with `$ARGUMENTS`:
+
+### Step 0 — Resolve the report directory
+
+Reports do not live in the audited repository. Ask the suite where this run's reports go, rather than guessing a path — run this from the project root:
+
+```bash
+REPORT_DIR="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report-dir.sh" --ensure)" \
+  && REPORT_DIR="$(cd "$REPORT_DIR" && pwd)" && echo "$REPORT_DIR"
+```
+
+Use that value as `{report_dir}` everywhere below, including in the spawn prompts. It must be **absolute**: teammates run in isolated worktrees, so a relative path would give each teammate its own private directory and the lead would find nothing to synthesize. The `cd`/`pwd` above is what guarantees that. `--ensure` creates the directory with the 0700 that keeps quoted source and matched-secret filenames off a shared machine, so do not `mkdir` it yourself.
 
 ### Step 1 — Check Target Exists
 
@@ -83,9 +94,9 @@ Spawn 3 teammates using the prompt templates below. After spawning:
 
 When all teammates finish:
 
-- Read `.reports/pragmatist-analysis.md`, `.reports/purist-analysis.md`, `.reports/maintainer-analysis.md`
-- Write `.reports/architecture-debate.md` using the Output Format below
-- Tell the user: "Architecture debate complete. Assessment saved to `.reports/architecture-debate.md`"
+- Read `{report_dir}/pragmatist-analysis.md`, `{report_dir}/purist-analysis.md`, `{report_dir}/maintainer-analysis.md`
+- Write `{report_dir}/architecture-debate.md` using the Output Format below
+- Tell the user: "Architecture debate complete. Assessment saved to `{report_dir}/architecture-debate.md`"
 
 ---
 
@@ -120,7 +131,7 @@ For each area of the code:
 - If it's a hot spot: "OK, this one's worth fixing because..."
 
 WRITE your analysis to:
-  {project_path}/.reports/pragmatist-analysis.md
+  {report_dir}/pragmatist-analysis.md
 
 Use this format:
 
@@ -189,7 +200,7 @@ For each violation:
 - Estimate effort to fix (small/medium/large)
 
 WRITE your analysis to:
-  {project_path}/.reports/purist-analysis.md
+  {report_dir}/purist-analysis.md
 
 Use this format:
 
@@ -265,7 +276,7 @@ For each concern:
 - Suggest improvement (if worth the effort)
 
 WRITE your analysis to:
-  {project_path}/.reports/maintainer-analysis.md
+  {report_dir}/maintainer-analysis.md
 
 Use this format:
 
@@ -319,7 +330,7 @@ Mark your task as completed.
 
 ## Output Format
 
-The lead synthesizes into `.reports/architecture-debate.md`:
+The lead synthesizes into `{report_dir}/architecture-debate.md`:
 
 ```markdown
 # Architecture Debate Assessment
