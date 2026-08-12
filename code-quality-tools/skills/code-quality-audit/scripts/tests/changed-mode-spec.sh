@@ -34,7 +34,7 @@ declare -a ERRORS=()
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<< "$haystack" ; then
     PASS=$((PASS + 1))
     echo "  PASS: $desc"
   else

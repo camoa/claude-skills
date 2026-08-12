@@ -113,7 +113,7 @@ refute_contains() {
   local desc="$1" haystack="$2" pattern="$3"
   if [[ -z "$haystack" ]]; then
     bad "$desc | NOTHING was produced, so this refutation proves nothing"
-  elif echo "$haystack" | grep -qE "$pattern"; then
+  elif grep -qE "$pattern" <<< "$haystack" ; then
     bad "$desc | got: $haystack"
   else
     ok "$desc"
@@ -127,7 +127,11 @@ refute_contains() {
 # empty or errored result cannot satisfy it.
 u_has() {   # <haystack> <literal> ; yes | no | NOTHING
   if [ -z "$1" ]; then printf 'NOTHING'; return 0; fi
-  if printf '%s' "$1" | grep -qF -- "$2"; then printf 'yes'; else printf 'no'; fi
+  # Here-string, not a pipe into `grep -qF`: under `set -o pipefail` grep exits on
+  # its first match, the upstream printf takes SIGPIPE, and the pipeline reports 141
+  # even though the text matched. On a multi-line haystack that flakes a few percent
+  # of runs, and this helper is used on whole command outputs.
+  if grep -qF -- "$2" <<< "$1"; then printf 'yes'; else printf 'no'; fi
 }
 
 TMP="$(mktemp -d)"
@@ -222,7 +226,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
   else
     missing=0
     while IFS= read -r line; do
-      echo "$line" | grep -q -- '--redact' || missing=$((missing + 1))
+      grep -q -- '--redact' <<< "$line" || missing=$((missing + 1))
     done <<< "$INVOCATIONS"
     assert_eq "[$stack] every gitleaks invocation carries --redact" "0" "$missing"
   fi
@@ -389,7 +393,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
     bad "[$stack] GITLEAKS_EXIT is read after being assigned (assigned only, never used)"
   fi
 
-  if echo "$BLOCK" | grep -q 'SKIPPED_TOOLS+=("gitleaks")'; then
+  if grep -q 'SKIPPED_TOOLS+=("gitleaks")' <<< "$BLOCK" ; then
     ok "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
   else
     bad "[$stack] a failed gitleaks is recorded in SKIPPED_TOOLS"
@@ -477,7 +481,7 @@ for target in "drupal:$SEC" "nextjs:$NEXTSEC"; do
   CLEAN=$(run_gitleaks_block "$BLOCKFILE" 0 '[]')
   assert_eq "[$stack] a clean run still reports clean and records no skip" \
     "0|" "$(echo "$CLEAN" | cut -d'|' -f1,2)"
-  if echo "$CLEAN" | grep -q 'No secrets detected'; then
+  if grep -q 'No secrets detected' <<< "$CLEAN" ; then
     ok "[$stack] a clean run still prints the clean message"
   else
     bad "[$stack] a clean run still prints the clean message | got: $CLEAN"
@@ -703,7 +707,7 @@ for site in 1 2; do
   ABS_VAL="$(cat "$ABS/val" 2>/dev/null || true)"
   refute_contains "[pcov site $site] pcov absent does not report available" \
     "$ABS_OUT" 'PCOV available'
-  if echo "$ABS_OUT" | grep -q 'PCOV not available'; then
+  if grep -q 'PCOV not available' <<< "$ABS_OUT" ; then
     ok "[pcov site $site] pcov absent prints the not-available warning"
   else
     bad "[pcov site $site] pcov absent prints the not-available warning | got: $ABS_OUT"
@@ -713,7 +717,7 @@ for site in 1 2; do
   # itself, and it is what breaks every numeric test downstream.
   assert_eq "[pcov site $site] pcov absent yields a single-line probe result" \
     "1" "$(printf '%s' "$ABS_VAL" | wc -l | tr -d ' ' | awk '{print $1 + 1}')"
-  if echo "$ABS_ERR" | grep -q 'integer expression expected'; then
+  if grep -q 'integer expression expected' <<< "$ABS_ERR" ; then
     bad "[pcov site $site] the probe result survives a numeric test | stderr: $ABS_ERR"
   else
     ok "[pcov site $site] the probe result survives a numeric test"
@@ -742,7 +746,7 @@ for site in 1 2; do
   PRE="$(run_pcov_block "$BLK" present)"
   PRE_OUT="$(cat "$PRE/out" 2>/dev/null || true)"
   PRE_VAL="$(cat "$PRE/val" 2>/dev/null || true)"
-  if echo "$PRE_OUT" | grep -q 'PCOV available'; then
+  if grep -q 'PCOV available' <<< "$PRE_OUT" ; then
     ok "[pcov site $site] pcov present still reports available"
   else
     bad "[pcov site $site] pcov present still reports available | got: $PRE_OUT"
@@ -766,7 +770,7 @@ for site in 1 2; do
   # whitespace instead of assuming LF.
   CRLF="$(run_pcov_block "$BLK" present_crlf)"
   CRLF_OUT="$(cat "$CRLF/out" 2>/dev/null || true)"
-  if echo "$CRLF_OUT" | grep -q 'PCOV available'; then
+  if grep -q 'PCOV available' <<< "$CRLF_OUT" ; then
     ok "[pcov site $site] a CR-terminated pcov line still reports available"
   else
     bad "[pcov site $site] a CR-terminated pcov line still reports available | got: $CRLF_OUT"
@@ -1593,6 +1597,65 @@ else
   bad "[contract] full-audit reads the security verdict from the report, not the exit code"
 fi
 
+# H3c: the timestamp the driver stamps on the report it writes.
+#
+# This value came from `date -Iseconds` until now, along with twenty sibling calls across
+# the gates. Two faults in one call, and WHERE the call sits decides how it fails. `-I` is
+# a GNU coreutils extension; BSD and macOS `date` reject it. Here it is a BARE assignment
+# under `set -e` that runs BEFORE any gate, so on macOS the driver dies on that line and
+# writes no report at all. The twenty siblings sit inside heredocs, where a failing command
+# substitution does NOT trip `set -e`, so they degrade quietly to an empty field instead.
+# This one is asserted because it is the one whose failure is total.
+#
+# The second fault shows on GNU too: `-Iseconds` renders LOCAL time with a numeric offset,
+# never a trailing Z — `+00:00` even when the zone IS UTC. So the same instant is spelled
+# differently on two machines, and differently from every other timestamp this tool emits
+# (drupal/ and nextjs/ security-check.sh, core/secret-history.sh all write UTC-with-Z).
+#
+# Classified rather than regex-refuted so "the driver wrote nothing" is its own answer: a
+# bare pattern check would report success when full-audit died before writing the report,
+# which is the false-clean shape one level up.
+fa_timestamp_shape() {   # <value> -> utc-z | local-offset | empty | MISSING | other:<value>
+  case "$1" in
+    MISSING) printf 'MISSING'; return 0 ;;
+    '')      printf 'empty';   return 0 ;;
+  esac
+  if [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    printf 'utc-z'
+  elif [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:?[0-9]{2}$ ]]; then
+    printf 'local-offset'
+  else
+    printf 'other:%s' "$1"
+  fi
+}
+
+# Run the real driver under a zone five and a half hours off UTC. The offset is what
+# separates "UTC" from "local time wearing a Z": a driver that stamped the local clock and
+# appended Z would satisfy the shape assertion and only be caught by the hour comparison.
+FA_TS_DIR="$(mktemp -d "$TMP/fats.XXXXXX")"
+FA_TS_H0="$(date -u +%Y-%m-%dT%H)"
+( cd "$FA_TS_DIR" \
+  && PATH="$FA_BIN:/usr/bin:/bin" REPORT_DIR="$FA_TS_DIR/.reports" \
+     TZ="Asia/Kolkata" STUB_SEC_STATUS="pass" \
+     bash "$FA_ROOT/core/full-audit.sh" ) >/dev/null 2>&1 || true
+FA_TS_H1="$(date -u +%Y-%m-%dT%H)"
+FA_TS="$(jq -r '.meta.timestamp // "MISSING"' "$FA_TS_DIR/.reports/audit-report.json" \
+         2>/dev/null || echo MISSING)"
+
+assert_eq "full-audit stamps meta.timestamp as UTC with a trailing Z, not a local offset" \
+  "utc-z" "$(fa_timestamp_shape "$FA_TS")"
+
+# The instant, not just the spelling. Bracketed by UTC-now taken either side of the run so
+# an hour rolling over mid-run cannot make this flaky. (If the machine has no zoneinfo
+# database, TZ falls back to UTC and this degrades to a tautology rather than a false
+# failure — the shape assertion above still holds.)
+case "${FA_TS%%:*}" in
+  "$FA_TS_H0"|"$FA_TS_H1")
+    ok "full-audit's timestamp is the UTC instant, not the local clock relabelled" ;;
+  *)
+    bad "full-audit's timestamp is the UTC instant, not the local clock relabelled | got '$FA_TS', UTC hour was '$FA_TS_H0'..'$FA_TS_H1'" ;;
+esac
+
 # ── I. the other nextjs analyzers are not silent zeros either ────────────────
 echo ""
 echo "I: npm audit / eslint / semgrep / trivy distinguish 'clean' from 'did not run'"
@@ -1818,7 +1881,7 @@ for spec in "${TOOLS[@]}"; do
     BELOW=$(run_tool_block "$BLOCKFILE" "$below_exit" "$clean_rep" "$basename")
     assert_eq "[$tool] exit $below_exit is a finding, not a failure: no skip, no counts" \
       "0|0|0|0|" "$(echo "$BELOW" | cut -d'|' -f2-6)"
-    if echo "$BELOW" | grep -q "$cleanmsg"; then
+    if grep -q "$cleanmsg" <<< "$BELOW" ; then
       ok "[$tool] exit $below_exit with a clean report still reports clean"
     else
       bad "[$tool] exit $below_exit with a clean report still reports clean | got: $BELOW"
@@ -1853,7 +1916,7 @@ for spec in "${TOOLS[@]}"; do
   CLEAN=$(run_tool_block "$BLOCKFILE" 0 "$clean_rep" "$basename")
   assert_eq "[$tool] a clean run records no skip and no counts" "0|0|0|0|" \
     "$(echo "$CLEAN" | cut -d'|' -f2-6)"
-  if echo "$CLEAN" | grep -q "$cleanmsg"; then
+  if grep -q "$cleanmsg" <<< "$CLEAN" ; then
     ok "[$tool] a clean run still prints the clean message"
   else
     bad "[$tool] a clean run still prints the clean message | got: $CLEAN"
@@ -1873,7 +1936,7 @@ if [[ -s "$ESLINT_BLOCK" ]]; then
   NULLRULE=$(run_tool_block "$ESLINT_BLOCK" 1 "$ESLINT_FATALMSG" 'eslint-security.json')
   assert_eq "[eslint] a null ruleId does not fail the count expression" "0|0|0|0|" \
     "$(echo "$NULLRULE" | cut -d'|' -f2-6)"
-  if echo "$NULLRULE" | grep -q 'No ESLint security issues'; then
+  if grep -q 'No ESLint security issues' <<< "$NULLRULE" ; then
     ok "[eslint] a null ruleId reads as no security findings, not as a failure"
   else
     bad "[eslint] a null ruleId reads as no security findings, not as a failure | got: $NULLRULE"
@@ -1990,7 +2053,7 @@ for dep in "composer_audit:^COMPOSER_AUDIT_JSON=:composer_audit" \
   CLEANRUN=$(run_dep_block "$BLOCKFILE" 0 "$CLEAN_DOC")
   assert_eq "[$name] a clean run records no skip and no counts" \
     "0|0|" "$(echo "$CLEANRUN" | cut -d'|' -f1,2,3)"
-  if echo "$CLEANRUN" | grep -qE 'No package vulnerabilities|No security advisories'; then
+  if grep -qE 'No package vulnerabilities|No security advisories' <<< "$CLEANRUN" ; then
     ok "[$name] a clean run still prints the clean message"
   else
     bad "[$name] a clean run still prints the clean message | got: $CLEANRUN"
@@ -4991,7 +5054,7 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
   assert_eq "first_seen_commit is the commit that introduced it" \
     "$T2_C1" "$(T2_GET first_seen_commit)"
   assert_eq "first_seen_date is that commit's author date" \
-    "2020-01-02T03:04:05+00:00" "$(T2_GET first_seen_date)"
+    "2020-01-02T03:04:05Z" "$(T2_GET first_seen_date)"
   assert_eq "author is that commit's author" "Ada Lovelace" "$(T2_GET author)"
 
   # Second, independent oracle for the same number: git's own pickaxe. The walk in
@@ -5001,6 +5064,30 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
   # fixture string, and the point of the case is to compare against git.
   T2_PICKAXE=$(git -C "$T2" log --all -S"$T_SEC_A" --format=%H | grep -c . || true)
   assert_eq "the count agrees with git's own pickaxe" "$T2_PICKAXE" "$(T2_GET commit_count)"
+
+  # ── T2b: the date is UTC, and its spelling is not the local git's opinion ───
+  #
+  # Every other fixture commits at +00:00, which is the one offset where "render
+  # the author's offset" and "render UTC" agree - so none of them can tell the two
+  # apart, and none of them noticed that `%aI` was letting the environment pick the
+  # format. Two things went wrong at once and this case pins both. (1) git 2.45.0
+  # changed how `%aI` spells a zero offset, from "+00:00" to "Z"; the assertions
+  # above passed on git 2.43 and failed on the CI runner for no reason in this
+  # repository. (2) `%aI` reports the author's own offset, so a commit made in
+  # +05:30 was written into the same report field in a different shape from a
+  # commit made in UTC, and gitleaks - the other producer of this field - had
+  # already converted its own to UTC. The author date below is deliberately NOT
+  # UTC: 03:04:05+05:30 is 21:34:05Z on the PREVIOUS day, so a run that forgets to
+  # convert cannot coincidentally match, and neither can one that stamps a literal
+  # Z onto an unconverted local time.
+  T2B="$TT/repo-offset"; mkdir -p "$T2B"; git -C "$T2B" init -q
+  printf 'const t = "%s";\n' "$T_SEC_A" > "$T2B/a.js"
+  git -C "$T2B" add -A; hist_commit "$T2B" c1 "2020-01-02T03:04:05+05:30"
+  hist_scan "$T2B" "$TT/repo-offset.json"
+  T2B_OUT=$(hist_run "$T2B" "$TT/repo-offset.json")
+  assert_eq "first_seen_date is UTC, not the author's local offset" \
+    "2020-01-01T21:34:05Z" \
+    "$(printf '%s' "$T2B_OUT" | jq -r '[.[]][0].first_seen_date // "NULL"' 2>/dev/null || echo ERR)"
 
   # ── T3: not in history is a DIFFERENT answer from could not check ───────────
   T3="$TT/repo-clean"; mkdir -p "$T3"; git -C "$T3" init -q
@@ -5563,7 +5650,7 @@ if [[ "$T_HAVE_GITLEAKS" == "1" ]]; then
     fi
     ISSUE='[.issues[] | select(.category == "Gitleaks Secret" and .file == "config.js")][0]'
     assert_eq "[$stack] e2e: the secret finding carries its first commit, date, author and count" \
-      "$W_SHA|2019-07-08T09:10:11+00:00|Ada Lovelace|1" \
+      "$W_SHA|2019-07-08T09:10:11Z|Ada Lovelace|1" \
       "$(jq -r "$ISSUE | \"\(.first_seen_commit)|\(.first_seen_date)|\(.author)|\(.commit_count)\"" "$REPORT" 2>/dev/null || echo ERR)"
     # The reason the fields are there at all: the advice has to change.
     if jq -r "$ISSUE | .remediation // \"\"" "$REPORT" 2>/dev/null | grep -qi 'rotate'; then
@@ -6029,17 +6116,17 @@ STUB
   U_WF="$(u_yaml_effective "$U_CITPL")"
   assert_eq "premise: the shipped CI workflow exists and prescribes a gitleaks scan" \
     "yes|yes" \
-    "$([ -f "$U_CITPL" ] && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks[[:space:]]' && echo yes || echo no)"
+    "$([ -f "$U_CITPL" ] && echo yes || echo no)|$(grep -qE '^[[:space:]]*gitleaks[[:space:]]' <<< "$U_WF" && echo yes || echo no)"
   # One assertion over three properties of the same file: what it runs, and the two
   # spellings it must not run. Split apart, the negative halves pass on an empty file.
   assert_eq "the shipped CI workflow scans git history, with no legacy spelling left" \
     "yes|0|0" \
-    "$(printf '%s\n' "$U_WF" | grep -qE '^[[:space:]]*gitleaks git[[:space:]]' && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_WF" | grep -c 'gitleaks detect' || true)"
+    "$(grep -qE '^[[:space:]]*gitleaks git[[:space:]]' <<< "$U_WF" && echo yes || echo no)|$(printf '%s\n' "$U_WF" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_WF" | grep -c 'gitleaks detect' || true)"
   # A checkout at the default fetch-depth of 1 gives `gitleaks git` a one-commit
   # clone, and a one-commit history that reports no leaks is a false clean. The scan
   # line being right is not enough if the workflow never fetched the history.
   assert_eq "and it fetches the history that scan needs" \
-    "yes" "$(printf '%s\n' "$U_WF" | grep -qE 'fetch-depth:[[:space:]]*0' && echo yes || echo no)"
+    "yes" "$(grep -qE 'fetch-depth:[[:space:]]*0' <<< "$U_WF" && echo yes || echo no)"
 
   for target in "drupal:${ROOT}/../references/operations/drupal-security.md" \
                 "nextjs:${ROOT}/../references/operations/nextjs-security.md"; do
@@ -6047,10 +6134,10 @@ STUB
     U_MD="$(u_md_prescribed "$file")"
     assert_eq "[$stack] premise: the security reference exists and prescribes a gitleaks command" \
       "yes|yes" \
-      "$([ -f "$file" ] && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks ' && echo yes || echo no)"
+      "$([ -f "$file" ] && echo yes || echo no)|$(grep -q 'gitleaks ' <<< "$U_MD" && echo yes || echo no)"
     assert_eq "[$stack] the security reference prescribes both grounds, with no legacy spelling" \
       "yes|yes|0|0" \
-      "$(printf '%s\n' "$U_MD" | grep -q 'gitleaks git ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -q 'gitleaks dir ' && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_MD" | grep -c 'gitleaks detect' || true)"
+      "$(grep -q 'gitleaks git ' <<< "$U_MD" && echo yes || echo no)|$(grep -q 'gitleaks dir ' <<< "$U_MD" && echo yes || echo no)|$(printf '%s\n' "$U_MD" | grep -c -- '--no-git' || true)|$(printf '%s\n' "$U_MD" | grep -c 'gitleaks detect' || true)"
   done
 
   # And a sweep, so a template or reference added LATER cannot reintroduce the

@@ -1,0 +1,110 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: some tests compare a file against its version on main.
+          fetch-depth: 0
+
+      - name: Fetch main
+        run: git fetch --no-tags origin main:main || true
+
+      # Pinned, not `apt-get install shellcheck`. The runner image already
+      # carries a shellcheck, so the apt step was redundant; worse, both apt
+      # and the preinstalled copy float with the image. scripts/lint-baseline.txt
+      # records the warnings of ONE shellcheck version, and versions add,
+      # remove and renumber checks, so a baseline compared against a different
+      # build CAN report warnings that are really just a version bump.
+      # (Measured on this tree at the time of pinning: 0.9.0, 0.10.0 and
+      # 0.11.0 all produce the same 35 pairs, so the hazard is latent here
+      # rather than live. The pin is what keeps it latent.)
+      # The version here and the header in the baseline must agree;
+      # lint-shell.sh checks that they do and names both when they don't.
+      - name: Install shellcheck
+        env:
+          SHELLCHECK_VERSION: '0.11.0'
+          SHELLCHECK_SHA256: '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198'
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL --retry 3 -o shellcheck.tar.xz "$url"
+          # Hard failure: sha256sum -c exits non-zero on a mismatch and
+          # `set -e` fails the job. It never warns and continues.
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          rm -rf shellcheck.tar.xz "shellcheck-v${SHELLCHECK_VERSION}"
+          # /usr/local/bin precedes the preinstalled copy on PATH; prove it.
+          shellcheck --version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # `make validate` runs `claude plugin validate`, which reads manifests
+      # off disk and needs no account and no API key (verified: it exits 0
+      # with a scrubbed HOME and no ANTHROPIC_API_KEY). Without this step the
+      # validate script has no CLI, and it now fails rather than skip when CI
+      # is set, so the step would go red instead of quietly green.
+      - name: Install the claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      # The four checks below each run even when an earlier one failed, so a
+      # single run reports every problem instead of stopping at the first.
+      # `make ci` aggregates the same way, which is what keeps the promise in
+      # CLAUDE.md that `make ci` is the same as the PR check.
+      - name: Check plugin manifests
+        if: ${{ !cancelled() }}
+        run: make manifests
+
+      - name: Check shell scripts
+        if: ${{ !cancelled() }}
+        run: make lint
+
+      - name: Check plugin structure
+        if: ${{ !cancelled() }}
+        run: make validate
+
+      # code-quality-tools' secret scanning gates on `command -v gitleaks`.
+      # Without the binary those sections skip and the run still reports zero
+      # failures, so install it before the tests, not after.
+      # Also !cancelled(): "Run tests" now runs even after an earlier check
+      # failed, and a test run without gitleaks silently skips the secret
+      # scanning rather than failing. This step has to keep pace with it.
+      - name: Install gitleaks
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o gitleaks.tar.gz "$url"
+          # Hard failure: sha256sum -c exits non-zero on a mismatch and
+          # `set -e` fails the job. It never warns and continues.
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tar.gz gitleaks
+          gitleaks version
+
+      - name: Run tests
+        if: ${{ !cancelled() }}
+        run: make test

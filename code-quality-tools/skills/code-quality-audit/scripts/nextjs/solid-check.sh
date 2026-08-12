@@ -338,7 +338,7 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
     "max_file_lines": ${MAX_FILE_LINES},
     "max_function_lines": ${MAX_FUNCTION_LINES}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

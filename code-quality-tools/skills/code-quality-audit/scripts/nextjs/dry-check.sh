@@ -102,7 +102,7 @@ cat > "${REPORT_DIR}/dry-report.json" << EOF
     "warning": ${DUPLICATION_WARN}
   },
   "status": "${DRY_STATUS}",
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

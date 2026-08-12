@@ -306,7 +306,7 @@ verify_drupal_tools() {
     # Save tool status
     cat > "${REPORT_DIR}/tools-status.json" << EOF
 {
-  "installed_at": "$(date -Iseconds)",
+  "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "project_type": "${PROJECT_TYPE}",
   "tools": {
 $(printf '    "%s": "%s",\n' "${tools_status[@]}" | sed 's/:\([^"]*\)$/": "\1/' | sed '$ s/,$//')
@@ -551,7 +551,7 @@ verify_nextjs_tools() {
     # Save tool status
     cat > "${REPORT_DIR}/tools-status.json" << EOF
 {
-  "installed_at": "$(date -Iseconds)",
+  "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "project_type": "${PROJECT_TYPE}",
   "tools": {
 $(printf '    "%s": "%s",\n' "${tools_status[@]}" | sed 's/:\([^"]*\)$/": "\1/' | sed '$ s/,$//')

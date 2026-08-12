@@ -35,9 +35,9 @@ hasnt(){ local f="$1" d="$2"; shift 2
 # Extract the YAML frontmatter block (between the first two --- lines).
 FM="$(awk 'NR==1 && /^---[[:space:]]*$/ {fm=1; next} fm && /^---[[:space:]]*$/ {exit} fm {print}' "$AGENT")"
 fm_has() { local d="$1"; shift
-  if printf '%s\n' "$FM" | grep -Eq "$@"; then echo "PASS: $d"; else echo "FAIL: $d  (missing frontmatter: $*)"; fail=1; fi; }
+  if grep -Eq "$@" <<< "$FM" ; then echo "PASS: $d"; else echo "FAIL: $d  (missing frontmatter: $*)"; fail=1; fi; }
 fm_hasnt() { local d="$1"; shift
-  if printf '%s\n' "$FM" | grep -Eq "$@"; then echo "FAIL: $d  (present in frontmatter but must not be: $*)"; fail=1; else echo "PASS: $d"; fi; }
+  if grep -Eq "$@" <<< "$FM" ; then echo "FAIL: $d  (present in frontmatter but must not be: $*)"; fail=1; else echo "PASS: $d"; fi; }
 
 # --- 1. distill-agent.md frontmatter is valid and does not deny what it needs ---
 [ -n "$FM" ] && echo "PASS: distill-agent.md has a frontmatter block" || { echo "FAIL: distill-agent.md has no frontmatter block"; fail=1; }

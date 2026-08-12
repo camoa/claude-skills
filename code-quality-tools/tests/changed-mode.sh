@@ -102,10 +102,10 @@ test_filter_logic() {
     local RELEVANT_FILES=()
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        if ! echo "$f" | grep -qE "$LINTABLE_EXTS"; then
+        if ! grep -qE "$LINTABLE_EXTS" <<< "$f" ; then
             continue
         fi
-        if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then
+        if grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)' <<< "$f" ; then
             continue
         fi
         RELEVANT_FILES+=("$f")
@@ -187,8 +187,8 @@ web/modules/custom/my_module/src/Service.php"
     FILES=()
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        if ! echo "$f" | grep -qE "$local_LINTABLE"; then continue; fi
-        if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then continue; fi
+        if ! grep -qE "$local_LINTABLE" <<< "$f" ; then continue; fi
+        if grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)' <<< "$f" ; then continue; fi
         FILES+=("$f")
     done < "$tmpf"
     rm -f "$tmpf"
@@ -207,7 +207,7 @@ web/modules/custom/my_module/src/Service.php"
     HAS_COMPOSER=false
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        if echo "$f" | grep -qE '(^|/)composer\.(json|lock)$'; then
+        if grep -qE '(^|/)composer\.(json|lock)$' <<< "$f" ; then
             HAS_COMPOSER=true
             break
         fi
@@ -228,7 +228,7 @@ web/modules/custom/my_module/src/Service.php"
     HAS_COMPOSER=false
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        if echo "$f" | grep -qE '(^|/)composer\.(json|lock)$'; then
+        if grep -qE '(^|/)composer\.(json|lock)$' <<< "$f" ; then
             HAS_COMPOSER=true
             break
         fi
@@ -249,7 +249,7 @@ web/modules/custom/my_module/src/Service.php"
     HAS_COMPOSER=false
     while IFS= read -r f; do
         [ -z "$f" ] && continue
-        if echo "$f" | grep -qE '(^|/)composer\.(json|lock)$'; then
+        if grep -qE '(^|/)composer\.(json|lock)$' <<< "$f" ; then
             HAS_COMPOSER=true
             break
         fi
@@ -286,7 +286,7 @@ run_skip_test() {
     # Exit 0 = clean skip
     if [ "$exit_code" -eq 0 ]; then
         # Check "SKIP" appears in output (lint/solid) or "skipped" (security)
-        if echo "$output" | grep -qi "skip"; then
+        if grep -qi "skip" <<< "$output" ; then
             ok "$label → exit 0, skip message present"
         else
             fail "$label → exit 0 but no SKIP message (output: ${output})"
@@ -319,7 +319,7 @@ run_skip_test "solid-check.sh --changed empty set" "${DRUPAL_SCRIPTS}/solid-chec
         bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
 
-    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "skip"; then
+    if [ "$exit_code" -eq 0 ] && grep -qi "skip" <<< "$output" ; then
         ok "$label → exit 0, skip message present"
     else
         fail "$label → exit_code=${exit_code}; output=${output}"
@@ -390,7 +390,7 @@ run_skip_test "solid-check.sh --changed empty set" "${DRUPAL_SCRIPTS}/solid-chec
     REPORT="${RDIR}/security-report.json"
     if [ -f "$REPORT" ]; then
         NOTE=$(jq -r '.messages[0] // ""' "$REPORT" 2>/dev/null || echo "")
-        if echo "$NOTE" | grep -qi "advisory\|skipped\|whole-project"; then
+        if grep -qi "advisory\|skipped\|whole-project" <<< "$NOTE" ; then
             ok "$label → advisory note present in report messages[]"
         else
             fail "$label → report exists but no advisory note: ${NOTE}"
@@ -417,7 +417,7 @@ run_skip_test "solid-check.sh --changed empty set" "${DRUPAL_SCRIPTS}/solid-chec
     REPORT="${RDIR}/security-report.json"
     if [ -f "$REPORT" ]; then
         NOTE=$(jq -r '.messages[0] // ""' "$REPORT" 2>/dev/null || echo "")
-        if echo "$NOTE" | grep -qi "advisory\|skipped\|whole-project"; then
+        if grep -qi "advisory\|skipped\|whole-project" <<< "$NOTE" ; then
             ok "$label → advisory note present"
         else
             fail "$label → advisory note missing: '${NOTE}'"
@@ -566,11 +566,11 @@ SECURITY_SCRIPT="${DRUPAL_SCRIPTS}/security-check.sh"
 
     scope_ok=true
     # The custom file must be in scope
-    echo "$SEMGREP_SCOPE" | grep -q "web/modules/custom/test_mod/src/Service.php" || scope_ok=false
-    echo "$PSL_SCOPE"     | grep -q "web/modules/custom/test_mod/src/Service.php" || scope_ok=false
+    grep -q "web/modules/custom/test_mod/src/Service.php" <<< "$SEMGREP_SCOPE" || scope_ok=false
+    grep -q "web/modules/custom/test_mod/src/Service.php" <<< "$PSL_SCOPE" || scope_ok=false
     # vendor + yml must NOT be in scope
-    echo "$SEMGREP_SCOPE" | grep -q "vendor/foo/Bar.php" && scope_ok=false
-    echo "$SEMGREP_SCOPE" | grep -q "config/install/x.yml" && scope_ok=false
+    grep -q "vendor/foo/Bar.php" <<< "$SEMGREP_SCOPE" && scope_ok=false
+    grep -q "config/install/x.yml" <<< "$SEMGREP_SCOPE" && scope_ok=false
 
     if [ "$scope_ok" = true ]; then
         ok "$label (semgrep scope='${SEMGREP_SCOPE#SEMGREP_SCOPE: }', psl scoped, vendor/yml excluded)"
@@ -666,7 +666,7 @@ make_no_ddev "$NO_DDEV_BIN"
         bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
 
-    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "skip"; then
+    if [ "$exit_code" -eq 0 ] && grep -qi "skip" <<< "$output" ; then
         ok "$label → exit 0, skip message present"
     else
         fail "$label → exit_code=${exit_code}; output=${output}"
@@ -688,7 +688,7 @@ make_no_ddev "$NO_DDEV_BIN"
         bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
 
-    if [ "$exit_code" -eq 2 ] && echo "$output" | grep -qi "ddev"; then
+    if [ "$exit_code" -eq 2 ] && grep -qi "ddev" <<< "$output" ; then
         ok "$label → exit 2, DDEV error message"
     else
         fail "$label → expected exit 2, got ${exit_code}; output=${output}"
@@ -710,7 +710,7 @@ make_no_ddev "$NO_DDEV_BIN"
         bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
 
-    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "skip\|no php"; then
+    if [ "$exit_code" -eq 0 ] && grep -qi "skip\|no php" <<< "$output" ; then
         ok "$label → exit 0, skip/no-php message present"
     else
         fail "$label → exit_code=${exit_code}; output=${output}"
@@ -732,7 +732,7 @@ make_no_ddev "$NO_DDEV_BIN"
         bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
 
-    if [ "$exit_code" -eq 2 ] && echo "$output" | grep -qi "ddev"; then
+    if [ "$exit_code" -eq 2 ] && grep -qi "ddev" <<< "$output" ; then
         ok "$label → exit 2, DDEV error message"
     else
         fail "$label → expected exit 2, got ${exit_code}; output=${output}"
@@ -808,7 +808,7 @@ make_phpunit_fixture() {
     ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
         bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
     RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
-    if echo "$RUN" | grep -q -- '-c docroot/core/phpunit.xml.dist'; then
+    if grep -q -- '-c docroot/core/phpunit.xml.dist' <<< "$RUN" ; then
         ok "$label"
     else
         fail "$label → PHPUNIT_RUN='${RUN}'"
@@ -826,7 +826,7 @@ make_phpunit_fixture() {
     ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
         bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
     RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
-    if echo "$RUN" | grep -q -- '-c web/core/phpunit.xml.dist'; then
+    if grep -q -- '-c web/core/phpunit.xml.dist' <<< "$RUN" ; then
         ok "$label"
     else
         fail "$label → PHPUNIT_RUN='${RUN}'"
@@ -842,7 +842,7 @@ make_phpunit_fixture() {
     out=$( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" \
         bash "$TDD_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" 2>&1 ) || true
     RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
-    if [ -n "$RUN" ] && ! echo "$RUN" | grep -q -- '-c ' && echo "$out" | grep -qi "No Drupal phpunit config found"; then
+    if [ -n "$RUN" ] && ! grep -q -- '-c ' <<< "$RUN" && grep -qi "No Drupal phpunit config found" <<< "$out" ; then
         ok "$label"
     else
         fail "$label → RUN='${RUN}'; warn=$(echo "$out" | grep -ci 'No Drupal phpunit config')"
@@ -859,7 +859,7 @@ make_phpunit_fixture() {
     ( cd "$WORKDIR" && PATH="${PHPUNIT_BIN}:${ORIG_PATH}" DDEV_PHPUNIT_LOG="$LOG" REPORT_DIR="$RDIR" \
         bash "$COV_SCRIPT" --changed "docroot/modules/custom/m/src/Service.php" >/dev/null 2>&1 ) || true
     RUN=$(grep '^PHPUNIT_RUN:' "$LOG" | head -1 || echo "")
-    if echo "$RUN" | grep -q -- '-c docroot/core/phpunit.xml.dist'; then
+    if grep -q -- '-c docroot/core/phpunit.xml.dist' <<< "$RUN" ; then
         ok "$label"
     else
         fail "$label → PHPUNIT_RUN='${RUN}'"
@@ -905,7 +905,7 @@ SH
         bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     STATUS=$(jq -r '.status // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
     REASON=$(jq -r '.skip_reason // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
-    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qi "SKIP.*phpcpd" \
+    if [ "$exit_code" -eq 0 ] && grep -qi "SKIP.*phpcpd" <<< "$output" \
         && [ "$STATUS" = "skipped" ] && [ "$REASON" = "tool_absent" ]; then
         ok "$label (status=${STATUS}, reason=${REASON})"
     else
@@ -962,9 +962,9 @@ SH
         bash "${DRUPAL_SCRIPTS}/solid-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     ABSENT=$(jq -c '.tools_absent // []' "${RDIR}/solid-report.json" 2>/dev/null || echo "[]")
     if [ "$exit_code" -eq 0 ] \
-        && echo "$output" | grep -qi "SKIP.*phpstan.*tool absent" \
-        && echo "$output" | grep -qi "SKIP.*phpmd.*tool absent" \
-        && echo "$ABSENT" | grep -q "phpstan" && echo "$ABSENT" | grep -q "phpmd"; then
+        && grep -qi "SKIP.*phpstan.*tool absent" <<< "$output" \
+        && grep -qi "SKIP.*phpmd.*tool absent" <<< "$output" \
+        && grep -q "phpstan" <<< "$ABSENT" && grep -q "phpmd" <<< "$ABSENT" ; then
         ok "$label (tools_absent=${ABSENT})"
     else
         fail "$label → exit=${exit_code}, tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"
@@ -1008,8 +1008,8 @@ SH
         bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1 ) || exit_code=$?
     ABSENT=$(jq -c '.meta.tools_absent // []' "${RDIR}/security-report.json" 2>/dev/null || echo "[]")
     if [ "$exit_code" -eq 0 ] \
-        && echo "$output" | grep -qi "SKIP.*php-security-linter.*tool absent" \
-        && echo "$ABSENT" | grep -q "php-security-linter"; then
+        && grep -qi "SKIP.*php-security-linter.*tool absent" <<< "$output" \
+        && grep -q "php-security-linter" <<< "$ABSENT" ; then
         ok "$label (tools_absent=${ABSENT})"
     else
         fail "$label → exit=${exit_code}, tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"

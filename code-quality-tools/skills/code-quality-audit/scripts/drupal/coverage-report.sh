@@ -403,7 +403,7 @@ if [[ "${1:-}" == "--changed" ]]; then
     "target": ${COVERAGE_TARGET}
   },
   "pcov_enabled": $([ "$PCOV_AVAILABLE" -gt 0 ] && echo "true" || echo "false"),
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
@@ -611,7 +611,7 @@ cat > "${REPORT_DIR}/coverage-report.json" << EOF
     "target": ${COVERAGE_TARGET}
   },
   "pcov_enabled": $([ "$PCOV_AVAILABLE" -gt 0 ] && echo "true" || echo "false"),
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

@@ -117,7 +117,7 @@ else
   else
     # The post-resolution routing_hints pass must be a real plan-mode guides-matcher consume.
     line_text="$(awk -v n="$hints_line" 'NR==n' "$IMPL")"
-    if echo "$line_text" | grep -q 'guides-matcher' && echo "$line_text" | grep -q 'mode: "plan"'; then
+    if grep -q 'guides-matcher' <<< "$line_text" && grep -q 'mode: "plan"' <<< "$line_text" ; then
       pass "## Routing hints — recipe resolved at line $recipe_line, routing_hints injected into a plan-mode guides-matcher pass at line $hints_line (after resolution)"
     else
       die "## Routing hints — routing_hints appears after resolution (line $hints_line) but not in a plan-mode guides-matcher pass (not a real consume)"

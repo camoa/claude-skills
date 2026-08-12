@@ -86,7 +86,7 @@ cat > "${REPORT_DIR}/coverage-report.json" << EOF
   },
   "status": "${COVERAGE_STATUS}",
   "tests_passed": $([ "$JEST_EXIT" -eq 0 ] && echo "true" || echo "false"),
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

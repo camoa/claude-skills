@@ -428,7 +428,7 @@ main() {
   "version_drift_reason": "${VERSION_DRIFT_REASON}",
   "composer_lock_core_version": "${COMPOSER_LOCK_CORE_VERSION}",
   "installed_core_version": "${DRUPAL_VERSION}",
-  "detected_at": "$(date -Iseconds)"
+  "detected_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 

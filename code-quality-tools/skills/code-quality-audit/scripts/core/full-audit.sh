@@ -223,7 +223,7 @@ echo ""
 # skeleton is what a consumer reads if the run dies before the summary jq below (every
 # per-gate merge jq is a bare command under `set -e`, so a gate emitting malformed JSON
 # kills the script and leaves this file exactly as written). It must not read as a pass.
-TIMESTAMP=$(date -Iseconds)
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cat > "${REPORT_DIR}/audit-report.json" << EOF
 {
   "meta": {

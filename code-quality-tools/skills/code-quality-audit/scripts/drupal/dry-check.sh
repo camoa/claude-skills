@@ -164,7 +164,7 @@ if [ -n "$CHANGED_FILES_PATH" ]; then
     "min_lines": ${MIN_LINES},
     "min_tokens": ${MIN_TOKENS}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
         exit 0
@@ -203,7 +203,7 @@ if ! ddev exec vendor/bin/phpcpd --version &> /dev/null; then
     "min_lines": ${MIN_LINES},
     "min_tokens": ${MIN_TOKENS}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
     echo ""
@@ -336,7 +336,7 @@ if [ -n "$CHANGED_FILES_PATH" ] && [ "$CLONE_COUNT" -gt 0 ]; then
     "min_lines": ${MIN_LINES},
     "min_tokens": ${MIN_TOKENS}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
@@ -382,7 +382,7 @@ else
     "warning": 15,
     "target": ${DUPLICATION_MAX}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 fi

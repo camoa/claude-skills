@@ -205,7 +205,7 @@ if [ -n "$CHANGED_FILE" ]; then
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
         exit 0
@@ -457,7 +457,7 @@ EOF
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
@@ -720,7 +720,7 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
   },
-  "generated_at": "$(date -Iseconds)"
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
