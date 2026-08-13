@@ -318,3 +318,12 @@ user's literal `[y]` to the displayed plan.
 - `/ai-dev-assistant:validate-all` — orchestrator
 - `scripts/visual-regression-gate.sh` · `scripts/baseline-manager.sh` · `scripts/screenshot-store-write.sh`
 - `references/screenshot-store-schema.md` · `references/validation-gate-result.md`
+
+## Output
+
+Prints the per-surface diff and waits for you to classify anything that moved.
+
+Writes `<task folder>/validations/latest/visual-regression.json`, the audit at
+`<task folder>/_visual_regression.json`, and appends to
+`<task folder>/validations/history.jsonl`. Baseline images are only rewritten
+after an explicit yes, and every rewrite is logged to `baseline-history.jsonl`.

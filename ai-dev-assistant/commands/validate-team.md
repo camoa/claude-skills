@@ -254,3 +254,11 @@ This command does NOT update `session_context.json`. Validation runs are transie
 - `references/team-manifest-schema.md` — canonical `team-manifest.json` v1.0 spec
 - `references/validation-gate-result.md` — per-gate + aggregate envelope schema (v3.13.0 v1.0; unchanged)
 - `references/screenshot-store-schema.md` — screenshot store layout (unchanged)
+
+## Output
+
+Prints each teammate's gate result and a summary line.
+
+Writes the same envelopes `/validate:all` does, plus a spawn manifest at
+`<task folder>/validations/tmp/team-manifest.json`. The aggregate `_all.json`
+adds a `source: "validate:team"` marker and is otherwise identical in shape.

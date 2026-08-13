@@ -185,3 +185,11 @@ ever touches the group that references *this* plugin's script.
 - `hooks/block-dangerous-commands.sh` — the guardrail script itself.
 - `/ai-dev-assistant:install-remembrance-hook` — the sibling opt-in hook
   installer this command mirrors in structure.
+
+## Output
+
+Prints what it installed and where.
+
+Copies `block-dangerous-commands.sh` into `<install-dir>/.claude/ai-dev-assistant/`
+and merges a hook entry into `<install-dir>/.claude/settings.json`. Idempotent,
+so re-running does not duplicate the entry.

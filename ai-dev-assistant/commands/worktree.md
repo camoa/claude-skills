@@ -217,3 +217,11 @@ Print the `DDEV:` line only when `--ddev-up` brought an instance up; show `seede
 - `references/worktree-conventions.md` — full conventions, including coverage of Claude Code's native worktree support
 - `superpowers:using-git-worktrees` — generic creation pattern (ai-dev-assistant adds task-aware lifecycle)
 - Claude Code's native worktree support — `https://code.claude.com/docs/en/worktrees` (the `claude --worktree` / `-w` CLI flag, PR-based worktrees, `.worktreeinclude`). The framework's `/worktree` and the native flag are complementary entry points — see `references/worktree-conventions.md`.
+
+## Output
+
+Prints the worktree path and the branch it created.
+
+Creates a git worktree at `.worktrees/<task>/` on branch `feature/<task>`, runs
+the project's setup, and pre-seeds the session context for that path. Refuses
+to run when you are already inside a worktree.

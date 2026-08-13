@@ -97,3 +97,7 @@ Cite-matching is approximate: any-of-three literal-string match. False negatives
 - `/ai-dev-assistant:validate-all <task>` — aggregator includes this gate
 - `/ai-dev-assistant:playbook-active` — see currently-loaded plays
 - `/ai-dev-assistant:upgrade-project` — fix `playbook_sets_source: "default"` implicit inheritance
+
+## Output
+
+Prints each cited play, each miss, and the verdict. Writes `validations/latest/playbook-adherence.json`, the audit `_playbook-adherence.json`, and appends to `validations/history.jsonl`.

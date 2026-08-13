@@ -123,3 +123,6 @@ Audit: {{audit_path}}
 - Walkthrough: `references/review-phase-walkthrough.md` (sibling `plumbing_docs_tests`) · Step 6 dispatcher: `references/visual-review/change-impact-dispatch.md` (v4.11.0+) · schemas: `references/gate-audit-schema.md` v1.2 (`gate_type: "review"`; `dispatch_plan`) + per-gate `references/validation-gate-result.md` v1.0 · Spec axis: `references/spec-axis-review.md` (v5.20.0+, M2)
 - Project opt-out: `**Review Required:** false` keeps gates at `/complete` (legacy v4.0.2 posture)
 - Related: `/ai-dev-assistant:implement` (Phase 3) · `:complete` (archive; consumes `_review.json`) · `:validate-all` / `:validate-team` (invoked by `/review`) · `:upgrade-project` (set `**Review Required:**`) · `:audit-status` (audit visibility)
+
+## Output
+Writes `_review.json`, one envelope per gate in `validations/latest/`, one line per run in `validations/history.jsonl`. Envelopes carry `status`, `findings`, `timestamp`.

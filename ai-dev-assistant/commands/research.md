@@ -102,3 +102,6 @@ If a gate's signals fire, it MUST run and its output MUST be shown verbatim befo
 - `/ai-dev-assistant:design <task>` — Phase 2
 - `/ai-dev-assistant:next` — recommended next action
 - `/ai-dev-assistant:propose-epics` — bulk epic-ification review
+
+## Output
+Writes `research.md` and one `_<gate>.json` per gate fired. Prints findings and gate results.

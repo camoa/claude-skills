@@ -463,3 +463,12 @@ follows it. The baseline-capture step writes only through
 - `skills/process-recipe-loader/SKILL.md` — resolves the framework-specific recipe this command follows
 - `scripts/derive-viewport-matrix.sh` · `scripts/migrate-screenshots-to-codepath.sh` · `scripts/baseline-manager.sh`
 - `references/visual-regression-walkthrough.md` · `references/visual-review/surface-registry-schema.md`
+
+## Output
+
+Prints every file it scaffolded.
+
+Writes into `<codePath>`: `tests/visual/`, per-surface specs, the
+`visual-chromium-*` projects in `playwright.config.ts`, and the shared surface
+registry at `.visual-review/registry.yml`. Writes no baseline images. A missing
+baseline is a loud failure with a `--bootstrap` message, never a silent create.

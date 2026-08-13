@@ -62,3 +62,11 @@ Mark a task complete and move to `completed/`. Behavior current as of v4.1.0; fu
 - `/ai-dev-assistant:next` — see what's next
 - `/ai-dev-assistant:status` — see all task statuses
 - `/ai-dev-assistant:audit-status` — see hardened-gate audit state
+
+## Output
+
+Prints the completion checks and the result to the terminal.
+
+Moves the task folder from `in_progress/` to `completed/`, updates
+`project_state.md`, and writes `<task folder>/_review.json` when the review
+gate fires.

@@ -103,3 +103,10 @@ Run `git worktree list` to verify.
 
 - `/ai-dev-assistant:worktree` — create worktrees
 - `references/worktree-conventions.md` — full conventions
+
+## Output
+
+Prints the worktree list, then asks per worktree before removing anything.
+
+Removes the worktrees you confirm, tearing down a registered DDEV project
+first. Honors git's refusal on uncommitted changes. Writes nothing else.

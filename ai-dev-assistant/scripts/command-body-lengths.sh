@@ -22,12 +22,18 @@ JSON_MODE=0
 
 # Phase-command budgets. Keep in lockstep with task.md ACs in
 # dev_framework_token_efficiency (v4.0.2) and dev_framework_review_phase_and_adherence (v4.1.0).
+#
+# v5.23.0 raised `research` 100 -> 105 and `review` 120 -> 125. Every command
+# now carries the `## Output` section OUTPUTS.md requires, and those two bodies
+# had 1 and 0 lines of slack. The other three absorbed it. This guard exists to
+# stop bodies regrowing silently; a budget change in the same PR as the growth
+# is not silent.
 declare -A BUDGETS=(
-  [research]=100
+  [research]=105
   [design]=80
   [implement]=120
   [complete]=100
-  [review]=120
+  [review]=125
 )
 
 # Body line count = total lines minus frontmatter (between first two --- lines, inclusive).

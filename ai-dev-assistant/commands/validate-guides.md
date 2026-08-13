@@ -190,3 +190,11 @@ See `implementation_process/in_progress/<this-task>/v2-candidates.md` for the fu
 - `references/guides-matcher-schema.md` — agent I/O contract (v4.3.0+)
 - `agents/guides-matcher.md` — the catalog-match subagent (haiku, read-only)
 - `dev-guides-navigator` plugin — the guide discovery tool whose usage this gate verifies
+
+## Output
+
+Prints the guides cited, the coverage gaps found, and the verdict.
+
+Writes `<task folder>/validations/latest/guides.json` and appends to
+`<task folder>/validations/history.jsonl`. The envelope carries `status`,
+`findings`, and `timestamp` per `references/validation-gate-result.md`.

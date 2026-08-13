@@ -84,3 +84,9 @@ Next phase command (research/design/implement/complete) will load these sets via
 - `/ai-dev-assistant:playbook-active` — display current active sets + local playbook + last conflicts
 - `references/playbook-schema.md` — local playbook structure (not relevant to sets)
 - `dev-guides-navigator` — set ID resolution and loading
+
+## Output
+
+Prints the sets it validated and the result.
+
+Writes the Playbook Sets field in `project_state.md`. Nothing else.

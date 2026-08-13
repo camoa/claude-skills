@@ -108,3 +108,10 @@ Print:
 - `/ai-dev-assistant:playbook-capture` — append new entries to the file
 - `/ai-dev-assistant:playbook-review` — walk existing entries for keep/update/remove
 - `references/playbook-schema.md` — recommended file structure
+
+## Output
+
+Prints the resolved playbook path and the state it was set to.
+
+Writes the User Playbook and User Playbook State fields in `project_state.md`.
+Does not create or edit the playbook file itself.

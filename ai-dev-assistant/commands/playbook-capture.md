@@ -120,3 +120,10 @@ Ask:
 - `/ai-dev-assistant:set-user-playbook` — configure the local playbook path
 - `references/playbook-schema.md` — entry structure
 - `/ai-dev-assistant:complete` — surfaces candidate plays at task completion (auto-detected from session); user can accept and route to this capture flow
+
+## Output
+
+Prints the drafted play as a diff and waits for your confirmation.
+
+On confirmation, appends the play to the project's local user playbook file.
+No write happens without an explicit yes.

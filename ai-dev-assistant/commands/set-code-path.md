@@ -133,3 +133,10 @@ Read, modify, write. For the matching project entry, set `codePath` to the resol
 - Plugin CONVENTIONS.md Project Metadata section (v3.11.0+)
 - marketplace.json description (v3.11.0)
 - `/ai-dev-assistant:next` references when codePath is unknown and a feature needs code
+
+## Output
+
+Prints the resolved code path and the state it was set to.
+
+Writes the Code Path field in `project_state.md` and updates the project's
+entry in `~/.claude/ai-dev-assistant/active_projects.json`.

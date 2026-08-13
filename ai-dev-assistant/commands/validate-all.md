@@ -156,3 +156,12 @@ See `implementation_process/in_progress/<this-task>/v2-candidates.md`.
 - `/ai-dev-assistant:validate-visual-regression` / `:validate-visual-parity` — visual gates
 - `references/validation-gate-result.md` — shared envelope + aggregate envelope schema
 - `/code-quality:lint` / `:coverage` / `:review` / `:audit` / `:ultrareview` — complementary `code-quality-tools` capabilities not wrapped here
+
+## Output
+
+Prints each gate's verdict and a summary line.
+
+Writes one envelope per gate to `<task folder>/validations/latest/<gate>.json`,
+an aggregate to `<task folder>/validations/latest/_all.json`, and appends every
+run to `<task folder>/validations/history.jsonl`. Envelopes carry `status`,
+`findings`, and `timestamp` per `references/validation-gate-result.md`.

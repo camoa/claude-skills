@@ -138,3 +138,12 @@ Tests: <passed>/<total> passed, <failed> failed, <skipped> skipped
 Report: <report_path>
 Audit: <task_folder>/_e2e.json
 ```
+
+## Output
+
+Prints the journey results and the verdict.
+
+Writes `<task folder>/validations/latest/e2e.json`, the audit at
+`<task folder>/_e2e.json`, and appends to
+`<task folder>/validations/history.jsonl`. Playwright's own artifacts land in
+`<codePath>` where its config puts them.

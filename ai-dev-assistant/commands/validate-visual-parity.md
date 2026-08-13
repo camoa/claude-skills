@@ -282,3 +282,13 @@ any prose embedded in it.
 - `/ai-dev-assistant:validate-all` — orchestrator
 - `scripts/visual-parity-gate.sh` · `references/visual-review/parity-compare.mjs`
 - `references/visual-parity-walkthrough.md` · `references/visual-review/surface-registry-schema.md` · `references/gate-audit-schema.md`
+
+## Output
+
+Prints the pixel difference and the CSS properties that drifted, per surface.
+
+Writes `<task folder>/validations/latest/visual-parity.json`, the audit at
+`<task folder>/_visual_parity.json`, and appends to
+`<task folder>/validations/history.jsonl`. Run captures and diff images go to
+`<codePath>/tests/parity/parity-results/`, which is gitignored. Never writes a
+baseline; a reference is updated by re-exporting it and editing `registry.yml`.

@@ -149,3 +149,11 @@ itself — the user pastes it.
 - `scripts/wo-obs-report.sh <task>/work-orders` — read-only miner that summarizes a completed or
   aborted run from `work-orders/loop-obs.ndjson` (per-WO dispositions + flagged terminal/repeated-rework
   WOs). Optional triage/learning aid; never part of the gate or merge decision.
+
+## Output
+
+Prints per-work-order progress, gate results, and the merge decision.
+
+Writes run state and observation records beside each work order under
+`<task folder>/work-orders/`. Creates git worktrees and branches when the run
+mode calls for them, and opens pull requests only after the ship gate passes.

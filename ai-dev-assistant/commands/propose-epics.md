@@ -101,3 +101,10 @@ Options:
 - `references/code-path-detection.md` — detect+confirm flow for codePath
 - `/ai-dev-assistant:set-code-path` — explicit codePath setter
 - `/ai-dev-assistant:research` — inline pre-analysis hook counterpart
+
+## Output
+
+Prints one proposal per oversized task, with accept, edit, reject, or skip.
+
+Writes nothing directly. Accepting a proposal invokes `/migrate-to-epic`,
+which does the writing. Rejected and skipped tasks are left untouched.

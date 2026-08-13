@@ -66,3 +66,11 @@ sibling orchestrator stages.
 - `work-order-builder` skill — builds one compiled work-order in clean context.
 - `/ai-dev-assistant:worktree` — sets `codePath` (run before compiling).
 - `/ai-dev-assistant:design` — Phase 2; produces the artifacts this command consumes.
+
+## Output
+
+Prints the compiled work orders and any gaps found.
+
+Writes `<task folder>/work-orders/wo-NN-<slug>.md`, one file per work order,
+and `<task folder>/coverage-map.json`. Reads `research.md`, `architecture.md`,
+and `alignment.md`; never edits them.

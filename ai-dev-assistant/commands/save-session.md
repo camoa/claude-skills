@@ -56,3 +56,11 @@ forget to run this; this command is the deliberate, reviewed save.
 - `/ai-dev-assistant:install-remembrance-hook` — wires the `SessionStart`
   primer and the `SessionEnd` save-session hook into a project.
 - `/ai-dev-assistant:next` — resume work and see the current phase/task.
+
+## Output
+
+Prints what it saved, and warns on stderr only when it found changes.
+
+Writes the per-workspace session file at
+`~/.claude/ai-dev-assistant/sessions/<md5(cwd)>.json`, and adds a
+`session_saved_at` field to the task folder's audit JSON files.

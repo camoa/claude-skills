@@ -196,3 +196,11 @@ This is NOT mandatory — many tasks (services, APIs, CLI commands) have no visu
 - Cannot detect animation/transition issues (Chrome shows static state)
 - Color comparison is RGB-based — may miss perceptual differences (use WCAG deltaE for precision)
 - The site must be running with the page accessible at the configured URL
+
+## Output
+
+Prints the visual findings to the terminal.
+
+Writes nothing unless you ask it to save the report, in which case it appends
+a `## Visual Check` section to
+`implementation_process/in_progress/<task>/implementation.md`.
