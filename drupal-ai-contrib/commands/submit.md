@@ -31,3 +31,12 @@ Thin entry point. Prepares the policy-required AI disclosure with the MR.
 The worker skill surfaces — but does not silently block on — unmet preconditions
 (`verify` not green, `review` not run). It fetches the current AI-contribution policy
 live via the `ai-policy-checker` agent to decide the disclosure threshold.
+
+## Output
+
+Prints the result to the terminal: the merge request URL, the target branch,
+the AI-disclosure decision and where it was placed, the issue status set, and
+the next step.
+
+Pushes the issue-fork branch and creates or updates the merge request on
+drupal.org. Writes nothing else locally.

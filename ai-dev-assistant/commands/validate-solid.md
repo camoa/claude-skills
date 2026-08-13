@@ -57,17 +57,20 @@ If `/code-quality:solid` emits JSON via a `--json` flag (future enhancement), pr
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "gate": "solid",
   "task": "<task_name>",
   "run_at": "<ISO-8601 UTC>",
+  "timestamp": "<ISO-8601 UTC>",
   "verdict": "pass",
+  "status": "pass",
   "details": {
     "source": "code-quality-tools:solid",
     "raw_output_path": "<path to .reports/solid.json if produced, else null>",
     "code_quality_tools_version": "<version from plugin.json of code-quality-tools>"
   },
-  "messages": ["<top findings>"]
+  "messages": ["<top findings>"],
+  "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
 }
 ```
 

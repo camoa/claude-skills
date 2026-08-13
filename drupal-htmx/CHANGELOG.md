@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-08-11
+
+### Changed
+
+- `/htmx-migrate` now documents that it edits files in place and writes no report.
+
 ## [1.6.1] - 2026-07-13
 
 ### Changed

@@ -35,3 +35,10 @@ duplicate.
 The worker skill reviews existing comments, status, and MRs **before** acting, and
 handles the issue-fork three ways — your fork (checkout), someone else's (surface,
 coordinate, never clobber), or none (create the branch).
+
+## Output
+
+Prints the issue's current state to the terminal: summary, status, target
+branch, and the issue-fork branch to work on.
+
+Writes nothing to disk.

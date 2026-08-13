@@ -204,3 +204,14 @@ To gate merges on Code Review findings, parse the **Claude Code Review** check r
 - `/code-quality-tools:ultrareview` — cloud multi-agent deep review for pre-merge (slower, more rigorous, paid after free quota)
 - `@claude review once` — GitHub PR comment that triggers one managed Code Review without subscribing the PR to future push-triggered reviews. Requires the managed Code Review service enabled on the repository. Useful for long-running PRs with frequent rebases.
 - `claude --from-pr <number>` — resumes the Claude Code session linked to a PR (linked automatically when Claude opened it). Use it to act on review findings in the original session's context.
+
+## Output
+
+Prints the graded assessment to the terminal: per-category scores, the total
+out of 50, the quality gate verdict, and prioritized action items.
+
+Writes `REVIEW.md` next to the reviewed target when you ask for the write-up.
+
+With `--json`, prints one JSON object instead, carrying `status`, `findings`,
+and `timestamp` per `references/json-schemas.md`. `findings` is always an
+array, so `jq '.findings[]'` is safe on a clean review.

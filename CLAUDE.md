@@ -67,6 +67,19 @@ picks it up.
 None of these dependencies fail loudly on their own. A green `make test`
 on a machine missing gitleaks is a smaller green than it looks.
 
+## Writing output
+
+Read `OUTPUTS.md` before adding anything that writes a file.
+
+- Tied to a task: the task folder.
+- The result of a check: `.reports/` at the root of the code being checked.
+- Something the person asked to be made: `outputs/<type>/<date>-<name>/`.
+- Otherwise print and exit. Do not leave a file nobody asked for.
+
+Anything a machine reads is JSON carrying `status`, `findings`, and
+`timestamp`. Every command that produces something has an `## Output`
+section saying what and where.
+
 ## Where things live
 
 - Plugin folders are top level. Each has `.claude-plugin/plugin.json`.

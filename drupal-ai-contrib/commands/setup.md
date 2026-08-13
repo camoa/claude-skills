@@ -33,3 +33,10 @@ Thin entry point. Onboarding is optional, idempotent, and never a gate.
 `contribution-setup` writes scaffolding files only with explicit confirmation and only
 within the target project. A contributor with a ready environment can skip straight to
 `/drupal-ai-contrib:issue`.
+
+## Output
+
+Prints a per-gap report to the terminal: which environment pieces were found,
+which were installed, and which still need a decision from you.
+
+Writes nothing to the contribution tree.

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.22.0] - 2026-08-11
+
+### Changed
+
+- Validation gate envelope v1.1: every `/validate:*` result now also carries `status`, `timestamp`, and `findings`, the names `code-quality-tools` and `code-paper-test` already use. `verdict`, `run_at`, and `messages` are unchanged and not deprecated, so existing consumers keep working.
+- Versioning policy for the envelope now matches `code-paper-test`: additive changes bump the minor, consumers pin `^1.`.
+
 ## [5.21.0] - 2026-07-13
 
 ### Added

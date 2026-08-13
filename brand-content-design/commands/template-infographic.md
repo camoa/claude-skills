@@ -825,3 +825,11 @@ Create a new infographic template or edit an existing one.
   ]
 }
 ```
+
+## Output
+
+Prints the wizard's choices back to you as you make them, then the path of
+the finished template.
+
+Writes the template into the project's infographic template folder. Editing
+an existing template overwrites that template in place.

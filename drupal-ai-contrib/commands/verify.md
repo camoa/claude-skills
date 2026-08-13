@@ -32,3 +32,12 @@ The worker skill environment-matches first (installs the CI-target core), mirror
 enabled drupalci job locally at CI strictness, runs the AI-policy gate (every
 contribution) and the eval gate (best-effort), and re-fires any gate whose path was
 edited after it last passed.
+
+## Output
+
+Prints a per-gate report to the terminal: each gate's blocking status, PASS,
+FAIL or UNRUN, the captured artifact backing it, and the environment-match
+status. A gate passes on a produced artifact, never on an assertion.
+
+Clears the re-verify ledger in the plugin data directory. Writes nothing to
+the contribution tree.

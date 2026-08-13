@@ -36,3 +36,11 @@ real pipeline is green.
 The worker skill reads the pipeline honestly — a green pipeline can hide a red
 `allow_failure` job or un-run manual opt-in variants; those are surfaced, never implied
 as coverage.
+
+## Output
+
+Prints the real drupalci pipeline result to the terminal: per-job status, the
+failing job's log excerpt when there is one, and whether the pipeline agrees
+with what `verify` reported locally.
+
+Writes nothing to disk.

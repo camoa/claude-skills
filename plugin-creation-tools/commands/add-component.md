@@ -89,3 +89,12 @@ Scaffold the [session-remembrance pattern](../skills/plugin-creation/references/
 
 - `$component-type`: Component type (skill, command, agent, hook, mcp, theme, remembrance-hooks)
 - `$component-name`: Component name (hyphen-case) — ignored for `remembrance-hooks` (fixed component names)
+
+## Output
+
+Prints what it added to the terminal: the component type, its path, and the
+next step.
+
+Writes the new component inside the existing plugin folder, and updates
+`.claude-plugin/plugin.json` when the component needs registering. Writes
+nothing outside that plugin folder.
