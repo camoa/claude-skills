@@ -74,6 +74,30 @@ Tell the user:
 - **This plugin is now safe to uninstall.** Use `ai-dev-assistant` going forward
   (`/ai-dev-assistant:next` to resume work).
 
+## Output
+
+This command changes your machine, not a report. Every other
+`/drupal-dev-framework:*` command is a symlink to this file, so this is what
+all of them do.
+
+`--dry-run` writes nothing at all and prints the same list of changes. The
+real run, after your confirmation:
+
+- **Outside any project** — moves the directory `~/.claude/drupal-dev-framework/`
+  to `~/.claude/ai-dev-assistant/`, carrying the project registry, sessions and
+  logs with it.
+- **In each registered project** — moves `<project>/.claude/drupal-dev-framework/`
+  to `<project>/.claude/ai-dev-assistant/`, and rewrites the two hook command
+  strings inside `<project>/.claude/settings.json` in place.
+- **Only with `--permissions`** — rewrites `Skill(drupal-dev-framework:*)` tokens
+  to `Skill(ai-dev-assistant:*)` inside each project's `settings.local.json` and
+  `settings.json`.
+
+It writes no report and leaves no backup copy. Every JSON file is validated
+before it is saved, and one that would come out invalid is left untouched. A
+directory that has already been migrated is flagged rather than overwritten,
+which is what makes a second run a no-op.
+
 ## Notes
 
 - The script reads the registry from the old store first, falling back to the

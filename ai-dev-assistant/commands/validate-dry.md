@@ -124,3 +124,7 @@ On `pass`: 0-2 messages (usually "all checks passed" + a brief observation). On 
 - `references/validation-gate-result.md` — the shared envelope contract
 - `/code-quality:dry` — the underlying check this command wraps
 - `/code-quality:coverage`, `/code-quality:lint`, `/code-quality:review`, `/code-quality:audit`, `/code-quality:ultrareview` — NOT wrapped; invoke directly for deeper coverage
+
+## Output
+
+Writes the result envelope to `<task_folder>/validations/latest/dry.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:dry` flow may also leave `.reports/dry.json` in the code being checked; when it does, its path is recorded in the envelope rather than written by this command. Prints the verdict, the top messages, and both persisted paths.

@@ -17,7 +17,7 @@ TESTED_PLUGINS := $(sort $(foreach p,$(PLUGINS),\
   $(if $(shell git ls-files '$(p)' 2>/dev/null | grep -E '/tests/.*\.sh$$|-spec\.sh$$|-spec\.mjs$$' | head -1),$(p))))
 UNTESTED_PLUGINS := $(filter-out $(TESTED_PLUGINS),$(PLUGINS))
 
-.PHONY: help test lint lint-baseline validate manifests ci \
+.PHONY: help test lint lint-baseline validate manifests outputs ci \
         $(addprefix test-,$(PLUGINS))
 
 help:
@@ -27,11 +27,13 @@ help:
 	@echo "make lint-baseline     rewrite that baseline (deliberate, then commit)"
 	@echo "make validate          check the catalog and each plugin with the claude CLI"
 	@echo "make manifests         check plugin.json and marketplace.json agree"
-	@echo "make ci                all four checks, same as the PR check"
+	@echo "make outputs           check every command says what it writes"
+	@echo "make ci                all five checks, same as the PR check"
 	@echo ""
 	@echo "lint reports a warning that is not in the baseline as a failure."
 	@echo "A baseline warning that is gone is reported as fixed and passes."
 	@echo "validate fails on errors; warnings print without failing."
+	@echo "outputs fails on a command file with no '## Output' section."
 	@echo ""
 	@echo "make test-<plugin> works for: $(TESTED_PLUGINS)"
 	@echo ""
@@ -63,14 +65,22 @@ validate:
 manifests:
 	@python3 scripts/check-manifests.py
 
-# Runs all four even when one fails, so a single run reports every problem
-# instead of stopping at the first. As prerequisites (ci: manifests lint
-# validate test) make would abort on the first failure and a lint regression
-# would hide whether the tests pass. .github/workflows/ci.yml runs the same
-# four checks the same way, so this really is the PR check.
+# Its own target rather than a rule inside check-manifests.py: that script
+# compares plugin.json against the catalog entry and knows nothing about
+# command bodies, and CLAUDE.md documents each target by what it can fail on,
+# which only works while a target has one subject. Separate also means this
+# can fail on its own line in CI instead of inside a manifest verdict.
+outputs:
+	@bash scripts/check-outputs.sh
+
+# Runs all five even when one fails, so a single run reports every problem
+# instead of stopping at the first. As prerequisites (ci: manifests outputs
+# lint validate test) make would abort on the first failure and a lint
+# regression would hide whether the tests pass. .github/workflows/ci.yml runs
+# the same five checks the same way, so this really is the PR check.
 ci:
 	@fail=""; \
-	for target in manifests lint validate test; do \
+	for target in manifests outputs lint validate test; do \
 	  printf '\n==> make %s\n' "$$target"; \
 	  $(MAKE) --no-print-directory "$$target" || fail="$$fail $$target"; \
 	done; \
@@ -79,4 +89,4 @@ ci:
 	  printf 'ci: FAILED:%s\n' "$$fail" >&2; \
 	  exit 1; \
 	fi; \
-	printf 'ci: all four checks passed\n'
+	printf 'ci: all five checks passed\n'

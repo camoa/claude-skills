@@ -212,6 +212,37 @@ The aggregate's own `status` is the worst gate status present: `fail` if any gat
 6. `findings[]` is always an array (possibly empty); never absent, never `null`
 7. `status == verdict` and `timestamp == run_at` in every envelope
 
+### How much of that is actually enforced
+
+These are conventions, not guarantees, and the difference matters to anything
+consuming an envelope.
+
+No code builds these envelopes. Each `/validate:*` command assembles the JSON
+itself by following the templates in this file and in its own command body —
+which is what "Owner: `commands/validate-*.md`" at the top of this page means.
+The scripts nearby do something else: `scripts/gate-audit-write.sh` writes the
+separate `_<gate>.json` gate-audit artifact and takes an already-built payload,
+`scripts/wo-review-snapshot.sh` only copies envelopes that already exist, and
+`scripts/validate-e2e.sh` emits the gate-audit shape carrying `verdict` with no
+`status`. There is no single place where an envelope is constructed, so there
+is nothing to unit test and nothing that can refuse to write a malformed one.
+
+`tests/validation-envelope-contract-spec.sh` checks what can be checked
+statically: that every envelope example and template on this page and in the
+`validate-*` commands satisfies the invariants above. It caught a real one —
+`validate-playbook-adherence.md` had `"verdict"` twice where the second should
+have been `"status"`, so that gate's documented envelope carried no `status`
+at all. What it cannot check is a run: an envelope written at runtime that
+contradicts its own template goes unnoticed.
+
+A consumer should therefore read defensively. Prefer `status`, `timestamp` and
+`findings`, fall back to `verdict`, `run_at` and `messages` when they are
+absent, and do not assume a `findings` entry exists for every `messages` entry.
+Making invariant 7 a guarantee means routing every gate through one emitter
+that derives the shared names from the ai-dev-assistant ones; until that
+exists, treat the pairs as a convention the docs enforce and the runtime does
+not.
+
 ## 8. Versioning policy
 
 Matches `code-paper-test`'s policy so both plugins version the same way.

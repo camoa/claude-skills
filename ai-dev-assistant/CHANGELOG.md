@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.23.1] - 2026-08-13
+
+### Fixed
+
+- `/validate:playbook-adherence` documented its result envelope with `"verdict"` twice, where the second entry should have been `"status"`. A consumer reading `status` off that gate got nothing. The template now carries both names, like every other gate.
+
+### Changed
+
+- `## Output` sections on `/migrate-tasks`, `/next`, `/pattern`, `/research-team`, `/status`, `/validate`, `/validate:dry`, `/validate:security`, `/validate:solid` and `/validate:tdd`. Each now says what it writes and where before you run it. The v5.23.0 pass left these ten without one.
+- `references/validation-gate-result.md` now says plainly that `status == verdict` and `timestamp == run_at` are conventions the docs hold to and nothing at runtime enforces. No code builds these envelopes; each `/validate:*` command assembles its own from the templates. Consumers should prefer `status`, `timestamp` and `findings` and fall back to `verdict`, `run_at` and `messages` when absent.
+- `tests/validation-envelope-contract-spec.sh` checks every envelope example and template in that reference and in the `validate-*` commands against the documented invariants. It is what caught the `status` defect above. It cannot check a run, only the templates.
+
 ## [5.23.0] - 2026-08-11
 
 ### Changed

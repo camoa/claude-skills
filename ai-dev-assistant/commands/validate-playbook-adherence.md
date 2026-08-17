@@ -54,7 +54,7 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
    {
      "schema_version": "1.1", "gate": "playbook-adherence", "task": "<name>",
      "run_at": "<ISO-8601 UTC>", "verdict": "<...>",
-     "timestamp": "<ISO-8601 UTC>", "verdict": "<...>",
+     "timestamp": "<ISO-8601 UTC>", "status": "<...>",
      "details": {
        "source": "framework:playbook-adherence",
        "invoked_by": "review | cli | validate-all | validate-team",

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.8] - 2026-08-13
+
+### Changed
+
+- `/architecture-debate`, `/security-debate` and `/setup` now document what they write and where. The two debate commands name the report directory the run resolves rather than `.reports/`, which stopped being the default in 3.9.6, and list the per-teammate analysis files they leave beside the synthesis. `/setup` names everything it puts in your project, including the git hooks and CI workflows you have to accept first, and the baseline audit it leaves in the resolved report directory.
+
 ## [3.9.7] - 2026-08-11
 
 ### Changed

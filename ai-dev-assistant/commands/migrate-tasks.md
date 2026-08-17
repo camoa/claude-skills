@@ -128,3 +128,9 @@ Invokes the `task-folder-migrator` skill in **manual mode**:
 
 - [MIGRATION.md](../MIGRATION.md) - Complete migration guide
 - [README.md](../README.md) - Upgrading to v3.0.0 section
+
+## Output
+
+Rewrites the task tree under `<project>/implementation_process/in_progress/`. For each flat `<task>.md` it creates a `<task>/` folder holding `task.md`, `research.md`, `architecture.md` and `implementation.md`, splitting the original by phase, and leaves the original beside it as `<task>.md.bak`.
+
+Nothing is deleted. The backups stay until you remove them yourself. Migration runs only after you confirm the listed plan.

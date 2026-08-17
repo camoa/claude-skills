@@ -311,6 +311,16 @@ Mark your task as completed.
 
 ---
 
+## Output
+
+Writes into `{report_dir}`, the directory holding the `security-report.json` this run debates:
+
+- `security-debate.md` — the lead's synthesis
+- `defender-analysis.md`, `red-team-analysis.md`, `compliance-analysis.md` — one per teammate, left in place as the evidence behind the synthesis
+- `security-context.md` — the dev-guides content fetched for this run, saved so the teammates can read it. `OUTPUTS.md` notes this as a write no rule covers: fetched guide content otherwise belongs in the navigator's shared store.
+
+It does not modify `security-report.json`.
+
 ## Output Format
 
 The lead synthesizes into `{report_dir}/security-debate.md`:

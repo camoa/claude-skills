@@ -82,3 +82,7 @@ This is a **Phase 2** command. Use during Architecture phase.
 ## Integration
 
 Pattern recommendations are added to architecture files for reference during implementation.
+
+## Output
+
+Prints the recommendation. Writes nothing. Carrying a recommendation into `architecture/` is a separate, deliberate step in `/ai-dev-assistant:design`, not something this command does for you.

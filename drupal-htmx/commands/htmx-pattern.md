@@ -52,7 +52,9 @@ Use the Task tool to invoke the htmx-recommender agent:
 - prompt: "Recommend HTMX pattern for: [use-case]"
 ```
 
-## Expected Output
+## Output
+
+Prints the pattern recommendation below to the terminal. Writes no files.
 
 ```markdown
 ## Recommended Pattern: Dependent Dropdown

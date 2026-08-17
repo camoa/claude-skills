@@ -328,6 +328,13 @@ Mark your task as completed.
 
 ---
 
+## Output
+
+Writes into `{report_dir}`, the audit report directory this run resolves:
+
+- `architecture-debate.md` — the lead's synthesis
+- `pragmatist-analysis.md`, `purist-analysis.md`, `maintainer-analysis.md` — one per teammate, left in place as the evidence behind the synthesis
+
 ## Output Format
 
 The lead synthesizes into `{report_dir}/architecture-debate.md`:

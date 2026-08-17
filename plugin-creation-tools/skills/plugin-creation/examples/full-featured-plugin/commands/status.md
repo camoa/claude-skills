@@ -14,7 +14,9 @@ Provide a comprehensive status report for the current project.
 3. Check for TODO comments in code: `grep -r "TODO" --include="*.py" --include="*.js" --include="*.ts" .`
 4. Summarize findings in a clear format
 
-## Output Format
+## Output
+
+Prints the status report below to the terminal. Writes no files.
 
 ```
 ## Git Status

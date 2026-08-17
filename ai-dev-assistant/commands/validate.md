@@ -89,3 +89,7 @@ Validate implementation against architecture and coding standards.
 Works with:
 - `superpowers:verification-before-completion`
 - `superpowers:code-reviewer`
+
+## Output
+
+Prints the validation report. Writes nothing. The gate commands that persist a result envelope are `/ai-dev-assistant:validate-<gate>` and `/ai-dev-assistant:validate-all`.

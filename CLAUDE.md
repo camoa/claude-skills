@@ -11,10 +11,11 @@ validator directly.
 | Rewrite the lint baseline | `make lint-baseline` |
 | Check plugin structure | `make validate` |
 | Check plugin manifests | `make manifests` |
+| Check every command says what it writes | `make outputs` |
 | Everything, same as the PR check | `make ci` |
 
-Before opening a PR: `make ci`. It runs all four checks even when one
-fails, so one run shows every problem. CI runs the same four the same way.
+Before opening a PR: `make ci`. It runs all five checks even when one
+fails, so one run shows every problem. CI runs the same five the same way.
 
 ## What each check can fail on
 
@@ -35,10 +36,19 @@ fails, so one run shows every problem. CI runs the same four the same way.
 - `make validate` does not catch a plugin folder missing from the catalog,
   and treats a version disagreement with the catalog as a warning only.
   `make manifests` is the check that fails on both.
+- `make outputs` fails on any tracked `*/commands/*.md` that does not carry
+  a line reading exactly `## Output`, outside a code fence, with at least
+  one non-blank line under it. The heading is matched exactly: `## Output
+  Format` is a different section, describing the shape of a printed report
+  rather than what the command leaves on disk, and it does not satisfy the
+  rule. There are no exemptions, deprecated commands included, since what
+  a command does to your filesystem is the thing you want written down
+  before you run it. Zero command files found fails. What it cannot check
+  is whether the section is *true*; it checks that the claim exists.
 
-Only `make test` and `make lint` scan files, and both only look at
-git-tracked ones. A brand-new script or test is not picked up until it is
-`git add`ed.
+Only `make test`, `make lint` and `make outputs` scan files, and all three
+only look at git-tracked ones. A brand-new script, test or command is not
+picked up until it is `git add`ed.
 
 New test: put it where that plugin already keeps its tests. `make test`
 picks it up.
@@ -54,7 +64,7 @@ picks it up.
   sections on `command -v gitleaks`. Without the binary those sections do
   not run, and the spec still exits 0 and still prints a passing total, so
   nothing tells you they were skipped. Measured on this tree: **742
-  assertions with gitleaks, 458 without — 284 silently disappear, and both
+  assertions with gitleaks, 458 without. 284 silently disappear, and both
   runs report "0 failed".** Everything about secret detection, history
   scanning and redaction is in the missing 284. `brew install gitleaks`.
 - **shellcheck**, for `make lint` only. `brew install shellcheck`. The
@@ -72,13 +82,23 @@ on a machine missing gitleaks is a smaller green than it looks.
 Read `OUTPUTS.md` before adding anything that writes a file.
 
 - Tied to a task: the task folder.
-- The result of a check: `.reports/` at the root of the code being checked.
+- The result of a check: a report directory that is resolved rather than
+  fixed, out of the audited repository by default. Not `.reports/`, which
+  stopped being the default in v3.9.6 and is now opt-in. `OUTPUTS.md` gives
+  the resolution order.
 - Something the person asked to be made: `outputs/<type>/<date>-<name>/`.
+- Configuration a setup command installs: where the tool expects it, in the
+  project being configured, on the person's confirmation.
+- State shared across projects: `~/.claude/<plugin>/`. Legitimate, and the
+  command's Output section has to name the path.
 - Otherwise print and exit. Do not leave a file nobody asked for.
 
 Anything a machine reads is JSON carrying `status`, `findings`, and
 `timestamp`. Every command that produces something has an `## Output`
-section saying what and where.
+section saying what and where, and `make outputs` fails when one does not.
+That check cannot tell whether a section is true: `OUTPUTS.md` was wrong
+about five plugins, and silent about a sixth, while all of them carried a
+section.
 
 ## Where things live
 

@@ -66,13 +66,17 @@ jobs:
       - name: Install the claude CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      # The four checks below each run even when an earlier one failed, so a
+      # The five checks below each run even when an earlier one failed, so a
       # single run reports every problem instead of stopping at the first.
       # `make ci` aggregates the same way, which is what keeps the promise in
       # CLAUDE.md that `make ci` is the same as the PR check.
       - name: Check plugin manifests
         if: ${{ !cancelled() }}
         run: make manifests
+
+      - name: Check command output sections
+        if: ${{ !cancelled() }}
+        run: make outputs
 
       - name: Check shell scripts
         if: ${{ !cancelled() }}

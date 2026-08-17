@@ -2,6 +2,17 @@
 
 All notable changes to this plugin are documented here.
 
+## [4.24.2] - 2026-08-13 - Output section on the upgrade command
+
+`/upgrade` now names everything it changes before you run it: the move of
+`~/.claude/drupal-dev-framework/` to `~/.claude/ai-dev-assistant/`, the same
+move inside every registered project, the two hook command strings it rewrites
+in each project's `settings.json`, and the `Skill(...)` tokens it touches only
+with `--permissions`. It writes no report and keeps no backup copy, so that
+list is worth reading first; `--dry-run` prints it and writes nothing. Every
+other `/drupal-dev-framework:*` command is a symlink to this file, so the
+section covers all of them.
+
 ## [4.24.1] — Deprecation-notice docs tightening
 
 Tightened the deprecation-notice README (problem-first, no em dashes). Positioning pass.
