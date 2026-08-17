@@ -58,7 +58,9 @@ Individual `/validate:*` commands for on-demand quality gates. Replaces `/comple
 - `validate-visual-parity` — **reworked v4.14.0 (Task D)**: registry-driven, runs the committed `tests/parity/` suite on the framework's visual-regression package (installed by the process recipe) + `pixelmatch`; compares the build against an external design reference (`figma` / `react-template` / `html-template` / `image` / `prod-url`); emits a TWO-LAYER diff — a coarse pixel-% plus a structured CSS-actionable diff naming which properties drift; `[g]/[i]/[c]` classification; no positional args (registry-driven); `gate_type: visual_parity`; carries `<!-- visual-review:dispatch-ready -->`. See `## Visual Parity Gate` below.
 - `validate-all` — sequential orchestrator; non-interactive CI mode runs visual-regression with `--ci` (any diff → `fail`, no prompts, no baseline writes); skips visual-parity (design-implementation-scoped — runs via `/review` or standalone)
 
-**Shared result envelope** (per `references/validation-gate-result.md` v1.0): every gate emits `{schema_version, gate, task, run_at, verdict, details, messages}`. Verdicts: `pass | warning | fail | skipped`. Persisted to `<task>/validations/latest/<gate>.json` (overwrite) + `<task>/validations/history.jsonl` (append).
+**Shared result envelope** (per `references/validation-gate-result.md` v1.1): every gate emits `{schema_version, gate, task, run_at, timestamp, verdict, status, details, messages, findings}`. Verdicts: `pass | warning | fail | skipped`. `status` and `timestamp` are the cross-plugin names for `verdict` and `run_at`; `findings[]` is the structured form of `messages[]`, one `{severity, title}` per message with severity from the verdict (`fail`→HIGH, `warning`→MEDIUM, `pass`/`skipped`→INFO).
+
+`scripts/validation-envelope-write.sh` is the single emitter. A gate command calls it with the verdict, the messages and its own `details`; the script derives the paired names and `findings[]` so they cannot disagree, and persists to `<task>/validations/latest/<gate>.json` (overwrite, temp+rename) + `<task>/validations/history.jsonl` (append). Its `aggregate` mode does the same for `_all.json`. Do not hand-type an envelope in a command body — `tests/validation-envelope-contract-spec.sh` fails on it. Unrelated to `scripts/gate-audit-write.sh`, which writes the `_<gate>.json` gate-audit artifact against `references/gate-audit-schema.md`.
 
 **Screenshot store** (per `references/screenshot-store-schema.md` v1.0): **codePath-native since v4.13.0** — baselines are committed Playwright snapshots at `<codePath>/tests/visual/<surface>.spec.ts-snapshots/`, with `.meta.json` provenance sidecars in-tree. The 9-field `.meta.json` schema is unchanged (`role`, `captured_by` enum, `prior_hash`, `source`); only the location moved (and the legacy `.previous` rotation is retired — git holds history). The v3.13.0 memory-project `.screenshots/` store is a migration source only — `migrate-screenshots-to-codepath.sh` imports it.
 
@@ -255,7 +257,7 @@ Two-layer best-practices system:
 2. `TeamCreate` fails → same fallback
 3. Team already resident in session → REFUSE with cleanup guidance (do NOT auto-cleanup)
 
-**Envelope compatibility:** per-gate envelopes stay at v3.13.0 v1.0 unchanged. Aggregate `_all.json` adds only a `source: "validate:team"` marker — same shape `/validate:all` produces.
+**Envelope compatibility:** per-gate envelopes keep the shared v1.1 shape. Aggregate `_all.json` adds only a `source: "validate:team"` marker and a `run_id` — same shape `/validate:all` produces, from the same `scripts/validation-envelope-write.sh aggregate` call.
 
 **When to use:** pre-PR / pre-merge / pre-release honest-validation moments, long conversations where context economy matters. Prefer `/validate:all` for routine use.
 

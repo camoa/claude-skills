@@ -209,10 +209,24 @@ For every surface in the gate output with `verdict: fail`:
 ## Step 10: Aggregate + emit the envelope
 
 Aggregate to the worst verdict across all surfaces (`fail` > `warning` >
-`pass`; `skipped` only if all skipped). Write the standard envelope per
-`references/validation-gate-result.md` to
-`<task>/validations/latest/visual-regression.json` and append
-`<task>/validations/history.jsonl`. The `details` block:
+`pass`; `skipped` only if all skipped). Build the `details` block below with
+`jq -n`, then hand it to
+`${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash), which
+builds the envelope per `references/validation-gate-result.md`, writes
+`<task>/validations/latest/visual-regression.json` and appends
+`<task>/validations/history.jsonl`. Do not assemble the envelope JSON by hand.
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+  --gate visual-regression \
+  --task "<task>" \
+  --task-folder "<abs task folder>" \
+  --verdict "<the aggregated worst verdict>" \
+  --details "$DETAILS_JSON" \
+  --message "<one line per surface, e.g. 'home-hero: pass'>"
+```
+
+The `details` block:
 
 ```json
 "details": {
@@ -221,8 +235,8 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` >
   "registry_path": "<abs path to registry.yml>",
   "surfaces": [
     {"id": "home-hero", "url": "/", "viewports": ["desktop","tablet","phone"],
-     "verdict": "pass", "classification": null, "baseline_updated": false,
-     "status": "pass", "classification": null, "baseline_updated": false,
+     "verdict": "pass", "status": "pass",
+     "classification": null, "baseline_updated": false,
      "a11y_diff_path": null}
   ],
   "diff_tolerance": 0.005,
@@ -230,7 +244,14 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` >
 }
 ```
 
+Each surface carries the same `verdict`/`status` pair the envelope does. The
+emitter does not reach inside `details`, so keeping a per-surface pair equal is
+this command's job — and one key per field: the pair is two names for one value,
+never a reason to repeat `classification` or `baseline_updated`.
+
 `gate` is `"visual-regression"` (hyphen form — matches the command name).
+`visual-regression-gate.sh` measures, this command owns the envelope; its stdout
+becomes `details`. See `references/validation-gate-result.md` §7.
 
 ## Step 11: Write the gate audit
 

@@ -129,9 +129,19 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
    - `code_inference.inferred_slugs` — flattened slug list extracted from `matcher_output.matched_guides[].slug`.
    - `code_inference.source: "none"` when no files surfaced from any source; `suppressed_by_flag: true` when `--no-code-inference` was passed.
 
-8. **Persist** — write envelope to:
-   - `<task_folder>/validations/latest/guides.json` (overwrite)
-   - `<task_folder>/validations/history.jsonl` (append)
+8. **Emit and persist** — build the `details` above with `jq -n`, then hand it to `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash), which builds the envelope and writes both files. Do not assemble the envelope JSON by hand.
+
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+     --gate guides \
+     --task "<task_name>" \
+     --task-folder "<abs path to the task folder>" \
+     --verdict "<pass|warning|fail|skipped>" \
+     --details "$DETAILS_JSON" \
+     --message "<one finding>"
+   ```
+
+   One `--message` per entry of the "Verdict messages" list below, repeated. The script derives `status`, `timestamp` and `findings[]` from the verdict and the messages, then writes `<task_folder>/validations/latest/guides.json` (overwrite, temp+rename) and appends one compact line to `<task_folder>/validations/history.jsonl`. Guide slugs and matcher output pass through `jq --arg`/`--argjson`, so nothing in them can break the JSON.
 
 9. **Print CLI summary** — show verdict, citations found, per-artifact gaps, and (when present) `domain_coverage_gaps` with the catalog slugs the agent matched but no artifact cites. On `fail` or domain-gap `warning`, suggest `/dev-guides-navigator <slug>` for each gap. On `skipped` due to applicability, print the applicability reason. Non-zero exit (1) only when invoked non-interactively.
 

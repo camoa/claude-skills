@@ -5,17 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.23.1] - 2026-08-13
+## [5.24.0] - 2026-08-17
 
-### Fixed
+### Added
 
-- `/validate:playbook-adherence` documented its result envelope with `"verdict"` twice, where the second entry should have been `"status"`. A consumer reading `status` off that gate got nothing. The template now carries both names, like every other gate.
+- `scripts/validation-envelope-write.sh` builds the result envelope that every `/validate:*` gate
+  produces. It takes the gate, task, verdict, messages and details, and derives `status`,
+  `timestamp` and `findings` itself, so the two sets of names cannot disagree. Unknown gates,
+  unknown verdicts, non-object details and duplicate keys anywhere in the JSON arguments are
+  refused rather than written.
 
 ### Changed
 
-- `## Output` sections on `/migrate-tasks`, `/next`, `/pattern`, `/research-team`, `/status`, `/validate`, `/validate:dry`, `/validate:security`, `/validate:solid` and `/validate:tdd`. Each now says what it writes and where before you run it. The v5.23.0 pass left these ten without one.
-- `references/validation-gate-result.md` now says plainly that `status == verdict` and `timestamp == run_at` are conventions the docs hold to and nothing at runtime enforces. No code builds these envelopes; each `/validate:*` command assembles its own from the templates. Consumers should prefer `status`, `timestamp` and `findings` and fall back to `verdict`, `run_at` and `messages` when absent.
-- `tests/validation-envelope-contract-spec.sh` checks every envelope example and template in that reference and in the `validate-*` commands against the documented invariants. It is what caught the `status` defect above. It cannot check a run, only the templates.
+- The eleven `/validate:*` commands call that script instead of each carrying its own copy of the
+  envelope as a JSON template for the model to fill in. Eleven hand-typed copies were eleven
+  chances to drift, and three of them had. Per-gate `details` shapes are unchanged.
+- `references/validation-gate-result.md` describes what is now enforced and what is not. The
+  script guarantees the envelope's shape; nothing forces a command to call it, and `details` is
+  checked only for being an object and free of duplicate keys, so a per-surface `verdict`/`status`
+  pair inside it remains the command's own responsibility.
+- `tests/validation-envelope-contract-spec.sh` runs the emitter rather than reading templates: 97
+  assertions over 75 static checks, including that no command hand-types an envelope and that
+  every gate a command persists is one the script accepts.
+- `## Output` sections on `/migrate-tasks`, `/next`, `/pattern`, `/research-team`, `/status`,
+  `/validate`, `/validate:dry`, `/validate:security`, `/validate:solid` and `/validate:tdd`. Each
+  says what it writes and where before you run it.
+
+### Fixed
+
+- A `/validate:all` run where every gate skipped reported `pass`. It reports `skipped`. The
+  aggregate summary was the eleventh hand-typed copy of the envelope and had its own rules.
+- `/validate:playbook-adherence` carried `"verdict"` twice where the second should have been
+  `"status"`, so anything reading `status` off that gate got nothing.
+- `/validate:visual-regression` and `/validate:visual-parity` carried duplicate keys inside
+  `details.surfaces[]`.
+- The aggregate example in `references/validation-gate-result.md` contradicted itself, claiming
+  seven gates in a summary above a list of three. It is generated from real output now.
 
 ## [5.23.0] - 2026-08-11
 

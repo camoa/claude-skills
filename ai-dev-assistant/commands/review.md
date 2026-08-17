@@ -42,7 +42,7 @@ Run in order. Each "gate" step writes audit; non-bypassable unless documented `-
    - `plugin-validate`: merge-base diff includes any plugin file
    - `validate-playbook-adherence`: file `commands/validate-playbook-adherence.md` exists OR mark `verdict: "skipped-not-shipped"` with `bypass_reason: "sibling adherence_gates not yet shipped"`; hardened `validate-guides`: command body contains `<!-- /review:hard-block -->` marker OR fall back to soft mode (note in audit)
 
-5. **Run hard-block gates sequentially.** For each: invoke flow inline (do NOT shell out). Capture per-gate envelope at `<task>/validations/latest/<gate>.json` per `references/validation-gate-result.md` v1.0. Add to `gates_run[]`. Order: tdd → solid → dry → security → guides → validate-playbook-adherence → skill-review (conditional) → plugin-validate (conditional).
+5. **Run hard-block gates sequentially.** For each: invoke flow inline (do NOT shell out). Capture per-gate envelope at `<task>/validations/latest/<gate>.json` per `references/validation-gate-result.md` v1.1. Add to `gates_run[]`. Order: tdd → solid → dry → security → guides → validate-playbook-adherence → skill-review (conditional) → plugin-validate (conditional).
 
    **5.0 Architecture-fit validation against the framework review recipe.** Before the code-quality gates run, validate the change against the documented architecture using the stack's review recipe. Additive — it never replaces or weakens a hard-block gate; it supplies `architecture-validator` the framework-specific BLOCKING checks the generic agent lacks. Follow the shared protocol in `references/recipe-resolution.md` with `phase: review` and the step-2 `<project_folder>`: it invokes `process-recipe-loader`, resolves each framework's review recipe (project_state-first, then source order, else `action:ask-user`), records the source in `project_state.md`, and defines how to follow each result (Read `body_path` — never streamed; follow `verified:true` directly; surface `verified:false` for human review first; `action:ask-user` → ask for a path or to research). Surface loader `warnings[]` (`no_frameworks_defined`, `navigator_unavailable:<framework>`, `recipe_not_published:<framework>`). The COMMAND owns resolution and injects the body; the agent stays generic (no Skill tool).
 
@@ -120,7 +120,7 @@ Audit: {{audit_path}}
 
 ## Pointers
 
-- Walkthrough: `references/review-phase-walkthrough.md` (sibling `plumbing_docs_tests`) · Step 6 dispatcher: `references/visual-review/change-impact-dispatch.md` (v4.11.0+) · schemas: `references/gate-audit-schema.md` v1.2 (`gate_type: "review"`; `dispatch_plan`) + per-gate `references/validation-gate-result.md` v1.0 · Spec axis: `references/spec-axis-review.md` (v5.20.0+, M2)
+- Walkthrough: `references/review-phase-walkthrough.md` (sibling `plumbing_docs_tests`) · Step 6 dispatcher: `references/visual-review/change-impact-dispatch.md` (v4.11.0+) · schemas: `references/gate-audit-schema.md` v1.2 (`gate_type: "review"`; `dispatch_plan`) + per-gate `references/validation-gate-result.md` v1.1 · Spec axis: `references/spec-axis-review.md` (v5.20.0+, M2)
 - Project opt-out: `**Review Required:** false` keeps gates at `/complete` (legacy v4.0.2 posture)
 - Related: `/ai-dev-assistant:implement` (Phase 3) · `:complete` (archive; consumes `_review.json`) · `:validate-all` / `:validate-team` (invoked by `/review`) · `:upgrade-project` (set `**Review Required:**`) · `:audit-status` (audit visibility)
 

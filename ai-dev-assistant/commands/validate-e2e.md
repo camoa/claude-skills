@@ -78,21 +78,26 @@ Capture stdout (the result JSON) and exit code.
 
 Before proceeding: verify the script's stdout is valid JSON by running `jq empty` on it. If the stdout is empty or not valid JSON (e.g., because the script exited 2 before emitting JSON), surface the script's stderr verbatim and stop — do not attempt to build `_e2e.json` from invalid input. (EC-F21)
 
-Write the result to `<task_folder>/validations/latest/e2e.json` per `references/validation-gate-result.md` v1.0:
-```json
-{
-  "schema_version": "1.1",
-  "gate": "e2e",
-  "task": "<task>",
-  "run_at": "<ISO timestamp>",
-  "timestamp": "<ISO timestamp>",
-  "verdict": "<pass|fail|warning>",
-  "status": "<pass|fail|warning>",
-  "details": "<script result JSON>",
-  "messages": [],
-  "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
-}
+Call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh`, which builds the
+envelope per `references/validation-gate-result.md` and writes it to
+`<task_folder>/validations/latest/e2e.json` plus one line on
+`<task_folder>/validations/history.jsonl`. Do not assemble the envelope JSON by hand.
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+  --gate e2e \
+  --task "<task>" \
+  --task-folder "<abs task folder>" \
+  --verdict "$(printf '%s' "$RESULT_JSON" | jq -r '.verdict')" \
+  --details "$RESULT_JSON" \
+  --message "<one line per failed test, if any>"
 ```
+
+`$RESULT_JSON` is the script's stdout from Step 4, already verified as valid JSON
+above; it becomes `details` verbatim. `validate-e2e.sh` measures, this command
+owns the envelope — see `references/validation-gate-result.md` §7. The emitter
+derives `status`, `timestamp` and `findings[]`, so those cannot disagree with the
+values they mirror.
 
 ## Step 6: Write gate audit
 

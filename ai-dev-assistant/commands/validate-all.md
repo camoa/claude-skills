@@ -47,41 +47,36 @@ Run every validation gate sequentially against the current task. Aggregate the p
 
    **Non-interactive (CI) mode:** when `/validate:all` runs without a TTY or with `$CI` set (detect via `[ -t 0 ] || [ -n "$CI" ]`), pass `--ci` to `visual-regression-gate.sh`. In `--ci` mode the suite still runs, but any diff is recorded as `fail` with no classification prompt and no baseline write — defaulting to `intentional` would silently move baselines (dangerous); defaulting to `regression` is the honest CI outcome. This matches v3.13.0's CI posture (interactive classification only happens in an interactive session).
 
-5. **Aggregate into the `_all.json` envelope** (per `references/validation-gate-result.md`):
+5. **Aggregate into the `_all.json` envelope** — collect one `{gate, verdict, messages}` object per gate that ran, and pass the list to `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` in `aggregate` mode (Bash). It derives the aggregate status, the summary counts, the prefixed `findings[]` and the `timestamp`/`status` pairs, and persists the result. Do not assemble the aggregate JSON by hand.
 
-   ```json
-   {
-     "schema_version": "1.1",
-     "run_at": "<ISO-8601 UTC>",
-     "timestamp": "<ISO-8601 UTC>",
-     "task": "<task_name>",
-     "status": "fail",
-     "gates": [
-       {"gate": "tdd", "verdict": "pass", "status": "pass"},
-       {"gate": "solid", "verdict": "warning", "status": "warning", "messages": ["..."]},
-       {"gate": "dry", "verdict": "pass", "status": "pass"},
-       {"gate": "security", "verdict": "pass", "status": "pass"},
-       {"gate": "guides", "verdict": "fail", "status": "fail", "messages": ["..."]},
-       {"gate": "visual-regression", "verdict": "skipped", "status": "skipped", "messages": ["No baselines in store"]},
-       {"gate": "visual-parity", "verdict": "skipped", "status": "skipped", "messages": ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
-     ],
-     "summary": {"pass": 3, "warning": 1, "fail": 1, "skipped": 2, "total": 7},
-     "findings": [
-       {"severity": "MEDIUM", "title": "solid: ..."},
-       {"severity": "HIGH", "title": "guides: ..."}
-     ],
-     "discoverability_hint": "For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
-   }
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" aggregate \
+     --task "<task_name>" \
+     --task-folder "<abs path to the task folder>" \
+     --gates-json "$(jq -n '[
+        {gate: "tdd",               verdict: "pass",    messages: []},
+        {gate: "solid",             verdict: "warning", messages: ["1 class exceeds 200 lines"]},
+        {gate: "dry",               verdict: "pass",    messages: []},
+        {gate: "security",          verdict: "pass",    messages: []},
+        {gate: "guides",            verdict: "fail",    messages: ["no guide citations in research.md"]},
+        {gate: "visual-regression", verdict: "skipped", messages: ["No baselines in store"]},
+        {gate: "visual-parity",     verdict: "skipped", messages: ["design-implementation-scoped — run /validate:visual-parity or let /review auto-run it"]}
+      ]')" \
+     --hint "For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
    ```
 
    The aggregate's own `status` is the worst gate status present: `fail` if any
-   gate failed, else `warning` if any warned, else `pass`. `findings[]` collects
-   every gate's findings with the gate name prefixed onto each `title`. Both are
-   always present, `findings` always an array.
+   gate failed, else `warning` if any warned, else `pass` if any passed. A run
+   where every gate was skipped aggregates to `skipped`, never `pass` — a run
+   that checked nothing must not read like a run that found nothing wrong.
+   `findings[]` collects every gate's messages with the gate name prefixed onto
+   each `title`, at the severity that gate's verdict implies. `findings` is
+   always an array. An unknown gate name or verdict in `--gates-json` is
+   rejected with exit 2 and nothing is written.
 
-6. **Persist** — write aggregate to:
-   - `<task_folder>/validations/latest/_all.json` (overwrite)
-   - `<task_folder>/validations/history.jsonl` (append)
+6. **Persistence** — the emitter writes both:
+   - `<task_folder>/validations/latest/_all.json` (overwrite, temp+rename)
+   - `<task_folder>/validations/history.jsonl` (one compact line appended)
 
    Note: each individual gate that ran also already persisted its own `latest/<gate>.json`. The `_all.json` is an additional summary, not a replacement.
 
