@@ -90,7 +90,7 @@ Substitute the placeholders:
 
 | Placeholder | Value |
 |-------------|-------|
-| `{generated_date}` | today's date (`date -I`) |
+| `{generated_date}` | today's UTC date (`date -u +%Y-%m-%d`) |
 | `{project_name}` | confirmed project name |
 | `{memory_path}` | confirmed memory path |
 | `{code_path}` | confirmed code path, or `(docs-only — no separate code path)` |

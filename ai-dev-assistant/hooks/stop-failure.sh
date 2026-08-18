@@ -7,7 +7,9 @@ LOG_FILE="$LOG_DIR/failures.log"
 
 mkdir -p "$LOG_DIR"
 
-TIMESTAMP=$(date -Iseconds)
+# Portable strftime, not the GNU-only `date -Iseconds`, which BSD/macOS date
+# rejects. UTC, so the same instant reads the same on every machine.
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 PROJECT_NAME=""
 TASK_NAME=""
 

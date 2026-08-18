@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `scripts/migrate-to-epic.sh` built six delete paths from a variable that, if empty, would have
+  removed the wrong directory. The dangerous half is not the one the linter names: an empty leaf
+  turned `rm -rf "$TEMP_ROOT/$TASK_NAME"` into deleting the whole migration temp folder, which
+  after step 5 holds the only copy of the task being migrated, and turned another into deleting the
+  project's entire `in_progress`. Neither is reachable today, since every one of those variables is
+  already validated before use, but nothing said so at the point of deletion. All six now refuse an
+  empty value with a message naming their own site, and `tests/migrate-to-epic-delete-safety-spec.sh`
+  asserts per site that a refused run leaves the folders intact, which is a different claim from
+  exiting non-zero.
+- `hooks/stop-failure.sh` recorded an empty timestamp on macOS. `date -Iseconds` is GNU-only, and
+  with no `set -e` in the file the failure was silent: every session logged a record with a blank
+  field. The same GNU-only call was still live in `scripts/fm-helpers.sh` and
+  `scripts/session-context-write.sh`, and in the instructions `/install-remembrance-hook` gives an
+  agent. All now use the portable UTC form.
 - A `/validate:all` run where every gate skipped reported `pass`. It reports `skipped`. The
   aggregate summary was the eleventh hand-typed copy of the envelope and had its own rules.
 - `/validate:playbook-adherence` carried `"verdict"` twice where the second should have been
