@@ -2,7 +2,6 @@
 ai-dev-assistant/hooks/phase-command-bypass.sh:SC2221
 ai-dev-assistant/hooks/phase-command-bypass.sh:SC2222
 ai-dev-assistant/scripts/dev-guides-detect.sh:SC2034
-ai-dev-assistant/scripts/migrate-to-epic.sh:SC2115
 ai-dev-assistant/scripts/playbook-read.sh:SC2034
 ai-dev-assistant/scripts/visual-parity-gate.sh:SC2034
 ai-dev-assistant/scripts/wo-parallel-batch.sh:SC2034

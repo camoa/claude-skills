@@ -48,28 +48,29 @@ Task name must match `^[a-z0-9_-]+$` (path-traversal mitigation). When `--skip-p
    - `ratio >= 0.5` → `verdict: "warning"` (soft) OR `"fail"` (when `--hard-block` OR `--strict`)
    - `ratio < 0.5` → `verdict: "fail"`
 
-9. **Build envelope** per `references/validation-gate-result.md` v1.0:
+9. **Emit and persist the envelope** — build this gate's `details` with `jq -n`, then hand it to `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash), which builds the envelope per `references/validation-gate-result.md` and writes both files. Do not assemble the envelope JSON by hand.
 
-   ```json
-   {
-     "schema_version": "1.1", "gate": "playbook-adherence", "task": "<name>",
-     "run_at": "<ISO-8601 UTC>", "verdict": "<...>",
-     "timestamp": "<ISO-8601 UTC>", "verdict": "<...>",
-     "details": {
-       "source": "framework:playbook-adherence",
-       "invoked_by": "review | cli | validate-all | validate-team",
-       "playbook_sets_loaded": [...], "user_playbook_loaded": "<path|null>",
-       "cited_count": <int>, "total_plays": <int>,
-       "uncited": [{"play_id", "filename_slug", "tldr_prefix"}, ...],
-       "cite_locations": {"<play_id>": [{"file","line","match_type"}, ...]},
-       "skipped_sections": [{"file","heading","line_range"}, ...]
-     },
-     "messages": [...],
-     "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
-   }
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+     --gate playbook-adherence \
+     --task "<name>" \
+     --task-folder "<abs path to the task folder>" \
+     --verdict "<pass|warning|fail|skipped>" \
+     --details "$(jq -n ... '{
+        source: "framework:playbook-adherence",
+        invoked_by: "review | cli | validate-all | validate-team",
+        playbook_sets_loaded: [...], user_playbook_loaded: "<path|null>",
+        cited_count: <int>, total_plays: <int>,
+        uncited: [{"play_id", "filename_slug", "tldr_prefix"}, ...],
+        cite_locations: {"<play_id>": [{"file","line","match_type"}, ...]},
+        skipped_sections: [{"file","heading","line_range"}, ...]
+      }')" \
+     --message "<one finding>"
    ```
 
-   `invoked_by`: argv `--invoked-by <source>` (default `cli`). `messages[]` includes per-uncited-play remediation hint (`"Uncited: <slug> — <tldr_prefix>"`); plus implicit-inheritance hint when `playbook_sets_source == "default"`. Write atomically to `<task>/validations/latest/playbook-adherence.json` (overwrite); append to `<task>/validations/history.jsonl`.
+   One `--message` per finding, repeated. The script derives `status`, `timestamp` and `findings[]` from the verdict and the messages, so those cannot disagree; it writes `<task>/validations/latest/playbook-adherence.json` via temp+rename and appends one compact line to `<task>/validations/history.jsonl`. Message text passes through `jq --arg`, so a play title carrying quotes is safe.
+
+   `invoked_by`: argv `--invoked-by <source>` (default `cli`). `messages[]` includes per-uncited-play remediation hint (`"Uncited: <slug> — <tldr_prefix>"`); plus implicit-inheritance hint when `playbook_sets_source == "default"`.
 
 10. **Print CLI summary + exit.** Tabular: verdict, ratio, uncited list, skipped-sections summary. Exit `0` in soft mode (always); exit `1` on `fail` when `--hard-block` OR `--strict` set; exit `2` on invalid args (charset, malformed flags).
 
@@ -81,7 +82,7 @@ Cite-matching is approximate: any-of-three literal-string match. False negatives
 
 ## Pointers
 
-- Per-gate envelope: `references/validation-gate-result.md` v1.0
+- Per-gate envelope: `references/validation-gate-result.md` v1.1
 - Cite-checker algorithm: architecture.md C3 in this subtask's design folder
 - Playbook structure: `references/playbook-schema.md` v1.0
 - Sibling: `/ai-dev-assistant:upgrade-project` (sets explicit `**Playbook Sets:**` per project)

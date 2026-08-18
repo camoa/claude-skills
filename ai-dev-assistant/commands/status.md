@@ -149,3 +149,7 @@ Empty section if no audit gaps. Mentions `/audit-status <task>` for per-task dri
 - `/ai-dev-assistant:research <task>` - Start research for a task
 - `/ai-dev-assistant:implement <task>` - Continue implementation
 - `/ai-dev-assistant:audit-status [<task>]` - **(v4.0.0+)** Detailed audit-state view; surfaces unaudited gates and bypass reasons
+
+## Output
+
+Prints the status report. The only thing it writes is the session-context file at `~/.claude/ai-dev-assistant/sessions/<hash>.json`, outside the project, recording which project and task are active so the compaction hooks can restore context. It does not change project state or task files.

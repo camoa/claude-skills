@@ -365,7 +365,7 @@ if [ "$EXPANSION_MODE" = "true" ]; then
   # shared/, phase artifacts, audit JSONs) into temp, then merge in the new
   # children. `/.` copies directory contents (including _*.json) into the
   # already-created atomic-lock dir.
-  cp -r "$TASK_DIR"/. "$TEMP_ROOT/$TASK_NAME/" || { rm -rf "$TEMP_ROOT/$TASK_NAME"; abort "failed to copy epic into temp"; }
+  cp -r "$TASK_DIR"/. "$TEMP_ROOT/$TASK_NAME/" || { rm -rf "${TEMP_ROOT:?empty, refusing rm -rf}/${TASK_NAME:?empty, refusing rm -rf of the whole temp root after a failed epic copy}"; abort "failed to copy epic into temp"; }
   mkdir -p "$TEMP_ROOT/$TASK_NAME/shared" "$TEMP_ROOT/$TASK_NAME/in_progress" "$TEMP_ROOT/$TASK_NAME/completed"
   # Merged children[] = existing (from frontmatter, local: prefix stripped) + new.
   EXISTING_BARE=()
@@ -468,7 +468,7 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
         apply_frontmatter "$TEMP_ROOT/$TASK_NAME/completed/$child/task.md" "$SUB_FM"
         ;;
       *)
-        rm -rf "$TEMP_ROOT/$TASK_NAME"
+        rm -rf "${TEMP_ROOT:?empty, refusing rm -rf}/${TASK_NAME:?empty, refusing rm -rf of the whole temp root after an unknown child kind}"
         abort "unknown kind '$kind' for child '$child' — shell-array indexing bug"
         ;;
     esac
@@ -493,7 +493,7 @@ while IFS= read -r -d '' taskmd; do
 done < <(find "$TEMP_ROOT/$TASK_NAME" -maxdepth 3 -name task.md -print0)
 
 if [ "$VALIDATION_FAILED" = "true" ]; then
-  rm -rf "$TEMP_ROOT/$TASK_NAME"
+  rm -rf "${TEMP_ROOT:?empty, refusing rm -rf}/${TASK_NAME:?empty, refusing rm -rf of the whole temp root after failed validation}"
   abort "validation failed; temp cleaned up; original untouched"
 fi
 echo "  OK"
@@ -508,7 +508,7 @@ mv "$TASK_DIR" "$TEMP_ROOT/.old-$TASK_NAME" \
 mv "$TEMP_ROOT/$TASK_NAME" "$TASK_DIR" || {
   # Paper-test Flaw 2 (MAJOR) fix: also clean up partial temp if the mv left it.
   mv "$TEMP_ROOT/.old-$TASK_NAME" "$TASK_DIR"
-  rm -rf "$TEMP_ROOT/$TASK_NAME"
+  rm -rf "${TEMP_ROOT:?empty, refusing rm -rf}/${TASK_NAME:?empty, refusing rm -rf of the whole temp root after a failed swap}"
   abort "failed to swap in new structure; restored original and cleaned temp"
 }
 
@@ -521,10 +521,13 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
     kind=$(child_kind_at $idx)
     case "$kind" in
       move_existing)
-        rm -rf "$CHILD_IN_PROGRESS_ROOT/$child"
+        # Both halves are guarded: an empty child name collapses this onto the
+        # project's whole in_progress/ root and erases every task under it.
+        rm -rf "${CHILD_IN_PROGRESS_ROOT:?empty, refusing rm -rf}/${child:?empty, refusing rm -rf of the whole in_progress root}"
         ;;
       already_completed)
-        rm -rf "$CHILD_COMPLETED_ROOT/$child"
+        # Same hazard against the completed/ root.
+        rm -rf "${CHILD_COMPLETED_ROOT:?empty, refusing rm -rf}/${child:?empty, refusing rm -rf of the whole completed root}"
         ;;
     esac
     idx=$((idx + 1))

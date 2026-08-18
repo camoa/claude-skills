@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.1] - 2026-08-13
+
+### Changed
+
+- `/validate` now documents what it writes. Without `--fix` it writes nothing. With `--fix` it edits the plugin files it migrates in place and appends one line per applied migration to `.claude-plugin/.validate-fixes.log` in the plugin being validated; `--fix --dry-run` reports the same migrations and writes nothing.
+- The two commands in the `full-featured-plugin` example gained the same section, since that example is what someone copies when writing their own.
+
 ## [3.12.0] - 2026-08-11
 
 ### Changed

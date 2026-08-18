@@ -322,3 +322,12 @@ This will:
 - `/ai-dev-assistant:research <task>` - Start/continue Phase 1
 - `/ai-dev-assistant:design <task>` - Start/continue Phase 2
 - `/ai-dev-assistant:implement <task>` - Start/continue Phase 3
+
+## Output
+
+Prints the recommended next action. It writes the session-context file at `~/.claude/ai-dev-assistant/sessions/<hash>.json`, outside the project, recording the resolved project and task.
+
+Two paths write more than that, and both are on your confirmation:
+
+- Naming a project that does not exist creates its folder — `project_state.md`, `architecture/`, `implementation_process/in_progress/`, `implementation_process/completed/` — at the location you choose, and registers it in `~/.claude/ai-dev-assistant/active_projects.json`.
+- Finding tasks in the pre-v3.0.0 flat layout migrates them into task folders, leaving a `.md.bak` beside each one.

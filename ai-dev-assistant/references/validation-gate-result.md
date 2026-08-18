@@ -1,7 +1,8 @@
 # Validation Gate Result Envelope v1.1
 
 **Introduced:** ai-dev-assistant v3.13.0
-**Owner:** `commands/validate-*.md`
+**Owner:** `scripts/validation-envelope-write.sh`
+**Producers:** `commands/validate-*.md`, by calling that script
 **Consumers (as of v3.13.0):** `commands/validate-all.md`, `commands/complete.md` (future, when v2 batch-approval lands)
 
 Every `/validate:*` command emits and persists a JSON result object with this shape, regardless of whether it wraps a `code-quality-tools` skill or implements its own check (guides, visual-parity, visual-regression). A shared envelope keeps consumers (`/validate:all`, future reports, `/complete` hooks) simple.
@@ -54,8 +55,8 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 
 | Field | Type | Values / constraints |
 |---|---|---|
-| `schema_version` | string | `"1.1"` at v5.22.0. JSON string. Consumers match on major (`^1\.`) |
-| `gate` | string | Gate identifier: `tdd` \| `solid` \| `dry` \| `security` \| `guides` \| `visual-parity` \| `visual-regression`. Matches the `/validate:<gate>` command name |
+| `schema_version` | string | `"1.1"`, unchanged since v5.22.0. JSON string. Consumers match on major (`^1\.`) |
+| `gate` | string | Gate identifier: `tdd` \| `solid` \| `dry` \| `security` \| `guides` \| `playbook-adherence` \| `e2e` \| `visual-parity` \| `visual-regression`. Matches the `/validate:<gate>` command name. The list is a closed set in `scripts/validation-envelope-write.sh`; anything else is rejected |
 | `task` | string | Task folder name the run was scoped to |
 | `run_at` | string | ISO-8601 UTC with `Z` suffix |
 | `timestamp` | string | Same value as `run_at`. The cross-plugin name |
@@ -158,7 +159,9 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 
 ## 5. Persistence
 
-Every `/validate:*` command writes the result to TWO locations in the task folder:
+`scripts/validation-envelope-write.sh` writes the result to TWO locations in the
+task folder. A `/validate:*` command does not write these files itself; it calls
+the script:
 
 ```
 <task>/validations/
@@ -167,10 +170,10 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 └── history.jsonl            # appended on each run — one JSON object per line
 ```
 
-- `latest/<gate>.json` — most recent result per gate. `/validate:all` reads these to aggregate. `/complete` (future) may check for pending updates
+- `latest/<gate>.json` — most recent result per gate, written via temp file + rename. `/validate:all` reads these to aggregate. `/complete` (future) may check for pending updates
 - `history.jsonl` — full run log, newest at the bottom. JSONL (one object per line) makes append cheap and git-diff legible
 
-`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see the aggregate envelope section).
+`/validate:all` ALSO writes an aggregate `<task>/validations/latest/_all.json` with a summary envelope (see the aggregate envelope section), through the same script in its `aggregate` mode.
 
 ## 6. Aggregate envelope (`/validate:all`)
 
@@ -180,19 +183,23 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
   "run_at": "2026-04-24T15:30:00Z",
   "timestamp": "2026-04-24T15:30:00Z",
   "task": "dev_framework_granular_validation",
+  "verdict": "warning",
   "status": "warning",
   "gates": [
-    {"gate": "tdd", "verdict": "pass", "status": "pass"},
+    {"gate": "tdd", "verdict": "pass", "status": "pass", "messages": []},
     {"gate": "solid", "verdict": "warning", "status": "warning", "messages": ["1 class exceeds 200 lines"]},
-    {"gate": "visual-regression", "verdict": "pass", "status": "pass"}
+    {"gate": "visual-regression", "verdict": "pass", "status": "pass", "messages": []}
   ],
   "summary": {
-    "pass": 5,
+    "pass": 2,
     "warning": 1,
     "fail": 0,
-    "skipped": 1,
-    "total": 7
+    "skipped": 0,
+    "total": 3
   },
+  "messages": [
+    "solid: 1 class exceeds 200 lines"
+  ],
   "findings": [
     {"severity": "MEDIUM", "title": "solid: 1 class exceeds 200 lines"}
   ],
@@ -200,17 +207,92 @@ Every `/validate:*` command writes the result to TWO locations in the task folde
 }
 ```
 
-The aggregate's own `status` is the worst gate status present: `fail` if any gate failed, else `warning` if any warned, else `pass`. Its `findings[]` collects every gate's findings, each `title` prefixed with the gate name.
+The aggregate's own `status` is the worst gate status present: `fail` if any gate
+failed, else `warning` if any warned, else `pass` if any passed. **A run in which
+every gate was skipped aggregates to `skipped`, not `pass`** — a run that checked
+nothing must not read like a run that found nothing wrong. Its `findings[]`
+collects every gate's messages, each `title` prefixed with the gate name and its
+severity taken from that gate's own verdict, so one failing gate's findings stay
+HIGH inside a `warning` aggregate.
+
+The aggregate carries no top-level `gate` field; it is identified by its `gates[]`
+array and by its `_all.json` filename. It does carry `verdict` alongside `status`,
+like every other envelope. Optional `source` and `run_id` fields appear when the
+caller supplies them (`/validate:team` sets both).
+
+Every example in this file was produced by running the emitter, not typed. What
+matches is the field set and the values; the whitespace does not, because these
+examples keep short arrays on one line for reading and `jq` expands them. A
+reader comparing an example against live output should compare values, not bytes.
+`tests/validation-envelope-contract-spec.sh` re-derives this aggregate's
+`summary`, `status`, `messages` and `findings` from its own `gates[]` using the
+emitter's rules, so an example that stops agreeing with the code fails the suite.
 
 ## 7. Invariants
 
 1. `schema_version` is always present and matches `^1\.`
-2. `gate` matches one of the 7 known IDs OR `_all` for aggregate
+2. `gate` matches one of the 9 known IDs: `tdd`, `solid`, `dry`, `security`, `guides`, `playbook-adherence`, `e2e`, `visual-parity`, `visual-regression`. The aggregate has no `gate` field — it is identified by `gates[]` and by its `_all.json` filename
 3. `verdict` is one of the 4 enum values
 4. `details.source` prefix identifies provenance: `code-quality-tools:*` for wrappers, `framework:*` for owned gates
 5. `messages[]` is always an array (possibly empty); never absent
 6. `findings[]` is always an array (possibly empty); never absent, never `null`
 7. `status == verdict` and `timestamp == run_at` in every envelope
+8. `findings[]` has exactly one entry per `messages[]` entry, in the same order, each `title` repeating its message and each `severity` derived from the verdict
+
+### How much of that is enforced, and where the gap still is
+
+`scripts/validation-envelope-write.sh` is the only place an envelope is built.
+It takes a gate, a task, a verdict, zero or more messages and the gate's own
+`details`, and **derives** the rest: `status` is written from the same variable
+as `verdict`, `timestamp` from the same clock read as `run_at`, and `findings[]`
+is generated from `messages[]` by one jq expression that applies the single
+severity mapping in the file. Invariants 5 through 8 hold because there is no
+code path that can produce anything else — not because a template says so.
+Invariants 2 and 3 are checked against closed lists and rejected with exit 2,
+so a typo fails loudly instead of writing a malformed envelope. Every value
+reaches jq through `--arg` / `--argjson`, so a finding containing quotes,
+newlines or shell metacharacters cannot corrupt the output.
+
+**How far the guarantee reaches into `details`.** Not far, and the limit is
+worth stating exactly. `details` is the gate's own object and every gate has
+its own shape, so the emitter does not validate that shape. It enforces two
+things: `details` must be a JSON object, and it must carry no duplicate key at
+any depth. The second is not cosmetic — jq resolves a duplicate key by keeping
+the last one and reporting nothing, and two of the three drifts that motivated
+this script were duplicate keys inside `details.surfaces[]`. The emitter now
+parses the raw text with a parser that refuses duplicates before jq sees it,
+and rejects with exit 2. That check needs python3; where python3 is missing the
+script prints on stderr that it did not run, so the absence is never silent.
+
+What remains yours: everything else about `details`. A per-surface
+`verdict`/`status` pair inside `details.surfaces[]` is the command's to keep
+consistent — the emitter pairs the envelope's own top-level `verdict`/`status`
+and no others, and it will not notice a surface whose two disagree. The same
+key appearing in two sibling objects is ordinary data and is accepted.
+
+`scripts/gate-audit-write.sh` is a different artifact and not a variant of this
+one: it writes `<task>/_<gate>.json` against `references/gate-audit-schema.md`
+from an already-built payload, keyed on `gate_type` and requiring `fired_at` and
+`gate_specific`. `scripts/wo-review-snapshot.sh` only copies envelopes that
+already exist. `scripts/validate-e2e.sh`, `scripts/visual-parity-gate.sh` and
+`scripts/visual-regression-gate.sh` measure — they take a code path and a
+registry, know nothing of a task folder, and their per-surface output is not a
+verdict until the calling command has classified it. Their stdout becomes the
+envelope's `details`; they do not call the emitter.
+
+**The gap that remains:** nothing forces a gate to call the emitter. Each
+`validate-*.md` command *instructs* a model to invoke the script, and a model
+that ignores the instruction and writes a file by hand produces an envelope with
+no guarantees at all. `tests/validation-envelope-contract-spec.sh` narrows this
+from the other side — it fails if any command file hand-types an envelope — but
+that is a check on the instructions, not on a run. The shape is guaranteed; the
+calling is not.
+
+A consumer can rely on the paired names agreeing in any envelope the emitter
+produced. Reading defensively still costs nothing: prefer `status`, `timestamp`
+and `findings`, and fall back to `verdict`, `run_at` and `messages`. Envelopes
+written before this script existed are still on disk in older task folders and
+carry only the conventions of their day.
 
 ## 8. Versioning policy
 
@@ -344,6 +426,8 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
 
 ## 10. See also
 
+- `scripts/validation-envelope-write.sh` — the emitter that owns this shape
+- `tests/validation-envelope-contract-spec.sh` — runs the emitter, checks the invariants above against its real output, and fails if a command file hand-types an envelope
 - `references/screenshot-store-schema.md` — the `.meta.json` schema referenced by visual gate details
 - `commands/validate-all.md` — the orchestrator that consumes per-gate envelopes and emits the aggregate
 - `commands/validate-tdd.md` (et al) — the per-gate commands that produce envelopes

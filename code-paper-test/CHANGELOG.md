@@ -5,6 +5,11 @@ All notable changes to the code-paper-test plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-08-13
+
+### Changed
+- `/test-team` now names the files it leaves beside the code under test: `paper-test-team-report.md`, the three per-tester analysis files it does not clean up, and a matching `.json` for each when `--json` is passed. Writing beside the traced file predates `OUTPUTS.md`, which records it as the one plugin that does not put results in a report directory.
+
 ## [0.11.1] - 2026-07-13
 
 ### Changed — docs

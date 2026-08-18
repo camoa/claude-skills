@@ -190,7 +190,7 @@ $fm
 
 # $child
 
-**Created:** $(date -I)
+**Created:** $(date -u +%Y-%m-%d)
 **Parent epic:** $parent
 
 ## Goal
@@ -203,6 +203,6 @@ $fm
 - [ ] Phase 4: Review (_review.json)
 
 ## Notes
-Stub scaffolded by \`/ai-dev-assistant:migrate-to-epic\` on $(date -I).
+Stub scaffolded by \`/ai-dev-assistant:migrate-to-epic\` on $(date -u +%Y-%m-%d).
 EOF
 }

@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.24.0] - 2026-08-17
+
+### Added
+
+- `scripts/validation-envelope-write.sh` builds the result envelope that every `/validate:*` gate
+  produces. It takes the gate, task, verdict, messages and details, and derives `status`,
+  `timestamp` and `findings` itself, so the two sets of names cannot disagree. Unknown gates,
+  unknown verdicts, non-object details and duplicate keys anywhere in the JSON arguments are
+  refused rather than written.
+
+### Changed
+
+- The eleven `/validate:*` commands call that script instead of each carrying its own copy of the
+  envelope as a JSON template for the model to fill in. Eleven hand-typed copies were eleven
+  chances to drift, and three of them had. Per-gate `details` shapes are unchanged.
+- `references/validation-gate-result.md` describes what is now enforced and what is not. The
+  script guarantees the envelope's shape; nothing forces a command to call it, and `details` is
+  checked only for being an object and free of duplicate keys, so a per-surface `verdict`/`status`
+  pair inside it remains the command's own responsibility.
+- `tests/validation-envelope-contract-spec.sh` runs the emitter rather than reading templates: 97
+  assertions over 75 static checks, including that no command hand-types an envelope and that
+  every gate a command persists is one the script accepts.
+- `## Output` sections on `/migrate-tasks`, `/next`, `/pattern`, `/research-team`, `/status`,
+  `/validate`, `/validate:dry`, `/validate:security`, `/validate:solid` and `/validate:tdd`. Each
+  says what it writes and where before you run it.
+
+### Fixed
+
+- `scripts/migrate-to-epic.sh` built six delete paths from a variable that, if empty, would have
+  removed the wrong directory. The dangerous half is not the one the linter names: an empty leaf
+  turned `rm -rf "$TEMP_ROOT/$TASK_NAME"` into deleting the whole migration temp folder, which
+  after step 5 holds the only copy of the task being migrated, and turned another into deleting the
+  project's entire `in_progress`. Neither is reachable today, since every one of those variables is
+  already validated before use, but nothing said so at the point of deletion. All six now refuse an
+  empty value with a message naming their own site, and `tests/migrate-to-epic-delete-safety-spec.sh`
+  asserts per site that a refused run leaves the folders intact, which is a different claim from
+  exiting non-zero.
+- `hooks/stop-failure.sh` recorded an empty timestamp on macOS. `date -Iseconds` is GNU-only, and
+  with no `set -e` in the file the failure was silent: every session logged a record with a blank
+  field. The same GNU-only call was still live in `scripts/fm-helpers.sh` and
+  `scripts/session-context-write.sh`, and in the instructions `/install-remembrance-hook` gives an
+  agent. All now use the portable UTC form.
+- A `/validate:all` run where every gate skipped reported `pass`. It reports `skipped`. The
+  aggregate summary was the eleventh hand-typed copy of the envelope and had its own rules.
+- `/validate:playbook-adherence` carried `"verdict"` twice where the second should have been
+  `"status"`, so anything reading `status` off that gate got nothing.
+- `/validate:visual-regression` and `/validate:visual-parity` carried duplicate keys inside
+  `details.surfaces[]`.
+- The aggregate example in `references/validation-gate-result.md` contradicted itself, claiming
+  seven gates in a summary above a list of three. It is generated from real output now.
+
 ## [5.23.0] - 2026-08-11
 
 ### Changed

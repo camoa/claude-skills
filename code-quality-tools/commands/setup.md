@@ -257,7 +257,17 @@ After installation, runs initial audit to establish baseline:
 
 Baseline saved to `$REPORT_DIR/baseline.json`, where `$REPORT_DIR` is what the scripts resolve and announce on start. There is no report-directory key in `.code-quality.json`: the location is decided by `scripts/core/report-dir.sh` and overridden with the `REPORT_DIR` environment variable, or with `REPORT_DIR_IN_REPO=1` to opt back in to an in-repo `.reports/`. It is out of the repository by default because reports quote audited source and name the files a secret scanner matched in.
 
-## Output & Next Steps
+## Output
+
+This one changes the project rather than reporting on it, all of it at the project root and all of it on your confirmation:
+
+- `.code-quality.json` — the configuration it generates, always.
+- `composer.json` / `package.json` and their lock files and installed trees, from the tool installs.
+- `grumphp.yml` (Drupal) or `.husky/pre-commit` (Next.js), plus the git hooks themselves under `.git/hooks/`, only if you accept the hooks prompt. It defaults to no and never installs them silently.
+- `.github/workflows/quality.yml` and `.github/workflows/quality-pr.yml`, each opt-in and independent of the other.
+- The baseline audit it runs at the end leaves that run's reports and `baseline.json` in the resolved report directory, the same place `/code-quality-tools:audit` writes. That is outside the repository by default; `scripts/core/report-dir.sh` decides and announces it.
+
+It installs nothing outside the project. The optional `security-guidance` plugin is a suggestion the wizard prints for you to run yourself, not something it installs.
 
 ```
 ✅ Setup Complete!

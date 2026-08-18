@@ -104,7 +104,7 @@ Roster (from architecture):
 
 Each spawn prompt MUST include the absolute-path reminder (the team-manifest schema):
 
-> When you write `<gate>.json` or append to `history.jsonl`, use the absolute paths in `manifest.envelope.latest_dir` / `manifest.envelope.history_file`. Do NOT use relative paths — you are in a worktree and relative writes will not reach the lead.
+> Your gate command writes its envelope by calling `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh`, which derives `<gate>.json` and `history.jsonl` from the `--task-folder` you pass it. Pass the task folder that `manifest.envelope.latest_dir` / `manifest.envelope.history_file` sit under, as an ABSOLUTE path. Do NOT use a relative path — you are in a worktree and relative writes will not reach the lead. Do not hand-write the envelope files.
 
 Each spawn prompt MUST include the progress-message contract:
 
@@ -136,18 +136,23 @@ Do NOT wait on `TaskCompleted` hook events (deferred to v2 Set B2). The mailbox 
 When all expected gates have reported (or timeout reached — document as manual-recovery scenario):
 
 1. Read each `<task>/validations/latest/<gate>.json` envelope written by teammates.
-2. Assemble `_all.json` using the same aggregation shape `/validate:all` emits (per `references/validation-gate-result.md`), with one addition:
-   ```json
-   "discoverability_hint": "Run produced by /validate:team (source: \"validate:team\"). For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
-   ```
-3. Include an explicit `source: "validate:team"` marker inside the aggregate object so downstream consumers can distinguish team-mode runs from single-session runs:
-   ```json
-   { "source": "validate:team", "schema_version": "1.0", ... }
+2. Assemble the `{gate, verdict, messages}` list from those envelopes and pass it to the same emitter `/validate:all` uses. `--source` records that this was a team run, `--run-id` links the aggregate to the per-gate history lines, and `--hint` carries the discoverability line. Do not assemble the aggregate JSON by hand.
+
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" aggregate \
+     --task "<task_name>" \
+     --task-folder "<abs path to the task folder>" \
+     --gates-json "$GATES_JSON" \
+     --source "validate:team" \
+     --run-id "<run_id from the manifest>" \
+     --hint "Run produced by /validate:team. For deeper coverage, see: /code-quality:lint, /code-quality:coverage, /code-quality:review, /code-quality:audit, /code-quality:ultrareview (not wrapped by /validate:*)"
    ```
 
-Write aggregate to:
-- `<task>/validations/latest/_all.json` (overwrite)
-- `<task>/validations/history.jsonl` (append — note: each teammate already appended its own per-gate line; the `_all.json` aggregate appends one additional summary line)
+   The emitter derives the aggregate status, summary counts and prefixed `findings[]`, and writes both files:
+   - `<task>/validations/latest/_all.json` (overwrite, temp+rename)
+   - `<task>/validations/history.jsonl` (append — note: each teammate already appended its own per-gate line; the `_all.json` aggregate appends one additional summary line)
+
+   A teammate that wrote an envelope this command cannot parse shows up here as a gate whose verdict cannot be read — record it as `fail` with the parse error in its `messages[]`, never omit it. A gate missing from the list is a gate the summary silently does not count.
 
 Print the summary table in the same format as `/validate:all` Step 7.
 
@@ -218,7 +223,7 @@ This separation is what makes `/validate:team` honest where `/validate:all` is e
 ## What this does NOT do
 
 - Does NOT wrap or modify `/validate:all` — sibling command, independent lifecycle
-- Does NOT introduce a new envelope schema — per-gate envelopes stay at v3.13.0 v1.0; the aggregate adds only the `source` marker
+- Does NOT introduce a new envelope schema — per-gate envelopes keep the shared v1.1 shape; the aggregate adds only the `source` marker, and both are built by `scripts/validation-envelope-write.sh`
 - Does NOT support `validate-visual-parity` in the team roster (deferred to v2 Set B5 — parity requires explicit `<reference>` arg)
 - Does NOT offer parallel visual gates (v1 serializes in one visual teammate; deferred to v2 Set B1)
 - Does NOT stream per-gate results via hooks (deferred to v2 Set B2 — mailbox messages cover it for now)
@@ -252,7 +257,8 @@ This command does NOT update `session_context.json`. Validation runs are transie
 - `/ai-dev-assistant:validate-all` — sibling; single-session aggregator. Use this for routine validation
 - `/ai-dev-assistant:validate-tdd` / `:validate-solid` / `:validate-dry` / `:validate-security` / `:validate-guides` / `:validate-visual-regression` — individual gates invoked by teammates
 - `references/team-manifest-schema.md` — canonical `team-manifest.json` v1.0 spec
-- `references/validation-gate-result.md` — per-gate + aggregate envelope schema (v3.13.0 v1.0; unchanged)
+- `references/validation-gate-result.md` — per-gate + aggregate envelope schema (v1.1)
+- `scripts/validation-envelope-write.sh` — the emitter that builds and persists both
 - `references/screenshot-store-schema.md` — screenshot store layout (unchanged)
 
 ## Output

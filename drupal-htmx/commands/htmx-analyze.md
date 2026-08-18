@@ -44,7 +44,9 @@ Use the Task tool to invoke the ajax-analyzer agent:
 - prompt: "Analyze [module-path] for AJAX patterns and generate migration report"
 ```
 
-## Expected Output
+## Output
+
+Prints the analysis report below to the terminal. Writes no files.
 
 ```markdown
 ## AJAX Analysis Report: my_module

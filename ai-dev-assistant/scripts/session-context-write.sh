@@ -55,7 +55,7 @@ NEW_CORE=$(jq -n \
   --arg projectPath "$PROJECT_PATH" \
   --arg task "$TASK_ARG" \
   --arg taskPath "$TASK_PATH_ARG" \
-  --arg updatedAt "$(date -I)" \
+  --arg updatedAt "$(date -u +%Y-%m-%d)" \
   '{
     workspace: $workspace,
     project: $project,

@@ -26,7 +26,9 @@ If no file specified:
 2. Review each changed file
 3. Report findings per file
 
-## Output Format
+## Output
+
+Prints the review below to the terminal. Writes no files.
 
 ```
 ## File: [filename]

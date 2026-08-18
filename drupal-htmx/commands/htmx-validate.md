@@ -45,7 +45,9 @@ Use the Task tool to invoke the htmx-validator agent:
 - prompt: "Validate HTMX implementation in [module-path]"
 ```
 
-## Expected Output
+## Output
+
+Prints the validation report below to the terminal. Writes no files.
 
 ```markdown
 ## HTMX Validation Report: my_module

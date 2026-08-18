@@ -540,6 +540,17 @@ Output: {"continue": false}
 
 ---
 
+## Output
+
+Writes into `{target_dir}`, the directory holding the code under test:
+
+- `paper-test-team-report.md` — the synthesized report, always
+- `paper-test-team-report.json` — the same result structured, when `--json` is passed
+- `happy-path-analysis.md`, `edge-case-analysis.md`, `red-team-analysis.md` — one per tester, left in place rather than cleaned up
+- a matching `.json` beside each of those three, when `--json` is passed
+
+Writing beside the traced file predates `OUTPUTS.md` and is noted there as the one plugin that does not follow rule 2.
+
 ## Output Format
 
 The Synthesizer (Teammate 4) synthesizes into `{target_dir}/paper-test-team-report.md`:

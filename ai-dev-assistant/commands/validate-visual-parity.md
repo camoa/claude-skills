@@ -160,10 +160,24 @@ Write `last_compared_at` (ISO-8601 UTC) onto every compared surface's
 ## Step 9: Aggregate + emit the envelope
 
 Aggregate to the worst verdict across all surfaces (`fail` > `warning` > `pass`;
-`skipped` only if all skipped). Write the standard envelope per
-`references/validation-gate-result.md` to
-`<task>/validations/latest/visual-parity.json` and append
-`<task>/validations/history.jsonl`. The `details` block:
+`skipped` only if all skipped). Build the `details` block below with `jq -n`,
+then hand it to `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh`
+(Bash), which builds the envelope per
+`references/validation-gate-result.md`, writes
+`<task>/validations/latest/visual-parity.json` and appends
+`<task>/validations/history.jsonl`. Do not assemble the envelope JSON by hand.
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+  --gate visual-parity \
+  --task "<task>" \
+  --task-folder "<abs task folder>" \
+  --verdict "<the aggregated worst verdict>" \
+  --details "$DETAILS_JSON" \
+  --message "<one line per surface, e.g. 'marketing-landing: fail (4.2%)'>"
+```
+
+The `details` block:
 
 ```json
 "details": {
@@ -173,8 +187,8 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` > `pass`;
   "run_dir": "<abs path to parity-results/<run>/>",
   "surfaces": [
     {"id": "marketing-landing", "viewport": "desktop", "reference_type": "html-template",
-     "verdict": "fail", "classification": "build-gap", "reference_updated": false,
-     "status": "fail", "classification": "build-gap", "reference_updated": false,
+     "verdict": "fail", "status": "fail",
+     "classification": "build-gap", "reference_updated": false,
      "pixel_diff_ratio": 0.042, "css_diff_mode": "full", "css_diff_count": 3,
      "css_diff": [
        {"selector": ".hero-title", "property": "font-weight", "build": "400", "reference": "500"}
@@ -186,9 +200,16 @@ Aggregate to the worst verdict across all surfaces (`fail` > `warning` > `pass`;
 }
 ```
 
+Each surface carries the same `verdict`/`status` pair the envelope does. The
+emitter does not reach inside `details`, so keeping a per-surface pair equal is
+this command's job — and one key per field: the pair is two names for one value,
+never a reason to repeat `classification` or `reference_updated`.
+
 `gate` is `"visual-parity"` (hyphen form — matches the command name). A surface whose
 `css_diff_mode` is `build-only` carries `css_diff: []` and a `notes` entry stating the
 reference is a static image — never imply a full comparison ran.
+`visual-parity-gate.sh` measures, this command owns the envelope; its stdout
+becomes `details`. See `references/validation-gate-result.md` §7.
 
 ## Step 10: Write the gate audit
 

@@ -86,7 +86,7 @@ Substitute the placeholders:
 | Placeholder | Value |
 |-------------|-------|
 | `{plugin_name}` | `{plugin-name}` |
-| `{generated_date}` | today's date (`date -I`) |
+| `{generated_date}` | today's UTC date (`date -u +%Y-%m-%d`) |
 | `{project_name}` | confirmed project name |
 | `{state_path}` | confirmed plugin state path |
 | `{resume_hint}` | a one-line "how to resume" instruction for your plugin |

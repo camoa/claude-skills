@@ -50,13 +50,45 @@ jobs:
         with:
           python-version: '3.12'
 
+      # pyyaml is what ai-dev-assistant/scripts/fm-helpers.sh reads task
+      # frontmatter with. pytest is what runs
+      # brand-content-design/scripts/slides/tests; without it run-tests.sh
+      # counts that whole directory as one skip and still exits 0, so those
+      # tests had never run here. requirements.txt is needed too, not just
+      # pytest: the test modules import `slides.auth`, which imports
+      # googleapiclient at module level, so a pytest-only install collects
+      # zero tests.
+      #
+      # pytest is pinned to an exact version. shellcheck and gitleaks below
+      # are pinned by version AND sha256 because they are tarballs fetched
+      # from a release URL, where the sha is the only thing tying the bytes
+      # to the version. pip resolves from a signed index against a name and
+      # version, so the analogous pin here is the version. A full
+      # `--require-hashes` lock would need a hash-pinned file covering every
+      # transitive dependency, and this repo has no such file.
       - name: Install Python dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml 'pytest==8.4.2' -r brand-content-design/scripts/slides/requirements.txt
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # run-tests.sh skips infographic-generator/test.js when its node_modules
+      # is absent, and that skip does not fail the run, so this suite had
+      # never run here either. `npm ci` rather than `npm install`: the folder
+      # commits a package-lock.json, and npm ci installs exactly the locked
+      # tree and fails when the lockfile and package.json disagree. That
+      # lockfile is this dependency's version pin, the same role the sha256
+      # plays for the two tarballs.
+      #
+      # test.js calls svgToPng, which does `puppeteer.launch()`, so the suite
+      # needs a real browser and not only the package. npm ci runs
+      # puppeteer's install script, which downloads it. Verified from a cold
+      # PUPPETEER_CACHE_DIR: the install populated chrome/ and took 42s.
+      - name: Install Node dependencies
+        working-directory: brand-content-design/skills/infographic-generator
+        run: npm ci
 
       # `make validate` runs `claude plugin validate`, which reads manifests
       # off disk and needs no account and no API key (verified: it exits 0
@@ -66,13 +98,17 @@ jobs:
       - name: Install the claude CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      # The four checks below each run even when an earlier one failed, so a
+      # The five checks below each run even when an earlier one failed, so a
       # single run reports every problem instead of stopping at the first.
       # `make ci` aggregates the same way, which is what keeps the promise in
       # CLAUDE.md that `make ci` is the same as the PR check.
       - name: Check plugin manifests
         if: ${{ !cancelled() }}
         run: make manifests
+
+      - name: Check command output sections
+        if: ${{ !cancelled() }}
+        run: make outputs
 
       - name: Check shell scripts
         if: ${{ !cancelled() }}

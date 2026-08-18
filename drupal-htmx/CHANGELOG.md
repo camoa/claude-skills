@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-08-13
+
+### Changed
+
+- `/htmx-analyze`, `/htmx-pattern` and `/htmx-validate` now state up front that they print their report to the terminal and write no files. The section they carried was headed `Expected Output` and described the shape of the printed report, which is a different question from what lands on disk.
+
 ## [1.6.2] - 2026-08-11
 
 ### Changed

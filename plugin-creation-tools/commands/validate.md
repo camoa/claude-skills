@@ -520,7 +520,11 @@ A plugin may ship a `<plugin>/.containment-allow` file (one ERE per line, `#` co
 - [ ] Skill descriptions preserve `PROACTIVELY`, `MUST`, and `NEVER` imperatives from prior versions when present (do not auto-strip)
 - [ ] Skill descriptions preserve `` !`command` `` dynamic-context injections when present (these are a documented Claude Code feature — do not treat as noise)
 
-## Output Format
+## Output
+
+Without `--fix`, prints the report below and writes nothing.
+
+With `--fix`, it also edits the plugin files it migrates, in place and atomically (tempfile then rename), and appends one line per applied migration to `.claude-plugin/.validate-fixes.log` in the plugin being validated. `--fix --dry-run` reports the same migrations and writes nothing.
 
 ```
 ## Plugin Validation: {name} v{version}

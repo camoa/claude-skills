@@ -6,7 +6,7 @@ argument-hint: "[<task-name>]"
 
 # Validate: DRY
 
-Run the DRY quality gate (DRY — code duplication detection) against the current task. Wraps `/code-quality:dry` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.0).
+Run the DRY quality gate (DRY — code duplication detection) against the current task. Wraps `/code-quality:dry` from the `code-quality-tools` plugin; adds task-context resolution, result persistence to the task folder, and emits the shared result envelope (`references/validation-gate-result.md` v1.1).
 
 ## Usage
 
@@ -31,11 +31,9 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:dry` wrote a JSON report to `.reports/dry.json` (disk-read fallback), capture its path.
 
-5. **Emit the shared envelope** — produce a JSON object matching `references/validation-gate-result.md` v1.0 for the dry gate.
+5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
-6. **Persist** — write the envelope to TWO locations:
-   - `<task_folder>/validations/latest/dry.json` — overwrite (most-recent-run lookup)
-   - `<task_folder>/validations/history.jsonl` — append (full run log)
+6. **Check the exit code** — 0 means both writes succeeded. 1 is a write failure (missing task folder, permissions) — carry on and say so in the CLI summary. 2 means the arguments were rejected and nothing was written; fix the call rather than falling back to a hand-written file.
 
 7. **Print CLI summary** — show verdict, top 3 messages, and the persisted-result paths. When invoked non-interactively (chained from `/validate:all` or CI equivalents), signal verdict via exit code: 0 for `pass`/`warning`/`skipped`; 1 for `fail`. In interactive use the printed summary IS the signal — Claude does not literally exit the session. User workflow is NEVER blocked regardless of verdict.
 
@@ -53,35 +51,42 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
 If `/code-quality:dry` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
 
-## Shared envelope shape (per `references/validation-gate-result.md`)
+## Emitting the envelope (per `references/validation-gate-result.md`)
 
-```json
-{
-  "schema_version": "1.1",
-  "gate": "dry",
-  "task": "<task_name>",
-  "run_at": "<ISO-8601 UTC>",
-  "timestamp": "<ISO-8601 UTC>",
-  "verdict": "pass",
-  "status": "pass",
-  "details": {
-    "source": "code-quality-tools:dry",
-    "raw_output_path": "<path to .reports/dry.json if produced, else null>",
-    "code_quality_tools_version": "<version from plugin.json of code-quality-tools>"
-  },
-  "messages": ["<top findings>"],
-  "findings": [{"severity": "<HIGH|MEDIUM|INFO by status>", "title": "<same text as the message>"}]
-}
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh" gate \
+  --gate dry \
+  --task "<task_name>" \
+  --task-folder "<abs path to the task folder>" \
+  --verdict "<pass|warning|fail|skipped>" \
+  --details "$(jq -n \
+      --arg raw "<path to .reports/dry.json if produced, else empty>" \
+      --arg cqt "<version from plugin.json of code-quality-tools>" \
+      '{source: "code-quality-tools:dry",
+        raw_output_path: (if $raw == "" then null else $raw end),
+        code_quality_tools_version: $cqt}')" \
+  --message "<one finding>" \
+  --message "<the next finding>"
 ```
+
+One `--message` per finding, repeated as many times as there are findings; none
+at all is fine. The script derives `status` from the verdict, `timestamp` from
+one clock read, and one `findings[]` entry per message carrying the severity the
+verdict implies, so those fields cannot disagree with the ones they mirror.
+Message text goes through `jq --arg`, so quotes, newlines and shell
+metacharacters in a tool's output are safe to pass straight through.
+
+`--details` is this gate's own detail object and is passed through verbatim.
 
 ## Persistence
 
-Write order:
-1. `mkdir -p <task_folder>/validations/latest`
-2. Write envelope to `<task_folder>/validations/latest/dry.json` (overwrites prior run)
-3. Append envelope (as single line) to `<task_folder>/validations/history.jsonl`
+`validation-envelope-write.sh` does both writes itself:
 
-`history.jsonl` uses JSON Lines format (one object per line, newline-separated). Append-safe; git-diff-legible; easy to tail.
+1. `<task_folder>/validations/latest/dry.json` — overwritten, via temp file + rename
+2. `<task_folder>/validations/history.jsonl` — one compact line appended
+
+It creates `validations/latest/` when absent. `history.jsonl` is JSON Lines (one
+object per line); append-safe, git-diff-legible, easy to tail.
 
 ## CLI output format
 
@@ -124,3 +129,7 @@ On `pass`: 0-2 messages (usually "all checks passed" + a brief observation). On 
 - `references/validation-gate-result.md` — the shared envelope contract
 - `/code-quality:dry` — the underlying check this command wraps
 - `/code-quality:coverage`, `/code-quality:lint`, `/code-quality:review`, `/code-quality:audit`, `/code-quality:ultrareview` — NOT wrapped; invoke directly for deeper coverage
+
+## Output
+
+Writes the result envelope to `<task_folder>/validations/latest/dry.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:dry` flow may also leave `.reports/dry.json` in the code being checked; when it does, its path is recorded in the envelope rather than written by this command. Prints the verdict, the top messages, and both persisted paths.

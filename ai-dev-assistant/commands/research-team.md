@@ -521,3 +521,13 @@ After research/investigation is complete:
 - `/ai-dev-assistant:research <task>` - Standard single-agent research (fallback)
 - `/ai-dev-assistant:design <task>` - Design architecture (Phase 2)
 - `/ai-dev-assistant:next` - See recommended next action
+
+## Output
+
+Everything lands in the task folder, `<project>/implementation_process/in_progress/<task>/`:
+
+- Feature mode — `prior-art.md`, `canonical-patterns.md` and `challenge-log.md` from the three teammates, then `research.md` synthesized by the lead.
+- Bug mode — `hypothesis-a.md`, `hypothesis-b.md` and `hypothesis-c.md`, then `investigation.md`.
+- `_recipe-load.json`, the recipe-resolution audit, written through `scripts/gate-audit-write.sh`. The same audit the plain `/ai-dev-assistant:research` writes, so the team variant is not a quieter path.
+
+The per-teammate files are left in place rather than cleaned up; they are the evidence behind the synthesis. It also writes the session-context file at `~/.claude/ai-dev-assistant/sessions/<hash>.json`, outside the project.
