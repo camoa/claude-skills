@@ -53,6 +53,9 @@
 import { readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+// Capture stability is shared with the visual-regression specs so the two gates
+// cannot drift apart. Copied next to this file by /setup-visual-parity.
+import { STABILITY_CSS, stabilizeForCapture } from './_capture-stability.mjs';
 
 /** Engine version — `/setup-visual-parity` step 3 compares this to decide whether to
  *  refresh a project's copied-in engine. Machine-readable (paper-test F7). */
@@ -98,10 +101,10 @@ export const MASK_COLOR_RGBA = [255, 0, 255, 255];
 export const DATA_VRT_MASK_SELECTOR = '[data-vrt-mask]';
 
 /** Capture-stability freeze CSS (D2) — kills transitions/animations, the caret, and
- *  smooth scrolling so a capture is deterministic across two rendering engines. */
-export const STABILITY_CSS =
-  '*, *::before, *::after { transition: none !important; animation: none !important; ' +
-  'caret-color: transparent !important; } html { scroll-behavior: auto !important; }';
+ *  smooth scrolling so a capture is deterministic across two rendering engines.
+ *  Defined in `_capture-stability.mjs` and re-exported here so existing importers
+ *  of this module keep working; there is one definition, not two. */
+export { STABILITY_CSS };
 
 /** Valid `dimension_align` modes (D3). `crop-min` is the v4.14.0 behaviour. */
 export const DIMENSION_ALIGN_MODES = new Set(['crop-min', 'pad-max']);
@@ -561,15 +564,9 @@ export function alignRGBA(png, w, h, padColor) {
 // Playwright/pngjs-coupled helpers (called only from runParityCheck)
 // ---------------------------------------------------------------------------------------
 
-/** Stabilise a page for a deterministic capture (D2): freeze CSS, settle fonts, then
- *  a double-rAF so the freeze and font swap have painted before the screenshot. */
-async function stabilizeForCapture(page) {
-  await page.addStyleTag({ content: STABILITY_CSS });
-  await page.evaluate(() => document.fonts && document.fonts.ready);
-  await page.evaluate(
-    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
-  );
-}
+/* `stabilizeForCapture` now lives in `_capture-stability.mjs` (imported at the top
+ * of this file) so the regression specs and this engine run the same settle. Its
+ * behaviour here is unchanged: freeze CSS, settle fonts, double-rAF. */
 
 /** Build the mask locator list (D1): the universal [data-vrt-mask] attribute plus any
  *  per-surface CSS selectors. Non-string/empty selectors are dropped defensively. */

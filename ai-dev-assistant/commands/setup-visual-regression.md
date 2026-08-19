@@ -197,10 +197,13 @@ the entry name first — idempotent):
    On a **re-run** where a project entry predates this seam and lacks the
    `testIgnore` key, add it (idempotent — check for the key first).
 
-3. Tighten the visual diff tolerance to the Spike #2 value by adding a
-   per-`expect` override scoped to the visual run (the base config ships
-   `maxDiffPixelRatio: 0.01`; visual regression uses `0.005`). Document the
-   override inline. Leave any existing `e2e-chromium` entry untouched.
+3. **Do not add a second tolerance value.** The base config ships one absolute
+   budget (`maxDiffPixels`) and that is the only one. An earlier revision of this
+   step told the operator to hand-add a tighter ratio scoped to the visual run —
+   so a project whose operator skipped or mistyped it silently ran at twice the
+   intended tolerance, with nothing detecting the difference. Step 10a derives
+   the number from a measurement instead. Leave any existing `e2e-chromium`
+   entry untouched.
 
 Setup is order-independent: only this command's `visual-chromium-*` entries
 are added; a sibling `e2e-chromium` entry from `/setup-e2e` is never modified.
@@ -276,12 +279,32 @@ last-write-wins; do not duplicate an `id` `/setup-e2e` already seeded, just add
 discovery. Tell the user to register surfaces by hand or with `--add-surface`,
 then continue with whatever surfaces the registry already holds.
 
+### Capture extent, per surface
+
+Each confirmed surface carries `capture: full | viewport` in the registry.
+**Default `full`** — write it explicitly rather than relying on absence, so a
+reader of the registry can see what was decided.
+
+Do not interrogate the operator surface by surface. Propose `full` for all of
+them, state once that a surface can opt out, and move on. The opt-out exists for
+a surface where one viewport IS the subject — a component-library page, for
+instance — not for long content pages, where a viewport capture leaves most of
+the page outside the baseline while the gate stays green.
+
 ## Step 7: Scaffold `tests/visual/`
 
 For each VR surface in the registry, read its `auth_context` field (schema
 v1.2). A surface with `auth_context` **null or absent** is **anonymous** — it is
 handled here. A surface with a **non-null** `auth_context` is **authenticated**
 — it is handled in step 7a (its spec, project, and storageState wiring differ).
+
+First, copy
+`${CLAUDE_PLUGIN_ROOT}/references/visual-review/_capture-stability.mjs` to
+`<codePath>/tests/visual/_capture-stability.mjs`. Every generated spec imports
+its settle from there, and the parity engine imports the same module, so the two
+gates cannot drift apart on what "stable enough to capture" means. Overwrite an
+existing copy only when the plugin's is newer; never edit the project's copy in
+place, since setup will replace it.
 
 For each **anonymous** VR surface, generate
 `<codePath>/tests/visual/<id>.spec.ts` from
@@ -292,15 +315,37 @@ For each **anonymous** VR surface, generate
 - `__VIEWPORTS__` → the surface's viewport names, comma-separated
 - `__MASKS_ARRAY__` → one `page.locator('<selector>')` per `masks` entry,
   comma-separated (empty when the surface has no masks)
-- `__SCREENSHOT_IMPORT__` / `__SCREENSHOT_CAPTURE__` → the capture seam. **Default
-  (no recipe override):** `__SCREENSHOT_IMPORT__` → empty, `__SCREENSHOT_CAPTURE__`
-  → `await expect(page).toHaveScreenshot('__SURFACE_ID__.png', { mask: masks });`
-  (Playwright-native, framework-neutral). **When the resolved VR process recipe
+- `__STABILITY_MODULE__` → `./` for an anonymous surface (its spec sits beside
+  the copied module in `tests/visual/`), `../../` for an authed surface under
+  `tests/visual/auth/<ctx>/`. The template appends `_capture-stability.mjs`.
+- `__SCREENSHOT_CAPTURE__` → the capture call. **Default (no recipe override):**
+
+  ```
+  await expect(page).toHaveScreenshot('__SURFACE_ID__.png', {
+    fullPage: <true unless the surface sets `capture: viewport`>,
+    caret: 'hide',
+    mask: masks,
+  });
+  ```
+
+  `fullPage` comes from the surface's `capture` field, which is `full` unless the
+  operator set `viewport` (step 6). Capture extent is a recorded decision, not
+  Playwright's inherited default — a viewport-only capture on a long page leaves
+  most of the surface outside the baseline and the gate green. `caret: 'hide'`
+  was decided in the originating epic and never shipped.
+
+- `__SCREENSHOT_IMPORT__` → empty by default. **When the resolved VR process recipe
   declares a `## Screenshot capture` block** (a `screenshot_import` line and a
-  `screenshot_capture` line), substitute those instead — this is how a framework
-  supplies an accessibility-aware or otherwise custom capture helper. Record the
-  resulting capture method as `captured_by` in step 10 (`playwright` for the
-  native default; the recipe's declared `captured_by` value otherwise).
+  `screenshot_capture` line), substitute those instead — this is how a
+  framework supplies an accessibility-aware or otherwise custom capture helper.
+  Record the resulting capture method as `captured_by` in step 10 (`playwright`
+  for the native default; the recipe's declared `captured_by` value otherwise).
+
+  **A recipe-supplied capture bypasses the block above**, so it also bypasses
+  `fullPage` and `caret`. When a recipe supplies its own capture, check that it
+  sets a capture extent; warn if it does not, naming the surface. A recipe that
+  captures the viewport on a full-page surface produces a green gate over an
+  unlooked-at page.
 
 Skip a surface whose `<id>.spec.ts` already exists (idempotent — and migration
 stubs from step 5 are kept).
@@ -432,6 +477,35 @@ On `[y]`, run the **baseline bootstrap flow** via `scripts/baseline-manager.sh`
 On a non-Linux dev host, remind the user of the per-platform capture policy in
 `tests/visual/README.md` (host capture produces `-darwin.png` / `-win32.png`,
 which CI will not find — capture in CI, Docker, or another Linux container).
+
+## Step 10a: Measure this project's noise floor
+
+Immediately after a successful first capture, offer:
+
+> Baselines captured. Measure this project's own noise floor now? It re-runs the
+> suite 3 times against the unchanged site with tolerance suppressed, so the
+> number you gate on is one you measured rather than one you inherited.
+> `[y]es (recommended) / [n]o`
+
+Default `[y]`. The site is already up and the baselines are already correct, so
+this is the cheapest this measurement will ever be.
+
+On `[y]`: run the suite 3 times with `--config`-level tolerance suppressed
+(Playwright treats an unset budget as **zero**, not as a fallback default, which
+is what makes the floor observable at all). Record, per run, how many captures
+came back byte-identical.
+
+- **Floor of 0** — the expected result on a properly stabilised capture, and
+  what was measured on the project this work came from: 75 of 75 identical
+  across five runs. Keep the shipped `maxDiffPixels: 100`; note the measurement
+  in the summary.
+- **Floor above 0** — do NOT quietly widen the tolerance to cover it. A nonzero
+  floor means the capture is not stabilised, and a tolerance sized to hide it
+  also hides the regressions this gate exists to find. Report the number, name
+  the surfaces that moved, and say so plainly.
+
+Record the observed floor and the run count in `project_state.md` beside the
+registry pointer, so the next person knows the tolerance was derived and when.
 
 ## Step 11: Summary
 

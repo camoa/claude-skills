@@ -17,11 +17,28 @@
  *                          (e.g. an accessibility-aware screenshot helper)
  *   __SCREENSHOT_CAPTURE__ the capture call — defaults to Playwright-native
  *                          `toHaveScreenshot`; a recipe may override it
+ *   __STABILITY_MODULE__   relative path to `_capture-stability.mjs`, which
+ *                          setup copies next to the specs. Anonymous surfaces
+ *                          get `./`; an authed surface two directories deeper
+ *                          gets `../../`.
  *
  * The PLUGIN ships a framework-neutral capture. HOW a surface is captured —
  * and whether it also writes an accessibility-tree snapshot — is supplied by
  * your project's process recipe via the two __SCREENSHOT_*__ tokens. Nothing
  * here assumes a framework.
+ *
+ * CAPTURE EXTENT IS A DECISION, NOT A DEFAULT
+ * -------------------------------------------
+ * Playwright captures the viewport only unless told otherwise. On a long page
+ * that silently puts most of the surface outside the baseline — measured on one
+ * site, a 375x5617 page whose baseline covered 14% of it. Setup therefore writes
+ * `fullPage` into the capture call from the surface's registry `capture` field,
+ * which defaults to `full`. A surface that genuinely wants one viewport — a
+ * component-library page, say — opts out per surface.
+ *
+ * The two failure modes are not symmetric, which is why `full` is the default:
+ * a viewport capture that should have been full-page fails silently, while a
+ * full-page capture that should have been a viewport fails loudly.
  *
  * KEEP THE SNAPSHOT NAME STABLE
  * ----------------------------
@@ -32,14 +49,17 @@
  * committed baseline for this surface. See tests/visual/README.md.
  */
 import { test, expect } from '@playwright/test';
+import { prepareForCapture } from '__STABILITY_MODULE___capture-stability.mjs';
 __SCREENSHOT_IMPORT__
 
 test.describe('__SURFACE_ID__ visual regression', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('__SURFACE_URL__');
-    await page.waitForLoadState('networkidle');
-    // Fonts-ready stabilization — avoids font-swap flicker in the capture.
-    await page.evaluate(() => document.fonts.ready);
+    // One settle, shared with the parity engine: scroll-behaviour override, then
+    // the lazy-content settle, then freeze + fonts + a double frame. `networkidle`
+    // alone is not a settle — it fires before a below-the-fold lazy image has even
+    // issued its request, so a full-page capture races the loader.
+    await prepareForCapture(page);
   });
 
   // Viewports (driven by playwright.config.ts visual-chromium-* projects):
@@ -48,7 +68,11 @@ test.describe('__SURFACE_ID__ visual regression', () => {
     // Masks — dynamic regions painted over before capture (from registry.yml
     // `masks`). A recipe-supplied capture helper may also write a paired
     // accessibility snapshot; such a11y diffs surface in the report (warning-only in v1).
+    // `[data-vrt-mask]` first, so a component can mark its own volatile region in
+    // markup. In markup the mask travels with the component; in a test file it
+    // rots. The parity engine already prepends this; regression now matches.
     const masks = [
+      page.locator('[data-vrt-mask]'),
       __MASKS_ARRAY__
     ];
     __SCREENSHOT_CAPTURE__

@@ -119,6 +119,18 @@ fi
 PROJ_ARGS=()
 for p in "${PROJECTS[@]}"; do PROJ_ARGS+=("--project" "$p"); done
 
+# Cap concurrency HERE as well as in playwright.config.ts. The config default is
+# the right place to state the reason, but a project that edited its config would
+# otherwise uncap the capture path silently. The framework is DDEV-first by
+# declaration, so the backend is known to be one web container: measured on a
+# 16-core host, the uncapped default failed 36 of 72 captures with no change to
+# the site. Override with VR_WORKERS when the backend can actually serve more.
+VR_WORKERS="${VR_WORKERS:-2}"
+case "$VR_WORKERS" in
+  ''|*[!0-9]*) VR_WORKERS=2 ;;
+esac
+[ "$VR_WORKERS" -lt 1 ] && VR_WORKERS=1
+
 # ─── run the suite ───────────────────────────────────────────────────────────
 
 PW_EXIT=0
@@ -137,7 +149,7 @@ PW_EXIT=0
 PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-$$.json")"
 ( cd "$CODE_PATH" \
   && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
-     npx playwright test "${PROJ_ARGS[@]}" --reporter=json,html >/dev/null 2>&1 ) || PW_EXIT=$?
+     npx playwright test "${PROJ_ARGS[@]}" --workers "$VR_WORKERS" --reporter=json,html >/dev/null 2>&1 ) || PW_EXIT=$?
 PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
 rm -f "$PW_JSON_FILE"
 
@@ -205,13 +217,34 @@ while IFS= read -r row; do
   # Best-effort diff_percent — Playwright screenshot errors carry
   # "(ratio 0.NN of all image pixels)". Take the max ratio for the surface.
   diff_percent='null'
+  failure_kind='null'
   if [ "$verdict" = "fail" ]; then
-    max_ratio=$(jq -r '.errors[]? // ""' <<<"$row" \
-      | grep -oE 'ratio [0-9]+\.[0-9]+' \
-      | grep -oE '[0-9]+\.[0-9]+' \
-      | sort -rn | head -1)
-    if [ -n "$max_ratio" ]; then
-      diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.4f", r * 100 }')
+    ERR_TEXT=$(jq -r '.errors[]? // ""' <<<"$row")
+
+    # A full-page image is sized to the document, so a page that renders taller
+    # fails on DIMENSION MISMATCH before any tolerance is consulted — and produces
+    # no diff image. That is a correct verdict (the page changed length) but it
+    # reads as an inscrutable error, and a reviewer hunts for a diff that does not
+    # exist. Name it instead. Playwright phrases this as
+    # "Expected an image WxH, but got WxH".
+    DIMS=$(printf '%s' "$ERR_TEXT" \
+      | grep -oE 'Expected an image [0-9]+px by [0-9]+px, received [0-9]+px by [0-9]+px' \
+      | head -1)
+    [ -z "$DIMS" ] && DIMS=$(printf '%s' "$ERR_TEXT" \
+      | grep -oE 'Expected an image [0-9]+ by [0-9]+, received [0-9]+ by [0-9]+' \
+      | head -1)
+
+    if [ -n "$DIMS" ]; then
+      failure_kind=$(jq -Rn --arg d "$DIMS" '"dimension_change: " + $d')
+    else
+      failure_kind='"pixel_diff"'
+      max_ratio=$(printf '%s' "$ERR_TEXT" \
+        | grep -oE 'ratio [0-9]+\.[0-9]+' \
+        | grep -oE '[0-9]+\.[0-9]+' \
+        | sort -rn | head -1)
+      if [ -n "$max_ratio" ]; then
+        diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.4f", r * 100 }')
+      fi
     fi
   fi
 
@@ -223,8 +256,9 @@ while IFS= read -r row; do
   esac
 
   SURFACES=$(jq -c \
-    --arg id "$sid" --arg v "$verdict" --argjson dp "$diff_percent" --argjson fv "$FAILED_VPS" '
-    . + [{id:$id, verdict:$v, diff_percent:$dp, failed_viewports:$fv}]' <<<"$SURFACES")
+    --arg id "$sid" --arg v "$verdict" --argjson dp "$diff_percent" --argjson fv "$FAILED_VPS" \
+    --argjson fk "$failure_kind" '
+    . + [{id:$id, verdict:$v, diff_percent:$dp, failure_kind:$fk, failed_viewports:$fv}]' <<<"$SURFACES")
 done <<<"$SURFACE_ROWS"
 
 SUMMARY=$(jq -nc --argjson r "$RUN" --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" \
