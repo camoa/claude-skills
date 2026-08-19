@@ -35,9 +35,28 @@
 
 import { defineConfig } from '@playwright/test';
 
+/* BASE URL RESOLUTION, in precedence order.
+ *
+ * `DDEV_PRIMARY_URL` is exported only INSIDE a `ddev` shell, and this harness runs
+ * host-side by design — so on the sanctioned path that term is always empty. Four
+ * components used to name it as the mechanism while nothing ever set it, which
+ * meant a DDEV project fell through to `https://localhost` and every capture
+ * failed with its own connection error.
+ *
+ * `/setup-visual-regression` now resolves the project's real URL once (via
+ * `ddev describe --json-output`) and writes it into the third term below. It sits
+ * BELOW both environment variables on purpose: `PLAYWRIGHT_BASE_URL` stays the
+ * documented override for CI and non-DDEV runners.
+ *
+ * The `https://localhost` fallback stays for consumers outside DDEV. It is no
+ * longer silent: the gate preflights whichever URL wins here and stops with one
+ * message naming it, instead of failing once per surface. */
+const DERIVED_BASE_URL = '__DERIVED_BASE_URL__';
+
 const BASE_URL =
   process.env.PLAYWRIGHT_BASE_URL ||
   process.env.DDEV_PRIMARY_URL ||
+  (DERIVED_BASE_URL.startsWith('http') ? DERIVED_BASE_URL : '') ||
   'https://localhost';
 
 export default defineConfig({

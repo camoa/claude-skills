@@ -28,15 +28,27 @@ classification UX.
 
 ## 2. Setup — `/setup-visual-regression`
 
-`/setup-visual-regression` is an idempotent 10-step wizard. It:
+`/setup-visual-regression` is an idempotent 10-step wizard.
 
-1. Checks that the site under test is reachable via `PLAYWRIGHT_BASE_URL` — the
-   URL must resolve for Playwright to run host-side. (This is not a
-   containerization check.)
+**It can stop before any of them.** Step 0 reads the project's frameworks and
+refuses two cases: an empty frameworks list (nothing to resolve a process recipe
+from — run `/upgrade-project` first), and a project whose frameworks are all
+non-web, where a visual gate is not applicable. Either way it prints why and
+exits with nothing scaffolded. `/setup-e2e` does the same, on the same project.
+
+The ten steps:
+
+1. Checks that the site under test is reachable, then **resolves the base URL and
+   writes it into the config** — `ddev describe --json-output` for a DDEV project,
+   otherwise it asks. `PLAYWRIGHT_BASE_URL` still overrides it. Nothing used to
+   derive this, so a DDEV project fell through to `https://localhost`.
 2. Installs the framework's VR package (resolved by the process recipe) +
    `@playwright/test` at the codePath root, plus the Chromium browser.
 3. Extends `playwright.config.ts` with one `visual-chromium-<viewport>` project
-   per derived viewport, and tightens `maxDiffPixelRatio` to `0.005`.
+   per derived viewport. It adds **no** second tolerance value: the base config
+   ships one absolute budget (`maxDiffPixels`). An earlier revision told the
+   operator to hand-add a tighter ratio here, so anyone who skipped that step ran
+   at twice the intended tolerance with nothing detecting it.
 4. Derives the viewport matrix (see the viewport matrix section).
 5. Offers to migrate a legacy `.screenshots/` store (see the migration section).
 6. Runs AI-assisted surface discovery (see the surface discovery section).
@@ -280,7 +292,12 @@ and provide the URL when prompted.
   surfaces).
 - SDC component-level isolation capture (deferred to a future epic — Spike #1).
 - Multi-browser beyond Chromium (Firefox/WebKit nightly tier).
-- Per-surface `maxDiffPixelRatio` tuning.
+- Per-surface tolerance. Still deferred, but the shape changed: the shipped
+  budget is now an absolute `maxDiffPixels`, not a ratio, so this is a per-surface
+  absolute override. The registry already carries a ratio field — scoped under
+  `parity_reference`, where the regression side cannot reach it — so doing this
+  means unscoping that field, which is a schema version bump with a
+  compatibility story, not a new key.
 
 ## 17. Pointers
 

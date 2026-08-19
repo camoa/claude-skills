@@ -116,6 +116,33 @@ if [ "${#PROJECTS[@]}" -eq 0 ]; then
   exit 0
 fi
 
+# ─── base-URL preflight ──────────────────────────────────────────────────────
+# Resolve the same chain playwright.config.ts resolves, and check the site answers
+# BEFORE running the suite. Without this, an unreachable or wrong base URL fails
+# once per surface with a connection error, and the operator reads N failures
+# instead of one cause. `DDEV_PRIMARY_URL` is exported only inside a `ddev` shell
+# and this gate runs host-side, so in practice it is the env override or the URL
+# setup derived into the config.
+BASE_URL="${PLAYWRIGHT_BASE_URL:-${DDEV_PRIMARY_URL:-}}"
+if [ -z "$BASE_URL" ]; then
+  BASE_URL=$(grep -oE "^const DERIVED_BASE_URL = '[^']*'" "$PW_CONFIG" 2>/dev/null \
+    | sed -E "s/^const DERIVED_BASE_URL = '//; s/'$//")
+fi
+case "$BASE_URL" in http*) ;; *) BASE_URL='https://localhost' ;; esac
+
+if command -v curl >/dev/null 2>&1; then
+  if ! curl -ksSf -o /dev/null --max-time 15 "$BASE_URL" 2>/dev/null; then
+    add_warning "base_url_unreachable: ${BASE_URL} did not answer. Set PLAYWRIGHT_BASE_URL, or re-run /setup-visual-regression to derive it."
+    emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
+    printf 'visual-regression-gate: base URL %s did not answer.\n' "$BASE_URL" >&2
+    printf '  Every capture would fail against it. Set PLAYWRIGHT_BASE_URL, or\n' >&2
+    printf '  re-run /setup-visual-regression to resolve the project URL.\n' >&2
+    exit 2
+  fi
+else
+  add_warning "base_url_unchecked: curl not available, so ${BASE_URL} was not preflighted"
+fi
+
 PROJ_ARGS=()
 for p in "${PROJECTS[@]}"; do PROJ_ARGS+=("--project" "$p"); done
 

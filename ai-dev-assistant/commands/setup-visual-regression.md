@@ -59,7 +59,17 @@ If **all** frameworks are in the non-web set → print:
 setup-visual-regression: e2e/visual-regression is not applicable to a non-web framework (<comma-list of frameworks>); skipping — no harness scaffolded.
 ```
 
-and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is empty, or if **any** framework is not in the non-web set (i.e. at least one web framework is present), proceed exactly as today — no behavior change for web projects. If this project has no `**Frameworks:**`, consider adopting frameworks first via `/upgrade-project` before running `/setup-visual-regression` — the point-of-need detect-or-ask sub-protocol (`references/recipe-resolution.md` step 6) does not cover setup commands.
+and exit (stop, no scaffold, no recipe resolution). If `.frameworks` is **empty** (`[]` or absent), do **not** assume any stack — print
+`"setup-visual-regression: no frameworks recorded for this project. Run /upgrade-project to backfill frameworks, or set them in project_state.md, then re-run /setup-visual-regression."`
+and stop. This matches `/setup-e2e` exactly. The two commands share one surface
+registry, and they previously disagreed here — e2e stopped while this command
+proceeded — so one project could get two behaviours from the same missing field.
+Stopping is the correct half: with no frameworks there is no process recipe to
+resolve, and Step 0a, Step 4 and Step 6 all take their content from it, so
+proceeding scaffolds a harness with no surface discovery and no viewport matrix.
+
+If **any** framework is not in the non-web set (i.e. at least one web framework is
+present), proceed exactly as today — no behavior change for web projects.
 
 This guard applies to the full-setup path only. The `--add-surface` and `--migrate` fast paths bypass it (they assume a harness already exists).
 
@@ -151,6 +161,34 @@ confirm with the user that the dev server or target URL is up, and stop if it is
 not. See the BYO-server appendix in
 `references/visual-regression-walkthrough.md`.
 
+### Resolve the base URL, and write it down
+
+Confirming the site is up is not the same as Playwright knowing where it is.
+`playwright-base.config.ts` resolves `PLAYWRIGHT_BASE_URL`, then
+`DDEV_PRIMARY_URL`, then a `https://localhost` fallback — and `DDEV_PRIMARY_URL`
+is exported only inside a `ddev` shell, while this harness runs host-side by
+design. So on the sanctioned path the second term is always empty, four
+components documented a mechanism that never fires, and every capture failed
+against `https://localhost` with its own connection error.
+
+Resolve it here, once:
+
+```bash
+ddev describe --json-output 2>/dev/null | jq -r '.raw.primary_url // empty'
+```
+
+- **A URL comes back** → carry it to Step 3, which writes it into the config's
+  `DERIVED_BASE_URL` slot. It sits BELOW both environment variables, so
+  `PLAYWRIGHT_BASE_URL` remains the documented override for CI and non-DDEV
+  runners.
+- **Nothing comes back** (no DDEV, or the project is not running) → ask the
+  operator for the URL Playwright should use, and write that. Do not leave the
+  slot unset and let the run discover the problem one surface at a time.
+
+On a **re-run**, re-resolve and update the slot if the answer changed — a DDEV
+project rename moves the URL, and a stale value fails in exactly the way this
+step exists to prevent.
+
 ## Step 2: Install Playwright (idempotent)
 
 Run host-side at the codePath root:
@@ -159,8 +197,27 @@ Run host-side at the codePath root:
 cd <codePath>
 [ -f package.json ] || npm init -y
 npm install --save-dev @playwright/test
-npx playwright install --with-deps chromium
+npx playwright install chromium
 ```
+
+**Install without `--with-deps` first, and escalate only if the browser does not
+run.** `--with-deps` shells out to the system package manager under sudo; on a
+workstation with no TTY for a password prompt it aborts with
+`sudo: a terminal is required to read the password` / `Failed to install
+browsers`, and setup stops there. On most developer machines the system
+libraries are already present and the plain install is enough.
+
+Verify by launching the browser rather than by matching Playwright's error text,
+which is not a stable contract:
+
+```bash
+npx playwright screenshot --browser=chromium about:blank /tmp/pw-probe.png
+```
+
+If that succeeds, the install is done. If it fails on missing system libraries,
+**then** tell the operator to run `npx playwright install --with-deps chromium`
+themselves in a terminal that can prompt for sudo, and stop — do not attempt a
+sudo command on their behalf.
 
 The framework's visual-regression package is **not** installed here. It comes
 from the process recipe (Step 0a). Install whatever the resolved recipe names,
@@ -180,9 +237,12 @@ Then, using the `Edit` tool (Claude edits the config — no `sed`/`awk` and no
 new Node script), make these changes **only if not already present** (check for
 the entry name first — idempotent):
 
-1. Add `import { devices } from '@playwright/test';` if `devices` is not
+1. Replace the `__DERIVED_BASE_URL__` placeholder in `DERIVED_BASE_URL` with the
+   URL resolved in Step 1. On a re-run the placeholder is already gone; compare
+   the resolved URL with what is there and update it if they differ.
+2. Add `import { devices } from '@playwright/test';` if `devices` is not
    already imported.
-2. Append one `projects[]` entry per derived viewport (from step 4) — NOT a
+3. Append one `projects[]` entry per derived viewport (from step 4) — NOT a
    single generic `visual-chromium` entry. Each anonymous project carries a
    `testIgnore` so it never also picks up the authenticated setup or surface
    specs (see step 7a):
@@ -197,7 +257,7 @@ the entry name first — idempotent):
    On a **re-run** where a project entry predates this seam and lacks the
    `testIgnore` key, add it (idempotent — check for the key first).
 
-3. **Do not add a second tolerance value.** The base config ships one absolute
+4. **Do not add a second tolerance value.** The base config ships one absolute
    budget (`maxDiffPixels`) and that is the only one. An earlier revision of this
    step told the operator to hand-add a tighter ratio scoped to the visual run —
    so a project whose operator skipped or mistyped it silently ran at twice the

@@ -100,10 +100,26 @@ the recommender model keeps the gates wanted, not resented. Full procedure:
 
 ## 7. Site URL configuration
 
-The gates need the site URL to be resolvable before running. `/setup-*` reads
-`PLAYWRIGHT_BASE_URL` from the environment (set by the project's local dev tooling or
-CI). If no URL is configured, setup prompts the user. Set `PLAYWRIGHT_BASE_URL` to the
-site URL before invoking any gate.
+The gates need the site URL to be resolvable before running. Resolution order, as
+implemented in `playwright-base.config.ts`:
+
+1. `PLAYWRIGHT_BASE_URL` from the environment — the override for CI and non-DDEV
+   runners, and it always wins.
+2. `DDEV_PRIMARY_URL` — exported **only inside a `ddev` shell**. Playwright runs
+   host-side by design, so on the sanctioned path this term is empty. It is kept
+   for anyone running the suite from inside the container.
+3. The URL `/setup-visual-regression` derived from `ddev describe --json-output`
+   and wrote into the config. Below the environment variables on purpose.
+4. `https://localhost`, the last-resort fallback.
+
+Earlier revisions of this section said setup prompts the user when no URL is
+configured. It did not: nothing set or derived a URL at all, so a DDEV project
+fell through to `https://localhost` and every capture failed with its own
+connection error. Setup now resolves it, and asks only when `ddev describe`
+returns nothing.
+
+The gate preflights whichever URL wins and stops with one message naming it,
+rather than failing once per surface.
 
 ## 8. What ships when
 
