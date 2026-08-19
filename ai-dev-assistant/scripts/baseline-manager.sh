@@ -16,7 +16,7 @@
 #
 #   PLAN mode    (no --confirmed) — prints the EXACT surfaces/viewports that
 #                WOULD be (re)captured as JSON, writes nothing, exits 0.
-#   EXECUTE mode (--confirmed)    — runs `npx playwright test --update-snapshots`
+#   EXECUTE mode (--confirmed)    — runs Playwright with `--update-snapshots`
 #                and appends baseline-history.jsonl.
 #
 # The calling command (/setup-visual-regression, /validate:visual-regression)
@@ -61,8 +61,28 @@
 # baseline-history.jsonl (a sibling of the registry) and is echoed into
 # the output.
 #
+# OUTCOME, NOT INTENT (baseline-history.jsonl)
+# -------------------------------------------
+# baseline-history.jsonl is the only durable provenance record this gate has,
+# so an entry records what HAPPENED, not what was planned. EXECUTE checksums
+# every baseline PNG under tests/visual/ before and after the Playwright run
+# and writes `surfaces_updated` from the files whose checksum actually moved,
+# alongside `playwright_exit` and an `updated` boolean. A run Playwright
+# rejected outright ("Error: No tests found", exit 1, zero bytes written) is
+# therefore distinguishable in the log from a rebaseline that wrote — which is
+# the whole discipline that keeps a stored-baseline gate auditable.
+#
+# A plan matching ZERO surfaces is an error, not a no-op: a rebaseline that
+# reports success having written nothing is exactly the false green this script
+# exists to prevent. An invalid --grep pattern is reported as invalid,
+# separately from a valid pattern that matched nothing.
+#
+# Playwright's console output goes to a log file, never to stdout: stdout
+# carries this script's JSON result object and nothing else, so `jq` can parse
+# it. On a non-zero exit the tail of that log is surfaced as a warning.
+#
 # Exit codes: 0 success (plan or execute) · 1 the --update-snapshots run failed
-#             · 2 validation / setup error.
+#             · 2 validation / setup error (a plan of zero surfaces included).
 
 set -uo pipefail
 
@@ -159,6 +179,23 @@ BLANKET=true
 # Surface stems = tests/visual/*.spec.ts basenames. --exact-surface keeps the
 # one stem equal to <id>; --grep keeps stems matching the pattern as an
 # extended regex (see the --grep asymmetry note in the header).
+#
+# Validate the pattern ONCE, against empty input, before it is used to filter
+# anything. grep exits 0 on a match, 1 on no match, and >1 on an error such as
+# an unparseable regex — the old filter discarded that status, so an INVALID
+# pattern skipped every stem and read exactly like a pattern that legitimately
+# matched nothing. The two cases get different messages. (Input comes from a
+# redirect, never a pipe: a writer feeding `grep -q` gets SIGPIPE when grep
+# stops at the first match, which pipefail then reports as 141.)
+if [ -n "$GREP_PATTERN" ]; then
+  GREP_PROBE_RC=0
+  grep -qE -- "$GREP_PATTERN" </dev/null >/dev/null 2>&1 || GREP_PROBE_RC=$?
+  if [ "$GREP_PROBE_RC" -gt 1 ]; then
+    err "--grep '$GREP_PATTERN': not a valid extended regular expression (grep exit $GREP_PROBE_RC)"
+    exit 2
+  fi
+fi
+
 SURFACES_PLANNED='[]'
 while IFS= read -r spec; do
   [ -z "$spec" ] && continue
@@ -166,7 +203,13 @@ while IFS= read -r spec; do
   if [ -n "$EXACT_SURFACE" ]; then
     [ "$stem" = "$EXACT_SURFACE" ] || continue
   elif [ -n "$GREP_PATTERN" ]; then
-    echo "$stem" | grep -qE "$GREP_PATTERN" 2>/dev/null || continue
+    STEM_RC=0
+    grep -qE -- "$GREP_PATTERN" <<<"$stem" >/dev/null 2>&1 || STEM_RC=$?
+    if [ "$STEM_RC" -gt 1 ]; then
+      err "--grep '$GREP_PATTERN': grep failed on stem '$stem' (exit $STEM_RC)"
+      exit 2
+    fi
+    [ "$STEM_RC" -eq 0 ] || continue
   fi
   SURFACES_PLANNED=$(jq -c --arg s "$stem" '. + [$s]' <<<"$SURFACES_PLANNED")
 done < <(find "$CODE_PATH/tests/visual" -maxdepth 1 -type f -name '*.spec.ts' 2>/dev/null | sort)
@@ -175,6 +218,20 @@ done < <(find "$CODE_PATH/tests/visual" -maxdepth 1 -type f -name '*.spec.ts' 2>
 # not an empty plan, so say which id and stop before EXECUTE can be reached.
 if [ -n "$EXACT_SURFACE" ] && [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -eq 0 ]; then
   err "--exact-surface '$EXACT_SURFACE': no $CODE_PATH/tests/visual/$EXACT_SURFACE.spec.ts"
+  exit 2
+fi
+
+# Planning zero surfaces is an error, not an empty no-op. EXECUTE used to emit
+# updated:false with playwright_exit:0 and exit 0 here — a rebaseline reporting
+# success having written nothing. Name the pattern that matched no surface, or
+# say the suite is empty when there was no pattern at all, and stop in BOTH
+# stages so the operator never confirms a run that cannot write.
+if [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -eq 0 ]; then
+  if [ -n "$GREP_PATTERN" ]; then
+    err "--grep '$GREP_PATTERN' is a valid pattern but matched no surface in $CODE_PATH/tests/visual — nothing would be rebaselined"
+  else
+    err "no *.spec.ts surfaces in $CODE_PATH/tests/visual — nothing to rebaseline (run /setup-visual-regression first)"
+  fi
   exit 2
 fi
 
@@ -269,12 +326,8 @@ if [ "$CONFIRMED" != true ]; then
 fi
 
 # ─── EXECUTE MODE ────────────────────────────────────────────────────────────
-
-if [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -eq 0 ]; then
-  add_warning "no_surfaces: no spec files matched — nothing to update"
-  jq -nc --argjson w "$WARNINGS" '{stage:"execute",updated:false,playwright_exit:0,warnings:$w}'
-  exit 0
-fi
+# (A plan of zero surfaces already exited 2 above — EXECUTE is never reached
+# with nothing to do.)
 
 # --project flags, one per viewport in the matrix resolved above. Project names
 # follow the setup convention visual-chromium-<viewport>, so the same matrix
@@ -286,8 +339,8 @@ while IFS= read -r p; do
 done < <(jq -r '.[]' <<<"$VIEWPORTS")
 
 # Refuse to run unscoped: with no viewports, a bare
-# `npx playwright test --update-snapshots` would regenerate snapshots for ALL
-# projects — including the e2e-chromium suite. Abort instead, naming both
+# `playwright test --update-snapshots` with no --project flag would regenerate
+# snapshots for ALL projects — including the e2e-chromium suite. Abort instead, naming both
 # sources so the message points at the real cause.
 if [ "${#PROJ_ARGS[@]}" -eq 0 ]; then
   add_warning "no_visual_projects: no viewports from either source — $REGISTRY_PATH has no top-level viewports: block, and $PW_CONFIG has no visual-chromium-* project names to scrape (a config that builds its projects programmatically cannot be scraped; declare viewports: in the registry). Refusing to run --update-snapshots unscoped"
@@ -308,18 +361,114 @@ elif [ -n "$GREP_PATTERN" ]; then
   PW_ARGS+=(--grep "$GREP_PATTERN")
 fi
 
-PW_EXIT=0
-(cd "$CODE_PATH" && npx playwright "${PW_ARGS[@]}") || PW_EXIT=$?
+# ─── observe what actually gets written ──────────────────────────────────────
+# Playwright's exit code says the RUN succeeded; it does not say which baseline
+# images changed. Checksum every PNG under tests/visual/ before and after, and
+# read `surfaces_updated` off the files whose checksum moved. Portable digest —
+# shasum ships with macOS, sha256sum with coreutils; without either, the
+# observation degrades to "unknown" and says so rather than guessing.
+SUM_CMD=()
+if command -v shasum >/dev/null 2>&1; then SUM_CMD=(shasum -a 256)
+elif command -v sha256sum >/dev/null 2>&1; then SUM_CMD=(sha256sum)
+fi
 
-# Append the history record (append-only; create parent dir if needed).
+# <outfile> ← "<checksum> <path>" per baseline PNG. `find -printf` and `stat -c`
+# are GNU-only, so neither is used.
+checksum_pngs() {
+  : > "$1"
+  [ "${#SUM_CMD[@]}" -gt 0 ] || return 0
+  while IFS= read -r png; do
+    [ -z "$png" ] && continue
+    sum=$("${SUM_CMD[@]}" "$png" 2>/dev/null | awk '{print $1}')
+    [ -n "$sum" ] && printf '%s %s\n' "$sum" "$png" >> "$1"
+  done < <(find "$CODE_PATH/tests/visual" -type f -name '*.png' 2>/dev/null | sort)
+}
+
+# A snapshot PNG lives in <stem>.spec.ts-snapshots/, so the surface is the
+# parent directory name with the suffixes stripped. Anything laid out
+# differently falls back to the image's own basename.
+stem_for_png() {
+  d=$(basename "$(dirname "$1")")
+  d=${d%-snapshots}
+  d=${d%.spec.ts}
+  if [ -n "$d" ] && [ "$d" != "visual" ]; then printf '%s\n' "$d"
+  else basename "$1" .png; fi
+}
+
+PNG_BEFORE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/bm-before-$$.txt")"
+PNG_AFTER="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/bm-after-$$.txt")"
+checksum_pngs "$PNG_BEFORE"
+
+# ─── run ─────────────────────────────────────────────────────────────────────
+# Playwright's console output must NEVER reach stdout: stdout is this script's
+# JSON result object, and console text in front of it makes the whole thing
+# unparseable by jq. Both streams go to a log file, and PLAYWRIGHT_JSON_OUTPUT_NAME
+# routes the json reporter to its own file, the same handling
+# scripts/visual-regression-gate.sh uses on its Playwright call.
+PW_LOG="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/bm-pwlog-$$.txt")"
+PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/bm-pwjson-$$.json")"
+PW_EXIT=0
+( cd "$CODE_PATH" \
+  && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
+     npx playwright "${PW_ARGS[@]}" --reporter=json >"$PW_LOG" 2>&1 ) || PW_EXIT=$?
+
+# On failure the reason ("Error: No tests found" being the common one) is in the
+# log and nowhere else, so carry it into the result rather than dropping it.
+if [ "$PW_EXIT" -ne 0 ]; then
+  PW_TAIL=$(grep -v '^[[:space:]]*$' "$PW_LOG" 2>/dev/null | tail -n 5 | tr '\n' ' ')
+  add_warning "playwright_failed: exit $PW_EXIT — ${PW_TAIL:-no output captured}"
+fi
+
+checksum_pngs "$PNG_AFTER"
+
+# Surfaces whose baseline images actually moved: checksum changed, file added,
+# or file removed. Paths may contain spaces, so split on the FIRST space only —
+# the checksum never contains one.
+SURFACES_UPDATED='[]'
+CHANGED_PNGS=0
+if [ "${#SUM_CMD[@]}" -gt 0 ]; then
+  while IFS= read -r changed; do
+    [ -z "$changed" ] && continue
+    CHANGED_PNGS=$((CHANGED_PNGS + 1))
+    st=$(stem_for_png "$changed")
+    [ -z "$st" ] && continue
+    SURFACES_UPDATED=$(jq -c --arg s "$st" 'if index($s) then . else . + [$s] end' <<<"$SURFACES_UPDATED")
+  done < <(awk '
+    NR==FNR { p = substr($0, index($0, " ") + 1); b[p] = $1; next }
+    { p = substr($0, index($0, " ") + 1); a[p] = $1
+      if (!(p in b) || b[p] != $1) print p }
+    END { for (p in b) if (!(p in a)) print p }
+  ' "$PNG_BEFORE" "$PNG_AFTER" 2>/dev/null | sort)
+else
+  add_warning "no_checksum_tool: neither shasum nor sha256sum is in PATH — surfaces_updated could not be observed and is reported empty"
+fi
+rm -f "$PNG_BEFORE" "$PNG_AFTER" "$PW_LOG" "$PW_JSON_FILE"
+
+# `updated` is an OBSERVATION, not a restatement of the exit code: a clean exit
+# that moved no image did not rebaseline anything.
+UPDATED=false
+[ "$PW_EXIT" -eq 0 ] && [ "$CHANGED_PNGS" -gt 0 ] && UPDATED=true
+if [ "$PW_EXIT" -eq 0 ] && [ "$CHANGED_PNGS" -eq 0 ] && [ "${#SUM_CMD[@]}" -gt 0 ]; then
+  add_warning "no_baseline_changed: Playwright exited 0 but no baseline PNG under $CODE_PATH/tests/visual changed — nothing was rebaselined"
+fi
+
+# Append the history record (append-only; create parent dir if needed). The
+# entry carries the OUTCOME — playwright_exit, updated, and the surfaces
+# observed to change — beside the plan that was attempted, so a failed run is
+# never indistinguishable from a successful rebaseline in the provenance log.
 mkdir -p "$(dirname "$HISTORY_PATH")" 2>/dev/null || true
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HISTORY_ENTRY=$(jq -nc \
   --arg ts "$NOW_ISO" --arg trigger "$REASON" \
-  --argjson surfaces "$SURFACES_PLANNED" --argjson viewports "$VIEWPORTS" \
+  --argjson planned "$SURFACES_PLANNED" --argjson updated_s "$SURFACES_UPDATED" \
+  --argjson pe "$PW_EXIT" --argjson upd "$UPDATED" --argjson cp "$CHANGED_PNGS" \
+  --argjson viewports "$VIEWPORTS" \
   --arg tb "$TRIGGERED_BY" --arg gp "$GREP_PATTERN" \
   --arg es "$EXACT_SURFACE" --arg vs "$VIEWPORTS_SOURCE" '
-  { timestamp: $ts, trigger: $trigger, surfaces: $surfaces,
+  { timestamp: $ts, trigger: $trigger,
+    playwright_exit: $pe, updated: $upd,
+    surfaces_planned: $planned, surfaces_updated: $updated_s,
+    baseline_images_changed: $cp,
     viewports: $viewports, viewports_source: $vs, triggered_by: $tb,
     exact_surface: (if $es == "" then null else $es end),
     grep_pattern: (if $gp == "" then null else $gp end) }')
@@ -329,13 +478,17 @@ fi
 
 jq -nc \
   --argjson pe "$PW_EXIT" --argjson sp "$SURFACES_PLANNED" \
+  --argjson su "$SURFACES_UPDATED" --argjson upd "$UPDATED" \
+  --argjson cp "$CHANGED_PNGS" \
   --argjson blanket "$BLANKET" --arg hp "$HISTORY_PATH" \
   --arg es "$EXACT_SURFACE" --argjson vp "$VIEWPORTS" --arg vs "$VIEWPORTS_SOURCE" \
   --argjson he "$HISTORY_ENTRY" --argjson w "$WARNINGS" '
   { stage: "execute",
-    updated: ($pe == 0),
+    updated: $upd,
     playwright_exit: $pe,
-    surfaces_updated: $sp,
+    surfaces_planned: $sp,
+    surfaces_updated: $su,
+    baseline_images_changed: $cp,
     exact_surface: (if $es == "" then null else $es end),
     viewports: $vp,
     viewports_source: $vs,

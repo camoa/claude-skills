@@ -73,6 +73,16 @@ else
   pass_check "reader accepts both filename shapes, as documented"
 fi
 
+# The store schema PROMISES a reader that accepts either shape. That promise was
+# false for as long as the reader hardcoded an ordinal; now that it is true, the
+# document must name both shapes rather than gesturing at "whatever exists".
+if grep -qE 'visual-chromium-<viewport>' "$STORE_SCHEMA" \
+   && grep -qE '<ordinal>' "$STORE_SCHEMA"; then
+  pass_check "the store schema names both filename shapes it claims to accept"
+else
+  fail_check "the store schema promises either shape without saying what they are"
+fi
+
 # The migration script is a third producer of the same grammar.
 if grep -qE 'visual-chromium' "$MIGRATE"; then
   pass_check "migration script writes the shared grammar"

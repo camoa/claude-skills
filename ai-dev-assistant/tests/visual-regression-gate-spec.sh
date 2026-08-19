@@ -58,11 +58,15 @@ cat > "$CP/playwright.config.ts" <<'EOF'
 import { defineConfig } from '@playwright/test';
 export default defineConfig({ projects: [{ name: 'e2e-chromium' }] });
 EOF
+# A gate with nothing to run has NOT passed — it has not run. This assertion
+# used to require exit 0, which meant a project whose visual projects were never
+# configured recorded a green visual gate. The sibling baseline-manager always
+# treated this condition as fatal; the gate now agrees with it.
 RC=0; OUT=$(bash "$SCRIPT" /tmp/reg.yml "$CP" 2>/dev/null) || RC=$?
-if [ "$RC" -eq 0 ] \
+if [ "$RC" -ne 0 ] \
    && echo "$OUT" | jq -e '.warnings[] | select(startswith("no_visual_projects"))' >/dev/null \
    && [ "$(echo "$OUT" | jq -c '.surfaces')" = "[]" ]; then
-  pass_check "no visual-chromium-* projects → exit 0, no_visual_projects warning, surfaces []"
+  pass_check "no visual-chromium-* projects → non-zero exit, warning, surfaces []"
 else
   fail_check "no-visual-projects — rc=$RC out=$OUT"
 fi
@@ -97,11 +101,31 @@ if [ "$RC" -eq 2 ]; then
 else
   fail_check "--project-pattern validation should exit 2, got $RC"
 fi
-RC=0; bash "$SCRIPT" /tmp/reg.yml "$CP" --project-pattern 'visual-chromium-' >/dev/null 2>&1 || RC=$?
-if [ "$RC" -ne 2 ]; then
+# ...and that it failed FOR THAT REASON, not incidentally.
+ERRTXT2=$(bash "$SCRIPT" /tmp/reg.yml "$CP" --project-pattern 'visual.*' 2>&1 >/dev/null || true)
+if printf '%s' "$ERRTXT2" | grep -q -- '--project-pattern must match'; then
+  pass_check "a metacharacter pattern is rejected by the pattern validator itself"
+else
+  fail_check "metacharacter pattern exited 2 for some other reason: $ERRTXT2"
+fi
+# Test pattern VALIDATION in isolation. Using the no-projects config here made
+# the assertion confounded once that condition became fatal: a rejected pattern
+# and an empty project list both exit 2, so the test could no longer tell which
+# it had proved. Give it a config that DOES declare a matching visual project,
+# so the only thing under test is whether the pattern is accepted.
+CP_OK="$TMPDIR/cp_pattern"; mkdir -p "$CP_OK/tests/visual"
+cat > "$CP_OK/playwright.config.ts" <<'EOF'
+export default defineConfig({ projects: [{ name: 'visual-chromium-lg' }] });
+EOF
+# Assert on WHICH failure, not on the exit code. Several conditions now exit 2 —
+# an unconfigured project list, an unreachable base URL — so exit code alone can
+# no longer prove anything about pattern validation. The pattern validator has
+# its own message; a valid pattern must not produce it.
+ERRTXT=$(bash "$SCRIPT" /tmp/reg.yml "$CP_OK" --project-pattern 'visual-chromium-' 2>&1 >/dev/null || true)
+if ! printf '%s' "$ERRTXT" | grep -q -- '--project-pattern must match'; then
   pass_check "--project-pattern 'visual-chromium-' (plain) accepted"
 else
-  fail_check "plain --project-pattern wrongly rejected"
+  fail_check "plain --project-pattern wrongly rejected: $ERRTXT"
 fi
 
 if [ "$FAIL" -ne 0 ]; then

@@ -111,9 +111,17 @@ done < <(grep -oE "name:[[:space:]]*['\"]${PROJECT_PREFIX}[A-Za-z0-9_-]+['\"]" "
   | grep -oE "${PROJECT_PREFIX}[A-Za-z0-9_-]+" | sort -u)
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
+  # EXIT NON-ZERO. This used to emit an all-zero summary and exit 0 — a run that
+  # inspected no surface, reported as a clean run. The sibling baseline-manager
+  # treats the identical condition as fatal, and it is the one that is right: a
+  # gate with nothing to run has not passed, it has not run. A caller that reads
+  # only the verdict would otherwise record a green visual gate for a project
+  # whose visual projects were never configured.
   add_warning "no_visual_projects: playwright.config.ts has no ${PROJECT_PREFIX}* project entries"
   emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
-  exit 0
+  printf 'visual-regression-gate: no %s* projects in playwright.config.ts.\n' "$PROJECT_PREFIX" >&2
+  printf '  Nothing to run, so nothing passed. Run /setup-visual-regression.\n' >&2
+  exit 2
 fi
 
 # ─── base-URL preflight ──────────────────────────────────────────────────────
@@ -181,11 +189,17 @@ PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
 rm -f "$PW_JSON_FILE"
 
 if ! jq -e . >/dev/null 2>&1 <<<"$PW_JSON"; then
+  # EXIT NON-ZERO WHATEVER PLAYWRIGHT SAID. No parseable report means this gate
+  # did not observe a single surface, so it cannot report a verdict either way.
+  # The previous version exited 0 when Playwright itself exited 0, and its comment
+  # claimed the degradation was "never a false pass" — true only for a consumer
+  # that reads warnings[], and no consumer did. An unreadable report is a broken
+  # run, not a quiet success.
   add_warning "playwright_no_json: the suite produced no parseable JSON report (exit $PW_EXIT)"
   emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
-  # A non-zero exit with no JSON is a setup/run failure, not a clean pass.
-  [ "$PW_EXIT" -ne 0 ] && exit 2
-  exit 0
+  printf 'visual-regression-gate: the suite produced no parseable JSON report (playwright exit %s).\n' "$PW_EXIT" >&2
+  printf '  No surface was observed, so this run has no verdict.\n' >&2
+  exit 2
 fi
 
 # Per-file (= per-surface) status + error rollup. Each top-level suite is a

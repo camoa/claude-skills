@@ -118,12 +118,48 @@ For each (surface × viewport), the expected baseline is
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh "<codePath>"` (Bash)
 and parse its JSON to enumerate what exists.
 
+**Read the reader's `warnings[]` before concluding anything about a baseline.**
+The reader reports a top-level `warnings[]` and a per-viewport `warnings[]`
+inside each component entry, and each one names the defect outright — a
+`meta_schema_mismatch` on a sidecar that is not valid JSON, is missing required
+fields, disagrees with the PNG's hash, or is named against the expected
+`<surface>-visual-chromium-<viewport>` shape; a `component_missing_meta` on a
+PNG with no sidecar at all. Surface every entry the reader returns, as
+`<surface>/<viewport>: <code> — <detail>`, and carry them into
+`details.baseline_warnings[]`. Report them **by code and detail, whatever the
+codes are** — do not filter against a list written here. The reader gains codes
+(passing it the registry makes it flag leftover snapshot directories no
+registered surface claims), and a step that only forwards the codes it already
+knows drops the new ones silently.
+
+Then place each (surface × viewport) in one of two states, which look alike in a
+bare file listing and need opposite fixes:
+
+- **ABSENT** — the reader found no baseline for it. Nothing was ever captured;
+  the fix is to capture one.
+- **UNREADABLE** — a baseline file exists but the reader could not use it, and
+  said why in a warning. Re-running the capture does not repair a corrupt or
+  schema-invalid sidecar, and the warning's `detail` names the file and the
+  defect.
+
+Name the two separately in the envelope `message`. Reporting an UNREADABLE
+baseline as missing sends the operator to rebaseline a surface whose actual
+problem is a broken sidecar, and the rebaseline appears to succeed.
+
 If any (surface × viewport) has **no baseline** and neither `--bootstrap` nor
 `--update-baselines` was passed → emit `verdict: fail` with the remediation
 message:
 
 > No baseline found for `<surface-id>/<viewport>`. Run
 > `/validate:visual-regression --bootstrap` to capture first baselines.
+
+An **UNREADABLE** baseline fails the same way, with its own message naming the
+warning instead of sending the operator to bootstrap:
+
+> Baseline for `<surface-id>/<viewport>` exists but could not be read:
+> `<code>` — `<detail>`. Repair the named file, or delete it and re-capture
+> with `/validate:visual-regression --bootstrap`; a rebaseline on its own does
+> not clear a schema-invalid sidecar.
 
 Persist the envelope and stop. **Never silently auto-create a baseline.**
 
@@ -158,8 +194,17 @@ Invoke `scripts/visual-regression-gate.sh <registry_path> <codePath>` (add
 (`surfaces[]` + `summary`). Playwright reaches the site over HTTP via
 `PLAYWRIGHT_BASE_URL`.
 
-Verify the script's stdout is valid JSON (`jq empty`). If not, surface stderr
-verbatim and stop.
+**Check the gate's exit code first, before you look at its stdout.** On a
+non-zero exit code, surface its stderr verbatim and stop, whatever stdout
+parsed as — the exit code is the signal that carries the failure, and stderr
+carries the actionable message (an absent suite exits 2 with
+`tests/visual/ not found — run /setup-visual-regression first` on stderr and
+nothing at all on stdout). On exit 0, verify stdout is valid JSON with
+`jq empty`, and treat **empty stdout as invalid regardless of the exit code**:
+`jq empty` succeeds on empty input, so a check that only parses stdout reports
+valid JSON for a gate that produced none, proceeds, and never shows the stderr
+that explains the failure. On invalid or empty stdout, surface stderr verbatim
+and stop.
 
 ### Authenticated surfaces (stack-neutral)
 

@@ -3,8 +3,11 @@
 # (reworked v4.13.0, Task C — codePath-native).
 #
 # Covers: store_missing, codePath-native scan, viewport-name parse,
-# hash_mismatch, component_missing_meta, --legacy-path flag, exit-0-always.
-# Run pre-PR.
+# hash_mismatch, component_missing_meta, --legacy-path flag, exit-0-always,
+# BOTH filename shapes (ordinal and the no-ordinal form the starter template
+# actually emits), authed baselines under tests/visual/auth/<ctx>/, and the
+# --registry cross-reference that separates an unregistered leftover directory
+# from a registered surface with no baselines. Run pre-PR.
 
 set -eu
 
@@ -126,6 +129,120 @@ if [ -z "$GARBAGE" ] && echo "$OUT" | jq -e '.warnings[] | select(.code == "meta
   pass_check "non-visual-chromium project segment → warning, no garbage viewport emitted"
 else
   fail_check "non-visual-chromium segment — garbage='$GARBAGE' out=$OUT"
+fi
+
+# === Test 11: the NO-ORDINAL filename shape the starter template produces ===
+# Every fixture above is ordinal-form. The plugin's own template names its
+# snapshot (`toHaveScreenshot('<id>.png')`), which suppresses the ordinal, so
+# the shape a default setup emits was the one shape this suite never built —
+# which is why a reader that rejected all of them passed it.
+SNAP4="$CP/tests/visual/blog.spec.ts-snapshots"
+mkdir -p "$SNAP4"
+printf 'BLOG' > "$SNAP4/blog-visual-chromium-tablet-linux.png"
+OUT=$(bash "$SCRIPT" "$CP" 2>/dev/null)
+BLOG_VP=$(echo "$OUT" | jq -r '.components[] | select(.name=="blog") | .viewports[0].viewport')
+if [ "$BLOG_VP" = "tablet" ]; then
+  pass_check "no-ordinal baseline (template default shape) parsed: surface=blog, viewport=tablet"
+else
+  fail_check "no-ordinal shape — viewport='$BLOG_VP' out=$OUT"
+fi
+
+# === Test 12: authed baseline with a -<ctx> segment, two levels deeper ===
+# Scaffolded under tests/visual/auth/<ctx>/, so it is both deeper than the old
+# maxdepth 1 scan and carrying a context segment the viewport must not absorb.
+AUTH_SNAP="$CP/tests/visual/auth/editor/account.spec.ts-snapshots"
+mkdir -p "$AUTH_SNAP"
+printf 'ACCT' > "$AUTH_SNAP/account-visual-chromium-lg-editor-linux.png"
+OUT=$(bash "$SCRIPT" "$CP" 2>/dev/null)
+ACCT_VP=$(echo "$OUT" | jq -r '.components[] | select(.name=="account") | .viewports[0].viewport')
+if [ "$ACCT_VP" = "lg" ]; then
+  pass_check "authed baseline under auth/<ctx>/ scanned; viewport=lg, context not folded in"
+else
+  fail_check "authed baseline — viewport='$ACCT_VP' (expected lg) out=$OUT"
+fi
+
+# === Registry cross-reference fixtures ===
+# A removed surface leaves its emptied <id>.spec.ts-snapshots/ behind. Without
+# the registry that directory is indistinguishable from a registered surface
+# that has never been baselined, and a pre-check built on this reader cannot
+# fail loudly on the second while ignoring the first.
+RCP="$TMPDIR/rcp"
+mkdir -p "$RCP/tests/visual/live-one.spec.ts-snapshots"
+mkdir -p "$RCP/tests/visual/gone.spec.ts-snapshots"   # orphan: emptied, unregistered
+printf 'L' > "$RCP/tests/visual/live-one.spec.ts-snapshots/live-one-visual-chromium-desktop-linux.png"
+cat > "$RCP/registry.yml" <<'EOF'
+schema_version: "1.3"
+viewports:
+  - {name: desktop, width: 1920, height: 1080}
+surfaces:
+  - id: live-one
+    url: "/"
+    gates: [visual_regression]
+  - id: no-baseline
+    url: "/nb"
+    gates: [visual_regression]
+  - id: e2e-only
+    url: "/e"
+    gates: [e2e]
+EOF
+
+HAVE_YAML=0
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' >/dev/null 2>&1; then
+  HAVE_YAML=1
+fi
+
+# === Test 13: without a registry the cross-reference is announced as not run ===
+# and nothing is dropped — an unchecked reader must not look like a clean one.
+OUT=$(bash "$SCRIPT" "$RCP" 2>/dev/null)
+if [ "$(echo "$OUT" | jq -r '.registry_checked')" = "false" ] \
+   && echo "$OUT" | jq -e '.warnings[] | select(.code == "registry_not_checked")' >/dev/null \
+   && [ "$(echo "$OUT" | jq -r '[.components[].name] | index("gone") != null')" = "true" ] \
+   && [ "$(echo "$OUT" | jq -r '.components[] | select(.name=="gone") | .orphan')" = "null" ]; then
+  pass_check "no registry → registry_checked false, registry_not_checked warning, orphan null (not a claim)"
+else
+  fail_check "no-registry posture — out=$OUT"
+fi
+
+if [ "$HAVE_YAML" -eq 1 ]; then
+  OUT=$(bash "$SCRIPT" "$RCP" --registry "$RCP/registry.yml" 2>/dev/null)
+
+  # === Test 14: an unregistered leftover directory is marked, not dropped ===
+  if [ "$(echo "$OUT" | jq -r '.registry_checked')" = "true" ] \
+     && [ "$(echo "$OUT" | jq -r '.components[] | select(.name=="gone") | .orphan')" = "true" ] \
+     && echo "$OUT" | jq -e '.warnings[] | select(.code == "orphan_snapshot_dir") | select(.detail | test("gone"))' >/dev/null; then
+    pass_check "orphan snapshot dir → orphan true + orphan_snapshot_dir warning naming it"
+  else
+    fail_check "orphan detection — out=$OUT"
+  fi
+
+  # === Test 15: the three cases are distinguishable from the output alone ===
+  WITH_BASE=$(echo "$OUT" | jq -r '[.components[] | select(.orphan == false and (.viewports | length) > 0) | .name] | join(",")')
+  NO_BASE=$(echo "$OUT" | jq -r '[.components[] | select(.orphan == false and (.viewports | length) == 0) | .name] | join(",")')
+  ORPHANED=$(echo "$OUT" | jq -r '[.components[] | select(.orphan == true) | .name] | join(",")')
+  if [ "$WITH_BASE" = "live-one" ] && [ "$NO_BASE" = "no-baseline" ] && [ "$ORPHANED" = "gone" ] \
+     && echo "$OUT" | jq -e '.warnings[] | select(.code == "surface_without_baselines") | select(.detail | test("no-baseline"))' >/dev/null; then
+    pass_check "registered-with-baselines / registered-without / unregistered-leftover all distinguishable"
+  else
+    fail_check "three-case split — with='$WITH_BASE' without='$NO_BASE' orphan='$ORPHANED' out=$OUT"
+  fi
+
+  # === Test 16: an e2e-only surface is not reported as missing a baseline ===
+  if ! echo "$OUT" | jq -e '.warnings[] | select(.code == "surface_without_baselines") | select(.detail | test("e2e-only"))' >/dev/null; then
+    pass_check "surface without the visual_regression gate is not flagged as unbaselined"
+  else
+    fail_check "e2e-only surface flagged as missing a visual baseline — out=$OUT"
+  fi
+else
+  fail_check "python3 + PyYAML unavailable — the registry cross-reference tests did NOT run (install PyYAML; a skipped check is not a passing one)"
+fi
+
+# === Test 17: an unreadable registry degrades to no-registry, exit 0 ===
+RC=0; OUT=$(bash "$SCRIPT" "$RCP" --registry "$RCP/does-not-exist.yml" 2>/dev/null) || RC=$?
+if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.registry_checked')" = "false" ] \
+   && echo "$OUT" | jq -e '.warnings[] | select(.code == "registry_not_checked")' >/dev/null; then
+  pass_check "unreadable registry → degrades to no-registry behaviour, says so, exit 0"
+else
+  fail_check "registry degradation — rc=$RC out=$OUT"
 fi
 
 if [ "$FAIL" -ne 0 ]; then

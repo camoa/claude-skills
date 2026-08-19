@@ -36,12 +36,46 @@ process recipe) are installed at the **codePath root** (where
 there. `tests/visual/` and `tests/e2e/` are test directories, not separate npm
 packages.
 
+## Reading a script's warnings (applies to every step below)
+
+Every script and skill this layer consumes reports a `warnings[]` array naming
+what went wrong, and the rule for each step that runs one is the same: **surface
+`warnings[]` before acting on the result.** Print each entry as
+`<code>: <detail>`, then branch. A result field read on its own — a null
+`codePath`, an absent baseline, an empty component list — says something is
+wrong but not what, and two causes with the same field value usually need
+opposite fixes, so a step that reads the field and discards the warnings will
+state the wrong remediation with confidence. This governs
+`project-state-read.sh` (Step 0), the `process-recipe-loader` skill (Step 0a),
+`migrate-screenshots-to-codepath.sh` (Step 5), and `screenshot-store-read.sh` in
+`/validate-visual-regression`. Surface whatever codes the script reports, by
+code and detail; never filter to a fixed list of codes, which goes stale the
+moment a script learns a new one.
+
 ## Step 0: Resolve project + codePath
 
 Resolve the active project and `codePath` from `project_state.md` by running
-`${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash)
-and parsing `.codePath`. If `codePath` is null, prompt the user to run
-`/set-code-path` and stop. Then persist session context:
+`${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash).
+Parse the whole object and read its `warnings[]` **before** branching on
+`.codePath`. Print every entry as `<code>: <detail>`, then decide the
+remediation from what the warnings say — a null `codePath` on its own does not
+tell you which failure you have, because the reader answers a bad folder
+argument with a well-formed object whose `codePath` is null too:
+
+- **A `folder_missing` warning is present** → the **folder argument is wrong**.
+  The named project folder does not exist, so nothing was read and `codePath` is
+  null as a consequence, not as a setting. Print
+  `"setup-visual-regression: project folder <project_folder> does not exist. Check the project name and re-run."`
+  and stop. Do **not** send the operator to `/set-code-path`: the code path was
+  never read, and setting one on a folder that does not exist fixes nothing.
+- **`codePath` is null with no `folder_missing` warning** → the folder was read
+  and the code path genuinely is unset. Prompt the user to run `/set-code-path`
+  and stop.
+
+These are two different failures with two different fixes and must never be
+collapsed into one message.
+
+Then persist session context:
 `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" null null` (Bash).
 
 The surface registry is `<codePath>/.visual-review/registry.yml` — shared with
