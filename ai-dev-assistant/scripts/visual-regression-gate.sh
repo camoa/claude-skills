@@ -80,11 +80,23 @@ add_warning() { WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }
 
 emit() {
   # $1 surfaces, $2 summary
+  #
+  # ORDER THE SURFACES WORST FIRST. Nothing used to rank them, so a reviewer
+  # walking fifteen panels got them in whatever order they happened to appear and
+  # started wherever the alphabet put them. Failures come first, ordered by how
+  # much moved; then warnings; then passes. The eye starts where the damage is.
+  #
+  # report_dir ties this verdict to the report it was produced alongside. Without
+  # it "the report from this run" is unenforceable, because the html reporter used
+  # to write one shared directory that any later run replaced.
   jq -nc \
     --argjson s "$1" --argjson sm "$2" \
     --arg rp "$REGISTRY_PATH" --arg pp "$PROJECT_PREFIX" \
+    --arg rd "${REPORT_DIR:-}" --arg rid "${REPORT_ID:-}" \
     --argjson ci "$CI_MODE" --argjson pe "${PW_EXIT:-0}" --argjson w "$WARNINGS" '
-    { surfaces: $s, summary: $sm, registry_path: $rp,
+    def rank: if .verdict == "fail" then 0 elif .verdict == "warning" then 1 else 2 end;
+    { surfaces: ($s | sort_by([rank, -((.diff_pixels // .diff_percent // 0)), .id])),
+      summary: $sm, registry_path: $rp, report_dir: $rd, report_id: $rid,
       project_pattern: $pp, ci_mode: $ci, playwright_exit: $pe, warnings: $w }'
 }
 
@@ -181,10 +193,22 @@ PW_EXIT=0
 # version old enough to ignore it the JSON would go to the /dev/null'd stdout and
 # this file stays empty — which degrades fail-safe to the playwright_no_json branch
 # below, never a false pass.)
+# RUN-SCOPED REPORT. The html reporter used to write the single shared
+# `playwright-report/`, so any later Playwright run in the same checkout silently
+# replaced it. Observed: a verifier ran one unrelated command and the served
+# report went from 15 tests to 1, while the recorded verdict still said pass and
+# the server still returned 200. "Walk every surface in the report from this run"
+# has no meaning while the report is last-writer-wins global state.
+REPORT_ID="${VR_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
+REPORT_DIR=".visual-review/reports/$REPORT_ID"
+mkdir -p "$CODE_PATH/$REPORT_DIR" 2>/dev/null || true
+
 PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-$$.json")"
 ( cd "$CODE_PATH" \
   && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
-     npx playwright test "${PROJ_ARGS[@]}" --workers "$VR_WORKERS" --reporter=json,html >/dev/null 2>&1 ) || PW_EXIT=$?
+     PLAYWRIGHT_HTML_OUTPUT_DIR="$REPORT_DIR" \
+     npx playwright test "${PROJ_ARGS[@]}" --workers "$VR_WORKERS" \
+       --reporter="json,html:$REPORT_DIR" >/dev/null 2>&1 ) || PW_EXIT=$?
 PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
 rm -f "$PW_JSON_FILE"
 
@@ -258,6 +282,8 @@ while IFS= read -r row; do
   # Best-effort diff_percent — Playwright screenshot errors carry
   # "(ratio 0.NN of all image pixels)". Take the max ratio for the surface.
   diff_percent='null'
+  diff_pixels='null'
+  diff_path='null'
   failure_kind='null'
   if [ "$verdict" = "fail" ]; then
     ERR_TEXT=$(jq -r '.errors[]? // ""' <<<"$row")
@@ -279,13 +305,37 @@ while IFS= read -r row; do
       failure_kind=$(jq -Rn --arg d "$DIMS" '"dimension_change: " + $d')
     else
       failure_kind='"pixel_diff"'
+
+      # EXACT COUNT FIRST. Playwright's message carries both an absolute pixel
+      # count and a ratio: "N pixels (ratio 0.NN of all image pixels) are
+      # different". The count is exact; the ratio is printed to two decimals, so
+      # multiplying it by 100 yields a figure that moves only in whole
+      # percentage points. The old code then formatted that to four decimals —
+      # four digits of precision it does not have. Against a small tolerance the
+      # entire decision band collapsed onto 0 or 1, so the number offered to
+      # triage a borderline failure was blind exactly where it mattered.
+      max_pixels=$(printf '%s' "$ERR_TEXT" \
+        | grep -oE '[0-9]+ pixels' \
+        | grep -oE '[0-9]+' \
+        | sort -rn | head -1)
+      [ -n "$max_pixels" ] && diff_pixels="$max_pixels"
+
       max_ratio=$(printf '%s' "$ERR_TEXT" \
         | grep -oE 'ratio [0-9]+\.[0-9]+' \
         | grep -oE '[0-9]+\.[0-9]+' \
         | sort -rn | head -1)
       if [ -n "$max_ratio" ]; then
-        diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.4f", r * 100 }')
+        # Two decimals in, two decimals out. No invented digits.
+        diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.2f", r * 100 }')
       fi
+
+      # Playwright writes its diff image under test-results/ in a hash-mangled
+      # directory. Find it rather than leaving the reviewer to glob for it: the
+      # mandated prompt asks for this path, and an unfillable token becomes the
+      # literal word "unknown" at the moment a human decides regression versus
+      # intentional.
+      found_diff=$(find "$CODE_PATH/test-results" -type f -name "*${sid}*diff.png" 2>/dev/null | head -1)
+      [ -n "$found_diff" ] && diff_path=$(jq -Rn --arg p "$found_diff" '$p')
     fi
   fi
 
@@ -298,8 +348,9 @@ while IFS= read -r row; do
 
   SURFACES=$(jq -c \
     --arg id "$sid" --arg v "$verdict" --argjson dp "$diff_percent" --argjson fv "$FAILED_VPS" \
-    --argjson fk "$failure_kind" '
-    . + [{id:$id, verdict:$v, diff_percent:$dp, failure_kind:$fk, failed_viewports:$fv}]' <<<"$SURFACES")
+    --argjson fk "$failure_kind" --argjson dpx "$diff_pixels" --argjson dpath "$diff_path" '
+    . + [{id:$id, verdict:$v, diff_percent:$dp, diff_pixels:$dpx, diff_path:$dpath,
+          failure_kind:$fk, failed_viewports:$fv}]' <<<"$SURFACES")
 done <<<"$SURFACE_ROWS"
 
 SUMMARY=$(jq -nc --argjson r "$RUN" --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" \

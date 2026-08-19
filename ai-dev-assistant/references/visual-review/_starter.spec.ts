@@ -48,6 +48,7 @@
  * Changing the snapshot name (or adding a second capture call) orphans every
  * committed baseline for this surface. See tests/visual/README.md.
  */
+import { existsSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { prepareForCapture } from '__STABILITY_MODULE___capture-stability.mjs';
 __SCREENSHOT_IMPORT__
@@ -64,7 +65,7 @@ test.describe('__SURFACE_ID__ visual regression', () => {
 
   // Viewports (driven by playwright.config.ts visual-chromium-* projects):
   //   __VIEWPORTS__
-  test('visual regression', async ({ page }) => {
+  test('visual regression', async ({ page }, testInfo) => {
     // Masks — dynamic regions painted over before capture (from registry.yml
     // `masks`). A recipe-supplied capture helper may also write a paired
     // accessibility snapshot; such a11y diffs surface in the report (warning-only in v1).
@@ -75,6 +76,26 @@ test.describe('__SURFACE_ID__ visual regression', () => {
       page.locator('[data-vrt-mask]'),
       __MASKS_ARRAY__
     ];
+    // ATTACH BEFORE ASSERTING. `toHaveScreenshot` attaches expected/actual/diff
+    // only when the comparison FAILS, so with every surface passing the HTML
+    // report renders green rows and zero images — and an instruction to walk
+    // every surface cannot be complied with when there is nothing to walk.
+    //
+    // Attaching the resolved baseline costs no extra capture: it is the image
+    // that is about to be compared against, and on a passing surface it is what
+    // rendered. Playwright still adds its own actual and diff on a failure.
+    //
+    // The `-expected.png` suffix is load-bearing — the HTML reporter recognises
+    // the expected/actual/diff trio by suffix and activates its drag-to-reveal
+    // slider. Any other name produces a flat attachment list instead.
+    const baselinePath = testInfo.snapshotPath('__SURFACE_ID__.png');
+    if (existsSync(baselinePath)) {
+      await testInfo.attach('__SURFACE_ID__-expected.png', {
+        path: baselinePath,
+        contentType: 'image/png',
+      });
+    }
+
     __SCREENSHOT_CAPTURE__
   });
 });

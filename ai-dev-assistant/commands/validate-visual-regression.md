@@ -230,12 +230,20 @@ gate change is needed for these:
   `screenshot-store-read.sh`; it does not assume the suffix shape, so both forms
   (authed or anonymous) are covered with no logic change.
 
-## Step 9: Classify each failed surface
+## Step 9: Classify each failed surface, then look at all of them
+
+The gate output is ordered worst first — failures by how much moved, then
+warnings, then passes. Walk it in that order; the eye should start where the
+damage is.
 
 For every surface in the gate output with `verdict: fail`:
 
 - **`--ci` mode** — no prompt; record `classification: "regression"`,
-  `baseline_updated: false`.
+  `baseline_updated: false`, and **`classification_source: "ci_default"`**. No
+  person saw this surface, and a verdict nobody made must not be recorded the
+  same way as one somebody made. Interactive classifications record
+  `classification_source: "operator"`.
+
 - **Interactive** — show the surface id, failed viewport(s), `diff_percent`,
   and the diff-image location (Playwright writes it under `test-results/`).
   Emit the `visual-regression-gate-fail` prompt from
@@ -280,6 +288,33 @@ For every surface in the gate output with `verdict: fail`:
     own declared `captured_by` value instead. Set `verdict: pass`,
     `classification: "intentional"`, `baseline_updated: true`.
   - `[c]` Cancel → `verdict: skipped`, `classification: "cancelled"`.
+
+### Step 9a: Walk every surface, not only the failed ones
+
+**This step is not optional and is not satisfied by the gate returning `pass`.**
+A surface sitting just under tolerance passes silently, and that is exactly where
+a real bug hides — a measured incident on the sibling gate moved an aggregate
+from 37% to 28% while missing six user-visible defects that took seconds to spot
+by eye.
+
+The ratio triages. Your eye decides.
+
+Open the report at the `report_dir` the gate recorded (see Step 12) and walk
+**every** surface at every viewport, including the ones that passed. Each surface
+carries an attached image whether it passed or failed, so there is something to
+look at in every row. Where a surface passed but the render is wrong, write it
+down — that observation is the actual output of this step.
+
+Then record the outcome in the result:
+
+- `human_reviewed: true` with a timestamp, when a person walked every surface
+  this run.
+- `human_reviewed: false` under `--ci`, by definition, and that is the honest
+  value. A run that skipped the eyeball pass must not be indistinguishable from
+  one that did it.
+
+A run whose metric passed and whose `human_reviewed` is `false` is an incomplete
+review, not a green one.
 
 ## Step 10: Aggregate + emit the envelope
 
@@ -365,8 +400,21 @@ If `--show-diffs` was passed, run `npx playwright show-report` host-side from
 `codePath` (default port 9323; if busy, Playwright picks the next free port).
 Print the report URL.
 
-Every VR run produces a current `playwright-report/`, so `show-report` always has
-something to open and its image-diff view carries the **Slider** (drag-to-reveal
+Point `show-report` at the **`report_dir` the gate recorded in its output**, not
+at the ambient `playwright-report/`.
+
+An earlier revision of this section guaranteed that every run produces a current
+`playwright-report/`, so `show-report` always has something to open. That was not
+true: the html reporter wrote one shared directory, and any later Playwright run
+in the same checkout silently replaced it. Observed during the proving run — a
+verifier ran one unrelated command and the served report went from 15 tests to 1,
+while the recorded verdict still said pass and the server still returned 200.
+Every signal read healthy and the artifact a human was being pointed at had been
+destroyed.
+
+The gate now writes to a run-scoped directory and records `report_dir` and
+`report_id` alongside the verdict, so the report you open is the one that run
+produced. Its image-diff view carries the **Slider** (drag-to-reveal
 baseline↔current) widget. This holds on **both** paths: the gate
 (`scripts/visual-regression-gate.sh`) runs `npx playwright test --reporter=json,html`
 (a CLI `--reporter` replaces the config one, so the gate requests html itself,
