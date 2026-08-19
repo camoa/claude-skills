@@ -116,27 +116,65 @@ while IFS= read -r snap_dir; do
     [ -z "$png_file" ] && continue
     png_base=$(basename "$png_file" .png)
 
-    # Filename: <stem>-<ordinal>-<projectName>-<platform>.png
-    # We know <stem> from the directory name, so strip it deterministically.
+    # Filename: <stem>[-<ordinal>]-visual-chromium-<viewport>[-<ctx>]-<platform>.png
+    #
+    # BOTH shapes are real and both are read. The plugin's own starter template
+    # NAMES its snapshot (`toHaveScreenshot('<id>.png')`), which suppresses the
+    # ordinal entirely — so the no-ordinal form is what a default setup produces,
+    # and it is what the migration script writes. Playwright assigns an ordinal
+    # only when a capture call passes no name, which is what a recipe-supplied
+    # anonymous capture does.
+    #
+    # An earlier revision hardcoded the ordinal as always present. Against the
+    # plugin's own default output it computed ordinal="visual", project="chromium-<vp>",
+    # failed its own prefix test, and warned-and-skipped EVERY file — so the reader
+    # could not tell fifteen baselines from fourteen, and the "loud failure on a
+    # missing baseline" guarantee built on it reported every baseline as absent.
     rest="${png_base#"$stem"-}"
     if [ "$rest" = "$png_base" ]; then
       STORE_WARNINGS=$(jq -cn --argjson p "$STORE_WARNINGS" --arg f "$png_base" \
-        '$p + [{code:"meta_schema_mismatch",detail:("baseline \($f) does not match <stem>-<ordinal>-<project>-<platform>")}]' )
+        '$p + [{code:"meta_schema_mismatch",detail:("baseline \($f) does not begin with its surface stem")}]' )
       continue
     fi
-    ordinal="${rest%%-*}"
+
     platform="${rest##*-}"
-    project="${rest#"$ordinal"-}"
-    project="${project%-"$platform"}"
-    # The project segment must be visual-chromium-<viewport>; anything else is a
-    # stray file (a renamed surface's leftover, a hand-placed PNG) — warn + skip,
-    # never emit a garbage viewport name.
-    if [ "${project#visual-chromium-}" = "$project" ]; then
+    body="${rest%-"$platform"}"
+
+    # Strip a leading numeric ordinal when one is present. Only digits — a
+    # viewport or context name never leads with a bare integer segment.
+    case "$body" in
+      [0-9]*-*)
+        maybe_ordinal="${body%%-*}"
+        case "$maybe_ordinal" in
+          *[!0-9]*) ;;                       # not purely numeric — leave it alone
+          *) body="${body#"$maybe_ordinal"-}" ;;
+        esac
+        ;;
+    esac
+
+    # The project segment must be visual-chromium-<viewport>[-<ctx>]; anything else
+    # is a stray file (a renamed surface's leftover, a hand-placed PNG) — warn +
+    # skip, never emit a garbage viewport name.
+    if [ "${body#visual-chromium-}" = "$body" ]; then
       STORE_WARNINGS=$(jq -cn --argjson p "$STORE_WARNINGS" --arg f "$png_base" \
         '$p + [{code:"meta_schema_mismatch",detail:("baseline \($f) project segment is not visual-chromium-<viewport>")}]' )
       continue
     fi
-    viewport="${project#visual-chromium-}"
+    viewport="${body#visual-chromium-}"
+
+    # An authenticated surface carries a trailing -<ctx> segment. Do NOT guess
+    # where the viewport ends: the context is knowable from the path, because
+    # authed specs are scaffolded under tests/visual/auth/<ctx>/. Folding the
+    # context into the viewport name emits a viewport no consumer will match on.
+    case "$snap_dir" in
+      */tests/visual/auth/*)
+        ctx_from_path="${snap_dir#*/tests/visual/auth/}"
+        ctx_from_path="${ctx_from_path%%/*}"
+        if [ -n "$ctx_from_path" ] && [ "${viewport%-"$ctx_from_path"}" != "$viewport" ]; then
+          viewport="${viewport%-"$ctx_from_path"}"
+        fi
+        ;;
+    esac
 
     meta_file="$snap_dir/$png_base.meta.json"
     vp_warnings='[]'
@@ -191,6 +229,11 @@ while IFS= read -r snap_dir; do
 
   COMPONENTS_JSON=$(jq -c -n --argjson cur "$COMPONENTS_JSON" --arg n "$stem" --argjson vps "$viewports_json" \
     '$cur + [{name:$n, viewports:$vps}]')
-done < <(find "$STORE_DIR" -maxdepth 1 -mindepth 1 -type d -name '*.spec.ts-snapshots' 2>/dev/null | sort)
+# Depth 3, not 1. Authenticated surfaces are scaffolded under
+# tests/visual/auth/<ctx>/, so their snapshot directories sit two levels deeper.
+# At maxdepth 1 the reader never scanned them — an authed baseline was not
+# mis-read, it was invisible, and any count built on this reader silently omitted
+# every authenticated surface.
+done < <(find "$STORE_DIR" -maxdepth 3 -mindepth 1 -type d -name '*.spec.ts-snapshots' 2>/dev/null | sort)
 
 emit_json true "$COMPONENTS_JSON" "$STORE_WARNINGS"

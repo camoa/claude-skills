@@ -131,17 +131,33 @@ If `--add-surface <url>` is present, skip steps 1–9:
 2. Prompt the user for the surface `id` (kebab-case, `^[a-z0-9][a-z0-9-]*$`),
    the `viewports` (default: the registry's top-level matrix), and any `masks`
    (CSS selectors).
-3. Append the surface entry to `surfaces:` in `registry.yml` with
+3. **Check the `id` is not already registered.** The schema requires surface ids to
+   be **unique** within `surfaces[]`, and this path appends. Read the existing
+   `surfaces:` and compare — appending unconditionally writes a duplicate `id` and
+   the registry becomes schema-invalid with nothing reporting it.
+   - **No entry carries that `id`** → continue to step 4.
+   - **An entry carries that `id`, and its `url`, `viewports` and `masks` match what
+     the operator just gave** → this is a re-run, and this command is documented as
+     idempotent, so it is a clean no-op rather than an error. Print
+     `"setup-visual-regression: surface <id> is already registered with the same url and masks — nothing to append."`
+     then skip step 4 and continue with steps 5 and 6, which are themselves
+     idempotent.
+   - **An entry carries that `id` but with a different `url`, `viewports` or
+     `masks`** → a collision. Do **not** append, and do **not** silently rewrite the
+     existing entry. Print
+     `"setup-visual-regression: surface <id> is already registered with url <existing-url>, which differs from <new-url>. Edit that entry in <codePath>/.visual-review/registry.yml to change it, or re-run --add-surface with a different id."`
+     and stop.
+4. Append the surface entry to `surfaces:` in `registry.yml` with
    `gates: [visual_regression]`. Do not hand-edit beyond this one entry. The
    surface is anonymous unless you also set `auth_context: "<ctx>"`.
-4. Generate the surface spec from the
+5. Generate the surface spec from the
    `references/visual-review/_starter.spec.ts` template (token substitution —
    see step 7). For an **anonymous** surface this is
    `<codePath>/tests/visual/<id>.spec.ts`. For a surface with a non-null
    `auth_context`, run the **step 7a** wiring instead (auth dir + setup stub +
    `visual-setup-<ctx>` / `visual-chromium-<vp>-<ctx>` projects + the spec at
    `tests/visual/auth/<ctx>/<id>.spec.ts`).
-5. Offer an immediate baseline capture: run the **baseline bootstrap flow**
+6. Offer an immediate baseline capture: run the **baseline bootstrap flow**
    (step 10) scoped to this one surface (`--grep "<id>"`).
 
 Re-runnable. Then stop.
@@ -354,7 +370,7 @@ the page outside the baseline while the gate stays green.
 ## Step 7: Scaffold `tests/visual/`
 
 For each VR surface in the registry, read its `auth_context` field (schema
-v1.2). A surface with `auth_context` **null or absent** is **anonymous** — it is
+v1.3). A surface with `auth_context` **null or absent** is **anonymous** — it is
 handled here. A surface with a **non-null** `auth_context` is **authenticated**
 — it is handled in step 7a (its spec, project, and storageState wiring differ).
 

@@ -22,17 +22,23 @@ on a project with no registry runs zero new gates and prints the opt-in notice.
 
 | Layer | File | Written by | Lifetime |
 |---|---|---|---|
-| **Project registry** | `<project>/.visual-review/registry.yml` | `/setup-*` commands | Outlives any task |
+| **Project registry** | `<codePath>/.visual-review/registry.yml` | `/setup-*` commands | Outlives any task |
 | **Task fragment** | `<task_folder>/visual-review-surfaces.yml` | A task that adds/changes surfaces | Merged into the project registry at `/complete`, then archived with the task |
 
-`<project>` is the **memory project folder** (the one holding `project_state.md`,
-`implementation_process/`, `.screenshots/`). The registry co-locates with the existing
-`.screenshots/` store — both are project-scoped review metadata, not code.
+`<codePath>` is the code checkout — the folder holding `playwright.config.ts` and
+`tests/visual/`. The registry co-locates with the committed `tests/visual/` suite it
+describes: the surfaces, viewports and masks travel with the specs and baselines that
+consume them. This is where `/setup-visual-regression` and `/setup-e2e` write it, and
+where every project with visual review set up actually has one.
 
-> **Relocatable (research D7).** Task C may move the `.screenshots/` store to
-> `codePath` when it resolves the screenshot-store fork. If it does, the registry may
-> follow. Consumers MUST resolve the registry path from the `project_state.md`
-> `**Visual Review:**` pointer (below), never hardcode `.visual-review/registry.yml`.
+> **Registries in an older location.** Earlier revisions of this schema specified the
+> registry in the **memory-project folder**, beside `project_state.md` and
+> `.screenshots/`. A project set up against that text may still carry one there. The
+> code path is the single home now; move such a file to
+> `<codePath>/.visual-review/registry.yml`.
+
+Consumers MUST resolve the registry path from the `project_state.md`
+`**Visual Review:**` pointer (below), never hardcode `.visual-review/registry.yml`.
 
 ## 2. Pointer in `project_state.md`
 
@@ -46,8 +52,8 @@ following the `**Code path:**` / `**Playbook Sets:**` pointer convention:
 Grammar — `**Visual Review:** <state> <relative-path>`:
 
 - `<state>` — `enabled` or `disabled`. First whitespace-delimited token.
-- `<relative-path>` — registry file path relative to the project folder. Remainder of
-  the line. Must resolve **within** the project folder (path-escape rejected — see
+- `<relative-path>` — registry file path, relative to `codePath`. Remainder of
+  the line. Must be relative and must not escape its base (path-escape rejected — see
   `scripts/project-state-read.sh`).
 - **Absent line** ⇒ the project has not set up visual review at all.
 - `disabled` ⇒ set up once but currently off; `/review` skips the new gates.
@@ -55,7 +61,7 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 `scripts/project-state-read.sh` parses this field into
 `visualReview: {enabled, registryPath}` (or `null` when absent). See its header.
 
-## 3. Project registry schema (`registry.yml`) v1.2
+## 3. Project registry schema (`registry.yml`) v1.3
 
 ```yaml
 schema_version: "1.3"
@@ -203,7 +209,7 @@ This is the seam that removed the last hardcoded preflight command from the gate
 A task that adds or changes review coverage drops a fragment in its task folder:
 
 ```yaml
-schema_version: "1.0"
+schema_version: "1.3"
 surfaces:
   - id: checkout-summary
     url: "/checkout"
@@ -211,6 +217,8 @@ surfaces:
 ```
 
 - **Identical `surfaces:` shape** to the project registry.
+- **Same `schema_version`** as the project registry — a fragment is governed by this
+  document, not versioned on its own track.
 - **No `viewports:` block** — a fragment inherits the project default matrix. A surface
   that needs a non-default matrix sets its own `viewports:` field.
 - Merged into the project registry at `/complete`.

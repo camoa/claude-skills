@@ -89,6 +89,28 @@ excluded from this run — they skip baseline checks, diffing, and classificatio
 If no surface has `visual_regression` in `gates` → emit `verdict: skipped`,
 message `"registry has no visual_regression surfaces"`, persist, and stop.
 
+**Unrecognised gate tokens (a skip that was not a choice).** The registry schema
+defines `gates` as a subset of `[e2e, visual_regression, visual_parity]`. While
+collecting surfaces, check every token in every surface's `gates` list against
+that vocabulary. A token that is **not in the schema** vocabulary matches no
+gate, so its surface drops out of the run looking exactly like a surface the
+author deliberately left uncovered. Do not let that pass silently. For each such
+token emit a **warning** naming the surface and the offending token:
+
+> Surface `<surface-id>` declares gate `<token>`, which is not in the schema
+> vocabulary `[e2e, visual_regression, visual_parity]`. It matches no gate, so
+> the surface was skipped. The likeliest culprit is `visual` — the published
+> Drupal process recipe writes that token, and the registry value has to be
+> `visual_regression`.
+
+Carry every such warning into `details.gate_token_warnings[]` and into the
+envelope `message`, and raise the aggregated verdict to `warning` when the run
+would otherwise be `pass` or `skipped`. When an unrecognised token is the reason
+no surface was selected, the emitted `skipped` must say so instead of the plain
+`"registry has no visual_regression surfaces"` message — a skip caused by a
+misconfigured token has to be distinguishable in the output from a skip that was
+a deliberate configuration choice.
+
 ## Step 6: Check baselines exist (loud failure on missing)
 
 For each (surface × viewport), the expected baseline is
@@ -190,20 +212,28 @@ For every surface in the gate output with `verdict: fail`:
   - `[r]` Regression → `verdict: fail`, `classification: "regression"`,
     `baseline_updated: false`.
   - `[i]` Intentional → run `baseline-manager.sh --update-baselines
-    "intentional-ui-change" --registry <reg> --codepath <codePath> --grep
-    "<surface-id>" --triggered-by validate-visual-regression:classify` in the
-    two-stage model. Run plan stage first, show the user the planned surfaces +
+    "intentional-ui-change" --registry <reg> --codepath <codePath>
+    --exact-surface <surface-id> --triggered-by validate-visual-regression:classify`
+    in the two-stage model. `--exact-surface` scopes the plan stage and the
+    execute stage to the same single surface; a bare `--grep <id>` does not — it
+    over-matches any surface whose id is a prefix of another (`--grep "couple"`
+    also rebaselines `couples-list`, discarding a genuine regression while the
+    blanket warning stays silent), and `--grep '<id>\b'` is the word-boundary
+    form if grep must be used at all.
+    Run plan stage first, show the user the planned surfaces +
     a final `[y]/[n]` "about to write" check, then re-invoke with `--confirmed`.
     After the confirmed update, write the provenance sidecar for each updated
     baseline PNG: **glob** `<codePath>/tests/visual/<surface-id>.spec.ts-snapshots/*.png`
     for the filenames Playwright actually wrote — do NOT assume the platform
     suffix (`-linux.png` on Linux, `-darwin.png` on macOS). For each, invoke
     `screenshot-store-write.sh write-baseline-codepath <codePath> <surface-id>
-    <png-filename> <viewport-name> framework-playwright <task>`, where
+    <png-filename> <viewport-name> playwright <task>`, where
     `<viewport-name>` is the bare viewport name — the segment between
     `visual-chromium-` and `-<platform>` in the filename (e.g. `desktop`), NOT
-    the full project name. Set `verdict: pass`, `classification: "intentional"`,
-    `baseline_updated: true`.
+    the full project name. `playwright` is the accepted provenance value for a
+    capture this command drove; a recipe-supplied capture passes the recipe's
+    own declared `captured_by` value instead. Set `verdict: pass`,
+    `classification: "intentional"`, `baseline_updated: true`.
   - `[c]` Cancel → `verdict: skipped`, `classification: "cancelled"`.
 
 ## Step 10: Aggregate + emit the envelope
@@ -240,7 +270,8 @@ The `details` block:
      "a11y_diff_path": null}
   ],
   "diff_tolerance": 0.005,
-  "capture_context": "host-side"
+  "capture_context": "host-side",
+  "gate_token_warnings": []
 }
 ```
 

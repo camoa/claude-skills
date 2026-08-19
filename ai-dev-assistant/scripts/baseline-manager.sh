@@ -6,7 +6,8 @@
 #   baseline-manager.sh --bootstrap              --registry <path> --codepath <path> [opts]
 #   baseline-manager.sh --update-baselines <why> --registry <path> --codepath <path> [opts]
 #
-#   opts: [--grep <pattern>] [--confirmed] [--triggered-by <value>]
+#   opts: [--exact-surface <id>] [--grep <pattern>] [--confirmed]
+#         [--triggered-by <value>]
 #
 # TWO-STAGE CONFIRM MODEL (Task C D-impl-8)
 # -----------------------------------------
@@ -24,14 +25,41 @@
 # without an explicit user [y] — the script cannot be coaxed past PLAN mode
 # without the flag the command sets only after the prompt.
 #
-# --grep scopes the update to confirmed surfaces (selective regeneration —
-# blanket updates require an explicit no-grep run, flagged `blanket: true`).
+# SCOPING: --exact-surface vs --grep
+# ----------------------------------
+# --exact-surface <id> scopes to exactly ONE surface, and PLAN and EXECUTE
+# honour it identically: PLAN keeps the single spec stem equal to <id>, EXECUTE
+# derives its Playwright --grep from that same <id>. Prefer it.
+#
+# --grep <pattern> is the older interface and is asymmetric by nature: PLAN
+# matches the pattern against the spec-file STEM, while Playwright matches it
+# against the joined test TITLE PATH
+# (`tests/visual/couple.spec.ts:27:7 › couple visual regression › …`). A pattern
+# such as `couple` therefore sweeps up `couples-list` in both stages while
+# `blanket` stays false, so the blanket warning never fires. It is still
+# accepted, but whenever a --grep pattern plans more than one surface the
+# output carries a `grep_overmatch` warning naming every surface matched, so
+# the breadth is visible before the operator confirms. `couple\b` scopes both
+# stages correctly; `^couple$` plans one surface and then yields Playwright
+# "No tests found".
+#
+# Either flag makes the run selective — blanket updates require a run with
+# neither, flagged `blanket: true`.
 #
 # Playwright runs HOST-SIDE. The DDEV site is reached via DDEV_PRIMARY_URL.
 #
-# This script does NOT parse registry.yml — it scans tests/visual/*.spec.ts
-# and playwright.config.ts. The --registry path locates baseline-history.jsonl
-# (a sibling of the registry) and is echoed into the output.
+# VIEWPORTS: the registry passed via --registry is AUTHORITATIVE. Its top-level
+# `viewports:` block is the same list /setup-visual-regression wrote the
+# Playwright projects from, so it states the matrix independently of how the
+# config happens to express it. playwright.config.ts is scanned only as a
+# fallback, because a config that builds its projects programmatically
+# (`VIEWPORTS.map(vp => ({ name: `visual-chromium-${vp.name}` }))`) behaves
+# identically to a literal one and yields zero regex matches — which used to
+# leave `viewports: []` and abort EXECUTE. When the fallback is used the output
+# says so (`viewports_source`, plus a warning); when neither source yields a
+# viewport the failure names both. The --registry path also locates
+# baseline-history.jsonl (a sibling of the registry) and is echoed into
+# the output.
 #
 # Exit codes: 0 success (plan or execute) · 1 the --update-snapshots run failed
 #             · 2 validation / setup error.
@@ -43,6 +71,7 @@ REASON=""
 REGISTRY_PATH=""
 CODE_PATH=""
 GREP_PATTERN=""
+EXACT_SURFACE=""
 CONFIRMED=false
 TRIGGERED_BY=""
 
@@ -74,6 +103,10 @@ while [ "$#" -gt 0 ]; do
       if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then GREP_PATTERN="$2"; shift 2
       else err "--grep requires a value"; exit 2; fi
       ;;
+    --exact-surface)
+      if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then EXACT_SURFACE="$2"; shift 2
+      else err "--exact-surface requires a value"; exit 2; fi
+      ;;
     --triggered-by)
       if [ "$#" -ge 2 ] && [ -n "${2:-}" ]; then TRIGGERED_BY="$2"; shift 2
       else err "--triggered-by requires a value"; exit 2; fi
@@ -88,6 +121,9 @@ if [ -z "$MODE" ]; then
 fi
 if [ -z "$REGISTRY_PATH" ] || [ -z "$CODE_PATH" ]; then
   err "--registry and --codepath are required"; exit 2
+fi
+if [ -n "$EXACT_SURFACE" ] && [ -n "$GREP_PATTERN" ]; then
+  err "--exact-surface and --grep are mutually exclusive — --exact-surface scopes to one surface, --grep to a pattern"; exit 2
 fi
 if [ ! -d "$CODE_PATH" ]; then
   err "codePath does not exist: $CODE_PATH"; exit 2
@@ -117,30 +153,96 @@ if [ -z "$TRIGGERED_BY" ]; then
 fi
 
 BLANKET=true
-[ -n "$GREP_PATTERN" ] && BLANKET=false
+{ [ -n "$GREP_PATTERN" ] || [ -n "$EXACT_SURFACE" ]; } && BLANKET=false
 
 # ─── plan: which surfaces would be (re)captured ──────────────────────────────
-# Surface stems = tests/visual/*.spec.ts basenames. With --grep, keep stems
-# matching the pattern as an extended regex.
+# Surface stems = tests/visual/*.spec.ts basenames. --exact-surface keeps the
+# one stem equal to <id>; --grep keeps stems matching the pattern as an
+# extended regex (see the --grep asymmetry note in the header).
 SURFACES_PLANNED='[]'
 while IFS= read -r spec; do
   [ -z "$spec" ] && continue
   stem=$(basename "$spec" .spec.ts)
-  if [ -n "$GREP_PATTERN" ]; then
+  if [ -n "$EXACT_SURFACE" ]; then
+    [ "$stem" = "$EXACT_SURFACE" ] || continue
+  elif [ -n "$GREP_PATTERN" ]; then
     echo "$stem" | grep -qE "$GREP_PATTERN" 2>/dev/null || continue
   fi
   SURFACES_PLANNED=$(jq -c --arg s "$stem" '. + [$s]' <<<"$SURFACES_PLANNED")
 done < <(find "$CODE_PATH/tests/visual" -maxdepth 1 -type f -name '*.spec.ts' 2>/dev/null | sort)
 
-# Viewport names from playwright.config.ts visual projects.
+# --exact-surface names one surface: an id with no spec file is a setup error,
+# not an empty plan, so say which id and stop before EXECUTE can be reached.
+if [ -n "$EXACT_SURFACE" ] && [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -eq 0 ]; then
+  err "--exact-surface '$EXACT_SURFACE': no $CODE_PATH/tests/visual/$EXACT_SURFACE.spec.ts"
+  exit 2
+fi
+
+# A --grep pattern that plans more than one surface is the asymmetry the header
+# describes: `blanket` stays false, so the blanket "this updates ALL baselines"
+# warning never fires even though several surfaces are being rebaselined. Name
+# every surface matched so the breadth is visible before the operator confirms.
+if [ -n "$GREP_PATTERN" ] && [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -gt 1 ]; then
+  add_warning "grep_overmatch: --grep '$GREP_PATTERN' matched $(jq 'length' <<<"$SURFACES_PLANNED") surfaces ($(jq -r 'join(", ")' <<<"$SURFACES_PLANNED")) — all of them will be rebaselined; use --exact-surface <id> to scope to one"
+fi
+
+# ─── viewport matrix: registry first, playwright.config.ts as fallback ───────
+# The registry's top-level `viewports:` block is authoritative. Parsed with
+# python3 + PyYAML, the same reader scripts/fm-helpers.sh uses for task
+# frontmatter — no new dependency, and python3 being absent degrades to the
+# fallback rather than failing.
 PW_CONFIG="$CODE_PATH/playwright.config.ts"
 VIEWPORTS='[]'
-if [ -f "$PW_CONFIG" ]; then
-  while IFS= read -r vp; do
-    [ -z "$vp" ] && continue
-    VIEWPORTS=$(jq -c --arg v "$vp" '. + [$v]' <<<"$VIEWPORTS")
-  done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
-            | grep -oE 'visual-chromium-[A-Za-z0-9_-]+' | sed 's/^visual-chromium-//' | sort -u)
+VIEWPORTS_SOURCE="none"
+
+read_registry_viewports() {
+  [ -f "$REGISTRY_PATH" ] || { echo '[]'; return 0; }
+  command -v python3 >/dev/null 2>&1 || { echo '[]'; return 0; }
+  python3 -c '
+import sys, json
+try:
+    import yaml
+except ImportError:
+    print("[]"); sys.exit(0)
+try:
+    with open(sys.argv[1]) as fh:
+        data = yaml.safe_load(fh.read())
+except Exception:
+    print("[]"); sys.exit(0)
+names = []
+vps = data.get("viewports") if isinstance(data, dict) else None
+if isinstance(vps, dict):
+    vps = list(vps.keys())
+if isinstance(vps, list):
+    for entry in vps:
+        name = entry.get("name") if isinstance(entry, dict) else entry
+        if isinstance(name, str) and name.strip() and name.strip() not in names:
+            names.append(name.strip())
+print(json.dumps(names))
+' "$REGISTRY_PATH" 2>/dev/null || echo '[]'
+}
+
+REGISTRY_VIEWPORTS=$(read_registry_viewports)
+jq -e 'type == "array"' <<<"$REGISTRY_VIEWPORTS" >/dev/null 2>&1 || REGISTRY_VIEWPORTS='[]'
+
+if [ "$(jq 'length' <<<"$REGISTRY_VIEWPORTS")" -gt 0 ]; then
+  VIEWPORTS="$REGISTRY_VIEWPORTS"
+  VIEWPORTS_SOURCE="registry"
+else
+  # Fallback — scrape literal `name: 'visual-chromium-…'` strings out of the
+  # config. This finds nothing in a config that builds its projects
+  # programmatically, which is exactly why the registry is tried first.
+  if [ -f "$PW_CONFIG" ]; then
+    while IFS= read -r vp; do
+      [ -z "$vp" ] && continue
+      VIEWPORTS=$(jq -c --arg v "$vp" '. + [$v]' <<<"$VIEWPORTS")
+    done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
+              | grep -oE 'visual-chromium-[A-Za-z0-9_-]+' | sed 's/^visual-chromium-//' | sort -u)
+  fi
+  if [ "$(jq 'length' <<<"$VIEWPORTS")" -gt 0 ]; then
+    VIEWPORTS_SOURCE="playwright-config"
+    add_warning "viewports_from_config_fallback: $REGISTRY_PATH declared no top-level viewports: — fell back to scraping visual-chromium-* project names out of playwright.config.ts"
+  fi
 fi
 
 HISTORY_PATH="$(dirname "$REGISTRY_PATH")/baseline-history.jsonl"
@@ -148,12 +250,15 @@ HISTORY_PATH="$(dirname "$REGISTRY_PATH")/baseline-history.jsonl"
 emit_plan() {
   jq -nc \
     --arg mode "$MODE" --arg reason "$REASON" --arg gp "$GREP_PATTERN" \
-    --argjson blanket "$BLANKET" --argjson sp "$SURFACES_PLANNED" \
-    --argjson vp "$VIEWPORTS" --arg hp "$HISTORY_PATH" \
+    --arg es "$EXACT_SURFACE" --argjson blanket "$BLANKET" \
+    --argjson sp "$SURFACES_PLANNED" \
+    --argjson vp "$VIEWPORTS" --arg vs "$VIEWPORTS_SOURCE" --arg hp "$HISTORY_PATH" \
     --arg tb "$TRIGGERED_BY" --argjson w "$WARNINGS" '
     { stage: "plan", mode: $mode, reason: $reason,
-      grep_pattern: $gp, blanket: $blanket,
-      surfaces_planned: $sp, viewports: $vp,
+      grep_pattern: $gp,
+      exact_surface: (if $es == "" then null else $es end),
+      blanket: $blanket,
+      surfaces_planned: $sp, viewports: $vp, viewports_source: $vs,
       history_path: $hp, triggered_by: $tb, warnings: $w }'
 }
 
@@ -171,25 +276,37 @@ if [ "$(jq 'length' <<<"$SURFACES_PLANNED")" -eq 0 ]; then
   exit 0
 fi
 
-# Discover visual project names for --project flags.
+# --project flags, one per viewport in the matrix resolved above. Project names
+# follow the setup convention visual-chromium-<viewport>, so the same matrix
+# scopes the run whichever source it came from.
 PROJ_ARGS=()
 while IFS= read -r p; do
   [ -z "$p" ] && continue
-  PROJ_ARGS+=("--project" "$p")
-done < <(grep -oE "name:[[:space:]]*['\"]visual-chromium-[A-Za-z0-9_-]+['\"]" "$PW_CONFIG" 2>/dev/null \
-          | grep -oE 'visual-chromium-[A-Za-z0-9_-]+' | sort -u)
+  PROJ_ARGS+=("--project" "visual-chromium-$p")
+done < <(jq -r '.[]' <<<"$VIEWPORTS")
 
-# Refuse to run unscoped: with no visual-chromium-* projects, a bare
+# Refuse to run unscoped: with no viewports, a bare
 # `npx playwright test --update-snapshots` would regenerate snapshots for ALL
-# projects — including the e2e-chromium suite. Abort instead.
+# projects — including the e2e-chromium suite. Abort instead, naming both
+# sources so the message points at the real cause.
 if [ "${#PROJ_ARGS[@]}" -eq 0 ]; then
-  add_warning "no_visual_projects: playwright.config.ts has no visual-chromium-* projects — refusing to run --update-snapshots unscoped"
+  add_warning "no_visual_projects: no viewports from either source — $REGISTRY_PATH has no top-level viewports: block, and $PW_CONFIG has no visual-chromium-* project names to scrape (a config that builds its projects programmatically cannot be scraped; declare viewports: in the registry). Refusing to run --update-snapshots unscoped"
   jq -nc --argjson w "$WARNINGS" '{stage:"execute",updated:false,playwright_exit:0,warnings:$w}'
   exit 2
 fi
 
 PW_ARGS=(test --update-snapshots "${PROJ_ARGS[@]}")
-[ -n "$GREP_PATTERN" ] && PW_ARGS+=(--grep "$GREP_PATTERN")
+if [ -n "$EXACT_SURFACE" ]; then
+  # Playwright matches --grep against the joined title path
+  # (`tests/visual/couple.spec.ts:27:7 › couple visual regression › …`), not the
+  # stem — `^couple$` matches nothing there. Anchor on the spec filename
+  # instead, preceded by start-of-string or a non-identifier character, so
+  # `hero` cannot also select `home-hero.spec.ts`.
+  ESCAPED_SURFACE=$(printf '%s' "$EXACT_SURFACE" | sed 's/[]\.^$*+?()[{}|\\\/]/\\&/g')
+  PW_ARGS+=(--grep "(^|[^A-Za-z0-9_-])${ESCAPED_SURFACE}\\.spec\\.ts")
+elif [ -n "$GREP_PATTERN" ]; then
+  PW_ARGS+=(--grep "$GREP_PATTERN")
+fi
 
 PW_EXIT=0
 (cd "$CODE_PATH" && npx playwright "${PW_ARGS[@]}") || PW_EXIT=$?
@@ -200,9 +317,11 @@ NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HISTORY_ENTRY=$(jq -nc \
   --arg ts "$NOW_ISO" --arg trigger "$REASON" \
   --argjson surfaces "$SURFACES_PLANNED" --argjson viewports "$VIEWPORTS" \
-  --arg tb "$TRIGGERED_BY" --arg gp "$GREP_PATTERN" '
+  --arg tb "$TRIGGERED_BY" --arg gp "$GREP_PATTERN" \
+  --arg es "$EXACT_SURFACE" --arg vs "$VIEWPORTS_SOURCE" '
   { timestamp: $ts, trigger: $trigger, surfaces: $surfaces,
-    viewports: $viewports, triggered_by: $tb,
+    viewports: $viewports, viewports_source: $vs, triggered_by: $tb,
+    exact_surface: (if $es == "" then null else $es end),
     grep_pattern: (if $gp == "" then null else $gp end) }')
 if ! echo "$HISTORY_ENTRY" >> "$HISTORY_PATH" 2>/dev/null; then
   add_warning "history_append_failed: could not append to $HISTORY_PATH"
@@ -211,11 +330,15 @@ fi
 jq -nc \
   --argjson pe "$PW_EXIT" --argjson sp "$SURFACES_PLANNED" \
   --argjson blanket "$BLANKET" --arg hp "$HISTORY_PATH" \
+  --arg es "$EXACT_SURFACE" --argjson vp "$VIEWPORTS" --arg vs "$VIEWPORTS_SOURCE" \
   --argjson he "$HISTORY_ENTRY" --argjson w "$WARNINGS" '
   { stage: "execute",
     updated: ($pe == 0),
     playwright_exit: $pe,
     surfaces_updated: $sp,
+    exact_surface: (if $es == "" then null else $es end),
+    viewports: $vp,
+    viewports_source: $vs,
     blanket: $blanket,
     history_path: $hp,
     history_entry: $he,
