@@ -229,9 +229,39 @@ Dynamic regions (timestamps, contextual links, ad slots) produce false diffs.
 Add CSS selectors to a surface's `masks` in `registry.yml`; the generated spec
 resolves them to Playwright `Locator`s and paints them out before capture. For
 regions best declared in the template, add a `data-vrt-mask` attribute in the
-template markup and list `[data-vrt-mask]` in `masks`.
+template markup. **You no longer list `[data-vrt-mask]` in `masks`** — the spec
+template prepends that selector automatically, matching what the parity engine
+has always done. Hand-registering it per surface was the old instruction, and it
+rotted: a component that gained the attribute stayed unmasked on any surface
+whose registry entry nobody remembered to update. In the markup the mask travels
+with the component; in a test file it rots.
+
+Masks are also **measured**. At capture the run reports what fraction of the
+surface its masks cover and how many elements each selector matched, and
+annotates the surface in the report when that fraction is large. A mask is chosen
+to suppress noise, and nothing used to ask whether it also suppressed the
+subject — measured on one real project, the masks a standard setup produced
+covered 29 of 29 teaser cards on one surface.
 
 ## 13. CI — GitHub Actions
+
+**Read this first: CI for visual regression is deliberately not the default, and
+its absence is a decision rather than an omission.**
+
+A visual gate needs the site under test to be running, which for a Drupal project
+means a live database. That is seldom available in CI, and standing one up per
+run buys little: the thing this gate protects against is a refactor changing what
+a page looks like, and the person doing the refactor is the person who should be
+looking at the diff. This is a **local pre-commit concern**. The natural home for
+enforcement is a pre-commit hook in the project itself.
+
+The `--ci` flag exists for running the gate non-interactively where a site *is*
+available. What follows is the workflow for that case. It is not a recommendation
+that every project add one.
+
+This rationale is recorded here because an earlier review of this layer listed the
+missing CI workflow as a gap, having no way to tell a deliberate absence from an
+oversight. An unstated decision reads as a hole.
 
 Run the visual suite on `pull_request`. Baselines are committed, so CI just
 compares — it never writes:
