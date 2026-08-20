@@ -81,7 +81,13 @@ else
   pass_check "spec template no longer relies on networkidle as the settle"
 fi
 
-if has "$STARTER" "page.locator('[data-vrt-mask]')"; then
+# Assert the BEHAVIOUR, not the syntax. The selector list became the single
+# source for both applying masks and measuring their coverage, so the universal
+# mask is now a string in that list with the locators derived from it. The old
+# check grepped for the literal locator call and failed on a refactor that
+# preserved exactly the property it was meant to protect.
+if grep -A3 -E 'maskSelectors *= *\[|const masks *= *\[' "$STARTER" | grep -qF "'[data-vrt-mask]'" \
+   || has "$STARTER" "page.locator('[data-vrt-mask]')"; then
   pass_check "spec template prepends the universal source-level mask"
 else
   fail_check "spec template does not prepend [data-vrt-mask]"

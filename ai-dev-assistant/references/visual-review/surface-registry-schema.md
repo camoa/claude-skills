@@ -1,9 +1,10 @@
-# Surface Registry Schema v1.3
+# Surface Registry Schema v1.4
 
 **Introduced:** ai-dev-assistant v4.11.0 (Task A — `visual_and_e2e_review_gates`)
 **v1.1:** v4.14.0 (Task D) — extends the `parity_reference` object additively
 **v1.2:** v5.1.0 — adds the framework-agnostic `auth_context` surface field and the optional top-level `e2e.preflight_command`, both additive. These are the two generic seams that let the e2e/visual gates run stack-neutral while a process recipe supplies the framework-specific values.
 **v1.3:** v5.14.0 — adds three optional `parity_reference` fields for cross-stack (React→Drupal) parity — `dimension_align`, `max_diff_ratio`, `content_floor` — and forwards the existing surface `masks` into the parity capture. All additive.
+**v1.4:** v5.25.0 — adds the optional `review` surface field (`automatic` | `manual`), which records whether a surface is meant to be gated automatically or captured for a human to look at. Additive.
 **Owner:** `commands/review.md` step 6 (change-impact dispatcher)
 **Consumers:** `/setup-e2e` + `/validate:e2e` (Task B), the reworked
 `validate-visual-regression` (Task C), `/setup-visual-parity` + the reworked
@@ -61,10 +62,10 @@ Grammar — `**Visual Review:** <state> <relative-path>`:
 `scripts/project-state-read.sh` parses this field into
 `visualReview: {enabled, registryPath}` (or `null` when absent). See its header.
 
-## 3. Project registry schema (`registry.yml`) v1.3
+## 3. Project registry schema (`registry.yml`) v1.4
 
 ```yaml
-schema_version: "1.3"
+schema_version: "1.4"
 e2e:                             # optional top-level block
   preflight_command: "<stack-setup-command>"   # framework-agnostic; value is project-specific
 viewports:                       # project default viewport matrix
@@ -78,6 +79,7 @@ surfaces:
     viewports: [desktop, tablet, phone]  # optional — overrides the default matrix
     masks: ["time", ".field--name-created"]   # CSS selectors, optional
     auth_context: null           # null | string — opaque auth context name
+    review: automatic            # automatic | manual — gate intent (default automatic)
     parity_reference: null       # null | object
 ```
 
@@ -101,7 +103,7 @@ object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes
 
 | Key | Type | Required | Notes |
 |---|---|---|---|
-| `schema_version` | string | yes | `"1.0"` (v4.11.0), `"1.1"` (v4.14.0+), `"1.2"` (v5.1.0+), or `"1.3"` (v5.14.0+). Consumers gate on major; a lower-minor registry is a valid higher-minor registry (every minor addition is optional). |
+| `schema_version` | string | yes | `"1.0"` (v4.11.0), `"1.1"` (v4.14.0+), `"1.2"` (v5.1.0+), `"1.3"` (v5.14.0+), or `"1.4"` (v5.25.0+). Consumers gate on major; a lower-minor registry is a valid higher-minor registry (every minor addition is optional). |
 | `e2e` | object | no | Optional e2e configuration block. Absent ⇒ the e2e gate runs no preflight. |
 | `viewports` | list | yes | The project default viewport matrix. Each entry is a **viewport descriptor**. |
 | `surfaces` | list | yes | Zero or more **surface entries**. Empty list is valid (set up, no surfaces yet). |
@@ -114,8 +116,9 @@ object and `visual_parity` in its `gates` list — `/setup-visual-parity` writes
 | `url` | string | yes | Path or absolute URL of the surface. Relative paths resolve against the Playwright `baseURL`. |
 | `gates` | list | yes | Subset of `[e2e, visual_regression, visual_parity]` — which gates apply to this surface. Empty list = registered but no gate runs it. |
 | `viewports` | list | no | List of viewport **names** (from `viewports[].name`). Absent ⇒ the project default matrix applies. |
-| `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. **(v1.3)** Also forwarded into the visual-**parity** capture (both sides), alongside the universal `[data-vrt-mask]` attribute selector. |
+| `masks` | list | no | CSS selectors masked before capture (dynamic regions — timestamps, ad slots). Absent ⇒ none. **(v1.3)** Also forwarded into the visual-**parity** capture (both sides), alongside the universal `[data-vrt-mask]` attribute selector. A mask written to stabilise visual regression therefore reaches a second gate that never asked for it: an over-broad selector suppresses parity findings too, and neither gate reports how much of the capture it covered. Size a mask for the smallest gate it will land in, not the loudest. |
 | `auth_context` | string \| null | no | `null`/absent ⇒ anonymous capture. A non-null **opaque context name** `"<ctx>"` routes the surface through the authenticated-VR seam (wired in v1.2, no longer reserved). See the concrete contract below. Framework-agnostic: the plugin treats `<ctx>` as an opaque key and never learns how the auth was obtained; the stack's process recipe supplies the login. |
+| `review` | enum | no | **(v1.4)** `automatic` (default, and the value assumed when the field is absent) \| `manual`. Records the **intent** behind gating this surface, which `gates: []` cannot express: an empty `gates` list says no gate runs, while `review: manual` says a gate runs, captures and diffs, and reports the result for a person to judge instead of failing the run. Content-driven listings (a writing index, a tag archive, a "latest" block) usually belong on `manual`, because they diff whenever an editor publishes, and a gate that fails on every publish teaches reviewers to click through failures — which costs more than not gating the surface at all. |
 | `parity_reference` | object \| null | no | `null`, or the **parity-reference object**. Consumed by `/setup-visual-parity` + `/validate:visual-parity` (Task D). |
 
 **`auth_context` contract (wired in v1.2).** A non-null `auth_context: "<ctx>"`
@@ -209,7 +212,7 @@ This is the seam that removed the last hardcoded preflight command from the gate
 A task that adds or changes review coverage drops a fragment in its task folder:
 
 ```yaml
-schema_version: "1.3"
+schema_version: "1.4"
 surfaces:
   - id: checkout-summary
     url: "/checkout"
@@ -285,12 +288,20 @@ Task B/C/D commands — all of which parse YAML natively. The sibling
   the new fields; a surface that sets none captures exactly as it did at v4.14.0
   (`crop-min`, global ratio, no content guard). These make cross-stack React→Drupal
   parity salient without a converter-side change.
+- **v1.4 committed for v5.25.0** — adds the optional `review` surface field.
+  Additive: a pre-v1.4 consumer ignores it, and a surface that omits it is
+  `automatic`, which is what every existing registry already means. It separates
+  "this surface is not gated" (`gates: []`) from "this surface is gated, and its
+  diff is for a person to judge" (`review: manual`).
 
 ## 8. Non-goals
 
 - **No registry file is created by Task A.** Only this schema ships. `/setup-*`
   (Task B/C/D) writes the first registry.
-- **No SDC component-level granularity** — surfaces are page-level URLs. Component
+- **No component-level granularity in the registry** — surfaces are page-level URLs.
+  A component-library route is a page-level URL and is a perfectly valid surface (and
+  `/setup-visual-regression` proposes one where the stack has it); what is out of scope
+  is addressing an individual component as a surface with no URL of its own. Component
   isolation is a future epic (Spike #1).
 - **No per-surface baseline data** — baselines live in the screenshot store (Task C
   owns its schema). The registry says *what to cover*, not *what the baseline is*.

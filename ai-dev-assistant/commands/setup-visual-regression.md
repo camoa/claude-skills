@@ -163,8 +163,20 @@ If `--add-surface <url>` is present, skip steps 1–9:
 1. Guard: if `<codePath>/tests/visual/` does not exist, print
    `"setup-visual-regression: run /setup-visual-regression first before --add-surface."` and stop.
 2. Prompt the user for the surface `id` (kebab-case, `^[a-z0-9][a-z0-9-]*$`),
-   the `viewports` (default: the registry's top-level matrix), and any `masks`
-   (CSS selectors).
+   the `viewports` (default: the registry's top-level matrix), any `masks`
+   (CSS selectors), and `review` (`automatic` by default; `manual` for a
+   content-driven listing — see "Automatic or manual review, per surface" in
+   step 6).
+
+   **Do not accept a mask selector blind.** The prompt asks for CSS selectors
+   with no discovery, no proposal and no feedback, so the operator is guessing at
+   what they will hide and finds out at the first diff. Before accepting one,
+   load `<url>` and report what the selector matches on that page: how many
+   elements, and roughly what fraction of the captured area they cover. Then
+   confirm. A selector matching nothing is a typo, and a selector matching most
+   of the page is hiding the subject — say which of the two you are looking at.
+   Step 6's "Masks, and what masking `img` trades away" covers the `img` case,
+   which is the mask most registries end up wanting.
 3. **Check the `id` is not already registered.** The schema requires surface ids to
    be **unique** within `surfaces[]`, and this path appends. Read the existing
    `surfaces:` and compare — appending unconditionally writes a duplicate `id` and
@@ -182,7 +194,9 @@ If `--add-surface <url>` is present, skip steps 1–9:
      `"setup-visual-regression: surface <id> is already registered with url <existing-url>, which differs from <new-url>. Edit that entry in <codePath>/.visual-review/registry.yml to change it, or re-run --add-surface with a different id."`
      and stop.
 4. Append the surface entry to `surfaces:` in `registry.yml` with
-   `gates: [visual_regression]`. Do not hand-edit beyond this one entry. The
+   `gates: [visual_regression]` and the `review` value from step 2 (written
+   explicitly, even when it is the `automatic` default). Do not hand-edit beyond
+   this one entry. The
    surface is anonymous unless you also set `auth_context: "<ctx>"`.
 5. Generate the surface spec from the
    `references/visual-review/_starter.spec.ts` template (token substitution —
@@ -389,6 +403,165 @@ last-write-wins; do not duplicate an `id` `/setup-e2e` already seeded, just add
 discovery. Tell the user to register surfaces by hand or with `--add-surface`,
 then continue with whatever surfaces the registry already holds.
 
+### What a surface set is for
+
+A surface set exists to cover **rendering templates**. The thing under test is
+rendering code, and rendering code lives in templates, so a surface earns its
+place by being the one place some template gets exercised. The rule that follows
+is **one instance per rendering template**. Two nodes of the same bundle cost
+twice and cover the same code, so the second adds spend and no coverage; a bundle
+with no surface at all has no coverage, and nothing in the registry says so.
+
+Size the set that way before sizing it by intuition. On the project this practice
+came from, an agent reasoned its way to a 12-surface list, multiplied it by 6
+viewports, captured 72 full-page baselines at 149 MB, and needed four rounds of
+operator correction to reach 5 surfaces at 3 viewports. The operator knew which
+templates mattered from the first minute and was never asked. Ask.
+
+**Propose the mapping, not just the list.** Show each proposed surface beside the
+template it covers, and show the templates that no proposed surface covers. A
+list of URLs cannot be checked by the person confirming it; a template-to-surface
+mapping can, and it gets corrected in one pass instead of four.
+
+### The fully-populated fixture
+
+Prefer a deliberately authored fixture over a sample of real content. For each
+bundle, author or identify **one node with every rendered field populated**, so a
+single capture exercises the whole template. Real content covers whichever subset
+of fields its author happened to fill in, which leaves the rest of the template
+untested with nothing reporting the gap, and it changes underneath the baseline
+every time an editor edits it.
+
+An unpublished fixture is fine. Publish it in the local environment for the
+capture; a surface does not have to be reachable in production to be the right
+surface locally.
+
+### The component-library surface
+
+On a component-based theme, the component library is the highest-value visual
+surface, and discovery never proposes it, because discovery looks for pages.
+Propose it explicitly. Why it beats a node page for regression:
+
+- Components render outside listing containers, so there is nothing to mask. On a
+  page surface the masks needed to stabilise a listing are exactly the ones that
+  hide the subject.
+- Stories are fixture content, so the surface does not diff every time an editor
+  publishes something.
+- A diff names a **component**, instead of pointing somewhere inside a
+  12,000-pixel page.
+- It tests the component, rather than one node that happens to use the component.
+
+**Detect it generically; take the specifics from the recipe.** The signal is a
+directory of component definition files, or a route that renders them. Where
+either exists, propose the library as a **default-on** surface. What that
+directory is called, and what the route is, are framework facts: the framework's
+process recipe supplies them, and this command carries no framework knowledge of
+its own.
+
+**What it does not cover.** A component library does not replace page surfaces.
+Composition, layout, stacking and cascade regressions appear only where components
+sit together in a real template, so a component can pass in isolation and break in
+context. And a library that has drifted from real usage is worse than an absent
+one, because it gives confidence it has not earned. Register page surfaces too,
+and read library coverage as coverage of components, never as coverage of pages.
+
+### Uncovered templates
+
+The two rules above imply a coverage model: components are covered on the library
+surface, pages are covered on node surfaces. Anything that is **neither** falls
+through both. A template that writes design-system markup directly instead of
+composing a component is masked out on the page surfaces and absent from the
+library, so no surface in the registry can isolate it, and nothing reports that
+today.
+
+Report it. After the surface list is confirmed, print a coverage warning naming
+the count, then list the template paths under it:
+
+```
+N templates render design-system markup that no registered surface can isolate
+```
+
+This command cannot fix an uncovered template. Whether a template composes a
+component is a property of the codebase, not of the registry. What it can do is
+turn an invisible hole into a listed one, which is the difference between a gate
+that is trusted and a gate that deserves to be.
+
+### Language variants
+
+**Default to one language.** Translations share templates and CSS, so a second
+language doubles capture, storage and review cost for near-identical output.
+
+Add a second language only for a specific named reason:
+
+- a language-dependent format the template renders, a date being the usual one
+- text-length reflow, where the translated string changes the layout rather than
+  only the words
+
+Even then, say what the cheaper check is: a string assertion usually verifies a
+localised date better than diffing an 8000-pixel image does, and it names what
+broke when it fails. Reach for a second language when the *layout* differs, not
+when the *text* differs.
+
+### Masks, and what masking `img` trades away
+
+Masking `img` is the most common mask in a visual-regression registry, and its
+tradeoff is written down nowhere, so each project rediscovers it. State it, so it
+is a deliberate choice rather than an omission:
+
+- **What it removes** — the largest source of byte-level noise. Derivative
+  regeneration, encoder differences and responsive source selection all change
+  pixels without changing anything a reviewer cares about.
+- **What it keeps** — the layout box. A masked image still occupies its space, so
+  a collapsed, resized or wrongly-proportioned image still shifts everything
+  around it and still fails the diff.
+- **What it hides** — a wrong image at the right size. The gate will not tell you
+  the picture changed if the replacement has the same dimensions.
+
+That is usually the right trade on a content surface. Cover image identity some
+other way if it matters. What it is never a licence for is masking the subject: a mask that covers most of the page is a warning, not an accepted default.
+
+### Automatic or manual review, per surface
+
+Each surface carries `review: automatic | manual` in the registry (schema §3.2),
+default `automatic`. Write it explicitly, like `capture`, so the registry records
+what was decided rather than what was left out.
+
+Set `manual` on a **content-driven listing** — a writing index, a tag archive, a
+"latest" block — where the page diffs whenever an editor publishes. Gating those
+automatically trains reviewers to click through failures, and a reviewer who has
+learned to dismiss this gate is worse than no gate. `manual` keeps the surface
+captured and diffed for a human to look at, without spending the gate's
+credibility on a diff nobody can act on.
+
+### Record what the operator confirmed
+
+The steps above say the operator confirms the surface list, and nothing enforces
+that or records that it happened. Prose an agent can skip is not a control, so
+write the confirmation down.
+
+When a task folder is in scope, write `<task>/_surface-selection.json` once the
+list is confirmed:
+
+```json
+{
+  "schema_version": "1.0",
+  "confirmed_at": "<ISO-8601 UTC>",
+  "proposed": [{"id": "…", "url": "…", "source": "recipe|component-library|operator"}],
+  "confirmed": [{"id": "…", "url": "…", "viewports": ["…"], "capture": "full|viewport", "review": "automatic|manual"}],
+  "operator_changes": [{"action": "removed|added|edited", "id": "…", "detail": "…"}],
+  "uncovered_templates": ["<template path>"]
+}
+```
+
+`proposed` is what discovery offered, `confirmed` is what the operator agreed to,
+and `operator_changes` is the difference between the two. The third field is the
+point of the file: when the lists differ by nine surfaces, the record says
+discovery was guessing and the next run should ask sooner.
+
+On a project-level run with no task folder there is nowhere to put the file.
+Print the same three lists in the Step 11 summary and say the record was not
+written; do not silently skip it.
+
 ### Capture extent, per surface
 
 Each confirmed surface carries `capture: full | viewport` in the registry.
@@ -404,7 +577,7 @@ the page outside the baseline while the gate stays green.
 ## Step 7: Scaffold `tests/visual/`
 
 For each VR surface in the registry, read its `auth_context` field (schema
-v1.3). A surface with `auth_context` **null or absent** is **anonymous** — it is
+v1.4). A surface with `auth_context` **null or absent** is **anonymous** — it is
 handled here. A surface with a **non-null** `auth_context` is **authenticated**
 — it is handled in step 7a (its spec, project, and storageState wiring differ).
 
@@ -423,8 +596,10 @@ For each **anonymous** VR surface, generate
 - `__SURFACE_ID__` → the surface `id`
 - `__SURFACE_URL__` → the surface `url`
 - `__VIEWPORTS__` → the surface's viewport names, comma-separated
-- `__MASKS_ARRAY__` → one `page.locator('<selector>')` per `masks` entry,
-  comma-separated (empty when the surface has no masks)
+- `__MASKS_ARRAY__` → one **quoted CSS selector string** per `masks` entry — for example `'.views-element-container', 'img'` — NOT `page.locator(...)` calls.
+  comma-separated (empty when the surface has no masks). The template derives
+  its locators from this list and measures what those selectors cover, so the
+  same list is both applied and reported on.
 - `__STABILITY_MODULE__` → `./` for an anonymous surface (its spec sits beside
   the copied module in `tests/visual/`), `../../` for an authed surface under
   `tests/visual/auth/<ctx>/`. The template appends `_capture-stability.mjs`.
@@ -623,7 +798,12 @@ Print:
 - Process recipe resolved (framework / source / `verified`), or none found
 - Packages installed; `playwright.config.ts` projects added
 - Viewport matrix (with its derivation source)
-- Surfaces registered (front-end / admin counts)
+- Surfaces registered (front-end / admin counts), each beside the template it
+  covers, and how many carry `review: manual`
+- Templates no registered surface can isolate (the step 6 coverage warning), or
+  `0` when there are none
+- Where the confirmation record was written (`<task>/_surface-selection.json`),
+  or that no task folder was in scope and it was not written
 - Migration result (if any)
 - Baselines captured / deferred
 - Next step: `/ai-dev-assistant:validate:visual-regression`
@@ -656,3 +836,8 @@ Writes into `<codePath>`: `tests/visual/`, per-surface specs, the
 `visual-chromium-*` projects in `playwright.config.ts`, and the shared surface
 registry at `.visual-review/registry.yml`. Writes no baseline images. A missing
 baseline is a loud failure with a `--bootstrap` message, never a silent create.
+
+Writes into the task folder, when one is in scope: `_surface-selection.json`,
+recording the proposed surfaces, the confirmed surfaces, and what the operator
+changed between the two. On a project-level run with no task folder, that record
+is printed in the summary instead and no file is written.

@@ -121,3 +121,86 @@ export async function prepareForCapture(page, opts = {}) {
   await settleLazyContent(page, opts);
   await stabilizeForCapture(page);
 }
+
+/**
+ * Measure what the masks actually cover.
+ *
+ * A mask is chosen to suppress noise. Nothing ever asked whether it also
+ * suppresses the subject. Measured on one real project, the two masks setup
+ * produced (`img` and a dynamic-listing container) covered 29 of 29 teaser cards
+ * on one surface and 32 of 34 on another — so the mask added to absorb churning
+ * content painted over every component the suite exists to protect. The gate
+ * would have passed a refactor that broke every card, and the human review saw
+ * grey boxes where the subject should have been. Neither the tool nor the person
+ * caught it at baseline sign-off, because no component reported it.
+ *
+ * The information is free at capture time: every mask locator already has a
+ * bounding box.
+ *
+ * Overlapping masks must not double-count, so coverage is rasterised onto a
+ * coarse grid rather than summed. The grid is deliberately cheap — this is a
+ * warning signal, not a measurement anyone should tune against.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} selectors  the mask selectors, as CSS strings
+ * @param {{grid?: number}} [opts]
+ * @returns {Promise<{page_area:number, masked_area:number, masked_fraction:number,
+ *                    per_selector:{selector:string,count:number}[]}>}
+ */
+export async function measureMaskCoverage(page, selectors, opts = {}) {
+  const grid = opts.grid ?? 120;
+  return page.evaluate(
+    ({ selectors, grid }) => {
+      const doc = document.documentElement;
+      const w = Math.max(doc.scrollWidth, 1);
+      const h = Math.max(doc.scrollHeight, 1);
+      const cellW = w / grid;
+      const cellH = h / grid;
+      const covered = new Uint8Array(grid * grid);
+      const perSelector = [];
+
+      for (const sel of selectors) {
+        let els = [];
+        try {
+          els = Array.from(document.querySelectorAll(sel));
+        } catch {
+          // An invalid selector matches nothing rather than throwing the capture.
+          perSelector.push({ selector: sel, count: -1 });
+          continue;
+        }
+        perSelector.push({ selector: sel, count: els.length });
+
+        for (const el of els) {
+          const r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) continue;
+          // Rects are viewport-relative; the capture is document-relative.
+          const top = r.top + window.scrollY;
+          const left = r.left + window.scrollX;
+          const c0 = Math.max(0, Math.floor(left / cellW));
+          const c1 = Math.min(grid - 1, Math.floor((left + r.width) / cellW));
+          const r0 = Math.max(0, Math.floor(top / cellH));
+          const r1 = Math.min(grid - 1, Math.floor((top + r.height) / cellH));
+          for (let row = r0; row <= r1; row++) {
+            for (let col = c0; col <= c1; col++) covered[row * grid + col] = 1;
+          }
+        }
+      }
+
+      let cells = 0;
+      for (let i = 0; i < covered.length; i++) cells += covered[i];
+      const pageArea = w * h;
+      return {
+        page_area: pageArea,
+        masked_area: Math.round((cells / (grid * grid)) * pageArea),
+        masked_fraction: cells / (grid * grid),
+        per_selector: perSelector,
+      };
+    },
+    { selectors, grid },
+  );
+}
+
+/** Above this fraction of the page, a mask is more likely hiding the subject than
+ *  the noise. Chosen as a signal, not a tuned threshold — the point is that
+ *  somebody looks, not that this number is exactly right. */
+export const MASK_COVERAGE_WARN_FRACTION = 0.4;

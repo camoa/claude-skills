@@ -10,7 +10,9 @@
  *   __SURFACE_ID__         the registry surface `id` (kebab-case)
  *   __SURFACE_URL__        the registry surface `url`
  *   __VIEWPORTS__          comma-separated viewport names (informational comment)
- *   __MASKS_ARRAY__        the surface `masks` selectors, as page.locator(...) calls
+ *   __MASKS_ARRAY__        the surface `masks` selectors, as QUOTED CSS STRINGS
+ *                          (not locator calls). The template derives the locators
+ *                          from them, so one list is both applied and measured.
  *                          (or an empty array when the surface has no masks)
  *   __SCREENSHOT_IMPORT__  extra import line for a capture helper — EMPTY by
  *                          default; a framework's process recipe may supply one
@@ -50,7 +52,11 @@
  */
 import { existsSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
-import { prepareForCapture } from '__STABILITY_MODULE___capture-stability.mjs';
+import {
+  prepareForCapture,
+  measureMaskCoverage,
+  MASK_COVERAGE_WARN_FRACTION,
+} from '__STABILITY_MODULE___capture-stability.mjs';
 __SCREENSHOT_IMPORT__
 
 test.describe('__SURFACE_ID__ visual regression', () => {
@@ -69,13 +75,40 @@ test.describe('__SURFACE_ID__ visual regression', () => {
     // Masks — dynamic regions painted over before capture (from registry.yml
     // `masks`). A recipe-supplied capture helper may also write a paired
     // accessibility snapshot; such a11y diffs surface in the report (warning-only in v1).
-    // `[data-vrt-mask]` first, so a component can mark its own volatile region in
-    // markup. In markup the mask travels with the component; in a test file it
-    // rots. The parity engine already prepends this; regression now matches.
-    const masks = [
-      page.locator('[data-vrt-mask]'),
+    // ONE list of selectors, used for both applying the masks and measuring what
+    // they cover. `[data-vrt-mask]` first, so a component can mark its own
+    // volatile region in markup — in markup the mask travels with the component,
+    // in a test file it rots. The parity engine already prepends this.
+    const maskSelectors = [
+      '[data-vrt-mask]',
       __MASKS_ARRAY__
     ];
+    const masks = maskSelectors.map((selector) => page.locator(selector));
+
+    // MEASURE WHAT THE MASKS HIDE. A mask is chosen to suppress noise and nothing
+    // ever asked whether it also suppresses the subject. Measured on one real
+    // project, the masks setup produced covered 29 of 29 teaser cards on one
+    // surface — the gate would have passed a refactor that broke every card.
+    // The bounding boxes are already in hand at this point, so this is free.
+    const coverage = await measureMaskCoverage(page, maskSelectors);
+    await testInfo.attach('__SURFACE_ID__-mask-coverage.json', {
+      body: JSON.stringify(coverage, null, 2),
+      contentType: 'application/json',
+    });
+    if (coverage.masked_fraction > MASK_COVERAGE_WARN_FRACTION) {
+      const pct = (coverage.masked_fraction * 100).toFixed(1);
+      const detail = coverage.per_selector
+        .map((s) => `${s.selector} x${s.count}`)
+        .join(', ');
+      // An annotation lands in the HTML report next to the surface, so the person
+      // doing the review sees it rather than it scrolling past in a console log.
+      testInfo.annotations.push({
+        type: 'mask-coverage',
+        description: `${pct}% of this surface is masked (${detail}). Check the masks are not covering the thing under test.`,
+      });
+      // eslint-disable-next-line no-console
+      console.warn(`[visual] __SURFACE_ID__: ${pct}% masked — ${detail}`);
+    }
     // ATTACH BEFORE ASSERTING. `toHaveScreenshot` attaches expected/actual/diff
     // only when the comparison FAILS, so with every surface passing the HTML
     // report renders green rows and zero images — and an instruction to walk
