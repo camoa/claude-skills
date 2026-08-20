@@ -89,6 +89,28 @@ excluded from this run — they skip baseline checks, diffing, and classificatio
 If no surface has `visual_regression` in `gates` → emit `verdict: skipped`,
 message `"registry has no visual_regression surfaces"`, persist, and stop.
 
+**Unrecognised gate tokens (a skip that was not a choice).** The registry schema
+defines `gates` as a subset of `[e2e, visual_regression, visual_parity]`. While
+collecting surfaces, check every token in every surface's `gates` list against
+that vocabulary. A token that is **not in the schema** vocabulary matches no
+gate, so its surface drops out of the run looking exactly like a surface the
+author deliberately left uncovered. Do not let that pass silently. For each such
+token emit a **warning** naming the surface and the offending token:
+
+> Surface `<surface-id>` declares gate `<token>`, which is not in the schema
+> vocabulary `[e2e, visual_regression, visual_parity]`. It matches no gate, so
+> the surface was skipped. The likeliest culprit is `visual` — the published
+> Drupal process recipe writes that token, and the registry value has to be
+> `visual_regression`.
+
+Carry every such warning into `details.gate_token_warnings[]` and into the
+envelope `message`, and raise the aggregated verdict to `warning` when the run
+would otherwise be `pass` or `skipped`. When an unrecognised token is the reason
+no surface was selected, the emitted `skipped` must say so instead of the plain
+`"registry has no visual_regression surfaces"` message — a skip caused by a
+misconfigured token has to be distinguishable in the output from a skip that was
+a deliberate configuration choice.
+
 ## Step 6: Check baselines exist (loud failure on missing)
 
 For each (surface × viewport), the expected baseline is
@@ -96,12 +118,48 @@ For each (surface × viewport), the expected baseline is
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/screenshot-store-read.sh "<codePath>"` (Bash)
 and parse its JSON to enumerate what exists.
 
+**Read the reader's `warnings[]` before concluding anything about a baseline.**
+The reader reports a top-level `warnings[]` and a per-viewport `warnings[]`
+inside each component entry, and each one names the defect outright — a
+`meta_schema_mismatch` on a sidecar that is not valid JSON, is missing required
+fields, disagrees with the PNG's hash, or is named against the expected
+`<surface>-visual-chromium-<viewport>` shape; a `component_missing_meta` on a
+PNG with no sidecar at all. Surface every entry the reader returns, as
+`<surface>/<viewport>: <code> — <detail>`, and carry them into
+`details.baseline_warnings[]`. Report them **by code and detail, whatever the
+codes are** — do not filter against a list written here. The reader gains codes
+(passing it the registry makes it flag leftover snapshot directories no
+registered surface claims), and a step that only forwards the codes it already
+knows drops the new ones silently.
+
+Then place each (surface × viewport) in one of two states, which look alike in a
+bare file listing and need opposite fixes:
+
+- **ABSENT** — the reader found no baseline for it. Nothing was ever captured;
+  the fix is to capture one.
+- **UNREADABLE** — a baseline file exists but the reader could not use it, and
+  said why in a warning. Re-running the capture does not repair a corrupt or
+  schema-invalid sidecar, and the warning's `detail` names the file and the
+  defect.
+
+Name the two separately in the envelope `message`. Reporting an UNREADABLE
+baseline as missing sends the operator to rebaseline a surface whose actual
+problem is a broken sidecar, and the rebaseline appears to succeed.
+
 If any (surface × viewport) has **no baseline** and neither `--bootstrap` nor
 `--update-baselines` was passed → emit `verdict: fail` with the remediation
 message:
 
 > No baseline found for `<surface-id>/<viewport>`. Run
 > `/validate:visual-regression --bootstrap` to capture first baselines.
+
+An **UNREADABLE** baseline fails the same way, with its own message naming the
+warning instead of sending the operator to bootstrap:
+
+> Baseline for `<surface-id>/<viewport>` exists but could not be read:
+> `<code>` — `<detail>`. Repair the named file, or delete it and re-capture
+> with `/validate:visual-regression --bootstrap`; a rebaseline on its own does
+> not clear a schema-invalid sidecar.
 
 Persist the envelope and stop. **Never silently auto-create a baseline.**
 
@@ -136,8 +194,17 @@ Invoke `scripts/visual-regression-gate.sh <registry_path> <codePath>` (add
 (`surfaces[]` + `summary`). Playwright reaches the site over HTTP via
 `PLAYWRIGHT_BASE_URL`.
 
-Verify the script's stdout is valid JSON (`jq empty`). If not, surface stderr
-verbatim and stop.
+**Check the gate's exit code first, before you look at its stdout.** On a
+non-zero exit code, surface its stderr verbatim and stop, whatever stdout
+parsed as — the exit code is the signal that carries the failure, and stderr
+carries the actionable message (an absent suite exits 2 with
+`tests/visual/ not found — run /setup-visual-regression first` on stderr and
+nothing at all on stdout). On exit 0, verify stdout is valid JSON with
+`jq empty`, and treat **empty stdout as invalid regardless of the exit code**:
+`jq empty` succeeds on empty input, so a check that only parses stdout reports
+valid JSON for a gate that produced none, proceeds, and never shows the stderr
+that explains the failure. On invalid or empty stdout, surface stderr verbatim
+and stop.
 
 ### Authenticated surfaces (stack-neutral)
 
@@ -163,12 +230,20 @@ gate change is needed for these:
   `screenshot-store-read.sh`; it does not assume the suffix shape, so both forms
   (authed or anonymous) are covered with no logic change.
 
-## Step 9: Classify each failed surface
+## Step 9: Classify each failed surface, then look at all of them
+
+The gate output is ordered worst first — failures by how much moved, then
+warnings, then passes. Walk it in that order; the eye should start where the
+damage is.
 
 For every surface in the gate output with `verdict: fail`:
 
 - **`--ci` mode** — no prompt; record `classification: "regression"`,
-  `baseline_updated: false`.
+  `baseline_updated: false`, and **`classification_source: "ci_default"`**. No
+  person saw this surface, and a verdict nobody made must not be recorded the
+  same way as one somebody made. Interactive classifications record
+  `classification_source: "operator"`.
+
 - **Interactive** — show the surface id, failed viewport(s), `diff_percent`,
   and the diff-image location (Playwright writes it under `test-results/`).
   Emit the `visual-regression-gate-fail` prompt from
@@ -190,21 +265,56 @@ For every surface in the gate output with `verdict: fail`:
   - `[r]` Regression → `verdict: fail`, `classification: "regression"`,
     `baseline_updated: false`.
   - `[i]` Intentional → run `baseline-manager.sh --update-baselines
-    "intentional-ui-change" --registry <reg> --codepath <codePath> --grep
-    "<surface-id>" --triggered-by validate-visual-regression:classify` in the
-    two-stage model. Run plan stage first, show the user the planned surfaces +
+    "intentional-ui-change" --registry <reg> --codepath <codePath>
+    --exact-surface <surface-id> --triggered-by validate-visual-regression:classify`
+    in the two-stage model. `--exact-surface` scopes the plan stage and the
+    execute stage to the same single surface; a bare `--grep <id>` does not — it
+    over-matches any surface whose id is a prefix of another (`--grep "couple"`
+    also rebaselines `couples-list`, discarding a genuine regression while the
+    blanket warning stays silent), and `--grep '<id>\b'` is the word-boundary
+    form if grep must be used at all.
+    Run plan stage first, show the user the planned surfaces +
     a final `[y]/[n]` "about to write" check, then re-invoke with `--confirmed`.
     After the confirmed update, write the provenance sidecar for each updated
     baseline PNG: **glob** `<codePath>/tests/visual/<surface-id>.spec.ts-snapshots/*.png`
     for the filenames Playwright actually wrote — do NOT assume the platform
     suffix (`-linux.png` on Linux, `-darwin.png` on macOS). For each, invoke
     `screenshot-store-write.sh write-baseline-codepath <codePath> <surface-id>
-    <png-filename> <viewport-name> framework-playwright <task>`, where
+    <png-filename> <viewport-name> playwright <task>`, where
     `<viewport-name>` is the bare viewport name — the segment between
     `visual-chromium-` and `-<platform>` in the filename (e.g. `desktop`), NOT
-    the full project name. Set `verdict: pass`, `classification: "intentional"`,
-    `baseline_updated: true`.
+    the full project name. `playwright` is the accepted provenance value for a
+    capture this command drove; a recipe-supplied capture passes the recipe's
+    own declared `captured_by` value instead. Set `verdict: pass`,
+    `classification: "intentional"`, `baseline_updated: true`.
   - `[c]` Cancel → `verdict: skipped`, `classification: "cancelled"`.
+
+### Step 9a: Walk every surface, not only the failed ones
+
+**This step is not optional and is not satisfied by the gate returning `pass`.**
+A surface sitting just under tolerance passes silently, and that is exactly where
+a real bug hides — a measured incident on the sibling gate moved an aggregate
+from 37% to 28% while missing six user-visible defects that took seconds to spot
+by eye.
+
+The ratio triages. Your eye decides.
+
+Open the report at the `report_dir` the gate recorded (see Step 12) and walk
+**every** surface at every viewport, including the ones that passed. Each surface
+carries an attached image whether it passed or failed, so there is something to
+look at in every row. Where a surface passed but the render is wrong, write it
+down — that observation is the actual output of this step.
+
+Then record the outcome in the result:
+
+- `human_reviewed: true` with a timestamp, when a person walked every surface
+  this run.
+- `human_reviewed: false` under `--ci`, by definition, and that is the honest
+  value. A run that skipped the eyeball pass must not be indistinguishable from
+  one that did it.
+
+A run whose metric passed and whose `human_reviewed` is `false` is an incomplete
+review, not a green one.
 
 ## Step 10: Aggregate + emit the envelope
 
@@ -240,7 +350,8 @@ The `details` block:
      "a11y_diff_path": null}
   ],
   "diff_tolerance": 0.005,
-  "capture_context": "host-side"
+  "capture_context": "host-side",
+  "gate_token_warnings": []
 }
 ```
 
@@ -289,8 +400,21 @@ If `--show-diffs` was passed, run `npx playwright show-report` host-side from
 `codePath` (default port 9323; if busy, Playwright picks the next free port).
 Print the report URL.
 
-Every VR run produces a current `playwright-report/`, so `show-report` always has
-something to open and its image-diff view carries the **Slider** (drag-to-reveal
+Point `show-report` at the **`report_dir` the gate recorded in its output**, not
+at the ambient `playwright-report/`.
+
+An earlier revision of this section guaranteed that every run produces a current
+`playwright-report/`, so `show-report` always has something to open. That was not
+true: the html reporter wrote one shared directory, and any later Playwright run
+in the same checkout silently replaced it. Observed during the proving run — a
+verifier ran one unrelated command and the served report went from 15 tests to 1,
+while the recorded verdict still said pass and the server still returned 200.
+Every signal read healthy and the artifact a human was being pointed at had been
+destroyed.
+
+The gate now writes to a run-scoped directory and records `report_dir` and
+`report_id` alongside the verdict, so the report you open is the one that run
+produced. Its image-diff view carries the **Slider** (drag-to-reveal
 baseline↔current) widget. This holds on **both** paths: the gate
 (`scripts/visual-regression-gate.sh`) runs `npx playwright test --reporter=json,html`
 (a CLI `--reporter` replaces the config one, so the gate requests html itself,

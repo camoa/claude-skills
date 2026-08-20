@@ -29,13 +29,33 @@
 #   2 — arg validation failure
 #   3 — IO error pre-rotation (safe; no partial state)
 #
-# captured_by values (from architecture):
-#   playwright-mcp | claude-in-chrome | figma-export | html-render | user-upload
+# captured_by values (single shared enum — see CAPTURED_BY_ENUM below):
+#   playwright | playwright-accessible | playwright-mcp | claude-in-chrome |
+#   figma-export | html-render | user-upload | lullabot-playwright |
+#   migrated-from-screenshots-store
 #
 # source_type values (parity-reference only):
 #   figma | html | image | url
 
 set -uo pipefail
+
+# Checksum tool. macOS ships `shasum` and no `sha256sum`; coreutils ships the
+# reverse. Calling either one bare means the command substitution returns EMPTY on
+# the other platform and an empty hash gets written or compared as though it were
+# real. Resolve once, and fail loudly when neither exists rather than recording a
+# blank where a digest belongs.
+if command -v shasum >/dev/null 2>&1; then
+  SUM_CMD=(shasum -a 256)
+elif command -v sha256sum >/dev/null 2>&1; then
+  SUM_CMD=(sha256sum)
+else
+  SUM_CMD=()
+fi
+sha256_of() {
+  [ "${#SUM_CMD[@]}" -gt 0 ] || return 1
+  "${SUM_CMD[@]}" "$1" 2>/dev/null | awk '{print $1}'
+}
+
 
 MODE="${1:-}"
 
@@ -50,6 +70,32 @@ EOF
 emit_result() {
   # $1 = status ("ok"|"rollback"|"error"), $2 = warnings JSON array, $3 = summary object
   jq -nc --arg st "$1" --argjson w "$2" --argjson s "$3" '{status:$st, warnings:$w, summary:$s}'
+}
+
+# ─── captured_by enum — single source of truth, shared by every subcommand ──
+# The union of every value a working call path actually emits (see
+# references/screenshot-store-schema.md §4):
+#   playwright                      — framework-neutral native capture (primary)
+#   playwright-accessible           — process-recipe-supplied accessibility capture
+#   playwright-mcp                  — playwright driven via the MCP tool
+#   claude-in-chrome                — captured via claude-in-chrome
+#   figma-export                    — imported from Figma
+#   html-render                     — rendered from HTML
+#   user-upload                     — manually supplied by a user
+#   lullabot-playwright              — back-compat: Lullabot accessible-screenshot helper
+#   migrated-from-screenshots-store  — set by migrate-screenshots-to-codepath.sh
+# Do not duplicate this list elsewhere — every subcommand that validates
+# captured_by calls validate_captured_by() below.
+CAPTURED_BY_ENUM="playwright playwright-accessible playwright-mcp claude-in-chrome figma-export html-render user-upload lullabot-playwright migrated-from-screenshots-store"
+CAPTURED_BY_ENUM_HUMAN="${CAPTURED_BY_ENUM// /, }"
+
+validate_captured_by() {
+  # $1 = value to check. Returns 0 if valid, 1 otherwise.
+  local v="$1" candidate
+  for candidate in $CAPTURED_BY_ENUM; do
+    [ "$v" = "$candidate" ] && return 0
+  done
+  return 1
 }
 
 # ─── write-baseline-codepath (v4.13.0 — codePath-native sidecar) ─────────────
@@ -77,16 +123,11 @@ if [ "$MODE" = "write-baseline-codepath" ]; then
   case "$PNG_NAME" in
     */*|..*) emit_result "error" '[{"code":"invalid_png_name","detail":"png-filename must be a bare filename"}]' '{}'; exit 2 ;;
   esac
-  # captured_by enum — framework-neutral defaults (playwright / playwright-accessible)
-  # plus recipe- and migration-supplied provenance values. lullabot-playwright is
-  # retained for back-compat with stores written before the agnostic refactor and
-  # for recipes that use the Lullabot accessible-screenshot helper.
-  case "$CB" in
-    playwright|playwright-accessible|playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload|lullabot-playwright|migrated-from-screenshots-store) ;;
-    *)
-      emit_result "error" '[{"code":"invalid_captured_by","detail":"captured_by not in the v4.13.0 enum"}]' '{}'
-      exit 2 ;;
-  esac
+  # captured_by enum — see validate_captured_by() / CAPTURED_BY_ENUM above.
+  if ! validate_captured_by "$CB"; then
+    emit_result "error" "$(jq -nc --arg d "captured_by must be one of: $CAPTURED_BY_ENUM_HUMAN" '[{code:"invalid_captured_by", detail:$d}]')" '{}'
+    exit 2
+  fi
 
   SNAP_DIR="$CODE_PATH/tests/visual/$SURFACE_ID.spec.ts-snapshots"
   PNG_PATH="$SNAP_DIR/$PNG_NAME"
@@ -102,7 +143,7 @@ if [ "$MODE" = "write-baseline-codepath" ]; then
     [ -n "$EXISTING" ] && PRIOR_HASH_JSON=$(jq -nc --arg h "$EXISTING" '$h')
   fi
 
-  NEW_HASH=$(sha256sum "$PNG_PATH" | awk '{print $1}')
+  NEW_HASH=$(sha256_of "$PNG_PATH")
   NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   META_JSON=$(jq -nc \
@@ -163,13 +204,11 @@ if ! echo "$VIEWPORT" | grep -qE '^[0-9]+x[0-9]+$'; then
   emit_result "error" '[{"code":"invalid_viewport","detail":"viewport must match ^[0-9]+x[0-9]+$"}]' '{}'
   exit 2
 fi
-# captured_by enum
-case "$CAPTURED_BY" in
-  playwright-mcp|claude-in-chrome|figma-export|html-render|user-upload) ;;
-  *)
-    emit_result "error" '[{"code":"invalid_captured_by","detail":"captured_by must be one of: playwright-mcp, claude-in-chrome, figma-export, html-render, user-upload"}]' '{}'
-    exit 2 ;;
-esac
+# captured_by enum — see validate_captured_by() / CAPTURED_BY_ENUM above.
+if ! validate_captured_by "$CAPTURED_BY"; then
+  emit_result "error" "$(jq -nc --arg d "captured_by must be one of: $CAPTURED_BY_ENUM_HUMAN" '[{code:"invalid_captured_by", detail:$d}]')" '{}'
+  exit 2
+fi
 # source_type enum (parity-reference only)
 if [ "$ROLE" = "parity_reference" ]; then
   case "$SOURCE_TYPE" in
@@ -195,7 +234,7 @@ PRIOR_HASH="null"
 # STEP 1 — compute prior_hash if predecessor exists
 if [ -f "$CURRENT_PNG" ]; then
   IS_FIRST_BASELINE="false"
-  PRIOR_HASH=$(sha256sum "$CURRENT_PNG" | awk '{print $1}')
+  PRIOR_HASH=$(sha256_of "$CURRENT_PNG")
 fi
 
 # STEPS 2-3 — rotation (only if predecessor exists)
@@ -226,7 +265,7 @@ cp "$SOURCE" "$CURRENT_PNG" || {
 }
 
 # STEP 5 — write new meta
-NEW_HASH=$(sha256sum "$CURRENT_PNG" | awk '{print $1}')
+NEW_HASH=$(sha256_of "$CURRENT_PNG")
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 if [ "$ROLE" = "parity_reference" ]; then
@@ -269,7 +308,7 @@ echo "$META_JSON" > "$CURRENT_META" || {
 }
 
 # STEP 6 — verify integrity
-VERIFY_HASH=$(sha256sum "$CURRENT_PNG" | awk '{print $1}')
+VERIFY_HASH=$(sha256_of "$CURRENT_PNG")
 if [ "$VERIFY_HASH" != "$NEW_HASH" ]; then
   # Extremely unlikely — would mean mid-write corruption. Rollback.
   rm -f "$CURRENT_PNG" "$CURRENT_META"

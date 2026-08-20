@@ -35,9 +35,28 @@
 
 import { defineConfig } from '@playwright/test';
 
+/* BASE URL RESOLUTION, in precedence order.
+ *
+ * `DDEV_PRIMARY_URL` is exported only INSIDE a `ddev` shell, and this harness runs
+ * host-side by design — so on the sanctioned path that term is always empty. Four
+ * components used to name it as the mechanism while nothing ever set it, which
+ * meant a DDEV project fell through to `https://localhost` and every capture
+ * failed with its own connection error.
+ *
+ * `/setup-visual-regression` now resolves the project's real URL once (via
+ * `ddev describe --json-output`) and writes it into the third term below. It sits
+ * BELOW both environment variables on purpose: `PLAYWRIGHT_BASE_URL` stays the
+ * documented override for CI and non-DDEV runners.
+ *
+ * The `https://localhost` fallback stays for consumers outside DDEV. It is no
+ * longer silent: the gate preflights whichever URL wins here and stops with one
+ * message naming it, instead of failing once per surface. */
+const DERIVED_BASE_URL = '__DERIVED_BASE_URL__';
+
 const BASE_URL =
   process.env.PLAYWRIGHT_BASE_URL ||
   process.env.DDEV_PRIMARY_URL ||
+  (DERIVED_BASE_URL.startsWith('http') ? DERIVED_BASE_URL : '') ||
   'https://localhost';
 
 export default defineConfig({
@@ -46,6 +65,20 @@ export default defineConfig({
   testDir: '.',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  /* WORKERS — a single-container backend cannot serve one browser per CPU core.
+     This config refuses to be written without `.ddev/config.yaml` (see DDEV-FIRST
+     above), so the backend is KNOWN to be one web container with one PHP-FPM
+     pool. Playwright's default is one worker per core; measured on a 16-core
+     workstation that failed 36 of 72 captures with no change to the site, purely
+     from the harness competing with itself. Two fixed it completely and held
+     across four further full runs. Raise it only against a backend that can
+     actually serve the concurrency. `fullyParallel` stays on — with a cap it
+     means "parallel up to the cap", which is the intent. */
+  workers: 2,
+  /* RETRIES — zero locally, on purpose. A retry that turns a flaky run green is
+     the same class of defect as a tolerance tuned until the suite passes: both
+     make an unreliable harness look reliable. If this suite needs retries to go
+     green, the capture is not stabilised and that is the thing to fix. */
   retries: process.env.CI ? 1 : 0,
   /* Always emit the `html` reporter alongside the console reporter: it is what
      produces `playwright-report/`, whose image-diff view carries the **Slider**
@@ -66,14 +99,31 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  /* Shared screenshot-comparison defaults. Visual regression (Task C) inherits
-     these; per-surface `masks` from the surface registry are applied at call
-     time, not here. `animations: 'disabled'` and a small `maxDiffPixelRatio`
-     keep diffs stable across runs. */
+  /* Shared screenshot-comparison defaults. Visual regression inherits these;
+     per-surface `masks` from the surface registry are applied at call time, not
+     here.
+
+     TOLERANCE IS AN ABSOLUTE COUNT, NOT A RATIO. A ratio is a fraction of image
+     area, so under full-page capture the budget grows with page height and is
+     loosest exactly where pages are tallest: 0.5% of 1440x900 is ~6,500 px, a
+     sane gate; 0.5% of 1440x8000 is ~57,600 px, enough to hide a whole
+     component. An absolute count does not move when a page grows.
+
+     100 is measured, not chosen. Five runs against an unchanged site with every
+     tolerance key removed — which Playwright treats as a budget of zero, not as
+     a fallback default — produced 75 of 75 byte-identical captures. The observed
+     noise floor was zero, so 100 is about a hundredfold headroom and still only
+     a ten-by-ten block.
+
+     Derive your own: `/setup-visual-regression` offers to repeat the suite
+     against an unchanged site and report the floor it observes. A project that
+     needs a large tolerance has an unstabilised capture, and the tolerance is
+     hiding it. */
   expect: {
     toHaveScreenshot: {
       animations: 'disabled',
-      maxDiffPixelRatio: 0.01,
+      caret: 'hide',
+      maxDiffPixels: 100,
     },
   },
 

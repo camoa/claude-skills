@@ -92,8 +92,12 @@ drift.
 
 A surface's `masks` in `.visual-review/registry.yml` are CSS selectors painted
 over before capture (timestamps, contextual links, ad slots). For regions best
-declared in the template itself, add a `data-vrt-mask` attribute in the
-template markup and list `[data-vrt-mask]` in the surface's `masks`.
+declared in the template itself, add a `data-vrt-mask` attribute in the template
+markup. You do **not** need to list `[data-vrt-mask]` in the surface's `masks` —
+the generated spec prepends it for you.
+
+The run also reports what fraction of the surface your masks cover. If that
+number is high, check the masks are not painting over the thing under test.
 
 ## Repo size & Git LFS
 

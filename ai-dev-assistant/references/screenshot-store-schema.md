@@ -57,10 +57,22 @@ The baseline filename is Playwright's snapshot naming —
 `<snapshot-name>-<projectName>-<platform>`. Generated specs name the snapshot
 explicitly after the surface id (`toHaveScreenshot('<surface-id>.png')`), so the
 name is deterministic; the `<viewport>` is the `visual-chromium-<viewport>`
-project segment. The `.meta.json` sidecar replaces the `.png` extension. (A
-recipe-supplied capture helper that names its snapshot anonymously will instead
-produce Playwright's `<test-name>-<ordinal>-…` form — the store reader enumerates
-whatever baseline files exist, so either shape is accepted.)
+project segment. The `.meta.json` sidecar replaces the `.png` extension.
+
+Two filename shapes are both read:
+
+- `<surface-id>-visual-chromium-<viewport>[-<ctx>]-<platform>.png` — what the
+  plugin's own starter template produces, because the generated spec names its
+  snapshot explicitly (`toHaveScreenshot('<surface-id>.png')`). This is what
+  `/setup-visual-regression`'s default scaffold produces.
+- `<surface-id>-<ordinal>-visual-chromium-<viewport>[-<ctx>]-<platform>.png` —
+  Playwright's own fallback naming, assigned when a capture call passes no
+  explicit name. A recipe-supplied anonymous capture helper produces this
+  shape instead of the named one.
+
+The store reader enumerates whatever baseline files exist under
+`<surface>.spec.ts-snapshots/`, so it does not assume which of the two shapes
+is present — both are read.
 
 ### 2b. Legacy layout (migration source only)
 

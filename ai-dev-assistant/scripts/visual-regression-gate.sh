@@ -80,11 +80,23 @@ add_warning() { WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }
 
 emit() {
   # $1 surfaces, $2 summary
+  #
+  # ORDER THE SURFACES WORST FIRST. Nothing used to rank them, so a reviewer
+  # walking fifteen panels got them in whatever order they happened to appear and
+  # started wherever the alphabet put them. Failures come first, ordered by how
+  # much moved; then warnings; then passes. The eye starts where the damage is.
+  #
+  # report_dir ties this verdict to the report it was produced alongside. Without
+  # it "the report from this run" is unenforceable, because the html reporter used
+  # to write one shared directory that any later run replaced.
   jq -nc \
     --argjson s "$1" --argjson sm "$2" \
     --arg rp "$REGISTRY_PATH" --arg pp "$PROJECT_PREFIX" \
+    --arg rd "${REPORT_DIR:-}" --arg rid "${REPORT_ID:-}" \
     --argjson ci "$CI_MODE" --argjson pe "${PW_EXIT:-0}" --argjson w "$WARNINGS" '
-    { surfaces: $s, summary: $sm, registry_path: $rp,
+    def rank: if .verdict == "fail" then 0 elif .verdict == "warning" then 1 else 2 end;
+    { surfaces: ($s | sort_by([rank, -((.diff_pixels // .diff_percent // 0)), .id])),
+      summary: $sm, registry_path: $rp, report_dir: $rd, report_id: $rid,
       project_pattern: $pp, ci_mode: $ci, playwright_exit: $pe, warnings: $w }'
 }
 
@@ -111,13 +123,74 @@ done < <(grep -oE "name:[[:space:]]*['\"]${PROJECT_PREFIX}[A-Za-z0-9_-]+['\"]" "
   | grep -oE "${PROJECT_PREFIX}[A-Za-z0-9_-]+" | sort -u)
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
+  # EXIT NON-ZERO. This used to emit an all-zero summary and exit 0 — a run that
+  # inspected no surface, reported as a clean run. The sibling baseline-manager
+  # treats the identical condition as fatal, and it is the one that is right: a
+  # gate with nothing to run has not passed, it has not run. A caller that reads
+  # only the verdict would otherwise record a green visual gate for a project
+  # whose visual projects were never configured.
   add_warning "no_visual_projects: playwright.config.ts has no ${PROJECT_PREFIX}* project entries"
   emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
-  exit 0
+  printf 'visual-regression-gate: no %s* projects in playwright.config.ts.\n' "$PROJECT_PREFIX" >&2
+  printf '  Nothing to run, so nothing passed. Run /setup-visual-regression.\n' >&2
+  exit 2
+fi
+
+# ─── base-URL preflight ──────────────────────────────────────────────────────
+# Resolve the same chain playwright.config.ts resolves, and check the site answers
+# BEFORE running the suite. Without this, an unreachable or wrong base URL fails
+# once per surface with a connection error, and the operator reads N failures
+# instead of one cause. `DDEV_PRIMARY_URL` is exported only inside a `ddev` shell
+# and this gate runs host-side, so in practice it is the env override or the URL
+# setup derived into the config.
+BASE_URL="${PLAYWRIGHT_BASE_URL:-${DDEV_PRIMARY_URL:-}}"
+if [ -z "$BASE_URL" ]; then
+  BASE_URL=$(grep -oE "^const DERIVED_BASE_URL = '[^']*'" "$PW_CONFIG" 2>/dev/null \
+    | sed -E "s/^const DERIVED_BASE_URL = '//; s/'$//")
+fi
+# A config written BEFORE this slot existed has no DERIVED_BASE_URL line, and its
+# operator may well have hand-edited the literal in the resolution chain to work
+# around the old always-falls-to-localhost defect. Guessing `https://localhost`
+# for such a project and then hard-failing on it would block a setup that works.
+#
+# So: only fail on what we could actually check. If no URL resolves here, say we
+# could not preflight and continue — an unreachable site still fails per surface,
+# which is the behaviour we had. Refusing to run on a URL we invented ourselves
+# would be worse than not checking.
+if ! printf '%s' "$BASE_URL" | grep -q '^http'; then
+  BASE_URL=$(grep -oE "https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+" "$PW_CONFIG" 2>/dev/null \
+    | grep -v 'localhost' | head -1)
+fi
+
+if ! printf '%s' "$BASE_URL" | grep -q '^http'; then
+  add_warning "base_url_unresolved: could not determine the base URL from the environment or ${PW_CONFIG##*/}; skipping the preflight. Set PLAYWRIGHT_BASE_URL, or re-run /setup-visual-regression to derive it."
+elif command -v curl >/dev/null 2>&1; then
+  if ! curl -ksSf -o /dev/null --max-time 15 "$BASE_URL" 2>/dev/null; then
+    add_warning "base_url_unreachable: ${BASE_URL} did not answer. Set PLAYWRIGHT_BASE_URL, or re-run /setup-visual-regression to derive it."
+    emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
+    printf 'visual-regression-gate: base URL %s did not answer.\n' "$BASE_URL" >&2
+    printf '  Every capture would fail against it. Set PLAYWRIGHT_BASE_URL, or\n' >&2
+    printf '  re-run /setup-visual-regression to resolve the project URL.\n' >&2
+    exit 2
+  fi
+elif [ -n "$BASE_URL" ]; then
+  add_warning "base_url_unchecked: curl not available, so ${BASE_URL} was not preflighted"
 fi
 
 PROJ_ARGS=()
 for p in "${PROJECTS[@]}"; do PROJ_ARGS+=("--project" "$p"); done
+
+# Cap concurrency HERE as well as in playwright.config.ts. The config default is
+# the right place to state the reason, but a project that edited its config would
+# otherwise uncap the capture path silently. The framework is DDEV-first by
+# declaration, so the backend is known to be one web container: measured on a
+# 16-core host, the uncapped default failed 36 of 72 captures with no change to
+# the site. Override with VR_WORKERS when the backend can actually serve more.
+VR_WORKERS="${VR_WORKERS:-2}"
+case "$VR_WORKERS" in
+  ''|*[!0-9]*) VR_WORKERS=2 ;;
+esac
+[ "$VR_WORKERS" -lt 1 ] && VR_WORKERS=1
 
 # ─── run the suite ───────────────────────────────────────────────────────────
 
@@ -134,20 +207,58 @@ PW_EXIT=0
 # version old enough to ignore it the JSON would go to the /dev/null'd stdout and
 # this file stays empty — which degrades fail-safe to the playwright_no_json branch
 # below, never a false pass.)
+# RUN-SCOPED REPORT. The html reporter used to write the single shared
+# `playwright-report/`, so any later Playwright run in the same checkout silently
+# replaced it. Observed: a verifier ran one unrelated command and the served
+# report went from 15 tests to 1, while the recorded verdict still said pass and
+# the server still returned 200. "Walk every surface in the report from this run"
+# has no meaning while the report is last-writer-wins global state.
+REPORT_ID="${VR_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
+REPORT_DIR=".visual-review/reports/$REPORT_ID"
+mkdir -p "$CODE_PATH/$REPORT_DIR" 2>/dev/null || true
+
+# The reporter list takes BARE names. Playwright's `builtInReporters` is
+# ["list","line","dot","json","junit","null","github","html","blob"]; a token that
+# is not in that list is treated as a module path and `require.resolve()` throws
+# "Cannot find module". So `--reporter=html:<dir>` does not scope the report, it
+# CRASHES the run before a single surface is captured. The output directory is set
+# through PLAYWRIGHT_HTML_OUTPUT_DIR above, which Playwright path.resolve()s
+# against the working directory — which is CODE_PATH here, so a relative
+# REPORT_DIR lands inside the project. (Verified against playwright 1.60.0
+# lib/common/index.js and lib/runner/index.js.)
+#
+# Keep Playwright's own console output OUT of stdout — stdout is this gate's JSON
+# contract — but keep it somewhere readable, because discarding it is how a crash
+# becomes an unexplained empty report.
+PW_LOG="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-log-$$.txt")"
 PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-$$.json")"
 ( cd "$CODE_PATH" \
   && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
-     npx playwright test "${PROJ_ARGS[@]}" --reporter=json,html >/dev/null 2>&1 ) || PW_EXIT=$?
+     PLAYWRIGHT_HTML_OUTPUT_DIR="$REPORT_DIR" \
+     npx playwright test "${PROJ_ARGS[@]}" --workers "$VR_WORKERS" \
+       --reporter=json,html >"$PW_LOG" 2>&1 ) || PW_EXIT=$?
 PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
 rm -f "$PW_JSON_FILE"
 
 if ! jq -e . >/dev/null 2>&1 <<<"$PW_JSON"; then
+  # EXIT NON-ZERO WHATEVER PLAYWRIGHT SAID. No parseable report means this gate
+  # did not observe a single surface, so it cannot report a verdict either way.
+  # The previous version exited 0 when Playwright itself exited 0, and its comment
+  # claimed the degradation was "never a false pass" — true only for a consumer
+  # that reads warnings[], and no consumer did. An unreadable report is a broken
+  # run, not a quiet success.
+  # Surface WHY. Without this the operator gets "no parseable JSON report" and no
+  # cause — which is exactly what an invalid reporter token produced.
+  PW_TAIL=$(grep -v '^[[:space:]]*$' "$PW_LOG" 2>/dev/null | tail -5 | tr '\n' ' ' || true)
+  rm -f "$PW_LOG"
   add_warning "playwright_no_json: the suite produced no parseable JSON report (exit $PW_EXIT)"
+  [ -n "$PW_TAIL" ] && add_warning "playwright_output: $PW_TAIL"
   emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
-  # A non-zero exit with no JSON is a setup/run failure, not a clean pass.
-  [ "$PW_EXIT" -ne 0 ] && exit 2
-  exit 0
+  printf 'visual-regression-gate: the suite produced no parseable JSON report (playwright exit %s).\n' "$PW_EXIT" >&2
+  printf '  No surface was observed, so this run has no verdict.\n' >&2
+  exit 2
 fi
+rm -f "$PW_LOG"   # parsed fine; the log has served its purpose
 
 # Per-file (= per-surface) status + error rollup. Each top-level suite is a
 # spec file; recurse() descends through describe blocks.
@@ -205,13 +316,60 @@ while IFS= read -r row; do
   # Best-effort diff_percent — Playwright screenshot errors carry
   # "(ratio 0.NN of all image pixels)". Take the max ratio for the surface.
   diff_percent='null'
+  diff_pixels='null'
+  diff_path='null'
+  failure_kind='null'
   if [ "$verdict" = "fail" ]; then
-    max_ratio=$(jq -r '.errors[]? // ""' <<<"$row" \
-      | grep -oE 'ratio [0-9]+\.[0-9]+' \
-      | grep -oE '[0-9]+\.[0-9]+' \
-      | sort -rn | head -1)
-    if [ -n "$max_ratio" ]; then
-      diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.4f", r * 100 }')
+    ERR_TEXT=$(jq -r '.errors[]? // ""' <<<"$row")
+
+    # A full-page image is sized to the document, so a page that renders taller
+    # fails on DIMENSION MISMATCH before any tolerance is consulted — and produces
+    # no diff image. That is a correct verdict (the page changed length) but it
+    # reads as an inscrutable error, and a reviewer hunts for a diff that does not
+    # exist. Name it instead. Playwright phrases this as
+    # "Expected an image WxH, but got WxH".
+    DIMS=$(printf '%s' "$ERR_TEXT" \
+      | grep -oE 'Expected an image [0-9]+px by [0-9]+px, received [0-9]+px by [0-9]+px' \
+      | head -1)
+    [ -z "$DIMS" ] && DIMS=$(printf '%s' "$ERR_TEXT" \
+      | grep -oE 'Expected an image [0-9]+ by [0-9]+, received [0-9]+ by [0-9]+' \
+      | head -1)
+
+    if [ -n "$DIMS" ]; then
+      failure_kind=$(jq -Rn --arg d "$DIMS" '"dimension_change: " + $d')
+    else
+      failure_kind='"pixel_diff"'
+
+      # EXACT COUNT FIRST. Playwright's message carries both an absolute pixel
+      # count and a ratio: "N pixels (ratio 0.NN of all image pixels) are
+      # different". The count is exact; the ratio is printed to two decimals, so
+      # multiplying it by 100 yields a figure that moves only in whole
+      # percentage points. The old code then formatted that to four decimals —
+      # four digits of precision it does not have. Against a small tolerance the
+      # entire decision band collapsed onto 0 or 1, so the number offered to
+      # triage a borderline failure was blind exactly where it mattered.
+      max_pixels=$(printf '%s' "$ERR_TEXT" \
+        | grep -oE '[0-9]+ pixels' \
+        | grep -oE '[0-9]+' \
+        | sort -rn | head -1)
+      [ -n "$max_pixels" ] && diff_pixels="$max_pixels"
+
+      max_ratio=$(printf '%s' "$ERR_TEXT" \
+        | grep -oE 'ratio [0-9]+\.[0-9]+' \
+        | grep -oE '[0-9]+\.[0-9]+' \
+        | sort -rn | head -1)
+      if [ -n "$max_ratio" ]; then
+        # Two decimals in, two decimals out. No invented digits.
+        diff_percent=$(awk -v r="$max_ratio" 'BEGIN { printf "%.2f", r * 100 }')
+      fi
+
+      # Playwright writes its diff image under test-results/ in a hash-mangled
+      # directory. Find it rather than leaving the reviewer to glob for it: the
+      # mandated prompt asks for this path, and an unfillable token becomes the
+      # literal word "unknown" at the moment a human decides regression versus
+      # intentional.
+      found_diff=$(find "$CODE_PATH/test-results" -type f -name "*${sid}*diff.png" 2>/dev/null | head -1)
+      [ -n "$found_diff" ] && diff_path=$(jq -Rn --arg p "$found_diff" '$p')
     fi
   fi
 
@@ -223,14 +381,79 @@ while IFS= read -r row; do
   esac
 
   SURFACES=$(jq -c \
-    --arg id "$sid" --arg v "$verdict" --argjson dp "$diff_percent" --argjson fv "$FAILED_VPS" '
-    . + [{id:$id, verdict:$v, diff_percent:$dp, failed_viewports:$fv}]' <<<"$SURFACES")
+    --arg id "$sid" --arg v "$verdict" --argjson dp "$diff_percent" --argjson fv "$FAILED_VPS" \
+    --argjson fk "$failure_kind" --argjson dpx "$diff_pixels" --argjson dpath "$diff_path" '
+    . + [{id:$id, verdict:$v, diff_percent:$dp, diff_pixels:$dpx, diff_path:$dpath,
+          failure_kind:$fk, failed_viewports:$fv}]' <<<"$SURFACES")
 done <<<"$SURFACE_ROWS"
 
+# ─── did we actually observe what the registry asked for? ────────────────────
+# The registry path was taken as an argument and never read — it was echoed back
+# in the output and nothing else. So a suite where every spec is skipped, or where
+# fourteen of fifteen spec files are missing, observed nothing and exited 0. A
+# gate that cannot notice its own subject going absent cannot fail, and a check
+# that cannot fail cannot inform.
+EXPECTED_IDS='[]'
+EXPECTED_CHECKED=false
+if [ -f "$REGISTRY_PATH" ] && command -v python3 >/dev/null 2>&1; then
+  EXPECTED_IDS=$(python3 -c '
+import sys, json
+try:
+    import yaml
+except ImportError:
+    print("[]"); sys.exit(0)
+try:
+    with open(sys.argv[1]) as fh:
+        data = yaml.safe_load(fh.read())
+except Exception:
+    print("[]"); sys.exit(0)
+out = []
+surfaces = data.get("surfaces") if isinstance(data, dict) else None
+for s in surfaces or []:
+    if not isinstance(s, dict):
+        continue
+    gates = s.get("gates") or []
+    if not isinstance(gates, list) or "visual_regression" not in gates:
+        continue
+    if str(s.get("review", "automatic")).strip() == "manual":
+        continue          # deliberately not auto-gated; absence is the intent
+    sid = s.get("id")
+    if isinstance(sid, str) and sid.strip():
+        out.append(sid.strip())
+print(json.dumps(out))
+' "$REGISTRY_PATH" 2>/dev/null || echo '[]')
+  jq -e 'type == "array"' <<<"$EXPECTED_IDS" >/dev/null 2>&1 || EXPECTED_IDS='[]'
+  [ "$(jq 'length' <<<"$EXPECTED_IDS")" -gt 0 ] && EXPECTED_CHECKED=true
+fi
+
+MISSING='[]'
+if [ "$EXPECTED_CHECKED" = true ]; then
+  MISSING=$(jq -c --argjson exp "$EXPECTED_IDS" --argjson got "$SURFACES" \
+    '[$exp[] | select(. as $e | ($got | map(.id) | index($e)) == null)]' <<<'null')
+  MISSING_N=$(jq 'length' <<<"$MISSING")
+  if [ "${MISSING_N:-0}" -gt 0 ]; then
+    add_warning "surfaces_missing: the registry asks for $(jq -r 'join(", ")' <<<"$MISSING") but the run produced no result for them"
+  fi
+else
+  # Say the check did not run. A silent skip here would restore exactly the hole
+  # this block exists to close.
+  add_warning "expected_surfaces_unchecked: could not read the registry (absent, unparseable, or PyYAML missing), so the observed surfaces were not compared against it"
+fi
+
 SUMMARY=$(jq -nc --argjson r "$RUN" --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" \
-  '{surfaces_run:$r, passed:$p, failed:$f, skipped:$s}')
+  --argjson e "$(jq 'length' <<<"$EXPECTED_IDS")" --argjson m "$MISSING" \
+  '{surfaces_run:$r, passed:$p, failed:$f, skipped:$s,
+    surfaces_expected:$e, surfaces_missing:$m}')
 
 emit "$SURFACES" "$SUMMARY"
 
 [ "$FAILED" -gt 0 ] && exit 1
+# A registry surface with no result is a failure of the gate to observe its
+# subject, not a clean run.
+if [ "$EXPECTED_CHECKED" = true ] && [ "$(jq 'length' <<<"$MISSING")" -gt 0 ]; then
+  printf 'visual-regression-gate: %s registry surface(s) produced no result: %s\n' \
+    "$(jq 'length' <<<"$MISSING")" "$(jq -r 'join(", ")' <<<"$MISSING")" >&2
+  printf '  The run did not observe them, so it cannot vouch for them.\n' >&2
+  exit 1
+fi
 exit 0

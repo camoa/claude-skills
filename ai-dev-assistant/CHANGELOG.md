@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.25.0] - 2026-08-20
+
+Closes the recorded defects in the visual-regression layer. The findings came from
+running this plugin's own setup from scratch on a real Drupal site and writing down
+what broke, then re-checking every finding against the current source, then paper-testing
+the fixes before they were trusted.
+
+### Fixed — the gate can now fail
+
+- The gate took the surface registry as an argument, echoed it back, and never read it.
+  A suite where every spec was skipped, or where spec files were missing, observed nothing
+  and exited 0. It now compares the surfaces it observed against the ones the registry asks
+  for and fails naming any that produced no result. Surfaces marked `review: manual` are
+  excluded, since their absence is the intent. When the registry cannot be read it reports
+  that the comparison did not happen rather than skipping quietly.
+- Two paths emitted an all-zero summary and exited 0: no visual projects configured, and a
+  run that produced no parseable report. Both now exit non-zero. The second carried a comment
+  claiming the degradation was "never a false pass", true only for a consumer that reads
+  warnings, and none did.
+- `/validate:visual-regression` checked only that the gate's stdout parsed as JSON, and
+  `jq empty` succeeds on empty input — so a run that exited 2 with a precise message on
+  stderr was recorded as valid and the message never shown. The exit code is now checked
+  first.
+- A rebaseline recorded what it planned, never what it wrote. It now checksums the images
+  before and after, so `updated` is an observation. A pattern that plans zero surfaces is an
+  error, and an invalid regex is distinguished from a valid one that matched nothing.
+- A rebaseline could rewrite more surfaces than the operator confirmed: the plan stage matches
+  spec stems while the execute stage matches Playwright's title path, so one pattern could
+  scope to different sets. The execute filter is now derived from what the plan resolved.
+
+### Fixed — what gets captured
+
+- Capture extent is a per-surface registry field (`capture: full | viewport`, default `full`)
+  rather than Playwright's inherited viewport-only default. On one measured page the old
+  default put 86% of the surface outside the baseline while the gate stayed green.
+- New `references/visual-review/_capture-stability.mjs`, shared with the parity engine so the
+  two gates cannot drift on what "stable enough to capture" means. It carries the freeze,
+  fonts and double-frame sequence the parity engine already proved, plus a lazy-content settle
+  that neither gate had. The freeze is split either side of the settle scroll: the
+  scroll-behaviour override before it so the scroll is instant, the animation freeze after it
+  so a scroll-triggered reveal has run.
+- Tolerance is one absolute `maxDiffPixels` rather than a ratio, which under full-page capture
+  grew with page height and was loosest where pages are tallest. Setup offers to measure the
+  project's own noise floor rather than advising it.
+- `workers` is capped in the shared config with its single-container reason, and again in the
+  gate so an edited config cannot uncap the capture path.
+
+### Fixed — contracts that disagreed
+
+- The baseline filename grammar accepts both the named form the starter template produces and
+  the ordinal form Playwright assigns to an anonymous capture. The reader previously hardcoded
+  the ordinal and could not tell fifteen baselines from fourteen.
+- The reader searches deep enough to see authenticated surfaces, which were previously never
+  scanned; takes an optional registry so a leftover snapshot directory is distinguishable from
+  a surface that was never baselined; and reports when that cross-reference did not run.
+- One provenance enum instead of two disagreeing ones, with the accepted values in the error.
+- The registry has one documented home and one version claim. `--add-surface` distinguishes an
+  identical re-add from a collision.
+- Both recipe-loader skills use named variables instead of bare positional parameters, which
+  the Skill tool overwrites with a caller's arguments. This reaches every lifecycle phase.
+
+### Fixed — what a person is shown
+
+- Every surface now carries an attached image whether it passed or failed, so the report has
+  something to show. `toHaveScreenshot` attaches only on failure, which left a passing run
+  rendering green rows and zero images.
+- The html report is written to a run-scoped directory and the verdict records which one.
+- The diff figure is an exact pixel count; the percentage is no longer printed with four
+  decimals of precision it does not have.
+- Surfaces arrive worst first. An unattended classification records that no person made it.
+
+### Added — what the process is pointed at
+
+- Mask coverage is measured at capture from element geometry, attached to the report, and
+  annotated on the surface when it is large. On the site this came from, the masks a standard
+  setup produced covered 29 of 29 teaser cards on one surface — the gate would have passed a
+  refactor that broke every card. Selectors the measurement cannot evaluate are reported as
+  unknown rather than scored as zero.
+- Setup states what a surface set is for: one instance per rendering template, the
+  fully-populated fixture, the component-library surface with its limits, a report of templates
+  no surface can isolate, one language by default, and the image-masking tradeoff.
+- Registry values are validated at the point they are substituted into a spec that is executed.
+- The viewport scan reads rem and em and both media range spellings, keeps min and max apart,
+  reports observed widths rather than computed cluster centres, selects files deterministically,
+  and reports a rule count per width. It previously scanned declarations rather than media
+  preludes, so a container `max-width` could become a viewport.
+- Setup resolves the Playwright base URL and writes it below both environment variables. It was
+  documented by five components and set by none, so a DDEV project fell through to localhost.
+
+### Changed
+
+- Surface registry schema 1.4 adds `review: automatic | manual`.
+- A re-run keeps existing viewport names, compared by width. A viewport name is a path segment
+  in every baseline filename, so re-deriving one orphans every baseline filed under it.
+- The rationale for CI being deliberately absent is written down.
+
 ## [5.24.0] - 2026-08-17
 
 ### Added
