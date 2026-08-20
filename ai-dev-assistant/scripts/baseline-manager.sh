@@ -348,17 +348,45 @@ if [ "${#PROJ_ARGS[@]}" -eq 0 ]; then
   exit 2
 fi
 
+# THE EXECUTE FILTER IS BUILT FROM WHAT THE PLAN RESOLVED — never from the
+# operator's pattern.
+#
+# The two stages match against different strings: PLAN matches spec-file stems,
+# EXECUTE hands Playwright a pattern it matches against the joined title path
+# (`tests/visual/couple.spec.ts:27:7 › couple visual regression › …`). Passing one
+# operator pattern to both means they can scope to DIFFERENT SETS, and the
+# direction that matters is execute matching MORE than plan — the two-stage
+# confirm then shows the operator one thing and rewrites another.
+#
+# `--grep 'couple|spec'` is the case: no stem contains "spec", so the plan shows
+# the couple surfaces, while every title path contains ".spec.ts", so Playwright
+# matches every surface and rebaselines all of them. The plan-side overmatch
+# warning does not cover this, because it looks at the opposite direction.
+#
+# Deriving the execute pattern from SURFACES_PLANNED closes it by construction:
+# whatever the operator's pattern selected, what runs is exactly what they were
+# shown. Each id is regex-escaped and anchored on its spec filename, preceded by
+# start-of-string or a non-identifier character, so `hero` cannot also select
+# `home-hero.spec.ts`.
 PW_ARGS=(test --update-snapshots "${PROJ_ARGS[@]}")
-if [ -n "$EXACT_SURFACE" ]; then
-  # Playwright matches --grep against the joined title path
-  # (`tests/visual/couple.spec.ts:27:7 › couple visual regression › …`), not the
-  # stem — `^couple$` matches nothing there. Anchor on the spec filename
-  # instead, preceded by start-of-string or a non-identifier character, so
-  # `hero` cannot also select `home-hero.spec.ts`.
-  ESCAPED_SURFACE=$(printf '%s' "$EXACT_SURFACE" | sed 's/[]\.^$*+?()[{}|\\\/]/\\&/g')
-  PW_ARGS+=(--grep "(^|[^A-Za-z0-9_-])${ESCAPED_SURFACE}\\.spec\\.ts")
-elif [ -n "$GREP_PATTERN" ]; then
-  PW_ARGS+=(--grep "$GREP_PATTERN")
+GREP_ALTERNATION=""
+while IFS= read -r planned_id; do
+  [ -z "$planned_id" ] && continue
+  ESCAPED_SURFACE=$(printf '%s' "$planned_id" | sed 's/[]\.^$*+?()[{}|\\\/]/\\&/g')
+  ONE="(^|[^A-Za-z0-9_-])${ESCAPED_SURFACE}\\.spec\\.ts"
+  if [ -z "$GREP_ALTERNATION" ]; then GREP_ALTERNATION="$ONE"
+  else GREP_ALTERNATION="${GREP_ALTERNATION}|${ONE}"; fi
+done <<EOF
+$(jq -r '.[]' <<<"$SURFACES_PLANNED" 2>/dev/null)
+EOF
+
+if [ -n "$GREP_ALTERNATION" ]; then
+  PW_ARGS+=(--grep "$GREP_ALTERNATION")
+elif [ -n "$EXACT_SURFACE" ] || [ -n "$GREP_PATTERN" ]; then
+  # Scoping was requested but produced no pattern. Refuse rather than running
+  # unscoped, which would rebaseline everything.
+  err "scoping was requested but resolved to no surface — refusing to run --update-snapshots unscoped"
+  exit 2
 fi
 
 # ─── observe what actually gets written ──────────────────────────────────────

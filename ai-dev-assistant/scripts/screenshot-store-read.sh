@@ -79,6 +79,24 @@
 
 set -uo pipefail
 
+# Checksum tool. macOS ships `shasum` and no `sha256sum`; coreutils ships the
+# reverse. Calling either one bare means the command substitution returns EMPTY on
+# the other platform and an empty hash gets written or compared as though it were
+# real. Resolve once, and fail loudly when neither exists rather than recording a
+# blank where a digest belongs.
+if command -v shasum >/dev/null 2>&1; then
+  SUM_CMD=(shasum -a 256)
+elif command -v sha256sum >/dev/null 2>&1; then
+  SUM_CMD=(sha256sum)
+else
+  SUM_CMD=()
+fi
+sha256_of() {
+  [ "${#SUM_CMD[@]}" -gt 0 ] || return 1
+  "${SUM_CMD[@]}" "$1" 2>/dev/null | awk '{print $1}'
+}
+
+
 CODE_PATH="${1:?codePath required}"
 LEGACY_PATH=""
 REGISTRY_PATH=""
@@ -301,7 +319,7 @@ while IFS= read -r snap_dir; do
           vp_warnings=$(jq -c -n --argjson prev "$vp_warnings" \
             '$prev + [{code:"meta_schema_mismatch",detail:"missing one or more required v1.0 fields"}]')
         fi
-        actual_hash=$(sha256sum "$png_file" 2>/dev/null | awk '{print $1}')
+        actual_hash=$(sha256_of "$png_file")
         declared_hash=$(echo "$meta_obj" | jq -r '.sha256 // empty' 2>/dev/null)
         if [ -n "$actual_hash" ] && [ -n "$declared_hash" ] && [ "$actual_hash" != "$declared_hash" ]; then
           vp_warnings=$(jq -c -n --argjson prev "$vp_warnings" --arg a "$actual_hash" --arg d "$declared_hash" \

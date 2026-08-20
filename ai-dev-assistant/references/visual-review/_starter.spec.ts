@@ -95,6 +95,21 @@ test.describe('__SURFACE_ID__ visual regression', () => {
       body: JSON.stringify(coverage, null, 2),
       contentType: 'application/json',
     });
+    // A selector the measurement could NOT parse is not a selector that covers
+    // nothing. Playwright's locator engine accepts forms `querySelectorAll` does
+    // not — an xpath like `//body` masks the entire page and measures as zero.
+    // Treat unmeasurable as unknown, loudly, never as safe.
+    const unmeasurable = coverage.per_selector.filter((sel) => sel.count === -1);
+    if (unmeasurable.length > 0) {
+      const names = unmeasurable.map((sel) => sel.selector).join(', ');
+      testInfo.annotations.push({
+        type: 'mask-coverage',
+        description: `Mask coverage could not be measured for: ${names}. These may be xpath or engine-specific selectors that the measurement cannot evaluate, so the reported fraction EXCLUDES whatever they hide. Verify by eye what they cover.`,
+      });
+      // eslint-disable-next-line no-console
+      console.warn(`[visual] __SURFACE_ID__: unmeasurable mask selector(s): ${names}`);
+    }
+
     if (coverage.masked_fraction > MASK_COVERAGE_WARN_FRACTION) {
       const pct = (coverage.masked_fraction * 100).toFixed(1);
       const detail = coverage.per_selector

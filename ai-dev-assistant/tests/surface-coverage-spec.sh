@@ -122,6 +122,15 @@ else
   fail_check "masking img is left for each project to rediscover"
 fi
 
+# === Registry values become executable code, so they must be validated ===
+# __SURFACE_URL__ and __MASKS_ARRAY__ are substituted into a spec that is then run
+# as Node. Textual substitution does not escape.
+if grep -qiE 'executed as Node|before substituting|substitution boundary' "$SETUP"; then
+  pass_check "values are validated before being substituted into an executed spec"
+else
+  fail_check "registry values reach a generated spec with no character validation"
+fi
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && printf 'surface-coverage-spec: all checks passed\n' || printf 'surface-coverage-spec: FAILURES above\n' >&2
 exit "$FAIL"

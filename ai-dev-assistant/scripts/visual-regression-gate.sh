@@ -148,9 +148,23 @@ if [ -z "$BASE_URL" ]; then
   BASE_URL=$(grep -oE "^const DERIVED_BASE_URL = '[^']*'" "$PW_CONFIG" 2>/dev/null \
     | sed -E "s/^const DERIVED_BASE_URL = '//; s/'$//")
 fi
-case "$BASE_URL" in http*) ;; *) BASE_URL='https://localhost' ;; esac
+# A config written BEFORE this slot existed has no DERIVED_BASE_URL line, and its
+# operator may well have hand-edited the literal in the resolution chain to work
+# around the old always-falls-to-localhost defect. Guessing `https://localhost`
+# for such a project and then hard-failing on it would block a setup that works.
+#
+# So: only fail on what we could actually check. If no URL resolves here, say we
+# could not preflight and continue — an unreachable site still fails per surface,
+# which is the behaviour we had. Refusing to run on a URL we invented ourselves
+# would be worse than not checking.
+if ! printf '%s' "$BASE_URL" | grep -q '^http'; then
+  BASE_URL=$(grep -oE "https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+" "$PW_CONFIG" 2>/dev/null \
+    | grep -v 'localhost' | head -1)
+fi
 
-if command -v curl >/dev/null 2>&1; then
+if ! printf '%s' "$BASE_URL" | grep -q '^http'; then
+  add_warning "base_url_unresolved: could not determine the base URL from the environment or ${PW_CONFIG##*/}; skipping the preflight. Set PLAYWRIGHT_BASE_URL, or re-run /setup-visual-regression to derive it."
+elif command -v curl >/dev/null 2>&1; then
   if ! curl -ksSf -o /dev/null --max-time 15 "$BASE_URL" 2>/dev/null; then
     add_warning "base_url_unreachable: ${BASE_URL} did not answer. Set PLAYWRIGHT_BASE_URL, or re-run /setup-visual-regression to derive it."
     emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
@@ -159,7 +173,7 @@ if command -v curl >/dev/null 2>&1; then
     printf '  re-run /setup-visual-regression to resolve the project URL.\n' >&2
     exit 2
   fi
-else
+elif [ -n "$BASE_URL" ]; then
   add_warning "base_url_unchecked: curl not available, so ${BASE_URL} was not preflighted"
 fi
 
@@ -203,12 +217,26 @@ REPORT_ID="${VR_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
 REPORT_DIR=".visual-review/reports/$REPORT_ID"
 mkdir -p "$CODE_PATH/$REPORT_DIR" 2>/dev/null || true
 
+# The reporter list takes BARE names. Playwright's `builtInReporters` is
+# ["list","line","dot","json","junit","null","github","html","blob"]; a token that
+# is not in that list is treated as a module path and `require.resolve()` throws
+# "Cannot find module". So `--reporter=html:<dir>` does not scope the report, it
+# CRASHES the run before a single surface is captured. The output directory is set
+# through PLAYWRIGHT_HTML_OUTPUT_DIR above, which Playwright path.resolve()s
+# against the working directory — which is CODE_PATH here, so a relative
+# REPORT_DIR lands inside the project. (Verified against playwright 1.60.0
+# lib/common/index.js and lib/runner/index.js.)
+#
+# Keep Playwright's own console output OUT of stdout — stdout is this gate's JSON
+# contract — but keep it somewhere readable, because discarding it is how a crash
+# becomes an unexplained empty report.
+PW_LOG="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-log-$$.txt")"
 PW_JSON_FILE="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/vr-gate-$$.json")"
 ( cd "$CODE_PATH" \
   && PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_JSON_OUTPUT_NAME="$PW_JSON_FILE" \
      PLAYWRIGHT_HTML_OUTPUT_DIR="$REPORT_DIR" \
      npx playwright test "${PROJ_ARGS[@]}" --workers "$VR_WORKERS" \
-       --reporter="json,html:$REPORT_DIR" >/dev/null 2>&1 ) || PW_EXIT=$?
+       --reporter=json,html >"$PW_LOG" 2>&1 ) || PW_EXIT=$?
 PW_JSON="$(cat "$PW_JSON_FILE" 2>/dev/null || true)"
 rm -f "$PW_JSON_FILE"
 
@@ -219,12 +247,18 @@ if ! jq -e . >/dev/null 2>&1 <<<"$PW_JSON"; then
   # claimed the degradation was "never a false pass" — true only for a consumer
   # that reads warnings[], and no consumer did. An unreadable report is a broken
   # run, not a quiet success.
+  # Surface WHY. Without this the operator gets "no parseable JSON report" and no
+  # cause — which is exactly what an invalid reporter token produced.
+  PW_TAIL=$(grep -v '^[[:space:]]*$' "$PW_LOG" 2>/dev/null | tail -5 | tr '\n' ' ' || true)
+  rm -f "$PW_LOG"
   add_warning "playwright_no_json: the suite produced no parseable JSON report (exit $PW_EXIT)"
+  [ -n "$PW_TAIL" ] && add_warning "playwright_output: $PW_TAIL"
   emit '[]' '{"surfaces_run":0,"passed":0,"failed":0,"skipped":0}'
   printf 'visual-regression-gate: the suite produced no parseable JSON report (playwright exit %s).\n' "$PW_EXIT" >&2
   printf '  No surface was observed, so this run has no verdict.\n' >&2
   exit 2
 fi
+rm -f "$PW_LOG"   # parsed fine; the log has served its purpose
 
 # Per-file (= per-surface) status + error rollup. Each top-level suite is a
 # spec file; recurse() descends through describe blocks.
@@ -353,10 +387,73 @@ while IFS= read -r row; do
           failure_kind:$fk, failed_viewports:$fv}]' <<<"$SURFACES")
 done <<<"$SURFACE_ROWS"
 
+# ─── did we actually observe what the registry asked for? ────────────────────
+# The registry path was taken as an argument and never read — it was echoed back
+# in the output and nothing else. So a suite where every spec is skipped, or where
+# fourteen of fifteen spec files are missing, observed nothing and exited 0. A
+# gate that cannot notice its own subject going absent cannot fail, and a check
+# that cannot fail cannot inform.
+EXPECTED_IDS='[]'
+EXPECTED_CHECKED=false
+if [ -f "$REGISTRY_PATH" ] && command -v python3 >/dev/null 2>&1; then
+  EXPECTED_IDS=$(python3 -c '
+import sys, json
+try:
+    import yaml
+except ImportError:
+    print("[]"); sys.exit(0)
+try:
+    with open(sys.argv[1]) as fh:
+        data = yaml.safe_load(fh.read())
+except Exception:
+    print("[]"); sys.exit(0)
+out = []
+surfaces = data.get("surfaces") if isinstance(data, dict) else None
+for s in surfaces or []:
+    if not isinstance(s, dict):
+        continue
+    gates = s.get("gates") or []
+    if not isinstance(gates, list) or "visual_regression" not in gates:
+        continue
+    if str(s.get("review", "automatic")).strip() == "manual":
+        continue          # deliberately not auto-gated; absence is the intent
+    sid = s.get("id")
+    if isinstance(sid, str) and sid.strip():
+        out.append(sid.strip())
+print(json.dumps(out))
+' "$REGISTRY_PATH" 2>/dev/null || echo '[]')
+  jq -e 'type == "array"' <<<"$EXPECTED_IDS" >/dev/null 2>&1 || EXPECTED_IDS='[]'
+  [ "$(jq 'length' <<<"$EXPECTED_IDS")" -gt 0 ] && EXPECTED_CHECKED=true
+fi
+
+MISSING='[]'
+if [ "$EXPECTED_CHECKED" = true ]; then
+  MISSING=$(jq -c --argjson exp "$EXPECTED_IDS" --argjson got "$SURFACES" \
+    '[$exp[] | select(. as $e | ($got | map(.id) | index($e)) == null)]' <<<'null')
+  MISSING_N=$(jq 'length' <<<"$MISSING")
+  if [ "${MISSING_N:-0}" -gt 0 ]; then
+    add_warning "surfaces_missing: the registry asks for $(jq -r 'join(", ")' <<<"$MISSING") but the run produced no result for them"
+  fi
+else
+  # Say the check did not run. A silent skip here would restore exactly the hole
+  # this block exists to close.
+  add_warning "expected_surfaces_unchecked: could not read the registry (absent, unparseable, or PyYAML missing), so the observed surfaces were not compared against it"
+fi
+
 SUMMARY=$(jq -nc --argjson r "$RUN" --argjson p "$PASSED" --argjson f "$FAILED" --argjson s "$SKIPPED" \
-  '{surfaces_run:$r, passed:$p, failed:$f, skipped:$s}')
+  --argjson e "$(jq 'length' <<<"$EXPECTED_IDS")" --argjson m "$MISSING" \
+  '{surfaces_run:$r, passed:$p, failed:$f, skipped:$s,
+    surfaces_expected:$e, surfaces_missing:$m}')
 
 emit "$SURFACES" "$SUMMARY"
 
 [ "$FAILED" -gt 0 ] && exit 1
+# A registry surface with no result is a failure of the gate to observe its
+# subject, not a clean run.
+if [ "$EXPECTED_CHECKED" = true ] && [ "$(jq 'length' <<<"$MISSING")" -gt 0 ]; then
+  printf 'visual-regression-gate: %s registry surface(s) produced no result: %s\n' \
+    "$(jq 'length' <<<"$MISSING")" "$(jq -r 'join(", ")' <<<"$MISSING")" >&2
+  printf '  The run did not observe them, so it cannot vouch for them.\n' >&2
+  exit 1
+fi
 exit 0

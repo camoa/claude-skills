@@ -309,6 +309,7 @@ if [ -n "$BREAKPOINTS_FROM" ]; then
     echo "[]"
     exit 2
   fi
+  BP_ERR="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/dvm-bp-$$.err")"
   if ! jq -e 'type == "array"' "$BREAKPOINTS_FROM" >/dev/null 2>&1; then
     echo "derive-viewport-matrix: --breakpoints-from is not a JSON array: $BREAKPOINTS_FROM" >&2
     echo "[]"
@@ -320,6 +321,11 @@ if [ -n "$BREAKPOINTS_FROM" ]; then
             elif . <= 1440 then 900
             else 1080 end;
     [ .[]
+      # Guard the ENTRY TYPE first. `.name` on a non-object (a bare string in the
+      # array, say) raises "Cannot index string with name", which aborts the whole
+      # filter — so one malformed entry used to discard every valid one, and the
+      # `|| echo []` below hid both the error and the loss.
+      | select(type == "object")
       | select((.name | type) == "string" and (.width | type) == "number")
       | (.width | floor) as $w
       | { name: .name,
@@ -329,7 +335,14 @@ if [ -n "$BREAKPOINTS_FROM" ]; then
     ]
     # dedup by width, first occurrence wins, input order preserved
     | reduce .[] as $v ([]; if any(.[]; .width == $v.width) then . else . + [$v] end)
-  ' "$BREAKPOINTS_FROM" 2>/dev/null || echo '[]')
+  ' "$BREAKPOINTS_FROM" 2>"$BP_ERR" || echo '[]')
+  if [ -s "$BP_ERR" ]; then
+    # Do not discard the reason. A filter that aborts here returns an empty matrix
+    # and the caller cannot tell that from "the file declared no breakpoints".
+    printf 'derive-viewport-matrix: --breakpoints-from parse reported: %s\n' \
+      "$(tr '\n' ' ' < "$BP_ERR")" >&2
+  fi
+  rm -f "$BP_ERR"
 
   if [ "$(jq 'length' <<<"$RESULT" 2>/dev/null || echo 0)" -gt 0 ]; then
     # Cross-check the declared set against what the stylesheets actually test.

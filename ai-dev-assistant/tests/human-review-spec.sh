@@ -41,10 +41,28 @@ else
 fi
 
 # === The report a person opens must belong to the run that produced the verdict ===
-if grep -qE 'reporter=[^ ]*html:' "$GATE"; then
+# The report directory is scoped through the ENV VAR, not through the CLI token.
+# Playwright's builtInReporters list is bare names only — a token like
+# `html:<dir>` is treated as a module path and require.resolve() throws
+# "Cannot find module", crashing the run before any surface is captured. That
+# defect shipped here and was caught on paper, not by this suite, because the
+# suite never invokes Playwright.
+if grep -qE 'PLAYWRIGHT_HTML_OUTPUT_DIR' "$GATE"; then
   pass_check "the html report is written to a run-scoped directory"
 else
   fail_check "the html report goes to the shared playwright-report/, which any later run replaces"
+fi
+# Match the INVOCATION, not the comment that explains why the colon is wrong.
+if grep -E '^[^#]*--reporter=' "$GATE" | grep -qE '\-\-reporter=[^ "]*:'; then
+  fail_check "a --reporter token carries a colon; Playwright resolves that as a module path and throws"
+else
+  pass_check "every --reporter token is a bare built-in name"
+fi
+# A crash whose cause is discarded becomes an unexplained empty report.
+if grep -qE 'npx playwright test' "$GATE" | grep -q '2>&1' || grep -A3 'npx playwright test' "$GATE" | grep -qE '>"\$PW_LOG" 2>&1'; then
+  pass_check "Playwright's output is captured rather than discarded"
+else
+  fail_check "Playwright's console output goes to /dev/null, so a crash has no visible cause"
 fi
 if grep -qE 'report_path|report_dir' "$GATE"; then
   pass_check "the run records which report it produced"

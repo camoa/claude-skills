@@ -144,6 +144,35 @@ else
   fail_check "the reader's spec only builds ordinal fixtures, so it looks where the bug is not"
 fi
 
+# === A digest tool that is absent must not produce a blank digest ===
+# macOS ships shasum and no sha256sum; coreutils ships the reverse. A bare call to
+# either returns EMPTY on the other platform, and an empty hash gets written or
+# compared as though it were real.
+for F in "$PLUGIN_ROOT/scripts/screenshot-store-write.sh" "$PLUGIN_ROOT/scripts/screenshot-store-read.sh" "$BM"; do
+  N=$(basename "$F")
+  if grep -qE 'shasum' "$F" && grep -qE 'sha256sum' "$F"; then
+    pass_check "$N resolves a checksum tool rather than assuming one"
+  else
+    fail_check "$N calls one checksum tool with no fallback — silently blank on the other platform"
+  fi
+done
+
+# === A re-run must not rename a viewport out from under committed baselines ===
+# A viewport name is a path segment in every baseline filename, so renaming it
+# orphans every baseline for that viewport.
+if grep -qiE 'viewport NAMES already in the registry win|existing names' "$SETUP"; then
+  pass_check "a re-run keeps existing viewport names rather than re-deriving them"
+else
+  fail_check "a re-run can rename a viewport, orphaning every baseline filed under the old name"
+fi
+
+# === An existing spec from an older template must not be skipped silently ===
+if grep -qE 'Check an existing spec before skipping it|predates the shared settle' "$SETUP"; then
+  pass_check "an outdated spec is reported rather than silently skipped"
+else
+  fail_check "an upgrade leaves existing surfaces on the old capture with no mention"
+fi
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && printf 'checks-can-fail-spec: all checks passed\n' || printf 'checks-can-fail-spec: FAILURES above\n' >&2
 exit "$FAIL"

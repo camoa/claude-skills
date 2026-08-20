@@ -73,6 +73,15 @@ r = await measureMaskCoverage(fakePage(1000, 8000, { '.all': [{ x: 0, y: 0, widt
 r.masked_fraction > 0.98 ? ok('a mask over the whole page reports ~100%')
   : bad(`full-page mask reported ${r.masked_fraction}`);
 
+// 8. An unmeasurable selector must be DISTINGUISHABLE from one that covers
+// nothing. Playwright's locator engine accepts xpath (`//body`) which masks the
+// whole page; querySelectorAll throws on it. Scoring that as 0 would report a
+// fully-masked surface as unmasked.
+r = await measureMaskCoverage(fakePage(1000, 1000, {}), ['BAD[']);
+(r.per_selector[0].count === -1 && r.masked_fraction === 0)
+  ? ok('an unmeasurable selector is flagged (-1), not silently scored as 0 coverage')
+  : bad(`unmeasurable selector not distinguishable: ${JSON.stringify(r)}`);
+
 console.log('');
 if (fails) { console.error('mask-coverage-spec: FAILURES above'); process.exit(1); }
 console.log('mask-coverage-spec: all checks passed');
