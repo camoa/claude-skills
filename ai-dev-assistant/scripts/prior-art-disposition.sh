@@ -137,8 +137,6 @@ if [ "$has_known_class" != true ]; then
   # count as recurring — otherwise "vibes:it-feels-cleaner" clears the bar.
   REASON="no recognised cost dimension named; a verdict must say what it compared (build, carry, agent, risk)"
   if [ "$VERDICT" = "supersede" ]; then reject "$REASON"; fi
-  # reuse/extend: inadmissible, and the action still surfaces so a human sees the thin verdict.
-  if [ "$VERDICT" = "supersede" ]; then reject "$REASON"; fi
   # reuse/extend: inadmissible, but there is nothing to downgrade to — the verdict stands as
   # proposed and is marked inadmissible so a human sees the thin reasoning.
   if [ "$MODE" = "attended" ]; then emit false "$VERDICT" surface true human "$REASON" false false; fi

@@ -50,7 +50,8 @@ cites nothing.
 
 `build` is paid once. `carry`, `agent`, and `risk` are paid forever. A candidate has to beat the
 task's own plan on a **recurring** dimension, not the one-time one — "I would have written it
-differently" is a build-cost preference and isn't sufficient on its own. This is exactly what
+differently" is a build-cost preference and isn't sufficient on its own.
+
 **What the kernel actually enforces, which is coarser than this model.**
 `scripts/prior-art-disposition.sh` sees only dimension *classes*, not whether a dimension is
 measurable or judgment: its grammar is `--dimensions "class:name,..."` plus `--measured` and

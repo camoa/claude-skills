@@ -160,13 +160,14 @@ the same distinction `**Code path:**` already draws between `unknown` and `(docs
 - `references/internal-prior-art.md`, the canonical spec, which names this command as the way to
   record or re-point a map
 - `commands/research.md` step 5a, which reads the value this command writes
-
-Carried in `CONVENTIONS.md`'s project-state field list. Not yet in the README Commands table or
-the marketplace description.
-Stated as owed rather than as fact: a Discoverability list that names surfaces which do not mention
-the command is the same defect as prose describing a flag a kernel does not have.
+- `CONVENTIONS.md`'s project-state field list, which documents the `**Code Map:**` line
 - The `internal-prior-art-finder` skill's map conversation, which points here once the user says
   they have (or want) a map
+
+**Owed, not yet done:** the README Commands table and the marketplace description do not mention this
+command. Listed here as outstanding rather than asserted as present, because a Discoverability list
+naming surfaces that do not mention the command is the same defect as prose describing a flag a
+kernel does not have.
 
 ## Output
 

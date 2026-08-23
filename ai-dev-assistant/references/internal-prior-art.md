@@ -51,6 +51,22 @@ after a candidate is confirmed. A no-hit run reads nothing in full.
 
 `scripts/prior-art-disposition.sh --verdict <none|reuse|extend|supersede> --mode <attended|unattended>
 [--dimensions "class:name,class:name,..."] [--measured "class:name=value; ..."] [--absorbs <true|false>]`
+
+**Serializing the finder's dimensions into those flags.** The finder returns `dimensions[]` as objects
+(`{class, name, kind, value}`); the kernel takes strings. The caller converts, and the mapping is fixed
+so two runs cannot disagree:
+
+| finder field | kernel flag |
+|---|---|
+| every dimension | `--dimensions "class:name,class:name"` (comma-joined) |
+| only `kind: "measurable"` **with a non-empty `value`** | `--measured "class:name=value;class:name=value"` (semicolon-joined) |
+| the hit's `absorbs_superseded_use_case` | `--absorbs true\|false` |
+
+**The kernel never sees `kind`.** It infers that something was measured from `--measured` being
+non-empty. That is why a dimension marked `measurable` whose `value` is empty must be omitted from
+`--measured` rather than passed with an empty value: passing it would tell the kernel a measurement
+exists when none does, and the citation floor would admit a supersede that cites nothing. The honesty
+lives in the finder; the kernel can only check that the string is non-empty.
 → `{admissible, effective_verdict, action, blocks, decided_by, rejection_reason, migration_required,
 resurface_next_attended, cited}`.
 
@@ -167,27 +183,30 @@ one existing. With no map, the search reads the codebase directly, at full funct
 
 ## Record shape (`_internal-prior-art.json`)
 
-Written by `/research` step 5a via `scripts/gate-audit-write.sh`, overwrite-on-fire like every gate
-The record's field list is normative in `references/gate-audit-schema.md` §5.16, which is what
-`scripts/gate-audit-write.sh` accepts and what `/review` step 5.0e reads. This section describes what
-the record is *for*; §5.16 is the authority on its shape. Where the two differ, §5.16 wins.
-`implementation_process/in_progress/internal_prior_art/architecture.md`'s Interface section until it is
-folded into `references/gate-audit-schema.md` as an additive `gate_type`. The fields that carry
-enforcement weight:
+**`references/gate-audit-schema.md` §5.16 is the authority on the field list.** It is what
+`scripts/gate-audit-write.sh` accepts and what `/review` step 5.0e reads, so a record written to
+anything else is a record the gate cannot validate. This section says what the record is *for*; where
+this prose and §5.16 disagree, §5.16 wins.
 
-- `sources[]` — one entry per source (`task-record`, `code`), each `searched` + `skip_reason`, per the
-  degradation rule above.
-- `aspects` — copied verbatim from `coverage-map.json`'s `task_aspects[]`, never re-derived;
-  `aspects_source: "coverage-map" | "fallback-goal"` records when there was no map to copy from.
-- `hits[]` — one per match: `aspect`, `capability`, `evidence: ledger|code|both`, `where[]` (file/task
-  refs with the cited quote), `verdict`, `dimensions[]`, `absorbs_superseded_use_case`, `disposition`
-  (the kernel's output), `confirmation` (see below), `cascade_comparison`, `migration`.
-  `absorbs_superseded_use_case: false` forces `verdict` to `extend` — the record cannot hold a supersede
-  that does not absorb, mirroring the kernel's `--absorbs` check.
-- `result: "hit" | "empty" | "not_searched"`, `recipe_gap[]`, `pending_duplicates[]`.
-- `cited_in_research` — computed at write time by checking whether `research.md`'s hub links
-  `research/internal-prior-art.md`. Makes "the build-custom recommendation cites the empty internal
-  search" a checkable claim, not a hope.
+Written by `/research` step 5a, overwrite-on-fire like every gate audit. Four fields carry the
+enforcement weight, and it is worth knowing why each exists rather than just its type:
+
+- **`sources`** — an object keyed `ledger` and `code`, each carrying `searched: true` or a non-null
+  `skip_reason`. This is the honesty record. "Not searched, and why" is a PASS; a source that is
+  neither searched nor explained is what the gate fails on.
+- **`aspects_searched[]`** — copied verbatim from `coverage-map.json`'s `task_aspects[]`, never
+  re-derived. The join to the coverage map is on the aspect string, so re-deriving would silently
+  break the comparison that produces the recipe-gap and drift signals.
+- **`hits[]`** — per match: `aspect`, `found_in`, `where`, the proposed `verdict`, and then the
+  kernel's answer: `effective_verdict`, `admissible`, `rejection_reason`. **Never write
+  `effective_verdict` by hand** — it comes from `scripts/prior-art-disposition.sh`, so the record and
+  the enforcement cannot drift apart. `migration_resolution` (`in_task | follow_up_task | null`) is
+  what `/review` reads on a supersede: an admissible supersede left at `null` fails, because a
+  migration that is neither done nor recorded recreates the duplication this exists to prevent.
+- **`confirmation`** — `agree | disagree | downgrade | no_return | not_required`. `no_return` is a
+  real value, not an error: a confirmer was dispatched and its sidecar never appeared. It is never
+  folded into agree or disagree, the same distinction `recipe_lookup_status` draws between a
+  couldn't-check and a checked-and-clean.
 
 The research subject `research/internal-prior-art.md` is always written, including on an empty result
 — "we looked and found nothing" is the finding a build-custom recommendation has to cite. Linked from
