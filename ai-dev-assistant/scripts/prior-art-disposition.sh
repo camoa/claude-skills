@@ -80,6 +80,23 @@ emit(){ # emit <admissible> <effective_verdict> <action> <blocks> <decided_by> <
   exit 0
 }
 
+
+# reject <reason> — the citation floor refused the verdict. Downgrades to `extend` (always safe:
+# extend removes nothing) and records why.
+#
+# AUTONOMOUS NEVER BLOCKS, rejection included. Every rejection path used to emit
+# `surface/true/human` regardless of mode, so an inadmissible verdict in an unattended run halted
+# the run waiting for a human who is not there. A kernel that stops an autonomous run dead is worse
+# than one that decides wrongly. Unattended, the rejection is recorded, downgraded, and re-surfaced
+# on the next attended run — the same posture an admissible unattended supersede gets.
+reject(){
+  local reason="$1"
+  if [ "$MODE" = "attended" ]; then
+    emit false extend surface true human "$reason" false false
+  fi
+  emit false extend downgrade_defer false deferred "$reason" false true
+}
+
 # --- input validation: never coerce a malformed input into a verdict ----------------------------
 case "$VERDICT" in
   none|reuse|extend|supersede) ;;
@@ -119,29 +136,24 @@ if [ "$has_known_class" != true ]; then
   # No dimension at all, or only classes outside the cost model. An unknown class must not quietly
   # count as recurring — otherwise "vibes:it-feels-cleaner" clears the bar.
   REASON="no recognised cost dimension named; a verdict must say what it compared (build, carry, agent, risk)"
-  if [ "$VERDICT" = "supersede" ]; then
-    emit false extend surface true human "$REASON" false false
-  fi
+  if [ "$VERDICT" = "supersede" ]; then reject "$REASON"; fi
   # reuse/extend: inadmissible, and the action still surfaces so a human sees the thin verdict.
+  if [ "$VERDICT" = "supersede" ]; then reject "$REASON"; fi
+  # reuse/extend: inadmissible, but there is nothing to downgrade to — the verdict stands as
+  # proposed and is marked inadmissible so a human sees the thin reasoning.
   if [ "$MODE" = "attended" ]; then emit false "$VERDICT" surface true human "$REASON" false false; fi
   emit false "$VERDICT" confirm false agent "$REASON" false false
 fi
 
 if [ "$VERDICT" = "supersede" ]; then
   if [ "$has_recurring" != true ]; then
-    emit false extend surface true human \
-      "supersede rests only on build cost; build is paid once while carry, agent and risk are paid forever, so a supersede must win on a recurring class" \
-      false false
+    reject "supersede rests only on build cost; build is paid once while carry, agent and risk are paid forever, so a supersede must win on a recurring class"
   fi
   if [ -z "$MEASURED" ]; then
-    emit false extend surface true human \
-      "supersede cites no measured value; naming dimensions without measuring one is an assertion, not a citation" \
-      false false
+    reject "supersede cites no measured value; naming dimensions without measuring one is an assertion, not a citation"
   fi
   if [ "$ABSORBS" != "true" ]; then
-    emit false extend surface true human \
-      "the replacement cannot absorb the superseded use case, so it is not a replacement but a second implementation; the verdict downgrades to extend" \
-      false false
+    reject "the replacement cannot absorb the superseded use case, so it is not a replacement but a second implementation; the verdict downgrades to extend"
   fi
 fi
 

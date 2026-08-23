@@ -51,7 +51,14 @@ cites nothing.
 `build` is paid once. `carry`, `agent`, and `risk` are paid forever. A candidate has to beat the
 task's own plan on a **recurring** dimension, not the one-time one — "I would have written it
 differently" is a build-cost preference and isn't sufficient on its own. This is exactly what
-`prior-art-disposition.sh`'s citation floor enforces mechanically: a `supersede` naming only `build`
+**What the kernel actually enforces, which is coarser than this model.**
+`scripts/prior-art-disposition.sh` sees only dimension *classes*, not whether a dimension is
+measurable or judgment: its grammar is `--dimensions "class:name,..."` plus `--measured` and
+`--absorbs`. So it catches a supersede argued only on `build`, and it catches one with nothing in
+`--measured` at all. It cannot detect an all-judgment set as such. That gap is closed by *your*
+honesty, not by the kernel: when nothing was measured, `--measured` must be left empty, and the
+kernel then rejects. Do not report a measured value you did not measure. See the citation-floor
+section of `references/internal-prior-art.md` for the authoritative description.
 or only `judgment` dimensions gets downgraded to `extend`, no matter how the case is argued in prose.
 
 ## The supersede trap

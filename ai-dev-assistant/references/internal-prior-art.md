@@ -148,21 +148,29 @@ one existing. With no map, the search reads the codebase directly, at full funct
   skill on first accept and by `/set-code-map` to re-point it. It is never re-asked once declined.
 - **Refresh is recommended, never performed.** `scripts/map-currency.sh --map-path <path> --repo
   <codePath> [--freshness-report <path>]` decides currency from the artifact's mtime against the
-  repository's last commit (`git -C <repo> log -1 --format=%ct`) — never from a tool-provided signal,
-  because the recommended tooling documents neither a build timestamp nor a status command reliably
-  enough to trust. `status` is `current | stale | absent | unknown` (`unknown` when there's an artifact
-  but no git, or git fails — never reported as `current`). A `stale` map is disclosed as stale and the
-  code is searched directly anyway; nothing writes to the user's map artifact.
-- **A tool's own freshness API is a bonus, never a dependency.** `--freshness-report <path>` reads a
-  file the user's tool already wrote and folds its `status` in when present and valid. The kernel never
-  executes the tool to produce one — not to check a version, not to ask a status. Where a tool exposes
-  only a status command, the attended flow asks the user to run it and paste the result; autonomous
-  falls through to the mtime-versus-commit comparison.
+  repository's last commit (`git -C <repo> log -1 --format=%ct`). **That comparison always runs** — it
+  is the ground truth, and the recommended tooling documents neither a build timestamp nor a status
+  command reliably enough to stand in for it. `status` is `current | stale | absent | unknown`
+  (`unknown` when there's an artifact but no git, or git fails — never reported as `current`). A
+  `stale` map is disclosed as stale and the code is searched directly anyway; nothing writes to the
+  user's map artifact.
+- **A tool's own freshness API may DOWNGRADE, never upgrade.** `--freshness-report <path>` reads a file
+  the user's tool already wrote. When it says `stale` it wins, because the tool may know about work the
+  mtime cannot see. When it says `current` against a repository whose last commit is newer than the
+  map, it is **refused** and the refusal is recorded as `freshness_report_upgrade_refused`.
+  The asymmetry is the safety property: we never run the tool, so we cannot know when it last looked,
+  and a report that could mark a demonstrably stale map fresh is exactly the failure this kernel
+  exists to prevent. Downgrading on a warning costs one redundant code read; upgrading on a claim
+  costs a confident wrong answer. The kernel never executes the tool to produce a report — not to
+  check a version, not to ask a status. Where a tool exposes only a status command, the attended flow
+  asks the user to run it and paste the result; autonomous falls through to mtime-versus-commit.
 
 ## Record shape (`_internal-prior-art.json`)
 
 Written by `/research` step 5a via `scripts/gate-audit-write.sh`, overwrite-on-fire like every gate
-audit. `gate_type: "internal-prior-art"`; the full field list is normative in
+The record's field list is normative in `references/gate-audit-schema.md` §5.16, which is what
+`scripts/gate-audit-write.sh` accepts and what `/review` step 5.0e reads. This section describes what
+the record is *for*; §5.16 is the authority on its shape. Where the two differ, §5.16 wins.
 `implementation_process/in_progress/internal_prior_art/architecture.md`'s Interface section until it is
 folded into `references/gate-audit-schema.md` as an additive `gate_type`. The fields that carry
 enforcement weight:

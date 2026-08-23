@@ -205,6 +205,8 @@ Merge-conflict path 1 aborts merge, prints conflict files, leaves worktree intac
 
 **`project_state.md` field:** `**Worktree By Default:** true` opts the project into worktree-always for `/implement`. Absent → false.
 
+**`project_state.md` field:** `**Code Map:** <relative-path>` records where an existing code map lives, for the internal prior-art search to read. `**Code Map:** (none)` records an explicit decline. Absent and `(none)` are deliberately different: absent means no answer yet, so the map conversation may run; `(none)` means the user said no and it is never re-asked. The path is validated for containment and dropped with a `code_map_path_escape` warning if it leaves the project. Written by `/ai-dev-assistant:set-code-map` or by the search's first-accept, inline, as `/set-code-path` writes `**Code path:**`. The framework never installs, runs, or refreshes the mapping tool.
+
 **Conventions:** `references/worktree-conventions.md` v1.2 documents directory priority (`.worktrees/` > `worktrees/` > CLAUDE.md > ask), branch naming (`feature/<task>`), gitignore requirement, signal taxonomy, lifecycle paths, refusal cases, and how the command relates to Claude Code's native `--worktree` support.
 
 **Reuses:** `superpowers:using-git-worktrees` skill's core patterns (directory priority, gitignore verify, auto-detect setup); extends with task-aware lifecycle. Not a hard dependency; replicated in command body.

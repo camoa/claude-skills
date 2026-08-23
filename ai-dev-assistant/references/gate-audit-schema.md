@@ -609,6 +609,7 @@ fail-closed by `/review`. Full semantics in `references/internal-prior-art.md`.
         "absorbs_superseded_use_case": null,
         "migration_required": false,
         "migration_task": null,
+        "migration_resolution": null,
         "confirmation": "agree | disagree | downgrade | no_return | not_required",
         "cascade_comparison": "matches | disagrees | no_covering_recipe"
       }
@@ -636,6 +637,13 @@ hand — it comes from the kernel, so the record and the enforcement cannot drif
 sidecar never appears, that is recorded as `no_return` and the verdict stands unconfirmed. It is never
 folded into `agree` or `disagree`. Same distinction `recipe_lookup_status` draws between a couldn't-check
 and a checked-and-clean.
+
+**`migration_resolution` is what `/review` reads on a supersede.** One of `"in_task"` (the refactor
+was decided and done inside this task), `"follow_up_task"` (a linked migration task exists), or `null`.
+An admissible supersede left at `null` fails the gate: a supersede whose migration is neither done nor
+recorded creates the duplication this feature exists to prevent. `migration_task` names the follow-up
+when there is one; `migration_resolution` says which of the two routes was taken, which is the thing a
+gate can check.
 
 **`user_prior_art.asked: false` requires `unasked_reason`.** An unattended run cannot ask, and silence is
 never recorded as "none known".

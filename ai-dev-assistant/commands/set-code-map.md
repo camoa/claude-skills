@@ -152,14 +152,19 @@ the same distinction `**Code path:**` already draws between `unknown` and `(docs
   check validates against. Set `codePath` first when both are unknown.
 - `/ai-dev-assistant:research` — the internal prior-art step reads `**Code Map:**` automatically
   once set; it never re-prompts.
-- `/ai-dev-assistant:status` — shows Code Map in the project overview.
+- `/ai-dev-assistant:status` — project overview. It does **not** render Code Map today; `project_state.md` is where the recorded value lives.
 
 ## Discoverability
 
-- README Commands table
 - Command frontmatter `description` (this file)
-- Plugin CONVENTIONS.md Project Metadata section
-- marketplace.json description
+- `references/internal-prior-art.md`, the canonical spec, which names this command as the way to
+  record or re-point a map
+- `commands/research.md` step 5a, which reads the value this command writes
+
+Carried in `CONVENTIONS.md`'s project-state field list. Not yet in the README Commands table or
+the marketplace description.
+Stated as owed rather than as fact: a Discoverability list that names surfaces which do not mention
+the command is the same defect as prose describing a flag a kernel does not have.
 - The `internal-prior-art-finder` skill's map conversation, which points here once the user says
   they have (or want) a map
 

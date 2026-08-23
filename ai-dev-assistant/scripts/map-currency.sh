@@ -92,8 +92,18 @@ if [ -z "$MAP_MTIME" ]; then
   emit true unknown "could not read the map artifact's modification time" null null "$FR_GIVEN" false ""
 fi
 
-# --- the tool's own freshness report: a bonus, never a dependency -------------------------------
+# --- the tool's own freshness report: read now, applied LAST, downgrade-only --------------------
 # Read from a file the user's tool wrote. NEVER invoke a tool to produce one.
+#
+# The report is parsed here but NOT acted on here. The git comparison below always runs, and the
+# report can only ever move the answer from `current` to `stale` — never the other way.
+#
+# The asymmetry is the whole safety property. The tool is the user's, we never run it, and we cannot
+# know when it last looked. A report claiming `current` against a repository whose last commit is
+# newer than the map would mark a demonstrably stale map fresh on a tool's say-so, which is exactly
+# the failure this kernel exists to prevent: a stale internal search is worse than no internal
+# search. Downgrading on a tool's warning costs a redundant code read. Upgrading on a tool's claim
+# costs a confident wrong answer.
 if [ "$FR_GIVEN" = true ]; then
   if [ ! -r "$FRESHNESS_REPORT" ]; then
     add_warn "freshness_report_unreadable"
@@ -102,13 +112,9 @@ if [ "$FR_GIVEN" = true ]; then
   else
     FR_STATUS="$(jq -r '.status // ""' "$FRESHNESS_REPORT" 2>/dev/null)"
     case "$FR_STATUS" in
-      stale|current)
-        # emit's 7th argument IS the "report was used" flag; no separate variable to drift from it.
-        emit true "$FR_STATUS" "the tool's own freshness report says $FR_STATUS" \
-             "$MAP_MTIME" null true true "$FR_STATUS"
-        ;;
-      "") add_warn "freshness_report_has_no_status" ;;
-      *)  add_warn "freshness_report_status_unrecognised:$FR_STATUS" ;;
+      stale|current) ;;
+      "") add_warn "freshness_report_has_no_status"; FR_STATUS="" ;;
+      *)  add_warn "freshness_report_status_unrecognised:$FR_STATUS"; FR_STATUS="" ;;
     esac
   fi
 fi
@@ -138,8 +144,19 @@ case "$LAST_COMMIT" in
 esac
 
 if [ "$MAP_MTIME" -ge "$LAST_COMMIT" ]; then
+  # Ground truth says current. A tool report may DOWNGRADE this (it may know about uncommitted or
+  # unindexed work the mtime cannot see); it may not confirm it, because confirmation adds nothing.
+  if [ "$FR_STATUS" = "stale" ]; then
+    emit true stale "the map is newer than the last commit, but the tool's own freshness report says stale" \
+         "$MAP_MTIME" "$LAST_COMMIT" true true "$FR_STATUS"
+  fi
   emit true current "the map is newer than the last commit" "$MAP_MTIME" "$LAST_COMMIT" "$FR_GIVEN" false "$FR_STATUS"
 else
+  # Ground truth says stale. NOTHING upgrades this. A report claiming `current` here is either
+  # lying or is itself out of date, and either way the commit is the fact.
+  if [ "$FR_STATUS" = "current" ]; then
+    add_warn "freshness_report_upgrade_refused: the report says current but code was committed after the map was built"
+  fi
   emit true stale "code was committed after the map was built, so the map cannot know about it" \
        "$MAP_MTIME" "$LAST_COMMIT" "$FR_GIVEN" false "$FR_STATUS"
 fi

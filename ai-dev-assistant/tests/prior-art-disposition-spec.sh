@@ -173,6 +173,43 @@ OUT="$(run --verdict supersede --mode attended --dimensions "vibes:it-feels-clea
 [ "$(jq -r '.admissible' <<<"$OUT")" = "false" ] && ok || no "an unknown cost class must not satisfy the floor"
 
 # =====================================================================================
+# 8b. AUTONOMOUS NEVER BLOCKS — including when the citation floor REJECTS the verdict.
+#     Regression: every floor-rejection path emitted `surface/true/human` regardless of
+#     mode, so an inadmissible supersede in an unattended run blocked waiting for a human
+#     who is not there. The floor tests above were all attended, so nothing caught it.
+#     A kernel that halts an autonomous run is worse than one that decides wrongly: the
+#     run stops dead with no one to answer it.
+# =====================================================================================
+for args in \
+  "--verdict supersede --mode unattended" \
+  "--verdict supersede --mode unattended --dimensions build:implementation-effort --measured build:x=1 --absorbs true" \
+  "--verdict supersede --mode unattended --dimensions carry:change-amplification --absorbs true" \
+  "--verdict supersede --mode unattended --dimensions carry:change-amplification --measured carry:x=7 --absorbs false" \
+  "--verdict reuse --mode unattended" \
+  "--verdict extend --mode unattended --dimensions vibes:nice" ; do
+  # shellcheck disable=SC2086
+  OUT="$(run $args)"
+  [ "$(jq -r '.blocks' <<<"$OUT")" = "false" ] && ok \
+    || no "AUTONOMOUS BLOCKED: [$args] returned blocks=true with no human present"
+  [ "$(jq -r '.decided_by' <<<"$OUT")" != "human" ] && ok \
+    || no "AUTONOMOUS: [$args] assigned the decision to a human who is not there"
+done
+
+# A rejected verdict in an unattended run still downgrades safely and comes back for a human.
+OUT="$(run --verdict supersede --mode unattended --dimensions build:implementation-effort \
+        --measured "build:effort=2 days" --absorbs true)"
+[ "$(jq -r '.effective_verdict' <<<"$OUT")" = "extend" ] && ok || no "rejected unattended supersede must downgrade to extend"
+[ "$(jq -r '.resurface_next_attended' <<<"$OUT")" = "true" ] && ok \
+  || no "a verdict rejected with no human present must re-surface on the next attended run"
+[ "$(jq -r '.admissible' <<<"$OUT")" = "false" ] && ok || no "the rejection must still be recorded as inadmissible"
+jq -e '.rejection_reason != null' >/dev/null <<<"$OUT" && ok || no "the rejection reason must survive the mode"
+
+# ...and the attended half is unchanged: a rejected verdict still surfaces and blocks.
+OUT="$(run --verdict supersede --mode attended --dimensions build:implementation-effort \
+        --measured "build:effort=2 days" --absorbs true)"
+[ "$(jq -r '.blocks' <<<"$OUT")" = "true" ] && ok || no "attended rejection must still block"
+
+# =====================================================================================
 # 9. Determinism — the same inputs give byte-identical output. The gate re-asserts this
 #    downstream, so drift here is drift everywhere.
 # =====================================================================================

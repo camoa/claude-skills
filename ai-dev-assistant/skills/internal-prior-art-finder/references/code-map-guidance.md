@@ -30,8 +30,8 @@ files on disk, no infrastructure to stand up. Concretely:
   *where* to look, it just can't answer the capability question by itself — the actual code still has
   to confirm every candidate (step 3's rule: the verdict is always read from the code, never from the
   map's summary of it).
-- **No required key for the code-parsing layer.** Local, deterministic extraction (tree-sitter and
-  similar) needs no account or paid service. An optional semantic pass over docs or media calling out
+- **No required key for the code-parsing layer.** Local, deterministic parsing needs no account and no
+  paid service. An optional semantic pass over docs or media calling out
   to a model is the user's own choice and the user's own key — never something this skill depends on.
 
 ## Four questions worth asking about a candidate tool

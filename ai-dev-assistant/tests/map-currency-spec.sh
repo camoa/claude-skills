@@ -109,13 +109,45 @@ for marker in "$TMP"/EXECUTED-*; do [ -e "$marker" ] && EXECUTED=$((EXECUTED+1))
 R="$TMP/r7"; mkrepo "$R"; M="$TMP/r7-map.json"; echo '{}' > "$M"   # mtime is current
 FR="$TMP/fresh.json"; printf '{"status":"stale","detail":"12 files changed since index"}\n' > "$FR"
 OUT="$("$K" --map-path "$M" --repo "$R" --freshness-report "$FR" 2>/dev/null)"
-[ "$(st "$OUT")" = "stale" ] && ok || no "a tool report saying stale must win over a current mtime"
+[ "$(st "$OUT")" = "stale" ] && ok || no "a tool report saying stale must downgrade a current mtime"
 [ "$(jq -r '.freshness_report.used' <<<"$OUT")" = "true" ] && ok || no "using the report must be recorded"
+
+# =====================================================================================
+# 7b. A TOOL REPORT MAY ONLY DOWNGRADE, NEVER UPGRADE. This is the safety asymmetry.
+#     The tool is the user's, we never run it, and we cannot know when it last looked.
+#     A report claiming "current" against a repository whose last commit is NEWER than
+#     the map must NOT flip the answer to current: that is a tool signal overriding
+#     ground truth to mark a stale map fresh, which is precisely the failure the whole
+#     feature exists to prevent ("a stale internal search is worse than none").
+#     Downgrading is always safe; upgrading never is.
+# =====================================================================================
+R="$TMP/r7b"; mkrepo "$R"; M="$TMP/r7b-map.json"; echo '{}' > "$M"
+touch -d '@1000000000' "$M" 2>/dev/null || touch -t 200109090146 "$M"   # map far older than HEAD
+FRC="$TMP/fresh-current.json"; printf '{"status":"current"}\n' > "$FRC"
+OUT="$("$K" --map-path "$M" --repo "$R" --freshness-report "$FRC" 2>/dev/null)"
+[ "$(st "$OUT")" = "stale" ] && ok \
+  || no "SAFETY: a tool report upgraded a demonstrably stale map to $(st "$OUT")"
+jq -e '.last_commit_at != null' >/dev/null <<<"$OUT" && ok \
+  || no "the git comparison must ALWAYS be computed, not short-circuited by a report"
+[ "$(jq -r '.freshness_report.used' <<<"$OUT")" = "false" ] && ok \
+  || no "an upgrade attempt must be recorded as not used"
+jq -e '.warnings | any(test("upgrade"; "i"))' >/dev/null <<<"$OUT" && ok \
+  || no "a refused upgrade should warn, so a lying or stale tool report is visible"
+
+# The downgrade direction still works: mtime says current, the tool says stale, stale wins.
+R="$TMP/r7c"; mkrepo "$R"; M2="$TMP/r7c-map.json"; echo '{}' > "$M2"
+FRS="$TMP/fresh-stale.json"; printf '{"status":"stale","detail":"12 files changed"}\n' > "$FRS"
+OUT="$("$K" --map-path "$M2" --repo "$R" --freshness-report "$FRS" 2>/dev/null)"
+[ "$(st "$OUT")" = "stale" ] && ok || no "a tool report saying stale must still downgrade a current map"
+[ "$(jq -r '.freshness_report.used' <<<"$OUT")" = "true" ] && ok || no "a used downgrade must be recorded as used"
+jq -e '.last_commit_at != null' >/dev/null <<<"$OUT" && ok || no "git comparison must be present even on a downgrade"
 
 # =====================================================================================
 # 8. A malformed or missing freshness report NEVER breaks the check — it falls back to
 #    mtime-vs-commit and says so. Nothing depends on the tool's API existing.
 # =====================================================================================
+# Own fixture: earlier cases deliberately reassign $M/$R to stale/backdated maps.
+R="$TMP/r8"; mkrepo "$R"; M="$TMP/r8-map.json"; echo '{}' > "$M"   # mtime now, commit 1h old
 BAD="$TMP/bad.json"; printf 'not json at all\n' > "$BAD"
 OUT="$("$K" --map-path "$M" --repo "$R" --freshness-report "$BAD" 2>/dev/null)"; RC=$?
 [ "$RC" -eq 0 ] && ok || no "malformed report: exit $RC, expected 0"
