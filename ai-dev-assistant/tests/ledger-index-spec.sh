@@ -272,6 +272,51 @@ WITH="$("$K" "$P" --with-criteria 2>/dev/null)"
 [ "$(jq -r '.tasks[0].goal' <<<"$DEFAULT")" = "First capability" ] && ok   || no "the capability statement must survive in the lean form"
 
 # =====================================================================================
+# 9e. ASPECT FILTERING IS KERNEL-SIDE, so the reader's cost stays bounded as the project
+#     ages. Measured on the live project: 15 tasks = ~7.6k tokens. Unfiltered, a 200-task
+#     project would push ~100k tokens at the reader and "bounded context cost" would stop
+#     being true. Filtering in the reader does not help — by then it has been read.
+# =====================================================================================
+P="$TMP/filter"; mkproj "$P"
+mktask "$P" completed chat_research  "Build an interactive chat for research sessions"
+mktask "$P" completed chat_drafting  "Build an interactive chat for drafting"
+mktask "$P" completed seo_foundation "Wire up an SEO metadata foundation"
+mktask "$P" completed image_styles   "Configure responsive image styles"
+ALL="$(run "$P")"
+HIT="$("$K" "$P" --match "interactive chat" 2>/dev/null)"
+[ "$(jq -r '.tasks | length' <<<"$ALL")" = "4" ] && ok || no "unfiltered should return all 4"
+[ "$(jq -r '.tasks | length' <<<"$HIT")" = "2" ] && ok \
+  || no "--match should return the 2 chat tasks, got $(jq -r '.tasks|length' <<<"$HIT")"
+[ "${#HIT}" -lt "${#ALL}" ] && ok || no "a filtered run must be smaller than an unfiltered one"
+
+# Matching is case-insensitive and looks at the capability statement, not the task name.
+[ "$(jq -r '.tasks | length' <<<"$("$K" "$P" --match "INTERACTIVE CHAT" 2>/dev/null)")" = "2" ] && ok \
+  || no "--match should be case-insensitive"
+[ "$(jq -r '.tasks | length' <<<"$("$K" "$P" --match "metadata foundation" 2>/dev/null)")" = "1" ] && ok \
+  || no "--match should match on the goal text"
+
+# A filter that matches nothing returns zero tasks AND says the filter was applied, so the
+# caller can tell "filtered to nothing" from "the project is empty".
+NONE="$("$K" "$P" --match "quantum blockchain" 2>/dev/null)"
+[ "$(jq -r '.tasks | length' <<<"$NONE")" = "0" ] && ok || no "a non-matching filter should return 0 tasks"
+[ "$(jq -r '.filter' <<<"$NONE")" = "quantum blockchain" ] && ok \
+  || no "the applied filter must be reported, so 0 results is distinguishable from an empty project"
+[ "$(jq -r '.counts.total_before_filter' <<<"$NONE")" = "4" ] && ok \
+  || no "the pre-filter total must be reported; otherwise a filtered run looks like an empty corpus"
+
+# A stub goal must never be matched INTO a result set by the filter.
+mkdir -p "$P/implementation_process/completed/never_scoped2"
+printf '# Task: never_scoped2\n\n## Goal\n_To be authored via `/ai-dev-assistant:scope`._\n' \
+  > "$P/implementation_process/completed/never_scoped2/task.md"
+[ "$(jq -r '.tasks | length' <<<"$("$K" "$P" --match "authored" 2>/dev/null)")" = "0" ] && ok \
+  || no "a stub goal must not be matchable; its scaffold text is identical across tasks"
+
+# Untrusted: a filter string with shell metacharacters is inert data.
+SENT2="$(mktemp -u)"
+"$K" "$P" --match "\$(touch $SENT2)" >/dev/null 2>&1
+[ ! -f "$SENT2" ] && ok || no "SECURITY: the --match value was shell-evaluated"
+
+# =====================================================================================
 # 10. Determinism: same tree twice, byte-identical output. The search's reproducibility
 #     rests on this, and a map/index that reorders per run cannot be diffed.
 # =====================================================================================

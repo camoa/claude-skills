@@ -33,9 +33,11 @@ GOAL_MAX=600
 
 PROJECT_DIR=""
 WITH_CRITERIA=false
+MATCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-criteria) WITH_CRITERIA=true ;;
+    --match) MATCH="${2:-}"; shift ;;
     -*) : ;;                       # unknown flags are ignored, never fatal
     *)  [ -z "$PROJECT_DIR" ] && PROJECT_DIR="$1" ;;
   esac
@@ -47,15 +49,18 @@ ALIGNMENT_READ_SH="$SCRIPT_DIR/alignment-read.sh"
 WARNINGS='[]'
 add_warn(){ WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }
 
-emit(){
+emit(){ # emit <tasks-json> [total_before_filter]
   jq -n --argjson tasks "$1" --argjson warnings "$WARNINGS" \
+        --arg filter "$MATCH" --argjson before "${2:-0}" \
     '{
        schema_version: "1.0",
+       filter: (if $filter == "" then null else $filter end),
        tasks: $tasks,
        counts: {
          completed:   ($tasks | map(select(.state == "completed"))   | length),
          in_progress: ($tasks | map(select(.state == "in_progress")) | length),
-         total:       ($tasks | length)
+         total:       ($tasks | length),
+         total_before_filter: $before
        },
        warnings: $warnings
      }'
@@ -222,6 +227,19 @@ scan_state_dir "$IP_DIR/in_progress" in_progress yes
 # Stable ordering so two runs over one tree are byte-identical and diffable.
 TASKS=$(jq -c 'sort_by(.name)' <<<"$TASKS")
 
-[ "$(jq -r 'length' <<<"$TASKS")" = "0" ] && add_warn "no_tasks_found"
+TOTAL_BEFORE=$(jq -r 'length' <<<"$TASKS")
+[ "$TOTAL_BEFORE" = "0" ] && add_warn "no_tasks_found"
 
-emit "$TASKS"
+# Aspect filter, applied HERE rather than by the reader. By the time a reader could filter, it has
+# already paid for every task in context — which is the cost this exists to bound. A stub goal is
+# never matchable: its scaffold text is identical across every unscoped task, so matching it would
+# pull in unrelated work.
+if [ -n "$MATCH" ]; then
+  TASKS=$(jq -c --arg m "$MATCH" '
+    [ .[] | select(.stub != true)
+          | select( ((.goal // "") + " " + (.expected_result // "") + " " + (.recommendation // ""))
+                    | ascii_downcase | contains($m | ascii_downcase) ) ]' <<<"$TASKS")
+  [ "$(jq -r 'length' <<<"$TASKS")" = "0" ] && add_warn "filter_matched_nothing:$MATCH"
+fi
+
+emit "$TASKS" "$TOTAL_BEFORE"

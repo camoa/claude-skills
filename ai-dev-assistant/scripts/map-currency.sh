@@ -65,7 +65,7 @@ emit(){ # emit <present> <status> <reason> <map_mtime|null> <last_commit|null> <
   exit 0
 }
 
-FR_GIVEN=false; FR_USED=false; FR_STATUS=""
+FR_GIVEN=false; FR_STATUS=""
 [ -n "$FRESHNESS_REPORT" ] && FR_GIVEN=true
 
 # --- the map artifact --------------------------------------------------------------------------
@@ -103,9 +103,9 @@ if [ "$FR_GIVEN" = true ]; then
     FR_STATUS="$(jq -r '.status // ""' "$FRESHNESS_REPORT" 2>/dev/null)"
     case "$FR_STATUS" in
       stale|current)
-        FR_USED=true
-        REASON="the tool's own freshness report says $FR_STATUS"
-        emit true "$FR_STATUS" "$REASON" "$MAP_MTIME" null true true "$FR_STATUS"
+        # emit's 7th argument IS the "report was used" flag; no separate variable to drift from it.
+        emit true "$FR_STATUS" "the tool's own freshness report says $FR_STATUS" \
+             "$MAP_MTIME" null true true "$FR_STATUS"
         ;;
       "") add_warn "freshness_report_has_no_status" ;;
       *)  add_warn "freshness_report_status_unrecognised:$FR_STATUS" ;;

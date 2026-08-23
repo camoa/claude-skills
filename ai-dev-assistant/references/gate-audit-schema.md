@@ -1,6 +1,6 @@
-# Gate Audit Schema v1.5
+# Gate Audit Schema v1.6
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13); v5.26.0 adds the `internal-prior-art` gate_type (v1.6, additive — persists the internal prior-art search, its per-source honesty record, and the disposition of each hit).
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
@@ -571,3 +571,93 @@ v1.0 covers all 7 v4.0.0 gate_types. v1.1 (ai-dev-assistant v4.1.0) adds `review
 - **No append-mode history.** History at the per-gate-fire level lives in `validations/history.jsonl` for `/validate:*` gates. The hardened gates are state, not events.
 - **No locking.** Concurrent writes from multiple Claude Code sessions could race. Mitigation: worktree workflow (v3.16.0) is the canonical answer for parallel work; without worktrees, last-writer-wins. Acceptable for v1.
 - **No remediation tracking inside the audit file.** When a user picks `remediated` (skill-review or plugin-validate), the audit records the decision but NOT the remediation steps. Remediation lives in code edits + git history; the audit just says "user fixed it."
+
+### 5.16 `internal-prior-art` (v1.6+)
+
+Records the internal prior-art search: whether it ran, what it searched, what it found, and what was
+decided about each hit. Audit file `_internal-prior-art.json`. Written by `/research` step 5a; asserted
+fail-closed by `/review`. Full semantics in `references/internal-prior-art.md`.
+
+```json
+{
+  "gate_type": "internal-prior-art",
+  "schema_version": "1.6",
+  "fired_at": "2026-08-22T00:00:00Z",
+  "task_folder": "<abs path to the task folder>",
+  "user_choice": "reuse | extend | supersede | build_anyway | null",
+  "gate_specific": {
+    "verdict": "pass | skipped",
+    "run_mode": "attended | unattended",
+    "sources": {
+      "ledger": { "searched": true,  "task_count": 15, "skip_reason": null },
+      "code":   { "searched": false, "skip_reason": "codePath is not readable" }
+    },
+    "map": { "recorded": false, "path": null, "status": "absent", "reason": "no map recorded for this project" },
+    "user_prior_art": { "asked": true, "answer": "<free text>", "unasked_reason": null },
+    "aspects_searched": ["<verbatim from coverage-map.json task_aspects[]>"],
+    "hits": [
+      {
+        "aspect": "<verbatim aspect string>",
+        "found_in": "ledger | code",
+        "where": "<task name, or file:line>",
+        "verdict": "reuse | extend | supersede",
+        "effective_verdict": "reuse | extend | supersede",
+        "admissible": true,
+        "rejection_reason": null,
+        "dimensions": ["carry:change-amplification"],
+        "measured": "carry:change-amplification=7 call sites",
+        "absorbs_superseded_use_case": null,
+        "migration_required": false,
+        "migration_task": null,
+        "confirmation": "agree | disagree | downgrade | no_return | not_required",
+        "cascade_comparison": "matches | disagrees | no_covering_recipe"
+      }
+    ],
+    "recipe_gap": ["<aspect with a hit and no covering recipe>"],
+    "subject_file": "research/internal-prior-art.md",
+    "skip_reason": null
+  }
+}
+```
+
+**Verdict rule.** `verdict` is `"pass"` when the record exists and every source carries either
+`searched: true` or a non-null `skip_reason`. **A source that could not be searched PASSES.** Degradation
+is not failure; making it a failure would push a run toward fabricating a clean result, which is the exact
+outcome the feature exists to prevent. `"skipped"` covers the grandfathered case: a task whose Phase 1 ran
+before this gate shipped has no record and did nothing wrong, so it carries a populated `skip_reason` and
+is never `unresolved`.
+
+**`hits[]` mirrors the disposition kernel.** `verdict` is what the search proposed;
+`effective_verdict` is what `scripts/prior-art-disposition.sh` allowed to stand. They differ whenever the
+citation floor rejected a supersede, and `rejection_reason` says why. Never write `effective_verdict` by
+hand — it comes from the kernel, so the record and the enforcement cannot drift.
+
+**`confirmation: "no_return"` is a real value.** When a `prior-art-verdict-confirmer` is dispatched and its
+sidecar never appears, that is recorded as `no_return` and the verdict stands unconfirmed. It is never
+folded into `agree` or `disagree`. Same distinction `recipe_lookup_status` draws between a couldn't-check
+and a checked-and-clean.
+
+**`user_prior_art.asked: false` requires `unasked_reason`.** An unattended run cannot ask, and silence is
+never recorded as "none known".
+
+### 5.17 `_prior-art-confirm-<aspect>.json` (agent sidecar, not a gate_type)
+
+Written by `agents/prior-art-verdict-confirmer.md`, one file per confirmed verdict. **Not** a gate_type and
+**not** written by `gate-audit-write.sh` — it is an agent artifact the orchestrator reads back, the same
+relationship `wo-critic`'s verdict file has to the critique skill. `<aspect>` is the aspect string
+slugified; the verbatim aspect is carried in the `aspect` field so the join never depends on the slug.
+
+```json
+{
+  "schema_version": "1.0",
+  "aspect": "<verbatim aspect string>",
+  "verdict_under_review": "reuse | extend | supersede",
+  "confirmation": "agree | disagree | downgrade",
+  "downgrade_to": "extend | null",
+  "reason": "<one or two sentences>",
+  "dimensions_checked": ["carry:change-amplification", "agent:context-to-load"],
+  "sources_read": ["<file:line the finder cited, that the confirmer actually opened>"],
+  "confirmed_at": "<ISO-8601>"
+}
+```
+

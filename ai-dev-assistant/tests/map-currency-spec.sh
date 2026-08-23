@@ -98,7 +98,8 @@ for name in graphify codebase-memory gitnexus serena; do
 done
 R="$TMP/r6"; mkrepo "$R"; M="$TMP/r6-map.json"; echo '{}' > "$M"
 PATH="$BIN:$PATH" "$K" --map-path "$M" --repo "$R" >/dev/null 2>&1
-EXECUTED=$(ls "$TMP" | grep -c '^EXECUTED-' || true)
+EXECUTED=0
+for marker in "$TMP"/EXECUTED-*; do [ -e "$marker" ] && EXECUTED=$((EXECUTED+1)); done
 [ "$EXECUTED" = "0" ] && ok || no "SECURITY/CONTRACT: the kernel executed a mapping tool ($EXECUTED found)"
 
 # =====================================================================================
