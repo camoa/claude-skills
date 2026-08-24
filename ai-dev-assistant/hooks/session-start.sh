@@ -29,6 +29,13 @@ if [ "$REGISTERED" = "true" ] && [ -n "$PROJECT" ]; then
   echo "This code belongs to the **$PROJECT** project."
   echo ""
   echo "Run \`/ai-dev-assistant:next\` to pick up where you left off."
+  echo ""
+  echo "**When new work arrives, say where it goes before you start.** Work that produces findings or"
+  echo "decisions someone needs later belongs in a task — \`/ai-dev-assistant:scope <name>\` opens one."
+  echo "A typo or a one-line config fix does not; just do it. Either answer is fine and the call is"
+  echo "yours, but make it out loud in one line. Deciding silently that something is too small to track"
+  echo "is indistinguishable from never having considered it, and whatever you learn doing untracked"
+  echo "work is gone when this session closes."
 else
   echo "This code is not set up as a project yet, so nothing here is being tracked."
   echo ""
