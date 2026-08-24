@@ -1,6 +1,20 @@
 # Changelog
 
-## [5.27.2] - 2026-08-24
+## [5.28.0] - 2026-08-24
+
+### Added
+- `/install-task-rule` writes the "work here goes through a task" rule into the code repository's own
+  `CLAUDE.md`. A `SessionStart` hook message arrives as context; `CLAUDE.md` arrives as an instruction
+  the harness tells the model it must follow. The difference is not theoretical — the greeting fix
+  below was watched failing in the same session it shipped in. The block does not force a task: a
+  one-line config fix does not need a lifecycle and the text says so. What it removes is the silent
+  decision, since "too small to track" decided invisibly looks exactly like never having considered
+  it. Opt-in, consented, and never run by default, because it writes into a file the plugin does not
+  own, in the user's repository, where it lands in their diffs. Idempotent through delimiting markers,
+  reversible with `--remove` down to the blank separator line, and offered once at project creation
+  and once in `/upgrade-project`'s gap list. The answer is recorded in `project_state.md` as
+  `**Task Rule:**` with the same three states `**Code Map:**` uses — never asked, declined, settled —
+  so a decline is never re-offered.
 
 ### Fixed
 - The session greeting argued its case in the branch that fires once and said almost nothing in the
