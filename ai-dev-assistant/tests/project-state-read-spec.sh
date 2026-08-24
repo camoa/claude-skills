@@ -240,6 +240,42 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
+# === Process Recipes: the hand-written variant must parse ======================================
+# The kernel writes `→ source=x`. A model composing the block by hand writes
+# `→ `name` (source: x, verified: true, sha: …) — recorded <date>`. Observed on a real project: two
+# recorded recipes came back with a null source and two warnings, so every phase re-resolved from
+# scratch while the record sat there looking complete. Both forms must parse.
+PR_DIR="$(mktemp -d)"; mkdir -p "$PR_DIR/p"
+cat > "$PR_DIR/p/project_state.md" <<'PRMD'
+# Test
+
+**Code path:** /tmp
+
+**Process Recipes:**
+- research × drupal → `some_recipe` (source: dev-guides, verified: true, sha: 290c6081) — recorded 2026-08-14
+- e2e-setup/nextjs/playwright → source=local
+- design/drupal/x → (source: research)
+PRMD
+PR_OUT="$("$READER" "$PR_DIR/p" 2>/dev/null)"
+[ "$(printf '%s' "$PR_OUT" | jq -r '.processRecipes[0].source')" = "dev-guides" ] \
+  && pass_check "hand-written '(source: x, ...)' parses" \
+  || fail_check "hand-written '(source: x, ...)' must parse, got null"
+[ "$(printf '%s' "$PR_OUT" | jq -r '.processRecipes[1].source')" = "local" ] \
+  && pass_check "kernel-written 'source=x' still parses" \
+  || fail_check "kernel-written 'source=x' regressed"
+[ "$(printf '%s' "$PR_OUT" | jq -r '.processRecipes[2].source')" = "research" ] \
+  && pass_check "parenthesised '(source: x)' parses" \
+  || fail_check "parenthesised '(source: x)' must parse"
+[ "$(printf '%s' "$PR_OUT" | jq -r '[.warnings[].code] | index("process_recipe_bad_source") // "none"')" = "none" ] \
+  && pass_check "a parsed source raises no bad-source warning" \
+  || fail_check "a source that parses must not warn"
+rm -rf "$PR_DIR"
+
+if [ "$FAIL" -ne 0 ]; then
+  printf '\nSome invariants FAILED for scripts/project-state-read.sh.\n' >&2
+  exit 1
+fi
+
 printf '\nAll invariants pass for scripts/project-state-read.sh.\n'
 exit 0
 

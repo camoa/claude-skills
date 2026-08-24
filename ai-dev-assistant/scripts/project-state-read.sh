@@ -489,6 +489,20 @@ PROC_REC_LINES=$(awk '
         if (pairs[i] ~ /^source=/) {
           src = substr(pairs[i], 8)
         }
+        # `source:` with a colon, optionally parenthesised and comma-terminated, is the shape a model
+        # writes when it composes the block by hand instead of calling write_source_record. Observed on
+        # a real project: two recorded recipes came back with a null source and two warnings, so every
+        # phase re-resolved from scratch while the record sat there looking complete. Accepting the
+        # variant costs nothing and rescues records already written; the kernel still emits `source=`.
+        else if (pairs[i] ~ /^\(?source:$/ && i < n) {
+          src = pairs[i+1]
+          gsub(/[,)]+$/, "", src)
+        }
+        else if (pairs[i] ~ /^\(?source:/) {
+          src = pairs[i]
+          sub(/^\(?source:/, "", src)
+          gsub(/[,)]+$/, "", src)
+        }
         # Any other token (e.g. a stale pinned_sha=...) is ignored on purpose.
       }
       printf("%s\t%s\n", key, src)
