@@ -14,6 +14,11 @@
   before listing anything.
 
 ### Changed
+- A new project now resolves its stack's phase methods at creation instead of one at a time, per phase,
+  forever. The recipe-adoption sweep already existed and ran only in `/upgrade-project`, so a project
+  retrofitted from an older version got a coverage map while a project created today got nothing — and
+  never saw which phases have no stack-specific method at all. Uncovered phases are named rather than
+  passed over silently. Recording and visibility only: it never follows a recipe body and never prompts.
 - Corrected the README's countable claims, which had been wrong for at least two releases: 7 agents
   where there are 12, 19 skills where there are 26, a version one release behind, and a
   `code-quality-tools (v3.13.0+)` floor that no released version satisfies (actual 3.9.8) sitting in the

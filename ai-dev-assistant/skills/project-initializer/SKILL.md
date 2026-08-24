@@ -202,7 +202,26 @@ Next: Answer requirements questions to complete Phase 1 setup.
 
 Once requirements-gatherer completes and user confirms, show — in order:
 
-**(a) Playbook-config nudge (v4.2.2+ — single source of truth).** Print one line before the `/next` hint:
+**(a) Recipe-adoption sweep — resolve the stack's phase methods once, now.** When `**Frameworks:**` is
+non-empty, run the sweep documented at `commands/upgrade-project.md` step 4b and in
+`references/recipe-adoption-sweep.md`: drive `process-recipe-loader` once per applicable phase
+(`research`, `design`, `implement`, `review`, `e2e-setup`, `visual-regression`), record each `source=`
+decision in the `**Process Recipes:**` block, and print the coverage map. **Recording and visibility
+only** — it never reads or follows a recipe body, never pre-caches, never approves an unverified
+recipe, and never prompts; every miss is simply "no recipe yet". Skip silently when frameworks are
+empty.
+
+This sweep already existed and ran only in `/upgrade-project`, which meant a project retrofitted from
+an older version got its phase methods mapped in one pass while a project created today discovered
+them one at a time, per phase, per task, forever — and never saw which phases have no method at all.
+Creation is where that map is worth having, because it is what shapes every later phase.
+
+**Report the gaps as gaps.** A phase with no recipe is not a failure and must not read as one, but it
+must be visible: name the uncovered phases in the printed map so the user knows where the framework
+has no stack-specific method and can decide whether to write one. Do not offer to author a recipe
+here and do not hand off — this step records and shows, nothing more.
+
+**(b) Playbook-config nudge (v4.2.2+ — single source of truth).** Print one line before the `/next` hint:
 
 ```
 💡 Optional next step: configure your playbook before the first task.
@@ -214,7 +233,7 @@ Once requirements-gatherer completes and user confirms, show — in order:
 
 This nudge is the canonical surface for new-project playbook discoverability — `/new` and `/next` (inline-create path) both invoke this skill, so the nudge fires for every caller. Do NOT duplicate this text in caller commands.
 
-**(b) Final handoff:**
+**(c) Final handoff:**
 
 ```
 Requirements gathering complete.
