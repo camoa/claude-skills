@@ -34,8 +34,11 @@ else
   echo ""
   echo "Run \`/ai-dev-assistant:new <project-name>\` to set it up, or carry on without it."
   echo ""
-  echo "Worth doing before a long piece of work: findings and decisions made without a project"
-  echo "live only in this session and are gone when it closes."
+  echo "**If real work is starting here, set it up first.** Look around only as much as you need to"
+  echo "name the thing — the stack, whether it runs, roughly what it is. Then set up the project and"
+  echo "make the deep analysis its first task. Findings and decisions produced before there is a"
+  echo "project have nowhere to go: they live in this session and are gone when it closes, and the"
+  echo "next session starts over. Auditing first and setting up afterwards is the common mistake."
   if [ -f "$REGISTRY" ]; then
     OTHERS=$(jq -r '.projects | length' "$REGISTRY" 2>/dev/null || echo "0")
     if [ "$OTHERS" -gt 0 ] 2>/dev/null; then

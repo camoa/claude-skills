@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.27.0] - 2026-08-24
+
+### Fixed
+- A session now knows which codebase it is in. The current directory was used for one thing only,
+  hashing a session filename; nothing compared it to any registered project's code path. So a session
+  opened in unregistered code was greeted with a count of every project the user had ever made and told
+  to pick one, and the "start a new project" line appeared only when the registry was completely empty
+  — meaning nobody saw it after their first project ever. New `scripts/project-for-cwd.sh` resolves a
+  directory to its owning project; subdirectories count, a prefix sibling does not, the deepest nested
+  project wins, and a missing registry is a first run rather than an error. The session greeting names
+  the project or says this code is not set up and how to set it up. `/next` resolves the directory
+  before listing anything.
+
+### Changed
+- Corrected the README's countable claims, which had been wrong for at least two releases: 7 agents
+  where there are 12, 19 skills where there are 26, a version one release behind, and a
+  `code-quality-tools (v3.13.0+)` floor that no released version satisfies (actual 3.9.8) sitting in the
+  same sentence as "minimum version 3.0.0", which contradicted it.
+- Architecture is written as a hub plus one file per component, the same split research already used,
+  so a later phase loads the component it needs instead of the whole design. Previously this was a
+  single optional clause reading "for complex tasks, optionally write architecture/<component>.md",
+  and complex tasks are exactly where a monolith gets written instead.
+- The design path states a size constraint: the architecture should be shorter than the change it
+  plans. Nothing in it said anything about length before, and the observed result was a
+  35,000-character architecture for a task whose job was updating Drupal core and modules.
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
