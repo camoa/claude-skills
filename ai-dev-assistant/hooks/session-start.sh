@@ -17,26 +17,32 @@ REGISTRY="$HOME/.claude/ai-dev-assistant/active_projects.json"
 echo "## AI Dev Assistant"
 echo ""
 
-if [ -f "$REGISTRY" ]; then
-  # Count projects
-  PROJECT_COUNT=$(jq -r '.projects | length' "$REGISTRY" 2>/dev/null || echo "0")
+# Which project owns THIS directory? Counting every project the user has ever made and telling them to
+# pick one is useless in a codebase that belongs to none of them — and the "start a new project" line
+# used to appear only when the registry was completely empty, so nobody saw it after their first project
+# ever. Answer for the directory in front of us.
+WHERE=$("$DDF_DIR/scripts/project-for-cwd.sh" "$PWD" 2>/dev/null)
+REGISTERED=$(printf '%s' "$WHERE" | jq -r '.registered // false' 2>/dev/null || echo "false")
+PROJECT=$(printf '%s' "$WHERE" | jq -r '.project // ""' 2>/dev/null || echo "")
 
-  if [ "$PROJECT_COUNT" -gt 0 ]; then
-    echo "Found $PROJECT_COUNT registered project(s)."
-    echo ""
-    echo "**Run \`/ai-dev-assistant:next\` to:**"
-    echo "1. Select a project"
-    echo "2. Choose or create a task"
-    echo "3. Get recommended next action"
-  else
-    echo "No projects registered yet."
-    echo ""
-    echo "**Run \`/ai-dev-assistant:new <project-name>\` to start a new project.**"
-  fi
-else
-  echo "No projects registered yet."
+if [ "$REGISTERED" = "true" ] && [ -n "$PROJECT" ]; then
+  echo "This code belongs to the **$PROJECT** project."
   echo ""
-  echo "**Run \`/ai-dev-assistant:new <project-name>\` to start a new project.**"
+  echo "Run \`/ai-dev-assistant:next\` to pick up where you left off."
+else
+  echo "This code is not set up as a project yet, so nothing here is being tracked."
+  echo ""
+  echo "Run \`/ai-dev-assistant:new <project-name>\` to set it up, or carry on without it."
+  echo ""
+  echo "Worth doing before a long piece of work: findings and decisions made without a project"
+  echo "live only in this session and are gone when it closes."
+  if [ -f "$REGISTRY" ]; then
+    OTHERS=$(jq -r '.projects | length' "$REGISTRY" 2>/dev/null || echo "0")
+    if [ "$OTHERS" -gt 0 ] 2>/dev/null; then
+      echo ""
+      echo "_(You have $OTHERS project(s) set up elsewhere; \`/ai-dev-assistant:next\` lists them.)_"
+    fi
+  fi
 fi
 
 exit 0
