@@ -95,7 +95,17 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 
 ## Output Format
 
-Create `{project_path}/architecture/main.md` with these sections:
+**Split by default.** Write a hub plus one file per component — `architecture.md` (or
+`architecture/main.md`) carries Overview, the compliance tables, a component index linking each file,
+Data Flow, Pattern References and Implementation Order; each component's detail goes in its own
+`architecture/<component>.md`. The hub links; it does not restate. One flat file is right only for a
+genuinely single-component design.
+
+**Write less than the change.** The design should be shorter than the thing it plans. Do not restate
+the method you were given, do not narrate the process, and do not pad a small change into a large
+document. If a component's file says nothing the code would not, drop it.
+
+Create the hub with these sections:
 - **Overview** — high-level description.
 - **Architecture Principles Compliance** — reusable-service, programmatic-entry-point, and SOLID status tables.
 - **Components** — Services (first), programmatic entry points (with services), UI components (after services), data structures.

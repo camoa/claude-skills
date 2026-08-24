@@ -59,6 +59,16 @@ Do NOT walk `blocks`/`blocked_by` graph transitively here — direct relationshi
 
 When `/next` is called without a project name:
 
+0. **Resolve the directory first.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/project-for-cwd.sh` (Bash) and
+   parse `.registered`, `.project`, `.match`. Standing inside a codebase is a far stronger signal than
+   recency, and ignoring it is what made the greeting useless: a session in unregistered code was told
+   how many projects existed elsewhere and asked to pick one.
+   - **`registered: true`** — go straight to that project. Do not render the list. Say which project it
+     is and why (`this code is <project>`), so a wrong match is visible and correctable.
+   - **`registered: false`** — do NOT open with a list of unrelated projects. Say the current code is
+     not set up, and offer `/ai-dev-assistant:new <name>` as the first option. Offer the list of other
+     projects as the second option, for the case where the user meant to work somewhere else. Under an
+     unattended run, state the fact and stop; do not prompt.
 1. Read registry at `~/.claude/ai-dev-assistant/active_projects.json`
 2. List all projects (sorted by lastAccessed, newest first)
 3. Ask user to choose

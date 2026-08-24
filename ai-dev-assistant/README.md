@@ -102,7 +102,7 @@ Phases apply per task, not per project: a project can have tasks at different ph
 
 **Declared dependencies (2):**
 - `dev-guides-navigator`: online guide discovery with caching (1200+ atomic guides across frameworks, CSS, and dev practices).
-- `code-quality-tools` (v3.13.0+): powers the `/validate:tdd|solid|dry|security` wrappers (minimum version 3.0.0).
+- `code-quality-tools` (minimum version 3.0.0): powers the `/validate:tdd|solid|dry|security` wrappers.
 
 **Recommended companions:** `superpowers` (TDD, brainstorming, verification), `code-quality-tools` (static analysis, security), `plugin-creation-tools` (invoked by the skill-review and plugin-validate gates when a task touches plugin files), `code-paper-test` (behavioral, mental-execution verification of skills and commands during plugin review).
 
@@ -161,8 +161,8 @@ The full command set (playbooks, worktrees, epics, visual setup, prototypes, glo
 
 ## What's inside
 
-- **7 agents** with model routing and turn caps (orchestration, architecture drafting and validation, pattern and prior-art research, scope analysis, independent verdict confirmation).
-- **19 skills** invoked by commands and agents; 6 methodology references enforced per phase (SOLID, Library-First, TDD, DRY, quality gates, purposeful code).
+- **12 agents** with model routing and turn caps (orchestration, architecture drafting and validation, pattern and prior-art research, scope analysis, independent verdict confirmation).
+- **26 skills** invoked by commands and agents; 6 methodology references enforced per phase (SOLID, Library-First, TDD, DRY, quality gates, purposeful code).
 - **It searches your own code before it searches the world.** Prior art used to mean "does a library
   exist?" It now asks the cheaper question first: have *we* already built this? The framework reads its
   own record of completed work, then the code itself, and comes back with reuse, extend, or supersede.
@@ -213,7 +213,7 @@ A passing gate means the disciplined step ran (the tests exist and pass, the sta
 - **Philosophy:** [PHILOSOPHY.md](../PHILOSOPHY.md). Why the framework works the way it does.
 - **Deeper how-to:** [docs/usage.md](docs/usage.md). Prerequisites, "it's working if", reading the trace, autonomous runs, the full command reference.
 - **Upgrading from v2.x:** run `/next` after upgrading (it offers to migrate old tasks), or `/ai-dev-assistant:migrate-tasks`. See [MIGRATION.md](./MIGRATION.md).
-- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.25.0**.
+- **Changelog:** [CHANGELOG.md](./CHANGELOG.md). Current version: **5.27.0**.
 
 ## License
 
