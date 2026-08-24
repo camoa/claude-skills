@@ -108,7 +108,7 @@ Working on: None - define tasks after requirements are gathered
 File: -
 
 ## Up Next
-Queued: {Tasks to work on after current task}
+Queued: {candidate first tasks once requirements surface them; see step 10(c)}
 
 ## Completed Implementation Tasks
 {Empty initially}
@@ -233,15 +233,40 @@ here and do not hand off — this step records and shows, nothing more.
 
 This nudge is the canonical surface for new-project playbook discoverability — `/new` and `/next` (inline-create path) both invoke this skill, so the nudge fires for every caller. Do NOT duplicate this text in caller commands.
 
-**(c) Final handoff:**
+**(c) Final handoff — offer the candidate tasks, and enter at scope.**
+
+Requirements gathering usually surfaces one or more candidate first tasks, and by this point you have
+often written one into `## Current Focus` in prose. Offer them. **Do not create them** — a task folder
+is the user's decision, and a project that creates its own backlog has decided for them.
+
+Record the candidates in `## Up Next` (that field exists for exactly this, and must not be left
+holding its `{...}` placeholder) and print:
 
 ```
 Requirements gathering complete.
 
-Run `/ai-dev-assistant:next` to get your next recommended action.
+Candidate first tasks:
+  - <task-name> — <one line on what it settles>
+  - <task-name> — <one line on what it settles>
+
+Say which one to start and I'll open it with `/ai-dev-assistant:scope <task-name>`,
+or run `/ai-dev-assistant:next` to see the full picture first.
 ```
 
-Do NOT manually list commands like `/research` or `/design`. Always direct to `/next` for intelligent routing.
+**A task that does not exist yet starts at Phase 0 scope, not Phase 1 research.** This is a rule about
+what you do, not a phrase to print. When the user picks a candidate, run `/ai-dev-assistant:scope
+<task>` — never `/ai-dev-assistant:research <task>`, and never offer research as the entry point.
+Phase 0 writes the four-field contract (Goal / Expected result / Success criteria / Non-goals) that
+Phase 4 later checks the change against; `/research` on a new task stops and authors that contract
+anyway, so naming research first either detours through scope or reads to the user as though scope
+were optional. `/next` routes new tasks the same way (`commands/next.md`, "Scope contract for
+brand-new tasks"), so the two agree.
+
+When requirements surfaced no clear candidate, drop the list and hand off to `/next` alone. Do not
+invent a task to fill the slot.
+
+Beyond `/scope` and `/next`, do not list further commands like `/design` or `/implement` — `/next`
+routes those.
 
 ## Stop Points
 
