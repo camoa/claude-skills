@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # project-state-read.sh — parse a project's project_state.md header block.
 #
-# Usage: project-state-read.sh <project_folder>
+# Usage: project-state-read.sh <project_folder|project_name>
+#
+# A bare name (no "/") that is not a directory is looked up in the registry
+# by exact name and replaced with its recorded path, with a
+# resolved_from_registry warning.
 #
 # Always emits a single-line JSON to stdout. Exit 0 regardless of input
 # (warnings surface via the warnings[] array). Mirrors the defensive posture
@@ -35,6 +39,7 @@
 # Warning codes:
 #   missing_arg                — script called without $1 (defensive; emit + exit 0)
 #   folder_missing             — project folder does not exist
+#   resolved_from_registry     — arg was a project name; resolved to its registered path
 #   project_state_md_missing   — project_state.md not in folder
 #   code_path_unknown          — project_state.md has no Code path line (first-use case)
 #   code_path_missing          — Code path declares a directory that does not exist
@@ -68,6 +73,27 @@ set -uo pipefail
 # Defensive contract: emit JSON-stdout + exit 0 always, even on bad inputs.
 # Mirrors task-frontmatter-reader. Caller (e.g., upgrade-project.md) trusts exit 0.
 PROJECT_DIR="${1:-}"
+
+# A bare project NAME is accepted as well as a folder path. The registry is the
+# authority on where a project lives, so a name is resolved through it rather
+# than falling through to folder_missing with every field at its empty default.
+# That empty reading is the hazard: a caller that checks `frameworks` and not
+# `warnings` reads [] as "this project has no frameworks" and silently skips the
+# work it guards. A wrong answer shaped like a legitimate one is worse than a
+# loud miss.
+REGISTRY_RESOLVED=""
+if [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR" ] && [ "${PROJECT_DIR#*/}" = "$PROJECT_DIR" ]; then
+  _REG="${AIDA_REGISTRY:-$HOME/.claude/ai-dev-assistant/active_projects.json}"
+  if [ -r "$_REG" ] && command -v jq >/dev/null 2>&1; then
+    _HIT=$(jq -r --arg n "$PROJECT_DIR" \
+      '[.projects[]? | select(.name == $n) | .path // empty] | first // empty' \
+      "$_REG" 2>/dev/null) || _HIT=""
+    if [ -n "$_HIT" ] && [ -d "$_HIT" ]; then
+      REGISTRY_RESOLVED="$PROJECT_DIR"
+      PROJECT_DIR="$_HIT"
+    fi
+  fi
+fi
 FOLDER_NAME=$(basename "${PROJECT_DIR:-(missing)}")
 PROJECT_STATE="${PROJECT_DIR}/project_state.md"
 
@@ -202,6 +228,10 @@ else
     WARNINGS=$(jq -c -n --arg p "$CODE_PATH_NORM" '[{code: "code_path_missing", detail: ("directory does not exist: " + $p)}]')
   fi
   CODE_PATH_OUT="$CODE_PATH_NORM"
+fi
+
+if [ -n "$REGISTRY_RESOLVED" ]; then
+  add_warning "resolved_from_registry" "'$REGISTRY_RESOLVED' is a project name, not a folder path; resolved via the registry to $PROJECT_DIR"
 fi
 
 # === Playbook Sets parsing ===

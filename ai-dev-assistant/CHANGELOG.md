@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.27.1] - 2026-08-24
+
+### Fixed
+- `project-state-read.sh` given a project name returned an answer that looked legitimate and was
+  wrong. It takes a folder path; a name fell through to `folder_missing` with every field at its
+  empty default, so `frameworks` came back `[]` — indistinguishable from a project that genuinely
+  declares no frameworks. The recipe-adoption sweep is guarded on exactly that field, and a caller
+  reading `frameworks` without also reading `warnings` would have skipped the sweep silently. Seen
+  live on a real project setup, caught only because the operator found `[]` suspicious. A bare name
+  is now resolved through the registry, with a `resolved_from_registry` warning; an unregistered name
+  still misses loudly, and an explicit path is never redirected by a registry entry of the same name.
+- A finished project setup offered to start the first task at research. A task with no folder starts
+  at Phase 0 scope, where the four-field contract Phase 4 checks against gets written; `/research` on
+  a new task stops and authors that contract anyway, so offering research first either detours
+  through scope or reads as though scope were optional. The rule was written down nowhere — the
+  skill's closing line said only "run `/next`" — so the session filled the gap with its own wording.
+  `project-initializer` step 10(c) now names `/scope`, states the phase, and offers the candidate
+  tasks without creating them. `tests/project-initializer-handoff-contract-spec.sh` holds the line.
+- `references/recipe-adoption-sweep.md` still described itself as `/upgrade-project` step 4b after
+  5.27.0 gave it a second caller at project creation. Both callers are now named.
+
 ## [5.27.0] - 2026-08-24
 
 ### Fixed

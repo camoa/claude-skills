@@ -1,8 +1,12 @@
-# Recipe-adoption sweep (`/upgrade-project` Step 4b)
+# Recipe-adoption sweep
+
+Two callers, one procedure: `/upgrade-project` step 4b (retrofitting an existing project)
+and `skills/project-initializer` step 10(a) (a project being created). Everything below
+applies identically to both; where the text says `/upgrade-project`, read "the caller".
 
 The eager on-ramp that complements the lazy point-of-need recipe trigger: after the project-state pass, once `**Frameworks:**` is known, `/upgrade-project` resolves + **records** process recipes for ALL applicable lifecycle phases in one pass so the coverage map is visible up front, instead of being discovered one phase at a time mid-work.
 
-**It records source decisions and reports coverage; it does NOT pre-cache or follow recipe bodies, and it does NOT approve unverified recipes** — bodies are still Read and followed lazily per-phase at use-time, and `verified:false` recipes still get human review then. This is a recording + visibility pass, not an execution commitment. Runs after Step 4, part of the project-level work (so it runs even with `--skip-tasks`); skipped only when frameworks are empty.
+**It records source decisions and reports coverage; it does NOT pre-cache or follow recipe bodies, and it does NOT approve unverified recipes** — bodies are still Read and followed lazily per-phase at use-time, and `verified:false` recipes still get human review then. This is a recording + visibility pass, not an execution commitment. Under `/upgrade-project` it runs after step 4, part of the project-level work (so it runs even with `--skip-tasks`); at creation it runs once requirements are gathered and `**Frameworks:**` is written. Either way it is skipped only when frameworks are empty.
 
 - **Guard.** Re-run `bash scripts/project-state-read.sh <project>` to read the now-current `.frameworks` and `.processRecipes`. If `.frameworks == []` (no codePath, undetectable stack, or user declined the Frameworks gap in Step 4), SKIP the sweep with a one-line note ("recipe-adoption sweep skipped: no **Frameworks:** set"). Never fail.
 - **Snapshot for idempotency.** Capture the set of already-recorded keys from `.processRecipes` (each entry's `key`) BEFORE driving the loader. A key resolved during the sweep that is in this snapshot is reported "already"; one not in it is "newly recorded". The loader's `write_source_record` is itself idempotent (an unchanged line is a no-op — rc 3 — so re-running the sweep produces no churn); this snapshot only labels the report.

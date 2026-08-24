@@ -271,6 +271,63 @@ PR_OUT="$("$READER" "$PR_DIR/p" 2>/dev/null)"
   || fail_check "a source that parses must not warn"
 rm -rf "$PR_DIR"
 
+# === Test: a bare project NAME resolves through the registry ===
+# The hazard this closes, observed live: the reader was called with a project
+# name instead of a folder path, returned frameworks:[] with a folder_missing
+# warning, and the caller — which read frameworks and not warnings — took the
+# empty list as "this project declares no frameworks" and nearly skipped the
+# recipe sweep it guards. An empty reading that looks legitimate is the failure.
+NAME_HOME=$(mktemp -d)
+NAME_PROJ="$NAME_HOME/projects/registered_name"
+mkdir -p "$NAME_PROJ" "$NAME_HOME/reg"
+cat > "$NAME_PROJ/project_state.md" <<EOF
+# Registered Name
+**Frameworks:** drupal, nextjs
+EOF
+cat > "$NAME_HOME/reg/active_projects.json" <<EOF
+{"projects":[{"name":"registered_name","path":"$NAME_PROJ","codePath":"$NAME_HOME/code"}]}
+EOF
+
+NAME_OUT=$(AIDA_REGISTRY="$NAME_HOME/reg/active_projects.json" bash "$READER" registered_name 2>/dev/null)
+[ "$(printf '%s' "$NAME_OUT" | jq -r '.frameworks | join(",")')" = "drupal,nextjs" ] \
+  && pass_check "a bare project name reads the real frameworks, not []" \
+  || fail_check "a bare project name must resolve via the registry"
+[ "$(printf '%s' "$NAME_OUT" | jq -r '.folder')" = "$NAME_PROJ" ] \
+  && pass_check "the resolved folder is the registered path" \
+  || fail_check "resolved folder must be the registered path"
+[ "$(printf '%s' "$NAME_OUT" | jq -r '[.warnings[].code] | index("resolved_from_registry") // "none"')" != "none" ] \
+  && pass_check "name resolution is recorded as a warning, never silent" \
+  || fail_check "resolving a name must record resolved_from_registry"
+[ "$(printf '%s' "$NAME_OUT" | jq -r '[.warnings[].code] | index("folder_missing") // "none"')" = "none" ] \
+  && pass_check "a resolved name does not also report folder_missing" \
+  || fail_check "a successfully resolved name must not warn folder_missing"
+
+# An unregistered name must still miss LOUDLY — resolution is not a guess.
+UNREG=$(AIDA_REGISTRY="$NAME_HOME/reg/active_projects.json" bash "$READER" no_such_project 2>/dev/null)
+[ "$(printf '%s' "$UNREG" | jq -r '[.warnings[].code] | index("folder_missing") // "none"')" != "none" ] \
+  && pass_check "an unregistered name still reports folder_missing" \
+  || fail_check "an unregistered name must not be silently accepted"
+
+# A PATH argument must never consult the registry, even when a project of that
+# basename is registered — the path is the caller being explicit.
+PATH_DIR="$NAME_HOME/elsewhere/registered_name"
+mkdir -p "$PATH_DIR"
+cat > "$PATH_DIR/project_state.md" <<EOF
+# Elsewhere
+**Frameworks:** symfony
+EOF
+PATH_OUT=$(AIDA_REGISTRY="$NAME_HOME/reg/active_projects.json" bash "$READER" "$PATH_DIR" 2>/dev/null)
+[ "$(printf '%s' "$PATH_OUT" | jq -r '.frameworks | join(",")')" = "symfony" ] \
+  && pass_check "an explicit path is read as given, not redirected by name" \
+  || fail_check "a path argument must never be overridden by a registry entry"
+
+# A missing or unreadable registry degrades to the old behaviour, never crashes.
+NOREG=$(AIDA_REGISTRY="$NAME_HOME/reg/does-not-exist.json" bash "$READER" registered_name 2>/dev/null)
+[ "$(printf '%s' "$NOREG" | jq -r '.warnings | length')" -gt 0 ] \
+  && pass_check "a missing registry degrades to a warning, still valid JSON" \
+  || fail_check "a missing registry must still emit warnings and valid JSON"
+rm -rf "$NAME_HOME"
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nSome invariants FAILED for scripts/project-state-read.sh.\n' >&2
   exit 1
