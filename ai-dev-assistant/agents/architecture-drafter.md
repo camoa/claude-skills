@@ -54,6 +54,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 
 1. **Read the injected recipe.** The design command injects the resolved framework recipe body. Follow its architecture method.
 2. **Review research.** Read existing research from the architecture/ or research/ folder.
+2a. **Read the internal prior-art record.** When `<task_folder>/_internal-prior-art.json` exists, read it before designing. An unresolved hit is not a green field: the project already has something that answers one of this task's capability aspects, and the design either builds on it (reuse or extend) or records why it supersedes it. Designing a parallel component over an unresolved hit is the duplication the record exists to prevent. `research/internal-prior-art.md` carries the detail.
 3. **Identify components.** List the services, libraries, UI components, and data structures needed.
 4. **Keep business logic out of the UI layer.** Design reusable services or libraries before UI components.
 5. **Apply SOLID.** Verify each service has a single responsibility.

@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.26.0] - 2026-08-22
+
+### Added
+
+- **Internal prior art: the research phase now searches the project's own code and its own record of
+  what it already built, before it searches the outside world.** Phase 1 only ever looked outward:
+  `prior-art-researcher` at package registries and the web, `core-pattern-finder` at the *framework's*
+  source. Nothing searched the repo at `codePath`, and `/research` and `/design` contained zero
+  references to completed tasks. So the framework could recommend building something the project
+  already had, and no gate caught it: the DRY gate is clone detection, which is textual, so two
+  differently-written implementations of one capability produce no clones at all.
+
+  The policy was already right and the data was missing. The plugin research recipe says "prefer extend
+  over create"; `architecture-drafter` enforces reusable services. Both fire on every task. Neither knew
+  what the project had already built.
+
+  - `commands/research.md` gains **step 5a**, between the alignment step and the outward search.
+  - New `scripts/ledger-index.sh` — turns the project's own completed and in-progress task record into a
+    search corpus. In-progress is scanned deliberately: a pending supersede migration lives there, and
+    seeing it is what stops the next task adding a third implementation. Refuses to drop a task
+    silently; any drop is recorded as `task_dropped:<name>`. Stub goals (scaffold text from a task that
+    never got scoped) are marked, because that text is identical across tasks and would otherwise match
+    everything. Success criteria are opt-in behind `--with-criteria`, which keeps the default output
+    about a third smaller.
+  - New `scripts/map-currency.sh` — a stale map is worse than no map, so currency is decided from the
+    artifact against the repository (mtime versus last commit) rather than from a tool-provided signal.
+    "I could not tell" is its own answer and is never reported as current.
+  - New `scripts/prior-art-disposition.sh` — the verdict matrix and the citation floor, in a kernel,
+    because a rejection a model performs on its own reasoning is not a rejection.
+  - New `skills/internal-prior-art-finder/`, `agents/prior-art-verdict-confirmer.md` (writes a verdict
+    sidecar rather than returning prose), `references/internal-prior-art.md`, `commands/set-code-map.md`.
+
+- **Verdicts are a cost comparison, not a quality score.** reuse / extend / **supersede**, judged across
+  build cost (paid once), carry cost, agent cost (context to load, and the ambiguity tax every future
+  session pays when two implementations exist), and risk cost. A supersede must win on the *recurring*
+  classes and cite something measured; "I would have written it differently" is a build-cost preference
+  and is rejected. A supersede that cannot absorb the superseded use case is downgraded to extend,
+  because otherwise the verdict creates the very duplication this feature prevents.
+
+- **A `internal-prior-art` hard-block gate in `/review`** (`commands/review.md` step 5.0e). It asserts the
+  search **ran and was recorded**, never that it found anything. A source that could not be searched
+  passes with its reason; tasks predating the gate are benignly skipped. "Nobody looked" must never read
+  as "nothing was found".
+
+- Gate audit schema **v1.6**: the `internal-prior-art` gate type and the
+  `_prior-art-confirm-<aspect>.json` agent sidecar.
+
+### Changed
+
+- **The outward prior-art search is now aspect-scoped too.** `commands/research.md` step 6 previously
+  contained no reference to `coverage-map.json`: the capability aspects were derived at step 2c and the
+  search that most needed them never saw them, so an aspect an adopted agentic recipe already answered
+  was researched again from scratch, and an aspect flagged `uncovered` got no extra attention. The
+  dispatch now carries the aspects and the per-recipe decisions, and every finding names the aspect it
+  answers.
+- `agents/architecture-drafter.md` reads the internal prior-art record before designing. An unresolved
+  hit is not a green field.
+- `references/maintainer-create-on-miss.md` Surface 2 gains a second trigger: an internal hit on an
+  aspect no recipe covers is a gap with evidence, and it reaches the existing capture surface rather
+  than a new one.
+
 ## [5.25.0] - 2026-08-20
 
 Closes the recorded defects in the visual-regression layer. The findings came from

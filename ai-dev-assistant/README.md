@@ -27,7 +27,8 @@ $ /ai-dev-assistant:scope rss_feed
 
 $ /ai-dev-assistant:research rss_feed
   Phase 1: Research
-    Prior art: found drupal/views_rss covers ~80% of this. Reuse, don't rebuild.
+    Internal prior art: your own feed_export task built a FeedBuilder service. Extend it.
+    Prior art: found drupal/views_rss covers ~80% of the rest. Reuse, don't rebuild.
     Guides loaded: drupal/views, drupal/render-cache
     → research.md written
 
@@ -117,7 +118,7 @@ This framework drives real tools. It runs shell commands with your actual filesy
 /ai-dev-assistant:new my_module     # Create project, answer requirements questions
 /ai-dev-assistant:next              # Pick your first task → offers a scope contract first
 /ai-dev-assistant:scope my_task     # Author the scope contract (declinable, but this is the start)
-/ai-dev-assistant:research my_task  # Phase 1: find prior art, load guides
+/ai-dev-assistant:research my_task  # Phase 1: search your own code first, then the world
 /ai-dev-assistant:design my_task    # Phase 2: design architecture, set acceptance criteria
 /ai-dev-assistant:implement my_task # Phase 3: build test-first
 /ai-dev-assistant:review my_task    # Phase 4: run the gates, get a PR body
@@ -160,8 +161,15 @@ The full command set (playbooks, worktrees, epics, visual setup, prototypes, glo
 
 ## What's inside
 
-- **6 agents** with model routing and turn caps (orchestration, architecture drafting and validation, pattern and prior-art research, scope analysis).
-- **18 skills** invoked by commands and agents; 6 methodology references enforced per phase (SOLID, Library-First, TDD, DRY, quality gates, purposeful code).
+- **7 agents** with model routing and turn caps (orchestration, architecture drafting and validation, pattern and prior-art research, scope analysis, independent verdict confirmation).
+- **19 skills** invoked by commands and agents; 6 methodology references enforced per phase (SOLID, Library-First, TDD, DRY, quality gates, purposeful code).
+- **It searches your own code before it searches the world.** Prior art used to mean "does a library
+  exist?" It now asks the cheaper question first: have *we* already built this? The framework reads its
+  own record of completed work, then the code itself, and comes back with reuse, extend, or supersede.
+  This matters because the usual safety net does not catch it: duplicate-code detection is textual, so
+  two implementations of one capability written at different times look nothing alike and slip straight
+  through. Optionally accelerated by a code map you create and own; the framework never installs, runs,
+  or maintains one.
 - **Adversarial challenge, built in.** The framework is made to argue with itself before you have to: a stated mechanism is challenged against the native pattern before it is adopted (mechanism-challenge), a built work-order gets an independent fresh-context critic that reads the diff as hostile (`wo-critic`), research can run as competing agents that debate (`/research-team`), and validation can run in isolated teams free of main-session bias (`/validate:team`).
 - **Online dev-guides:** the framework loads current domain guides for your stack at the start of every phase via the required `dev-guides-navigator`, so the AI works from today's best practice rather than its training cutoff. Hash-cached, session-aware, 1200+ atomic decision guides at [camoa.github.io/dev-guides](https://camoa.github.io/dev-guides/).
 - **Process recipes (why it is stack-agnostic):** a *stack* is data, not engine code. Each framework's per-phase method (how to research, design, implement, and review on that stack) lives as a **process recipe**, discovered and fetched through [`dev-guides-navigator`](../dev-guides-navigator/README.md) from the public [dev-guides](https://camoa.github.io/dev-guides/) catalog. Supporting a new stack means authoring those assets (guides plus recipes) in dev-guides, not changing the engine. If your stack is not covered yet, that catalog is where a recipe gets added.

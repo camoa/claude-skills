@@ -82,6 +82,32 @@ Fires in `/research` Step 2c, on the **genuine `no_match`** case only.
 the genuine `no_match` path always did. Record the surfaced aspect in
 `_agentic-recipe.json` `gate_specific.recipe_gap_proposed[]` (additive) so it surfaces once per task.
 
+### Second trigger path — an internal prior-art hit on an uncovered aspect (v5.26.0+)
+
+The trigger above fires on a *silent* gap: no recipe covers an aspect, and nothing else has an opinion.
+There is a stronger signal, and `/research` step 5a produces it.
+
+When the internal prior-art search finds the project **already implemented** an aspect that no agentic
+recipe covers, that is a gap with evidence attached: the work has been done here at least once, with no
+sanctioned pattern to have done it against. `_internal-prior-art.json` records those aspects in
+`gate_specific.recipe_gap[]`, and step 5a mirrors them into the same
+`_agentic-recipe.json` `gate_specific.recipe_gap_proposed[]` list this surface already reads.
+
+**Trigger:** conditions 1 and 4 above, plus an aspect present in `_internal-prior-art.json`
+`gate_specific.recipe_gap[]`. Condition 2 is **not** required — an internal hit is informative whether or
+not the recipe lookup was conclusive.
+
+**The notice gains one clause:**
+
+> 💡 **Maintainer note:** no agentic recipe covers **`<aspect>`**, and this project has already
+> implemented it at `<where>`. Worth capturing a recipe from the existing implementation. (Proceeding
+> with the generic flow now.)
+
+Same posture: visibility only, no offer, no handoff, one surfacing per task, recorded in the same list so
+the two paths cannot double-notify for one aspect. The detection side lives at `/research`; the capture
+side already exists at `/complete`, whose `play_candidates` mode surfaces repeated decisions worth
+recording. This closes that loop without adding a third surface.
+
 ---
 
 ## Surface 3 — PROCESS-RECIPE gap (PROPOSE-ONLY note, appended to the existing ask-user)

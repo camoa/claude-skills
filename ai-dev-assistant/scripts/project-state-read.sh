@@ -21,6 +21,11 @@
 #     "runMode": "interactive" | "autonomous",   # spine_memory — absent/bad → "interactive" (never autonomous)
 #     "reviewRequired": bool | null,    # v4.1.0+ — null when absent (legacy default applies in /complete)
 #     "visualReview": null | {"enabled": bool, "registryPath": "<rel>" | null},  # v4.11.0+
+#     "codeMap": null | {"declined": bool, "path": "<rel>" | null},  # v5.26.0+ — null when the
+#                                       # **Code Map:** line is absent (never asked, or asked and the
+#                                       # answer not yet recorded); {"declined": true} when the user
+#                                       # explicitly said no. The two are NOT the same: absent means
+#                                       # ask, declined means never ask again.
 #     "frameworks": ["<framework-id>", ...],  # e.g. ["nextjs","symfony"]; [] when absent
 #     "localGuidesPath": "<rel-path>" | null,  # path to local dev-guides; null when absent
 #     "processRecipes": [{"key": "<phase>/<fw>/<name>", "source": "<dev-guides|local|machine-local|research>" | null}, ...],
@@ -74,6 +79,7 @@ emit_json() {
   # $10 = worktreeByDefault bool string, $11 = reviewRequired bool|"null", $12 = visualReview JSON
   # $13 = frameworks JSON array, $14 = localGuidesPath (string "null" for null),
   # $15 = processRecipes JSON array, $16 = runMode string (default "interactive")
+  # $17 = codeMap JSON ("null" literal when no answer is recorded)
   jq -nc \
     --arg n "$1" --arg cp "$2" --arg d "$3" \
     --argjson w "$4" \
@@ -86,7 +92,8 @@ emit_json() {
     --argjson fr "${13:-[]}" \
     --arg lgp "${14:-null}" \
     --argjson rec "${15:-[]}" \
-    --arg rm "${16:-interactive}" '
+    --arg rm "${16:-interactive}" \
+    --argjson cm "${17:-null}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -103,6 +110,7 @@ emit_json() {
       frameworks: $fr,
       localGuidesPath: (if $lgp == "null" then null else $lgp end),
       processRecipes: $rec,
+      codeMap: $cm,
       warnings: $w
     }'
 }
@@ -319,6 +327,36 @@ case "$RM_NORM" in
                           add_warning "run_mode_bad_value" "expected interactive|autonomous, got: $RM_RAW" ;;
 esac
 
+# === Code Map parsing (v5.26.0+) ===
+# Grammar: **Code Map:** <relative-path> | (none)
+#   Absent line     → codeMap: null      — no answer recorded yet; the map conversation may run.
+#   `(none)`        → {"declined": true} — the user said no. Recorded so it is never re-asked.
+#   <relative-path> → {"declined": false, "path": "<rel>"} — resolved relative to codePath.
+# The path is validated for containment: a value escaping the project folder or codePath is dropped
+# with a warning rather than returned, mirroring the visual-review registry's posture. This value is
+# read by the internal prior-art search; an escaping path would point it at an arbitrary file.
+CM_RAW=$(awk '
+  /^\*\*[Cc]ode [Mm]ap:\*\*/ {
+    sub(/^\*\*[Cc]ode [Mm]ap:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+CM_TRIM=$(printf '%s' "$CM_RAW" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+CM_OUT="null"
+case "$CM_TRIM" in
+  "") ;;                                   # absent → null (ask)
+  "(none)"|"(None)"|"(NONE)")
+    CM_OUT='{"declined": true, "path": null}' ;;
+  *)
+    case "$CM_TRIM" in
+      /*|*..*)
+        add_warning "code_map_path_escape" "Code Map must be a relative path inside the project: $CM_TRIM" ;;
+      *)
+        CM_OUT=$(jq -nc --arg p "$CM_TRIM" '{declined: false, path: $p}') ;;
+    esac ;;
+esac
+
 # === Visual Review parsing (v4.11.0+) ===
 # Grammar: **Visual Review:** <state> <relative-path>
 #   <state> ∈ {enabled, disabled}; <relative-path> must resolve WITHIN the project.
@@ -484,4 +522,4 @@ fi
 
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
   "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT" \
-  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES" "$RM_OUT"
+  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES" "$RM_OUT" "$CM_OUT"

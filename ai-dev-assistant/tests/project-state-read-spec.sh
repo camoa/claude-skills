@@ -199,6 +199,42 @@ else
   fail_check "VR '.' path handling — got: $(echo "$out" | jq -c '.visualReview, .warnings')"
 fi
 
+# === codeMap (v5.26.0+) ================================================================
+# The load-bearing distinction: an ABSENT line means "no answer recorded, the map
+# conversation may run"; `(none)` means "the user said no, never ask again". Collapsing
+# them re-asks a question the user already answered, on every single task.
+printf '# Test\n**Code path:** /tmp\n' > "$TMPDIR/project_state.md"
+[ "$(bash "$READER" "$TMPDIR" | jq -r '.codeMap')" = "null" ] \
+  && pass_check "codeMap: absent line parses to null (the map conversation may run)" \
+  || fail_check "codeMap: an absent Code Map line should parse to null"
+
+printf '# Test\n**Code path:** /tmp\n**Code Map:** (none)\n' > "$TMPDIR/project_state.md"
+[ "$(bash "$READER" "$TMPDIR" | jq -r '.codeMap.declined')" = "true" ] \
+  && pass_check "codeMap: (none) records an explicit decline, so it is never re-asked" \
+  || fail_check "codeMap: (none) should parse to declined:true, distinct from absent"
+
+printf '# Test\n**Code Map:** graphify-out/graph.json\n' > "$TMPDIR/project_state.md"
+[ "$(bash "$READER" "$TMPDIR" | jq -r '.codeMap.path')" = "graphify-out/graph.json" ] \
+  && pass_check "codeMap: a relative path is recorded" \
+  || fail_check "codeMap: relative path was not recorded"
+[ "$(bash "$READER" "$TMPDIR" | jq -r '.codeMap.declined')" = "false" ] \
+  && pass_check "codeMap: a recorded path is not a decline" \
+  || fail_check "codeMap: declined should be false when a path is set"
+
+# Containment: this value steers where the internal prior-art search reads, so an escaping
+# path is dropped with a warning rather than returned. Mirrors the visual-review registry.
+for bad in "../../etc/passwd" "/etc/passwd" ".."; do
+  printf '# Test\n**Code Map:** %s\n' "$bad" > "$TMPDIR/project_state.md"
+  CM_OUT_T="$(bash "$READER" "$TMPDIR")"
+  [ "$(jq -r '.codeMap' <<<"$CM_OUT_T")" = "null" ] \
+    && pass_check "codeMap: escaping path '$bad' dropped" \
+    || fail_check "codeMap: escaping path '$bad' was accepted"
+  jq -e '.warnings | any(.code == "code_map_path_escape")' >/dev/null <<<"$CM_OUT_T" \
+    && pass_check "codeMap: escape '$bad' warned rather than dropped silently" \
+    || fail_check "codeMap: escaping path '$bad' was dropped with no warning"
+done
+
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nproject-state-read.sh parsing invariants violated.\n' >&2
   exit 1
@@ -206,3 +242,4 @@ fi
 
 printf '\nAll invariants pass for scripts/project-state-read.sh.\n'
 exit 0
+
