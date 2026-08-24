@@ -30,6 +30,11 @@
 #                                       # answer not yet recorded); {"declined": true} when the user
 #                                       # explicitly said no. The two are NOT the same: absent means
 #                                       # ask, declined means never ask again.
+#     "taskRule": null | {"declined": bool},  # v5.28.0+ — null when the **Task Rule:** line is
+#                                       # absent (never offered, or offered and unanswered);
+#                                       # {"declined": true} when the user said no. Same three-state
+#                                       # rule as codeMap: absent means ask, declined means never ask
+#                                       # again, and the two are not the same answer.
 #     "frameworks": ["<framework-id>", ...],  # e.g. ["nextjs","symfony"]; [] when absent
 #     "localGuidesPath": "<rel-path>" | null,  # path to local dev-guides; null when absent
 #     "processRecipes": [{"key": "<phase>/<fw>/<name>", "source": "<dev-guides|local|machine-local|research>" | null}, ...],
@@ -48,6 +53,7 @@
 #   visual_review_path_escape  — **Visual Review:** registry path escapes the project folder
 #   process_recipe_bad_source  — a process_recipes slot has source not in dev-guides|local|research
 #   run_mode_bad_value         — **Run Mode:** value not in interactive|autonomous (coerced to interactive)
+#   task_rule_bad_value        — **Task Rule:** value not in installed|(none)
 #
 # codePath sentinels in project_state.md:
 #   **Code path:** /abs/path    → non-null string
@@ -106,6 +112,7 @@ emit_json() {
   # $13 = frameworks JSON array, $14 = localGuidesPath (string "null" for null),
   # $15 = processRecipes JSON array, $16 = runMode string (default "interactive")
   # $17 = codeMap JSON ("null" literal when no answer is recorded)
+  # $18 = taskRule JSON ("null" literal when no answer is recorded)
   jq -nc \
     --arg n "$1" --arg cp "$2" --arg d "$3" \
     --argjson w "$4" \
@@ -119,7 +126,7 @@ emit_json() {
     --arg lgp "${14:-null}" \
     --argjson rec "${15:-[]}" \
     --arg rm "${16:-interactive}" \
-    --argjson cm "${17:-null}" '
+    --argjson cm "${17:-null}" --argjson tr "${18:-null}" '
     {
       project_name: $n,
       codePath: (if $cp == "null" then null else $cp end),
@@ -137,6 +144,7 @@ emit_json() {
       localGuidesPath: (if $lgp == "null" then null else $lgp end),
       processRecipes: $rec,
       codeMap: $cm,
+      taskRule: $tr,
       warnings: $w
     }'
 }
@@ -387,6 +395,29 @@ case "$CM_TRIM" in
     esac ;;
 esac
 
+# === Task Rule parsing (v5.28.0+) ===
+# Grammar: **Task Rule:** installed | (none)
+#   Absent line → taskRule: null            — never offered, or offered and not yet answered.
+#   `(none)`    → {"declined": true}        — the user said no. Recorded so it is never re-offered.
+#   `installed` → {"declined": false}       — the CLAUDE.md block is in place.
+# Three states, not two: "nobody has been asked" and "asked and declined" are different facts, and
+# collapsing them either re-asks a settled question forever or treats silence as consent.
+TR_RAW=$(awk '
+  /^\*\*[Tt]ask [Rr]ule:\*\*/ {
+    sub(/^\*\*[Tt]ask [Rr]ule:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' "$PROJECT_STATE")
+TR_TRIM=$(printf '%s' "$TR_RAW" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+TR_OUT="null"
+case "$TR_TRIM" in
+  "") ;;
+  "(none)"|"(None)"|"(NONE)") TR_OUT='{"declined": true}' ;;
+  installed|Installed|INSTALLED)  TR_OUT='{"declined": false}' ;;
+  *) add_warning "task_rule_bad_value" "expected installed or (none), got: $TR_TRIM" ;;
+esac
+
 # === Visual Review parsing (v4.11.0+) ===
 # Grammar: **Visual Review:** <state> <relative-path>
 #   <state> ∈ {enabled, disabled}; <relative-path> must resolve WITHIN the project.
@@ -566,4 +597,4 @@ fi
 
 emit_json "$PROJECT_NAME" "$CODE_PATH_OUT" "$PROJECT_DIR" "$WARNINGS" \
   "$PB_SETS_OUT" "$PB_SETS_SOURCE" "$UP_OUT" "$UP_STATE" "$PB_RESOLUTIONS" "$WBD_OUT" "$RR_OUT" \
-  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES" "$RM_OUT" "$CM_OUT"
+  "$VR_OUT" "$FRAMEWORKS_OUT" "$LGP_OUT" "$PROCESS_RECIPES" "$RM_OUT" "$CM_OUT" "$TR_OUT"

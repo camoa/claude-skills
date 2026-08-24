@@ -233,6 +233,21 @@ here and do not hand off — this step records and shows, nothing more.
 
 This nudge is the canonical surface for new-project playbook discoverability — `/new` and `/next` (inline-create path) both invoke this skill, so the nudge fires for every caller. Do NOT duplicate this text in caller commands.
 
+**(b2) Task-rule offer — put the rule where a session reads it as an instruction.**
+
+Offer once, right after the playbook nudge, when `**Code path:**` is known:
+
+```
+💡 Optional: write the "work here goes through a task" rule into <codePath>/CLAUDE.md.
+   A session-start message is context; CLAUDE.md is an instruction the harness says to follow.
+   It does not force a task on small work — it stops the choice being made silently.
+   Install it? [y/N]
+```
+
+On `[y]` invoke `/ai-dev-assistant:install-task-rule`. On `[n]` record `**Task Rule:** (none)` in
+`project_state.md` so it is never re-offered — a decline is an answer, not a deferred yes. Skip
+silently when there is no code path. **Never write to the user's repository without the answer.**
+
 **(c) Final handoff — offer the candidate tasks, and enter at scope.**
 
 Requirements gathering usually surfaces one or more candidate first tasks, and by this point you have

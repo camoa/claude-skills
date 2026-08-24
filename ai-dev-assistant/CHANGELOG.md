@@ -1,5 +1,34 @@
 # Changelog
 
+## [5.28.0] - 2026-08-24
+
+### Added
+- `/install-task-rule` writes the "work here goes through a task" rule into the code repository's own
+  `CLAUDE.md`. A `SessionStart` hook message arrives as context; `CLAUDE.md` arrives as an instruction
+  the harness tells the model it must follow. The difference is not theoretical — the greeting fix
+  below was watched failing in the same session it shipped in. The block does not force a task: a
+  one-line config fix does not need a lifecycle and the text says so. What it removes is the silent
+  decision, since "too small to track" decided invisibly looks exactly like never having considered
+  it. Opt-in, consented, and never run by default, because it writes into a file the plugin does not
+  own, in the user's repository, where it lands in their diffs. Idempotent through delimiting markers,
+  reversible with `--remove` down to the blank separator line, and offered once at project creation
+  and once in `/upgrade-project`'s gap list. The answer is recorded in `project_state.md` as
+  `**Task Rule:**` with the same three states `**Code Map:**` uses — never asked, declined, settled —
+  so a decline is never re-offered.
+
+### Fixed
+- The session greeting argued its case in the branch that fires once and said almost nothing in the
+  branch that fires every day. An unregistered directory got five sentences on why findings made
+  before a project exists have nowhere to go; a registered one got "run `/next` to pick up where you
+  left off", which is inert when nothing is in progress and silent about work that is only now
+  arriving. Seen live: a session inside a registered project with an empty `in_progress/` was asked
+  for a concrete fix and went straight to doing it, never mentioning the project it was sitting in.
+  The registered branch now speaks to new work. It does not force a task — a one-line config fix does
+  not need a lifecycle, and saying so is part of the text — but it does require the choice to be
+  stated in one line before work starts, because deciding silently that something is too small to
+  track is indistinguishable from never having considered it. `tests/session-start-greeting-spec.sh`
+  covers both branches; the hook had no spec at all before this.
+
 ## [5.27.1] - 2026-08-24
 
 ### Fixed
