@@ -21,15 +21,26 @@
 #   - another_task_active: another task folder has implementation.md AND
 #     git log --since="2 hours" --name-only shows files matching that task's
 #     Files Created/Modified list
-#   - dirty_tree: git status --porcelain shows modified files matching another
-#     task's tracked files
+#   - dirty_tree: uncommitted changes to TRACKED files. Untracked files are counted and
+#     reported in signal_details, and never fire the signal: the framework writes an
+#     untracked CLAUDE.md into the repository itself, so firing on one meant recommending
+#     a worktree on the strength of this plugin's own footprint.
 #   - multi_session: 2+ session-context files reference the same project
 #   - project_opt_in: project_state.md has **Worktree By Default:** true
 
 set -uo pipefail
 
-PROJECT_DIR="${1:?project folder required}"
-TASK_NAME="${2:?task name required}"
+# `${1:?...}` prints bash's own "line N: 1: ..." prefix, where the number is the positional
+# parameter's name. A live run called this with one argument and got `line 32: 2: task name
+# required`, which says nothing about what to pass.
+if [ $# -lt 2 ]; then
+  echo "usage: worktree-signals.sh <project_folder> <task_name>" >&2
+  echo "  project_folder is the task's project folder under the projects base," >&2
+  echo "  not the code repository. Both arguments are required." >&2
+  exit 1
+fi
+PROJECT_DIR="$1"
+TASK_NAME="$2"
 
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 DETECT_SH="$SCRIPT_DIR/worktree-detect.sh"
@@ -130,15 +141,31 @@ if [ "$ANOTHER_TASK_FIRED" = "true" ]; then
     '{another_task_active: {task: $t, recent_commits: $c, since: "2 hours"}}')
 fi
 
-# Step 4: dirty_tree signal — any uncommitted changes
+# Step 4: dirty_tree signal — uncommitted changes to TRACKED files
+#
+# This counted every line of `git status --porcelain`, untracked files included, while its own
+# contract above said "modified files matching another task's tracked files". One untracked file
+# made the signal fire, made strength `high`, and recommended isolating the work in a worktree.
+#
+# The framework then supplied that file itself. `install-task-rule` writes CLAUDE.md into the
+# code repository and does not commit it, so a live run recommended a worktree for a three-line
+# config edit on the strength of a file this plugin had put there. A signal that fires on its own
+# footprint is not evidence about the tree.
+#
+# Tracked modifications are the thing a worktree actually isolates you from. Untracked files are
+# counted and reported so the number is still visible, and they never fire the signal on their own.
 DIRTY_FIRED=false
 if git -C "$GIT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  DIRTY_COUNT=$(git -C "$GIT_DIR" status --porcelain 2>/dev/null | wc -l)
-  if [ "$DIRTY_COUNT" -gt 0 ]; then
+  PORCELAIN=$(git -C "$GIT_DIR" status --porcelain 2>/dev/null)
+  TRACKED_COUNT=$(printf '%s\n' "$PORCELAIN" | grep -c '^[^?]' || true)
+  UNTRACKED_COUNT=$(printf '%s\n' "$PORCELAIN" | grep -c '^??' || true)
+  if [ "$TRACKED_COUNT" -gt 0 ]; then
     DIRTY_FIRED=true
     SIGNALS+=("dirty_tree")
-    SIGNAL_DETAILS=$(echo "$SIGNAL_DETAILS" | jq -c --argjson c "$DIRTY_COUNT" '. + {dirty_tree: {modified_files: $c}}')
   fi
+  SIGNAL_DETAILS=$(echo "$SIGNAL_DETAILS" | jq -c \
+    --argjson t "$TRACKED_COUNT" --argjson u "$UNTRACKED_COUNT" --argjson f "$DIRTY_FIRED" \
+    '. + {dirty_tree: {modified_tracked_files: $t, untracked_files: $u, fired: $f}}')
 fi
 
 # Step 5: multi_session signal — 2+ session-context files reference same project

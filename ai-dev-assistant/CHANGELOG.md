@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.30.2] - 2026-08-25
+
+### Fixed
+- The worktree signal fired on the framework's own footprint. `dirty_tree` counted every line of
+  `git status --porcelain`, untracked files included, while the script's own contract said it
+  meant "modified files matching another task's tracked files". One untracked file made it fire,
+  made strength `high`, and recommended isolating the work in a worktree. The framework then
+  supplied that file itself: `install-task-rule` writes `CLAUDE.md` into the code repository and
+  does not commit it, so a live run was told to take a worktree for a three-line configuration
+  edit on the strength of a file this plugin had put there. The signal now counts uncommitted
+  changes to tracked files; untracked files are still counted and reported in `signal_details`
+  and never fire it on their own. The header contract was rewritten to describe what the code
+  actually computes.
+- `/implement` documented a one-argument call to a script that requires two. `worktree-signals.sh`
+  needs `<project_folder> <task_name>`, the walkthrough reference had it right, and the command
+  body said `<task>`, so a session following the command verbatim could not run it. That is where
+  the bug was; the error message was only how it surfaced.
+- `worktree-signals.sh` called with too few arguments printed bash's own `line 32: 2: task name
+  required`, where the number is the name of the positional parameter. Same class as the
+  `analysis-agent-normalize.sh` message fixed in 5.30.1, found the same way.
+
 ## [5.30.1] - 2026-08-25
 
 ### Fixed

@@ -26,7 +26,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
    - Both `[x]` → silent.
    Never block.
 
-2. **Worktree signals (v3.16.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/worktree-signals.sh <task>`. On HIGH-strength signal (`another_task_active`, `dirty_tree`, `--worktree` flag, or `worktreeByDefault: true`), print soft-nudge offering `/worktree <task>`. Suppress when already inside a worktree. Never block.
+2. **Worktree signals (v3.16.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/worktree-signals.sh "<project_folder>" "<task_name>"` (Bash). **Both arguments are required** — `<project_folder>` is the task's project folder, not the code repository, and a one-argument call fails. On HIGH-strength signal (`another_task_active`, `dirty_tree`, `--worktree` flag, or `worktreeByDefault: true`), print soft-nudge offering `/worktree <task>`. `dirty_tree` counts uncommitted changes to **tracked** files only; untracked files are reported in `signal_details` and never fire it. Suppress when already inside a worktree. Never block.
 
 2b. **Work-order build-path offer (v4.19.0+, conditional).** Check whether `<task>/work-orders/wo-*.md` exist (Bash glob). **SILENT when absent — do not print anything if no work-orders are found.** When files are found, print ONE soft-nudge:
 
