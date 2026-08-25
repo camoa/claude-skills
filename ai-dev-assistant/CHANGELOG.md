@@ -30,6 +30,17 @@
   site cites one, `/design` and `/implement` included. `tests/prompt-template-spec.sh` fails
   on a citation with no template, and on a step number appearing inside a template body.
 
+- `gate-audit-write.sh` names a `gate_specific` that drifts from its own schema section, on
+  stderr, without refusing the write. It cannot refuse: the schema says outright that this
+  script validates the envelope and not the payload, so no caller has ever had to satisfy a
+  payload contract and failing now would break runs mid-flight. One observed research run
+  drifted three times — `user_choice` a level below where consumers read it, a create-on-miss
+  mirror missing half its documented keys, and a `recipe-load` carrying `frameworks: []` while
+  its prose `notes` described the resolution in full. That last one is the shape of it: the
+  record exists to make resolution machine-auditable and the machine-readable half was the
+  half left out, so a consumer counting resolved frameworks reads zero. An empty
+  `frameworks[]` is now named unless a `bypass` object says why it is empty.
+
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /

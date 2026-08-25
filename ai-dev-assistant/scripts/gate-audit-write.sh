@@ -139,6 +139,55 @@ for field in fired_at task_folder gate_specific; do
   fi
 done
 
+# Warn on a gate_specific that is missing the keys its section of the schema names.
+#
+# The writer deliberately does not fail here. It cannot: the schema says outright that this
+# script validates the envelope and not the payload, so a caller has never had to satisfy a
+# payload contract and failing now would break runs mid-flight. But silence has a measured
+# cost. On one observed research run, three separate records drifted — `user_choice` written
+# one level below where consumers read it, a create-on-miss mirror missing half its documented
+# keys, and a `recipe-load` whose `frameworks[]` was empty while its prose `notes` described
+# the resolution in full. That last one is the shape of the problem: the record exists to make
+# resolution machine-auditable, and the machine-readable half was the half left out. A
+# consumer counting resolved frameworks reads zero.
+#
+# Keys listed here are ones the gate's own section states, not everything it may carry.
+case "$GATE_TYPE" in
+  pre-analysis)       REQUIRED_KEYS="decision confidence code_read" ;;
+  recipe-load)        REQUIRED_KEYS="phase frameworks" ;;
+  dev-guides-load)    REQUIRED_KEYS="methodology_floor guides_actually_loaded" ;;
+  agentic-recipe)     REQUIRED_KEYS="recipes recipe_lookup_status" ;;
+  internal-prior-art) REQUIRED_KEYS="sources" ;;
+  coverage-mapping)   REQUIRED_KEYS="verdict" ;;
+  *)                  REQUIRED_KEYS="" ;;
+esac
+
+if [[ -n "$REQUIRED_KEYS" ]]; then
+  MISSING=""
+  for k in $REQUIRED_KEYS; do
+    if ! echo "$PAYLOAD" | jq -e --arg k "$k" '.gate_specific | has($k)' >/dev/null 2>&1; then
+      MISSING="$MISSING $k"
+    fi
+  done
+  if [[ -n "$MISSING" ]]; then
+    echo "gate-audit-write: WARNING — $GATE_TYPE gate_specific is missing documented key(s):$MISSING" >&2
+    echo "  see references/gate-audit-schema.md for this gate's section. Written anyway." >&2
+  fi
+fi
+
+# An empty required list is not the same as a missing key, and for recipe-load it is the
+# case that actually occurred: `frameworks: []` beside a prose `notes` describing a
+# resolution that did happen. The schema pairs an empty list with a `bypass` object naming
+# the no-recipe outcome, so empty-and-unexplained is the drift worth naming.
+if [[ "$GATE_TYPE" == "recipe-load" ]]; then
+  if echo "$PAYLOAD" | jq -e '(.gate_specific.frameworks | type == "array" and length == 0)
+                              and (.gate_specific.bypass // null) == null' >/dev/null 2>&1; then
+    echo "gate-audit-write: WARNING — recipe-load recorded no frameworks and no bypass object." >&2
+    echo "  An empty frameworks[] needs a bypass naming why (no_frameworks_defined etc.)." >&2
+    echo "  Prose in notes[] is not a substitute: consumers count frameworks[]. Written anyway." >&2
+  fi
+fi
+
 # Validate task folder exists
 if [[ ! -d "$TASK_FOLDER" ]]; then
   echo "gate-audit-write: task folder does not exist: $TASK_FOLDER" >&2

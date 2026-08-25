@@ -166,6 +166,42 @@ if [ -f "$R" ]; then
     || fail_check "hoisting clobbered a correctly-placed user_choice"
 fi
 
+# -------------------------------------------- a payload that drifts from its own schema
+
+# Three records on one observed run carried shapes their schema sections do not describe.
+# The writer cannot fail on this — the schema says outright that it validates the envelope
+# and not the payload, so no caller has ever had to satisfy a payload contract and failing
+# now would break runs mid-flight. It can say so, which is more than nothing was doing.
+# Capture stderr, discard stdout. Braces so the order reads unambiguously (SC2069).
+warn_of() { { bash "$W" "$@" >/dev/null; } 2>&1 || true; }
+
+warn_of "$T" recipe-load '{"notes":["prose only"]}' | grep -q 'missing documented key' \
+  && pass_check "a payload missing documented keys is named on stderr" \
+  || fail_check "a payload missing documented keys passes silently"
+
+warn_of "$T" pre-analysis '{"decision":"keep_flat","confidence":"high","code_read":true}' \
+  | grep -q 'WARNING' \
+  && fail_check "a complete payload was warned about" \
+  || pass_check "a complete payload stays quiet"
+
+# The case that actually happened: frameworks[] present but empty, with the resolution it
+# omitted described in prose beside it. A consumer counting frameworks reads zero, and the
+# key-presence check above cannot see it because the key is there.
+warn_of "$T" recipe-load '{"phase":"research","frameworks":[],"notes":["resolved, honestly"]}' \
+  | grep -q 'no frameworks and no bypass' \
+  && pass_check "an unexplained empty frameworks[] is named" \
+  || fail_check "an empty frameworks[] with no bypass passes silently"
+
+warn_of "$T" recipe-load '{"phase":"research","frameworks":[],"bypass":{"reason":"no_frameworks_defined"}}' \
+  | grep -q 'no frameworks and no bypass' \
+  && fail_check "an empty frameworks[] WITH a bypass was warned about — the escape is legitimate" \
+  || pass_check "an empty frameworks[] explained by a bypass stays quiet"
+
+# A warning is not a refusal. The record must still land.
+[ -f "$T/_recipe-load.json" ] \
+  && pass_check "a warned-about payload is still written" \
+  || fail_check "the warning became a refusal — that breaks callers mid-flight"
+
 # ------------------------------------------------- the record is written after the answer
 
 # Observed live: /research step 1 wrote _pre-analysis.json, THEN displayed the prompt and
