@@ -56,6 +56,34 @@ if [[ "$ACTIVE_PHASE" == "$EXPECTED" ]]; then
   exit 0
 fi
 
+# UNKNOWABLE IS NOT A BYPASS. `lastPhase` unset means nobody declared a phase, which is the state
+# of every session where the phase command has not called phase-active-write.sh — including, until
+# that script existed, every session there has ever been. Reporting that as a bypass produced a
+# finding on every phase artifact ever written and made the record worthless: a guardrail that
+# always fires cannot tell a real bypass from a correct run.
+#
+# Assert a bypass only when a DIFFERENT phase is positively active. When nothing is declared, say
+# so — `undetermined`, with the reason — so a reader can tell "we caught something" from "we could
+# not look."
+if [[ "$ACTIVE_PHASE" == "null" || -z "$ACTIVE_PHASE" ]]; then
+  jq -nc --arg artifact "$ARTIFACT" --arg expected "$EXPECTED" \
+     --arg task_folder "$TASK_FOLDER" --arg fired_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{schema_version: "1.0",
+      gate_type: "phase-command-bypass",
+      fired_at: $fired_at,
+      task_folder: $task_folder,
+      user_choice: null,
+      bypass_reason: null,
+      gate_specific: {
+        artifact_written: $artifact,
+        phase_command_active: null,
+        expected_phase_command: $expected,
+        verdict: "undetermined",
+        reason: "no phase command declared itself active; scripts/phase-active-write.sh was not called, so a bypass can be neither confirmed nor ruled out"
+      }}'
+  exit 0
+fi
+
 # Bypass detected — emit audit JSON
 FIRED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -75,6 +103,8 @@ jq -nc \
     gate_specific: {
       artifact_written: $artifact,
       phase_command_active: (if $active == "null" or $active == "" then null else $active end),
-      expected_phase_command: $expected
+      expected_phase_command: $expected,
+      verdict: "bypass",
+      reason: "a different phase command was active when this artifact was written"
     }
   }'

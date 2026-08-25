@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.29.1] - 2026-08-25
+
+### Fixed
+- The phase-command-bypass guardrail reported a bypass on every phase artifact ever written,
+  including artifacts written by the phase command doing exactly its job. It compared the artifact
+  against `lastPhase` in the session file; `session-context-write.sh` preserves that field and says
+  another component owns it, and no such component existed — nothing in the plugin ever assigned it
+  a value. So it was always null, null never matched the expected phase, and every research, design
+  and implementation run left an unexplained finding in its audit trail. A guardrail that fires 100%
+  of the time cannot tell a real bypass from a correct run. Caught on a research run that passed all
+  its gates and still produced the record. New `scripts/phase-active-write.sh` is the missing
+  writer, called by `/research`, `/design` and `/implement` on entry before anything is written, and
+  the detector now separates three states rather than two: a declaring phase command produces no
+  record, a genuinely different active phase is a `bypass` naming which one, and nothing declared is
+  `undetermined` with its reason rather than an accusation. Both records use the gate-audit envelope
+  — the first version of this fix emitted a flat record that a reader keying on `gate_specific`
+  would have parsed as empty.
+
 ## [5.29.0] - 2026-08-25
 
 ### Fixed
