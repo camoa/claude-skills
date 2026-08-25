@@ -41,6 +41,16 @@
   half left out, so a consumer counting resolved frameworks reads zero. An empty
   `frameworks[]` is now named unless a `bypass` object says why it is empty.
 
+- The coverage gate reported coverage and measured formatting. `coverage-mapping-check.sh` took
+  the first 30 characters of each research question and required that exact string in the
+  Coverage Mapping body, a rule written down nowhere — not in the walkthrough, whose own example
+  shows an abbreviated `### Q1 —` heading, and not in the failure output. A research phase with
+  six subject files answering all six questions came back `fail, 1 of 6 addressed`, which reads
+  as five unanswered questions. The run inferred the real rule and pasted whole questions into
+  every row: the gate passed and the table got worse. A row may now name its question by number
+  (`Q<n>`, matching the numbered list in `task.md`), the verbatim match still works, a question
+  named nowhere still fails, and the failure now says what a row has to look like.
+
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /
