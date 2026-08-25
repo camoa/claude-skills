@@ -1,5 +1,29 @@
 # Changelog
 
+## [5.30.5] - 2026-08-25
+
+### Fixed
+- `/scope` threw away the words the user typed. Step 1, "Read existing context first," listed
+  three disk reads and never the invocation text, so a `/scope <task>` carrying a full problem
+  statement lost it: the scaffolded `task.md` wrote `_To be authored via /scope_` into `## Goal`
+  over a goal the user had just stated, and Step 2's mode table then read that stub, classified
+  the task `Stub / empty`, and directed the agent into open exploration — asking the user what
+  they wanted to achieve immediately after they said it, against this command's own rule never to
+  make the user restate something they have already written. Observed on a live run whose
+  invocation carried a goal, an expected result and three non-goals in about sixty words, enough
+  content to have classified as reflect-and-refine. The invocation description is now item 0 of
+  Step 1, seeded verbatim into the stub's `## Goal` when one was given, and mode selection counts
+  the invocation and `task.md` together rather than the stub alone. Open exploration now requires
+  that the user has genuinely said nothing yet.
+- `/scope` never stated its own phase boundary. Nothing in the command said that reading source,
+  querying a running system or inspecting config to work out what the user really needs is Phase 1
+  work, and a live run went straight to investigating the target codebase before the task folder
+  existed, spending the user's turn before a contract existed to aim it. The `Do NOT` list now
+  names the boundary, enumerates the reads this phase makes — resolving the task folder,
+  `fm-read.sh`, `alignment-read.sh` — and says what to do when a scope answer genuinely depends on
+  current behavior: that uncertainty is itself the finding, recorded as a research question rather
+  than settled on the spot.
+
 ## [5.30.4] - 2026-08-25
 
 ### Fixed
