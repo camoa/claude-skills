@@ -31,6 +31,8 @@ Phase 4 of a task — run all hard-blocking validation gates before PR creation.
 
 Run in order. Each "gate" step writes audit; non-bypassable unless documented `--skip-*` flag supplied (records `bypass_reason`).
 
+0. **Declare the active phase (v5.30.3+).** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/phase-active-write.sh" review "<task_folder>"` (Bash) **before writing anything**. `/research`, `/design` and `/implement` have declared theirs since v5.29.0 and this command never did, so every record review writes — `_review.json`, `_spec.json`, `_recipe-load.json` — was compared against a null phase by the phase-command-bypass guardrail and reported `undetermined`. Run it at entry, not at the end: an artifact written before the declaration cannot be told apart from one written outside the phase command. **Pass the task folder** — the session file the declaration also lands in is deleted by the SessionStart hook, so a resume or a compact mid-phase wipes it.
+
 1. **Phase Transition Check.** Read `task.md` Phase Status. If Phase 3 not `[x]`, soft-nudge once. If `## Phase Status` H2 absent entirely, append it with the four standard phase lines (1 Research, 2 Architecture, 3 Implementation, 4 Review). If only Phase 4 line missing, idempotently insert before next `## ` boundary (or EOF if none).
 
 2. **Resolve task + project context.** Validate `<task-name>` charset (above). If absent, try running `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-read.sh` (Bash) and parsing its JSON (`.task`, `.taskPath`); if also null, exit 2 with usage. Resolve the project folder by running `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and parsing its JSON.

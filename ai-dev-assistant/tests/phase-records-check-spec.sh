@@ -83,9 +83,10 @@ OUT=$(bash "$K" "$(mkp cond research $REQUIRED)" --phase research)
 
 # --- an unknown phase is UNKNOWN, never complete -------------------------------
 # A phase this script has no contract for has not been checked. Saying complete would make the
-# check the same kind of confident wrong answer it exists to catch.
+# check the same kind of confident wrong answer it exists to catch. All four lifecycle phases
+# now have contracts, so this uses a name that is deliberately not one of them.
 # shellcheck disable=SC2086
-[ "$(bash "$K" "$(mkp other research $REQUIRED)" --phase review | jq -r .verdict)" = "unknown" ] \
+[ "$(bash "$K" "$(mkp other research $REQUIRED)" --phase deploy | jq -r .verdict)" = "unknown" ] \
   && pass_check "a phase with no encoded contract reports unknown" \
   || fail_check "an unchecked phase must never report complete"
 
@@ -191,6 +192,41 @@ NOPHASE=$(bash "$K" "$(mk nophase $IMPL_REQ)" --phase implement)
 [ "$(printf '%s' "$NOPHASE" | jq -r .missing_required)" -gt 0 ] \
   && pass_check "missing_required counts every required record that did not satisfy" \
   || fail_check "the verdict says incomplete while the count says nothing is missing"
+
+# --- review has a contract of its own --------------------------------------------------
+# Review was left without one when design and implement got theirs, so the last phase in the
+# lifecycle — the one that decides whether the work ships — answered `unknown` about its own
+# records for a whole live round.
+REVIEW_REQ="_phase-active.json _review.json _spec.json _recipe-load.json _mechanism-challenge.json _internal-prior-art.json"
+# shellcheck disable=SC2086
+RV=$(bash "$K" "$(mkp rfull review $REVIEW_REQ)" --phase review)
+[ "$(printf '%s' "$RV" | jq -r .verdict)" = "complete" ] \
+  && pass_check "a review phase with every record reports complete" \
+  || fail_check "review is checked but a complete one does not report complete"
+
+[ "$(bash "$K" "$(mkp rgap review _review.json _spec.json _recipe-load.json _mechanism-challenge.json _internal-prior-art.json)" --phase review | jq -r .verdict)" = "incomplete" ] \
+  && pass_check "a review that never declared its phase reports incomplete" \
+  || fail_check "review can skip declaring its phase and still read complete"
+
+# Review asserts the mechanism and prior-art records rather than writing them, so an earlier
+# phase's copy is what it should find.
+[ "$(printf '%s' "$RV" | jq -r '.records[]|select(.name=="_internal-prior-art.json")|.requirement')" = "required" ] \
+  && pass_check "review requires the prior-art record it asserts" \
+  || fail_check "review can pass without the prior-art search having been recorded"
+
+# --- a record only one phase writes is attributed by its name --------------------------
+# _review.json cannot be anyone's but review's, and these payloads never carried a phase field.
+# Demanding one would invent a requirement rather than check one.
+# shellcheck disable=SC2086
+IMPL_BY_NAME=$(bash "$K" "$(mk rimplicit $REVIEW_REQ)" --phase review)
+[ "$(printf '%s' "$IMPL_BY_NAME" | jq -r '.records[]|select(.name=="_review.json")|.status')" = "present" ] \
+  && pass_check "a record only one phase writes needs no phase field" \
+  || fail_check "_review.json was penalised for a field its payload never had"
+
+# The exemption is per record, not blanket: a record that DOES carry a phase must still match.
+[ "$(printf '%s' "$IMPL_BY_NAME" | jq -r '.records[]|select(.name=="_phase-active.json")|.status')" = "unattributed" ] \
+  && pass_check "the by-name exemption does not leak to records that carry a phase" \
+  || fail_check "every record became exempt, so attribution stopped meaning anything"
 
 # Neither phase may report complete on an empty task folder.
 for ph in design implement; do

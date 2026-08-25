@@ -49,6 +49,12 @@
 # record at all, so a phase that skipped an unskippable gate still read `complete`. The design
 # entry had it as conditional when its step is equally unconditional. Both are required now.
 #
+# Review was left without a contract when design and implement got theirs, so the last phase in
+# the lifecycle — the one that decides whether the work ships — answered `unknown` about its own
+# records for a whole live round. Its two assertion gates read records an earlier phase wrote
+# rather than writing them, which is what `carryable` is for: the mechanism challenge and the
+# internal prior-art search are required to be present and are not required to be review's own.
+#
 # `_pre-analysis.json` was listed for both and belongs to neither: the epic check those phases run
 # branches and stays silent, and nothing in either command writes that record. A contract answers
 # what THIS phase owes, so a record it never produces has no place in it.
@@ -86,27 +92,35 @@ if [ -z "$TASK_DIR" ] || [ ! -d "$TASK_DIR" ]; then
 fi
 
 # The contract, one line per record:
-#   <name>|<required|conditional>|<producer>|<step>|<carryable?>
+#   <name>|<required|conditional>|<producer>|<step>|<attribution>
 #
-# `carryable` says whether a record written by an EARLIER phase legitimately satisfies this one.
-# Almost nothing is. The mechanism challenge is: its backstop is specified to reuse an existing
-# record when the mechanisms hash still matches, and to run the full challenge otherwise, so a
-# record stamped with an earlier phase is a correct outcome there and a stale artifact anywhere
-# else.
+# `attribution` says how a record is tied to the phase being checked:
+#
+#   (empty)   the record must name this phase. The default, and right for anything a phase
+#             re-fires each time it runs.
+#   carryable an EARLIER phase's record legitimately satisfies this one. Rare. The mechanism
+#             challenge is: its backstop is specified to reuse an existing record when the
+#             mechanisms hash still matches, so an earlier stamp is a correct outcome there and
+#             a stale artifact anywhere else. Review's two assertion gates are the same shape —
+#             they read what research wrote rather than writing their own.
+#   implicit  only one phase ever writes this record, so its name identifies it the way
+#             architecture.md identifies the design phase. `_review.json` cannot be anyone's but
+#             review's. Demanding a phase field these payloads never carried would be inventing
+#             a requirement rather than checking one.
 # `conditional` records are reported for visibility and never counted against the verdict — a
 # maintainer-mode offer that did not fire is not a missing record.
 case "$PHASE" in
-  research) CONTRACT='_pre-analysis.json|required|analysis-agent (description mode), written via gate-audit-write.sh|step 1
-coverage-map.json|required|the recipe-loader skill|step 2c
-_agentic-recipe.json|required|step 2c, written via gate-audit-write.sh|step 2c
+  research) CONTRACT='_pre-analysis.json|required|analysis-agent (description mode), written via gate-audit-write.sh|step 1|implicit
+coverage-map.json|required|the recipe-loader skill|step 2c|implicit
+_agentic-recipe.json|required|step 2c, written via gate-audit-write.sh|step 2c|implicit
 _mechanism-challenge.json|required|the mechanism-challenge cascade, written via gate-audit-write.sh|step 2c|carryable
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
 _playbook-load.json|required|playbook-load-deterministic.sh|step 4
-_internal-prior-art.json|required|the internal-prior-art-finder skill|step 5a
+_internal-prior-art.json|required|the internal-prior-art-finder skill|step 5a|implicit
 research.md|required|the phase itself|step 6
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 6
-_coverage-mapping.json|conditional|the coverage-mapping gate|step 6
-_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
+_coverage-mapping.json|conditional|the coverage-mapping gate|step 6|implicit
+_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
   design) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 2
@@ -114,7 +128,7 @@ _playbook-load.json|required|playbook-load-deterministic.sh|step 3
 architecture.md|required|the architecture-drafter agent|step 5
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 2
 _mechanism-challenge.json|required|the mechanism-challenge refresh, which the design step runs unconditionally|step 4|carryable
-_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2
+_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|step 11' ;;
   implement) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
@@ -122,8 +136,16 @@ _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 implementation.md|required|the phase itself|step 7
 _mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6|carryable
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
-_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
+_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
+  review) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
+_review.json|required|the review phase, written via gate-audit-write.sh|step 8|implicit
+_spec.json|required|the spec-axis review gate|step 5.0d|implicit
+_recipe-load.json|required|the process-recipe-loader skill|step 5
+_mechanism-challenge.json|required|an earlier phase; review asserts the record rather than writing it|step 5.0c|carryable
+_internal-prior-art.json|required|an earlier phase; review asserts the search ran and was recorded|step 5.0e|carryable
+_agentic-recipe.json|conditional|the adopted-recipe verifier, when the task adopted one|step 5.0b|carryable
+PR_BODY.md|conditional|step 11, written only when the verdict is green and neither --no-pr-body nor --dry-run is set|step 11' ;;
   *) add_warn "no_record_contract_for_phase:$PHASE"
      emit unknown '[]' ;;
 esac
@@ -154,12 +176,17 @@ while IFS='|' read -r NAME REQ PRODUCER STEP CARRY; do
     case "$NAME" in
       *.json)
         WROTE=$(record_phase "$TASK_DIR/$NAME")
-        if [ -z "$WROTE" ]; then
-          STATUS="unattributed"
-        elif [ "$WROTE" = "$PHASE" ]; then
+        if [ "$CARRY" = "implicit" ]; then
+          # Only this phase writes it, so the filename is the attribution.
+          STATUS="present"
+        elif [ "$WROTE" = "$PHASE" ] && [ -n "$WROTE" ]; then
           STATUS="present"
         elif [ "$CARRY" = "carryable" ]; then
+          # An earlier phase's copy satisfies this entry, so an unstamped one does too: the
+          # contract already accepts a record this phase did not write.
           STATUS="carried"
+        elif [ -z "$WROTE" ]; then
+          STATUS="unattributed"
         else
           STATUS="stale"
         fi ;;

@@ -29,13 +29,15 @@ for field in description allowed-tools argument-hint; do
   fi
 done
 
-# 2. Body line count ≤125 (raised from 120 in v5.23.0 for the mandatory
-#    ## Output section; kept in lockstep with scripts/command-body-lengths.sh)
+# 2. Body line count ≤127 (120 -> 125 in v5.23.0 for the mandatory ## Output
+#    section; 125 -> 127 in v5.30.3 for the step-0 phase declaration the other
+#    three phase commands have had since v5.29.0 and this one never did;
+#    kept in lockstep with scripts/command-body-lengths.sh)
 BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
-if [ "$BODY_LINES" -le 125 ]; then
-  pass_check "body line count $BODY_LINES ≤ 125"
+if [ "$BODY_LINES" -le 127 ]; then
+  pass_check "body line count $BODY_LINES ≤ 127"
 else
-  fail_check "body line count $BODY_LINES > 125"
+  fail_check "body line count $BODY_LINES > 127"
 fi
 
 # 3. 5-mechanism markers

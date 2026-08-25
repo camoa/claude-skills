@@ -15,6 +15,19 @@
   `unattributed` and does not satisfy a required entry. Each record reports `written_by_phase`.
   The mechanism challenge is the one carryable record, because its backstop is specified to reuse
   an existing record when the mechanisms hash still matches.
+- The review phase had no record contract and no phase declaration. Design and implement got
+  contracts in 5.30.1 and review was left out, so the last phase in the lifecycle — the one that
+  decides whether the work ships — answered `unknown` about its own records for a whole live
+  round. Review also never called `phase-active-write.sh`, which the other three phase commands
+  have done since 5.29.0, so every record it wrote was compared against a null phase and reported
+  `undetermined`. It now declares its phase at entry and carries a contract naming what it writes
+  (`_review.json`, `_spec.json`, `_recipe-load.json`) and what it asserts from earlier phases (the
+  mechanism challenge and the internal prior-art search).
+- Attribution gained a third mode. Several records carry no phase field and never did, because
+  only one phase ever writes them — `_review.json` cannot be anyone's but review's, the way
+  `architecture.md` is design's. Those are marked `implicit` and attributed by name; demanding a
+  field their payloads never had would invent a requirement rather than check one. The exemption
+  is per record, so anything that does carry a phase must still match.
 - `missing_required` counted only records with status `missing`, so a phase could report
   `incomplete` alongside a count of zero. It now counts every required record that did not
   satisfy, whatever the reason.
