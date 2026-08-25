@@ -15,6 +15,22 @@
   Step 1, seeded verbatim into the stub's `## Goal` when one was given, and mode selection counts
   the invocation and `task.md` together rather than the stub alone. Open exploration now requires
   that the user has genuinely said nothing yet.
+- Phase 1 had no notion of observing the system under study. Every source `/research` step 6
+  names is documentary — process recipes, dev-guides, prior art, existing code — which answers a
+  research question about *options* and says nothing about a question about *current behavior*:
+  why the software does what it does today, what a user actually sees, whether the thing the task
+  describes is happening for the reason assumed. With no method attached, a live run improvised
+  one and read the target system's database directly. The datastore does not apply the
+  application's access rules, does not know derived, cached, unpublished or unsaved state, and
+  does not run the layers that decide what a user is shown, so a row count answers a question
+  about rows when the question was about behavior — and can be confidently wrong in exactly the
+  direction that matters. Phase 1 now owns the observational read: query the system through the
+  interface it presents, never past it into its datastore; follow the resolved process recipe
+  where it names the stack's read tooling and record the gap as a finding where none does; and
+  treat every behavioral claim as a research subject with its own file and Coverage Mapping row,
+  stating what was run, against which environment, on what date, and which states were not
+  reached. The stack-specific tooling stays a recipe concern; the rule that you do not reach past
+  the application is the engine's.
 - `/scope` never stated its own phase boundary. Nothing in the command said that reading source,
   querying a running system or inspecting config to work out what the user really needs is Phase 1
   work, and a live run went straight to investigating the target codebase before the task folder
