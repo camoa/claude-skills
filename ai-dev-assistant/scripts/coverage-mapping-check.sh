@@ -113,14 +113,30 @@ if [[ -f "$TASK_MD" ]]; then
       }
     ' "$RESEARCH_MD")
 
-    # For each question, check if a substring of it appears in coverage body
+    # A question counts as addressed if the row names it either way:
+    #
+    #   verbatim  — the question's first 30 characters appear in the body
+    #   by number — a row label of Q<n>, matching the numbered list in task.md
+    #
+    # Only the first form existed before v5.30.0, and it was never written down. A run
+    # whose research was complete — six subjects, every question answered — got back
+    # `fail, 1 of 6 addressed` because its rows abbreviated the questions. The verdict
+    # said coverage; what it measured was string formatting. The run inferred the rule
+    # from the failure and pasted the full question text into every row, which made the
+    # gate pass and the table harder to read. Numbered rows are what the walkthrough's own
+    # example uses, and task.md numbers the questions, so the number is a real reference.
+    COVERAGE_LC=$(echo "$COVERAGE_BODY" | tr '[:upper:]' '[:lower:]')
     MISSING_ARR=()
+    QN=0
     while IFS= read -r q; do
       [[ -z "$q" ]] && continue
       QUESTIONS_FOUND=$((QUESTIONS_FOUND + 1))
-      # Use first 30 chars of the question as the substring (lowercase compare)
+      QN=$((QN + 1))
       SUBSTR=$(echo "$q" | head -c 30 | tr '[:upper:]' '[:lower:]')
-      if echo "$COVERAGE_BODY" | tr '[:upper:]' '[:lower:]' | grep -qF "$SUBSTR"; then
+      # Anchored so "q1" cannot be matched by "q12", and so a bare mention of Q1 in
+      # prose does not count — it has to label a row.
+      if echo "$COVERAGE_LC" | grep -qF "$SUBSTR" \
+         || echo "$COVERAGE_LC" | grep -qE "(^|\|)[[:space:]]*q${QN}([^0-9]|$)"; then
         QUESTIONS_ADDRESSED=$((QUESTIONS_ADDRESSED + 1))
       else
         MISSING_ARR+=("$q")
@@ -129,6 +145,10 @@ if [[ -f "$TASK_MD" ]]; then
 
     if [[ "${#MISSING_ARR[@]}" -gt 0 ]]; then
       MISSING_JSON=$(printf '%s\n' "${MISSING_ARR[@]}" | jq -R . | jq -s -c .)
+      # Say what a row has to look like. A verdict a reader cannot act on sends them
+      # guessing at the matcher, which is how the last failure got "fixed" by pasting
+      # whole questions into every row.
+      FORMAT_WARN=$(jq -nc '[{code:"coverage_row_format", detail:"A Coverage Mapping row must name its question either verbatim (its first 30 characters) or by number (a row starting Q<n>, matching the numbered list under task.md ## Research Questions). A row that paraphrases matches neither. This is a formatting requirement, not a judgement about whether the research answered the question."}]')
     fi
   fi
 fi
@@ -138,7 +158,7 @@ if [[ "$QUESTIONS_FOUND" -eq 0 ]]; then
   # No declared questions — section presence is enough
   emit "pass" 0 0 '[]' '[]'
 elif [[ "$QUESTIONS_ADDRESSED" -lt "$QUESTIONS_FOUND" ]]; then
-  emit "fail" "$QUESTIONS_FOUND" "$QUESTIONS_ADDRESSED" "$MISSING_JSON" '[]'
+  emit "fail" "$QUESTIONS_FOUND" "$QUESTIONS_ADDRESSED" "$MISSING_JSON" "${FORMAT_WARN:-[]}"
 else
   emit "pass" "$QUESTIONS_FOUND" "$QUESTIONS_ADDRESSED" '[]' '[]'
 fi

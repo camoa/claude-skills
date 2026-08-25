@@ -44,7 +44,15 @@ esac
 SESS_FILE=$(ddf_session_file)
 
 ACTIVE_PHASE="null"
-if [[ -f "$SESS_FILE" ]]; then
+# The task-folder record first: it outlives the session file, which the SessionStart hook
+# deletes, so a phase interrupted and resumed still knows what it declared.
+TF_ACTIVE="$TASK_FOLDER/_phase-active.json"
+if [[ -f "$TF_ACTIVE" ]]; then
+  RAW=$(jq -r '.phase // empty' "$TF_ACTIVE" 2>/dev/null)
+  [[ -n "$RAW" ]] && ACTIVE_PHASE="$RAW"
+fi
+# Fall back to the session file for a caller that declared without naming a task folder.
+if [[ "$ACTIVE_PHASE" == "null" && -f "$SESS_FILE" ]]; then
   RAW=$(jq -r '.lastPhase // empty' "$SESS_FILE" 2>/dev/null)
   [[ -n "$RAW" ]] && ACTIVE_PHASE="$RAW"
 fi

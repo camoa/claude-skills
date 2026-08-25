@@ -8,7 +8,9 @@
 #                plugin-validate | phase-command-bypass | dev-guides-load |
 #                playbook-load | review | e2e | visual_regression | visual_parity |
 #                recipe-load | agentic-recipe | internal-prior-art
-#   <json_payload>: complete audit JSON object conforming to
+#   <json_payload>: EITHER the gate_specific object on its own (preferred — this
+#                   script builds the envelope around it), OR a complete audit JSON
+#                   object conforming to
 #                   references/gate-audit-schema.md (v1.0 for the original 7
 #                   gate types; v1.1 adds `review`; v1.2 — v4.11.0 — adds `e2e`
 #                   + `visual_regression`; v1.3 — v4.14.0 — adds `visual_parity`;
@@ -16,9 +18,13 @@
 #                   v1.5 — v5.12.0 — adds `agentic-recipe`)
 #
 # Behavior:
+# - Accepts a bare gate_specific object and wraps it in the envelope, deriving
+#   schema_version from gate_type and hoisting user_choice / bypass_reason
+# - Stamps fired_at from this script's clock in both shapes; a caller-supplied
+#   fired_at is discarded (see the normalize block for why)
 # - Validates the JSON parses + has schema_version starting with "1." (1.0–1.6 accepted)
 # - Validates gate_type is one of the 14 allowed values
-# - Validates required top-level fields (gate_type, fired_at, task_folder, gate_specific)
+# - Validates required top-level fields (gate_type, task_folder, gate_specific)
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
 #
@@ -50,6 +56,62 @@ if ! echo "$PAYLOAD" | jq empty >/dev/null 2>&1; then
   exit 2
 fi
 
+# Normalize the payload into a complete envelope.
+#
+# Two accepted shapes:
+#   full envelope  — has a top-level `gate_type`; used as-is (v4.0.0 contract)
+#   bare payload   — no top-level `gate_type`; treated as `gate_specific` and wrapped here
+#
+# The bare shape exists because it is what a caller reaches for naturally, and because
+# an envelope hand-authored per call is an envelope that drifts: every audit written
+# before v5.30.0 carried a model-authored `fired_at`, and every one of them said
+# midnight. The clock lives here now. `fired_at` is stamped by this script in BOTH
+# shapes and a caller-supplied value is discarded — a caller that cannot read a clock
+# cannot stamp a time, and a wrong time is worse than no time because it reads as
+# evidence. `user_choice` and `bypass_reason` are envelope-level per
+# references/gate-audit-schema.md section 4; when a bare payload carries them they are
+# hoisted rather than left buried where no consumer looks for them.
+if ! echo "$PAYLOAD" | jq -e 'type == "object"' >/dev/null 2>&1; then
+  echo "gate-audit-write: payload must be a JSON object" >&2
+  exit 2
+fi
+
+# schema_version each gate type was introduced at (schema section 3).
+case "$GATE_TYPE" in
+  review) DEFAULT_SV="1.2" ;;
+  e2e|visual_regression) DEFAULT_SV="1.2" ;;
+  visual_parity) DEFAULT_SV="1.3" ;;
+  recipe-load) DEFAULT_SV="1.4" ;;
+  agentic-recipe) DEFAULT_SV="1.5" ;;
+  internal-prior-art) DEFAULT_SV="1.6" ;;
+  *) DEFAULT_SV="1.0" ;;
+esac
+
+FIRED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+if echo "$PAYLOAD" | jq -e 'has("gate_type")' >/dev/null 2>&1; then
+  # Hoist here too. A full-envelope caller that tucked the answer inside gate_specific
+  # has put it where section 4 does not look for it, and observed runs do exactly that:
+  # `user_choice: "continue"` buried one level down, invisible to every envelope reader.
+  # Only lift when the envelope slot is empty, so a caller that filled it in properly wins.
+  PAYLOAD=$(echo "$PAYLOAD" | jq --arg sv "$DEFAULT_SV" --arg fa "$FIRED_AT" '
+    .schema_version = (.schema_version // $sv)
+    | .fired_at = $fa
+    | if (.user_choice == null) and (.gate_specific.user_choice? != null)
+      then .user_choice = .gate_specific.user_choice
+         | .gate_specific |= del(.user_choice) else . end
+    | if (.bypass_reason == null) and (.gate_specific.bypass_reason? != null)
+      then .bypass_reason = .gate_specific.bypass_reason
+         | .gate_specific |= del(.bypass_reason) else . end')
+else
+  PAYLOAD=$(echo "$PAYLOAD" | jq \
+    --arg sv "$DEFAULT_SV" --arg gt "$GATE_TYPE" \
+    --arg fa "$FIRED_AT" --arg tf "$TASK_FOLDER" \
+    '{schema_version: $sv, gate_type: $gt, fired_at: $fa, task_folder: $tf,
+      user_choice: (.user_choice // null), bypass_reason: (.bypass_reason // null),
+      gate_specific: (del(.user_choice) | del(.bypass_reason))}')
+fi
+
 # Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate,
 # v1.2 e2e / visual_regression gates, v1.3 visual_parity gate, v1.4 recipe-load gate,
 # v1.5 agentic-recipe gate, v1.6 internal-prior-art gate)
@@ -76,6 +138,55 @@ for field in fired_at task_folder gate_specific; do
     exit 2
   fi
 done
+
+# Warn on a gate_specific that is missing the keys its section of the schema names.
+#
+# The writer deliberately does not fail here. It cannot: the schema says outright that this
+# script validates the envelope and not the payload, so a caller has never had to satisfy a
+# payload contract and failing now would break runs mid-flight. But silence has a measured
+# cost. On one observed research run, three separate records drifted — `user_choice` written
+# one level below where consumers read it, a create-on-miss mirror missing half its documented
+# keys, and a `recipe-load` whose `frameworks[]` was empty while its prose `notes` described
+# the resolution in full. That last one is the shape of the problem: the record exists to make
+# resolution machine-auditable, and the machine-readable half was the half left out. A
+# consumer counting resolved frameworks reads zero.
+#
+# Keys listed here are ones the gate's own section states, not everything it may carry.
+case "$GATE_TYPE" in
+  pre-analysis)       REQUIRED_KEYS="decision confidence code_read" ;;
+  recipe-load)        REQUIRED_KEYS="phase frameworks" ;;
+  dev-guides-load)    REQUIRED_KEYS="methodology_floor guides_actually_loaded" ;;
+  agentic-recipe)     REQUIRED_KEYS="recipes recipe_lookup_status" ;;
+  internal-prior-art) REQUIRED_KEYS="sources" ;;
+  coverage-mapping)   REQUIRED_KEYS="verdict" ;;
+  *)                  REQUIRED_KEYS="" ;;
+esac
+
+if [[ -n "$REQUIRED_KEYS" ]]; then
+  MISSING=""
+  for k in $REQUIRED_KEYS; do
+    if ! echo "$PAYLOAD" | jq -e --arg k "$k" '.gate_specific | has($k)' >/dev/null 2>&1; then
+      MISSING="$MISSING $k"
+    fi
+  done
+  if [[ -n "$MISSING" ]]; then
+    echo "gate-audit-write: WARNING — $GATE_TYPE gate_specific is missing documented key(s):$MISSING" >&2
+    echo "  see references/gate-audit-schema.md for this gate's section. Written anyway." >&2
+  fi
+fi
+
+# An empty required list is not the same as a missing key, and for recipe-load it is the
+# case that actually occurred: `frameworks: []` beside a prose `notes` describing a
+# resolution that did happen. The schema pairs an empty list with a `bypass` object naming
+# the no-recipe outcome, so empty-and-unexplained is the drift worth naming.
+if [[ "$GATE_TYPE" == "recipe-load" ]]; then
+  if echo "$PAYLOAD" | jq -e '(.gate_specific.frameworks | type == "array" and length == 0)
+                              and (.gate_specific.bypass // null) == null' >/dev/null 2>&1; then
+    echo "gate-audit-write: WARNING — recipe-load recorded no frameworks and no bypass object." >&2
+    echo "  An empty frameworks[] needs a bypass naming why (no_frameworks_defined etc.)." >&2
+    echo "  Prose in notes[] is not a substitute: consumers count frameworks[]. Written anyway." >&2
+  fi
+fi
 
 # Validate task folder exists
 if [[ ! -d "$TASK_FOLDER" ]]; then

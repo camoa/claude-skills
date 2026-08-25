@@ -1,5 +1,77 @@
 # Changelog
 
+## [5.30.0] - 2026-08-25
+
+### Fixed
+- Every gate audit the framework had ever written was stamped `00:00:00Z`. `gate-audit-write.sh`
+  required a complete envelope and validated `fired_at` without ever generating it, so the
+  timestamp was authored by the caller — a model, which has no clock. The cost showed up when a
+  task folder was reset half-way: a genuine coverage pass was left standing beside a `research.md`
+  that no longer existed, and because every record read midnight, nothing could establish which
+  came first. A correct session read its own honest audit trail as a forgery and refused to
+  proceed. The script now stamps `fired_at` itself and discards a caller-supplied value. A wrong
+  time is worse than no time, because it reads as evidence.
+
+- `/research` step 1 wrote `_pre-analysis.json` and only then displayed the prompt and blocked,
+  so the record was on disk before a choice existed and nothing said to update it afterwards.
+  A live run did the only thing left to it and patched the file by hand, putting `user_choice`
+  inside `gate_specific` (section 4 of the schema says envelope level, which is where consumers
+  look) with the value `proceed_flat` (the enum is `y` / `n` / `s` / `bypassed`). The atomic
+  writer was right there and the run edited around it. Step 1 now blocks first and writes once,
+  with `user_choice` in the payload, and says not to patch the file afterwards. Step 3's
+  dev-guides gate already had this order; step 1 was the outlier.
+
+- Three user-facing prompts had no words of their own. `/research` step 3 cited
+  `prompts:dev-guides-preflight`, a template never written since it was first referenced in
+  v4.10.0; the scope-contract offer and the prior-art question cited nothing at all. A model
+  that cannot find a template does not stop, it composes one, and what it composes is named
+  after the only handle it has — so a live run asked a person about "Step 5a", an address
+  inside a command file they have never opened. All three templates now exist and every call
+  site cites one, `/design` and `/implement` included. `tests/prompt-template-spec.sh` fails
+  on a citation with no template, and on a step number appearing inside a template body.
+
+- `gate-audit-write.sh` names a `gate_specific` that drifts from its own schema section, on
+  stderr, without refusing the write. It cannot refuse: the schema says outright that this
+  script validates the envelope and not the payload, so no caller has ever had to satisfy a
+  payload contract and failing now would break runs mid-flight. One observed research run
+  drifted three times — `user_choice` a level below where consumers read it, a create-on-miss
+  mirror missing half its documented keys, and a `recipe-load` carrying `frameworks: []` while
+  its prose `notes` described the resolution in full. That last one is the shape of it: the
+  record exists to make resolution machine-auditable and the machine-readable half was the
+  half left out, so a consumer counting resolved frameworks reads zero. An empty
+  `frameworks[]` is now named unless a `bypass` object says why it is empty.
+
+- The coverage gate reported coverage and measured formatting. `coverage-mapping-check.sh` took
+  the first 30 characters of each research question and required that exact string in the
+  Coverage Mapping body, a rule written down nowhere — not in the walkthrough, whose own example
+  shows an abbreviated `### Q1 —` heading, and not in the failure output. A research phase with
+  six subject files answering all six questions came back `fail, 1 of 6 addressed`, which reads
+  as five unanswered questions. The run inferred the real rule and pasted whole questions into
+  every row: the gate passed and the table got worse. A row may now name its question by number
+  (`Q<n>`, matching the numbered list in `task.md`), the verbatim match still works, a question
+  named nowhere still fails, and the failure now says what a row has to look like.
+
+- A phase declaration did not survive a resume. `hooks/session-start.sh` deletes the session
+  file outright, and that file was the only home for `lastPhase`, so any resume, compact or
+  restart mid-phase erased a declaration made minutes earlier. Observed live: a research phase
+  declared itself, was interrupted, and the guardrail afterwards could only report
+  `undetermined` — honest, and useless, because the phase had in fact declared itself.
+  `phase-active-write.sh` now takes the task folder and writes `_phase-active.json` beside the
+  work it describes; the detector reads that first and falls back to the session file. Nothing
+  declared anywhere is still `undetermined`, and a genuine mismatch is still a bypass.
+
+### Added
+- `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
+  around it, deriving `schema_version` from the gate type and hoisting `user_choice` /
+  `bypass_reason` to where section 4 of the schema says they belong. Hoisting applies to the
+  complete-envelope form too: a live run passed `user_choice: "continue"` inside
+  `gate_specific`, one level below where every envelope reader looks. The lift only fills an
+  empty envelope slot, so a caller that placed the answer correctly keeps it. The complete-envelope form
+  still works, so no existing caller changed. This is the shape callers already reached for: a
+  live run passed the bare object, got `schema_version must be one of ... (got "")`, and had to
+  open the script to recover — one wasted round-trip per gate, per run. `/research` step 1 and
+  `references/gate-audit-schema.md` §4a now state the accepted shapes at the call site.
+
 ## [5.29.1] - 2026-08-25
 
 ### Fixed

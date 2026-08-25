@@ -18,7 +18,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 ## Runtime Steps
 
-0. **Declare the active phase (v5.29.0+).** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/phase-active-write.sh" implement` (Bash) **before writing anything**. The phase-command-bypass guardrail compares the artifact being written against the phase that declared itself; with nothing declared it can only report `undetermined`, which is what it did on every task until this call existed. Run it at entry, not at the end — an artifact written before the declaration is indistinguishable from one written outside the phase command.
+0. **Declare the active phase (v5.29.0+).** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/phase-active-write.sh" implement "<task_folder>"` (Bash) **before writing anything**. The phase-command-bypass guardrail compares the artifact being written against the phase that declared itself; with nothing declared it can only report `undetermined`, which is what it did on every task until this call existed. Run it at entry, not at the end — an artifact written before the declaration is indistinguishable from one written outside the phase command. **Pass the task folder.** The session file the declaration also lands in is deleted by the SessionStart hook, so a resume or a compact mid-phase wipes it; the task-folder copy is what survives.
 
 1. **Phase Transition Check.** Read `task.md` Phase Status. Evaluate Phases 1 and 2 independently:
    - Phase 2 not `[x]` → print one-line soft-nudge ("Phase 2 not complete; consider `/ai-dev-assistant:design <task>` first.").
@@ -46,7 +46,7 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 
 4. **Playbook load.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`. Surface conflicts once-per-session per topic. Write `_playbook-load.json` audit. If a project-level `glossary.md` exists, read it for naming consistency (soft — never blocks; absent is fine).
 
-5. **Alignment retrofit + phase-level offer.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parse its JSON. If `.sections.task_level.present == false`: offer task-level retrofit (4 questions, default `[n]`). On `[y]` execute task-level scope flow inline. Then offer phase-3 scope (default `[n]`); on `[y]` execute `--phase 3` inline. Never block.
+5. **Alignment retrofit + phase-level offer.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) and parse its JSON. If `.sections.task_level.present == false`: offer task-level retrofit (4 questions, default `[n]`). **Show it with the literal `prompts:scope-contract-offer` template** (`references/gate-hardening-prompts.md`), `{{level}}` = `this task`. On `[y]` execute task-level scope flow inline. Then offer phase-3 scope (default `[n]`, same template with `{{level}}` = `the implementation phase`); on `[y]` execute `--phase 3` inline. Never block.
 
    - **`/goal` bridge tip (emit ONCE, declinable, never auto-run).** After the contract is resolved, if parsed `success_criteria[]` exist for Phase-3 (else task-level), print ONE suggested `/goal` string the user can paste to drive implementation to done — anchored to the `/review` gate verdict, with a Non-goals `git status` guard and a turn bound:
      > `/goal /ai-dev-assistant:review <task> reports overall_verdict "pass" in _review.json (all hard-block gates green) printed inline AND the Phase-3 Success criteria hold AND nothing outside the Non-goals was modified — or stop after 20 turns`
