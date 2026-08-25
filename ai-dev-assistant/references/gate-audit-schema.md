@@ -370,6 +370,8 @@ Expected `gate_specific` shape:
       "declarations_audit": { "schema_version": "1.0", "phase": "review",
         "framework": "drupal", "declarations": [ /* … */ ],
         "summary": {"expected": 2, "present": 1, "absent_recommended": 1} },
+      "method_fit": { "verdict": "mismatch",
+        "reason": "method is contrib-module prior art; this task installs no module" },
       "advisory": "expected '## Change-impact globs' absent — gate uses the neutral floor"
     }
   ],
@@ -384,8 +386,24 @@ Expected `gate_specific` shape:
 | `frameworks` | list | One entry per framework the phase considered. Empty list with `bypass.reason:"no_frameworks_defined"` when none are set. |
 | `frameworks[].source` | enum \| null | Provenance — only `dev-guides` is `verified:true`. `null` when nothing resolved. |
 | `frameworks[].declarations_audit` | object \| null | Verbatim `recipe-declarations-audit.sh` output for declaration-bearing phases; `null` otherwise. |
+| `frameworks[].method_fit` | object \| null | **v5.30.1+.** `{verdict, reason}`. `verdict` is `fits` \| `partial` \| `mismatch` \| `undetermined`; `reason` is one line and is required for `partial` and `mismatch`. Expected on every `available:true` entry — the writer warns when it is absent, because an unassessed recipe otherwise reads as a suitable one. `undetermined` is the honest answer when nobody looked. |
 | `frameworks[].advisory` | string \| null | One-line human note emitted when a `recommended:true` declaration is `absent` (the surfaced fail-open). `null` when clean. |
 | `bypass` | object \| null | `{ "reason": "no_frameworks_defined \| navigator_unavailable \| recipe_not_published \| user_declined" }` when the phase proceeded stack-neutral with no recipe; `null` on a normal resolve. Records the deliberate degrade-first path so it is auditable rather than silent. |
+
+**Why `method_fit` exists (v5.30.1).** Recipe routing keys on phase and framework and on
+nothing else; what kind of work the task is never enters. So a task that edits three
+configuration values and runs a build was handed a contrib-module prior-art method during
+research and a service-and-plugin architecture method during design. Both phases noticed,
+and both wrote a paragraph into a `notes` key that this section has never defined and that
+no consumer reads. `notes` is not a field — it is where an observation goes to be lost. Both
+observations were gone by the next phase, and the review that eventually judges the work had
+no way to learn the method was wrong for it.
+
+Recording the verdict here makes it machine-readable for the phase that is running. It does
+not make it durable: this file is overwrite-on-fire, so the next phase's write replaces it.
+For the verdict to survive, the resolution step also appends `fit=<verdict>` to the recipe's
+line in `project_state.md`'s `**Process Recipes:**` block, which `scripts/project-state-read.sh`
+parses into `processRecipes[].fit`. An absent `fit` parses as `null`, never as `fits`.
 
 This audit **records** the degrade-first outcome; it does **not** block. A non-blocking,
 advisory gate by design (consistent with the recipe path's stack-agnostic, never-block

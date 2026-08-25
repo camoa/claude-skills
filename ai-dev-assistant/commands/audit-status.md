@@ -106,7 +106,7 @@ Audit status (project-wide):
 
 If single-task mode shows `⚠` for `phase-command-bypass`, ask: `[d]etails / [a]cknowledge / quit`.
 
-- `[d]` → display literal `prompts:phase-command-bypass-acknowledge` template from `references/gate-hardening-prompts.md`. User picks `[a]cknowledge` (note bypass and continue) or `[r]e-run` (invoke proper phase command now).
+- `[d]` → render it: `${CLAUDE_PLUGIN_ROOT}/scripts/prompt-render.sh phase-command-bypass-acknowledge artifact_written=… phase_command_active=… fired_at=…` (Bash), and show exactly what it printed. User picks `[a]cknowledge` (note bypass and continue) or `[r]e-run` (invoke proper phase command now).
 - `[a]` → exit without action.
 
 ## What this does NOT do

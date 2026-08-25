@@ -1,5 +1,55 @@
 # Changelog
 
+## [5.30.1] - 2026-08-25
+
+### Fixed
+- Mandated prompt wording was retyped rather than rendered, so it drifted. The templates added
+  in 5.30.0 shipped as prose instructions to reproduce them exactly. On the first live run after
+  that, both prompts that fired were composed fresh instead. One asked a person which section was
+  missing from which file and named a numbered phase, which is the wording its template exists to
+  replace. Nothing had malfunctioned: the guides prompt was never wired at all, because three
+  command bodies still described its two groups inline with different labels than the template
+  uses, and the scope-contract prompt was cited correctly and paraphrased anyway. An instruction
+  to reproduce text exactly, addressed to a model, produces text that is close, and close is where
+  the internal vocabulary gets back in. `scripts/prompt-render.sh` now fills a template and prints
+  it, and commands show what it printed. An unfilled placeholder exits 2 and prints nothing, so a
+  prompt showing its own machinery cannot reach a person; an unknown template id exits 1 rather
+  than falling through to improvisation. The three templates written in 5.30.0 are also added to
+  the index table above them, which had said the file held ten prompts when it held thirteen.
+- A recipe that did not suit the task had nowhere to say so. Recipe routing keys on phase and
+  framework and on nothing else; what kind of work the task does never enters. So a task that
+  edits three configuration values and runs a build was handed a contrib-module prior-art method
+  during research and a service-and-plugin architecture method during design. Both phases noticed,
+  and both wrote a paragraph into a `notes` key that the gate schema has never defined and that no
+  consumer reads. Both observations were gone by the next phase, because the audit file is
+  overwrite-on-fire, so the review that eventually judges the work had no way to learn the method
+  was wrong for it. Adds `frameworks[].method_fit` (`{verdict, reason}`, verdict one of `fits`,
+  `partial`, `mismatch`, `undetermined`) which the writer checks for, and `fit=<verdict>` on the
+  `project_state.md` recipe line so the verdict outlives the phase. An absent verdict is warned
+  and parses as `null`, never as a good fit: nobody assessed it and it suited the task are
+  different facts. Also requires `resolved_count`, which the schema documented and the live record
+  did not carry, and makes a failed fit check report itself rather than read as finding no
+  problems.
+
+- The record-completeness check knew only the research phase. It exists because a session can
+  read a protocol, do the work itself, and leave none of the records the protocol's skills would
+  have written; it caught exactly that once. A live design phase then ran it and got
+  `verdict: "unknown"` — honestly reported, and useless, because the guardrail that had already
+  found a real gap could not look at the phase after it or at implementation after that. An
+  honest `unknown` on every phase but one is a check that has stopped checking. `design` and
+  `implement` now carry contracts naming each record, whether it is required or conditional, and
+  who was supposed to write it.
+- `analysis-agent-normalize.sh` called with no argument printed bash's own
+  `line 26: 1: usage: ...`, where the `1` is the name of the positional parameter. A live run hit
+  it and had to work out that the `1` said nothing about its input. It now prints a usage line and
+  the stdin form. The script also had no test at all, despite every phase piping the analysis
+  agent's output through it; `tests/analysis-agent-normalize-spec.sh` covers the confidence clamp
+  and both documented exits.
+
+### Known gaps
+- Recipe routing still has two dimensions. `method_fit` records that the wrong method arrived; it
+  does not stop it arriving. Routing by the kind of work a task does is unbuilt.
+
 ## [5.30.0] - 2026-08-25
 
 ### Fixed

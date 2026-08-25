@@ -154,7 +154,7 @@ done
 # Keys listed here are ones the gate's own section states, not everything it may carry.
 case "$GATE_TYPE" in
   pre-analysis)       REQUIRED_KEYS="decision confidence code_read" ;;
-  recipe-load)        REQUIRED_KEYS="phase frameworks" ;;
+  recipe-load)        REQUIRED_KEYS="phase frameworks resolved_count" ;;
   dev-guides-load)    REQUIRED_KEYS="methodology_floor guides_actually_loaded" ;;
   agentic-recipe)     REQUIRED_KEYS="recipes recipe_lookup_status" ;;
   internal-prior-art) REQUIRED_KEYS="sources" ;;
@@ -185,6 +185,53 @@ if [[ "$GATE_TYPE" == "recipe-load" ]]; then
     echo "gate-audit-write: WARNING — recipe-load recorded no frameworks and no bypass object." >&2
     echo "  An empty frameworks[] needs a bypass naming why (no_frameworks_defined etc.)." >&2
     echo "  Prose in notes[] is not a substitute: consumers count frameworks[]. Written anyway." >&2
+  fi
+fi
+
+# A resolved recipe that did not suit the task must say so where a program can read it.
+#
+# Recipe routing keys on phase and framework and on nothing else. It never asks what kind of
+# work the task is, so an environment task — three config values and a build — was handed a
+# contrib-module prior-art method during research and a service-and-plugin architecture method
+# during design. Both times the phase noticed, and both times it wrote a paragraph into a
+# `notes` key that appears nowhere in this gate's schema and that no consumer reads. By the
+# next phase the observation was gone, and the review that eventually judges the work has no
+# way to learn the method was wrong for it.
+#
+# `method_fit` is where that goes: `{"verdict": "fits|partial|mismatch|undetermined",
+# "reason": "<one line>"}` on each framework entry. `undetermined` is a real answer and the
+# honest one when nobody looked; what must not happen is an unassessed recipe reading as a
+# suitable one. Absent is warned rather than rejected, per this writer's payload posture.
+if [[ "$GATE_TYPE" == "recipe-load" ]]; then
+  # A jq failure here must not read as "no problems found". It is reported and the
+  # write continues, the same posture as every other payload warning.
+  if ! FIT_PROBLEMS=$(echo "$PAYLOAD" | jq -r '
+    (.gate_specific.frameworks // [])
+    | map(select(.available == true))
+    | map(
+        (.framework // "?") as $fw
+        | (.method_fit // null) as $fit
+        | if $fit == null then
+            "\($fw): no method_fit, so an unassessed recipe reads as a suitable one"
+          else
+            ($fit.verdict // "") as $v
+            | ($fit.reason // "") as $r
+            | if (["fits","partial","mismatch","undetermined"] | index($v)) == null then
+                "\($fw): method_fit.verdict \"\($v)\" is not fits|partial|mismatch|undetermined"
+              elif (($v == "partial" or $v == "mismatch") and ($r | length) == 0) then
+                "\($fw): method_fit is \($v) with no reason, so the next phase cannot act on it"
+              else empty end
+          end)
+    | .[]' 2>&1); then
+    echo "gate-audit-write: WARNING — could not check recipe-load method_fit: $FIT_PROBLEMS" >&2
+    FIT_PROBLEMS=""
+  fi
+  if [[ -n "$FIT_PROBLEMS" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && echo "gate-audit-write: WARNING — recipe-load $line" >&2
+    done <<< "$FIT_PROBLEMS"
+    echo "  See references/gate-audit-schema.md 5.12. Prose in notes[] is not a substitute." >&2
+    echo "  Record fit= on the project_state recipe line too, or it is gone next phase. Written anyway." >&2
   fi
 fi
 
