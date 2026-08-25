@@ -21,6 +21,15 @@
   with `user_choice` in the payload, and says not to patch the file afterwards. Step 3's
   dev-guides gate already had this order; step 1 was the outlier.
 
+- Three user-facing prompts had no words of their own. `/research` step 3 cited
+  `prompts:dev-guides-preflight`, a template never written since it was first referenced in
+  v4.10.0; the scope-contract offer and the prior-art question cited nothing at all. A model
+  that cannot find a template does not stop, it composes one, and what it composes is named
+  after the only handle it has — so a live run asked a person about "Step 5a", an address
+  inside a command file they have never opened. All three templates now exist and every call
+  site cites one, `/design` and `/implement` included. `tests/prompt-template-spec.sh` fails
+  on a citation with no template, and on a step number appearing inside a template body.
+
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /

@@ -66,6 +66,62 @@ Agent had insufficient context. Verdict recorded as insufficient_info. Proceed a
 {{/if}}
 ```
 
+## Template ID: `dev-guides-preflight`
+
+Cited by `/research` step 3 since v4.10.0 and never written until v5.30.0. A run that
+went looking for it found nothing and composed its own wording, which is how a step
+number reaches a person who has no way to know what step 3 is.
+
+```
+Guides for {{task_name}}
+
+Always loaded:
+{{methodology_floor}}
+
+Matched to this task:
+{{matched_domain_guides}}
+
+[c]ontinue with these (default)
+[a]dd — search the catalog again for more
+[n]one — skip guide loading
+```
+
+## Template ID: `scope-contract-offer`
+
+The offer at `/research` step 5, `/design`, and `/implement`. `{{level}}` is either
+`this task` or `the research phase`; say which one is being scoped, because the two
+offers differ only in scope and a person cannot tell them apart otherwise.
+
+```
+{{task_name}} has no written scope contract for {{level}}.
+
+A contract is four short answers — the goal, what you expect to end up with, how
+you will know it worked, and what you are explicitly not doing. It takes a couple
+of minutes and every later phase is checked against it.
+
+[n]o — skip, decide later (default)
+[y]es — answer the four questions now
+```
+
+## Template ID: `prior-art-ask`
+
+The question at `/research` step 5a. It is asked rather than assumed on purpose: an
+unanswered question is recorded as nobody having been asked, never as nothing existing.
+Ask it plainly, and never pre-answer it — a suggested answer is what makes a person
+agree with a search that has not happened yet.
+
+```
+Before searching {{project_name}} for earlier work on this: do you already know
+of any?
+
+An abandoned branch, a script someone wrote, a half-finished attempt, notes in a
+ticket. Anything you remember is worth more than what the search will turn up,
+because it points at work that was never committed.
+
+If you do not know of any, say so — that is a real answer and it gets recorded.
+The search runs either way.
+```
+
 ## Template ID: `coverage-mapping-fail`
 
 ```
