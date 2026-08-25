@@ -1,5 +1,101 @@
 # Changelog
 
+## [5.29.1] - 2026-08-25
+
+### Fixed
+- The phase-command-bypass guardrail reported a bypass on every phase artifact ever written,
+  including artifacts written by the phase command doing exactly its job. It compared the artifact
+  against `lastPhase` in the session file; `session-context-write.sh` preserves that field and says
+  another component owns it, and no such component existed — nothing in the plugin ever assigned it
+  a value. So it was always null, null never matched the expected phase, and every research, design
+  and implementation run left an unexplained finding in its audit trail. A guardrail that fires 100%
+  of the time cannot tell a real bypass from a correct run. Caught on a research run that passed all
+  its gates and still produced the record. New `scripts/phase-active-write.sh` is the missing
+  writer, called by `/research`, `/design` and `/implement` on entry before anything is written, and
+  the detector now separates three states rather than two: a declaring phase command produces no
+  record, a genuinely different active phase is a `bypass` naming which one, and nothing declared is
+  `undetermined` with its reason rather than an accusation. Both records use the gate-audit envelope
+  — the first version of this fix emitted a flat record that a reader keying on `gate_specific`
+  would have parsed as empty.
+
+## [5.29.0] - 2026-08-25
+
+### Fixed
+- Every agent dispatch in the plugin named its agent without the plugin prefix, so the Task tool
+  could not resolve any of them. Caught live: `/research` step 6 said dispatch
+  `prior-art-researcher`, the session did exactly that, and the tool answered "Agent type
+  'prior-art-researcher' not found" while listing `ai-dev-assistant:prior-art-researcher` among what
+  was available. 47 dispatch references across 19 files, none prefixed. Attended it costs a retry;
+  unattended it is a dispatch that silently never happens.
+  `tests/agent-dispatch-prefix-spec.sh` fails on any bare dispatch reference, and on a prefix
+  wrongly added to an agent's own frontmatter, where the harness adds it already.
+
+### Added
+- `scripts/phase-records-check.sh` asks whether a phase left behind the records it owes. Sessions
+  read the protocol and carry a step out by hand instead of invoking the skill it names; the
+  terminal output is good and everything the skill was going to WRITE is absent. `/review` already
+  fail-closes on several of those records, which is right and far too late — it surfaces at Phase 4
+  about work done in Phase 1. This asks at the end of the phase that owes the answer and names the
+  skill and step behind each missing record, because "missing `_mechanism-challenge.json`" is a
+  puzzle and "the mechanism-challenge cascade did not run" is an instruction. `/research` runs it
+  before marking Phase 1 done and does not mark it on `incomplete`. An empty file counts as missing,
+  conditional records never block, and a phase with no encoded contract reports `unknown` rather
+  than `complete`. Only `research` has a contract encoded so far.
+
+## [5.28.2] - 2026-08-25
+
+### Fixed
+- A phase can now tell whether it left behind the records it owes. Sessions keep reading the protocol
+  and carrying a step out by hand instead of invoking the skill it names; the terminal output is
+  good, sometimes better than the skill would produce, and what goes missing is whatever the skill
+  was going to WRITE. Measured on one real task at the end of Phase 1: three required records absent
+  — `coverage-map.json`, `_mechanism-challenge.json`, and `_internal-prior-art.json`. The
+  hand-rolled prior-art search found a genuinely task-reframing commit and left no record, no
+  `research/` pointer, no disposition, and never opened the code-map conversation that lives inside
+  the skipped skill. `/review` already fail-closes on several of those records being absent, which is
+  the right posture and far too late: it surfaces at Phase 4 about work done in Phase 1. New
+  `scripts/phase-records-check.sh` asks at the end of the phase that owes the answer, and names the
+  skill and step behind each missing record — "missing `_internal-prior-art.json`" is a puzzle,
+  "step 5a's internal-prior-art-finder did not run" is an instruction. `/research` runs it before
+  marking Phase 1 done and does not mark it on `incomplete`. An empty file counts as missing,
+  conditional records never block, and a phase with no encoded contract reports `unknown` rather
+  than `complete`. Only `research` has a contract encoded so far.
+
+## [5.28.2] - 2026-08-25
+
+### Fixed
+- A phase can now tell whether it was actually performed or merely understood. Sessions keep reading
+  the protocol and doing the work by hand instead of invoking the skill it names — the terminal
+  output is good, sometimes better than the skill would produce, and everything the skill was going
+  to WRITE is simply absent. Measured on one real task: three skipped components in a single phase
+  (`recipe-loader` at step 2c, the mechanism-challenge cascade, and `internal-prior-art-finder` at
+  step 5a), of which manual inspection found one. The hand-rolled prior-art search did find a
+  genuinely task-reframing commit, and left no record, no `research/` pointer, no disposition, and
+  never opened the code-map conversation that lives inside the skipped skill. `/review` already
+  fail-closes on several of those records being absent, which is the right posture and far too late:
+  it surfaces at Phase 4 about work done in Phase 1. New `scripts/phase-records-check.sh` asks the
+  question at the end of the phase that owes the answer, and reports each missing record with the
+  skill and step that owed it — "missing `_internal-prior-art.json`" is a puzzle, "step 5a's
+  internal-prior-art-finder did not run" is an instruction. `/research` runs it before marking Phase
+  1 done and does not mark it on `incomplete`. An empty file counts as missing, conditional records
+  never block, and a phase with no encoded contract reports `unknown` rather than `complete`.
+
+## [5.28.1] - 2026-08-24
+
+### Fixed
+- A recorded process-recipe key that matches no catalog entry now gets caught. The
+  `**Process Recipes:**` block is the memory of a resolution decision every later phase reads first,
+  and a wrong key fails silently: the block parses, reads authoritatively, matches nothing, and each
+  phase falls back to a full lookup forever. Seen live on a real setup pass that drove the lookup by
+  hand instead of through `process-recipe-loader` and built each key's last segment from the catalog
+  line's recipe name (`drupal_research_contrib_prior_art`) rather than its URL slug
+  (`contrib-prior-art`) — the navigator's documented key contract. All six keys were wrong and the
+  run looked flawless. New `scripts/recipe-key-check.sh` compares each recorded key against the
+  cached catalog, names the slug that would have worked, and reports `unknown` rather than `ok` when
+  no index is cached. The sweep verifies what it just wrote; `/next` surfaces a live mismatch in one
+  line. Shape checking would not have caught this — `drupal_research_contrib_prior_art` is a
+  perfectly well-formed segment — so the catalog is the only ground truth.
+
 ## [5.28.0] - 2026-08-24
 
 ### Added

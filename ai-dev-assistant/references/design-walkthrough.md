@@ -121,7 +121,7 @@ Default: `[c]`.
 1. Loads task from `implementation_process/in_progress/{task_name}/`
 2. Reviews research findings in `research.md`
 3. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
-4. Invokes `architecture-drafter` agent
+4. Invokes `ai-dev-assistant:architecture-drafter` agent
 5. Invokes `guide-integrator` for methodology refs
 5. Creates/updates `architecture.md` with design
 6. Updates `task.md` to mark Phase 2 as in progress
@@ -138,7 +138,7 @@ Purpose: epic-shape sometimes only becomes obvious at architecture time when you
 
 ### Step 1 — Re-invoke analysis-agent in folder mode
 
-Invoke `analysis-agent` via Task tool with:
+Invoke `ai-dev-assistant:analysis-agent` via Task tool with:
 
 - `task_folder` = absolute path to the task folder (now contains `task.md` + `alignment.md` + `research.md` + `architecture.md` — strictly more context than at research time)
 - `codePath` = resolved via `project-state-reader`

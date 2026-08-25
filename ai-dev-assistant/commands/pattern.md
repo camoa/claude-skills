@@ -16,7 +16,7 @@ Get pattern recommendations for a specific use case. Framework patterns are reso
 
 ## What This Does
 
-1. Invokes `pattern-recommender` agent
+1. Invokes `ai-dev-assistant:pattern-recommender` agent
 2. Analyzes the use case
 3. Compares available patterns
 4. Provides recommendation with framework-core and ecosystem references

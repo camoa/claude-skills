@@ -32,7 +32,7 @@ the phase is marked complete (so the live human interaction has already finished
    authoritative), with an optional task override via `scripts/fm-read.sh "<task_folder>"` → `.run_mode`
    (`null` = inherit). Absent/bad → `interactive` (fail-closed; an unset mode never grants autonomy).
 2. **Branch** (see the table in §4).
-3. **Dispatch** `distill-agent` (Task tool) with **paths only** — `artifact_path`, `sibling_paths[]`,
+3. **Dispatch** `ai-dev-assistant:distill-agent` (Task tool) with **paths only** — `artifact_path`, `sibling_paths[]`,
    `phase`, `run_mode`, optional `bounded_brief`, `output_path` = `<task_folder>/_distill.json`. Never the
    transcript.
 4. **Read the sidecar back as scalars** — `.self_contained` + `.artifact_pointer` (never the agent's

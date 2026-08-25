@@ -21,7 +21,7 @@ Validate implementation against architecture and coding standards.
 
 ## What This Does
 
-1. Invokes `architecture-validator` agent
+1. Invokes `ai-dev-assistant:architecture-validator` agent
 2. Invokes `code-pattern-checker` skill
 3. Checks against documented architecture
 4. Validates coding standards

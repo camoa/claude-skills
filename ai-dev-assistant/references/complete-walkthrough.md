@@ -124,7 +124,7 @@ After the 5 quality gates pass and before the task moves to `completed/`, surfac
 
 ### Step 1 — Invoke analysis-agent in `play_candidates` mode
 
-Per `references/analysis-agent-schema.md` v1.1, invoke `analysis-agent` (Task tool) with:
+Per `references/analysis-agent-schema.md` v1.1, invoke `ai-dev-assistant:analysis-agent` (Task tool) with:
 
 ```json
 {
