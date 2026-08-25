@@ -51,6 +51,15 @@
   (`Q<n>`, matching the numbered list in `task.md`), the verbatim match still works, a question
   named nowhere still fails, and the failure now says what a row has to look like.
 
+- A phase declaration did not survive a resume. `hooks/session-start.sh` deletes the session
+  file outright, and that file was the only home for `lastPhase`, so any resume, compact or
+  restart mid-phase erased a declaration made minutes earlier. Observed live: a research phase
+  declared itself, was interrupted, and the guardrail afterwards could only report
+  `undetermined` — honest, and useless, because the phase had in fact declared itself.
+  `phase-active-write.sh` now takes the task folder and writes `_phase-active.json` beside the
+  work it describes; the detector reads that first and falls back to the session file. Nothing
+  declared anywhere is still `undetermined`, and a genuine mismatch is still a bypass.
+
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /

@@ -76,6 +76,52 @@ done
   && pass_check "an unrecognised phase is refused" \
   || fail_check "an unrecognised phase must not be written"
 
+# ---------------------------------------- the declaration outlives the session file
+
+# hooks/session-start.sh runs `rm -f "$(ddf_session_file)"`, so every resume, compact or
+# restart destroys a declaration made minutes earlier. Observed live: a research phase
+# declared itself, was interrupted, and the guardrail afterwards could only say
+# `undetermined` — honest, and useless, because the phase HAD declared itself. The task
+# folder outlives all three.
+TD=$(mktemp -d)
+bash "$PLUGIN_ROOT/scripts/phase-active-write.sh" research "$TD" >/dev/null 2>&1 || true
+
+[ -f "$TD/_phase-active.json" ] \
+  && pass_check "declaring with a task folder writes a durable record beside the work" \
+  || fail_check "no _phase-active.json — the declaration lives only where a hook deletes it"
+
+[ "$(jq -r '.phase' "$TD/_phase-active.json" 2>/dev/null)" = research ] \
+  && pass_check "the durable record names the phase" \
+  || fail_check "the durable record does not name the phase"
+
+# Wipe the session file exactly as the SessionStart hook does.
+# shellcheck source=/dev/null
+. "$PLUGIN_ROOT/scripts/session-paths.sh"
+rm -f "$(ddf_session_file)"
+
+V=$(bash "$PLUGIN_ROOT/scripts/phase-command-bypass-detect.sh" "$TD" research.md research 2>/dev/null \
+    | jq -r '.gate_specific.verdict // "match"')
+[ "$V" = match ] \
+  && pass_check "the declaration still resolves after the session file is deleted" \
+  || fail_check "a resumed phase reads as $V — the session-file wipe still erases the declaration"
+
+# The honest third state must survive the change: nothing declared is still not a bypass.
+rm -f "$TD/_phase-active.json"
+V=$(bash "$PLUGIN_ROOT/scripts/phase-command-bypass-detect.sh" "$TD" research.md research 2>/dev/null \
+    | jq -r '.gate_specific.verdict')
+[ "$V" = undetermined ] \
+  && pass_check "with nothing declared anywhere the verdict is still undetermined" \
+  || fail_check "an undeclared phase now reads as $V — unknowable must never become an accusation"
+
+# And a real bypass is still caught.
+bash "$PLUGIN_ROOT/scripts/phase-active-write.sh" design "$TD" >/dev/null 2>&1 || true
+V=$(bash "$PLUGIN_ROOT/scripts/phase-command-bypass-detect.sh" "$TD" research.md research 2>/dev/null \
+    | jq -r '.gate_specific.verdict')
+[ "$V" = bypass ] \
+  && pass_check "a genuine mismatch is still recorded as a bypass" \
+  || fail_check "the guardrail lost its teeth: a design declaration writing research.md reads as $V"
+rm -rf "$TD"
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nSome invariants FAILED for the phase-active declaration.\n' >&2
   exit 1

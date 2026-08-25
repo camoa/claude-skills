@@ -18,7 +18,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 ## Runtime Steps
 
-0. **Declare the active phase (v5.29.0+).** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/phase-active-write.sh" implement` (Bash) **before writing anything**. The phase-command-bypass guardrail compares the artifact being written against the phase that declared itself; with nothing declared it can only report `undetermined`, which is what it did on every task until this call existed. Run it at entry, not at the end — an artifact written before the declaration is indistinguishable from one written outside the phase command.
+0. **Declare the active phase (v5.29.0+).** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/phase-active-write.sh" implement "<task_folder>"` (Bash) **before writing anything**. The phase-command-bypass guardrail compares the artifact being written against the phase that declared itself; with nothing declared it can only report `undetermined`, which is what it did on every task until this call existed. Run it at entry, not at the end — an artifact written before the declaration is indistinguishable from one written outside the phase command. **Pass the task folder.** The session file the declaration also lands in is deleted by the SessionStart hook, so a resume or a compact mid-phase wipes it; the task-folder copy is what survives.
 
 1. **Phase Transition Check.** Read `task.md` Phase Status. Evaluate Phases 1 and 2 independently:
    - Phase 2 not `[x]` → print one-line soft-nudge ("Phase 2 not complete; consider `/ai-dev-assistant:design <task>` first.").

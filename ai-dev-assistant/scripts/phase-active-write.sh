@@ -12,13 +12,22 @@
 # explained away. This script is the missing writer: each phase command calls it on ENTRY, before
 # it writes anything, so the detector has a fact to compare against.
 #
-# Usage: phase-active-write.sh <research|design|implement|none>
+# Usage: phase-active-write.sh <research|design|implement|none> [task_folder]
 #
 # `none` clears the field, for a phase command that has finished.
+#
+# Give it the task folder whenever you have one. The session file is not durable: the
+# SessionStart hook deletes it outright, so a resume, a compact, or any restart mid-phase
+# destroys a declaration made minutes earlier. Observed live — a research phase declared
+# itself, was interrupted, and the guardrail afterwards could only report `undetermined`,
+# which is honest and useless. `<task_folder>/_phase-active.json` lives with the work it
+# describes and survives all three. The session file is still written, so a caller that
+# cannot name a task folder behaves exactly as before.
 # Emits one JSON line; exit 0 on every recoverable state.
 set -uo pipefail
 
 PHASE="${1:-}"
+TASK_FOLDER="${2:-}"
 case "$PHASE" in
   research|design|implement) ;;
   none|"") PHASE="none" ;;
@@ -53,5 +62,20 @@ else
     > "$SESS_FILE" 2>/dev/null || { printf '{"ok":false,"reason":"could not create session file"}\n'; exit 0; }
 fi
 
-jq -n --arg p "$PHASE" --arg f "$SESS_FILE" '{ok:true, lastPhase:(if $p=="none" then null else $p end), session_file:$f}'
+# The durable copy. Written second so a failure here cannot cost the session-file write.
+TASK_RECORD="null"
+if [ -n "$TASK_FOLDER" ] && [ -d "$TASK_FOLDER" ]; then
+  TF_OUT="$TASK_FOLDER/_phase-active.json"
+  TMP2=$(mktemp)
+  if jq -n --arg p "$VALUE" --arg at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+       '{phase:(if $p=="" then null else $p end), declared_at:$at}' > "$TMP2" 2>/dev/null; then
+    mv "$TMP2" "$TF_OUT" && TASK_RECORD="$TF_OUT"
+  else
+    rm -f "$TMP2"
+  fi
+fi
+
+jq -n --arg p "$PHASE" --arg f "$SESS_FILE" --arg t "$TASK_RECORD" \
+  '{ok:true, lastPhase:(if $p=="none" then null else $p end), session_file:$f,
+    task_record:(if $t=="null" then null else $t end)}'
 exit 0
