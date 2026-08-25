@@ -134,6 +134,38 @@ else
   fail_check "the usage header still does not say a bare gate_specific object is accepted"
 fi
 
+# ------------------------------------------ hoisting also applies to a full envelope
+
+# Observed live: a full-envelope call put `user_choice: "continue"` inside gate_specific.
+# Hoisting only ran on the bare path, so the answer stayed one level below where section 4
+# says every consumer looks. The envelope slot was empty and the value was right there.
+bash "$W" "$T" dev-guides-load "$(jq -nc --arg tf "$T" '{schema_version:"1.0",
+  gate_type:"dev-guides-load", fired_at:"x", task_folder:$tf,
+  gate_specific:{phase:"research", user_choice:"continue"}}')" >/dev/null 2>&1 || true
+D="$T/_dev-guides-load.json"
+if [ -f "$D" ]; then
+  [ "$(jq -r '.user_choice' "$D")" = "continue" ] \
+    && pass_check "a buried user_choice is hoisted out of a full envelope too" \
+    || fail_check "user_choice stayed buried in gate_specific on the full-envelope path"
+  [ "$(jq -r '.gate_specific.user_choice // "gone"' "$D")" = "gone" ] \
+    && pass_check "the buried copy is removed once hoisted" \
+    || fail_check "the buried copy survived, so the two can now disagree"
+else
+  fail_check "full-envelope dev-guides-load write produced no file"
+fi
+
+# A caller that filled the envelope slot properly must win — hoisting fills a gap, it
+# does not overwrite an answer the caller already placed correctly.
+bash "$W" "$T" review "$(jq -nc --arg tf "$T" '{schema_version:"1.2", gate_type:"review",
+  fired_at:"x", task_folder:$tf, user_choice:"accepted",
+  gate_specific:{user_choice:"IGNORED"}}')" >/dev/null 2>&1 || true
+R="$T/_review.json"
+if [ -f "$R" ]; then
+  [ "$(jq -r '.user_choice' "$R")" = "accepted" ] \
+    && pass_check "a correctly-placed user_choice is not overwritten by the buried one" \
+    || fail_check "hoisting clobbered a correctly-placed user_choice"
+fi
+
 # ------------------------------------------------- the record is written after the answer
 
 # Observed live: /research step 1 wrote _pre-analysis.json, THEN displayed the prompt and

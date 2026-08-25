@@ -90,8 +90,19 @@ esac
 FIRED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 if echo "$PAYLOAD" | jq -e 'has("gate_type")' >/dev/null 2>&1; then
-  PAYLOAD=$(echo "$PAYLOAD" | jq --arg sv "$DEFAULT_SV" --arg fa "$FIRED_AT" \
-    '.schema_version = (.schema_version // $sv) | .fired_at = $fa')
+  # Hoist here too. A full-envelope caller that tucked the answer inside gate_specific
+  # has put it where section 4 does not look for it, and observed runs do exactly that:
+  # `user_choice: "continue"` buried one level down, invisible to every envelope reader.
+  # Only lift when the envelope slot is empty, so a caller that filled it in properly wins.
+  PAYLOAD=$(echo "$PAYLOAD" | jq --arg sv "$DEFAULT_SV" --arg fa "$FIRED_AT" '
+    .schema_version = (.schema_version // $sv)
+    | .fired_at = $fa
+    | if (.user_choice == null) and (.gate_specific.user_choice? != null)
+      then .user_choice = .gate_specific.user_choice
+         | .gate_specific |= del(.user_choice) else . end
+    | if (.bypass_reason == null) and (.gate_specific.bypass_reason? != null)
+      then .bypass_reason = .gate_specific.bypass_reason
+         | .gate_specific |= del(.bypass_reason) else . end')
 else
   PAYLOAD=$(echo "$PAYLOAD" | jq \
     --arg sv "$DEFAULT_SV" --arg gt "$GATE_TYPE" \
