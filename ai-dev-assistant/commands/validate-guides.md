@@ -86,7 +86,7 @@ This gate is **dual-mode** (v4.1.0+): standalone CLI invocation stays soft-nudge
 
    **Staleness check (caller-side, not agent-side):** `stat -c %Y "$catalog_path"` to read mtime; if older than 30 days (compare to `date +%s`), append `code_inference.warnings: ["catalog_cache_stale"]` AND proceed — staleness is informational, not blocking. Suggest in the CLI summary that the user run `/dev-guides-navigator --refresh` to update the cache.
 
-   **c) Invoke `guides-matcher` agent** in `validation` mode with the union, the catalog path, optional `context_excerpts[]` from `implementation.md` Files Created/Modified, and `already_cited[]` from Step 4. Per `references/guides-matcher-schema.md`. This gate does not itself resolve a process recipe, so it passes no `routing_hints[]`; the agent's neutral role buckets match generic conventions, and framework-specific config/template suffixes fall to `unmatched_files[]` — acceptable for a soft-nudge advisory.
+   **c) Invoke `ai-dev-assistant:guides-matcher` agent** in `validation` mode with the union, the catalog path, optional `context_excerpts[]` from `implementation.md` Files Created/Modified, and `already_cited[]` from Step 4. Per `references/guides-matcher-schema.md`. This gate does not itself resolve a process recipe, so it passes no `routing_hints[]`; the agent's neutral role buckets match generic conventions, and framework-specific config/template suffixes fall to `unmatched_files[]` — acceptable for a soft-nudge advisory.
 
    **d) Compute `domain_coverage_gaps`** — agent's `matched_guides[].slug` MINUS prefix-match against `guides_cited[]`. Slugs the agent judged relevant but no artifact citation covers.
 

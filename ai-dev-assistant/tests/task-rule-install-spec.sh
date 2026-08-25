@@ -89,6 +89,23 @@ OUT=$(bash "$READER" "$PROJ")
   && pass_check "an unrecognised value warns rather than being coerced" \
   || fail_check "a bad Task Rule value must warn and read as unanswered"
 
+# --- the criterion judges consequence, not diff size -----------------------------
+# The first wording offered "a one-line config fix" as the example of work too small
+# to track. A session applied it correctly to a two-line DDEV edit and got the wrong
+# answer: those two lines forced a Node runtime the theme build had never run on, a
+# PHP version choice, and a restart of the foundation everything else stands on. A
+# size test cannot see any of that.
+T2=$(mktemp -d); mkdir -p "$T2/repo"
+bash "$K" --code-path "$T2/repo" --project demo >/dev/null
+BLK=$(cat "$T2/repo/CLAUDE.md")
+printf '%s' "$BLK" | grep -qi 'judge the work, not the diff' \
+  && pass_check "the block tells the reader to judge the work, not the diff" \
+  || fail_check "the block must say size of change is not size of work"
+printf '%s' "$BLK" | grep -Eqi 'one-line config fix' \
+  && fail_check "the block still offers diff size as the test for skipping a task" \
+  || pass_check "diff size is no longer offered as the test"
+rm -rf "$T2"
+
 if [ "$FAIL" -ne 0 ]; then
   printf '\nSome invariants FAILED for the task rule.\n' >&2
   exit 1

@@ -12,6 +12,16 @@ The eager on-ramp that complements the lazy point-of-need recipe trigger: after 
 - **Snapshot for idempotency.** Capture the set of already-recorded keys from `.processRecipes` (each entry's `key`) BEFORE driving the loader. A key resolved during the sweep that is in this snapshot is reported "already"; one not in it is "newly recorded". The loader's `write_source_record` is itself idempotent (an unchanged line is a no-op — rc 3 — so re-running the sweep produces no churn); this snapshot only labels the report.
 - **Drive the loader once per phase.** For each phase in the declared list in `references/recipe-resolution.md` ("Phases that resolve a framework recipe") — `research`, `design`, `implement`, `review`, `e2e-setup`, `visual-regression` — invoke the `process-recipe-loader` skill (Skill tool) with `phase: <phase>` and `project_folder: <project_folder>`. The loader resolves every framework for that phase, records each resolved `source=` line into `project_state.md` (idempotently), and returns its per-result JSON `{available, source, verified, recorded, action, body_path, notes[]}` + `warnings[]`. Resolution mechanics (source order, trust model, the `project_state` short-circuit, the source-record write) live in `references/recipe-resolution.md` and the loader — do not re-describe them here. **The sweep never Reads `body_path` and never follows a body** (no pre-caching; execution stays lazy).
 - **Non-blocking on every miss.** The sweep is informational and MUST NOT prompt. Treat each no-body outcome as "no recipe yet" in the coverage map — do NOT enter the loader's `action:ask-user` interactive protocol, do NOT ask the user for a path, do NOT research or fabricate. Specifically: `available:false` + `action:ask-user`, a `recipe_not_published:<fw>` warning, a `navigator_unavailable:<fw>` warning, and `results:[]` with `no_frameworks_defined` all map to "no recipe yet" for that (phase, framework). Render `navigator_unavailable` as a transient "no recipe yet (navigator unavailable — re-run)" distinct from the benign "not published yet".
+- **Verify the keys you just wrote.** Run `bash scripts/recipe-key-check.sh "<project_folder>"` and
+  report its `status`. A recorded key is only useful if a later phase can resolve it, and a wrong one
+  fails silently: the block parses, reads authoritatively, and matches nothing, so every phase falls
+  back to a full lookup forever. The key's last segment is the **URL slug** — the trailing path
+  segment of the catalog line's site-url — and NOT the recipe name in the line. Those differ for
+  every recipe published so far (`drupal_research_contrib_prior_art` is the name;
+  `contrib-prior-art` is the slug), which is exactly why driving the lookup by hand instead of
+  through `process-recipe-loader` produces six plausible keys that resolve to nothing. On
+  `status: mismatch`, correct the block from each key's `expected_slug` before reporting coverage.
+  On `status: unknown` say so — the index was not cached, so nothing was checked.
 - **Coverage report.** After all six phases, print the map (per phase, per framework):
   ```
   ## Process-recipe adoption — coverage map (<project>)

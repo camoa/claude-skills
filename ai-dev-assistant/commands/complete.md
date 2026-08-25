@@ -34,7 +34,7 @@ Mark a task complete and move to `completed/`. Behavior current as of v4.1.0; fu
    - **`false`:** legacy v4.0.2 posture. Run inline the gates that previously lived here: skill-review (conditional, see `references/complete-walkthrough.md`), plugin-validate (conditional), `/validate:all` standard gates. Soft-nudge / hard-block per existing v4.0.0 contract.
    - **Absent AND `completed/` non-empty:** treat as `false` (project predates v4.1.0; legacy posture). Print one-time soft-nudge: "v4.1.0 introduced /review as the pre-PR gate phase. Run `/ai-dev-assistant:upgrade-project` to opt into the new posture." Then proceed inline as legacy.
 
-4. **Candidate-play surface (v3.15.0+).** Invoke `analysis-agent` in `play_candidates` mode (analyzes task artifacts + `git diff` for repeated decisions worth capturing). For each candidate, prompt `[y]/[n]/[d]`. `[y]` hands off to `/playbook-capture`. Opt-out: `--no-play-candidates`.
+4. **Candidate-play surface (v3.15.0+).** Invoke `ai-dev-assistant:analysis-agent` in `play_candidates` mode (analyzes task artifacts + `git diff` for repeated decisions worth capturing). For each candidate, prompt `[y]/[n]/[d]`. `[y]` hands off to `/playbook-capture`. Opt-out: `--no-play-candidates`.
 
 5. **Update `task.md`.** Add Completion section (date, status, files created/modified, summary, notes).
 

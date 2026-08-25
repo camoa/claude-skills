@@ -108,10 +108,14 @@ what is learned survives the session that learned it.
   scope, not research), or
 - say plainly that this one is too small to track, and just do it.
 
-A typo, a one-line config fix, or a question does not need a lifecycle. The rule is
-not that everything becomes a task — it is that the choice is made out loud rather
-than by default. Deciding silently that something is too small is indistinguishable
-from never having considered it.
+**Judge the work, not the diff.** A two-line edit that forces a version choice, a
+rebuild, or a restart of something everything else depends on is a task; a typo or a
+question is not. Size of change is not size of work, and reaching for it is how a
+foundation decision gets made in passing.
+
+The rule is not that everything becomes a task — it is that the choice is made out
+loud rather than by default. Deciding silently that something is too small is
+indistinguishable from never having considered it.
 
 Run \`/ai-dev-assistant:next\` to see what is already in progress.
 $END

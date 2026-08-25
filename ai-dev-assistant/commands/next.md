@@ -17,7 +17,7 @@ Get recommendation for what to do next based on project state.
 
 ## What This Does
 
-1. Invokes `project-orchestrator` agent
+1. Invokes `ai-dev-assistant:project-orchestrator` agent
 2. Analyzes current state (project requirements + active tasks)
 3. **For each in-progress task folder, run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind` and any `.parent`/`.children` relationships** — so the suggestion below can prefer "continue a subtask in the active epic" over "start an unrelated flat task."
 4. Suggests prioritized next actions using the rules below
@@ -219,6 +219,19 @@ Using the same `project-state-read.sh` result (same Bash call as the nudges abov
 > 💡 This project has **Frameworks:** set but no process recipes adopted yet. Run `/ai-dev-assistant:upgrade-project` to sweep all lifecycle phases and record which recipes resolve (a recording + visibility pass — bodies are still followed lazily per phase; nothing is pre-committed). Or they resolve lazily at the next phase step. (Optional — never blocks.)
 
 Print immediately after the framework nudge. The two are naturally exclusive on the frameworks condition: empty frameworks → the framework nudge fires (adopt frameworks first); frameworks set but no recipes → this nudge fires. Skip silently when `.frameworks` is empty (covered by the framework nudge) or `.processRecipes` is non-empty. The empty-only signal is deliberate — a project where only some phases publish recipes is a valid steady state, not a gap, so partial coverage is not nudged (no false-positive churn). Never block.
+
+### Recorded recipe keys that resolve to nothing (v5.28.1+)
+
+Using the same `project-state-read.sh` result as the nudges above, when `.processRecipes` is
+non-empty run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recipe-key-check.sh" "<project_folder>"`. On
+`status: mismatch`, print one line naming the count and the first offender:
+
+> ⚠ N recorded process-recipe key(s) match no catalog entry, so each phase re-resolves from scratch
+> and the recorded decision does nothing: `<key>` should end in `<expected_slug>`. Fix the
+> `**Process Recipes:**` block in `project_state.md`.
+
+Print it alongside the other nudges. Skip silently on `ok`, `none`, or `unknown` — an uncached index
+means nothing was checked, which is not a finding. Never blocks.
 
 ### Scope contract for brand-new tasks (v5.21.0+, required artifact + adaptive elicitation)
 

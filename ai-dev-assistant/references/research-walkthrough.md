@@ -18,7 +18,7 @@ Research existing solutions for a specific task (Phase 1 of a task).
 2. Creates task directory: `implementation_process/in_progress/{task_name}/`
 3. Creates `task.md` (tracker with links and acceptance criteria)
 4. **(v3.13.4+)** Dev-guides pre-flight — explicit `guide-integrator` invocation + always-prompt the user to continue / add / decline (see "Dev-guides pre-flight" section below)
-5. Invokes `prior-art-researcher` agent for package registry and community library search
+5. Invokes `ai-dev-assistant:prior-art-researcher` agent for package registry and community library search
 6. Invokes `core-pattern-finder` skill for core examples
 7. Stores findings in `research.md` file
 8. Updates `task.md` to mark Phase 1 as in progress
@@ -37,7 +37,7 @@ This step catches the "task started flat, research revealed it's actually an epi
 
 ### Step 1 — Re-invoke analysis-agent in folder mode
 
-Invoke `analysis-agent` via Task tool with:
+Invoke `ai-dev-assistant:analysis-agent` via Task tool with:
 
 - `task_folder` = absolute path to the task folder (the folder now contains `task.md` + `alignment.md` + `research.md` — maximum context the agent has ever had for this task)
 - `codePath` = resolved via `project-state-reader` on the active project
@@ -345,7 +345,7 @@ Refactored flow:
    - Task name + description total length > 500 chars
    - Description has ≥3 distinct bullet points
    - Description contains explicit conjunction phrasing (`and also`, `plus`, `as well as`, `in addition to`)
-2. Invoke `analysis-agent` (via Task tool) in description mode regardless of signal state.
+2. Invoke `ai-dev-assistant:analysis-agent` (via Task tool) in description mode regardless of signal state.
 3. Save output to `<task>/_pre-analysis.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh`.
 4. Display agent output verbatim to user using literal `prompts:pre-analysis-decision` template from `references/gate-hardening-prompts.md`. Do NOT paraphrase.
 5. Block on user response per the template's option list.
@@ -363,7 +363,7 @@ For historical reference; the always-on gate above supersedes this. The soft-hoo
 If a signal fires:
 
 1. Resolve `codePath` via `project-state-reader` on the active project. If unknown, skip detect+confirm here (too intrusive at task-creation time); agent runs with `code_read: false` / `confidence: low`.
-2. Invoke `analysis-agent` (via Task tool) in **description mode** — pass `task_description_text` (the task name + full description as typed by the user), the codePath (or null), and `schema_version: "1.0"`. **Do NOT pass a task_folder** — the folder does not exist yet at pre-analysis time. See `references/analysis-agent-schema.md` the "Input modes" section.
+2. Invoke `ai-dev-assistant:analysis-agent` (via Task tool) in **description mode** — pass `task_description_text` (the task name + full description as typed by the user), the codePath (or null), and `schema_version: "1.0"`. **Do NOT pass a task_folder** — the folder does not exist yet at pre-analysis time. See `references/analysis-agent-schema.md` the "Input modes" section.
 3. Parse the agent's JSON output per `references/analysis-agent-schema.md` v1.0. Expect `task_folder: "(pre-creation)"` in the output.
 4. Branch on `decision`:
    - `epic_candidate` → ask the user: *"This task's scope looks like it might warrant being an epic. Agent proposed N children: [list]. Create as epic with these children? [y/n/standard flat task]"*. On `y`, invoke `/ai-dev-assistant:migrate-to-epic <task_name> --children "<proposed names>"` (which will create the epic directly — no flat task created first). On `n` or `standard`, proceed with flat-task research.
@@ -444,7 +444,7 @@ Default: `[c]`.
 
 1. Invoke `alignment-reader` skill against the task folder.
 
-2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`). Inspect the returned `signals_used[]` for `scope_contract_recommended`.
+2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `ai-dev-assistant:analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`). Inspect the returned `signals_used[]` for `scope_contract_recommended`.
 
    - If present → print soft-nudge in plain language:
      > **Before I dig into research:** this task has no task-level scope recorded yet, and I'm seeing signals that scope could drift (multiple distinct deliverables, or a description that reads several ways). Want to pin down what it's really trying to deliver first?
@@ -516,7 +516,7 @@ Default: `[c]`.
      > **[y]es** — 4 questions now
      > **[n]o** — research as-is (we can always add this later)
      Default: `[n]`. **On `[y]`** → execute the **task-level** flow from `commands/scope.md` (the `## Task-Level` section), exactly as step 2's `[y]` path does (NOT the `--phase 1` flow of step 4 below); after the write, refresh `alignment-reader` output and **proceed to research (do not re-evaluate this offer chain — the just-authored task-level section must not immediately trigger branch B's phase-1 offer)**. **On `[n]`/`[skip]`** → proceed to research.
-     **Soft-nudge honesty:** `[n]` is one keystroke and always respected, and the floor does NOT re-invoke `analysis-agent` (step 2 stays skipped on fresh tasks) — it adds a prompt, not a model dispatch. It is mutually exclusive with the `scope_contract_recommended` pre-analysis nudge (its guard requires that signal to be absent). It is **not** guarded against `/next`'s brand-new-task scope offer: `/next` persists nothing when the user declines (`commands/next.md` "Scope offer for brand-new tasks"), so a user who declined scope at `/next` and then runs `/research` with weak signals will see this offer a second time. That is an accepted cost of the soft-nudge posture (one extra declinable `[n]` at the highest-leverage moment), not a tracked-state suppression.
+     **Soft-nudge honesty:** `[n]` is one keystroke and always respected, and the floor does NOT re-invoke `ai-dev-assistant:analysis-agent` (step 2 stays skipped on fresh tasks) — it adds a prompt, not a model dispatch. It is mutually exclusive with the `scope_contract_recommended` pre-analysis nudge (its guard requires that signal to be absent). It is **not** guarded against `/next`'s brand-new-task scope offer: `/next` persists nothing when the user declines (`commands/next.md` "Scope offer for brand-new tasks"), so a user who declined scope at `/next` and then runs `/research` with weak signals will see this offer a second time. That is an accepted cost of the soft-nudge posture (one extra declinable `[n]` at the highest-leverage moment), not a tracked-state suppression.
 
 4. If user says `[y]` to a **phase-1** offer (the branches above this floor), execute the `--phase 1` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 1 — Research` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with research. (The floor branch handles its own `[y]` inline per its task-level note above.)
 

@@ -234,7 +234,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 
 **`dispatch_plan.ai_surface_selection` (additive optional, no version bump).**
 
-Absent from `dispatch_plan` when the `ai-test-selector` agent did not run: no visual
+Absent from `dispatch_plan` when the `ai-dev-assistant:ai-test-selector` agent did not run: no visual
 review configured, the gate was not recommended, or `--skip-ai-selection` was passed.
 One entry per gate (`e2e` or `visual_regression`) where the agent ran. `visual_parity` is never present — it is reference-driven and excluded from AI selection.
 

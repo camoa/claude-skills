@@ -15,7 +15,7 @@ Activate when:
 - User says "migrate tasks to new structure"
 - User says "convert task files to folders"
 - User invokes `/ai-dev-assistant:migrate-tasks` (manual mode)
-- Invoked by `project-orchestrator` when old format detected (automatic mode)
+- Invoked by `ai-dev-assistant:project-orchestrator` when old format detected (automatic mode)
 - Before upgrading from v2.x to v3.0.0
 
 ## Modes
@@ -55,7 +55,7 @@ implementation_process/in_progress/settings_form/
 ### 0. Detect Mode
 
 Check if invoked automatically or manually:
-- **Automatic:** Invoked by `project-orchestrator` agent (context includes automatic=true)
+- **Automatic:** Invoked by `ai-dev-assistant:project-orchestrator` agent (context includes automatic=true)
 - **Manual:** Invoked by `/migrate-tasks` command or user request
 
 Set `$automatic = true/false` based on invocation context.

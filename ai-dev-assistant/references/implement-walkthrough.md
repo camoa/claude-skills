@@ -170,7 +170,7 @@ Purpose: the `implementation.md` step plan sometimes reveals that the task's wor
 
 ### Step 1 — Re-invoke analysis-agent in folder mode
 
-Invoke `analysis-agent` via Task tool with:
+Invoke `ai-dev-assistant:analysis-agent` via Task tool with:
 
 - `task_folder` = absolute path to the task folder (maximum context: task+alignment+research+architecture+implementation all present)
 - `codePath` = resolved via `project-state-reader`

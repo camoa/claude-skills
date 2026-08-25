@@ -17,7 +17,7 @@ Analyze a task file to determine its current development phase.
 ## Activation
 
 Activate when:
-- Invoked by `project-orchestrator` agent
+- Invoked by `ai-dev-assistant:project-orchestrator` agent
 - Checking status of a specific task
 - "What phase is this task in?"
 - Determining next action for a task

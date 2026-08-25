@@ -26,7 +26,7 @@ This is the bulk-review counterpart to the inline pre-analysis hook in `/researc
    - `kind: subtask` (inside an epic; subject to different analysis)
    - `completed/` subtasks (via folder-location check inside any epic's `completed/`)
    - Empty task folders (no task.md)
-4. **Analyzes each candidate** — invokes `analysis-agent` (via Task tool, one subagent per candidate — they can run in parallel). Each returns structured JSON per `references/analysis-agent-schema.md` v1.0. **Normalize each candidate's JSON** through `${CLAUDE_PLUGIN_ROOT}/scripts/analysis-agent-normalize.sh` as it returns, before the schema-version check, presentation, or any `/migrate-to-epic` call — it deterministically clamps `confidence` to `low` when `code_read:false` (schema invariant 2).
+4. **Analyzes each candidate** — invokes `ai-dev-assistant:analysis-agent` (via Task tool, one subagent per candidate — they can run in parallel). Each returns structured JSON per `references/analysis-agent-schema.md` v1.0. **Normalize each candidate's JSON** through `${CLAUDE_PLUGIN_ROOT}/scripts/analysis-agent-normalize.sh` as it returns, before the schema-version check, presentation, or any `/migrate-to-epic` call — it deterministically clamps `confidence` to `low` when `code_read:false` (schema invariant 2).
 5. **Presents per-task** — for each analyzed task, show the user the agent's decision:
    - `epic_candidate` — proposed children + rationale → ask user to accept / edit / reject / skip
    - `keep_flat` — brief "no change recommended" note; move on
@@ -66,7 +66,7 @@ Options:
 ## Implementation notes (for the command body)
 
 1. **Candidate enumeration** — iterate `<project>/implementation_process/in_progress/*/` and for each subfolder run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash, parse `.kind`). Filter to `kind: flat`. Do NOT recurse into epic folders; this run only considers top-level flat tasks.
-2. **Parallel analysis** — Agent SDK Subagents model fits: spawn N subagents (one per candidate) via the Task tool. Each subagent invokes `analysis-agent` and returns the JSON. Parent aggregates. Reference: Claude Code Agent SDK Subagents docs [cite AS-1 in research.md].
+2. **Parallel analysis** — Agent SDK Subagents model fits: spawn N subagents (one per candidate) via the Task tool. Each subagent invokes `ai-dev-assistant:analysis-agent` and returns the JSON. Parent aggregates. Reference: Claude Code Agent SDK Subagents docs [cite AS-1 in research.md].
 3. **Accept flow** — on accept, build the child-names string (comma-separated) and invoke `/ai-dev-assistant:migrate-to-epic <task> --children "<csv>"`. The migration command handles the transactional work; this command only surfaces the proposal and relays the decision.
 4. **Edit flow** — on edit, show the proposed children as an editable list; user can rename, remove, add. Validate names match `^[A-Za-z0-9_][A-Za-z0-9._-]*$` before passing to `/migrate-to-epic`.
 5. **Reject / skip** — record decision silently; do NOT write to the task. Summary at the end shows counts.
