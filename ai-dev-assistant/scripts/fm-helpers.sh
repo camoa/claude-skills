@@ -15,14 +15,14 @@ fm_read() {
 
   if [ ! -d "$task_dir" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "folder_missing", detail: "task folder does not exist"}]}'
+      '{id: $id, kind: null, parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: null, mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "folder_missing", detail: "task folder does not exist"}]}'
     return 0
   fi
 
   local task_md="$task_dir/task.md"
   if [ ! -f "$task_md" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "task_md_missing", detail: "task.md not found in folder"}]}'
+      '{id: $id, kind: null, parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: null, mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "task_md_missing", detail: "task.md not found in folder"}]}'
     return 0
   fi
 
@@ -31,7 +31,7 @@ fm_read() {
 
   if [ -z "$fm" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: []}'
+      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: null, mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "frontmatter_absent", detail: "task.md has no frontmatter block; kind defaults to flat, status is unknown"}]}'
     return 0
   fi
 
@@ -50,7 +50,7 @@ except Exception as e:
 
   if [ -z "$parsed" ]; then
     jq -nc --arg id "local:$folder_name" --arg dir "$task_dir" \
-      '{id: $id, kind: "flat", parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: "draft", mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "parser_unavailable", detail: "python3 missing or failed"}]}'
+      '{id: $id, kind: null, parent: null, children: [], blocks: [], blocked_by: [], external_ids: {}, status: null, mechanism_hints: [], run_mode: null, folder: $dir, warnings: [{code: "parser_unavailable", detail: "python3 missing or failed"}]}'
     return 0
   fi
 
@@ -65,7 +65,7 @@ except Exception as e:
         blocks: ($d.blocks // []),
         blocked_by: ($d.blocked_by // []),
         external_ids: ($d.external_ids // {}),
-        status: ($d.status // "draft"),
+        status: ($d.status // null),
         mechanism_hints: ($d.mechanism_hints // []),
         run_mode: ($d.run_mode // null),
         folder: $dir,
@@ -80,7 +80,7 @@ except Exception as e:
         blocks: [],
         blocked_by: [],
         external_ids: {},
-        status: "draft",
+        status: null,
         mechanism_hints: [],
         run_mode: null,
         folder: $dir,
@@ -88,6 +88,18 @@ except Exception as e:
       }
     end' <<<"$parsed"
 }
+
+# `status` is null when nothing on disk said otherwise (v5.30.4+).
+#
+# It used to be the string "draft" in five places: four where the read had failed or the file
+# carried no frontmatter, and once as the default for an absent key. A finished task and a
+# never-started one came back identical, and the no-frontmatter path also returned
+# `warnings: []`, so nothing anywhere in the object said a read had not happened. Observed on a
+# task that had just passed review: `status: draft`, no warnings.
+#
+# `kind` follows the same rule but keeps "flat" where the file was read and declared no
+# hierarchy, because that is a fact about the file rather than a fallback. Where nothing was
+# read at all, kind is null too.
 
 # write_epic_frontmatter <task_name> <current_status> [<child1> <child2> ...]
 # Prints a canonical YAML frontmatter block (including --- delimiters) to stdout.

@@ -178,6 +178,9 @@ echo "[1/8] Preflight"
 READER=$(fm_read "$TASK_DIR")
 CURRENT_KIND=$(jq -r '.kind' <<<"$READER")
 CURRENT_STATUS=$(jq -r '.status' <<<"$READER")
+# fm_read returns a null status when nothing on disk said otherwise. Writing the literal
+# "null" into a new epic's frontmatter would turn an unknown into a recorded value.
+[ "$CURRENT_STATUS" = "null" ] && CURRENT_STATUS="in_progress"
 
 # Expansion mode: the resolved task is ALREADY an epic/sub_epic. With children
 # passed, expand it in place instead of aborting; with none, exit with a hint.
@@ -450,6 +453,7 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
         cp -r "$CHILD_IN_PROGRESS_ROOT/$child" "$TEMP_ROOT/$TASK_NAME/in_progress/$child"
         CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/in_progress/$child")
         CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
+        [ "$CHILD_STATUS" = "null" ] && CHILD_STATUS="in_progress"
         SUB_FM=$(write_subtask_frontmatter "$child" "$TASK_NAME" "$CHILD_STATUS")
         apply_frontmatter "$TEMP_ROOT/$TASK_NAME/in_progress/$child/task.md" "$SUB_FM"
         ;;
@@ -463,6 +467,7 @@ if [ ${#CHILDREN[@]} -gt 0 ]; then
         cp -r "$CHILD_COMPLETED_ROOT/$child" "$TEMP_ROOT/$TASK_NAME/completed/$child"
         CHILD_READER=$(fm_read "$TEMP_ROOT/$TASK_NAME/completed/$child")
         CHILD_STATUS=$(jq -r '.status' <<<"$CHILD_READER")
+        [ "$CHILD_STATUS" = "null" ] && CHILD_STATUS="in_progress"
         # Force status=completed regardless of what frontmatter said (authoritative by location)
         SUB_FM=$(write_subtask_frontmatter "$child" "$TASK_NAME" "completed")
         apply_frontmatter "$TEMP_ROOT/$TASK_NAME/completed/$child/task.md" "$SUB_FM"
