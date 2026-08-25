@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.30.3] - 2026-08-25
+
+### Fixed
+- The record check confirmed a file existed, not that the phase had produced it. Every JSON
+  record in a task folder is overwrite-on-fire and none is deleted between phases, so a record
+  written three phases earlier satisfied the contract of a phase that never ran the step.
+  Observed live: `_mechanism-challenge.json` stamped `phase: design` counted as implementation's
+  copy of the gate that command calls unskippable, and a research-phase `_distill.json` counted
+  for both later phases. The check could not tell a phase that did the work from one that
+  inherited the file, which is the same failure it exists to catch one level up. Records are now
+  attributed: one naming this phase is `present`, one naming another phase is `carried` where the
+  contract allows reuse and `stale` where it does not, and one naming no phase at all is
+  `unattributed` and does not satisfy a required entry. Each record reports `written_by_phase`.
+  The mechanism challenge is the one carryable record, because its backstop is specified to reuse
+  an existing record when the mechanisms hash still matches.
+- `missing_required` counted only records with status `missing`, so a phase could report
+  `incomplete` alongside a count of zero. It now counts every required record that did not
+  satisfy, whatever the reason.
+- Auditing a phase after a later one has run finds its records replaced rather than absent. That
+  case now carries a `records_overwritten_by_a_later_phase` warning, so a retrospective check does
+  not read as a phase that skipped its work.
+
 ## [5.30.2] - 2026-08-25
 
 ### Fixed

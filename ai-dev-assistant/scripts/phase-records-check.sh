@@ -23,7 +23,14 @@
 #
 # Emits ONE JSON object, exit 0 always:
 #   { schema_version, phase, task_folder, verdict, missing_required,
-#     records: [{name, status, requirement, producer, step}], warnings[] }
+#     records: [{name, status, requirement, producer, step, written_by_phase}], warnings[] }
+#
+# status: present | carried | stale | unattributed | empty | missing
+#   present      — the record names this phase
+#   carried      — an earlier phase's record that this contract allows to be reused
+#   stale        — an earlier phase's record where reuse is not allowed; counts as missing
+#   unattributed — the record names no phase, so it cannot be tied to this one; counts as missing
+#                  when required, because a record that cannot say who wrote it has not answered
 #
 # verdict: complete | incomplete | unknown
 #   unknown — the phase has no record contract encoded here. Never reported as complete: a phase
@@ -67,7 +74,8 @@ emit(){ # emit <verdict> <records_json>
   jq -n --arg v "$1" --argjson r "$2" --arg p "$PHASE" --arg t "$TASK_DIR" --argjson w "$WARNINGS" \
     '{schema_version:"1.0", phase:$p, task_folder:(if $t=="" then null else $t end),
       verdict:$v,
-      missing_required:([$r[]|select(.status=="missing" and .requirement=="required")]|length),
+      missing_required:([$r[]|select(.requirement=="required")
+                            |select(.status|IN("present","carried")|not)]|length),
       records:$r, warnings:$w}'
   exit 0
 }
@@ -77,14 +85,21 @@ if [ -z "$TASK_DIR" ] || [ ! -d "$TASK_DIR" ]; then
   emit unknown '[]'
 fi
 
-# The contract, one line per record: <name>|<required|conditional>|<producer>|<step>
+# The contract, one line per record:
+#   <name>|<required|conditional>|<producer>|<step>|<carryable?>
+#
+# `carryable` says whether a record written by an EARLIER phase legitimately satisfies this one.
+# Almost nothing is. The mechanism challenge is: its backstop is specified to reuse an existing
+# record when the mechanisms hash still matches, and to run the full challenge otherwise, so a
+# record stamped with an earlier phase is a correct outcome there and a stale artifact anywhere
+# else.
 # `conditional` records are reported for visibility and never counted against the verdict — a
 # maintainer-mode offer that did not fire is not a missing record.
 case "$PHASE" in
   research) CONTRACT='_pre-analysis.json|required|analysis-agent (description mode), written via gate-audit-write.sh|step 1
 coverage-map.json|required|the recipe-loader skill|step 2c
 _agentic-recipe.json|required|step 2c, written via gate-audit-write.sh|step 2c
-_mechanism-challenge.json|required|the mechanism-challenge cascade, written via gate-audit-write.sh|step 2c
+_mechanism-challenge.json|required|the mechanism-challenge cascade, written via gate-audit-write.sh|step 2c|carryable
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
 _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 _internal-prior-art.json|required|the internal-prior-art-finder skill|step 5a
@@ -98,14 +113,14 @@ _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agen
 _playbook-load.json|required|playbook-load-deterministic.sh|step 3
 architecture.md|required|the architecture-drafter agent|step 5
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 2
-_mechanism-challenge.json|required|the mechanism-challenge refresh, which the design step runs unconditionally|step 4
+_mechanism-challenge.json|required|the mechanism-challenge refresh, which the design step runs unconditionally|step 4|carryable
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|step 11' ;;
   implement) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
 _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 implementation.md|required|the phase itself|step 7
-_mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6
+_mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6|carryable
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
@@ -115,21 +130,65 @@ esac
 
 RECORDS='[]'
 MISSING=0
-while IFS='|' read -r NAME REQ PRODUCER STEP; do
+# Presence was the whole test until v5.30.3, and presence is not the question this file asks.
+# Every JSON record here is overwrite-on-fire and none is deleted between phases, so a file
+# written three phases ago satisfied the contract of a phase that never ran the step. Observed
+# live: `_mechanism-challenge.json` stamped `phase: design` counted as implementation's copy of
+# the gate that command calls unskippable, and `_distill.json` from research counted for both
+# later phases. The check could not tell a phase that did the work from a phase that inherited
+# the file, which is the same failure it exists to catch one level up.
+#
+# So each record is attributed. A record naming this phase is `present`. A record naming another
+# phase is `carried` where the contract allows reuse and `stale` where it does not. A record
+# carrying no phase at all is `unattributed`: it may well be this phase's and nothing on disk
+# says so, and for a required record that is not good enough.
+record_phase() { # record_phase <file> -> the phase it names, or empty
+  jq -r '(.gate_specific.phase // .phase // empty)' "$1" 2>/dev/null | head -1
+}
+
+while IFS='|' read -r NAME REQ PRODUCER STEP CARRY; do
   [ -z "$NAME" ] && continue
   STATUS="missing"
+  WROTE=""
   if [ -s "$TASK_DIR/$NAME" ]; then
-    STATUS="present"
+    case "$NAME" in
+      *.json)
+        WROTE=$(record_phase "$TASK_DIR/$NAME")
+        if [ -z "$WROTE" ]; then
+          STATUS="unattributed"
+        elif [ "$WROTE" = "$PHASE" ]; then
+          STATUS="present"
+        elif [ "$CARRY" = "carryable" ]; then
+          STATUS="carried"
+        else
+          STATUS="stale"
+        fi ;;
+      # A phase artifact is named for its phase — architecture.md is the design phase's by
+      # definition — so there is nothing to attribute and nothing to get wrong.
+      *) STATUS="present" ;;
+    esac
   elif [ -e "$TASK_DIR/$NAME" ]; then
     # An empty file is not a record. It parses as absent everywhere downstream, so calling it
     # present here would hide the problem one layer deeper.
     STATUS="empty"
   fi
-  [ "$STATUS" != "present" ] && [ "$REQ" = "required" ] && MISSING=$((MISSING + 1))
+  case "$STATUS" in
+    present|carried) ;;
+    *) [ "$REQ" = "required" ] && MISSING=$((MISSING + 1)) ;;
+  esac
   RECORDS=$(jq -c --argjson a "$RECORDS" --arg n "$NAME" --arg s "$STATUS" --arg r "$REQ" \
-                  --arg p "$PRODUCER" --arg st "$STEP" \
-    -n '$a + [{name:$n, status:$s, requirement:$r, producer:$p, step:$st}]')
+                  --arg p "$PRODUCER" --arg st "$STEP" --arg w "$WROTE" \
+    -n '$a + [{name:$n, status:$s, requirement:$r, producer:$p, step:$st,
+               written_by_phase: (if $w == "" then null else $w end)}]')
 done <<< "$CONTRACT"
+
+# Every JSON record here is overwrite-on-fire. Auditing a phase after a later phase has run
+# therefore finds that phase's records replaced, not absent, and the verdict has to be readable
+# as that rather than as work never done.
+STALE_LATER=$(printf '%s' "$RECORDS" | jq -r '[.[]|select(.status=="stale" and .requirement=="required")]|length')
+if [ "${STALE_LATER:-0}" -gt 0 ]; then
+  add_warn "records_overwritten_by_a_later_phase"
+fi
 
 if [ "$MISSING" -gt 0 ]; then emit incomplete "$RECORDS"; fi
 emit complete "$RECORDS"
