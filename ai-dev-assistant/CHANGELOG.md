@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.30.0] - 2026-08-25
+
+### Fixed
+- Every gate audit the framework had ever written was stamped `00:00:00Z`. `gate-audit-write.sh`
+  required a complete envelope and validated `fired_at` without ever generating it, so the
+  timestamp was authored by the caller — a model, which has no clock. The cost showed up when a
+  task folder was reset half-way: a genuine coverage pass was left standing beside a `research.md`
+  that no longer existed, and because every record read midnight, nothing could establish which
+  came first. A correct session read its own honest audit trail as a forgery and refused to
+  proceed. The script now stamps `fired_at` itself and discards a caller-supplied value. A wrong
+  time is worse than no time, because it reads as evidence.
+
+### Added
+- `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
+  around it, deriving `schema_version` from the gate type and hoisting `user_choice` /
+  `bypass_reason` to where section 4 of the schema says they belong. The complete-envelope form
+  still works, so no existing caller changed. This is the shape callers already reached for: a
+  live run passed the bare object, got `schema_version must be one of ... (got "")`, and had to
+  open the script to recover — one wasted round-trip per gate, per run. `/research` step 1 and
+  `references/gate-audit-schema.md` §4a now state the accepted shapes at the call site.
+
 ## [5.29.1] - 2026-08-25
 
 ### Fixed

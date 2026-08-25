@@ -66,6 +66,26 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 | `bypass_reason` | string \| null | Populated when user passed `--skip-<gate>` flag. The string is whatever the user supplied. `null` when gate ran without bypass. |
 | `gate_specific` | object | Per-gate payload. See the gate-specific sections for each gate type. |
 
+### 4a. What to pass the writer (v5.30.0+)
+
+`scripts/gate-audit-write.sh <task_folder> <gate_type> <payload>` accepts the
+`gate_specific` object **on its own**. It builds the envelope: `gate_type` and
+`task_folder` come from the arguments, `schema_version` from the gate type, and
+`fired_at` from its own clock. A `user_choice` or `bypass_reason` found in the object
+is hoisted to the envelope, where section 4 says it belongs and where consumers look
+for it.
+
+A complete envelope is still accepted, so no existing caller changed.
+
+**`fired_at` is stamped by the script in both shapes and a caller-supplied value is
+discarded.** It has to be. Before v5.30.0 the envelope was hand-authored on every call,
+which meant the timestamp was hand-authored too, and a model has no clock — every gate
+audit this framework had ever written said `00:00:00Z`. That is not a cosmetic flaw. On
+a task folder reset half-way, a genuine coverage pass was left standing beside a
+`research.md` that no longer existed, and nothing in either record could establish which
+came first. A session read its own honest audit trail as a forgery. A wrong time is
+worse than no time, because it reads as evidence.
+
 ## 5. Per-gate payload (`gate_specific`)
 
 **Optional additive flags (v4.1.0+, applicable to any gate):**
