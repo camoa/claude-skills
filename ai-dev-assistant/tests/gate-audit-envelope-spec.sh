@@ -134,6 +134,35 @@ else
   fail_check "the usage header still does not say a bare gate_specific object is accepted"
 fi
 
+# ------------------------------------------------- the record is written after the answer
+
+# Observed live: /research step 1 wrote _pre-analysis.json, THEN displayed the prompt and
+# blocked. The audit was on disk before a choice existed, and nothing told the run to update
+# it afterwards — so it patched the file by hand, putting user_choice inside gate_specific
+# (section 4 says envelope) with the value "proceed_flat" (the enum is y/n/s/bypassed). The
+# atomic writer was right there and the run edited around it, because the step's own ordering
+# left nowhere to put the answer.
+STEP1=$(sed -n '/^1\. \*\*Pre-analysis gate/,/^2\. /p' "$PLUGIN_ROOT/commands/research.md")
+# Step 1 is a single markdown line, so compare character offsets, not line numbers.
+BLOCK_AT=$(printf '%s' "$STEP1" | awk '{i=index($0,"Block on choice"); if(i){print NR"."i; exit}}')
+WRITE_AT=$(printf '%s' "$STEP1" | awk '{i=index($0,"gate-audit-write.sh"); if(i){print NR"."i; exit}}')
+if [ -n "$BLOCK_AT" ] && [ -n "$WRITE_AT" ]; then
+  # "<line>.<column>" sorts correctly as a version string.
+  [ "$(printf '%s\n%s\n' "$BLOCK_AT" "$WRITE_AT" | sort -V | head -1)" = "$BLOCK_AT" ] \
+    && pass_check "step 1 blocks on the choice before writing the audit" \
+    || fail_check "step 1 still writes the audit before blocking — the record cannot hold the choice"
+else
+  fail_check "step 1 no longer names both the block and the writer"
+fi
+
+printf '%s' "$STEP1" | grep -q 'never patch the audit file after the writer has run' \
+  && pass_check "step 1 forbids hand-patching the audit" \
+  || fail_check "step 1 does not forbid hand-patching the audit"
+
+printf '%s' "$STEP1" | grep -q '`y` / `n` / `s` / `bypassed`' \
+  && pass_check "step 1 names the user_choice enum" \
+  || fail_check "step 1 does not name the user_choice enum, so a paraphrase gets recorded"
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && { printf 'gate-audit-envelope-spec: all checks passed\n'; exit 0; }
 printf 'gate-audit-envelope-spec: FAILURES\n' >&2; exit 1

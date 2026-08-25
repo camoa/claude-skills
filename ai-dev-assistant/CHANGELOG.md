@@ -12,6 +12,15 @@
   proceed. The script now stamps `fired_at` itself and discards a caller-supplied value. A wrong
   time is worse than no time, because it reads as evidence.
 
+- `/research` step 1 wrote `_pre-analysis.json` and only then displayed the prompt and blocked,
+  so the record was on disk before a choice existed and nothing said to update it afterwards.
+  A live run did the only thing left to it and patched the file by hand, putting `user_choice`
+  inside `gate_specific` (section 4 of the schema says envelope level, which is where consumers
+  look) with the value `proceed_flat` (the enum is `y` / `n` / `s` / `bypassed`). The atomic
+  writer was right there and the run edited around it. Step 1 now blocks first and writes once,
+  with `user_choice` in the payload, and says not to patch the file afterwards. Step 3's
+  dev-guides gate already had this order; step 1 was the outlier.
+
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /
