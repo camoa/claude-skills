@@ -24,7 +24,10 @@
 ### Added
 - `gate-audit-write.sh` accepts the `gate_specific` object on its own and builds the envelope
   around it, deriving `schema_version` from the gate type and hoisting `user_choice` /
-  `bypass_reason` to where section 4 of the schema says they belong. The complete-envelope form
+  `bypass_reason` to where section 4 of the schema says they belong. Hoisting applies to the
+  complete-envelope form too: a live run passed `user_choice: "continue"` inside
+  `gate_specific`, one level below where every envelope reader looks. The lift only fills an
+  empty envelope slot, so a caller that placed the answer correctly keeps it. The complete-envelope form
   still works, so no existing caller changed. This is the shape callers already reached for: a
   live run passed the bare object, got `schema_version must be one of ... (got "")`, and had to
   open the script to recover — one wasted round-trip per gate, per run. `/research` step 1 and
