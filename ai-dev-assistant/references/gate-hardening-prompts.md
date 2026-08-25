@@ -1,10 +1,10 @@
-# Gate Hardening Prompts v1.6
+# Gate Hardening Prompts v1.7
 
 **Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions).
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
-The framework's hardened gates use **literal mandated wording** for user prompts. Literal-wording IS the rationalization-resistance mechanism — agents trained on English are constrained from paraphrasing English templates, which removes the "soften this for the user" failure mode. Authoring rules (the "Template authoring rules" section) forbid paraphrase, reorder, pre-answer, and truncation.
+The framework's hardened gates use **literal mandated wording** for user prompts, and since v5.30.1 that wording is produced by `scripts/prompt-render.sh` rather than transcribed by whoever is running the command. Literal wording is the rationalization-resistance mechanism; rendering is what makes it hold, because a template that a model retypes comes out close rather than identical, and close is where the internal vocabulary gets back in. Authoring rules forbid paraphrase, reorder, pre-answer, and truncation, and rule 7 forbids retyping altogether.
 
 The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prompts; no templates here.
 
@@ -18,6 +18,9 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `coverage-mapping-fail` | `/research` end-of-phase on `verdict: fail` | `missing_questions` (multi-line) | `[a]` |
 | `skill-review-decision` | `/complete` on `skills/*/SKILL.md` staged change | `skills_reviewed`, `findings` | **none** — user MUST pick |
 | `plugin-validate-decision` | `/complete` on plugin file staged change | `plugins_validated`, `findings` | **none** — user MUST pick |
+| `dev-guides-preflight` (v1.7+) | `/research`, `/design`, `/implement` before guides load | `task_name`, `methodology_floor`, `matched_domain_guides` | `[c]` |
+| `scope-contract-offer` (v1.7+) | `/research`, `/design`, `/implement` when a scope contract is absent | `task_name`, `level` | `[n]` |
+| `prior-art-ask` (v1.7+) | `/research` before the internal prior-art search | `project_name` | **none** — an unanswered ask is recorded as unasked |
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 | `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
 | `review-summary` (v1.2+; two-axis v1.6+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `spec_verdict_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
@@ -33,6 +36,11 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 4. **No pre-answer** — framework refuses to add "I think the answer is X" before the prompt
 5. **No reorder** — option lists ([y]/[n]/[s] etc.) preserve order
 6. **No truncate** — even on long content, framework shows verbatim agent output (per show-not-summarize)
+7. **Rendered, never retyped (v1.7+)** — a command calls `scripts/prompt-render.sh <template-id> key=value …` and shows the user exactly what the script printed. It does not transcribe a template body into its own prose, and it does not describe the wording inline.
+
+**Why rule 7 exists.** Rules 1–6 were the whole mechanism until v5.30.1 and they are not sufficient. On the first live run after `dev-guides-preflight`, `scope-contract-offer`, and `prior-art-ask` were written, both prompts that fired were composed fresh. One asked a person which section was missing from which file and named a numbered phase, which is what its template replaces. Nothing had malfunctioned: `dev-guides-preflight` was never wired at all — three command bodies still described the two groups inline with different labels than the template uses — and `scope-contract-offer` was cited correctly and paraphrased anyway.
+
+An instruction to reproduce text exactly, addressed to a model, produces text that is close. Close is the failure: the labels shift, the explanation gets dropped as redundant, and the internal vocabulary the template exists to keep out comes back in through the improvised half. The renderer removes the transcription step. `tests/prompt-template-spec.sh` checks that each of these prompts is rendered rather than worded, and that a render is the file's body character for character.
 
 ## Template ID: `pre-analysis-decision`
 
@@ -88,9 +96,12 @@ Matched to this task:
 
 ## Template ID: `scope-contract-offer`
 
-The offer at `/research` step 5, `/design`, and `/implement`. `{{level}}` is either
-`this task` or `the research phase`; say which one is being scoped, because the two
-offers differ only in scope and a person cannot tell them apart otherwise.
+Offered by `/research`, `/design`, and `/implement` when a scope contract is absent.
+`{{level}}` is one of `this task`, `the research phase`, `the architecture phase`, or
+`the implementation phase`; say which one is being scoped, because the offers differ
+only in scope and a person cannot tell them apart otherwise. Pass it to
+`scripts/prompt-render.sh` — an unsubstituted `{{level}}` stops the render rather than
+reaching a person.
 
 ```
 {{task_name}} has no written scope contract for {{level}}.
