@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.30.4] - 2026-08-25
+
+### Fixed
+- A finished task and a never-started one read the same. `fm_read` returned the string `draft`
+  in five places: four where the read had failed or the file carried no frontmatter, and once as
+  the default for an absent key. The no-frontmatter path also returned `warnings: []`, so nothing
+  in the object said a read had not happened. Observed on a task that had just passed review:
+  `status: draft`, no warnings. `status` is now `null` wherever nothing on disk said otherwise,
+  and the no-frontmatter path carries a `frontmatter_absent` warning. `kind` follows the same
+  rule but keeps `flat` where the file was read and declared no hierarchy, because that is a fact
+  about the file rather than a fallback; where nothing was read at all, `kind` is `null` too.
+  `migrate-to-epic.sh` resolves a null status before writing it into a new epic's frontmatter, so
+  an unknown does not become a recorded value on the way through.
+
 ## [5.30.3] - 2026-08-25
 
 ### Fixed
