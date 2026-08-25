@@ -115,12 +115,33 @@ callers cite instead of re-describing the steps inline.
      `e2e-setup`; `research`/`design`/`implement` carry no required token, so their lint is a clean no-op).
      **Never block** — an absent declaration is a valid agnostic-floor choice. Capture each kernel's JSON
      for the audit below.
+   - **Assess whether the method fits the task (v5.30.1+).** Before recording, read the resolved body
+     and answer one question about each: does this method describe the kind of work this task actually
+     does? Routing chose it by phase and framework alone and never asked what the task is, so the answer
+     is genuinely open. Record it as `frameworks[].method_fit` = `{verdict, reason}`, verdict one of
+     `fits` / `partial` / `mismatch` / `undetermined`, reason one line and mandatory for `partial` and
+     `mismatch`. `undetermined` is a real answer for a body you did not read; what is not allowed is
+     leaving it out, because an unassessed recipe then reads exactly like a suitable one.
+     **A mismatch never changes what you do here.** Inject the body verbatim as this protocol requires
+     and follow it. A mismatch means the method's own steps may return an explicit nothing-applicable,
+     and that a later phase should read the verdict rather than assume the work was measured against a
+     method that suited it. Do not manufacture work to satisfy an ill-fitting recipe, and do not skip
+     the recipe because it fits poorly.
+     **Then make it durable.** `_recipe-load.json` is overwrite-on-fire, so a verdict written only there
+     is gone at the next phase. Append `fit=<verdict>` to this recipe's line in `project_state.md`'s
+     `**Process Recipes:**` block — `- design/drupal/architecture → source=dev-guides fit=mismatch`.
+     `scripts/project-state-read.sh` parses it into `processRecipes[].fit`; absent parses as `null`.
+     This step exists because it twice did not. An environment task — three configuration values and a
+     build — was handed a contrib-module prior-art method, then a service-and-plugin architecture method.
+     Both phases saw it and wrote a paragraph into a `notes` key no consumer reads, and both times the
+     observation was gone by the next phase.
    - **Record `_recipe-load.json`** — every phase run that resolves recipes and has a task folder in scope.
      Assemble the `recipe-load` payload (`references/gate-audit-schema.md` §5.12) and write it with
      `scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"`. Include every framework the
      phase considered (resolved or not) with its `source`/`verified`/`available`/`body_path`, its
-     `declarations_audit` (the kernel JSON, or `null` for `research`/`design`), the surfaced `advisory`
-     (or `null`), and a `bypass` object for any no-recipe outcome (`no_frameworks_defined`,
+     `declarations_audit` (the kernel JSON, or `null` for `research`/`design`), its `method_fit` from the
+     step above, the surfaced `advisory` (or `null`), `resolved_count`, and a `bypass` object for any
+     no-recipe outcome (`no_frameworks_defined`,
      `navigator_unavailable`, `recipe_not_published`, `user_declined`). This makes resolution **auditable
      and idempotent across resume** and records the degrade-first path rather than leaving it silent.
      The setup commands (`/setup-e2e`, `/setup-visual-regression`) may run before a task folder exists —

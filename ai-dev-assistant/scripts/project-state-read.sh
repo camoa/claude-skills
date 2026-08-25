@@ -52,6 +52,7 @@
 #   visual_review_no_path      — **Visual Review:** line has a state but no registry path
 #   visual_review_path_escape  — **Visual Review:** registry path escapes the project folder
 #   process_recipe_bad_source  — a process_recipes slot has source not in dev-guides|local|research
+#   process_recipe_bad_fit     — a process_recipes slot has fit not in fits|partial|mismatch|undetermined
 #   run_mode_bad_value         — **Run Mode:** value not in interactive|autonomous (coerced to interactive)
 #   task_rule_bad_value        — **Task Rule:** value not in installed|(none)
 #
@@ -526,9 +527,17 @@ fi
 #   - e2e-setup/nextjs/playwright → source=dev-guides
 #   - e2e-setup/symfony/panther → source=local
 # Only → and -> are accepted as key/attrs separator (= would collide with attr key=value pairs).
-# Source-only records — nothing is pinned. Lenient: any other token on the line
-# (e.g. a leftover pinned_sha=... from an older format) is ignored; we parse the
-# source and drop the rest so stale files do not break.
+#   - design/drupal/architecture → source=dev-guides fit=mismatch
+# Lenient: any other token on the line (e.g. a leftover pinned_sha=... from an older
+# format) is ignored, so stale files do not break.
+#
+# `fit=` records whether the recipe's method suited the task it was handed (v5.30.1+).
+# Routing picks a recipe by phase and framework and never by what kind of work the task
+# is, so a task that edits three config values and runs a build was twice handed a
+# feature-building method: contrib-module prior art, then service-and-plugin architecture.
+# Both times the phase recorded the mismatch as prose in a notes key nothing reads, and
+# both times it was gone by the next phase. An absent fit parses as null, never as a good
+# fit — nobody assessed it is a different fact from it suited the task.
 # H2 fix rationale: emit key/source as TAB-separated text from awk; build JSON in jq.
 PROC_REC_LINES=$(awk '
   BEGIN { in_block = 0 }
@@ -545,10 +554,15 @@ PROC_REC_LINES=$(awk '
       gsub(/\t/, " ", key)
       gsub(/\t/, " ", attrs)
       src = ""
+      fit = ""
       n = split(attrs, pairs, /[[:space:]]+/)
       for (i = 1; i <= n; i++) {
         if (pairs[i] ~ /^source=/) {
           src = substr(pairs[i], 8)
+        }
+        else if (pairs[i] ~ /^fit=/) {
+          fit = substr(pairs[i], 5)
+          gsub(/[,)]+$/, "", fit)
         }
         # `source:` with a colon, optionally parenthesised and comma-terminated, is the shape a model
         # writes when it composes the block by hand instead of calling write_source_record. Observed on
@@ -566,19 +580,23 @@ PROC_REC_LINES=$(awk '
         }
         # Any other token (e.g. a stale pinned_sha=...) is ignored on purpose.
       }
-      printf("%s\t%s\n", key, src)
+      printf("%s\t%s\t%s\n", key, src, fit)
     }
   }
 ' "$PROJECT_STATE")
 
 # Validate sources and add warnings (must run before building the JSON array so WARNINGS is up to date)
 if [ -n "$PROC_REC_LINES" ]; then
-  while IFS=$'\t' read -r rec_key rec_src; do
+  while IFS=$'\t' read -r rec_key rec_src rec_fit; do
     [ -z "$rec_key" ] && continue
     case "$rec_src" in
       dev-guides|local|machine-local|research) ;;
       "") add_warning "process_recipe_bad_source" "process_recipes slot '$rec_key' missing source" ;;
       *)  add_warning "process_recipe_bad_source" "expected source dev-guides|local|machine-local|research, got: $rec_src (slot: $rec_key)" ;;
+    esac
+    case "$rec_fit" in
+      fits|partial|mismatch|undetermined|"") ;;
+      *) add_warning "process_recipe_bad_fit" "expected fit fits|partial|mismatch|undetermined, got: $rec_fit (slot: $rec_key)" ;;
     esac
   done <<< "$PROC_REC_LINES"
 fi
@@ -590,7 +608,8 @@ else
     split("\n") | map(select(length > 0)) | map(split("\t")) |
     map({
       key: .[0],
-      source: (if .[1] == "" then null else .[1] end)
+      source: (if .[1] == "" then null else .[1] end),
+      fit: (if (.[2] // "") == "" then null else .[2] end)
     })')
   [ -z "$PROCESS_RECIPES" ] && PROCESS_RECIPES="[]"
 fi
