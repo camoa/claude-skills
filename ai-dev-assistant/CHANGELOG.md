@@ -1,5 +1,60 @@
 # Changelog
 
+## [5.30.3] - 2026-08-25
+
+### Fixed
+- The record check confirmed a file existed, not that the phase had produced it. Every JSON
+  record in a task folder is overwrite-on-fire and none is deleted between phases, so a record
+  written three phases earlier satisfied the contract of a phase that never ran the step.
+  Observed live: `_mechanism-challenge.json` stamped `phase: design` counted as implementation's
+  copy of the gate that command calls unskippable, and a research-phase `_distill.json` counted
+  for both later phases. The check could not tell a phase that did the work from one that
+  inherited the file, which is the same failure it exists to catch one level up. Records are now
+  attributed: one naming this phase is `present`, one naming another phase is `carried` where the
+  contract allows reuse and `stale` where it does not, and one naming no phase at all is
+  `unattributed` and does not satisfy a required entry. Each record reports `written_by_phase`.
+  The mechanism challenge is the one carryable record, because its backstop is specified to reuse
+  an existing record when the mechanisms hash still matches.
+- The review phase had no record contract and no phase declaration. Design and implement got
+  contracts in 5.30.1 and review was left out, so the last phase in the lifecycle — the one that
+  decides whether the work ships — answered `unknown` about its own records for a whole live
+  round. Review also never called `phase-active-write.sh`, which the other three phase commands
+  have done since 5.29.0, so every record it wrote was compared against a null phase and reported
+  `undetermined`. It now declares its phase at entry and carries a contract naming what it writes
+  (`_review.json`, `_spec.json`, `_recipe-load.json`) and what it asserts from earlier phases (the
+  mechanism challenge and the internal prior-art search).
+- Attribution gained a third mode. Several records carry no phase field and never did, because
+  only one phase ever writes them — `_review.json` cannot be anyone's but review's, the way
+  `architecture.md` is design's. Those are marked `implicit` and attributed by name; demanding a
+  field their payloads never had would invent a requirement rather than check one. The exemption
+  is per record, so anything that does carry a phase must still match.
+- `missing_required` counted only records with status `missing`, so a phase could report
+  `incomplete` alongside a count of zero. It now counts every required record that did not
+  satisfy, whatever the reason.
+- Auditing a phase after a later one has run finds its records replaced rather than absent. That
+  case now carries a `records_overwritten_by_a_later_phase` warning, so a retrospective check does
+  not read as a phase that skipped its work.
+
+- The review judged a diff that could not contain the change. `/review` resolved its change set
+  as `git diff $(git merge-base "$BASE" HEAD)..HEAD` — the committed change and nothing else —
+  while step 3 of the same command warns the operator that gates run on staged and working-tree
+  state. Review runs before the pull request exists, so a task's change is normally uncommitted at
+  that moment. Observed live: a finished task with its change in the working tree produced an
+  empty merge-base diff, and the spec reviewer would have been handed no implementation, found
+  every success criterion unimplemented, and hard-failed a task that was complete. It passed only
+  because the session noticed and fed it the working-tree diff by hand. `scripts/review-change-set.sh`
+  now resolves the set as committed plus staged plus modified, records which sources contributed,
+  and reports untracked files separately so `install-task-rule`'s own `CLAUDE.md` is never judged
+  as the task's work. The spec axis, the code-quality file filter, and the change-impact dispatch
+  all read that set.
+- An empty change set now skips the spec gate with its reason rather than failing every criterion,
+  and only when the reason is `no_changes_anywhere`. A base that did not resolve is reported as
+  `base_unresolvable` instead: the comparison never happened, and skipping on it would be
+  answering a question that was never asked.
+- The change-impact classifier was called without a file list, so it fell back to diffing
+  `main..HEAD` — the wrong base on any branch not named `main`, and blind to uncommitted work.
+  It is now passed the change set explicitly.
+
 ## [5.30.2] - 2026-08-25
 
 ### Fixed
