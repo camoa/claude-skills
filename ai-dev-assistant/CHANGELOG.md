@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.30.4] - 2026-08-25
+
+### Fixed
+- The review judged a diff that could not contain the change. `/review` resolved its change set
+  as `git diff $(git merge-base "$BASE" HEAD)..HEAD` — the committed change and nothing else —
+  while step 3 of the same command warns the operator that gates run on staged and working-tree
+  state. Review runs before the pull request exists, so a task's change is normally uncommitted at
+  that moment. Observed live: a finished task with its change in the working tree produced an
+  empty merge-base diff, and the spec reviewer would have been handed no implementation, found
+  every success criterion unimplemented, and hard-failed a task that was complete. It passed only
+  because the session noticed and fed it the working-tree diff by hand. `scripts/review-change-set.sh`
+  now resolves the set as committed plus staged plus modified, records which sources contributed,
+  and reports untracked files separately so `install-task-rule`'s own `CLAUDE.md` is never judged
+  as the task's work. The spec axis, the code-quality file filter, and the change-impact dispatch
+  all read that set.
+- An empty change set now skips the spec gate with its reason rather than failing every criterion,
+  and only when the reason is `no_changes_anywhere`. A base that did not resolve is reported as
+  `base_unresolvable` instead: the comparison never happened, and skipping on it would be
+  answering a question that was never asked.
+- The change-impact classifier was called without a file list, so it fell back to diffing
+  `main..HEAD` — the wrong base on any branch not named `main`, and blind to uncommitted work.
+  It is now passed the change set explicitly.
+
 ## [5.30.2] - 2026-08-25
 
 ### Fixed
