@@ -23,7 +23,14 @@
 
 set -uo pipefail
 
-SRC="${1:?usage: analysis-agent-normalize.sh <json-file>|-}"
+# `${1:?...}` prints bash's own "line N: 1: usage" prefix, where the `1` is the positional
+# parameter's name. A live run hit it and had to work out that `1` meant "no argument given".
+if [ $# -lt 1 ]; then
+  echo "usage: analysis-agent-normalize.sh <json-file>|-" >&2
+  echo "  Pass a file holding the agent's JSON, or - to read it from stdin." >&2
+  exit 1
+fi
+SRC="$1"
 
 if [ "$SRC" = "-" ]; then
   RAW=$(cat)

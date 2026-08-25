@@ -76,9 +76,44 @@ OUT=$(bash "$K" "$(mk cond $REQUIRED)" --phase research)
 # A phase this script has no contract for has not been checked. Saying complete would make the
 # check the same kind of confident wrong answer it exists to catch.
 # shellcheck disable=SC2086
-[ "$(bash "$K" "$(mk other $REQUIRED)" --phase design | jq -r .verdict)" = "unknown" ] \
+[ "$(bash "$K" "$(mk other $REQUIRED)" --phase review | jq -r .verdict)" = "unknown" ] \
   && pass_check "a phase with no encoded contract reports unknown" \
   || fail_check "an unchecked phase must never report complete"
+
+# --- design and implement are checked, not waved through -----------------------
+# Research was the only phase with a contract until v5.30.1. A live design phase ran this and
+# got `unknown`: honest, and useless. The guardrail that had already caught one skipped gate
+# could not look at the phase after it, or at implementation after that.
+DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md"
+IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md"
+
+# shellcheck disable=SC2086
+[ "$(bash "$K" "$(mk dfull $DESIGN_REQ)" --phase design | jq -r .verdict)" = "complete" ] \
+  && pass_check "a design phase with every record reports complete" \
+  || fail_check "design is checked but a complete one does not report complete"
+
+# shellcheck disable=SC2086
+[ "$(bash "$K" "$(mk ifull $IMPL_REQ)" --phase implement | jq -r .verdict)" = "complete" ] \
+  && pass_check "an implement phase with every record reports complete" \
+  || fail_check "implement is checked but a complete one does not report complete"
+
+# The gap that started this: a phase declaration that never landed in the task folder is the
+# record whose absence made every bypass report `undetermined`.
+DOUT=$(bash "$K" "$(mk dgap _dev-guides-load.json _playbook-load.json architecture.md)" --phase design)
+[ "$(printf '%s' "$DOUT" | jq -r .verdict)" = "incomplete" ] \
+  && pass_check "a design phase missing a required record reports incomplete" \
+  || fail_check "a design phase missing a required record was waved through"
+[ "$(printf '%s' "$DOUT" | jq -r '.records[]|select(.name=="_phase-active.json")|.producer')" \
+  = "phase-active-write.sh with the task folder" ] \
+  && pass_check "the missing design record names who was supposed to write it" \
+  || fail_check "a missing design record is a puzzle rather than an instruction"
+
+# Neither phase may report complete on an empty task folder.
+for ph in design implement; do
+  [ "$(bash "$K" "$(mk "empty-$ph")" --phase "$ph" | jq -r .verdict)" = "incomplete" ] \
+    && pass_check "an empty task folder is incomplete for $ph" \
+    || fail_check "an empty task folder reported something other than incomplete for $ph"
+done
 
 # --- defensive posture ----------------------------------------------------------
 bash "$K" "$T/nope" --phase research | jq empty >/dev/null 2>&1 \

@@ -29,6 +29,12 @@
 #   unknown — the phase has no record contract encoded here. Never reported as complete: a phase
 #             this script does not know about has not been checked, and saying otherwise would make
 #             the check itself the kind of confident wrong answer it exists to catch.
+#
+# Research was the only phase with a contract until v5.30.1, so this check caught a skipped gate
+# once and then went quiet. A live design phase ran it and got `unknown` — honestly reported, and
+# useless: the one guardrail that had already found a real gap could not look at the phase that
+# came next, or at implementation after it. An honest `unknown` on every phase but one is a check
+# that has stopped checking. Design and implement now carry contracts too.
 set -uo pipefail
 
 TASK_DIR="${1:-}"; PHASE="research"
@@ -75,6 +81,23 @@ _internal-prior-art.json|required|the internal-prior-art-finder skill|step 5a
 research.md|required|the phase itself|step 6
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 6
 _coverage-mapping.json|conditional|the coverage-mapping gate|step 6
+_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
+_distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
+  design) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
+_dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 2
+_playbook-load.json|required|playbook-load-deterministic.sh|step 3
+architecture.md|required|the architecture-drafter agent|step 5
+_recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 2
+_mechanism-challenge.json|conditional|the mechanism-challenge refresh, when the design commits to a mechanism|step 5
+_pre-analysis.json|conditional|analysis-agent (folder mode), the post-design epic check|step 6
+_create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2
+_distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|step 11' ;;
+  implement) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
+_dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
+_playbook-load.json|required|playbook-load-deterministic.sh|step 4
+implementation.md|required|the phase itself|step 7
+_recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
+_pre-analysis.json|conditional|analysis-agent (folder mode), the post-plan epic check|step 8
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
   *) add_warn "no_record_contract_for_phase:$PHASE"

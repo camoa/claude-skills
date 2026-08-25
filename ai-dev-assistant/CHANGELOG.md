@@ -31,6 +31,21 @@
   did not carry, and makes a failed fit check report itself rather than read as finding no
   problems.
 
+- The record-completeness check knew only the research phase. It exists because a session can
+  read a protocol, do the work itself, and leave none of the records the protocol's skills would
+  have written; it caught exactly that once. A live design phase then ran it and got
+  `verdict: "unknown"` — honestly reported, and useless, because the guardrail that had already
+  found a real gap could not look at the phase after it or at implementation after that. An
+  honest `unknown` on every phase but one is a check that has stopped checking. `design` and
+  `implement` now carry contracts naming each record, whether it is required or conditional, and
+  who was supposed to write it.
+- `analysis-agent-normalize.sh` called with no argument printed bash's own
+  `line 26: 1: usage: ...`, where the `1` is the name of the positional parameter. A live run hit
+  it and had to work out that the `1` said nothing about its input. It now prints a usage line and
+  the stdin form. The script also had no test at all, despite every phase piping the analysis
+  agent's output through it; `tests/analysis-agent-normalize-spec.sh` covers the confidence clamp
+  and both documented exits.
+
 ### Known gaps
 - Recipe routing still has two dimensions. `method_fit` records that the wrong method arrived; it
   does not stop it arriving. Routing by the kind of work a task does is unbuilt.
