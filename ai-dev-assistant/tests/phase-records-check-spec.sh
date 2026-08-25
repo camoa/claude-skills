@@ -84,8 +84,8 @@ OUT=$(bash "$K" "$(mk cond $REQUIRED)" --phase research)
 # Research was the only phase with a contract until v5.30.1. A live design phase ran this and
 # got `unknown`: honest, and useless. The guardrail that had already caught one skipped gate
 # could not look at the phase after it, or at implementation after that.
-DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md"
-IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md"
+DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md _mechanism-challenge.json"
+IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md _mechanism-challenge.json"
 
 # shellcheck disable=SC2086
 [ "$(bash "$K" "$(mk dfull $DESIGN_REQ)" --phase design | jq -r .verdict)" = "complete" ] \
@@ -107,6 +107,32 @@ DOUT=$(bash "$K" "$(mk dgap _dev-guides-load.json _playbook-load.json architectu
   = "phase-active-write.sh with the task folder" ] \
   && pass_check "the missing design record names who was supposed to write it" \
   || fail_check "a missing design record is a puzzle rather than an instruction"
+
+# The gate `/implement` calls "the unskippable catch" was not in its contract at all, so a phase
+# that skipped it still read complete. Both phases run the challenge unconditionally.
+for ph in design implement; do
+  case "$ph" in
+    design) OTHERS="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md" ;;
+    *)      OTHERS="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md" ;;
+  esac
+  # shellcheck disable=SC2086
+  MOUT=$(bash "$K" "$(mk "nomech-$ph" $OTHERS)" --phase "$ph")
+  [ "$(printf '%s' "$MOUT" | jq -r .verdict)" = "incomplete" ] \
+    && pass_check "a $ph phase with no mechanism-challenge record reports incomplete" \
+    || fail_check "a $ph phase skipped the unskippable challenge and read complete"
+  [ "$(printf '%s' "$MOUT" | jq -r '.records[]|select(.name=="_mechanism-challenge.json")|.requirement')" = "required" ] \
+    && pass_check "the mechanism-challenge record is required for $ph, not conditional" \
+    || fail_check "the mechanism-challenge record is not required for $ph, so its absence never counts"
+done
+
+# A contract answers what THIS phase owes. The epic check these phases run branches and stays
+# silent; nothing in either command writes _pre-analysis.json, so listing it was a category error.
+for ph in design implement; do
+  [ "$(bash "$K" "$(mk "pa-$ph" _phase-active.json)" --phase "$ph" \
+       | jq -r '[.records[]|select(.name=="_pre-analysis.json")]|length')" = "0" ] \
+    && pass_check "$ph does not claim a record it never writes" \
+    || fail_check "$ph's contract lists _pre-analysis.json, which belongs to research"
+done
 
 # Neither phase may report complete on an empty task folder.
 for ph in design implement; do

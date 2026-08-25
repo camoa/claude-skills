@@ -35,6 +35,16 @@
 # useless: the one guardrail that had already found a real gap could not look at the phase that
 # came next, or at implementation after it. An honest `unknown` on every phase but one is a check
 # that has stopped checking. Design and implement now carry contracts too.
+#
+# Those two contracts were then derived by reading the command bodies rather than by watching a
+# run, and the next live phase found what that missed. `/implement` calls the mechanism challenge
+# "the unskippable catch" and writes its record either way, and the contract did not list the
+# record at all, so a phase that skipped an unskippable gate still read `complete`. The design
+# entry had it as conditional when its step is equally unconditional. Both are required now.
+#
+# `_pre-analysis.json` was listed for both and belongs to neither: the epic check those phases run
+# branches and stays silent, and nothing in either command writes that record. A contract answers
+# what THIS phase owes, so a record it never produces has no place in it.
 set -uo pipefail
 
 TASK_DIR="${1:-}"; PHASE="research"
@@ -88,16 +98,15 @@ _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agen
 _playbook-load.json|required|playbook-load-deterministic.sh|step 3
 architecture.md|required|the architecture-drafter agent|step 5
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 2
-_mechanism-challenge.json|conditional|the mechanism-challenge refresh, when the design commits to a mechanism|step 5
-_pre-analysis.json|conditional|analysis-agent (folder mode), the post-design epic check|step 6
+_mechanism-challenge.json|required|the mechanism-challenge refresh, which the design step runs unconditionally|step 4
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|step 11' ;;
   implement) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 3
 _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 implementation.md|required|the phase itself|step 7
+_mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
-_pre-analysis.json|conditional|analysis-agent (folder mode), the post-plan epic check|step 8
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
   *) add_warn "no_record_contract_for_phase:$PHASE"
