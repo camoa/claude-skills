@@ -7,6 +7,11 @@
 # deterministic invocation. Reads project_state.md via project-state-read.sh,
 # resolves playbookSets, loads userPlaybook via playbook-read.sh.
 #
+# PRINTS the gate_specific object on stdout. It does NOT write _playbook-load.json:
+# it is handed a project folder and cannot know which task is active. The caller adds
+# `phase` and writes the record through gate-audit-write.sh. Leaving this output on
+# stdout leaves no audit behind, and the phase then fails its own records check.
+#
 # Output (per references/gate-audit-schema.md gate_specific shape):
 #   {
 #     "playbook_sets_loaded": [...],

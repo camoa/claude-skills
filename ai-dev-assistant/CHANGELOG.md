@@ -3,6 +3,27 @@
 ## [5.30.7] - 2026-08-26
 
 ### Fixed
+- A phase could not produce a record its own contract required. `playbook-load-deterministic.sh`
+  **prints** the `gate_specific` object — it is handed a project folder and cannot know which task
+  is active — while `/research`, `/design` and `/implement` all said it "writes
+  `_playbook-load.json` audit". Nothing told the caller to pass that stdout to
+  `gate-audit-write.sh`, so on a live run the payload went to the terminal, the record did not
+  exist, and the end-of-phase records check reported it missing. `/upgrade-project`, the retrofit
+  path, had the wrapping right all along. All three phase commands now say the loader prints, and
+  wire its output to the writer.
+- `phase` was documented, required for attribution, and not demanded at the write.
+  `_dev-guides-load.json` and `_playbook-load.json` are the two records every phase contract
+  attributes by phase — neither carries the `implicit` flag — and the schema documents `phase` as
+  the first `gate_specific` field. But `dev-guides-load` required only `methodology_floor` and
+  `guides_actually_loaded`, and `playbook-load` required nothing at all. A record written without
+  it passed the writer in silence and then read `unattributed` at the end of the phase, a long way
+  from the cause. Both now demand `phase`, the way `recipe-load` already did.
+- The `method_fit` check crashed on a type it did not expect and showed a person the crash. When
+  `method_fit` arrived as a bare string instead of the `{verdict, reason}` object,
+  `($fit.verdict // "")` raised `Cannot index string with string "verdict"`, and that raw jq
+  message was what reached the terminal. The wrapper added in 5.30.1 did its job — a jq failure
+  reports itself rather than reading as clean — but the message was not something anyone could act
+  on. A non-object `method_fit` is now named as what it is.
 - The pre-analysis verdict prompt reached a person with its conditional markers intact. The
   `pre-analysis-decision` template carried three `{{#if decision == "..."}}` branches, and
   `prompt-render.sh` substitutes `{{key}}` and evaluates nothing else. A live run printed all
