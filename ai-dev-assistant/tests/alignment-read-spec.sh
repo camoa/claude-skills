@@ -375,6 +375,96 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# A section with zero parsed content splits two ways (v1.2). Before this, both
+# reported section_empty_stub — so an author who wrote the four fields as bold
+# labels instead of H3 headings was told the section was empty while looking at
+# a screen full of their own text, and had to go read the grammar to find out
+# what was actually wrong.
+
+# T14: body content present, no recognized H3 → section_unparsed_body
+D="$(mkalign t14 <<'EOF'
+# Alignment: t14
+
+**Task:** t14
+**Created:** 2026-08-25
+
+## Task-Level
+
+**Goal**
+
+Published items whose dates have passed stay published indefinitely.
+
+**Success criteria**
+
+- [ ] A past item is unpublished automatically
+EOF
+)"
+arun "$D"
+W="$(jq -r '[.warnings[].code] | join(",")' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$W" = "section_unparsed_body" ] \
+  && [ "$(jq -r '.sections.task_level.present' <<<"$OUT")" = "false" ]; then
+  pass_check "T14 bold labels: section_unparsed_body, not section_empty_stub"
+else
+  fail_check "T14 bold labels: section_unparsed_body, not section_empty_stub" \
+    "warnings=$W present=$(jq -r '.sections.task_level.present' <<<"$OUT") rc=$RC"
+fi
+
+# T15: H2 with genuinely nothing under it keeps section_empty_stub
+D="$(mkalign t15 <<'EOF'
+# Alignment: t15
+
+**Task:** t15
+**Created:** 2026-08-25
+
+## Task-Level
+EOF
+)"
+arun "$D"
+W="$(jq -r '[.warnings[].code] | join(",")' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$W" = "section_empty_stub" ] \
+  && [ "$(jq -r '.sections.task_level.present' <<<"$OUT")" = "false" ]; then
+  pass_check "T15 genuinely empty H2 still reports section_empty_stub"
+else
+  fail_check "T15 genuinely empty H2 still reports section_empty_stub" \
+    "warnings=$W present=$(jq -r '.sections.task_level.present' <<<"$OUT") rc=$RC"
+fi
+
+# T16: a well-formed section with a line of preamble under the H2 before the
+# first H3 is NOT flagged — it parsed fine, so neither warning applies
+D="$(mkalign t16 <<'EOF'
+# Alignment: t16
+
+**Task:** t16
+**Created:** 2026-08-25
+
+## Task-Level
+
+A sentence of preamble that belongs to no field.
+
+### Goal
+
+g
+
+### Success criteria
+
+- [ ] a criterion
+EOF
+)"
+arun "$D"
+W="$(jq -r '[.warnings[].code] | join(",")' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(jq -r '.sections.task_level.present' <<<"$OUT")" = "true" ] \
+  && [[ "$W" != *"section_unparsed_body"* ]] \
+  && [[ "$W" != *"section_empty_stub"* ]]; then
+  pass_check "T16 preamble under a populated H2 raises neither stub warning"
+else
+  fail_check "T16 preamble under a populated H2 raises neither stub warning" \
+    "warnings=$W present=$(jq -r '.sections.task_level.present' <<<"$OUT") rc=$RC"
+fi
+
+# ---------------------------------------------------------------------------
 echo "----"
 echo "alignment-read-spec: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -202,7 +202,30 @@ Create the file with:
 <section>
 ```
 
-Where `<section>` is the H2 block you just authored.
+Where `<section>` is the H2 block you just authored, in exactly this shape:
+
+```markdown
+## Task-Level
+
+### Goal
+
+<prose>
+
+### Expected result
+
+<prose>
+
+### Success criteria
+
+- [ ] <falsifiable statement> — verify: <how it will be checked>
+- [ ] <falsifiable statement>
+
+### Non-goals
+
+- <thing explicitly out of scope>
+```
+
+**The four field names are H3 headings (`### Goal`), never bold labels (`**Goal**`).** The reader keys on the heading level: a section written with bold labels parses as having no fields at all, so `present` comes back `false` and the whole contract is invisible to `/research`, `/design` and `/implement` even though the file is full of content. Phase sections use the same four H3s under `## Phase 1 — Research` / `## Phase 2 — Architecture` / `## Phase 3 — Implementation`. Full grammar, including the optional `— verify:` suffix and every warning code, is in `references/alignment-contract.md`.
 
 **Success-criterion format.** Write each criterion as a task-list line `- [ ] <text>`. When the user declared how a criterion will be verified, append the optional suffix `- [ ] <text> — verify: <how>` (space, em-dash, space, `verify:`, space). Omit the suffix when no verification note was given. The reader parses it into `{text, checked, verification}` per `references/alignment-contract.md` §5.2.
 

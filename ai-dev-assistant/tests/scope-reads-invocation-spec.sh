@@ -56,6 +56,13 @@ have   scope.md "mode: reaching open exploration by drift is a bug"        'is a
 absent scope.md "mode: disk-only table header is gone"                     '^\| task\.md state \| Mode \|'
 absent scope.md "mode: unconditional empty-stub row is gone"               '^\| Stub / empty \| \*\*Open exploration\*\*'
 
+# --- The command renders the artifact's shape, so it need not be recalled ---
+have   scope.md "template: shows the H3 field headings"                     '^### Goal$'
+have   scope.md "template: shows all four fields"                           '^### Non-goals$'
+have   scope.md "template: shows the verify suffix in place"                'verify: <how it will be checked>'
+have   scope.md "template: H3 vs bold labels is stated outright"            'never bold labels'
+have   scope.md "template: says what breaks — the contract goes invisible"  'invisible to'
+
 # --- Defect 2: the phase boundary is stated ---
 have   scope.md "boundary: investigating the codebase is prohibited here"  'Do not investigate the codebase to answer the scope questions'
 have   scope.md "boundary: named as Phase 1 / research work"               'is Phase 1'

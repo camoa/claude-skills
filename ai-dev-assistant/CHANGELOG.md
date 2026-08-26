@@ -3,6 +3,23 @@
 ## [5.30.6] - 2026-08-25
 
 ### Fixed
+- `/scope` never showed the shape of the artifact it exists to write. Three hundred lines
+  instructing the author to produce a four-field contract, and not one occurrence of `### Goal`
+  anywhere in them — the "Writing `alignment.md`" section showed the H1 and metadata lines and
+  then a bare `<section>` placeholder. A live run wrote the four fields as bold labels, which the
+  reader does not parse, and had to go read `references/alignment-contract.md` to find out why.
+  The command now renders the full section template, states outright that the field names are H3
+  headings and never bold labels, and says what goes wrong when they are not: the section parses
+  as having no fields, `present` comes back `false`, and the contract is invisible to `/research`,
+  `/design` and `/implement` while the file sits there full of content.
+- The reader named the wrong problem when it could not parse a section. A `## Task-Level` carrying
+  two kilobytes of content in an unrecognized shape reported `section_empty_stub` — the same code
+  as a heading with nothing under it at all. "Empty" sends an author hunting for content they can
+  see on the screen instead of at the heading level, which is exactly the detour the live run took.
+  Body text inside a recognized H2 that sits under no recognized H3 is now counted, and such a
+  section reports `section_unparsed_body` instead. `present` stays `false` for both, because
+  neither yields usable fields; the codes differ because the thing to go and fix differs. A
+  well-formed section with a line of preamble before its first H3 raises neither, since it parsed.
 - A success criterion that wrapped onto a second line was silently truncated to its first line,
   and a `— verify:` note that wrapped was lost or cut mid-sentence. `alignment-read.sh` walked the
   section buffer one line at a time: a line matching `- [ ]` became a criterion and a continuation

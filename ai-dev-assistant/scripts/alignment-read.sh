@@ -107,7 +107,20 @@ RECORDS=$(awk '
     }
   }
   function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3) {
-    if (cur_section == "" || cur_field == "") return
+    if (cur_section == "" || cur_field == "") {
+      # An H2 whose body sits under no recognized H3 field. Emitting nothing
+      # here makes the section read as an empty stub, which names the wrong
+      # problem: the author wrote the fields in a shape the grammar does not
+      # recognize (bold labels instead of H3 headings is the common one), and
+      # being told the section is empty sends them hunting for missing content
+      # rather than a wrong heading level. Recorded so the warning can say
+      # which of the two it actually is.
+      if (cur_section != "" && orphan_n > 0) {
+        printf "{\"kind\":\"orphan_body\",\"section\":\"%s\"}\n", cur_section
+        orphan_n = 0
+      }
+      return
+    }
     if (cur_field == "success_criteria") {
       had_item = 0
       join_wrapped()
@@ -196,6 +209,7 @@ RECORDS=$(awk '
     cur_section = ""
     cur_field = ""
     buf_n = 0
+    orphan_n = 0
     seen_h1 = 0
   }
   # H1: task title (first line only)
@@ -235,6 +249,7 @@ RECORDS=$(awk '
     }
     cur_field = ""
     buf_n = 0
+    orphan_n = 0
     next
   }
   # H3: field (only meaningful within a recognized section)
@@ -259,6 +274,13 @@ RECORDS=$(awk '
   # accumulate body lines for the current field
   cur_field != "" {
     buf[++buf_n] = $0
+  }
+  # Non-blank body inside a recognized H2 but under no recognized H3. Counted,
+  # never kept: enough to tell a section written in a shape the grammar does not
+  # recognize from a section nobody wrote at all. In a well-formed file only
+  # blank lines sit here, so the count stays zero.
+  cur_section != "" && cur_field == "" && /[^[:space:]]/ {
+    orphan_n++
   }
   END {
     flush_field()
@@ -357,8 +379,14 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "criteria_prose"))  | map({code: "success_criteria_not_checklist", section: .section})) as $w_crit_prose |
   (map(select(.kind == "non_goals_prose")) | map({code: "non_goals_not_bulleted", section: .section})) as $w_ngoal_prose |
 
-  # section_empty_stub warnings: H2 exists but zero content records
-  ($empty_stub_keys | map({code: "section_empty_stub", section: .})) as $w_empty_stub |
+  # An H2 with zero parsed content splits two ways, and the difference is the
+  # whole diagnostic: nothing was written, or something was written in a shape
+  # the grammar does not recognize.
+  (map(select(.kind == "orphan_body")) | map(.section) | unique) as $orphan_keys |
+  ($empty_stub_keys - $orphan_keys) as $truly_empty_keys |
+  ($empty_stub_keys - $truly_empty_keys) as $unparsed_keys |
+  ($truly_empty_keys | map({code: "section_empty_stub", section: .})) as $w_empty_stub |
+  ($unparsed_keys | map({code: "section_unparsed_body", section: .})) as $w_unparsed |
 
   # missing_field warnings from sections_final.fields_missing (truly absent H3s)
   ([$sections_final | to_entries[] | select(.value.present) | {sk: .key, fm: .value.fields_missing}]
@@ -371,6 +399,6 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     created: ($meta_created.created // null),
     schema_version: "1.0",
     sections: $sections_final,
-    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_missing)
+    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_unparsed + $w_missing)
   }
 '
