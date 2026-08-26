@@ -195,6 +195,50 @@ Each task goes through:
 /ai-dev-assistant:research report_formatter
 ```
 
+## Observing the system under study (v5.30.5+)
+
+Every source Step 6 names is documentary — process recipes, dev-guides, prior
+art, existing code. That covers research questions about *options*. It does not
+cover research questions about *current behavior*: why the software does what it
+does today, what a user actually sees, whether the thing the task describes is
+even happening for the reason assumed. Those answers are not in any document.
+They come from watching the system run.
+
+Phase 1 owns that read, and it is a research subject like any other.
+
+**When it applies.** A research question whose answer is a fact about the
+running system rather than a choice between approaches. "Which scheduling
+approach fits" is documentary. "Why are finished items still listed" is
+observational, and answering it from documents alone produces a confident guess.
+
+**Read through the interface the system presents, never past it into its
+datastore.** Query the application through its own API, its command-line
+tooling, its HTTP surface — whatever it exposes as the supported way in. Do not
+go to the database directly. The datastore does not apply the application's
+access rules, does not know derived, cached, unpublished or unsaved state, and
+does not run the layers that decide what a user is shown. A row count is a claim
+about rows; the question was about behavior, and the two disagree exactly where
+the interesting bugs live. An answer obtained past the interface can be
+confidently wrong in the direction that matters and carries nothing that says
+so.
+
+**The resolved process recipe names the stack's read tooling.** Where a
+framework's research recipe says how to query that stack, follow it. Where no
+recipe covers it, that is a gap worth recording as a finding — it is not a
+licence to reach past the application to get an answer faster.
+
+**Record the method with the finding.** A behavioral claim gets its own
+`research/<subject>.md` file and a Coverage Mapping row like any other subject,
+and states how it was obtained: what was run, against what environment, on what
+date. Environments drift and a claim about current behavior expires. A claim
+whose method is not written down cannot be re-checked by the next reader, which
+makes it indistinguishable from a claim that was never checked at all.
+
+**What you could not observe is part of the finding.** Say which states you did
+not reach — the logged-out view, the other language, the cached path, the role
+you do not have. Observation is sampling, and a finding that does not say what
+it sampled reads as a claim about the whole system.
+
 ## Output (v3.0.0)
 
 Creates folder structure:

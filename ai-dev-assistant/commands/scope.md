@@ -59,6 +59,7 @@ When scaffolding a missing task folder, write exactly this minimal `task.md` (Ph
 **Current Phase:** Phase 0 — Scope
 
 ## Goal
+<the invocation description verbatim, if one was given; otherwise the placeholder below>
 _To be authored via `/ai-dev-assistant:scope`. `/ai-dev-assistant:research` will replace this stub with the full Phase 1 tracker._
 
 ## Phase Status
@@ -74,6 +75,8 @@ _To be authored via `/ai-dev-assistant:scope`. `/ai-dev-assistant:research` will
 ## Notes
 Stub scaffolded by `/ai-dev-assistant:scope` on <YYYY-MM-DD>.
 ```
+
+**Seed `## Goal` from the invocation.** When `/scope` was invoked with a description after the task name, write that description into `## Goal` **verbatim, in the user's words**, and drop the placeholder line. Do not paraphrase it, do not reshape it into the 4-field contract here — that is Step 3's job with the user in the loop. Only when the invocation carried nothing beyond the task name does the placeholder get written. Writing the placeholder over a stated goal loses the user's words and mis-classifies the task as empty at Step 2.
 
 `/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by " note — the same marker family `/migrate-to-epic` stubs carry) and overwrite it with the full template rather than aborting on a pre-existing folder.
 
@@ -105,21 +108,24 @@ The conversation produces a 4-field contract (Goal / Expected result / Success c
 
 ### Step 1 — Read existing context first
 
-Before asking anything, read the task's current content:
+Before asking anything, read the task's current content. **The user's own invocation text is part of that content and is read first** — it is the freshest statement of intent on the table and the only source that is not on disk.
 
+0. **The invocation description** — everything the user typed after `<task-name>` on the `/scope` line. Frequently this already carries a Goal, an Expected result, and one or more Non-goals in the user's own words. Treat it as authored input, not as a passing remark: it feeds Step 2's mode selection and is seeded into the stub (see "Stub scaffolding"). If the invocation carried no description beyond the task name, there is nothing to read here and Step 2 classifies on disk content alone.
 1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/fm-read.sh "<task_folder>"` (Bash) and parse `.kind`, `.status`, description, dependencies.
 2. Read `task.md` body (Goal, Current State, Acceptance Criteria, Research Questions, Notes — whatever exists).
 3. Read `alignment.md` via `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh "<task_folder>"` (Bash) (should be missing or have no Task-Level section, since this command path only runs when we intend to author).
 
 ### Step 2 — Decide the conversation mode
 
-Based on what Step 1 surfaced:
+Based on everything Step 1 surfaced — the invocation description **and** `task.md`, counted together. A brand-new task whose folder was scaffolded this run has a stub on disk but may have arrived with a full problem statement in the invocation; classify on the combined content, never on the stub alone:
 
-| task.md state | Mode | Opening move |
+| Available content (invocation + task.md) | Mode | Opening move |
 |---|---|---|
 | Substantive Goal + ACs (≥40 words of content) | **Reflect-and-refine** | Paraphrase what's there, ask if the paraphrase captures the real driver or if something else is the point |
 | Partial content (Goal only, or just a title) | **Draft-and-confirm** | Propose a draft Goal + expected result from available context, ask what's missing or wrong |
-| Stub / empty | **Open exploration** | Ask openly what the user wants to achieve; multi-sentence answers welcome; refine iteratively |
+| Stub / empty **and** no invocation description | **Open exploration** | Ask openly what the user wants to achieve; multi-sentence answers welcome; refine iteratively |
+
+Open exploration is for when the user has genuinely said nothing yet. Reaching it because the invocation text was set aside is a bug in this command's execution, not a mode choice — it asks the user to restate what they just wrote.
 
 The mode determines tone, not script. The agent MUST NOT fall into "ask 5 rigid questions in order" regardless of mode.
 
@@ -290,6 +296,7 @@ Optionally add one line (never auto-runs `/goal`): `"You can later drive impleme
 - Do not block the task lifecycle from inside `/scope`: this command authors the contract, it never gates a phase itself. For a RETROFIT of an existing task, if the user says no, proceed without writing. (For a NEW task the contract is required before `/research`, but that requirement is enforced by `/next` and `/research` step 2a, not by `/scope`; the elicitation here stays soft, and draft-and-confirm satisfies it in a single confirm.)
 - Do not write partial sections. A section is either fully written (all 4 fields present, even if empty) or not written at all — the reader's `empty_field` warning is for humans who chose to leave a field blank, not for interrupted writes.
 - Do not merge multiple phase sections in one invocation. `--phase` takes a single value.
+- **Do not investigate the codebase to answer the scope questions.** Reading source, querying the running system, inspecting config or the database to work out what the user *really* needs is Phase 1 — `/ai-dev-assistant:research` — and doing it here spends the user's turn before a contract exists to aim it. Scope is a conversation about intent: the user is the source, and what they want is not a fact recoverable from the code. Resolving the task folder, `fm-read.sh`, and `alignment-read.sh` are the reads this phase makes; anything past the task folder is out of bounds. If the answer to a scope question genuinely depends on how the system behaves today, that uncertainty **is** the scope finding — record it as a Research Question for Phase 1 or say so to the user, do not go and settle it.
 - Do not let `--grill` block the task lifecycle. It intensifies the interview, never the gate — `[c]ancel` still exits cleanly at any point, and `/scope --grill` still never blocks `/research` or the task.
 
 ## Output
