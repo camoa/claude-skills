@@ -1,5 +1,49 @@
 # Changelog
 
+## [5.30.6] - 2026-08-25
+
+### Fixed
+- `/scope` never showed the shape of the artifact it exists to write. Three hundred lines
+  instructing the author to produce a four-field contract, and not one occurrence of `### Goal`
+  anywhere in them — the "Writing `alignment.md`" section showed the H1 and metadata lines and
+  then a bare `<section>` placeholder. A live run wrote the four fields as bold labels, which the
+  reader does not parse, and had to go read `references/alignment-contract.md` to find out why.
+  The command now renders the full section template, states outright that the field names are H3
+  headings and never bold labels, and says what goes wrong when they are not: the section parses
+  as having no fields, `present` comes back `false`, and the contract is invisible to `/research`,
+  `/design` and `/implement` while the file sits there full of content.
+- The reader named the wrong problem when it could not parse a section. A `## Task-Level` carrying
+  two kilobytes of content in an unrecognized shape reported `section_empty_stub` — the same code
+  as a heading with nothing under it at all. "Empty" sends an author hunting for content they can
+  see on the screen instead of at the heading level, which is exactly the detour the live run took.
+  Body text inside a recognized H2 that sits under no recognized H3 is now counted, and such a
+  section reports `section_unparsed_body` instead. `present` stays `false` for both, because
+  neither yields usable fields; the codes differ because the thing to go and fix differs. A
+  well-formed section with a line of preamble before its first H3 raises neither, since it parsed.
+- A success criterion that wrapped onto a second line was silently truncated to its first line,
+  and a `— verify:` note that wrapped was lost or cut mid-sentence. `alignment-read.sh` walked the
+  section buffer one line at a time: a line matching `- [ ]` became a criterion and a continuation
+  line matched nothing and was discarded, with `warnings` left empty, so a contract that read as
+  complete was missing most of what it said. Found by feeding the reader a real scope contract
+  before it was written: one criterion listing six required fixture cases came back as the fragment
+  "A repeatable fixture set exists before implementation, created through the", with
+  `verification: null` against a file that plainly stated one. This is load-bearing — the Phase 4
+  spec review judges the finished change against these criteria, so it would have checked a
+  sentence that asserts nothing. Wrapped items are ordinary markdown and render as one item; the
+  reader now joins continuation lines before parsing, and a blank line or a new list item closes
+  the open one. Non-goals had the same defect and the same fix. `references/alignment-contract.md`
+  §5.2 and §5.3 sanctioned the old behavior ("each item is on its own line", "per line") and now
+  describe the joining, at grammar v1.2.
+- The goal-seeding rule added in 5.30.5 only fired when `/scope` scaffolded the task folder in
+  that same run. A folder left behind by an interrupted `/scope` — stub `task.md`, placeholder
+  `## Goal`, no `alignment.md` — matched the resolution row "Folder exists with `task.md` →
+  proceed normally, the task is established," so a re-run with the same description discarded it
+  again through a different branch. Found immediately: the run that exposed 5.30.5 was interrupted
+  after scaffolding, leaving exactly that folder. The resolution table now separates an authored
+  `task.md` from a stub, recognised by the same marker family `/research` step 2 and
+  `/migrate-to-epic` already read, and the seeding rule applies to a stub however it got there.
+  The folder existing is not evidence the task was authored; only content that is not the stub is.
+
 ## [5.30.5] - 2026-08-25
 
 ### Fixed

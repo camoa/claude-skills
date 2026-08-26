@@ -41,7 +41,8 @@ Accept task names in these forms:
 
 | Outcome | Behavior |
 |---|---|
-| Folder exists with `task.md` | Proceed normally — the task is established |
+| Folder exists with an authored `task.md` | Proceed normally — the task is established |
+| Folder exists but `task.md` is **a stub** (`Current Phase: Phase 0 — Scope`, or the `Stub scaffolded by ` note — the same marker family `/research` step 2 and `/migrate-to-epic` read) | Proceed, and apply the goal-seeding rule below exactly as if the folder had just been scaffolded. A stub is a placeholder, not an authored task |
 | Folder absent, name validates (`^[A-Za-z0-9_][A-Za-z0-9._-]*$`, no path separators, not `.`/`..`) | **Scaffold a minimal task stub** at `implementation_process/in_progress/<task_name>/task.md` so the scope conversation has a home. See "Stub scaffolding" below. |
 | Folder absent, name invalid | Report the validation error and abort. Do not scaffold. |
 | Ambiguous match (e.g., same name in two epics) | Report candidate matches and abort. |
@@ -76,7 +77,7 @@ _To be authored via `/ai-dev-assistant:scope`. `/ai-dev-assistant:research` will
 Stub scaffolded by `/ai-dev-assistant:scope` on <YYYY-MM-DD>.
 ```
 
-**Seed `## Goal` from the invocation.** When `/scope` was invoked with a description after the task name, write that description into `## Goal` **verbatim, in the user's words**, and drop the placeholder line. Do not paraphrase it, do not reshape it into the 4-field contract here — that is Step 3's job with the user in the loop. Only when the invocation carried nothing beyond the task name does the placeholder get written. Writing the placeholder over a stated goal loses the user's words and mis-classifies the task as empty at Step 2.
+**Seed `## Goal` from the invocation.** This rule applies whenever `task.md` is a stub — whether this run scaffolded it or an earlier interrupted run left it behind. When `/scope` was invoked with a description after the task name, write that description into `## Goal` **verbatim, in the user's words**, and drop the placeholder line. Do not paraphrase it, do not reshape it into the 4-field contract here — that is Step 3's job with the user in the loop. Only when the invocation carried nothing beyond the task name does the placeholder get written. Writing the placeholder over a stated goal loses the user's words and mis-classifies the task as empty at Step 2. **Leaving an existing stub's placeholder in place loses them the same way**: a `/scope` that was interrupted after scaffolding, or that the user re-runs with a fuller description, must seed the goal on that run too. The folder existing is not evidence the task was authored — only content that is not the stub is.
 
 `/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by " note — the same marker family `/migrate-to-epic` stubs carry) and overwrite it with the full template rather than aborting on a pre-existing folder.
 
@@ -201,7 +202,30 @@ Create the file with:
 <section>
 ```
 
-Where `<section>` is the H2 block you just authored.
+Where `<section>` is the H2 block you just authored, in exactly this shape:
+
+```markdown
+## Task-Level
+
+### Goal
+
+<prose>
+
+### Expected result
+
+<prose>
+
+### Success criteria
+
+- [ ] <falsifiable statement> — verify: <how it will be checked>
+- [ ] <falsifiable statement>
+
+### Non-goals
+
+- <thing explicitly out of scope>
+```
+
+**The four field names are H3 headings (`### Goal`), never bold labels (`**Goal**`).** The reader keys on the heading level: a section written with bold labels parses as having no fields at all, so `present` comes back `false` and the whole contract is invisible to `/research`, `/design` and `/implement` even though the file is full of content. Phase sections use the same four H3s under `## Phase 1 — Research` / `## Phase 2 — Architecture` / `## Phase 3 — Implementation`. Full grammar, including the optional `— verify:` suffix and every warning code, is in `references/alignment-contract.md`.
 
 **Success-criterion format.** Write each criterion as a task-list line `- [ ] <text>`. When the user declared how a criterion will be verified, append the optional suffix `- [ ] <text> — verify: <how>` (space, em-dash, space, `verify:`, space). Omit the suffix when no verification note was given. The reader parses it into `{text, checked, verification}` per `references/alignment-contract.md` §5.2.
 
