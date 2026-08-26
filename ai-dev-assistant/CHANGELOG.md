@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.30.7] - 2026-08-26
+
+### Fixed
+- The pre-analysis verdict prompt reached a person with its conditional markers intact. The
+  `pre-analysis-decision` template carried three `{{#if decision == "..."}}` branches, and
+  `prompt-render.sh` substitutes `{{key}}` and evaluates nothing else. A live run printed all
+  three verdict branches plus the literal `{{#if}}` and `{{/if}}` lines, then had to explain to
+  the user which block applied — the improvised explanation that rendering exists to remove.
+  There is no template language here and there should not be one: the template is now three,
+  one per verdict, each rendering whole, and the caller picks the ID from `decision`.
+- The guard against exactly that could not see it. `prompt-render.sh` matched
+  `\{\{([a-z0-9_]+)\}\}` when checking for anything left unfilled, so `{{#if decision == "x"}}`
+  and `{{/if}}` matched nothing and the script exited 0 on a template full of markers. It now
+  refuses any residual `{{...}}`, names what was left, prints nothing, and says that a marker
+  which is not a key/value placeholder has no renderer here — split the template instead.
+- `/research` cited the pre-analysis template without wiring it. Step 1 said "display verbatim to
+  user using `prompts:pre-analysis-decision` template", the pre-v5.30.1 phrasing that rule 7 in
+  `references/gate-hardening-prompts.md` exists to eliminate, while every other prompt in that
+  command names `prompt-render.sh` and its arguments. Both the command and
+  `references/research-walkthrough.md` step 4 now name the renderer and the three template IDs.
+
 ## [5.30.6] - 2026-08-25
 
 ### Fixed

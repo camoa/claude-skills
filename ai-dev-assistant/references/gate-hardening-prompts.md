@@ -14,7 +14,9 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 
 | ID | Fired by | Substitutions | Default option |
 |----|----------|--------------|----------------|
-| `pre-analysis-decision` | `/research` after `analysis-agent` | `decision`, `signals_used`, `reasoning`, `children_list` (epic_candidate only) | `[y]` for keep_flat / insufficient_info; **none** for epic_candidate |
+| `pre-analysis-decision-epic-candidate` | `/research` after `analysis-agent`, when `decision == "epic_candidate"` | `signals_used`, `reasoning`, `children_list` | **none** — no default |
+| `pre-analysis-decision-keep-flat` | `/research` after `analysis-agent`, when `decision == "keep_flat"` | `signals_used`, `reasoning` | `[y]` |
+| `pre-analysis-decision-insufficient-info` | `/research` after `analysis-agent`, when `decision == "insufficient_info"` | `signals_used`, `reasoning` | `[y]` |
 | `coverage-mapping-fail` | `/research` end-of-phase on `verdict: fail` | `missing_questions` (multi-line) | `[a]` |
 | `skill-review-decision` | `/complete` on `skills/*/SKILL.md` staged change | `skills_reviewed`, `findings` | **none** — user MUST pick |
 | `plugin-validate-decision` | `/complete` on plugin file staged change | `plugins_validated`, `findings` | **none** — user MUST pick |
@@ -42,16 +44,22 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 
 An instruction to reproduce text exactly, addressed to a model, produces text that is close. Close is the failure: the labels shift, the explanation gets dropped as redundant, and the internal vocabulary the template exists to keep out comes back in through the improvised half. The renderer removes the transcription step. `tests/prompt-template-spec.sh` checks that each of these prompts is rendered rather than worded, and that a render is the file's body character for character.
 
-## Template ID: `pre-analysis-decision`
+## Template ID: `pre-analysis-decision-epic-candidate`
+
+The pre-analysis verdict was one template with three `{{#if decision == ...}}` branches
+until v5.30.7. The renderer substitutes `{{key}}` and evaluates nothing, so a live run
+printed all three branches plus the literal `{{#if}}` and `{{/if}}` markers to a person,
+who then had to be told which block applied to them. There is no template language here
+and there should not be one: a template is a body that gets filled and shown. One verdict,
+one template, rendered whole. The caller picks the ID from `decision`.
 
 ```
-Pre-analysis verdict: {{decision}}
+Pre-analysis verdict: epic_candidate
 Signals fired: {{signals_used}}
 
 Agent reasoning (verbatim):
 {{reasoning}}
 
-{{#if decision == "epic_candidate"}}
 Proposed children:
 {{children_list}}
 
@@ -59,19 +67,36 @@ Create as epic with these children?
 [y]es — convert to epic via /migrate-to-epic
 [n]o flat — proceed as flat task
 [s]tandard — show edit list of proposed children
-{{/if}}
-{{#if decision == "keep_flat"}}
+```
+
+## Template ID: `pre-analysis-decision-keep-flat`
+
+```
+Pre-analysis verdict: keep_flat
+Signals fired: {{signals_used}}
+
+Agent reasoning (verbatim):
+{{reasoning}}
+
 Verdict recorded as keep_flat. Proceed as flat task.
 
 [y]es — proceed as flat (default)
 [n]o — abort and re-evaluate
-{{/if}}
-{{#if decision == "insufficient_info"}}
+```
+
+## Template ID: `pre-analysis-decision-insufficient-info`
+
+```
+Pre-analysis verdict: insufficient_info
+Signals fired: {{signals_used}}
+
+Agent reasoning (verbatim):
+{{reasoning}}
+
 Agent had insufficient context. Verdict recorded as insufficient_info. Proceed as flat task with the option to re-run pre-analysis after research.
 
 [y]es — proceed as flat
 [n]o — abort
-{{/if}}
 ```
 
 ## Template ID: `dev-guides-preflight`
