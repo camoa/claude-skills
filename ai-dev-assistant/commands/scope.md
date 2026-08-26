@@ -41,7 +41,8 @@ Accept task names in these forms:
 
 | Outcome | Behavior |
 |---|---|
-| Folder exists with `task.md` | Proceed normally — the task is established |
+| Folder exists with an authored `task.md` | Proceed normally — the task is established |
+| Folder exists but `task.md` is **a stub** (`Current Phase: Phase 0 — Scope`, or the `Stub scaffolded by ` note — the same marker family `/research` step 2 and `/migrate-to-epic` read) | Proceed, and apply the goal-seeding rule below exactly as if the folder had just been scaffolded. A stub is a placeholder, not an authored task |
 | Folder absent, name validates (`^[A-Za-z0-9_][A-Za-z0-9._-]*$`, no path separators, not `.`/`..`) | **Scaffold a minimal task stub** at `implementation_process/in_progress/<task_name>/task.md` so the scope conversation has a home. See "Stub scaffolding" below. |
 | Folder absent, name invalid | Report the validation error and abort. Do not scaffold. |
 | Ambiguous match (e.g., same name in two epics) | Report candidate matches and abort. |
@@ -76,7 +77,7 @@ _To be authored via `/ai-dev-assistant:scope`. `/ai-dev-assistant:research` will
 Stub scaffolded by `/ai-dev-assistant:scope` on <YYYY-MM-DD>.
 ```
 
-**Seed `## Goal` from the invocation.** When `/scope` was invoked with a description after the task name, write that description into `## Goal` **verbatim, in the user's words**, and drop the placeholder line. Do not paraphrase it, do not reshape it into the 4-field contract here — that is Step 3's job with the user in the loop. Only when the invocation carried nothing beyond the task name does the placeholder get written. Writing the placeholder over a stated goal loses the user's words and mis-classifies the task as empty at Step 2.
+**Seed `## Goal` from the invocation.** This rule applies whenever `task.md` is a stub — whether this run scaffolded it or an earlier interrupted run left it behind. When `/scope` was invoked with a description after the task name, write that description into `## Goal` **verbatim, in the user's words**, and drop the placeholder line. Do not paraphrase it, do not reshape it into the 4-field contract here — that is Step 3's job with the user in the loop. Only when the invocation carried nothing beyond the task name does the placeholder get written. Writing the placeholder over a stated goal loses the user's words and mis-classifies the task as empty at Step 2. **Leaving an existing stub's placeholder in place loses them the same way**: a `/scope` that was interrupted after scaffolding, or that the user re-runs with a fuller description, must seed the goal on that run too. The folder existing is not evidence the task was authored — only content that is not the stub is.
 
 `/research` step 2 ("Create task scaffolding") MUST detect this stub (`Current Phase: Phase 0 — Scope` line or the explicit "Stub scaffolded by " note — the same marker family `/migrate-to-epic` stubs carry) and overwrite it with the full template rather than aborting on a pre-existing folder.
 

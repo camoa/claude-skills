@@ -84,12 +84,35 @@ RECORDS=$(awk '
     if (match(h, /^Phase 3 (—|–|-) Implementation$/)) return "phase_3"
     return ""
   }
+  # Fold markdown list-item continuation lines into the item they belong to.
+  # A "- [ ] ..." or "- ..." item wraps onto any following non-blank line that
+  # does not itself start a list item; a blank line closes it. Without this the
+  # per-line scan below keeps only the FIRST line of an item and silently drops the
+  # rest, so a wrapped criterion becomes a sentence fragment and a "— verify:"
+  # note that wrapped is lost entirely — with no warning to say so. Wrapping is
+  # ordinary markdown and renders as one item, so the writer produces it.
+  # Populates jn[1..jn_n]; buf stays untouched for the prose fallback.
+  function join_wrapped(   i, l, open) {
+    jn_n = 0; open = 0
+    for (i = 1; i <= buf_n; i++) {
+      l = buf[i]
+      if (match(l, /^[[:space:]]*-[[:space:]]+/)) {
+        jn[++jn_n] = l; open = 1
+      } else if (open && l ~ /[^[:space:]]/) {
+        jn[jn_n] = jn[jn_n] " " trim(l)
+      } else {
+        jn[++jn_n] = l
+        if (!(l ~ /[^[:space:]]/)) open = 0
+      }
+    }
+  }
   function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3) {
     if (cur_section == "" || cur_field == "") return
     if (cur_field == "success_criteria") {
       had_item = 0
-      for (i = 1; i <= buf_n; i++) {
-        line = buf[i]
+      join_wrapped()
+      for (i = 1; i <= jn_n; i++) {
+        line = jn[i]
         if (match(line, /^[[:space:]]*-[[:space:]]+\[[[:space:]xX]\][[:space:]]+.+$/)) {
           text = line
           sub(/^[[:space:]]*-[[:space:]]+\[/, "", text)
@@ -133,8 +156,9 @@ RECORDS=$(awk '
       }
     } else if (cur_field == "non_goals") {
       had_item = 0
-      for (i = 1; i <= buf_n; i++) {
-        line = buf[i]
+      join_wrapped()
+      for (i = 1; i <= jn_n; i++) {
+        line = jn[i]
         # bullet but not a task-list item
         if (match(line, /^[[:space:]]*-[[:space:]]+/) && !match(line, /^[[:space:]]*-[[:space:]]+\[[[:space:]xX]\]/)) {
           text = line

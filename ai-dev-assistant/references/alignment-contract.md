@@ -100,14 +100,16 @@ Empty body → `{present: true, body: ""}` + warning `empty_field`.
 
 ### 5.2 `Success criteria`
 
-Expected as a markdown task-list where each item is on its own line:
+Expected as a markdown task-list:
 
 - `- [ ] <text>` → `{text: "<text>", checked: false, verification: null}`
 - `- [x] <text>` or `- [X] <text>` → `{text: "<text>", checked: true, verification: null}`
 
-Parser regex: `^\s*-\s+\[([ xX])\]\s+(.+?)\s*$` (per line).
+Parser regex: `^\s*-\s+\[([ xX])\]\s+(.+?)\s*$`, applied after line-joining (below).
 
-Lines matching the regex are extracted into `success_criteria[]` in document order. Lines that don't match (e.g., stray prose, blank lines) are ignored.
+Matching items are extracted into `success_criteria[]` in document order. Content that is not part of any item (stray prose before the first item, blank lines) is ignored.
+
+**Wrapped items (v1.2+).** An item MAY span several lines. A line that does not itself start a list item, is not blank, and follows an open item is a **continuation**: it is trimmed and joined to that item with a single space before the regex and the verification split run. A blank line, or a line starting a new list item, closes the open item. This is ordinary markdown — a wrapped item renders as one item — and authored contracts routinely wrap, so the reader must not treat a wrapped item as a one-line item plus discarded text. Before v1.2 it did, and the consequences were silent: a criterion was truncated to its first line, a `— verify:` note that wrapped was lost or cut mid-sentence, and `warnings` stayed empty, so a contract that read as complete was missing most of what it said. Joining is not itself a warning condition; wrapping is legitimate.
 
 **Optional verification suffix (v1.1+).** A criterion line MAY declare *how* it will be verified by appending a trailing suffix:
 
@@ -115,7 +117,7 @@ Lines matching the regex are extracted into `success_criteria[]` in document ord
 - [ ] <criterion text> — verify: <how it will be verified>
 ```
 
-The delimiter is ` — verify: ` (space, em-dash U+2014, space, the literal `verify:`, space). For tolerance the reader ALSO accepts en-dash `–` and hyphen `-` in the delimiter position (matching the phase-header dash tolerance in §3), but the lowercase `verify: ` token is required. The split happens on the **first** delimiter occurrence: the text before it becomes `text` (trimmed); the text after becomes `verification` (trimmed). When no delimiter is present, `verification` is `null` and `text` is the whole line (the pre-v1.1 behavior, unchanged).
+The suffix may begin on a continuation line — after joining, the delimiter is preceded by the join space, so ` — verify: ` still matches. The delimiter is ` — verify: ` (space, em-dash U+2014, space, the literal `verify:`, space). For tolerance the reader ALSO accepts en-dash `–` and hyphen `-` in the delimiter position (matching the phase-header dash tolerance in §3), but the lowercase `verify: ` token is required. The split happens on the **first** delimiter occurrence: the text before it becomes `text` (trimmed); the text after becomes `verification` (trimmed). When no delimiter is present, `verification` is `null` and `text` is the whole line (the pre-v1.1 behavior, unchanged).
 
 Captured up-front at scope time, the suffix lets each criterion declare its verification strategy rather than deferring it to Phase 4. It is always optional; a criterion whose `text` legitimately contains an em-dash but no `verify:` token is left intact with `verification: null`.
 
@@ -128,9 +130,9 @@ If the body contains prose only (no task-list lines at all), emit warning `succe
 
 ### 5.3 `Non-goals`
 
-Expected as a bulleted list. Parser regex: `^\s*-\s+(.+?)\s*$`.
+Expected as a bulleted list. Parser regex: `^\s*-\s+(.+?)\s*$`, applied after the same line-joining as §5.2.
 
-Lines matching → extracted into `non_goals[]` in document order. If body is prose only, emit `non_goals_not_bulleted` warning and place prose in `non_goals_prose`.
+Matching items → extracted into `non_goals[]` in document order. **Wrapped items (v1.2+)** follow §5.2 exactly: a non-blank line that does not start a list item is joined to the open item with a single space, so a non-goal that wraps keeps its whole text instead of being truncated to its first line. If body is prose only, emit `non_goals_not_bulleted` warning and place prose in `non_goals_prose`.
 
 ## 6. Warning codes
 

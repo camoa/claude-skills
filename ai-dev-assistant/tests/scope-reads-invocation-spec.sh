@@ -41,6 +41,11 @@ have   scope.md "stub: seeded verbatim, in the user's words"               'verb
 have   scope.md "stub: no paraphrase at scaffold time"                     'Do not paraphrase it'
 have   scope.md "stub: placeholder is the no-description branch only"      'Only when the invocation carried nothing'
 have   scope.md "stub: template shows the conditional goal line"           'the invocation description verbatim, if one was given'
+have   scope.md "stub: seeding applies to a stub an earlier run left behind" 'whether this run scaffolded it or an earlier interrupted run'
+have   scope.md "stub: an existing placeholder loses the words the same way" 'Leaving an existing stub.s placeholder in place'
+have   scope.md "stub: folder existing is not evidence of authorship"        'not evidence the task was authored'
+have   scope.md "resolution: a stub row exists distinct from an authored one" 'Folder exists but .task.md. is \*\*a stub\*\*'
+have   scope.md "resolution: authored task.md is what proceeds normally"     'Folder exists with an authored .task.md.'
 
 # --- Defect 1: mode selection counts both sources ---
 have   scope.md "mode: classified on invocation AND task.md together"      'counted together'
