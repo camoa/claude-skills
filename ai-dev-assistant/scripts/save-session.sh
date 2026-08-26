@@ -30,8 +30,11 @@
 #         yields a noisy "hook error" notice — there is nothing useful to fail.
 #
 # Timeout: the SessionEnd hook entry sets `timeout: 10`. SessionEnd's default
-# budget is 1.5s; a per-hook timeout in a project settings.json raises it. This
-# script does bounded file I/O only and finishes far inside that budget.
+# budget is 1.5s; a per-hook timeout in a project settings.json raises it. The
+# file I/O below is bounded and finishes in hundredths of a second. The one part
+# that could exceed any budget is the stdin read, which is why it is bounded too
+# — see the note at step 1. Override with SAVE_SESSION_STDIN_TIMEOUT if a caller
+# genuinely needs longer.
 
 set -uo pipefail
 
@@ -41,7 +44,23 @@ now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 CWD=""
 if [ ! -t 0 ]; then
-  STDIN_JSON=$(cat 2>/dev/null || true)
+  # Bounded read, deliberately. This script has two callers and only one of them
+  # feeds it: as a SessionEnd hook stdin carries the hook JSON and closes, but
+  # invoked as a command (/ai-dev-assistant:save-session) the descriptor can be
+  # open with nobody ever writing to it. An unbounded `cat` then waits for input
+  # that never arrives until the caller's timeout kills it — which is the whole
+  # reason this script was seen "overrunning its timeout and going to
+  # background". It was never doing slow work; the file I/O below finishes in
+  # hundredths of a second. It was waiting.
+  #
+  # `read -t` is a bash builtin, so this stays dependency-free in the copy
+  # /install-remembrance-hook drops into a project, where `timeout` may not be
+  # on PATH. `-d ''` reads to EOF; that returns non-zero on a normal read (no
+  # NUL delimiter is ever found) exactly as it does on a timeout, so the status
+  # carries no information and whatever arrived is used either way. Losing the
+  # payload costs only `.cwd`, and $PWD is the right fallback for both callers.
+  STDIN_JSON=""
+  IFS= read -r -d '' -t "${SAVE_SESSION_STDIN_TIMEOUT:-2}" STDIN_JSON || true
   if [ -n "${STDIN_JSON:-}" ]; then
     CWD=$(printf '%s' "$STDIN_JSON" | jq -r '.cwd // empty' 2>/dev/null || true)
   fi

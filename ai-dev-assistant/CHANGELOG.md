@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.30.8] - 2026-08-26
+
+### Fixed
+- `save-session.sh` blocked on stdin and was repeatedly reported as "overran its timeout and
+  went to background". It was never doing slow work — on a real task folder the file I/O finishes
+  in hundredths of a second. Step 1 read `STDIN_JSON=$(cat)`, and the script has two callers of
+  which only one feeds it: as a SessionEnd hook stdin carries the hook JSON and closes, but
+  invoked as a command through `/ai-dev-assistant:save-session` the descriptor can be open with
+  nobody ever writing to it. The unbounded read then waited for input that never came until the
+  caller's timeout killed it. Measured before the fix against an stdin held open: exit 124, 0%
+  CPU, killed at the cap. The read is now bounded by the `read` builtin rather than an external
+  `timeout`, because this script is copied into user projects by `/install-remembrance-hook` where
+  PATH is not ours; `SAVE_SESSION_STDIN_TIMEOUT` overrides the two-second default. Losing the
+  payload costs only `.cwd`, and `$PWD` is the correct fallback for both callers. The script's
+  header claimed it "does bounded file I/O only and finishes far inside that budget", which was
+  true of the work and false of the wait that preceded it; it now says which part is bounded and
+  why.
+
+  A project that already has a copy installed keeps the old one until
+  `/ai-dev-assistant:install-remembrance-hook` is re-run there.
+
+  The plugin has eight other unbounded stdin reads and all eight are correct: `wo-compile.sh` and
+  `analysis-agent-normalize.sh` are filters that are piped a payload by contract, and the two
+  hooks are always handed their JSON by Claude Code. `save-session.sh` was the only one with a
+  dual role, which is what made the same line wrong there and right everywhere else.
+
 ## [5.30.7] - 2026-08-26
 
 ### Fixed
