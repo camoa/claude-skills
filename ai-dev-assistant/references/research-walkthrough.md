@@ -391,7 +391,7 @@ Refactored flow:
    - Description contains explicit conjunction phrasing (`and also`, `plus`, `as well as`, `in addition to`)
 2. Invoke `ai-dev-assistant:analysis-agent` (via Task tool) in description mode regardless of signal state.
 3. Save output to `<task>/_pre-analysis.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh`.
-4. Display agent output verbatim to user using literal `prompts:pre-analysis-decision` template from `references/gate-hardening-prompts.md`. Do NOT paraphrase.
+4. Render the verdict prompt with `scripts/prompt-render.sh` and show exactly what it printed. The template ID is chosen by `decision`: `pre-analysis-decision-epic-candidate`, `pre-analysis-decision-keep-flat`, or `pre-analysis-decision-insufficient-info`. Each renders whole — the renderer fills `{{key}}` placeholders and evaluates nothing else, so one verdict gets one template rather than one template carrying three branches. Do NOT paraphrase, and do not explain which branch applies; the rendered block is already the only one.
 5. Block on user response per the template's option list.
 6. Record decision in `_pre-analysis.json`.
 7. Branch: `epic_candidate + y` → `/migrate-to-epic`. Else → flat-task flow.

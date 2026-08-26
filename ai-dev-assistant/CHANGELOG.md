@@ -1,5 +1,47 @@
 # Changelog
 
+## [5.30.7] - 2026-08-26
+
+### Fixed
+- A phase could not produce a record its own contract required. `playbook-load-deterministic.sh`
+  **prints** the `gate_specific` object — it is handed a project folder and cannot know which task
+  is active — while `/research`, `/design` and `/implement` all said it "writes
+  `_playbook-load.json` audit". Nothing told the caller to pass that stdout to
+  `gate-audit-write.sh`, so on a live run the payload went to the terminal, the record did not
+  exist, and the end-of-phase records check reported it missing. `/upgrade-project`, the retrofit
+  path, had the wrapping right all along. All three phase commands now say the loader prints, and
+  wire its output to the writer.
+- `phase` was documented, required for attribution, and not demanded at the write.
+  `_dev-guides-load.json` and `_playbook-load.json` are the two records every phase contract
+  attributes by phase — neither carries the `implicit` flag — and the schema documents `phase` as
+  the first `gate_specific` field. But `dev-guides-load` required only `methodology_floor` and
+  `guides_actually_loaded`, and `playbook-load` required nothing at all. A record written without
+  it passed the writer in silence and then read `unattributed` at the end of the phase, a long way
+  from the cause. Both now demand `phase`, the way `recipe-load` already did.
+- The `method_fit` check crashed on a type it did not expect and showed a person the crash. When
+  `method_fit` arrived as a bare string instead of the `{verdict, reason}` object,
+  `($fit.verdict // "")` raised `Cannot index string with string "verdict"`, and that raw jq
+  message was what reached the terminal. The wrapper added in 5.30.1 did its job — a jq failure
+  reports itself rather than reading as clean — but the message was not something anyone could act
+  on. A non-object `method_fit` is now named as what it is.
+- The pre-analysis verdict prompt reached a person with its conditional markers intact. The
+  `pre-analysis-decision` template carried three `{{#if decision == "..."}}` branches, and
+  `prompt-render.sh` substitutes `{{key}}` and evaluates nothing else. A live run printed all
+  three verdict branches plus the literal `{{#if}}` and `{{/if}}` lines, then had to explain to
+  the user which block applied — the improvised explanation that rendering exists to remove.
+  There is no template language here and there should not be one: the template is now three,
+  one per verdict, each rendering whole, and the caller picks the ID from `decision`.
+- The guard against exactly that could not see it. `prompt-render.sh` matched
+  `\{\{([a-z0-9_]+)\}\}` when checking for anything left unfilled, so `{{#if decision == "x"}}`
+  and `{{/if}}` matched nothing and the script exited 0 on a template full of markers. It now
+  refuses any residual `{{...}}`, names what was left, prints nothing, and says that a marker
+  which is not a key/value placeholder has no renderer here — split the template instead.
+- `/research` cited the pre-analysis template without wiring it. Step 1 said "display verbatim to
+  user using `prompts:pre-analysis-decision` template", the pre-v5.30.1 phrasing that rule 7 in
+  `references/gate-hardening-prompts.md` exists to eliminate, while every other prompt in that
+  command names `prompt-render.sh` and its arguments. Both the command and
+  `references/research-walkthrough.md` step 4 now name the renderer and the three template IDs.
+
 ## [5.30.6] - 2026-08-25
 
 ### Fixed

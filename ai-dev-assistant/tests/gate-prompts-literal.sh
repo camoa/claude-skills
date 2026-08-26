@@ -61,7 +61,9 @@ extract_literal() {
 }
 
 TEMPLATE_IDS=(
-  "pre-analysis-decision"
+  "pre-analysis-decision-epic-candidate"
+  "pre-analysis-decision-keep-flat"
+  "pre-analysis-decision-insufficient-info"
   "coverage-mapping-fail"
   "skill-review-decision"
   "plugin-validate-decision"

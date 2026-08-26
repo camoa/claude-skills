@@ -155,6 +155,64 @@ else
   fail_check "scripts/prompt-render.sh is missing — every prompt is improvised wording again"
 fi
 
+# ------------------------------------------- the renderer fills, it does not evaluate
+# The pre-analysis verdict shipped as one template carrying three
+# {{#if decision == "..."}} branches. prompt-render.sh substitutes {{key}} and
+# evaluates nothing, so a live run printed all three branches and the raw {{#if}} /
+# {{/if}} markers to a person, who then had to be told which block was theirs. The
+# unfilled-placeholder guard did not catch it either: it matched {{lower_snake}} only,
+# so the markers that were actually there were invisible to the check built to stop
+# exactly this. One verdict, one template, rendered whole.
+
+# Only the fenced literal blocks under a Template ID heading are template bodies;
+# the prose between them is documentation and may legitimately mention a marker.
+TEMPLATE_BODIES="$(awk '
+  /^## Template ID: `/ { seen=1; next }
+  seen && /^```$/       { infence = !infence; next }
+  infence               { print }
+' "$PROMPTS")"
+if [ -z "$TEMPLATE_BODIES" ]; then
+  fail_check "no template bodies extracted — the fence scan is looking in the wrong place"
+elif printf '%s' "$TEMPLATE_BODIES" | grep -qE '\{\{[#/]'; then
+  fail_check "a template body carries a conditional or loop marker — the renderer has no evaluator, so those markers reach the reader verbatim"
+else
+  pass_check "no template body carries a marker the renderer cannot fill"
+fi
+
+for id in pre-analysis-decision-epic-candidate pre-analysis-decision-keep-flat pre-analysis-decision-insufficient-info; do
+  if grep -q "^## Template ID: \`${id}\`$" "$PROMPTS"; then
+    pass_check "$id is its own template rather than a branch inside one"
+  else
+    fail_check "$id is missing — the verdict prompt is back to one template with branches"
+  fi
+done
+
+# The guard must refuse ANY residual marker, not just a {{lower_snake}} placeholder.
+# Built as a throwaway plugin tree so the shipped script needs no test-only override.
+GTMP="$(mktemp -d)"
+mkdir -p "$GTMP/scripts" "$GTMP/references"
+cp "$PLUGIN_ROOT/scripts/prompt-render.sh" "$GTMP/scripts/"
+cat > "$GTMP/references/gate-hardening-prompts.md" <<'TPL'
+## Template ID: `conditional-probe`
+
+```
+Verdict: {{decision}}
+{{#if decision == "x"}}
+branch text
+{{/if}}
+```
+TPL
+# The probe is SUPPOSED to exit 2, so both captures must survive `set -e`:
+# a bare assignment from a failing command substitution aborts the script.
+GOUT="$(bash "$GTMP/scripts/prompt-render.sh" conditional-probe decision=x 2>&1)" && GRC=0 || GRC=$?
+GSTDOUT="$(bash "$GTMP/scripts/prompt-render.sh" conditional-probe decision=x 2>/dev/null)" || true
+if [ "$GRC" -eq 2 ] && [ -z "$GSTDOUT" ] && printf '%s' "$GOUT" | grep -q '#if'; then
+  pass_check "a conditional marker stops the render, prints nothing, and is named in the error"
+else
+  fail_check "a conditional marker rendered anyway (rc=$GRC, stdout=$(printf '%s' "$GSTDOUT" | head -c 60))"
+fi
+rm -rf "$GTMP"
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && { printf 'prompt-template-spec: all checks passed\n'; exit 0; }
 printf 'prompt-template-spec: FAILURES\n' >&2; exit 1

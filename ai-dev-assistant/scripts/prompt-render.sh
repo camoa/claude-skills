@@ -87,13 +87,20 @@ for arg in sys.argv[1:]:
     key, value = arg.split("=", 1)
     body = body.replace("{{%s}}" % key, value)
 
-left = sorted(set(re.findall(r"\{\{([a-z0-9_]+)\}\}", body)))
+# Any residual {{...}} at all, not just a {{lower_snake}} placeholder. The narrow
+# pattern was the bug: a template carrying {{#if decision == "x"}} / {{/if}} matched
+# nothing, so this check passed and a person was shown three verdict branches and the
+# raw conditional markers. A guard that exists to stop an unrendered marker reaching a
+# reader has to be able to see every marker there is.
+left = sorted(set(m.strip() for m in re.findall(r"\{\{(.*?)\}\}", body, re.S)))
 if left:
     sys.stderr.write(
         "prompt-render: template '%s' still has unfilled placeholder(s): %s\n"
         % (wanted, ", ".join(left))
     )
-    sys.stderr.write("  Nothing was printed. Pass each as key=value and run again.\n")
+    sys.stderr.write("  Nothing was printed. Pass each as key=value and run again.\n"
+        "  A marker that is not a key/value placeholder (a conditional, a loop) has no\n"
+        "  renderer here: split the template so each case is a body that renders whole.\n")
     sys.exit(2)
 
 sys.stdout.write(body)

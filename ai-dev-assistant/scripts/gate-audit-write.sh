@@ -155,7 +155,8 @@ done
 case "$GATE_TYPE" in
   pre-analysis)       REQUIRED_KEYS="decision confidence code_read" ;;
   recipe-load)        REQUIRED_KEYS="phase frameworks resolved_count" ;;
-  dev-guides-load)    REQUIRED_KEYS="methodology_floor guides_actually_loaded" ;;
+  dev-guides-load)    REQUIRED_KEYS="phase methodology_floor guides_actually_loaded" ;;
+  playbook-load)      REQUIRED_KEYS="phase playbook_sets_loaded playbook_sets_source" ;;
   agentic-recipe)     REQUIRED_KEYS="recipes recipe_lookup_status" ;;
   internal-prior-art) REQUIRED_KEYS="sources" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
@@ -213,6 +214,8 @@ if [[ "$GATE_TYPE" == "recipe-load" ]]; then
         | (.method_fit // null) as $fit
         | if $fit == null then
             "\($fw): no method_fit, so an unassessed recipe reads as a suitable one"
+          elif ($fit | type) != "object" then
+            "\($fw): method_fit is a \($fit | type), not the {verdict, reason} object the schema requires"
           else
             ($fit.verdict // "") as $v
             | ($fit.reason // "") as $r
