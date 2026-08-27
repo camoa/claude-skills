@@ -109,6 +109,17 @@ fi
 #             a requirement rather than checking one.
 # `conditional` records are reported for visibility and never counted against the verdict — a
 # maintainer-mode offer that did not fire is not a missing record.
+#
+# There is a third value, `required-unless-work-orders`, and it exists because `conditional`
+# was the wrong answer for exactly one row. `_build-critique.json` was marked conditional with
+# its condition written in prose ("when the build ran in-session rather than through
+# /run-work-orders"), and nothing read that sentence, so a phase that skipped the rung
+# entirely still reported `complete` with `missing_required: 0`. The condition is on disk:
+# a build that went through `/run-work-orders` leaves `work-orders/wo-NN._critique.json` per
+# work-order and owes no `_build-critique.json`. So the row is required by default and
+# downgraded to conditional only when those per-work-order critiques are actually there,
+# with a warning saying which record satisfied it. A condition nothing evaluates is not a
+# condition.
 case "$PHASE" in
   research) CONTRACT='_pre-analysis.json|required|analysis-agent (description mode), written via gate-audit-write.sh|step 1|implicit
 coverage-map.json|required|the recipe-loader skill|step 2c|implicit
@@ -138,6 +149,7 @@ implementation.md|required|the phase itself|step 7
 _mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6|carryable
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
 _preconditions.json|conditional|the preconditions gate, when a framework implement recipe resolved|step 6b
+_build-critique.json|required-unless-work-orders|the build-critique rung, both axes in one record; a build that ran through /run-work-orders instead leaves work-orders/wo-NN._critique.json and owes no record here|loop step 8 and Runtime Step 12
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
   review) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0
@@ -170,8 +182,23 @@ record_phase() { # record_phase <file> -> the phase it names, or empty
   jq -r '(.gate_specific.phase // .phase // empty)' "$1" 2>/dev/null | head -1
 }
 
+# The disk-side of the `required-unless-work-orders` token. A glob with no matches stays
+# literal under `set -u`, so the `-e` test is false and the record stays required.
+wo_critiques_exist() {
+  set -- "$TASK_DIR"/work-orders/wo-*_critique.json
+  [ -e "$1" ]
+}
+
 while IFS='|' read -r NAME REQ PRODUCER STEP CARRY; do
   [ -z "$NAME" ] && continue
+  if [ "$REQ" = "required-unless-work-orders" ]; then
+    if wo_critiques_exist; then
+      REQ="conditional"
+      add_warn "build_critique_satisfied_by_work_order_critiques"
+    else
+      REQ="required"
+    fi
+  fi
   STATUS="missing"
   WROTE=""
   if [ -s "$TASK_DIR/$NAME" ]; then

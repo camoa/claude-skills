@@ -22,7 +22,9 @@ one score.
 ## What it checks
 
 Reads the task's `alignment.md` **Task-Level `### Success criteria`** (grammar: `references/
-alignment-contract.md`) and `architecture.md` if present, then judges the merge-base diff for:
+alignment-contract.md`) and `architecture.md` if present, then judges the change set from
+`scripts/review-change-set.sh` (committed since the base, plus staged, plus modified in the working
+tree) for:
 
 1. **Missing requirements** — a success criterion with no corresponding implementation in the diff. This is
    the **hard** signal — objective (a criterion either has a corresponding hunk or it doesn't) — and alone
@@ -46,11 +48,18 @@ it still drives `overall_verdict` via step 8 rule 1 exactly as before.
 ## Dispatch
 
 `/review` dispatches `agents/spec-axis-reviewer.md` (Task tool, read-only, generic) with the parsed success
-criteria + `architecture.md` (if present) + the merge-base diff — the same command-owns-resolution /
+criteria + `architecture.md` (if present) + the change set — the same command-owns-resolution /
 agent-stays-generic pattern `/review` step 5.0 already uses for `architecture-validator`. The agent returns
 its verdict as its Task response (it does not write files); `/review` captures it into
 `<task_folder>/_spec.json` via `gate-audit-write.sh <task> spec <payload>` (`gate-audit-schema.md` §5.15)
 and adds `gates_run[]` entry `name: "spec"`, `kind: "hard-block"`.
+
+**Second caller (v5.33.0+).** `/implement` dispatches the same agent once at the end of Phase 3, as the
+alignment axis of the build-critique rung (`references/build-critique.md`). Same inputs, same verdict rule.
+It does **not** write `_spec.json`; its result is recorded in the `alignment` object of
+`<task_folder>/_build-critique.json`, and `/review` still runs its own Spec pass afterwards. Running it at
+both points is the point rather than a duplication: a criterion found unimplemented while the build is open
+is a task, and found at the Phase 4 gate it is a reopening.
 
 ## Aggregation — distinct, not collapsed
 

@@ -1,12 +1,12 @@
-# Gate Audit Schema v1.6
+# Gate Audit Schema v1.9
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13); v5.26.0 adds the `internal-prior-art` gate_type (v1.6, additive — persists the internal prior-art search, its per-source honesty record, and the disposition of each hit).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13); v5.26.0 adds the `internal-prior-art` gate_type (v1.6, additive — persists the internal prior-art search, its per-source honesty record, and the disposition of each hit); v5.31.0 adds the `preconditions` gate_type (v1.7, additive); v5.32.0 adds the `framework` gate_type (v1.8, additive); v5.33.0 adds the `build-critique` gate_type (v1.9, additive; persists the Phase 3 per-component adversarial critique and the end-of-phase alignment pass) and stamps `plugin_version` on every envelope.
 **Owner:** `scripts/gate-audit-write.sh`
-**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
+**Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/implement.md` (v5.33.0+ writes `build-critique`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
 A "gate audit" is a single JSON file written when one of the framework's hardened gates fires. The file lives in the task folder and serves as **proof on disk** that the gate ran. Absence of the file (when it should be present) is evidence of bypass — surfaced by `/audit-status` and `/status`.
 
-This schema is the unified shape across all 15 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
+This schema is the unified shape across all 19 audit file types. A `gate_type` discriminator selects which `gate_specific` payload applies.
 
 ## 1. Location
 
@@ -31,6 +31,10 @@ Where `<gate_type>` is one of:
 - `agentic-recipe` (v1.5+)
 - `mechanism-challenge` (own `schema_version "1.0"`; v5.17.0+)
 - `spec` (own `schema_version "1.0"`; v5.20.0+)
+- `internal-prior-art` (v1.6+)
+- `preconditions` (v1.7+)
+- `framework` (v1.8+)
+- `build-critique` (v1.9+)
 
 Files are siblings of `task.md`/`alignment.md`/`research.md`/`architecture.md`/`implementation.md`. The `_` prefix groups them visually and signals "framework-managed; not user-authored content."
 
@@ -45,8 +49,9 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 ```json
 {
   "schema_version": "1.0",
-  "gate_type": "<one of the 14>",
+  "gate_type": "<one of the 19>",
   "fired_at": "2026-04-24T20:30:00Z",
+  "plugin_version": "5.33.0",
   "task_folder": "/abs/path/to/task",
   "user_choice": "<gate-specific enum or null>",
   "bypass_reason": null,
@@ -58,9 +63,10 @@ Historical runs are NOT preserved per-task in these files. If a gate's history m
 
 | Field | Type | Constraints |
 |---|---|---|
-| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+; `"1.5"` for `gate_type: "agentic-recipe"` written by v5.12.0+. JSON string. Consumers gate on major. |
-| `gate_type` | enum | One of the 15 listed in the gate types section. Discriminator for `gate_specific` payload. |
+| `schema_version` | string | `"1.0"` for v4.0.0; `"1.1"` for `gate_type: "review"` written by v4.1.0–v4.10.x; `"1.2"` for v4.11.0+ when `gate_type` is `"review"`, `"e2e"`, or `"visual_regression"` (the v4.11.0 `review` payload grew the optional `dispatch_plan` key, so v4.11.0+ `review` audits carry `"1.2"`); `"1.3"` for `gate_type: "visual_parity"` written by v4.14.0+; `"1.4"` for `gate_type: "recipe-load"` written by v5.11.0+; `"1.5"` for `gate_type: "agentic-recipe"` written by v5.12.0+; `"1.6"` for `gate_type: "internal-prior-art"` written by v5.26.0+; `"1.7"` for `gate_type: "preconditions"` written by v5.31.0+; `"1.8"` for `gate_type: "framework"` written by v5.32.0+; `"1.9"` for `gate_type: "build-critique"` written by v5.33.0+. JSON string. Consumers gate on major. |
+| `gate_type` | enum | One of the 19 listed in the gate types section. Discriminator for `gate_specific` payload. |
 | `fired_at` | string | ISO-8601 UTC with `Z` suffix. |
+| `plugin_version` | string | v5.33.0+. The plugin version of the build that wrote this record, or the literal `"undetermined"` when it could not be read. Never null, never absent in a record written by v5.33.0 or later. **Absence is itself provenance:** a record with no `plugin_version` was written by a build that predated the stamp. |
 | `task_folder` | string | Absolute path to the task folder. Mirrors how validation envelopes record absolute paths. |
 | `user_choice` | enum \| null | Per-gate enum (e.g. `y`/`n`/`s` for pre-analysis; `accepted`/`remediated`/`bypassed` for skill-review). `null` for deterministic gates with no user prompt (`dev-guides-load`, `playbook-load`). |
 | `bypass_reason` | string \| null | Populated when user passed `--skip-<gate>` flag. The string is whatever the user supplied. `null` when gate ran without bypass. |
@@ -85,6 +91,17 @@ a task folder reset half-way, a genuine coverage pass was left standing beside a
 `research.md` that no longer existed, and nothing in either record could establish which
 came first. A session read its own honest audit trail as a forgery. A wrong time is
 worse than no time, because it reads as evidence.
+
+**`plugin_version` is stamped the same way, and for the same reason (v5.33.0+).** It is
+resolved from the writing script's own install location, not from `CLAUDE_PLUGIN_ROOT`
+and not from the caller: the script executing is by definition the build that ran, while
+the environment variable can name a different one and a long session can keep calling a
+version-pinned path it resolved before a plugin reload. Without the stamp a task folder
+cannot say which build produced it. That is not hypothetical — a live run's records had
+to be attributed by reading a chat transcript for cached paths, because the audit files
+themselves could not distinguish the build that had a given gate from the one before it.
+A caller-supplied value is discarded, and an unreadable `plugin.json` yields
+`"undetermined"` rather than a missing key, so "which build" is never answered by silence.
 
 ## 5. Per-gate payload (`gate_specific`)
 
@@ -707,3 +724,74 @@ slugified; the verbatim aspect is carried in the `aspect` field so the join neve
 }
 ```
 
+### 5.18 `build-critique` (v1.9+, v5.33.0 — the Phase 3 challenge rung)
+
+Written once per implementation phase by `/implement`. Full contract:
+`references/build-critique.md`.
+
+One record carries **both axes** — the per-component adversarial critique and the
+end-of-phase alignment check — because they are one rung, the same way `/review` keeps its
+Standards and Spec axes in one `_review.json` without merging their verdicts.
+
+```json
+{
+  "phase": "implement",
+  "verdict": "pass | concern | critical | unresolved | skipped",
+  "components": [
+    {
+      "component": "<name, from architecture/<component>.md>",
+      "risk_tier": "low | medium | high",
+      "lenses": ["security", "correctness"],
+      "verdict": "pass | concern | critical | unresolved",
+      "blocking": false,
+      "findings_count": 0,
+      "checkpoint_before": "<sha>",
+      "checkpoint_after": "<sha>",
+      "critique_ref": "<task_folder>/build-critique/<component>.critique.json"
+    }
+  ],
+  "components_declared": 7,
+  "components_critiqued": 7,
+  "uncritiqued": [],
+  "alignment": {
+    "verdict": "pass | fail | skipped",
+    "missing_requirements": [],
+    "scope_creep": [],
+    "spec_ref": "<path or null>"
+  }
+}
+```
+
+| Key | Required | Notes |
+|---|---|---|
+| `phase` | yes | Always `"implement"`. |
+| `verdict` | yes | The rung's overall answer. `critical` iff any component blocked and was not overridden; `unresolved` iff any component or the alignment axis came back undetermined and none blocked. |
+| `components[]` | yes | One row per component actually critiqued. May be empty when `verdict` is `skipped`. |
+| `components_declared` | yes | How many components the architecture declares. |
+| `components_critiqued` | yes | How many got a critique. |
+| `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. |
+| `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. |
+
+**`components_declared` and `components_critiqued` are both required, and the gap between
+them must be itemised.** A rung that critiqued three of seven components and recorded only
+its three green rows is a record that cannot say what it did not look at — the exact
+failure shape this schema keeps closing elsewhere. `uncritiqued[]` is what makes a partial
+run legible instead of letting it read as a complete one.
+
+**`verdict: "skipped"`** is legitimate in exactly two cases, each carrying its reason in
+the payload: an empty change set, or a task with no architecture file (no design phase).
+It is never the answer to "the critics did not run" — that is `unresolved`, with the
+components named.
+
+**Consumed by `/review` step 5.0f, through `scripts/build-critique-assert.sh`.** The record
+is a hard-block gate input, not documentation: `verdict: "critical"`, any component with
+`blocking: true`, `verdict: "unresolved"`, a payload missing the three count keys, and a
+`skipped` with no reason all fail the review. The absence of the record fails it too, unless
+`work-orders/wo-NN._critique.json` files show the build went through `/run-work-orders` and
+owes those instead. An override is a `bypass_reason` on this record, which the writer hoists
+to the envelope and the gate surfaces rather than absorbs.
+
+The per-critic verdict files under `<task_folder>/build-critique/` follow the `wo-critic`
+verdict-file pattern and are **not** written through `gate-audit-write.sh`; they are agent
+artifacts the orchestrator reads back, the same relationship `_critique.json` has to the
+work-order critique skill.

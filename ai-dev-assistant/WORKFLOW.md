@@ -150,6 +150,8 @@ This single command handles everything - it will guide you through project selec
 │   │   • User runs tests (Claude does NOT auto-run)                           │   │
 │   │   • Writes implementation.md                                             │   │
 │   │   • CODE is written in this phase                                        │   │
+│   │   • Each component is critiqued by a fresh-context critic                │   │
+│   │   • End of phase: the change is checked against the contract             │   │
 │   │                                                                          │   │
 │   └──────────────────────────────┬──────────────────────────────────────────┘   │
 │                                  │                                               │
@@ -386,6 +388,8 @@ This plugin includes skills and agents that activate automatically at each phase
 | `guide-integrator` | Skill | Loads dev-guides for security and implementation patterns |
 | `tdd-companion` | Skill | **Enforces TDD** - blocks code before tests |
 | `code-pattern-checker` | Skill | Validates SOLID, DRY, Security, CSS standards |
+| `wo-critic` | Agent (fresh context, per lens) | Critiques each built architecture component against its acceptance criteria |
+| `spec-axis-reviewer` | Agent (fresh context, read-only) | Once at end of phase - does the change implement what `alignment.md` asked for |
 
 ### Task Completion
 

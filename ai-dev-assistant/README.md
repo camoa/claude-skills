@@ -79,7 +79,7 @@ You create a **project** (a module, component, or set of related work), then bre
 | **0. Alignment** | `/scope <task>` | The scope contract. An interactive interview, one question at a time, that pins Goal / Expected result / Success criteria / Non-goals into `alignment.md`. You answer; nothing is auto-generated. Declinable and soft-nudged (offered when warranted), but this is where you make the decisions the later phases are held to. `--grill` turns up the interrogation when you want to be pushed. |
 | **1. Research** | `/research <task>` | Look for a third-party library that already solves it, find first-party patterns, study existing solutions. |
 | **2. Architecture** | `/design <task>` | Design the approach, choose patterns, set acceptance criteria. |
-| **3. Implementation** | `/implement <task>` | Build test-first, with your approval at each step. |
+| **3. Implementation** | `/implement <task>` | Build test-first, with your approval at each step. Each architecture component is critiqued by an independent fresh-context critic before the next one starts, and the finished phase is checked against the scope contract. |
 | **4. Review** | `/review <task>` | Run the code gates (TDD, SOLID, DRY, security, guides) plus any behavioral (E2E) and visual (regression, parity) gates you set up, then write the verdict before a PR. |
 
 Phases apply per task, not per project: a project can have tasks at different phases at once.
@@ -142,7 +142,7 @@ Returning to work? `/ai-dev-assistant:next` is the one command to remember: it s
 | `/research <task>` | Phase 1: research third-party libraries, first-party patterns, existing solutions. |
 | `/research-team <task>` | Phase 1 with 3 competing AI perspectives plus a debate. |
 | `/design <task>` | Phase 2: design architecture, choose patterns. |
-| `/implement <task>` | Phase 3: build test-first, step-by-step approval. |
+| `/implement <task>` | Phase 3: build test-first, step-by-step approval, per-component critique. |
 | `/review <task>` | Phase 4: run the hard gates, write `_review.json` and `PR_BODY.md`. |
 | `/complete <task>` | Finish the task, move it to completed. |
 
@@ -170,7 +170,7 @@ The full command set (playbooks, worktrees, epics, visual setup, prototypes, glo
   two implementations of one capability written at different times look nothing alike and slip straight
   through. Optionally accelerated by a code map you create and own; the framework never installs, runs,
   or maintains one.
-- **Adversarial challenge, built in.** The framework is made to argue with itself before you have to: a stated mechanism is challenged against the native pattern before it is adopted (mechanism-challenge), a built work-order gets an independent fresh-context critic that reads the diff as hostile (`wo-critic`), research can run as competing agents that debate (`/research-team`), and validation can run in isolated teams free of main-session bias (`/validate:team`).
+- **Adversarial challenge, built in.** The framework is made to argue with itself before you have to: a stated mechanism is challenged against the native pattern before it is adopted (mechanism-challenge), a built work-order gets an independent fresh-context critic that reads the diff as hostile (`wo-critic`), the same critic challenges each architecture component of an in-session build while the code can still change, research can run as competing agents that debate (`/research-team`), and validation can run in isolated teams free of main-session bias (`/validate:team`).
 - **Online dev-guides:** the framework loads current domain guides for your stack at the start of every phase via the required `dev-guides-navigator`, so the AI works from today's best practice rather than its training cutoff. Hash-cached, session-aware, 1200+ atomic decision guides at [camoa.github.io/dev-guides](https://camoa.github.io/dev-guides/).
 - **Process recipes (why it is stack-agnostic):** a *stack* is data, not engine code. Each framework's per-phase method (how to research, design, implement, and review on that stack) lives as a **process recipe**, discovered and fetched through [`dev-guides-navigator`](../dev-guides-navigator/README.md) from the public [dev-guides](https://camoa.github.io/dev-guides/) catalog. Supporting a new stack means authoring those assets (guides plus recipes) in dev-guides, not changing the engine. If your stack is not covered yet, that catalog is where a recipe gets added.
 

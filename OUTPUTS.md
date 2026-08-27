@@ -57,7 +57,7 @@ their directory through the same script.
 
 | Plugin | Writes | Where |
 |---|---|---|
-| ai-dev-assistant | phase artifacts, gate results, session state | `implementation_process/in_progress/<task>/`, gate JSON under `<task>/validations/latest/` and `<task>/validations/history.jsonl`; session context at `~/.claude/ai-dev-assistant/sessions/<key>.json` and the project registry at `~/.claude/ai-dev-assistant/active_projects.json` |
+| ai-dev-assistant | phase artifacts, gate results, session state, and build checkpoints in the code repository | `implementation_process/in_progress/<task>/`, gate JSON under `<task>/validations/latest/` and `<task>/validations/history.jsonl`; session context at `~/.claude/ai-dev-assistant/sessions/<key>.json` and the project registry at `~/.claude/ai-dev-assistant/active_projects.json`. `/implement` also writes `_build-critique.json` and one verdict file per critic under `<task>/build-critique/`, and git refs under `refs/worktree/aida/build-checkpoints/` and `refs/aida/build-checkpoints-keep/` in the code repository at `codePath` |
 | code-quality-tools | tool reports, review write-up, and the config its setup wizard installs | the resolved report directory (above), `REVIEW.md`; setup writes `.code-quality.json`, and on your confirmation `grumphp.yml` or `.husky/pre-commit`, `.github/workflows/quality.yml` and `quality-pr.yml`, and git hooks under `.git/hooks/` |
 | code-paper-test | trace report plus one analysis file per teammate | `<target_dir>/paper-test-team-report.md`, plus `happy-path-analysis.md`, `edge-case-analysis.md` and `red-team-analysis.md` beside the traced code. `--json` adds a `.json` beside each of those four |
 | brand-content-design | a project tree, brand files, templates, and finished content | `/brand-init` creates `<project>/` in the current directory with `input/`, `assets/`, `templates/`, `presentations/`, `carousels/` and `html-pages/`. Finished content lands in that project, at `presentations/<YYYY-MM-DD>-<name>/`, `carousels/<YYYY-MM-DD>-<name>/`, `infographics/<YYYY-MM-DD>-<name>/`, and `html-pages/` (under the design system's name from `/html-page`, under a dated folder from `/html-page-quick`). Not `outputs/<type>/<date>-<name>/`: that path survives only in the plugin's own `references/output-specs.md` and no command writes it. Templates and design systems go under `templates/<type>/<name>/`; `/brand-extract`, `/brand-assets` and `/brand-palette` rewrite `brand-philosophy.md`, and `/brand-extract` downloads Google Fonts into `assets/fonts/`. `/presentation` and `/template-presentation` also upload to Google Drive under `brand-content/<brand>/` and, on a re-render, default to trashing the previous Drive folder |
@@ -102,6 +102,17 @@ either is a decision for the repo owner, not a documentation fix.
   `PostToolUse` hook on any `Edit` or `Write` of a matching source
   extension, so it grows in any project, with no command of this plugin
   ever run and no command's Output section naming the path.
+- `ai-dev-assistant`'s `/implement` writes git refs into the repository at
+  `codePath`, under `refs/worktree/aida/build-checkpoints/` and `refs/aida/build-checkpoints-keep/`. That is a write into a tree
+  this marketplace does not own, and no rule covers it. The build-critique rung
+  needs a `<before>..<after>` range for work that is uncommitted and usually
+  untracked, so `scripts/build-checkpoint.sh` writes commit objects on no branch
+  and anchors them under that namespace so garbage collection cannot take them
+  mid-build. HEAD, the index, the working tree, `git branch`, `git status` and
+  `git stash` are untouched, and a plain `git log` does not show them, though
+  `git log --all` does. The command removes the namespace at end of phase;
+  `build-checkpoint.sh list --repo <codePath>` shows what an interrupted run left
+  behind, and `clear` removes it.
 - `brand-content-design` writes into its own installed plugin directory:
   the three infographic commands run `npm install` in
   `skills/infographic-generator/`, leaving a `node_modules/` that a plugin

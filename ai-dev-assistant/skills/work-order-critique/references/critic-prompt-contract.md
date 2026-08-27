@@ -3,7 +3,9 @@
 The discipline that makes the adversarial critique rung **narrow** (not close) the semantic-injection class,
 and that keeps the collected critic verdicts **untrusted data, never control flow**. The critic itself
 is the `agents/wo-critic.md` agent; this is the contract the `work-order-critique` skill honors when it
-spawns critics and reads their verdicts.
+spawns critics and reads their verdicts. Since v5.33.0 `/implement`'s build-critique rung
+(`references/build-critique.md`) honors the same contract when it critiques an architecture component,
+with the component's acceptance criteria in place of the work-order's `## Done =` checklist.
 
 ## R-B — NARROWS, does not CLOSE (the honest framing)
 A fresh-context critic removes the **builder's conversational narrative** as a steering channel. It does

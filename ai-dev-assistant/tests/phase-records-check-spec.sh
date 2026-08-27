@@ -95,7 +95,7 @@ OUT=$(bash "$K" "$(mkp cond research $REQUIRED)" --phase research)
 # got `unknown`: honest, and useless. The guardrail that had already caught one skipped gate
 # could not look at the phase after it, or at implementation after that.
 DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md _mechanism-challenge.json"
-IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md _mechanism-challenge.json"
+IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md _mechanism-challenge.json _build-critique.json"
 
 # shellcheck disable=SC2086
 [ "$(bash "$K" "$(mkp dfull design $DESIGN_REQ)" --phase design | jq -r .verdict)" = "complete" ] \

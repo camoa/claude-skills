@@ -1,5 +1,128 @@
 # Changelog
 
+## [5.33.0] - 2026-08-27
+
+### Added
+- **Phase 3 challenges the build while it can still change.** Both agents that do this
+  already existed and neither could reach an in-session build: `wo-critic` fires only inside
+  `/run-work-orders` and the work-order loop, and `spec-axis-reviewer` only in Phase 4. So a
+  task that declined the work-order offer had no adversarial review at all until every line
+  was written, and the offer never said that declining removed it. `commands/implement.md`
+  contained no occurrence of critic, adversarial, fresh-context or `architecture-validator` —
+  whose own description says to use it during implementation. What `/implement` did activate,
+  `tdd-companion` and `code-pattern-checker`, are skills the builder runs on itself in its own
+  context, which is self-review: a builder holding its own reasoning cannot be surprised by it.
+
+  Observed live: a build hand-rolled a test-runner install, rewrote a component's architecture
+  file mid-build to reverse a design-phase finding, and emptied a static-analysis suppression
+  list. Each was defensible. None was seen by anything but the agent that made it.
+
+  The rung reuses the whole existing critique stack with an architecture component standing in
+  for the work-order — `wo-risk-classify.sh` for the tier, `risk-tiering-rules.json` for the
+  lens set, the `wo-critic` agent, `wo-critique-aggregate.sh` for the verdict — and the
+  component's own acceptance criteria play the role of a work-order's `## Done =` checklist. A
+  `critical` from any lens halts that component; `unresolved` is never read as a pass. Once at
+  end of phase, `spec-axis-reviewer` answers the orthogonal question the adversarial lenses
+  cannot: does the change implement what the contract asked for, while the builder can still
+  act on the answer rather than at the Phase 4 gate. Contract: `references/build-critique.md`.
+
+- **`scripts/build-checkpoint.sh`** — a before/after boundary for work that has not been
+  committed. The work-order loop gets its `<before>..<after>` range free because a work-order
+  is a discrete build atom; an in-session build has neither sha, since the code sits in the
+  working tree, usually untracked, and HEAD does not move between components. Requiring a
+  commit per component would produce a range and is not ours to require: how a repository uses
+  version control belongs to whoever owns it. A checkpoint is instead a commit object on no
+  branch (temporary index, `write-tree`, `commit-tree`) anchored under
+  `refs/worktree/aida/build-checkpoints/` so garbage collection cannot take it mid-build. That
+  namespace is per-checkout; every other namespace under `refs/` is shared by all checkouts of
+  a repository. Two agents building different tasks in two worktrees of one repository is the
+  ordinary working pattern here, and `/implement` step 2 nudges toward a worktree, so a shared
+  namespace collides by default: both write the documented default label `main`, the second
+  overwrites the first, and the first to finish deletes the other's boundary on its end-of-phase
+  clear, after which a critic reads a range belonging to a different task. HEAD, the
+  index, the working tree, `git branch`, `git status` and `git stash` are untouched.
+  Untracked-not-ignored files are included deliberately, because a new module is entirely
+  untracked and a checkpoint that skipped them would hand the critic an empty diff for the
+  component most worth critiquing; `untracked[]` reports what rode along.
+
+- **`gate_type: "build-critique"`**, schema 1.9, at `<task_folder>/_build-critique.json`. One
+  record carries both axes, the way `/review` carries Standards and Spec in one `_review.json`
+  without merging their verdicts. `components_declared` and `components_critiqued` are both
+  required and any gap is itemised in `uncritiqued[]`: a rung that critiqued three of seven
+  components and recorded only its three green rows is a record that cannot say what it did
+  not look at.
+
+- **`scripts/build-critique-assert.sh`, and `/review` step 5.0f hard-blocks on it.** The rung
+  above shipped with three things that looked like enforcement and none that could fail: a
+  `conditional` row in `phase-records-check.sh` (a class of row that script never counts
+  against the verdict), a condition written in prose that nothing evaluated, and no downstream
+  consumer at all, so a record saying `verdict: "critical"` had no bearing on whether the task
+  shipped. The script answers one question from disk and answers it for both build paths: an
+  in-session `/implement` build owes `_build-critique.json`, a `/run-work-orders` build writes
+  `work-orders/wo-NN._critique.json` per work-order and owes no record here, and it tells them
+  apart by looking for those files rather than by trusting a sentence about which path was
+  taken. A build with neither was not challenged, and that is a fail, not a skip — there is
+  deliberately no path from "could not tell" to `pass`. A record that is present fails too on
+  `critical`, on any component `blocking: true`, on `unresolved`, on missing
+  `components_declared`/`components_critiqued`/`uncritiqued[]`, on a `skipped` carrying no
+  reason, and on zero components critiqued against a non-zero declared count. The one way past
+  is a `bypass_reason` recorded in the record itself, which surfaces in the review table and
+  sets `pr_ready: false`; there is no `--skip-build-critique` flag, because an override worth
+  taking is worth an auditor being able to read who took it. `/complete` inherits the block
+  through `_review.json` rather than growing a second copy of it, and `/audit-status` now
+  scans the record alongside the other audit files.
+
+- **`plugin_version` on every gate audit envelope.** `gate-audit-write.sh` recorded the
+  payload schema, the gate type, the time and the task folder, and no record anywhere said
+  which build produced it. That is not cosmetic: a live Phase 3 round improvised work a
+  sibling plugin owns, and deciding whether that was a current-build failure or a stale-build
+  replay of an already-fixed one should have been readable off the task folder. It was not —
+  the answer had to be reconstructed from cached script paths quoted in a chat transcript.
+  Resolved from the writing script's own install location, never from `CLAUDE_PLUGIN_ROOT` and
+  never from the caller, because the script executing is by definition the build that ran while
+  the environment variable can name a different one. Unreadable yields `"undetermined"`, never
+  a missing key. Records written before this carry no stamp, and that absence is itself
+  provenance.
+
+- **`scripts/plugin-dep-check.sh`**, and the four `/validate-*` wrappers now use it.
+
+### Fixed
+- **The four `/validate-*` wrappers stated a minimum version they never checked.** Each
+  confirmed `code-quality-tools`' cache directory "returns a non-empty directory" and then
+  declared "minimum supported version: 3.0.0". A cache holding only 2.x passed. Nothing
+  selected *which* installed version either: a live run resolved that path with a lexically
+  sorted glob and read 3.9.6 while 3.9.8 sat beside it. Resolution is now by version order
+  (`3.10.0` beats `3.9.8`, which the lexical shortcuts get wrong in both directions), the
+  minimum is compared, and a missing cache directory reports `undetermined` rather than
+  `not_installed` — the cache is one install location, not the only one, and answering "not
+  installed" from a single unreadable place is the same error as a gate reporting clean
+  because it could not run.
+
+- **The work-order offer sold isolation and never said what declining removed.** `[n]` also
+  declined `wo-critic`, the only adversarial review that existed before Phase 4. Both paths now
+  carry a critique, so the choice is about isolation and parallelism rather than about whether
+  the work gets reviewed at all.
+
+- **The phase-3 records contract excused the build-critique record unconditionally.** The row
+  was `conditional`, and `phase-records-check.sh` reports conditional rows for visibility and
+  never counts them, so an implementation phase that skipped the rung entirely returned
+  `{"verdict":"complete","missing_required":0}`. The condition the row named was real — the
+  work-order build path genuinely owes a different record — but it lived in prose while the
+  discriminator sat on disk. The row is now `required-unless-work-orders`, resolved by looking
+  for `work-orders/wo-NN._critique.json` and downgraded only when they are there, with a
+  warning naming what satisfied it. `commands/implement.md` claimed that running this check was
+  what stopped a skipped rung from reading as a complete phase; that sentence was false when it
+  was written and is now true.
+
+- **`spec-axis-reviewer`'s Inputs still named the merge-base diff**, which is the exact shipped
+  bug `review-change-set.sh` was written to fix: review runs before the pull request, so a
+  finished-but-uncommitted task yields an empty merge-base diff, and an agent handed no
+  implementation finds every success criterion missing and hard-fails complete work.
+
+- **`build-checkpoint.sh` hung on a value-less trailing `--label`** — `shift 2` against a
+  one-argument tail does not shift, so the parser spun forever. Found by the spec written
+  against it, not by reading it.
+
 ## [5.32.0] - 2026-08-27
 
 ### Changed
