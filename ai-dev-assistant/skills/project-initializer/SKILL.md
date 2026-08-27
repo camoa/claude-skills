@@ -88,7 +88,7 @@ Use `Write` tool to create `{path}/{project_name}/project_state.md`:
 **Status:** Initializing
 **Path:** {full_path_to_project_folder}
 **Code path:** {absolute_code_path OR (docs-only) OR omit-entirely-if-caller-did-not-provide}
-**Frameworks:** {when code path is known: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-frameworks.sh" "<code_path>"` and write the `jq -r 'join(", ")'` result (e.g. `drupal, nextjs, claude-code-plugins`); omit this line entirely when code path is unknown or the returned array is empty}
+**Frameworks:** {when code path is known: name the stack with the cascade in `references/framework-resolution.md` (facts from `bash "${CLAUDE_PLUGIN_ROOT}/scripts/framework-evidence.sh" "<code_path>"`, then `bash "${CLAUDE_PLUGIN_ROOT}/scripts/framework-support.sh" "<slug>"` per framework named, for what the catalogs carry) and write the slugs comma-joined (e.g. `drupal, nextjs, claude-code-plugins`); omit this line entirely when code path is unknown or the cascade names no framework}
 **Run Mode:** interactive
 **Review Required:** true
 **Worktree By Default:** false
@@ -126,7 +126,7 @@ Initial setup - gathering requirements
   the thing the framework exists to do, and nobody chose that. Measured on a real project: ten days
   old, the field unset, review not required. A new project starts with the promise on; turning it off
   is a decision someone makes, not a default nobody sees.
-- Never write an empty or placeholder `**Frameworks:**` line. The reader treats absence as `[]`. Only write the line when `detect-frameworks.sh` returns a non-empty array.
+- Never write an empty or placeholder `**Frameworks:**` line. The reader treats absence as `[]`. Only write the line when the cascade named at least one framework.
 - The project does NOT have a phase. Each TASK has its own phase (Research → Architecture → Implementation)
 - Multiple tasks can be in `implementation_process/in_progress/` simultaneously
 - Task files in `in_progress/` contain the task's current phase and progress
