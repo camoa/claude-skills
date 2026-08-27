@@ -3,6 +3,20 @@
 ## [5.30.8] - 2026-08-26
 
 ### Fixed
+- Nothing checked the primer that gets written. `/install-remembrance-hook` step 3 substitutes
+  five `{placeholder}` tokens by hand, step 5 writes the result, step 6 reports success. A dropped
+  one is not a one-time typo: `session-primer.md` is injected at the start of every session in
+  that project from then on, so a literal `{code_path}` is shown every session until somebody
+  notices. The only check was a person approving rendered prose in step 3, which is the wrong
+  instrument for spotting a stray brace. Step 5 now greps the written file for leftovers and the
+  install is not reported done while any remain.
+- `/install-remembrance-hook` told you to re-run it when a path changed and not when the plugin
+  was upgraded. `save-session.sh` is copied into the project at install time and pinned there —
+  deliberate, so the hook does not depend on the plugin install path, but it also means a fix
+  shipped later never reaches an installed project until the command runs again, and nothing
+  detects a stale copy. That is exactly what happened with the stdin fix below: a project
+  installed before v5.30.8 kept the blocking copy, and the only symptom was a session-end that
+  hung. Step 6 now names the upgrade case.
 - `save-session.sh` blocked on stdin and was repeatedly reported as "overran its timeout and
   went to background". It was never doing slow work — on a real task folder the file I/O finishes
   in hundredths of a second. Step 1 read `STDIN_JSON=$(cat)`, and the script has two callers of

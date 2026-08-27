@@ -72,6 +72,49 @@ else
   ok "the header no longer claims the script cannot exceed its budget"
 fi
 
+# --- the installed copy is pinned, and the command has to say so ---
+# save-session.sh is copied into a project at install time so the hook does not
+# depend on the plugin install path. That is deliberate, and it also means a fix
+# shipped later never reaches an already-installed project until the command runs
+# again. Nothing detects a stale copy — so the command has to name the upgrade case,
+# not only the path-changed one.
+IRH="$ROOT/commands/install-remembrance-hook.md"
+if grep -q 'Re-run it after upgrading the plugin' "$IRH"; then
+  ok "install-remembrance-hook says to re-run after a plugin upgrade, not only on a path change"
+else
+  bad "install-remembrance-hook says to re-run after a plugin upgrade, not only on a path change"
+fi
+if grep -q 'Nothing detects a stale copy' "$IRH"; then
+  ok "the pinned copy is named as undetected rather than left implied"
+else
+  bad "the pinned copy is named as undetected rather than left implied"
+fi
+
+# --- the written primer is checked for placeholders the hand-substitution missed ---
+if grep -q 'still has unfilled placeholder' "$IRH"; then
+  ok "the written primer is checked for leftover placeholders"
+else
+  bad "the written primer is checked for leftover placeholders"
+fi
+if grep -q 'Do not report the install as done while that prints anything' "$IRH"; then
+  ok "a half-filled primer blocks the done report"
+else
+  bad "a half-filled primer blocks the done report"
+fi
+
+# The check in the command must actually catch the template's placeholder shape.
+TPL="$ROOT/templates/session-primer.md"
+if [ -f "$TPL" ]; then
+  FOUND="$(grep -oE '\{[a-z_]+\}' "$TPL" | sort -u | wc -l | tr -d ' ')"
+  if [ "$FOUND" -ge 4 ]; then
+    ok "the primer template's placeholders match the shape the check greps for ($FOUND found)"
+  else
+    bad "the primer template's placeholders match the shape the check greps for" "found=$FOUND"
+  fi
+else
+  bad "templates/session-primer.md is missing"
+fi
+
 echo "----"
 echo "save-session-stdin-spec: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
