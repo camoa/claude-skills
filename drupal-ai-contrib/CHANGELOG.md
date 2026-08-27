@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2026-08-27
+
+Eslint/stylelint CI-parity gap: `verify`'s environment-match stopped at PHP/core
+version, and `pipeline` had no recovery path once a locally-clean lint run reached CI
+red.
+
+### Fixed
+
+- **`contribution-verify` §1 didn't environment-match JS/CSS tooling.** The shared
+  `gitlab_templates` eslint job merges core's linked `.eslintrc.passing.json` (+ jquery
+  variant) with the project's own `.eslintrc.json` via ESLint's own config cascade, plus
+  core's `.prettierrc.json` when absent — none of which a hand-rebuilt local eslint
+  command reproduces. Added the same environment-match discipline already applied to
+  PHP/core version. The `eslint`/`stylelint` gate-table row in §3 now points at it.
+- **`contribution-pipeline` §3 had no recovery path for a lint failure.** The eslint job
+  always uploads `_eslint.patch` as a job artifact (even empty) — the exact diff its own
+  `--fix` run produced. Added fetch-and-apply instructions, plus the caution against a
+  broad local `--fix` reformatting files outside the contribution (the shared job's own
+  `--fix` is scoped to files with real content diffs; a local one has no such filter).
+  `stylelint` has no equivalent patch artifact — only a `gl-codequality.json` findings
+  report — documented as its own case, not folded into the eslint instructions.
+- **The `.prettierrc.json` fallback in §1 was a fact, not a command.** Found by loading
+  this branch via `--plugin-dir` and running `/drupal-ai-contrib:verify` for real
+  against a live contribution: the eslint config resolved correctly, but Prettier
+  resolves its own config independently of eslint's `--config` flag, so the run silently
+  fell back to Prettier's default (`singleQuote: false`) and reported the reverse of the
+  project's real quote convention. Replaced the sentence with the literal three-line
+  symlink sequence the real CI job runs.
+
+### Verified
+
+- Both jobs' real behavior confirmed against `includes/include.drupalci.main.yml` in
+  `project/gitlab_templates` (the `eslint` and `stylelint` job blocks) — not assumed
+  from memory.
+- Live-tested against a real contribution via `--plugin-dir` + `/drupal-ai-contrib:verify`
+  (see the §1 fix above — that's how the fallback gap was found). Also confirmed against
+  a real historical CI failure (`ai_metering` job `10995315`, MR !31: pipeline "success",
+  job `status: failed`, `_eslint.patch` still fetchable today) and the config-cascade
+  merge on two published contrib modules with their own `.eslintrc.json`
+  (`ai_agents`, `ai_context`).
+
+### Bumped
+
+- Plugin `0.4.2` → `0.4.3`. Root `marketplace.json` entry `0.4.2` → `0.4.3` and
+  `metadata.version` `2.0.40` → `2.0.41`.
+
 ## [0.4.2] - 2026-08-11
 
 ### Changed

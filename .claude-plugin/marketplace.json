@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.40"
+    "version": "2.0.41"
   },
   "plugins": [
     {
@@ -120,7 +120,7 @@
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
       "description": "AI-assisted Drupal contribution quality \u2014 evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline) with a local drupalci-parity gate set plus AI-policy and eval gates, and 3 read-only fresh-context review agents. Authenticated GitLab writes delegate to the drupal-gitlab skill (glab); drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant, built on the camoa/dev-guides contribution guides.",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "author": {
         "name": "camoa"
       },

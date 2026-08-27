@@ -35,6 +35,25 @@ Read from `.gitlab-ci.yml`: `_TARGET_CORE`, `_TARGET_PHP`, `_GITLAB_TEMPLATES_RE
 are **resolved, never baked in**. If the environment is not matched, say so — local
 green on mismatched versions is not evidence.
 
+JS/CSS tooling needs the same discipline — as a command, not just a principle.
+Prettier resolves its own config independently of ESLint's `--config` / `--no-eslintrc`
+flags, so pointing `eslint` at core's linked config is not enough by itself: a run that
+never resolves the project's (or core's) `.prettierrc.json` still executes cleanly and
+reports a verdict — it just silently falls back to Prettier's own default
+(`singleQuote: false`), the **opposite** of core's convention, and flags the **opposite**
+set of quote violations from CI's real one. Reproduce what the shared `gitlab_templates`
+job actually does before running `eslint`:
+
+    ln -sv <core>/.eslintrc.passing.json <project>/../.eslintrc.json
+    ln -sv <core>/.eslintrc.jquery.json <project>/../.eslintrc.jquery.json
+    test -e <project>/.prettierrc.json || ln -sv <core>/.prettierrc.json <project>/.prettierrc.json
+
+then run `<core>/node_modules/.bin/eslint` from inside `<project>` with
+`--resolve-plugins-relative-to=<core>` — the same binary and the same merged config CI
+uses, not a hand-assembled command. `stylelint` has no such fallback: it uses the
+project's own `.stylelintrc*` when present, core's only when absent — confirm which one
+actually applies before assuming either.
+
 ### 2. Parse the enabled gate set
 
 `.gitlab-ci.yml` `include`s the `gitlab_templates` files. Determine which jobs are
@@ -52,7 +71,7 @@ Run each enabled job locally at CI strictness; capture each one's output as the 
 | `phpstan` | `phpstan analyse` with the project's `phpstan.neon` (`phpstan-drupal`). **`allow_failure: true` by default** — report it, flagged non-blocking. |
 | `phpunit` | Run with the **core config**: `vendor/bin/phpunit -c web/core/phpunit.xml.dist --webroot=web`, switching to `core/scripts/run-tests.sh` when `_PHPUNIT_CONCURRENT: 1`. The core `phpunit.xml.dist` carries `failOnWarning` / `failOnPhpunitWarning` — that is what fails on warnings. Pass = zero failures, zero warnings, zero deprecations. |
 | `cspell` | `cspell` with the project's `.cspell-project-words.txt` loaded |
-| `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT` |
+| `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT`; resolve the project's own merged config, never a rebuilt command (§1) |
 
 **Opt-in variants** — `OPT_IN_TEST_PREVIOUS_MAJOR` / `_PREVIOUS_MINOR` / `_NEXT_MINOR` /
 `_MAX_PHP`. `gitlab_templates` v1.15.0+ moved these to **manual trigger** — they do not
