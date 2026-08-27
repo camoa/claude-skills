@@ -3,6 +3,13 @@
 ## [5.30.8] - 2026-08-26
 
 ### Fixed
+- Half of the 5.30.7 `phase` fix was missing. That release made `gate-audit-write.sh` require
+  `phase` for both `dev-guides-load` and `playbook-load`, and updated `/research`, `/design` and
+  `/implement` to pass it — for `playbook-load` only. None of the three named `phase` in the
+  `_dev-guides-load.json` payload, so a caller following the command body literally omitted it and
+  drew a missing-key warning on every run. Callers had been passing it by habit, which is why the
+  records on disk carry it and nothing surfaced until the requirement was added. All three now
+  name it, and the spec checks both gates across all three phases rather than one gate.
 - Nothing checked the primer that gets written. `/install-remembrance-hook` step 3 substitutes
   five `{placeholder}` tokens by hand, step 5 writes the result, step 6 reports success. A dropped
   one is not a one-time typo: `session-primer.md` is injected at the start of every session in
