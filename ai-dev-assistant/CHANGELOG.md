@@ -1,6 +1,6 @@
 # Changelog
 
-## [5.30.8] - 2026-08-26
+## [5.30.9] - 2026-08-27
 
 ### Fixed
 - Five documented calls to `analysis-agent-normalize.sh` showed no argument, and the script
@@ -62,6 +62,10 @@
   detects a stale copy. That is exactly what happened with the stdin fix below: a project
   installed before v5.30.8 kept the blocking copy, and the only symptom was a session-end that
   hung. Step 6 now names the upgrade case.
+
+## [5.30.8] - 2026-08-26
+
+### Fixed
 - `save-session.sh` blocked on stdin and was repeatedly reported as "overran its timeout and
   went to background". It was never doing slow work — on a real task folder the file I/O finishes
   in hundredths of a second. Step 1 read `STDIN_JSON=$(cat)`, and the script has two callers of
