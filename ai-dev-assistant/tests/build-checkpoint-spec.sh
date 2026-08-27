@@ -559,9 +559,20 @@ git -C "$WTBASE" cat-file -e "$WSHA_MAIN^{commit}" 2>/dev/null \
 [ -z "$(git -C "$WTLINK" rev-parse --verify "$NS/main.before" 2>/dev/null || true)" ] \
   && pass_check "the main checkout's checkpoint is not reachable through the other's namespace" \
   || fail_check "the linked worktree can still resolve a label it just cleared"
-[ -z "$(git -C "$WTBASE" for-each-ref --format='%(refname)' 'refs/aida' 2>/dev/null || true)" ] \
-  && pass_check "neither checkout wrote to the shared refs/aida/ prefix" \
-  || fail_check "a checkpoint landed in the ref store both checkouts share"
+# The IDENTITY ref must never be shared: that is the collision this whole fixture is about.
+# The sha-named keep-ref is shared on purpose, because gc in one checkout cannot see another
+# checkout's per-worktree refs, and a name that is the object's own hash can only collide with
+# an identical object. So the property is not "nothing shared" but "no LABEL shared".
+[ -z "$(git -C "$WTBASE" for-each-ref --format='%(refname)' 'refs/aida/build-checkpoints' 2>/dev/null || true)" ] \
+  && pass_check "no label-named checkpoint landed in the ref store both checkouts share" \
+  || fail_check "a label-named checkpoint landed in the shared ref store, which is the collision"
+for kr in $(git -C "$WTBASE" for-each-ref --format='%(refname)' 'refs/aida/build-checkpoints-keep' 2>/dev/null || true); do
+  if [ "${kr##*/}" = "$(git -C "$WTBASE" rev-parse --verify "$kr" 2>/dev/null)" ]; then
+    pass_check "the shared keep-ref is named by the object's own sha, so it cannot collide by label"
+  else
+    fail_check "a shared keep-ref is not named by its object's sha: $kr"
+  fi
+done
 
 # ------------------------------------------------------------------- label validation
 #
@@ -651,6 +662,96 @@ rc_of capture --label x
 rc_of capture --repo "$R" --label x --wat
 [ "$RC" = "2" ] && pass_check "an unrecognised argument exits 2 rather than being ignored" \
                 || fail_check "an unknown argument exited $RC, expected 2"
+
+# ------------------------------------------- gc from a sibling checkout must not take it
+#
+# The finding this defends against: moving to `refs/worktree/` bought per-checkout isolation
+# and silently lost gc protection between checkouts, because a checkout's per-worktree refs
+# are not reachability roots for a gc run somewhere else. Measured on git 2.43, before the
+# shared keep-ref existed: `gc --prune=now` from the main checkout deleted an object captured
+# in a linked worktree, `list` still reported the checkpoint, and the critic's rev range was a
+# git fatal. Three shipped documents asserted this could not happen, and the assertion whose
+# message said so never ran gc. This one runs gc.
+
+GCR="$T/gcrepo"
+mkdir -p "$GCR"
+git -C "$GCR" init -q .
+git -C "$GCR" config user.email spec@example.com
+git -C "$GCR" config user.name "Spec"
+git -C "$GCR" commit -q --allow-empty -m init
+git -C "$GCR" worktree add -q "$T/gcwt" -b gcwt 2>/dev/null
+printf 'new module\n' > "$T/gcwt/module.txt"
+
+GC_SHA=$(bash "$S" capture --repo "$T/gcwt" --label gc1 2>/dev/null | jq -r '.sha // ""')
+if [ -n "$GC_SHA" ]; then
+  git -C "$GCR" gc --prune=now --quiet 2>/dev/null || true
+
+  git -C "$GCR" cat-file -e "${GC_SHA}^{commit}" 2>/dev/null \
+    && pass_check "a gc --prune=now from a sibling checkout does not destroy the checkpoint object" \
+    || fail_check "the object was collected by a sibling checkout's gc; the anchor does not anchor"
+
+  [ "$(bash "$S" list --repo "$T/gcwt" 2>/dev/null | jq -r '.checkpoints[0].object')" = "resolvable" ] \
+    && pass_check "list confirms the object still resolves after that gc" \
+    || fail_check "list reports the checkpoint as unresolvable after a sibling gc"
+
+  git -C "$T/gcwt" diff --name-only "$GC_SHA"..HEAD >/dev/null 2>&1 \
+    && pass_check "the rev range a critic would run is still usable after that gc" \
+    || fail_check "the rev range is a git fatal after a sibling gc"
+
+  # The mechanism, asserted directly: a shared sha-named keep-ref is what gc can see.
+  git -C "$GCR" rev-parse --verify "refs/aida/build-checkpoints-keep/$GC_SHA" >/dev/null 2>&1 \
+    && pass_check "capture anchors the object in a shared, sha-named keep namespace" \
+    || fail_check "no shared keep-ref for the captured object; only the per-worktree ref exists"
+
+  # Isolation must survive the addition. The keep-ref is shared on purpose; the identity ref
+  # is not, and one checkout clearing must not strand another's checkpoint.
+  bash "$S" capture --repo "$GCR" --label gc1 >/dev/null 2>&1
+  bash "$S" clear --repo "$GCR" >/dev/null 2>&1
+  [ "$(bash "$S" list --repo "$T/gcwt" 2>/dev/null | jq -r '.checkpoints[0].object')" = "resolvable" ] \
+    && pass_check "one checkout clearing leaves a sibling's checkpoint resolvable, not just listed" \
+    || fail_check "clearing in one checkout stranded or destroyed a sibling's checkpoint"
+
+  bash "$S" clear --repo "$T/gcwt" >/dev/null 2>&1
+  [ "$(git -C "$GCR" for-each-ref --format='%(refname)' refs/aida/build-checkpoints-keep | wc -l)" = "0" ] \
+    && pass_check "clear releases the shared keep-ref too, leaving no anchor behind" \
+    || fail_check "keep-refs survive clear, accumulating one unreachable-object anchor per build"
+else
+  fail_check "could not capture in a linked worktree, so the gc property was never tested"
+fi
+
+# --------------------------------------- list reports an object that is gone, rather than
+# ---------------------------------------- naming a checkpoint the caller cannot use
+#
+# Staged as the original bug minus its fix: capture in a LINKED WORKTREE, delete the shared
+# keep-ref, then gc from the MAIN checkout, which cannot see the worktree's per-worktree ref
+# and therefore collects the object while the ref survives. A single checkout cannot stage
+# this, because there its own identity ref is a reachability root, which is why an earlier
+# version of this assertion never ran and could not fail.
+
+DEADR="$T/deadrepo"
+mkdir -p "$DEADR"
+git -C "$DEADR" init -q .
+git -C "$DEADR" config user.email spec@example.com
+git -C "$DEADR" config user.name "Spec"
+git -C "$DEADR" commit -q --allow-empty -m init
+git -C "$DEADR" worktree add -q "$T/deadwt" -b deadwt 2>/dev/null
+printf 'x\n' > "$T/deadwt/x.txt"
+DEAD_SHA=$(bash "$S" capture --repo "$T/deadwt" --label dead 2>/dev/null | jq -r '.sha // ""')
+git -C "$DEADR" update-ref -d "refs/aida/build-checkpoints-keep/$DEAD_SHA" 2>/dev/null || true
+git -C "$DEADR" reflog expire --expire=now --all 2>/dev/null || true
+git -C "$DEADR" gc --prune=now --quiet 2>/dev/null || true
+
+if [ -n "$DEAD_SHA" ] && ! git -C "$DEADR" cat-file -e "${DEAD_SHA}^{commit}" 2>/dev/null; then
+  DL=$(bash "$S" list --repo "$T/deadwt" 2>/dev/null)
+  [ "$(printf '%s' "$DL" | jq -r '.checkpoints[0].object')" = "unresolvable" ] \
+    && pass_check "a ref that outlived its object is reported unresolvable, not as a usable checkpoint" \
+    || fail_check "list named a checkpoint whose commit is gone without saying so"
+  [ "$(printf '%s' "$DL" | jq -r '.unresolvable_count')" = "1" ] \
+    && pass_check "unresolvable_count counts it, so a caller reading one field still learns" \
+    || fail_check "unresolvable_count did not count a dangling checkpoint"
+else
+  fail_check "could not stage a dangling ref, so the unresolvable path was never tested"
+fi
 
 if [ "$FAIL" = "0" ]; then printf '\nbuild-checkpoint-spec: all checks passed\n'; else printf '\nbuild-checkpoint-spec: FAILURES\n' >&2; fi
 exit "$FAIL"

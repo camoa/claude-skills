@@ -3,7 +3,7 @@
 #
 # Usage:
 #   build-checkpoint.sh capture --repo <path> --label <name>   → JSON: {sha, ...}
-#   build-checkpoint.sh list    --repo <path>                  → JSON: {checkpoints: [...]}
+#   build-checkpoint.sh list    --repo <path>                  → JSON: {checkpoints, unresolvable_count}
 #   build-checkpoint.sh clear   --repo <path> [--label <name>] → JSON: {removed: [...]}
 #
 # Why this exists. The work-order critique hands each critic a `<before>..<after>` git rev
@@ -26,11 +26,28 @@
 # including this namespace. They are hidden from the ordinary views, not from a deliberate
 # look.
 #
-# The object is anchored under `refs/worktree/aida/build-checkpoints/<label>` so garbage
-# collection cannot take it mid-build. That namespace is outside `refs/heads` and
-# `refs/tags`, so it is invisible to `git branch`, `git tag` and a plain `git log`, and
-# `clear` removes it. It is the one thing this script writes into the repository, and the
-# calling command's Output section has to say so.
+# The object is anchored under TWO refs, and it needs both.
+#
+# `refs/worktree/aida/build-checkpoints/<label>` is the checkpoint's identity. That namespace
+# is per-checkout, which is the whole point: everything else under `refs/` is shared by every
+# checkout of a repository, and two agents building different tasks in two worktrees would
+# otherwise write the same default label, overwrite each other, and delete each other's
+# boundary on clear.
+#
+# But per-checkout refs are not reachability roots for a `git gc` run from a DIFFERENT
+# checkout, so per-worktree isolation costs the very protection the anchor exists for.
+# Measured on git 2.43: `gc --prune=now` from a sibling checkout deletes the object and leaves
+# the ref, after which `list` reports a checkpoint whose commit no longer exists and the
+# critic's rev range is a git fatal. So each object also gets a keep-ref at
+# `refs/aida/build-checkpoints-keep/<sha>`, which IS shared and therefore visible to gc
+# everywhere. Naming it by sha rather than by label is what makes sharing safe: two checkouts
+# can only collide on that name by having produced byte-identical trees, in which case they
+# are the same object and sharing it is correct.
+#
+# Both namespaces sit outside `refs/heads` and `refs/tags`, so they are invisible to
+# `git branch`, `git tag` and a plain `git log`. `clear` removes both. They are the only
+# things this script writes into the repository, and the calling command's Output section has
+# to say so.
 #
 # `refs/worktree/` rather than a plain `refs/` prefix, because everything else under `refs/`
 # is one store shared by every checkout of a repository, and `refs/worktree/` is the one
@@ -100,6 +117,7 @@ if ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 NS="refs/worktree/aida/build-checkpoints"
+KEEP_NS="refs/aida/build-checkpoints-keep"
 
 # A label becomes part of a ref name. Refuse anything git would reject or that could escape
 # the namespace, rather than letting git fail somewhere less legible.
@@ -163,6 +181,11 @@ capture)
   fi
   [ -n "$SHA" ] || { echo "build-checkpoint: could not create a checkpoint commit object" >&2; exit 4; }
 
+  # The shared, sha-named keep-ref goes first: an identity ref anchoring an object that a
+  # sibling checkout's gc can still collect is the failure this pair exists to prevent.
+  git -C "$REPO" update-ref "$KEEP_NS/$SHA" "$SHA" 2>/dev/null \
+    || { echo "build-checkpoint: could not anchor the checkpoint object under $KEEP_NS/$SHA" >&2; exit 4; }
+
   git -C "$REPO" update-ref "$NS/$LABEL" "$SHA" 2>/dev/null \
     || { echo "build-checkpoint: could not anchor the checkpoint under $NS/$LABEL" >&2; exit 4; }
 
@@ -195,6 +218,7 @@ capture)
   HEAD_AFTER=$(git -C "$REPO" rev-parse --verify HEAD 2>/dev/null) || HEAD_AFTER=""
   if [ "$HEAD_AFTER" != "$PARENT" ]; then
     git -C "$REPO" update-ref -d "$NS/$LABEL" 2>/dev/null
+    git -C "$REPO" update-ref -d "$KEEP_NS/$SHA" 2>/dev/null
     echo "build-checkpoint: HEAD moved during the capture ($PARENT -> $HEAD_AFTER); the checkpoint was removed rather than reported as an undisturbed boundary" >&2
     exit 4
   fi
@@ -213,7 +237,8 @@ capture)
       untracked_count: ($untracked | length)}') || REPORT=""
   if [ -z "$REPORT" ]; then
     git -C "$REPO" update-ref -d "$NS/$LABEL" 2>/dev/null
-    echo "build-checkpoint: could not render the capture report; the checkpoint ref was removed rather than left anchored with no sha to clear it by" >&2
+    git -C "$REPO" update-ref -d "$KEEP_NS/$SHA" 2>/dev/null
+    echo "build-checkpoint: could not render the capture report; the checkpoint refs were removed rather than left anchored with no sha to clear them by" >&2
     exit 5
   fi
   printf '%s\n' "$REPORT"
@@ -222,11 +247,27 @@ capture)
 list)
   ROWS=$(git -C "$REPO" for-each-ref --format='%(refname)%09%(objectname)' "$NS" 2>/dev/null || true)
   if [ -z "$ROWS" ]; then
-    jq -n '{checkpoints: []}'
+    jq -n '{checkpoints: [], unresolvable_count: 0}'
   else
-    printf '%s\n' "$ROWS" \
-      | jq -R --arg ns "$NS" 'split("\t") | {label: (.[0] | ltrimstr($ns + "/")), ref: .[0], sha: .[1]}' \
-      | jq -s '{checkpoints: .}'
+    # Resolve every sha before reporting it. A ref can outlive its object: per-worktree refs
+    # are not reachability roots for a gc run from a sibling checkout, and while the shared
+    # keep-ref closes that case, nothing stops someone deleting a ref by hand. A list that
+    # names a checkpoint whose commit is gone hands the caller a rev range that turns into a
+    # git fatal, which is the same failure arriving one step later and further from its cause.
+    CHECKED=""
+    while IFS="$(printf '\t')" read -r refname refsha; do
+      [ -n "$refname" ] || continue
+      if git -C "$REPO" cat-file -e "${refsha}^{commit}" 2>/dev/null; then
+        CHECKED="${CHECKED}${refname}	${refsha}	resolvable
+"
+      else
+        CHECKED="${CHECKED}${refname}	${refsha}	unresolvable
+"
+      fi
+    done <<< "$ROWS"
+    printf '%s' "$CHECKED" \
+      | jq -R --arg ns "$NS" 'split("\t") | {label: (.[0] | ltrimstr($ns + "/")), ref: .[0], sha: .[1], object: .[2]}' \
+      | jq -s '{checkpoints: ., unresolvable_count: (map(select(.object == "unresolvable")) | length)}'
   fi
   ;;
 
@@ -245,9 +286,17 @@ clear)
   FAILED_LABELS=()
   drop_ref() {
     # $1 the full refname, $2 the label to report it under.
+    #
+    # The object's shared keep-ref goes with it. Read the sha BEFORE deleting the identity
+    # ref, because afterwards there is nothing left to say which object this checkout was
+    # holding. Leaving keep-refs behind would accumulate one unreachable-object anchor per
+    # component per build, in a namespace nothing else ever prunes.
+    local sha
+    sha=$(git -C "$REPO" rev-parse --verify "$1" 2>/dev/null) || sha=""
     if git -C "$REPO" update-ref -d "$1" 2>/dev/null \
        && ! git -C "$REPO" rev-parse --verify "$1" >/dev/null 2>&1; then
       REMOVED_LABELS+=("$2")
+      [ -n "$sha" ] && git -C "$REPO" update-ref -d "$KEEP_NS/$sha" 2>/dev/null || true
     else
       FAILED_LABELS+=("$2")
     fi

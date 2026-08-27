@@ -783,6 +783,14 @@ the payload: an empty change set, or a task with no architecture file (no design
 It is never the answer to "the critics did not run" — that is `unresolved`, with the
 components named.
 
+**Consumed by `/review` step 5.0f, through `scripts/build-critique-assert.sh`.** The record
+is a hard-block gate input, not documentation: `verdict: "critical"`, any component with
+`blocking: true`, `verdict: "unresolved"`, a payload missing the three count keys, and a
+`skipped` with no reason all fail the review. The absence of the record fails it too, unless
+`work-orders/wo-NN._critique.json` files show the build went through `/run-work-orders` and
+owes those instead. An override is a `bypass_reason` on this record, which the writer hoists
+to the envelope and the gate surfaces rather than absorbs.
+
 The per-critic verdict files under `<task_folder>/build-critique/` follow the `wo-critic`
 verdict-file pattern and are **not** written through `gate-audit-write.sh`; they are agent
 artifacts the orchestrator reads back, the same relationship `_critique.json` has to the

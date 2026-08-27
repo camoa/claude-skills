@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# build-critique-assert.sh — was this task's build ever challenged by something other than
+# the context that built it?
+#
+# THE DEFECT THIS EXISTS FOR. v5.33.0 added a build-critique rung to `/implement` and three
+# things looked like they enforced it. None could fail. `phase-records-check.sh` carried a
+# `_build-critique.json` row marked `conditional`, and that script counts conditional rows
+# for visibility only, so a phase that skipped the rung entirely still returned
+# `{"verdict":"complete","missing_required":0}`. The condition the row named — "when the
+# build ran in-session rather than through /run-work-orders" — was prose, and nothing read
+# it, even though the discriminator sits on disk. And no downstream command named the record
+# at all, so a record saying `verdict: "critical"` had zero effect on whether the task
+# shipped. The rung was real; its enforcement was a description of enforcement.
+#
+# This script is the part that can fail. It answers one question from disk — was the build
+# challenged, and did the challenge come back clean — and it answers it for BOTH build paths,
+# because a task reaches `/review` by either:
+#
+#   in-session   `/implement` built it and owes `<task>/_build-critique.json`
+#   work-orders  `/run-work-orders` built it and owes `<task>/work-orders/wo-NN._critique.json`
+#                per work-order, and legitimately has no `_build-critique.json`
+#
+# A build with NEITHER record was not challenged. That is the failure, not a skip, and it is
+# the one case a "could not tell" reading would wave through — which is exactly how the gap
+# above stayed open. There is deliberately no path here from "no evidence" to `pass`.
+#
+# Usage: build-critique-assert.sh <task_folder> [--change-set-empty]
+#
+#   --change-set-empty  the caller resolved an empty change set (`/review` step 4's
+#                       `empty_reason: no_changes_anywhere`). Only consulted when there is no
+#                       record at all: nothing changed, so there was nothing to critique.
+#
+# Emits ONE JSON object on stdout:
+#   { schema_version, task_folder, build_path, verdict, unresolved, bypass_reason,
+#     evidence{...}, messages[] }
+#
+# build_path: in-session | work-orders | none
+# verdict:    pass | fail | bypassed | skipped
+#
+# Exit codes:
+#   0 — pass, skipped (benign), or bypassed (an override the operator recorded)
+#   1 — fail, including every unresolved state (fail-closed)
+#   2 — usage: no task folder, or not a directory
+set -uo pipefail
+
+TASK_DIR="${1:-}"
+CHANGE_SET_EMPTY=0
+shift 2>/dev/null || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --change-set-empty) CHANGE_SET_EMPTY=1 ;;
+    *) ;;
+  esac
+  shift
+done
+
+MESSAGES='[]'
+add_msg() { MESSAGES=$(jq -c --arg m "$1" '. + [$m]' <<<"$MESSAGES" 2>/dev/null || printf '[]'); }
+
+EVIDENCE='{}'
+set_ev() { EVIDENCE=$(jq -c --arg k "$1" --argjson v "$2" '.[$k] = $v' <<<"$EVIDENCE" 2>/dev/null || printf '{}'); }
+set_ev_s() { EVIDENCE=$(jq -c --arg k "$1" --arg v "$2" '.[$k] = $v' <<<"$EVIDENCE" 2>/dev/null || printf '{}'); }
+
+emit() { # emit <verdict> <unresolved true|false> <bypass_reason or empty> <exit code>
+  jq -n --arg t "$TASK_DIR" --arg p "$BUILD_PATH" --arg v "$1" --argjson u "$2" \
+        --arg b "$3" --argjson e "$EVIDENCE" --argjson m "$MESSAGES" \
+    '{schema_version:"1.0",
+      task_folder:(if $t=="" then null else $t end),
+      build_path:$p, verdict:$v, unresolved:$u,
+      bypass_reason:(if $b=="" then null else $b end),
+      evidence:$e, messages:$m}'
+  exit "$4"
+}
+
+BUILD_PATH="none"
+
+if [ -z "$TASK_DIR" ] || [ ! -d "$TASK_DIR" ]; then
+  printf '{"schema_version":"1.0","task_folder":null,"build_path":"none","verdict":"fail","unresolved":true,"bypass_reason":null,"evidence":{},"messages":["task_folder_not_a_directory"]}\n'
+  exit 2
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  # A check that could not run has cleared nothing. Reporting that as a pass is the shape of
+  # failure this whole file is about.
+  printf '{"schema_version":"1.0","build_path":"none","verdict":"fail","unresolved":true,"bypass_reason":null,"evidence":{},"messages":["jq_missing"]}\n'
+  exit 1
+fi
+
+REC="$TASK_DIR/_build-critique.json"
+WO_DIR="$TASK_DIR/work-orders"
+
+# ---------------------------------------------------------------- the in-session record
+
+if [ -e "$REC" ]; then
+  BUILD_PATH="in-session"
+  if [ ! -s "$REC" ]; then
+    # An empty file parses as absent everywhere downstream. Calling it present here would
+    # bury the problem one layer deeper.
+    set_ev_s build_critique_record "empty"
+    add_msg "_build-critique.json is an empty file, so the rung recorded nothing"
+    emit fail true "" 1
+  fi
+  if ! jq -e 'type == "object"' "$REC" >/dev/null 2>&1; then
+    set_ev_s build_critique_record "unreadable"
+    add_msg "_build-critique.json does not parse as a JSON object"
+    emit fail true "" 1
+  fi
+  set_ev_s build_critique_record "present"
+
+  PAYLOAD=$(jq -c '(.gate_specific // .)' "$REC" 2>/dev/null || printf '{}')
+  BYPASS=$(jq -r '(.bypass_reason // .gate_specific.bypass_reason // "") | tostring' "$REC" 2>/dev/null)
+  [ "$BYPASS" = "null" ] && BYPASS=""
+  RV=$(jq -r '(.verdict // "") | tostring' <<<"$PAYLOAD")
+  set_ev_s record_verdict "$RV"
+
+  BLOCKING=$(jq -c '[(.components // [])[] | select(.blocking == true) | (.component // "unnamed")]' <<<"$PAYLOAD")
+  set_ev blocking_components "$BLOCKING"
+  BLOCKING_N=$(jq -r 'length' <<<"$BLOCKING")
+
+  DECLARED=$(jq -r '(.components_declared // -1)' <<<"$PAYLOAD")
+  CRITIQUED=$(jq -r '(.components_critiqued // -1)' <<<"$PAYLOAD")
+  UNCRIT_N=$(jq -r '(.uncritiqued // []) | length' <<<"$PAYLOAD")
+  set_ev components_declared "$DECLARED"
+  set_ev components_critiqued "$CRITIQUED"
+  set_ev uncritiqued_count "$UNCRIT_N"
+
+  ALIGN=$(jq -r '(.alignment.verdict // "") | tostring' <<<"$PAYLOAD")
+  set_ev_s alignment_verdict "$ALIGN"
+  if [ "$ALIGN" = "fail" ]; then
+    # Surfaced, never the reason this gate fails. `/review` runs its own Spec axis (step
+    # 5.0d) over the current change set, and that is the pass entitled to judge whether the
+    # criteria are met NOW. Failing here as well would block on a Phase 3 finding that the
+    # rest of Phase 3 may already have fixed, and would report one problem twice.
+    add_msg "the Phase 3 alignment axis came back fail; the Spec gate judges it against the current change set"
+  fi
+
+  # An operator override is a decision someone made and recorded. Surface it; never absorb it.
+  if [ -n "$BYPASS" ]; then
+    add_msg "the build-critique record carries a recorded bypass: $BYPASS"
+    emit bypassed false "$BYPASS" 0
+  fi
+
+  if [ "$RV" = "critical" ] || [ "$BLOCKING_N" -gt 0 ]; then
+    add_msg "the build critique blocked: verdict=$RV, $BLOCKING_N blocking component(s)"
+    add_msg "address the findings and re-run the rung, or record an explicit bypass_reason in the record"
+    emit fail false "" 1
+  fi
+
+  if [ "$RV" = "unresolved" ]; then
+    add_msg "the build critique came back unresolved, so nothing was cleared"
+    emit fail true "" 1
+  fi
+
+  if [ "$DECLARED" = "-1" ] || [ "$CRITIQUED" = "-1" ] || ! jq -e 'has("uncritiqued")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+    # The counts are what make a partial run legible. A record that critiqued three of seven
+    # components and recorded only its three green rows cannot say what it did not look at,
+    # and reads exactly like a complete one.
+    add_msg "the record omits components_declared, components_critiqued or uncritiqued[], so it cannot say what it did not look at"
+    emit fail true "" 1
+  fi
+
+  if [ "$RV" = "skipped" ]; then
+    SKIP_REASON=$(jq -r '(.reason // .skip_reason // .alignment.reason // "") | tostring' <<<"$PAYLOAD")
+    [ "$SKIP_REASON" = "null" ] && SKIP_REASON=""
+    if [ -z "$SKIP_REASON" ]; then
+      # `skipped` is legitimate for an empty phase range or a task with no architecture file,
+      # and each of those carries its reason. Without one it is indistinguishable from "the
+      # critics did not run", which the contract says is `unresolved`.
+      add_msg "verdict skipped with no reason recorded; the contract allows skipped only for an empty phase range or no architecture file, each carrying its reason"
+      emit fail true "" 1
+    fi
+    add_msg "the rung recorded a legitimate skip: $SKIP_REASON"
+    emit skipped false "" 0
+  fi
+
+  if [ "$CRITIQUED" -le 0 ] && [ "$DECLARED" -gt 0 ]; then
+    add_msg "$DECLARED component(s) declared and none critiqued, so the build was not challenged"
+    emit fail true "" 1
+  fi
+
+  if [ "$UNCRIT_N" -gt 0 ]; then
+    add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued with reasons"
+  fi
+  add_msg "the build was challenged in-session: $CRITIQUED component critique(s), verdict $RV"
+  emit pass false "" 0
+fi
+
+# ---------------------------------------------------------- the work-order build path
+#
+# No `_build-critique.json`. That is legitimate for exactly one reason: the build went
+# through `/run-work-orders`, which challenges each work-order with `wo-critic` and writes
+# `wo-NN._critique.json` instead. Read that off disk rather than believing a sentence about
+# which path was taken.
+
+set_ev_s build_critique_record "absent"
+
+CRITIQUES=""
+HALTS=""
+WOS=""
+if [ -d "$WO_DIR" ]; then
+  CRITIQUES=$(find "$WO_DIR" -maxdepth 1 -name 'wo-*_critique.json' -type f 2>/dev/null | sort)
+  HALTS=$(find "$WO_DIR" -maxdepth 1 -name 'wo-*.HALT' -type f 2>/dev/null | sort)
+  WOS=$(find "$WO_DIR" -maxdepth 1 -name 'wo-*.md' -type f 2>/dev/null | sort)
+fi
+count_lines() { if [ -z "$1" ]; then printf '0'; else printf '%s\n' "$1" | grep -c .; fi; }
+CRIT_N=$(count_lines "$CRITIQUES")
+HALT_N=$(count_lines "$HALTS")
+WO_N=$(count_lines "$WOS")
+set_ev work_orders "$WO_N"
+set_ev work_order_critiques "$CRIT_N"
+set_ev halt_markers "$HALT_N"
+
+if [ "$CRIT_N" -gt 0 ]; then
+  BUILD_PATH="work-orders"
+  BLOCKED='[]'
+  UNREADABLE='[]'
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # `// ` cannot be used to default this: jq treats `false` as null-ish, so
+    # `.blocking // "absent"` reports every clean critique as unevaluated.
+    B=$(jq -r 'if has("blocking") then (.blocking | tostring) else "absent" end' "$f" 2>/dev/null || printf 'absent')
+    case "$B" in
+      true)  BLOCKED=$(jq -c --arg n "$(basename "$f")" '. + [$n]' <<<"$BLOCKED") ;;
+      false) ;;
+      # An absent, null or unparseable `blocking` is `not_evaluated`, which
+      # references/critique-envelope.md treats as blocking. A critique that did not evaluate
+      # cleared nothing.
+      *)     UNREADABLE=$(jq -c --arg n "$(basename "$f")" '. + [$n]' <<<"$UNREADABLE") ;;
+    esac
+  done <<< "$CRITIQUES"
+  set_ev blocking_work_orders "$BLOCKED"
+  set_ev unevaluated_work_orders "$UNREADABLE"
+
+  if [ "$HALT_N" -gt 0 ]; then
+    add_msg "$HALT_N work-order HALT marker(s) present, so a critique blocked and was never resolved"
+    emit fail false "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$BLOCKED")" -gt 0 ]; then
+    add_msg "blocking work-order critique(s): $(jq -r 'join(", ")' <<<"$BLOCKED")"
+    emit fail false "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$UNREADABLE")" -gt 0 ]; then
+    add_msg "work-order critique(s) with no evaluated blocking field: $(jq -r 'join(", ")' <<<"$UNREADABLE")"
+    emit fail true "" 1
+  fi
+  add_msg "the build was challenged through /run-work-orders: $CRIT_N work-order critique(s), none blocking"
+  emit pass false "" 0
+fi
+
+if [ "$WO_N" -gt 0 ]; then
+  BUILD_PATH="work-orders"
+  add_msg "$WO_N compiled work-order(s) and no wo-NN._critique.json for any of them, so no work-order was challenged"
+  add_msg "run /ai-dev-assistant:run-work-orders, or build in-session so the /implement build-critique rung writes _build-critique.json"
+  emit fail true "" 1
+fi
+
+if [ "$CHANGE_SET_EMPTY" = "1" ]; then
+  # Nothing changed anywhere, so there was nothing for a critic to look at. This is the one
+  # benign absence, and it is the caller's finding, not a guess made here.
+  add_msg "no changes anywhere in the change set, so there was nothing to critique"
+  emit skipped false "" 0
+fi
+
+add_msg "no build-critique record and no work-order critique, so nothing outside the builder ever looked at this build"
+add_msg "re-run the /implement build-critique rung, or record an explicit bypass_reason in _build-critique.json"
+emit fail true "" 1

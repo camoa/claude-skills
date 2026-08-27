@@ -411,18 +411,28 @@ Per component:
 A `critical` from any lens halts that component: `[a]ddress` (fix, then re-run the critique) or
 `[o]verride (reason)`, recorded in `bypass_reason`. `concern` is surfaced and does not block.
 `unresolved` is not a pass: a critic that could not determine has cleared nothing, and under
-`--headless` it halts.
+`--required`, which is passed unconditionally, is what makes it blocking rather than a non-blocking
+`concern` at low and medium tier.
 
 At end of phase, before the phase hands off, `ai-dev-assistant:spec-axis-reviewer` runs once against
-`alignment.md`'s Task-Level `### Success criteria`, `architecture.md`, and the change set from
-`scripts/review-change-set.sh`. `missing_requirements[]` non-empty is a hard fail; `scope_creep[]`
-alone is advisory. `/review` runs its own Spec pass later regardless: a criterion found unimplemented
+`alignment.md`'s Task-Level `### Success criteria`, `architecture.md`, and the file list from
+`git diff --name-only <phase.before>..<phase.after>`, the phase-level checkpoint pair.
+**Not `scripts/review-change-set.sh`**, which deliberately excludes untracked files: a new module is
+entirely untracked until someone stages it, which is the state this phase builds in, and a reviewer
+handed a change set with the new code missing finds every criterion unimplemented and hard-fails work
+that is complete. `missing_requirements[]` non-empty is a hard fail; `scope_creep[]` alone is
+advisory. `/review` runs its own Spec pass later regardless: a criterion found unimplemented
 while the build is open is a task, and found at the gate it is a reopening.
 
 Both axes are then written as one `gate-audit-write.sh` envelope, `gate_type: "build-critique"`,
 schema 1.9, at `<task_folder>/_build-critique.json`. `components_declared` and `components_critiqued`
 are both required and any gap is itemised in `uncritiqued[]`, so a partial run cannot read as a
-complete one. Finally `build-checkpoint.sh clear --repo <codePath>` removes the checkpoint refs.
+complete one. The records check then runs (`phase-records-check.sh --phase implement`), where the
+record is `required-unless-work-orders`: required unless `work-orders/wo-NN._critique.json` files show
+the build went through `/run-work-orders` and owes those instead. `/review` step 5.0f re-asserts the
+same record as a hard block via `scripts/build-critique-assert.sh`, so a skipped rung stops the task
+at the gate rather than only being noted. Finally `build-checkpoint.sh clear --repo <codePath>`
+removes the checkpoint refs.
 
 ## Implementation Progress (v3.0.0)
 

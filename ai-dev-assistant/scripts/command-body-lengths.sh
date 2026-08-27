@@ -25,7 +25,9 @@ JSON_MODE=0
 #
 # v5.23.0 raised `research` 100 -> 105 and `review` 120 -> 125. v5.30.3 raised
 # `review` 125 -> 127 for the step-0 phase declaration the other three phase
-# commands have had since v5.29.0 and this one never did. Every command
+# commands have had since v5.29.0 and this one never did. v5.33.0 raised
+# `review` 127 -> 129 for step 5.0f, the assertion gate that makes the
+# build-critique rung able to fail. Every command
 # now carries the `## Output` section OUTPUTS.md requires, and those two bodies
 # had 1 and 0 lines of slack. The other three absorbed it. This guard exists to
 # stop bodies regrowing silently; a budget change in the same PR as the growth
@@ -35,7 +37,7 @@ declare -A BUDGETS=(
   [design]=80
   [implement]=120
   [complete]=100
-  [review]=127
+  [review]=129
 )
 
 # Body line count = total lines minus frontmatter (between first two --- lines, inclusive).

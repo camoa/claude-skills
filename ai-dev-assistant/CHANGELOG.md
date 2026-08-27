@@ -52,6 +52,26 @@
   components and recorded only its three green rows is a record that cannot say what it did
   not look at.
 
+- **`scripts/build-critique-assert.sh`, and `/review` step 5.0f hard-blocks on it.** The rung
+  above shipped with three things that looked like enforcement and none that could fail: a
+  `conditional` row in `phase-records-check.sh` (a class of row that script never counts
+  against the verdict), a condition written in prose that nothing evaluated, and no downstream
+  consumer at all, so a record saying `verdict: "critical"` had no bearing on whether the task
+  shipped. The script answers one question from disk and answers it for both build paths: an
+  in-session `/implement` build owes `_build-critique.json`, a `/run-work-orders` build writes
+  `work-orders/wo-NN._critique.json` per work-order and owes no record here, and it tells them
+  apart by looking for those files rather than by trusting a sentence about which path was
+  taken. A build with neither was not challenged, and that is a fail, not a skip — there is
+  deliberately no path from "could not tell" to `pass`. A record that is present fails too on
+  `critical`, on any component `blocking: true`, on `unresolved`, on missing
+  `components_declared`/`components_critiqued`/`uncritiqued[]`, on a `skipped` carrying no
+  reason, and on zero components critiqued against a non-zero declared count. The one way past
+  is a `bypass_reason` recorded in the record itself, which surfaces in the review table and
+  sets `pr_ready: false`; there is no `--skip-build-critique` flag, because an override worth
+  taking is worth an auditor being able to read who took it. `/complete` inherits the block
+  through `_review.json` rather than growing a second copy of it, and `/audit-status` now
+  scans the record alongside the other audit files.
+
 - **`plugin_version` on every gate audit envelope.** `gate-audit-write.sh` recorded the
   payload schema, the gate type, the time and the task folder, and no record anywhere said
   which build produced it. That is not cosmetic: a live Phase 3 round improvised work a
@@ -82,6 +102,17 @@
   declined `wo-critic`, the only adversarial review that existed before Phase 4. Both paths now
   carry a critique, so the choice is about isolation and parallelism rather than about whether
   the work gets reviewed at all.
+
+- **The phase-3 records contract excused the build-critique record unconditionally.** The row
+  was `conditional`, and `phase-records-check.sh` reports conditional rows for visibility and
+  never counts them, so an implementation phase that skipped the rung entirely returned
+  `{"verdict":"complete","missing_required":0}`. The condition the row named was real — the
+  work-order build path genuinely owes a different record — but it lived in prose while the
+  discriminator sat on disk. The row is now `required-unless-work-orders`, resolved by looking
+  for `work-orders/wo-NN._critique.json` and downgraded only when they are there, with a
+  warning naming what satisfied it. `commands/implement.md` claimed that running this check was
+  what stopped a skipped rung from reading as a complete phase; that sentence was false when it
+  was written and is now true.
 
 - **`spec-axis-reviewer`'s Inputs still named the merge-base diff**, which is the exact shipped
   bug `review-change-set.sh` was written to fix: review runs before the pull request, so a

@@ -49,15 +49,29 @@ commits into someone's branch has overstepped.
 
 `scripts/build-checkpoint.sh` resolves it. A checkpoint is a commit **object** with no
 branch — a temporary index, `git write-tree`, `git commit-tree` — anchored under
-`refs/worktree/aida/build-checkpoints/<label>` so garbage collection cannot take it mid-build.
+`refs/worktree/aida/build-checkpoints/<label>`, plus a second, shared keep-ref at
+`refs/aida/build-checkpoints-keep/<sha>`. It needs both, and the reason is measured rather
+than assumed.
 
-**`refs/worktree/` is the point of that path, not decoration.** Every other namespace under
+**Why two refs.** `refs/worktree/` is the point of that path, not decoration. Every other namespace under
 `refs/` is shared by all checkouts of a repository; `refs/worktree/` is per-checkout. Two
 agents building different tasks in two worktrees of the same repository is the ordinary
 working pattern, and `/implement` step 2 nudges toward a worktree, so a shared namespace is a
 collision by default rather than by accident: both write the documented default label `main`,
 the second overwrites the first, and whichever finishes first deletes the other's boundary on
-its end-of-phase clear. The critic then reads a range belonging to a different task. HEAD
+its end-of-phase clear. The critic then reads a range belonging to a different task.
+
+Per-checkout refs, though, are **not reachability roots for a `git gc` run from a different
+checkout**, so isolation on its own costs the protection the anchor exists to give. Measured
+on git 2.43: `gc --prune=now` from a sibling checkout deletes the object and leaves the ref,
+after which `list` names a checkpoint whose commit is gone and the critic's rev range is a git
+fatal. The shared keep-ref closes that, and naming it by the object's own sha is what makes
+sharing safe: two checkouts can only collide on that name by having produced byte-identical
+trees, in which case they are the same object. `clear` releases both.
+
+`list` reports each checkpoint's `object` as `resolvable` or `unresolvable` and counts the
+latter, because a ref can still outlive its object if someone deletes a ref by hand, and a
+range that fails at the critic is the same failure arriving further from its cause. HEAD
 does not move, no branch advances, the real index and working tree are untouched, and the
 sha behaves as an ordinary commit for `git diff <a>..<b>`. Untracked-not-ignored files are
 included deliberately: a new module is entirely untracked until someone stages it, and a

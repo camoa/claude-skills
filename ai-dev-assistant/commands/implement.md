@@ -215,9 +215,15 @@ Reached when the last component closes. All four parts are required.
    answer to "the critics did not run" — that is `unresolved`, with the components named.
 
 3. **The records check.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/phase-records-check.sh
-   "<task_folder>" --phase implement` and surface its verdict. Without this the contract row
-   for `_build-critique.json` is a string nothing evaluates, and a phase that skipped the rung
-   ends indistinguishable from one that ran it.
+   "<task_folder>" --phase implement` and surface its verdict. A missing `_build-critique.json`
+   makes the verdict `incomplete` and lifts `missing_required` — the row is
+   `required-unless-work-orders`, resolved against disk, so it is required here and downgraded
+   only when `work-orders/wo-NN._critique.json` files show the build went through
+   `/run-work-orders` instead. It was `conditional` until v5.33.0, and conditional rows are
+   never counted against the verdict, so a phase that skipped the rung entirely still reported
+   `complete` with `missing_required: 0` and this sentence described an enforcement that did
+   not exist. `/review` step 5.0f re-asserts the same record as a hard block; failing here is
+   cheaper, because the context that could fix it is still loaded.
 
 4. **Clear the checkpoints.** `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh clear --repo
    <codePath>`, so the phase leaves no refs behind in the code repository.
@@ -260,8 +266,8 @@ non-functional change.
 
 Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`.
 
-**In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
+**In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`, plus a shared keep-ref per object at `refs/aida/build-checkpoints-keep/<sha>`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
 
-`refs/worktree/` rather than a plain `refs/` path is deliberate and load-bearing: everything else under `refs/` is shared by every checkout of a repository, while `refs/worktree/` is per-checkout. Two agents building different tasks in two worktrees of one repository is the ordinary case here, not an edge case, and step 2 of this command actively nudges toward a worktree. In a shared namespace they would write the same default label, silently overwrite each other's boundary, and one of them clearing at end of phase would delete the other's, handing a critic a range belonging to a different task.
+The pair is deliberate and load-bearing. `refs/worktree/` rather than a plain `refs/` path: everything else under `refs/` is shared by every checkout of a repository, while `refs/worktree/` is per-checkout. Two agents building different tasks in two worktrees of one repository is the ordinary case here, not an edge case, and step 2 of this command actively nudges toward a worktree. In a shared namespace they would write the same default label, silently overwrite each other's boundary, and one of them clearing at end of phase would delete the other's, handing a critic a range belonging to a different task. The shared keep-ref then buys back what per-checkout refs give up: they are not reachability roots for a `git gc` run from another checkout, so without it a `gc --prune=now` next door collects the object and leaves the ref. It is named by the object's own sha, which is why sharing it cannot collide. `clear` removes both, and `list` says whether each object still resolves.
 
 Prints progress and test results.

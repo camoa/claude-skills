@@ -204,20 +204,23 @@ if printf '%s\n' "$IMPL_CONTRACT" | grep -q '_build-critique\.json'; then
 else
   fail_check "the implement record contract does not owe _build-critique.json — a phase that skipped the rung still reads complete"
 fi
-# It is `conditional`, not `required`, and the condition has to be stated. The work-order
-# build path writes per-work-order `_critique.json` and never `_build-critique.json`, so an
-# unconditional row would fail the records contract for a phase that was in fact critiqued —
-# just by the other path. A conditional row with no condition named is the worse failure
-# though: it excuses the record's absence without saying when absence is legitimate.
-if printf '%s\n' "$IMPL_CONTRACT" | grep -qE '_build-critique\.json\|conditional\|'; then
-  pass_check "it is owed conditionally, matching the two build paths"
+# It is `required-unless-work-orders`, and the distance from a plain `conditional` is the
+# finding that produced this row. The work-order build path writes per-work-order
+# `_critique.json` and never `_build-critique.json`, so an unconditional row would fail the
+# records contract for a phase that was in fact critiqued, just by the other path. But
+# `conditional` rows are never counted against the verdict at all, so the row excused the
+# record's absence unconditionally while its stated condition sat in prose nothing read: a
+# phase that skipped the rung entirely returned `complete` with `missing_required: 0`. The
+# token is resolved against disk instead, and the row still has to name the other path.
+if printf '%s\n' "$IMPL_CONTRACT" | grep -qE '_build-critique\.json\|required-unless-work-orders\|'; then
+  pass_check "it is required unless disk shows the work-order path took the build"
 else
-  fail_check "_build-critique.json is not marked conditional in the implement contract"
+  fail_check "_build-critique.json is not required-unless-work-orders in the implement contract"
 fi
-if printf '%s\n' "$IMPL_CONTRACT" | grep -E '_build-critique\.json\|conditional\|' | grep -q 'run-work-orders'; then
-  pass_check "the condition names the build path that writes a different record instead"
+if printf '%s\n' "$IMPL_CONTRACT" | grep -E '_build-critique\.json\|required-unless-work-orders\|' | grep -q 'run-work-orders'; then
+  pass_check "the row names the build path that writes a different record instead"
 else
-  fail_check "the conditional row does not say when the record is legitimately absent"
+  fail_check "the row does not say when the record is legitimately absent"
 fi
 
 # --------------------------------------------------- 4. the command actually instructs it
