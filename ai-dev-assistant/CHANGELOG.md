@@ -3,6 +3,26 @@
 ## [5.30.8] - 2026-08-26
 
 ### Fixed
+- The maintainer guide-creation offer could not fire on a task worth authoring for, and the proof
+  sat in its own reference file. `references/maintainer-create-on-miss.md` describes two surfaces
+  reading the same `coverage-map.json`: Surface 2 triggers on "a load-bearing capability aspect is
+  uncovered" (per aspect), Surface 1 on "the `Domain guides matched:` group is empty" (whole task).
+  Observed live on a task whose coverage map named two uncovered aspects out of six, both of them
+  the point of the task: `_dev-guides-load.json` carried 12 catalog candidates and 4 matched guides
+  covering the other four, so the union was not empty and Surface 1 stayed silent — while Surface 2,
+  reading the same file, named both aspects out loud. An all-or-nothing test can only fire when
+  nothing matched at all, which is the case where a maintainer has least idea what to write; the
+  case worth catching is a real gap sitting beside real coverage. Surface 1 now applies the
+  per-aspect test Surface 2 already had, and offers once per uncovered aspect — the durable sidecar
+  is already keyed by topic, so per-aspect decisions record and suppress independently with no
+  change to its shape. The whole-task test survives as the explicit fallback for a task with no
+  readable coverage map, and a decline records which of the two tests produced it so a `[n]` under
+  the weaker one is not mistaken for a `[n]` under the stronger.
+
+  `/research`, `/design` and `/implement` each restated the trigger inline, in three slightly
+  different wordings, which is how the two surfaces drifted apart while living in the same
+  reference. All three now defer to that reference for the condition and keep only their own
+  wiring.
 - Half of the 5.30.7 `phase` fix was missing. That release made `gate-audit-write.sh` require
   `phase` for both `dev-guides-load` and `playbook-load`, and updated `/research`, `/design` and
   `/implement` to pass it — for `playbook-load` only. None of the three named `phase` in the

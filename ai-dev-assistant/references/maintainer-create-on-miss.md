@@ -22,8 +22,25 @@ Fires in `/research` Step 3 and `/design` Step 2, **after** the two-stage prefli
 
 **Trigger (all must hold):**
 1. `maintainer_mode == true`.
-2. **Genuine domain miss** — the preflight's `Domain guides matched:` group is empty
-   (`catalog_candidates[] ∪ matched_domain_guides[]` is empty, i.e. "— none auto-matched —"). The
+2. **An uncovered load-bearing aspect** — `coverage-map.json` lists a load-bearing capability
+   aspect in `uncovered_aspects[]` that no guide covers. This is the same per-aspect test Surface 2
+   already applies to recipes, against the same file.
+
+   **Until v5.30.8 this read "the preflight's `Domain guides matched:` group is empty"**, and that
+   whole-task test is why the offer had never once fired on a task worth authoring for. Observed
+   live: a task whose coverage map named two uncovered aspects — both of them the point of the
+   task — matched four domain guides on its other four aspects, so the union was not empty and the
+   offer stayed silent. Surface 2, reading the same map, named both aspects out loud. An
+   all-or-nothing test can only fire when *nothing* matched, which is the case where the maintainer
+   has least idea what to write; the case worth catching is a real gap sitting beside real
+   coverage.
+
+   **Fallback when there is no coverage map** (a task entered directly at `/design`, or a map that
+   failed to load): fall back to the old whole-task test — the union being empty. Say which test
+   was applied when recording the decision, so a `[n]` recorded under the weaker test is not
+   mistaken for one recorded under the stronger.
+
+   The
    always-present methodology floor (tdd/solid/dry[/library-first]) does **not** count — only a true
    absence of a *domain* guide is a miss (a weak/partial match is not a miss).
 3. **Not already settled for this topic** — the **durable** sidecar `<task>/_create-on-miss.json` does
@@ -35,6 +52,10 @@ Fires in `/research` Step 3 and `/design` Step 2, **after** the two-stage prefli
    entry, write it back — a `/research` decline must still suppress the `/design` re-offer.
 
 **The offer (assertive — name the gap plainly, default `[n]`, never blocks):**
+
+The offer names the uncovered aspect, one offer per aspect, so `<topic>` is that aspect rather than
+the task. The durable sidecar is already keyed by `topic`, so per-aspect decisions record and
+suppress independently without any change to its shape.
 
 > 🧭 **Maintainer create-on-miss.** No dev-guide topic matched this task's domain
 > (**`<topic>`**), and your dev-guides source repo is detected at `<dg_src>`. As the maintainer, you
