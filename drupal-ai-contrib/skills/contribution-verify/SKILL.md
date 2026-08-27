@@ -35,6 +35,44 @@ Read from `.gitlab-ci.yml`: `_TARGET_CORE`, `_TARGET_PHP`, `_GITLAB_TEMPLATES_RE
 are **resolved, never baked in**. If the environment is not matched, say so — local
 green on mismatched versions is not evidence.
 
+JS/CSS tooling needs the same discipline — as a command, not just a principle.
+Prettier resolves its own config independently of ESLint's `--config` / `--no-eslintrc`
+flags, so pointing `eslint` at core's linked config is not enough by itself: a run that
+never resolves the project's (or core's) `.prettierrc.json` still executes cleanly and
+reports a verdict — it just silently falls back to Prettier's own default
+(`singleQuote: false`), the **opposite** of core's convention, and flags the **opposite**
+set of quote violations from CI's real one. Reproduce what the shared `gitlab_templates`
+job actually does before running `eslint`:
+
+    ln -sfv <core>/.eslintrc.passing.json <project>/../.eslintrc.json
+    ln -sfv <core>/.eslintrc.jquery.json <project>/../.eslintrc.jquery.json
+    test -e <project>/.prettierrc.json || ln -sfv <core>/.prettierrc.json <project>/.prettierrc.json
+
+The first two land **above** the contribution repo, so they never enter the MR. The third
+lands **inside** it: remove it when you are done, or it will show up in `git status` and can
+be committed by accident. `-f` so a re-run does not fail on an existing link.
+
+CI also writes a `.prettierignore` when the project has none, which exempts YAML from
+Prettier's rules:
+
+    test -e <project>/.prettierignore || echo '*.yml' > <project>/.prettierignore
+
+Then run the job's **own** invocation, not a shortened one. Missing flags reproduce the
+config and lose the scope, which is the same false clean in a different place:
+
+    <core>/node_modules/.bin/eslint --no-error-on-unmatched-pattern \
+      --ignore-pattern="*.es6.js" --resolve-plugins-relative-to=<core> \
+      --ext=.js,.yml .
+
+`--ext=.js,.yml` is the one that matters most: given a directory, ESLint lints `.js` only by
+default, while CI also lints `*.info.yml`, `*.libraries.yml` and `*.services.yml`. Drop it and
+the local run reports clean on files CI checks. `--ignore-pattern="*.es6.js"` skips legacy
+files CI skips, so dropping it produces a false red instead. Same binary, same merged config,
+same scope. `stylelint` resolves differently: it uses the project's own
+`.stylelintrc*` when present and core's only when absent, so there is no merged cascade to
+reproduce — confirm which single config applies before assuming either. That is a statement
+about the config cascade, not about Prettier, which stylelint does not involve.
+
 ### 2. Parse the enabled gate set
 
 `.gitlab-ci.yml` `include`s the `gitlab_templates` files. Determine which jobs are
@@ -52,7 +90,7 @@ Run each enabled job locally at CI strictness; capture each one's output as the 
 | `phpstan` | `phpstan analyse` with the project's `phpstan.neon` (`phpstan-drupal`). **`allow_failure: true` by default** — report it, flagged non-blocking. |
 | `phpunit` | Run with the **core config**: `vendor/bin/phpunit -c web/core/phpunit.xml.dist --webroot=web`, switching to `core/scripts/run-tests.sh` when `_PHPUNIT_CONCURRENT: 1`. The core `phpunit.xml.dist` carries `failOnWarning` / `failOnPhpunitWarning` — that is what fails on warnings. Pass = zero failures, zero warnings, zero deprecations. |
 | `cspell` | `cspell` with the project's `.cspell-project-words.txt` loaded |
-| `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT` |
+| `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT`; resolve the project's own merged config, never a rebuilt command (§1) |
 
 **Opt-in variants** — `OPT_IN_TEST_PREVIOUS_MAJOR` / `_PREVIOUS_MINOR` / `_NEXT_MINOR` /
 `_MAX_PHP`. `gitlab_templates` v1.15.0+ moved these to **manual trigger** — they do not
