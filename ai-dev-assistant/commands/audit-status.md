@@ -28,7 +28,7 @@ Refuse if no project context resolved.
 
 ### Step 2 — For each task, scan audit files
 
-The 7 v4.0.0 audit file types are:
+The audit file types are:
 
 - `_pre-analysis.json`
 - `_coverage-mapping.json`
@@ -41,7 +41,7 @@ The 7 v4.0.0 audit file types are:
 For each task folder:
 
 1. List which audit files exist
-2. For each existing file, parse `gate_type`, `fired_at`, `user_choice`, `bypass_reason`, `gate_specific` per `references/gate-audit-schema.md` v1.0
+2. For each existing file, parse `gate_type`, `fired_at`, `plugin_version`, `user_choice`, `bypass_reason`, `gate_specific` per `references/gate-audit-schema.md`
 3. Compute "expected but missing" gates:
    - `_pre-analysis.json` expected if `research.md` exists; missing → grandfathered (pre-v4.0.0) OR bypassed
    - `_coverage-mapping.json` expected if `research.md` exists with content > 200 lines (substantive)
@@ -120,7 +120,7 @@ If single-task mode shows `⚠` for `phase-command-bypass`, ask: `[d]etails / [a
 
 - `/ai-dev-assistant:status` — task-level overview; includes Unaudited gates section as summary
 - `/ai-dev-assistant:research`, `:design`, `:implement`, `:complete` — the phase commands that fire the audited gates
-- `references/gate-audit-schema.md` v1.0 — schema for the 7 audit file types
+- `references/gate-audit-schema.md` — schema for every audit file type
 - `references/gate-hardening-prompts.md` v1.0 — prompts surfaced by audit-status when bypasses are acknowledged
 
 ## Output

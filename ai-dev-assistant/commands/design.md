@@ -70,7 +70,7 @@ Default `[n]` — proceed to `/ai-dev-assistant:implement` as usual. Never block
 
 - Full walkthrough: `references/design-walkthrough.md`
 - Mandated wording: `references/gate-hardening-prompts.md`
-- Audit shape: `references/gate-audit-schema.md` v1.0
+- Audit shape: `references/gate-audit-schema.md`
 - Alignment grammar: `references/alignment-contract.md`
 - Distill-and-drop seam + `_distill.json` schema: `references/orchestration-context-hygiene.md`
 

@@ -30,9 +30,11 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
 
 2b. **Work-order build-path offer (v4.19.0+, conditional).** Check whether `<task>/work-orders/wo-*.md` exist (Bash glob). **SILENT when absent — do not print anything if no work-orders are found.** When files are found, print ONE soft-nudge:
 
-> 💡 Work-orders found for this task. Build via independent agents? `/ai-dev-assistant:run-work-orders <task>` (requires a worktree) runs each WO in isolation. `[y]` → hand off to `/run-work-orders`; `[n]` (default) — continue in-session. See `references/work-order-lifecycle.md`.
+> 💡 Work-orders found for this task. Build via independent agents? `/ai-dev-assistant:run-work-orders <task>` (requires a worktree) runs each WO in isolation, with an adversarial critique per work-order. `[y]` → hand off to `/run-work-orders`; `[n]` (default) — continue in-session, where the build-critique rung critiques per architecture component instead. Either way the build is challenged. See `references/work-order-lifecycle.md` and `references/build-critique.md`.
 
 Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive Development Loop unchanged. The in-session default behavior is not altered by this check.
+
+**Say what each path includes, and do not sell isolation alone.** Before v5.33.0 this nudge offered the upside of the work-order path and never mentioned that `[n]` also declined `wo-critic`, the only adversarial review that existed before Phase 4. A task took the default for good reasons and its whole build went unchallenged, which nobody chose and nothing recorded. The in-session path now carries its own critique rung, so the choice is about isolation and parallelism rather than about whether the work gets reviewed.
 
 3. **Dev-guides preflight (two-stage + component-aware, v4.10.0+).** Stage 1 deterministic; Stage 2 in two agent passes (prose + component file-path). See `/research` step 3 for the shared two-stage description.
    - **Stage 1 (deterministic).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder> --phase implement` → `{ methodology_floor[], catalog_candidates[], scanned_files[], warnings[] }`. The implement-phase methodology floor is 5 refs (`plugin:tdd-workflow`, `plugin:solid`, `plugin:dry-patterns`, `plugin:library-first`, `plugin:quality-gates`).
@@ -80,18 +82,145 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 
 10. **Run `${CLAUDE_PLUGIN_ROOT}/scripts/session-context-write.sh "<project_name>" "<project_folder>" "<task>" "<task_path>"`** (Bash) with resolved project + task.
 
-11. **Hand off to interactive development.** Developer guides each step. Claude proposes (test-first), developer approves, Claude writes test then implementation, developer runs tests (Claude does NOT auto-run unless explicitly asked).
+11. **Open the phase boundary, then hand off to interactive development.** First run
+    `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> --label phase.before`
+    (Bash) and keep the `.sha` — Runtime Step 12's alignment axis diffs against it, and a
+    boundary captured after the code exists measures nothing. Then hand off: developer guides
+    each step, Claude proposes (test-first), developer approves, Claude writes test then
+    implementation, developer runs tests (Claude does NOT auto-run unless explicitly asked).
+
+    **The Interactive Development Loop below is part of this step**, including its build-critique
+    rung at loop step 8. The loop exits into Runtime Step 12, which closes the phase. A build that
+    reaches the end of the loop and stops has not finished the phase.
+
+12. **Close the phase.** The alignment axis, the record, the records check, and clearing the
+    checkpoints. Defined in full under "Runtime Step 12" below, after the loop it follows.
 
 ## Interactive Development Loop
 
-For each acceptance criterion:
+The unit of BUILDING is an acceptance criterion. The unit of CRITIQUE is an architecture
+component (`/design` writes one `architecture/<component>.md` per component, each carrying
+its own acceptance criteria). Those are different units on purpose, and step 0 below is what
+joins them: a component is critiqued when its criteria are all built, not once per criterion.
+
+0. **Open the component.** Before writing the first line of a component's code:
+   `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> --label <component>.before`
+   Keep the `.sha`. A flat `architecture.md` with no component files is one component named `main`.
 1. Developer requests piece to implement.
 2. Claude proposes approach (test first, per TDD discipline from `references/tdd-workflow.md`).
 3. Developer approves or adjusts.
 4. Claude writes test, then implementation.
 5. Developer runs tests.
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
-7. Repeat until task complete.
+7. Repeat 1-6 until this component's acceptance criteria are built.
+8. **Close the component: run the build-critique rung below.** It is not optional and not a
+   nudge. A `critical` stops this component here.
+9. Repeat 0-8 for the next component. When the last one closes, go to Runtime Step 12.
+
+### The build-critique rung (v5.33.0+) — full contract `references/build-critique.md`
+
+Runs at loop step 8, once per component. Every command below is a real invocation; the
+scripts are the existing work-order critique kernels and their flags are not optional.
+
+```
+CD=<task_folder>/build-critique
+mkdir -p "$CD/<component>.critics"
+
+# 1. the boundary
+AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> \
+          --label <component>.after | jq -r .sha)
+
+# 2. the realized file list, which is what the classifier takes (it has no rev-range input)
+git -C <codePath> diff --name-only <before-sha>..$AFTER > "$CD/<component>.files.txt"
+
+# 3. the tier. --gate-floor is REQUIRED here: there is no work-order file to read it from,
+#    and the classifier tiers everything high when both are missing.
+${CLAUDE_PLUGIN_ROOT}/scripts/wo-risk-classify.sh \
+  --files-from "$CD/<component>.files.txt" \
+  --gate-floor "tdd,solid,dry,security,guides"        # the base_gate_floor from risk-tiering-rules.json
+# → .risk_tier ∈ low | medium | high
+```
+
+**4. Lenses** from `references/risk-tiering-rules.json` `tier_lenses`: `low` → `skeptic`;
+`medium` → `security`, `correctness`; `high` → `security`, `correctness`, `meets-ac`. A
+security lens is guaranteed at `medium` and above, so executable code always gets one.
+
+**5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
+**fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
+challenge. Give each the inputs the existing contract specifies: `<worktree>` = `codePath`,
+the `<before-sha>..$AFTER` range, the component's acceptance criteria as injected content, its
+lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
+`<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
+must not read an absent gate record as a clean one.
+
+**Read each verdict from the file the critic wrote, never from its Task return.** An agent
+that died mid-response returns text that reads like an answer.
+
+```
+# 6. the verdict. --required is what makes an `unresolved` critic blocking; without it an
+#    undetermined critic aggregates to a non-blocking `concern` below high tier.
+#    --diff-empty when <component>.files.txt is empty: a component declared done that changed
+#    nothing is `critical`, not `skipped`. That is a do-nothing build, and catching it is the
+#    `meets-ac` lens's whole job.
+${CLAUDE_PLUGIN_ROOT}/scripts/wo-critique-aggregate.sh \
+  --wo "<component>" --tier "<risk_tier>" --mode fanout \
+  --expected <number of lenses dispatched> \
+  --critics-dir "$CD/<component>.critics" \
+  --evaluated true --required [--diff-empty] \
+  > "$CD/<component>.critique.json"
+```
+
+The kernel always exits 0 and always emits an envelope; **the verdict is in `blocking`**, not
+in the exit code. On `blocking: true` the component stops: `[a]ddress` (fix, then re-run this
+rung for this component) or `[o]verride (reason)`, recorded in the envelope's `bypass_reason`.
+
+- **A `critical` halts that component.** The build does not move to the next one.
+- **`unresolved` is not a pass.** A critic that could not determine has cleared nothing, and
+  `--required` above is what makes the kernel treat it as blocking rather than folding it into
+  a non-blocking `concern` at low and medium tier.
+- `overall: "concern"` is surfaced and does not block.
+
+Do not skip the rung because the component looks small. Whether it is small is a judgment by
+the same context that built it, which is the judgment being checked.
+
+### Runtime Step 12 — close the phase
+
+Reached when the last component closes. All four parts are required.
+
+1. **The alignment axis.** Capture `--label phase.after`, then hand
+   `ai-dev-assistant:spec-axis-reviewer` the file list from
+   `git -C <codePath> diff --name-only <phase.before-sha>..<phase.after-sha>` together with
+   `alignment.md`'s Task-Level `### Success criteria` and `architecture.md`.
+
+   **Use the checkpoint range, not `review-change-set.sh`.** That resolver deliberately
+   excludes untracked files, and a new module is entirely untracked until someone stages it —
+   the exact case this phase exists to build. Handed a change set with the new code missing,
+   the reviewer finds every criterion unimplemented and hard-fails complete work.
+
+   Verdict rule unchanged from Phase 4: `missing_requirements[]` non-empty is a hard fail,
+   `scope_creep[]` alone is advisory. It does **not** write `_spec.json` here. `/review` runs
+   its own Spec pass later regardless, and that is the point rather than a duplication: a
+   criterion found unimplemented while the build is open is a task, and found at the gate it
+   is a reopening.
+
+2. **The record.** ONE envelope via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh
+   "<task_folder>" build-critique "<payload>"` (schema 1.9, shape in
+   `references/gate-audit-schema.md`). **`components_declared`, `components_critiqued` and
+   `uncritiqued[]` are all required and must be honest.** A rung that critiqued three of seven
+   components and recorded only its three green rows is a record that cannot say what it did
+   not look at. Every gap gets a `{component, reason}` row.
+
+   `verdict: "skipped"` is legitimate for exactly two cases, each carrying its reason: the
+   phase-level range is empty, or the task has no architecture file at all. It is never the
+   answer to "the critics did not run" — that is `unresolved`, with the components named.
+
+3. **The records check.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/phase-records-check.sh
+   "<task_folder>" --phase implement` and surface its verdict. Without this the contract row
+   for `_build-critique.json` is a string nothing evaluates, and a phase that skipped the rung
+   ends indistinguishable from one that ran it.
+
+4. **Clear the checkpoints.** `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh clear --repo
+   <codePath>`, so the phase leaves no refs behind in the code repository.
 
 ## Verify-and-promote nudge (v4.15.0+)
 
@@ -115,8 +244,9 @@ non-functional change.
 - Full walkthrough: `references/implement-walkthrough.md`
 - TDD methodology: `references/tdd-workflow.md`
 - Mandated wording: `references/gate-hardening-prompts.md`
-- Audit shape: `references/gate-audit-schema.md` v1.0
+- Audit shape: `references/gate-audit-schema.md` v1.9
 - Worktree conventions: `references/worktree-conventions.md`
+- Build-critique rung: `references/build-critique.md` (v5.33.0+)
 
 ## Related
 
@@ -128,4 +258,10 @@ non-functional change.
 
 ## Output
 
-Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+) and `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one. Prints progress and test results.
+Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`.
+
+**In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
+
+`refs/worktree/` rather than a plain `refs/` path is deliberate and load-bearing: everything else under `refs/` is shared by every checkout of a repository, while `refs/worktree/` is per-checkout. Two agents building different tasks in two worktrees of one repository is the ordinary case here, not an edge case, and step 2 of this command actively nudges toward a worktree. In a shared namespace they would write the same default label, silently overwrite each other's boundary, and one of them clearing at end of phase would delete the other's, handing a critic a range belonging to a different task.
+
+Prints progress and test results.

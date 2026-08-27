@@ -62,7 +62,7 @@ Never block the command on this check — the user is in control. The nudge exis
 
 ### Step 1 — Invoke guide-integrator explicitly
 
-**(v4.0.0+: deterministic detection.)** Invoke `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` BEFORE prompting the user. Populate Step 2's prompt's "Auto-loaded based on task keywords:" line from `guides_to_load[]` script output. Write `<task>/_dev-guides-load.json` audit per `references/gate-audit-schema.md` v1.0 after user picks `[c]/[a]/[n]`. Eliminates bypass-by-declaration.
+**(v4.0.0+: deterministic detection.)** Invoke `${CLAUDE_PLUGIN_ROOT}/scripts/dev-guides-detect.sh <task_folder>` BEFORE prompting the user. Populate Step 2's prompt's "Auto-loaded based on task keywords:" line from `guides_to_load[]` script output. Write `<task>/_dev-guides-load.json` audit per `references/gate-audit-schema.md` after user picks `[c]/[a]/[n]`. Eliminates bypass-by-declaration.
 
 **(v3.15.0+, refactored v4.0.0+)** `guide-integrator` v5.1.0+ delegates the playbook load to `${CLAUDE_PLUGIN_ROOT}/scripts/playbook-load-deterministic.sh <project_folder>`; emits `<task>/_playbook-load.json` audit. Surface conflicts once-per-session per topic (precedence: local > active set > generic dev-guide); persist to `<project>/.claude/playbook-conflicts.log`.
 
@@ -162,6 +162,7 @@ Default: `[c]`.
 12. **(v3.13.5+)** Post-plan epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with full task context (`task.md` + `alignment.md` + `research.md` + `architecture.md` + `implementation.md`) and surfaces `epic_candidate` if the step-plan surfaced separable work. **Runs BEFORE any code is written** — mid-implementation epic migration is prohibitively expensive
 13. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
 14. **Invokes `session-context-writer` skill with the resolved project and task**
+15. **(v5.33.0+)** Runs the build-critique rung during the build (see "Build-critique rung" below): an independent fresh-context critique per architecture component, then one end-of-phase alignment pass, recorded in `_build-critique.json`
 
 ## Preconditions gate (v5.31.0+)
 
@@ -374,6 +375,54 @@ After context is loaded:
 4. Claude writes test, then implementation
 5. Developer runs tests
 6. Repeat until task complete
+
+The build itself is critiqued as it goes, per architecture component. See the next section.
+
+## Build-critique rung (v5.33.0+)
+
+**The unit is an architecture component, not an acceptance criterion.** `/design` writes one
+`architecture/<component>.md` per component, each carrying its own acceptance criteria, and those
+criteria are what the critic checks the built code against. A flat `architecture.md` with no
+component files is one unit named `main`. Full contract: `references/build-critique.md`.
+
+Why it exists: `tdd-companion` and `code-pattern-checker` are skills the builder runs on itself, in
+its own context. That is self-review. Before v5.33.0 the only adversarial review on the in-session
+path was Phase 4, after every line was written, and the work-order offer never said that declining it
+also declined `wo-critic`.
+
+Per component:
+
+1. Before the component's first line, `scripts/build-checkpoint.sh capture --repo <codePath> --label
+   <component>.before`. A checkpoint is a commit object on no branch, anchored under
+   `refs/worktree/aida/build-checkpoints/`; HEAD, the index and the working tree are untouched. It exists
+   because an in-session build has no `<before>..<after>` range. The code is uncommitted, usually
+   untracked, and HEAD does not move between components.
+2. Build the component.
+3. `--label <component>.after` when it is done.
+4. `scripts/wo-risk-classify.sh` over that range gives the tier; `references/risk-tiering-rules.json`
+   gives the lenses that tier implies (`low` → `skeptic`; `medium` → `security`, `correctness`;
+   `high` → `security`, `correctness`, `meets-ac`).
+5. One `ai-dev-assistant:wo-critic` per lens, dispatched fresh via the Task tool, never a fork. A
+   forked critic inherits the reasoning it exists to challenge. Each writes to
+   `<task_folder>/build-critique/<component>.critic-<lens>.json`. Read the verdict from that file,
+   never from the critic's Task return.
+6. Aggregate with `scripts/wo-critique-aggregate.sh`.
+
+A `critical` from any lens halts that component: `[a]ddress` (fix, then re-run the critique) or
+`[o]verride (reason)`, recorded in `bypass_reason`. `concern` is surfaced and does not block.
+`unresolved` is not a pass: a critic that could not determine has cleared nothing, and under
+`--headless` it halts.
+
+At end of phase, before the phase hands off, `ai-dev-assistant:spec-axis-reviewer` runs once against
+`alignment.md`'s Task-Level `### Success criteria`, `architecture.md`, and the change set from
+`scripts/review-change-set.sh`. `missing_requirements[]` non-empty is a hard fail; `scope_creep[]`
+alone is advisory. `/review` runs its own Spec pass later regardless: a criterion found unimplemented
+while the build is open is a task, and found at the gate it is a reopening.
+
+Both axes are then written as one `gate-audit-write.sh` envelope, `gate_type: "build-critique"`,
+schema 1.9, at `<task_folder>/_build-critique.json`. `components_declared` and `components_critiqued`
+are both required and any gap is itemised in `uncritiqued[]`, so a partial run cannot read as a
+complete one. Finally `build-checkpoint.sh clear --repo <codePath>` removes the checkpoint refs.
 
 ## Implementation Progress (v3.0.0)
 

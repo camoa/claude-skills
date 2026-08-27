@@ -21,7 +21,8 @@ than the one scoped. Your verdict is reported separately and **never merged** in
 - The task's `alignment.md` **Task-Level `### Success criteria`** (parsed per
   `references/alignment-contract.md`) — the falsifiable statements the task committed to.
 - `architecture.md`, if present — the documented components/decisions the change was scoped to.
-- The merge-base diff (or an equivalent change description) for the task.
+- **The change set**, as the `files[]` from `scripts/review-change-set.sh` — committed since the base, plus staged, plus modified in the working tree. **Not the merge-base diff.** This line used to say merge-base, and that was the shipped bug `review-change-set.sh` exists to fix: review runs before the pull request, so uncommitted is the ordinary state of a task at that moment, and a merge-base diff of a finished-but-uncommitted task is empty. Handed nothing, this agent finds every success criterion unimplemented and hard-fails work that is complete.
+- An empty change set means `verdict: "skipped"`, never `fail`. A reviewer given no diff has judged nothing.
 
 ## Untrusted content boundary
 

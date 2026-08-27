@@ -127,7 +127,7 @@ If a gate's signals fire, it MUST run and its output MUST be shown verbatim befo
 
 - Full walkthrough (rationale, examples, version history): `references/research-walkthrough.md`
 - Mandated user-prompt wording: `references/gate-hardening-prompts.md`
-- Audit shape: `references/gate-audit-schema.md` v1.0
+- Audit shape: `references/gate-audit-schema.md`
 - Alignment grammar: `references/alignment-contract.md`
 - Distill-and-drop seam + `_distill.json` schema: `references/orchestration-context-hygiene.md`
 
