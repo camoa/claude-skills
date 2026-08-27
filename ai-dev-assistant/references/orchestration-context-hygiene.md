@@ -55,7 +55,8 @@ Written by `distill-agent` to `<task_folder>/_distill.json`; read back by the co
   "artifact_pointer": "<abs path to the artifact>",
   "digest": ["<= ~5 short lines of the load-bearing decisions>"],
   "self_contained": true,
-  "gaps": ["<a load-bearing decision NOT captured in the artifact>"],
+  "gaps": ["<a load-bearing decision NOT captured in the artifact, still open>"],
+  "gaps_closed": [{"gap": "<what was missing>", "closed_by": "<what was written, and where>"}],
   "run_mode": "interactive | autonomous",
   "interaction_substitute": null
 }
@@ -68,13 +69,33 @@ Written by `distill-agent` to `<task_folder>/_distill.json`; read back by the co
 | `artifact_pointer` | abs path | the artifact the orchestrator carries forward. |
 | `digest` | array | ≤ ~5 short lines naming the load-bearing decisions. |
 | `self_contained` | bool | `false` **iff** `gaps[]` is non-empty. |
-| `gaps` | array | load-bearing decisions not captured in the artifact; `[]` on the common path. |
+| `gaps` | array | load-bearing decisions not captured in the artifact and **still open**; `[]` on the common path. |
+| `gaps_closed` | array | **(v1.1+)** gaps this run found and the orchestrator has since addressed: `{gap, closed_by}` objects, `closed_by` naming what was written and where. `[]` when nothing was closed. |
 | `run_mode` | enum | `interactive` \| `autonomous`. |
 | `interaction_substitute` | `null` \| array | `null` in interactive mode; `{question, answer, recorded_into}[]` in autonomous mode (prep-phase Q&A only). |
 
 **Invariant:** `self_contained == (gaps | length == 0)`. A `false` is **advisory** — the orchestrator
 prints one line and proceeds; it never blocks the lifecycle, writes no `gate_type` audit, and installs no
 hook.
+
+**Closing a gap (v1.1+).** Until this field existed the record could not say what happened after it was
+written, and an orchestrator that acted on a gap had two wrong options. Leave the file alone and it still
+reads `self_contained: false` with an open gap, so the next phase goes looking for something already
+fixed. Re-run the agent and it reads `self_contained: true, gaps: []`, which says nothing was ever wrong
+and erases the one piece of evidence that the check earned its keep. Observed live: a Phase 2 distill
+found a genuine gap, the orchestrator closed it, and then had to explain in prose what the record could
+not.
+
+When the orchestrator addresses a gap, it **moves** that entry out of `gaps[]` into `gaps_closed[]` with a
+`closed_by` naming what was written and where, then recomputes `self_contained` from the new `gaps[]`. The
+invariant holds unchanged, and closing the last gap makes `self_contained` `true` **while `gaps_closed[]`
+keeps the history** — found, and fixed, both legible.
+
+This is the **only** edit an orchestrator may make to the sidecar. The agent owns the initial write; the
+orchestrator never re-authors `digest`, `artifact_pointer`, or the text of a gap, and never invents a
+`gaps_closed` entry for a gap the agent did not find. A gap that was considered and deliberately left open
+stays in `gaps[]` — "we decided not to" is not closed, and recording it as closed is the same lie in the
+other direction.
 
 ## 4. `run_mode` branch (the whole run_mode-awareness)
 

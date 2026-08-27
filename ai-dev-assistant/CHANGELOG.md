@@ -3,6 +3,24 @@
 ## [5.30.9] - 2026-08-27
 
 ### Fixed
+- The distill sidecar could not say what happened after it was written. `_distill.json` carried
+  `self_contained` and `gaps[]` under the invariant `self_contained == (gaps | length == 0)`, and
+  nothing recorded that a gap had been addressed. An orchestrator that acted on one had two wrong
+  options: leave the file, and it still reads `self_contained: false` with an open gap, sending the
+  next phase after something already fixed; or re-run the agent, and it reads
+  `self_contained: true, gaps: []`, which says nothing was ever wrong and erases the one piece of
+  evidence that the check earned its keep. Observed live at the end of a Phase 2 — the distill
+  found a genuine gap, the orchestrator closed it, and then had to explain in prose what the record
+  could not.
+
+  Sidecar v1.1 adds `gaps_closed[]`, holding `{gap, closed_by}` with `closed_by` naming what was
+  written and where. Closing **moves** an entry out of `gaps[]` into it and recomputes
+  `self_contained`, so the invariant is untouched and closing the last gap flips `self_contained`
+  to `true` while the history survives. That move is the only edit an orchestrator may make to the
+  sidecar: the agent still owns the initial write and emits `gaps_closed` as `[]`, since it is a
+  check that has fixed nothing and a `closed_by` it invented would be a claim about work it did not
+  do. A gap considered and deliberately left open stays in `gaps[]` — deciding against is not
+  closing, and recording it as closed is the same lie in the other direction.
 - The traceability walkthrough only ever walked one way. Step 2 asked "for each criterion, which
   section addresses it" and step 3 marked a criterion with nothing behind it as NOT YET ADDRESSED.
   Nothing asked the reverse — what is in the artifact that no criterion asked for — and a scan that

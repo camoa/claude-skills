@@ -58,6 +58,8 @@ read, request, or infer the orchestrator's transcript. Your only inputs are the 
    named library/pattern, a non-obvious constraint, an acceptance criterion). Ask: *does the artifact — on
    its own, no transcript — carry each load-bearing decision the phase reached?* Any that is **not**
    captured on disk is a `gaps[]` entry.
+
+   **Always write `gaps_closed` as `[]`.** It exists so the orchestrator can record that it acted on a gap without either leaving an open one behind or re-running you for a clean sheet — see the "Closing a gap" rule in `references/orchestration-context-hygiene.md`. Populating it is its job, never yours: you are a check, you have not fixed anything, and a `closed_by` you invented would be a claim about work you did not do.
 3. **Compose the digest.** ≤ ~5 short lines naming the load-bearing decisions the artifact records — the
    handle the orchestrator carries in place of the exchange. Terse, not a summary of the whole file.
 4. **Autonomous only — interaction-substitute.** When `run_mode == autonomous`, additionally answer the
@@ -79,6 +81,7 @@ Use the **Write tool** to write exactly this shape to `output_path`:
   "digest": ["<= ~5 short lines of the load-bearing decisions>"],
   "self_contained": true,
   "gaps": ["<a load-bearing decision NOT captured in the artifact>"],
+  "gaps_closed": [],
   "run_mode": "interactive | autonomous",
   "interaction_substitute": null
 }
