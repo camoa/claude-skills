@@ -48,6 +48,21 @@ red.
 - Plugin `0.4.2` → `0.4.3`. Root `marketplace.json` entry `0.4.2` → `0.4.3` and
   `metadata.version` `2.0.40` → `2.0.41`.
 
+### Review follow-ups, same PR
+
+- The eslint reproduction now quotes the job's own full invocation rather than a shortened
+  one. `--ext=.js,.yml` is the load-bearing flag: given a directory, ESLint lints `.js` only
+  by default while CI also lints `*.info.yml`, `*.libraries.yml` and `*.services.yml`, so a
+  run without it reports clean on files CI checks. That was the same false clean this change
+  set out to close, one level down. `--ignore-pattern="*.es6.js"` and the `.prettierignore`
+  step are included for the same reason.
+- The config symlinks use `-f` so a re-run does not fail, and the `.prettierrc.json` link,
+  which lands inside the contribution repo rather than above it, is now called out for
+  removal so it cannot be committed by accident.
+- Corrected the claim about the job's `--fix` scope. It runs `--fix .` project-wide; its
+  patch is narrow because the project was otherwise clean, not because the run was scoped.
+- Clarified that stylelint's lack of a fallback is about the config cascade, not Prettier.
+
 ## [0.4.2] - 2026-08-11
 
 ### Changed

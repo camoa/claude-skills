@@ -44,15 +44,34 @@ reports a verdict — it just silently falls back to Prettier's own default
 set of quote violations from CI's real one. Reproduce what the shared `gitlab_templates`
 job actually does before running `eslint`:
 
-    ln -sv <core>/.eslintrc.passing.json <project>/../.eslintrc.json
-    ln -sv <core>/.eslintrc.jquery.json <project>/../.eslintrc.jquery.json
-    test -e <project>/.prettierrc.json || ln -sv <core>/.prettierrc.json <project>/.prettierrc.json
+    ln -sfv <core>/.eslintrc.passing.json <project>/../.eslintrc.json
+    ln -sfv <core>/.eslintrc.jquery.json <project>/../.eslintrc.jquery.json
+    test -e <project>/.prettierrc.json || ln -sfv <core>/.prettierrc.json <project>/.prettierrc.json
 
-then run `<core>/node_modules/.bin/eslint` from inside `<project>` with
-`--resolve-plugins-relative-to=<core>` — the same binary and the same merged config CI
-uses, not a hand-assembled command. `stylelint` has no such fallback: it uses the
-project's own `.stylelintrc*` when present, core's only when absent — confirm which one
-actually applies before assuming either.
+The first two land **above** the contribution repo, so they never enter the MR. The third
+lands **inside** it: remove it when you are done, or it will show up in `git status` and can
+be committed by accident. `-f` so a re-run does not fail on an existing link.
+
+CI also writes a `.prettierignore` when the project has none, which exempts YAML from
+Prettier's rules:
+
+    test -e <project>/.prettierignore || echo '*.yml' > <project>/.prettierignore
+
+Then run the job's **own** invocation, not a shortened one. Missing flags reproduce the
+config and lose the scope, which is the same false clean in a different place:
+
+    <core>/node_modules/.bin/eslint --no-error-on-unmatched-pattern \
+      --ignore-pattern="*.es6.js" --resolve-plugins-relative-to=<core> \
+      --ext=.js,.yml .
+
+`--ext=.js,.yml` is the one that matters most: given a directory, ESLint lints `.js` only by
+default, while CI also lints `*.info.yml`, `*.libraries.yml` and `*.services.yml`. Drop it and
+the local run reports clean on files CI checks. `--ignore-pattern="*.es6.js"` skips legacy
+files CI skips, so dropping it produces a false red instead. Same binary, same merged config,
+same scope. `stylelint` resolves differently: it uses the project's own
+`.stylelintrc*` when present and core's only when absent, so there is no merged cascade to
+reproduce — confirm which single config applies before assuming either. That is a statement
+about the config cascade, not about Prettier, which stylelint does not involve.
 
 ### 2. Parse the enabled gate set
 

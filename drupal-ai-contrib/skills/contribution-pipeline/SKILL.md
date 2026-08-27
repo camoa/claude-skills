@@ -73,10 +73,12 @@ nothing to fetch and apply. Read the report, or reproduce `stylelint --fix` loca
 against whichever config actually applies (project's own, or core's only if absent).
 
 **Never re-derive an eslint fix by running `--fix` on the whole project "to see what
-breaks".** The shared job's own `--fix` run is scoped to only the changed `.js`/`.yml`
-files with real content diffs — a broad local `--fix` has no such filter and reformats
-every drifted file the job would also flag, most of them outside the current
-contribution. If `_eslint.patch` is unavailable, scope any local `--fix` to the single
+breaks".** The job runs `--fix .` across the whole project, so its patch is not narrow
+by scoping; it is narrow because the project was already clean apart from the change. A
+local `--fix` on a project that has drifted since reformats every drifted file at once,
+most of them outside the current contribution. The patch artifact is the safe path
+precisely because it is the diff the job produced against that state, not one you
+regenerate against yours. If `_eslint.patch` is unavailable, scope any local `--fix` to the single
 failing file and run `git diff --stat` immediately after to catch an abnormal blast
 radius before committing.
 
