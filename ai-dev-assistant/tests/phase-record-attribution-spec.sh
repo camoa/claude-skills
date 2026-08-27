@@ -88,6 +88,21 @@ for f in research design implement; do
   fi
 done
 
+# The writer demands `phase` for dev-guides-load too (5.30.7). Making the writer
+# require a key while leaving every caller unaware of it is half a fix: a command
+# body followed literally then warns on every run. Both gates, all three phases.
+for f in research design implement; do
+  C="$ROOT/commands/$f.md"
+  # Take everything from the marker to end of line — a sentence-bounded pattern
+  # stops at the dot inside "gate-audit-schema.md" and finds nothing.
+  LINE="$(grep -o 'Write .\_dev-guides-load\.json. audit.*$' "$C" | head -1)"
+  if printf '%s' "$LINE" | grep -q 'phase'; then
+    ok "/$f names phase in the dev-guides-load payload"
+  else
+    bad "/$f names phase in the dev-guides-load payload" "$LINE"
+  fi
+done
+
 if grep -q 'It does NOT write _playbook-load.json' "$ROOT/scripts/playbook-load-deterministic.sh"; then
   ok "the loader's own header says it prints rather than writes"
 else

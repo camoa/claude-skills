@@ -157,6 +157,24 @@ chmod +x "$DEST/save-session.sh"
 Write the rendered primer (from step 3) to `$DEST/session-primer.md`,
 overwriting any previous copy.
 
+**Then check it took.** The five placeholders in step 3 are substituted by hand,
+and this file is injected at the start of every session in that project from now
+on — a dropped one is not a one-time typo, it is a literal `{code_path}` shown
+every session until somebody notices. The approval in step 3 is a person reading
+prose, which is exactly the wrong instrument for spotting a stray brace.
+
+```bash
+LEFT=$(grep -oE '\{[a-z_]+\}' "$DEST/session-primer.md" | sort -u | tr '\n' ' ')
+if [ -n "$LEFT" ]; then
+  echo "install-remembrance-hook: the primer still has unfilled placeholder(s): $LEFT" >&2
+  echo "  Fill them from the step 3 table and write it again before continuing." >&2
+fi
+```
+
+Do not report the install as done while that prints anything. Fix the primer and
+write it again; a half-filled primer is worse than none, because the hook keeps
+injecting it.
+
 ### Step 6 — Report
 
 Tell the user:
@@ -165,6 +183,13 @@ Tell the user:
 - They can hand-edit `session-primer.md` directly — no need to re-run this command.
 - **Re-run this command if the project name, memory path, or code path changes**
   — the primer is a static snapshot and does not track `project_state.md`.
+- **Re-run it after upgrading the plugin, too.** `save-session.sh` is copied into
+  the project at install time and pinned there — that is the point, so the hook
+  does not depend on the plugin install path, but it also means a fix shipped in
+  a later plugin version does not reach this project until this command runs
+  again. Nothing detects a stale copy. A project installed before v5.30.8 keeps
+  the copy whose unbounded stdin read blocked until its caller's timeout killed
+  it, and the only symptom is a session-end that hangs.
 - New hooks take effect on the next Claude Code session in that directory.
 
 ## Idempotency

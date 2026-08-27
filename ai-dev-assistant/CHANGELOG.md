@@ -1,5 +1,102 @@
 # Changelog
 
+## [5.30.9] - 2026-08-27
+
+### Fixed
+- The distill sidecar could not say what happened after it was written. `_distill.json` carried
+  `self_contained` and `gaps[]` under the invariant `self_contained == (gaps | length == 0)`, and
+  nothing recorded that a gap had been addressed. An orchestrator that acted on one had two wrong
+  options: leave the file, and it still reads `self_contained: false` with an open gap, sending the
+  next phase after something already fixed; or re-run the agent, and it reads
+  `self_contained: true, gaps: []`, which says nothing was ever wrong and erases the one piece of
+  evidence that the check earned its keep. Observed live at the end of a Phase 2 — the distill
+  found a genuine gap, the orchestrator closed it, and then had to explain in prose what the record
+  could not.
+
+  Sidecar v1.1 adds `gaps_closed[]`, holding `{gap, closed_by}` with `closed_by` naming what was
+  written and where. Closing **moves** an entry out of `gaps[]` into it and recomputes
+  `self_contained`, so the invariant is untouched and closing the last gap flips `self_contained`
+  to `true` while the history survives. That move is the only edit an orchestrator may make to the
+  sidecar: the agent still owns the initial write and emits `gaps_closed` as `[]`, since it is a
+  check that has fixed nothing and a `closed_by` it invented would be a claim about work it did not
+  do. A gap considered and deliberately left open stays in `gaps[]` — deciding against is not
+  closing, and recording it as closed is the same lie in the other direction.
+- The traceability walkthrough only ever walked one way. Step 2 asked "for each criterion, which
+  section addresses it" and step 3 marked a criterion with nothing behind it as NOT YET ADDRESSED.
+  Nothing asked the reverse — what is in the artifact that no criterion asked for — and a scan that
+  starts from the criteria list is structurally blind to a section nobody requested. Observed at
+  the end of a live Phase 2: the mapping returned all nine criteria addressed with nothing missing,
+  and walking the other way by hand surfaced a fixture row beyond the six the contract listed plus
+  a `--dry-run` flag no criterion mentioned. Both defensible, neither decided. Phase 4's spec
+  review would have found the same two after they were built. Both walkthroughs now walk both
+  directions, naming anything that answers to no criterion and no recorded decision as UNASKED.
+
+  It stays advisory and issues no verdict. `references/spec-axis-review.md` settled that scope
+  creep never hard-fails on its own, because an untraceable-to-what judgment produced false fails
+  under unattended runs — a decision about severity, not about looking. This walkthrough is opt-in
+  and ends in `[c]/[r]/[d]`; an UNASKED row is a line in the decision log unless the person says
+  otherwise. Surfacing it at the end of a phase rather than at review is the point, because by
+  review the thing has been built.
+- Five documented calls to `analysis-agent-normalize.sh` showed no argument, and the script
+  requires one. A command body is executed by a model reading prose, so a call written as a bare
+  script path in backticks reads as a complete instruction and gets run that way. A live `/design`
+  run did exactly that and got `usage: analysis-agent-normalize.sh <json-file>|-` where a
+  normalized verdict should have been. Nothing downstream noticed, because the normalizer exists
+  to clamp `confidence` to `low` when `code_read` is false — a field the agent usually sets
+  correctly on its own. So the missed call only costs anything in the case the clamp exists to
+  catch. All five sites in `/research` (two), `/design`, `/implement` and `/propose-epics` now show
+  the piped form and say the argument is required. Second time this shape has shipped: v5.30.2
+  fixed `/implement` documenting a one-argument call to a two-argument script.
+- New `tests/documented-call-arity-spec.sh` covers the class rather than the instance: for each
+  script that requires arguments, it checks the script actually refuses a bare call, and that no
+  command body cites it as a bare `${CLAUDE_PLUGIN_ROOT}/scripts/…` path. Two things it does not
+  do, both deliberate. It accepts either refusal shape — a non-zero exit or a verdict of
+  `unknown` — because `phase-records-check.sh` correctly takes the second, and a spec demanding
+  the word "usage" would have pushed a correct script to change. And it flags only the
+  `${CLAUDE_PLUGIN_ROOT}/` form, since a bare `scripts/x.sh` in a pointer list is prose about
+  ownership rather than an instruction to run something.
+- The maintainer guide-creation offer could not fire on a task worth authoring for, and the proof
+  sat in its own reference file. `references/maintainer-create-on-miss.md` describes two surfaces
+  reading the same `coverage-map.json`: Surface 2 triggers on "a load-bearing capability aspect is
+  uncovered" (per aspect), Surface 1 on "the `Domain guides matched:` group is empty" (whole task).
+  Observed live on a task whose coverage map named two uncovered aspects out of six, both of them
+  the point of the task: `_dev-guides-load.json` carried 12 catalog candidates and 4 matched guides
+  covering the other four, so the union was not empty and Surface 1 stayed silent — while Surface 2,
+  reading the same file, named both aspects out loud. An all-or-nothing test can only fire when
+  nothing matched at all, which is the case where a maintainer has least idea what to write; the
+  case worth catching is a real gap sitting beside real coverage. Surface 1 now applies the
+  per-aspect test Surface 2 already had, and offers once per uncovered aspect — the durable sidecar
+  is already keyed by topic, so per-aspect decisions record and suppress independently with no
+  change to its shape. The whole-task test survives as the explicit fallback for a task with no
+  readable coverage map, and a decline records which of the two tests produced it so a `[n]` under
+  the weaker one is not mistaken for a `[n]` under the stronger.
+
+  `/research`, `/design` and `/implement` each restated the trigger inline, in three slightly
+  different wordings, which is how the two surfaces drifted apart while living in the same
+  reference. All three now defer to that reference for the condition and keep only their own
+  wiring.
+- Half of the 5.30.7 `phase` fix was missing. That release made `gate-audit-write.sh` require
+  `phase` for both `dev-guides-load` and `playbook-load`, and updated `/research`, `/design` and
+  `/implement` to pass it — for `playbook-load` only. None of the three named `phase` in the
+  `_dev-guides-load.json` payload, so a caller following the command body literally omitted it and
+  drew a missing-key warning on every run. Callers had been passing it by habit, which is why the
+  records on disk carry it and nothing surfaced until the requirement was added. All three now
+  name it, and the spec checks both gates across all three phases rather than one gate.
+- Nothing checked the primer that gets written. `/install-remembrance-hook` step 3 substitutes
+  five `{placeholder}` tokens by hand, step 5 writes the result, step 6 reports success. A dropped
+  one is not a one-time typo: `session-primer.md` is injected at the start of every session in
+  that project from then on, so a literal `{code_path}` is shown every session until somebody
+  notices. The only check was a person approving rendered prose in step 3, which is the wrong
+  instrument for spotting a stray brace. Step 5 now greps the written file for leftovers and the
+  install is not reported done while any remain.
+- `/install-remembrance-hook` told you to re-run it when a path changed and not when the plugin
+  was upgraded. `save-session.sh` is copied into the project at install time and pinned there —
+  deliberate, so the hook does not depend on the plugin install path, but it also means a fix
+  shipped later never reaches an installed project until the command runs again, and nothing
+  detects a stale copy. That is exactly what happened with the stdin fix below: a project
+  installed before v5.30.8 kept the blocking copy, and the only symptom was a session-end that
+  hung. Step 6 now names the upgrade case.
+
 ## [5.30.8] - 2026-08-26
 
 ### Fixed
