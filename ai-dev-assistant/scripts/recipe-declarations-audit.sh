@@ -76,7 +76,14 @@ expected_for_phase() {
       printf '%s\t%s\t%s\n' '## Screenshot capture'  'heading' '0'
       printf '%s\t%s\t%s\n' '## Change-impact globs'  'heading' '1'
       ;;
-    implement|design)
+    implement)
+      printf '%s\t%s\t%s\n' '## Routing hints'  'heading' '0'
+      # Recommended, unlike every other implement token: this is the fail-closed one. A recipe
+      # that states a precondition only in prose gets it injected verbatim and parsed by nothing,
+      # which is how a missing test runner reached a build step unchallenged.
+      printf '%s\t%s\t%s\n' '## Preconditions'  'heading' '1'
+      ;;
+    design)
       printf '%s\t%s\t%s\n' '## Routing hints' 'heading' '0'
       ;;
     e2e-setup)

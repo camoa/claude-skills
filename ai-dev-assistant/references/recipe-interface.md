@@ -12,7 +12,7 @@ below are a literal contract: a recipe that misspells `## Screenshot capture` as
 
 ## Failure posture (read this first)
 
-Every declaration except one **fails open to the framework-neutral floor**: an absent or misnamed block is
+Every declaration except two **fails open to the framework-neutral floor**: an absent or misnamed block is
 not an error — the gate just runs its stack-neutral default (no custom capture, neutral extension floor,
 neutral globs, generic routing buckets). This is deliberate agnostic posture, but it means a typo degrades
 silently to "did nothing stack-specific" rather than failing loudly. The recipe author is responsible for
@@ -25,8 +25,9 @@ the exact spelling; this contract is the source of truth for it.
 | `## Code-quality extensions` | fail-open — neutral extension floor only |
 | `## Change-impact globs` | fail-open — shipped neutral floor only |
 | `## Routing hints` | fail-open — agent's generic role buckets |
+| `## Preconditions` | **fail-closed** — an unmet precondition halts the phase; an absent block is recorded `undeclared`, never `met` |
 
-## The five declarations
+## The six declarations
 
 ### 1. `## Screenshot capture` — phase `visual-regression`
 **Consumer:** `commands/setup-visual-regression.md` (the `## Step 7` capture-method substitution).
@@ -102,6 +103,42 @@ default_gates: []
 Absent / malformed ⇒ the shipped neutral floor (stylesheet / plain-script / markup extensions) classifies
 alone; the recipe globs are simply not merged (a warning is recorded, the run never fails).
 
+### 6. `## Preconditions` — phase `implement`
+**Consumer:** `scripts/preconditions-check.sh`, run by `commands/implement.md` step 6b.
+
+This is the one declaration a recipe can use to say *the phase cannot start yet*, and the only one besides
+`e2e.preflight_command` that fails closed. It exists because a recipe could already state a precondition in
+prose and the engine had no way to read it: observed live, a Drupal implement recipe required a configured
+PHPUnit runner, the project had none, and the phase proceeded to improvise a runner install by hand rather
+than route to the tool that owns it. The prose was injected verbatim and parsed by nothing.
+
+```markdown
+## Preconditions
+preconditions:
+  - id: test-runner
+    what: a runner whose failure the RED step can observe
+    check: test -x vendor/bin/phpunit
+    owner: code-quality-tools:setup
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | stable slug; the entry boundary, so an entry without it is dropped |
+| `what` | no | one line the operator reads when it is unmet |
+| `check` | no | the command that decides. Absent ⇒ `unknown`, never `met` |
+| `owner` | no | `<plugin>:<command>` that satisfies it. Absent ⇒ the phase's default owner table |
+
+**`check` is exec'd directly, never through a shell.** A recipe body is untrusted upstream data, so the
+value is split on whitespace and run as argv. Shell metacharacters are therefore not syntax, and a check
+containing one is refused outright as `unknown / unsafe_check_shape` rather than run to mean something its
+author did not read. Write `test -x vendor/bin/phpunit`, not `command -v phpunit || exit 1`. Exit 127 is
+recorded `unknown / check_command_not_found`, because a missing checker says nothing about the precondition.
+
+**Four verdicts, and `undeclared` is not `met`.** `met` (every entry ran and passed), `unmet` (at least one
+failed — halts), `unknown` (a block is present but something could not be run), `undeclared` (no block).
+A caller that folds `undeclared` into `met` has re-created the defect this declaration closes: the recipe
+declared nothing, so nothing was checked, and that is a different fact from everything passing.
+
 ## Which recipe carries which declaration
 
 A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its phase consumes:
@@ -110,7 +147,7 @@ A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its
 |---|---|
 | `visual-regression/<fw>/…` | `## Screenshot capture` (1), `## Change-impact globs` (5) |
 | `e2e-setup/<fw>/…` | `e2e.preflight_command` (2) |
-| `implement/<fw>/…` | `## Routing hints` (3) |
+| `implement/<fw>/…` | `## Routing hints` (3), `## Preconditions` (6) |
 | `review/<fw>/…` | `## Code-quality extensions` (4), `## Change-impact globs` (5) |
 
 The key is `<phase>/<framework>/<slug>`; the **phase segment**, not the recipe's filename, decides which
