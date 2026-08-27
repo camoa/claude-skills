@@ -60,6 +60,28 @@ A pipeline reported "passed" can still hide problems. Inspect **every job**:
   manual trigger. An un-run manual job is **not coverage**. Report it explicitly as
   not run — never imply a green pipeline means those variants passed.
 
+**A failed `eslint` job ships its own fix — `stylelint` does not.** The shared
+`gitlab_templates` eslint job always uploads `_eslint.patch` as a job artifact (empty
+when there's nothing to fix) — the exact diff its own `--fix` run produced. Get the job
+ID from `glab ci view`, then fetch and apply the patch directly:
+
+    glab api …/jobs/<id>/artifacts/_eslint.patch > _eslint.patch
+    git apply _eslint.patch
+
+`stylelint` publishes findings only (`gl-codequality.json`), never a patch — there is
+nothing to fetch and apply. Read the report, or reproduce `stylelint --fix` locally
+against whichever config actually applies (project's own, or core's only if absent).
+
+**Never re-derive an eslint fix by running `--fix` on the whole project "to see what
+breaks".** The job runs `--fix .` across the whole project, so its patch is not narrow
+by scoping; it is narrow because the project was already clean apart from the change. A
+local `--fix` on a project that has drifted since reformats every drifted file at once,
+most of them outside the current contribution. The patch artifact is the safe path
+precisely because it is the diff the job produced against that state, not one you
+regenerate against yours. If `_eslint.patch` is unavailable, scope any local `--fix` to the single
+failing file and run `git diff --stat` immediately after to catch an abnormal blast
+radius before committing.
+
 ### 4. Gate
 
 The contribution is **done** only when: every blocking job is green, every
@@ -100,3 +122,5 @@ is the pipeline's — never assert "should pass".
 | Pipeline still running | Report in-progress; the gate is not satisfied until jobs finish. |
 | Pipeline needs re-running | Triggers are blocked on `git.drupalcode.org` — push a commit (`--allow-empty` if no code change); pipelines fire on push only. |
 | A blocking job failed | Diagnose against the reproduction dev-guide; route back to development → `verify`. |
+| `eslint` job failed, local run was clean | Local eslint likely isn't using core's linked config + pinned binary (`contribution-verify` §1) — don't re-guess; fetch `_eslint.patch` from the job instead. |
+| `stylelint` job failed | No patch artifact exists for stylelint — read `gl-codequality.json` from the job, or reproduce `stylelint --fix` locally scoped to the failing file(s). |
