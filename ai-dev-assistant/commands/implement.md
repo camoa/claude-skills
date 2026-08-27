@@ -66,7 +66,7 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 
 7. **Author/update implementation.md.** Standard sections: Step Plan (numbered), Files Created/Modified, Progress (`[ ]`/`[x]` per step), TDD Log, Notes, Blockers. Update `task.md` Phase 3 in-progress.
 
-8. **Post-plan epic check (v3.13.5+, BEFORE any code is written).** Re-invoke `ai-dev-assistant:analysis-agent` in folder mode (sees task+alignment+research+architecture+implementation). **Normalize the returned JSON** through `${CLAUDE_PLUGIN_ROOT}/scripts/analysis-agent-normalize.sh` before branching (deterministic `confidence` clamp, schema invariant 2). Branch on `decision`:
+8. **Post-plan epic check (v3.13.5+, BEFORE any code is written).** Re-invoke `ai-dev-assistant:analysis-agent` in folder mode (sees task+alignment+research+architecture+implementation). **Normalize the returned JSON** through `printf '%s' "<the agent's JSON>" | ${CLAUDE_PLUGIN_ROOT}/scripts/analysis-agent-normalize.sh -` (a file path works in place of `-`; the argument is **required** — called bare it prints its usage and normalizes nothing) before branching (deterministic `confidence` clamp, schema invariant 2). Branch on `decision`:
    - `keep_flat` / `insufficient_info` → silent, proceed.
    - `epic_candidate` → display "last chance before coding" offer (note: mid-implementation migration is expensive; step plan is discarded if migrating). Default `[n]`. `[y]` → `/migrate-to-epic`, stop. `[d]` → show rationale, re-ask.
 

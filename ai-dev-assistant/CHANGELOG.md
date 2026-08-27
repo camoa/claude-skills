@@ -3,6 +3,24 @@
 ## [5.30.8] - 2026-08-26
 
 ### Fixed
+- Five documented calls to `analysis-agent-normalize.sh` showed no argument, and the script
+  requires one. A command body is executed by a model reading prose, so a call written as a bare
+  script path in backticks reads as a complete instruction and gets run that way. A live `/design`
+  run did exactly that and got `usage: analysis-agent-normalize.sh <json-file>|-` where a
+  normalized verdict should have been. Nothing downstream noticed, because the normalizer exists
+  to clamp `confidence` to `low` when `code_read` is false — a field the agent usually sets
+  correctly on its own. So the missed call only costs anything in the case the clamp exists to
+  catch. All five sites in `/research` (two), `/design`, `/implement` and `/propose-epics` now show
+  the piped form and say the argument is required. Second time this shape has shipped: v5.30.2
+  fixed `/implement` documenting a one-argument call to a two-argument script.
+- New `tests/documented-call-arity-spec.sh` covers the class rather than the instance: for each
+  script that requires arguments, it checks the script actually refuses a bare call, and that no
+  command body cites it as a bare `${CLAUDE_PLUGIN_ROOT}/scripts/…` path. Two things it does not
+  do, both deliberate. It accepts either refusal shape — a non-zero exit or a verdict of
+  `unknown` — because `phase-records-check.sh` correctly takes the second, and a spec demanding
+  the word "usage" would have pushed a correct script to change. And it flags only the
+  `${CLAUDE_PLUGIN_ROOT}/` form, since a bare `scripts/x.sh` in a pointer list is prose about
+  ownership rather than an instruction to run something.
 - The maintainer guide-creation offer could not fire on a task worth authoring for, and the proof
   sat in its own reference file. `references/maintainer-create-on-miss.md` describes two surfaces
   reading the same `coverage-map.json`: Surface 2 triggers on "a load-bearing capability aspect is
