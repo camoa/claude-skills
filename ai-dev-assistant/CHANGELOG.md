@@ -1,5 +1,60 @@
 # Changelog
 
+## [5.32.0] - 2026-08-27
+
+### Changed
+- The model identifies a project's framework. No framework list exists anywhere in the plugin
+  any more. `scripts/detect-frameworks.sh` held one hand-written detection block per framework
+  (drupal, nextjs, claude-code-plugins), which made the set of recognizable frameworks a property
+  of a plugin release: dev-guides published complete four-phase process-recipe families for `go`
+  and `php-cli`, detection returned `[]` on both, and four recipe families were reachable only by
+  an operator who already knew the exact slug. The `no_frameworks_defined` path then asked for a
+  framework id as a free token with no allowlist, so typing `golang` instead of `go` resolved no
+  recipe at any phase and explained nothing.
+
+  Two intermediate designs were built and rejected before this one, because neither actually
+  removed the problem: moving the list to a table in the same script (adding a framework is still
+  a plugin release), and declaring a detection signal block in each recipe (a project stays
+  unrecognizable until someone authors its entry, and it silently drops any framework with guides
+  but no published recipe). A model reading a repository needs no entry for either.
+
+  `scripts/detect-frameworks.sh` and its spec are deleted.
+
+### Added
+- `scripts/framework-evidence.sh <codePath>` reports facts and interprets none of them:
+  top-level entries, an extension histogram, root files small enough to read, and nested project
+  directories. That last one matters because a nested docroot changes where every other path
+  resolves, and a caller that assumes the repo root gets every subsequent path wrong.
+- `scripts/framework-support.sh <slug>` takes whatever slug the model decided on and reports what
+  the three dev-guides catalogs carry for it. A slug the catalogs have never heard of is a valid
+  input with an honest empty answer, which is the test that no list survives.
+- `references/framework-resolution.md`, the five-step cascade: identify, look up support, ask the
+  user for another source on a gap (including a local path), research the web as a last resort
+  with `verified: false` provenance, then record once in `_framework.json` and `project_state.md`
+  so every later phase reads the record instead of re-deriving it.
+- `framework` gate type at schema 1.8, requiring `frameworks`, `identified_by` and
+  `cascade_step_reached`. A payload with only `frameworks[]` cannot say whether the model
+  identified them or the operator typed them, nor how far the cascade had to go to find a method.
+- `_framework.json` in the research phase record contract.
+- `tests/framework-resolution-spec.sh`, 144 assertions.
+
+### Fixed
+- The agentic-recipes catalog can now be queried by framework, following the dev-guides change of
+  2026-08-27 that publishes a `framework=` token on each entry line. Three things this gets right
+  that a naive read would not: a catalog cached before that change is readable and old-format, and
+  reports `unknown / catalog_predates_framework_key` rather than `none`, since every machine with
+  a stale store is in that state and "there are no agentic recipes for drupal" would be a
+  confident wrong answer; the header format legend contains a literal `framework=<framework>`
+  placeholder that must not count as an entry, or an old index looks new and the guard becomes a
+  lie; and `framework=none` marks a deliberately stack-neutral recipe, so it is a real value and a
+  query for that literal slug matches nothing.
+- A found outweighs an unread catalog. `verdict` is `partial` when support was confirmed somewhere
+  even while another catalog went unread, because reporting `unknown` there would hide a fact the
+  script established, and the per-catalog status still names which one was not read. `unknown` is
+  reserved for the case where it changes the answer: nothing found anywhere AND something unread,
+  where `none` would be the confident wrong answer. `full` needs all three, so it is never claimed
+  on the strength of a catalog nobody could open.
+
 ## [5.31.0] - 2026-08-27
 
 ### Added

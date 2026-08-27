@@ -85,8 +85,9 @@ callers cite instead of re-describing the steps inline.
    generic agent and do not invent steps. Handle each no-body case explicitly:
 
    - **`results:[]` with `no_frameworks_defined`** (the project has no frameworks recorded): run the
-     **framework detect-or-ask sub-protocol** below — the *need* for a recipe is the trigger to adopt a
-     framework, not a reason to silently run stack-neutral forever. Do **not** merely tell the user to run
+     **framework-resolution branch** below, which drives the cascade in
+     `references/framework-resolution.md`. The *need* for a recipe is the trigger to resolve a framework,
+     not a reason to silently run stack-neutral forever. Do **not** merely tell the user to run
      `/upgrade-project` and skip.
    - **`action:ask-user`** (a true miss): ask the user for a path or to research it, per step 5, and
      proceed according to the answer. Until a body is resolved and Read, there is nothing to follow.
@@ -152,43 +153,46 @@ callers cite instead of re-describing the steps inline.
    step does not verify the recipe was *followed*. What is now deterministic: resolution **ran and was
    recorded**, and an absent recommended declaration is **surfaced**, not silently degraded.
 
-### Framework detect-or-ask (the `no_frameworks_defined` sub-protocol)
+### Framework resolution (the `no_frameworks_defined` branch)
 
 The need IS the trigger: when a phase step needs a recipe but the project has no `**Frameworks:**`, the
-**calling command** adopts a framework at the point of need rather than skipping. This fires **only** when
-`frameworks == []` (an empty result with `no_frameworks_defined`); it never touches the `action:ask-user`
-path (frameworks set, recipe missing — that case is step 5, unchanged). It is idempotent (once a Frameworks
-line is written, `frameworks != []` so this branch cannot re-fire) and degrade-safe (decline → proceed
-stack-neutral exactly as before — no regression).
+**calling command** resolves a framework at the point of need rather than skipping. The method is the
+five-step cascade in `references/framework-resolution.md`: the model identifies the framework by reading
+the repository (facts from `scripts/framework-evidence.sh`), then `scripts/framework-support.sh <slug>`
+reports what the three catalogs carry for it, a remaining gap goes to the user (who may name another
+source, including a local path), a gap the user cannot close goes to web research tagged unverified, and
+the answer is recorded once in `<task_folder>/_framework.json` and `project_state.md` where every later
+phase reads it. Follow that document; do not restate its steps here.
 
-0. **Attended-mode gate.** The offer in steps 1–2 is **interactive** and runs ONLY when an answer is
-   possible. In an **unattended** run (a `--headless` command, or an autonomous/loop driver), do NOT prompt:
-   record a `frameworks_unset` gap marker so the gap is not silently lost, skip the framework-specific step
-   for this run, and continue. A later attended `/next` surfaces the marker. Never block an unattended run.
+This branch fires **only** when `frameworks == []` (an empty result with `no_frameworks_defined`). It never
+touches the `action:ask-user` path (frameworks set, recipe missing, which is step 5, unchanged). It is
+idempotent: once a Frameworks line is written, `frameworks != []`, so it cannot re-fire. It is degrade-safe:
+on a decline the phase proceeds stack-neutral exactly as before, no regression.
 
-1. **Guard codePath.** Read `codePath` via `scripts/project-state-read.sh` (the loader's result JSON does
-   **not** carry codePath, so a command that did not already read it must read it here).
-   - **codePath unknown** → cannot detect: ASK the user (offer `/set-code-path`), or skip-with-note for this
-     run. Do not silently gate on a missing codePath.
+What the calling command owes on top of the cascade:
 
-2. **Detect, then offer or ask.** Run `scripts/detect-frameworks.sh "<codePath>"` (the detector; no change).
-   - **One or more detected** → **offer**: "Detected `<list>`. Set as this project's `**Frameworks:**`? [y/N]".
-     - `y` → write the `**Frameworks:**` line into `project_state.md` using the `/upgrade-project` idiom
-       (flush-left, inserted after the last top-block metadata field — the exact format
-       `project-state-read.sh` parses; never a blank or placeholder line) → go to step 3.
-     - `n` → proceed stack-neutral for this run (no write, no regression).
-   - **Empty result** → the detector emits `[]` for a genuine no-framework project AND for a codePath/parse
-     fault alike; it does not disambiguate. Safe degrade either way: ASK the user for a framework id (a free
-     token — no allowlist), or skip. **Never** write a blank/placeholder Frameworks line.
+- **Attended-mode gate.** The cascade asks the user, so it runs ONLY when an answer is possible. In an
+  **unattended** run (a `--headless` command, or an autonomous/loop driver), do NOT prompt: record a
+  `frameworks_unset` gap marker so the gap is not silently lost, skip the framework-specific step for this
+  run, and continue. A later attended `/next` surfaces the marker. Never block an unattended run.
+- **Guard codePath.** Read `codePath` via `scripts/project-state-read.sh` (the loader's result JSON does
+  **not** carry codePath, so a command that did not already read it must read it here). Identification is a
+  read of the codebase, so with **codePath unknown** there is nothing to read: ASK the user (offer
+  `/set-code-path`), or skip-with-note for this run. Do not silently gate on a missing codePath.
+- **Write the line, or write nothing.** Once the user confirms a framework, write the `**Frameworks:**` line
+  into `project_state.md` using the `/upgrade-project` idiom (flush-left, inserted after the last top-block
+  metadata field, the exact format `project-state-read.sh` parses). **Never** write a blank or placeholder
+  line. A cascade that reaches its end with no framework, and a user who declines, both leave the line absent.
+- **Re-resolve once (loop guard).** After the line is written, re-invoke the `process-recipe-loader` skill
+  (it re-reads `project_state.md` from disk on every call, so it sees the new line) and use its results to
+  proceed with the framework-specific step. Re-resolve **at most once**: if it *still* returns
+  `no_frameworks_defined` (the write failed, or its format was not parseable), do **not** loop.
+  Skip-with-note and warn.
 
-3. **Re-resolve once (loop guard).** Re-invoke the `process-recipe-loader` skill (the loader re-reads
-   `project_state.md` from disk every call, so it sees the newly written line). Use its results to proceed
-   with the framework-specific step. Re-resolve **at most once**: if it *still* returns `no_frameworks_defined`
-   (the write failed, or its format was not parseable), do **not** loop — skip-with-note and warn.
-
-This behavior lives **only** here; the phase commands cite this sub-protocol rather than re-describing it.
-The two setup commands (`/setup-e2e`, `/setup-visual-regression`) handle empty frameworks with their own
-pre-loader guards and are out of scope for this sub-protocol; they point the user to adopt frameworks first.
+This behavior lives **only** here and in `references/framework-resolution.md`; the phase commands cite it
+rather than re-describing it. The two setup commands (`/setup-e2e`, `/setup-visual-regression`) handle empty
+frameworks with their own pre-loader guards and are out of scope for this branch; they point the user to
+adopt frameworks first.
 
 ## Who invokes the loader (commands, not agents)
 
@@ -220,4 +224,7 @@ above with the matching `phase` id:
   absent gate declarations per phase); `references/gate-audit-schema.md` §5.12: the `_recipe-load.json`
   audit it feeds. Step 7 is what makes the otherwise-silent declaration fail-open visible and the
   resolution outcome auditable.
+- `references/framework-resolution.md`: the cascade that answers "which framework is this?" when the
+  project has none recorded, plus `scripts/framework-evidence.sh` (facts about a codebase, identifies
+  nothing) and `scripts/framework-support.sh` (what the catalogs carry for a slug), the two scripts it runs
 - `scripts/project-state-read.sh`: emits `frameworks`, `codePath`, `localGuidesPath`, `processRecipes`

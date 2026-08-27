@@ -119,6 +119,7 @@ _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 _internal-prior-art.json|required|the internal-prior-art-finder skill|step 5a|implicit
 research.md|required|the phase itself|step 6
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 6
+_framework.json|conditional|the framework-resolution cascade, when the project has no recorded frameworks|step 6|carryable
 _coverage-mapping.json|conditional|the coverage-mapping gate|step 6|implicit
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;

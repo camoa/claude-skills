@@ -97,7 +97,7 @@ The COMMAND owns resolution and injection. For each framework result with `avail
 The teammates treat that block as the framework search method to follow. They never resolve the recipe themselves and stay stack-neutral.
 
 **No body resolved → do not inject a method-less search.** Per `references/recipe-resolution.md` step 6, the inject step runs only when a `body_path` resolved for the framework:
-- **`results:[]` with `no_frameworks_defined`** → follow the framework detect-or-ask sub-protocol in `references/recipe-resolution.md` step 6 (detect → offer/ask → write `**Frameworks:**` → re-resolve once → proceed; unattended: record gap + skip).
+- **`results:[]` with `no_frameworks_defined`** → follow the framework-resolution branch in `references/recipe-resolution.md` step 6, which runs the cascade in `references/framework-resolution.md` (identify the framework by reading the repository → check what the catalogs carry for it → ask the user → research → record `_framework.json` and write `**Frameworks:**` → re-resolve once → proceed; unattended: record gap + skip).
 - **`action:ask-user`** → ask the user for a path or to research it, and proceed per the answer. Until a body is resolved and Read, there is no framework method to inject.
 - **A framework that resolved nothing** → skip that framework's method with a clear note and continue with the frameworks that did resolve.
 
@@ -528,6 +528,7 @@ Everything lands in the task folder, `<project>/implementation_process/in_progre
 
 - Feature mode — `prior-art.md`, `canonical-patterns.md` and `challenge-log.md` from the three teammates, then `research.md` synthesized by the lead.
 - Bug mode — `hypothesis-a.md`, `hypothesis-b.md` and `hypothesis-c.md`, then `investigation.md`.
+- `_framework.json`, when the project had no recorded frameworks and the framework-resolution cascade ran to name one.
 - `_recipe-load.json`, the recipe-resolution audit, written through `scripts/gate-audit-write.sh`. The same audit the plain `/ai-dev-assistant:research` writes, so the team variant is not a quieter path.
 
 The per-teammate files are left in place rather than cleaned up; they are the evidence behind the synthesis. It also writes the session-context file at `~/.claude/ai-dev-assistant/sessions/<hash>.json`, outside the project.

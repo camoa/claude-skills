@@ -7,7 +7,7 @@
 #   <gate_type>: one of pre-analysis | coverage-mapping | skill-review |
 #                plugin-validate | phase-command-bypass | dev-guides-load |
 #                playbook-load | review | e2e | visual_regression | visual_parity |
-#                recipe-load | agentic-recipe | internal-prior-art
+#                recipe-load | agentic-recipe | internal-prior-art | framework
 #   <json_payload>: EITHER the gate_specific object on its own (preferred — this
 #                   script builds the envelope around it), OR a complete audit JSON
 #                   object conforming to
@@ -16,15 +16,16 @@
 #                   + `visual_regression`; v1.3 — v4.14.0 — adds `visual_parity`;
 #                   v1.4 — v5.11.0 — adds `recipe-load`;
 #                   v1.5 — v5.12.0 — adds `agentic-recipe`;
-#                   v1.7 — v5.31.0 — adds `preconditions`)
+#                   v1.7 (v5.31.0) adds `preconditions`;
+#                   v1.8, v5.32.0, adds `framework`)
 #
 # Behavior:
 # - Accepts a bare gate_specific object and wraps it in the envelope, deriving
 #   schema_version from gate_type and hoisting user_choice / bypass_reason
 # - Stamps fired_at from this script's clock in both shapes; a caller-supplied
 #   fired_at is discarded (see the normalize block for why)
-# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.7 accepted)
-# - Validates gate_type is one of the 17 allowed values
+# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.8 accepted)
+# - Validates gate_type is one of the 18 allowed values
 # - Validates required top-level fields (gate_type, task_folder, gate_specific)
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
@@ -42,11 +43,11 @@ PAYLOAD="${3:?JSON payload required}"
 
 # Validate gate_type
 case "$GATE_TYPE" in
-  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions)
+  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions|framework)
     ;;
   *)
     echo "gate-audit-write: invalid gate_type: $GATE_TYPE" >&2
-    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions" >&2
+    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions, framework" >&2
     exit 2
     ;;
 esac
@@ -86,6 +87,7 @@ case "$GATE_TYPE" in
   agentic-recipe) DEFAULT_SV="1.5" ;;
   internal-prior-art) DEFAULT_SV="1.6" ;;
   preconditions)      DEFAULT_SV="1.7" ;;
+  framework)          DEFAULT_SV="1.8" ;;
   *) DEFAULT_SV="1.0" ;;
 esac
 
@@ -116,12 +118,13 @@ fi
 
 # Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate,
 # v1.2 e2e / visual_regression gates, v1.3 visual_parity gate, v1.4 recipe-load gate,
-# v1.5 agentic-recipe gate, v1.6 internal-prior-art gate, v1.7 preconditions gate)
+# v1.5 agentic-recipe gate, v1.6 internal-prior-art gate, v1.7 preconditions gate,
+# v1.8 framework gate)
 SV=$(echo "$PAYLOAD" | jq -r '.schema_version // empty')
 case "$SV" in
-  1.0|1.1|1.2|1.3|1.4|1.5|1.6|1.7) ;;
+  1.0|1.1|1.2|1.3|1.4|1.5|1.6|1.7|1.8) ;;
   *)
-    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 (got \"$SV\")" >&2
+    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 (got \"$SV\")" >&2
     exit 2
     ;;
 esac
@@ -165,6 +168,11 @@ case "$GATE_TYPE" in
   # distinguish a recipe that declared no preconditions from one whose preconditions all passed,
   # and those are the two facts this record exists to keep apart.
   preconditions)      REQUIRED_KEYS="phase declared verdict preconditions" ;;
+  # All three required: `frameworks[]` alone cannot say where the answer came from. A framework the
+  # model identified by reading the repository and one the operator typed at a prompt read identically
+  # in a bare list, and neither says how far the cascade had to go before a method was found. That is
+  # the whole point of the record, so `identified_by` and `cascade_step_reached` are not optional.
+  framework)          REQUIRED_KEYS="frameworks identified_by cascade_step_reached" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
   *)                  REQUIRED_KEYS="" ;;
 esac
