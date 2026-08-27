@@ -138,6 +138,28 @@ On `[y]`:
    - a `research/<subject>.md` file whose subject answers the item
    - Cross-cutting pattern numbers / evidence references
 3. **Honest mapping.** If a question or criterion has no clear section in `research.md`, mark it **"NOT YET ADDRESSED"** — do not invent a reference. Flag it for the discussion step.
+4. **Then walk it the other way.** Steps 2–3 answer "does every criterion have something behind
+   it". They cannot answer "does everything here answer to a criterion", because a section nobody
+   asked for is invisible to a scan that starts from the criteria list. Both directions matter and
+   only one was ever walked.
+
+   Go through `research.md` and its `research/<subject>.md` files's substantive commitments — recommendations, adopted patterns, rejected options,
+   anything the next phase would carry forward — and for each, name the criterion or the recorded
+   decision it answers to. Anything that answers to neither is **UNASKED**: not wrong, not a
+   finding, just something the contract did not ask for and somebody should decide about while it
+   is still free to drop.
+
+   Observed live at the end of a Phase 2, where the same one-directional mapping ran: all nine
+   criteria came back addressed with nothing missing, and walking the other way surfaced a
+   fixture row beyond the six the contract listed plus a flag no criterion mentioned. Both were
+   defensible. Neither had been decided.
+
+   **This is advisory and produces no verdict.** `references/spec-axis-review.md` settled that
+   scope creep never hard-fails on its own — an untraceable-to-what judgment produced false fails
+   under unattended runs. That decision is about severity, not about looking, and this walkthrough
+   has no verdict to give: it is opt-in, it ends in `[c]/[r]/[d]`, and an UNASKED row is a line in
+   the decision log unless the person says otherwise. Surfacing it here rather than at Phase 4 is
+   the whole point — at Phase 4 the thing has already been built.
 
 ### Step 3 — Print the table
 

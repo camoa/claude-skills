@@ -208,6 +208,28 @@ On `[y]`:
    - Explicit callouts in the artifact (e.g., "Acceptance criteria" row, "Risks" mitigations)
    - Cross-references to fallback flows, invariants, or open questions resolutions
 3. **Honest mapping.** If a criterion has no clear section in the artifact, mark it **"NOT YET ADDRESSED"** — do not invent a section reference. Flag it for the discussion step.
+4. **Then walk it the other way.** Steps 2–3 answer "does every criterion have something behind
+   it". They cannot answer "does everything here answer to a criterion", because a section nobody
+   asked for is invisible to a scan that starts from the criteria list. Both directions matter and
+   only one was ever walked.
+
+   Go through `architecture.md` and its `architecture/{component}.md` files's substantive commitments — components, commands, flags, fixtures,
+   settings, anything the next phase would build — and for each, name the criterion or the recorded
+   decision it answers to. Anything that answers to neither is **UNASKED**: not wrong, not a
+   finding, just something the contract did not ask for and somebody should decide about while it
+   is still free to drop.
+
+   Observed live at the end of a Phase 2: the mapping came back with all nine criteria addressed
+   and nothing missing, and walking the other way surfaced a fixture row beyond the six the
+   contract listed, plus a `--dry-run` flag no criterion mentioned. Both were defensible. Neither
+   had been decided.
+
+   **This is advisory and produces no verdict.** `references/spec-axis-review.md` settled that
+   scope creep never hard-fails on its own — an untraceable-to-what judgment produced false fails
+   under unattended runs. That decision is about severity, not about looking, and this walkthrough
+   has no verdict to give: it is opt-in, it ends in `[c]/[r]/[d]`, and an UNASKED row is a line in
+   the decision log unless the person says otherwise. Surfacing it here rather than at Phase 4 is
+   the whole point — at Phase 4 the thing has already been built.
 
 ### Step 3 — Print the table
 

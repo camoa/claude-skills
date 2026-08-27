@@ -3,6 +3,22 @@
 ## [5.30.9] - 2026-08-27
 
 ### Fixed
+- The traceability walkthrough only ever walked one way. Step 2 asked "for each criterion, which
+  section addresses it" and step 3 marked a criterion with nothing behind it as NOT YET ADDRESSED.
+  Nothing asked the reverse — what is in the artifact that no criterion asked for — and a scan that
+  starts from the criteria list is structurally blind to a section nobody requested. Observed at
+  the end of a live Phase 2: the mapping returned all nine criteria addressed with nothing missing,
+  and walking the other way by hand surfaced a fixture row beyond the six the contract listed plus
+  a `--dry-run` flag no criterion mentioned. Both defensible, neither decided. Phase 4's spec
+  review would have found the same two after they were built. Both walkthroughs now walk both
+  directions, naming anything that answers to no criterion and no recorded decision as UNASKED.
+
+  It stays advisory and issues no verdict. `references/spec-axis-review.md` settled that scope
+  creep never hard-fails on its own, because an untraceable-to-what judgment produced false fails
+  under unattended runs — a decision about severity, not about looking. This walkthrough is opt-in
+  and ends in `[c]/[r]/[d]`; an UNASKED row is a line in the decision log unless the person says
+  otherwise. Surfacing it at the end of a phase rather than at review is the point, because by
+  review the thing has been built.
 - Five documented calls to `analysis-agent-normalize.sh` showed no argument, and the script
   requires one. A command body is executed by a model reading prose, so a call written as a bare
   script path in backticks reads as a complete instruction and gets run that way. A live `/design`
