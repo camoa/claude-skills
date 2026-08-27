@@ -15,15 +15,16 @@
 #                   gate types; v1.1 adds `review`; v1.2 — v4.11.0 — adds `e2e`
 #                   + `visual_regression`; v1.3 — v4.14.0 — adds `visual_parity`;
 #                   v1.4 — v5.11.0 — adds `recipe-load`;
-#                   v1.5 — v5.12.0 — adds `agentic-recipe`)
+#                   v1.5 — v5.12.0 — adds `agentic-recipe`;
+#                   v1.7 — v5.31.0 — adds `preconditions`)
 #
 # Behavior:
 # - Accepts a bare gate_specific object and wraps it in the envelope, deriving
 #   schema_version from gate_type and hoisting user_choice / bypass_reason
 # - Stamps fired_at from this script's clock in both shapes; a caller-supplied
 #   fired_at is discarded (see the normalize block for why)
-# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.6 accepted)
-# - Validates gate_type is one of the 14 allowed values
+# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.7 accepted)
+# - Validates gate_type is one of the 17 allowed values
 # - Validates required top-level fields (gate_type, task_folder, gate_specific)
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
@@ -41,11 +42,11 @@ PAYLOAD="${3:?JSON payload required}"
 
 # Validate gate_type
 case "$GATE_TYPE" in
-  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art)
+  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions)
     ;;
   *)
     echo "gate-audit-write: invalid gate_type: $GATE_TYPE" >&2
-    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art" >&2
+    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions" >&2
     exit 2
     ;;
 esac
@@ -84,6 +85,7 @@ case "$GATE_TYPE" in
   recipe-load) DEFAULT_SV="1.4" ;;
   agentic-recipe) DEFAULT_SV="1.5" ;;
   internal-prior-art) DEFAULT_SV="1.6" ;;
+  preconditions)      DEFAULT_SV="1.7" ;;
   *) DEFAULT_SV="1.0" ;;
 esac
 
@@ -114,12 +116,12 @@ fi
 
 # Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate,
 # v1.2 e2e / visual_regression gates, v1.3 visual_parity gate, v1.4 recipe-load gate,
-# v1.5 agentic-recipe gate, v1.6 internal-prior-art gate)
+# v1.5 agentic-recipe gate, v1.6 internal-prior-art gate, v1.7 preconditions gate)
 SV=$(echo "$PAYLOAD" | jq -r '.schema_version // empty')
 case "$SV" in
-  1.0|1.1|1.2|1.3|1.4|1.5|1.6) ;;
+  1.0|1.1|1.2|1.3|1.4|1.5|1.6|1.7) ;;
   *)
-    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 (got \"$SV\")" >&2
+    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 (got \"$SV\")" >&2
     exit 2
     ;;
 esac
@@ -159,6 +161,10 @@ case "$GATE_TYPE" in
   playbook-load)      REQUIRED_KEYS="phase playbook_sets_loaded playbook_sets_source" ;;
   agentic-recipe)     REQUIRED_KEYS="recipes recipe_lookup_status" ;;
   internal-prior-art) REQUIRED_KEYS="sources" ;;
+  # `verdict` and `declared` both required: a payload carrying only the summary counts cannot
+  # distinguish a recipe that declared no preconditions from one whose preconditions all passed,
+  # and those are the two facts this record exists to keep apart.
+  preconditions)      REQUIRED_KEYS="phase declared verdict preconditions" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
   *)                  REQUIRED_KEYS="" ;;
 esac

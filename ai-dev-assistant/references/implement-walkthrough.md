@@ -158,9 +158,51 @@ Default: `[c]`.
 8. Updates `task.md` to mark Phase 3 as in progress
 9. Activates `tdd-companion` for TDD discipline
 10. Prepares for interactive development
-11. **(v3.13.5+)** Post-plan epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with full task context (`task.md` + `alignment.md` + `research.md` + `architecture.md` + `implementation.md`) and surfaces `epic_candidate` if the step-plan surfaced separable work. **Runs BEFORE any code is written** — mid-implementation epic migration is prohibitively expensive
-12. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
-13. **Invokes `session-context-writer` skill with the resolved project and task**
+11. **(v5.31.0+)** Preconditions gate against the resolved implement recipe (see "Preconditions gate" below) — the one fail-closed declaration; `unmet` halts before any code is written, and `undeclared` is recorded as itself rather than as met
+12. **(v3.13.5+)** Post-plan epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with full task context (`task.md` + `alignment.md` + `research.md` + `architecture.md` + `implementation.md`) and surfaces `epic_candidate` if the step-plan surfaced separable work. **Runs BEFORE any code is written** — mid-implementation epic migration is prohibitively expensive
+13. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `implementation.md` progress + planned work to the task's acceptance criteria
+14. **Invokes `session-context-writer` skill with the resolved project and task**
+
+## Preconditions gate (v5.31.0+)
+
+**Runs at step 6b, after the framework implement recipe resolves and before any code is written.**
+Consumes the recipe's `## Preconditions` block via `scripts/preconditions-check.sh`. Contract and field
+shapes: `references/recipe-interface.md` §6.
+
+Why it exists: a recipe could state a precondition in prose, and the engine had no way to read it. The
+body was injected verbatim into the phase and parsed by nothing, so an unmet precondition produced no
+gate, no verdict and no record. Observed live on a Drupal task — the recipe required a configured PHPUnit
+runner, the project had none, and the phase went on to hand-roll a runner install, a dependency dry-run
+and a `composer audit` parse, all of it work another plugin already owns.
+
+### The four verdicts
+
+| Verdict | Meaning | What the phase does |
+|---|---|---|
+| `met` | every declared entry ran and passed | proceed, silent |
+| `unmet` | at least one check ran and failed | **halt**; print `what` + `owner`; `[f]ix via owner` / `[o]verride (reason)` |
+| `unknown` | a block is present, something could not be run | one advisory line per entry, never blocks |
+| `undeclared` | the recipe carries no `## Preconditions` block | record it; **never report as met** |
+
+The last row is the point. A recipe that declared nothing and a recipe whose preconditions all passed are
+different facts, and a phase that cannot tell them apart is back to answering a question it never asked.
+
+### Who owns the tooling
+
+An unmet entry names its `owner` as `<plugin>:<command>`. When it names none, or when no recipe resolved
+at all, this is the default table. **Route to the owner; do not satisfy it by hand.**
+
+| Need | Owner |
+|---|---|
+| Install or configure a test runner, linter, static analyzer, or their config files | `/code-quality-tools:setup` |
+| Dependency advisories, secret scanning, security posture of what is installed | `/code-quality-tools:security` |
+| Test-first discipline once a runner exists | `tdd-companion` skill (already activated at step 6) |
+| The stack-specific build method | the resolved implement recipe |
+
+Hand-rolling either of the first two produces work that duplicates a plugin, is recorded in no gate
+envelope, and is not re-runnable at `/review`. If the owning command turns out not to cover the need, that
+gap is a finding worth recording, not a licence to improvise: check that the owner covers it before
+excluding it.
 
 ## Post-phase epic check (v3.13.5+)
 

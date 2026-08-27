@@ -1,5 +1,56 @@
 # Changelog
 
+## [5.31.0] - 2026-08-27
+
+### Added
+- Phase 3 can now be told it cannot start yet. A process recipe may declare a
+  `## Preconditions` block, and `scripts/preconditions-check.sh` runs it at `/implement`
+  step 6b. Before this, a recipe could state a precondition in prose and the engine had no
+  way to read it: the body was injected verbatim into the phase and parsed by nothing, so
+  an unmet precondition produced no gate, no verdict and no record. Observed live on a
+  Drupal task whose implement recipe required a configured PHPUnit runner. The project had
+  none, the phase read "precondition 1, unmet" as narrative, and went on to hand-roll a
+  runner install, a dependency dry-run and a `composer audit` parse. Every one of those is
+  work `code-quality-tools` already owns, and none of it landed in a gate envelope or is
+  re-runnable at `/review`.
+
+  The block carries `id`, `what`, `check` and `owner` per entry. `check` is exec'd directly
+  and never through a shell, because a recipe body is untrusted upstream data: the value is
+  split on whitespace and run as argv, so shell metacharacters are inert literals rather
+  than syntax, and a check containing one is refused outright as
+  `unknown / unsafe_check_shape` rather than run to mean something its author did not read.
+
+  Four verdicts, and the fourth is the point. `met` proceeds. `unmet` **halts the build**
+  and prints the entry's `what` and its `owner` — this is the only fail-closed declaration
+  in the recipe interface besides `e2e.preflight_command`, because a project with no test
+  runner cannot observe a RED step fail, which makes test-first unfalsifiable rather than
+  merely unrun. `unknown` (a check that could not run, including exit 127, which says the
+  checker is missing and nothing about the precondition) advises without blocking.
+  `undeclared` (no block) is recorded as itself and is **never** reported as met: a recipe
+  that declared nothing and a recipe whose preconditions all passed are different facts,
+  and folding them together re-creates the defect the declaration closes.
+
+- `/implement` now names who owns the tooling. `references/implement-walkthrough.md` carries
+  a default owner table — `/code-quality-tools:setup` for installing or configuring a test
+  runner, linter, static analyzer or their config files; `/code-quality-tools:security` for
+  dependency advisories and secret scanning — used when an unmet entry names no `owner` or
+  no recipe resolved at all. Nothing in Phase 3 referenced `code-quality-tools` before this;
+  every mention sat in Phase 4's `/validate:*` wrappers, so at the moment tooling was needed
+  the phase had no owner to route to and improvised.
+
+- `_preconditions.json` joins the implement phase's record contract in
+  `scripts/phase-records-check.sh` (conditional, step 6b), and `preconditions` is a
+  gate type in `scripts/gate-audit-write.sh` at schema 1.7, requiring `phase`, `declared`,
+  `verdict` and `preconditions` — `declared` and `verdict` both, since a payload carrying
+  only the summary counts cannot tell those two facts apart either.
+
+- `## Preconditions` is documented as declaration 6 in `references/recipe-interface.md` and
+  is the one **recommended** implement-phase token in `scripts/recipe-declarations-audit.sh`,
+  so a recipe that declares none is visible to its author rather than silently fail-open.
+
+- `tests/implement-preconditions-spec.sh` (47 assertions) pins all of it, including a canary
+  file proving a metacharacter check never reaches a shell.
+
 ## [5.30.9] - 2026-08-27
 
 ### Fixed

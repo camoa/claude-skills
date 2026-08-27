@@ -136,6 +136,7 @@ _playbook-load.json|required|playbook-load-deterministic.sh|step 4
 implementation.md|required|the phase itself|step 7
 _mechanism-challenge.json|required|the mechanism-challenge backstop, which runs the full challenge when the record is absent|step 6|carryable
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 3
+_preconditions.json|conditional|the preconditions gate, when a framework implement recipe resolved|step 6b
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 3|carryable
 _distill.json|conditional|the distill-agent, when the end-of-phase seam is accepted|end of phase' ;;
   review) CONTRACT='_phase-active.json|required|phase-active-write.sh with the task folder|step 0

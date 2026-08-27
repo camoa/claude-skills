@@ -59,7 +59,9 @@ has "$REF" "seam: required has no converter producer"            -i 'no converte
 
 # --- audit plumbing: allowlist + schema section + count bump ---
 has "$AUDITW" "gate-audit-write allowlists mechanism-challenge"   'mechanism-challenge'
-has "$AUDITW" "allowlist count comment bumped to 14"             '14 allowed values'
+# The literal was pinned at 14 while the allowlist already held 16, so this assertion
+# agreed with a stale comment rather than with the code it describes. Both now say 17.
+has "$AUDITW" "allowlist count comment matches the allowlist"    '17 allowed values'
 has "$SCHEMA" "schema doc has the mechanism-challenge section"    -i 'mechanism-challenge'
 has "$SCHEMA" "schema records challenge_ran + mechanisms_hash"    'challenge_ran'
 has "$SCHEMA" "schema gate_type count bumped to 14"              'one of the 14'
