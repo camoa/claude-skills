@@ -102,7 +102,7 @@ value that must be written down rather than implied by silence:
 | Value | Meaning |
 |---|---|
 | `observed` | The test was run before the implementation existed and failed **at its own assertion, for the reason it names** |
-| `passed_first_run` | It was run and it passed, so the test is wrong (`tdd-companion`'s blocking violation) |
+| `passed_first_run` | It was run and it passed. The reason says which kind: a test-first test that passes immediately is wrong (`tdd-companion`'s named violation); a characterization or regression test written against existing code passes by design |
 | `unobserved` | Nobody ran it. Legal to record, never legal to leave unsaid |
 
 **A failure is not automatically a RED.** A test that dies in `setUp` — a missing schema, an
