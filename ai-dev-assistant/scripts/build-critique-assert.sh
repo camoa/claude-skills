@@ -217,11 +217,24 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
 
+  if [ "$FIRSTRUN_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then
+    # Two different things pass on their first run and only one is a defect.
+    #
+    # A test written test-first that passes immediately is the blocking violation
+    # `tdd-companion` names: it is not evidence the behaviour works, it is evidence the test
+    # does not test it. A characterization or regression test deliberately written against
+    # code that already exists passes on its first run BY DESIGN, and is worth having --
+    # locking in behaviour, or reproducing a defect a critic just found.
+    #
+    # The first release of this block failed both, with no reason path. That would have forced
+    # a live build to record a violation for tests that were not violations, which teaches a
+    # builder that the honest answer is the expensive one. Say which kind it was; the gate
+    # checks that the question was answered, not that the answer is true.
+    add_msg "$FIRSTRUN_N test(s) passed on their first run with no reason recorded; say whether the test is wrong or was written deliberately against existing code"
+    emit fail true "" 1
+  fi
   if [ "$FIRSTRUN_N" -gt 0 ]; then
-    # tdd-companion already calls this a blocking violation: a test that passes on its first
-    # run is not evidence the behaviour works, it is evidence the test does not test it.
-    add_msg "$FIRSTRUN_N test(s) passed on their first run, so those tests assert nothing about the behaviour they name"
-    emit fail false "" 1
+    add_msg "$FIRSTRUN_N test(s) passed on their first run: $TDD_REASON"
   fi
 
   if [ "$UNOBS_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then

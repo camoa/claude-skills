@@ -96,13 +96,25 @@ msg_has "3 criterion/criteria were seen to fail" "the RED count is surfaced in t
 
 # --------------------------------------------- 3. a test that passed on its first run
 
+# Two different things pass on a first run and only one is a defect: a test-first test that
+# passes immediately is broken, a characterization test written against existing code passes
+# by design. v5.34.0 failed both with no reason path, which would have made a live build
+# record a violation for tests that were not violations.
 D=$(mktask tdd_firstrun)
 write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"unobserved":[]}'
 run "$D"
-verdict_is fail "a test that passed on its first run fails the gate"
-unresolved_is false "a first-run pass is a clean, non-blocking-record fail, not unresolved"
-rc_is 1 "a first-run pass exits 1"
-msg_has "passed on their first run" "the message names which check failed"
+verdict_is fail "a first-run pass with no reason fails the gate"
+unresolved_is true "an unexplained first-run pass is a could-not-tell, not a settled violation"
+rc_is 1 "an unexplained first-run pass exits 1"
+msg_has "no reason recorded" "the message asks which kind of test it was"
+
+D=$(mktask tdd_firstrun_reason)
+write_record "$D" '.tdd={"red_observed":3,"passed_first_run":1,"unobserved":[],
+  "reason":"two characterization tests written against existing code during a repair round"}'
+run "$D"
+verdict_is pass "a first-run pass passes once the reason says which kind of test it was"
+unresolved_is false "an explained first-run pass is not unresolved"
+rc_is 0 "an explained first-run pass exits 0"
 
 # ------------------------------------------- 4. unobserved criteria with no reason
 

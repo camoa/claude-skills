@@ -235,15 +235,25 @@ written anyway. The enforcement that actually stops a review is downstream, in
 |---|---|---|---|
 | `tdd` key absent | fail | `true` | 1 |
 | `red_observed` / `passed_first_run` / `unobserved` — any missing | fail | `true` | 1 |
-| `passed_first_run > 0` | fail | `false` | 1 |
+| `passed_first_run > 0`, no `reason` | fail | `true` | 1 |
+| `passed_first_run > 0` with a `reason` | pass | `false` | 0 |
 | `unobserved` non-empty, `reason` empty or absent | fail | `true` | 1 |
 | `unobserved` non-empty, `reason` populated | pass | — | 0 |
 | all present, `unobserved` empty | pass | — | 0 |
 
-`passed_first_run > 0` is `unresolved: false` on purpose — it isn't an unknown, it's a named
-violation: a test that passed before the code existed asserts nothing about the behavior it
-claims to test. Everything else that's wrong with the block is a "could not tell," so it
-reads `unresolved: true` instead. **Applies to the in-session build path only** — see below.
+**Two different things pass on a first run, and only one is a defect.** A test written
+test-first that passes immediately is `tdd-companion`'s named violation: it asserts nothing
+about the behavior it claims to test. A characterization or regression test written
+deliberately against code that already exists passes on its first run by design, and is worth
+having — locking in behavior, or reproducing a defect a critic just found. Both land in
+`passed_first_run`, and the `reason` says which.
+
+v5.34.0 failed both with no reason path at all. A live build hit it immediately: several tests
+added during repair rounds were written against existing code and passed first time, and the
+rule would have made the honest record a violation. A gate that punishes the true answer
+teaches a builder to write a different one. As everywhere else in this rung, the gate checks
+that the question was answered, not that the answer is true. **Applies to the in-session build
+path only** — see below.
 
 ## The contract baseline — Runtime Step 11, before any code exists
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.34.1] - 2026-08-28
+
+### Fixed
+- **`passed_first_run` failed two different things and only one was a defect.** v5.34.0 made any
+  `passed_first_run > 0` a hard fail with no reason path, on the strength of `tdd-companion`
+  calling it a blocking violation. That is right for a test written test-first that passes
+  immediately: it asserts nothing about the behavior it claims to test. It is wrong for a
+  characterization or regression test written deliberately against code that already exists,
+  which passes on its first run by design and is worth having — locking in behavior, or
+  reproducing a defect a critic just found.
+
+  A live build hit this within an hour of the release. Several tests added during its repair
+  rounds were written against existing code and passed first time, and the rule would have made
+  the honest record a violation. A gate that punishes the true answer teaches a builder to write
+  a different one, which is the opposite of what this block is for.
+
+  `passed_first_run > 0` now behaves like every other state in the rung: it needs a `reason`
+  saying which kind of test it was, and passes with one. Unexplained, it is `unresolved: true`
+  rather than a settled violation, because without the reason the gate genuinely cannot tell the
+  two apart. The gate checks that the question was answered, not that the answer is true — the
+  same limit already documented for `unobserved` and for contract changes.
+
 ## [5.34.0] - 2026-08-28
 
 ### Fixed
