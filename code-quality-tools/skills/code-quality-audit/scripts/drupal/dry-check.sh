@@ -226,6 +226,15 @@ if [ "$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")" != "ok" ]; then
     mkdir -p "${REPORT_DIR}/dry"
     cqt_unmeasured "the custom modules path is not there — duplication was NOT measured" \
         "${DRUPAL_MODULES_PATH}"
+    # ENCODED, not interpolated. `["${DRUPAL_MODULES_PATH}"]` in the heredoc below made a
+    # path containing a double quote produce a report jq then refuses to read — the
+    # verdict and the exit code were right and the RECORD of them was unreadable, and
+    # full-audit.sh falls back to the exit code whenever a report will not parse. jq can
+    # encode the value correctly, which is why this is encoded rather than refused the
+    # way security-check.sh has to refuse one going into generated XML. Same treatment
+    # lint-check.sh already gives its own paths_missing.
+    DRY_MISSING_JSON=$(printf '%s' "${DRUPAL_MODULES_PATH}" \
+        | jq -R -s 'rtrimstr("\n") | [.]' 2>/dev/null || printf '[]')
     cat > "${REPORT_DIR}/dry-report.json" << EOF
 {
   "mode": "unmeasured",
@@ -237,7 +246,7 @@ if [ "$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")" != "ok" ]; then
   "clones": [],
   "measured": false,
   "phpcpd_exit": null,
-  "paths_missing": ["${DRUPAL_MODULES_PATH}"],
+  "paths_missing": ${DRY_MISSING_JSON},
   "rating": "${CQT_STATUS_UNMEASURED}",
   "status": "${CQT_STATUS_UNMEASURED}",
   "settings": {

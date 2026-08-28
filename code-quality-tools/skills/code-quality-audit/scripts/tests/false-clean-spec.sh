@@ -7284,6 +7284,42 @@ else
   assert_eq "[lib] a derived path still reads as derived after it has been resolved" \
     "derived|derived" "$X_ORIGIN"
 
+  # X14: RESOLVING TWICE IN ONE PROCESS GIVES THE SAME ANSWER.
+  #
+  # cqt_resolve_custom_path exports the variable on every branch and then reads that same
+  # variable as `explicit` on the next call, so a second resolution in one process reports
+  # a typo in an override nobody wrote — the exact failure the origin record exists to
+  # prevent, arrived at through the record itself. Not reachable in shipped code today:
+  # each gate calls cqt_resolve_drupal_paths once. It is a trap for the next caller that
+  # resolves twice — a retry, or a --changed path that re-resolves — and the fix is one
+  # line, so it is closed rather than documented.
+  X_TWICE=$(env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      first="$(cqt_path_origin DRUPAL_MODULES_PATH)|$DRUPAL_MODULES_PATH"
+      cqt_resolve_drupal_paths
+      printf "%s || %s|%s" "$first" "$(cqt_path_origin DRUPAL_MODULES_PATH)" "$DRUPAL_MODULES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] resolving twice in one process does not turn a derived path into an override" \
+    "derived|docroot/modules/custom || derived|docroot/modules/custom" "$X_TWICE"
+
+  # X15: and a REAL explicit value still survives a second resolution. Without this, the
+  # fix could have been "ignore the variable on every call", which would discard the
+  # caller's override the moment anything resolved twice.
+  X_TWICE_EXPL=$(env -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    DRUPAL_MODULES_PATH="docroot/modules/custom/nosuch" \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$(cqt_path_origin DRUPAL_MODULES_PATH)" "$DRUPAL_MODULES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] an explicit override is still explicit, and still itself, after two calls" \
+    "explicit|docroot/modules/custom/nosuch" "$X_TWICE_EXPL"
+
   # X13: and the two paths keep separate answers. cqt_resolve_drupal_paths resolves
   # modules and then themes, so a single CQT_PATH_ORIGIN global holds only the themes
   # answer by the time either is read; asking about modules must not return it.
@@ -7527,6 +7563,34 @@ assert_eq "[drupal lint --changed] the scoped invocation carries --extensions to
   "--standard=Drupal,DrupalPractice --report=json --extensions=${Y_EXTS} web/modules/custom/m/m.module" \
   "$(l2_argv "$Y_W4" phpcs_json)"
 
+# Y7: A DYING phpcbf IS NOT A CLEAN FIX. `cmd 2>&1 | tee file` followed by `$?` captures
+# TEE's status, and tee succeeds whenever it can write the file — so a phpcbf that never
+# ran read as exit 0, which is the most reassuring of this branch's three messages.
+# rector-fix.sh:127-131 states this rule; the same shape survived three lines below the
+# code this task edited.
+# The gate's own stdout is the channel here — --fix's three messages are for a human, and
+# which one is printed is the whole finding.
+y_fix_out() {   # <work> <phpcbf exit>
+  local work="$1" ex="$2" bin
+  bin="$(mktemp -d "$TMP/y7b.XXXXXX")"; cp "$YSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$work/.reports" \
+       STUB_MARKER_DIR="$work/markers" STUB_PHPCS_EXIT="$ex" \
+       bash "$LINT" --fix 2>&1 )
+}
+
+Y_W6="$(mk_l2)"; mkdir -p "$Y_W6/markers"
+Y_FIX_OUT="$(y_fix_out "$Y_W6" 9)"
+assert_eq "[drupal lint --fix] a phpcbf that died is not reported as all issues corrected" \
+  "no|yes" \
+  "$(u_has "$Y_FIX_OUT" 'All fixable issues corrected')|$(u_has "$Y_FIX_OUT" 'could not be auto-fixed')"
+
+# Y8: and the partner. A phpcbf that really did exit 0 still gets the reassuring line, so
+# Y7 is not satisfied by a branch that never reports success.
+Y_W7="$(mk_l2)"; mkdir -p "$Y_W7/markers"
+assert_eq "[drupal lint --fix] a phpcbf that exited 0 still says so" \
+  "yes" "$(u_has "$(y_fix_out "$Y_W7" 0)" 'All fixable issues corrected')"
+
 # Y6: --changed's exclusion list is derived from the resolved layout, not from a second
 # hardcoded web/. On an Acquia project every path in a changed set begins docroot/, and
 # the shipped regex excluded web/core/ — so docroot/core/ was linted as custom code
@@ -7634,6 +7698,53 @@ Z_RUN=(z_run_changed_empty)
 z_both "[drupal lint --changed] an empty report is unmeasured, not a pass with empty counts" \
   "4|unmeasured|0|0"
 
+# Z9: THE TRUNCATED REPORT. The half of "no usable report" that an empty-file test
+# cannot reach. phpcs killed mid-write (OOM, a full disk, a container that went away)
+# leaves valid-JSON-so-far and nothing more: non-empty, so `[ -s ]` is satisfied, and
+# unparseable, so `jq` exits non-zero and prints nothing. The `|| echo "0"` that guards
+# the EMPTY case then supplies a literal 0, which validates as an integer, and the gate
+# certifies a clean tree from a scan that died. Measured on the shipped script before
+# the fix: `[PASS]`, exit 0, and a report reading {"phpcs_exit": 2, "report_usable":
+# true, "errors": 0, "warnings": 0, "status": "pass"}.
+#
+# The fix is to read jq's OWN status instead of substituting a value for it: a jq that
+# failed means the report is unusable, which is what CHANGED_USABLE/PHPCS_USABLE exist
+# to say. Section J already tests this shape for gitleaks, composer audit and drush;
+# the lint gate had only the empty body.
+Z_TRUNC='{"totals":{"errors":7,"warnings":2,"fixab'
+Z_W7="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W7/web/modules/custom/m/m.module"
+z_run_trunc() { L2_EXIT=2 L2_BODY="$Z_TRUNC" run_l2 "$Z_W7"; }
+Z_RUN=(z_run_trunc)
+z_both "[drupal lint] a TRUNCATED report is unmeasured, not a clean tree" "4|unmeasured|0|0"
+
+# Z9b: and the report says so in the field a machine reads, not only in the exit code.
+# report_usable:true over counts nobody could parse is the record that misleads a reader
+# after the run is over.
+# `has(...)`, not `// "MISSING"`: jq's alternative operator fires on false as well as on
+# absent, so the `//` spelling reports MISSING for the exact value this asserts.
+assert_eq "[drupal lint] the truncated run records report_usable:false" "false" \
+  "$(jq -r 'if has("report_usable") then .report_usable else "MISSING" end' \
+     "$Z_W7/.reports/lint-report.json" 2>/dev/null || echo MISSING)"
+
+# Z10: the same truncation in --changed mode. Same defect, same `|| echo "0"`, and this
+# is the mode CI and AIDA's /validate-* wrappers actually invoke.
+Z_W8="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W8/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Z_W8/changed.txt"
+z_run_changed_trunc() { L2_EXIT=2 L2_BODY="$Z_TRUNC" run_l2 "$Z_W8" --changed "$Z_W8/changed.txt"; }
+Z_RUN=(z_run_changed_trunc)
+z_both "[drupal lint --changed] a TRUNCATED report is unmeasured, not a clean tree" \
+  "4|unmeasured|0|0"
+
+# Z11: the guard that keeps Z9/Z10 honest. A report that IS valid JSON and says zero is
+# a real clean tree and must still pass, or the fix above would have been "call
+# everything unusable".
+Z_W9="$(mk_l2)"
+z_run_valid_zero() { L2_BODY='{"totals":{"errors":0,"warnings":0,"fixable":0},"files":{}}' run_l2 "$Z_W9"; }
+Z_RUN=(z_run_valid_zero)
+z_both "[drupal lint] a valid report of zero findings is still a pass" "0|pass|0|0"
+
 # Z7: a changed set with nothing lintable in it is NOT unmeasured. A docs-only diff asks
 # the gate to check no PHP at all, which it can honestly answer. Keeping this distinct
 # from Z5 is the difference between "there was nothing to measure" and "what I was told
@@ -7645,6 +7756,59 @@ z_run_changed_nonlintable() { run_l2 "$Z_W6" --changed "$Z_W6/changed.txt"; }
 Z_RUN=(z_run_changed_nonlintable)
 z_both "[drupal lint --changed] a docs-only changed set is a clean skip, not unmeasured" \
   "0|skipped|0|0"
+
+# Z12: A PARTIALLY MEASURABLE CHANGED SET. One file present, one named and not on disk.
+#
+# The shipped gate returned exit 0, status "pass", report_usable true, with the absent
+# path recorded only in paths_missing and an [UNMEASURED] line on the stdout that
+# full-audit.sh discards. Criterion 3's rule — an absent path never yields exit 0 from
+# any gate — does not hold at this grain, and AIDA's /validate-* wrappers are exactly the
+# caller that reads the exit code with nobody watching stdout.
+#
+# THE VERDICT RECORDED FOR THIS SHAPE IS "partial", EXIT 1, and the reasoning is:
+#
+#   not 0    — the contract decision of 2026-08-27. A caller with only the exit code
+#              reads 0 as a clean pass, which is what this gate did not earn.
+#   not 4    — "unmeasured" in this suite means the gate covered NOTHING. Something was
+#              measured here, and filing the two under one word makes them
+#              indistinguishable to full-audit.sh, which is the argument path-resolve.sh
+#              already gives for not reusing "skipped".
+#   not 2    — the files that WERE read came back clean. A changed set that deletes a PHP
+#              file is ordinary, and a gate that fails every such diff is a check that
+#              fires on every run.
+#
+# So: findings win, and a would-be PASS is capped. paths_missing[] names what was not
+# read, in the report as well as on stdout.
+Z_W10="$(mk_l2)"
+printf '<?php\n' > "$Z_W10/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\nweb/modules/custom/m/gone.module\n' > "$Z_W10/changed.txt"
+z_run_partial() { run_l2 "$Z_W10" --changed "$Z_W10/changed.txt"; }
+Z_RUN=(z_run_partial)
+z_both "[drupal lint --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial|0|0"
+assert_eq "[drupal lint --changed] and the report names what it could not read" \
+  "web/modules/custom/m/gone.module" \
+  "$(jq -r '.paths_missing | join(",")' "$Z_W10/.reports/lint-report.json" 2>/dev/null || echo MISSING)"
+
+# Z13: findings outrank the cap. The present half of the same partial set carries a
+# violation, so the verdict is the finding — "partial" must not soften a real failure.
+Z_W11="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W11/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\nweb/modules/custom/m/gone.module\n' > "$Z_W11/changed.txt"
+z_run_partial_fail() { run_l2 "$Z_W11" --changed "$Z_W11/changed.txt"; }
+Z_RUN=(z_run_partial_fail)
+z_both "[drupal lint --changed] a finding in the measured half still fails the gate" \
+  "2|fail|1|0"
+
+# Z14: and the fully-present set is untouched. Without this, "cap the pass" is
+# satisfiable by a gate that never passes.
+Z_W12="$(mk_l2)"
+printf '<?php\n' > "$Z_W12/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Z_W12/changed.txt"
+z_run_all_present() { run_l2 "$Z_W12" --changed "$Z_W12/changed.txt"; }
+Z_RUN=(z_run_all_present)
+z_both "[drupal lint --changed] a changed set that is entirely on disk still passes" \
+  "0|pass|0|0"
 
 # Z8: no version inference anywhere outside the two availability probes. The classifier
 # was dropped on purpose; this is what stops it coming back the next time an exit code
@@ -7742,6 +7906,9 @@ mk_ab() {
 }
 
 # Echoes "<exit>|<status>|<static_drupal_calls>|<phpstan_level>|<tools_unmeasured csv>".
+# phpstan_level is read with `has(...)` rather than `// "MISSING"`: jq's alternative
+# operator fires on null, and `null` is a value this field is required to be able to
+# carry — a config whose level comes from an `includes:` file.
 run_ab() {
   local work="$1"; shift
   local bin rdir rc=0
@@ -7754,7 +7921,8 @@ run_ab() {
   printf '%s|%s|%s|%s|%s' "$rc" \
     "$(jq -r '.status // "MISSING"' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
     "$(jq -r '.metrics.static_drupal_calls' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
-    "$(jq -r '.phpstan_level // "MISSING"' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r 'if has("phpstan_level") then (.phpstan_level | tostring) else "MISSING" end' \
+         "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
     "$(jq -r '(.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)"
 }
 
@@ -7792,6 +7960,47 @@ AB_W3="$(mk_ab)"
 printf 'parameters:\n    level: 8\n' > "$AB_W3/phpstan.neon"
 assert_eq "[solid] the reported level is the config's, not a restated default" \
   "0|pass|0|8|" "$(run_ab "$AB_W3")"
+
+# AB3b: A NON-NUMERIC LEVEL. `level: max` is valid phpstan and common in Drupal
+# projects. The extractor matched digits only, found nothing, and fell back to
+# ${PHPSTAN_LEVEL:-5} — so the report claimed level 5 while phpstan ran, under
+# --configuration, at max. That is the same defect the commit says it fixed (the docs
+# naming a number no run used), one layer down.
+AB_W3B="$(mk_ab)"
+printf 'parameters:\n    level: max\n' > "$AB_W3B/phpstan.neon"
+assert_eq "[solid] a config at level: max is reported as max, not as a fallback 5" \
+  "0|pass|0|max|" "$(run_ab "$AB_W3B")"
+
+# AB3c: and the report is still JSON. `"phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE},`
+# unquoted wrote `"phpstan_level": max,`; jq then failed on the whole report with
+# "Invalid numeric literal", full-audit.sh read no status from it and silently fell back
+# to the exit code — bypassing the verdict-from-report mechanism entirely. Asserted by
+# parsing the file, which is the thing that was broken.
+assert_eq "[solid] and the report still parses as JSON with a non-numeric level" \
+  "pass" \
+  "$(jq -r '.status' "$AB_W3B/.reports/solid-report.json" 2>/dev/null || echo UNPARSEABLE)"
+
+# AB3d: a numeric level stays a JSON NUMBER. Quoting everything would fix AB3c and break
+# every consumer that compares the level arithmetically.
+assert_eq "[solid] a numeric level is emitted as a number, not as a string" \
+  "number" \
+  "$(jq -r '.phpstan_level | type' "$AB_W3/.reports/solid-report.json" 2>/dev/null || echo MISSING)"
+
+# AB3e: PHPSTAN_LEVEL=max on the command line, with no config placed. The env var is
+# passed straight to --level, so the same value has to survive into the report.
+AB_W3E="$(mk_ab)"
+assert_eq "[solid] PHPSTAN_LEVEL=max with no config placed reports max and still parses" \
+  "0|pass|0|max|" "$(PHPSTAN_LEVEL=max run_ab "$AB_W3E")"
+
+# AB3f: a config whose level comes from an `includes:` file. The gate cannot see that
+# level without resolving phpstan's own include graph, and restating the default 5 would
+# be a number no run used — the exact defect. Reported as null: the config is in force,
+# and what level it settles on is not knowable from here.
+AB_W3F="$(mk_ab)"
+printf 'includes:\n    - vendor/x/base.neon\nparameters:\n    paths:\n        - web/modules/custom\n' \
+  > "$AB_W3F/phpstan.neon"
+assert_eq "[solid] a level this gate cannot read is null, not a restated default" \
+  "0|pass|0|null|" "$(run_ab "$AB_W3F")"
 
 # AB4: THE DIP DEFECT. The modules path is not there. `wc -l` of grep's error is 0, so
 # the gate printed "[OK] No static \Drupal:: calls found" and exited 0 — a pass earned
@@ -7831,6 +8040,24 @@ AB_W7="$(mk_ab)"
 printf '<?php\n\\Drupal::service("x");\n' > "$AB_W7/web/modules/custom/m/src/B.php"
 assert_eq "[solid] the same call in the project's own tree IS counted" \
   "0|pass|1|5|" "$(run_ab "$AB_W7")"
+
+# AB9: the same partially-measurable changed set, in the gate with the same guard shape.
+# solid-check.sh:248 was unmeasured only when RELEVANT_FILES was empty AND MISSING_FILES
+# was not; one present file made the whole set a pass. Same verdict as the lint gate, for
+# the same reasons, recorded once at Z12.
+AB_W8="$(mk_ab)"
+printf 'web/modules/custom/m/src/A.php\nweb/modules/custom/m/src/Gone.php\n' > "$AB_W8/changed.txt"
+assert_eq "[solid --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial|0|5|" "$(run_ab "$AB_W8" --changed "$AB_W8/changed.txt")"
+assert_eq "[solid --changed] and the report names what it could not read" \
+  "web/modules/custom/m/src/Gone.php" \
+  "$(jq -r '(.paths_missing // ["MISSING"]) | join(",")' "$AB_W8/.reports/solid-report.json" 2>/dev/null || echo MISSING)"
+
+# AB10: the partner. A changed set entirely on disk is still a plain pass.
+AB_W9="$(mk_ab)"
+printf 'web/modules/custom/m/src/A.php\n' > "$AB_W9/changed.txt"
+assert_eq "[solid --changed] a changed set that is entirely on disk still passes" \
+  "0|pass|0|5|" "$(run_ab "$AB_W9" --changed "$AB_W9/changed.txt")"
 
 # ── AD. the DRY gate proves it measured something (criterion 5) ──────────────
 echo ""
@@ -7984,6 +8211,29 @@ printf '<?php\n// CLONE\n' > "$AD_W4/web/modules/custom/m/node_modules/pkg/p.php
 assert_eq "[dry] a clone inside node_modules is not this project's duplication" \
   "0|pass|0.00|true|0" "$(run_ad "$AD_W4")"
 
+
+# AD8: A PATH WITH A DOUBLE QUOTE IN IT. `"paths_missing": ["${DRUPAL_MODULES_PATH}"]`
+# interpolated the resolved path straight into a JSON heredoc, so a quote in the value
+# produced a report jq then refuses to read. The verdict and the exit code were right;
+# the RECORD of them was unreadable, and full-audit.sh falls back to the exit code when a
+# report will not parse — so the verdict-from-report mechanism this task relies on was
+# bypassed by a path.
+#
+# security-check.sh:1069-1076 argues the case for refusing such a path when it has to go
+# into generated XML. Here it goes into JSON, where jq can encode it correctly, so it is
+# ENCODED rather than refused: `jq -R -s` is the same treatment lint-check.sh already
+# gives its own paths_missing.
+AD_W9="$(mktemp -d "$TMP/adq.XXXXXX")"
+mkdir -p "$AD_W9/markers" "$AD_W9/web/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AD_W9/web/core/lib/Drupal.php"
+AD_Q_BIN="$(mktemp -d "$TMP/adqbin.XXXXXX")"; cp "$ADSTUB/ddev" "$AD_Q_BIN/"
+( cd "$AD_W9" \
+  && PATH="$AD_Q_BIN:/usr/bin:/bin" REPORT_DIR="$AD_W9/.reports" \
+     DRUPAL_MODULES_PATH='doc"root/x' \
+     bash "$DRY" ) >/dev/null 2>&1 || true
+assert_eq "[dry] a path containing a double quote still produces a readable report" \
+  "unmeasured|doc\"root/x" \
+  "$(jq -r '.status' "$AD_W9/.reports/dry-report.json" 2>/dev/null || echo UNPARSEABLE)|$(jq -r '.paths_missing | join(",")' "$AD_W9/.reports/dry-report.json" 2>/dev/null || echo UNPARSEABLE)"
 # ── AA. generated tool configs carry the resolved paths (criterion 2) ────────
 echo ""
 echo "AA: a config this suite WRITES names the layout it detected, not web/"
@@ -8032,6 +8282,42 @@ esac
 STUB
 chmod +x "$AASTUB/ddev"
 
+# A semgrep that MODELS --exclude, so "does the gate exclude vendored trees" is answered
+# by a verdict rather than by grepping the script for the flag. A file is a finding when
+# it contains the token SEMGREP-HIT; a path with a component equal to an --exclude value
+# is not read. That is a model of semgrep's exclusion, not a reimplementation of it, and
+# it is the half this assertion needs.
+cat > "$AASTUB/semgrep" <<'STUB'
+#!/usr/bin/env bash
+[ "${1-}" = "--version" ] && { printf '1.172.0\n'; exit 0; }
+[ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/semgrep_argv"
+excludes=(); paths=()
+for a in "$@"; do
+  case "$a" in
+    scan|--config=*|--json) ;;
+    --exclude=*) excludes+=("${a#--exclude=}") ;;
+    -*) ;;
+    *) paths+=("$a") ;;
+  esac
+done
+results=""
+for p in "${paths[@]+"${paths[@]}"}"; do
+  while IFS= read -r f; do
+    skip=0
+    for g in "${excludes[@]+"${excludes[@]}"}"; do
+      [ -n "$g" ] || continue
+      case "/$f/" in */"$g"/*) skip=1 ;; esac
+    done
+    [ "$skip" = 1 ] && continue
+    grep -qF SEMGREP-HIT "$f" 2>/dev/null || continue
+    results="${results}${results:+,}$(printf '{"path":"%s","start":{"line":1},"extra":{"severity":"WARNING","message":"m","metadata":{}}}' "$f")"
+  done < <(find "$p" -type f 2>/dev/null)
+done
+printf '{"results":[%s],"errors":[]}\n' "$results"
+exit 0
+STUB
+chmod +x "$AASTUB/semgrep"
+
 # An Acquia-layout project: the case the hardcoded web/ literal gets wrong.
 mk_aa() {
   local root="${1:-docroot}"
@@ -8048,8 +8334,13 @@ run_aa() {
   local bin rdir rc=0
   rdir="$work/.reports"
   bin="$(mktemp -d "$TMP/aabin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  # Opt-in, because most of this section is about the layers that run with no analyzer
+  # installed at all — the ordinary state of a developer machine.
+  [ "${AA_SEMGREP:-0}" = 1 ] && cp "$AASTUB/semgrep" "$bin/"
+  mkdir -p "$work/markers"
   ( cd "$work" \
     && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM="${AA_PSALM:-0}" \
+       STUB_MARKER_DIR="$work/markers" \
        bash "$SEC" "$@" ) >/dev/null 2>&1 || rc=$?
   printf '%s|%s|%s|%s' "$rc" \
     "$(jq -r '.summary.overall_status // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
@@ -8061,9 +8352,24 @@ run_aa() {
 # wrote, because that file outlives the run.
 AA_W1="$(mk_aa docroot)"
 AA_PSALM=1 run_aa "$AA_W1" > /dev/null
-AA_DIRS=$(grep -o 'name="[^"]*"' "$AA_W1/psalm.xml" 2>/dev/null | paste -sd, - | tr -d '\n')
+# Scoped to what psalm is told to READ. The ignore list below it is AA1b's subject, and
+# folding the two into one expected string would make either assertion satisfiable by
+# moving a directory between the sections.
+AA_DIRS=$(sed -n '/<projectFiles>/,/<ignoreFiles>/p' "$AA_W1/psalm.xml" 2>/dev/null \
+  | grep -o 'name="[^"]*"' | paste -sd, - | tr -d '\n')
 assert_eq "[security] the generated psalm.xml points at the layout that was detected" \
-  'name="docroot/modules/custom",name="docroot/themes/custom",name="vendor"' "$AA_DIRS"
+  'name="docroot/modules/custom",name="docroot/themes/custom"' "$AA_DIRS"
+
+# AA1b: and its <ignoreFiles> names the vendored trees, not `vendor` alone (criterion 7).
+# architecture/security-check.md:57-59 committed to three exclusions for this gate — the
+# pattern greps, semgrep's --exclude, and this — and only the greps shipped. This file
+# outlives the run that wrote it, so a config that scans somebody else's bundled code
+# keeps doing it long after the gate is fixed. Asserted on the FILE, for that reason.
+AA_IGNORED=$(sed -n '/<ignoreFiles>/,/<\/ignoreFiles>/p' "$AA_W1/psalm.xml" 2>/dev/null \
+  | grep -o 'name="[^"]*"' | paste -sd, - | tr -d '\n')
+assert_eq "[security] the generated psalm.xml ignores the vendored trees under both paths" \
+  'name="vendor",name="docroot/modules/custom/*/vendor",name="docroot/themes/custom/*/vendor",name="docroot/modules/custom/*/node_modules",name="docroot/themes/custom/*/node_modules"' \
+  "$AA_IGNORED"
 
 # AA2: and carries no web/ string at all. A substitution that added the right paths
 # while leaving the old ones behind would satisfy AA1.
@@ -8121,6 +8427,133 @@ printf '{{ content|raw }}\n' > "$AA_W5/docroot/themes/custom/t/templates/page.ht
 # still pass — the assertion is on the count, which is what AA6 is refuting.
 assert_eq "[security] the same |raw in the theme's own templates IS reported" \
   "0|pass||1" "$(run_aa "$AA_W5")"
+
+# AA6-sem / AA7-sem: THE SAME CRITERION, WITH THE TOOL PRESENT.
+#
+# AA6 above passes with semgrep absent and STUB_PSALM defaulting to 0, so it exercises the
+# grep layer alone — and the roll-up then recorded this gate as answering criterion 7 with
+# two thirds of it unbuilt. A green that cannot fail, inside the fix for checks that
+# cannot fail. These two run the layer that was never exercised.
+AA_W12="$(mk_aa docroot)"
+mkdir -p "$AA_W12/docroot/modules/custom/m/node_modules/pkg"
+printf '<?php\n// SEMGREP-HIT\n' > "$AA_W12/docroot/modules/custom/m/node_modules/pkg/p.php"
+assert_eq "[security] with semgrep PRESENT, a hit inside node_modules is not reported" \
+  "0|pass||0" "$(AA_SEMGREP=1 run_aa "$AA_W12")"
+
+AA_W13="$(mk_aa docroot)"
+printf '<?php\n// SEMGREP-HIT\n' > "$AA_W13/docroot/modules/custom/m/Hit.php"
+assert_eq "[security] and the same hit in the project's own tree IS reported" \
+  "0|pass||1" "$(AA_SEMGREP=1 run_aa "$AA_W13")"
+
+# AA6-argv: the exclusions are on the invocation, not only in the outcome. Read off the
+# recorded argv, so a stub that happened not to descend into node_modules could not
+# satisfy it.
+# NEVER-INVOKED and NONE are kept apart: a run where semgrep was never reached and one
+# where it was reached without the flag are different failures, and one fallback string
+# for both is the shape this whole spec exists to refuse.
+if [ -f "$AA_W13/markers/semgrep_argv" ]; then
+  # LC_ALL=C: the list contains a dot-prefixed entry, and a locale-aware sort orders
+  # `.git` and `bower_components` differently from a byte sort. The assertion is about
+  # WHICH flags were passed, not about the collation of the machine running the suite.
+  AA_SEM_ARGV=$(tr ' ' '\n' < "$AA_W13/markers/semgrep_argv" \
+    | grep '^--exclude=' | LC_ALL=C sort | paste -sd, - | tr -d '\n')
+  AA_SEM_ARGV="${AA_SEM_ARGV:-NONE}"
+else
+  AA_SEM_ARGV="NEVER-INVOKED"
+fi
+assert_eq "[security] and the semgrep invocation carries the vendored-tree exclusions" \
+  "--exclude=.git,--exclude=bower_components,--exclude=node_modules,--exclude=vendor" \
+  "$AA_SEM_ARGV"
+
+# AA8: THE TENTH CALL SITE. `--changed`'s exclusion regex was the one place in this
+# gate that still spelled the layout as a `web/` literal —
+# `^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)` — the
+# byte-identical string that was replaced in lint-check.sh and solid-check.sh in the same
+# commit. On an Acquia project every changed path begins docroot/, so `docroot/core/`
+# matched nothing and Drupal core was handed to semgrep and the pattern layer as this
+# project's custom code.
+#
+# Asserted on the file list the gate PRINTS, so a regex that merely mentions the prefix
+# without excluding anything cannot satisfy it.
+run_aa_changed() {   # <work> <changed-file> ; echoes the printed relevant-file list, csv
+  local work="$1" changed="$2" bin rdir
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/aacbin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM=0 \
+       bash "$SEC" --changed "$changed" 2>/dev/null ) \
+    | sed -n '/^Relevant SAST files/,/^$/p' | sed -n 's/^  //p' | paste -sd, - | tr -d '\n'
+}
+
+AA_W6="$(mk_aa docroot)"
+printf 'docroot/core/lib/Drupal.php\ndocroot/modules/custom/m/A.php\n' > "$AA_W6/changed.txt"
+assert_eq "[security --changed] core is excluded at the layout's own prefix, not at web/" \
+  "docroot/modules/custom/m/A.php" "$(run_aa_changed "$AA_W6" "$AA_W6/changed.txt")"
+
+# AA9: and the composer-layout project the old literal happened to get right still
+# behaves. A conversion that swapped one hardcoded layout for another would pass AA8
+# and fail here.
+AA_W7="$(mk_aa web)"
+mkdir -p "$AA_W7/web/modules/contrib/x" "$AA_W7/vendor/pkg"
+printf '<?php\n' > "$AA_W7/web/modules/contrib/x/x.module"
+printf '<?php\n' > "$AA_W7/vendor/pkg/v.php"
+printf 'web/core/lib/Drupal.php\nweb/modules/contrib/x/x.module\nvendor/pkg/v.php\nweb/modules/custom/m/A.php\n' \
+  > "$AA_W7/changed.txt"
+assert_eq "[security --changed] core, contrib and vendor are all still excluded on a web/ layout" \
+  "web/modules/custom/m/A.php" "$(run_aa_changed "$AA_W7" "$AA_W7/changed.txt")"
+
+# AA10-AA13: THE --changed BRANCH HAD NO UNMEASURED CONTRACT AT ALL, behind a comment
+# that said it did. `UNMEASURED_TOOLS=()` was declared at :361 and never appended to and
+# never read; every append site was in the standard path, and the changed-mode report
+# emitted no tools_unmeasured field. The branch also had no on-disk existence filter —
+# the one this commit added to lint-check.sh and solid-check.sh — so a changed set of
+# deleted files reached semgrep, php-security-linter and the pattern greps as nonexistent
+# paths and their empty output was read exactly the way a clean scan is.
+#
+# Echoes "<exit>|<overall_status>|<tools_unmeasured csv>|<paths_missing csv>".
+run_aa_changed_v() {
+  local work="$1" changed="$2" bin rdir rc=0
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/aacvbin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM=0 \
+       bash "$SEC" --changed "$changed" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.summary.overall_status // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.meta.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.meta.paths_missing // ["MISSING"]) | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# AA10: every named PHP file is gone from disk. The shipped gate took the
+# "no relevant files" branch and reported a CLEAN SKIP with exit 0 — a set of files it
+# was asked about and could not read, answered with the same code as a docs-only diff.
+AA_W8="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/Gone.php\n' > "$AA_W8/changed.txt"
+assert_eq "[security --changed] a changed set with nothing left on disk is unmeasured, not a clean skip" \
+  "4|unmeasured|custom_patterns,php-security-linter,semgrep|docroot/modules/custom/m/Gone.php" \
+  "$(run_aa_changed_v "$AA_W8" "$AA_W8/changed.txt")"
+
+# AA11: a docs-only changed set is still a clean skip. The distinction AA10 depends on:
+# "there was nothing to measure" is not "what I was told to measure was not there".
+AA_W9="$(mk_aa docroot)"
+printf '# hi\n' > "$AA_W9/README.md"
+printf 'README.md\n' > "$AA_W9/changed.txt"
+assert_eq "[security --changed] a docs-only changed set is still a clean skip" \
+  "0|skipped||" "$(run_aa_changed_v "$AA_W9" "$AA_W9/changed.txt")"
+
+# AA12: the partial set. One file present, one gone. Same verdict as the other two
+# --changed gates, for the reasons recorded once at Z12.
+AA_W10="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/A.php\ndocroot/modules/custom/m/Gone.php\n' > "$AA_W10/changed.txt"
+assert_eq "[security --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial||docroot/modules/custom/m/Gone.php" \
+  "$(run_aa_changed_v "$AA_W10" "$AA_W10/changed.txt")"
+
+# AA13: the partner that keeps AA12 honest — a fully present set still passes with 0.
+AA_W11="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/A.php\n' > "$AA_W11/changed.txt"
+assert_eq "[security --changed] a changed set that is entirely on disk still passes" \
+  "0|pass||" "$(run_aa_changed_v "$AA_W11" "$AA_W11/changed.txt")"
 
 # ── AA-rector. the generated rector.php carries the resolved paths ───────────
 echo ""
@@ -8342,6 +8775,17 @@ else
   # function that caps everything.
   assert_eq "[aggregate] two gates that DID produce a result still pass" "pass" \
     "$(resolve_overall_status pass pass pass unknown unknown unknown)"
+
+  # AF1b: "partial" is the one status that is BOTH. A gate that measured part of a
+  # changed set produced evidence — so it is not "nothing ran" — and its coverage was
+  # incomplete — so it must not certify a pass. Filing it under either existing arm
+  # loses one of the two halves.
+  assert_eq "[aggregate] a partial gate is evidence, so the run is not 'unknown'" "warning" \
+    "$(resolve_overall_status pass partial unknown unknown unknown unknown)"
+  assert_eq "[aggregate] and it caps a would-be pass the way unmeasured does" "warning" \
+    "$(resolve_overall_status pass pass partial unknown unknown unknown)"
+  assert_eq "[aggregate] a real failure still outranks a partial gate" "fail" \
+    "$(resolve_overall_status fail partial unknown unknown unknown unknown)"
 fi
 
 # AF2: and the word is read from the REPORT, not the exit code. The SOLID stub writes
@@ -8392,11 +8836,46 @@ assert_eq "[install] and the audit exits non-zero" "2" "$(p_rc "$AG_FAIL")"
 
 # AG2: the quieter half — the installer exits 0 while recording that not everything
 # installed. The exit status alone would have called this a success.
+#
+# THE TWO OUTCOMES ARE NOT THE SAME OUTCOME. An earlier version of this section asserted
+# a STOP here, and full-audit.sh's own comment beside the code described the opposite
+# case ("phpmd missing, phpstan fine, which is still a usable run") as one it allowed.
+# The rewritten installer then widened the gap: it sets all_ok=false for any tool outside
+# machine scope that is not resolvable — psalm, phpmd and phpcpd included — so an
+# ordinary developer machine ran ZERO gates and exited 2 where it used to run the whole
+# audit with the DRY gate skipped. The reconciliation splits the two:
+#
+#   installer failed, or wrote nothing readable  -> STOP (AG1, AG3, AG4)
+#   installer succeeded, some tools absent       -> RUN, and refuse to certify a pass
+#
+# The refusal is not new machinery: each gate already records its absent tool and reports
+# "skipped", and resolve_overall_status already caps a would-be pass over any of them.
+# What this branch adds is that the run gets there.
 AG_PARTIAL="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": false}' \
   run_p_audit drupal '' pass 0 1 0)"
 assert_eq "[install] all_ok:false is read even when the installer exited 0" \
   "no" "$(u_has "$(cat "$AG_PARTIAL/out.txt")" 'Tools available')"
-assert_eq "[install] and that run exits non-zero too" "2" "$(p_rc "$AG_PARTIAL")"
+assert_eq "[install] and the run continues to its gates rather than stopping at step 2" \
+  "coverage-report,dry-check,security-check,solid-check" "$(p_gates "$AG_PARTIAL")"
+assert_eq "[install] and it says why, naming the record instead of just warning" \
+  "yes" "$(u_has "$(cat "$AG_PARTIAL/out.txt")" 'not every tool is available')"
+
+# AG2b: and the incomplete tool set reaches the VERDICT, which is the whole reason
+# continuing is safe. The solid stub passes and writes a report; without the cap this
+# run would certify a pass over an audit missing analyzers.
+AG_CAP="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": false}' \
+  run_p_audit nextjs '' pass 0 1 0)"
+assert_eq "[install] an incomplete tool set caps the overall verdict at warning" \
+  "warning" "$(p_field "$AG_CAP" overall_score)"
+assert_eq "[install] and the summary names that as the reason" \
+  "yes" "$(u_has "$(cat "$AG_CAP/out.txt")" 'not every analyzer is installed')"
+
+# AG2c: the partner. The same nextjs run with a healthy install still certifies a pass,
+# so AG2b is not satisfied by an audit that can never pass.
+AG_NOCAP="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": true}' \
+  run_p_audit nextjs '' pass 0 1 0)"
+assert_eq "[install] a healthy install leaves the verdict uncapped" \
+  "pass" "$(p_field "$AG_NOCAP" overall_score)"
 
 # AG3: no status file at all — an installer that died before writing one. Absence is
 # not consent.
@@ -8405,6 +8884,19 @@ AG_NOFILE="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='' \
 assert_eq "[install] a missing tools-status.json is not read as success" \
   "no" "$(u_has "$(cat "$AG_NOFILE/out.txt")" 'Tools available')"
 assert_eq "[install] and that run exits non-zero" "2" "$(p_rc "$AG_NOFILE")"
+
+# AG3b: a status file with no all_ok key at all — an older or truncated document. It
+# must land with AG3, not with AG2: "the installer did not say" is not "the installer
+# said no".
+#
+# This pins the read, and the read is where it went wrong. `.all_ok // empty` cannot tell
+# the two apart, because jq's alternative operator fires on the value `false` as well as
+# on an absent key. It was harmless while both answers produced the same stop, and it
+# decides the outcome now that they do not.
+AG_NOKEY="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"tools": {}}' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] a status file that never says all_ok stops the run, like no file at all" \
+  "NO-GATE-RAN|2" "$(p_gates "$AG_NOKEY")|$(p_rc "$AG_NOKEY")"
 
 # AG4: an unparseable one, same answer.
 AG_JUNK="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='not json at all' \
@@ -8544,6 +9036,61 @@ assert_eq "[W] coverage-report.sh at an absent path is non-zero (the exemplar, u
   "non-zero-and-not-3" \
   "$([ "$W_COV_RC" != "0" ] && [ "$W_COV_RC" != "3" ] && printf 'non-zero-and-not-3' || printf "rc=${W_COV_RC}")"
 
+# W-COV2: THE REASON IS IN THE FILE, which is what this gate is cited for.
+#
+# The claim in coverage-report.sh:65-71 — repeated in the decision block of this task's
+# alignment.md, where it is the whole basis for the failure-signal contract — is that this
+# gate "already refuses an early exit 0 with the reason written into the file". The first
+# half was true of the artifact and the second was not: the report carried
+# {"scope": "...", "line_coverage": 0, "status": "fail"} with no reason, no paths_missing,
+# and nothing to separate "measured 0%" from "measured nothing". The reason lived only on
+# stdout, which full-audit.sh does not parse.
+#
+# `line_coverage` stays a NUMBER: schemas/audit-report.schema.json types it "number",
+# unlike branch_coverage which is explicitly ["number","null"]. `measured` is the field
+# that carries the distinction, and the reader who sees 0 has it beside them.
+# Its own stub: the shared W one has PHPUnit ABSENT on purpose (tdd-workflow.sh needs
+# that), and this gate exits at the runner probe before it ever reaches the scope check.
+# Here PHPUnit is present and simply finds nothing to run, which is the shape the
+# assertion is about.
+W_COV2_BIN="$(mktemp -d "$TMP/wcovbin.XXXXXX")"
+cat > "$W_COV2_BIN/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+case "${1-}" in
+  test) case "${3-}" in vendor/bin/phpunit) exit 0 ;; *) exit 1 ;; esac ;;
+  mkdir|rm) exit 0 ;;
+  cat)  shift; cat "$@" 2>/dev/null; exit 0 ;;
+  php)  shift ;;
+esac
+case "${1-}" in
+  vendor/bin/phpunit)
+    [ "${2-}" = "--version" ] && { printf 'PHPUnit 10.5.0
+'; exit 0; }
+    # A real PHPUnit handed a path with no tests under it: no "Lines:", no "Tests:".
+    printf 'No tests executed!
+'; exit 0 ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$W_COV2_BIN/ddev"
+W_COV2_WORK="$(mk_w)"
+W_COV2_RDIR="$W_COV2_WORK/.reports"
+( cd "$W_COV2_WORK" \
+  && env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH \
+     PATH="$W_COV2_BIN:/usr/bin:/bin" REPORT_DIR="$W_COV2_RDIR" \
+     bash "$COV" ) >/dev/null 2>&1 || true
+assert_eq "[W] the coverage report records that it measured nothing, and what it could not read" \
+  "false|web/modules/custom|yes" \
+  "$(jq -r 'if has("measured") then (.measured | tostring) else "MISSING" end' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null || echo MISSING)|$(jq -r '(.paths_missing // ["MISSING"]) | join(",")' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null || echo MISSING)|$(u_has "$(jq -r '.reason // ""' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null)" 'does not exist')"
+
 # And the loop that makes the count mean something: every gate on disk must appear in
 # the scenario table above. A gate present on disk and absent from the table fails here,
 # which is the check that a hand-written 7 cannot perform.
@@ -8566,7 +9113,12 @@ echo "AE: a finding planted under node_modules belongs to whoever vendored it"
 # exclusion it passes. This section is the roll-up: every gate on disk has an answer,
 # and the two that answer differently say why.
 
-AE_ANSWERED="lint-check.sh:Y4 solid-check.sh:AB6+AB7 dry-check.sh:AD7 security-check.sh:AA6+AA7 rector-fix.sh:AR2 tdd-workflow.sh:AC6 coverage-report.sh:exempt"
+# security-check.sh names four arms, not two, and the reason is worth the extra words:
+# AA6/AA7 exercise the grep layer with every analyzer ABSENT, which is the state that let
+# this gate be recorded as answering the criterion while two thirds of it were unbuilt.
+# AA1b covers the generated psalm.xml's ignore list and AA6-sem covers semgrep's
+# --exclude, both with the tool PRESENT.
+AE_ANSWERED="lint-check.sh:Y4 solid-check.sh:AB6+AB7 dry-check.sh:AD7 security-check.sh:AA1b+AA6+AA7+AA6-sem rector-fix.sh:AR2 tdd-workflow.sh:AC6 coverage-report.sh:exempt"
 AE_MISSING=""
 for ae_gate in "${W_GATES[@]}"; do
   case " ${AE_ANSWERED} " in
@@ -8598,6 +9150,119 @@ assert_eq "[AE] a vendored npm tree carries no PHPUnit test file to discover" "0
 AE_COV_IGNORE=$(grep -cE '\--ignore|--exclude' "$COV" 2>/dev/null || true)
 assert_eq "[AE] [contract, not behavioural] the coverage gate passes no exclusion flag, because there is none to pass" \
   "0" "${AE_COV_IGNORE:-MISSING}"
+
+# ── DOC. the documented CI gate reads the status, not only the counts ────────
+echo ""
+echo "DOC: the snippet a caller copies out of the command docs rejects an unmeasured run"
+
+# Seven gates gained a new exit code and a new status word, and the surface a caller
+# actually reads had no entry for either. commands/security.md gave the CI gate as
+# `CRIT=$(jq '.summary.critical'); HIGH=$(jq '.summary.high'); if [ $CRIT -gt 0 ] || ...`
+# — and an unmeasured security run has critical=0 and high=0 BY CONSTRUCTION, so the
+# documented consumer read it as clean. The mechanism was right in full-audit.sh and
+# absent from the one place a person copies.
+#
+# THE SNIPPET IS EXTRACTED AND RUN, not grepped. A grep for the word "overall_status"
+# passes on a snippet that reads the field and does nothing with it.
+DOC_CMDS="${ROOT}/../../../commands"
+DOC_SEC="${DOC_CMDS}/security.md"
+
+if [[ ! -f "$DOC_SEC" ]]; then
+  bad "[DOC] commands/security.md is where the documented CI gate lives"
+else
+  # The fenced block that opens with the documented invocation, up to its closing fence.
+  awk '/^result=\$\(\/code-quality-tools:security --json\)$/ {inb=1} inb && /^```$/ {exit} inb {print}' \
+    "$DOC_SEC" > "$TMP/doc_sec_gate.sh"
+  # The one line that cannot run here is the invocation itself; everything below it is
+  # the gate, and that is what is under test.
+  sed -i '1s|.*|result=$(cat "$1")|' "$TMP/doc_sec_gate.sh"
+
+  doc_gate() {   # <json> ; echoes the exit status the documented gate would leave
+    local f="$TMP/doc_fixture.json" rc=0
+    printf '%s' "$1" > "$f"
+    bash "$TMP/doc_sec_gate.sh" "$f" >/dev/null 2>&1 || rc=$?
+    printf '%s' "$rc"
+  }
+
+  assert_eq "[DOC] the extracted snippet is non-empty (so the assertions below mean something)" \
+    "yes" "$([ -s "$TMP/doc_sec_gate.sh" ] && printf yes || printf no)"
+
+  # DOC1: THE DEFECT. An unmeasured run: zero critical, zero high, and nothing scanned.
+  assert_eq "[DOC] the documented gate rejects an unmeasured security run" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"unmeasured","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC2: and a partial one, for the same reason at a finer grain.
+  assert_eq "[DOC] and a partial one" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"partial","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC3: and a skipped one — the word that already existed and was already read as clean.
+  assert_eq "[DOC] and a skipped one" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"skipped","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC4: a real clean run still passes. Without this the fix could be "reject
+  # everything", and a gate that fires on every run carries no information.
+  assert_eq "[DOC] a run that covered its ground and found nothing still passes" "0" \
+    "$(doc_gate '{"summary":{"overall_status":"pass","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC5: and the counts still gate, which is what the snippet was there for.
+  assert_eq "[DOC] a covered run with a critical finding still fails" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"fail","critical":1,"high":0},"meta":{},"findings":[{"severity":"critical"}]}')"
+fi
+
+# DOC6: [contract, not behavioural] every gate command doc names exit 4 and the word.
+# The snippet above is the one consumer that can be executed; the rest is a table a
+# person reads, and a table that omits the code is how a caller comes to write the
+# snippet DOC1 refutes.
+DOC_MISSING=""
+for doc_cmd in security lint solid dry; do
+  doc_f="${DOC_CMDS}/${doc_cmd}.md"
+  if [[ ! -f "$doc_f" ]]; then DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:absent"; continue; fi
+  grep -q 'unmeasured' "$doc_f" || DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:no-word"
+  grep -qE '\| 4 \|' "$doc_f" || DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:no-exit-4"
+done
+assert_eq "[DOC] [contract, not behavioural] every gate command doc names exit 4 and 'unmeasured'" \
+  "" "$DOC_MISSING"
+
+# DOC8: the SCHEMA admits the words the tool emits. `unmeasured` has been written into
+# summary.*_score since 10b1c9b while the enum still read
+# ["pass","warning","fail","unknown"], and `partial` widened the same gap — a schema that
+# forbids a value the tool produces is a false record of the same kind this task is
+# about. `lint_score` and `security_score` were absent from it entirely while
+# full-audit.sh:610-615 has always written both.
+DOC_SCHEMA="${ROOT}/../schemas/audit-report.schema.json"
+DOC_SCORE_MISSING=""
+for doc_k in overall_score coverage_score solid_score lint_score dry_score security_score; do
+  jq -e --arg k "$doc_k" '.properties.summary.properties | has($k)' "$DOC_SCHEMA" >/dev/null 2>&1 \
+    || DOC_SCORE_MISSING="${DOC_SCORE_MISSING}${DOC_SCORE_MISSING:+,}${doc_k}"
+done
+assert_eq "[DOC] every summary score full-audit.sh writes is in the schema" \
+  "" "$DOC_SCORE_MISSING"
+
+# The overall verdict is deliberately NOT widened: resolve_overall_status maps the
+# coverage words onto warning and only ever returns these four. Asserted so that adding
+# them there later has to be a decision rather than a copy-paste.
+assert_eq "[DOC] overall_score keeps the four words resolve_overall_status can return" \
+  "fail,pass,unknown,warning" \
+  "$(jq -r '.properties.summary.properties.overall_score.enum | sort | join(",")' "$DOC_SCHEMA" 2>/dev/null || echo MISSING)"
+
+DOC_ENUM_MISSING=""
+for doc_k in coverage_score solid_score lint_score dry_score security_score; do
+  for doc_w in skipped unmeasured partial; do
+    jq -e --arg k "$doc_k" --arg w "$doc_w" \
+      '.properties.summary.properties[$k].enum | index($w) != null' "$DOC_SCHEMA" >/dev/null 2>&1 \
+      || DOC_ENUM_MISSING="${DOC_ENUM_MISSING}${DOC_ENUM_MISSING:+,}${doc_k}:${doc_w}"
+  done
+done
+assert_eq "[DOC] and every per-gate score admits skipped, unmeasured and partial" \
+  "" "$DOC_ENUM_MISSING"
+
+# DOC7: and the two gates that carry the partial verdict document it, since it is the
+# only status in this suite that exits 1 while the report says the tree is clean.
+DOC_PARTIAL=""
+for doc_cmd in security lint solid; do
+  grep -q 'partial' "${DOC_CMDS}/${doc_cmd}.md" || DOC_PARTIAL="${DOC_PARTIAL}${DOC_PARTIAL:+,}${doc_cmd}"
+done
+assert_eq "[DOC] the three --changed gates document the partial verdict" "" "$DOC_PARTIAL"
 
 # ── IN. the config-driven installer (config_driven_installer child) ──────────
 #

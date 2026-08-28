@@ -21,9 +21,9 @@ cqt_announce_report_dir
 # These two variables used to default to a web/ literal here, which pointed the gate at
 # a directory detect-environment.sh had already ruled out on every docroot-layout
 # (Acquia) project. Themes are custom code too and phpcs has a Drupal standard for them;
-# leaving the themes path out did not make the gate narrower, it made it silently wrong.
-# Measured on one real client project: 493 errors and 27 warnings across 58 theme files,
-# 37% of the site's total standards findings, invisible on every run.
+# leaving the themes path out did not make the gate narrower, it made it silently wrong —
+# every standards finding in every custom theme was invisible on every run, and the gate
+# reported a clean tree without them.
 #
 # The library sources nothing, runs nothing at load time and prints nothing, so it is
 # safe above this script's own `set -e`. An explicit DRUPAL_MODULES_PATH /
@@ -160,7 +160,22 @@ EOF
         exit "$CQT_EXIT_UNMEASURED"
     fi
 
+    # A PARTIALLY MEASURABLE SET. Some of what the caller named is on disk and some is
+    # not, so this run measures part of the question it was asked.
+    #
+    # The verdict for that shape is "partial", and it exits 1. Not 0: the caller reading
+    # only the exit code — CI, and AIDA's /validate-* wrappers — reads 0 as a clean pass
+    # over the whole set, which is the defect this task exists to remove, one grain
+    # finer. Not 4: "unmeasured" means the gate covered nothing, and something was
+    # covered here. Not 2: the files that WERE read came back clean, and a diff that
+    # deletes a PHP file is ordinary — a gate that failed every such diff would fire on
+    # every run and carry no information.
+    #
+    # Findings still outrank the cap. It only ever turns a would-be "pass" into
+    # "partial"; a real error is still "fail" and still exits 2.
+    CHANGED_PARTIAL=false
     if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+        CHANGED_PARTIAL=true
         cqt_unmeasured "some changed files are not on disk — they were not scanned" \
             "${MISSING_FILES[@]}"
     fi
@@ -217,10 +232,20 @@ EOF
     # empty input, and the count becomes the EMPTY STRING rather than a zero — which
     # `[ "" -gt 0 ]` then errors on, `if` swallows, and the status falls through to
     # "pass" while the heredoc writes `"errors": ,`.
+    #
+    # jq's status decides, not a substituted zero. See the long note on the standard
+    # path: `|| echo "0"` turns a TRUNCATED report — non-empty, so `[ -s ]` passes, and
+    # unparseable, so jq fails silently — into a certified clean tree. This is the mode
+    # CI and AIDA's /validate-* wrappers invoke, and the one where nobody reads stdout.
     CHANGED_USABLE=true
     if [ -s "${REPORT_DIR}/lint/phpcs.json" ] && command -v jq &> /dev/null; then
-        CHANGED_ERRORS=$(jq '.totals.errors // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
-        CHANGED_WARNINGS=$(jq '.totals.warnings // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
+        if CHANGED_TOTALS=$(jq -r '"\(.totals.errors // 0) \(.totals.warnings // 0)"' \
+                               "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null); then
+            CHANGED_ERRORS="${CHANGED_TOTALS%% *}"
+            CHANGED_WARNINGS="${CHANGED_TOTALS##* }"
+        else
+            CHANGED_USABLE=false
+        fi
     else
         CHANGED_USABLE=false
     fi
@@ -243,6 +268,9 @@ EOF
         CHANGED_STATUS="fail"
     elif [ "$CHANGED_WARNINGS" -gt 10 ]; then
         CHANGED_STATUS="warning"
+    elif [ "$CHANGED_PARTIAL" == true ]; then
+        # Last, so a finding is never softened into an incomplete-coverage note.
+        CHANGED_STATUS="partial"
     fi
 
     cat > "${REPORT_DIR}/lint-report.json" << EOF
@@ -273,6 +301,9 @@ EOF
         cqt_unmeasured "phpcs produced no usable report (exit ${CHANGED_PHPCS_EXIT}) — coding standards were NOT verified" \
             "${RELEVANT_FILES[@]}"
         exit "$CQT_EXIT_UNMEASURED"
+    elif [ "$CHANGED_STATUS" == "partial" ]; then
+        echo -e "${YELLOW}[PARTIAL]${NC} No violations in what was read, but ${#MISSING_FILES[@]} changed file(s) were not on disk — coverage is incomplete"
+        exit "$CQT_EXIT_WARNING"
     elif [ "$CHANGED_STATUS" == "pass" ]; then
         echo -e "${GREEN}[PASS]${NC} Coding standards check passed"
         exit 0
@@ -389,7 +420,12 @@ if [ "$FIX_MODE" == true ]; then
         --ignore="${PHPCS_IGNORE}" \
         "${SCAN_PATHS[@]}" \
         2>&1 | tee "${REPORT_DIR}/lint/phpcbf.txt"
-    PHPCBF_EXIT=$?
+    # PIPESTATUS[0], not `$?`. After `cmd | tee file` the status is TEE's, and tee
+    # succeeds whenever it can write the file — so a phpcbf that never ran read as exit 0
+    # and printed "All fixable issues corrected", the most reassuring of the three
+    # messages below. rector-fix.sh:127-131 states this rule; the same shape survived
+    # three lines below the code this task edited.
+    PHPCBF_EXIT=${PIPESTATUS[0]}
     set -e
 
     echo ""
@@ -435,28 +471,46 @@ else
     # EMPTY, and an absent or empty report is not a count of zero. The else branch is
     # the difference — without it a report that never arrived left the counters at
     # their initialised 0, which validates as an integer and certifies a clean tree.
+    #
+    # `|| echo "0"` IS NOT A FALLBACK, IT IS A FABRICATION, and it was the hole this
+    # guard was written to close. On a TRUNCATED report — valid JSON so far and nothing
+    # more, which is what an OOM-killed or disk-full phpcs leaves — `[ -s ]` is
+    # satisfied because the file is not empty, jq exits non-zero and prints nothing, and
+    # `|| echo "0"` then supplies a literal zero that validates as an integer below. The
+    # gate certified a clean tree from a scan that died mid-write. Measured on the
+    # shipped script: [PASS], exit 0, report_usable true, errors 0.
+    #
+    # So jq's OWN status is what decides, in ONE invocation whose failure cannot be
+    # confused with a count: it either parses the report and prints both totals, or it
+    # fails and the report is unusable. Nothing substitutes a value for a parse that did
+    # not happen.
     PHPCS_USABLE=true
     if [ -s "${REPORT_DIR}/lint/phpcs.json" ] && command -v jq &> /dev/null; then
-        ERRORS=$(jq '.totals.errors // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
-        WARNINGS=$(jq '.totals.warnings // 0' "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null || echo "0")
+        if PHPCS_TOTALS=$(jq -r '"\(.totals.errors // 0) \(.totals.warnings // 0)"' \
+                             "${REPORT_DIR}/lint/phpcs.json" 2>/dev/null); then
+            ERRORS="${PHPCS_TOTALS%% *}"
+            WARNINGS="${PHPCS_TOTALS##* }"
+        else
+            PHPCS_USABLE=false
+        fi
     else
         PHPCS_USABLE=false
     fi
 
-    # A count that is not a number is not a count of zero.
+    # A count that is not a number is not a count of zero. A SECOND guard, kept even
+    # though the parse above now reports its own failure.
     #
-    # `|| echo "0"` never fires on an empty report: jq exits 0 on empty input, it just
-    # emits nothing, so ERRORS becomes the EMPTY STRING. `[ "" -gt 0 ]` then aborts with
-    # "integer expression expected", `if` swallows that as false, the status falls through
-    # to "pass", and the heredoc below writes `"errors": ,` — an unparseable report
-    # asserting a clean tree. Observed, not theorised: it is exactly what this script did
-    # on any missing scan path before the existence filter above, printing [PASS] and
-    # exiting 0 having scanned nothing.
+    # It catches the shape jq itself calls success: a report whose .totals.errors is
+    # present but is a string, a null-that-is-not-absent, or an object — jq exits 0 and
+    # prints it, and only this test can tell that it is not a count. jq exiting 0 on
+    # EMPTY input is the same family: it emits nothing, ERRORS becomes the empty string,
+    # `[ "" -gt 0 ]` aborts with "integer expression expected", `if` swallows that as
+    # false and the status falls through to "pass".
     #
-    # The filter removes the common trigger; it cannot remove the rest. phpcs can still
-    # produce an empty or truncated report by dying mid-run, and every one of those is a
-    # scan that did not happen. So the counts are validated as integers and anything else
-    # is reported as "skipped" — no finding was proved, and none was disproved either.
+    # The two guards divide the ways a report can be unreadable and neither covers the
+    # other: this one cannot see a truncated file (jq fails, prints nothing, and a
+    # substituted 0 passes the regex), and the parse above cannot see a well-formed
+    # report carrying a nonsense total.
     if ! [[ "$ERRORS" =~ ^[0-9]+$ ]] || ! [[ "$WARNINGS" =~ ^[0-9]+$ ]]; then
         PHPCS_USABLE=false
         ERRORS=0

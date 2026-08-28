@@ -680,13 +680,23 @@ make_no_ddev "$NO_DDEV_BIN"
 {
     label="security-check.sh --changed PHP-file → exit 2 (DDEV required)"
     tmpf=$(mktemp)
+    # THE NAMED FILE HAS TO EXIST. --changed now filters the list to what is on disk
+    # before it probes DDEV, the same order lint-check.sh and solid-check.sh use, so a
+    # changed set naming a file that is not there is answered "unmeasured" (exit 4) and
+    # never reaches the DDEV check. That is the correct answer to that question — but it
+    # is not the question this test is asking, and a fixture naming a nonexistent path
+    # would quietly stop testing the DDEV requirement.
+    SECDDEV_WORK=$(mktemp -d)
+    mkdir -p "${SECDDEV_WORK}/web/modules/custom/my_module/src"
+    printf '<?php\n' > "${SECDDEV_WORK}/web/modules/custom/my_module/src/MyService.php"
     printf '%s\n' "web/modules/custom/my_module/src/MyService.php" > "$tmpf"
     RDIR=$(mktemp -d)
 
     exit_code=0
-    output=$(PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+    output=$(cd "$SECDDEV_WORK" && PATH="${NO_DDEV_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
         bash "${DRUPAL_SCRIPTS}/security-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     rm -f "$tmpf"
+    rm -rf "$SECDDEV_WORK"
 
     if [ "$exit_code" -eq 2 ] && grep -qi "ddev" <<< "$output" ; then
         ok "$label → exit 2, DDEV error message"

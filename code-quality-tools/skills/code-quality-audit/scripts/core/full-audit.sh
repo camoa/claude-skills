@@ -128,6 +128,14 @@ resolve_overall_status() {
                 # hears "fine".
                 incomplete=$((incomplete + 1))
                 ;;
+            partial)
+                # THE ONE STATUS THAT IS BOTH. A --changed gate handed a set that is
+                # partly on disk measures part of the question: real evidence, so this
+                # is not "nothing ran", and incomplete coverage, so it must not certify
+                # a pass. Either existing arm alone loses one of the two halves.
+                produced=$((produced + 1))
+                incomplete=$((incomplete + 1))
+                ;;
             *)
                 produced=$((produced + 1))
                 ;;
@@ -226,6 +234,9 @@ echo ""
 # Step 2: Check/install tools
 echo -e "${BLUE}[Step 2/6]${NC} Verifying tools..."
 TOOLS_OK=false
+# "unknown" contributes nothing to the aggregate; "skipped" caps a would-be pass. See the
+# two-outcome note below.
+TOOLS_STATUS="unknown"
 if [ "$PROJECT_TYPE" == "nextjs" ]; then
     # Check for ESLint (Next.js)
     if npx eslint --version &> /dev/null; then
@@ -248,25 +259,70 @@ if [ "$TOOLS_OK" != "true" ]; then
     "${SCRIPT_DIR}/install-tools.sh" || install_exit=$?
 
     # And the verdict comes from what the installer WROTE, not from a re-probe of
-    # phpstan. install-tools.sh records a per-tool map and an all_ok flag; its exit 1
-    # can mean "phpmd missing, phpstan fine", which is still a usable run, and the exit
-    # status alone cannot say so. Absence of the file is not consent: an installer that
-    # died before writing one proved nothing.
+    # phpstan. install-tools.sh records a per-tool map and an all_ok flag; the exit
+    # status alone cannot distinguish "the install failed" from "the install ran and
+    # psalm is not on this machine". Absence of the file is not consent: an installer
+    # that died before writing one proved nothing.
+    #
+    # TWO OUTCOMES, NOT ONE. The earlier version of this block stopped the audit on
+    # `all_ok != true` and said so in the comment while claiming the opposite in the
+    # sentence above it. It also became far broader when the installer was rewritten:
+    # install-tools.sh now sets all_ok=false for ANY tool outside machine scope that is
+    # not resolvable, psalm, phpmd and phpcpd included — so a perfectly ordinary
+    # developer machine ran zero gates and exited 2, where before it ran the full audit
+    # with the DRY gate skipped. That contradicts this suite's own stated principle,
+    # restated in solid-check.sh and dry-check.sh, that a tool which is simply not
+    # installed must not have consequences "or every run on a normal machine would report
+    # incomplete".
+    #
+    #   the installer FAILED (non-zero exit), or wrote no readable status  -> STOP.
+    #       Nothing about the tool set is known, and the reason the stop exists is that
+    #       an audit with no analyzers reports "tool absent" from every layer.
+    #   the installer SUCCEEDED and some tools are absent  -> CONTINUE, capped.
+    #       The gates already handle this correctly: each one records the absent tool and
+    #       reports "skipped" or "unmeasured", and resolve_overall_status refuses to
+    #       certify a pass over any of them. Stopping here would suppress the eight
+    #       layers that CAN run in order to avoid trusting the two that cannot.
+    #
+    # TOOLS_STATUS rides into the aggregate the same way DRIFT_STATUS does.
+    # `has(...)`, NOT `.all_ok // empty`. jq's alternative operator fires on the value
+    # `false` as well as on an absent key, so the `//` spelling collapses "the installer
+    # said not everything installed" into "the installer wrote nothing readable" — the
+    # two cases this block now has to tell apart. It did not matter while both led to the
+    # same stop; it decides the outcome now.
+    #
+    # Result is "true", "false", or empty for an absent key, an unreadable file or no
+    # file at all.
     tools_all_ok=""
     if [ -f "${REPORT_DIR}/tools-status.json" ]; then
-        tools_all_ok=$(jq -r '.all_ok // empty' "${REPORT_DIR}/tools-status.json" 2>/dev/null || true)
+        tools_all_ok=$(jq -r 'if has("all_ok") then (.all_ok | tostring) else "" end' \
+            "${REPORT_DIR}/tools-status.json" 2>/dev/null || true)
     fi
 
-    if [ "$install_exit" -ne 0 ] || [ "$tools_all_ok" != "true" ]; then
+    if [ "$install_exit" -ne 0 ] || [ -z "$tools_all_ok" ]; then
         echo -e "${RED}[STOP]${NC} tool installation did not complete (installer exit ${install_exit}, all_ok=${tools_all_ok:-<no status file>})"
         echo "  No gate was run: an audit whose analyzers are not installed reports"
         echo "  'tool absent' from every layer, which reads as a clean scan."
         echo "  See ${REPORT_DIR}/tools-status.json for which tools are missing."
         exit 2
     fi
+
+    if [ "$tools_all_ok" != "true" ]; then
+        TOOLS_STATUS="skipped"
+        echo -e "${YELLOW}[WARN]${NC} the install completed, but not every tool is available."
+        echo "  The gates below record each absent tool and report 'skipped' rather than"
+        echo "  a pass, and this run cannot certify a pass because of it."
+        MISSING_TOOL_LIST=$(jq -r '[.findings[]? | "\(.tool)=\(.state)"] | join(", ")' \
+            "${REPORT_DIR}/tools-status.json" 2>/dev/null || true)
+        [ -n "$MISSING_TOOL_LIST" ] && echo "  Not available: ${MISSING_TOOL_LIST}"
+        echo "  Full record: ${REPORT_DIR}/tools-status.json"
+        echo ""
+    fi
 fi
-echo -e "${GREEN}[OK]${NC} Tools available"
-echo ""
+if [ "${TOOLS_STATUS}" != "skipped" ]; then
+    echo -e "${GREEN}[OK]${NC} Tools available"
+    echo ""
+fi
 
 # Initialize aggregated report. overall_score starts at "unknown", not "pass": this
 # skeleton is what a consumer reads if the run dies before the summary jq below (every
@@ -539,7 +595,7 @@ fi
 # drift ("unknown"), and caps a would-be pass at "warning" when there is.
 OVERALL_STATUS=$(resolve_overall_status "$OVERALL_STATUS" \
     "$COVERAGE_STATUS" "$SOLID_STATUS" "$LINT_STATUS" "$DRY_STATUS" "$SECURITY_STATUS" \
-    "$DRIFT_STATUS")
+    "$DRIFT_STATUS" "$TOOLS_STATUS")
 
 # Update summary in report
 jq --arg overall "$OVERALL_STATUS" \
@@ -591,6 +647,9 @@ echo -e "  Overall:   $([ "$OVERALL_STATUS" == "pass" ] && echo "${GREEN}PASS${N
 # is not a puzzle. Only gates that ran and declared incomplete coverage cap it.
 if [ "$DRIFT_STATUS" = "skipped" ]; then
     echo -e "             ${YELLOW}(the installed code does not match composer.lock - every gate above examined a tree that cannot be trusted, so this run cannot certify a pass)${NC}"
+fi
+if [ "$TOOLS_STATUS" = "skipped" ]; then
+    echo -e "             ${YELLOW}(not every analyzer is installed - see ${REPORT_DIR}/tools-status.json, so this run cannot certify a pass)${NC}"
 fi
 for capped_gate in "coverage:${COVERAGE_STATUS}" "SOLID:${SOLID_STATUS}" \
     "lint:${LINT_STATUS}" "DRY:${DRY_STATUS}" "security:${SECURITY_STATUS}"; do

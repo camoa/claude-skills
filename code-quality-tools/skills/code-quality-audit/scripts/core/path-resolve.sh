@@ -168,7 +168,22 @@ cqt_detect_drupal_root() {
 cqt_resolve_custom_path() {
     local var_name="$1" kind="$2"
     local explicit="${!var_name-}"
+    local record="CQT_PATH_ORIGIN_${var_name}"
     local prefix derived
+
+    # RESOLVING TWICE IN ONE PROCESS MUST GIVE THE SAME ANSWER. Every branch below
+    # exports the variable, including the not-found one, so a second call reads its own
+    # previous output back as a caller's override and reports `explicit` for everything —
+    # and a project with no custom modules is then a typo in a config nobody wrote, which
+    # is precisely what the origin record exists to prevent.
+    #
+    # The record is what distinguishes them. A value this library derived is cleared and
+    # re-derived; a value the CALLER exported (origin `explicit`) is left alone, because
+    # ignoring the variable on every call would discard the override the moment anything
+    # resolved twice.
+    if [ -n "${!record-}" ] && [ "${!record}" != "explicit" ]; then
+        explicit=""
+    fi
 
     CQT_PATH_ORIGIN="derived"
     CQT_PATH_STATE="missing"

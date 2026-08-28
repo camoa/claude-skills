@@ -55,15 +55,43 @@ for candidate in phpstan.neon phpstan.neon.dist; do
         break
     fi
 done
+#
+# THE LEVEL IS NOT ALWAYS A DIGIT. `level: max` is valid phpstan and common in Drupal
+# projects, and the extractor here used to match `[0-9]+` only: it found nothing, fell
+# back to ${PHPSTAN_LEVEL:-5}, and the report then claimed 5 for a run that phpstan
+# performed at max. That is the same defect this block was written to fix — a number
+# stated in a record that no run used — one layer down from the docs.
+#
+# So the value is taken as a TOKEN, whatever it is, and only then interpreted. And a
+# level this gate genuinely cannot read is `null`, not a restated default: a
+# phpstan.neon that sets its level through `includes:` is in force, --level is not
+# passed alongside it, and what it settles on is not knowable without resolving
+# phpstan's own include graph. Reporting 5 there would be inventing the number again.
 PHPSTAN_ARGS=()
 if [ -n "$PHPSTAN_CONFIG" ]; then
     PHPSTAN_ARGS=(--configuration "$PHPSTAN_CONFIG")
-    PHPSTAN_LEVEL_EFFECTIVE=$(grep -hEo '^[[:space:]]*level:[[:space:]]*[0-9]+' "$PHPSTAN_CONFIG" 2>/dev/null | grep -Eo '[0-9]+' | head -1)
-    [ -n "$PHPSTAN_LEVEL_EFFECTIVE" ] || PHPSTAN_LEVEL_EFFECTIVE="${PHPSTAN_LEVEL:-5}"
+    PHPSTAN_LEVEL_EFFECTIVE=$(grep -hE '^[[:space:]]*level:[[:space:]]*[^[:space:]]' "$PHPSTAN_CONFIG" 2>/dev/null \
+        | head -1 | sed -E 's/^[[:space:]]*level:[[:space:]]*//; s/[[:space:]]+#.*$//; s/[[:space:]]+$//; s/^["'"'"']//; s/["'"'"']$//')
 else
     PHPSTAN_LEVEL_EFFECTIVE="${PHPSTAN_LEVEL:-5}"
     PHPSTAN_ARGS=(--level "$PHPSTAN_LEVEL_EFFECTIVE")
 fi
+
+# The report is JSON, and this field was interpolated bare. A numeric level has to stay a
+# NUMBER — consumers compare it arithmetically — and anything else has to be quoted, or
+# the whole report stops parsing: `"phpstan_level": max,` made jq fail on the entire
+# file, full-audit.sh read no status from it and fell back to the exit code, bypassing
+# the verdict-from-report mechanism the rest of this task depends on. An empty value is
+# `null`, which is what "the config decides and this gate cannot see it" means.
+if [ -z "$PHPSTAN_LEVEL_EFFECTIVE" ]; then
+    PHPSTAN_LEVEL_EFFECTIVE_JSON="null"
+elif [[ "$PHPSTAN_LEVEL_EFFECTIVE" =~ ^[0-9]+$ ]]; then
+    PHPSTAN_LEVEL_EFFECTIVE_JSON="$PHPSTAN_LEVEL_EFFECTIVE"
+else
+    PHPSTAN_LEVEL_EFFECTIVE_JSON=$(printf '%s' "$PHPSTAN_LEVEL_EFFECTIVE" | jq -R -s 'rtrimstr("\n")' 2>/dev/null || printf 'null')
+fi
+PHPSTAN_CONFIG_JSON=$(printf '%s' "$PHPSTAN_CONFIG" \
+    | jq -R -s 'rtrimstr("\n") | if . == "" then null else . end' 2>/dev/null || printf 'null')
 
 # The absolute path composer installs global binaries into, resolved at most once.
 # `composer global config` prints "Changed current directory to ..." on STDERR, so
@@ -261,6 +289,12 @@ if [ -n "$CHANGED_FILE" ]; then
         fi
     done < "$CHANGED_FILE"
 
+    # What the caller named that is not on disk, in the shape the report needs. `jq -R
+    # -s` rather than raw interpolation, so a path containing a double quote cannot
+    # produce a report jq then refuses to read.
+    CHANGED_MISSING_JSON=$(printf '%s\n' "${MISSING_FILES[@]+"${MISSING_FILES[@]}"}" \
+        | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+
     if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "${#MISSING_FILES[@]}" -gt 0 ]; then
         mkdir -p "${REPORT_DIR}/solid"
         cqt_unmeasured "every PHP file in the changed set is missing from disk — SOLID was NOT checked" \
@@ -280,6 +314,7 @@ if [ -n "$CHANGED_FILE" ]; then
   "mode": "changed",
   "changed_file": "${CHANGED_FILE}",
   "relevant_files": 0,
+  "paths_missing": ${CHANGED_MISSING_JSON},
   "tools_unmeasured": ["phpstan", "phpmd", "static_calls"],
   "status": "${CQT_STATUS_UNMEASURED}",
   "thresholds": {
@@ -538,6 +573,16 @@ EOF
     elif [ "$FAILED_COUNT" -gt 0 ]; then
         SOLID_STATUS="skipped"
         echo -e "${YELLOW}[SKIP]${NC} No violations, but $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")') returned no usable result — gate skipped"
+    elif [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+        # A PARTIALLY MEASURABLE SET. The guard above this branch was unmeasured only
+        # when RELEVANT_FILES was empty AND MISSING_FILES was not, so one present file
+        # made a set with any number of absent ones a clean pass with exit 0. The
+        # verdict for this shape, and the reasoning for each rejected alternative, is
+        # recorded once in lint-check.sh's --changed branch; both gates answer it the
+        # same way, and this branch sits AFTER the finding branches so a real violation
+        # is never softened into a coverage note.
+        SOLID_STATUS="partial"
+        echo -e "${YELLOW}[PARTIAL]${NC} No violations in what was read, but ${#MISSING_FILES[@]} changed file(s) were not on disk — coverage is incomplete"
     else
         SOLID_STATUS="pass"
         echo -e "${GREEN}[PASS]${NC} SOLID compliance acceptable"
@@ -558,10 +603,14 @@ EOF
   "mode": "changed",
   "changed_file": "${CHANGED_FILE}",
   "relevant_files": ${#RELEVANT_FILES[@]},
+  "paths_missing": ${CHANGED_MISSING_JSON},
   "analyzers_ran": ${RAN_ANALYZERS},
   "skipped_tools": ${SKIPPED_TOOLS_JSON},
   "tools_absent": ${ABSENT_TOOLS_JSON},
   "tools_failed": ${FAILED_TOOLS_JSON},
+  "tools_unmeasured": [],
+  "phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE_JSON},
+  "phpstan_config": ${PHPSTAN_CONFIG_JSON},
   "status": "${SOLID_STATUS}",
   "thresholds": {
     "complexity_max": ${COMPLEXITY_MAX}
@@ -576,6 +625,7 @@ EOF
     case "$SOLID_STATUS" in
         skipped) exit 0 ;;
         pass) exit 0 ;;
+        partial) exit "$CQT_EXIT_WARNING" ;;
         warning) exit 1 ;;
         fail) exit 2 ;;
     esac
@@ -863,8 +913,8 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
     "phpmd_violations": ${PHPMD_VIOLATIONS_COUNT:-0}
   },
   "analyzers_ran": ${RAN_ANALYZERS},
-  "phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE},
-  "phpstan_config": $([ -n "$PHPSTAN_CONFIG" ] && printf '"%s"' "$PHPSTAN_CONFIG" || printf 'null'),
+  "phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE_JSON},
+  "phpstan_config": ${PHPSTAN_CONFIG_JSON},
   "skipped_tools": ${SKIPPED_TOOLS_JSON},
   "tools_absent": ${ABSENT_TOOLS_JSON},
   "tools_unmeasured": ${UNMEASURED_TOOLS_JSON},

@@ -74,9 +74,29 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check
 Behaviour:
 - Filters the list to PHP-family extensions (`.php .module .inc .install .profile .theme .engine`) and excludes `vendor/`, `web/core/`, `*/contrib/*`.
 - If the filtered set is empty → exits `0` with status `skipped` (no whole-tree scan).
+- If every named file is missing from disk → exits `4` with status `unmeasured`, and
+  `tools_unmeasured[]` names the analyzers that had nothing to read.
+- If SOME named files are missing → exits `1` with status `partial` and `paths_missing[]`
+  naming them. A violation in the files that WERE read still wins, and still exits `2`.
 - `phpmd` receives a comma-separated file list (its required format for file-level targeting).
 - Report gains `"mode": "changed"` and `"relevant_files": N`.
 - Compatible with CI patterns: `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/solid-check.sh" --changed .changed-files.txt`
+
+## Exit codes and status words
+
+| exit | `.status` | means |
+|---|---|---|
+| 0 | `pass` | the analyzers ran over the scoped paths and found nothing |
+| 0 | `skipped` | every analyzer is absent, or one that was present returned nothing usable |
+| 1 | `warning` | more than 10 warnings, no criticals |
+| 1 | `partial` | `--changed` only: some named files were not on disk |
+| 2 | `fail` | critical violations found |
+| 4 | `unmeasured` | the scanned path, or every file in the changed set, is not there. **Nothing was checked** |
+
+`.phpstan_level` is the level the run actually used: the placed config's when there is
+one, the flag's when there is not, and `null` when the config sets it somewhere this gate
+cannot read (an `includes:` file). It is not always a number — `max` is valid — so a
+consumer comparing it arithmetically has to check the type first.
 
 ## Complexity Thresholds
 
