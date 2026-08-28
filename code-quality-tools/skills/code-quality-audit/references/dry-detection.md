@@ -15,12 +15,13 @@
 ## Detection Tool: PHPCPD
 
 **Package:** `systemsdk/phpcpd` (active fork)
-**Note:** Original `sebastian/phpcpd` is abandoned.
+**Note:** Original `sebastian/phpcpd` is marked abandoned on Packagist (checked 2026-08-28).
+Its last release was 6.0.3, 2020-12-07.
 
 ### Installation
 
 ```bash
-ddev composer require --dev systemsdk/phpcpd
+ddev composer require --dev systemsdk/phpcpd:^9.0
 ```
 
 ### Basic Usage

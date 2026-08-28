@@ -19,9 +19,9 @@ When user says "setup tools", "install PHPStan", "install testing tools":
 2. Check installed: `ddev exec vendor/bin/phpstan --version`
 3. Install missing:
    ```bash
-   ddev composer require --dev phpstan/phpstan phpstan/extension-installer \
-     mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules \
-     phpmd/phpmd systemsdk/phpcpd drupal/coder
+   ddev composer require --dev phpstan/phpstan:^2.0 phpstan/extension-installer:^1.4 \
+     mglaman/phpstan-drupal:^2.1.2 phpstan/phpstan-deprecation-rules:^2.0 \
+     phpmd/phpmd:^2.15 systemsdk/phpcpd:^9.0 drupal/coder:^9.0
    ```
 4. Copy templates to project root:
    - `templates/drupal/phpstan.neon` (PHPStan 2.x - extensions auto-load)

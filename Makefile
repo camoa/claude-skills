@@ -18,7 +18,7 @@ TESTED_PLUGINS := $(sort $(foreach p,$(PLUGINS),\
 UNTESTED_PLUGINS := $(filter-out $(TESTED_PLUGINS),$(PLUGINS))
 
 .PHONY: help test lint lint-baseline validate manifests outputs setup-doc \
-        setup-doc-check ci $(addprefix test-,$(PLUGINS))
+        setup-doc-check tool-versions claims ci $(addprefix test-,$(PLUGINS))
 
 help:
 	@echo "make test              run every test in the repo"
@@ -28,12 +28,16 @@ help:
 	@echo "make validate          check the catalog and each plugin with the claude CLI"
 	@echo "make manifests         check plugin.json and marketplace.json agree"
 	@echo "make outputs           check every command says what it writes"
-	@echo "make ci                all five checks, same as the PR check"
+	@echo "make claims            check documented claims against their authority"
+	@echo "make ci                all seven checks, same as the PR check"
 	@echo ""
 	@echo "lint reports a warning that is not in the baseline as a failure."
 	@echo "A baseline warning that is gone is reported as fixed and passes."
 	@echo "validate fails on errors; warnings print without failing."
 	@echo "outputs fails on a command file with no '## Output' section."
+	@echo "claims fails when a claim in code-quality-tools/ disagrees with the file"
+	@echo "that is the authority for it, and exits 4 when a rule compared nothing."
+	@echo ""
 	@echo "setup-doc-check fails when setup.md's generated region no longer matches"
 	@echo "the catalog, or no longer matches its own checksum. setup-doc REFUSES to"
 	@echo "regenerate over a hand edit rather than destroying it; --force overrides."
@@ -76,6 +80,23 @@ manifests:
 outputs:
 	@bash scripts/check-outputs.sh
 
+# Compares a claim recorded in code-quality-tools/ against the in-repo file that is the
+# authority for it: the tool catalog for a package constraint, the phpstan template for
+# the level, the two schema files for the generated version table. `make manifests`
+# compares two internal files with each other; this is the check that compares a claim
+# with the thing it describes.
+#
+# Offline and deterministic. `scripts/check-claims.sh --upstream` re-reads Packagist and
+# is a deliberate act a person runs, never a make target and never CI.
+claims:
+	@bash scripts/check-claims.sh
+
+# Regenerates the PHP-ecosystem version table in tool-comparison.md from the tool catalog
+# and the upstream record. Same refusal-on-hand-edit contract as setup-doc, and the same
+# mechanism: both source scripts/lib/generated-region.sh.
+tool-versions:
+	@bash scripts/gen-tool-versions.sh
+
 # The tool inventory in code-quality-tools/commands/setup.md is GENERATED from
 # schema/tool-catalog.json. Four lists used to disagree about what setup installs;
 # generating one of them removes it as a place they can disagree, and the checksum
@@ -89,14 +110,14 @@ setup-doc:
 setup-doc-check:
 	@bash scripts/gen-setup-doc.sh --check
 
-# Runs all six even when one fails, so a single run reports every problem
+# Runs all seven even when one fails, so a single run reports every problem
 # instead of stopping at the first. As prerequisites (ci: manifests outputs
 # lint validate test) make would abort on the first failure and a lint
 # regression would hide whether the tests pass. .github/workflows/ci.yml runs
-# the same six checks the same way, so this really is the PR check.
+# the same seven checks the same way, so this really is the PR check.
 ci:
 	@fail=""; \
-	for target in manifests outputs setup-doc-check lint validate test; do \
+	for target in manifests outputs setup-doc-check claims lint validate test; do \
 	  printf '\n==> make %s\n' "$$target"; \
 	  $(MAKE) --no-print-directory "$$target" || fail="$$fail $$target"; \
 	done; \
@@ -105,4 +126,4 @@ ci:
 	  printf 'ci: FAILED:%s\n' "$$fail" >&2; \
 	  exit 1; \
 	fi; \
-	printf 'ci: all six checks passed\n'
+	printf 'ci: all seven checks passed\n'

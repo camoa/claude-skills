@@ -41,14 +41,14 @@ The audit performs 10 complementary security checks:
 ### 3. yousha/php-security-linter
 - **Type:** PHPCS security rules
 - **Coverage:** OWASP Top 10 + CIS benchmarks
-- **Status:** ✅ Actively maintained (Dec 2025)
-- **Installation:** `ddev composer require --dev yousha/php-security-linter`
+- **Status:** ✅ 3.1.8.6 released 2026-08-17; repository not archived (checked 2026-08-28)
+- **Installation:** `ddev composer require --dev yousha/php-security-linter:^3.1`
 
 ### 4. Psalm Taint Analysis
 - **Type:** Dataflow analysis
 - **Coverage:** XSS, SQLi detection (OWASP A03:2021)
 - **Status:** ✅ Active (recommended but optional)
-- **Installation:** `ddev composer require --dev vimeo/psalm`
+- **Installation:** `ddev composer require --dev vimeo/psalm:^6.0`
 
 ### 5. Custom Drupal Patterns
 - **Type:** Regex-based detection
@@ -133,13 +133,13 @@ CQT_SECRET_SCAN=history CQT_SECRET_SCAN_TIMEOUT=1800 \
 ### Required Tools
 ```bash
 # PHP Security Linter
-ddev composer require --dev yousha/php-security-linter
+ddev composer require --dev yousha/php-security-linter:^3.1
 ```
 
 ### Recommended Tools
 ```bash
 # Psalm (for taint analysis)
-ddev composer require --dev vimeo/psalm
+ddev composer require --dev vimeo/psalm:^6.0
 
 # Roave Security Advisories (prevents vulnerable package installation)
 ddev composer require --dev roave/security-advisories:dev-master
@@ -216,18 +216,27 @@ cat "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report
 
 ## Why Modern Tools
 
-### ❌ Abandoned Tools (DO NOT USE)
+### ❌ Tools This Skill Does Not Install
+
+Neither of these is a judgement about how the project is run. Each is a fact you can
+check, which is the reason the wording is what it is: `abandoned` is a Composer field,
+Packagist has no `deprecated` flag, and in PHP `deprecated` marks a symbol rather than a
+package. Both facts below were read on 2026-08-28.
 
 **pheromone/phpcs-security-audit**
-- Last updated: March 2020 (abandoned)
-- No PHP 8.x support
-- Security rules outdated
-- **Replacement:** yousha/php-security-linter
+- Latest release 2.0.1, 2019-08-05 — seven years, no release since
+- Not marked abandoned on Packagist (checked 2026-08-28); the age is the fact, not a flag
+- Declares `php >=5.4` and its sniffs predate PHP 8
+- **Replacement:** `yousha/php-security-linter`, 3.1.8.6 released 2026-08-17
 
-**drupal-check**
-- Last updated: 2023 (abandoned)
-- No longer maintained
-- Superseded by PHPStan + Drupal extension
+**mglaman/drupal-check**
+- Latest release 1.5.0, 2024-08-14
+- Not marked abandoned on Packagist and not archived on GitHub (checked 2026-08-28)
+- The blocker is its constraint, not its health: 1.5.0 declares
+  `mglaman/phpstan-drupal ^1.0.0` and no direct `phpstan/phpstan`. PHPStan 1.x arrives
+  transitively through phpstan-drupal 1.x, which requires `phpstan/phpstan ^1.12`. This
+  skill installs the PHPStan 2.x stack, so the two cannot resolve in one project
+- **Replacement:** `phpstan/phpstan-deprecation-rules` with `mglaman/phpstan-drupal` 2.x
 
 ### ✅ Why These Tools?
 

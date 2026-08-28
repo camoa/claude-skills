@@ -78,13 +78,13 @@ Or install manually.
 **Drupal (via DDEV):**
 ```bash
 ddev composer require --dev \
-  phpstan/phpstan \
-  phpmd/phpmd \
-  systemsdk/phpcpd \
-  vimeo/psalm \
-  drupal/coder \
+  phpstan/phpstan:^2.0 \
+  phpmd/phpmd:^2.15 \
+  systemsdk/phpcpd:^9.0 \
+  vimeo/psalm:^6.0 \
+  drupal/coder:^9.0 \
   drupal/security_review \
-  roave/security-advisories
+  roave/security-advisories:dev-master
 ```
 
 **Next.js:**

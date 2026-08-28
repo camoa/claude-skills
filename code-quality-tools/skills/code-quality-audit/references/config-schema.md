@@ -20,7 +20,7 @@ Every tool carries a `scope`, and the scope is assigned by this rule rather than
 taste. Stated verbatim, the same sentence `schema/tool-catalog.json` carries in its
 `scope_rule` field:
 
-> A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`.
+> A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`. An entry may sit on the wrong side of this predicate only when it records a `scope_reason` saying so in those terms and a `reversal_condition` naming the observation that would move it; `psalm` is the one such entry, and its generated config hands it an explicit autoloader rather than sharing a resolver.
 
 The predicate is `bamarni/composer-bin-plugin`'s own rule of thumb — "limit this approach
 to tools which do not autoload your code" — and it excludes most of what this plugin
@@ -116,11 +116,21 @@ A config that fails any of these is refused with the field named, and exits **2*
 not repaired: repairing a contract silently is how the two install paths came to disagree
 in the first place.
 
-## A missing file is derived, announced, and not written
+## A missing file is derived, announced, and never persisted
 
 When an audit finds no `.code-quality.json`, `cqt_config_derive` builds a **complete**
 config from the catalog for the detected project type and layout, announces it in full,
-and hands it to the same validator a file gets. **Nothing is written.**
+and hands it to the same validator a file gets. **No `.code-quality.json` is written** —
+the derived config lives in memory for the duration of the run and nowhere else.
+
+That is a narrower claim than "nothing is written", and the narrower one is the true one.
+The install this feeds does write to the project, exactly as it does from a file-driven
+config: Composer edits `composer.json` for the resolved packages, and the `templates[]`
+entries are placed at the project root unless a file of that name is already there. The
+announcement names those files before the install runs. The alternative — skipping
+template placement on the derived path — would leave PHPStan reading no config on the
+projects that never ran `/setup`, which is PHPStan analysing Drupal as plain PHP and
+exiting 0.
 
 `/code-quality-tools:setup` is the only writer of `.code-quality.json` in this plugin.
 Writing a config file is what an init command is for — `composer init`,

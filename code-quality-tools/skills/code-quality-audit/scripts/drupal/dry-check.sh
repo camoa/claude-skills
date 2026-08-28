@@ -188,7 +188,7 @@ fi
 # purely because the tool is not installed.
 if ! ddev exec vendor/bin/phpcpd --version &> /dev/null; then
     echo -e "${YELLOW}[SKIP]${NC} phpcpd not installed — DRY gate skipped (tool absent)"
-    echo "  Install with: ddev composer require --dev systemsdk/phpcpd"
+    echo "  Install with: ddev composer require --dev systemsdk/phpcpd:^9.0"
     mkdir -p "${REPORT_DIR}/dry"
     cat > "${REPORT_DIR}/dry-report.json" << EOF
 {

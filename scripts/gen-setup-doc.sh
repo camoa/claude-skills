@@ -53,7 +53,14 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The markers / banner / checksum mechanism lives in ONE place: scripts/gen-tool-versions.sh
+# needs the identical contract for tool-comparison.md's version table, and a second copy of
+# a checksum protocol drifts the way the four hardcoded package lists did.
+# shellcheck source=./lib/generated-region.sh
+. "${SCRIPT_DIR}/lib/generated-region.sh"
+
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SETUP_MD_DEFAULT="${ROOT}/code-quality-tools/commands/setup.md"
 CATALOG_DEFAULT="${ROOT}/code-quality-tools/skills/code-quality-audit/schema/tool-catalog.json"
@@ -80,8 +87,6 @@ while [ $# -gt 0 ]; do
 done
 
 command -v jq > /dev/null 2>&1 || die "jq is required"
-command -v sha256sum > /dev/null 2>&1 || SHA_CMD="shasum -a 256"
-: "${SHA_CMD:=sha256sum}"
 
 [ -f "${CATALOG}" ]  || die "catalog not found: ${CATALOG}"
 [ -f "${SETUP_MD}" ] || die "setup.md not found: ${SETUP_MD}"
@@ -98,8 +103,6 @@ fi
 TOOL_COUNT="$(jq -r '.tools | length' "${CATALOG}" 2> /dev/null)" || die "catalog is not valid JSON"
 [ "${TOOL_COUNT:-0}" -gt 0 ] 2> /dev/null \
     || die "the catalog holds zero tools, so there is nothing to generate. A check that found nothing to check has not passed."
-
-digest() { printf '%s' "$1" | ${SHA_CMD} | cut -d' ' -f1; }
 
 # ── the region body ───────────────────────────────────────────────────────────
 #
@@ -130,41 +133,25 @@ build_region() {
 }
 
 # ── read what is committed ────────────────────────────────────────────────────
-grep -qxF "${BEGIN_MARKER}" "${SETUP_MD}" \
-    || die "the begin marker is missing from ${SETUP_MD}. Nothing bounds the generated region, so nothing can be generated or compared."
+#
+# region_load enforces the marker-and-checksum contract and sets REGION_BODY,
+# REGION_DIGEST and REGION_RECORDED. Its failure messages are the ones this script used to
+# raise itself, including the refusal of an end marker that carries no digest.
+region_load "${SETUP_MD}" "${BEGIN_MARKER}" "${END_PREFIX}" "${END_SUFFIX}" || die "${REGION_ERROR}"
 
-END_LINE="$(grep -nE "^${END_PREFIX}[0-9a-f]{64}${END_SUFFIX}\$" "${SETUP_MD}" | head -1)"
-if [ -z "${END_LINE}" ]; then
-    if grep -qE '^<!-- END GENERATED: tool-catalog' "${SETUP_MD}"; then
-        die "the end marker carries no 64-hex sha256 digest. That is the state a hand edit produces when somebody deletes the part they did not understand, so it is a failure rather than a region to adopt."
-    fi
-    die "the end marker is missing from ${SETUP_MD}"
-fi
-
-BEGIN_NO="$(grep -nxF "${BEGIN_MARKER}" "${SETUP_MD}" | head -1 | cut -d: -f1)"
-END_NO="${END_LINE%%:*}"
-[ "${BEGIN_NO}" -lt "${END_NO}" ] || die "the end marker precedes the begin marker in ${SETUP_MD}"
-
-RECORDED="$(printf '%s' "${END_LINE#*:}" | sed -E "s|^${END_PREFIX}([0-9a-f]{64})${END_SUFFIX}\$|\1|")"
-
-# The digest covers the region body BETWEEN the two marker lines, banner included and
-# the marker lines themselves excluded, so writing the digest cannot change the digest.
-COMMITTED_BODY="$(sed -n "$((BEGIN_NO + 1)),$((END_NO - 1))p" "${SETUP_MD}")"
-COMMITTED_DIGEST="$(digest "${COMMITTED_BODY}")"
+BEGIN_NO="${REGION_BEGIN_NO}"
+END_NO="${REGION_END_NO}"
+RECORDED="${REGION_RECORDED}"
+COMMITTED_BODY="${REGION_BODY}"
+COMMITTED_DIGEST="${REGION_DIGEST}"
 
 NEW_BODY="$(build_region)"
-NEW_DIGEST="$(digest "${NEW_BODY}")"
+NEW_DIGEST="$(region_digest "${NEW_BODY}")"
 
 write_region() {
-    local tmp
-    tmp="$(mktemp)"
-    {
-        sed -n "1,${BEGIN_NO}p" "${SETUP_MD}"
-        printf '%s\n' "${NEW_BODY}"
-        printf '%s%s%s\n' "${END_PREFIX}" "${NEW_DIGEST}" "${END_SUFFIX}"
-        sed -n "$((END_NO + 1)),\$p" "${SETUP_MD}"
-    } > "${tmp}"
-    mv "${tmp}" "${SETUP_MD}"
+    region_replace "${SETUP_MD}" "${BEGIN_NO}" "${END_NO}" \
+        "${NEW_BODY}" "${NEW_DIGEST}" "${END_PREFIX}" "${END_SUFFIX}" \
+        || die "could not write ${SETUP_MD}"
 }
 
 case "${MODE}" in

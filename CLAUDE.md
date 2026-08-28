@@ -14,10 +14,12 @@ validator directly.
 | Check every command says what it writes | `make outputs` |
 | Regenerate setup.md's tool inventory | `make setup-doc` |
 | Check that inventory against the catalog | `make setup-doc-check` |
+| Regenerate the tool version table | `make tool-versions` |
+| Check documented claims against their authority | `make claims` |
 | Everything, same as the PR check | `make ci` |
 
-Before opening a PR: `make ci`. It runs all six checks even when one
-fails, so one run shows every problem. CI runs the same six the same way.
+Before opening a PR: `make ci`. It runs all seven checks even when one
+fails, so one run shows every problem. CI runs the same seven the same way.
 
 ## What each check can fail on
 
@@ -65,9 +67,56 @@ fails, so one run shows every problem. CI runs the same six the same way.
   a hand edit is about to be destroyed. `scripts/gen-setup-doc.sh --force`
   is the deliberate override; no `make` target calls it.
 
-Only `make test`, `make lint` and `make outputs` scan files, and all three
-only look at git-tracked ones. A brand-new script, test or command is not
-picked up until it is `git add`ed.
+- `make claims` is the only check that compares a documented claim against
+  the thing it describes, rather than two internal files against each other.
+  Five rules, each deriving its authority from a file that already exists,
+  all scoped to tracked files under `code-quality-tools/`:
+  **R1** an install documented anywhere — a fenced block, a CI template, a
+  remediation string a gate echoes — carries the constraint
+  `schema/tool-catalog.json` pins. A `*` there means the catalog states no
+  opinion and omitting a constraint agrees with it.
+  **R2** no bare month-year stamp such as `(December 2025)`; dated claims
+  read `checked YYYY-MM-DD`, one per row. Age is REPORTED, never failed: an
+  age threshold fails a green tree with no commit behind it.
+  **R3** no `deprecated` or `unmaintained` beside a package name — neither
+  is a state Composer has. `abandoned` IS a Composer field, so it is allowed
+  on a line that also carries the date somebody read the flag. Two subjects:
+  a `vendor/package` token anywhere on the line, and a BARE tool name with
+  the judgement attached to it (at most four filler words apart, either
+  order). The bare half exists because the four sites this rule was written
+  for all wrote `drupal-check` with no vendor prefix, so a rule reading only
+  slashed tokens passed every one of them. Recognised names are derived from
+  `schema/tool-catalog.json` and `schema/upstream-versions.json`, never
+  registered; a scoped npm name and a name under four characters contribute
+  nothing, which is what keeps `react` and `cli` out of a rule that reads
+  prose.
+  **R4a** no `--level` on a command line the plugin ships to be run, because
+  it silently overrides a placed `phpstan.neon`; **R4b** every other level
+  literal equals the one `templates/drupal/phpstan.neon` ships.
+  **R5** the generated version table in `references/tool-comparison.md`
+  matches `schema/tool-catalog.json` and `schema/upstream-versions.json`,
+  and every catalogued Drupal package has an upstream record.
+  `CHANGELOG.md` and specs are exempt from all five: a changelog records
+  what was believed then, and a spec must be able to name the value it
+  asserts.
+  It **exits 4, not 1**, when any rule compared nothing, so a caller can
+  tell "I found a problem" from "I could not look". A missing catalog, a
+  missing template or an empty tree all reach it.
+  It is offline and deterministic. `scripts/check-claims.sh --upstream`
+  re-reads Packagist and compares the recorded version, PHP requirement and
+  abandoned flag against what upstream publishes now; it is a deliberate
+  refresh a person runs, like `make lint-baseline`, and neither `make` nor
+  CI ever calls it. What `make claims` cannot tell you offline is whether a
+  recorded upstream value is still true — that is what the per-row `checked`
+  date is for.
+- `make tool-versions` rewrites the generated version table, with the same
+  refusal-on-hand-edit contract as `make setup-doc`. Both generators source
+  `scripts/lib/generated-region.sh`, so there is one marker-and-checksum
+  mechanism rather than two copies of it.
+
+Only `make test`, `make lint`, `make outputs` and `make claims` scan files,
+and all four only look at git-tracked ones. A brand-new script, test,
+command or reference file is not picked up until it is `git add`ed.
 
 New test: put it where that plugin already keeps its tests. `make test`
 picks it up.
