@@ -97,6 +97,13 @@
   Amending a design mid-build stays legitimate and is sometimes forced; on the live build the
   original recipe was genuinely impossible. It only has to be visible.
 
+  **A task already mid-build when this lands gets `late`, not a false `captured`.** `capture`
+  detects the rung's own scaffolding and says so: such a task cannot produce an honest baseline,
+  because the contract has already moved under it. Failing it forever would punish a task for
+  predating the check, and stamping it `captured` would certify the amendments the baseline exists
+  to expose — the worse of the two, because it reads as legitimate. `late` passes with a recorded
+  reason, exactly like a recorded contract change.
+
   The task folder is not a git repository, so `build-checkpoint.sh` could not cover this, and the
   framework deliberately does not create one: version-control policy for a directory belongs to
   its owner. The baseline is a copy, so it works whether or not anything is versioned.

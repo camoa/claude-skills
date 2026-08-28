@@ -234,6 +234,100 @@ status_is captured "capture succeeds even when neither alignment.md nor architec
 files_is 0 "the file count is zero when there is nothing on disk to capture"
 rc_is 0 "capture with nothing to capture still exits 0"
 
+# --------------------------------------------------------- A13. capture is LATE: a
+# build-critique/<name>.critics/ directory already exists — components were already
+# built and critiqued before this baseline was taken
+
+D=$(mktask capture_late); seed_full "$D"
+mkdir -p "$D/build-critique/a.critics"
+run_cb capture "$D"
+status_is late "a build-critique/<name>.critics/ directory marks the capture late"
+files_is 4 "a late capture still copies every present file, same count as an on-time one"
+rc_is 0 "a late capture exits 0 — it is an honest state, not an error"
+V=$(printf '%s' "$OUT" | jq -r '.note // ""')
+if [ -n "$V" ]; then pass_check "a late capture's note is present and non-empty"
+else fail_check "a late capture's note is missing or empty"; fi
+
+# The files are still ACTUALLY copied to disk with the real content, not just counted.
+for rel in alignment.md architecture.md architecture/a.md architecture/b.md; do
+  SRC="$D/$rel"; DST="$D/build-critique/_contract-baseline/$rel"
+  if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+    pass_check "late capture: $rel was copied to _contract-baseline/ with matching content"
+  else
+    fail_check "late capture: $rel missing or content mismatch at $DST"
+  fi
+done
+
+# --------------------------------------------------------- A14. diff right after a LATE
+# capture behaves exactly like diff right after an on-time one: unchanged
+
+run_cb diff "$D"
+status_is unchanged "diff immediately after a late capture reports unchanged, same as an on-time one"
+arr_empty changed "unchanged after a late capture means changed[] is empty"
+arr_empty added "unchanged after a late capture means added[] is empty"
+arr_empty removed "unchanged after a late capture means removed[] is empty"
+
+# --------------------------------------------------------- A15. capture is LATE via the
+# OTHER tell: a build-critique/<name>.files.txt file, no .critics/ directory involved
+
+D=$(mktask capture_late_filestxt)
+mkdir -p "$D/build-critique"
+touch "$D/build-critique/a.files.txt"
+printf 'alignment only\n' > "$D/alignment.md"
+run_cb capture "$D"
+status_is late "a build-critique/<name>.files.txt file also marks the capture late"
+files_is 1 "the late capture's file count matches what is actually present (alignment.md only)"
+
+# --------------------------------------------------------- A16. build-critique/ exists but
+# is EMPTY — no .critics/ dir, no .files.txt, so this is NOT late: it is an on-time capture
+# taken into a phase folder that happens to already exist
+
+D=$(mktask capture_bc_empty_dir)
+mkdir -p "$D/build-critique"
+printf 'alignment only\n' > "$D/alignment.md"
+run_cb capture "$D"
+status_is captured "an empty build-critique/ directory does not trigger late — nothing there points at a started build"
+rc_is 0 "capture with an empty build-critique/ still exits 0"
+
+# --------------------------------------------------------- A17. diff after a LATE capture,
+# following an edit — same "changed" behavior as the on-time A4 case
+
+D=$(mktask diff_late_edit); seed_full "$D"
+mkdir -p "$D/build-critique/a.critics"
+run_cb capture "$D"; status_is late "diff_late_edit: the capture before the edit is late"
+printf 'a v2 EDITED\n' > "$D/architecture/a.md"
+run_cb diff "$D"
+status_is changed "editing a file after a late capture is still reported as changed"
+arr_contains changed "architecture/a.md" "the edited file is named in changed[] after a late capture"
+arr_empty added "editing alone after a late capture adds nothing"
+arr_empty removed "editing alone after a late capture removes nothing"
+
+# --------------------------------------------------------- A18. diff after a LATE capture,
+# following an addition — same "added" behavior as the on-time A5 case
+
+D=$(mktask diff_late_add); seed_full "$D"
+mkdir -p "$D/build-critique/a.critics"
+run_cb capture "$D"; status_is late "diff_late_add: the capture before the addition is late"
+printf 'brand new\n' > "$D/architecture/new.md"
+run_cb diff "$D"
+status_is changed "adding a file after a late capture is still reported as changed"
+arr_contains added "architecture/new.md" "the new file is named in added[] after a late capture"
+arr_empty changed "adding alone after a late capture changes nothing"
+arr_empty removed "adding alone after a late capture removes nothing"
+
+# --------------------------------------------------------- A19. diff after a LATE capture,
+# following a removal — same "removed" behavior as the on-time A6 case
+
+D=$(mktask diff_late_remove); seed_full "$D"
+mkdir -p "$D/build-critique/a.critics"
+run_cb capture "$D"; status_is late "diff_late_remove: the capture before the removal is late"
+rm -f "$D/architecture.md"
+run_cb diff "$D"
+status_is changed "removing a file after a late capture is still reported as changed"
+arr_contains removed "architecture.md" "the removed file is named in removed[] after a late capture"
+arr_empty changed "removing alone after a late capture changes nothing"
+arr_empty added "removing alone after a late capture adds nothing"
+
 # ============================================================================
 # PART B — the `contract` block inside build-critique-assert.sh
 # ============================================================================
@@ -337,6 +431,32 @@ unresolved_is false "an explained contract change is not unresolved"
 grc_is 0 "an explained contract change exits 0"
 msg_has "were amended during the build" "the amendment is surfaced, not silently accepted"
 msg_has "the original design was found impossible mid-build; scope had to change" "the recorded reason itself is surfaced verbatim"
+
+# --------------------------------------------- B6. baseline:"late" with NO reason recorded
+# — the migration state (a task predating the mechanism) fails exactly like an unexplained
+# change, because an unexplained "late" is indistinguishable from nobody ever having looked
+
+D=$(mktask b_late_noreason)
+write_record "$D" '.contract={"baseline":"late","changed":[]}'
+run "$D"
+verdict_is fail "baseline:\"late\" with no reason fails the gate"
+unresolved_is true "an unexplained late baseline is unresolved, not a clean fail"
+grc_is 1 "baseline:\"late\" with no reason exits 1"
+msg_has "the contract baseline was taken after the build had begun and carries no reason" "the message names that the late baseline carries no reason"
+
+# --------------------------------------------- B7. baseline:"late" WITH a recorded reason
+# — the only way a migration-state baseline passes: it says plainly what the baseline is
+# worth, it does not pass silently
+
+D=$(mktask b_late_reason)
+write_record "$D" '.contract={"baseline":"late","changed":[],
+  "reason":"task predates the contract-baseline mechanism"}'
+run "$D"
+verdict_is pass "baseline:\"late\" with a recorded reason passes"
+unresolved_is false "an explained late baseline is not unresolved"
+grc_is 0 "baseline:\"late\" with a recorded reason exits 0"
+msg_has "the contract baseline post-dates the start of this build" "the message says plainly that the baseline post-dates the build"
+msg_has "task predates the contract-baseline mechanism" "the recorded reason itself is surfaced verbatim"
 
 if [ "$FAIL" = "0" ]; then
   printf '\ncontract-baseline-spec: all checks passed\n'

@@ -259,7 +259,18 @@ if [ -e "$REC" ]; then
   [ "$CON_REASON" = "null" ] && CON_REASON=""
   set_ev contract "$CON"
 
-  if [ "$CON_BASE" != "captured" ]; then
+  # `late` is the migration state: a task already building when this mechanism landed cannot
+  # produce an honest baseline, because the contract has already moved under it. Failing it
+  # forever punishes a task for predating the check, and passing it silently would certify the
+  # very amendments the baseline exists to expose. So it passes only with a reason, exactly like
+  # a recorded contract change, and the record says plainly what the baseline is worth.
+  if [ "$CON_BASE" = "late" ]; then
+    if [ -z "$CON_REASON" ]; then
+      add_msg "the contract baseline was taken after the build had begun and carries no reason; say why it could not be captured at phase start"
+      emit fail true "" 1
+    fi
+    add_msg "the contract baseline post-dates the start of this build, so it records the contract as the build left it: $CON_REASON"
+  elif [ "$CON_BASE" != "captured" ]; then
     add_msg "no contract baseline was captured at phase start, so whether the design changed under the build cannot be determined"
     emit fail true "" 1
   fi

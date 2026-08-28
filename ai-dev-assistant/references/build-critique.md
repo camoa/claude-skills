@@ -245,6 +245,49 @@ violation: a test that passed before the code existed asserts nothing about the 
 claims to test. Everything else that's wrong with the block is a "could not tell," so it
 reads `unresolved: true` instead. **Applies to the in-session build path only** — see below.
 
+## The contract baseline — Runtime Step 11, before any code exists
+
+Both mechanisms that judge scope, this rung's `meets-ac` lens and the end-of-phase alignment
+axis, read `alignment.md` and `architecture/`. The builder can edit those files. Without a
+frozen copy the scope question resolves against whatever the design says at critique time,
+which may be text the builder wrote to describe the code it is meant to authorise — a build
+grading itself against its own homework. Seen live, and caught only because the builder
+annotated its own edit: a `meets-ac` critic ruled an addition "blessed only by design-doc text
+that self-declares added at Phase 3."
+
+`contract-baseline.sh capture "<task_folder>"` copies `alignment.md`, `architecture.md` and
+`architecture/*.md` into `<task_folder>/build-critique/_contract-baseline/` at Runtime Step 11.
+`contract-baseline.sh diff` reports `changed[]`, `added[]` and `removed[]` at Step 12, and that
+goes into the record's `contract` block.
+
+| Payload state | verdict | `unresolved` | exit |
+|---|---|---|---|
+| no `contract` key | fail | `true` | 1 |
+| `baseline: late`, no `reason` | fail | `true` | 1 |
+| `baseline: late` with a `reason` | pass | `false` | 0 |
+| `baseline` neither `captured` nor `late` | fail | `true` | 1 |
+| `changed[]` non-empty, no `reason` | fail | `true` | 1 |
+| `changed[]` non-empty with a `reason` | pass | `false` | 0 |
+| `baseline: captured`, nothing changed | pass | `false` | 0 |
+
+**Amending the contract mid-build is legitimate.** A design can be discovered to be
+unbuildable, and on the build that produced this rule one was: its recipe for a fixture shape
+could not be constructed against the contrib source it depended on. What the gate refuses is an
+amendment nobody can see. **Re-capture is refused for the same reason** — a baseline that can be
+refreshed mid-phase launders exactly the edit it exists to expose.
+
+**A task already building when this landed cannot produce an honest baseline**, because the
+contract has already moved under it. `capture` detects that from the rung's own scaffolding
+(`build-critique/*.critics/`, `build-critique/*.files.txt`) and returns `late` rather than
+`captured`. Failing `late` forever would punish a task for predating the check; stamping it
+`captured` would certify the amendments the baseline exists to expose, which is worse because it
+reads as legitimate. So it passes with a reason, and the record says what the baseline is worth.
+A fresh phase should never see `late`; if it does, the phase boundary was opened after the code.
+
+**What this cannot do.** It compares files, not intent: rewording a criterion while keeping its
+meaning reads as a change, and a `reason` is prose nothing verifies. It cannot see edits made
+before Step 11, so a contract rewritten during `/design` is simply the baseline.
+
 ## The record
 
 One `gate-audit-write.sh` envelope, `gate_type: "build-critique"`, schema 1.9, written to

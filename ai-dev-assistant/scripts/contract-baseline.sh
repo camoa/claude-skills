@@ -58,12 +58,31 @@ if [ "$SUB" = "capture" ]; then
     printf '{"schema_version":"1.0","action":"capture","status":"already_present","path":"%s","note":"a baseline predating the build already exists and was left alone"}\n' "$BASE"
     exit 0
   fi
+  # A baseline is only a baseline if it predates the build. Capturing one after the code
+  # exists freezes the contract as the build already left it — including any amendment the
+  # baseline exists to expose — and stamping that `captured` is worse than having none, because
+  # it reads as legitimate. So detect it and say so. `late` is an honest state a reviewer can
+  # weigh; it is not a pass wearing a baseline's clothes.
+  #
+  # The tell is the rung's own scaffolding: `build-critique/<component>.critics/` or a component
+  # checkpoint means components have already been built and critiqued under this phase.
+  LATE=0
+  if [ -d "$TASK/build-critique" ]; then
+    find "$TASK/build-critique" -maxdepth 1 \( -name '*.critics' -o -name '*.files.txt' \) \
+      2>/dev/null | grep -q . && LATE=1
+  fi
   mkdir -p "$BASE/architecture" 2>/dev/null || { echo "contract-baseline: cannot create $BASE" >&2; exit 4; }
   N=0
   while IFS= read -r rel; do
     [ -z "$rel" ] && continue
     cp "$TASK/$rel" "$BASE/$rel" 2>/dev/null && N=$((N + 1))
   done < <(present_list "$TASK")
+  if [ "$LATE" = "1" ]; then
+    jq -nc --arg p "$BASE" --argjson n "$N" \
+      '{schema_version:"1.0",action:"capture",status:"late",path:$p,files:$n,
+        note:"components were already built when this baseline was taken, so it records the contract as the build left it, not as the build found it"}'
+    exit 0
+  fi
   jq -nc --arg p "$BASE" --argjson n "$N" \
     '{schema_version:"1.0",action:"capture",status:"captured",path:$p,files:$n}'
   exit 0
