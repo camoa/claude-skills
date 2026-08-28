@@ -59,6 +59,26 @@
   skipping the observation, and a `--filter`-scoped run whose purpose is watching one new test
   fail is the cycle itself, not a test-suite sweep.
 
+### Changed (from the first live firing of the rung)
+- **Critics are told to execute, not only to read.** `agents/wo-critic.md` mentioned running a
+  test twice in passing and never as an expectation, so three lenses on one component split on
+  it: one wrote throwaway probes and drained cron, one declined to run PHPUnit citing a project
+  rule and flagged itself source-verified but unexecuted. Both findings that mattered most came
+  from the lens that executed — a count the builder had never thought to check, and an artifact
+  that decayed into proving the opposite of its purpose within hours of being built. Neither was
+  reachable by reading. The contract now states that a `run_mode` policy or a project rule about
+  running test suites governs the **builder**, not a read-only critic, and that a lens which
+  genuinely cannot run something says so in its verdict rather than presenting the read-only
+  conclusion as settled.
+
+- **`implementation.md` is explicitly not gate evidence.** The rung passes `review_ref: null` and
+  tells each critic the deterministic gates have not run for this unit, but said nothing about
+  the softer source a critic reaches for instead. On a live build that block was written before a
+  repair and never after, so it reported 9 tests and 196 assertions for a suite that was by then
+  13 and 241, across 269 changed lines including production code — affirmatively wrong rather
+  than behind. A critic told no gate record exists, which then reads that block as one, has
+  substituted stale prose for the record whose absence it was just told about.
+
 ### Known gaps
 - The work-order build path (`/run-work-orders`) carries no RED evidence. `wo-critic` has no
   temporal lens and `wo-NN._critique.json` has no `tdd` block, so this release covers the
