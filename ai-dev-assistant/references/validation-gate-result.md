@@ -41,11 +41,11 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
     "raw_output_path": "/abs/path/.reports/tdd.json"
   },
   "messages": [
-    "Red-Green-Refactor cycle observed across 3 commits",
+    "3 changed source files mapped to a co-located test; all mapped tests pass",
     "All new logic has tests"
   ],
   "findings": [
-    {"severity": "INFO", "title": "Red-Green-Refactor cycle observed across 3 commits"},
+    {"severity": "INFO", "title": "3 changed source files mapped to a co-located test; all mapped tests pass"},
     {"severity": "INFO", "title": "All new logic has tests"}
   ]
 }
@@ -71,7 +71,7 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | Verdict | Meaning | Exit behavior |
 |---|---|---|
 | `pass` | Gate's criteria met. Nothing to fix | Command prints summary + exits 0 |
-| `warning` | Gate passes but with observations worth surfacing (e.g., "TDD followed but 1 commit lacks a test"). Not blocking | Command prints summary + exits 0 |
+| `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking | Command prints summary + exits 0 |
 | `fail` | Gate's criteria NOT met. Action required | Command prints summary + exits 1 (signals failure; user/AI can see + fix) |
 | `skipped` | Gate was invoked but not run (e.g., user passed `--skip`, or the underlying tool is unavailable) | Command prints reason + exits 0 |
 
@@ -328,9 +328,9 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
     "raw_output_path": "/abs/path/.reports/tdd.json",
     "code_quality_tools_version": "3.0.0"
   },
-  "messages": ["Red-Green-Refactor cycle observed across 3 commits"],
+  "messages": ["3 changed source files mapped to a co-located test; all mapped tests pass"],
   "findings": [
-    {"severity": "INFO", "title": "Red-Green-Refactor cycle observed across 3 commits"}
+    {"severity": "INFO", "title": "3 changed source files mapped to a co-located test; all mapped tests pass"}
   ]
 }
 ```

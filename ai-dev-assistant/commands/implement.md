@@ -85,7 +85,13 @@ Default `[n]` — continue to step 3 (dev-guides preflight) and the Interactive 
 11. **Open the phase boundary, then hand off to interactive development.** First run
     `${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> --label phase.before`
     (Bash) and keep the `.sha` — Runtime Step 12's alignment axis diffs against it, and a
-    boundary captured after the code exists measures nothing. Then hand off: developer guides
+    boundary captured after the code exists measures nothing. Then run
+    `${CLAUDE_PLUGIN_ROOT}/scripts/contract-baseline.sh capture "<task_folder>"`, which freezes
+    `alignment.md` and `architecture/` as they stand before any code is written. The task folder
+    is not a git repository, so the checkpoint above cannot cover it, and without this the
+    critics judging scope read whatever the design says at critique time — including text the
+    builder wrote to describe code it had already written. Re-capture is refused by design.
+    Then hand off: developer guides
     each step, Claude proposes (test-first), developer approves, Claude writes test then
     implementation, developer runs tests (Claude does NOT auto-run unless explicitly asked).
 
@@ -109,8 +115,13 @@ joins them: a component is critiqued when its criteria are all built, not once p
 1. Developer requests piece to implement.
 2. Claude proposes approach (test first, per TDD discipline from `references/tdd-workflow.md`).
 3. Developer approves or adjusts.
-4. Claude writes test, then implementation.
-5. Developer runs tests.
+4. Claude writes the test. **Then the test is run and the failure is watched, before any
+   implementation exists.** Who runs it follows `run_mode` (`references/tdd-workflow.md`, "Who
+   runs the tests"): attended, Claude gives the exact command and the developer reports back;
+   autonomous, the agent runs it, because there is nobody else to. Record the outcome for this
+   criterion as `observed`, `passed_first_run` (the test is wrong; fix it before writing code)
+   or `unobserved` with a reason. Then write the implementation.
+5. Developer runs tests (GREEN).
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
 7. Repeat 1-6 until this component's acceptance criteria are built.
 8. **Close the component: run the build-critique rung below.** It is not optional and not a
@@ -187,6 +198,11 @@ the same context that built it, which is the judgment being checked.
 
 Reached when the last component closes. All four parts are required.
 
+0. **The contract diff.** `${CLAUDE_PLUGIN_ROOT}/scripts/contract-baseline.sh diff
+   "<task_folder>"`. Carry it into part 2's payload, and read it before writing that payload:
+   a `changed[]` entry is a design document this build edited, and the reason belongs in the
+   record rather than only in the file's own prose.
+
 1. **The alignment axis.** Capture `--label phase.after`, then hand
    `ai-dev-assistant:spec-axis-reviewer` the file list from
    `git -C <codePath> diff --name-only <phase.before-sha>..<phase.after-sha>` together with
@@ -213,6 +229,19 @@ Reached when the last component closes. All four parts are required.
    `verdict: "skipped"` is legitimate for exactly two cases, each carrying its reason: the
    phase-level range is empty, or the task has no architecture file at all. It is never the
    answer to "the critics did not run" — that is `unresolved`, with the components named.
+
+   **The payload also carries `contract` (v5.34.0+)** — `{baseline, changed[], reason}` from
+   `${CLAUDE_PLUGIN_ROOT}/scripts/contract-baseline.sh diff "<task_folder>"`. Amending
+   `alignment.md` or `architecture/` mid-build is legitimate and sometimes forced, but it must
+   be visible: `meets-ac` and the alignment axis both judge the change against those files, so
+   an unrecorded edit lets a build authorise itself. A `changed[]` with no `reason` fails, and
+   so does a phase that never captured a baseline at Step 11.
+
+   **The payload also carries `tdd` (v5.34.0+):** `{red_observed, passed_first_run, unobserved[], reason}` aggregated over every
+   criterion built this phase, from the loop step 4 outcomes. `unobserved[]` is legal and needs
+   a `reason`; without one it is indistinguishable from nobody having thought about it. Any
+   `passed_first_run` is a blocking violation. This is the only place the RED observation is
+   written down, and `/review` step 5.0f is what reads it back.
 
 3. **The records check.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/phase-records-check.sh
    "<task_folder>" --phase implement` and surface its verdict. A missing `_build-critique.json`
@@ -264,7 +293,7 @@ non-functional change.
 
 ## Output
 
-Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`.
+Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`, and freezes the contract at `<task_folder>/build-critique/_contract-baseline/` (v5.34.0+) — copies of `alignment.md`, `architecture.md` and `architecture/*.md` as they stood before any code was written, so the critics judging scope can tell a design that authorised the work from one amended to describe it. Written once at Runtime Step 11 and never overwritten; it stays with the task folder rather than being cleared at end of phase, because it is the evidence for what the phase was judged against.
 
 **In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`, plus a shared keep-ref per object at `refs/aida/build-checkpoints-keep/<sha>`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
 

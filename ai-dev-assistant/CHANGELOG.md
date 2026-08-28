@@ -1,5 +1,120 @@
 # Changelog
 
+## [5.34.0] - 2026-08-28
+
+### Fixed
+- **The whole-tree TDD gate ran no test and was scored as passing.**
+  `code-quality-tools/commands/tdd.md` invokes `tdd-workflow.sh` with no argument; the script
+  defaults `ACTION="${1:-help}"`, so the entire "whole-project TDD scan" was its usage text
+  printed to stdout. `commands/validate-tdd.md`'s verdict table then read that as ambiguous
+  output and scored it `warning`, which is neither `fail` nor unresolved, so `/review`'s
+  aggregation rules 1 and 2 both missed it. `/review --full-audit` — the mode whose whole
+  purpose is surfacing whole-codebase debt — ran a TDD gate that executed nothing and still
+  went green. Confirmed by running the script against a real project.
+
+  `validate-tdd.md` no longer invokes the flow bare: with no `--files` it enumerates the
+  project's sources itself and forwards them as `--changed`, the mode that actually runs
+  tests. Output carrying no evidence a test ran is now `skipped` + `unresolved: true` rather
+  than `warning`, and `commands/review.md` step 8 rule 2 propagates a gate's
+  self-declared `unresolved` into `gates_run[]` so it fails closed.
+
+- **`references/validation-gate-result.md` documented a check that does not exist.** Its
+  worked example for the TDD gate read `"Red-Green-Refactor cycle observed across 3 commits"`,
+  and a second line cited "1 commit lacks a test". No script in either plugin inspects commit
+  count or commit ordering for TDD. Both examples now describe what the gate actually reports:
+  changed sources mapped to co-located tests.
+
+### Added
+- **The RED observation is recorded, and a build that skipped it can no longer claim TDD.**
+  The framework asserted in three places that a test MUST be seen to fail before the code
+  exists — `references/tdd-workflow.md`, `skills/tdd-companion/SKILL.md`, the Interactive
+  Development Loop — and recorded it in none. "I wrote the test first" and "I watched it fail"
+  produced byte-identical artifacts. Every mechanism that looked like it checked did not:
+  `--changed` mode runs tests only after the implementation exists, so it proves GREEN-now and
+  never RED-before; `implementation.md`'s TDD Log is free prose nothing re-reads and
+  `phase-records-check.sh` requires only that the file exists; and git commit ordering is
+  neither implemented nor viable here, because an in-session build lands test and
+  implementation inside one checkpoint range.
+
+  `_build-critique.json` now carries a `tdd` block —
+  `{red_observed, passed_first_run, unobserved[], reason}` — aggregated over the criteria
+  built each phase, and `scripts/build-critique-assert.sh` enforces it at `/review` step 5.0f.
+  An absent block, a partial one, or an `unobserved[]` with no reason is fail-closed: a record
+  that cannot say what it did not watch clears nothing. Any `passed_first_run` is a hard fail,
+  which is what `tdd-companion` already called a blocking violation without anything acting on
+  it. `gate-audit-write.sh` names `tdd` in build-critique's required keys, which warns on
+  stderr and writes the record anyway — that check has always been advisory. The block is
+  enforced in one place only: `build-critique-assert.sh` at the `/review` hard gate.
+
+  It rides the record that already hard-blocks rather than getting a gate of its own. Building
+  a second enforcement path beside a working one is how v5.33.0's `conditional` row happened.
+
+### Changed
+- **Who runs the tests now depends on `run_mode`.** `references/tdd-workflow.md` said flatly
+  that the user executes the tests and reports results back. That is right for an attended
+  build and impossible for an unattended one: `run_mode: autonomous` has no user, so the rule
+  left the autonomous path with a mandatory step nobody could perform and no fallback. A live
+  run hit exactly this and had to stop and ask. Attended, the developer runs it and reports
+  back; autonomous, the agent runs it, because there is nobody else to. Neither row permits
+  skipping the observation, and a `--filter`-scoped run whose purpose is watching one new test
+  fail is the cycle itself, not a test-suite sweep.
+
+### Changed (from the first live firing of the rung)
+- **Critics are told to execute, not only to read.** `agents/wo-critic.md` mentioned running a
+  test twice in passing and never as an expectation, so three lenses on one component split on
+  it: one wrote throwaway probes and drained cron, one declined to run PHPUnit citing a project
+  rule and flagged itself source-verified but unexecuted. Both findings that mattered most came
+  from the lens that executed — a count the builder had never thought to check, and an artifact
+  that decayed into proving the opposite of its purpose within hours of being built. Neither was
+  reachable by reading. The contract now states that a `run_mode` policy or a project rule about
+  running test suites governs the **builder**, not a read-only critic, and that a lens which
+  genuinely cannot run something says so in its verdict rather than presenting the read-only
+  conclusion as settled.
+
+- **`implementation.md` is explicitly not gate evidence.** The rung passes `review_ref: null` and
+  tells each critic the deterministic gates have not run for this unit, but said nothing about
+  the softer source a critic reaches for instead. On a live build that block was written before a
+  repair and never after, so it reported 9 tests and 196 assertions for a suite that was by then
+  13 and 241, across 269 changed lines including production code — affirmatively wrong rather
+  than behind. A critic told no gate record exists, which then reads that block as one, has
+  substituted stale prose for the record whose absence it was just told about.
+
+- **The contract a build is judged against is now frozen before the build runs.**
+  `spec-axis-reviewer` and `wo-critic`'s `meets-ac` lens both answer "does this implement what
+  was asked?" by reading `alignment.md` and `architecture/` — files the builder can edit. Nothing
+  recorded what they said when the phase opened, so a scope question resolved against whatever
+  the document said at critique time, including text written to describe code that already
+  existed. Seen live, and only because the builder annotated its own edit: a `meets-ac` critic
+  ruled an addition "blessed only by design-doc text that self-declares added at Phase 3." Edited
+  silently, the same critic reads the amended design as the baseline and passes the scope check
+  it was dispatched to perform.
+
+  `scripts/contract-baseline.sh capture` freezes those files at Runtime Step 11, before any code
+  exists. Runtime Step 12 records the diff in `_build-critique.json`'s `contract` block, and the
+  `/review` gate fails on a change with no reason, or on a phase that never captured a baseline —
+  a build that did not freeze the contract cannot say whether it moved. **Re-capture is refused**,
+  because silently refreshing the baseline would launder the edit the baseline exists to expose.
+  Amending a design mid-build stays legitimate and is sometimes forced; on the live build the
+  original recipe was genuinely impossible. It only has to be visible.
+
+  **A task already mid-build when this lands gets `late`, not a false `captured`.** `capture`
+  detects the rung's own scaffolding and says so: such a task cannot produce an honest baseline,
+  because the contract has already moved under it. Failing it forever would punish a task for
+  predating the check, and stamping it `captured` would certify the amendments the baseline exists
+  to expose — the worse of the two, because it reads as legitimate. `late` passes with a recorded
+  reason, exactly like a recorded contract change.
+
+  The task folder is not a git repository, so `build-checkpoint.sh` could not cover this, and the
+  framework deliberately does not create one: version-control policy for a directory belongs to
+  its owner. The baseline is a copy, so it works whether or not anything is versioned.
+
+### Known gaps
+- The work-order build path (`/run-work-orders`) carries no RED evidence. `wo-critic` has no
+  temporal lens and `wo-NN._critique.json` has no `tdd` block, so this release covers the
+  in-session path only.
+- A recorded `observed` is a report of an observation, not proof of one. Nothing captures the
+  test runner's real exit code, so a mistaken or dishonest record still passes.
+
 ## [5.33.0] - 2026-08-27
 
 ### Added
