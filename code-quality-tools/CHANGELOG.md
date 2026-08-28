@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-08-28
+
+### Fixed
+
+- A gate pointed at a path that is not there can no longer report a pass. Nine call sites across seven Drupal gates defaulted the custom-code path to a `web/` layout literal instead of asking the resolver this plugin already ships, so every docroot-layout project had each gate aimed at a directory that was ruled out, and four of them then reported clean against it. Resolution now lives in one sourceable library, and a gate that cannot measure emits `status: unmeasured` in its report with exit 4 as a fallback, which the audit refuses to certify as a pass.
+- No phpcs or phpcbf invocation passed `--extensions`, so `.module`, `.theme`, `.install`, `.inc`, `.profile` and `.engine` were never scanned. The lint gate silently skipped the most Drupal-specific file types on every run.
+- `lint-check.sh --changed` reported `[PASS]` having scanned nothing when handed a path that did not exist, under both phpcs majors. A truncated phpcs report also read as zero errors, because a failed `jq` fell back to a literal `0` that passed the integer check.
+- The SOLID gate ran at whatever level PHPStan discovered, or 0 with no config at all, while its own reference documented level 8. It now chooses a level explicitly and records the effective one in its report.
+- `dry-check.sh` had an inverted redirect that sent phpcpd's complaint away from the file the metrics parser reads; `tdd-workflow.sh` read a missing PHPUnit as a passing RED step; `security-check.sh` emitted a hardcoded modules path from inside a quoted heredoc the resolved value could not reach.
+- The installer's own verification could not fail. With nothing installed at all it reported a pass and printed `[OK] the installed toolchain can fail`; a phpcs that died with a fatal error was recorded as passed, because the check grepped merged output for `Drupal` and matched the file path.
+- Six recorded facts about the installed tools were out of date or wrong, including an unconstrained `drupal/coder` that now resolves to a major requiring a phpcs the gates were never written for, and a `drupal-check` deprecation claim naming a state Composer does not have.
+
+### Added
+
+- `/setup`'s Drupal install is config-driven. `.code-quality.json` was generated on every run and read by nothing; it is now the installer's input. A tool catalog carries each tool's scope, the installer resolves packages from config, writes `allow-plugins` through `composer config`, places the templates, and verifies its work with a staged violation that has to drive the hook non-zero.
+- `make claims` fails when a documented claim disagrees with the thing it describes, and exits 4 rather than 1 when a rule compared nothing.
+- `make setup-doc-check` regenerates `setup.md`'s tool inventory from the schema and refuses a hand-edited region rather than overwriting it.
+
+### Changed
+
+- `drupal/coder` is pinned `^9.0`, tracking current rather than being left open. `drupal-ai-contrib` deliberately keeps `^8.3.x` to match Drupal core-dev; both pins now carry their reason in the file that pins them.
+- GrumPHP is installed only when `git_hooks.enabled` is true.
+
 ## [3.9.8] - 2026-08-13
 
 ### Changed
