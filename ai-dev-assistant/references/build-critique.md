@@ -179,6 +179,62 @@ unimplemented while the build is open is a task; discovered at the gate it is a 
 `/review` runs its own Spec pass afterwards regardless. This one never writes `_spec.json`
 — its result belongs to the build record below.
 
+## The RED-observation half — loop step 4, not this rung
+
+The adversarial critique above answers "is this diff sound." It says nothing about whether
+the diff was built test-first, because a critic reading a finished diff cannot tell a test
+that failed first from one written after the fact to match working code. That answer has to
+come from watching the build happen, and the only point in the loop where it can be watched
+is loop step 4 — writing the test and running it before the implementation exists — not the
+critique rung at step 8, which fires after the component is already done.
+
+**`observed` means it failed at its own assertion**, not merely that the command exited
+non-zero: a test that dies in `setUp` never reached the behaviour it names, and counting that
+as a RED credits an observation nobody made. `references/tdd-workflow.md` carries the rule.
+
+**What gets recorded, per acceptance criterion:** whether its test was run and seen to FAIL
+before the implementation existed (`observed`), ran and passed on the first try — meaning the
+test is wrong (`passed_first_run`) — or nobody ran it (`unobserved`, legal only with a
+reason). `references/tdd-workflow.md`'s "Who runs the tests, and what has to be recorded" is
+the source of these three values and of the rule that `unobserved` is a real, writable value
+rather than something silence implies.
+
+**Who runs the test depends on `run_mode`**, read from `project_state.md` /
+`scripts/project-state-read.sh` (task override via `scripts/fm-read.sh`):
+
+| `run_mode` | Who runs it | How RED is observed |
+|---|---|---|
+| `interactive` (default) | The user, unless they've said otherwise for this project | Claude gives the exact command; the user runs it and reports the result back |
+| `autonomous` | The agent, because there is nobody else | The agent runs the command itself and keeps the exit code |
+
+Neither row is a licence to skip the observation — `references/tdd-workflow.md` covers the
+edge case (a project that says "I run the tests, not you") explicitly: that instruction is
+about unattended whole-suite sweeps, and a single targeted invocation whose only purpose is
+to watch one new test fail is the RED step itself, still owed either way.
+
+**Where it lands.** The per-criterion outcomes aggregate once, at Runtime Step 12 part 2 —
+not per component — into the `tdd` key of this rung's own record:
+`{red_observed, passed_first_run, unobserved[], reason}`, counted and named across every
+criterion built the whole phase. `gate-audit-write.sh` lists `tdd` in `build-critique`'s
+REQUIRED_KEYS, the same non-blocking check it runs against `phase`, `verdict`,
+`components_declared`, and the rest — absence gets a warning on stderr and the file is
+written anyway. The enforcement that actually stops a review is downstream, in
+`scripts/build-critique-assert.sh`, run by `/review` step 5.0f:
+
+| Payload state | Verdict | `unresolved` | exit |
+|---|---|---|---|
+| `tdd` key absent | fail | `true` | 1 |
+| `red_observed` / `passed_first_run` / `unobserved` — any missing | fail | `true` | 1 |
+| `passed_first_run > 0` | fail | `false` | 1 |
+| `unobserved` non-empty, `reason` empty or absent | fail | `true` | 1 |
+| `unobserved` non-empty, `reason` populated | pass | — | 0 |
+| all present, `unobserved` empty | pass | — | 0 |
+
+`passed_first_run > 0` is `unresolved: false` on purpose — it isn't an unknown, it's a named
+violation: a test that passed before the code existed asserts nothing about the behavior it
+claims to test. Everything else that's wrong with the block is a "could not tell," so it
+reads `unresolved: true` instead. **Applies to the in-session build path only** — see below.
+
 ## The record
 
 One `gate-audit-write.sh` envelope, `gate_type: "build-critique"`, schema 1.9, written to
@@ -197,6 +253,7 @@ without merging their verdicts.
 | `components_critiqued` | integer | How many actually got a critique. |
 | `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. |
 | `alignment` | object | `{verdict, missing_requirements[], scope_creep[], spec_ref}`, or `{verdict: "skipped", reason}`. |
+| `tdd` | object | `{red_observed, passed_first_run, unobserved[], reason}` — the RED-observation half, from loop step 4, aggregated across the whole phase (v5.34.0+, required). See above. |
 
 **`components_declared`, `components_critiqued` and `uncritiqued[]` are all three required,
 and a partial run must not be able to read as a complete one.** A rung that critiqued three of seven components and
@@ -222,3 +279,17 @@ components named. It is also not the same as a single component's empty diff, wh
   `uncritiqued[]` row is what makes that visible rather than silent.
 - **An architecture with no acceptance criteria per component** leaves `meets-ac` with
   nothing to check. The critique still runs; the row records the criteria were absent.
+- **The work-order build path carries no RED evidence at all.** The `tdd` block lives on
+  `_build-critique.json`, and only `/implement`'s in-session path writes that record. A build
+  that went through `/run-work-orders` owes `work-orders/wo-NN._critique.json` instead, and
+  nothing in that shape carries `red_observed`, `passed_first_run`, or `unobserved`. The
+  RED-observation half is not degraded on that path — it is entirely absent, and
+  `build-critique-assert.sh` does not ask it to be present, because the file it would live in
+  is never expected to exist there. Documented as not covered, not as covered-and-passing.
+- **A recorded `observed` is a report of an observation, not proof of one.** Nothing in this
+  rung, or in `/review`, captures the test runner's actual exit code. The record is whatever
+  Claude typed into the `tdd` block after the fact. A criterion whose test never ran, or whose
+  test failed for the wrong reason, or whose result was simply misremembered, still passes as
+  long as the block says `observed` and the counts add up. The enforcement above closes the
+  gap between "recorded" and "unrecorded"; it does not close the gap between "recorded" and
+  "true."

@@ -109,8 +109,13 @@ joins them: a component is critiqued when its criteria are all built, not once p
 1. Developer requests piece to implement.
 2. Claude proposes approach (test first, per TDD discipline from `references/tdd-workflow.md`).
 3. Developer approves or adjusts.
-4. Claude writes test, then implementation.
-5. Developer runs tests.
+4. Claude writes the test. **Then the test is run and the failure is watched, before any
+   implementation exists.** Who runs it follows `run_mode` (`references/tdd-workflow.md`, "Who
+   runs the tests"): attended, Claude gives the exact command and the developer reports back;
+   autonomous, the agent runs it, because there is nobody else to. Record the outcome for this
+   criterion as `observed`, `passed_first_run` (the test is wrong; fix it before writing code)
+   or `unobserved` with a reason. Then write the implementation.
+5. Developer runs tests (GREEN).
 6. Update `implementation.md` Progress + `task.md` AC checkboxes.
 7. Repeat 1-6 until this component's acceptance criteria are built.
 8. **Close the component: run the build-critique rung below.** It is not optional and not a
@@ -213,6 +218,12 @@ Reached when the last component closes. All four parts are required.
    `verdict: "skipped"` is legitimate for exactly two cases, each carrying its reason: the
    phase-level range is empty, or the task has no architecture file at all. It is never the
    answer to "the critics did not run" — that is `unresolved`, with the components named.
+
+   **The payload also carries `tdd` (v5.34.0+):** `{red_observed, passed_first_run, unobserved[], reason}` aggregated over every
+   criterion built this phase, from the loop step 4 outcomes. `unobserved[]` is legal and needs
+   a `reason`; without one it is indistinguishable from nobody having thought about it. Any
+   `passed_first_run` is a blocking violation. This is the only place the RED observation is
+   written down, and `/review` step 5.0f is what reads it back.
 
 3. **The records check.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/phase-records-check.sh
    "<task_folder>" --phase implement` and surface its verdict. A missing `_build-critique.json`

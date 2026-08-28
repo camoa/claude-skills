@@ -1,6 +1,6 @@
 # Gate Audit Schema v1.9
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13); v5.26.0 adds the `internal-prior-art` gate_type (v1.6, additive — persists the internal prior-art search, its per-source honesty record, and the disposition of each hit); v5.31.0 adds the `preconditions` gate_type (v1.7, additive); v5.32.0 adds the `framework` gate_type (v1.8, additive); v5.33.0 adds the `build-critique` gate_type (v1.9, additive; persists the Phase 3 per-component adversarial critique and the end-of-phase alignment pass) and stamps `plugin_version` on every envelope.
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); v4.1.0 adds `review` gate_type (v1.1, additive); v4.11.0 adds `e2e` + `visual_regression` gate_types and the `review` payload's `dispatch_plan` key (v1.2, additive); v4.14.0 adds the `visual_parity` gate_type (v1.3, additive); v5.11.0 adds the `recipe-load` gate_type (v1.4, additive — persists process-recipe resolution outcome + the declarations-audit per phase); v5.12.0 adds the `agentic-recipe` gate_type (v1.5, additive — persists the agentic-recipe discovery/gate decision + verifier outcome per task); v5.13.0 generalises the `agentic-recipe` payload from a single object to a `recipes[]` list (multi-recipe adoption per task) — `schema_version` stays `1.5` (overwrite-on-fire + barely deployed → no migration; see §5.13); v5.26.0 adds the `internal-prior-art` gate_type (v1.6, additive — persists the internal prior-art search, its per-source honesty record, and the disposition of each hit); v5.31.0 adds the `preconditions` gate_type (v1.7, additive); v5.32.0 adds the `framework` gate_type (v1.8, additive); v5.33.0 adds the `build-critique` gate_type (v1.9, additive; persists the Phase 3 per-component adversarial critique and the end-of-phase alignment pass) and stamps `plugin_version` on every envelope; v5.34.0 adds a required `tdd` block to the `build-critique` payload (schema stays `1.9` — see §5.18) recording, per criterion, whether a failing test was actually watched before the implementation existed.
 **Owner:** `scripts/gate-audit-write.sh`
 **Consumers:** `commands/research.md`, `commands/complete.md`, `commands/review.md` (v4.1.0+; v4.11.0+ writes `dispatch_plan`), `commands/implement.md` (v5.33.0+ writes `build-critique`), `commands/audit-status.md`, `commands/status.md`, plus the v4.0.0 hardened-gate scripts (`coverage-mapping-check.sh`, `dev-guides-detect.sh`, `playbook-load-deterministic.sh`, `phase-command-bypass-detect.sh`)
 
@@ -758,6 +758,12 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
     "missing_requirements": [],
     "scope_creep": [],
     "spec_ref": "<path or null>"
+  },
+  "tdd": {
+    "red_observed": 5,
+    "passed_first_run": 0,
+    "unobserved": [],
+    "reason": null
   }
 }
 ```
@@ -771,6 +777,35 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 | `components_critiqued` | yes | How many got a critique. |
 | `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. |
 | `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. |
+| `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. |
+
+**`tdd` (v5.34.0+).** `red_observed` and `passed_first_run` are counts of criteria across the
+whole phase; `unobserved` is the list of criterion ids, not a count, because a criterion built
+with no watched RED has to be nameable, not just tallied. `gate-audit-write.sh`'s
+REQUIRED_KEYS check (§4a) treats `tdd` the way it treats every other listed key here —
+absence gets a warning on stderr and the file is written anyway, the same non-blocking
+posture as `frameworks[].method_fit` above. The hard enforcement is downstream, in
+`scripts/build-critique-assert.sh`, which `/review` step 5.0f runs against this record before
+folding it into `overall_verdict`:
+
+| Payload state | `build-critique-assert.sh` verdict | `unresolved` | exit |
+|---|---|---|---|
+| `tdd` key absent | fail | `true` | 1 |
+| `red_observed` / `passed_first_run` / `unobserved` — any missing | fail | `true` | 1 |
+| `passed_first_run > 0` | fail | `false` | 1 |
+| `unobserved` non-empty, `reason` empty or absent | fail | `true` | 1 |
+| `unobserved` non-empty, `reason` populated | pass | — | 0 |
+| all present, `unobserved` empty | pass | — | 0 |
+
+`passed_first_run > 0` is `unresolved: false` because it is not an unknown — it is a test that
+passed before the code existed, which means the test asserts nothing about the behavior it
+names. Everything else that is wrong about the block reads as "could not tell," which is why
+it is `unresolved: true`; a real, named violation does not get filed the same way as a gap in
+the record. **Covers the in-session build path only** — `/implement` writes this record; a
+build that went through `/run-work-orders` has no `_build-critique.json` and owes
+`work-orders/wo-NN._critique.json` instead, which carries no RED-observation equivalent. Full
+enforcement rationale and the who-runs-the-test-by-`run_mode` rule: `references/tdd-workflow.md`
+("Who runs the tests, and what has to be recorded") and `references/build-critique.md`.
 
 **`components_declared` and `components_critiqued` are both required, and the gap between
 them must be itemised.** A rung that critiqued three of seven components and recorded only
@@ -785,11 +820,12 @@ components named.
 
 **Consumed by `/review` step 5.0f, through `scripts/build-critique-assert.sh`.** The record
 is a hard-block gate input, not documentation: `verdict: "critical"`, any component with
-`blocking: true`, `verdict: "unresolved"`, a payload missing the three count keys, and a
-`skipped` with no reason all fail the review. The absence of the record fails it too, unless
-`work-orders/wo-NN._critique.json` files show the build went through `/run-work-orders` and
-owes those instead. An override is a `bypass_reason` on this record, which the writer hoists
-to the envelope and the gate surfaces rather than absorbs.
+`blocking: true`, `verdict: "unresolved"`, a payload missing the three count keys, a
+malformed or absent `tdd` block (table above), and a `skipped` with no reason all fail the
+review. The absence of the record fails it too, unless `work-orders/wo-NN._critique.json`
+files show the build went through `/run-work-orders` and owes those instead. An override is
+a `bypass_reason` on this record, which the writer hoists to the envelope and the gate
+surfaces rather than absorbs.
 
 The per-critic verdict files under `<task_folder>/build-critique/` follow the `wo-critic`
 verdict-file pattern and are **not** written through `gate-audit-write.sh`; they are agent

@@ -181,6 +181,61 @@ if [ -e "$REC" ]; then
   if [ "$UNCRIT_N" -gt 0 ]; then
     add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued with reasons"
   fi
+
+  # ------------------------------------------------------- the RED observation (v5.34.0+)
+  #
+  # TDD's RED step is an observation: a test run before the implementation existed and seen
+  # to fail. Until v5.34.0 the framework asserted it in three prose locations and recorded it
+  # in none, so "I wrote the test first" and "I watched it fail" produced byte-identical
+  # artifacts. Every gate that looked like it checked did not: the whole-tree TDD gate
+  # invoked its runner with no action and scored the usage text, `--changed` mode runs the
+  # tests only after the implementation exists so it can prove GREEN-now and never
+  # RED-before, and git commit ordering is both unimplemented and structurally blind to this
+  # framework's own build shape, where test and implementation land inside one checkpoint
+  # range.
+  #
+  # It rides this record rather than getting a gate of its own because this record already
+  # hard-blocks, is already written per component, and already refuses to go from "could not
+  # tell" to pass. A second enforcement path where one works is how the previous round's
+  # `conditional` row happened.
+  if ! jq -e 'has("tdd")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+    set_ev_s tdd "absent"
+    add_msg "the record carries no tdd block, so it cannot say whether any test was seen to fail before the code existed"
+    emit fail true "" 1
+  fi
+  TDD=$(jq -c '.tdd' <<<"$PAYLOAD")
+  RED_N=$(jq -r '(.red_observed // -1)' <<<"$TDD")
+  FIRSTRUN_N=$(jq -r '(.passed_first_run // -1)' <<<"$TDD")
+  UNOBS=$(jq -c '(.unobserved // [])' <<<"$TDD")
+  UNOBS_N=$(jq -r 'length' <<<"$UNOBS")
+  TDD_REASON=$(jq -r '(.reason // "") | tostring' <<<"$TDD")
+  [ "$TDD_REASON" = "null" ] && TDD_REASON=""
+  set_ev tdd "$TDD"
+
+  if [ "$RED_N" = "-1" ] || [ "$FIRSTRUN_N" = "-1" ] || ! jq -e 'has("unobserved")' <<<"$TDD" >/dev/null 2>&1; then
+    add_msg "the tdd block omits red_observed, passed_first_run or unobserved[], so it cannot say what it did not watch"
+    emit fail true "" 1
+  fi
+
+  if [ "$FIRSTRUN_N" -gt 0 ]; then
+    # tdd-companion already calls this a blocking violation: a test that passes on its first
+    # run is not evidence the behaviour works, it is evidence the test does not test it.
+    add_msg "$FIRSTRUN_N test(s) passed on their first run, so those tests assert nothing about the behaviour they name"
+    emit fail false "" 1
+  fi
+
+  if [ "$UNOBS_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then
+    # Recording `unobserved` is legal. Leaving it unexplained is not: with no reason it reads
+    # identically to a run where nobody thought about it, which is the state this whole block
+    # exists to make visible.
+    add_msg "$UNOBS_N criterion/criteria recorded unobserved with no reason; say why nobody watched them fail"
+    emit fail true "" 1
+  fi
+  if [ "$UNOBS_N" -gt 0 ]; then
+    add_msg "$UNOBS_N criterion/criteria were built without a watched RED: $TDD_REASON"
+  fi
+  add_msg "$RED_N criterion/criteria were seen to fail before their implementation existed"
+
   add_msg "the build was challenged in-session: $CRITIQUED component critique(s), verdict $RV"
   emit pass false "" 0
 fi
