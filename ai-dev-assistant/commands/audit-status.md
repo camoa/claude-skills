@@ -28,7 +28,7 @@ Refuse if no project context resolved.
 
 ### Step 2 — For each task, scan audit files
 
-The 7 v4.0.0 audit file types are:
+The audit file types are:
 
 - `_pre-analysis.json`
 - `_coverage-mapping.json`
@@ -37,11 +37,12 @@ The 7 v4.0.0 audit file types are:
 - `_phase-command-bypass.json`
 - `_dev-guides-load.json`
 - `_playbook-load.json`
+- `_build-critique.json` (v5.33.0+)
 
 For each task folder:
 
 1. List which audit files exist
-2. For each existing file, parse `gate_type`, `fired_at`, `user_choice`, `bypass_reason`, `gate_specific` per `references/gate-audit-schema.md` v1.0
+2. For each existing file, parse `gate_type`, `fired_at`, `plugin_version`, `user_choice`, `bypass_reason`, `gate_specific` per `references/gate-audit-schema.md`
 3. Compute "expected but missing" gates:
    - `_pre-analysis.json` expected if `research.md` exists; missing → grandfathered (pre-v4.0.0) OR bypassed
    - `_coverage-mapping.json` expected if `research.md` exists with content > 200 lines (substantive)
@@ -50,6 +51,7 @@ For each task folder:
    - `_dev-guides-load.json` expected if any phase command ran (research.md / architecture.md / implementation.md exists)
    - `_playbook-load.json` expected if `playbookSets` non-empty OR `userPlaybook` set in project_state.md
    - `_phase-command-bypass.json` expected only when actual bypass happened — its presence IS the signal
+   - `_build-critique.json` expected if `implementation.md` exists AND `work-orders/wo-*._critique.json` do not — the two build paths owe different records, and a `/run-work-orders` build is challenged per work-order rather than per component. Missing with neither record present is the `✗` case, not the `⊘` one: nothing outside the builder looked at that build. Report its `gate_specific.verdict` and, when the count of critiqued components is below the count declared, the gap — a rung that critiqued three of seven components and recorded three green rows reads exactly like a complete one unless the counts are shown
 
 ### Step 3 — Print summary
 
@@ -65,6 +67,7 @@ Audit status for <task_name>:
   ⚠ phase-command-bypass FIRED 2026-04-24T19:45:00Z  artifact: research.md  expected: research  active: null
   ✓ dev-guides-load     fired 2026-04-24T20:31:00Z  user_choice: c          [matched: gate, complete, quality → plugin:quality-gates]
   ✓ playbook-load       fired 2026-04-24T20:31:00Z  loaded: <framework>/best-practices/<author> + local (19 plays)
+  ✓ build-critique      fired 2026-04-24T21:05:00Z  verdict: pass           [7/7 components critiqued; alignment: pass]
 
   Bypasses recorded: 0
   Missing audits (= unaudited): 0
@@ -120,7 +123,8 @@ If single-task mode shows `⚠` for `phase-command-bypass`, ask: `[d]etails / [a
 
 - `/ai-dev-assistant:status` — task-level overview; includes Unaudited gates section as summary
 - `/ai-dev-assistant:research`, `:design`, `:implement`, `:complete` — the phase commands that fire the audited gates
-- `references/gate-audit-schema.md` v1.0 — schema for the 7 audit file types
+- `/ai-dev-assistant:review` — the command that hard-blocks on `_build-critique.json`; this one only reports it
+- `references/gate-audit-schema.md` — schema for every audit file type
 - `references/gate-hardening-prompts.md` v1.0 — prompts surfaced by audit-status when bypasses are acknowledged
 
 ## Output

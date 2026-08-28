@@ -59,12 +59,16 @@ has "$REF" "seam: required has no converter producer"            -i 'no converte
 
 # --- audit plumbing: allowlist + schema section + count bump ---
 has "$AUDITW" "gate-audit-write allowlists mechanism-challenge"   'mechanism-challenge'
-# The literal was pinned at 14 while the allowlist already held 16, so this assertion
-# agreed with a stale comment rather than with the code it describes. Both now say 18.
-has "$AUDITW" "allowlist count comment matches the allowlist"    '18 allowed values'
+# These two literals keep going stale, in the same way, for the same reason: a count of the
+# gate types is written in three places (this spec, the writer's header comment, the schema's
+# shape block) and adding a gate type touches only one of them. It was pinned at 14 while the
+# allowlist held 16, then at 18 while it held 19. Both now say 19, and any assertion that ever
+# reads as "agrees with a stale comment" rather than "agrees with the code" is the bug, not
+# the evidence.
+has "$AUDITW" "allowlist count comment matches the allowlist"    '19 allowed values'
 has "$SCHEMA" "schema doc has the mechanism-challenge section"    -i 'mechanism-challenge'
 has "$SCHEMA" "schema records challenge_ran + mechanisms_hash"    'challenge_ran'
-has "$SCHEMA" "schema gate_type count bumped to 14"              'one of the 14'
+has "$SCHEMA" "schema gate_type count matches the allowlist"     'one of the 19'
 
 # --- frontmatter reader exposes mechanism_hints (defaulting []) ---
 has "$FMH" "fm-helpers emits mechanism_hints"                     'mechanism_hints'

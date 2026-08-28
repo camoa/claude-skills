@@ -7,7 +7,8 @@
 #   <gate_type>: one of pre-analysis | coverage-mapping | skill-review |
 #                plugin-validate | phase-command-bypass | dev-guides-load |
 #                playbook-load | review | e2e | visual_regression | visual_parity |
-#                recipe-load | agentic-recipe | internal-prior-art | framework
+#                recipe-load | agentic-recipe | internal-prior-art | framework |
+#                build-critique
 #   <json_payload>: EITHER the gate_specific object on its own (preferred — this
 #                   script builds the envelope around it), OR a complete audit JSON
 #                   object conforming to
@@ -17,15 +18,19 @@
 #                   v1.4 — v5.11.0 — adds `recipe-load`;
 #                   v1.5 — v5.12.0 — adds `agentic-recipe`;
 #                   v1.7 (v5.31.0) adds `preconditions`;
-#                   v1.8, v5.32.0, adds `framework`)
+#                   v1.8, v5.32.0, adds `framework`;
+#                   v1.9, v5.33.0, adds `build-critique`)
 #
 # Behavior:
 # - Accepts a bare gate_specific object and wraps it in the envelope, deriving
 #   schema_version from gate_type and hoisting user_choice / bypass_reason
 # - Stamps fired_at from this script's clock in both shapes; a caller-supplied
 #   fired_at is discarded (see the normalize block for why)
-# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.8 accepted)
-# - Validates gate_type is one of the 18 allowed values
+# - Stamps plugin_version from this script's own install location in both shapes (v5.33.0+),
+#   so a record can say which build produced it; a caller-supplied value is discarded, and
+#   an unreadable plugin.json yields the string "undetermined" rather than a missing key
+# - Validates the JSON parses + has schema_version starting with "1." (1.0–1.9 accepted)
+# - Validates gate_type is one of the 19 allowed values
 # - Validates required top-level fields (gate_type, task_folder, gate_specific)
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
@@ -43,11 +48,11 @@ PAYLOAD="${3:?JSON payload required}"
 
 # Validate gate_type
 case "$GATE_TYPE" in
-  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions|framework)
+  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions|framework|build-critique)
     ;;
   *)
     echo "gate-audit-write: invalid gate_type: $GATE_TYPE" >&2
-    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions, framework" >&2
+    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions, framework, build-critique" >&2
     exit 2
     ;;
 esac
@@ -88,19 +93,45 @@ case "$GATE_TYPE" in
   internal-prior-art) DEFAULT_SV="1.6" ;;
   preconditions)      DEFAULT_SV="1.7" ;;
   framework)          DEFAULT_SV="1.8" ;;
+  build-critique)     DEFAULT_SV="1.9" ;;
   *) DEFAULT_SV="1.0" ;;
 esac
 
 FIRED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+# Which build wrote this record.
+#
+# Resolved from THIS script's own location, never from CLAUDE_PLUGIN_ROOT and never from
+# the caller. The script that is executing IS, by definition, the build that ran; the
+# environment variable can name a different one, and a long-lived session can go on
+# calling a version-pinned path it resolved before a plugin reload. That ambiguity is
+# not theoretical: a live run's task folder could not say whether its records came from
+# the build that has the preconditions gate or the one before it, and nothing in the
+# folder settled it — the answer had to be reconstructed from a chat transcript.
+#
+# Same rule as `fired_at`: stamped here, a caller-supplied value discarded. A caller that
+# cannot read its own version cannot stamp one, and a wrong version is worse than none
+# because it reads as evidence. Unreadable resolves to the string "undetermined", never
+# to null and never to an omitted key — "which build" must not be answerable by silence.
+#
+# Records written before v5.33.0 carry no `plugin_version` at all. That absence is itself
+# provenance: no stamp means the writer predated the stamp.
+GAW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || GAW_SCRIPT_DIR=""
+PLUGIN_VERSION="undetermined"
+if [ -n "$GAW_SCRIPT_DIR" ] && [ -r "$GAW_SCRIPT_DIR/../.claude-plugin/plugin.json" ]; then
+  GAW_PV=$(jq -r '.version // empty' "$GAW_SCRIPT_DIR/../.claude-plugin/plugin.json" 2>/dev/null) || GAW_PV=""
+  [ -n "$GAW_PV" ] && PLUGIN_VERSION="$GAW_PV"
+fi
 
 if echo "$PAYLOAD" | jq -e 'has("gate_type")' >/dev/null 2>&1; then
   # Hoist here too. A full-envelope caller that tucked the answer inside gate_specific
   # has put it where section 4 does not look for it, and observed runs do exactly that:
   # `user_choice: "continue"` buried one level down, invisible to every envelope reader.
   # Only lift when the envelope slot is empty, so a caller that filled it in properly wins.
-  PAYLOAD=$(echo "$PAYLOAD" | jq --arg sv "$DEFAULT_SV" --arg fa "$FIRED_AT" '
+  PAYLOAD=$(echo "$PAYLOAD" | jq --arg sv "$DEFAULT_SV" --arg fa "$FIRED_AT" --arg pv "$PLUGIN_VERSION" '
     .schema_version = (.schema_version // $sv)
     | .fired_at = $fa
+    | .plugin_version = $pv
     | if (.user_choice == null) and (.gate_specific.user_choice? != null)
       then .user_choice = .gate_specific.user_choice
          | .gate_specific |= del(.user_choice) else . end
@@ -110,8 +141,9 @@ if echo "$PAYLOAD" | jq -e 'has("gate_type")' >/dev/null 2>&1; then
 else
   PAYLOAD=$(echo "$PAYLOAD" | jq \
     --arg sv "$DEFAULT_SV" --arg gt "$GATE_TYPE" \
-    --arg fa "$FIRED_AT" --arg tf "$TASK_FOLDER" \
+    --arg fa "$FIRED_AT" --arg tf "$TASK_FOLDER" --arg pv "$PLUGIN_VERSION" \
     '{schema_version: $sv, gate_type: $gt, fired_at: $fa, task_folder: $tf,
+      plugin_version: $pv,
       user_choice: (.user_choice // null), bypass_reason: (.bypass_reason // null),
       gate_specific: (del(.user_choice) | del(.bypass_reason))}')
 fi
@@ -119,12 +151,12 @@ fi
 # Validate schema_version (accept any 1.x — backward-compat for v1.1 review gate,
 # v1.2 e2e / visual_regression gates, v1.3 visual_parity gate, v1.4 recipe-load gate,
 # v1.5 agentic-recipe gate, v1.6 internal-prior-art gate, v1.7 preconditions gate,
-# v1.8 framework gate)
+# v1.8 framework gate, v1.9 build-critique gate)
 SV=$(echo "$PAYLOAD" | jq -r '.schema_version // empty')
 case "$SV" in
-  1.0|1.1|1.2|1.3|1.4|1.5|1.6|1.7|1.8) ;;
+  1.0|1.1|1.2|1.3|1.4|1.5|1.6|1.7|1.8|1.9) ;;
   *)
-    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 (got \"$SV\")" >&2
+    echo "gate-audit-write: schema_version must be one of 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 (got \"$SV\")" >&2
     exit 2
     ;;
 esac
@@ -137,7 +169,7 @@ if [[ "$PAYLOAD_GT" != "$GATE_TYPE" ]]; then
 fi
 
 # Validate required fields
-for field in fired_at task_folder gate_specific; do
+for field in fired_at plugin_version task_folder gate_specific; do
   if ! echo "$PAYLOAD" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
     echo "gate-audit-write: missing required field: $field" >&2
     exit 2
@@ -173,6 +205,7 @@ case "$GATE_TYPE" in
   # in a bare list, and neither says how far the cascade had to go before a method was found. That is
   # the whole point of the record, so `identified_by` and `cascade_step_reached` are not optional.
   framework)          REQUIRED_KEYS="frameworks identified_by cascade_step_reached" ;;
+  build-critique)     REQUIRED_KEYS="phase verdict components components_declared components_critiqued uncritiqued alignment tdd contract" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
   *)                  REQUIRED_KEYS="" ;;
 esac

@@ -117,6 +117,7 @@ What happens:
 - Claude works through architecture step by step
 - Writes tests first (TDD), then implementation
 - You approve each change before it lands
+- Each architecture component is critiqued by an independent fresh-context critic before the next one starts
 - Progress recorded in `implementation.md`
 
 You stay in the driver's seat. Claude asks before each significant change.

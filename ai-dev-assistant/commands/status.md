@@ -121,7 +121,7 @@ If no project specified:
 
 ## Unaudited gates section (v4.0.0+)
 
-After listing tasks, scan each task folder for missing audit files (per `references/gate-audit-schema.md` v1.0). Tasks where the framework expected a hardened gate to fire but the audit file is absent are flagged.
+After listing tasks, scan each task folder for missing audit files (per `references/gate-audit-schema.md`). Tasks where the framework expected a hardened gate to fire but the audit file is absent are flagged.
 
 Detection per task:
 
