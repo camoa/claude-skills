@@ -16,8 +16,54 @@ NC='\033[0m'
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+
+# Where this project's custom code lives is answered in ONE place, for every gate. This
+# used to be a web/ literal, which pointed the gate at a directory
+# detect-environment.sh had already ruled out on every docroot-layout project.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
 COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
+
+# Can this gate measure anything at all? Asked BEFORE any analyzer is invoked, so a
+# missing path is answered by the gate rather than by whatever each tool happens to do
+# with a bad argument — which for the DIP grep was `wc -l` of an error message, i.e. 0,
+# i.e. "[OK] No static \Drupal:: calls found" for a directory that is not there.
+MODULES_STATE="$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")"
+UNMEASURED_TOOLS=()
+
+# Trees that are somebody else's code. The Next.js gates already exclude these.
+PHPMD_EXCLUDE="*/tests/*,*/node_modules/*,*/vendor/*"
+
+# The level phpstan runs at is CHOSEN here, and recorded.
+#
+# Both call sites passed neither --level nor --configuration, so phpstan inherited a
+# discovered config's level when one had been placed and fell back to its own built-in 0
+# when none had — and a level 0 run finds almost nothing, which reads as a clean tree.
+# Nobody chose the level the gate actually ran at, and the docs named a third number.
+#
+# A placed config wins and is passed explicitly, so the gate and phpstan agree on which
+# file is in force; --level is NOT passed alongside it, which phpstan rejects. With no
+# config, PHPSTAN_LEVEL (default 5, the value templates/drupal/phpstan.neon ships) is
+# named on the command line. Either way phpstan_level in the report is the EFFECTIVE
+# value, read back from the config when there is one rather than restated from the
+# default — the two agree at 5 by coincidence and nowhere else.
+PHPSTAN_CONFIG=""
+for candidate in phpstan.neon phpstan.neon.dist; do
+    if [ -f "$candidate" ]; then
+        PHPSTAN_CONFIG="$candidate"
+        break
+    fi
+done
+PHPSTAN_ARGS=()
+if [ -n "$PHPSTAN_CONFIG" ]; then
+    PHPSTAN_ARGS=(--configuration "$PHPSTAN_CONFIG")
+    PHPSTAN_LEVEL_EFFECTIVE=$(grep -hEo '^[[:space:]]*level:[[:space:]]*[0-9]+' "$PHPSTAN_CONFIG" 2>/dev/null | grep -Eo '[0-9]+' | head -1)
+    [ -n "$PHPSTAN_LEVEL_EFFECTIVE" ] || PHPSTAN_LEVEL_EFFECTIVE="${PHPSTAN_LEVEL:-5}"
+else
+    PHPSTAN_LEVEL_EFFECTIVE="${PHPSTAN_LEVEL:-5}"
+    PHPSTAN_ARGS=(--level "$PHPSTAN_LEVEL_EFFECTIVE")
+fi
 
 # The absolute path composer installs global binaries into, resolved at most once.
 # `composer global config` prints "Changed current directory to ..." on STDERR, so
@@ -170,18 +216,64 @@ if [ -n "$CHANGED_FILE" ]; then
     # PHP extensions only for SOLID tools
     LINTABLE_EXTS="\.php$|\.module$|\.inc$|\.install$|\.profile$|\.theme$|\.engine$"
 
-    # Filter: keep PHP extensions, exclude vendor/core/contrib
+    # What is not this project's code, at THIS project's layout. The list used to name
+    # web/core/ and web/{themes,modules}/contrib/, a second hardcoded layout: on an
+    # Acquia project every changed path begins docroot/ and nothing was excluded.
+    CHANGED_ROOT_PREFIX="$(cqt_drupal_root_prefix)"
+    [ -n "$CHANGED_ROOT_PREFIX" ] && CHANGED_ROOT_PREFIX="${CHANGED_ROOT_PREFIX}/"
+    CHANGED_EXCLUDE_RE="^(vendor/|${CHANGED_ROOT_PREFIX}core/)|(^|/)(vendor|node_modules|bower_components|contrib)/"
+
+    # Filter: keep PHP extensions, exclude vendor/core/contrib, and keep only what is
+    # actually on disk.
     RELEVANT_FILES=()
+    MISSING_FILES=()
     while IFS= read -r f; do
         [ -z "$f" ] && continue
         if ! echo "$f" | grep -qE "$LINTABLE_EXTS"; then
             continue
         fi
-        if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then
+        if echo "$f" | grep -qE "$CHANGED_EXCLUDE_RE"; then
             continue
         fi
-        RELEVANT_FILES+=("$f")
+        # phpstan, phpmd and the grep are all handed these paths directly, and none of
+        # them can report on a file that is not on disk. Recorded rather than dropped,
+        # so a changed set of nothing-but-deleted-files is unmeasured rather than clean.
+        if [ -e "$f" ]; then
+            RELEVANT_FILES+=("$f")
+        else
+            MISSING_FILES+=("$f")
+        fi
     done < "$CHANGED_FILE"
+
+    if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+        mkdir -p "${REPORT_DIR}/solid"
+        cqt_unmeasured "every PHP file in the changed set is missing from disk — SOLID was NOT checked" \
+            "${MISSING_FILES[@]}"
+        cat > "${REPORT_DIR}/solid-report.json" << EOF
+{
+  "violations": [],
+  "metrics": {
+    "total_violations": 0,
+    "critical_count": 0,
+    "warning_count": 0,
+    "suggestion_count": 0,
+    "static_drupal_calls": null,
+    "phpstan_errors": 0,
+    "phpmd_violations": 0
+  },
+  "mode": "changed",
+  "changed_file": "${CHANGED_FILE}",
+  "relevant_files": 0,
+  "tools_unmeasured": ["phpstan", "phpmd", "static_calls"],
+  "status": "${CQT_STATUS_UNMEASURED}",
+  "thresholds": {
+    "complexity_max": ${COMPLEXITY_MAX}
+  },
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+        exit "$CQT_EXIT_UNMEASURED"
+    fi
 
     if [ "${#RELEVANT_FILES[@]}" -eq 0 ]; then
         echo -e "${GREEN}[SKIP]${NC} No PHP files in the changed set — clean skip."
@@ -249,6 +341,7 @@ EOF
         # shellcheck disable=SC2046
         "${ANALYZER_CMD[@]}" analyse \
             "${RELEVANT_FILES[@]}" \
+            "${PHPSTAN_ARGS[@]}" \
             --error-format=json \
             --no-progress \
             --memory-limit=1500M \
@@ -312,7 +405,7 @@ EOF
             "$PHPMD_TARGETS" \
             json \
             cleancode,codesize,design,naming \
-            --exclude "*/tests/*" \
+            --exclude "${PHPMD_EXCLUDE}" \
             2>/dev/null > "$PHPMD_JSON"
         PHPMD_EXIT=$?
         set -e
@@ -503,12 +596,16 @@ mkdir -p "${REPORT_DIR}/solid"
 # =====================
 PHPSTAN_VIOLATIONS="[]"
 PHPSTAN_JSON="${REPORT_DIR}/solid/phpstan.json"
-if resolve_analyzer phpstan; then
+if [ "$MODULES_STATE" != "ok" ]; then
+    cqt_unmeasured "phpstan was not run: the custom modules path is not there" "${DRUPAL_MODULES_PATH}"
+    UNMEASURED_TOOLS+=("phpstan")
+elif resolve_analyzer phpstan; then
     echo "Running PHPStan (type safety, LSP, DIP) [${ANALYZER_RUNNER}]..."
     RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
     set +e
     "${ANALYZER_CMD[@]}" analyse \
         "${DRUPAL_MODULES_PATH}" \
+        "${PHPSTAN_ARGS[@]}" \
         --error-format=json \
         --no-progress \
         --memory-limit=1500M \
@@ -563,7 +660,10 @@ fi
 # =====================
 PHPMD_VIOLATIONS="[]"
 PHPMD_JSON="${REPORT_DIR}/solid/phpmd.json"
-if resolve_analyzer phpmd; then
+if [ "$MODULES_STATE" != "ok" ]; then
+    cqt_unmeasured "phpmd was not run: the custom modules path is not there" "${DRUPAL_MODULES_PATH}"
+    UNMEASURED_TOOLS+=("phpmd")
+elif resolve_analyzer phpmd; then
     echo "Running PHPMD (complexity, SRP) [${ANALYZER_RUNNER}]..."
     RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
     set +e
@@ -571,7 +671,7 @@ if resolve_analyzer phpmd; then
         "${DRUPAL_MODULES_PATH}" \
         json \
         cleancode,codesize,design,naming \
-        --exclude "*/tests/*" \
+        --exclude "${PHPMD_EXCLUDE}" \
         2>/dev/null > "$PHPMD_JSON"
     PHPMD_EXIT=$?
     set -e
@@ -632,12 +732,31 @@ echo "  For auto-fixes: Run rector-fix.sh"
 # regardless of phpstan/phpmd presence.
 # =====================
 echo "Checking for static \\Drupal:: calls (DIP)..."
+
+# THE CHECK IS GATED ON THE PATH BEING THERE. `wc -l` of grep's error message is 0, so
+# a directory that does not exist produced "[OK] No static \Drupal:: calls found" —
+# the single most reassuring line this gate can print, earned by reading nothing.
+#
+# static_drupal_calls then goes to null in the report rather than 0: a count nobody took
+# is not a count of zero, and 0 is what a reader and full-audit.sh both treat as clean.
+STATIC_CALLS=0
+STATIC_CALLS_JSON="0"
+STATIC_VIOLATIONS="[]"
+if [ "$MODULES_STATE" != "ok" ]; then
+    cqt_unmeasured "static \\Drupal:: calls were not checked: the custom modules path is not there" \
+        "${DRUPAL_MODULES_PATH}"
+    UNMEASURED_TOOLS+=("static_calls")
+    STATIC_CALLS_JSON="null"
+else
 RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 
 STATIC_CALLS=$(ddev exec grep -r "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
     --include="*.php" \
     --exclude-dir="tests" \
+    --exclude-dir="node_modules" \
+    --exclude-dir="vendor" \
     -l 2>/dev/null | wc -l || echo "0")
+STATIC_CALLS_JSON="$STATIC_CALLS"
 
 if [ "$STATIC_CALLS" -gt 0 ]; then
     echo -e "  ${YELLOW}[WARN]${NC} Found ${STATIC_CALLS} files with static \\Drupal:: calls"
@@ -646,7 +765,9 @@ if [ "$STATIC_CALLS" -gt 0 ]; then
     # Create DIP violations for static calls
     STATIC_VIOLATIONS=$(ddev exec grep -rn "\\\\Drupal::" "${DRUPAL_MODULES_PATH}" \
         --include="*.php" \
-        --exclude-dir="tests" 2>/dev/null | head -20 | \
+        --exclude-dir="tests" \
+        --exclude-dir="node_modules" \
+        --exclude-dir="vendor" 2>/dev/null | head -20 | \
         jq -R -s 'split("\n") | map(select(length > 0)) | map(split(":") | {
             principle: "DIP",
             severity: "warning",
@@ -660,6 +781,7 @@ if [ "$STATIC_CALLS" -gt 0 ]; then
 else
     echo -e "  ${GREEN}[OK]${NC} No static \\Drupal:: calls found"
     STATIC_VIOLATIONS="[]"
+fi
 fi
 
 # =====================
@@ -682,7 +804,17 @@ FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 # Determine overall status. All analyzers absent → "skipped" (exit 0), never a
 # hollow PASS. Absence of a tool never inverts pass↔fail; a tool that was found and
 # returned nothing usable caps a would-be pass, but real findings still outrank it.
-if [ "$RAN_ANALYZERS" -eq 0 ]; then
+UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
+
+# `unmeasured` sits between the findings and the absences, and it is not `skipped`.
+# `skipped` means the TOOL is absent, a legitimate state of the machine that must not
+# make every laptop report an incomplete audit. `unmeasured` means the gate was pointed
+# at ground it could not read, which is a configuration fact about the project. Real
+# findings still outrank it: two absent paths must not erase a critical violation that
+# a third check did find.
+if [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ] && [ "$RAN_ANALYZERS" -eq 0 ]; then
+    SOLID_STATUS="${CQT_STATUS_UNMEASURED}"
+elif [ "$RAN_ANALYZERS" -eq 0 ]; then
     SOLID_STATUS="skipped"
     echo -e "${YELLOW}[SKIP]${NC} No SOLID analyzers available (all tools absent) — gate skipped"
 elif [ "$CRITICAL_COUNT" -gt 0 ]; then
@@ -691,6 +823,8 @@ elif [ "$CRITICAL_COUNT" -gt 0 ]; then
 elif [ "$WARNING_COUNT" -gt 10 ]; then
     SOLID_STATUS="warning"
     echo -e "${YELLOW}[WARN]${NC} Found ${WARNING_COUNT} SOLID warnings"
+elif [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ]; then
+    SOLID_STATUS="${CQT_STATUS_UNMEASURED}"
 elif [ "$FAILED_COUNT" -gt 0 ]; then
     SOLID_STATUS="skipped"
     echo -e "${YELLOW}[SKIP]${NC} No violations, but $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")') returned no usable result — gate skipped"
@@ -708,13 +842,16 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
     "critical_count": ${CRITICAL_COUNT},
     "warning_count": ${WARNING_COUNT},
     "suggestion_count": ${SUGGESTION_COUNT},
-    "static_drupal_calls": ${STATIC_CALLS},
+    "static_drupal_calls": ${STATIC_CALLS_JSON},
     "phpstan_errors": ${PHPSTAN_ERRORS:-0},
     "phpmd_violations": ${PHPMD_VIOLATIONS_COUNT:-0}
   },
   "analyzers_ran": ${RAN_ANALYZERS},
+  "phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE},
+  "phpstan_config": $([ -n "$PHPSTAN_CONFIG" ] && printf '"%s"' "$PHPSTAN_CONFIG" || printf 'null'),
   "skipped_tools": ${SKIPPED_TOOLS_JSON},
   "tools_absent": ${ABSENT_TOOLS_JSON},
+  "tools_unmeasured": ${UNMEASURED_TOOLS_JSON},
   "tools_failed": ${FAILED_TOOLS_JSON},
   "status": "${SOLID_STATUS}",
   "thresholds": {
@@ -727,8 +864,12 @@ EOF
 echo ""
 echo "Report saved: ${REPORT_DIR}/solid-report.json"
 
-# Exit based on status
+# Exit based on status. `unmeasured` is 4 and never 0: the status is the primary channel
+# and full-audit.sh reads it, but a gate run standalone or through AIDA's /validate-*
+# wrappers has only the exit code, and a zero there is read as a pass. Not 3, which
+# already means the installed tree does not match composer.lock.
 case "$SOLID_STATUS" in
+    "${CQT_STATUS_UNMEASURED}") exit "$CQT_EXIT_UNMEASURED" ;;
     skipped) exit 0 ;;
     pass) exit 0 ;;
     warning) exit 1 ;;

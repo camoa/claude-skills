@@ -21,9 +21,6 @@ code-quality-tools/skills/code-quality-audit/scripts/core/install-tools.sh:SC203
 code-quality-tools/skills/code-quality-audit/scripts/core/report-processor.sh:SC2155
 code-quality-tools/skills/code-quality-audit/scripts/core/secret-scan.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/coverage-report.sh:SC2034
-code-quality-tools/skills/code-quality-audit/scripts/drupal/dry-check.sh:SC2034
-code-quality-tools/skills/code-quality-audit/scripts/drupal/dry-check.sh:SC2069
-code-quality-tools/skills/code-quality-audit/scripts/drupal/lint-check.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/solid-check.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh:SC2155

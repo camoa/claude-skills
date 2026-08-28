@@ -62,7 +62,15 @@ NC='\033[0m'
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+
+# Where this project's custom code lives is answered in ONE place, for every gate. The
+# absent-path branch further down is deliberately left as it is: this gate is the
+# in-repo precedent for the rule the rest of this task is adopting, and it already
+# refuses an early exit 0 with the reason written into the file. Only the layout literal
+# moves.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
 COVERAGE_MINIMUM="${COVERAGE_MINIMUM:-70}"
 COVERAGE_TARGET="${COVERAGE_TARGET:-80}"
 

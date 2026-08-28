@@ -88,11 +88,14 @@ parameters:
     # the top; the exclusions this file used to carry are what starting at the
     # top actually produced last time.
     #
-    # Note for the SOLID gate (scripts/drupal/solid-check.sh): it invokes phpstan
-    # with no --level and no --configuration, so it uses whatever config PHPStan
-    # discovers in your project root - this file, if you copied it here. With no
-    # config at all PHPStan falls back to level 0, so adopting this file at 5
-    # raises the gate's strictness relative to not adopting it.
+    # Note for the SOLID gate (scripts/drupal/solid-check.sh): the gate CHOOSES,
+    # and says which choice it made. When this file (or phpstan.neon.dist) is in
+    # the project root it passes --configuration <that file> and reports the
+    # level it read back from it, so this key is the one in force. With no config
+    # placed it passes --level 5 explicitly, matching the value here, rather than
+    # letting PHPStan fall back to its built-in 0 - which finds almost nothing
+    # and reads as a clean tree. Either way the effective level is recorded as
+    # phpstan_level in solid-report.json, so a reader never has to infer it.
     level: 5
 
     # Paths to analyse.

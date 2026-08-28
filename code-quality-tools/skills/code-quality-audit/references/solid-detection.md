@@ -90,14 +90,24 @@ switch ($entity->getEntityTypeId()) {
 
 | Tool | Check | Threshold |
 |------|-------|-----------|
-| PHPStan Level 8 | Return type violations | 0 errors |
-| PHPStan Level 8 | Parameter type violations | 0 errors |
+| PHPStan (gate level) | Return type violations | 0 errors |
+| PHPStan (gate level) | Parameter type violations | 0 errors |
 | Psalm Level 1 | Covariance/contravariance | 0 errors |
+
+**"Gate level" is the level `solid-check.sh` actually ran at, and it is recorded as
+`phpstan_level` in `solid-report.json` — read it there rather than from this page.** The
+gate passes `--configuration` when a `phpstan.neon` or `phpstan.neon.dist` is in the
+project root and takes the level from that file; with none placed it passes `--level 5`,
+the value `templates/drupal/phpstan.neon` ships. This table used to name 8, which no run
+of the gate has ever used. Return and parameter type violations are levels 6-8 material,
+so a project that wants them has to raise the level in its own config; the gate reports
+which level answered, and never silently falls back to phpstan's built-in 0.
 
 ### Commands
 
 ```bash
-# PHPStan strict type checking
+# PHPStan strict type checking, run by hand at a level you are choosing here. The gate
+# does not run at 8 unless your phpstan.neon says so — see the note above.
 ddev exec vendor/bin/phpstan analyse \
     web/modules/custom \
     --level=8 \
@@ -211,7 +221,8 @@ ddev exec grep -rn "\\\\Drupal::" web/modules/custom \
 # drupal-check deprecations
 ddev exec vendor/bin/drupal-check web/modules/custom
 
-# PHPStan with Drupal rules
+# PHPStan with Drupal rules, by hand. The gate takes its level from your phpstan.neon
+# when you have one, and reports it as phpstan_level.
 ddev exec vendor/bin/phpstan analyse web/modules/custom --level=8
 ```
 

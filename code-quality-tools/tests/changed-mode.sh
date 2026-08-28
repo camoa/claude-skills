@@ -952,13 +952,20 @@ SH
 {
     label="solid-check.sh --changed: phpstan+phpmd absent → exit 0, tools_absent recorded"
     NOAN_BIN=$(mktemp -d); make_no_analyzers_ddev "$NOAN_BIN"
+    # The changed file has to EXIST. This subject is tool absence, and the gate now
+    # separates "the analyzers are not installed" (this test) from "the files I was told
+    # to analyse are not on disk" (unmeasured, exit 4). Running from a directory where
+    # the listed file does not exist made this fixture assert the first while producing
+    # the second, so the sandbox is built rather than assumed.
+    NOAN_WORK=$(mktemp -d); mkdir -p "${NOAN_WORK}/web/modules/custom/m/src"
+    printf '<?php\nclass A {}\n' > "${NOAN_WORK}/web/modules/custom/m/src/A.php"
     tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
     RDIR=$(mktemp -d)
     exit_code=0
     # PATH is narrowed to the stub dir plus the system bin dirs (jq, date and grep live
     # there) instead of inheriting the full developer PATH, so a phpstan or phpmd
     # installed on this machine cannot turn an absence test into a presence test.
-    output=$(PATH="${NOAN_BIN}:/usr/bin:/bin" REPORT_DIR="$RDIR" \
+    output=$(cd "$NOAN_WORK" && PATH="${NOAN_BIN}:/usr/bin:/bin" REPORT_DIR="$RDIR" \
         bash "${DRUPAL_SCRIPTS}/solid-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     ABSENT=$(jq -c '.tools_absent // []' "${RDIR}/solid-report.json" 2>/dev/null || echo "[]")
     if [ "$exit_code" -eq 0 ] \
@@ -969,7 +976,7 @@ SH
     else
         fail "$label → exit=${exit_code}, tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"
     fi
-    rm -rf "$NOAN_BIN" "$RDIR"; rm -f "$tmpf"
+    rm -rf "$NOAN_BIN" "$NOAN_WORK" "$RDIR"; rm -f "$tmpf"
 }
 
 # ── Test 34: security-check.sh --changed, php-security-linter absent → exit 0, recorded ──

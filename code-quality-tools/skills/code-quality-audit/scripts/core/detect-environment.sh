@@ -12,6 +12,14 @@ NC='\033[0m' # No Color
 
 # shellcheck source=../core/report-dir.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+# Where the custom code is, and what a gate does when it is not there. The rule lives in
+# its own library because seven gates need it and none of them can afford to source THIS
+# script to get it: everything above main() here runs at source time, including `set -e`,
+# a banner, report-dir.sh and fourteen globals two of which full-audit.sh owns. This
+# script keeps its own function names as thin wrappers over the library, so nothing that
+# calls them changes.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 
 # Default values
 PROJECT_TYPE="unknown"
@@ -122,102 +130,42 @@ detect_nextjs() {
     return 1
 }
 
-# The detected Drupal root, expressed relative to the project root.
+# The detected Drupal root as a project-root-relative prefix, and one resolved
+# custom-code path.
 #
-# detect_drupal already works out where the web root is — docroot/ on an Acquia-layout
-# project, web/ on a composer-template one — so the custom-code paths must be derived
-# from THAT and not guessed independently, or every docroot-layout project is told to
-# look in a web/ that does not exist.
+# Both bodies now live in core/path-resolve.sh, which is sourced above; these are thin
+# wrappers that keep this script's own names, signatures and output. Callers here are
+# untouched. The library is where they live because a GATE needs the same two answers,
+# and a gate cannot source this file to get them.
 #
-# Relative on purpose: the gates treat these as project-root-relative paths
-# (coverage-report.sh builds /var/www/html/${DRUPAL_MODULES_PATH} for the container,
-# and the grep-based gates run from the project root), so the absolute DRUPAL_ROOT
-# must never leak into them.
-#
-# This script is its own process, so exporting is not how the values travel. They
-# reach the gates two ways: the caller's own environment when a gate is run directly,
-# and environment.json, which full-audit.sh reads back and re-exports before running
-# any gate. Under /audit that re-export is the only path, so a value resolved here and
-# not written to environment.json reaches nothing.
+# The announcements stay HERE rather than moving down with the logic: they are this
+# command's user interface, and a gate sourcing the library must not print an
+# environment-detection banner in the middle of its own output. So the library resolves
+# silently and reports the origin (explicit / derived / nonstandard) and the state
+# (ok / missing), and this wrapper turns those into the five lines it has always printed.
 drupal_root_prefix() {
-    local rel="${DRUPAL_ROOT}"
-
-    # Nothing detected to derive from — keep the historical default rather than
-    # inventing a layout.
-    if [ -z "${rel}" ]; then
-        printf '%s' "web"
-        return 0
-    fi
-
-    case "${rel}" in
-        "${PROJECT_ROOT}")   rel="" ;;
-        "${PROJECT_ROOT}"/*) rel="${rel#"${PROJECT_ROOT}"/}" ;;
-    esac
-
-    # detect_drupal composes "${PROJECT_ROOT}/${path}" over a search list whose first
-    # entry is ".", so a root-layout project arrives here as "." or "./web".
-    while [ "${rel}" != "${rel#./}" ]; do
-        rel="${rel#./}"
-    done
-    rel="${rel%/}"
-    if [ "${rel}" = "." ]; then
-        rel=""
-    fi
-
-    printf '%s' "${rel}"
+    cqt_drupal_root_prefix
 }
 
-# Resolve one custom-code path (modules or themes) and export it.
-#
-# An explicit value always wins and is never second-guessed: the caller who exported
-# it knows their layout better than this detection does, and silently substituting a
-# different directory would scope every gate at something the caller did not ask for.
-# It is still reported as missing when it does not exist, because that is a typo worth
-# seeing rather than a clean scan of nothing.
-#
-# The path is exported even when no directory was found, so environment.json always
-# names what was actually looked for rather than going blank. An empty field is worse
-# than a wrong one: it is what full-audit.sh re-exports to the gates, and a gate handed
-# nothing falls back to its own web/... default — silently undoing the resolution on
-# exactly the layouts that needed it. (It also used to end the audit outright: that
-# read was a bare `VAR=$(grep ...)` under `set -e` and an empty field made grep exit 1.
-# That read is now non-fatal, so this is about the value, not the crash.)
 resolve_custom_path() {
     local var_name="$1" kind="$2"
-    local explicit="${!var_name-}"
-    local prefix derived
+    local value
 
-    # Written as an `if` rather than `[ -n ... ] && ...`: this script runs under
-    # `set -e`, and a trailing AND-list whose test fails would hand the enclosing
-    # function a non-zero status.
-    prefix="$(drupal_root_prefix)"
-    if [ -n "${prefix}" ]; then
-        prefix="${prefix}/"
-    fi
-    derived="${prefix}${kind}/custom"
+    cqt_resolve_custom_path "$var_name" "$kind"
+    value="${!var_name}"
 
-    if [ -n "${explicit}" ]; then
-        if [ -d "${explicit}" ]; then
-            echo -e "${GREEN}[OK]${NC} Custom ${kind} found at: ${explicit}"
-        else
+    case "${CQT_PATH_ORIGIN}:${CQT_PATH_STATE}" in
+        nonstandard:ok)
+            echo -e "${YELLOW}[WARN]${NC} Custom ${kind} at non-standard path: ${value}"
+            ;;
+        *:ok)
+            echo -e "${GREEN}[OK]${NC} Custom ${kind} found at: ${value}"
+            ;;
+        *)
             echo -e "${YELLOW}[WARN]${NC} No custom ${kind} directory found"
-            echo "  Expected: ${explicit}"
-        fi
-        export "${var_name}=${explicit}"
-        return 0
-    fi
-
-    if [ -d "${derived}" ]; then
-        echo -e "${GREEN}[OK]${NC} Custom ${kind} found at: ${derived}"
-        export "${var_name}=${derived}"
-    elif [ -d "${kind}/custom" ]; then
-        echo -e "${YELLOW}[WARN]${NC} Custom ${kind} at non-standard path: ${kind}/custom"
-        export "${var_name}=${kind}/custom"
-    else
-        echo -e "${YELLOW}[WARN]${NC} No custom ${kind} directory found"
-        echo "  Expected: ${derived}"
-        export "${var_name}=${derived}"
-    fi
+            echo "  Expected: ${value}"
+            ;;
+    esac
 }
 
 # Check for custom modules and themes paths
@@ -457,4 +405,12 @@ EOF
     fi
 }
 
-main "$@"
+# Executed, not sourced. The guard is correct on its own merits and the file should have
+# it; it is NOT why core/path-resolve.sh exists, and reading it that way would be a
+# mistake a later edit could act on. It suppresses main() and nothing above it: `set -e`
+# at the top, the banner, the report-dir.sh source and every global assignment all still
+# land in a shell that sources this file. That is the reason two pure path functions were
+# extracted downward instead.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi

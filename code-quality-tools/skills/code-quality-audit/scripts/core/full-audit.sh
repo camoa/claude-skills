@@ -43,6 +43,24 @@ WARNING_COUNT=0
 SUGGESTION_COUNT=0
 
 # Helper to update status
+# A gate's exit code, read as a verdict. The FALLBACK channel: every gate that writes a
+# report has its status taken from there first, and this is what is left when no report
+# exists — which for rector-fix.sh and tdd-workflow.sh is always, since they write none.
+#
+# 4 is "unmeasured": the gate ran and could not read the ground it was pointed at. It is
+# deliberately not 3, which already means the installed tree does not match
+# composer.lock in two places, and it is deliberately not folded in with the failures —
+# a gate that measured nothing has not found a problem, and reporting one would train a
+# reader to ignore it.
+gate_status_from_exit() {
+    case "$1" in
+        0) echo "pass" ;;
+        1) echo "warning" ;;
+        4) echo "unmeasured" ;;
+        *) echo "fail" ;;
+    esac
+}
+
 update_status() {
     local check_status="$1"
     case "$check_status" in
@@ -100,7 +118,14 @@ resolve_overall_status() {
         case "$gate" in
             unknown|"")
                 ;;
-            skipped)
+            skipped|unmeasured)
+                # Two different findings, one consequence. "skipped" is the tool being
+                # absent; "unmeasured" is the ground not being there. Either way the
+                # gate covered nothing, so neither may be counted as a produced result
+                # and either caps a would-be pass. Filing "unmeasured" under the
+                # default arm would have counted it as EVIDENCE, and seven gates would
+                # have learned to say "I did not measure this" into a receiver that
+                # hears "fine".
                 incomplete=$((incomplete + 1))
                 ;;
             *)
@@ -162,9 +187,10 @@ else
 fi
 
 # EXPORT, not just assign. Every gate below runs as its own process, so a plain
-# assignment reaches none of them: each would fall back to its own
-# `${DRUPAL_MODULES_PATH:-web/modules/custom}` default and scan a tree that
-# detect-environment.sh already established is not where this project keeps its code.
+# assignment reaches none of them: each would resolve the layout again for itself
+# through core/path-resolve.sh, which gives the same answer here but re-does work this
+# script has already done, and before that library existed each gate fell back to a
+# hardcoded web/ default and scanned a tree detect-environment.sh had already ruled out.
 # On a docroot-layout (Acquia) project that means the whole audit examines nothing
 # while reporting normally.
 #
@@ -214,7 +240,30 @@ fi
 
 if [ "$TOOLS_OK" != "true" ]; then
     echo -e "${YELLOW}[INFO]${NC} Installing missing tools..."
-    "${SCRIPT_DIR}/install-tools.sh" || true
+    # The status is CAPTURED, not discarded. `|| true` here, followed by an
+    # unconditional "[OK] Tools available", meant an audit whose tools never installed
+    # announced that they had — and every gate below then reported "tool absent" into a
+    # run that had already declared itself fine.
+    install_exit=0
+    "${SCRIPT_DIR}/install-tools.sh" || install_exit=$?
+
+    # And the verdict comes from what the installer WROTE, not from a re-probe of
+    # phpstan. install-tools.sh records a per-tool map and an all_ok flag; its exit 1
+    # can mean "phpmd missing, phpstan fine", which is still a usable run, and the exit
+    # status alone cannot say so. Absence of the file is not consent: an installer that
+    # died before writing one proved nothing.
+    tools_all_ok=""
+    if [ -f "${REPORT_DIR}/tools-status.json" ]; then
+        tools_all_ok=$(jq -r '.all_ok // empty' "${REPORT_DIR}/tools-status.json" 2>/dev/null || true)
+    fi
+
+    if [ "$install_exit" -ne 0 ] || [ "$tools_all_ok" != "true" ]; then
+        echo -e "${RED}[STOP]${NC} tool installation did not complete (installer exit ${install_exit}, all_ok=${tools_all_ok:-<no status file>})"
+        echo "  No gate was run: an audit whose analyzers are not installed reports"
+        echo "  'tool absent' from every layer, which reads as a clean scan."
+        echo "  See ${REPORT_DIR}/tools-status.json for which tools are missing."
+        exit 2
+    fi
 fi
 echo -e "${GREEN}[OK]${NC} Tools available"
 echo ""
@@ -280,18 +329,25 @@ echo ""
 echo -e "${BLUE}[Step 3/6]${NC} Running coverage analysis..."
 COVERAGE_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/coverage-report.sh" ]; then
-    if "${SCRIPTS_DIR}/coverage-report.sh" 2>/dev/null; then
-        COVERAGE_STATUS="pass"
-    else
-        exit_code=$?
-        if [ $exit_code -eq 1 ]; then
-            COVERAGE_STATUS="warning"
-            WARNING_COUNT=$((WARNING_COUNT + 1))
-        else
-            COVERAGE_STATUS="fail"
-            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
-        fi
+    # Same mechanism the SOLID and security gates already use: clear any previous
+    # report, take the verdict from the one this run writes, and fall back to the exit
+    # code only when there is none. Without the clear, a gate that dies before writing
+    # is judged by the LAST run's report and a stale "pass" survives a crash.
+    rm -f "${REPORT_DIR}/coverage-report.json" 2>/dev/null || true
+    coverage_exit=0
+    "${SCRIPTS_DIR}/coverage-report.sh" 2>/dev/null || coverage_exit=$?
+    COVERAGE_STATUS=""
+    if [ -f "${REPORT_DIR}/coverage-report.json" ]; then
+        COVERAGE_STATUS=$(jq -r '.status // empty' \
+            "${REPORT_DIR}/coverage-report.json" 2>/dev/null || true)
     fi
+    if [ -z "$COVERAGE_STATUS" ]; then
+        COVERAGE_STATUS=$(gate_status_from_exit "$coverage_exit")
+    fi
+    case "$COVERAGE_STATUS" in
+        warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
+        fail)    CRITICAL_COUNT=$((CRITICAL_COUNT + 1)) ;;
+    esac
     update_status "$COVERAGE_STATUS"
 
     # Merge coverage report
@@ -338,11 +394,7 @@ if [ -f "${SCRIPTS_DIR}/solid-check.sh" ]; then
         # No usable verdict — no report, or one too malformed to read. Judge by the exit
         # code rather than by "unknown": the gate DID run, and "unknown" is the bucket
         # for gates that never ran, which carries no consequence at the aggregate.
-        case "$solid_exit" in
-            0) SOLID_STATUS="pass" ;;
-            1) SOLID_STATUS="warning" ;;
-            *) SOLID_STATUS="fail" ;;
-        esac
+        SOLID_STATUS=$(gate_status_from_exit "$solid_exit")
     fi
     case "$SOLID_STATUS" in
         warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
@@ -408,18 +460,21 @@ echo ""
 echo -e "${BLUE}[Step 5/6]${NC} Running DRY analysis..."
 DRY_STATUS="unknown"
 if [ -f "${SCRIPTS_DIR}/dry-check.sh" ]; then
-    if "${SCRIPTS_DIR}/dry-check.sh" 2>/dev/null; then
-        DRY_STATUS="pass"
-    else
-        exit_code=$?
-        if [ $exit_code -eq 1 ]; then
-            DRY_STATUS="warning"
-            WARNING_COUNT=$((WARNING_COUNT + 1))
-        else
-            DRY_STATUS="fail"
-            CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
-        fi
+    rm -f "${REPORT_DIR}/dry-report.json" 2>/dev/null || true
+    dry_exit=0
+    "${SCRIPTS_DIR}/dry-check.sh" 2>/dev/null || dry_exit=$?
+    DRY_STATUS=""
+    if [ -f "${REPORT_DIR}/dry-report.json" ]; then
+        DRY_STATUS=$(jq -r '.status // empty' \
+            "${REPORT_DIR}/dry-report.json" 2>/dev/null || true)
     fi
+    if [ -z "$DRY_STATUS" ]; then
+        DRY_STATUS=$(gate_status_from_exit "$dry_exit")
+    fi
+    case "$DRY_STATUS" in
+        warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
+        fail)    CRITICAL_COUNT=$((CRITICAL_COUNT + 1)) ;;
+    esac
     update_status "$DRY_STATUS"
 
     # Merge DRY report
@@ -452,10 +507,8 @@ if [ "$PROJECT_TYPE" == "drupal" ] || [ "$PROJECT_TYPE" == "monorepo" ]; then
         if [ -f "${REPORT_DIR}/security-report.json" ]; then
             SECURITY_STATUS=$(jq -r '.summary.overall_status // "unknown"' \
                 "${REPORT_DIR}/security-report.json" 2>/dev/null || echo "unknown")
-        elif [ "$security_exit" -eq 0 ]; then
-            SECURITY_STATUS="pass"
         else
-            SECURITY_STATUS="fail"
+            SECURITY_STATUS=$(gate_status_from_exit "$security_exit")
         fi
         case "$SECURITY_STATUS" in
             warning) WARNING_COUNT=$((WARNING_COUNT + 1)) ;;
@@ -541,9 +594,11 @@ if [ "$DRIFT_STATUS" = "skipped" ]; then
 fi
 for capped_gate in "coverage:${COVERAGE_STATUS}" "SOLID:${SOLID_STATUS}" \
     "lint:${LINT_STATUS}" "DRY:${DRY_STATUS}" "security:${SECURITY_STATUS}"; do
-    if [ "${capped_gate#*:}" = "skipped" ]; then
-        echo -e "             ${YELLOW}(the ${capped_gate%%:*} gate covered no ground - this run cannot certify a pass)${NC}"
-    fi
+    case "${capped_gate#*:}" in
+        skipped|unmeasured)
+            echo -e "             ${YELLOW}(the ${capped_gate%%:*} gate covered no ground - this run cannot certify a pass)${NC}"
+            ;;
+    esac
 done
 echo ""
 echo "  Reports:"
