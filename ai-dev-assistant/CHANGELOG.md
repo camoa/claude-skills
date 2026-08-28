@@ -79,6 +79,28 @@
   than behind. A critic told no gate record exists, which then reads that block as one, has
   substituted stale prose for the record whose absence it was just told about.
 
+- **The contract a build is judged against is now frozen before the build runs.**
+  `spec-axis-reviewer` and `wo-critic`'s `meets-ac` lens both answer "does this implement what
+  was asked?" by reading `alignment.md` and `architecture/` — files the builder can edit. Nothing
+  recorded what they said when the phase opened, so a scope question resolved against whatever
+  the document said at critique time, including text written to describe code that already
+  existed. Seen live, and only because the builder annotated its own edit: a `meets-ac` critic
+  ruled an addition "blessed only by design-doc text that self-declares added at Phase 3." Edited
+  silently, the same critic reads the amended design as the baseline and passes the scope check
+  it was dispatched to perform.
+
+  `scripts/contract-baseline.sh capture` freezes those files at Runtime Step 11, before any code
+  exists. Runtime Step 12 records the diff in `_build-critique.json`'s `contract` block, and the
+  `/review` gate fails on a change with no reason, or on a phase that never captured a baseline —
+  a build that did not freeze the contract cannot say whether it moved. **Re-capture is refused**,
+  because silently refreshing the baseline would launder the edit the baseline exists to expose.
+  Amending a design mid-build stays legitimate and is sometimes forced; on the live build the
+  original recipe was genuinely impossible. It only has to be visible.
+
+  The task folder is not a git repository, so `build-checkpoint.sh` could not cover this, and the
+  framework deliberately does not create one: version-control policy for a directory belongs to
+  its owner. The baseline is a copy, so it works whether or not anything is versioned.
+
 ### Known gaps
 - The work-order build path (`/run-work-orders`) carries no RED evidence. `wo-critic` has no
   temporal lens and `wo-NN._critique.json` has no `tdd` block, so this release covers the

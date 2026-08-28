@@ -53,6 +53,7 @@ GOOD='{"phase":"implement","verdict":"pass",
    "critique_ref":"/x/build-critique/main.critique.json"}],
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
+ "contract":{"baseline":"captured","changed":[]},
  "alignment":{"verdict":"pass","missing_requirements":[],"scope_creep":[],"spec_ref":null}}'
 
 # ------------------------------------------------------------------ 1. the gate type is wired
@@ -117,7 +118,7 @@ set -e
 # payload and the warning must name exactly that key.
 
 mkdir -p "$T/keys"
-for K in phase verdict components components_declared components_critiqued alignment tdd; do
+for K in phase verdict components components_declared components_critiqued alignment tdd contract; do
   PAY=$(printf '%s' "$GOOD" | jq -c --arg k "$K" 'del(.[$k])')
   set +e
   bash "$W" "$T/keys" build-critique "$PAY" >/dev/null 2>"$T/keys/$K.err"

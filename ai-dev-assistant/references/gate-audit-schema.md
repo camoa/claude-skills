@@ -777,6 +777,7 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 | `components_critiqued` | yes | How many got a critique. |
 | `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. |
 | `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. |
+| `contract` | yes | Required as of v5.34.0. `{baseline, changed[], reason}` from `contract-baseline.sh diff` — whether `alignment.md` / `architecture/` were amended during the build, against a baseline frozen at Runtime Step 11. `reason` is required when `changed[]` is non-empty; a `baseline` other than `captured` is fail-closed, since a build that never froze the contract cannot say whether it changed. |
 | `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. |
 
 **`tdd` (v5.34.0+).** `red_observed` and `passed_first_run` are counts of criteria across the

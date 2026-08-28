@@ -236,6 +236,41 @@ if [ -e "$REC" ]; then
   fi
   add_msg "$RED_N criterion/criteria were seen to fail before their implementation existed"
 
+  # ------------------------------------------------- the contract baseline (v5.34.0+)
+  #
+  # `meets-ac` and the alignment axis both judge the change against `alignment.md` and
+  # `architecture/`. The builder can edit those. Without a baseline the scope question
+  # resolves against whatever the document says now, which may be text written to describe
+  # the code it is meant to authorise. Seen live: a critic ruled an addition "blessed only by
+  # design-doc text that self-declares added at Phase 3", and caught it only because the
+  # builder had annotated its own edit. Editing the contract mid-build is legitimate and
+  # sometimes forced. Editing it invisibly is not, so a change needs a reason, and a build
+  # that never captured a baseline cannot answer the question at all.
+  if ! jq -e 'has("contract")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+    set_ev_s contract "absent"
+    add_msg "the record carries no contract block, so it cannot say whether the design it was judged against changed during the build"
+    emit fail true "" 1
+  fi
+  CON=$(jq -c '.contract' <<<"$PAYLOAD")
+  CON_BASE=$(jq -r '(.baseline // "") | tostring' <<<"$CON")
+  CON_CHANGED=$(jq -c '(.changed // [])' <<<"$CON")
+  CON_N=$(jq -r 'length' <<<"$CON_CHANGED")
+  CON_REASON=$(jq -r '(.reason // "") | tostring' <<<"$CON")
+  [ "$CON_REASON" = "null" ] && CON_REASON=""
+  set_ev contract "$CON"
+
+  if [ "$CON_BASE" != "captured" ]; then
+    add_msg "no contract baseline was captured at phase start, so whether the design changed under the build cannot be determined"
+    emit fail true "" 1
+  fi
+  if [ "$CON_N" -gt 0 ] && [ -z "$CON_REASON" ]; then
+    add_msg "$CON_N contract file(s) changed during the build with no reason recorded; say what was wrong with the design"
+    emit fail true "" 1
+  fi
+  if [ "$CON_N" -gt 0 ]; then
+    add_msg "$CON_N contract file(s) were amended during the build: $CON_REASON"
+  fi
+
   add_msg "the build was challenged in-session: $CRITIQUED component critique(s), verdict $RV"
   emit pass false "" 0
 fi

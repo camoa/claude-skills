@@ -205,7 +205,7 @@ case "$GATE_TYPE" in
   # in a bare list, and neither says how far the cascade had to go before a method was found. That is
   # the whole point of the record, so `identified_by` and `cascade_step_reached` are not optional.
   framework)          REQUIRED_KEYS="frameworks identified_by cascade_step_reached" ;;
-  build-critique)     REQUIRED_KEYS="phase verdict components components_declared components_critiqued uncritiqued alignment tdd" ;;
+  build-critique)     REQUIRED_KEYS="phase verdict components components_declared components_critiqued uncritiqued alignment tdd contract" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
   *)                  REQUIRED_KEYS="" ;;
 esac
