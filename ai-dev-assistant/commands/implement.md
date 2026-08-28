@@ -194,7 +194,7 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
 
-**The round budget (v5.35.0+): three blocking rounds on one component, then stop and ask.** Each
+**The round budget (v5.35.0+): two blocking rounds on one component, then stop and ask.** Each
 `[a]ddress` starts a new round on that component, and a repair is itself unreviewed work — live,
 one component took four rounds and rounds 2 and 3 were each caused by the repair before them.
 Every round was individually correct while the sequence was not converging, and nothing said so.
@@ -204,7 +204,22 @@ scope, or accept and record a bypass); with `run_mode: autonomous` there is nobo
 and carry a `rounds` count on each component row plus a `rounds[]` history of what each round
 found. Past the threshold the gate fails a record with no `escalation.reason`. This caps
 unsupervised iteration, not quality: a fourth round is fine, an unrecorded one is not. A builder
-wrong three times running is the least reliable judge of whether the fourth attempt differs.
+wrong twice running is the least reliable judge of whether the third attempt differs.
+
+**Repair the minimum, and record it when you cannot.** The churn that made this budget necessary
+was not the critics: each round the builder answered a `concern` with new mechanism instead of
+the smallest fix, and every new mechanism was fresh attack surface. One method that did not exist
+before a round-2 repair collected 38 of the 58 findings raised in the three rounds after it.
+Measure each repair round against the previous round's checkpoint and record
+`repair_growth: {net_lines, reason}` on the round; growth with no reason fails the gate. Growth
+is allowed, unexamined growth is not.
+
+**A finding you cannot answer yet is deferred, not fixed speculatively.** When a critic reports
+something whose resolution lives in a component later in the build order, carry it in the round's
+`deferred[]` as `{finding, blocked_on, why_now_is_wrong}` rather than inventing a fix for absent
+code. In the same live build, answering one such finding produced the next round's critical and
+that answer produced the round after. Deferred findings do not block; they are re-checked when
+`blocked_on` is built.
 
 ### Runtime Step 12 — close the phase
 
