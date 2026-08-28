@@ -255,6 +255,40 @@ teaches a builder to write a different one. As everywhere else in this rung, the
 that the question was answered, not that the answer is true. **Applies to the in-session build
 path only** — see below.
 
+## The round budget — three blocking rounds, then somebody decides
+
+`[a]ddress` starts a new round on the component. Nothing counted them, so the loop could run
+indefinitely and no artifact said whether it was converging.
+
+Live, one component ran four blocking rounds. Round 1 found a fixture that proved the inverse of
+its purpose. Round 2's critical was caused by round 1's repair. Round 3's two criticals were both
+caused by round 2's repair. Round 4 then proved the premise behind the round-3 cut was
+arithmetically false. Every round was individually correct — the critics found real defects and
+the builder fixed them — and the sequence as a whole was not converging. The builder stopped and
+asked the operator whether to continue, which was the right instinct arriving from nowhere: no
+rule told it to, and an unattended run has nobody to ask.
+
+At the third blocking round on one component, halt.
+
+| `run_mode` | What happens |
+|---|---|
+| `interactive` | Put it to the person: continue, cut scope, or accept and record a bypass |
+| `autonomous` | **HALT.** Never start a fourth round unattended |
+
+Record the outcome in `escalation.reason`, keep a `rounds` count on each component row, and keep
+a `rounds[]` history of what each round found. Past the threshold the gate fails a record with no
+`escalation.reason`.
+
+**This caps unsupervised iteration, not quality.** A fourth round is a legitimate choice; an
+unrecorded fourth round is not. The reason is the same one the whole rung rests on: a builder that
+has been wrong three times running is the least reliable judge of whether the fourth attempt is
+different.
+
+**What this cannot do.** It counts rounds, not progress — three rounds that each fix something
+real trip the same threshold as three that thrash. It reads `rounds` off the record, so a builder
+that runs four rounds and writes `1` defeats it, exactly like every other self-reported field
+here.
+
 ## The contract baseline — Runtime Step 11, before any code exists
 
 Both mechanisms that judge scope, this rung's `meets-ac` lens and the end-of-phase alignment

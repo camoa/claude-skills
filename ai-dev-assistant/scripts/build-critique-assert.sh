@@ -249,6 +249,47 @@ if [ -e "$REC" ]; then
   fi
   add_msg "$RED_N criterion/criteria were seen to fail before their implementation existed"
 
+  # ------------------------------------------------ the round budget (v5.35.0+)
+  #
+  # The rung can loop forever and nothing noticed. Live: one component took FOUR blocking
+  # rounds, and rounds 2 and 3 were both caused by the repair that preceded them. Each round
+  # was individually correct -- critics found real defects, the builder fixed them -- while the
+  # sequence as a whole was not converging, and no artifact said so. The builder asked the
+  # human whether to keep going, which is the right instinct arriving from nowhere: no rule
+  # told it to, and in an unattended run there is nobody to ask.
+  #
+  # This does not cap quality or forbid a fifth round. It caps UNSUPERVISED iteration: past the
+  # threshold, continuing is a decision somebody made and recorded, not a default. The builder
+  # that has been wrong three times running is the least reliable judge of whether the fourth
+  # attempt is different, which is the same reason the rung exists at all.
+  ROUND_LIMIT=3
+  # `rounds` must be a number to be compared. jq orders every string above every number, so a
+  # bare `>=` reports `rounds: "3"` -- and `rounds: "a"` -- as over budget, and the message would
+  # then claim rounds that never happened. A count that is not a number is a malformed record,
+  # not a high one; it is caught here and named as such.
+  BADROUNDS=$(jq -c \
+    '[(.components // [])[] | select(has("rounds") and (.rounds != null) and ((.rounds | type) != "number")) | (.component // "unnamed")]' \
+    <<<"$PAYLOAD" 2>/dev/null) || BADROUNDS='[]'
+  if [ "$(jq -r 'length' <<<"$BADROUNDS")" -gt 0 ]; then
+    set_ev malformed_rounds "$BADROUNDS"
+    add_msg "a component records a non-numeric rounds count, so how many times it was critiqued cannot be read"
+    emit fail true "" 1
+  fi
+  OVERBUDGET=$(jq -c --argjson lim "$ROUND_LIMIT" \
+    '[(.components // [])[] | select(((.rounds // 1) | if type == "number" then . else 1 end) >= $lim) | (.component // "unnamed")]' \
+    <<<"$PAYLOAD" 2>/dev/null) || OVERBUDGET='[]'
+  OVER_N=$(jq -r 'length' <<<"$OVERBUDGET")
+  set_ev over_budget_components "$OVERBUDGET"
+  if [ "$OVER_N" -gt 0 ]; then
+    ESC=$(jq -r '(.escalation.reason // "") | tostring' <<<"$PAYLOAD")
+    [ "$ESC" = "null" ] && ESC=""
+    if [ -z "$ESC" ]; then
+      add_msg "$OVER_N component(s) reached $ROUND_LIMIT or more critique rounds with no escalation recorded; say who decided to keep going and why"
+      emit fail true "" 1
+    fi
+    add_msg "$OVER_N component(s) ran to $ROUND_LIMIT or more rounds; continuing was a recorded decision: $ESC"
+  fi
+
   # ------------------------------------------------- the contract baseline (v5.34.0+)
   #
   # `meets-ac` and the alignment axis both judge the change against `alignment.md` and

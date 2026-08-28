@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.35.0] - 2026-08-28
+
+### Added
+- **A round budget on the build-critique rung.** `[a]ddress` starts a new round on the component
+  and nothing counted them, so the loop could run indefinitely with no artifact saying whether it
+  was converging. Live, one component ran four blocking rounds: round 2's critical was caused by
+  round 1's repair, round 3's two criticals by round 2's, and round 4 proved the premise behind
+  round 3's cut was arithmetically false. Every round was individually correct while the sequence
+  was not converging. The builder stopped and asked whether to continue — the right instinct
+  arriving from nowhere, since no rule told it to and an unattended run has nobody to ask.
+
+  At the third blocking round on one component the loop halts: attended, the choice goes to the
+  person; under `run_mode: autonomous` it HALTS rather than starting a fourth. The outcome is
+  recorded in the payload's `escalation.reason`, each component row carries a `rounds` count, and
+  a `rounds[]` history records what each round found. Past the threshold the gate fails a record
+  with no `escalation.reason`.
+
+  This caps unsupervised iteration, not quality. A fourth round is a legitimate choice; an
+  unrecorded one is not. A builder wrong three times running is the least reliable judge of
+  whether the fourth attempt is different — the same reason the rung exists at all.
+
+  The shape was not designed here. The live build invented `rounds[]` on its own, with per-round
+  lenses and headlines, because it needed somewhere to put the history. This formalises what use
+  produced and gives it a consumer that can fail.
+
 ## [5.34.1] - 2026-08-28
 
 ### Fixed

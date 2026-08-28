@@ -194,6 +194,18 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
 
+**The round budget (v5.35.0+): three blocking rounds on one component, then stop and ask.** Each
+`[a]ddress` starts a new round on that component, and a repair is itself unreviewed work — live,
+one component took four rounds and rounds 2 and 3 were each caused by the repair before them.
+Every round was individually correct while the sequence was not converging, and nothing said so.
+At the third blocking round, halt: in an attended run put the choice to the person (continue, cut
+scope, or accept and record a bypass); with `run_mode: autonomous` there is nobody to ask, so
+**HALT** rather than start a fourth. Record the outcome in the payload's `escalation.reason`,
+and carry a `rounds` count on each component row plus a `rounds[]` history of what each round
+found. Past the threshold the gate fails a record with no `escalation.reason`. This caps
+unsupervised iteration, not quality: a fourth round is fine, an unrecorded one is not. A builder
+wrong three times running is the least reliable judge of whether the fourth attempt differs.
+
 ### Runtime Step 12 — close the phase
 
 Reached when the last component closes. All four parts are required.
