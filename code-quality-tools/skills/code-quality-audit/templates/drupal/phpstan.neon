@@ -96,6 +96,16 @@ parameters:
     # letting PHPStan fall back to its built-in 0 - which finds almost nothing
     # and reads as a clean tree. Either way the effective level is recorded as
     # phpstan_level in solid-report.json, so a reader never has to infer it.
+    #
+    # SUBSTITUTED AT PLACEMENT from phpstan.level in .code-quality.json, which the epic
+    # settled as the single source of truth for this number. cqt-install.sh rewrites the
+    # `level:` line below rather than replacing a token, so this file keeps a real
+    # integer here: an unquoted brace-delimited placeholder in a YAML value position is a
+    # flow mapping whose key is a flow mapping, which every parser rejects, and this
+    # template is parsed by the spec.
+    # The literal is the same 5 the config defaults to, so the two cannot disagree by
+    # accident, and raising it here without raising the default would be caught by the
+    # spec assertion that pins this line.
     level: 5
 
     # Paths to analyse.
@@ -109,10 +119,40 @@ parameters:
     # When paths are passed on the command line they REPLACE this list rather
     # than merging with it, so the audit scripts in this skill - which pass
     # ${DRUPAL_MODULES_PATH} explicitly - are unaffected by the value here.
+    #
+    # LAYOUT, resolved: {{MODULES_PATH}} is substituted at placement from
+    # project.layout.modules in .code-quality.json, which is the string
+    # cqt_drupal_root_prefix() already computed. The template no longer has to
+    # assume a layout, and a reader of the un-placed file can see that it does not.
     paths:
-        - web/modules/custom
+        - "{{MODULES_PATH}}"
 
-    # excludePaths: DELIBERATELY ABSENT. Do not add one.
+    # excludePaths: exclude nothing of ours, exclude what is not ours.
+    #
+    # The list below is short on purpose and every entry is somebody else's code
+    # vendored into this tree. It came from a live run against a real Drupal site,
+    # not from reading this file: a custom theme's npm tree ships PHP
+    # (flatted/php/flatted.php) and `paths:` above reaches it, so PHPStan was
+    # reporting findings against a package the project did not write and cannot fix.
+    #
+    # This plugin already knew the pattern and applied it everywhere except here -
+    # scripts/nextjs/dry-check.sh, scripts/nextjs/solid-check.sh, templates/grumphp.yml,
+    # templates/ci/github-drupal-pr.yml and templates/gitleaks-vendored-allowlist.toml
+    # all exclude node_modules. No Drupal gate did. This is the Drupal gate doing it.
+    #
+    # analyseAndScan is correct HERE and would NOT be correct for our own source: it
+    # means the file is not even read for symbol discovery, which is exactly right for
+    # a bundle whose symbols are not ours and exactly wrong for a module of ours.
+    # Quoted so this file still parses unsubstituted; cqt-install.sh replaces the token
+    # together with its quotes, so the placed file carries a bare pattern.
+    excludePaths:
+        analyseAndScan:
+            - "*/node_modules/*"
+            - "{{MODULES_PATH}}/*/vendor/*"
+            - "{{THEMES_PATH}}/*/vendor/*"
+
+    # And NOTHING of our own is excluded. Do not add one. The rest of this note is
+    # unchanged, and every word of it is about our own source:
     #
     # This template used to exclude tests/, *.module and *.install. That silently
     # defeated rules that phpstan-drupal enables by default:
@@ -159,15 +199,22 @@ parameters:
     # This is the right tool for suppressing a known-unfixable finding: it is
     # scoped to one message, and reportUnmatchedIgnoredErrors above turns a stale
     # entry into a hard error instead of letting it rot silently.
-    ignoreErrors:
-        # Drupal magic methods
-        - '#Call to an undefined method Drupal\\Core\\Entity\\EntityInterface::#'
-
-        # Common Drupal patterns
-        - '#Cannot call method [a-zA-Z]+\(\) on array\|null#'
-
-        # Form API callbacks
-        - '#Parameter \#1 \$form of method .+::submitForm\(\) expects array, array<string, mixed> given#'
+    #
+    # SHIPS EMPTY, and that is the point of the flag above. This file used to carry
+    # three pre-emptive patterns for findings a project may not have, while
+    # reportUnmatchedIgnoredErrors was true. A suppression that matches nothing is
+    # itself an error, so on a project with zero custom PHP all three failed: the
+    # template could not run clean on the case it is most likely to be adopted on.
+    #
+    # Emptying the list rather than turning the flag off is deliberate. The flag is
+    # what makes a stale suppression visible, and that is worth keeping; what was
+    # wrong was suppressing findings nobody had seen yet.
+    #
+    # Add an entry when a REAL finding needs one, and name it:
+    #
+    #   ignoreErrors:
+    #       - '#Call to an undefined method Drupal\\Core\\Entity\\EntityInterface::#'
+    ignoreErrors: []
 
     # Parallel processing
     parallel:

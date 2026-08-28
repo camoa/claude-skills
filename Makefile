@@ -17,8 +17,8 @@ TESTED_PLUGINS := $(sort $(foreach p,$(PLUGINS),\
   $(if $(shell git ls-files '$(p)' 2>/dev/null | grep -E '/tests/.*\.sh$$|-spec\.sh$$|-spec\.mjs$$' | head -1),$(p))))
 UNTESTED_PLUGINS := $(filter-out $(TESTED_PLUGINS),$(PLUGINS))
 
-.PHONY: help test lint lint-baseline validate manifests outputs ci \
-        $(addprefix test-,$(PLUGINS))
+.PHONY: help test lint lint-baseline validate manifests outputs setup-doc \
+        setup-doc-check ci $(addprefix test-,$(PLUGINS))
 
 help:
 	@echo "make test              run every test in the repo"
@@ -34,6 +34,9 @@ help:
 	@echo "A baseline warning that is gone is reported as fixed and passes."
 	@echo "validate fails on errors; warnings print without failing."
 	@echo "outputs fails on a command file with no '## Output' section."
+	@echo "setup-doc-check fails when setup.md's generated region no longer matches"
+	@echo "the catalog, or no longer matches its own checksum. setup-doc REFUSES to"
+	@echo "regenerate over a hand edit rather than destroying it; --force overrides."
 	@echo ""
 	@echo "make test-<plugin> works for: $(TESTED_PLUGINS)"
 	@echo ""
@@ -73,14 +76,27 @@ manifests:
 outputs:
 	@bash scripts/check-outputs.sh
 
-# Runs all five even when one fails, so a single run reports every problem
+# The tool inventory in code-quality-tools/commands/setup.md is GENERATED from
+# schema/tool-catalog.json. Four lists used to disagree about what setup installs;
+# generating one of them removes it as a place they can disagree, and the checksum
+# on the region's end marker is what stops a hand edit being destroyed silently.
+#
+# setup-doc REFUSES when the committed region no longer matches its checksum.
+# gen-setup-doc.sh --force is the deliberate override and nothing here calls it.
+setup-doc:
+	@bash scripts/gen-setup-doc.sh
+
+setup-doc-check:
+	@bash scripts/gen-setup-doc.sh --check
+
+# Runs all six even when one fails, so a single run reports every problem
 # instead of stopping at the first. As prerequisites (ci: manifests outputs
 # lint validate test) make would abort on the first failure and a lint
 # regression would hide whether the tests pass. .github/workflows/ci.yml runs
-# the same five checks the same way, so this really is the PR check.
+# the same six checks the same way, so this really is the PR check.
 ci:
 	@fail=""; \
-	for target in manifests outputs lint validate test; do \
+	for target in manifests outputs setup-doc-check lint validate test; do \
 	  printf '\n==> make %s\n' "$$target"; \
 	  $(MAKE) --no-print-directory "$$target" || fail="$$fail $$target"; \
 	done; \
@@ -89,4 +105,4 @@ ci:
 	  printf 'ci: FAILED:%s\n' "$$fail" >&2; \
 	  exit 1; \
 	fi; \
-	printf 'ci: all five checks passed\n'
+	printf 'ci: all six checks passed\n'

@@ -110,6 +110,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: make outputs
 
+      # setup.md's tool inventory is generated from the catalog. This fails when
+      # the two disagree, and separately when the region no longer matches the
+      # checksum on its own end marker — the state a hand edit inside the markers
+      # produces.
+      - name: Check the generated setup.md region
+        run: make setup-doc-check
+
       - name: Check shell scripts
         if: ${{ !cancelled() }}
         run: make lint

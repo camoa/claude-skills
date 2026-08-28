@@ -1,7 +1,20 @@
-# GrumPHP configuration for code-quality-tools v3.2.0+
+# GrumPHP configuration for code-quality-tools
 #
-# Copy to your project root as `grumphp.yml`. Installed by `/code-quality-tools:setup`
-# when the optional "Install GrumPHP git hooks?" prompt is accepted.
+# Placed at the project root by scripts/core/cqt-install.sh, and ONLY when
+# git_hooks.enabled is true in .code-quality.json. GrumPHP attaches git hooks at
+# package-install time, so consent for the package and consent for the hooks are the
+# same answer; cqt-config.sh refuses a config that lists phpro/grumphp with hooks off.
+#
+# {{HOOK_TASKS}} is substituted from git_hooks.tasks, and the installer replaces the
+# token TOGETHER WITH ITS SURROUNDING QUOTES, so `tasks: "{{HOOK_TASKS}}"` becomes
+# `tasks: [phpcs, phpstan]` rather than a string that looks like a list. The quotes are
+# in the template so that this file still parses as YAML unsubstituted: an unquoted
+# brace-delimited placeholder in a value position is a flow mapping whose key is a flow
+# mapping, which every YAML parser rejects. The docroot/ patterns below are
+# not substituted: a project can be moved or a second checkout can use the other
+# layout, and matching both costs nothing because a pattern that matches no staged file
+# does nothing at all. The web/ and bare variants were already here; docroot/ was the
+# Acquia layout this file could not see.
 #
 # Scope: pre-commit only checks files staged for the current commit
 # (`context: git-staged-files`). Full-tree analysis lives in CI workflows —
@@ -18,12 +31,22 @@ grumphp:
   ignore_unstaged_changes: true
   hide_circumvention_tip: false
 
+  # Which tasks the pre-commit hook actually runs, named rather than left implicit.
+  # Without a testsuite GrumPHP runs every task defined below on every hook, so the
+  # `tasks:` list here is what makes "the hook runs what the config asked for" a fact
+  # about this file instead of a coincidence of which tasks happen to be defined.
+  testsuites:
+    git_pre_commit:
+      tasks: "{{HOOK_TASKS}}"
+
   tasks:
     phpcs:
       standard: Drupal,DrupalPractice
       whitelist_patterns:
         - /^web\/modules\/custom\/(.*)/
         - /^web\/themes\/custom\/(.*)/
+        - /^docroot\/modules\/custom\/(.*)/
+        - /^docroot\/themes\/custom\/(.*)/
         - /^modules\/custom\/(.*)/
         - /^themes\/custom\/(.*)/
       triggered_by: [php, module, theme, install, inc, profile]
@@ -37,6 +60,10 @@ grumphp:
       force_patterns:
         - /^web\/modules\/custom\/(.*)/
         - /^web\/themes\/custom\/(.*)/
+        - /^docroot\/modules\/custom\/(.*)/
+        - /^docroot\/themes\/custom\/(.*)/
+        - /^modules\/custom\/(.*)/
+        - /^themes\/custom\/(.*)/
       triggered_by: [php, module, theme, install, inc, profile]
       memory_limit: "-1"
       use_grumphp_paths: true

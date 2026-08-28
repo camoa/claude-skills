@@ -12,10 +12,12 @@ validator directly.
 | Check plugin structure | `make validate` |
 | Check plugin manifests | `make manifests` |
 | Check every command says what it writes | `make outputs` |
+| Regenerate setup.md's tool inventory | `make setup-doc` |
+| Check that inventory against the catalog | `make setup-doc-check` |
 | Everything, same as the PR check | `make ci` |
 
-Before opening a PR: `make ci`. It runs all five checks even when one
-fails, so one run shows every problem. CI runs the same five the same way.
+Before opening a PR: `make ci`. It runs all six checks even when one
+fails, so one run shows every problem. CI runs the same six the same way.
 
 ## What each check can fail on
 
@@ -45,6 +47,23 @@ fails, so one run shows every problem. CI runs the same five the same way.
   a command does to your filesystem is the thing you want written down
   before you run it. Zero command files found fails. What it cannot check
   is whether the section is *true*; it checks that the claim exists.
+
+- `make setup-doc-check` regenerates the region between
+  `<!-- BEGIN GENERATED: tool-catalog -->` and the matching end marker in
+  `code-quality-tools/commands/setup.md` from
+  `skills/code-quality-audit/schema/tool-catalog.json`, and fails on two
+  separate things: the committed region differing from what the catalog
+  generates (printing the diff), and the region no longer matching the
+  sha256 recorded on its own end marker. It also fails when the catalog is
+  empty, a marker is missing, the checksum is absent or malformed, or
+  `setup.md` is untracked — a check that found nothing to check has not
+  passed. Its one non-generated assertion is that `full-audit.sh` and
+  `SKILL.md` still route to `install-tools.sh`, reported as `unchecked`
+  rather than passing when either file cannot be read.
+- `make setup-doc` rewrites that region. It **refuses** and exits non-zero
+  when the committed region does not match its checksum, because that means
+  a hand edit is about to be destroyed. `scripts/gen-setup-doc.sh --force`
+  is the deliberate override; no `make` target calls it.
 
 Only `make test`, `make lint` and `make outputs` scan files, and all three
 only look at git-tracked ones. A brand-new script, test or command is not

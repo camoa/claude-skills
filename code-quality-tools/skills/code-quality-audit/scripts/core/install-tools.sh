@@ -1,591 +1,215 @@
 #!/bin/bash
-# install-tools.sh - Install code quality tools via DDEV
+# install-tools.sh - the entry point the two live callers already reach.
 # Part of code-quality-audit skill
+#
+# Keeps its name because full-audit.sh:248 and SKILL.md:124 both route here. What it does
+# has changed completely: it used to BE the install, with a thirteen-step hardcoded
+# package list that disagreed with the one in commands/setup.md. Now it resolves a config
+# and hands off, so there is one install path and it lives in a file that runs.
+#
+#   install-tools.sh [--config PATH] [--dry-run]
+#
+# With .code-quality.json present it loads the file. With it absent it DERIVES a complete
+# config from the tool catalog, announces it in full, and pipes it to the installer on
+# stdin. It does not write the file: /code-quality-tools:setup is this plugin's init
+# command and its only writer. An audit run therefore installs the right set and states
+# what it resolved, without leaving a config file in a repository whose owner never asked
+# for one.
+#
+# It exits honestly. full-audit.sh reads both this exit status and the tools-status.json
+# written below; the `|| true` that used to discard the status was fixed by the
+# gate_path_resolution sibling, and this script's job is to give that caller something
+# true to read.
 
-set -e
+set -uo pipefail
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Where reports go is decided in one place, and it is never inside the audited
 # repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
-# shellcheck source=../core/report-dir.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+# shellcheck source=./report-dir.sh
+. "${SCRIPT_DIR}/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
+
+# Where this project's custom code lives is answered in ONE place, for every gate and now
+# for the installer too. Sourcing this is safe by construction: it sources nothing, runs
+# nothing at load time, sets no shell option and prints nothing.
+# shellcheck source=./path-resolve.sh
+. "${SCRIPT_DIR}/path-resolve.sh"
+
+# shellcheck source=./cqt-config.sh
+. "${SCRIPT_DIR}/cqt-config.sh"
+
+DRY_RUN=0
+CONFIG_ARG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config)   CONFIG_ARG="${2-}"; shift 2 ;;
+        --config=*) CONFIG_ARG="${1#--config=}"; shift ;;
+        --dry-run)  DRY_RUN=1; shift ;;
+        -h|--help)  sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) printf '%b[ERROR]%b unknown argument: %s\n' "$RED" "$NC" "$1" >&2; exit 2 ;;
+    esac
+done
 
 echo "=== Code Quality Audit - Install Tools ==="
 echo ""
 
-# Load environment if available
-if [ -f "${REPORT_DIR}/environment.json" ]; then
-    PROJECT_TYPE=$(grep -oP '"project_type":\s*"\K[^"]+' "${REPORT_DIR}/environment.json")
-    DDEV_AVAILABLE=$(grep -oP '"ddev_available":\s*\K[^,}]+' "${REPORT_DIR}/environment.json")
+# ── which stack, answered from evidence rather than defaulted ─────────────────
+#
+# This is the line the research names by file:line. The old code read two scalars out of
+# environment.json with a Perl-regex grep and then did PROJECT_TYPE="${PROJECT_TYPE:-drupal}",
+# so a missing, truncated or renamed field produced a Drupal install on a project nobody
+# had established was Drupal, behind a [WARN] nobody reads.
+#
+# Detection is allowed to look in several places — that is what detection is. What it is
+# not allowed to do is invent an answer when every source came up empty, so the last
+# branch refuses instead of picking one.
+detect_project_type() {
+    local t=""
+
+    if [ -n "${PROJECT_TYPE:-}" ]; then
+        printf '%s' "${PROJECT_TYPE}"
+        return 0
+    fi
+    if [ -f "${REPORT_DIR}/environment.json" ] && command -v jq > /dev/null 2>&1; then
+        t="$(jq -r '.project_type // empty' "${REPORT_DIR}/environment.json" 2> /dev/null)"
+        [ -n "$t" ] && { printf '%s' "$t"; return 0; }
+    fi
+    if [ -f composer.json ] && grep -q '"drupal/core' composer.json 2> /dev/null; then
+        printf 'drupal'; return 0
+    fi
+    if [ -f package.json ] && grep -q '"next"' package.json 2> /dev/null; then
+        printf 'nextjs'; return 0
+    fi
+    for d in modules/custom web/modules/custom docroot/modules/custom; do
+        if [ -d "$d" ]; then printf 'drupal'; return 0; fi
+    done
+    return 1
+}
+
+# ── resolve the config ────────────────────────────────────────────────────────
+CONFIG_SOURCE_KIND=""
+CONFIG_TO_USE=""
+DERIVED_DOC=""
+
+if [ -n "${CONFIG_ARG}" ]; then
+    CONFIG_TO_USE="${CONFIG_ARG}"
+    CONFIG_SOURCE_KIND="file"
+elif [ -f .code-quality.json ]; then
+    CONFIG_TO_USE=".code-quality.json"
+    CONFIG_SOURCE_KIND="file"
 else
-    echo -e "${YELLOW}[WARN]${NC} Environment not detected. Run detect-environment.sh first."
-    PROJECT_TYPE="${PROJECT_TYPE:-drupal}"
-    DDEV_AVAILABLE="${DDEV_AVAILABLE:-false}"
+    PTYPE="$(detect_project_type)" || {
+        printf '%b[ERROR]%b no .code-quality.json, and the project type could not be\n' "$RED" "$NC" >&2
+        printf '        determined from the environment record, composer.json, package.json\n' >&2
+        printf '        or the tree. Nothing is assumed here: run /code-quality-tools:setup,\n' >&2
+        printf '        or pass PROJECT_TYPE explicitly.\n' >&2
+        exit 2
+    }
+    cqt_detect_drupal_root
+    WEBROOT="$(cqt_drupal_root_prefix)"
+    # A Next.js project has no Drupal root, and cqt_drupal_root_prefix keeps the
+    # historical "web" default when it has nothing to derive from. That default is right
+    # for a Drupal project with no detected root and wrong here, so it is cleared rather
+    # than carried into a layout the config would then record as fact.
+    [ "${PTYPE}" = "nextjs" ] && WEBROOT=""
+    DERIVED_DOC="$(cqt_config_derive "${PTYPE}" "${WEBROOT}")"
+    CONFIG_TO_USE="-"
+    CONFIG_SOURCE_KIND="derived"
+
+    # Validated exactly as a file is, then announced in full. The announcement is the
+    # half that stops the silent skip, and it does not depend on any other task landing.
+    cqt_config_load - > /dev/null <<< "${DERIVED_DOC}"
+    cqt_config_announce_derived
+    echo ""
 fi
 
-# Check DDEV
-check_ddev() {
-    if [ "$DDEV_AVAILABLE" != "true" ]; then
-        if command -v ddev &> /dev/null && ddev describe &> /dev/null; then
-            DDEV_AVAILABLE="true"
-        else
-            echo -e "${RED}[ERROR]${NC} DDEV is not available"
-            echo "  Please start DDEV first: ddev start"
-            exit 1
-        fi
-    fi
-}
+# ── hand off ──────────────────────────────────────────────────────────────────
+INSTALL_ARGS=(--config "${CONFIG_TO_USE}")
+[ "${DRY_RUN}" -eq 1 ] && INSTALL_ARGS+=(--dry-run)
 
-# Install Drupal tools
-install_drupal_tools() {
-    echo "Installing Drupal code quality tools..."
-    echo ""
+install_exit=0
+if [ "${CONFIG_SOURCE_KIND}" = "derived" ]; then
+    printf '%s' "${DERIVED_DOC}" | bash "${SCRIPT_DIR}/cqt-install.sh" "${INSTALL_ARGS[@]}" || install_exit=$?
+else
+    bash "${SCRIPT_DIR}/cqt-install.sh" "${INSTALL_ARGS[@]}" || install_exit=$?
+fi
 
-    # PHPStan with Drupal extension
-    echo -e "${YELLOW}[1/13]${NC} Installing PHPStan + Drupal extension..."
-    ddev composer require --dev \
-        phpstan/phpstan \
-        phpstan/extension-installer \
-        mglaman/phpstan-drupal \
-        phpstan/phpstan-deprecation-rules \
-        --no-interaction 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} PHPStan may already be installed or had issues"
-        }
-
-    # PHPMD
-    echo -e "${YELLOW}[2/13]${NC} Installing PHPMD..."
-    ddev composer require --dev phpmd/phpmd --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} PHPMD may already be installed or had issues"
-    }
-
-    # PHPCPD (systemsdk fork for PHP 8.3+)
-    echo -e "${YELLOW}[3/13]${NC} Installing PHPCPD..."
-    ddev composer require --dev systemsdk/phpcpd --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} PHPCPD may already be installed or had issues"
-    }
-
-    # Drupal Coder
-    echo -e "${YELLOW}[4/13]${NC} Installing Drupal Coder..."
-    ddev composer require --dev drupal/coder --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} Drupal Coder may already be installed or had issues"
-    }
-
-    # Drupal Rector (auto-fix deprecations)
-    echo -e "${YELLOW}[5/13]${NC} Installing Drupal Rector..."
-    ddev composer require --dev palantirnet/drupal-rector --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} Drupal Rector may already be installed or had issues"
-    }
-
-    # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/13]${NC} Checking jq dependency..."
-    if command -v jq &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} jq is available"
-    else
-        echo -e "${YELLOW}[WARN]${NC} jq is not installed"
-        echo "  Install with: apt-get install jq (Linux) or brew install jq (macOS)"
-    fi
-
-    # Check for PCOV
-    echo -e "${YELLOW}[7/13]${NC} Checking PCOV extension..."
-    if ddev exec php -m 2>/dev/null | grep -q pcov; then
-        echo -e "${GREEN}[OK]${NC} PCOV is available"
-    else
-        echo -e "${YELLOW}[WARN]${NC} PCOV is not installed"
-        echo "  Add to .ddev/config.yaml:"
-        echo "    webimage_extra_packages:"
-        echo "      - php\${DDEV_PHP_VERSION}-pcov"
-        echo "  Then run: ddev restart"
-    fi
-
-    # Psalm (Security - Taint Analysis) - RECOMMENDED
-    echo -e "${YELLOW}[8/13]${NC} Installing Psalm (taint analysis - recommended for security)..."
-    ddev composer require --dev vimeo/psalm --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} Psalm may already be installed or had issues"
-    }
-
-    # php-security-linter (OWASP/CIS Security Rules) - RECOMMENDED
-    echo -e "${YELLOW}[9/13]${NC} Installing php-security-linter (OWASP/CIS - recommended)..."
-    ddev composer require --dev yousha/php-security-linter --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} php-security-linter may already be installed or had issues"
-    }
-
-    # Roave Security Advisories (Composer Prevention Layer) - RECOMMENDED
-    echo -e "${YELLOW}[10/13]${NC} Installing Roave Security Advisories (vulnerability prevention)..."
-    ddev composer require --dev roave/security-advisories:dev-master --no-interaction 2>&1 || {
-        echo -e "${YELLOW}[INFO]${NC} Roave Security Advisories prevents vulnerable package installation"
-        echo -e "${YELLOW}[INFO]${NC} If installation conflicts, you may have vulnerable packages installed"
-    }
-
-    # Semgrep (Multi-language SAST) - RECOMMENDED
-    echo -e "${YELLOW}[11/13]${NC} Installing Semgrep (multi-language SAST)..."
-    if ddev exec semgrep --version &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Semgrep already installed"
-    else
-        ddev exec pip3 install semgrep 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
-        }
-    fi
-
-    # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
-    echo -e "${YELLOW}[12/13]${NC} Installing Trivy (dependency/secret scanner)..."
-    if command -v trivy &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Trivy already installed"
-    else
-        echo -e "${YELLOW}[INFO]${NC} Installing Trivy..."
-        # Install Trivy binary for host system
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} Trivy installation failed - install manually:"
-            echo "  See: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
-        }
-    fi
-
-    # Gitleaks (Secret Detection) - RECOMMENDED
-    echo -e "${YELLOW}[13/13]${NC} Installing Gitleaks (secret detection)..."
-    if command -v gitleaks &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
-    else
-        echo -e "${YELLOW}[INFO]${NC} Installing Gitleaks..."
-        # Install Gitleaks binary for host system
-        curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} Gitleaks installation failed - install manually:"
-            echo "  See: https://github.com/gitleaks/gitleaks#installation"
-        }
-    fi
-
-    echo ""
-    echo -e "${BLUE}[OPTIONAL]${NC} Security Review module (Drupal config audit):"
-    echo "  ddev composer require drupal/security_review"
-    echo "  ddev drush pm:enable security_review"
-    echo ""
-    echo -e "${BLUE}[OPTIONAL]${NC} Roave Security Advisories (blocks vulnerable packages):"
-    echo "  ddev composer require --dev roave/security-advisories:dev-latest"
-    echo ""
-}
-
-# Verify installations
-verify_drupal_tools() {
-    echo "Verifying tool installations..."
-    echo ""
-
-    local tools_status=()
-    local all_ok=true
-
-    # PHPStan
-    if ddev exec vendor/bin/phpstan --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/phpstan --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} PHPStan: ${VERSION}"
-        tools_status+=("phpstan:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} PHPStan not found"
-        tools_status+=("phpstan:fail")
-        all_ok=false
-    fi
-
-    # PHPMD
-    if ddev exec vendor/bin/phpmd --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/phpmd --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} PHPMD: ${VERSION}"
-        tools_status+=("phpmd:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} PHPMD not found"
-        tools_status+=("phpmd:fail")
-        all_ok=false
-    fi
-
-    # PHPCPD
-    if ddev exec vendor/bin/phpcpd --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/phpcpd --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} PHPCPD: ${VERSION}"
-        tools_status+=("phpcpd:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} PHPCPD not found"
-        tools_status+=("phpcpd:fail")
-        all_ok=false
-    fi
-
-    # Psalm (Security - Optional)
-    if ddev exec vendor/bin/psalm --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/psalm --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Psalm: ${VERSION}"
-        tools_status+=("psalm:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Psalm not found (recommended for security taint analysis)"
-        tools_status+=("psalm:optional")
-    fi
-
-    # php-security-linter (Optional)
-    if ddev exec vendor/bin/php-security-linter --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/php-security-linter --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} php-security-linter: ${VERSION}"
-        tools_status+=("php-security-linter:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} php-security-linter not found (recommended for OWASP security checks)"
-        tools_status+=("php-security-linter:optional")
-    fi
-
-    # Roave Security Advisories (Optional)
-    if ddev composer show roave/security-advisories &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Roave Security Advisories: installed (prevents vulnerable packages)"
-        tools_status+=("roave:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Roave Security Advisories not found (prevents vulnerable package installation)"
-        tools_status+=("roave:optional")
-    fi
-
-    # phpcs (Drupal Coder)
-    if ddev exec vendor/bin/phpcs --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/phpcs --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} PHP_CodeSniffer: ${VERSION}"
-        tools_status+=("phpcs:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} PHP_CodeSniffer not found"
-        tools_status+=("phpcs:fail")
-        all_ok=false
-    fi
-
-    # PHPUnit
-    if ddev exec vendor/bin/phpunit --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/phpunit --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} PHPUnit: ${VERSION}"
-        tools_status+=("phpunit:ok")
-    else
-        echo -e "${YELLOW}[WARN]${NC} PHPUnit not found (may need drupal/core-dev)"
-        tools_status+=("phpunit:warn")
-    fi
-
-    # Rector (drupal-rector)
-    if ddev exec vendor/bin/rector --version &> /dev/null; then
-        VERSION=$(ddev exec vendor/bin/rector --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Rector: ${VERSION}"
-        tools_status+=("rector:ok")
-    else
-        echo -e "${YELLOW}[WARN]${NC} Rector not found"
-        tools_status+=("rector:warn")
-    fi
-
-    # Semgrep (Multi-language SAST)
-    if ddev exec semgrep --version &> /dev/null; then
-        VERSION=$(ddev exec semgrep --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Semgrep: ${VERSION}"
-        tools_status+=("semgrep:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Semgrep not found (recommended for cross-stack SAST)"
-        tools_status+=("semgrep:optional")
-    fi
-
-    # Trivy (Dependency/Secret Scanner)
-    if command -v trivy &> /dev/null; then
-        VERSION=$(trivy --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Trivy: ${VERSION}"
-        tools_status+=("trivy:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Trivy not found (recommended for dependency/secret scanning)"
-        tools_status+=("trivy:optional")
-    fi
-
-    # Gitleaks (Secret Detection)
-    if command -v gitleaks &> /dev/null; then
-        VERSION=$(gitleaks version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} Gitleaks: ${VERSION}"
-        tools_status+=("gitleaks:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Gitleaks not found (recommended for secret detection)"
-        tools_status+=("gitleaks:optional")
-    fi
-
-    echo ""
-
-    # Save tool status
-    cat > "${REPORT_DIR}/tools-status.json" << EOF
-{
-  "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "project_type": "${PROJECT_TYPE}",
-  "tools": {
-$(printf '    "%s": "%s",\n' "${tools_status[@]}" | sed 's/:\([^"]*\)$/": "\1/' | sed '$ s/,$//')
-  },
-  "all_ok": ${all_ok}
-}
-EOF
-
-    if [ "$all_ok" = true ]; then
-        echo -e "${GREEN}All tools installed successfully${NC}"
-        exit 0
-    else
-        echo -e "${YELLOW}Some tools failed to install${NC}"
-        exit 1
-    fi
-}
-
-# Install Next.js tools
-install_nextjs_tools() {
-    echo "Installing Next.js code quality tools..."
-    echo ""
-
-    # Check for npm
-    if ! command -v npm &> /dev/null; then
-        echo -e "${RED}[ERROR]${NC} npm is not installed"
-        echo "  Please install Node.js first: https://nodejs.org/"
-        exit 1
-    fi
-
-    # ESLint with Next.js config + security plugins
-    echo -e "${YELLOW}[1/11]${NC} Installing ESLint + Next.js config + security plugins..."
-    npm install -D eslint eslint-config-next @typescript-eslint/eslint-plugin \
-        eslint-plugin-react-hooks eslint-config-prettier \
-        eslint-plugin-security eslint-plugin-no-secrets 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} ESLint may already be installed or had issues"
-    }
-
-    # Jest + Testing Library
-    echo -e "${YELLOW}[2/11]${NC} Installing Jest + Testing Library..."
-    npm install -D jest @jest/globals jest-environment-jsdom \
-        @testing-library/react @testing-library/jest-dom 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} Jest may already be installed or had issues"
-    }
-
-    # jscpd for duplication detection
-    echo -e "${YELLOW}[3/11]${NC} Installing jscpd..."
-    npm install -D jscpd 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} jscpd may already be installed or had issues"
-    }
-
-    # madge for circular dependency detection (SOLID check)
-    echo -e "${YELLOW}[4/11]${NC} Installing madge (circular dependency detection)..."
-    npm install -D madge 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} madge may already be installed or had issues"
-    }
-
-    # TypeScript (if not already present)
-    echo -e "${YELLOW}[5/11]${NC} Checking TypeScript..."
-    if [ -f "tsconfig.json" ]; then
-        echo -e "${GREEN}[OK]${NC} TypeScript already configured"
-    else
-        npm install -D typescript @types/node @types/react 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} TypeScript may already be installed or had issues"
-        }
-    fi
-
-    # Check for jq (required for JSON processing)
-    echo -e "${YELLOW}[6/11]${NC} Checking jq dependency..."
-    if command -v jq &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} jq is available"
-    else
-        echo -e "${YELLOW}[WARN]${NC} jq is not installed"
-        echo "  Install with: apt-get install jq (Linux) or brew install jq (macOS)"
-    fi
-
-    # Semgrep (Multi-language SAST) - RECOMMENDED
-    echo -e "${YELLOW}[7/11]${NC} Installing Semgrep (multi-language SAST)..."
-    if command -v semgrep &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Semgrep already installed"
-    else
-        # Try pip3 first, fallback to npm
-        if command -v pip3 &> /dev/null; then
-            pip3 install semgrep 2>&1 || {
-                echo -e "${YELLOW}[WARN]${NC} Semgrep pip3 installation failed, trying npm..."
-                npm install -g @semgrep/cli 2>&1 || {
-                    echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
-                }
-            }
-        else
-            echo -e "${YELLOW}[INFO]${NC} pip3 not found, using npm..."
-            npm install -g @semgrep/cli 2>&1 || {
-                echo -e "${YELLOW}[WARN]${NC} Semgrep installation failed - install manually: pip3 install semgrep"
-            }
-        fi
-    fi
-
-    # Trivy (Dependency/Container/Secret Scanner) - RECOMMENDED
-    echo -e "${YELLOW}[8/11]${NC} Installing Trivy (dependency/secret scanner)..."
-    if command -v trivy &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Trivy already installed"
-    else
-        echo -e "${YELLOW}[INFO]${NC} Installing Trivy..."
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} Trivy installation failed - install manually:"
-            echo "  See: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
-        }
-    fi
-
-    # Gitleaks (Secret Detection) - RECOMMENDED
-    echo -e "${YELLOW}[9/11]${NC} Installing Gitleaks (secret detection)..."
-    if command -v gitleaks &> /dev/null; then
-        echo -e "${GREEN}[OK]${NC} Gitleaks already installed"
-    else
-        echo -e "${YELLOW}[INFO]${NC} Installing Gitleaks..."
-        curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /usr/local/bin 2>&1 || {
-            echo -e "${YELLOW}[WARN]${NC} Gitleaks installation failed - install manually:"
-            echo "  See: https://github.com/gitleaks/gitleaks#installation"
-        }
-    fi
-
-    # Socket CLI (Supply Chain Security) - RECOMMENDED
-    echo -e "${YELLOW}[10/11]${NC} Installing Socket CLI (supply chain attack detection)..."
-    npm install -D @socketsecurity/cli 2>&1 || {
-        echo -e "${YELLOW}[WARN]${NC} Socket CLI may already be installed or had issues"
-    }
-
-    # Setup complete message
-    echo -e "${YELLOW}[11/11]${NC} Installation complete!"
-    echo ""
-
-    echo ""
-    verify_nextjs_tools
-}
-
-# Verify Next.js tools
-verify_nextjs_tools() {
-    echo "Verifying tool installations..."
-    echo ""
-
-    local tools_status=()
-    local all_ok=true
-
-    # ESLint
-    if npx eslint --version &> /dev/null; then
-        VERSION=$(npx eslint --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} ESLint: ${VERSION}"
-        tools_status+=("eslint:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} ESLint not found"
-        tools_status+=("eslint:fail")
-        all_ok=false
-    fi
-
-    # Jest
-    if npx jest --version &> /dev/null; then
-        VERSION=$(npx jest --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} Jest: ${VERSION}"
-        tools_status+=("jest:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} Jest not found"
-        tools_status+=("jest:fail")
-        all_ok=false
-    fi
-
-    # jscpd
-    if npx jscpd --version &> /dev/null; then
-        VERSION=$(npx jscpd --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} jscpd: ${VERSION}"
-        tools_status+=("jscpd:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} jscpd not found"
-        tools_status+=("jscpd:fail")
-        all_ok=false
-    fi
-
-    # madge (SOLID check)
-    if npx madge --version &> /dev/null; then
-        VERSION=$(npx madge --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} madge: ${VERSION}"
-        tools_status+=("madge:ok")
-    else
-        echo -e "${RED}[FAIL]${NC} madge not found"
-        tools_status+=("madge:fail")
-        all_ok=false
-    fi
-
-    # TypeScript
-    if npx tsc --version &> /dev/null; then
-        VERSION=$(npx tsc --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} TypeScript: ${VERSION}"
-        tools_status+=("typescript:ok")
-    else
-        echo -e "${YELLOW}[WARN]${NC} TypeScript not found"
-        tools_status+=("typescript:warn")
-    fi
-
-    # Semgrep (Multi-language SAST)
-    if command -v semgrep &> /dev/null; then
-        VERSION=$(semgrep --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Semgrep: ${VERSION}"
-        tools_status+=("semgrep:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Semgrep not found (recommended for security scanning)"
-        tools_status+=("semgrep:optional")
-    fi
-
-    # Trivy (Dependency/Secret Scanner)
-    if command -v trivy &> /dev/null; then
-        VERSION=$(trivy --version 2>/dev/null | head -1)
-        echo -e "${GREEN}[OK]${NC} Trivy: ${VERSION}"
-        tools_status+=("trivy:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Trivy not found (recommended for dependency/secret scanning)"
-        tools_status+=("trivy:optional")
-    fi
-
-    # Gitleaks (Secret Detection)
-    if command -v gitleaks &> /dev/null; then
-        VERSION=$(gitleaks version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} Gitleaks: ${VERSION}"
-        tools_status+=("gitleaks:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Gitleaks not found (recommended for secret detection)"
-        tools_status+=("gitleaks:optional")
-    fi
-
-    # Socket CLI (Supply Chain Security)
-    if npx socket-npm --version &> /dev/null 2>&1; then
-        VERSION=$(npx socket-npm --version 2>/dev/null)
-        echo -e "${GREEN}[OK]${NC} Socket CLI: ${VERSION}"
-        tools_status+=("socket:ok")
-    else
-        echo -e "${YELLOW}[OPTIONAL]${NC} Socket CLI not found (recommended for supply chain attack detection)"
-        tools_status+=("socket:optional")
-    fi
-
-    echo ""
-
-    # Create reports directory
+# ── the record full-audit.sh reads ────────────────────────────────────────────
+#
+# full-audit.sh:255-266 stops the audit when tools-status.json is absent or its all_ok is
+# not true, on the stated ground that an exit status alone cannot say "phpmd missing,
+# phpstan fine". That contract predates this rewrite and is kept: an installer that
+# stopped writing the file would fire the sibling's stop-on-failed-install gate on every
+# run.
+#
+# Nothing is written on a dry run, because a dry run installed nothing and a status file
+# claiming otherwise is exactly the false record this epic exists to remove.
+if [ "${DRY_RUN}" -eq 0 ]; then
     mkdir -p "${REPORT_DIR}"
+    TOOLS_JSON="$(
+        cqt_config_doc \
+        | jq -c '
+            [ .tools | to_entries[] | select(.value.bin != null) | { key: .key, bin: .value.bin, scope: .value.scope } ]
+          '
+    )"
+    STATUS_ENTRIES=""
+    ALL_OK=true
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        id="$(jq -r '.key' <<< "$row")"
+        bin="$(jq -r '.bin' <<< "$row")"
+        scope="$(jq -r '.scope' <<< "$row")"
+        state="absent"
+        if command -v "${bin}" > /dev/null 2>&1; then
+            state="ok"
+        elif [ -x "vendor/bin/${bin}" ]; then
+            state="ok"
+        elif [ -x "vendor-bin/${id}/vendor/bin/${bin}" ]; then
+            state="ok"
+        elif command -v ddev > /dev/null 2>&1 && cqt_tool_present "vendor/bin/${bin}"; then
+            state="ok"
+        fi
+        # A machine-scope tool that is not installed is a state of the machine, not a
+        # failed install. Only the tools this run was supposed to install can fail it.
+        if [ "${state}" != "ok" ] && [ "${scope}" != "machine" ]; then
+            ALL_OK=false
+        fi
+        STATUS_ENTRIES="${STATUS_ENTRIES}${STATUS_ENTRIES:+,}$(jq -nc --arg k "$id" --arg v "$state" '{($k): $v}')"
+    done <<< "$(jq -c '.[]' <<< "${TOOLS_JSON}")"
 
-    # Save tool status
-    cat > "${REPORT_DIR}/tools-status.json" << EOF
-{
-  "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "project_type": "${PROJECT_TYPE}",
-  "tools": {
-$(printf '    "%s": "%s",\n' "${tools_status[@]}" | sed 's/:\([^"]*\)$/": "\1/' | sed '$ s/,$//')
-  },
-  "all_ok": ${all_ok}
-}
-EOF
+    [ "${install_exit}" -eq 0 ] || ALL_OK=false
 
-    if [ "$all_ok" = true ]; then
-        echo -e "${GREEN}All tools installed successfully${NC}"
-        exit 0
+    jq -n \
+        --argjson tools "$( [ -n "${STATUS_ENTRIES}" ] && printf '[%s]' "${STATUS_ENTRIES}" || printf '[]' )" \
+        --arg pt "$(cqt_config_get .project.type)" \
+        --arg src "$(cqt_config_source)" \
+        --argjson all_ok "${ALL_OK}" \
+        --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+        {
+          status: (if $all_ok then "pass" else "fail" end),
+          timestamp: $ts,
+          installed_at: $ts,
+          project_type: $pt,
+          config_source: $src,
+          tools: ($tools | add // {}),
+          findings: [ $tools | add // {} | to_entries[] | select(.value != "ok")
+                      | { tool: .key, state: .value } ],
+          all_ok: $all_ok
+        }' > "${REPORT_DIR}/tools-status.json"
+
+    if [ "${ALL_OK}" = "true" ]; then
+        printf '%b[OK]%b tool status written to %s\n' "$GREEN" "$NC" "${REPORT_DIR}/tools-status.json"
     else
-        echo -e "${YELLOW}Some tools failed to install${NC}"
-        exit 1
+        printf '%b[WARN]%b some tools are not available; see %s\n' "$YELLOW" "$NC" "${REPORT_DIR}/tools-status.json"
     fi
-}
+fi
 
-# Main
-main() {
-    case "$PROJECT_TYPE" in
-        drupal|monorepo)
-            check_ddev
-            install_drupal_tools
-            verify_drupal_tools
-            ;;
-        nextjs)
-            # Next.js doesn't need DDEV
-            install_nextjs_tools
-            ;;
-        *)
-            echo -e "${RED}[ERROR]${NC} Unknown project type: ${PROJECT_TYPE}"
-            exit 1
-            ;;
-    esac
-}
-
-main "$@"
+exit "${install_exit}"

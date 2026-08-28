@@ -110,6 +110,22 @@ resolve_analyzer() {
         return 0
     fi
 
+    # A fourth location, for a tool installed at `isolated` scope. Four analysers with
+    # their own dependency trees do not belong in an application's require-dev, so
+    # cqt-install.sh puts phpmd, phpcpd, php-security-linter and psalm into their own
+    # bamarni bin namespaces instead. This is where they land.
+    #
+    # SECOND and not first, so a project that deliberately pinned a tool in its own
+    # vendor/bin still wins, which is the existing order's stated intent. Second and not
+    # last, so an isolated install is preferred over whatever the machine happens to
+    # have. One lookup added to the resolver that already exists; nothing new resolves
+    # paths, so nothing new can resolve them differently.
+    if ddev exec test -f "vendor-bin/$tool/vendor/bin/$tool" &> /dev/null; then
+        ANALYZER_RUNNER="container"
+        ANALYZER_CMD=(ddev exec "vendor-bin/$tool/vendor/bin/$tool")
+        return 0
+    fi
+
     if command -v "$tool" &> /dev/null; then
         ANALYZER_RUNNER="host"
         ANALYZER_CMD=("$tool")

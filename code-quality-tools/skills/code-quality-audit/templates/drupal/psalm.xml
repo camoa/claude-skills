@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Psalm configuration for Drupal custom code.
+
+  Placed at the project root by scripts/core/cqt-install.sh, and only when psalm is in
+  the config's tools. {{MODULES_PATH}} and {{THEMES_PATH}} are substituted from
+  project.layout; the tokens sit in element values, so this file parses as XML with
+  them in place.
+
+  It replaces the minimal config security-check.sh:1013-1015 used to write inline on
+  first run, which was a gate writing configuration into somebody's project in the
+  middle of an audit.
+
+  THE AUTOLOADER IS THE POINT OF THIS FILE. Psalm is installed at `isolated` scope, in
+  its own bamarni bin namespace, because its dependency tree is the heaviest of the four
+  isolated analysers and the likeliest to collide with an application's own libraries.
+  But it sits on the wrong side of the isolation predicate's letter: taint analysis
+  resolves the classes it follows, and "does not autoload your code" is the whole test
+  for isolation. So the autoloader is handed to it explicitly below. Handing a tool a
+  path to an autoloader is not the same as sharing a resolver with it.
+
+  Reversal condition, recorded in schema/tool-catalog.json beside the scope: if an
+  isolated Psalm with this autoloader cannot resolve project classes in a live run, it
+  moves back to `project` scope. That is a one line change to `scope` in the catalog and
+  no change anywhere else, which is the point of scope being a field.
+-->
+<psalm
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    errorLevel="4"
+    resolveFromConfigFile="true"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="false"
+>
+    <autoloader>vendor/autoload.php</autoloader>
+
+    <projectFiles>
+        <directory name="{{MODULES_PATH}}" />
+        <directory name="{{THEMES_PATH}}" />
+        <ignoreFiles>
+            <!--
+              Somebody else's code, vendored into this tree. The same list the placed
+              phpstan.neon excludes, and for the same reason: excluding our source hides
+              rules we want, excluding a vendored bundle hides nothing of ours.
+            -->
+            <directory name="vendor" />
+            <directory name="{{MODULES_PATH}}/*/vendor" />
+            <directory name="{{THEMES_PATH}}/*/vendor" />
+            <directory name="{{THEMES_PATH}}/*/node_modules" />
+            <directory name="{{MODULES_PATH}}/*/node_modules" />
+        </ignoreFiles>
+    </projectFiles>
+</psalm>

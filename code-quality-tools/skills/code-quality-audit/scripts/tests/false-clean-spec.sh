@@ -3363,12 +3363,39 @@ PY
 # independently of level, so a lower level costs no Drupal coverage while an
 # excludePaths entry costs all of it. If a future edit raises the level back, that is a
 # real decision and should have to change this line to make it.
-assert_eq "[O, harness guard + shipped level] the template still parses, still configures phpstan, and still ships level 5" \
-  "5|1|present" \
+#
+# The level is ALSO the reason cqt-install.sh rewrites the `level:` LINE at placement
+# rather than substituting a token into it: a token here makes this file unparseable,
+# and every assertion in this section reads it with a YAML parser. The literal below is
+# the same value .code-quality.json defaults to, so the template and the config cannot
+# silently disagree.
+#
+# The third field changed with config_driven_installer, and the change is the point.
+# It used to be `'present' if p.get('ignoreErrors')`, i.e. the list is NON-EMPTY. The
+# template now ships `ignoreErrors: []` deliberately: it carried three pre-emptive
+# suppressions while reportUnmatchedIgnoredErrors was true, and an unmatched suppression
+# is itself an error, so on a project with zero custom PHP all three failed and the
+# template could not run clean on the case it is most likely to be adopted on. A
+# truthiness probe would now be satisfied only by that defect. What the guard actually
+# needs is that the KEY is still there and still a list — an unparseable or truncated
+# file gives neither — and that it is empty, which is the shipped state this task
+# settled on. Emptying rather than removing the key, and leaving
+# reportUnmatchedIgnoredErrors on, is what keeps a future stale suppression visible.
+assert_eq "[O, harness guard + shipped level] the template still parses, still configures phpstan, and still ships level 5 with an empty ignoreErrors" \
+  "5|1|empty-list" \
   "$(python3 -c "
 import yaml
 p = (yaml.safe_load(open('$NEON')) or {}).get('parameters') or {}
-print('%s|%s|%s' % (p.get('level'), len(p.get('paths') or []), 'present' if p.get('ignoreErrors') else 'absent'))
+ie = p.get('ignoreErrors', 'MISSING')
+print('%s|%s|%s' % (p.get('level'), len(p.get('paths') or []),
+                    'empty-list' if ie == [] else ('non-empty' if isinstance(ie, list) else 'MISSING')))
+")"
+assert_eq "[O] and reportUnmatchedIgnoredErrors stays on, so a stale suppression is still an error" \
+  "True" \
+  "$(python3 -c "
+import yaml
+p = (yaml.safe_load(open('$NEON')) or {}).get('parameters') or {}
+print(p.get('reportUnmatchedIgnoredErrors'))
 ")"
 
 # O1: the reported defect. None of the three files a default-enabled rule needs to
@@ -3379,15 +3406,24 @@ assert_eq "[contract, not behavioural] no shipped excludePaths pattern hides .mo
 # O2: and the assertion above genuinely discriminates. Put the old exclusion block
 # back and it must report all three files hidden. Without this, "0" would also be the
 # reading for a config whose excludePaths key we simply failed to find.
+# Injected INTO the excludePaths list the template now ships, not as a second
+# excludePaths key. The template gained an analyseAndScan block excluding vendored
+# third-party trees (node_modules, and vendor/ inside a custom module or theme), so a
+# second top-level `excludePaths:` would simply be the duplicate key a YAML parser
+# discards — the mutation would write a file, change nothing a parser can see, and the
+# assertion below would report "0 hidden" for the wrong reason. Putting the pre-fix
+# patterns into the list that exists is what actually restores the old blindness.
 O_EXCL_INJECT='
-    excludePaths:
-        - web/modules/custom/*/tests/*
-        - web/modules/custom/*/*.module
-        - web/modules/custom/*/*.install
-'
+            - web/modules/custom/*/tests/*
+            - web/modules/custom/*/*.module
+            - web/modules/custom/*/*.install'
+# The anchor is the shipped excludePaths block itself. `paths:` is no longer usable as
+# one: it now names a quoted placeholder, substituted at placement from
+# project.layout.modules, because a static config file cannot detect whether a project's
+# web root is web/ or docroot/ and this one used to guess.
 assert_eq "[O, mutation] the pre-fix excludePaths block re-inserts at exactly one anchor" \
-  "ok" "$(o_mutate "$NEON" "$TMP/neon_excl" '    paths:
-        - web/modules/custom' "$O_EXCL_INJECT" 1)"
+  "ok" "$(o_mutate "$NEON" "$TMP/neon_excl" '    excludePaths:
+        analyseAndScan:' "$O_EXCL_INJECT" 1)"
 assert_eq "[O, mutation] with the pre-fix exclusions back, all three files are hidden again" \
   "3" "$(o_hidden "$TMP/neon_excl")"
 
@@ -4336,7 +4372,7 @@ while IFS= read -r r_f; do R_ALL+=("$r_f"); done < <(
 )
 R_EXPECTED=(
   core/detect-environment.sh core/full-audit.sh core/install-tools.sh
-  core/report-processor.sh
+  core/install-verify.sh core/report-processor.sh
   drupal/coverage-report.sh drupal/dry-check.sh drupal/lint-check.sh
   drupal/rector-fix.sh drupal/security-check.sh drupal/solid-check.sh
   nextjs/coverage-report.sh nextjs/dry-check.sh nextjs/lint-check.sh
@@ -8562,6 +8598,1270 @@ assert_eq "[AE] a vendored npm tree carries no PHPUnit test file to discover" "0
 AE_COV_IGNORE=$(grep -cE '\--ignore|--exclude' "$COV" 2>/dev/null || true)
 assert_eq "[AE] [contract, not behavioural] the coverage gate passes no exclusion flag, because there is none to pass" \
   "0" "${AE_COV_IGNORE:-MISSING}"
+
+# ── IN. the config-driven installer (config_driven_installer child) ──────────
+#
+# Eleven sections, IN-A through IN-K. The prefix is deliberate: letters A-W and
+# AA-AG are already taken by this file and by the gate_path_resolution sibling,
+# and a section letter that collides is a section somebody deletes by accident.
+#
+# What they assert, and the criterion each one carries:
+#
+#   IN-A  the tool catalog is one list, and every entry's scope cites the rule (2, 3)
+#   IN-B  the config schema expresses the five matrix dimensions, and one
+#         fixture per dimension round-trips through the installer (1)
+#   IN-C  the config reader refuses; it never falls back to a default (19)
+#   IN-D  a derived config resolves the same package list as a written one, and
+#         leaves no file behind (8)
+#   IN-E  allow-plugins is written by `composer config`, before any require (5, 9)
+#   IN-F  nothing is installed that the config did not ask for (6)
+#   IN-G  an isolated tool stays out of require-dev and resolves through
+#         resolve_analyzer's fourth location (2, 4)
+#   IN-H  the placed templates carry the layout, exclude only what is not ours,
+#         ship no pre-emptive suppressions, and name no in-repo report path (10, 11, 12, 16)
+#   IN-I  the installer refuses to shadow a config it did not write (13)
+#   IN-J  the install verifies itself, and the verification is asserted red
+#         before it is asserted green (14)
+#   IN-K  setup.md holds no install, and the generated region cannot be edited
+#         away silently (7, 15, 17)
+
+SKILLROOT="${ROOT}/.."
+PLUGINROOT="${ROOT}/../../.."
+REPOROOT="${ROOT}/../../../.."
+CATALOG="${SKILLROOT}/schema/tool-catalog.json"
+CQSCHEMA="${SKILLROOT}/schema/code-quality.schema.json"
+CFGDOC="${SKILLROOT}/references/config-schema.md"
+CQTCONFIG="${ROOT}/core/cqt-config.sh"
+CQTINSTALL="${ROOT}/core/cqt-install.sh"
+CQTVERIFY="${ROOT}/core/install-verify.sh"
+SHIM="${ROOT}/core/install-tools.sh"
+SETUPMD="${PLUGINROOT}/commands/setup.md"
+GENDOC="${REPOROOT}/scripts/gen-setup-doc.sh"
+
+# ── IN-A. one list of tools, and every scope cites the rule (criteria 2, 3) ───
+echo ""
+echo "IN-A: the tool catalog states its rule and every entry cites it"
+
+if [[ ! -f "$CATALOG" ]]; then
+  bad "[IN-A] the tool catalog exists at schema/tool-catalog.json"
+else
+  ok "[IN-A] the tool catalog exists at schema/tool-catalog.json"
+
+  assert_eq "[IN-A] the catalog is valid JSON" "yes" \
+    "$(jq -e . "$CATALOG" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # The rule itself, not a paraphrase of it. Criterion 3 asks that scope be
+  # assigned "by a stated rule, not per-tool taste", so the rule has to be IN the
+  # file a reader opens, and it has to be the predicate the mechanism challenge
+  # settled: "tools which do not autoload your code".
+  RULE=$(jq -r '.scope_rule // ""' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] the catalog states a scope rule" "yes" \
+    "$([[ -n "$RULE" ]] && echo yes || echo no)"
+  assert_eq "[IN-A] the stated rule names autoloading the project's own code" "yes" \
+    "$(u_has "$RULE" "autoload")"
+
+  # Vocabulary. A fourth word would be a scope the installer cannot route.
+  BADSCOPE=$(jq -r '[.tools | to_entries[] | select(.value.scope as $s | ["project","isolated","machine"] | index($s) | not) | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every tool's scope is project|isolated|machine" "" "$BADSCOPE"
+
+  # The citation is the half criterion 3 is actually about. An entry with a scope
+  # and no reason is exactly the per-tool taste the criterion refuses.
+  NOREASON=$(jq -r '[.tools | to_entries[] | select((.value.scope_reason // "") == "") | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every tool carries a non-empty scope_reason" "" "$NOREASON"
+
+  # isolated is the MINORITY case. The predicate excludes every tool that
+  # resolves project classes, so phpstan-drupal, coder, PHPUnit and Rector all
+  # stay project — a catalog that isolates them has misread the rule.
+  ISO=$(jq -r '[.tools | to_entries[] | select(.value.scope == "isolated") | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] exactly four tools are isolated" \
+    "php-security-linter,phpcpd,phpmd,psalm" "$ISO"
+
+  for keep in phpstan-drupal coder rector phpunit roave; do
+    assert_eq "[IN-A] $keep stays at project scope" "project" \
+      "$(jq -r --arg k "$keep" '.tools[$k].scope // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  done
+
+  # required_when is what makes criterion 8 hold for the derived path too: it is
+  # the catalog fact cqt_config_load re-checks as an invariant.
+  for req in phpstan-extension-installer phpstan-drupal phpstan-deprecation-rules; do
+    assert_eq "[IN-A] $req is required when the project is Drupal" "drupal" \
+      "$(jq -r --arg k "$req" '.tools[$k].required_when["project.type"] // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  done
+
+  GATED=$(jq -r '[.tools | to_entries[] | select(.value.consent_gated == true) | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] grumphp and husky are the only consent-gated tools" "grumphp,husky" "$GATED"
+
+  # A machine tool has no package to require, so an entry that carries one would
+  # reach `composer require` with a name Composer has never heard of. The hint is
+  # what replaces the `curl | sh` install-tools.sh:144,:157 used to run.
+  MACHPKG=$(jq -r '[.tools | to_entries[] | select(.value.scope == "machine") | select((.value.packages | length) > 0) | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] no machine-scope tool carries a package list" "" "$MACHPKG"
+  MACHHINT=$(jq -r '[.tools | to_entries[] | select(.value.scope == "machine") | select((.value.install_hint // "") == "") | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every machine-scope tool carries an install_hint" "" "$MACHHINT"
+
+  # The pin the epic settled, and the reason recorded WHERE the pin is. Stating
+  # it only in a changelog is what left drupal-ai-contrib's ^8.3.x reading as an
+  # accident.
+  assert_eq "[IN-A] drupal/coder pins ^9.0" "^9.0" \
+    "$(jq -r '.tools.coder.packages[0].constraint // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  assert_eq "[IN-A] the coder pin carries its own constraint_reason" "yes" \
+    "$([[ -n "$(jq -r '.tools.coder.constraint_reason // ""' "$CATALOG" 2>/dev/null)" ]] && echo yes || echo no)"
+
+  # Every package name reaches a composer/npm command line eventually. The
+  # catalog is trusted input, which is not a reason for it to hold a name that
+  # would not survive being one.
+  BADNAME=$(jq -r '[.tools | to_entries[] | .value.packages[]? | select(.name | test("^[a-z0-9@][a-zA-Z0-9._/-]*$") | not) | .name] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every package name is a plain package name" "" "$BADNAME"
+fi
+
+# Criterion 3 asks the rule be "stated in the schema docs". A rule that lives only
+# in the data file is not stated where the person reading about the schema is.
+if [[ ! -f "$CFGDOC" ]]; then
+  bad "[IN-A] references/config-schema.md exists"
+else
+  ok "[IN-A] references/config-schema.md exists"
+  DOCRULE=$(cat "$CFGDOC")
+  CATRULE=$(jq -r '.scope_rule // "NORULE"' "$CATALOG" 2>/dev/null || echo NORULE)
+  assert_eq "[IN-A] the schema doc states the catalog's scope rule verbatim" "yes" \
+    "$(u_has "$DOCRULE" "$CATRULE")"
+fi
+
+# ── IN-B. the schema expresses what an install needs (criterion 1) ───────────
+echo ""
+echo "IN-B: the config schema carries the five matrix dimensions"
+
+if [[ ! -f "$CQSCHEMA" ]]; then
+  bad "[IN-B] the config schema exists at schema/code-quality.schema.json"
+else
+  ok "[IN-B] the config schema exists at schema/code-quality.schema.json"
+  assert_eq "[IN-B] the schema is valid JSON" "yes" \
+    "$(jq -e . "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # One assertion per matrix dimension, by the path the fixtures use. A schema
+  # that cannot express a dimension is a schema the wizard has to work around,
+  # which is how judgment leaks back into the prose.
+  assert_eq "[IN-B] schema_version is required" "true" \
+    "$(jq -r '[.required[]?] | index("schema_version") != null' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] dimension: project.type" "yes" \
+    "$(jq -e '.properties.project.properties.type' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: project.layout.web_root" "yes" \
+    "$(jq -e '.properties.project.properties.layout.properties.web_root' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: per-tool scope" "yes" \
+    "$(jq -e '.properties.tools.additionalProperties.properties.scope' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  # allow_plugins is REQUIRED, not optional-with-an-empty-default. The one entry
+  # that matters is not derivable from the package list — drupal/coder pulls
+  # dealerdirect/phpcodesniffer-composer-installer transitively and never names it —
+  # so a config that may omit the key is a config that can silently disable the
+  # Drupal phpcs standard, which is the defect this task exists to remove.
+  assert_eq "[IN-B] allow_plugins is a required per-tool key" "true" \
+    "$(jq -r '[.properties.tools.additionalProperties.required[]?] | index("allow_plugins") != null' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] dimension: phpstan.level" "yes" \
+    "$(jq -e '.properties.phpstan.properties.level' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: git_hooks.enabled" "yes" \
+    "$(jq -e '.properties.git_hooks.properties.enabled' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] the templates list is a dimension the config carries" "yes" \
+    "$(jq -e '.properties.templates' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # web_root is an enum of three, not a free string: it is substituted into every
+  # placed template, and a traversal there is a write outside the project root.
+  assert_eq "[IN-B] web_root is an enum of web|docroot|empty" ",docroot,web" \
+    "$(jq -r '[.properties.project.properties.layout.properties.web_root.enum[]?] | sort | join(",")' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] tool scope is an enum of the three words" "isolated,machine,project" \
+    "$(jq -r '[.properties.tools.additionalProperties.properties.scope.enum[]?] | sort | join(",")' "$CQSCHEMA" 2>/dev/null)"
+fi
+
+# ── IN-C. the config reader refuses; it never defaults (criterion 19) ────────
+echo ""
+echo "IN-C: a contract file that cannot be read is not a contract that may be assumed"
+
+# The single input surface for every fixture below. One helper that materialises a
+# throwaway project from a .code-quality.json plus a directory skeleton, so a
+# criterion's verify is one fixture and one assertion rather than a new scaffold
+# each time.
+#
+#   in_config <type> <web_root> <hooks> [tools-json-override]
+#
+# Emits a schema-valid document on stdout. `hooks` is true|false and decides both
+# git_hooks.enabled and whether phpro/grumphp is present, because those two are
+# the same answer (invariant 4).
+in_config() {
+  local ptype="$1" webroot="$2" hooks="$3" tools_override="${4:-}"
+  local mods themes
+  if [[ -n "$webroot" ]]; then mods="${webroot}/modules/custom"; themes="${webroot}/themes/custom"
+  else mods="modules/custom"; themes="themes/custom"; fi
+  local tools
+  if [[ -n "$tools_override" ]]; then
+    tools="$tools_override"
+  elif [[ "$ptype" == "nextjs" ]]; then
+    tools='{"eslint":{"scope":"project","packages":[{"name":"eslint","constraint":""}],"allow_plugins":[],"bin":"eslint"}}'
+  else
+    tools='{
+      "phpstan":{"scope":"project","packages":[{"name":"phpstan/phpstan","constraint":"^2.0"}],"allow_plugins":[],"bin":"phpstan"},
+      "phpstan-extension-installer":{"scope":"project","packages":[{"name":"phpstan/extension-installer","constraint":"^1.4"}],"allow_plugins":["phpstan/extension-installer"],"bin":null},
+      "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^2.1.2"}],"allow_plugins":[],"bin":null},
+      "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^2.0"}],"allow_plugins":[],"bin":null},
+      "coder":{"scope":"project","packages":[{"name":"drupal/coder","constraint":"^9.0"}],"allow_plugins":["dealerdirect/phpcodesniffer-composer-installer"],"bin":"phpcs"},
+      "phpmd":{"scope":"isolated","packages":[{"name":"phpmd/phpmd","constraint":"^2.15"}],"allow_plugins":[],"bin":"phpmd"},
+      "gitleaks":{"scope":"machine","packages":[],"allow_plugins":[],"bin":"gitleaks","install_hint":"brew install gitleaks"}
+    }'
+  fi
+  if [[ "$hooks" == "true" ]]; then
+    tools=$(jq -c '. + {"grumphp":{"scope":"project","packages":[{"name":"phpro/grumphp","constraint":"^2.0"}],"allow_plugins":["phpro/grumphp"],"bin":"grumphp"}}' <<< "$tools")
+    HOOKBLOCK='{"enabled":true,"tool":"grumphp","tasks":["phpcs","phpstan"]}'
+  else
+    HOOKBLOCK='{"enabled":false,"tool":null,"tasks":[]}'
+  fi
+  jq -nc --arg t "$ptype" --arg w "$webroot" --arg m "$mods" --arg th "$themes" \
+     --argjson tools "$(jq -c . <<< "$tools")" --argjson hooks "$HOOKBLOCK" '
+    {schema_version:"3.0",
+     project:{type:$t, layout:{web_root:$w, modules:$m, themes:$th}},
+     tools:$tools,
+     phpstan:{level:5},
+     isolation:{package:"bamarni/composer-bin-plugin",constraint:"^1.9",
+                allow_plugin:"bamarni/composer-bin-plugin",
+                forward_command_key:"extra.bamarni-bin.forward-command"},
+     templates:["drupal/phpstan.neon","drupal/phpmd.xml","drupal/phpunit.xml"],
+     git_hooks:$hooks,
+     thresholds:{coverage:80,complexity:10,duplication:5,security_severity:"medium"}}'
+}
+
+# Run cqt_config_load in its OWN process against a document, and report
+# "<exit>|<combined output>". A separate process because the whole point of the
+# library is what it does to the exit status, and sourcing it into the spec would
+# let the spec's own `set` decide that.
+in_load() {   # <path-or-dash> [stdin-doc]
+  local arg="$1" doc="${2-}"
+  if [[ -n "$doc" ]]; then
+    printf '%s' "$doc" | bash -c '. "$1"; cqt_config_load "$2"' _ "$CQTCONFIG" "$arg" 2>&1
+    printf '|%s' "${PIPESTATUS[0]}"   # placeholder, replaced below
+  fi
+}
+
+# Simpler and honest: run it, capture output and status separately.
+in_load_status() {  # <path-or-dash> ; stdin is the doc when path is "-"
+  bash -c '. "$1"; cqt_config_load "$2" >/dev/null 2>&1' _ "$CQTCONFIG" "$1"
+  printf '%s' "$?"
+}
+in_load_out() {     # <path-or-dash> ; stdin is the doc when path is "-"
+  bash -c '. "$1"; cqt_config_load "$2" 2>&1' _ "$CQTCONFIG" "$1" || true
+}
+
+if [[ ! -f "$CQTCONFIG" ]]; then
+  bad "[IN-C] core/cqt-config.sh exists"
+else
+  ok "[IN-C] core/cqt-config.sh exists"
+
+  IN_C="$TMP/in_c"; mkdir -p "$IN_C"
+
+  # Each failure is its OWN message naming its own condition. One generic
+  # "invalid config" would tell a user nothing they could act on, and the
+  # criterion is specifically about failing loudly.
+  printf '{ "schema_version": ' > "$IN_C/malformed.json"
+  : > "$IN_C/empty.json"
+  in_config drupal web false > "$IN_C/good.json"
+  printf '%s' "$(in_config drupal web false)" | jq -c '.schema_version = "9.0"' > "$IN_C/futuremajor.json"
+  printf '%s' "$(in_config drupal web false)" | jq -c 'del(.tools["phpstan-drupal"])' > "$IN_C/nomglaman.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.tools.grumphp = {"scope":"project","packages":[{"name":"phpro/grumphp","constraint":"^2.0"}],"allow_plugins":["phpro/grumphp"],"bin":"grumphp"}' \
+    > "$IN_C/hookless-grumphp.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.tools.phpstan.packages[0].name = "phpstan/phpstan; rm -rf /"' > "$IN_C/metachar.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.templates = ["../../etc/passwd"]' > "$IN_C/badtemplate.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.project.layout.modules = "../../../etc"' > "$IN_C/traversal.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c 'del(.project.type)' > "$IN_C/notype.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.project.layout.web_root = "public"' > "$IN_C/badwebroot.json"
+
+  assert_eq "[IN-C] a valid config loads and exits 0" "0" "$(in_load_status "$IN_C/good.json")"
+
+  for case in \
+    "missing:$IN_C/nothing-here.json:no such file" \
+    "malformed:$IN_C/malformed.json:not valid JSON" \
+    "empty:$IN_C/empty.json:empty" \
+    "unknown major:$IN_C/futuremajor.json:schema_version" \
+    "drupal set incomplete:$IN_C/nomglaman.json:mglaman/phpstan-drupal" \
+    "consent-gated without consent:$IN_C/hookless-grumphp.json:phpro/grumphp" \
+    "shell metacharacter in a package name:$IN_C/metachar.json:package name" \
+    "template id outside the allowlist:$IN_C/badtemplate.json:templates" \
+    "path traversal in layout:$IN_C/traversal.json:layout" \
+    "project.type absent:$IN_C/notype.json:project.type" \
+    "web_root outside the enum:$IN_C/badwebroot.json:web_root" \
+  ; do
+    label="${case%%:*}"; rest="${case#*:}"; path="${rest%%:*}"; want="${rest#*:}"
+    assert_eq "[IN-C] $label exits 2" "2" "$(in_load_status "$path")"
+    OUTC="$(in_load_out "$path")"
+    assert_eq "[IN-C] $label names its field or condition" "yes" "$(u_has "$OUTC" "$want")"
+  done
+
+  # An unreadable file is its own condition, and not the same one as a missing
+  # file: "chmod 000" and "not there" call for different fixes.
+  cp "$IN_C/good.json" "$IN_C/unreadable.json"; chmod 000 "$IN_C/unreadable.json"
+  if [[ -r "$IN_C/unreadable.json" ]]; then
+    # Running as root, where mode 000 is still readable. Say so rather than
+    # asserting something the environment has already decided.
+    SKIP_NOTE="[IN-C] unreadable-file case not asserted: this user can read mode 000"
+    echo "  skip  $SKIP_NOTE"
+  else
+    assert_eq "[IN-C] an unreadable file exits 2" "2" "$(in_load_status "$IN_C/unreadable.json")"
+    assert_eq "[IN-C] an unreadable file names readability" "yes" \
+      "$(u_has "$(in_load_out "$IN_C/unreadable.json")" "not readable")"
+  fi
+  chmod 644 "$IN_C/unreadable.json" 2>/dev/null || true
+
+  # No path through the reader falls back to a default. This is the defect the
+  # criterion names by file:line — install-tools.sh:25-27 read two scalars with
+  # grep -oP and then did PROJECT_TYPE="${PROJECT_TYPE:-drupal}", so a renamed
+  # field produced a Drupal install on a project nobody had established was one.
+  # Comment lines are stripped first. This library's header NAMES the defect it
+  # exists to remove, quoting install-tools.sh:25-27 verbatim, and a check that a
+  # comment can trip would push the next author into deleting the explanation to
+  # get the suite green.
+  DEFAULTED=$(sed 's/[[:space:]]*#.*$//' "$CQTCONFIG" | grep -cE ':-(drupal|nextjs|monorepo|true|false)\}' || true)
+  assert_eq "[IN-C] the reader carries no fall-back-to-default for a config value" "0" "${DEFAULTED:-MISSING}"
+  assert_eq "[IN-C] the reader parses with jq, not by line-scraping" "0" \
+    "$(grep -cE "grep -oP|sed -n 's/.*\"" "$CQTCONFIG" || true)"
+
+  # Reading a config changes nothing on disk. The library is sourced by an AUDIT,
+  # so a write here would be a change to somebody's repository they did not ask for.
+  IN_C_TREE="$TMP/in_c_tree"; mkdir -p "$IN_C_TREE"
+  cp "$IN_C/good.json" "$IN_C_TREE/.code-quality.json"
+  BEFORE=$(cd "$IN_C_TREE" && find . -type f | sort | md5sum)
+  ( cd "$IN_C_TREE" && bash -c '. "$1"; cqt_config_load .code-quality.json' _ "$CQTCONFIG" >/dev/null 2>&1 )
+  AFTER=$(cd "$IN_C_TREE" && find . -type f | sort | md5sum)
+  assert_eq "[IN-C] loading a config leaves the tree byte-for-byte unchanged" "$BEFORE" "$AFTER"
+
+  # The accessors. cqt_config_tools emits NUL-separated specs so a package name
+  # never has to survive being re-split on whitespace.
+  ACC=$(bash -c '
+    . "$1"
+    cqt_config_load "$2" >/dev/null
+    printf "%s|" "$(cqt_config_get .project.layout.web_root)"
+    printf "%s|" "$(cqt_config_get .phpstan.level)"
+    printf "%s|" "$(cqt_config_source)"
+    cqt_config_tools project | tr "\0" ","
+  ' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
+  assert_eq "[IN-C] the accessors return the config's own values" \
+    "web|5|file|phpstan/phpstan:^2.0,phpstan/extension-installer:^1.4,mglaman/phpstan-drupal:^2.1.2,phpstan/phpstan-deprecation-rules:^2.0,drupal/coder:^9.0," \
+    "$ACC"
+
+  ISOSPEC=$(bash -c '. "$1"; cqt_config_load "$2" >/dev/null; cqt_config_tools isolated | tr "\0" ","' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
+  assert_eq "[IN-C] the isolated scope is addressable on its own" "phpmd:phpmd/phpmd:^2.15," "$ISOSPEC"
+
+  # `-` reads the document from stdin, which is how a derived config is validated
+  # without ever becoming a file.
+  STDIN_STATUS=$(in_config drupal web false | bash -c '. "$1"; cqt_config_load - >/dev/null 2>&1' _ "$CQTCONFIG"; echo $?)
+  assert_eq "[IN-C] a document on stdin validates the same way a file does" "0" "$STDIN_STATUS"
+fi
+
+# ── IN-D..IN-I fixtures ──────────────────────────────────────────────────────
+#
+# One project skeleton builder, used by every section below. A criterion's verify
+# is then one fixture plus one assertion rather than a new scaffold each time.
+#
+#   in_project <dir> <web_root>   composer.json, the web root, a custom module and
+#                                 a custom theme, and a node_modules tree inside the
+#                                 theme carrying PHP that ships inside an npm package.
+in_project() {
+  local dir="$1" webroot="$2" prefix=""
+  [[ -n "$webroot" ]] && prefix="${webroot}/"
+  mkdir -p "$dir/${prefix}modules/custom/mymod/src" \
+           "$dir/${prefix}modules/custom/mymod/tests/src/Unit" \
+           "$dir/${prefix}themes/custom/mytheme/node_modules/flatted/php"
+  printf '{\n  "name": "acme/site",\n  "require": {}\n}\n' > "$dir/composer.json"
+  printf '<?php\nnamespace Drupal\\mymod;\nclass Thing {}\n' > "$dir/${prefix}modules/custom/mymod/src/Thing.php"
+  printf '<?php\nfunction mymod_help() {}\n' > "$dir/${prefix}modules/custom/mymod/mymod.module"
+  printf '<?php\nfunction mymod_install() {}\n' > "$dir/${prefix}modules/custom/mymod/mymod.install"
+  printf '<?php\nnamespace Drupal\\Tests\\mymod\\Unit;\nclass ThingTest {}\n' \
+    > "$dir/${prefix}modules/custom/mymod/tests/src/Unit/ThingTest.php"
+  # Real, and the reason criterion 11 exists: a custom theme's npm tree ships PHP.
+  printf '<?php\nclass Flatted {}\n' > "$dir/${prefix}themes/custom/mytheme/node_modules/flatted/php/flatted.php"
+}
+
+# Run the installer in --dry-run from inside a fixture, and return what it printed.
+# --dry-run writes nothing, so every package-list and ordering assertion runs with
+# no Composer, no npm and no DDEV.
+in_dry() {   # <dir> <config-path-relative-to-dir>
+  ( cd "$1" && bash "$CQTINSTALL" --config "$2" --dry-run 2>&1 )
+}
+
+# The same, but performing every filesystem step for real and printing the Composer
+# and npm invocations instead of running them. This is what the template-placement,
+# shadow-refusal and vendor-bin assertions need: real files, no package manager.
+in_place() {   # <dir> <config-path-relative-to-dir>
+  ( cd "$1" && bash "$CQTINSTALL" --config "$2" --no-composer 2>&1 )
+}
+
+# ── IN-D. a derived config resolves what a written one does (criterion 8) ────
+echo ""
+echo "IN-D: the resolved package list does not depend on which door you came through"
+
+if [[ ! -f "$CQTINSTALL" || ! -f "$SHIM" ]]; then
+  bad "[IN-D] core/cqt-install.sh and core/install-tools.sh both exist"
+else
+  ok "[IN-D] core/cqt-install.sh and core/install-tools.sh both exist"
+
+  IN_D="$TMP/in_d"; in_project "$IN_D" web
+  in_config drupal web false > "$IN_D/.code-quality.json"
+
+  # The wizard's path: a file on disk.
+  D_FILE=$(bash -c '
+    . "$1"; cqt_config_load "$2" >/dev/null
+    cqt_config_tools project | tr "\0" "\n"
+  ' _ "$CQTCONFIG" "$IN_D/.code-quality.json" | sort | tr '\n' ',')
+
+  # The full-audit.sh path: nothing on disk, derived from the catalog in memory.
+  D_DERIVED=$(bash -c '
+    . "$1"
+    cqt_config_derive drupal web | cqt_config_load - >/dev/null 2>&1 || true
+    cqt_config_derive drupal web > "$2/derived.json"
+    cqt_config_load "$2/derived.json" >/dev/null
+    cqt_config_tools project | tr "\0" "\n"
+  ' _ "$CQTCONFIG" "$TMP" | sort | tr '\n' ',')
+
+  # The three packages that make PHPStan Drupal-aware are the whole point of the
+  # criterion: the prose path omitted them, and because the shipped phpstan.neon
+  # carries no `includes:` block their absence produces no error at all.
+  for p in phpstan/extension-installer mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules; do
+    assert_eq "[IN-D] the file-driven path resolves $p" "yes" "$(u_has "$D_FILE" "$p")"
+    assert_eq "[IN-D] the derived path resolves $p" "yes" "$(u_has "$D_DERIVED" "$p")"
+  done
+
+  # And the equality itself, which is what the criterion actually names.
+  D_BOTH=$(bash -c '
+    . "$1"
+    cqt_config_derive drupal web > "$2/derived2.json"
+    cqt_config_load "$2/derived2.json" >/dev/null
+    for s in project isolated machine; do cqt_config_tools "$s" | tr "\0" "\n"; done
+  ' _ "$CQTCONFIG" "$TMP" | grep -E '^(phpstan|mglaman|drupal|roave|palantirnet)/' | sort | tr '\n' ',')
+  D_FILEALL=$(bash -c '
+    . "$1"; cqt_config_load "$2" >/dev/null
+    for s in project isolated machine; do cqt_config_tools "$s" | tr "\0" "\n"; done
+  ' _ "$CQTCONFIG" "$IN_D/.code-quality.json" | grep -E '^(phpstan|mglaman|drupal)/' | sort | tr '\n' ',')
+  assert_eq "[IN-D] the derived list is not empty" "yes" "$([[ -n "$D_BOTH" ]] && echo yes || echo no)"
+  assert_eq "[IN-D] every Drupal package the file-driven path resolves, the derived path resolves too" "yes" \
+    "$(python3 - "$D_FILEALL" "$D_BOTH" <<'PY'
+import sys
+a=[x for x in sys.argv[1].split(',') if x]
+b=set(x for x in sys.argv[2].split(',') if x)
+print("yes" if all(x in b for x in a) else "no: missing " + ",".join(x for x in a if x not in b))
+PY
+)"
+
+  # And the derived path writes NOTHING. This is the assertion that would have
+  # silently passed under the earlier design, where the derived config was
+  # persisted, so it is asserted directly rather than inferred from the other two.
+  IN_D2="$TMP/in_d2"; in_project "$IN_D2" web
+  D_BEFORE=$(cd "$IN_D2" && find . | sort | md5sum)
+  ( cd "$IN_D2" && bash "$SHIM" --dry-run >/dev/null 2>&1 ) || true
+  D_AFTER=$(cd "$IN_D2" && find . | sort | md5sum)
+  assert_eq "[IN-D] a run with no .code-quality.json leaves the tree unchanged" "$D_BEFORE" "$D_AFTER"
+  assert_eq "[IN-D] and leaves no .code-quality.json behind" "no" \
+    "$([[ -f "$IN_D2/.code-quality.json" ]] && echo yes || echo no)"
+
+  D_ANNOUNCE=$( cd "$IN_D2" && PROJECT_TYPE=drupal bash "$SHIM" --dry-run 2>&1 || true )
+  assert_eq "[IN-D] the run announces that it derived a config" "yes" "$(u_has "$D_ANNOUNCE" "Derived a complete config")"
+  assert_eq "[IN-D] the announcement says nothing was written" "yes" "$(u_has "$D_ANNOUNCE" "Nothing was written")"
+  assert_eq "[IN-D] the announcement names the command that would persist it" "yes" \
+    "$(u_has "$D_ANNOUNCE" "/code-quality-tools:setup")"
+  assert_eq "[IN-D] the announcement prints the resolved package list" "yes" \
+    "$(u_has "$D_ANNOUNCE" "mglaman/phpstan-drupal")"
+
+  # A doctored catalog must produce a refusal, not a quiet install: otherwise the
+  # derivation is a path around the validator rather than an input to it.
+  jq 'del(.tools["phpstan-drupal"])' "$CATALOG" > "$TMP/catalog-doctored.json"
+  D_DOCTORED_STATUS=$(bash -c '
+    CQT_CATALOG="$3"
+    . "$1"
+    cqt_config_derive drupal web | cqt_config_load - >/dev/null 2>&1
+  ' _ "$CQTCONFIG" "" "$TMP/catalog-doctored.json"; echo $?)
+  assert_eq "[IN-D] a catalog missing mglaman/phpstan-drupal is refused, not quietly installed" "2" "$D_DOCTORED_STATUS"
+fi
+
+# ── IN-E. allow-plugins, written by Composer, before any require (5, 9) ──────
+echo ""
+echo "IN-E: the two lines that decide whether the toolchain runs Drupal rules at all"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_E="$TMP/in_e"; in_project "$IN_E" web
+  in_config drupal web false > "$IN_E/.code-quality.json"
+  E_OUT=$(in_dry "$IN_E" .code-quality.json)
+
+  assert_eq "[IN-E] the dry run printed a command sequence" "yes" "$([[ -n "$E_OUT" ]] && echo yes || echo no)"
+
+  for p in phpstan/extension-installer dealerdirect/phpcodesniffer-composer-installer; do
+    assert_eq "[IN-E] allow-plugins is written for $p" "yes" \
+      "$(u_has "$E_OUT" "composer config --no-plugins allow-plugins.${p} true")"
+  done
+
+  # Ordering is the criterion, not content. A plugin refused on first activation
+  # does not retroactively activate when the key appears later, so every
+  # allow-plugins write has to precede every require.
+  E_LAST_ALLOW=$(grep -n 'allow-plugins\.' <<< "$E_OUT" | tail -1 | cut -d: -f1)
+  E_FIRST_REQ=$(grep -nE 'composer (bin [a-z0-9-]+ )?require' <<< "$E_OUT" | head -1 | cut -d: -f1)
+  assert_eq "[IN-E] every allow-plugins write precedes every require" "yes" \
+    "$([[ -n "$E_LAST_ALLOW" && -n "$E_FIRST_REQ" && "$E_LAST_ALLOW" -lt "$E_FIRST_REQ" ]] && echo yes || echo "no (last allow=$E_LAST_ALLOW, first require=$E_FIRST_REQ)")"
+
+  # Composer writes composer.json, never this script. Handing it the job hands
+  # Composer the merge with an existing block, global-config precedence, the key's
+  # location on the running version, and the file's formatting.
+  E_HANDWRITE=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" \
+    | grep -cE '(jq[^|]*>[[:space:]]*[^ ]*composer\.json|>[[:space:]]*"?\$?\{?[A-Za-z_]*\}?/?composer\.json)' || true)
+  assert_eq "[IN-E] nothing in the installer writes composer.json itself" "0" "${E_HANDWRITE:-MISSING}"
+  assert_eq "[IN-E] every allow-plugins write goes through 'composer config'" "0" \
+    "$(grep -c 'allow-plugins' <<< "$E_OUT" | tr -d ' ' >/dev/null; grep 'allow-plugins' <<< "$E_OUT" | grep -cv 'composer config --no-plugins' || true)"
+
+  # --no-plugins on every one of them, because these writes run BEFORE the plugins
+  # they are authorising are allowed to load.
+  assert_eq "[IN-E] each allow-plugins write passes --no-plugins" "0" \
+    "$(grep 'allow-plugins' <<< "$E_OUT" | grep -cv -- '--no-plugins' || true)"
+
+  # The security half of the same stage. install-tools.sh:144,:157 piped a moving
+  # branch of somebody's install script into `sh` and wrote /usr/local/bin during
+  # what the user had asked to be an audit.
+  assert_eq "[IN-E] the installer runs no curl-pipe-shell" "0" \
+    "$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" | grep -cE 'curl[^|]*\|[[:space:]]*(sudo[[:space:]]+)?sh' || true)"
+  assert_eq "[IN-E] and writes nothing into /usr/local/bin" "0" \
+    "$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" | grep -c '/usr/local/bin' || true)"
+
+  # A real Composer, when there is one: an unrelated allow-plugins entry the
+  # project already had must survive. That merge is precisely the work a
+  # hand-written JSON write would have had to reimplement, and get right.
+  if command -v composer >/dev/null 2>&1; then
+    IN_E2="$TMP/in_e2"; in_project "$IN_E2" web
+    in_config drupal web false > "$IN_E2/.code-quality.json"
+    ( cd "$IN_E2" && composer config --no-plugins allow-plugins.acme/unrelated true >/dev/null 2>&1 )
+    ( cd "$IN_E2" && bash "$CQTINSTALL" --config .code-quality.json --no-composer >/dev/null 2>&1 ) || true
+    assert_eq "[IN-E] a pre-existing allow-plugins entry survives (real composer)" "true" \
+      "$(jq -r '.config["allow-plugins"]["acme/unrelated"] // "GONE"' "$IN_E2/composer.json" 2>/dev/null)"
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-E] pre-existing allow-plugins merge: composer is not installed"
+  fi
+fi
+
+# ── IN-F. nothing is installed that the config did not ask for (criterion 6) ─
+echo ""
+echo "IN-F: there is one install list, and it is the config"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_F="$TMP/in_f"; in_project "$IN_F" web
+  in_config drupal web false > "$IN_F/.code-quality.json"
+  F_OFF=$(in_dry "$IN_F" .code-quality.json)
+
+  IN_F2="$TMP/in_f2"; in_project "$IN_F2" web
+  in_config drupal web true > "$IN_F2/.code-quality.json"
+  F_ON=$(in_dry "$IN_F2" .code-quality.json)
+
+  # setup.md:76 installed grumphp in the unconditional Quick Install block, before
+  # the hooks prompt at :196 was reached, and :206 installed it a second time. So a
+  # user who declined hooks still got it. The opt-in guarded `grumphp git:init`,
+  # not the dependency.
+  assert_eq "[IN-F] git_hooks.enabled:false installs no phpro/grumphp" "no" "$(u_has "$F_OFF" "phpro/grumphp")"
+  assert_eq "[IN-F] git_hooks.enabled:true does" "yes" "$(u_has "$F_ON" "phpro/grumphp")"
+  assert_eq "[IN-F] and its allow-plugins entry follows the same consent" "no" \
+    "$(u_has "$F_OFF" "allow-plugins.phpro/grumphp")"
+  assert_eq "[IN-F] the hook is registered only when hooks were consented to" "yes" \
+    "$(u_has "$F_ON" "grumphp git:init")"
+  assert_eq "[IN-F] and not otherwise" "no" "$(u_has "$F_OFF" "git:init")"
+
+  # One install list, asserted structurally: the script must not carry a hardcoded
+  # package name of its own. Comments are stripped, because the reasons above name
+  # the packages they are about.
+  F_HARDCODED=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" \
+    | grep -cE '(phpstan/phpstan|mglaman/|drupal/coder|phpmd/phpmd|systemsdk/|vimeo/psalm|roave/|palantirnet/|bamarni/)' || true)
+  assert_eq "[IN-F] the installer carries no package list of its own" "0" "${F_HARDCODED:-MISSING}"
+
+  # Every package that reaches the sequence is one the config named.
+  # The isolation mechanism is named by the config too, under .isolation, so it
+  # counts as invited. That it is NOT hardcoded in the installer is the point of
+  # carrying it there, and the structural assertion above is what checks it.
+  F_NAMES=$( { bash -c '. "$1"; cqt_config_load "$2" >/dev/null; for s in project isolated; do cqt_config_tools "$s" | tr "\0" "\n"; done' \
+                _ "$CQTCONFIG" "$IN_F/.code-quality.json" | sed 's/^[a-z0-9-]*://' | cut -d: -f1
+              jq -r '.isolation.package' "$IN_F/.code-quality.json"; } | sort -u)
+  F_UNINVITED=""
+  while IFS= read -r req; do
+    for w in $req; do
+      case "$w" in
+        */*) pkg="${w%%:*}"
+             grep -qxF -- "$pkg" <<< "$F_NAMES" || F_UNINVITED="${F_UNINVITED}${F_UNINVITED:+,}${pkg}" ;;
+      esac
+    done
+  done <<< "$(grep -E 'composer (bin [a-z0-9-]+ )?require' <<< "$F_OFF")"
+  assert_eq "[IN-F] no package reaches a require that the config did not name" "" "$F_UNINVITED"
+fi
+
+# ── IN-G. the isolated scope, write side and read side (criteria 2, 4) ──────
+echo ""
+echo "IN-G: four analysers with their own dependency trees stay out of require-dev"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_G="$TMP/in_g"; in_project "$IN_G" web
+  in_config drupal web false > "$IN_G/.code-quality.json"
+  G_OUT=$(in_dry "$IN_G" .code-quality.json)
+
+  G_PROJECT_REQ=$(grep -E 'composer require' <<< "$G_OUT" | grep -v 'composer bin ' || true)
+  assert_eq "[IN-G] an isolated tool never appears in the project's require-dev" "no" \
+    "$(u_has "$G_PROJECT_REQ" "phpmd/phpmd")"
+  assert_eq "[IN-G] it is installed into its own bin namespace instead" "yes" \
+    "$(u_has "$G_OUT" "composer bin phpmd require --dev phpmd/phpmd")"
+  assert_eq "[IN-G] the isolation mechanism itself is required once" "yes" \
+    "$(u_has "$G_OUT" "bamarni/composer-bin-plugin")"
+  assert_eq "[IN-G] and allowed, like any other Composer plugin" "yes" \
+    "$(u_has "$G_OUT" "allow-plugins.bamarni/composer-bin-plugin true")"
+  # forward-command is the single reason this beats a hand-rolled tools/composer.json:
+  # a developer's plain `composer install` installs the bin namespaces too.
+  assert_eq "[IN-G] forward-command is set so a plain composer install covers the namespaces" "yes" \
+    "$(u_has "$G_OUT" "extra.bamarni-bin.forward-command")"
+
+  # Read side: the fourth location in solid-check.sh's existing three-location
+  # lookup, not a new resolver. Second in the order, so a project that deliberately
+  # pinned a tool in its own vendor/bin still wins, and an isolated install still
+  # beats whatever the machine happens to have.
+  G_FN=$(sed -n '/^resolve_analyzer()/,/^}/p' "$SOLID")
+  assert_eq "[IN-G] resolve_analyzer knows the vendor-bin location" "yes" \
+    "$(u_has "$G_FN" 'vendor-bin/$tool/vendor/bin/$tool')"
+  G_ORDER=$(grep -nE 'vendor/bin/\$tool|vendor-bin/\$tool|command -v "\$tool"|COMPOSER_GLOBAL_BIN' <<< "$G_FN" | cut -d: -f1 | tr '\n' ' ')
+  G_POS_PROJECT=$(grep -n 'ddev exec test -f "vendor/bin/\$tool"' <<< "$G_FN" | head -1 | cut -d: -f1)
+  G_POS_BIN=$(grep -n 'vendor-bin/\$tool' <<< "$G_FN" | head -1 | cut -d: -f1)
+  G_POS_PATH=$(grep -n 'command -v "\$tool"' <<< "$G_FN" | head -1 | cut -d: -f1)
+  assert_eq "[IN-G] vendor-bin is looked up second: after the project's own vendor/bin, before the host PATH" "yes" \
+    "$([[ -n "$G_POS_PROJECT" && -n "$G_POS_BIN" && -n "$G_POS_PATH" && "$G_POS_PROJECT" -lt "$G_POS_BIN" && "$G_POS_BIN" -lt "$G_POS_PATH" ]] \
+       && echo yes || echo "no (project=$G_POS_PROJECT bin=$G_POS_BIN path=$G_POS_PATH; order line numbers: $G_ORDER)")"
+
+  # And it is the SAME function, not a second resolver. dry-check.sh and
+  # security-check.sh resolve their own way; unifying them is gate path handling,
+  # which the gate_path_resolution sibling owns.
+  assert_eq "[IN-G] no new analyzer resolver was added beside it" "1" \
+    "$(grep -c '^resolve_analyzer()' "$SOLID" || true)"
+fi
+
+# ── IN-I. the installer refuses to shadow a config it did not write (13) ────
+echo ""
+echo "IN-I: declining to create a shadow, and saying why"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_I="$TMP/in_i"; in_project "$IN_I" web
+  in_config drupal web false > "$IN_I/.code-quality.json"
+  # drupal/core-dev ships one, and drupal-ai-contrib writes one. PHPUnit resolves
+  # phpunit.xml before phpunit.xml.dist, so writing ours would silently take a
+  # project's test configuration away from it.
+  printf '<?xml version="1.0"?>\n<phpunit bootstrap="web/core/tests/bootstrap.php"/>\n' > "$IN_I/phpunit.xml.dist"
+  I_OUT=$(in_place "$IN_I" .code-quality.json)
+
+  assert_eq "[IN-I] no phpunit.xml is written where a .dist would be shadowed" "no" \
+    "$([[ -f "$IN_I/phpunit.xml" ]] && echo yes || echo no)"
+  assert_eq "[IN-I] the run names the file it declined to shadow" "yes" "$(u_has "$I_OUT" "phpunit.xml.dist")"
+  assert_eq "[IN-I] and states the reason rather than failing silently" "yes" "$(u_has "$I_OUT" "did not generate")"
+  # A refusal, not an error: the rest of the install still happens.
+  assert_eq "[IN-I] the other templates are still placed" "yes" \
+    "$([[ -f "$IN_I/phpstan.neon" ]] && echo yes || echo no)"
+  # And it never takes ownership of the file it declined to shadow.
+  assert_eq "[IN-I] the pre-existing .dist is untouched" \
+    "$(printf '<?xml version="1.0"?>\n<phpunit bootstrap="web/core/tests/bootstrap.php"/>\n' | md5sum)" \
+    "$(md5sum < "$IN_I/phpunit.xml.dist")"
+
+  # The same refusal for a file the project already wrote itself, which is the
+  # other direction of "does not take ownership of a file it did not write".
+  IN_I2="$TMP/in_i2"; in_project "$IN_I2" web
+  in_config drupal web false > "$IN_I2/.code-quality.json"
+  printf 'parameters:\n    level: 9\n' > "$IN_I2/phpstan.neon"
+  I2_OUT=$(in_place "$IN_I2" .code-quality.json)
+  assert_eq "[IN-I] an existing phpstan.neon this plugin did not write is not overwritten" \
+    "$(printf 'parameters:\n    level: 9\n' | md5sum)" "$(md5sum < "$IN_I2/phpstan.neon")"
+  assert_eq "[IN-I] and the run says so" "yes" "$(u_has "$I2_OUT" "phpstan.neon")"
+
+  # Re-running over a file this plugin DID write is not a refusal: the provenance
+  # comment is what tells the two cases apart, so a second /setup can update its
+  # own output.
+  I3_OUT=$(in_place "$IN_I" .code-quality.json)
+  assert_eq "[IN-I] a template this plugin generated is refreshed, not refused" "yes" \
+    "$(u_has "$(cat "$IN_I/phpstan.neon")" "code-quality-tools:generated")"
+  assert_eq "[IN-I] the re-run still produced output" "yes" "$([[ -n "$I3_OUT" ]] && echo yes || echo no)"
+fi
+
+# ── IN-H. the placed templates (criteria 10, 11, 12, 16) ────────────────────
+echo ""
+echo "IN-H: the layout is substituted, and the exclusions exclude only what is not ours"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  # Three layouts, because the whole reason these tokens exist is that a static
+  # config file cannot detect which one a project uses, and the template used to
+  # hardcode one of the three.
+  for layout in web docroot ""; do
+    tag="${layout:-root}"
+    d="$TMP/in_h_${tag}"; in_project "$d" "$layout"
+    in_config drupal "$layout" false > "$d/.code-quality.json"
+    H_OUT=$(in_place "$d" .code-quality.json)
+    want_mods="${layout:+${layout}/}modules/custom"
+    want_themes="${layout:+${layout}/}themes/custom"
+
+    assert_eq "[IN-H:$tag] phpstan.neon was placed" "yes" \
+      "$([[ -f "$d/phpstan.neon" ]] && echo yes || echo no)"
+    if [[ -f "$d/phpstan.neon" ]]; then
+      NEON=$(cat "$d/phpstan.neon")
+      assert_eq "[IN-H:$tag] paths: names the configured modules path" "yes" \
+        "$(u_has "$NEON" "- ${want_mods}")"
+      # The empty-web_root case is the one a naive join gets wrong: it must be
+      # modules/custom, never /modules/custom.
+      assert_eq "[IN-H:$tag] no absolute path was produced by an empty web root" "no" \
+        "$(u_has "$NEON" "- /modules/custom")"
+      assert_eq "[IN-H:$tag] no token survived substitution" "no" "$(u_has "$NEON" "{{")"
+      assert_eq "[IN-H:$tag] the placed file carries its provenance" "yes" \
+        "$(u_has "$NEON" "code-quality-tools:generated")"
+      assert_eq "[IN-H:$tag] the level came from the config" "yes" "$(u_has "$NEON" "level: 5")"
+      assert_eq "[IN-H:$tag] the vendored-tree excludes name this project's own paths" "yes" \
+        "$(u_has "$NEON" "${want_themes}/*/vendor/*")"
+    fi
+    if [[ -f "$d/phpunit.xml" ]]; then
+      PU=$(cat "$d/phpunit.xml")
+      # The joined-prefix case. A template that assembles "{{WEB_ROOT}}/core/..." itself
+      # produces "/core/tests/bootstrap.php" on a root-layout project: an absolute path
+      # into the filesystem root, which is why the installer computes the joined prefix
+      # once instead.
+      assert_eq "[IN-H:$tag] phpunit bootstrap follows the layout" "yes" \
+        "$(u_has "$PU" "bootstrap=\"${layout:+${layout}/}core/tests/bootstrap.php\"")"
+      assert_eq "[IN-H:$tag] and is never absolute" "no" "$(u_has "$PU" 'bootstrap="/')"
+    else
+      bad "[IN-H:$tag] phpunit.xml was placed"
+    fi
+    if [[ -f "$d/grumphp.yml" ]]; then
+      assert_eq "[IN-H:$tag] grumphp.yml was not placed: no hooks were consented to" "unexpected" "placed"
+    else
+      ok "[IN-H:$tag] grumphp.yml is absent, because hooks were not consented to"
+    fi
+  done
+
+  # ── criterion 11, asserted behaviourally rather than by reading the file ──
+  #
+  # The finding came from a live run, not from inspection: a custom theme's npm
+  # tree ships PHP (flatted/php/flatted.php) and phpstan's `paths:` reaches it. The
+  # template's 25-line "excludePaths: DELIBERATELY ABSENT" argument is entirely
+  # about excluding OUR OWN source — tests/ hides TestClassSuffixNameRule, *.module
+  # hides ProceduralHookEntityOperationCacheabilityRule — and none of that reasoning
+  # covers somebody else's vendored bundle. Excluding our source hides rules we
+  # want; excluding a vendored bundle hides nothing of ours.
+  #
+  # So the assertion resolves the shipped patterns against real files, the way
+  # section O does, instead of grepping for a string.
+  HD="$TMP/in_h_web"
+  if [[ -f "$HD/phpstan.neon" ]]; then
+    # The reset condition is a TOP-LEVEL key (exactly four spaces), not any key: the
+    # entries live one level down under analyseAndScan, and a reset on "any letter"
+    # would stop reading at that nested key and then assert against an empty list —
+    # which passes for the wrong reason.
+    H_PATTERNS=$(awk '/^[[:space:]]*excludePaths:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{gsub(/^[[:space:]]*-[[:space:]]*/,"");print;next} f&&/^ {4}[a-zA-Z]/{f=0}' "$HD/phpstan.neon" | tr -d '\r')
+    assert_eq "[IN-H] the placed config carries at least one excludePaths entry" "yes" \
+      "$([[ -n "$H_PATTERNS" ]] && echo yes || echo no)"
+
+    h_excluded() {   # <path> -> yes|no
+      local p="$1" pat
+      while IFS= read -r pat; do
+        [[ -z "$pat" ]] && continue
+        # A NEON entry may be quoted — the vendored-tree patterns are, so the template
+        # parses as YAML with its placeholders in place — and the quotes are not part
+        # of the pattern.
+        pat="${pat%\"}"; pat="${pat#\"}"
+        # shellcheck disable=SC2053
+        [[ "$p" == $pat ]] && { printf 'yes'; return 0; }
+      done <<< "$H_PATTERNS"
+      printf 'no'
+    }
+
+    assert_eq "[IN-H] a theme's node_modules PHP is excluded" "yes" \
+      "$(h_excluded "web/themes/custom/mytheme/node_modules/flatted/php/flatted.php")"
+    assert_eq "[IN-H] a module's vendored tree is excluded" "yes" \
+      "$(h_excluded "web/modules/custom/mymod/vendor/acme/lib/Lib.php")"
+    # And the three the DELIBERATELY ABSENT comment is about are still analysed.
+    assert_eq "[IN-H] tests/ is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/tests/src/Unit/ThingTest.php")"
+    assert_eq "[IN-H] *.module is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/mymod.module")"
+    assert_eq "[IN-H] *.install is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/mymod.install")"
+    assert_eq "[IN-H] ordinary src/ is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/src/Thing.php")"
+
+    # An exclude under analyseAndScan is not the same as a bare one: a bare list is
+    # analyseAndScan shorthand, so an excluded file is not even read for symbol
+    # discovery and PHPStan then gives wrong answers elsewhere rather than fewer
+    # answers here. The vendored trees are what we want gone entirely, so
+    # analyseAndScan is correct HERE and would not be correct for our own source.
+    assert_eq "[IN-H] the excludes are scoped under analyseAndScan deliberately" "yes" \
+      "$(u_has "$(cat "$HD/phpstan.neon")" "analyseAndScan")"
+  fi
+
+  # ── criterion 12: no pre-emptive suppressions ────────────────────────────
+  #
+  # The shipped template carried three ignoreErrors patterns AND
+  # reportUnmatchedIgnoredErrors: true. A suppression that matches nothing is itself
+  # an error, so on a project with zero custom PHP all three fail: the template
+  # cannot run clean on the case it is most likely to be adopted on. Emptying the
+  # list rather than turning off the check keeps the mechanism that makes stale
+  # suppressions visible.
+  H_TPL="${SKILLROOT}/templates/drupal/phpstan.neon"
+  H_IGN=$(awk '/^[[:space:]]*ignoreErrors:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{c++} f&&/^[[:space:]]*[a-zA-Z]/{f=0} END{print c+0}' "$H_TPL")
+  assert_eq "[IN-H] the shipped phpstan.neon ships zero ignoreErrors entries" "0" "$H_IGN"
+  assert_eq "[IN-H] and keeps reportUnmatchedIgnoredErrors on, so a stale one stays visible" "yes" \
+    "$(u_has "$(cat "$H_TPL")" "reportUnmatchedIgnoredErrors: true")"
+  if [[ -f "$HD/phpstan.neon" ]]; then
+    H_IGN_PLACED=$(awk '/^[[:space:]]*ignoreErrors:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{c++} f&&/^[[:space:]]*[a-zA-Z]/{f=0} END{print c+0}' "$HD/phpstan.neon")
+    assert_eq "[IN-H] the PLACED file ships zero of them too" "0" "$H_IGN_PLACED"
+  fi
+
+  # ── criterion 10's second half: phpunit.xml names no in-repo report path ──
+  #
+  # Removed, not repointed. PHPUnit runs in the DDEV web container and no host path
+  # is valid there, so a resolved host path would be as wrong as the hardcoded one.
+  # coverage-report.sh:69-99 reached this already: it writes coverage to a
+  # container-local stage and passes --coverage-clover on the command line, and a
+  # CLI report flag overrides the XML. <source> stays, and it is what actually
+  # scopes coverage, so removing the report blocks costs the gates nothing.
+  if [[ -f "$HD/phpunit.xml" ]]; then
+    # XML comments are stripped first. The placed file EXPLAINS the removal, naming the
+    # blocks and the paths it used to carry, and a check that a comment can trip pushes
+    # the next author into deleting the explanation to get the suite green. What the
+    # criterion is about is what PHPUnit would act on.
+    H_PU=$(python3 -c 'import sys,re; print(re.sub(r"<!--.*?-->", "", open(sys.argv[1]).read(), flags=re.S))' "$HD/phpunit.xml")
+    assert_eq "[IN-H] the placed phpunit.xml names no reports/ path" "no" "$(u_has "$H_PU" "reports/")"
+    assert_eq "[IN-H] it carries no <coverage><report> block" "no" "$(u_has "$H_PU" "<report>")"
+    assert_eq "[IN-H] it carries no <logging> block" "no" "$(u_has "$H_PU" "<logging>")"
+    assert_eq "[IN-H] <source> stays, because that is what scopes coverage" "yes" "$(u_has "$H_PU" "<source>")"
+    assert_eq "[IN-H] and the bootstrap follows the configured layout" "yes" \
+      "$(u_has "$H_PU" 'bootstrap="web/core/tests/bootstrap.php"')"
+    assert_eq "[IN-H] no absolute host path survives in it" "no" "$(u_has "$H_PU" "$TMP")"
+  else
+    bad "[IN-H] phpunit.xml was placed on the web-layout fixture"
+  fi
+
+  # ── criterion 16: grumphp testsuites and docroot variants ────────────────
+  HG="$TMP/in_h_hooks"; in_project "$HG" docroot
+  in_config drupal docroot true > "$HG/.code-quality.json"
+  # grumphp.yml is only placed when it is in templates[], which the wizard adds on
+  # consent. The fixture asks for it explicitly, which is what a consented config
+  # looks like.
+  jq -c '.templates += ["grumphp.yml"]' "$HG/.code-quality.json" > "$HG/tmp.json" && mv "$HG/tmp.json" "$HG/.code-quality.json"
+  in_place "$HG" .code-quality.json > /dev/null
+  if [[ -f "$HG/grumphp.yml" ]]; then
+    HGY=$(cat "$HG/grumphp.yml")
+    assert_eq "[IN-H] grumphp.yml carries a testsuites block" "yes" "$(u_has "$HGY" "testsuites:")"
+    assert_eq "[IN-H] named git_pre_commit" "yes" "$(u_has "$HGY" "git_pre_commit:")"
+    assert_eq "[IN-H] whose tasks are the ones the config asked for" "yes" "$(u_has "$HGY" "[phpcs, phpstan]")"
+    assert_eq "[IN-H] and a docroot/ whitelist variant" "yes" "$(u_has "$HGY" 'docroot\/modules\/custom')"
+    assert_eq "[IN-H] and a docroot/ force-pattern variant" "yes" \
+      "$(awk '/force_patterns:/{f=1} f&&/docroot/{print "yes";exit}' <<< "$HGY" | head -1 | tr -d '\n')"
+    assert_eq "[IN-H] the existing web/ variants are kept, not replaced" "yes" "$(u_has "$HGY" 'web\/modules\/custom')"
+  else
+    bad "[IN-H] grumphp.yml was placed on the consented fixture"
+  fi
+
+  # ── psalm.xml, the one isolation that is not free ────────────────────────
+  H_PSALM="${SKILLROOT}/templates/drupal/psalm.xml"
+  assert_eq "[IN-H] a psalm.xml template ships" "yes" "$([[ -f "$H_PSALM" ]] && echo yes || echo no)"
+  if [[ -f "$H_PSALM" ]]; then
+    assert_eq "[IN-H] it hands an isolated Psalm the project's autoloader explicitly" "yes" \
+      "$(u_has "$(cat "$H_PSALM")" "<autoloader>vendor/autoload.php</autoloader>")"
+  fi
+
+  # ── every template still parses as its own format, tokens unsubstituted ──
+  #
+  # A token in a VALUE position is what makes this possible, and it is why the
+  # tokens are not spliced into keys or structure. A template that has to be
+  # substituted before it can be linted is a template nobody lints.
+  for x in "${SKILLROOT}"/templates/drupal/*.xml; do
+    assert_eq "[IN-H] $(basename "$x") parses as XML with tokens in place" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+  done
+  if python3 -c 'import yaml' 2>/dev/null; then
+    assert_eq "[IN-H] grumphp.yml parses as YAML with tokens in place" "ok" \
+      "$(python3 -c 'import sys,yaml
+try:
+    yaml.safe_load(open(sys.argv[1])); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "${SKILLROOT}/templates/grumphp.yml")"
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-H] grumphp.yml YAML parse: PyYAML is not installed"
+  fi
+  # [contract, not behavioural] NEON has no parser available here, so the shipped
+  # file is checked for the structure the gate reads rather than parsed. Said out
+  # loud rather than left as an implied equivalence.
+  assert_eq "[IN-H] [contract, not behavioural] the phpstan template still opens with parameters:" "yes" \
+    "$(u_has "$(cat "$H_TPL")" "parameters:")"
+fi
+
+# ── IN-J. the install verifies itself, red before green (criterion 14) ──────
+echo ""
+echo "IN-J: three claims about the installed toolchain that are false today and produce no error"
+
+if [[ ! -f "$CQTVERIFY" ]]; then
+  bad "[IN-J] core/install-verify.sh exists"
+else
+  ok "[IN-J] core/install-verify.sh exists"
+
+  # It is a SEPARATE process from the installer, which is the design and not a
+  # file-layout preference: a thing asking itself whether it worked verifies nothing.
+  assert_eq "[IN-J] the installer hands off to it rather than checking its own work" "yes" \
+    "$(u_has "$(cat "$CQTINSTALL")" "install-verify.sh")"
+
+  # Plant a phpcs that answers a fixed way, so `phpcs -i` can be driven to both
+  # states. The three environment-dependent checks are the reason this section
+  # stubs rather than skips: a suite that skips them reports zero failures having
+  # asserted nothing, which is the shape this repo's own CLAUDE.md names as the
+  # defect worth avoiding.
+  J_STUB="$TMP/in_j_stub"; mkdir -p "$J_STUB"
+  j_phpcs() {   # <standards-line>
+    cat > "$J_STUB/phpcs" <<STUB
+#!/bin/bash
+if [ "\$1" = "-i" ]; then echo "$1"; exit 0; fi
+grep -rqF 'cqt-known-violation' "\$@" 2>/dev/null && exit 2
+exit 0
+STUB
+    chmod +x "$J_STUB/phpcs"
+  }
+
+  # Prints the exit status; the OUTPUT goes to a file, not to a variable. `X=$(j_run ...)`
+  # runs the function in a subshell, so anything it assigned is discarded and the caller
+  # silently reads the previous run's value — the same trap last_absent() upstream in this
+  # file documents, and it produced two assertions here that "passed" against an empty
+  # string until they were written as refutations that notice emptiness.
+  j_out() { cat "$TMP/j_out" 2>/dev/null || printf 'NOTHING'; }
+  j_run() {   # <dir> <config> ; prints "<exit>", output lands in $(j_out)
+    ( cd "$1" && REPORT_DIR="$1/.verify-reports" \
+      PATH="$J_STUB:/usr/bin:/bin" bash "$CQTVERIFY" --config "$2" ) > "$TMP/j_out" 2>&1
+    printf '%s' "$?"
+  }
+
+  IN_J="$TMP/in_j"; in_project "$IN_J" web
+  in_config drupal web false > "$IN_J/.code-quality.json"
+
+  # ── the mutation, and the RED half is the state a project is in today ──
+  #
+  # Without the allow-plugins entries, dealerdirect never registers the Drupal
+  # standard and extension-installer never writes a GeneratedConfig naming mglaman.
+  # Neither absence produces an error anywhere: phpcs --standard=Drupal has nothing
+  # to load, and PHPStan analyses Drupal as plain PHP and exits 0.
+  j_phpcs "The installed coding standards are PEAR, PSR1, PSR2, PSR12, Squiz and Zend"
+  mkdir -p "$IN_J/vendor"
+  J_RED=$(j_run "$IN_J" .code-quality.json)
+  assert_eq "[IN-J] RED: with the standard unregistered and no GeneratedConfig, verification fails" "1" "$J_RED"
+  assert_eq "[IN-J] RED: it says phpcs does not list Drupal" "yes" "$(u_has "$(j_out)" "Drupal")"
+  assert_eq "[IN-J] RED: and that mglaman is not registered" "yes" "$(u_has "$(j_out)" "mglaman")"
+
+  # ── the GREEN half, one mutation apart ──
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice, PEAR, PSR2 and Squiz"
+  mkdir -p "$IN_J/vendor/phpstan/extension-installer/src"
+  cat > "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" <<'GEN'
+<?php
+final class GeneratedConfig
+{
+    public const EXTENSIONS = ['mglaman/phpstan-drupal' => ['install_path' => '...']];
+}
+GEN
+  J_GREEN=$(j_run "$IN_J" .code-quality.json)
+  assert_eq "[IN-J] GREEN: with both registered, verification passes" "0" "$J_GREEN"
+
+  # One at a time, so neither check is carrying the other.
+  j_phpcs "The installed coding standards are PEAR and Squiz"
+  assert_eq "[IN-J] only phpcs mutated back: still fails" "1" "$(j_run "$IN_J" .code-quality.json)"
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+  mv "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" "$IN_J/gen.bak"
+  assert_eq "[IN-J] only GeneratedConfig mutated back: still fails" "1" "$(j_run "$IN_J" .code-quality.json)"
+  mv "$IN_J/gen.bak" "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+
+  # ── the report ──
+  J_REPORT="$IN_J/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] a machine-readable report is written" "yes" \
+    "$([[ -f "$J_REPORT" ]] && echo yes || echo no)"
+  if [[ -f "$J_REPORT" ]]; then
+    assert_eq "[IN-J] it carries status, findings and timestamp, per the repo convention" "yes" \
+      "$(jq -e 'has("status") and has("findings") and has("timestamp")' "$J_REPORT" >/dev/null 2>&1 && echo yes || echo no)"
+    # A check that could not APPLY reports skipped, never passed. Same three-state
+    # discipline check_version_drift() uses for "unchecked", and for the same
+    # reason: a consumer has to tell "we looked and it was fine" from "we never
+    # looked".
+    assert_eq "[IN-J] the hook check reports skipped, not passed, when hooks were not installed" "skipped" \
+      "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_REPORT" 2>/dev/null)"
+    assert_eq "[IN-J] and says why it was skipped" "yes" \
+      "$([[ -n "$(jq -r '.checks.hook_can_fail.reason // ""' "$J_REPORT" 2>/dev/null)" ]] && echo yes || echo no)"
+    assert_eq "[IN-J] a skipped check does not count as a pass in the totals" "0" \
+      "$(jq -r '[.checks[] | select(.status == "skipped")] | map(select(.counted_as_pass == true)) | length' "$J_REPORT" 2>/dev/null)"
+  fi
+
+  # ── check 3, the replacement for a verification that cannot fail ──
+  #
+  # setup.md:222 verified GrumPHP with `git commit --allow-empty`. That stages no
+  # files, GrumPHP's pre-commit context is git-staged-files, so it inspected an
+  # empty set and passed. This is the replacement, and it is asserted red before
+  # it is asserted green.
+  #
+  # [stubbed hook] The hook planted below stands in for GrumPHP: it refuses any
+  # staged file carrying the marker. What is under test is install-verify.sh —
+  # that it stages the violation, runs the hook, reads the status, and restores
+  # the index — not GrumPHP itself, which needs a live Composer install.
+  IN_JH="$TMP/in_jh"; in_project "$IN_JH" web
+  in_config drupal web true > "$IN_JH/.code-quality.json"
+  mkdir -p "$IN_JH/vendor/phpstan/extension-installer/src"
+  cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+     "$IN_JH/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+  ( cd "$IN_JH" && git init -q . && git config user.email t@e && git config user.name t \
+      && git add -A && git commit -qm base ) >/dev/null 2>&1
+  cat > "$IN_JH/.git/hooks/pre-commit" <<'HOOK'
+#!/bin/bash
+# Stands in for GrumPHP: refuses any staged file carrying the marker.
+files=$(git diff --cached --name-only)
+[ -n "$files" ] || exit 0
+for f in $files; do
+  [ -f "$f" ] || continue
+  grep -qF 'cqt-known-violation' "$f" && { echo "hook: refused $f"; exit 1; }
+done
+exit 0
+HOOK
+  chmod +x "$IN_JH/.git/hooks/pre-commit"
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+
+  J_INDEX_BEFORE=$(md5sum < "$IN_JH/.git/index")
+  J_HOOK_STATUS=$(j_run "$IN_JH" .code-quality.json)
+  J_INDEX_AFTER=$(md5sum < "$IN_JH/.git/index")
+  J_HREPORT="$IN_JH/.verify-reports/install-verify.json"
+
+  assert_eq "[IN-J] GREEN: a hook that refuses the seeded violation passes the check" "0" "$J_HOOK_STATUS"
+  assert_eq "[IN-J] the hook check ran rather than being skipped" "passed" \
+    "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  # The index is restored on every exit path. Leaving a staged file in somebody's
+  # repository after an audit is a real harm, so it is asserted byte for byte.
+  assert_eq "[IN-J] the git index is byte-identical afterwards" "$J_INDEX_BEFORE" "$J_INDEX_AFTER"
+  assert_eq "[IN-J] and the violation file is gone from the working tree" "0" \
+    "$(find "$IN_JH" -name '*cqt*violation*' 2>/dev/null | wc -l | tr -d ' ')"
+
+  # RED: a hook that passes everything is a hook that cannot fail, which is the
+  # exact state setup.md's `git commit --allow-empty` verification left behind.
+  cat > "$IN_JH/.git/hooks/pre-commit" <<'HOOK'
+#!/bin/bash
+exit 0
+HOOK
+  chmod +x "$IN_JH/.git/hooks/pre-commit"
+  J_INDEX_BEFORE2=$(md5sum < "$IN_JH/.git/index")
+  J_HOOK_RED=$(j_run "$IN_JH" .code-quality.json)
+  assert_eq "[IN-J] RED: a hook that passes the seeded violation fails verification" "1" "$J_HOOK_RED"
+  assert_eq "[IN-J] and the report records that check as failed" "failed" \
+    "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] the index is restored on the failing path too" "$J_INDEX_BEFORE2" \
+    "$(md5sum < "$IN_JH/.git/index")"
+
+  # And the thing it replaces is gone from the command.
+  assert_eq "[IN-J] setup.md no longer verifies with a commit that stages nothing" "0" \
+    "$(grep -c 'allow-empty' "$SETUPMD" || true)"
+fi
+
+# ── IN-K. setup.md holds no install, and the region cannot be edited away ────
+echo ""
+echo "IN-K: the prose keeps the judgment; the generated region keeps the inventory"
+
+if [[ ! -f "$SETUPMD" ]]; then
+  bad "[IN-K] commands/setup.md exists"
+else
+  # Criteria 7 and 15, which are literally grep counts. Cheap, and they are the
+  # verify text the contract names.
+  assert_eq "[IN-K] setup.md carries no composer require" "0" "$(grep -c 'composer require' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no allow-empty verification" "0" "$(grep -c 'allow-empty' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no cp of a template" "0" "$(grep -cE '^\s*cp .*templates?/' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no npm install block" "0" "$(grep -c 'npm install' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and does not claim no external script is needed" "0" \
+    "$(grep -c 'no external script needed' "$SETUPMD" || true)"
+
+  # What it gained: one step, naming the script that does the work.
+  assert_eq "[IN-K] it hands off to the installer" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "scripts/core/install-tools.sh")"
+  assert_eq "[IN-K] and writes the config that installer reads" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" ".code-quality.json")"
+  # make outputs fails a command with no '## Output' section, and this one still
+  # changes the project, so the section has to stay and has to be true.
+  assert_eq "[IN-K] the ## Output section survives the rewrite" "yes" \
+    "$(grep -c '^## Output$' "$SETUPMD" | grep -q '^1$' && echo yes || echo no)"
+  assert_eq "[IN-K] the frontmatter still carries description and allowed-tools" "2" \
+    "$(head -6 "$SETUPMD" | grep -cE '^(description|allowed-tools):' || true)"
+
+  # The generated region: markers, banner, checksum. Three things, each answering a
+  # different reader. The markers bound what the generator owns; the banner is
+  # INSIDE the region because that is where a person editing it is looking
+  # (terraform-docs shipped exactly this after issue #309); the checksum is what
+  # makes the generator refuse rather than silently destroy that person's edit
+  # (cog -c). Without it, generation turns a visible disagreement into a lost one.
+  assert_eq "[IN-K] the region has a begin marker" "1" \
+    "$(grep -c '^<!-- BEGIN GENERATED: tool-catalog -->$' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and an end marker carrying a 64-hex digest" "1" \
+    "$(grep -cE '^<!-- END GENERATED: tool-catalog sha256:[0-9a-f]{64} -->$' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and a do-not-modify banner inside the region" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "Do not modify this region directly")"
+  # The region names tools and holds no command, which is how criterion 17 and
+  # criterion 7 stop fighting: what is generated is the tool INVENTORY.
+  K_REGION=$(awk '/^<!-- BEGIN GENERATED: tool-catalog -->$/{f=1;next} /^<!-- END GENERATED/{f=0} f' "$SETUPMD")
+  assert_eq "[IN-K] the generated region holds no install command" "no" "$(u_has "$K_REGION" "composer ")"
+  assert_eq "[IN-K] and does name the tools" "yes" "$(u_has "$K_REGION" "mglaman/phpstan-drupal")"
+  assert_eq "[IN-K] with the scope beside each" "yes" "$(u_has "$K_REGION" "isolated")"
+fi
+
+if [[ ! -f "$GENDOC" ]]; then
+  bad "[IN-K] scripts/gen-setup-doc.sh exists"
+else
+  ok "[IN-K] scripts/gen-setup-doc.sh exists"
+
+  assert_eq "[IN-K] --check passes on the committed tree" "0" \
+    "$( bash "$GENDOC" --check >/dev/null 2>&1; echo $? )"
+
+  # Everything below runs on a COPY. A spec that regenerates the real setup.md
+  # would be a test that edits the repository it is testing.
+  K="$TMP/in_k"; mkdir -p "$K"
+  cp "$SETUPMD" "$K/setup.md"; cp "$CATALOG" "$K/catalog.json"
+  k_gen() { bash "$GENDOC" --setup-md "$K/setup.md" --catalog "$K/catalog.json" "$@" 2>&1; }
+  k_status() { k_gen "$@" >/dev/null 2>&1; printf '%s' "$?"; }
+
+  assert_eq "[IN-K] --check passes on an untouched copy" "0" "$(k_status --check)"
+
+  # A hand edit inside the region. This is the failure the whole mechanism exists
+  # for: without a guard the edit is destroyed silently, because both mature tools
+  # replace everything between their markers.
+  python3 - "$K/setup.md" <<'PY'
+import io,sys
+p=sys.argv[1]
+s=io.open(p,encoding='utf-8').read()
+i=s.index('<!-- BEGIN GENERATED: tool-catalog -->')
+j=s.index('<!-- END GENERATED')
+s=s[:j] + '| handedited | acme/thing | project | quality |\n' + s[j:]
+io.open(p,'w',encoding='utf-8').write(s)
+PY
+  K_EDITED=$(md5sum < "$K/setup.md")
+
+  assert_eq "[IN-K] --check fails on a hand edit inside the region" "1" "$(k_status --check)"
+  K_CHECK_OUT=$(k_gen --check)
+  assert_eq "[IN-K] and names the checksum mismatch" "yes" "$(u_has "$K_CHECK_OUT" "checksum")"
+  assert_eq "[IN-K] and prints the diff, so the reader sees what moved" "yes" \
+    "$(u_has "$K_CHECK_OUT" "handedited")"
+
+  # The write path REFUSES rather than overwriting. A two-step
+  # regenerate-and-diff would pass even if the write path silently destroyed the
+  # edit, which is why this is asserted between the red and the green.
+  assert_eq "[IN-K] a plain regenerate refuses on that tree" "1" "$(k_status)"
+  assert_eq "[IN-K] and leaves the region byte-identical" "$K_EDITED" "$(md5sum < "$K/setup.md")"
+  # Not just "it failed": the refusal PRINTS the region as committed, so the person
+  # standing there can see the edit that is about to be lost and move it somewhere
+  # that survives. A refusal that only says no leaves them to find it themselves.
+  K_REFUSAL=$(k_gen)
+  assert_eq "[IN-K] the refusal names itself as a refusal" "yes" "$(u_has "$K_REFUSAL" "REFUSING")"
+  assert_eq "[IN-K] and prints the edit it would have destroyed" "yes" "$(u_has "$K_REFUSAL" "handedited")"
+
+  # --force is the deliberate override, for somebody who has read the refusal and
+  # moved their edit somewhere that survives. Nothing in make calls it.
+  assert_eq "[IN-K] --force regenerates" "0" "$(k_status --force)"
+  assert_eq "[IN-K] and --check is green again" "0" "$(k_status --check)"
+  assert_eq "[IN-K] the hand edit is gone, deliberately this time" "no" \
+    "$(u_has "$(cat "$K/setup.md")" "handedited")"
+  # Comment lines stripped: the Makefile's own comment explains that --force exists
+  # and that no target calls it, and a check a comment can trip pushes the next
+  # author into deleting the explanation.
+  assert_eq "[IN-K] nothing in the Makefile calls --force" "0" \
+    "$(sed 's/^[[:space:]]*#.*$//' "$REPOROOT/Makefile" | grep -c 'gen-setup-doc.sh --force' || true)"
+
+  # A change to the CATALOG must move the region too, or generation is decorative.
+  jq '.tools.phpmd.category = "duplication-detection"' "$K/catalog.json" > "$K/c2.json" && mv "$K/c2.json" "$K/catalog.json"
+  assert_eq "[IN-K] --check fails when the catalog moved and the doc did not" "1" "$(k_status --check)"
+  assert_eq "[IN-K] --force brings them back into agreement" "0" "$(k_status --force)"
+  assert_eq "[IN-K] and the new value is what landed" "yes" \
+    "$(u_has "$(cat "$K/setup.md")" "duplication-detection")"
+
+  # ── failing honestly: a check that found nothing to check is a failure ──
+  #
+  # The repo's stated rule, applied to a sixth target. Every one of these would
+  # otherwise be a green run that asserted nothing.
+  cp "$SETUPMD" "$K/setup.md"
+  jq '.tools = {}' "$CATALOG" > "$K/empty-catalog.json"
+  assert_eq "[IN-K] an empty catalog fails rather than generating an empty table" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/setup.md" --catalog "$K/empty-catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  grep -v '^<!-- BEGIN GENERATED: tool-catalog -->$' "$SETUPMD" > "$K/nomarker.md"
+  assert_eq "[IN-K] a missing marker fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nomarker.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  sed 's/^<!-- END GENERATED: tool-catalog sha256:[0-9a-f]* -->$/<!-- END GENERATED: tool-catalog -->/' \
+    "$SETUPMD" > "$K/nodigest.md"
+  assert_eq "[IN-K] a missing checksum fails, and is not treated as a region to adopt" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nodigest.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  sed 's/sha256:[0-9a-f]\{64\}/sha256:notahex/' "$SETUPMD" > "$K/baddigest.md"
+  assert_eq "[IN-K] a malformed checksum fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/baddigest.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  assert_eq "[IN-K] a setup.md that is not there fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nothing-here.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+fi
+
+# ── the target joins the ones that already run ───────────────────────────────
+if [[ -f "$REPOROOT/Makefile" ]]; then
+  MK=$(cat "$REPOROOT/Makefile")
+  assert_eq "[IN-K] make setup-doc exists" "yes" "$(u_has "$MK" "setup-doc:")"
+  assert_eq "[IN-K] make setup-doc-check exists" "yes" "$(u_has "$MK" "setup-doc-check:")"
+  # In the ci loop, or it is a check nobody runs — which is the same shape as a
+  # check that lands in a different task from the thing it checks.
+  MK_CI=$(awk '/^ci:/{f=1} f' "$REPOROOT/Makefile")
+  assert_eq "[IN-K] and it is in the ci loop" "yes" "$(u_has "$MK_CI" "setup-doc-check")"
+  assert_eq "[IN-K] make help documents it" "yes" \
+    "$(awk '/^help:/{f=1} /^[a-z-]*:$/&&!/^help:/{if(f&&NR>5)f=0} f' "$REPOROOT/Makefile" | grep -c 'setup-doc' | grep -qv '^0$' && echo yes || echo no)"
+  # CLAUDE.md documents each target by what it can fail on, and a sixth
+  # undocumented target breaks that.
+  assert_eq "[IN-K] CLAUDE.md gained a row for it" "yes" \
+    "$(u_has "$(cat "$REPOROOT/CLAUDE.md")" "setup-doc-check")"
+  # And CI runs the same set, or `make ci` stops being the PR check.
+  assert_eq "[IN-K] the CI workflow runs it too" "yes" \
+    "$(u_has "$(cat "$REPOROOT/.github/workflows/ci.yml")" "make setup-doc-check")"
+fi
+
+# ── IN-B2. the matrix, one fixture per dimension (criterion 1) ──────────────
+echo ""
+echo "IN-B2: one fixture per matrix dimension round-trips through the installer"
+
+# Three of the five dimensions are exercised where their consequence lives:
+# project.layout.web_root by IN-H (three layouts, three placed template sets),
+# tool scope by IN-G (an isolated tool absent from require-dev and present in its own
+# bin namespace), git_hooks.enabled by IN-F (both values, both directions). The two
+# that have no other home are asserted here, so the criterion has a fixture for each
+# of the five rather than three and an assumption.
+if [[ -f "$CQTINSTALL" ]]; then
+  # project.type — the other stack. A Next.js config must reach npm and must NOT
+  # reach Composer at all, or the shim's "keep the Next.js path working" non-goal is
+  # quietly broken by the Drupal-shaped stages.
+  B2N="$TMP/in_b2_next"; mkdir -p "$B2N"
+  printf '{"name":"x","dependencies":{"next":"14.0.0"}}\n' > "$B2N/package.json"
+  in_config nextjs "" false > "$B2N/.code-quality.json"
+  B2_OUT=$(in_dry "$B2N" .code-quality.json)
+  assert_eq "[IN-B2] a nextjs config installs through npm" "yes" \
+    "$(u_has "$B2_OUT" "npm install --save-dev eslint")"
+  assert_eq "[IN-B2] and never reaches composer" "no" "$(u_has "$B2_OUT" "composer ")"
+  assert_eq "[IN-B2] and asks for no bin namespace, which npm has no mechanism for" "no" \
+    "$(u_has "$B2_OUT" "vendor-bin")"
+
+  # phpstan.level — the dimension the epic settled as the single source of truth.
+  # Asserted by PLACING the file, because the level is the one value the installer
+  # rewrites as a line rather than substituting as a token, and a token-only
+  # assertion would not exercise that path at all.
+  B2L="$TMP/in_b2_level"; in_project "$B2L" web
+  in_config drupal web false | jq -c '.phpstan.level = 8' > "$B2L/.code-quality.json"
+  in_place "$B2L" .code-quality.json > /dev/null
+  assert_eq "[IN-B2] the placed phpstan.neon carries the level the config chose" "yes" \
+    "$(u_has "$(cat "$B2L/phpstan.neon")" "level: 8")"
+  assert_eq "[IN-B2] and not the template's shipped default" "no" \
+    "$(u_has "$(grep -vE '^\s*#' "$B2L/phpstan.neon")" "level: 5")"
+  # The template's own literal is still 5, so template and config default agree and
+  # neither can drift without somebody editing a pinned assertion.
+  assert_eq "[IN-B2] while the shipped template still reads 5" "yes" \
+    "$(u_has "$(grep -vE '^\s*#' "${SKILLROOT}/templates/drupal/phpstan.neon")" "level: 5")"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

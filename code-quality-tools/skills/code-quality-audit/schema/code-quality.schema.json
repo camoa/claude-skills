@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/camoa/claude-skills/code-quality-tools/schema/code-quality.schema.json",
+  "title": ".code-quality.json",
+  "description": "The contract between /code-quality-tools:setup and scripts/core/cqt-install.sh. The wizard keeps the judgment and writes this file; the installer keeps the execution and reads it. Validated by scripts/core/cqt-config.sh, which refuses rather than falling back to a default: this is a contract file, not a detection record, and a contract you could not read is not a contract you may assume. See references/config-schema.md for the prose, including the scope rule stated verbatim.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "tools",
+    "templates",
+    "isolation",
+    "git_hooks",
+    "thresholds"
+  ],
+
+  "properties": {
+    "schema_version": {
+      "description": "Major.minor. The installer refuses a major it does not know, by name, rather than guessing at an old shape. setup.md:158-190 already shipped a .code-quality.json whose shape named tool CATEGORIES with no packages, no scope, no layout and no templates; nothing read it, and nothing could have installed from it.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "layout"],
+      "properties": {
+        "type": {
+          "description": "Matrix dimension 1. Decides which stack's tools apply and, for drupal, which packages are required rather than optional.",
+          "type": "string",
+          "enum": ["drupal", "nextjs", "monorepo"]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["web_root", "modules", "themes"],
+          "properties": {
+            "web_root": {
+              "description": "Matrix dimension 2. NOT detected here: it is the string cqt_drupal_root_prefix() in core/path-resolve.sh already computes, recorded. A second layout detector is how the two would disagree. The empty string is a root-layout project, and is a value rather than an omission.",
+              "type": "string",
+              "enum": ["web", "docroot", ""]
+            },
+            "modules": {
+              "description": "The joined custom-modules path, computed once by the wizard from web_root. Substituted into every placed template as {{MODULES_PATH}}, so each template does not assemble it again and get the empty-web_root case wrong.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._/-]+$"
+            },
+            "themes": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._/-]+$"
+            }
+          }
+        }
+      }
+    },
+
+    "tools": {
+      "description": "Matrix dimension 3. Resolved packages, not tool ids alone: the installer has exactly one input and never reads the catalog, so a fixture config is a complete test input; and a project's .code-quality.json is afterwards readable as a record of what was installed and why.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "packages", "allow_plugins"],
+        "properties": {
+          "scope": {
+            "description": "Routes the install. `project` goes into require-dev / devDependencies, `isolated` into its own vendor-bin namespace, `machine` is reported rather than installed.",
+            "type": "string",
+            "enum": ["project", "isolated", "machine"]
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "constraint"],
+              "properties": {
+                "name": {
+                  "description": "Re-validated against the Composer and npm name grammars by cqt-config.sh before it can become a command-line argument. The schema constrains shape; that check constrains content, and it is the one that matters.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "constraint": {
+                  "description": "Empty string means unconstrained deliberately, which is legitimate for npm and for drupal/core-dev. It is a value, not an omission.",
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            }
+          },
+          "allow_plugins": {
+            "description": "The Composer plugins this tool needs listed under config.allow-plugins, written with `composer config` before any require. Required, and often empty, because the one entry that matters is not derivable from the package list: drupal/coder pulls dealerdirect/phpcodesniffer-composer-installer transitively and never names it, so a rule of the form 'allow every plugin I am requiring' cannot produce it. Without the entry the Drupal phpcs standard is never registered and `phpcs --standard=Drupal` has nothing to load.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9]([_.-]?[a-z0-9]+)*$"
+            }
+          },
+          "bin": {
+            "type": ["string", "null"],
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "install_hint": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    },
+
+    "isolation": {
+      "description": "How `isolated` scope is implemented. Carried in the config rather than hardcoded in the installer so that the installer has exactly one input and no package name of its own: the wizard copies it out of the catalog's `isolation` block, and a fixture config is a complete test input. Chosen in Phase 1 against phive and a plain tools/composer.json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "constraint", "allow_plugin", "forward_command_key"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9]([_.-]?[a-z0-9]+)*$"
+        },
+        "constraint": { "type": "string", "maxLength": 100 },
+        "allow_plugin": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9]([_.-]?[a-z0-9]+)*$"
+        },
+        "forward_command_key": {
+          "description": "Set to true so a developer's plain `composer install` installs the bin namespaces too. That forwarding is the single reason this beats a hand-rolled tools/composer.json.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      }
+    },
+
+    "phpstan": {
+      "description": "Matrix dimension 4. The single source of truth for the level, settled by the epic. Which value is right is not this schema's argument; carrying the field is.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level"],
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        }
+      }
+    },
+
+    "templates": {
+      "description": "Template ids from a FIXED allowlist, never joined into a path. A config cannot make the installer read or write an arbitrary file, because nothing here is used as a path component without first matching one of these strings.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "drupal/phpstan.neon",
+          "drupal/phpmd.xml",
+          "drupal/phpunit.xml",
+          "drupal/psalm.xml",
+          "grumphp.yml",
+          "nextjs/eslint.config.js",
+          "nextjs/jest.config.js",
+          "nextjs/jest.setup.js"
+        ]
+      }
+    },
+
+    "git_hooks": {
+      "description": "Matrix dimension 5. `enabled: false` means no consent-gated tool may appear in `tools` at all — cqt-config.sh invariant 4 — which is the gate setup.md never had: it guarded `grumphp git:init` and not the dependency.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "tool", "tasks"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "tool": {
+          "type": ["string", "null"],
+          "enum": ["grumphp", "husky", null]
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["phpcs", "phpstan", "phpmd", "eslint", "jest"]
+          }
+        }
+      }
+    },
+
+    "thresholds": {
+      "description": "The interview's numeric answers. No amount of detection produces a preference, which is why these are asked and then written down rather than defaulted at read time.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage", "complexity", "duplication", "security_severity"],
+      "properties": {
+        "coverage": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "complexity": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "duplication": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "security_severity": {
+          "type": "string",
+          "enum": ["all", "low", "medium", "high", "critical"]
+        }
+      }
+    }
+  }
+}

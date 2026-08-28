@@ -1,12 +1,13 @@
 ---
-description: Interactive setup wizard to install and configure code quality tools for Drupal/Next.js projects. Use when user says "install quality tools", "set up PHPStan", "configure linting", "add code quality", "first time setup", "install ESLint", "setup security tools". Detects project type and installs recommended tools.
+description: Interactive setup wizard to install and configure code quality tools for Drupal/Next.js projects. Use when user says "install quality tools", "set up PHPStan", "configure linting", "add code quality", "first time setup", "install ESLint", "setup security tools". Detects project type, runs the interview, and writes the config the installer reads.
 allowed-tools: Read, Bash, Grep, Glob, AskUserQuestion, Write
 argument-hint: optional|project-path
 ---
 
 # Setup Wizard
 
-Interactive wizard to install and configure code quality tools for your project.
+Interactive wizard that decides what this project needs, writes `.code-quality.json`, and
+hands off to the installer.
 
 ## Usage
 
@@ -14,90 +15,134 @@ Interactive wizard to install and configure code quality tools for your project.
 /code-quality-tools:setup [project-path]
 ```
 
-## What This Does
+## The boundary this command sits on
 
-1. Auto-detects project type (Drupal, Next.js, or both)
-2. Presents tool selection (Quick install or Custom)
-3. Configures quality thresholds
-4. Installs selected tools
-5. Generates `.code-quality.json` configuration
-6. Optionally offers the in-session **security-guidance** plugin (soft offer — never auto-installs)
-7. Optionally sets up git hooks (GrumPHP/Husky)
-8. Runs baseline audit
-9. Displays next steps
+You keep the judgment. The script keeps the execution. `.code-quality.json` is the line
+between them, and it is a file rather than a step, so nothing the user ends up with was
+re-typed by a model on its way there.
 
-## Setup Workflow
+- **Detection is a script.** Anything discoverable from the filesystem, the package
+  manifests or the installed binaries is detected, never asked.
+- **Selection is an interview, and it is the only interview.** Which tools, how strict,
+  which paths, hooks or CI or both. No amount of detection produces a preference.
+- **The config is the artifact and the handoff.** Every judgement has to be expressible
+  in it. A judgement that cannot be written into the config means the schema is short a
+  field, not that logic belongs back in this prose.
+- **Execution is a script and it fails closed.** It refuses a malformed config naming
+  the field, refuses to write outside its expected paths, and installs in a declared
+  order.
+- **Verification is a script and it is separate from execution.** A model asking itself
+  whether the install worked verifies nothing.
 
-```
-Detection → Tool Selection → Threshold Config → Installation → Security Plugin (optional) → Git Hooks (optional) → Baseline Audit → Summary
-```
+**This command is the only writer of `.code-quality.json` in this plugin.** An audit run
+that finds the file missing derives an equivalent config in memory, announces it in full,
+and tells the user that this command is what persists one. That keeps a run somebody
+asked to be an audit from leaving a config file in their repository.
 
-## Tool Categories
+## Steps
 
-**Static Analysis:**
-- Drupal: PHPStan, Psalm, PHPMD
-- Next.js: ESLint, TypeScript, madge
+1. **Detect.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/detect-environment.sh"`.
+   Do not re-implement any of it. What it resolves — project type, the Drupal root and
+   therefore the web root, DDEV availability, what is already installed — is what goes
+   into `project` in the config. In particular `project.layout.web_root` is the value
+   that script already computed; deriving it a second time here is how the two would
+   come to disagree.
 
-**Security:**
-- Both: Semgrep, Trivy, Gitleaks
-- Drupal: Security Review, Drush advisories, Roave, Composer audit
-- Next.js: npm audit, Socket CLI
+2. **Read the codebase.** Look at what is already there: an existing `phpstan.neon` or
+   `phpunit.xml.dist`, a `grumphp.yml`, a CI workflow, how much custom PHP exists, and
+   whether the code is legacy enough to need a baseline. This is the part that needs
+   judgment and is why this is a command and not a script.
 
-**Quality Metrics:**
-- Drupal: PHPCPD (duplication)
-- Next.js: jscpd (duplication)
+3. **Interview.** Ask, and record the answers in the config:
+   - **Which tools.** The full inventory is below. Default to everything for the
+     detected stack.
+   - **PHPStan level** (`phpstan.level`, default 5). This field is the single source of
+     truth for the level; nothing else in the plugin restates a number.
+   - **Thresholds**: coverage (default 80), complexity (default 10), duplication
+     (default 5%), security severity (default medium).
+   - **Git hooks: yes or no, defaulting to no.** This one answer controls both the hook
+     registration and the hook runner's package. GrumPHP attaches hooks at
+     package-install time, so consent for the package and consent for the hooks are the
+     same answer, and the installer refuses a config that says otherwise.
+   - **CI workflows**, independently of hooks.
 
-**Testing:**
-- Drupal: PHPUnit
-- Next.js: Jest
+4. **Write `.code-quality.json`** at the project root, against
+   `skills/code-quality-audit/schema/code-quality.schema.json`. Resolve each chosen tool
+   through `skills/code-quality-audit/schema/tool-catalog.json` and copy its concrete
+   packages, `scope`, `allow_plugins` and `bin` into the config. The schema and the
+   scope rule are documented in
+   `skills/code-quality-audit/references/config-schema.md`.
 
-**Standards:**
-- Drupal: Drupal Coder, Rector
-- Next.js: Prettier (optional)
+5. **Install.** One command:
 
-**Code Intelligence (recommended):**
-- Drupal: `php-lsp` plugin + `intelephense` binary
-- Next.js: `typescript-lsp` plugin + `typescript-language-server` binary
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/install-tools.sh"
+   ```
 
-## Installation Modes
+   It reads the config you just wrote, writes `config.allow-plugins` before installing
+   anything, installs each tool at its scope, places the templates with the layout
+   substituted, registers the hook if one was consented to, and then runs
+   `install-verify.sh` in a separate process. It exits non-zero when the install did not
+   complete. Do not install a package or copy a template yourself: the whole point of
+   the config is that there is one install path and it is that script.
 
-### Quick Install (Recommended)
-Installs all recommended tools with default thresholds.
+6. **Read the verification result.** `install-verify.sh` asserts three things that are
+   false on a normal install today and produce no error: that `phpcs -i` lists Drupal,
+   that extension-installer's `GeneratedConfig.php` names mglaman, and that a staged
+   known violation drives the hook non-zero. A check that could not apply reports
+   `skipped` with a reason, never `passed`. Report what it found rather than
+   paraphrasing it as success.
 
-**Drupal:**
-```bash
-ddev composer require --dev \
-  phpstan/phpstan \
-  phpmd/phpmd \
-  systemsdk/phpcpd \
-  vimeo/psalm \
-  drupal/coder \
-  rector/rector \
-  phpro/grumphp \
-  roave/security-advisories
-```
+7. **Offer the optional extras** below (LSP, `security-guidance`, CI workflows).
 
-Plus: Semgrep, Trivy, Gitleaks (system-level)
+8. **Run a baseline audit** and report it.
 
-**Next.js:**
-```bash
-npm install --save-dev \
-  eslint \
-  @typescript-eslint/parser \
-  @typescript-eslint/eslint-plugin \
-  jest \
-  @testing-library/react \
-  @testing-library/jest-dom \
-  jscpd \
-  madge \
-  husky \
-  lint-staged
-```
+## What gets installed
 
-Plus: Semgrep, Trivy, Gitleaks (system-level)
+<!-- BEGIN GENERATED: tool-catalog -->
+<!-- Generated from skills/code-quality-audit/schema/tool-catalog.json.
+     Do not modify this region directly; edit the catalog and run `make setup-doc`.
+     `make setup-doc-check` fails when this region and the catalog disagree. -->
 
-### Custom Install
-Select specific tools and configure thresholds individually.
+| Tool | Package | Scope | Category |
+|---|---|---|---|
+| `phpstan` | phpstan/phpstan ^2.0 | project | static-analysis |
+| `phpstan-extension-installer` | phpstan/extension-installer ^1.4 | project | static-analysis |
+| `phpstan-drupal` | mglaman/phpstan-drupal ^2.1.2 | project | static-analysis |
+| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules ^2.0 | project | static-analysis |
+| `coder` | drupal/coder ^9.0 | project | standards |
+| `rector` | palantirnet/drupal-rector ^1.1 | project | standards |
+| `phpunit` | drupal/core-dev * | project | testing |
+| `roave` | roave/security-advisories dev-master | project | security |
+| `grumphp` | phpro/grumphp ^2.0 | project | hooks |
+| `phpmd` | phpmd/phpmd ^2.15 | isolated | quality |
+| `phpcpd` | systemsdk/phpcpd ^9.0 | isolated | quality |
+| `php-security-linter` | yousha/php-security-linter ^3.1 | isolated | security |
+| `psalm` | vimeo/psalm ^6.0 | isolated | security |
+| `eslint` | eslint<br>eslint-config-next<br>@typescript-eslint/eslint-plugin<br>eslint-plugin-react-hooks<br>eslint-config-prettier<br>eslint-plugin-security<br>eslint-plugin-no-secrets | project | static-analysis |
+| `jest` | jest<br>@jest/globals<br>jest-environment-jsdom<br>@testing-library/react<br>@testing-library/jest-dom | project | testing |
+| `jscpd` | jscpd | project | quality |
+| `madge` | madge | project | static-analysis |
+| `typescript` | typescript<br>@types/node<br>@types/react | project | static-analysis |
+| `socket` | @socketsecurity/cli | project | security |
+| `husky` | husky<br>lint-staged | project | hooks |
+| `jq` | _(no package; installed on the machine)_ | machine | quality |
+| `semgrep` | _(no package; installed on the machine)_ | machine | security |
+| `trivy` | _(no package; installed on the machine)_ | machine | security |
+| `gitleaks` | _(no package; installed on the machine)_ | machine | security |
+| `pcov` | _(no package; installed on the machine)_ | machine | testing |
+| `inotifywait` | _(no package; installed on the machine)_ | machine | quality |
+<!-- END GENERATED: tool-catalog sha256:a371766a2b392fb8c462cdfa1cbc273afe2d3545c5445f39de425bcb37120615 -->
+
+`scope` is assigned by a stated rule, not per tool taste:
+
+> A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`.
+
+`isolated` tools go into their own `vendor-bin/<tool>/` namespace via
+`bamarni/composer-bin-plugin` and never enter the project's `require-dev`. `machine`
+tools are reported with an install hint and never installed: this plugin does not pipe a
+moving branch of somebody's install script into `sh`, and does not write
+`/usr/local/bin`, during what you asked to be an audit.
 
 ## Code Intelligence Plugins (recommended)
 
@@ -137,181 +182,88 @@ Prerequisites: Claude Code **2.1.144+**, `python3` on `PATH`, and a git reposito
 
 Default is **No**. To enable it for everyone who clones the repo, add it to checked-in `.claude/settings.json` under `enabledPlugins` instead (see the plugin's docs).
 
-## Threshold Configuration
+## Git Hooks
 
-Interactive prompts for:
+Ask once, default **No**:
 
-1. **Coverage Threshold** (default: 80%)
-   - Minimum test coverage percentage
+> Install git hooks to lint staged files on every commit? [y/N]
 
-2. **Complexity Threshold** (default: 10)
-   - Maximum cyclomatic complexity
+The answer becomes `git_hooks.enabled` in the config, and it controls the package as well
+as the hook. The hook only checks **files staged for the current commit**
+(`context: git-staged-files`); heavier checks stay in CI. The placed `grumphp.yml` ships
+`phpcs` (Drupal standards) and `phpstan` only, and deliberately excludes:
 
-3. **Duplication Threshold** (default: 5%)
-   - Maximum allowed code duplication
+- **phpcpd** — directory-scoped, too slow for pre-commit
+- **phpunit** — runs the full suite; lives in CI instead
+- **phpmd** — noisy on legacy code; opt in by adding `phpmd:` to the placed file
 
-4. **Security Severity** (default: medium+)
-   - Options: all, low+, medium+, high+, critical
-
-## Generated Configuration
-
-Creates `.code-quality.json`:
-```json
-{
-  "version": "2.2.0",
-  "project": {
-    "type": "drupal",
-    "path": "./",
-    "name": "my-project"
-  },
-  "tools": {
-    "static_analysis": ["phpstan", "psalm"],
-    "security": ["semgrep", "trivy", "gitleaks"],
-    "quality": ["phpmd", "phpcpd"],
-    "testing": ["phpunit"],
-    "standards": ["drupal-coder"]
-  },
-  "thresholds": {
-    "coverage": 80,
-    "complexity": 10,
-    "duplication": 5,
-    "security_severity": "medium"
-  },
-  "reports": {
-    "formats": ["json", "markdown", "html"],
-    "retention_days": 30
-  },
-  "git_hooks": {
-    "enabled": false,
-    "tool": "grumphp",
-    "checks": ["lint", "security"]
-  }
-}
-```
-
-## Git Hooks Setup (Optional)
-
-After installing the static-analysis tools, prompt the user:
-
-> Install GrumPHP git hooks to lint staged files on every commit? [y/N]
-
-Default is **No**. The wizard must not install hooks silently. Re-runs of `/code-quality-tools:setup` re-ask only if hooks aren't already installed.
-
-### On "yes" — Drupal (GrumPHP)
-
-The hook only checks **files staged for the current commit** (`context: git-staged-files`). Heavier checks stay in CI.
-
-1. Install GrumPHP:
-   ```bash
-   ddev composer require --dev phpro/grumphp
-   ```
-2. Copy the template into the project root:
-   ```bash
-   cp skills/code-quality-audit/templates/grumphp.yml ./grumphp.yml
-   ```
-   The template ships with `phpcs` (Drupal standards) and `phpstan` only. Intentionally excluded:
-   - **phpcpd** — directory-scoped, too slow for pre-commit
-   - **phpunit** — runs the full suite; lives in CI instead
-   - **phpmd** — noisy on legacy code; opt-in by uncommenting in the template
-3. Register the hook:
-   ```bash
-   ddev exec vendor/bin/grumphp git:init
-   ```
-4. Confirm with a no-op staged change:
-   ```bash
-   git commit --allow-empty -m "Test grumphp hook"
-   ```
+Verification of the hook is not this command's job, and it is not an empty commit: an
+empty commit stages no files, so a `git-staged-files` hook inspects an empty set and
+passes. That is a verification that cannot fail. `install-verify.sh` stages a known
+violation, runs the hook, asserts it goes non-zero, and restores the index.
 
 To remove later: `vendor/bin/grumphp git:deinit && composer remove --dev phpro/grumphp`.
 
-### On "yes" — Next.js (Husky + lint-staged)
+On Next.js the hook runner is Husky with `lint-staged`; the same consent gate applies.
 
-```json
-// package.json
-"lint-staged": {
-  "*.{js,jsx,ts,tsx}": [
-    "eslint --fix",
-    "jest --findRelatedTests --passWithNoTests"
-  ]
-}
-```
+## CI workflows (independent of hooks)
 
-Then `npx husky init && echo 'npx lint-staged' > .husky/pre-commit`.
-
-### CI alternative (recommended in addition to or instead of hooks)
-
-For per-PR review without a local hook, install one or both opt-in GitHub Actions workflows:
+Both are opt-in and independent — install one, both, or neither:
 
 - `skills/code-quality-audit/templates/ci/github-drupal.yml` → `.github/workflows/quality.yml` — full quality battery on push/PR to main.
 - `skills/code-quality-audit/templates/ci/github-drupal-pr.yml` → `.github/workflows/quality-pr.yml` — **changed-files-only** review of PRs; posts a sticky comment with synthesis + rubric. Gate is soft by default; set repo Variable `FAIL_ON_GATE=true` to enforce.
 
-Both workflows are independent — install one, both, or neither.
-
 ## Baseline Audit
 
-After installation, runs initial audit to establish baseline:
-- Current coverage %
-- Existing security issues
-- Current duplication level
-- SOLID score
+After installation, run an initial audit to establish a baseline: coverage, existing
+security issues, duplication level, SOLID score.
 
 Baseline saved to `$REPORT_DIR/baseline.json`, where `$REPORT_DIR` is what the scripts resolve and announce on start. There is no report-directory key in `.code-quality.json`: the location is decided by `scripts/core/report-dir.sh` and overridden with the `REPORT_DIR` environment variable, or with `REPORT_DIR_IN_REPO=1` to opt back in to an in-repo `.reports/`. It is out of the repository by default because reports quote audited source and name the files a secret scanner matched in.
 
 ## Output
 
-This one changes the project rather than reporting on it, all of it at the project root and all of it on your confirmation:
+This one changes the project rather than reporting on it. The command's own footprint is
+one file; everything else is written by the script it hands off to, and all of it is at
+the project root and on your confirmation:
 
-- `.code-quality.json` — the configuration it generates, always.
-- `composer.json` / `package.json` and their lock files and installed trees, from the tool installs.
-- `grumphp.yml` (Drupal) or `.husky/pre-commit` (Next.js), plus the git hooks themselves under `.git/hooks/`, only if you accept the hooks prompt. It defaults to no and never installs them silently.
+- `.code-quality.json` — written by this command, always. It is the only thing this
+  command writes, and this command is the only thing in the plugin that writes it.
+- `composer.json` and its lock file and installed tree, from the tool installs. Composer
+  writes `composer.json` itself, including the `config.allow-plugins` block; the
+  installer never edits that file directly.
+- `vendor-bin/<tool>/` for each `isolated` tool, plus `composer.json` there.
+- `package.json` and its lock file and `node_modules`, on Next.js.
+- The config templates the config asked for, at the project root, each with a provenance
+  comment naming this plugin: `phpstan.neon`, `phpmd.xml`, `phpunit.xml`, `psalm.xml`,
+  `grumphp.yml`. The installer **declines** to write any of them when a file it did not
+  generate would be shadowed or overwritten, and says which file and why.
+- `grumphp.yml` (Drupal) or `.husky/pre-commit` (Next.js), plus the git hooks themselves
+  under `.git/hooks/`, only if you accept the hooks prompt. It defaults to no. The
+  package and the hooks are the same consent, so declining installs neither.
 - `.github/workflows/quality.yml` and `.github/workflows/quality-pr.yml`, each opt-in and independent of the other.
-- The baseline audit it runs at the end leaves that run's reports and `baseline.json` in the resolved report directory, the same place `/code-quality-tools:audit` writes. That is outside the repository by default; `scripts/core/report-dir.sh` decides and announces it.
+- `install-verify.json` and `tools-status.json` in the resolved report directory, plus
+  whatever the baseline audit writes there. That is outside the repository by default;
+  `scripts/core/report-dir.sh` decides and announces it.
 
-It installs nothing outside the project. The optional `security-guidance` plugin is a suggestion the wizard prints for you to run yourself, not something it installs.
-
-```
-✅ Setup Complete!
-
-Tools Installed:
-  ✓ PHPStan 1.10.x
-  ✓ Psalm 5.x
-  ✓ Semgrep 1.x
-  ✓ Trivy 0.48.x
-  ✓ Gitleaks 8.x
-
-Configuration:
-  ✓ .code-quality.json created
-  ✓ Git hooks configured (GrumPHP — staged files only, phpcs + phpstan)
-
-Baseline Audit Results:
-  Coverage: 72% (target: 80%)
-  Security Issues: 3 medium severity
-  Duplication: 4.2%
-  SOLID Score: 85/100
-
-Next Steps:
-1. Review baseline: $REPORT_DIR/baseline.json
-2. Address security issues: /code-quality-tools:security
-3. Improve coverage: /code-quality-tools:tdd
-4. Run full audit: /code-quality-tools:audit
-
-Documentation: See references/setup-guide.md
-```
+It installs nothing outside the project, and it installs no `machine`-scope tool at all —
+those are reported with a hint. The optional `security-guidance` plugin is a suggestion
+the wizard prints for you to run yourself.
 
 ## Re-running Setup
 
-Safe to re-run - will:
-- Detect existing tools
-- Offer to update configuration
-- Skip already-installed tools
-- Update git hooks if requested
+Safe to re-run. Detection runs again, the interview is re-asked, the config is rewritten,
+and the installer refreshes the templates **it** generated (identified by the provenance
+comment) while still declining to touch any file it did not write.
 
 ## Error Handling
 
-Common issues:
-- **"DDEV not running"** (Drupal): Start DDEV (`ddev start`)
-- **"npm not found"** (Next.js): Install Node.js
-- **"Permission denied"**: Check file permissions
+- **"the project type could not be determined"** — nothing is assumed. Pass
+  `PROJECT_TYPE`, or write the config first.
+- **`.code-quality.json (…): …` with a field named, exit 2** — the config is refused
+  rather than repaired. Fix the named field.
+- **"DDEV not running"** (Drupal): start DDEV (`ddev start`), or run without it — the
+  installer probes rather than assuming.
+- **"npm not found"** (Next.js): install Node.js.
 
 See: `references/troubleshooting.md#setup-issues`
 
@@ -320,8 +272,3 @@ See: `references/troubleshooting.md#setup-issues`
 - `/code-quality-tools:audit` - Run full audit after setup
 - `/code-quality-tools:coverage` - Check test coverage
 - `/code-quality-tools:security` - Run security scan
-
-## Implementation Note
-
-This command guides setup interactively through Claude — no external script needed.
-Follow the steps above to detect project type, present options, and install tools.
