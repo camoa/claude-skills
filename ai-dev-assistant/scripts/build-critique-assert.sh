@@ -281,7 +281,15 @@ if [ -e "$REC" ]; then
   OVER_N=$(jq -r 'length' <<<"$OVERBUDGET")
   set_ev over_budget_components "$OVERBUDGET"
   if [ "$OVER_N" -gt 0 ]; then
-    ESC=$(jq -r '(.escalation.reason // "") | tostring' <<<"$PAYLOAD")
+    # Two places are legitimate, and the second is the one a live build actually produced:
+    # a top-level `escalation.reason`, or a `resolution` on the round it settled. The
+    # per-round form is better -- a decision belongs with the round that provoked it -- and
+    # this check was written to demand the other one before anyone looked at a real record.
+    ESC=$(jq -r '((.escalation.reason // "") | tostring) as $top
+                 | if $top != "" then $top
+                   else ([(.rounds // [])[] | (.resolution // empty) | tostring]
+                         | map(select(. != "")) | last // "")
+                   end' <<<"$PAYLOAD")
     [ "$ESC" = "null" ] && ESC=""
     if [ -z "$ESC" ]; then
       add_msg "$OVER_N component(s) reached $ROUND_LIMIT or more critique rounds with no escalation recorded; say who decided to keep going and why"

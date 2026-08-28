@@ -192,6 +192,25 @@ rc_is 1 "an empty escalation reason exits 1"
 msg_has "1 component(s) reached 3 or more critique rounds with no escalation recorded" \
   "an empty reason string produces the same unescalated-breach message as no escalation object"
 
+# ------------------------------- 7b. the decision may sit on the round it settled
+# A live build recorded the operator's answer as `rounds[].resolution`, attached to the round
+# that provoked it, not as a top-level `escalation.reason`. That placement is better -- the
+# decision belongs with its round -- and this check originally demanded the other shape, so a
+# build that DID escalate and DID record the answer would have failed.
+D=$(mktask escalation_per_round)
+write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":5}]
+  | .rounds=[{"round":5,"resolution":"owner chose the bounded fix"}]'
+run "$D"
+verdict_is pass "a resolution on the round it settled satisfies the escalation requirement"
+rc_is 0 "a per-round resolution exits 0"
+
+D=$(mktask escalation_per_round_empty)
+write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":5}]
+  | .rounds=[{"round":5,"resolution":""}]'
+run "$D"
+verdict_is fail "an empty per-round resolution is no decision at all"
+msg_has "no escalation recorded" "an empty resolution reads as unescalated"
+
 # --------------------------------------------------- 8. rounds is not an integer
 
 # jq's default ordering places every string above every number (null < false < true <

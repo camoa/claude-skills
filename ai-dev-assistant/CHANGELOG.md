@@ -21,6 +21,13 @@
   unrecorded one is not. A builder wrong three times running is the least reliable judge of
   whether the fourth attempt is different — the same reason the rung exists at all.
 
+  **The escalation may be recorded in either of two places**, and the second is the one a live
+  build actually produced: a top-level `escalation.reason`, or a `resolution` on the `rounds[]`
+  entry it settled. The per-round form is better — a decision belongs with the round that
+  provoked it — and the first cut of this check demanded the other one, so a build that did
+  escalate, did ask its operator, and did record the answer would have failed the gate. Checked
+  against the live record before shipping, which is how it was caught.
+
   The shape was not designed here. The live build invented `rounds[]` on its own, with per-round
   lenses and headlines, because it needed somewhere to put the history. This formalises what use
   produced and gives it a consumer that can fail.

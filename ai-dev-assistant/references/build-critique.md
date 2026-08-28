@@ -275,8 +275,10 @@ At the third blocking round on one component, halt.
 | `interactive` | Put it to the person: continue, cut scope, or accept and record a bypass |
 | `autonomous` | **HALT.** Never start a fourth round unattended |
 
-Record the outcome in `escalation.reason`, keep a `rounds` count on each component row, and keep
-a `rounds[]` history of what each round found. Past the threshold the gate fails a record with no
+Record the outcome either as a top-level `escalation.reason` or as a `resolution` on the
+`rounds[]` entry it settled — the per-round form is the one a live build produced, and it is the
+better of the two, since a decision belongs with the round that provoked it. Keep a `rounds`
+count on each component row, and a `rounds[]` history of what each round found. Past the threshold the gate fails a record with no
 `escalation.reason`.
 
 **This caps unsupervised iteration, not quality.** A fourth round is a legitimate choice; an
