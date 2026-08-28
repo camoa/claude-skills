@@ -113,6 +113,16 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    There is no per-component `_review.json`, so `<review_ref>` is passed as `null` and the
    critic is told the deterministic gates have not run for this unit — it must not read an
    absent gate record as a clean one.
+
+   **And `implementation.md` is not a substitute for that missing record.** Its prose is
+   written by the builder, at whatever moment the builder happened to write it, and nothing
+   re-checks it afterwards. On a live build it was updated before a repair and never after, so
+   by the time the critics read it, it reported 9 tests and 196 assertions for a suite that was
+   then 13 and 241, across 269 changed lines including production code — affirmatively wrong
+   rather than merely behind. A critic handed `review_ref: null` that then treats that block as
+   gate evidence has substituted stale prose for the record whose absence it was just told
+   about. `null` means no deterministic gate evidence exists for this unit. Say that in the
+   verdict; do not source it from somewhere softer.
 8. **Aggregate**, redirecting stdout, because the kernel prints its envelope rather than
    writing a file:
 
