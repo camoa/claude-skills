@@ -40,12 +40,29 @@
 #
 # The AGGREGATE honours that too, which is the part a consumer actually reads:
 #
-#   any check failed            -> status "fail",       exit 1
-#   no check passed             -> status "unmeasured", exit 4
-#   at least one passed, none failed -> status "pass",  exit 0
+#   any check failed                  -> status "fail",       exit 1
+#   no check passed                   -> status "unmeasured", exit 4
+#   some passed, some skipped, none failed -> status "partial", exit 5
+#   all three passed                  -> status "pass",        exit 0
 #
-# `unmeasured` and 4 are the suite's existing words for this — path-resolve.sh's
-# CQT_STATUS_UNMEASURED and CQT_EXIT_UNMEASURED — not a second vocabulary invented here.
+# FOUR states, not three, because three of them made "we looked at one of the three" a
+# `pass`: a project with hooks installed but no phpcs and no vendor/ reported
+# {"status":"pass","passed":1,"skipped":2} and printed "the installed toolchain can fail"
+# about two checks it had not applied. That is the same sentence-wider-than-the-evidence
+# defect as the all-skipped case, one check narrower.
+#
+# Collapsing it the other way — any skip makes the run unmeasured — was the alternative
+# and it is wrong here: git_hooks.enabled false is a legitimate and common config, so
+# check 3 skips on a perfectly good install, and calling that install unverified would
+# make the state meaningless by firing on almost every run. `partial` is the honest word
+# for it, and the printed line names which checks were applied and which were not, so the
+# reader does not have to open the JSON to find out what the verdict covers.
+#
+# None of these four words or codes is invented here. They are path-resolve.sh's
+# CQT_STATUS_UNMEASURED / CQT_EXIT_UNMEASURED and CQT_STATUS_PARTIAL / CQT_EXIT_PARTIAL,
+# and this script SOURCES that file to read them rather than restating the literals —
+# the earlier version claimed to reuse the vocabulary while spelling "unmeasured" and 4
+# out again, so a change to the library would have silently left this file behind.
 
 set -uo pipefail
 
@@ -67,6 +84,12 @@ cqt_announce_report_dir
 
 # shellcheck source=./cqt-config.sh
 . "${SCRIPT_DIR}/cqt-config.sh"
+
+# The suite's status words and exit codes, read out of the file that owns them. It sources
+# nothing, runs nothing at load time and prints nothing, which is what makes sourcing it
+# here safe.
+# shellcheck source=./path-resolve.sh
+. "${SCRIPT_DIR}/path-resolve.sh"
 
 CONFIG_PATH=""
 JSON_ONLY=0
@@ -303,25 +326,36 @@ check_hook_can_fail
 # toolchain can fail", and exited 0 — a claim about a toolchain it had not looked at, and
 # the header two screens up says a consumer has to be able to tell those apart.
 #
-# The word and the exit code are NOT invented here. The gate_path_resolution sibling
-# already settled both for exactly this state: status "unmeasured" (path-resolve.sh's
-# CQT_STATUS_UNMEASURED) and exit 4 (CQT_EXIT_UNMEASURED), which full-audit.sh's
-# gate_status_from_exit maps to "unmeasured" and which resolve_overall_status refuses to
-# call a pass. Reusing them keeps one vocabulary; a second one here would mean two words
-# for one condition and a reader who has to learn both.
+# The words and the exit codes are NOT invented here. They are sourced from
+# path-resolve.sh above — CQT_STATUS_UNMEASURED / CQT_EXIT_UNMEASURED for the state the
+# gate_path_resolution sibling already settled, and CQT_STATUS_PARTIAL / CQT_EXIT_PARTIAL
+# for the one below it. full-audit.sh's gate_status_from_exit maps 4 to "unmeasured" and
+# resolve_overall_status refuses to call it a pass. One vocabulary; a second one here
+# would mean two words for one condition and a reader who has to learn both.
 PASSES="$(jq -r '[.[] | select(.status == "passed")] | length' <<< "${CHECKS_JSON}")"
 SKIPS="$(jq -r '[.[] | select(.status == "skipped")] | length' <<< "${CHECKS_JSON}")"
+SKIPPED_NAMES="$(jq -r '[to_entries[] | select(.value.status == "skipped") | .key] | join(", ")' <<< "${CHECKS_JSON}")"
+PASSED_NAMES="$(jq -r '[to_entries[] | select(.value.status == "passed") | .key] | join(", ")' <<< "${CHECKS_JSON}")"
 
-# Precedence: a real failure outranks everything, then "nothing was measured", then pass.
-# Zero passes with at least one skip is the unmeasured case — the run covered no ground.
+# Precedence: a real failure outranks everything, then "nothing was measured", then
+# "some of it was measured", then pass. Zero passes with at least one skip is the
+# unmeasured case — the run covered no ground. At least one pass AND at least one skip is
+# `partial`: a real result that does not cover what the [OK] sentence claims.
+#
+# `pass` is now reserved for a run in which every check applied. It used to also cover
+# one-passed-two-skipped, which printed "the installed toolchain can fail" about two
+# checks that never ran — the same defect as the all-skipped case, one check narrower.
 AGG_STATUS="pass"
 AGG_REASON=""
 if [ "${FAILURES}" -ne 0 ]; then
     AGG_STATUS="fail"
     AGG_REASON="${FAILURES} check(s) failed"
 elif [ "${PASSES}" -eq 0 ]; then
-    AGG_STATUS="unmeasured"
+    AGG_STATUS="${CQT_STATUS_UNMEASURED}"
     AGG_REASON="no check could be applied here (${SKIPS} skipped, 0 passed), so nothing about this toolchain was established. A zero-failure run that measured nothing is not a working install."
+elif [ "${SKIPS}" -ne 0 ]; then
+    AGG_STATUS="${CQT_STATUS_PARTIAL}"
+    AGG_REASON="${PASSES} of $((PASSES + SKIPS)) checks were applied and passed (${PASSED_NAMES}); ${SKIPS} could not be applied here (${SKIPPED_NAMES}), so nothing is established about what they cover. This is not a failure and it is not a full verification either."
 fi
 
 mkdir -p "${REPORT_DIR}"
@@ -349,10 +383,21 @@ case "${AGG_STATUS}" in
         say '%b[FAIL]%b %s check(s) failed. See %s\n' "$RED" "$NC" "${FAILURES}" "${REPORT_DIR}/install-verify.json"
         exit 1
         ;;
-    unmeasured)
+    "${CQT_STATUS_UNMEASURED}")
         say '%b[UNMEASURED]%b %s See %s\n' "$YELLOW" "$NC" "${AGG_REASON}" "${REPORT_DIR}/install-verify.json"
-        exit 4
+        exit "${CQT_EXIT_UNMEASURED}"
+        ;;
+    "${CQT_STATUS_PARTIAL}")
+        # Deliberately NOT "[OK] the installed toolchain can fail". That sentence is about
+        # all three checks, and this run applied some of them. The line names both halves
+        # so the reader learns what the verdict covers without opening the JSON, which is
+        # the only place the counts lived before.
+        say '%b[PARTIAL]%b the checks that could be applied here passed: %s.\n' "$YELLOW" "$NC" "${PASSED_NAMES}"
+        say '          NOT checked here (%s): %s. Nothing is established about what\n' "${SKIPS}" "${SKIPPED_NAMES}"
+        say '          those cover; see the reason on each in %s\n' "${REPORT_DIR}/install-verify.json"
+        exit "${CQT_EXIT_PARTIAL}"
         ;;
 esac
-say '%b[OK]%b the installed toolchain can fail. See %s\n' "$GREEN" "$NC" "${REPORT_DIR}/install-verify.json"
+say '%b[OK]%b all %s checks applied and the installed toolchain can fail. See %s\n' \
+    "$GREEN" "$NC" "${PASSES}" "${REPORT_DIR}/install-verify.json"
 exit 0

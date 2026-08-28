@@ -9816,10 +9816,72 @@ got=set(rec.get("tools",{}))
 print("yes" if want and want <= got else "no: missing " + ",".join(sorted(want-got)))
 PY
 )"
-    # The refutation the finding is really about: all_ok cannot be true off a map that
-    # names nothing. Asserted as an implication so it holds however the map came out.
-    assert_eq "[IN-D] all_ok is never true with an empty tool map" "yes" \
-      "$(jq -r 'if (.tools | length) == 0 and .all_ok == true then "no" else "yes" end' "$D_STATUS")"
+  fi
+
+  # ── the guard, on a fixture where the guard is the only thing holding the line ──
+  #
+  # "all_ok is never true with an empty tool map" used to be asserted on IN_D3 above,
+  # where it could not fail for its stated reason and did not go red when the guard was
+  # deleted. Two things masked it. The map there is never empty, so the implication is
+  # satisfied without the guard; and that run's install-verify returns 4, so install_exit
+  # forces ALL_OK=false before the guard is ever consulted. An assertion that passes for a
+  # reason unrelated to what it asserts is the defect this whole task exists to remove,
+  # so the fixture is rebuilt to remove both masks:
+  #
+  #   * the config names ONLY packages with no binary — the three that make PHPStan
+  #     Drupal-aware are libraries, not tools — so the resolved map is legitimately empty
+  #     even with the load working perfectly, and the guard is the only thing left;
+  #   * the install SUCCEEDS: composer is stubbed, phpcs lists Drupal, GeneratedConfig
+  #     names mglaman, so verification passes both applicable checks and skips the hook
+  #     one (partial, 5), which the installer does not treat as a failure. install_exit is
+  #     0 and cannot stand in for the guard.
+  #
+  # Both of those are ASSERTED, not assumed. If the fixture ever stops producing an empty
+  # map or a zero exit, the assertion below would go quietly vacuous again — so the thing
+  # that would make it vacuous is itself a failing assertion.
+  IN_D4="$TMP/in_d4"; in_project "$IN_D4" web
+  in_config drupal web false '{
+    "phpstan-extension-installer":{"scope":"project","packages":[{"name":"phpstan/extension-installer","constraint":"^1.4"}],"allow_plugins":["phpstan/extension-installer"],"bin":null},
+    "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^2.1.2"}],"allow_plugins":[],"bin":null},
+    "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^2.0"}],"allow_plugins":[],"bin":null}
+  }' > "$IN_D4/.code-quality.json"
+  D4_STUB="$TMP/in_d4_stub"; mkdir -p "$D4_STUB"
+  for b in composer npm; do printf '#!/bin/bash\nexit 0\n' > "$D4_STUB/$b"; chmod +x "$D4_STUB/$b"; done
+  cat > "$D4_STUB/phpcs" <<'D4PHPCS'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are Drupal, DrupalPractice and PEAR"; exit 0; }
+exit 0
+D4PHPCS
+  chmod +x "$D4_STUB/phpcs"
+  mkdir -p "$IN_D4/vendor/phpstan/extension-installer/src"
+  cat > "$IN_D4/vendor/phpstan/extension-installer/src/GeneratedConfig.php" <<'D4GEN'
+<?php
+final class GeneratedConfig
+{
+    public const EXTENSIONS = ['mglaman/phpstan-drupal' => ['install_path' => '...']];
+}
+D4GEN
+  D4_EXIT=$( ( cd "$IN_D4" && PATH="$D4_STUB:/usr/bin:/bin" REPORT_DIR="$IN_D4/.r" \
+      bash "$SHIM" --config .code-quality.json ) > "$TMP/d4_out" 2>&1; printf '%s' "$?" )
+  D4_STATUS="$IN_D4/.r/tools-status.json"
+  if [[ ! -f "$D4_STATUS" ]]; then
+    bad "[IN-D] the no-binary config still writes tools-status.json"
+  else
+    ok "[IN-D] the no-binary config still writes tools-status.json"
+    # Precondition 1: the run really did succeed, so all_ok is not being forced false by
+    # install_exit. This is the assertion that keeps the next one honest.
+    assert_eq "[IN-D] the install itself succeeded, so install_exit cannot stand in for the guard" "0" "$D4_EXIT"
+    # Precondition 2: the map really is empty, so the implication below is not vacuous.
+    assert_eq "[IN-D] a config naming only binary-less packages resolves an empty tool map" "0" \
+      "$(jq -r '.tools | length' "$D4_STATUS")"
+    # And the refutation itself: all_ok cannot be true off a map that names nothing.
+    # Deleting the empty-map guard turns exactly this red, and nothing else does.
+    assert_eq "[IN-D] all_ok is never true with an empty tool map" "false" \
+      "$(jq -r '.all_ok' "$D4_STATUS")"
+    assert_eq "[IN-D] and the record it writes for that is a fail, not a pass" "fail" \
+      "$(jq -r '.status' "$D4_STATUS")"
+    assert_eq "[IN-D] the run says why: it probed no tool" "yes" \
+      "$(u_has "$(cat "$TMP/d4_out")" "named no probeable tool")"
   fi
 
   # A doctored catalog must produce a refusal, not a quiet install: otherwise the
@@ -10433,7 +10495,42 @@ final class GeneratedConfig
 }
 GEN
   J_GREEN=$(j_run "$IN_J" .code-quality.json)
-  assert_eq "[IN-J] GREEN: with both registered, verification passes" "0" "$J_GREEN"
+
+  # ── one check of the three did not apply, and that is not a pass ────────
+  #
+  # This fixture has git_hooks.enabled false, so check 3 skips. The aggregate used to
+  # fold that into `pass`: it exited 0 and printed "[OK] the installed toolchain can
+  # fail" — a sentence about all three checks — having applied two. Executed on a real
+  # project this is the partially-installed case: hooks installed, no phpcs and no
+  # vendor/ reported {"status":"pass","passed":1,"skipped":2} and said the toolchain
+  # could fail.
+  #
+  # It is `partial` rather than `unmeasured` because git_hooks.enabled false is a
+  # legitimate config — every derived config carries it — so treating the skip as "we
+  # never looked" would fire on a large share of correct installs and stop meaning
+  # anything. The word has to distinguish "we applied two of three and both passed" from
+  # both neighbours, which is why there are four states and not three.
+  assert_eq "[IN-J] two of three applied: the aggregate is partial, not pass" "partial" \
+    "$(jq -r '.status // "ABSENT"' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)"
+  assert_eq "[IN-J] and it exits 5 for it, not 0" "5" "$J_GREEN"
+  assert_eq "[IN-J] partial is the suite's word, read from path-resolve.sh" "partial" \
+    "$(grep -o 'CQT_STATUS_PARTIAL="[a-z]*"' "${ROOT}/core/path-resolve.sh" | sed 's/.*="//;s/"//')"
+  assert_eq "[IN-J] 5 is what path-resolve.sh calls CQT_EXIT_PARTIAL" "5" \
+    "$(grep -o 'CQT_EXIT_PARTIAL=[0-9]' "${ROOT}/core/path-resolve.sh" | cut -d= -f2)"
+  # The printed line is the half a person reads, and it has to say what the verdict
+  # covers. An unqualified [OK] about two of three checks is the defect itself.
+  assert_eq "[IN-J] it does not print the unqualified toolchain-can-fail line" "no" \
+    "$(u_has "$(j_out)" "the installed toolchain can fail")"
+  assert_eq "[IN-J] it prints PARTIAL instead" "yes" "$(u_has "$(j_out)" "PARTIAL")"
+  assert_eq "[IN-J] and names the checks it DID apply" "yes" "$(u_has "$(j_out)" "phpcs_lists_drupal")"
+  assert_eq "[IN-J] and names the one it did not" "yes" "$(u_has "$(j_out)" "NOT checked here")"
+  assert_eq "[IN-J] naming that check by name too" "yes" "$(u_has "$(j_out)" "hook_can_fail")"
+  # The word travels in the report as well as the exit code, because the exit code is the
+  # fallback channel and the report is the one full-audit.sh prefers.
+  assert_eq "[IN-J] the report records which checks were not applied" "1" \
+    "$(jq -r '.skipped // -1' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)"
+  assert_eq "[IN-J] and the reason names both halves rather than only the passing one" "yes" \
+    "$(u_has "$(jq -r '.reason // ""' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)" "could not be applied")"
 
   # One at a time, so neither check is carrying the other.
   j_phpcs "The installed coding standards are PEAR and Squiz"
@@ -10502,6 +10599,15 @@ HOOK
   assert_eq "[IN-J] GREEN: a hook that refuses the seeded violation passes the check" "0" "$J_HOOK_STATUS"
   assert_eq "[IN-J] the hook check ran rather than being skipped" "passed" \
     "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  # This is the only fixture in which all three checks APPLY, and it is the only one that
+  # earns a `pass`. That is the point of the four states: exit 0 now means every claim the
+  # [OK] sentence makes was actually tested, so the sentence and the evidence are the same
+  # width. A run with a skip in it leaves by the partial branch instead.
+  assert_eq "[IN-J] all three applied: the aggregate is a pass" "pass" \
+    "$(jq -r '.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] with nothing skipped" "0" "$(jq -r '.skipped // -1' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the [OK] line says how many checks it is speaking for" "yes" \
+    "$(u_has "$(j_out)" "all 3 checks applied")"
   # The index is restored on every exit path. Leaving a staged file in somebody's
   # repository after an audit is a real harm, so it is asserted byte for byte.
   assert_eq "[IN-J] the git index is byte-identical afterwards" "$J_INDEX_BEFORE" "$J_INDEX_AFTER"
@@ -10613,12 +10719,16 @@ REAL
     "$(u_has "$(j_out)" "the installed toolchain can fail")"
   assert_eq "[IN-J] it prints UNMEASURED instead" "yes" "$(u_has "$(j_out)" "UNMEASURED")"
 
-  # The sole consumer reads that status as three states, not two. `|| FAILED=1` collapses
+  # The sole consumer reads that status as four states, not two. `|| FAILED=1` collapses
   # 4 into "failed", which is the right verdict and the wrong report: "we could not look"
-  # and "we looked and it is broken" call for different fixes.
+  # and "we looked and it is broken" call for different fixes. And 5 must not fail the
+  # install at all — that behaviour is held by the IN-D no-binary fixture above, which
+  # asserts the shim exits 0 on a run whose verification came back partial.
   J_CONSUMER=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL")
   assert_eq "[IN-J] the installer reads the verifier's status as more than zero-or-not" "yes" \
     "$(u_has "$J_CONSUMER" "4)")"
+  assert_eq "[IN-J] and gives the partial code its own arm rather than the catch-all" "yes" \
+    "$(u_has "$J_CONSUMER" "5)")"
   assert_eq "[IN-J] and does not capture it with \$? after a pipe" "0" \
     "$(printf '%s' "$J_CONSUMER" | grep -A2 'config -$' | grep -c 'vexit=\$?' || true)"
 
@@ -10697,6 +10807,25 @@ else
   assert_eq "[IN-K] and no allow-empty verification" "0" "$(grep -c 'allow-empty' "$SETUPMD" || true)"
   assert_eq "[IN-K] and no cp of a template" "0" "$(grep -cE '^\s*cp .*templates?/' "$SETUPMD" || true)"
   assert_eq "[IN-K] and no npm install block" "0" "$(grep -c 'npm install' "$SETUPMD" || true)"
+
+  # The doc half of the same finding the announcement fixed. cqt_config_announce_derived
+  # stopped saying "Nothing was written." because the sentence was false at the moment it
+  # printed — the install that follows a derived audit places the template files and lets
+  # Composer edit composer.json. setup.md described the same path in the same reassuring
+  # shape ("keeps a run somebody asked to be an audit from leaving a config file in their
+  # repository") and was not updated with it, so the prose outlived the string it was
+  # describing. Asserted here rather than trusted, because that is exactly how it drifted.
+  assert_eq "[IN-K] setup.md keeps the narrow claim: no .code-quality.json is left behind" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "no audit leaves a")"
+  assert_eq "[IN-K] and states that the install after a derived audit DOES write" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "does write to the project")"
+  assert_eq "[IN-K] naming composer.json as one of the things it writes" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "Composer edits")"
+  assert_eq "[IN-K] and the templates it places" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "placed at the project root")"
+  # The sentence the announcement dropped must not survive in the prose either.
+  assert_eq "[IN-K] setup.md no longer says an audit leaves nothing in the repository" "0" \
+    "$(grep -c 'from leaving a config file in their repository' "$SETUPMD" || true)"
   assert_eq "[IN-K] and does not claim no external script is needed" "0" \
     "$(grep -c 'no external script needed' "$SETUPMD" || true)"
 

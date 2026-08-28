@@ -52,12 +52,27 @@ CQT_EXIT_WARNING=1
 CQT_EXIT_FAIL=2
 CQT_EXIT_UNMEASURED=4
 
+# 5 is "some of it was measured, and what was measured was fine". Distinct from 4 because
+# the two call for different actions: 4 means nothing was established and the run has to
+# be repeated somewhere it can be, while 5 means a real result that does not cover
+# everything the check claims to cover. Folding 5 into 0 is what let install-verify.sh
+# print "the installed toolchain can fail" about two checks it never applied; folding it
+# into 4 would call a normal install unmeasured, because a config with git_hooks.enabled
+# false legitimately skips a check on every run.
+CQT_EXIT_PARTIAL=5
+
 # The status word every gate writes into its report when it was asked to check a path
 # it could not measure. Deliberately NOT "skipped": in this suite "skipped" already
 # means "the tool is absent", which is a legitimate state of the machine. A path that is
 # not there is a configuration fact about the project, and filing it under the same word
 # would make two different findings indistinguishable to full-audit.sh.
 CQT_STATUS_UNMEASURED="unmeasured"
+
+# The status word for a run that applied some of its checks, passed all of the ones it
+# applied, and could not apply the rest. "pass" would claim the unapplied ones;
+# "unmeasured" would deny the applied ones. Its consumers must read the report's
+# passed/skipped counts to know which is which, and the word exists so they know to.
+CQT_STATUS_PARTIAL="partial"
 
 # The paths the current process could not measure. Appended to by cqt_unmeasured, read
 # by a gate when it builds paths_missing[] / tools_unmeasured[] for its report.

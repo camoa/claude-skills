@@ -36,8 +36,18 @@ re-typed by a model on its way there.
 
 **This command is the only writer of `.code-quality.json` in this plugin.** An audit run
 that finds the file missing derives an equivalent config in memory, announces it in full,
-and tells the user that this command is what persists one. That keeps a run somebody
-asked to be an audit from leaving a config file in their repository.
+and tells the user that this command is what persists one. So no audit leaves a
+`.code-quality.json` behind — a file nobody could tell apart from one a person authored.
+
+That is the whole of the claim, and the narrow version is the true one. The install an
+audit runs after deriving does write to the project, exactly as it does from a config
+file: Composer edits `composer.json` for the resolved packages, and the `templates[]`
+entries are placed at the project root unless a file of that name is already there. The
+derived run names `composer.json` and each of those files before it places them, and
+`references/config-schema.md` says the same. Leaving the templates out of the derived path
+would be the tidier-sounding choice and the wrong one: it would leave PHPStan reading no
+config on exactly the projects that never ran this command, which is PHPStan analysing
+Drupal as plain PHP and exiting 0.
 
 ## Steps
 

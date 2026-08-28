@@ -427,13 +427,24 @@ stage_verify() {
     # The verifier reads the same document the installer acted on. When the config was
     # derived, that document never became a file, so it is piped in on stdin.
     #
-    # Its exit status is read as three states rather than two. 4 is `unmeasured`: no check
-    # could be applied, so nothing about this toolchain was established. That is not a
-    # passing install — an install nobody could verify is the state this whole stage
-    # exists to surface — so it still fails the run, but it is REPORTED as its own thing,
-    # because "we could not look" and "we looked and it is broken" call for different
-    # fixes. Reading only zero-or-not is what let a run with three skipped checks print
-    # "[OK] the installed toolchain can fail".
+    # Its exit status is read as four states rather than two.
+    #
+    # 4 is `unmeasured`: no check could be applied, so nothing about this toolchain was
+    # established. That is not a passing install — an install nobody could verify is the
+    # state this whole stage exists to surface — so it still fails the run, but it is
+    # REPORTED as its own thing, because "we could not look" and "we looked and it is
+    # broken" call for different fixes. Reading only zero-or-not is what let a run with
+    # three skipped checks print "[OK] the installed toolchain can fail".
+    #
+    # 5 is `partial`: every check that could be applied passed, and at least one could
+    # not. It does NOT fail the install, and that is a deliberate line rather than a
+    # softening. git_hooks.enabled false is a legitimate config — it is what every derived
+    # config carries — so the hook check skips on a large share of correct installs, and
+    # failing them would make the state fire so often it stopped carrying information.
+    # What it must not do is disappear: the verifier's own [PARTIAL] block names which
+    # checks were applied and which were not, and this repeats the consequence, so the
+    # difference between a verified install and a partly verified one is on screen either
+    # way.
     local vexit=0
     if [ "$(cqt_config_source)" = "derived" ]; then
         cqt_config_doc | bash "${verifier}" --config -
@@ -447,6 +458,11 @@ stage_verify() {
            printf '%b[UNMEASURED]%b verification could apply none of its checks here, so this\n' "$YELLOW" "$NC"
            printf '              install is not verified. That is recorded as a failure: an\n'
            printf '              install nobody could verify is not an install that worked.\n'
+           ;;
+        5) printf '%b[PARTIAL]%b verification applied some of its checks and none of them\n' "$YELLOW" "$NC"
+           printf '          failed. The ones it could not apply are named above, and nothing\n'
+           printf '          is established about what those cover. The install is not failed\n'
+           printf '          for that; it is also not fully verified.\n'
            ;;
         *) FAILED=1 ;;
     esac
