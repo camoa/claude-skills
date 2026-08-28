@@ -37,6 +37,15 @@
 # three-state discipline check_version_drift() uses for `unchecked`, and for the same
 # reason: a consumer has to be able to tell "we looked and it was fine" from "we never
 # looked".
+#
+# The AGGREGATE honours that too, which is the part a consumer actually reads:
+#
+#   any check failed            -> status "fail",       exit 1
+#   no check passed             -> status "unmeasured", exit 4
+#   at least one passed, none failed -> status "pass",  exit 0
+#
+# `unmeasured` and 4 are the suite's existing words for this — path-resolve.sh's
+# CQT_STATUS_UNMEASURED and CQT_EXIT_UNMEASURED — not a second vocabulary invented here.
 
 set -uo pipefail
 
@@ -66,7 +75,7 @@ while [ $# -gt 0 ]; do
         --config)   CONFIG_PATH="${2-}"; shift 2 ;;
         --config=*) CONFIG_PATH="${1#--config=}"; shift ;;
         --json)     JSON_ONLY=1; shift ;;
-        -h|--help)  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) printf '%b[ERROR]%b unknown argument: %s\n' "$RED" "$NC" "$1" >&2; exit 2 ;;
     esac
 done
@@ -120,20 +129,53 @@ resolve_phpcs() {
 }
 
 # ── check 1 ───────────────────────────────────────────────────────────────────
+# The reason this reads the exit status and parses a LINE rather than grepping the blob:
+# it used to do `out="$(phpcs -i 2>&1)"` and then `grep -q 'Drupal'` over merged streams.
+# That discards the status entirely, so a phpcs exiting 255 was still read for content,
+# and the pattern matches anywhere — including in the fatal's own stack trace. A real one,
+# `PHP Fatal error ... in /home/dev/Sites/Drupal10/vendor/.../Runner.php`, was recorded
+# {"status":"passed"} because the project path contains the word. The tool had not run and
+# no standard was listed.
+#
+# So: a non-zero status is a failure on its own, and the match is against the standards
+# phpcs actually names on its `The installed coding standards are ...` line, compared as
+# whole tokens. A path can no longer answer for a registration.
 check_phpcs_lists_drupal() {
-    local out
+    local out rc=0 line standards std
     if ! resolve_phpcs; then
         record "phpcs_lists_drupal" "skipped" \
             "phpcs is not installed anywhere this script can reach, so the standard's registration cannot be observed"
         return 0
     fi
-    out="$("${PHPCS_CMD[@]}" -i 2>&1)"
-    if printf '%s' "${out}" | grep -q 'Drupal'; then
-        record "phpcs_lists_drupal" "passed" ""
-    else
+    out="$("${PHPCS_CMD[@]}" -i 2>&1)" || rc=$?
+    if [ "${rc}" -ne 0 ]; then
         record "phpcs_lists_drupal" "failed" \
-            "phpcs -i does not list Drupal, so --standard=Drupal,DrupalPractice has nothing to load. drupal/coder is a rule set registered by dealerdirect/phpcodesniffer-composer-installer; without that plugin in config.allow-plugins it never activates, and nothing about that is reported as an error. Output was: ${out}"
+            "phpcs -i exited ${rc}, so it did not run and no standard was listed. Whatever it printed is a diagnostic, not a standards list, and reading it for content is how a fatal whose stack trace names a path containing 'Drupal' came to be recorded as a pass. Output was: ${out}"
+        return 0
     fi
+
+    # phpcs prints one line: "The installed coding standards are A, B, C and D". Anchored
+    # to that prefix, so no other line of output can supply the answer.
+    line="$(printf '%s\n' "${out}" | sed -n 's/^The installed coding standards are //p' | head -1)"
+    if [ -z "${line}" ]; then
+        record "phpcs_lists_drupal" "failed" \
+            "phpcs -i exited 0 but printed no 'The installed coding standards are' line, so there is no standards list to read and the registration cannot be confirmed. Output was: ${out}"
+        return 0
+    fi
+
+    # Whole tokens, never a substring: "DrupalPractice" alone does not answer for
+    # "Drupal", and neither does a path.
+    standards="$(printf '%s' "${line}" | sed -e 's/[.[:space:]]*$//' -e 's/ and /,/g' -e 's/,/\n/g')"
+    while IFS= read -r std; do
+        std="$(printf '%s' "${std}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        if [ "${std}" = "Drupal" ]; then
+            record "phpcs_lists_drupal" "passed" ""
+            return 0
+        fi
+    done <<< "${standards}"
+
+    record "phpcs_lists_drupal" "failed" \
+        "phpcs -i does not list Drupal among its installed standards, so --standard=Drupal,DrupalPractice has nothing to load. drupal/coder is a rule set registered by dealerdirect/phpcodesniffer-composer-installer; without that plugin in config.allow-plugins it never activates, and nothing about that is reported as an error. It listed: ${line}"
 }
 
 # ── check 2 ───────────────────────────────────────────────────────────────────
@@ -172,16 +214,22 @@ check_extension_installer_registered() {
 #
 # The index is restored on every exit path, trap included. Leaving a staged file behind
 # after a failed audit is a real harm, not a tidiness issue.
+#
+# The index is resolved through git rather than assumed at .git/index for the same reason
+# the working-tree test is: in a linked worktree the index lives beside the worktree's own
+# gitdir, and a literal path would restore the wrong file, or none.
 CQT_VIOLATION_FILE=""
 CQT_INDEX_BACKUP=""
+CQT_INDEX_PATH=""
 restore_index() {
     [ -n "${CQT_VIOLATION_FILE}" ] && rm -f "${CQT_VIOLATION_FILE}"
-    if [ -n "${CQT_INDEX_BACKUP}" ] && [ -f "${CQT_INDEX_BACKUP}" ]; then
-        cp -f "${CQT_INDEX_BACKUP}" .git/index 2> /dev/null || true
+    if [ -n "${CQT_INDEX_BACKUP}" ] && [ -f "${CQT_INDEX_BACKUP}" ] && [ -n "${CQT_INDEX_PATH}" ]; then
+        cp -f "${CQT_INDEX_BACKUP}" "${CQT_INDEX_PATH}" 2> /dev/null || true
         rm -f "${CQT_INDEX_BACKUP}"
     fi
     CQT_VIOLATION_FILE=""
     CQT_INDEX_BACKUP=""
+    CQT_INDEX_PATH=""
 }
 trap restore_index EXIT INT TERM
 
@@ -194,19 +242,27 @@ check_hook_can_fail() {
             "git_hooks.enabled is false, so no hook was installed and there is nothing here that could fail"
         return 0
     fi
-    if [ ! -d .git ]; then
+    # `git rev-parse`, not `[ -d .git ]`. In a linked worktree or a submodule, .git is a
+    # FILE holding a `gitdir:` pointer, and hooks run there normally — so the directory
+    # test recorded "this is not a git working tree" about a tree that plainly is one, and
+    # silently disabled the one check that replaces setup.md's `git commit --allow-empty`.
+    # This repository develops in worktrees, so the wrong branch was the reachable one.
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
         record "hook_can_fail" "skipped" "this is not a git working tree, so no pre-commit hook can run"
         return 0
     fi
-    hook=".git/hooks/pre-commit"
+    # The hooks directory follows the same pointer. core.hooksPath moves it too, and
+    # `--git-path hooks` is the one query that answers for every layout.
+    hook="$(git rev-parse --git-path hooks 2> /dev/null)/pre-commit"
     if [ ! -x "${hook}" ]; then
         record "hook_can_fail" "failed" \
             "git_hooks.enabled is true but ${hook} is not present and executable, so the hook the config asked for is not installed"
         return 0
     fi
 
-    CQT_INDEX_BACKUP=".git/index.cqt-verify-backup"
-    cp -f .git/index "${CQT_INDEX_BACKUP}" 2> /dev/null || CQT_INDEX_BACKUP=""
+    CQT_INDEX_PATH="$(git rev-parse --git-path index 2> /dev/null)"
+    CQT_INDEX_BACKUP="${CQT_INDEX_PATH}.cqt-verify-backup"
+    cp -f "${CQT_INDEX_PATH}" "${CQT_INDEX_BACKUP}" 2> /dev/null || CQT_INDEX_BACKUP=""
 
     CQT_VIOLATION_FILE="./cqt-known-violation.php"
     cat > "${CQT_VIOLATION_FILE}" <<'VIOLATION'
@@ -238,13 +294,46 @@ check_phpcs_lists_drupal
 check_extension_installer_registered
 check_hook_can_fail
 
+# ── the aggregate, which is the only part any consumer acts on ────────────────
+#
+# The per-check three-state discipline above is real, and the aggregate used to throw it
+# away: `status` was `if failures == 0 then "pass" else "fail"`, so three skips became a
+# pass. Executed on a project with nothing installed at all, this file wrote
+# {"status":"pass","passed":0,"failed":0,"skipped":3}, printed "[OK] the installed
+# toolchain can fail", and exited 0 — a claim about a toolchain it had not looked at, and
+# the header two screens up says a consumer has to be able to tell those apart.
+#
+# The word and the exit code are NOT invented here. The gate_path_resolution sibling
+# already settled both for exactly this state: status "unmeasured" (path-resolve.sh's
+# CQT_STATUS_UNMEASURED) and exit 4 (CQT_EXIT_UNMEASURED), which full-audit.sh's
+# gate_status_from_exit maps to "unmeasured" and which resolve_overall_status refuses to
+# call a pass. Reusing them keeps one vocabulary; a second one here would mean two words
+# for one condition and a reader who has to learn both.
+PASSES="$(jq -r '[.[] | select(.status == "passed")] | length' <<< "${CHECKS_JSON}")"
+SKIPS="$(jq -r '[.[] | select(.status == "skipped")] | length' <<< "${CHECKS_JSON}")"
+
+# Precedence: a real failure outranks everything, then "nothing was measured", then pass.
+# Zero passes with at least one skip is the unmeasured case — the run covered no ground.
+AGG_STATUS="pass"
+AGG_REASON=""
+if [ "${FAILURES}" -ne 0 ]; then
+    AGG_STATUS="fail"
+    AGG_REASON="${FAILURES} check(s) failed"
+elif [ "${PASSES}" -eq 0 ]; then
+    AGG_STATUS="unmeasured"
+    AGG_REASON="no check could be applied here (${SKIPS} skipped, 0 passed), so nothing about this toolchain was established. A zero-failure run that measured nothing is not a working install."
+fi
+
 mkdir -p "${REPORT_DIR}"
 jq -n \
     --argjson checks "${CHECKS_JSON}" \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg status "${AGG_STATUS}" \
+    --arg reason "${AGG_REASON}" \
     --argjson failures "${FAILURES}" '
     {
-      status: (if $failures == 0 then "pass" else "fail" end),
+      status: $status,
+      reason: $reason,
       timestamp: $ts,
       checks: $checks,
       findings: [ $checks | to_entries[] | select(.value.status != "passed")
@@ -255,9 +344,15 @@ jq -n \
     }' > "${REPORT_DIR}/install-verify.json"
 
 say '\n%s\n' "----"
-if [ "${FAILURES}" -ne 0 ]; then
-    say '%b[FAIL]%b %s check(s) failed. See %s\n' "$RED" "$NC" "${FAILURES}" "${REPORT_DIR}/install-verify.json"
-    exit 1
-fi
+case "${AGG_STATUS}" in
+    fail)
+        say '%b[FAIL]%b %s check(s) failed. See %s\n' "$RED" "$NC" "${FAILURES}" "${REPORT_DIR}/install-verify.json"
+        exit 1
+        ;;
+    unmeasured)
+        say '%b[UNMEASURED]%b %s See %s\n' "$YELLOW" "$NC" "${AGG_REASON}" "${REPORT_DIR}/install-verify.json"
+        exit 4
+        ;;
+esac
 say '%b[OK]%b the installed toolchain can fail. See %s\n' "$GREEN" "$NC" "${REPORT_DIR}/install-verify.json"
 exit 0

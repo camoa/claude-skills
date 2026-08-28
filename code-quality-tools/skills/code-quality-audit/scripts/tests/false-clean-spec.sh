@@ -9377,6 +9377,34 @@ else
   # would not survive being one.
   BADNAME=$(jq -r '[.tools | to_entries[] | .value.packages[]? | select(.name | test("^[a-z0-9@][a-zA-Z0-9._/-]*$") | not) | .name] | join(",")' "$CATALOG" 2>/dev/null)
   assert_eq "[IN-A] every package name is a plain package name" "" "$BADNAME"
+
+  # ── the rule and its one exception have to agree ─────────────────────────
+  #
+  # psalm is `isolated`, and the generated psalm.xml hands it
+  # <autoloader>vendor/autoload.php</autoloader> with resolveFromConfigFile="true" —
+  # autoloading the project's own code, which is the rule's own predicate for `project`.
+  # The entry declared the contradiction openly in scope_reason and recorded a
+  # reversal_condition, but the RULE did not admit that an exception could exist, so a
+  # reader comparing the two found the catalog contradicting its own stated rule. The rule
+  # now names the mechanism, and these assertions hold the exception to it.
+  assert_eq "[IN-A] the rule admits an exception only against a recorded reason" "yes" \
+    "$(u_has "$RULE" "scope_reason")"
+  assert_eq "[IN-A] and a reversal_condition naming what would move it" "yes" \
+    "$(u_has "$RULE" "reversal_condition")"
+  # Every isolated entry that says it sits on the wrong side of the predicate must carry
+  # the reversal condition the rule requires. An undeclared one would be the oversight.
+  NORECON=$(jq -r '[.tools | to_entries[]
+    | select(.value.scope == "isolated")
+    | select((.value.scope_reason // "") | test("wrong side"))
+    | select((.value.reversal_condition // "") == "")
+    | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every declared exception carries its reversal_condition" "" "$NORECON"
+  assert_eq "[IN-A] psalm is the one entry that declares it" "psalm" \
+    "$(jq -r '[.tools | to_entries[] | select((.value.scope_reason // "") | test("wrong side")) | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)"
+  # And the exception is bounded: the tools the predicate plainly covers stay isolated
+  # with no exception clause of their own.
+  assert_eq "[IN-A] the other three isolated tools claim no exception" "" \
+    "$(jq -r '[.tools | to_entries[] | select(.value.scope == "isolated") | select(.key != "psalm") | select((.value.scope_reason // "") | test("wrong side")) | .key] | join(",")' "$CATALOG" 2>/dev/null)"
 fi
 
 # Criterion 3 asks the rule be "stated in the schema docs". A rule that lives only
@@ -9728,11 +9756,71 @@ PY
 
   D_ANNOUNCE=$( cd "$IN_D2" && PROJECT_TYPE=drupal bash "$SHIM" --dry-run 2>&1 || true )
   assert_eq "[IN-D] the run announces that it derived a config" "yes" "$(u_has "$D_ANNOUNCE" "Derived a complete config")"
-  assert_eq "[IN-D] the announcement says nothing was written" "yes" "$(u_has "$D_ANNOUNCE" "Nothing was written")"
   assert_eq "[IN-D] the announcement names the command that would persist it" "yes" \
     "$(u_has "$D_ANNOUNCE" "/code-quality-tools:setup")"
   assert_eq "[IN-D] the announcement prints the resolved package list" "yes" \
     "$(u_has "$D_ANNOUNCE" "mglaman/phpstan-drupal")"
+
+  # ── the sentence a reader acts on has to be true when it is printed ──────
+  #
+  # It used to read "Nothing was written." It was false at the moment of printing: a
+  # find(1) snapshot across a derived audit shows phpstan.neon, phpmd.xml, phpunit.xml
+  # and psalm.xml added to the project root and composer.json modified. The narrow claim
+  # — no .code-quality.json — does hold and is asserted separately just above, so the
+  # sentence now makes the narrow claim and the run names what it WILL place.
+  assert_eq "[IN-D] the announcement no longer claims nothing was written" "no" \
+    "$(u_has "$D_ANNOUNCE" "Nothing was written")"
+  assert_eq "[IN-D] it says instead that no .code-quality.json was written" "yes" \
+    "$(u_has "$D_ANNOUNCE" "No .code-quality.json was")"
+  assert_eq "[IN-D] and states that the install does write to the project" "yes" \
+    "$(u_has "$D_ANNOUNCE" "DOES write to the project")"
+  assert_eq "[IN-D] naming composer.json" "yes" "$(u_has "$D_ANNOUNCE" "composer.json")"
+  for placed in phpstan.neon phpmd.xml phpunit.xml psalm.xml; do
+    assert_eq "[IN-D] and naming ./$placed before it places it" "yes" \
+      "$(u_has "$D_ANNOUNCE" "./$placed")"
+  done
+
+  # ── the shim's file branch, which is the branch a configured project takes ──
+  #
+  # cqt_config_load used to be called ONLY inside the derived branch. On the file branch
+  # — --config given, or .code-quality.json present, which is the normal state after
+  # /setup — CQT_CONFIG_DOC was the empty string, so cqt_config_doc fed jq nothing, the
+  # per-tool loop never ran an iteration, and the record read {"tools":{},"all_ok":true}
+  # having probed nothing. full-audit.sh:256-265 gates the whole audit on that flag.
+  #
+  # Asserted on the RECORD rather than by grepping for the call, because the call being
+  # present somewhere in the file is what was true while the defect stood.
+  IN_D3="$TMP/in_d3"; in_project "$IN_D3" web
+  in_config drupal web false > "$IN_D3/.code-quality.json"
+  D_STUB="$TMP/in_d3_stub"; mkdir -p "$D_STUB"
+  for b in composer npm; do printf '#!/bin/bash\nexit 0\n' > "$D_STUB/$b"; chmod +x "$D_STUB/$b"; done
+  ( cd "$IN_D3" && PATH="$D_STUB:$PATH" REPORT_DIR="$IN_D3/.r" bash "$SHIM" --config .code-quality.json ) \
+    > /dev/null 2>&1 || true
+  D_STATUS="$IN_D3/.r/tools-status.json"
+  if [[ ! -f "$D_STATUS" ]]; then
+    bad "[IN-D] the file branch writes tools-status.json"
+  else
+    ok "[IN-D] the file branch writes tools-status.json"
+    assert_eq "[IN-D] the file branch resolved a per-tool map rather than an empty one" "yes" \
+      "$([[ "$(jq -r '.tools | length' "$D_STATUS")" -gt 0 ]] && echo yes || echo no)"
+    assert_eq "[IN-D] it records the project type it resolved" "drupal" \
+      "$(jq -r '.project_type // "EMPTY"' "$D_STATUS")"
+    assert_eq "[IN-D] and that the config came from a file" "file" \
+      "$(jq -r '.config_source // "EMPTY"' "$D_STATUS")"
+    assert_eq "[IN-D] every tool the config named appears in the map" "yes" \
+      "$(python3 - "$D_STATUS" "$IN_D3/.code-quality.json" <<'PY'
+import json,sys
+rec=json.load(open(sys.argv[1])); cfg=json.load(open(sys.argv[2]))
+want={k for k,v in cfg["tools"].items() if v.get("bin")}
+got=set(rec.get("tools",{}))
+print("yes" if want and want <= got else "no: missing " + ",".join(sorted(want-got)))
+PY
+)"
+    # The refutation the finding is really about: all_ok cannot be true off a map that
+    # names nothing. Asserted as an implication so it holds however the map came out.
+    assert_eq "[IN-D] all_ok is never true with an empty tool map" "yes" \
+      "$(jq -r 'if (.tools | length) == 0 and .all_ok == true then "no" else "yes" end' "$D_STATUS")"
+  fi
 
   # A doctored catalog must produce a refusal, not a quiet install: otherwise the
   # derivation is a path around the validator rather than an input to it.
@@ -10159,6 +10247,121 @@ except Exception as e:
   # loud rather than left as an implied equivalence.
   assert_eq "[IN-H] [contract, not behavioural] the phpstan template still opens with parameters:" "yes" \
     "$(u_has "$(cat "$H_TPL")" "parameters:")"
+
+  # ── every PLACED XML parses, which the template assertions above cannot say ──
+  #
+  # The templates were asserted to parse; the OUTPUT was not, and the output was what
+  # broke. `dest` is built as "./$(basename ...)", so `${dest#*.}` stripped through the
+  # period in "./" and expanded to "/psalm.xml" — never "xml". The declaration-preserving
+  # branch therefore never ran once, and all three placed XML files carried the provenance
+  # comment ABOVE the declaration, which libxml refuses outright: "XML declaration allowed
+  # only at the start of the document". libxml is the parser PHPUnit, PHPMD and Psalm all
+  # sit on, so each tool the installer had just configured could not read its own config.
+  #
+  # Asserted with a real parser against a real placed file, never by grepping for a
+  # string, because a string check is what the in-code comment already was.
+  if [[ -d "$HD" ]]; then
+    for x in "$HD"/*.xml; do
+      [[ -f "$x" ]] || continue
+      assert_eq "[IN-H] the PLACED $(basename "$x") parses as XML" "ok" \
+        "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+      assert_eq "[IN-H] and its declaration is still the first line of $(basename "$x")" "yes" \
+        "$(head -1 "$x" | grep -q '^<?xml' && echo yes || echo no)"
+      assert_eq "[IN-H] with the provenance comment beneath it, not above" "yes" \
+        "$(sed -n '2p' "$x" | grep -q 'code-quality-tools:generated' && echo yes || echo no)"
+    done
+    # The NEON case gets the quotes REMOVED, which is why the quoted-token pass exists at
+    # all. The XML case must NOT, and is asserted on the psalm fixture further down —
+    # $HD's templates list does not include psalm.xml, and an assertion guarded on a file
+    # that is never there passes by never running.
+    if [[ -f "$HD/phpstan.neon" ]]; then
+      assert_eq "[IN-H] a substituted NEON list entry loses its quotes, as it must" "yes" \
+        "$(u_has "$(cat "$HD/phpstan.neon")" "- web/modules/custom")"
+    fi
+  fi
+
+  # ── the provenance comment cannot corrupt the file it describes ────────────
+  #
+  # CONFIG_PATH is interpolated into the comment body, and XML forbids `--` inside a
+  # comment. `--config my--cfg.json` produced a first line DOMDocument rejected with
+  # "Double hyphen within comment" — a second, independent corruption vector that would
+  # have survived the ${dest#*.} fix above.
+  IN_HD="$TMP/in_h_dash"; in_project "$IN_HD" web
+  in_config drupal web false > "$IN_HD/my--cfg.json"
+  in_place "$IN_HD" 'my--cfg.json' > /dev/null 2>&1
+  for x in "$IN_HD"/*.xml; do
+    [[ -f "$x" ]] || continue
+    assert_eq "[IN-H] $(basename "$x") still parses when the config path contains --" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+  done
+  if [[ -f "$IN_HD/phpmd.xml" ]]; then
+    # The BODY of the comment, between the delimiters — `<!--` itself contains the two
+    # hyphens that are legal only there.
+    assert_eq "[IN-H] no XML comment BODY carries a double hyphen" "0" \
+      "$(python3 -c 'import sys,re
+line = open(sys.argv[1]).read().split("\n")[1]
+m = re.match(r"^<!--(.*)-->\s*$", line)
+print(0 if (m and "--" not in m.group(1)) else 1)' "$IN_HD/phpmd.xml")"
+    assert_eq "[IN-H] and the provenance is still legible after separation" "yes" \
+      "$(u_has "$(sed -n '2p' "$IN_HD/phpmd.xml")" "code-quality-tools:generated")"
+    assert_eq "[IN-H] the config path is still recognisable in it" "yes" \
+      "$(u_has "$(sed -n '2p' "$IN_HD/phpmd.xml")" "cfg.json")"
+  fi
+
+  # ── what actually decides that a template is placed ────────────────────────
+  #
+  # psalm.xml claimed it was placed "only when psalm is in the config's tools".
+  # stage_templates iterates .templates[] and never reads .tools, and cqt_config_derive
+  # hardcodes the four-template Drupal list independently of which tools it picked, so a
+  # config with .tools.psalm deleted still got a psalm.xml. `templates` is the field that
+  # decides, and the file now says so.
+  IN_HT="$TMP/in_h_tpl"; in_project "$IN_HT" web
+  in_config drupal web false > "$IN_HT/.code-quality.json"
+  jq -c '.templates += ["drupal/psalm.xml"] | del(.tools.psalm)' "$IN_HT/.code-quality.json" \
+    > "$IN_HT/t.json" && mv "$IN_HT/t.json" "$IN_HT/.code-quality.json"
+  in_place "$IN_HT" .code-quality.json > /dev/null 2>&1
+  assert_eq "[IN-H] templates[] decides placement: psalm.xml is placed with no psalm tool" "yes" \
+    "$([[ -f "$IN_HT/psalm.xml" ]] && echo yes || echo no)"
+
+  # psalm.xml is the one template whose tokens sit in ATTRIBUTE values, where the quotes
+  # are syntax rather than part of the value. The quoted-token pass that YAML and NEON
+  # need would eat them and produce `<directory name=web/modules/custom />`, which no
+  # parser accepts — a defect that stayed invisible while every placed XML was already
+  # unparseable for the declaration reason above. So the format decides, and it is
+  # asserted here, on the only fixture that actually places the file.
+  if [[ -f "$IN_HT/psalm.xml" ]]; then
+    assert_eq "[IN-H] the placed psalm.xml parses as XML" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$IN_HT/psalm.xml")"
+    assert_eq "[IN-H] a substituted XML attribute keeps its quotes" "yes" \
+      "$(u_has "$(cat "$IN_HT/psalm.xml")" '<directory name="web/modules/custom" />')"
+    assert_eq "[IN-H] and no directory attribute was left unquoted by the substitution" "0" \
+      "$(grep -cE '<directory name=[^"]' "$IN_HT/psalm.xml" || true)"
+    assert_eq "[IN-H] its declaration is still the first line" "yes" \
+      "$(head -1 "$IN_HT/psalm.xml" | grep -q '^<?xml' && echo yes || echo no)"
+  else
+    bad "[IN-H] psalm.xml was placed on the templates fixture"
+  fi
+  assert_eq "[IN-H] and the template no longer claims the tools list gates it" "no" \
+    "$(u_has "$(cat "$H_PSALM")" "only when psalm is in")"
+  assert_eq "[IN-H] it names templates as the field that does" "yes" \
+    "$(u_has "$(cat "$H_PSALM")" "config's \`templates\` list")"
+  IN_HT2="$TMP/in_h_tpl2"; in_project "$IN_HT2" web
+  in_config drupal web false > "$IN_HT2/.code-quality.json"
+  in_place "$IN_HT2" .code-quality.json > /dev/null 2>&1
+  assert_eq "[IN-H] and dropping it from templates[] is what stops it being placed" "no" \
+    "$([[ -f "$IN_HT2/psalm.xml" ]] && echo yes || echo no)"
 fi
 
 # ── IN-J. the install verifies itself, red before green (criterion 14) ──────
@@ -10323,6 +10526,162 @@ HOOK
   # And the thing it replaces is gone from the command.
   assert_eq "[IN-J] setup.md no longer verifies with a commit that stages nothing" "0" \
     "$(grep -c 'allow-empty' "$SETUPMD" || true)"
+
+  # ── check 1 may not read a fatal for content ────────────────────────────
+  #
+  # It captured `out="$(phpcs -i 2>&1)"`, discarding the exit status, then grepped the
+  # merged streams for the literal "Drupal". A phpcs exiting 255 whose fatal names
+  # /home/dev/Sites/Drupal10/vendor/... was recorded {"status":"passed"}: the tool had
+  # not run, no standard was listed, and the PROJECT PATH answered the question. That
+  # path shape is ordinary among Drupal developers, not contrived.
+  IN_JF="$TMP/in_jf"; in_project "$IN_JF" web
+  in_config drupal web false > "$IN_JF/.code-quality.json"
+  mkdir -p "$IN_JF/vendor/bin" "$IN_JF/vendor/phpstan/extension-installer/src"
+  cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+     "$IN_JF/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+  cat > "$IN_JF/vendor/bin/phpcs" <<'FATAL'
+#!/bin/bash
+echo "PHP Fatal error: Uncaught Error in /home/dev/Sites/Drupal10/vendor/squizlabs/php_codesniffer/src/Runner.php" >&2
+exit 255
+FATAL
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  J_FATAL_EXIT=$(j_run "$IN_JF" .code-quality.json)
+  J_FREPORT="$IN_JF/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] a phpcs that exits 255 is not recorded as a pass" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the reason names the exit status rather than the path" "yes" \
+    "$(u_has "$(jq -r '.checks.phpcs_lists_drupal.reason // ""' "$J_FREPORT" 2>/dev/null)" "exited 255")"
+  assert_eq "[IN-J] a fatal naming a Drupal path does not answer for a registration" "1" "$J_FATAL_EXIT"
+
+  # phpcs exiting 0 with no standards line is the same class: nothing to read.
+  printf '#!/bin/bash\nexit 0\n' > "$IN_JF/vendor/bin/phpcs"; chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_null_exit=$(j_run "$IN_JF" .code-quality.json)
+  assert_eq "[IN-J] phpcs printing no standards list is a failure, not a pass" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the run exits non-zero for it" "1" "$j_null_exit"
+
+  # The match is against the standards phpcs NAMES, as whole tokens: "DrupalPractice"
+  # alone is a different standard and does not register Drupal.
+  cat > "$IN_JF/vendor/bin/phpcs" <<'PRACTICE'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are DrupalPractice, PEAR and Squiz"; exit 0; }
+exit 0
+PRACTICE
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_run "$IN_JF" .code-quality.json > /dev/null
+  assert_eq "[IN-J] DrupalPractice alone does not satisfy the Drupal standard" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  cat > "$IN_JF/vendor/bin/phpcs" <<'REAL'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are Drupal, DrupalPractice, PEAR and Squiz"; exit 0; }
+exit 0
+REAL
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_run "$IN_JF" .code-quality.json > /dev/null
+  assert_eq "[IN-J] and a real standards list naming Drupal still passes" "passed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+
+  # ── the aggregate: skips do not add up to a pass ────────────────────────
+  #
+  # `status` was `if failures == 0 then "pass" else "fail"`, so a project with nothing
+  # installed wrote {"status":"pass","passed":0,"failed":0,"skipped":3}, printed "[OK] the
+  # installed toolchain can fail" and exited 0. cqt-install.sh reads only that exit code,
+  # so its sole consumer could not tell zero-checks-ran from three-checks-passed.
+  #
+  # The word and the code are the suite's existing ones — path-resolve.sh's
+  # CQT_STATUS_UNMEASURED and CQT_EXIT_UNMEASURED — not a second vocabulary.
+  IN_JU="$TMP/in_ju"; mkdir -p "$IN_JU"
+  in_config drupal web false > "$IN_JU/.code-quality.json"
+  J_EMPTY_STUB="$TMP/in_ju_nostub"; mkdir -p "$J_EMPTY_STUB"
+  J_UNMEAS_EXIT=$( ( cd "$IN_JU" && REPORT_DIR="$IN_JU/.verify-reports" \
+      PATH="$J_EMPTY_STUB:/usr/bin:/bin" bash "$CQTVERIFY" --config .code-quality.json ) \
+      > "$TMP/j_out" 2>&1; printf '%s' "$?" )
+  J_UREPORT="$IN_JU/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] nothing installed: all three checks skip" "3" \
+    "$(jq -r '.skipped // -1' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and none of them passed" "0" "$(jq -r '.passed // -1' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] the aggregate is unmeasured, not pass" "unmeasured" \
+    "$(jq -r '.status // "ABSENT"' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] it uses the suite's existing word for this, not a new one" "unmeasured" \
+    "$(grep -o 'CQT_STATUS_UNMEASURED="[a-z]*"' "${ROOT}/core/path-resolve.sh" | sed 's/.*="//;s/"//')"
+  assert_eq "[IN-J] the report says why nothing could be measured" "yes" \
+    "$([[ -n "$(jq -r '.reason // ""' "$J_UREPORT" 2>/dev/null)" ]] && echo yes || echo no)"
+  assert_eq "[IN-J] and it exits 4, the suite's unmeasured code, not 0" "4" "$J_UNMEAS_EXIT"
+  assert_eq "[IN-J] 4 is what path-resolve.sh calls CQT_EXIT_UNMEASURED" "4" \
+    "$(grep -o 'CQT_EXIT_UNMEASURED=[0-9]' "${ROOT}/core/path-resolve.sh" | cut -d= -f2)"
+  assert_eq "[IN-J] and it does not print the toolchain-can-fail line" "no" \
+    "$(u_has "$(j_out)" "the installed toolchain can fail")"
+  assert_eq "[IN-J] it prints UNMEASURED instead" "yes" "$(u_has "$(j_out)" "UNMEASURED")"
+
+  # The sole consumer reads that status as three states, not two. `|| FAILED=1` collapses
+  # 4 into "failed", which is the right verdict and the wrong report: "we could not look"
+  # and "we looked and it is broken" call for different fixes.
+  J_CONSUMER=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL")
+  assert_eq "[IN-J] the installer reads the verifier's status as more than zero-or-not" "yes" \
+    "$(u_has "$J_CONSUMER" "4)")"
+  assert_eq "[IN-J] and does not capture it with \$? after a pipe" "0" \
+    "$(printf '%s' "$J_CONSUMER" | grep -A2 'config -$' | grep -c 'vexit=\$?' || true)"
+
+  # ── check 3 in a linked worktree, where .git is a FILE ──────────────────
+  #
+  # `[ ! -d .git ]` recorded "this is not a git working tree" about a worktree that
+  # plainly is one — hooks run there normally — and silently disabled the one check that
+  # replaces setup.md's `git commit --allow-empty`. This repository develops in
+  # worktrees, so the wrong branch was the reachable one.
+  if git --version > /dev/null 2>&1; then
+    IN_JW="$TMP/in_jw"; mkdir -p "$IN_JW"
+    ( cd "$IN_JW" && git init -q . && git config user.email t@e && git config user.name t \
+        && printf 'x\n' > f.txt && git add -A && git commit -qm base \
+        && git worktree add -q "$TMP/in_jw_wt" -b jwbranch ) > /dev/null 2>&1
+    if [[ -f "$TMP/in_jw_wt/.git" ]]; then
+      ok "[IN-J] the fixture worktree has .git as a FILE, which is the case under test"
+      in_config drupal web true > "$TMP/in_jw_wt/.code-quality.json"
+      mkdir -p "$TMP/in_jw_wt/vendor/phpstan/extension-installer/src"
+      cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+         "$TMP/in_jw_wt/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+      JW_HOOKS=$( cd "$TMP/in_jw_wt" && git rev-parse --git-path hooks )
+      mkdir -p "$JW_HOOKS"
+      cat > "$JW_HOOKS/pre-commit" <<'HOOK'
+#!/bin/bash
+files=$(git diff --cached --name-only)
+[ -n "$files" ] || exit 0
+for f in $files; do
+  [ -f "$f" ] || continue
+  grep -qF 'cqt-known-violation' "$f" && { echo "hook: refused $f"; exit 1; }
+done
+exit 0
+HOOK
+      chmod +x "$JW_HOOKS/pre-commit"
+      j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+      JW_INDEX=$( cd "$TMP/in_jw_wt" && git rev-parse --git-path index )
+      JW_BEFORE=$(md5sum < "$JW_INDEX")
+      JW_EXIT=$(j_run "$TMP/in_jw_wt" .code-quality.json)
+      JW_REPORT="$TMP/in_jw_wt/.verify-reports/install-verify.json"
+      assert_eq "[IN-J] in a worktree the hook check RUNS rather than skipping" "passed" \
+        "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$JW_REPORT" 2>/dev/null)"
+      # Read off the whole report, not off the reason field: a passed check's reason is
+      # the empty string, and u_has answers NOTHING rather than no on an empty haystack.
+      assert_eq "[IN-J] it does not claim a worktree is not a git working tree" "no" \
+        "$(u_has "$(cat "$JW_REPORT" 2>/dev/null)" "not a git working tree")"
+      assert_eq "[IN-J] and the run is a pass there" "0" "$JW_EXIT"
+      assert_eq "[IN-J] the worktree's own index is restored byte for byte" "$JW_BEFORE" \
+        "$(md5sum < "$JW_INDEX")"
+      assert_eq "[IN-J] and no violation file is left in the worktree" "0" \
+        "$(find "$TMP/in_jw_wt" -name '*cqt*violation*' 2>/dev/null | wc -l | tr -d ' ')"
+
+      # RED in the worktree too, so the check is not merely running but still able to fail.
+      printf '#!/bin/bash\nexit 0\n' > "$JW_HOOKS/pre-commit"; chmod +x "$JW_HOOKS/pre-commit"
+      assert_eq "[IN-J] RED in a worktree: a hook that passes everything still fails" "1" \
+        "$(j_run "$TMP/in_jw_wt" .code-quality.json)"
+      ( cd "$IN_JW" && git worktree remove --force "$TMP/in_jw_wt" ) > /dev/null 2>&1 || true
+    else
+      SKIP=$((SKIP + 1))
+      echo "  skip  [IN-J] worktree hook case: git worktree add did not produce a .git file here"
+    fi
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-J] worktree hook case: git is not installed"
+  fi
 fi
 
 # ── IN-K. setup.md holds no install, and the region cannot be edited away ────

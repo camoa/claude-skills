@@ -6,8 +6,8 @@
 #   ddev exec vendor/bin/phpstan analyse
 #
 # Required packages:
-#   composer require --dev phpstan/phpstan phpstan/extension-installer \
-#     mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules
+#   composer require --dev phpstan/phpstan:^2.0 phpstan/extension-installer:^1.4 \
+#     mglaman/phpstan-drupal:^2.1.2 phpstan/phpstan-deprecation-rules:^2.0
 #
 # Note: phpstan/extension-installer auto-loads extensions.
 #       Do NOT add an includes: block - it causes duplicate loading errors.

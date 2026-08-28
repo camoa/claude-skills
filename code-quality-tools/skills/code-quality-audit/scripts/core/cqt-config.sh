@@ -468,17 +468,39 @@ cqt_config_derive() {
 # Print the derived config in full, by scope, so a run that found no file still states
 # exactly what it resolved. This is the half that stops the silent skip, and it does not
 # depend on the full-audit.sh `|| true` fix landing in the sibling task.
+#
+# This used to end the first paragraph with "Nothing was written." That sentence was
+# false at the moment it was printed. The narrow claim behind it holds — no
+# .code-quality.json is created, and the report directory resolves outside the repository
+# — but the install that follows places the template config files and lets Composer edit
+# composer.json, and a full find(1) snapshot before and after a derived audit shows
+# phpstan.neon, phpmd.xml, phpunit.xml and psalm.xml added and composer.json modified.
+# "Nothing was written" is the reassurance a reader acts on, so it now says what it
+# actually means and the run names the files it is about to place.
+#
+# The templates are still placed, deliberately. Removing them from this path would leave
+# PHPStan reading no config on exactly the projects that never ran /setup, which is
+# PHPStan analysing Drupal as plain PHP and exiting 0 — the false clean this epic exists
+# to remove, reintroduced in the name of tidiness. The honest fix is the sentence.
 cqt_config_announce_derived() {
-    local scope spec
+    local scope spec tmpl
     printf '[INFO] No .code-quality.json found. Derived a complete config from the tool\n'
-    printf '       catalog for project type %s, layout %s. Nothing was written.\n' \
+    printf '       catalog for project type %s, layout %s. No .code-quality.json was\n' \
         "'$(cqt_config_get .project.type)'" "'$(cqt_config_get .project.layout.web_root)'"
+    printf '       written: this config exists only in memory for the duration of this run.\n'
     for scope in project isolated machine; do
         printf '[INFO] Resolved (%s):\n' "${scope}"
         while IFS= read -r -d '' spec; do
             printf '         %s\n' "${spec}"
         done < <(cqt_config_tools "${scope}")
     done
+    printf '[INFO] The install this feeds DOES write to the project: Composer edits\n'
+    printf '       composer.json for the packages above, and these config files are placed\n'
+    printf '       at the project root unless a file of that name is already there:\n'
+    while IFS= read -r tmpl; do
+        [ -n "${tmpl}" ] || continue
+        printf '         ./%s\n' "${tmpl##*/}"
+    done <<< "$(jq -r '.templates[]? // empty' <<< "${CQT_CONFIG_DOC}" 2> /dev/null)"
     printf '[INFO] To keep this configuration, run /code-quality-tools:setup. That command\n'
     printf '       is the only writer of .code-quality.json in this plugin.\n'
 }

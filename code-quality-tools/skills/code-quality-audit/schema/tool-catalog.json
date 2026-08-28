@@ -16,12 +16,12 @@
     "argument, whether it arrived from here or from a project's config file."
   ],
 
-  "scope_rule": "A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`.",
+  "scope_rule": "A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`. An entry may sit on the wrong side of this predicate only when it records a `scope_reason` saying so in those terms and a `reversal_condition` naming the observation that would move it; `psalm` is the one such entry, and its generated config hands it an explicit autoloader rather than sharing a resolver.",
 
   "scope_rule_source": "bamarni/composer-bin-plugin's own rule of thumb, 'limit this approach to tools which do not autoload your code' (README, read 2026-08-27). The predicate excludes most of what this plugin installs, so `isolated` is the minority case and four tools land in it. Three scopes in the vocabulary does not mean a third of the toolchain in each.",
 
   "isolation": {
-    "_comment": "How `isolated` is implemented. Chosen in Phase 1 against phive and a plain tools/composer.json, re-confirmed 2026-08-27: 1.9.1 released 2025-02-04, no deprecation; PHIVE's Composer integration is an abandoned read-only proof of concept; `composer global` is the thing both exist to replace. A scoped PHAR is better where one exists, but a PHAR cannot host extensions and this tool set needs them.",
+    "_comment": "How `isolated` is implemented. Chosen in Phase 1 against phive and a plain tools/composer.json, checked 2026-08-27: 1.9.1 released 2025-02-04; PHIVE's Composer integration is an abandoned read-only proof of concept; `composer global` is the thing both exist to replace. A scoped PHAR is better where one exists, but a PHAR cannot host extensions and this tool set needs them.",
     "package": "bamarni/composer-bin-plugin",
     "constraint": "^1.9",
     "allow_plugin": "bamarni/composer-bin-plugin",

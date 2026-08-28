@@ -131,6 +131,20 @@ else
     echo ""
 fi
 
+# The file branch loads it HERE, and this line is the whole reason the status record
+# below says anything. It used to be missing: cqt_config_load ran only inside the derived
+# branch, so on the branch a configured project actually takes — CONFIG_ARG given, or
+# .code-quality.json on disk, which is the normal state after /setup — CQT_CONFIG_DOC was
+# the empty string. cqt_config_doc then fed jq nothing, TOOLS_JSON came back empty, the
+# per-tool loop never ran a single iteration, and ALL_OK stayed true. The record said
+# {"tools":{},"all_ok":true} having probed no tool at all, and full-audit.sh:256-265 reads
+# that flag to decide whether the audit may proceed. A shim reporting a healthy toolchain
+# it never looked at is the exact defect this epic exists to remove, so the load is a
+# precondition of writing the record rather than a step inside one branch.
+if [ "${CONFIG_SOURCE_KIND}" = "file" ]; then
+    cqt_config_load "${CONFIG_TO_USE}" > /dev/null
+fi
+
 # ── hand off ──────────────────────────────────────────────────────────────────
 INSTALL_ARGS=(--config "${CONFIG_TO_USE}")
 [ "${DRY_RUN}" -eq 1 ] && INSTALL_ARGS+=(--dry-run)
@@ -162,6 +176,20 @@ if [ "${DRY_RUN}" -eq 0 ]; then
     )"
     STATUS_ENTRIES=""
     ALL_OK=true
+
+    # Fail closed on an empty map, so the loop below cannot report a pass by not running.
+    # A config that resolved zero probeable tools is not a healthy toolchain; it is a run
+    # that established nothing, and the only honest all_ok for it is false. Written as its
+    # own guard rather than trusted to the load above, because the defect this replaces
+    # was precisely a missing load somewhere else in the file.
+    TOOL_ROWS="$(jq -r 'length' <<< "${TOOLS_JSON:-[]}" 2> /dev/null)"
+    if [ "${TOOL_ROWS:-0}" -eq 0 ]; then
+        ALL_OK=false
+        printf '%b[WARN]%b the resolved config named no probeable tool, so nothing was\n' "$YELLOW" "$NC" >&2
+        printf '       checked. This is recorded as all_ok:false: a run that probed no\n' >&2
+        printf '       tool has not established that the toolchain is present.\n' >&2
+    fi
+
     while IFS= read -r row; do
         [ -n "$row" ] || continue
         id="$(jq -r '.key' <<< "$row")"

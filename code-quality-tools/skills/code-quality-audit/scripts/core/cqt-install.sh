@@ -241,7 +241,20 @@ provenance_line() {
     local dest="$1" body
     body="${CQT_PROVENANCE} from ${CONFIG_PATH} by code-quality-tools ${PLUGIN_VERSION}"
     case "${dest}" in
-        *.xml)  printf '<!-- %s -->' "${body}" ;;
+        *.xml)
+            # CONFIG_PATH is a path somebody chose, and XML forbids `--` inside a comment
+            # at all — `--config my--cfg.json` produced a file DOMDocument rejected with
+            # "Double hyphen within comment". A comment carrying provenance must not be
+            # able to make the file it describes unparseable, so the run is broken up. A
+            # trailing hyphen would close the comment as `--->`, so that is separated too.
+            # Looped, because one pass over `----` leaves a `--` behind: the replacement
+            # is non-overlapping, so `- -- -` comes back out of `----`.
+            while [ "${body}" != "${body//--/- -}" ]; do
+                body="${body//--/- -}"
+            done
+            body="${body%-}"
+            printf '<!-- %s -->' "${body}"
+            ;;
         *.js)   printf '// %s' "${body}" ;;
         *)      printf '# %s' "${body}" ;;
     esac
@@ -286,21 +299,29 @@ would_shadow() {
 # every parser rejects it. Replacing the quotes along with the token is what turns
 # `- "{{MODULES_PATH}}"` into `- web/modules/custom` rather than into a quoted string
 # that happens to look right.
-sub_token() {   # <body> <token> <value>
-    local body="$1" tok="$2" val="$3"
-    body="${body//\"\{\{${tok}\}\}\"/${val}}"
+#
+# The quoted-form pass is what YAML and NEON need and what XML must NOT get. In XML the
+# quotes around an attribute value are syntax, not part of the value, so eating them turns
+# `<directory name="{{MODULES_PATH}}" />` into `<directory name=web/modules/custom />`,
+# which no parser accepts. The defect was invisible while the provenance comment sat above
+# the XML declaration and every placed XML file was already unparseable; fixing that
+# uncovered it. So the destination's format decides, and `eat_quotes` is 0 for XML.
+sub_token() {   # <body> <token> <value> <eat_quotes: 0|1>
+    local body="$1" tok="$2" val="$3" eat="${4:-1}"
+    [ "${eat}" -eq 1 ] && body="${body//\"\{\{${tok}\}\}\"/${val}}"
     body="${body//\{\{${tok}\}\}/${val}}"
     printf '%s' "${body}"
 }
 
-substitute() {
-    local body="$1" tasks
+substitute() {   # <body> <dest>
+    local body="$1" dest="${2-}" tasks eat=1
+    [ "${dest##*.}" = "xml" ] && eat=0
     tasks="$(cqt_config_doc | jq -r '[.git_hooks.tasks[]?] | join(", ")')"
-    body="$(sub_token "${body}" WEB_ROOT "${WEB_ROOT}")"
-    body="$(sub_token "${body}" WEB_ROOT_PREFIX "${WEB_ROOT:+${WEB_ROOT}/}")"
-    body="$(sub_token "${body}" MODULES_PATH "${MODULES_PATH}")"
-    body="$(sub_token "${body}" THEMES_PATH "${THEMES_PATH}")"
-    body="$(sub_token "${body}" HOOK_TASKS "[${tasks}]")"
+    body="$(sub_token "${body}" WEB_ROOT "${WEB_ROOT}" "${eat}")"
+    body="$(sub_token "${body}" WEB_ROOT_PREFIX "${WEB_ROOT:+${WEB_ROOT}/}" "${eat}")"
+    body="$(sub_token "${body}" MODULES_PATH "${MODULES_PATH}" "${eat}")"
+    body="$(sub_token "${body}" THEMES_PATH "${THEMES_PATH}" "${eat}")"
+    body="$(sub_token "${body}" HOOK_TASKS "[${tasks}]" "${eat}")"
 
     # The PHPStan level is a rewritten LINE, not a token, and deliberately so. The
     # template is parsed as YAML by the spec (section O pins its level, its paths and
@@ -345,11 +366,18 @@ stage_templates() {
             continue
         fi
         body="$(cat "${src}")"
-        body="$(substitute "${body}")"
+        body="$(substitute "${body}" "${dest}")"
         prov="$(provenance_line "${dest}")"
         # An XML declaration has to stay the first line of the document, so the
         # provenance comment goes after it rather than before.
-        if [ "${dest#*.}" = "xml" ] && printf '%s' "${body}" | head -1 | grep -q '<?xml'; then
+        #
+        # `##*.`, not `#*.`: dest is built above as "./$(basename ...)", so it ALWAYS
+        # begins with "./" and the shortest-match form strips through that first period.
+        # For "./psalm.xml" it expanded to "/psalm.xml", never "xml", so this branch never
+        # ran once — every generated XML file got the comment above its declaration and
+        # libxml refused all three with "XML declaration allowed only at the start of the
+        # document". The comment right above described behaviour the code did not have.
+        if [ "${dest##*.}" = "xml" ] && printf '%s' "${body}" | head -1 | grep -q '<?xml'; then
             { printf '%s\n' "$(printf '%s' "${body}" | head -1)"
               printf '%s\n' "${prov}"
               printf '%s' "${body}" | tail -n +2
@@ -398,11 +426,30 @@ stage_verify() {
     fi
     # The verifier reads the same document the installer acted on. When the config was
     # derived, that document never became a file, so it is piped in on stdin.
+    #
+    # Its exit status is read as three states rather than two. 4 is `unmeasured`: no check
+    # could be applied, so nothing about this toolchain was established. That is not a
+    # passing install — an install nobody could verify is the state this whole stage
+    # exists to surface — so it still fails the run, but it is REPORTED as its own thing,
+    # because "we could not look" and "we looked and it is broken" call for different
+    # fixes. Reading only zero-or-not is what let a run with three skipped checks print
+    # "[OK] the installed toolchain can fail".
+    local vexit=0
     if [ "$(cqt_config_source)" = "derived" ]; then
-        cqt_config_doc | bash "${verifier}" --config - || FAILED=1
+        cqt_config_doc | bash "${verifier}" --config -
+        vexit="${PIPESTATUS[1]}"
     else
-        bash "${verifier}" --config "${CONFIG_PATH}" || FAILED=1
+        bash "${verifier}" --config "${CONFIG_PATH}" || vexit=$?
     fi
+    case "${vexit}" in
+        0) ;;
+        4) FAILED=1
+           printf '%b[UNMEASURED]%b verification could apply none of its checks here, so this\n' "$YELLOW" "$NC"
+           printf '              install is not verified. That is recorded as a failure: an\n'
+           printf '              install nobody could verify is not an install that worked.\n'
+           ;;
+        *) FAILED=1 ;;
+    esac
     printf '\n'
 }
 
