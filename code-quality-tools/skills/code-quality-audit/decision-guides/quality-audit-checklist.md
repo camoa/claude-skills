@@ -26,7 +26,7 @@ Run before pushing to remote:
 # Static analysis (~30s)
 ddev exec vendor/bin/phpstan analyse \
     web/modules/custom \
-    --level=5
+    --level="$(jq -r '.phpstan.level' .code-quality.json)"
 
 # Unit + Kernel tests (~1-2min)
 ddev exec vendor/bin/phpunit \
@@ -34,7 +34,7 @@ ddev exec vendor/bin/phpunit \
 ```
 
 **Pass criteria:**
-- PHPStan: No errors at level 5
+- PHPStan: No errors at the configured level (`.code-quality.json`'s `phpstan.level`)
 - Tests: All passing
 
 ## Pre-Merge Checks (Full)
@@ -171,7 +171,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflo
 ### Stage 2: Static Analysis (2min)
 
 ```yaml
-- phpstan analyse --level=8
+- phpstan analyse at .code-quality.json's phpstan.level
 ```
 
 **Fail:** Merge blocked (errors), Warning (level <8)
@@ -205,13 +205,17 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/tdd-workflo
 ### Stage 6: Security & Deprecations (optional)
 
 ```yaml
-- phpstan analyse --level=2  # Includes deprecation rules
+- phpstan analyse at .code-quality.json's phpstan.level
 - composer audit
 ```
 
 **Fail:** Warning (critical: block)
 
-> **Note**: Use `phpstan/phpstan-deprecation-rules` instead of deprecated `drupal-check`.
+> **Note**: Use `phpstan/phpstan-deprecation-rules`, not `mglaman/drupal-check`.
+> drupal-check 1.5.0 declares `mglaman/phpstan-drupal ^1.0.0`, and does not require
+> `phpstan/phpstan` at all. PHPStan 1.x arrives transitively, because phpstan-drupal 1.x
+> requires `phpstan/phpstan ^1.12`. This skill installs the PHPStan 2.x stack, so the two
+> cannot resolve in one project.
 
 ## Issue Triage
 

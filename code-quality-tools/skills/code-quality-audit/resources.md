@@ -14,7 +14,10 @@ Links to official documentation and learning resources.
 ### Drupal-Specific
 
 - [phpstan-drupal](https://github.com/mglaman/phpstan-drupal)
-- [phpstan-deprecation-rules](https://github.com/phpstan/phpstan-deprecation-rules) (replaces deprecated drupal-check)
+- [phpstan-deprecation-rules](https://github.com/phpstan/phpstan-deprecation-rules) —
+  what to use instead of `mglaman/drupal-check`, which declares
+  `mglaman/phpstan-drupal ^1.0.0` and no direct `phpstan/phpstan`; PHPStan 1.x is what
+  that resolves to
 - [Drupal Coder](https://www.drupal.org/project/coder)
 - [Drupal Testing Documentation](https://www.drupal.org/docs/develop/automated-testing)
 
@@ -49,16 +52,26 @@ Links to official documentation and learning resources.
 
 ```bash
 composer require --dev \
-  phpstan/phpstan \
-  phpstan/extension-installer \
-  mglaman/phpstan-drupal \
-  phpstan/phpstan-deprecation-rules \
-  phpmd/phpmd \
-  systemsdk/phpcpd \
-  drupal/coder
+  phpstan/phpstan:^2.0 \
+  phpstan/extension-installer:^1.4 \
+  mglaman/phpstan-drupal:^2.1.2 \
+  phpstan/phpstan-deprecation-rules:^2.0 \
+  phpmd/phpmd:^2.15 \
+  systemsdk/phpcpd:^9.0 \
+  drupal/coder:^9.0
 ```
 
-> **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
+> **Note**: `mglaman/drupal-check` cannot be installed into a project this skill
+> configures. Its 1.5.0 `composer.json` declares `mglaman/phpstan-drupal ^1.0.0` and
+> `phpstan/phpstan-deprecation-rules ^1.0.0`, and declares no dependency on
+> `phpstan/phpstan` at all. PHPStan 1.x arrives transitively, because phpstan-drupal 1.x
+> requires `phpstan/phpstan ^1.12`. This skill installs the PHPStan 2.x stack, so the two
+> cannot resolve together. Use `phpstan/phpstan-deprecation-rules` with
+> `mglaman/phpstan-drupal` 2.x instead.
+>
+> Upstream state, checked 2026-08-28: not marked abandoned on Packagist, not archived on
+> GitHub, latest release 1.5.0 (2024-08-14). The constraint above is the reason to reach
+> for something else; the project's health is not.
 
 #### Upgrading to phpstan-drupal 2.1.0
 

@@ -27,7 +27,11 @@ NC='\033[0m'
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+
+# Where this project's custom code lives is answered in ONE place, for every gate.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
 DUPLICATION_MAX="${DUPLICATION_MAX:-5}"
 
 # PHPCPD settings
@@ -184,7 +188,7 @@ fi
 # purely because the tool is not installed.
 if ! ddev exec vendor/bin/phpcpd --version &> /dev/null; then
     echo -e "${YELLOW}[SKIP]${NC} phpcpd not installed — DRY gate skipped (tool absent)"
-    echo "  Install with: ddev composer require --dev systemsdk/phpcpd"
+    echo "  Install with: ddev composer require --dev systemsdk/phpcpd:^9.0"
     mkdir -p "${REPORT_DIR}/dry"
     cat > "${REPORT_DIR}/dry-report.json" << EOF
 {
@@ -211,6 +215,52 @@ EOF
     exit 0
 fi
 
+# Is there anything to measure? Asked BEFORE phpcpd is invoked, so the verdict does not
+# depend on what phpcpd chooses to do with an argument that is not there — which was
+# never exercised, and whose output the redirect below was discarding anyway.
+#
+# Deliberately NOT "skipped": that word is taken, and one line above it means phpcpd
+# itself is absent, which is a legitimate state of the machine. A path that is not there
+# is a configuration fact about the project.
+if [ "$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")" != "ok" ]; then
+    mkdir -p "${REPORT_DIR}/dry"
+    cqt_unmeasured "the custom modules path is not there — duplication was NOT measured" \
+        "${DRUPAL_MODULES_PATH}"
+    # ENCODED, not interpolated. `["${DRUPAL_MODULES_PATH}"]` in the heredoc below made a
+    # path containing a double quote produce a report jq then refuses to read — the
+    # verdict and the exit code were right and the RECORD of them was unreadable, and
+    # full-audit.sh falls back to the exit code whenever a report will not parse. jq can
+    # encode the value correctly, which is why this is encoded rather than refused the
+    # way security-check.sh has to refuse one going into generated XML. Same treatment
+    # lint-check.sh already gives its own paths_missing.
+    DRY_MISSING_JSON=$(printf '%s' "${DRUPAL_MODULES_PATH}" \
+        | jq -R -s 'rtrimstr("\n") | [.]' 2>/dev/null || printf '[]')
+    cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "mode": "unmeasured",
+  "changed_mode": $([ -n "$CHANGED_FILES_PATH" ] && echo "true" || echo "false"),
+  "duplication_percentage": 0,
+  "total_lines": 0,
+  "duplicated_lines": 0,
+  "clone_count": 0,
+  "clones": [],
+  "measured": false,
+  "phpcpd_exit": null,
+  "paths_missing": ${DRY_MISSING_JSON},
+  "rating": "${CQT_STATUS_UNMEASURED}",
+  "status": "${CQT_STATUS_UNMEASURED}",
+  "settings": {
+    "min_lines": ${MIN_LINES},
+    "min_tokens": ${MIN_TOKENS}
+  },
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    echo ""
+    echo "Report saved: ${REPORT_DIR}/dry-report.json"
+    exit "$CQT_EXIT_UNMEASURED"
+fi
+
 # Get PHPCPD version
 PHPCPD_VERSION=$(ddev exec vendor/bin/phpcpd --version 2>/dev/null | head -1 || echo "unknown")
 echo "PHPCPD version: ${PHPCPD_VERSION}"
@@ -229,10 +279,18 @@ ddev exec vendor/bin/phpcpd \
     --min-tokens="${MIN_TOKENS}" \
     --exclude=tests \
     --exclude=Test \
+    --exclude=node_modules \
+    --exclude=vendor \
     "${DRUPAL_MODULES_PATH}" \
-    2>&1 > "$PHPCPD_OUTPUT"
+    > "$PHPCPD_OUTPUT" 2>&1
 PHPCPD_EXIT=$?
 set -e
+
+# `> file 2>&1`, and the ORDER is the whole fix. Bash applies redirections left to
+# right, so the previous `2>&1 > "$PHPCPD_OUTPUT"` duplicated fd 2 onto the CALLER's
+# stdout and only then moved fd 1 to the file. Everything phpcpd said about why it could
+# not run went to a stream the parser below never reads — and under /audit not even
+# there, because full-audit.sh calls this gate with 2>/dev/null.
 
 # Parse output
 cat "$PHPCPD_OUTPUT"
@@ -251,6 +309,55 @@ DUPLICATION_PCT=$(grep -oP '\K[\d.]+(?=% duplicated)' "$PHPCPD_OUTPUT" 2>/dev/nu
 # If percentage not found, calculate it
 if [ "$DUPLICATION_PCT" == "0" ] && [ "$TOTAL_LINES" -gt 0 ]; then
     DUPLICATION_PCT=$(echo "scale=2; $DUPLICATED_LINES * 100 / $TOTAL_LINES" | bc 2>/dev/null || echo "0")
+fi
+
+# PROOF OF MEASUREMENT. Every extraction above ends in `|| echo "0"`, and 0% duplication
+# is `[PASS] Duplication 0% is excellent` — so a phpcpd that printed nothing at all, for
+# any reason, was indistinguishable from a clean tree. Correcting the redirect puts the
+# reason in the file; it does not stop the zero.
+#
+# A POSITIVE signal is required before a percentage is believed: a line in phpcpd's own
+# summary format. `total lines` appears in the percentage line of every completed run,
+# and `No clones found` is what it prints on a clean one. Neither can be produced by a
+# run that died.
+#
+# PHPCPD_EXIT was captured and, confirmed by grep, never referenced again. It is read
+# here, and only at the shell level: phpcpd's own non-zero codes mean it found clones,
+# which is a measurement. 126 and above are the shell saying the command never ran.
+MEASURED=true
+if ! grep -qE 'total lines|No clones found' "$PHPCPD_OUTPUT" 2>/dev/null; then
+    MEASURED=false
+fi
+if [ "$PHPCPD_EXIT" -ge 126 ]; then
+    MEASURED=false
+fi
+
+if [ "$MEASURED" == false ]; then
+    cqt_unmeasured "phpcpd produced no measurement (exit ${PHPCPD_EXIT}) — duplication was NOT checked" \
+        "${DRUPAL_MODULES_PATH}"
+    cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "mode": "unmeasured",
+  "changed_mode": $([ -n "$CHANGED_FILES_PATH" ] && echo "true" || echo "false"),
+  "duplication_percentage": 0,
+  "total_lines": 0,
+  "duplicated_lines": 0,
+  "clone_count": 0,
+  "clones": [],
+  "measured": false,
+  "phpcpd_exit": ${PHPCPD_EXIT},
+  "rating": "${CQT_STATUS_UNMEASURED}",
+  "status": "${CQT_STATUS_UNMEASURED}",
+  "settings": {
+    "min_lines": ${MIN_LINES},
+    "min_tokens": ${MIN_TOKENS}
+  },
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    echo ""
+    echo "Report saved: ${REPORT_DIR}/dry-report.json"
+    exit "$CQT_EXIT_UNMEASURED"
 fi
 
 echo "Summary:"
@@ -330,6 +437,8 @@ if [ -n "$CHANGED_FILES_PATH" ] && [ "$CLONE_COUNT" -gt 0 ]; then
   "failing_clones": ${FAILING_CLONES},
   "informational_clones": ${INFO_CLONES},
   "clones": ${CLONES_JSON},
+  "measured": ${MEASURED},
+  "phpcpd_exit": ${PHPCPD_EXIT},
   "rating": "${DRY_RATING}",
   "status": "${DRY_STATUS}",
   "settings": {
@@ -370,6 +479,8 @@ else
   "duplicated_lines": ${DUPLICATED_LINES},
   "clone_count": ${CLONE_COUNT},
   "clones": ${CLONES_JSON},
+  "measured": ${MEASURED},
+  "phpcpd_exit": ${PHPCPD_EXIT},
   "rating": "${DRY_RATING}",
   "status": "${DRY_STATUS}",
   "settings": {

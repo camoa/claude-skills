@@ -62,9 +62,36 @@ NC='\033[0m'
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+
+# Where this project's custom code lives is answered in ONE place, for every gate.
+#
+# The absent-path branch further down keeps its BEHAVIOUR: this gate is the in-repo
+# precedent for the rule the rest of this task adopts, and it refuses an early exit 0 on
+# a path it never measured. What it did not do, despite this comment having said so, is
+# write the reason into the file — that lived on stdout, which full-audit.sh does not
+# parse, and the report carried a bare 0% indistinguishable from a real measurement of
+# zero. `measured`, `reason` and `paths_missing` are the fix; the verdict and the exit
+# code are unchanged.
+#
+# It also keeps `fail` rather than converting to `unmeasured`, deliberately. `fail`
+# reaches the aggregate as a produced result and takes the whole run to exit 2;
+# `unmeasured` would cap it at warning and exit 1. Converting would make this gate
+# QUIETER about a scan that covered nothing, which is the wrong direction for the one
+# gate the contract is modelled on.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
 COVERAGE_MINIMUM="${COVERAGE_MINIMUM:-70}"
 COVERAGE_TARGET="${COVERAGE_TARGET:-80}"
+
+# Did this run have anything to measure at all, and if not, why. Written into the report
+# rather than only printed. `line_coverage` stays a number — audit-report.schema.json
+# types it "number", unlike branch_coverage which is explicitly ["number","null"] — so
+# `measured` is the field that carries the distinction, and it sits beside the 0 a reader
+# would otherwise take at face value.
+COVERAGE_MEASURED=true
+COVERAGE_REASON=""
+COVERAGE_PATHS_MISSING="[]"
 
 # ── host filesystem vs container filesystem ───────────────────────────────────
 #
@@ -491,6 +518,16 @@ else
     if [ ! -d "${DRUPAL_MODULES_PATH}" ]; then
         echo -e "  ${YELLOW}[WARN]${NC} ${DRUPAL_MODULES_PATH} does not exist — PHPUnit will find nothing here."
         echo "         Set DRUPAL_MODULES_PATH to this project's custom code."
+        # AND IN THE FILE, not only on stdout. This gate is cited — in its own comment
+        # above, and in this task's failure-signal decision — as the one that "already
+        # refuses an early exit 0 with the reason written into the file". The refusal was
+        # real; the written reason was not. The report said line_coverage 0 and status
+        # fail with nothing to separate "measured 0%" from "measured nothing", and
+        # full-audit.sh does not parse stdout.
+        COVERAGE_MEASURED=false
+        COVERAGE_REASON="${DRUPAL_MODULES_PATH} does not exist — PHPUnit was given a path with no code under it, so this 0% is the absence of a measurement, not a measurement of zero"
+        COVERAGE_PATHS_MISSING=$(printf '%s' "${DRUPAL_MODULES_PATH}" \
+            | jq -R -s 'rtrimstr("\n") | [.]' 2>/dev/null || printf '[]')
     fi
 fi
 echo ""
@@ -597,6 +634,9 @@ fi
 cat > "${REPORT_DIR}/coverage-report.json" << EOF
 {
   "scope": "${COVERAGE_SCOPE}",
+  "measured": ${COVERAGE_MEASURED},
+  "reason": $(printf '%s' "${COVERAGE_REASON}" | jq -R -s 'rtrimstr("\n") | if . == "" then null else . end' 2>/dev/null || printf 'null'),
+  "paths_missing": ${COVERAGE_PATHS_MISSING},
   "line_coverage": ${COVERAGE_PCT},
   "branch_coverage": null,
   "files_analyzed": 0,

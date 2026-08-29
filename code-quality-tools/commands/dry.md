@@ -82,6 +82,20 @@ check to be meaningful. Instead, the post-scan verdict is filtered:
 Run without `--changed` (e.g. `/code-quality-tools:audit`, `--full-audit`) to restore
 whole-tree failing behavior on all clones.
 
+## Exit codes and status words
+
+| exit | `.status` | means |
+|---|---|---|
+| 0 | `pass` | phpcpd ran and duplication is under the threshold |
+| 0 | `skipped` | phpcpd is not installed — a fact about the machine, not about the code |
+| 1 | `warning` | duplication over the warning threshold |
+| 2 | `fail` | duplication over the failing threshold |
+| 4 | `unmeasured` | the custom modules path is not there, or phpcpd emitted no measurement. **Nothing was checked**, and `.measured` is `false` |
+
+`.duplication_percentage` is `0` in the `unmeasured` case too, because there is no other
+number to put there. `.measured` is the field that separates it from a real 0%; a gate
+that reads the percentage alone treats a scan that never happened as a clean tree.
+
 ## Duplication Thresholds
 
 Default: Duplication > 5% triggers warning

@@ -21,17 +21,46 @@ Run a comprehensive security scan across multiple layers.
 
 When invoked with `--json`, emit schema `v1.0` JSON on stdout. Each finding includes `layer`, `rule_id`, `severity`, optional `owasp` / `cwe`, file:line, message, fix, and `confidence`. `summary` aggregates counts per severity and lists layers that ran vs. were skipped.
 
-Gate on `.summary.critical` + `.summary.high`:
+Gate on `.summary.overall_status` **first**, then on `.summary.critical` +
+`.summary.high`. A run that could not cover its ground reports zero of both by
+construction, so the counts alone read it as clean:
 
 ```bash
 result=$(/code-quality-tools:security --json)
+STATUS=$(echo "$result" | jq -r '.summary.overall_status')
 CRIT=$(echo "$result" | jq '.summary.critical')
 HIGH=$(echo "$result" | jq '.summary.high')
+
+# The counts say what was found. The status says whether anything was looked at.
+case "$STATUS" in
+  unmeasured|partial|skipped)
+    echo "$result" | jq '.meta'
+    echo "security scan did not cover its ground (${STATUS}) - not a clean result"
+    exit 1
+    ;;
+esac
+
 if [ "$CRIT" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
   echo "$result" | jq '.findings[] | select(.severity == "critical" or .severity == "high")'
   exit 1
 fi
 ```
+
+### Exit codes and status words
+
+| exit | `.summary.overall_status` | means |
+|---|---|---|
+| 0 | `pass` | every layer that ran covered its ground and found nothing |
+| 0 | `warning` | findings below the failing thresholds |
+| 0 | `skipped` | no analyzer was available, or one that was there returned nothing usable |
+| 1 | `fail` | findings at or above a failing threshold |
+| 1 | `partial` | `--changed` only: some named files were not on disk. What was read is clean; the set was not fully covered |
+| 2 | — | DDEV is not running |
+| 4 | `unmeasured` | a layer was asked to read a path or a file list that is not there. **Nothing was checked** |
+
+`skipped`, `partial` and `unmeasured` are three different findings and none of them is a
+pass. `skipped` is about the machine (a tool is absent), `unmeasured` is about the project
+(the ground is not there), and `partial` is about the request (part of it was answerable).
 
 Schema: `skills/code-quality-audit/references/json-schemas.md`.
 

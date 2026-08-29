@@ -17,13 +17,9 @@ ai-dev-assistant/tests/wo-obs-report-spec.sh:SC1010
 ai-dev-assistant/tests/wo-parallel-batch-spec.sh:SC1010
 ai-dev-assistant/tests/wo-parallel-conductor-e2e-spec.sh:SC1010
 ai-dev-assistant/tests/wo-reconcile-table-spec.sh:SC1010
-code-quality-tools/skills/code-quality-audit/scripts/core/install-tools.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/core/report-processor.sh:SC2155
 code-quality-tools/skills/code-quality-audit/scripts/core/secret-scan.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/coverage-report.sh:SC2034
-code-quality-tools/skills/code-quality-audit/scripts/drupal/dry-check.sh:SC2034
-code-quality-tools/skills/code-quality-audit/scripts/drupal/dry-check.sh:SC2069
-code-quality-tools/skills/code-quality-audit/scripts/drupal/lint-check.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/solid-check.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh:SC2034
 code-quality-tools/skills/code-quality-audit/scripts/drupal/tdd-workflow.sh:SC2155

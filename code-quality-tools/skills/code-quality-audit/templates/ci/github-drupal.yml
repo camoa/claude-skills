@@ -48,14 +48,14 @@ jobs:
       - name: Install quality tools
         run: |
           ddev composer require --dev \
-            phpstan/phpstan \
-            mglaman/phpstan-drupal \
-            phpstan/extension-installer \
-            phpmd/phpmd \
-            systemsdk/phpcpd \
-            drupal/coder \
-            vimeo/psalm \
-            yousha/php-security-linter \
+            phpstan/phpstan:^2.0 \
+            mglaman/phpstan-drupal:^2.1.2 \
+            phpstan/extension-installer:^1.4 \
+            phpmd/phpmd:^2.15 \
+            systemsdk/phpcpd:^9.0 \
+            drupal/coder:^9.0 \
+            vimeo/psalm:^6.0 \
+            yousha/php-security-linter:^3.1 \
             --no-interaction
 
       # =====================
@@ -63,9 +63,20 @@ jobs:
       # =====================
       - name: PHPStan Analysis
         run: |
+          # The level is the project's own, read from .code-quality.json. This workflow
+          # used to pin a stricter level here than /review used against the same code, so
+          # a change could pass locally and fail here for no reason anybody had chosen.
+          #
+          # No default on purpose: a CI run that cannot read the configured level must
+          # fail rather than pick one silently.
+          test -f .code-quality.json || {
+            echo "::error::.code-quality.json is missing. Run /code-quality-tools:setup."
+            exit 1
+          }
+          LEVEL="$(jq -r '.phpstan.level' .code-quality.json)"
           ddev exec vendor/bin/phpstan analyse \
             web/modules/custom \
-            --level=8 \
+            --level="$LEVEL" \
             --error-format=github \
             --no-progress
         continue-on-error: true

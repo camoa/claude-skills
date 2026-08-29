@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] - 2026-08-28
+
+The `drupal/coder` pin at `^8.3.x` now says why it is there. It reproduces Drupal
+core-dev, which pins `^8.3.30` across 11.x, 11.3.x and 10.6.x, because this plugin's
+patches are run by core's own CI. `code-quality-tools` deliberately tracks current at
+`^9.0` instead, since it audits custom site code and is not bound to core-dev. Same
+package, two profiles, one stated reason each, so neither reads as an accident.
+
 ## [0.4.3] - 2026-08-27
 
 Eslint/stylelint CI-parity gap: `verify`'s environment-match stopped at PHP/core

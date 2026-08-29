@@ -86,11 +86,22 @@ Run each enabled job locally at CI strictness; capture each one's output as the 
 | Gate | How to run at CI strictness |
 |------|------------------------------|
 | `composer` | `composer validate` + install with the project's constraints |
-| `phpcs` | `phpcs` against the project's `phpcs.xml.dist` (`Drupal` + `DrupalPractice`); `drupal/coder` ^8.3.x. **Blocking by default.** |
+| `phpcs` | `phpcs` against the project's `phpcs.xml.dist` (`Drupal` + `DrupalPractice`); `drupal/coder` `^8.3`, deliberately — see below. **Blocking by default.** |
 | `phpstan` | `phpstan analyse` with the project's `phpstan.neon` (`phpstan-drupal`). **`allow_failure: true` by default** — report it, flagged non-blocking. |
 | `phpunit` | Run with the **core config**: `vendor/bin/phpunit -c web/core/phpunit.xml.dist --webroot=web`, switching to `core/scripts/run-tests.sh` when `_PHPUNIT_CONCURRENT: 1`. The core `phpunit.xml.dist` carries `failOnWarning` / `failOnPhpunitWarning` — that is what fails on warnings. Pass = zero failures, zero warnings, zero deprecations. |
 | `cspell` | `cspell` with the project's `.cspell-project-words.txt` loaded |
 | `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT`; resolve the project's own merged config, never a rebuilt command (§1) |
+
+**Why `drupal/coder` is pinned `^8.3` here, and `^9.0` in `code-quality-tools`.** Same
+package, two profiles, one stated reason each. This skill exists to reproduce drupal.org's
+own pipeline locally, and that pipeline installs coder through `drupal/core-dev`, which
+pins `^8.3.30` on 11.x and 11.3.x and `^8.3.10` on 10.6.x — no core branch has moved to
+`^9`. Pinning `^8.3` is therefore the only pin that reproduces the CI that judges the
+patch; tracking the current major here would run a stricter phpcs than the one the
+gate is imitating, and fail a patch core's CI would have passed. `code-quality-tools`
+audits custom site code, is bound to no core-dev pin, and tracks the current major at
+`^9.0` for that reason. Verified against core-dev's `composer.json` and
+`gitlab_templates`' `include.drupalci.main.yml` on 2026-08-27.
 
 **Opt-in variants** — `OPT_IN_TEST_PREVIOUS_MAJOR` / `_PREVIOUS_MINOR` / `_NEXT_MINOR` /
 `_MAX_PHP`. `gitlab_templates` v1.15.0+ moved these to **manual trigger** — they do not

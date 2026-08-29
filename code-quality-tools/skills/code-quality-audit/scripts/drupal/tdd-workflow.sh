@@ -22,7 +22,40 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
+# Where this project's custom code lives is answered in ONE place, for every gate. This
+# gate uses it only as watch mode's default watch_path, so it matters less here than in
+# the others — recorded so nobody goes looking for a scan path that is not there.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
+
+# Check the RUNNER, which check_ddev does not.
+#
+# Three call sites invoke `ddev exec vendor/bin/phpunit` with no probe. run_test()
+# returns the raw status uninterpreted and phase_red() sends EVERY non-zero to
+# "[OK] Test failed as expected. RED phase complete." — so a container with no PHPUnit
+# and a genuinely failing test produce the same signal, and the false one is the
+# reassuring one. A whole TDD cycle can be walked through, green at every step, against
+# a runner that was never installed.
+#
+# A probe, not a reinterpretation of the status: `ddev exec test -f`, the same shape
+# install-tools.sh and security-check.sh already use. Probing BEFORE the call means RED
+# keeps meaning exactly one thing, which is easier to keep true than a classifier inside
+# the phase — so phase_red()'s branch logic is deliberately untouched.
+#
+# Exit 4, not 1. 1 here means "the tests failed", which is a measurement; this is the
+# absence of the thing that would have taken it. And not 3, which already means the
+# installed tree does not match composer.lock. This gate writes no JSON report, so the
+# exit code is not a fallback channel — it is the only one there is.
+check_runner() {
+    if ! cqt_tool_present vendor/bin/phpunit; then
+        echo -e "${RED}[UNMEASURED]${NC} no PHPUnit runner in the container — nothing was tested"
+        echo "  Install with: ddev composer require --dev phpunit/phpunit"
+        echo "  Or, for a Drupal site: ddev composer require --dev drupal/core-dev"
+        exit "$CQT_EXIT_UNMEASURED"
+    fi
+}
+
 
 # ── Drupal phpunit config resolver ────────────────────────────────────────────
 # Drupal Unit tests extend Drupal\Tests\UnitTestCase, which only autoloads under
@@ -124,6 +157,10 @@ if [[ "${1:-}" == "--changed" ]]; then
       echo -e "${RED}[ERROR]${NC} DDEV is not running"
       exit 1
     fi
+    # And the runner. This branch has its own DDEV check, so it needed its own probe
+    # beside it: without one, an absent runner arrives as phpunit's 127 and is returned
+    # to the caller as if the mapped tests had been run and failed.
+    check_runner
 
     local _cfg
     _cfg=$(resolve_phpunit_config || true)
@@ -358,7 +395,12 @@ watch_mode() {
         # Polling fallback
         local last_hash=""
         while true; do
-            local current_hash=$(find "$watch_path" -name "*.php" -exec md5sum {} \; 2>/dev/null | md5sum)
+            # Vendored trees are somebody else's code; hashing them makes every
+            # `npm install` look like a source change, and on a large node_modules the
+            # poll never finishes inside its own two-second interval.
+            local current_hash=$(find "$watch_path" \
+                \( -name node_modules -o -name vendor \) -prune -o \
+                -name "*.php" -exec md5sum {} \; 2>/dev/null | md5sum)
             if [ "$current_hash" != "$last_hash" ]; then
                 if [ -n "$last_hash" ]; then
                     echo ""
@@ -372,7 +414,8 @@ watch_mode() {
     else
         # Watch with inotifywait
         while true; do
-            inotifywait -q -e modify,create,delete -r "$watch_path" --include '\.php$'
+            inotifywait -q -e modify,create,delete -r "$watch_path" --include '\.php$' \
+                --exclude '/(node_modules|vendor)/'
             echo ""
             echo "=== File change detected ==="
             run_test || true
@@ -385,22 +428,27 @@ main() {
     case "$ACTION" in
         red)
             check_ddev
+            check_runner
             phase_red
             ;;
         green)
             check_ddev
+            check_runner
             phase_green
             ;;
         refactor)
             check_ddev
+            check_runner
             phase_refactor
             ;;
         cycle)
             check_ddev
+            check_runner
             full_cycle
             ;;
         watch)
             check_ddev
+            check_runner
             watch_mode
             ;;
         help|--help|-h)

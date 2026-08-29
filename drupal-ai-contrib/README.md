@@ -10,7 +10,7 @@ This plugin runs the gates before you push, so the failure surfaces on your mach
 
 ## See it in action
 
-A fix to an existing module, from claiming the issue to confirming the real pipeline. The commands are real; the output is trimmed to what you would actually see.
+A fix to an existing module, from claiming the issue to confirming the real pipeline. The commands are real. The output is trimmed to what you would actually see.
 
 ```text
 $ /drupal-ai-contrib:setup
@@ -58,7 +58,7 @@ It is not needed for work that never leaves your own site: a client build, a pri
 /plugin install drupal-ai-contrib@camoa-skills
 ```
 
-**Companions & tools:** `dev-guides-navigator` (companion, supplies the contribution how-to guides; install it alongside), `mglaman/drupalorg-cli` (issue / MR / pipeline operations, the executable is `drupalorg`; install the PHAR per `skills/drupal-ai-contrib/references/drupalorg-cli.md`), `glab` (installed and authenticated for `git.drupalcode.org`, for the authenticated GitLab MR / pipeline / fork-push operations), DDEV (the local environment), and a drupal.org account with GitLab access. `setup` detects what is missing and points you at it; nothing here is a hard prerequisite for the plugin to load.
+**Companions & tools:** `dev-guides-navigator` (companion, supplies the contribution how-to guides, and is installed alongside), `mglaman/drupalorg-cli` (issue / MR / pipeline operations, the executable is `drupalorg`, and the PHAR is installed per `skills/drupal-ai-contrib/references/drupalorg-cli.md`), `glab` (installed and authenticated for `git.drupalcode.org`, for the authenticated GitLab MR / pipeline / fork-push operations), DDEV (the local environment), and a drupal.org account with GitLab access. `setup` detects what is missing and names it. Nothing here is a hard prerequisite for the plugin to load.
 
 ## Commands
 
@@ -77,7 +77,7 @@ The full component list (agents, skills, hooks, the knowledge layer, and how the
 
 ## Built on the Drupal AI standards
 
-This plugin does not invent its own rules. AI governance for Drupal contributions is an actively evolving standard, developed in the **`ai_best_practices`** drupal.org project, the canonical source of truth for the adopted *Policy on the use of AI when contributing to Drupal* and the contribution **eval suite** (`evals/evals.json`). Because that standard is still being written, the plugin tracks it live instead of freezing a snapshot that goes stale: the `ai-policy-checker` agent fetches the current policy and eval state on every contribution and tags each fact SETTLED, DRAFT, or DISCUSSION, and the eval gate degrades gracefully when the schema changes rather than hard-pinning it. No policy text is hard-coded here; as `ai_best_practices` evolves, the plugin follows without needing a release.
+This plugin does not invent its own rules. AI governance for Drupal contributions is an actively evolving standard, developed in the **`ai_best_practices`** drupal.org project, the canonical source of truth for the adopted *Policy on the use of AI when contributing to Drupal* and the contribution **eval suite** (`evals/evals.json`). Because that standard is still being written, the plugin tracks it live instead of freezing a snapshot that goes stale: the `ai-policy-checker` agent fetches the current policy and eval state on every contribution and tags each fact SETTLED, DRAFT, or DISCUSSION, and the eval gate degrades gracefully when the schema changes rather than hard-pinning it. No policy text is hard-coded here. As `ai_best_practices` evolves, the plugin follows without needing a release.
 
 ## Relationship to ai-dev-assistant
 

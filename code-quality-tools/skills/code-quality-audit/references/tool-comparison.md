@@ -23,7 +23,7 @@ Mapping of code quality tools between Drupal and Next.js ecosystems.
 
 ```bash
 ddev exec vendor/bin/phpstan analyse \
-    --level=8 \
+    --level="$(jq -r '.phpstan.level' .code-quality.json)" \
     --error-format=json \
     web/modules/custom
 ```
@@ -215,13 +215,13 @@ ddev exec vendor/bin/phpmetrics \
 ```bash
 # Install all tools
 ddev composer require --dev \
-    phpstan/phpstan \
-    phpstan/extension-installer \
-    mglaman/phpstan-drupal \
-    phpstan/phpstan-deprecation-rules \
-    phpmd/phpmd \
-    systemsdk/phpcpd \
-    drupal/coder
+    phpstan/phpstan:^2.0 \
+    phpstan/extension-installer:^1.4 \
+    mglaman/phpstan-drupal:^2.1.2 \
+    phpstan/phpstan-deprecation-rules:^2.0 \
+    phpmd/phpmd:^2.15 \
+    systemsdk/phpcpd:^9.0 \
+    drupal/coder:^9.0
 
 # Run all checks
 ddev exec vendor/bin/phpstan analyse web/modules/custom
@@ -249,20 +249,52 @@ npx jscpd src/
 npx jest --coverage
 ```
 
-## Tool Versions (December 2025)
+## Tool Versions
 
 ### PHP Ecosystem
 
-| Tool | Version | PHP Requirement |
-|------|---------|-----------------|
-| PHPStan | 2.x | PHP 7.4+ |
-| phpstan-drupal | 2.1+ | PHP 7.4+ |
-| phpstan-deprecation-rules | Latest | PHP 7.4+ |
-| PHPMD | Latest | PHP 8.1+ |
-| PHPCPD | 8.x | PHP 8.3+ |
-| Drupal Coder | 9.x | PHP 8.1+ |
+The table below is GENERATED. `Installed as` is the constraint
+`skills/code-quality-audit/schema/tool-catalog.json` resolves, so this table cannot
+disagree with what the installer installs; the version, PHP requirement and date come
+from `schema/upstream-versions.json`. Edit those two files and run `make tool-versions`.
 
-> **Note**: `mglaman/drupal-check` is deprecated. Use `phpstan/phpstan-deprecation-rules` instead.
+The date is per row, never over the table. The heading used to carry one month-year stamp
+while two of its six rows had gone wrong, and nothing said which rows had been re-read.
+
+<!-- BEGIN GENERATED: tool-versions -->
+<!-- Generated from skills/code-quality-audit/schema/tool-catalog.json (package and
+     constraint) and schema/upstream-versions.json (version, PHP floor, checked date).
+     Do not modify this region directly; edit those two files and run `make tool-versions`.
+     `make claims` fails when this region and the schemas disagree. -->
+
+| Tool | Package | Installed as | Upstream latest | PHP requirement | Checked |
+|---|---|---|---|---|---|
+| `phpstan` | phpstan/phpstan | `^2.0` | 2.2.9 (2026-08-22) | `^7.4\|^8.0` | 2026-08-28 |
+| `phpstan-extension-installer` | phpstan/extension-installer | `^1.4` | 1.4.3 (2024-09-04) | `^7.2 \|\| ^8.0` | 2026-08-28 |
+| `phpstan-drupal` | mglaman/phpstan-drupal | `^2.1.2` | 2.1.2 (2026-08-13) | `^8.1` | 2026-08-28 |
+| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules | `^2.0` | 2.0.5 (2026-07-22) | `^7.4 \|\| ^8.0` | 2026-08-28 |
+| `coder` | drupal/coder | `^9.0` | 9.0.1 (2026-06-21) | `>=7.4` | 2026-08-28 |
+| `rector` | palantirnet/drupal-rector | `^1.1` | 1.1.2 (2026-07-31) | not declared | 2026-08-28 |
+| `phpunit` | drupal/core-dev | `*` | 11.4.5 (2026-08-06) | not declared | 2026-08-28 |
+| `roave` | roave/security-advisories | `dev-master` | no tagged release | not declared | 2026-08-28 |
+| `grumphp` | phpro/grumphp | `^2.0` | 2.23.0 (2026-07-22) | `~8.2.0 \|\| ~8.3.0 \|\| ~8.4.0 \|\| ~8.5.0` | 2026-08-28 |
+| `phpmd` | phpmd/phpmd | `^2.15` | 2.15.0 (2023-12-11) | `>=5.3.9` | 2026-08-28 |
+| `phpcpd` | systemsdk/phpcpd | `^9.0` | 9.0.0 (2026-03-08) | `>=8.4` | 2026-08-28 |
+| `php-security-linter` | yousha/php-security-linter | `^3.1` | 3.1.8.6 (2026-08-17) | `>=8.2` | 2026-08-28 |
+| `psalm` | vimeo/psalm | `^6.0` | 6.16.1 (2026-03-19) | `~8.1.31 \|\| ~8.2.27 \|\| ~8.3.16 \|\| ~8.4.3 \|\| ~8.5.0` | 2026-08-28 |
+<!-- END GENERATED: tool-versions sha256:32039b805f171d77cbe959de5dd28ca0dc9d78dfeadda42fd6bdfd0e60749ef6 -->
+
+> **Note**: `mglaman/drupal-check` cannot be installed into a project this skill
+> configures. Its 1.5.0 `composer.json` declares `mglaman/phpstan-drupal ^1.0.0` and
+> `phpstan/phpstan-deprecation-rules ^1.0.0`, and declares no dependency on
+> `phpstan/phpstan` at all. PHPStan 1.x arrives transitively, because phpstan-drupal 1.x
+> requires `phpstan/phpstan ^1.12`. This skill installs the PHPStan 2.x stack, so the two
+> cannot resolve together. Use `phpstan/phpstan-deprecation-rules` with
+> `mglaman/phpstan-drupal` 2.x instead.
+>
+> Upstream state, checked 2026-08-28: not marked abandoned on Packagist, not archived on
+> GitHub, latest release 1.5.0 (2024-08-14). The constraint above is the reason to reach
+> for something else; the project's health is not.
 
 > **phpstan-drupal 2.1.0 raises the floor.** Nine rules that were opt-in are now on by
 > default (`testClassSuffixNameRule`, `dependencySerializationTraitPropertyRule`,

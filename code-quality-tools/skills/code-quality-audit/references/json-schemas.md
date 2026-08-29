@@ -148,7 +148,15 @@ The commands `/code-quality-tools:audit`, `/code-quality-tools:review`, and `/co
 ### Invariants (CI pipelines rely on these)
 
 1. **`findings` is always an array.** Zero findings = `[]`, never `null`, never omitted. Downstream `jq '.findings[]'` must never fail on "pass with no findings."
-2. **`status` is `warning` (NEVER `pass`) when no tools actually ran.** If the command fell back with every configured layer skipped (binaries missing, config absent), the gate result is **indeterminate** — `pass` on a zero-tool run is a CI false-green and is prohibited.
+2. **`status` is never `pass` when the run did not cover its ground.** Three distinct words say why, and none of them is a pass:
+
+   | word | means | typical exit |
+   |---|---|---|
+   | `skipped` | a tool was absent, or one that was present returned nothing usable. A fact about the machine | 0 |
+   | `unmeasured` | the path, or every file in the changed set, is not there. **Nothing was checked.** A fact about the project | 4 |
+   | `partial` | `--changed` only: some named files were on disk and some were not. What was read is clean; the set was not fully covered | 1 |
+
+   A gate that reads only a finding COUNT treats all three as clean, because each carries zero findings by construction. Branch on the status word first. `pass` on a zero-tool run is a CI false-green and is prohibited.
 3. **`schema_version` is semver on the schema itself**, independent of plugin version. Additive changes bump minor (`1.0` → `1.1`); breaking changes bump major (`1.0` → `2.0`).
 
    > **CI pinning:** match `^1\.` (jq: `test("^1\\.")`), NOT `== "1.0"` exactly — additive minor bumps are back-compat and should not break your gate. Only pin major. Example:
@@ -168,13 +176,13 @@ All three share:
   "project_type": "drupal|nextjs|unknown",
   "timestamp": "2026-04-20T07:00:00Z",
   "target": "string or array of paths",
-  "status": "pass|warning|fail",
+  "status": "pass|warning|fail|skipped|unmeasured|partial",
   "summary": { "...": "command-specific" },
   "findings": [ { "...": "command-specific" } ]
 }
 ```
 
-`status` is the overall gate verdict — consumers can branch on it directly. Per invariant (2) above, `status` is `warning` not `pass` when no tools ran.
+`status` is the overall gate verdict — consumers can branch on it directly. Per invariant (2) above, it is never `pass` when the run did not cover its ground, and the word says which of the three reasons applies.
 
 ### `/code-quality-tools:audit --json`
 
@@ -217,7 +225,12 @@ Gate pattern:
 
 ```bash
 result=$(/code-quality-tools:audit --json)
-echo "$result" | jq -e '.status != "fail"' >/dev/null || exit 1
+# `!= "fail"` alone passes every word in invariant (2), each of which carries zero
+# findings by construction. Name what a pass IS, rather than the one thing it is not.
+echo "$result" | jq -e '.status == "pass" or .status == "warning"' >/dev/null || {
+  echo "$result" | jq '{status, summary}'
+  exit 1
+}
 ```
 
 ### `/code-quality-tools:review --json`

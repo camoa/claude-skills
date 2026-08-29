@@ -1,0 +1,386 @@
+{
+  "catalog_version": "1.0",
+  "_comment": [
+    "The one list of tools this plugin installs. Four lists disagreed before this file",
+    "existed: commands/setup.md, scripts/core/install-tools.sh,",
+    "references/operations/drupal-setup.md and templates/ci/github-drupal.yml, each of",
+    "them hardcoded inside the file that consumed it. A fifth list in bash would have",
+    "been the same defect wearing a new name, so this is machine-readable: the wizard",
+    "resolves ids through it, scripts/gen-setup-doc.sh GENERATES setup.md's inventory",
+    "from it, and cqt_config_derive builds a complete config out of it when an audit",
+    "finds no .code-quality.json.",
+    "",
+    "It is data the plugin ships, so it is trusted input. That is not a reason for the",
+    "installer to trust its own input: cqt-config.sh re-validates every package name",
+    "against the Composer/npm name grammar before it can become a command-line",
+    "argument, whether it arrived from here or from a project's config file."
+  ],
+
+  "scope_rule": "A tool is `project` when it autoloads the project's own code, or when it works only as an edge in the project's own dependency resolution. Everything else that the audit machinery alone invokes is `isolated`. Anything with no PHP or npm package at all is `machine`. An entry may sit on the wrong side of this predicate only when it records a `scope_reason` saying so in those terms and a `reversal_condition` naming the observation that would move it; `psalm` is the one such entry, and its generated config hands it an explicit autoloader rather than sharing a resolver.",
+
+  "scope_rule_source": "bamarni/composer-bin-plugin's own rule of thumb, 'limit this approach to tools which do not autoload your code' (README, read 2026-08-27). The predicate excludes most of what this plugin installs, so `isolated` is the minority case and four tools land in it. Three scopes in the vocabulary does not mean a third of the toolchain in each.",
+
+  "isolation": {
+    "_comment": "How `isolated` is implemented. Chosen in Phase 1 against phive and a plain tools/composer.json, checked 2026-08-27: 1.9.1 released 2025-02-04; PHIVE's Composer integration is an abandoned read-only proof of concept; `composer global` is the thing both exist to replace. A scoped PHAR is better where one exists, but a PHAR cannot host extensions and this tool set needs them.",
+    "package": "bamarni/composer-bin-plugin",
+    "constraint": "^1.9",
+    "allow_plugin": "bamarni/composer-bin-plugin",
+    "forward_command_key": "extra.bamarni-bin.forward-command",
+    "bin_path_template": "vendor-bin/{tool}/vendor/bin/{tool}",
+    "namespace_rule": "One namespace per tool, never one shared namespace. Sharing one graph across four analysers reintroduces exactly the collision the scope exists to avoid."
+  },
+
+  "tools": {
+    "phpstan": {
+      "stack": "drupal",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "Autoloads the project's own code: phpstan-drupal boots Drupal's container and resolves project classes, which is the predicate's exact exclusion. Invoked by scripts/drupal/solid-check.sh.",
+      "packages": [{ "name": "phpstan/phpstan", "constraint": "^2.0" }],
+      "bin": "phpstan",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "phpstan-extension-installer": {
+      "stack": "drupal",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "A Composer plugin, so it only works as an edge in the project's own dependency resolution. It has no binary and nothing invokes it directly.",
+      "packages": [{ "name": "phpstan/extension-installer", "constraint": "^1.4" }],
+      "bin": null,
+      "required_when": { "project.type": "drupal" },
+      "consent_gated": false,
+      "allow_plugins": ["phpstan/extension-installer"],
+      "required_reason": "templates/drupal/phpstan.neon deliberately carries no `includes:` block because this plugin is supposed to auto-register the Drupal rules. When it is absent, or present but not allowed, nothing fails: PHPStan starts, loads zero Drupal rules, analyses Drupal as plain PHP and exits 0."
+    },
+
+    "phpstan-drupal": {
+      "stack": "drupal",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "Loads Drupal's container and resolves the project's own classes. The predicate excludes it from isolation by its letter.",
+      "packages": [{ "name": "mglaman/phpstan-drupal", "constraint": "^2.1.2" }],
+      "bin": null,
+      "required_when": { "project.type": "drupal" },
+      "consent_gated": false,
+      "allow_plugins": [],
+      "required_reason": "The whole reason PHPStan knows anything about Drupal. Its absence is silent for the reason recorded on phpstan-extension-installer."
+    },
+
+    "phpstan-deprecation-rules": {
+      "stack": "drupal",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "A PHPStan rule set registered through extension-installer, so it exists only as an edge in the project's resolution.",
+      "packages": [{ "name": "phpstan/phpstan-deprecation-rules", "constraint": "^2.0" }],
+      "bin": null,
+      "required_when": { "project.type": "drupal" },
+      "consent_gated": false,
+      "allow_plugins": [],
+      "required_reason": "Drupal's deprecation policy is the thing a version-upgrade audit is mostly looking for; without this rule set the deprecation findings are simply not produced."
+    },
+
+    "coder": {
+      "stack": "drupal",
+      "category": "standards",
+      "scope": "project",
+      "scope_reason": "drupal/coder is `type: phpcodesniffer-standard`, a rule set rather than a tool. It registers the Drupal standard through dealerdirect/phpcodesniffer-composer-installer, so it works only as an edge in the project's own resolution and cannot be isolated.",
+      "packages": [{ "name": "drupal/coder", "constraint": "^9.0" }],
+      "bin": "phpcs",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": ["dealerdirect/phpcodesniffer-composer-installer"],
+      "constraint_reason": "^9.0 here, and drupal-ai-contrib keeps ^8.3.x. Two profiles, one stated reason each. That project's patches run through core's CI and are bound to core-dev's pin; this plugin audits custom site code and is not. Established empirically 2026-08-27: coder 9.0.1 pulls phpcs 4.0.4, whose JSON report shape is identical to phpcs 3's but whose exit codes are a bitfield, which is why lint-check.sh's exit classifier moves with the pin. Recorded here rather than only in a CHANGELOG, so the divergence is visible where the pin is."
+    },
+
+    "rector": {
+      "stack": "drupal",
+      "category": "standards",
+      "scope": "project",
+      "scope_reason": "Parses and rewrites the project's own source, so it resolves that source. Isolating it would hand it a resolver that cannot see the code it edits.",
+      "packages": [{ "name": "palantirnet/drupal-rector", "constraint": "^1.1" }],
+      "bin": "rector",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "phpunit": {
+      "stack": "drupal",
+      "category": "testing",
+      "scope": "project",
+      "scope_reason": "Boots the application. Nothing about a test runner survives being cut off from the code under test.",
+      "packages": [{ "name": "drupal/core-dev", "constraint": "*" }],
+      "bin": "phpunit",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "constraint_reason": "Unpinned deliberately. drupal/core-dev is a metapackage locked to the site's Drupal minor, so any constraint this catalog could state would be wrong on every site running a different core. `*` lets Composer resolve it against the core already installed, which is the only correct answer a catalog can give without reading the project's composer.lock."
+    },
+
+    "roave": {
+      "stack": "drupal",
+      "category": "security",
+      "scope": "project",
+      "scope_reason": "The exception that proves the split. It is a metapackage with no code whose only mechanism is a conflict edge inside the resolver, so `project` is the only scope in which it does anything at all.",
+      "packages": [{ "name": "roave/security-advisories", "constraint": "dev-master" }],
+      "bin": null,
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "constraint_reason": "dev-master, not unconstrained. The bare form at setup.md:77 has no stable version to resolve to, so Composer fails the whole batch on it rather than the one package."
+    },
+
+    "grumphp": {
+      "stack": "drupal",
+      "category": "hooks",
+      "scope": "project",
+      "scope_reason": "A Composer plugin that attaches git hooks at package-install time, so it acts inside the project's own resolution.",
+      "packages": [{ "name": "phpro/grumphp", "constraint": "^2.0" }],
+      "bin": "grumphp",
+      "required_when": null,
+      "consent_gated": true,
+      "consent_key": "git_hooks.enabled",
+      "allow_plugins": ["phpro/grumphp"],
+      "consent_reason": "setup.md:76 installed it in the unconditional Quick Install block, BEFORE the hooks prompt at :196 was reached, and the Git Hooks section then installed it a second time. A user who declined hooks still got GrumPHP in composer.json. The opt-in guarded `grumphp git:init`, not the dependency. GrumPHP attaches hooks at install time, so consent for the package and consent for the hooks are the same answer."
+    },
+
+    "phpmd": {
+      "stack": "drupal",
+      "category": "quality",
+      "scope": "isolated",
+      "scope_reason": "Reads source without resolving it. Nothing but the audit machinery invokes it (solid-check.sh), so it has no business in an application's require-dev.",
+      "packages": [{ "name": "phpmd/phpmd", "constraint": "^2.15" }],
+      "bin": "phpmd",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "phpcpd": {
+      "stack": "drupal",
+      "category": "quality",
+      "scope": "isolated",
+      "scope_reason": "A copy-paste detector: it tokenises source and never resolves it. Only dry-check.sh runs it.",
+      "packages": [{ "name": "systemsdk/phpcpd", "constraint": "^9.0" }],
+      "bin": "phpcpd",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "php-security-linter": {
+      "stack": "drupal",
+      "category": "security",
+      "scope": "isolated",
+      "scope_reason": "Pattern-matches source against OWASP/CIS rules without resolving it. Only security-check.sh runs it.",
+      "packages": [{ "name": "yousha/php-security-linter", "constraint": "^3.1" }],
+      "bin": "php-security-linter",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "psalm": {
+      "stack": "drupal",
+      "category": "security",
+      "scope": "isolated",
+      "scope_reason": "The one isolation that is not free, and it sits on the wrong side of the predicate's letter: taint analysis resolves the classes it follows. It stays isolated because its dependency tree is the heaviest of the four and the likeliest to collide, and because handing it a path to an autoloader is not the same as sharing a resolver. The generated psalm.xml carries an explicit <autoloader> for exactly that reason.",
+      "packages": [{ "name": "vimeo/psalm", "constraint": "^6.0" }],
+      "bin": "psalm",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "reversal_condition": "If an isolated Psalm with an explicit autoloader cannot resolve project classes in a live run, it moves back to `project`. That is a one-line change to `scope` here and no change anywhere else, which is the point of scope being a field."
+    },
+
+    "eslint": {
+      "stack": "nextjs",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "Resolves the project's own modules through its config and plugin chain. npm has no isolation mechanism analogous to composer-bin-plugin, so devDependencies is the only scope available to a JS tool.",
+      "packages": [
+        { "name": "eslint", "constraint": "" },
+        { "name": "eslint-config-next", "constraint": "" },
+        { "name": "@typescript-eslint/eslint-plugin", "constraint": "" },
+        { "name": "eslint-plugin-react-hooks", "constraint": "" },
+        { "name": "eslint-config-prettier", "constraint": "" },
+        { "name": "eslint-plugin-security", "constraint": "" },
+        { "name": "eslint-plugin-no-secrets", "constraint": "" }
+      ],
+      "bin": "eslint",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "jest": {
+      "stack": "nextjs",
+      "category": "testing",
+      "scope": "project",
+      "scope_reason": "Boots the application's modules. npm has no isolated scope.",
+      "packages": [
+        { "name": "jest", "constraint": "" },
+        { "name": "@jest/globals", "constraint": "" },
+        { "name": "jest-environment-jsdom", "constraint": "" },
+        { "name": "@testing-library/react", "constraint": "" },
+        { "name": "@testing-library/jest-dom", "constraint": "" }
+      ],
+      "bin": "jest",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "jscpd": {
+      "stack": "nextjs",
+      "category": "quality",
+      "scope": "project",
+      "scope_reason": "Reads source without resolving it, but npm has no isolated scope to put it in. Recorded as project because that is the only bucket available, not because the predicate puts it there.",
+      "packages": [{ "name": "jscpd", "constraint": "" }],
+      "bin": "jscpd",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "madge": {
+      "stack": "nextjs",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "Resolves the project's own import graph, which is the predicate's exclusion.",
+      "packages": [{ "name": "madge", "constraint": "" }],
+      "bin": "madge",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "typescript": {
+      "stack": "nextjs",
+      "category": "static-analysis",
+      "scope": "project",
+      "scope_reason": "Type-checks the project's own source against its own tsconfig.",
+      "packages": [
+        { "name": "typescript", "constraint": "" },
+        { "name": "@types/node", "constraint": "" },
+        { "name": "@types/react", "constraint": "" }
+      ],
+      "bin": "tsc",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "socket": {
+      "stack": "nextjs",
+      "category": "security",
+      "scope": "project",
+      "scope_reason": "Reads the project's own dependency manifest, so it works against the project's resolution.",
+      "packages": [{ "name": "@socketsecurity/cli", "constraint": "" }],
+      "bin": "socket-npm",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": []
+    },
+
+    "husky": {
+      "stack": "nextjs",
+      "category": "hooks",
+      "scope": "project",
+      "scope_reason": "Writes into the project's own .git/hooks and .husky/, driven by package.json scripts.",
+      "packages": [
+        { "name": "husky", "constraint": "" },
+        { "name": "lint-staged", "constraint": "" }
+      ],
+      "bin": "husky",
+      "required_when": null,
+      "consent_gated": true,
+      "consent_key": "git_hooks.enabled",
+      "allow_plugins": [],
+      "consent_reason": "The Next.js half of the same rule that governs grumphp: a user who declines hooks does not get the hook runner in package.json."
+    },
+
+    "jq": {
+      "stack": "any",
+      "category": "quality",
+      "scope": "machine",
+      "scope_reason": "No PHP or npm package exists for it, so the third clause of the rule applies. Every script in this suite reads JSON reports with it, and cqt-config.sh requires it outright.",
+      "packages": [],
+      "bin": "jq",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "apt-get install jq (Linux) or brew install jq (macOS)"
+    },
+
+    "semgrep": {
+      "stack": "any",
+      "category": "security",
+      "scope": "machine",
+      "scope_reason": "A Python tool with no PHP or npm package. Installed on the machine or in the container, never into the project's dependency graph.",
+      "packages": [],
+      "bin": "semgrep",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "pip3 install semgrep, or in DDEV: ddev exec pip3 install semgrep"
+    },
+
+    "trivy": {
+      "stack": "any",
+      "category": "security",
+      "scope": "machine",
+      "scope_reason": "A single Go binary with no package manager entry in either ecosystem.",
+      "packages": [],
+      "bin": "trivy",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "brew install trivy, or see https://trivy.dev/latest/getting-started/installation/",
+      "hint_reason": "A hint and not an install. install-tools.sh:144 piped a moving branch of an install script into `sh` and wrote /usr/local/bin during what the user had asked to be an audit, with a privilege it never requested."
+    },
+
+    "gitleaks": {
+      "stack": "any",
+      "category": "security",
+      "scope": "machine",
+      "scope_reason": "A single Go binary with no package manager entry in either ecosystem.",
+      "packages": [],
+      "bin": "gitleaks",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installation",
+      "hint_reason": "Same as trivy: install-tools.sh:157 curl-piped a master-branch script into `sh` writing /usr/local/bin. Also note the repo's own CLAUDE.md: without this binary the secret-scanning spec loses 284 assertions and still reports zero failures."
+    },
+
+    "pcov": {
+      "stack": "drupal",
+      "category": "testing",
+      "scope": "machine",
+      "scope_reason": "A PHP extension. It is built into the runtime, not required into a project.",
+      "packages": [],
+      "bin": null,
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "Add to .ddev/config.yaml: webimage_extra_packages: [php${DDEV_PHP_VERSION}-pcov], then ddev restart"
+    },
+
+    "inotifywait": {
+      "stack": "any",
+      "category": "quality",
+      "scope": "machine",
+      "scope_reason": "A system utility used by watch-mode linting. No package in either ecosystem.",
+      "packages": [],
+      "bin": "inotifywait",
+      "required_when": null,
+      "consent_gated": false,
+      "allow_plugins": [],
+      "install_hint": "apt-get install inotify-tools (Linux) or brew install fswatch (macOS)"
+    }
+  }
+}
