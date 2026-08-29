@@ -99,12 +99,27 @@ gate's own `verdict` stays `skipped`. An unknown gate result is never absorbed
 into a pass. That consumer is the only thing making the marker load-bearing: if
 rule 2 is ever deleted, every producer below becomes decorative.
 
-**When a wrapper must emit it.** Whenever the gate was invoked and could not
-actually check the thing it exists to check. Each wrapper resolves this from the
-gate's **JSON report**, located with
-`scripts/core/report-dir.sh --latest` — never from the console text, and never
-from a hardcoded `.reports/`, which stopped being the default in
-code-quality-tools v3.9.6:
+**Who emits it: `scripts/gate-verdict-resolve.sh`, not the wrapper.** The four
+`validate-*.md` commands hand it the gate's report path, exit code and a
+freshness baseline, and use the `verdict`, `unresolved`, `coverage_partial` and
+`messages[]` it returns. The markers are already inside those `messages[]` when
+they come back, so a wrapper that edits, reorders or trims the list drops the
+only thing `/review` reads.
+
+That indirection is not tidiness. The mapping lived in prose for three revisions
+and the prose got the field paths wrong every time — `security-report.json` has
+no top-level `.status`, `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` on any path. A field path is a claim
+about a producer, checkable only by reading the producer, and
+`tests/gate-verdict-resolve-spec.sh` now does exactly that for every path the
+resolver declares, plus fixture reports for each state of each mode. A table in
+a command file cannot be run, so it was never checked, so it was wrong.
+
+**When it applies.** Whenever the gate was invoked and could not check the thing
+it exists to check. The resolver reads the gate's **JSON report**, located with
+`scripts/core/report-dir.sh --latest` — never the console text, and never a
+hardcoded `.reports/`, which stopped being the default in code-quality-tools
+v3.9.6:
 
 | Gate | Report | The could-not-check path |
 |---|---|---|
@@ -118,6 +133,17 @@ gate that wrote no report cannot tell you what it measured. `tdd` is the
 deliberate exception — `tdd-workflow.sh` writes no JSON report on any path and
 says so in its own source, so its primary channel is the exit code and treating
 an absent report as unresolved there would fail-close every review.
+
+**Freshness is checked, not assumed.** `report-dir.sh`'s `project` origin resolves
+to a DATED directory and falls back to the newest existing one, so a rerun that
+dies before writing anything — DDEV down, the gate exits 2 with no report —
+leaves the PREVIOUS run's report on disk and a reader picks up a stale green.
+Each wrapper stamps `date -u +%Y-%m-%dT%H:%M:%SZ` before invoking its gate and
+passes it as `--not-before`; a report generated earlier than that is `unresolved`
+with `freshness: "stale"` in `evidence`. Omit the baseline and the resolver
+reports `freshness: "unchecked"` rather than treating an undated read as current
+— a resolver that silently assumed freshness would be the same false green one
+level down.
 
 **Do not derive coverage from `analyzers_ran`.** It counts checks, not
 analyzers: `solid-check.sh` increments it for its always-on `\Drupal::` grep,

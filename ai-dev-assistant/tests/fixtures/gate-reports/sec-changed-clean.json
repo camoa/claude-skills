@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "scan_type": "security_audit_changed",
+    "tools_absent": [],
+    "tools_failed": [],
+    "tools_unmeasured": [],
+    "mode": "changed",
+    "analyzers_ran": 4,
+    "tools_run": [
+      "semgrep",
+      "custom_patterns"
+    ],
+    "tools_skipped": []
+  },
+  "summary": {
+    "overall_status": "pass",
+    "security_score": "pass",
+    "total_issues": 0,
+    "by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    }
+  }
+}

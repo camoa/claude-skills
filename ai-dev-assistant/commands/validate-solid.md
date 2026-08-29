@@ -29,9 +29,9 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). Capture the console output; step 4 reads the report.
+3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). **Stamp the time before invoking** — `date -u +%Y-%m-%dT%H:%M:%SZ` (Bash) — and keep the gate's exit code. Both go to the resolver at step 4: `report-dir.sh` can resolve to a dated directory and fall back to the newest existing one, so a run that dies before writing leaves the PREVIOUS run's report in place, and without a baseline the resolver would read a stale green.
 
-4. **Read the report, then classify** — locate `solid-report.json` via `report-dir.sh --latest` and resolve the verdict from it per the "Verdict interpretation" section below, which is ordered coverage-first. The report is the primary source; the console text is the last resort and sets the verdict only when no report exists. Extract actionable findings into `messages[]`, and capture the report's absolute path plus `analyzers_ran`, `tools_absent[]`, `tools_failed[]` and `tools_unmeasured[]` for `--details`.
+4. **Resolve the verdict with the script, not by reading** — locate `solid-report.json` via `report-dir.sh --latest`, then run `${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh solid "<report>" --exit-code "<code>" --not-before "<step-3 timestamp>"` (Bash) and use its JSON verbatim per "Verdict interpretation" below. Every field path, both report modes and the coverage arithmetic live in that script, where `tests/gate-verdict-resolve-spec.sh` checks them against the gate's own emitters and against fixture reports. Pass `messages[]` through unedited and `evidence{}` into `--details`.
 
 5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
@@ -41,101 +41,54 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
 ## Where the result comes from
 
-**The report file is the source of the verdict. The console text is not.** Every gate
-in `code-quality-tools` writes `<report-dir>/solid-report.json` on **every** path it can take,
-including the ones where it measured nothing, and that file carries the fields a verdict
-needs: `status`, `rating`, `mode`, `measured`, `skip_reason`, `tools_absent[]`,
-`tools_failed[]`, `tools_unmeasured[]`, `analyzers_ran`. Its console line does not. This
-wrapper used to claim "no stable JSON surface exists yet upstream" and parse prose
-instead, and that claim was false when it was written.
-
-Parsing prose is not merely less precise here, it inverts the answer. `solid-check.sh` prints `[PASS] SOLID compliance acceptable` when phpstan and phpmd are
-both absent, so the old table's first row — "Explicit PASS" — matched, won, and the
-coverage rows below it never ran.
+**`scripts/gate-verdict-resolve.sh` decides the verdict. This file does not.** It used to
+carry the mapping as prose, and prose got the field paths wrong every round it was
+rewritten: `security-report.json` has no top-level `.status` (it is
+`.summary.overall_status`), `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` at all. Each was a claim about a producer, and a
+claim about a producer is only checkable by reading the producer — which
+`tests/gate-verdict-resolve-spec.sh` now does, against every path the resolver declares.
+A table in a command file cannot be run, so it was never checked, so it was wrong.
 
 **Locating the report.** Run `bash "<code-quality-tools path>/skills/code-quality-audit/scripts/core/report-dir.sh" --latest`
-(Bash) and read `solid-report.json` from the directory it prints. `--latest` is the reader's mode:
-it answers where the most recent run actually wrote, which is a different question from
-where the next one would. Do **not** hardcode `.reports/` — it stopped being the default
-in code-quality-tools v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`, so a
-wrapper looking there finds nothing on a normal run and concludes the gate did not run.
-`--latest` prints nothing and exits 1 when no run has ever written; treat that exactly
-like a missing file, below.
+(Bash) and read `solid-report.json` from the directory it prints. Never hardcode
+`.reports/`; it stopped being the default in code-quality-tools v3.9.6.
+
+**This gate is multi-analyzer, so it has a real partial state** — phpstan and phpmd can go
+missing while the always-on `\Drupal::` grep still runs. Do not try to detect that from
+`analyzers_ran`: the grep needs no binary and increments the counter, so it is `>= 1` with
+both analyzers gone. The resolver derives coverage from the tool lists for exactly that
+reason, and its spec pins the case as a fixture.
 
 ## Verdict interpretation
 
-Resolve in this order. **A is checked before B and B before C** — a coverage question
-answered after a findings question is answered too late, which is how the previous
-version of this section went wrong.
+There is no table here on purpose. Run the resolver and use what it returns:
 
-**A. Was a report written at all?** No `solid-report.json` — the file is missing, unparseable, or
-`--latest` exited 1 — ⇒ `skipped`, with `unresolved: true` in `messages[]` saying no
-report was found and naming where it looked. A gate that wrote no report cannot tell you
-what it measured, and its console text is the least reliable thing in the room. Use the
-text heuristics at the bottom of this section **only** to populate `messages[]` with
-whatever the run did say; they never set the verdict on this path.
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" solid "<report path>" \
+  --exit-code "<the gate's exit status>" --not-before "<the step-3 timestamp>"
+```
 
-**B. Did it measure anything?** Ordered; first match wins.
+It prints one JSON object:
 
-| Signal in `solid-report.json` | Our verdict |
+| Field | Use it for |
 |---|---|
-| `status` or `rating` is `unmeasured`, or `measured` is `false` | `skipped`, and put `unresolved: true` in `messages[]` quoting the report's reason |
-| Every **binary** analyzer the report names — `phpstan` and `phpmd` — appears in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]` | `skipped`, and put `unresolved: true` in `messages[]`, naming them |
-| Some but not all of them do | `warning`, **with the literal `coverage_partial: true` in `messages[]`**, naming the absent or failed tools and what went unchecked. Never `pass` |
-| Otherwise | fall through to C |
+| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `skipped` |
+| `unresolved` | `true` ⇒ **nothing** was measured. The resolver has already put the literal `unresolved: true` in `messages[]`; pass those messages through unchanged. `/review` step 8 rule 2 reads it and fails closed |
+| `coverage_partial` | `true` ⇒ **part** of it was measured. Same deal: the literal `coverage_partial: true` is already in `messages[]`, and `/review` step 8 rule 4 fails closed on it |
+| `messages[]` | one `--message` per entry, in order. **Do not edit, reorder or drop any of them** — the two markers live in here, and a marker a caller trims is a green review |
+| `evidence{}` | put it in `--details` as-is. It records which fields were read and what they held, so a verdict can be argued with |
+| `measured`, `mode` | context for the CLI summary |
 
-**Do not use `analyzers_ran == 0` as the zero-coverage test.** It is a trap.
-`solid-check.sh` increments that counter for its always-on `\Drupal::` static-call grep,
-which needs no binary, so on any project with a readable modules path it is `>= 1` even
-when phpstan and phpmd are both missing — and when the modules path IS missing the status
-is `unmeasured`, which row 1 already catches. The counter is real and worth carrying in
-`--details`, but it counts checks, not coverage. Derive coverage from the tool lists.
+Both markers are never set at once: nothing-measured and part-measured are different
+facts. An ordinary `warning` — a real, complete measurement whose number sits over a soft
+threshold — carries **neither**, and stays exactly as non-blocking as it has always been.
+Failing those would block projects where every tool is installed and teach everyone to
+reach for `--skip-solid`, which is the bypass that makes this whole mechanism worthless.
 
-The three rows exist because SOLID, unlike DRY, has a real partial state. With phpstan
-and phpmd gone the grep still runs, so something was measured and `unresolved` would
-overstate the damage; with all three gone nothing was. What neither may be is `pass`:
-`solid-check.sh` prints `[PASS] SOLID compliance acceptable` and sets `status:"pass"` with
-both analyzers absent, because `tools_absent[]` deliberately does not move its own verdict
-(it says so at `drupal/solid-check.sh` near line 552) — that is the gate declining to
-judge the machine, and reading coverage off it is this wrapper's job, not the gate's.
-
-**The marker, not the verdict, is what makes a partial run block.** `coverage_partial: true`
-goes in `messages[]` only on the row above — a `warning` this wrapper produced *because*
-part of the gate did not run. `/review` step 8 rule 4 reads that string and fails closed on
-it. A `warning` from path C is a different animal: the gate measured everything and found a
-number over a soft threshold, and those have never blocked a review. Rule 4 deliberately
-does not key on `verdict: "warning"` for exactly that reason, so **do not attach the marker
-to a fully measured warning** — doing so fails projects for ordinary findings and trains
-people to reach for `--skip-solid`, which is the bypass that makes this whole mechanism
-worthless.
-
-It is the sibling of `unresolved: true`, and the two are not interchangeable:
-`unresolved` means **nothing** was measured, `coverage_partial` means **part** of it was.
-
-**C. It measured. Map the finding.**
-
-| `status` in `solid-report.json` | Our verdict |
-|---|---|
-| `pass` | `pass` |
-| `warning` or `partial` | `warning` |
-| `fail` | `fail` |
-| anything unrecognised | `warning`, naming the status verbatim |
-
-The gate's exit code corroborates and never overrides: `4` is `unmeasured` (B catches it
-from the report; if the report and the exit code disagree, the disagreement itself is
-`unresolved`), `1` is a real fail, `2` is a bad invocation, `0` covers pass, warning and
-the benign skips.
-
-**Last resort — text heuristics.** For `messages[]` only, and for the verdict **only** on
-path A, where there is nothing else. Ordered; first match wins.
-
-| Signal in output | Reading |
-|---|---|
-| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | clean |
-| Explicit "FAIL" / "✗" / "violations found" | findings |
-| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | observations |
-| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | a skip |
-| Ambiguous or empty output | say so in `messages[]` |
+**If the resolver cannot be run**, emit `verdict: "skipped"` with `unresolved: true` and
+say so. Do not fall back to reading the console text: guessing from prose is the thing
+this replaced.
 
 ## Emitting the envelope (per `references/validation-gate-result.md`)
 

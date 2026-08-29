@@ -1,0 +1,19 @@
+{
+  "mode": "unmeasured",
+  "changed_mode": false,
+  "duplication_percentage": 0,
+  "total_lines": 0,
+  "duplicated_lines": 0,
+  "clone_count": 0,
+  "clones": [],
+  "settings": {
+    "min_lines": 5,
+    "min_tokens": 70
+  },
+  "generated_at": "2026-08-29T12:00:00Z",
+  "rating": "unmeasured",
+  "status": "unmeasured",
+  "measured": false,
+  "phpcpd_exit": 2,
+  "paths_missing": []
+}

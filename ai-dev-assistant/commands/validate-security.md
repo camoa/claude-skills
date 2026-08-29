@@ -29,9 +29,9 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + framework
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). Capture the console output; step 4 reads the report.
+3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). **Stamp the time before invoking** — `date -u +%Y-%m-%dT%H:%M:%SZ` (Bash) — and keep the gate's exit code. Both go to the resolver at step 4: `report-dir.sh` can resolve to a dated directory and fall back to the newest existing one, so a run that dies before writing leaves the PREVIOUS run's report in place, and without a baseline the resolver would read a stale green.
 
-4. **Read the report, then classify** — locate `security-report.json` via `report-dir.sh --latest` and resolve the verdict from it per the "Verdict interpretation" section below, which is ordered coverage-first. The report is the primary source; the console text is the last resort and sets the verdict only when no report exists. Extract actionable findings into `messages[]`, and capture the report's absolute path plus `meta.tools[]`, `meta.tools_absent[]`, `meta.tools_failed[]`, `meta.tools_unmeasured[]` and `analyzers_ran` when present for `--details`.
+4. **Resolve the verdict with the script, not by reading** — locate `security-report.json` via `report-dir.sh --latest`, then run `${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh security "<report>" --exit-code "<code>" --not-before "<step-3 timestamp>"` (Bash) and use its JSON verbatim per "Verdict interpretation" below. Every field path, both report modes and the coverage arithmetic live in that script, where `tests/gate-verdict-resolve-spec.sh` checks them against the gate's own emitters and against fixture reports. Pass `messages[]` through unedited and `evidence{}` into `--details`.
 
 5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
@@ -41,102 +41,56 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + framework
 
 ## Where the result comes from
 
-**The report file is the source of the verdict. The console text is not.** Every gate
-in `code-quality-tools` writes `<report-dir>/security-report.json` on **every** path it can take,
-including the ones where it measured nothing, and that file carries the fields a verdict
-needs: `status`, `rating`, `mode`, `measured`, `skip_reason`, `tools_absent[]`,
-`tools_failed[]`, `tools_unmeasured[]`, `analyzers_ran`. Its console line does not. This
-wrapper used to claim "no stable JSON surface exists yet upstream" and parse prose
-instead, and that claim was false when it was written.
-
-Parsing prose is not merely less precise here, it inverts the answer. `security-check.sh` prints `✓ Security audit passed` and sets `overall_status:"pass"`
-with gitleaks, semgrep, trivy and psalm all absent, so the old table's "Explicit PASS"
-row matched first and the coverage rows below it were unreachable.
+**`scripts/gate-verdict-resolve.sh` decides the verdict. This file does not.** It used to
+carry the mapping as prose, and prose got the field paths wrong every round it was
+rewritten: `security-report.json` has no top-level `.status` (it is
+`.summary.overall_status`), `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` at all. Each was a claim about a producer, and a
+claim about a producer is only checkable by reading the producer — which
+`tests/gate-verdict-resolve-spec.sh` now does, against every path the resolver declares.
+A table in a command file cannot be run, so it was never checked, so it was wrong.
 
 **Locating the report.** Run `bash "<code-quality-tools path>/skills/code-quality-audit/scripts/core/report-dir.sh" --latest`
-(Bash) and read `security-report.json` from the directory it prints. `--latest` is the reader's mode:
-it answers where the most recent run actually wrote, which is a different question from
-where the next one would. Do **not** hardcode `.reports/` — it stopped being the default
-in code-quality-tools v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`, so a
-wrapper looking there finds nothing on a normal run and concludes the gate did not run.
-`--latest` prints nothing and exits 1 when no run has ever written; treat that exactly
-like a missing file, below.
+(Bash) and read `security-report.json` from the directory it prints. Never hardcode
+`.reports/`; it stopped being the default in code-quality-tools v3.9.6.
+
+**This gate emits two different report shapes** — whole-project and `--changed`, the
+latter being `/review`'s default path — and they do not carry the same keys. The resolver
+handles both and reads the verdict from `.summary.overall_status`, because there is no
+top-level `.status`. A wrapper that read one went green on a project with a critical
+finding. `meta.tools[]` is deliberately not consulted: it exists only in whole-project
+mode, and its literal names `phpcs_security_linter` / `psalm_taint` / `roave` while the
+code pushes `php-security-linter` and `psalm` and never pushes `roave`.
 
 ## Verdict interpretation
 
-Resolve in this order. **A is checked before B and B before C** — a coverage question
-answered after a findings question is answered too late, which is how the previous
-version of this section went wrong.
+There is no table here on purpose. Run the resolver and use what it returns:
 
-**A. Was a report written at all?** No `security-report.json` — the file is missing, unparseable, or
-`--latest` exited 1 — ⇒ `skipped`, with `unresolved: true` in `messages[]` saying no
-report was found and naming where it looked. A gate that wrote no report cannot tell you
-what it measured, and its console text is the least reliable thing in the room. Use the
-text heuristics at the bottom of this section **only** to populate `messages[]` with
-whatever the run did say; they never set the verdict on this path.
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" security "<report path>" \
+  --exit-code "<the gate's exit status>" --not-before "<the step-3 timestamp>"
+```
 
-**B. Did it measure anything?** Ordered; first match wins.
+It prints one JSON object:
 
-| Signal in `security-report.json` | Our verdict |
+| Field | Use it for |
 |---|---|
-| `summary.overall_status` is `unmeasured`, or `meta.tools_unmeasured[]` is non-empty with nothing measured | `skipped`, and put `unresolved: true` in `messages[]` quoting the report's reason |
-| Every entry of `meta.tools[]` appears in `meta.tools_absent[]` ∪ `meta.tools_failed[]` ∪ `meta.tools_unmeasured[]` | `skipped`, and put `unresolved: true` in `messages[]`, naming the layers |
-| Some but not all of them do | `warning`, **with the literal `coverage_partial: true` in `messages[]`**, naming the absent or failed tools and which layers went unchecked. Never `pass` |
-| Otherwise | fall through to C |
+| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `skipped` |
+| `unresolved` | `true` ⇒ **nothing** was measured. The resolver has already put the literal `unresolved: true` in `messages[]`; pass those messages through unchanged. `/review` step 8 rule 2 reads it and fails closed |
+| `coverage_partial` | `true` ⇒ **part** of it was measured. Same deal: the literal `coverage_partial: true` is already in `messages[]`, and `/review` step 8 rule 4 fails closed on it |
+| `messages[]` | one `--message` per entry, in order. **Do not edit, reorder or drop any of them** — the two markers live in here, and a marker a caller trims is a green review |
+| `evidence{}` | put it in `--details` as-is. It records which fields were read and what they held, so a verdict can be argued with |
+| `measured`, `mode` | context for the CLI summary |
 
-`analyzers_ran` is present **only in `--changed` mode**, which is `/review`'s default
-path. On the standard whole-project path it is not in the report at all, so a wrapper
-that reads it unconditionally gets null on half its runs. Derive coverage from the tool
-lists instead — `meta.tools[]` minus `meta.tools_absent[]`, `meta.tools_failed[]` and
-`meta.tools_unmeasured[]` — which are present on both paths. `tools_failed[]` counts here
-as heavily as `tools_absent[]`: a scanner that crashed produced no evidence either, and
-omitting it from the derivation is how a crashed gitleaks reads as a clean one.
+Both markers are never set at once: nothing-measured and part-measured are different
+facts. An ordinary `warning` — a real, complete measurement whose number sits over a soft
+threshold — carries **neither**, and stays exactly as non-blocking as it has always been.
+Failing those would block projects where every tool is installed and teach everyone to
+reach for `--skip-security`, which is the bypass that makes this whole mechanism worthless.
 
-The stack is many layers — composer audit, semgrep, the phpcs security linter, psalm
-taint, gitleaks, trivy, custom patterns — so the partial state is the common case and the
-one that matters most. A machine missing every scanner reports a clean tree; a machine
-missing only the secret scanner reports a clean tree while nothing read a single
-credential. `tools_absent[]` is documented as expected-absent and deliberately does not
-move `security-check.sh`'s own status, which is what makes naming it here the wrapper's
-job.
-
-**The marker, not the verdict, is what makes a partial run block.** `coverage_partial: true`
-goes in `messages[]` only on the row above — a `warning` this wrapper produced *because*
-part of the gate did not run. `/review` step 8 rule 4 reads that string and fails closed on
-it. A `warning` from path C is a different animal: the gate measured everything and found a
-number over a soft threshold, and those have never blocked a review. Rule 4 deliberately
-does not key on `verdict: "warning"` for exactly that reason, so **do not attach the marker
-to a fully measured warning** — doing so fails projects for ordinary findings and trains
-people to reach for `--skip-security`, which is the bypass that makes this whole mechanism
-worthless.
-
-It is the sibling of `unresolved: true`, and the two are not interchangeable:
-`unresolved` means **nothing** was measured, `coverage_partial` means **part** of it was.
-
-**C. It measured. Map the finding.**
-
-| `status` in `security-report.json` | Our verdict |
-|---|---|
-| `pass` | `pass` |
-| `warning` or `partial` | `warning` |
-| `fail` | `fail` |
-| anything unrecognised | `warning`, naming the status verbatim |
-
-The gate's exit code corroborates and never overrides: `4` is `unmeasured` (B catches it
-from the report; if the report and the exit code disagree, the disagreement itself is
-`unresolved`), `1` is a real fail, `2` is a bad invocation, `0` covers pass, warning and
-the benign skips.
-
-**Last resort — text heuristics.** For `messages[]` only, and for the verdict **only** on
-path A, where there is nothing else. Ordered; first match wins.
-
-| Signal in output | Reading |
-|---|---|
-| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | clean |
-| Explicit "FAIL" / "✗" / "violations found" | findings |
-| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | observations |
-| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | a skip |
-| Ambiguous or empty output | say so in `messages[]` |
+**If the resolver cannot be run**, emit `verdict: "skipped"` with `unresolved: true` and
+say so. Do not fall back to reading the console text: guessing from prose is the thing
+this replaced.
 
 ## Emitting the envelope (per `references/validation-gate-result.md`)
 

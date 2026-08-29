@@ -29,9 +29,9 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — DRY keeps its whole-tree clone scan but the `--changed` mode filters the verdict to clones where at least one copy is in the changed-files list (a clone entirely in unchanged code is not your concern this review). The code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan with no verdict filter (auto-detect project type, run the dry check, surface findings). Capture the console output; step 4 reads the report.
+3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — DRY keeps its whole-tree clone scan but the `--changed` mode filters the verdict to clones where at least one copy is in the changed-files list (a clone entirely in unchanged code is not your concern this review). The code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan with no verdict filter (auto-detect project type, run the dry check, surface findings). **Stamp the time before invoking** — `date -u +%Y-%m-%dT%H:%M:%SZ` (Bash) — and keep the gate's exit code. Both go to the resolver at step 4: `report-dir.sh` can resolve to a dated directory and fall back to the newest existing one, so a run that dies before writing leaves the PREVIOUS run's report in place, and without a baseline the resolver would read a stale green.
 
-4. **Read the report, then classify** — locate `dry-report.json` via `report-dir.sh --latest` and resolve the verdict from it per the "Verdict interpretation" section below, which is ordered coverage-first. The report is the primary source; the console text is the last resort and sets the verdict only when no report exists. Extract actionable findings into `messages[]`, and capture the report's absolute path plus `tools_absent[]`, `tools_failed[]` and `skip_reason` for `--details`.
+4. **Resolve the verdict with the script, not by reading** — locate `dry-report.json` via `report-dir.sh --latest`, then run `${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh dry "<report>" --exit-code "<code>" --not-before "<step-3 timestamp>"` (Bash) and use its JSON verbatim per "Verdict interpretation" below. Every field path, both report modes and the coverage arithmetic live in that script, where `tests/gate-verdict-resolve-spec.sh` checks them against the gate's own emitters and against fixture reports. Pass `messages[]` through unedited and `evidence{}` into `--details`.
 
 5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
@@ -41,89 +41,54 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
 ## Where the result comes from
 
-**The report file is the source of the verdict. The console text is not.** Every gate
-in `code-quality-tools` writes `<report-dir>/dry-report.json` on **every** path it can take,
-including the ones where it measured nothing, and that file carries the fields a verdict
-needs: `status`, `rating`, `mode`, `measured`, `skip_reason`, `tools_absent[]`,
-`tools_failed[]`, `tools_unmeasured[]`, `analyzers_ran`. Its console line does not. This
-wrapper used to claim "no stable JSON surface exists yet upstream" and parse prose
-instead, and that claim was false when it was written.
-
-Parsing prose is not merely less precise here, it inverts the answer. `dry-check.sh` prints `[SKIP] phpcpd not installed` and exits 0 on the absent path, and
-the old table's first row matched any `✓` or "no violations" in the surrounding output,
-so the row meant to catch this never evaluated.
+**`scripts/gate-verdict-resolve.sh` decides the verdict. This file does not.** It used to
+carry the mapping as prose, and prose got the field paths wrong every round it was
+rewritten: `security-report.json` has no top-level `.status` (it is
+`.summary.overall_status`), `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` at all. Each was a claim about a producer, and a
+claim about a producer is only checkable by reading the producer — which
+`tests/gate-verdict-resolve-spec.sh` now does, against every path the resolver declares.
+A table in a command file cannot be run, so it was never checked, so it was wrong.
 
 **Locating the report.** Run `bash "<code-quality-tools path>/skills/code-quality-audit/scripts/core/report-dir.sh" --latest`
-(Bash) and read `dry-report.json` from the directory it prints. `--latest` is the reader's mode:
-it answers where the most recent run actually wrote, which is a different question from
-where the next one would. Do **not** hardcode `.reports/` — it stopped being the default
-in code-quality-tools v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`, so a
-wrapper looking there finds nothing on a normal run and concludes the gate did not run.
-`--latest` prints nothing and exits 1 when no run has ever written; treat that exactly
-like a missing file, below.
+(Bash) and read `dry-report.json` from the directory it prints. `--latest` answers where
+the most recent run actually wrote, which is a different question from where the next one
+would. Never hardcode `.reports/` — it stopped being the default in code-quality-tools
+v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`.
+
+**This gate has one analyzer, so it has no partial state.** phpcpd either measured
+duplication or it did not; the resolver returns `unresolved` for the second case and never
+sets `coverage_partial` for this gate.
 
 ## Verdict interpretation
 
-Resolve in this order. **A is checked before B and B before C** — a coverage question
-answered after a findings question is answered too late, which is how the previous
-version of this section went wrong.
+There is no table here on purpose. Run the resolver and use what it returns:
 
-**A. Was a report written at all?** No `dry-report.json` — the file is missing, unparseable, or
-`--latest` exited 1 — ⇒ `skipped`, with `unresolved: true` in `messages[]` saying no
-report was found and naming where it looked. A gate that wrote no report cannot tell you
-what it measured, and its console text is the least reliable thing in the room. Use the
-text heuristics at the bottom of this section **only** to populate `messages[]` with
-whatever the run did say; they never set the verdict on this path.
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" dry "<report path>" \
+  --exit-code "<the gate's exit status>" --not-before "<the step-3 timestamp>"
+```
 
-**B. Did it measure anything?** Ordered; first match wins.
+It prints one JSON object:
 
-| Signal in `dry-report.json` | Our verdict |
+| Field | Use it for |
 |---|---|
-| `status` or `rating` is `unmeasured`, or `measured` is `false` | `skipped`, and put `unresolved: true` in `messages[]` quoting the report's reason |
-| `skip_reason` is `tool_absent`, or `tools_absent[]` contains `phpcpd` | `skipped`, and put `unresolved: true` in `messages[]`, naming phpcpd |
-| `tools_failed[]` is non-empty | `skipped`, and put `unresolved: true` in `messages[]`, naming what failed |
-| Otherwise | fall through to C |
+| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `skipped` |
+| `unresolved` | `true` ⇒ **nothing** was measured. The resolver has already put the literal `unresolved: true` in `messages[]`; pass those messages through unchanged. `/review` step 8 rule 2 reads it and fails closed |
+| `coverage_partial` | `true` ⇒ **part** of it was measured. Same deal: the literal `coverage_partial: true` is already in `messages[]`, and `/review` step 8 rule 4 fails closed on it |
+| `messages[]` | one `--message` per entry, in order. **Do not edit, reorder or drop any of them** — the two markers live in here, and a marker a caller trims is a green review |
+| `evidence{}` | put it in `--details` as-is. It records which fields were read and what they held, so a verdict can be argued with |
+| `measured`, `mode` | context for the CLI summary |
 
-phpcpd is this gate's **only** analyzer, so every one of those rows means the same
-thing: duplication was not measured, and there is no partial state to report.
-`dry-check.sh` says so honestly — `status:"skipped"`, `skip_reason:"tool_absent"`,
-`tools_absent:["phpcpd"]`, exit 0, and it writes that report before exiting. A crashed
-phpcpd is the same fact as an absent one: a tool that returned nothing usable produced no
-evidence, so `tools_failed[]` is treated exactly as seriously as `tools_absent[]`.
-"Not measured" must never be reported as "no duplication".
+Both markers are never set at once: nothing-measured and part-measured are different
+facts. An ordinary `warning` — a real, complete measurement whose number sits over a soft
+threshold — carries **neither**, and stays exactly as non-blocking as it has always been.
+Failing those would block projects where every tool is installed and teach everyone to
+reach for `--skip-dry`, which is the bypass that makes this whole mechanism worthless.
 
-**This gate has no partial state, so it never emits `coverage_partial: true`.** Its
-siblings `validate-solid` and `validate-security` do, on a `warning` caused by some
-analyzers being gone, and `/review` step 8 rule 4 fails on that marker. DRY runs one
-analyzer: it either measured duplication or it did not, and the rows above cover the
-second case as `unresolved`. A `warning` from this gate is always a fully measured run
-whose duplication exceeded a soft threshold, which has never blocked a review and still
-does not.
-
-**C. It measured. Map the finding.**
-
-| `status` in `dry-report.json` | Our verdict |
-|---|---|
-| `pass` | `pass` |
-| `warning` or `partial` | `warning` |
-| `fail` | `fail` |
-| anything unrecognised | `warning`, naming the status verbatim |
-
-The gate's exit code corroborates and never overrides: `4` is `unmeasured` (B catches it
-from the report; if the report and the exit code disagree, the disagreement itself is
-`unresolved`), `1` is a real fail, `2` is a bad invocation, `0` covers pass, warning and
-the benign skips.
-
-**Last resort — text heuristics.** For `messages[]` only, and for the verdict **only** on
-path A, where there is nothing else. Ordered; first match wins.
-
-| Signal in output | Reading |
-|---|---|
-| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | clean |
-| Explicit "FAIL" / "✗" / "violations found" | findings |
-| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | observations |
-| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | a skip |
-| Ambiguous or empty output | say so in `messages[]` |
+**If the resolver cannot be run**, emit `verdict: "skipped"` with `unresolved: true` and
+say so. Do not fall back to reading the console text: guessing from prose is the thing
+this replaced.
 
 ## Emitting the envelope (per `references/validation-gate-result.md`)
 

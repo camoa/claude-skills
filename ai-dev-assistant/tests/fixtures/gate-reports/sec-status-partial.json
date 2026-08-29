@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "scan_type": "security_audit",
+    "tools_absent": [],
+    "tools_failed": [],
+    "tools_unmeasured": []
+  },
+  "summary": {
+    "overall_status": "partial",
+    "security_score": "partial",
+    "total_issues": 0,
+    "by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    }
+  }
+}

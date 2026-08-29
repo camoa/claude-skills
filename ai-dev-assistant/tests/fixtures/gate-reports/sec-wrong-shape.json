@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "scan_type": "security_audit",
+    "tools_absent": [],
+    "tools_failed": [],
+    "tools_unmeasured": []
+  }
+}

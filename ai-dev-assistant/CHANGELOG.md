@@ -3,6 +3,40 @@
 ## [5.35.6] - 2026-08-29
 
 ### Fixed
+- **The mapping from a gate's report to a verdict is a script, not a table a model reads.**
+  `scripts/gate-verdict-resolve.sh <gate> <report-path>` returns one JSON object —
+  `verdict`, `unresolved`, `coverage_partial`, `measured`, `messages[]`, `evidence{}` — and
+  owns every field path, both report modes, the tool lists, and the single-versus-multi
+  analyzer distinction. The wrappers call it and use what it returns.
+
+  Three rounds of encoding this as prose produced three rounds of defects that only a
+  script can prevent: a table keyed on a top-level `status` that `security-report.json`
+  does not have (it is `summary.overall_status`), set relations over a `meta.tools[]` that
+  exists only in whole-project mode while `/review` defaults to change-scoped, and a
+  hardcoded tool list naming `phpcs_security_linter`, `psalm_taint` and `roave` where the
+  code pushes `php-security-linter`, `psalm`, and never `roave` at all. Each one read a
+  field that was not there, got null, and fell through to a benign `warning`. A fully
+  tooled project with a critical security finding would have gone green — worse than the
+  bug this release started from.
+
+- **The spec reads the gate scripts it describes.** Every JSON path the resolver declares
+  is asserted to appear in the producing script's own output, with the path list derived
+  from the resolver rather than hand-copied, and a floor that fails when the check covers
+  too few paths to mean anything. The previous spec's assertions compared this plugin's
+  prose against this plugin's prose; not one opened `dry-check.sh`, `solid-check.sh` or
+  `security-check.sh`, which is why none of the three defects above was visible to it while
+  it reported 89 passing assertions. Twenty-seven fixture reports drive the resolver
+  through each state in both modes, including malformed JSON, an absent file, and a report
+  whose shape is not recognised.
+
+- **A report older than the run it is read for is `unresolved`, when the caller can say
+  when the run began.** `--not-before` compares the report's timestamp; without it,
+  freshness is reported `unchecked` and never assumed. A gate that dies before writing —
+  DDEV down, exit 2, no report — leaves the previous run's passing report on disk, and in
+  a dated report directory that is a green from this morning answering for code from this
+  afternoon.
+
+### Fixed
 - **A quality gate whose analyzers were missing reported the answer a clean tree would
   have given.** With phpcpd absent, `dry-check.sh` is honest — `status:"skipped"`,
   `skip_reason:"tool_absent"`, `tools_absent:["phpcpd"]`, exit 0. phpcpd is the DRY gate's
