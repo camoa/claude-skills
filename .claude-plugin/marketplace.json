@@ -119,7 +119,7 @@
     {
       "name": "drupal-ai-contrib",
       "source": "./drupal-ai-contrib",
-      "description": "AI-assisted Drupal contribution quality \u2014 evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline) with a local drupalci-parity gate set plus AI-policy and eval gates, and 3 read-only fresh-context review agents. Authenticated GitLab writes delegate to the drupal-gitlab skill (glab); drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant, built on the camoa/dev-guides contribution guides.",
+      "description": "AI-assisted Drupal contribution quality. Evidence over assertion: every gate passes on a captured artifact, never an AI claim. 6 commands for the contribution arc (setup, issue, verify, review, submit, pipeline) with a local drupalci-parity gate set plus AI-policy and eval gates, and 3 read-only fresh-context review agents. Authenticated GitLab writes delegate to the drupal-gitlab skill (glab). drupalorg-cli covers no-auth reads and the legacy queue. A quality layer outside ai-dev-assistant, built on the camoa/dev-guides contribution guides.",
       "version": "0.4.4",
       "author": {
         "name": "camoa"
