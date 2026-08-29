@@ -45,6 +45,8 @@ set -uo pipefail
 TASK_FOLDER="${1:?task folder required}"
 GATE_TYPE="${2:?gate type required}"
 PAYLOAD="${3:?JSON payload required}"
+ALLOW_KEY_LOSS=0
+[[ "${4:-}" == "--allow-key-loss" ]] && ALLOW_KEY_LOSS=1
 
 # Validate gate_type
 case "$GATE_TYPE" in
@@ -293,6 +295,39 @@ fi
 
 OUT_FILE="$TASK_FOLDER/_${GATE_TYPE}.json"
 TMP_FILE="$OUT_FILE.tmp.$$"
+
+# A rewrite must not lose what the last one recorded.
+#
+# Every write here replaces the whole record. That is right for one writer and wrong for the
+# way these records actually get produced: an orchestrator writes, an agent it dispatched
+# writes, a later pass corrects one field. Each of those assembles a payload from what it
+# knows, and a writer that never saw an earlier key simply omits it. The rename is atomic, so
+# nothing is corrupt -- it is just quietly shorter than it was, with no error and no diff.
+#
+# Seen live: three collisions on one build-critique record in a single session. Nothing
+# detected any of them. They were caught because a person re-read the file after each write,
+# and the remedy adopted was a convention -- use one writer -- which is exactly the kind of
+# rule that holds until someone forgets.
+#
+# So the comparison is on TOP-LEVEL gate_specific keys only, in one direction. A record's key
+# set grows or holds; a correction changes values and nested contents, which this never
+# touches. Deliberately removing a key is still possible with --allow-key-loss, which makes
+# the intent explicit rather than accidental.
+if [[ -f "$OUT_FILE" ]]; then
+  LOST=$(jq -r --argjson new "$(jq -c '(.gate_specific // {})' <<<"$PAYLOAD" 2>/dev/null || echo '{}')" \
+    '((.gate_specific // {}) | keys) - ($new | keys) | join(" ")' "$OUT_FILE" 2>/dev/null) || LOST=""
+  if [[ -n "$LOST" ]]; then
+    if [[ "$ALLOW_KEY_LOSS" -eq 1 ]]; then
+      echo "gate-audit-write: NOTE — dropping key(s) present in the existing $GATE_TYPE record: $LOST" >&2
+      echo "  --allow-key-loss was passed, so this is deliberate." >&2
+    else
+      echo "gate-audit-write: REFUSED — this payload drops key(s) the existing $GATE_TYPE record has: $LOST" >&2
+      echo "  Read $OUT_FILE, merge your changes onto it, and write the whole record." >&2
+      echo "  Pass --allow-key-loss as a 4th argument if the removal is intended." >&2
+      exit 2
+    fi
+  fi
+fi
 
 # Atomic write: temp + rename
 if ! echo "$PAYLOAD" | jq . > "$TMP_FILE" 2>/dev/null; then

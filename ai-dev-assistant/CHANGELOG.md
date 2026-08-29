@@ -15,8 +15,24 @@
   independently confirm it. Shipping without that confirmation stays allowed; doing it silently
   does not.
 
+- **A rewrite of a gate record cannot silently drop what the last write recorded.**
+  `gate-audit-write.sh` now compares the incoming payload's top-level keys against the record on
+  disk and refuses a write that loses any of them, naming the keys and telling the caller to
+  merge onto the existing record. `--allow-key-loss` as a fourth argument makes a deliberate
+  removal explicit.
+
+  Every write replaces the whole record, which suits one writer and not the way these records are
+  produced: an orchestrator writes, an agent it dispatched writes, a later pass corrects one
+  field. Each assembles a payload from what it knows, and a writer that never saw an earlier key
+  omits it. The rename is atomic, so nothing is corrupt. The record is just quietly shorter, with
+  no error and no diff.
+
+  The comparison is one-directional and top-level only. A key set grows or holds, while
+  corrections to values and to nested contents are untouched.
+
 ### Testing
 - `tests/closing-fixes-spec.sh`, 22 assertions, mutation-verified.
+- `tests/record-key-loss-spec.sh`, 14 assertions, mutation-verified.
 
 ## [5.35.2] - 2026-08-29
 

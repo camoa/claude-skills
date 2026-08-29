@@ -83,6 +83,19 @@ for it.
 
 A complete envelope is still accepted, so no existing caller changed.
 
+**A rewrite cannot drop what the last write recorded (v5.35.3+).** When a record for that gate
+type already exists, the script compares the incoming payload's top-level `gate_specific` keys
+against it and **refuses**, exit 2, if any would be lost, naming them and telling the caller to
+merge onto the existing record. This is the one place the script refuses rather than warns, and
+the reason is that the failure it prevents is invisible: every write replaces the whole record,
+several writers legitimately touch one record, and a writer that never saw an earlier key simply
+omits it. The rename is atomic, so nothing is corrupt. The record is just quietly shorter, with
+no error and no diff.
+
+The comparison is one-directional and top-level only. A key set grows or holds, and corrections
+to values and to nested contents are untouched. Pass `--allow-key-loss` as a fourth argument to
+remove a key on purpose; the removal is announced on stderr either way.
+
 **`fired_at` is stamped by the script in both shapes and a caller-supplied value is
 discarded.** It has to be. Before v5.30.0 the envelope was hand-authored on every call,
 which meant the timestamp was hand-authored too, and a model has no clock — every gate
