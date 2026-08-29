@@ -36,6 +36,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 # An otherwise-valid, otherwise-passing build-critique payload: tdd and contract are both
 # already clean, so every fixture below isolates the round-budget block on its own.
 GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
+ "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline":"captured","changed":[]},
  "integration":{"ran":false,"reason":"single-component fixture"},

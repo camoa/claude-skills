@@ -379,6 +379,26 @@ also what the reason requirement now keys on, so a record cannot under-report it
 When no baseline exists, or the diff cannot run, the gate records `contract_recheck` as
 `unresolved` or `unavailable` and manufactures no agreement in either direction.
 
+**What changed after the last critique pass? (v5.35.3+)** The record carries `closing_fixes`
+`{applied, verified_by, reason}`. `applied: 0` passes. `applied > 0` needs a named `verified_by`,
+and when that is the fix's own author it needs a reason as well.
+
+The rung critiques a build, findings come back, and the findings get repaired. On the path where
+that repair is the last thing to happen, nothing critiques it: under per-component rounds the
+next round sees the repair, but under a single closing pass there is no next round, so the code
+that ships is not the code any critic read.
+
+Neither hypothetical nor rare. One live record invented
+`rung_resolution.closing_fixes_not_critiqued: true` because the situation existed and this schema
+had no field for it, an ad-hoc key that appears nowhere in this plugin and that nothing has ever
+read. On the build that produced this rule, six fixes landed after all three lenses returned,
+including a critical in the branch deciding whether published content gets unpublished, whose fix
+was written by the same agent that wrote the bug. The orchestrator dispatched a fresh-eyes
+verifier by hand, correctly, and nothing in the framework asked it to.
+
+The author of a fix is the one person who cannot independently confirm it. Shipping without that
+confirmation stays allowed; doing it silently does not.
+
 **Was the component ever run? (v5.35.2+)** Each `components[]` row carries `runtime`:
 `executed`, `static_only`, or `not_run`, and the last two need a non-empty `runtime_reason`.
 
