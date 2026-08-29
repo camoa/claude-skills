@@ -29,7 +29,7 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). Capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). Capture the output for envelope construction in step 4, **including `analyzers_ran` and `tools_absent[]`** — `solid-check.sh` emits both on the `--changed` path and on the standard path, and both belong in `--details` so a reader can see how much of the gate actually ran.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:solid` wrote a JSON report to `.reports/solid.json` (disk-read fallback), capture its path.
 
@@ -48,8 +48,12 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 | Explicit "PASS" / "✓" / "all checks passed" / "no violations" | `pass` |
 | Explicit "FAIL" / "✗" / "violations found" / "tests missing for <x>" | `fail` |
 | Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | `warning` |
+| `analyzers_ran == 0` — every analyzer absent | `skipped`, and put `unresolved: true` in `messages[]`, naming each entry of `tools_absent[]` |
+| `analyzers_ran >= 1` with a non-empty `tools_absent[]` — some analyzers ran, some did not | `warning`, naming the absent tools and what went unchecked. Never `pass` |
 | Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | `skipped` |
 | Ambiguous or empty output | `warning` (conservative — surface for human review) |
+
+SOLID is multi-analyzer — phpstan, phpmd, and an always-on `\Drupal::` static-call grep that needs no binary — so unlike DRY it has a real partial state, and the two rows above are the reason it needs two: a run with phpmd missing still measured something, a run with nothing installed measured nothing at all. Reporting either as `pass` says the code has no SOLID violations when what happened is that nobody looked. The `analyzers_ran == 0` row fails closed via `/review` step 8 rule 2; the partial row surfaces the hole without blocking, because a partial measurement is still a measurement.
 
 If `/code-quality:solid` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
 

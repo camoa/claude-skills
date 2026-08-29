@@ -29,15 +29,15 @@ for field in description allowed-tools argument-hint; do
   fi
 done
 
-# 2. Body line count ≤129 (120 -> 125 in v5.23.0 for the mandatory ## Output
+# 2. Body line count ≤131 (120 -> 125 in v5.23.0 for the mandatory ## Output
 #    section; 125 -> 127 in v5.30.3 for the step-0 phase declaration the other
 #    three phase commands have had since v5.29.0 and this one never did;
-#    129 -> 131 in v5.35.5 for step 8b, the contract-drift diff. Step 0 absorbed the
-#    baseline capture rather than adding a step of its own, so the growth is the one
-#    genuinely new gate step and not its prose.
 #    127 -> 129 in v5.33.0 for step 5.0f, the gate that makes the build-critique
 #    rung able to fail — the rung shipped with three things that looked like
 #    enforcement and none that could;
+#    129 -> 131 in v5.35.5 for step 8b, the contract-drift diff. Step 0 absorbed the
+#    baseline capture rather than adding a step of its own, so the growth is the one
+#    genuinely new gate step and not its prose.
 #    kept in lockstep with scripts/command-body-lengths.sh)
 BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
 if [ "$BODY_LINES" -le 131 ]; then

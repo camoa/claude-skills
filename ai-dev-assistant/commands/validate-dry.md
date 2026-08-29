@@ -29,7 +29,7 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — DRY keeps its whole-tree clone scan but the `--changed` mode filters the verdict to clones where at least one copy is in the changed-files list (a clone entirely in unchanged code is not your concern this review). The code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan with no verdict filter (auto-detect project type, run the dry check, surface findings). Capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:dry` flow as documented in the `code-quality-tools` plugin's `commands/dry.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — DRY keeps its whole-tree clone scan but the `--changed` mode filters the verdict to clones where at least one copy is in the changed-files list (a clone entirely in unchanged code is not your concern this review). The code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan with no verdict filter (auto-detect project type, run the dry check, surface findings). Capture the output for envelope construction in step 4, **including the report's `tools_absent[]`** — pass it through in `--details` so a reader can see which analyzer was missing without re-running the gate.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:dry` wrote a JSON report to `.reports/dry.json` (disk-read fallback), capture its path.
 
@@ -48,8 +48,11 @@ Run the DRY quality gate (DRY — code duplication detection) against the curren
 | Explicit "PASS" / "✓" / "all checks passed" / "no violations" | `pass` |
 | Explicit "FAIL" / "✗" / "violations found" / "tests missing for <x>" | `fail` |
 | Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | `warning` |
+| Report carries `status:"skipped"` with `skip_reason:"tool_absent"`, or the output names phpcpd absent | `skipped`, and put `unresolved: true` in `messages[]`, naming phpcpd |
 | Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | `skipped` |
 | Ambiguous or empty output | `warning` (conservative — surface for human review) |
+
+phpcpd is this gate's **only** analyzer, so its absence means duplication was never measured — there is no partial state to report. `dry-check.sh` says so honestly (`status:"skipped"`, `skip_reason:"tool_absent"`, `tools_absent:["phpcpd"]`, exit 0) and the wrapper used to flatten that into a plain skip, which step 8 rule 4 of `/review` then treated as benign and aggregated into `overall_verdict: pass`. `unresolved: true` makes it fail closed via step 8 rule 2 instead. "Not measured" must never be reported as "no duplication".
 
 If `/code-quality:dry` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
 

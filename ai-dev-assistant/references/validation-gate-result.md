@@ -73,9 +73,49 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | `pass` | Gate's criteria met. Nothing to fix | Command prints summary + exits 0 |
 | `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking | Command prints summary + exits 0 |
 | `fail` | Gate's criteria NOT met. Action required | Command prints summary + exits 1 (signals failure; user/AI can see + fix) |
-| `skipped` | Gate was invoked but not run (e.g., user passed `--skip`, or the underlying tool is unavailable) | Command prints reason + exits 0 |
+| `skipped` | Gate was invoked and did not run, for a reason that leaves nothing unknown — the user passed `--skip`, the gate is not applicable, the change set is empty. **Not** the state for "the analyzer was missing, so nothing got measured": that is a `skipped` carrying `unresolved`, below | Command prints reason + exits 0 |
 
 All gates are advisory by default — `fail` does NOT block the user's workflow (soft-nudge posture). The exit code communicates the result to invokers that want to chain (e.g., CI, `/validate:all` orchestration).
+
+### `unresolved` — invoked, and could not check anything
+
+The four verdicts answer "what did the gate find?". They cannot answer "did the
+gate look?", and those are different questions: a gate whose only analyzer is
+not installed finds no violations, which is not the same fact as a clean tree.
+`unresolved` is the marker for the second case.
+
+**What it is.** The literal string `unresolved: true` inside one of the
+envelope's `messages[]` entries, alongside a message naming what could not be
+checked and why. It is a convention on message TEXT, not a field — nothing in
+`scripts/validation-envelope-write.sh` produces or validates it, so a producer
+that misspells it emits an envelope that reads clean.
+
+**Who consumes it.** `commands/review.md` step 8 rule 2. When a gate's
+`validations/latest/<gate>.json` carries `unresolved: true` in `messages[]`,
+`/review` propagates it into that gate's `gates_run[]` entry and resolves
+`overall_verdict: "fail"` — **fail-closed, ranked above bypass**, while the
+gate's own `verdict` stays `skipped`. An unknown gate result is never absorbed
+into a pass. That consumer is the only thing making the marker load-bearing: if
+rule 2 is ever deleted, every producer below becomes decorative.
+
+**When a wrapper must emit it.** Whenever the gate was invoked and could not
+actually check the thing it exists to check:
+
+| Gate | The could-not-check path |
+|---|---|
+| `tdd` | No `--files` list, so no test ran — the whole-tree mode is usage text, not a scan |
+| `dry` | phpcpd absent. It is the gate's only analyzer, so duplication was not measured at all |
+| `solid` | `analyzers_ran == 0` — phpstan and phpmd both absent |
+| `security` | `analyzers_ran == 0`, or every entry of `meta.tools` absent or unmeasured |
+
+A gate that ran SOME of its analyzers is a different state: `warning`, naming
+what went unchecked, never `pass` and never `unresolved`. A partial measurement
+is still a measurement.
+
+What is NOT unresolved: a `--skip` bypass, a `skipped-not-shipped` gate, the
+Spec axis skipping for want of an `alignment.md`, an empty change set. Those
+leave nothing unknown, and marking them unresolved would fail a review that had
+nothing to fail on.
 
 ## 4. `details` — gate-specific structures
 
@@ -87,13 +127,21 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 "details": {
   "source": "code-quality-tools:tdd",
   "raw_output_path": "/abs/path/.reports/tdd.json",
-  "code_quality_tools_version": "3.0.0"
+  "code_quality_tools_version": "3.0.0",
+  "analyzers_ran": 2,
+  "tools_absent": ["phpmd"]
 }
 ```
 
 - `source` — the underlying skill invoked (always `code-quality-tools:<gate>`)
 - `raw_output_path` — absolute path to the unmodified output from the wrapped tool, for deep diagnosis
 - `code_quality_tools_version` — version of the dependency at run time
+- `analyzers_ran` — how many of the gate's analyzers actually produced a measurement. Copied from the underlying report where it emits one: `solid-check.sh` does on both paths, `security-check.sh` only in `--changed` mode, and on its standard path the wrapper derives it from `meta.tools` minus `meta.tools_absent`/`meta.tools_unmeasured`. Optional, but the field that lets a reader tell a clean gate from an unrun one
+- `tools_absent` — the analyzer names the underlying report listed as not installed. Optional; present whenever the report names any
+
+Both are passed straight through — `--details` is handed to the emitter verbatim
+and only checked for object shape and duplicate keys, so carrying them needs no
+change to `validation-envelope-write.sh`.
 
 ### Guides gate (framework-owned)
 

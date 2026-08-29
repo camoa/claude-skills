@@ -1,5 +1,46 @@
 # Changelog
 
+## [5.35.6] - 2026-08-29
+
+### Fixed
+- **A quality gate whose analyzer was not installed reported the answer a clean tree would
+  have given.** With phpcpd absent, `dry-check.sh` is honest — `status:"skipped"`,
+  `skip_reason:"tool_absent"`, `tools_absent:["phpcpd"]`, exit 0. phpcpd is the DRY gate's
+  only analyzer, so duplication was never measured. `commands/validate-dry.md` mapped that
+  onto a plain `skipped`, `/review` step 8 rule 4 listed "a tool-unavailable soft skip"
+  among the benign states that do not prevent a pass, and the review went green carrying a
+  duplication verdict nothing had produced. phpmd and the SOLID complexity layer had the
+  same hole with a partial-coverage twist: phpstan and an always-on `\Drupal::` grep still
+  ran, so part of that gate was real and part of it was silence.
+
+- **The four wrappers now mark a could-not-check run `unresolved`.** `validate-tdd.md` has
+  emitted the literal `unresolved: true` inside `messages[]` since its own no-test-executed
+  path was found, and `review.md` step 8 rule 2 reads it back out and fails closed. Nothing
+  else knew: the string appeared zero times in `validation-envelope-write.sh`, zero times in
+  the envelope contract, and zero times in the other three wrappers. `validate-dry.md` now
+  emits it when phpcpd is absent; `validate-solid.md` and `validate-security.md` emit it on
+  `analyzers_ran == 0` and report partial coverage as `warning`, naming the absent tools —
+  never `pass`. `tools_absent` and `analyzers_ran` ride through `--details`, which passes
+  arbitrary structured JSON verbatim, so no script changed.
+
+- **`references/validation-gate-result.md` documents the convention it depended on.** The
+  file that calls itself the shared envelope contract never mentioned `unresolved`: what the
+  string is, that it lives in `messages[]`, that `review.md` step 8 rule 2 consumes it
+  fail-closed, and which path in each gate must emit it. Its `skipped` definition folded
+  "the underlying tool is unavailable" into a benign skip, which was the bug in written form.
+  `tools_absent` and `analyzers_ran` are now documented as stable `--details` keys.
+
+- **Two stale line budgets.** `tests/review-command-spec.sh`'s comment said the review body
+  budget was 129 while the line below enforced 131, and `scripts/command-body-lengths.sh`
+  still carried 129 — a script no Makefile target or test calls, so it reported `review.md`
+  over budget and nothing saw it.
+
+### Added
+- `tests/gate-coverage-honesty-spec.sh` — asserts each wrapper emits the marker on its own
+  could-not-check path, that the contract documents it, and that `review.md` rule 2 still
+  reads it out of `validations/latest/<gate>.json`. That last one is the point: delete the
+  consumer and every producer becomes decorative while all their own assertions stay green.
+
 ## [5.35.5] - 2026-08-29
 
 ### Fixed

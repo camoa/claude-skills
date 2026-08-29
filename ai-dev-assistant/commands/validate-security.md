@@ -29,7 +29,7 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + framework
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). Capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:security` flow as documented in the `code-quality-tools` plugin's `commands/security.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the SAST gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the security check, surface findings). Capture the output for envelope construction in step 4, **including the coverage fields** — `security-check.sh` emits `analyzers_ran` only in `--changed` mode, which is `/review`'s default path; on the standard path derive coverage instead by diffing `meta.tools` against `meta.tools_absent` and `meta.tools_unmeasured`. Carry `analyzers_ran` (or the derived count) and `tools_absent[]` in `--details`.
 
 4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:security` wrote a JSON report to `.reports/security.json` (disk-read fallback), capture its path.
 
@@ -48,8 +48,12 @@ Run the Security quality gate (Security — OWASP Top 10 style audit + framework
 | Explicit "PASS" / "✓" / "all checks passed" / "no violations" | `pass` |
 | Explicit "FAIL" / "✗" / "violations found" / "tests missing for <x>" | `fail` |
 | Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | `warning` |
+| `analyzers_ran == 0` (or every entry of `meta.tools` is absent/unmeasured) | `skipped`, and put `unresolved: true` in `messages[]`, naming each entry of `tools_absent[]` |
+| `analyzers_ran >= 1` with a non-empty `tools_absent[]`/`tools_unmeasured[]` — some layers ran, some did not | `warning`, naming the absent tools and which layers went unchecked. Never `pass` |
 | Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | `skipped` |
 | Ambiguous or empty output | `warning` (conservative — surface for human review) |
+
+The security gate stacks many layers — composer audit, semgrep, the phpcs security linter, psalm taint, gitleaks, custom patterns — so it has the same partial state SOLID does, and the same failure if it is flattened: a machine missing every scanner reports a clean tree, and a machine missing only the secret scanner reports a clean tree while nothing read a single credential. `tools_absent[]` is documented as expected-absent and deliberately does not move `security-check.sh`'s own status, which makes naming it here the wrapper's job. A gate that scanned nothing is `unresolved` and fails closed via `/review` step 8 rule 2; a gate that scanned some of its layers says which ones it did not.
 
 If `/code-quality:security` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
 
