@@ -252,9 +252,15 @@ Reached when the last component closes. All four parts are required.
    criterion found unimplemented while the build is open is a task, and found at the gate it
    is a reopening.
 
-2. **The record.** ONE envelope via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh
-   "<task_folder>" build-critique "<payload>"` (schema 1.9, shape in
-   `references/gate-audit-schema.md`). **`components_declared`, `components_critiqued` and
+2. **The record.** ONE envelope. **Write the payload to a file and pass it as `@<path>`** —
+   `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh "<task_folder>" build-critique
+   "@/tmp/build-critique-payload.json"` (schema 1.9, shape in
+   `references/gate-audit-schema.md`). Not a style preference: this record grows per component
+   per round, a command-line argument is capped at 128 KB by the kernel, and past that the write
+   dies with "argument list too long" before the script starts — taking the key-loss guard with
+   it and leaving a hand edit as the only way to update the file, which is the exact rewrite that
+   guard refuses. Measured live at 136 KB on a nine-component build. **`components_declared`,
+   `components_critiqued` and
    `uncritiqued[]` are all required and must be honest.** A rung that critiqued three of seven
    components and recorded only its three green rows is a record that cannot say what it did
    not look at. Every gap gets a `{component, reason}` row.

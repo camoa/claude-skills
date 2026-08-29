@@ -1,5 +1,52 @@
 # Changelog
 
+## [5.35.5] - 2026-08-29
+
+### Fixed
+- **`/review` can now declare its phase.** `commands/review.md` step 0 has told the command to run
+  `phase-active-write.sh review` since v5.30.3. That script's list of accepted phases was
+  `research|design|implement`. It answered `{"ok":false,"reason":"unrecognised phase: review"}`
+  and exited 0, so the declaration never happened on any review that has ever run, and nothing
+  said so.
+
+  Meanwhile `phase-records-check.sh` lists `_phase-active.json` as **required** for the review
+  phase. One half of the contract demanded a record the other half could not write, and the two
+  halves were never compared.
+
+- **An unrecognised phase now exits 2 instead of 0.** Every other failure in that script is an
+  environment degradation a caller cannot act on — no `jq`, an unwritable session file — where
+  carrying on is right. A phase name the script does not know is a caller bug, and `ok:false` on
+  a successful exit reaches nobody: no caller reads a JSON field it has no reason to expect. That
+  is what let the dead review declaration survive five releases.
+
+- **A gate audit payload can be passed from a file: `@<path>`.** A payload given as a command-line
+  argument is capped at 128 KB by the kernel, not by the script. Past `MAX_ARG_STRLEN` the exec
+  fails with `argument list too long` before bash starts, so nothing in `gate-audit-write.sh`
+  runs — including the v5.35.3 refusal that stops a rewrite dropping keys the record already has.
+
+  `_build-critique.json` grows per component per critique round and has no upper bound; it
+  measured 136 KB on a nine-component build with six rounds. At that size the only remaining way
+  to update it was a hand edit, which is exactly the rewrite the guard refuses. A size limit
+  standing in front of a guard disables the guard.
+
+  `gate-audit-write.sh <task> <gate> @/path/to/payload.json` reads the payload from a file, which
+  has no size limit and reaches every check. Nothing else changes: same normalisation, same
+  stamps, same refusals. A missing or unreadable file is exit 2, naming the path. The inline form
+  is untouched and all 28 documented call sites still work; `/implement` step 12 and `/review`
+  step 10, the two that write unbounded records, now document the file form.
+
+### Testing
+- `tests/phase-active-declaration-spec.sh` gains the check it was missing: every phase name a
+  command actually passes to `phase-active-write.sh` must be a phase that script accepts. The
+  name is read out of the command file rather than listed in the spec, so a new phase command is
+  covered the day it is added. Restoring the old whitelist turns 2 assertions red; restoring
+  exit 0 on an unrecognised phase turns 1 red.
+- New `tests/gate-audit-payload-size-spec.sh`, 21 assertions. It builds a payload past
+  `MAX_ARG_STRLEN`, confirms the command-line form genuinely cannot carry it, then asserts the
+  file form writes it whole, stamps it identically, and still refuses a rewrite that drops a key.
+  Removing `@<path>` support turns 13 red; resolving it after the JSON validation turns 13 red;
+  making a missing payload file silently write an empty record turns 1 red.
+
 ## [5.35.4] - 2026-08-29
 
 ### Fixed

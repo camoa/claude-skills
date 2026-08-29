@@ -12,7 +12,20 @@
 # explained away. This script is the missing writer: each phase command calls it on ENTRY, before
 # it writes anything, so the detector has a fact to compare against.
 #
-# Usage: phase-active-write.sh <research|design|implement|none> [task_folder]
+# Usage: phase-active-write.sh <research|design|implement|review|none> [task_folder]
+#
+# `review` was missing from this list until v5.35.5 while commands/review.md step 0 called it and
+# phase-records-check.sh listed `_phase-active.json` as REQUIRED for the review phase. The two
+# halves of that contract disagreed and neither could say so: the script answered
+# {"ok":false,"reason":"unrecognised phase: review"} and exited 0, so the declaration silently
+# never happened on any review that ever ran. Observed live on a task whose review wrote four
+# records against a `_phase-active.json` still reading `implement` from the phase before.
+#
+# Which is why an unrecognised phase now exits 2 rather than 0. Every other exit-0 path here is an
+# environment degradation the caller cannot fix — no jq, an unwritable session file — where
+# carrying on is the right answer. A phase name the script does not know is a caller bug, fixable
+# only by the caller, and a caller that reads an exit code and not a JSON field learns nothing
+# from `ok:false`. None did.
 #
 # `none` clears the field, for a phase command that has finished.
 #
@@ -23,15 +36,15 @@
 # which is honest and useless. `<task_folder>/_phase-active.json` lives with the work it
 # describes and survives all three. The session file is still written, so a caller that
 # cannot name a task folder behaves exactly as before.
-# Emits one JSON line; exit 0 on every recoverable state.
+# Emits one JSON line. Exit 0 on every recoverable state, 2 on an unrecognised phase.
 set -uo pipefail
 
 PHASE="${1:-}"
 TASK_FOLDER="${2:-}"
 case "$PHASE" in
-  research|design|implement) ;;
+  research|design|implement|review) ;;
   none|"") PHASE="none" ;;
-  *) printf '{"ok":false,"reason":"unrecognised phase: %s"}\n' "$PHASE"; exit 0 ;;
+  *) printf '{"ok":false,"reason":"unrecognised phase: %s"}\n' "$PHASE"; exit 2 ;;
 esac
 
 if ! command -v jq >/dev/null 2>&1; then

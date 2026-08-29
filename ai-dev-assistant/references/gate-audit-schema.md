@@ -83,6 +83,24 @@ for it.
 
 A complete envelope is still accepted, so no existing caller changed.
 
+**Pass a large payload from a file: `@<path>` (v5.35.5+).** A payload given on the command line
+is capped at 128 KB by the kernel, not by this script — Linux `MAX_ARG_STRLEN`, which cannot be
+raised. Past it `execve` fails with `argument list too long` and bash never starts, so nothing
+below runs: not the JSON validation, not the atomic rename, not the key-loss refusal. The script
+has no opportunity to report anything, because the script is not running.
+
+`gate-audit-write.sh <task_folder> <gate_type> @/path/to/payload.json` reads the payload from a
+file instead, which has no size limit and reaches every check. Nothing else differs — the same
+normalisation, the same stamps, the same refusals. A payload file that does not exist or cannot
+be read is exit 2 with a message naming the path.
+
+**Use it for `build-critique` and `review`.** Those two records have no upper bound: one grows
+per component per critique round, the other carries every gate's messages and detail. Observed
+live at 136 KB on a nine-component build with six rounds, at which point the only way left to
+update the file was to edit it by hand — the precise rewrite the key-loss guard below exists to
+refuse, performed with the guard unreachable. A size limit standing in front of a guard disables
+the guard.
+
 **A rewrite cannot drop what the last write recorded (v5.35.3+).** When a record for that gate
 type already exists, the script compares the incoming payload's top-level `gate_specific` keys
 against it and **refuses**, exit 2, if any would be lost, naming them and telling the caller to
