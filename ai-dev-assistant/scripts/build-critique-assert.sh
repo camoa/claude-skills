@@ -428,17 +428,25 @@ if [ -e "$REC" ]; then
       add_msg "name who verified the repair in verified_by, or record author/none with a reason"
       emit fail true "" 1
     fi
-    case "$CF_BY" in
-      author|none|self)
-        if [ -z "$CF_WHY" ]; then
-          add_msg "$CF_N closing fix(es) verified only by their author, with no reason recorded"
-          add_msg "the author of a fix cannot independently confirm it; say why no fresh context read it"
-          emit fail true "" 1
-        fi
-        add_msg "$CF_N closing fix(es) shipped without independent verification: $CF_WHY"
-        ;;
-      *) add_msg "$CF_N closing fix(es) landed after the critics and were verified by $CF_BY" ;;
-    esac
+    # The honest answer to "who checked this?" is usually MIXED, and the first real use of this
+    # field said so: two fixes read by a fresh context, four resting on the author's own tests.
+    # An exact match on author|none|self missed that entirely -- a mixed answer fell to the
+    # free-text branch and skipped the reason requirement, so the check could not fire on the
+    # most truthful thing a build can write. Match the word anywhere instead.
+    #
+    # It over-triggers on a phrasing like "a fresh context, not the author", and that is the
+    # right side to err on: the cost is one sentence, and the alternative is a rule that passes
+    # whenever the answer is complicated.
+    if printf '%s' "$CF_BY" | grep -qiE '(^|[^[:alnum:]])(author|self|none|nobody|unverified)([^[:alnum:]]|$)'; then
+      if [ -z "$CF_WHY" ]; then
+        add_msg "$CF_N closing fix(es) name the author, or nobody, among their verifiers, with no reason recorded"
+        add_msg "the author of a fix cannot independently confirm it; say which fixes that covers and why no fresh context read them"
+        emit fail true "" 1
+      fi
+      add_msg "$CF_N closing fix(es) were not all independently verified ($CF_BY): $CF_WHY"
+    else
+      add_msg "$CF_N closing fix(es) landed after the critics and were verified by $CF_BY"
+    fi
   fi
 
   # ------------------- can each criterion be verified by anything shipped? (v5.35.2+)

@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.35.4] - 2026-08-29
+
+### Fixed
+- **A mixed answer to "who verified the closing fixes?" no longer skips the reason
+  requirement.** `closing_fixes.verified_by` only demanded a reason when it was exactly `author`,
+  `none` or `self`. The honest answer is usually mixed, and the first real use of the field said
+  so: two fixes read by a fresh context, four resting on the author's own tests. That answer fell
+  to the free-text branch and was never asked for a reason, so the check could not fire on the
+  most truthful thing a build can write.
+
+  The match is now on the word anywhere in the string, case-insensitively, and covers `nobody`
+  and `unverified` as well. It over-triggers on a phrasing such as "a fresh context, not the
+  author". That is the right side to err on: the cost is one sentence, and the alternative is a
+  rule that passes whenever the answer is complicated.
+
+### Testing
+- `tests/closing-fixes-spec.sh` grows to 30 assertions. Restoring the old exact-match rule turns
+  7 of them red.
+
 ## [5.35.3] - 2026-08-29
 
 ### Added
