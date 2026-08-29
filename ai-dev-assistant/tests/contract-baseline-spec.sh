@@ -336,7 +336,7 @@ arr_empty added "removing alone after a late capture adds nothing"
 # block clean. The contract key is added or omitted per fixture below.
 GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
  "components":[{"component":"a","blocking":false}],
- "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]}}'
+ "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},"integration":{"ran":false,"reason":"single-component fixture"}}'
 
 write_record() { # write_record <folder> <jq filter over GOOD>
   bash "$W" "$1" build-critique "$(printf '%s' "$GOOD" | jq -c "$2")" >/dev/null 2>&1
@@ -446,6 +446,29 @@ msg_has "the contract baseline was taken after the build had begun and carries n
 
 # --------------------------------------------- B7. baseline:"late" WITH a recorded reason
 # — the only way a migration-state baseline passes: it says plainly what the baseline is
+# --------------------- the shape a live build actually wrote: baseline_status
+# `baseline` may hold the PATH to the baseline directory, with the state alongside it in
+# `baseline_status`. That split is reasonable and it is what a live build produced; the first
+# cut of this check read only `baseline`, so a record that captured a baseline and honestly
+# labelled it `late` failed as though none had been taken.
+D=$(mktask baseline_status_late_reason)
+write_record "$D" '.contract={"baseline":"build-critique/_contract-baseline","baseline_status":"late","changed":[],"reason":"the component predates the mechanism"}'
+run "$D"
+verdict_is pass "baseline_status:late with a reason passes"
+rc_is 0 "the live shape exits 0"
+
+D=$(mktask baseline_status_late_noreason)
+write_record "$D" '.contract={"baseline":"p/x","baseline_status":"late","changed":[]}'
+run "$D"
+verdict_is fail "baseline_status:late still needs its reason"
+msg_has "taken after the build had begun" "the late message fires through the status key"
+
+D=$(mktask baseline_path_no_status)
+write_record "$D" '.contract={"baseline":"p/x","changed":[]}'
+run "$D"
+verdict_is fail "a path with no status says where the baseline is but never what it is worth"
+msg_has "no contract baseline was captured" "an unstated baseline is fail-closed"
+
 # worth, it does not pass silently
 
 D=$(mktask b_late_reason)

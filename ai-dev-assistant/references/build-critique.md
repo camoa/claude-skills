@@ -92,7 +92,9 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    --label <component>.before`; keep the sha.
 2. Build the component.
 3. **When its acceptance criteria are built**, capture `--label <component>.after`.
-4. **Realize the file list.** `git -C <codePath> diff --name-only <before>..<after> >
+4. **Realize the file list**, scoped to THIS round. Round 1's base is `<component>.before`;
+   every later round's base is the **previous round's `.after`**, never the component base.
+   `git -C <codePath> diff --name-only <base-for-this-round>..<after> >
    <task_folder>/build-critique/<component>.files.txt`. The classifier takes a file list, not
    a rev range.
 5. **Tier.** `wo-risk-classify.sh --files-from <that file> --gate-floor
@@ -290,6 +292,27 @@ different.
 behavioural defects that no test caught and no amount of reading would have surfaced. Rounds 3, 4
 and 5 produced 58 findings between them and not one concerned a defect that pre-existed the
 round-1 and round-2 repairs. The value is front-loaded. Past that the loop audits its own repairs.
+
+## Each round reviews its own delta, not the whole component again
+
+Round 1's range is `<component>.before..<component>.after`. **Every later round's base is the
+previous round's `.after`.** A repair round that re-diffs from the component base hands three
+critics every line they already reviewed, and they find new things in old code every time, so
+findings accumulate instead of converging on what the repair actually changed.
+
+Measured on the run this rule came from: five rounds re-diffed the whole component from base and
+none came back clean. The sixth scoped to the delta and was the first non-blocking round of the
+six. The build's own orchestrator named it — "five rounds of critics re-reading already-reviewed
+code is a large part of why findings never converged."
+
+Keep each round's `.after` sha. It is the next round's base.
+
+**What this gives up, and nothing currently covers it.** A critic seeing only the delta cannot
+judge whether the repair fits the component as a whole, and no pass in this framework answers
+that: `wo-critic` only ever sees one unit's diff, on both build paths, while the alignment axis
+and the deterministic gates judge the whole change without an adversary. Delta-scoping trades a
+known cost — findings that never converge because every round re-reads reviewed code — for a
+gap that was already there. Do not read the trade as a transfer.
 
 ## Repair the minimum, and defer what cannot be answered yet
 

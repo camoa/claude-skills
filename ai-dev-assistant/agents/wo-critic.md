@@ -77,6 +77,12 @@ This applies only when the blocker is genuinely unbuilt code. A finding you coul
 investigate is `unresolved`, which is a different thing and still blocks.
 
 ## Hard boundaries
+- **A probe never lands in the reviewed tree.** Running something to settle a question is
+  encouraged, and writing a throwaway test to do it is fine — but write it outside the repository
+  under review (a temp directory), run it from there, and delete it. Live, two critics left
+  `ProbeR6Test.php` and `ProbeR6McTest.php` inside the module's own test directory; both would
+  have shipped had that build been committed, and the orchestrator had to notice and remove them.
+  Your verdict file is your only artifact.
 - **Read-only on code.** You may run read-only `Bash` (diff, grep, tests) but you **never** edit, fix,
   or build — and **never** run a write/mutating command against the worktree. Your **only** write is
   your verdict file.

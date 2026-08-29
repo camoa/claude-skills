@@ -142,7 +142,13 @@ AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePa
           --label <component>.after | jq -r .sha)
 
 # 2. the realized file list, which is what the classifier takes (it has no rev-range input)
-git -C <codePath> diff --name-only <before-sha>..$AFTER > "$CD/<component>.files.txt"
+# ROUND 1 diffs from <component>.before. EVERY LATER ROUND diffs from the PREVIOUS ROUND's
+# .after, not from the component base. A repair round that re-diffs the whole component hands
+# three critics ~670 lines they already reviewed, and they find new things in old code every
+# time — findings accumulate instead of converging. Measured live: five rounds re-diffed from
+# base and none was clean; the sixth scoped to the delta and was the first non-blocking round
+# of the six. Keep each round's .after sha; the next round's base is that sha.
+git -C <codePath> diff --name-only <base-for-this-round>..$AFTER > "$CD/<component>.files.txt"
 
 # 3. the tier. --gate-floor is REQUIRED here: there is no work-order file to read it from,
 #    and the classifier tiers everything high when both are missing.
@@ -159,7 +165,7 @@ security lens is guaranteed at `medium` and above, so executable code always get
 **5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
 **fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
 challenge. Give each the inputs the existing contract specifies: `<worktree>` = `codePath`,
-the `<before-sha>..$AFTER` range, the component's acceptance criteria as injected content, its
+the `<base-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
 lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
 `<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
 must not read an absent gate record as a clean one.

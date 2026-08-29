@@ -369,7 +369,20 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
   CON=$(jq -c '.contract' <<<"$PAYLOAD")
-  CON_BASE=$(jq -r '(.baseline // "") | tostring' <<<"$CON")
+  # Two spellings, both legitimate, and the second is what a live build wrote: `baseline` may
+  # carry the STATE (captured|late) or the PATH to the baseline directory, with the state in
+  # `baseline_status` alongside it. That split is reasonable -- where it is, and what it is worth
+  # -- and this check originally read only the first, so a record that captured a baseline and
+  # honestly labelled it `late` failed as though none had been taken. Prefer the explicit status
+  # key; fall back to `baseline` when it holds a state rather than a path.
+  CON_BASE=$(jq -r '((.baseline_status // "") | tostring) as $st
+                    | if $st != "" then $st
+                      else ((.baseline // "") | tostring) end' <<<"$CON")
+  case "$CON_BASE" in
+    captured|late) ;;
+    */*) # a path in `baseline` with no `baseline_status` says where but never what
+      CON_BASE="unstated" ;;
+  esac
   CON_CHANGED=$(jq -c '(.changed // [])' <<<"$CON")
   CON_N=$(jq -r 'length' <<<"$CON_CHANGED")
   CON_REASON=$(jq -r '(.reason // "") | tostring' <<<"$CON")

@@ -3,6 +3,29 @@
 ## [5.35.0] - 2026-08-28
 
 ### Added
+- **Each critique round reviews its own delta, not the whole component again.** Round 1 diffs
+  from the component's opening checkpoint; every later round now diffs from the **previous
+  round's** checkpoint. A repair round that re-diffs from the component base hands three critics
+  every line they already reviewed, and they find new things in old code each time, so findings
+  accumulate instead of converging on what the repair changed.
+
+  Measured on the run this came from: five rounds re-diffed the whole component from base and
+  none was clean. The sixth scoped to the delta and was the first non-blocking round of the six.
+  The build's own orchestrator identified it — "five rounds of critics re-reading
+  already-reviewed code is a large part of why findings never converged."
+
+  What it gives up is that a critic seeing only the delta cannot judge whether the repair fits
+  the component as a whole — and nothing in this framework covers that today. `wo-critic` only
+  ever sees one unit's diff on both build paths, while the alignment axis and the deterministic
+  gates judge the whole change with no adversary. This trades a measured cost for a gap that was
+  already present; it does not move the question somewhere it gets answered.
+
+- **A critic's probe never lands in the reviewed tree.** Running something to settle a question
+  is encouraged and writing a throwaway test to do it is fine, but it goes in a temp directory
+  outside the repository under review. Live, two critics left probe test files inside the
+  module's own test directory; both would have shipped had that build been committed, and the
+  orchestrator had to spot and remove them. A critic's verdict file is its only artifact.
+
 - **Repair the minimum, and defer what cannot be answered yet.** Two rules with one cause, both
   measured on the run that produced them. The churn was never the critics.
 
@@ -58,6 +81,14 @@
 ## [5.34.1] - 2026-08-28
 
 ### Fixed
+- **The contract gate now reads the baseline shape a live build actually writes.** `baseline`
+  may carry the path to the baseline directory, with the state alongside it in
+  `baseline_status`. That split is reasonable — where it is, and what it is worth — and the
+  first cut read only `baseline`, so a record that captured a baseline and honestly labelled it
+  `late` failed as though none had been taken. Both spellings are accepted; a path with no
+  status key is fail-closed, since it says where the baseline is and never what it is worth.
+  Third time in this release cycle that a live record used a shape the schema did not
+  anticipate, which is an argument for checking records before writing checks.
 - **`passed_first_run` failed two different things and only one was a defect.** v5.34.0 made any
   `passed_first_run > 0` a hard fail with no reason path, on the strength of `tdd-companion`
   calling it a blocking violation. That is right for a test written test-first that passes
