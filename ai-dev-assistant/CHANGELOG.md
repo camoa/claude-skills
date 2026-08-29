@@ -60,7 +60,35 @@
   grandfather clause: a record that cannot say which build it describes is the exact state this
   check exists to surface, and its age does not make it able to answer.
 
+- **The review can move the goalposts, and now says when it did.** v5.34.0 froze the contract in
+  front of the build, because a builder can edit `alignment.md` and `architecture/` and a scope
+  question then resolves against text written to describe the code it is judging. Every word of
+  that applies to `/review`, which reads the same two documents at the moment each gate fires and
+  can edit them, and which had no baseline at all.
+
+  Observed live: a review found a defect, corrected the two architecture documents that had
+  specified the defective behaviour, and deleted four acceptance criteria describing a check that
+  was withdrawn — between one run of the Spec gate and the next. Every edit was right. None was
+  recorded. A criterion that no longer exists cannot be reported as unimplemented.
+
+  `contract-baseline.sh` gains `--slot`, so review keeps its own baseline beside the build's. The
+  two answer different questions and cannot share one: capture refuses to overwrite, which is the
+  property that makes a baseline worth anything. `/review` captures at step 0, diffs at step 8b,
+  and records `contract_drift` in `_review.json`.
+
+  **It never blocks on its own** — correcting a document that specified defective behaviour is the
+  review doing its job, and the point is visibility, not prohibition. One consequence is not
+  advisory: `alignment.md` among the changed files means the Spec gate judged a criteria list that
+  is no longer on disk, so 5.0d is re-run or its entry becomes `skipped` with `unresolved: true`.
+  A stale verdict must not be reported as a current one.
+
 ### Testing
+- New `tests/review-contract-drift-spec.sh`, 13 assertions: the two slots are independent, an
+  amended architecture document and a deleted success criterion are both recorded by name, a diff
+  with no baseline never reads as an unchanged contract, and an unknown slot is a usage error
+  rather than a silent third baseline. Ignoring `--slot` turns 1 red, as does falling back to the
+  build slot on an unknown name, and as does dropping the Spec-gate staleness rule from
+  `review.md`.
 - New `tests/build-identity-spec.sh`, 19 assertions: a matching identity passes, file order is
   irrelevant, an added file and a moved head each fail and name what moved, and absent, incomplete
   or uncomparable each fail closed with distinguishable evidence. Removing the whole block turns

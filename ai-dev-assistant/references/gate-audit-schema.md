@@ -265,11 +265,18 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "overall_verdict": "pass | fail | bypassed",
   "pr_ready": true,
   "pr_body_path": "<task>/PR_BODY.md or null",
+  "contract_drift": { /* v5.35.5+, required — see below */ },
   "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
 
 `user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+
+**`contract_drift` (v5.35.5+, required).** `{checked, status, changed[], reason}` — did `alignment.md` or `architecture/` move between the start of the review and its verdict? `/review` captures a baseline at step 0 (`contract-baseline.sh capture --slot review`) and diffs it at step 8b.
+
+Review reads the contract as it stands at the moment each gate fires, and review can edit it. That is legitimate: a document specifying behaviour just found defective has to be corrected. Editing it invisibly is not, which is the same argument that put a baseline in front of the build in v5.34.0 — there the concern was a builder describing the code it had written, here it is a reviewer moving the standard it is judging against. `checked: false` carrying a reason is the honest answer when the step-0 capture did not run; a diff with no baseline must never read as an unchanged contract.
+
+**Never blocking on its own.** One consequence is not advisory: `alignment.md` in `changed[]` means the Spec gate at 5.0d judged a criteria list that is no longer the one on disk, so its verdict describes a contract that no longer exists. 5.0d is re-run, or its `gates_run[]` entry becomes `skipped` with `unresolved: true`, which step 8 rule 2 already treats as fail-closed. Observed live: a review corrected two architecture documents and deleted four acceptance criteria describing a withdrawn check, between one run of the Spec gate and the next. A criterion that no longer exists cannot be reported as unimplemented.
 
 **`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
