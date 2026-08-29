@@ -381,7 +381,11 @@ When no baseline exists, or the diff cannot run, the gate records `contract_rech
 
 **What changed after the last critique pass? (v5.35.3+)** The record carries `closing_fixes`
 `{applied, verified_by, reason}`. `applied: 0` passes. `applied > 0` needs a named `verified_by`,
-and when that is the fix's own author it needs a reason as well.
+and when that names the fix's own author, or nobody, it needs a reason as well. The match is on the
+word anywhere in the string, not the whole string, because the honest answer is usually mixed:
+the first real use of this field recorded two fixes read by a fresh context and four resting on
+the author's own tests. An exact match let that answer through without a reason, which made the
+check unable to fire on the most truthful thing a build can write.
 
 The rung critiques a build, findings come back, and the findings get repaired. On the path where
 that repair is the last thing to happen, nothing critiques it: under per-component rounds the

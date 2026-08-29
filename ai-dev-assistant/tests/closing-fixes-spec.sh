@@ -94,7 +94,43 @@ d=$(mktask); write_record "$d" '.closing_fixes={"applied":2,"verified_by":"autho
   "reason":"both are comment-only edits with no branch change, diffed by the owner"}'
 run "$d"
 verdict_is pass "author-verified WITH a reason is a decision, and passes"
-msg_has "without independent verification" "the record says plainly what it shipped"
+msg_has "were not all independently verified" "the record says plainly what it shipped"
+
+# --- the verifier is usually MIXED, and that is the answer the rule has to catch ---
+#
+# First real use wrote "fresh-context agent for fixes 1 and 2; author for 3-6". An exact match on
+# author|none|self fell through to the free-text branch, so the most truthful answer a build can
+# give was the one answer that skipped the reason requirement.
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":6,
+  "verified_by":"fresh-context agent for fixes 1 and 2; author for 3 through 6"}'
+run "$d"
+verdict_is fail "a MIXED verifier naming the author still needs a reason"
+rc_is 1 "and exits non-zero"
+msg_has "among their verifiers" "the failure names what it caught"
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":6,
+  "verified_by":"fresh-context agent for fixes 1 and 2; author for 3 through 6",
+  "reason":"fixes 1 and 2 could destroy published content and were read by a fresh context; 3 to 6 are covered by the author tests and a gate re-run"}'
+run "$d"
+verdict_is pass "a mixed verifier WITH a reason passes"
+msg_has "were not all independently verified" "the record says the confirmation was partial"
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":2,"verified_by":"nobody"}'
+run "$d"
+verdict_is fail "nobody is caught the same way"
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":2,"verified_by":"left unverified"}'
+run "$d"
+verdict_is fail "unverified is caught the same way"
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":2,"verified_by":"the authorship reviewer"}'
+run "$d"
+verdict_is pass "a longer word merely containing author is not a match"
+
+d=$(mktask); write_record "$d" '.closing_fixes={"applied":2,"verified_by":"AUTHOR"}'
+run "$d"
+verdict_is fail "the match is case-insensitive"
 
 echo "----"
 if [ "$FAIL" -eq 0 ]; then echo "closing-fixes-spec: all assertions passed"; else
