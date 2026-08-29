@@ -29,9 +29,9 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). Capture the output for envelope construction in step 4, **including `analyzers_ran` and `tools_absent[]`** — `solid-check.sh` emits both on the `--changed` path and on the standard path, and both belong in `--details` so a reader can see how much of the gate actually ran.
+3. **Invoke the check** — execute the `/code-quality:solid` flow as documented in the `code-quality-tools` plugin's `commands/solid.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. When `--files` is absent, run the flow's standard whole-project scan (auto-detect project type, run the solid check, surface findings). Capture the console output; step 4 reads the report.
 
-4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:solid` wrote a JSON report to `.reports/solid.json` (disk-read fallback), capture its path.
+4. **Read the report, then classify** — locate `solid-report.json` via `report-dir.sh --latest` and resolve the verdict from it per the "Verdict interpretation" section below, which is ordered coverage-first. The report is the primary source; the console text is the last resort and sets the verdict only when no report exists. Extract actionable findings into `messages[]`, and capture the report's absolute path plus `analyzers_ran`, `tools_absent[]`, `tools_failed[]` and `tools_unmeasured[]` for `--details`.
 
 5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
@@ -39,23 +39,90 @@ Run the SOLID quality gate (SOLID principles compliance (single responsibility, 
 
 7. **Print CLI summary** — show verdict, top 3 messages, and the persisted-result paths. When invoked non-interactively (chained from `/validate:all` or CI equivalents), signal verdict via exit code: 0 for `pass`/`warning`/`skipped`; 1 for `fail`. In interactive use the printed summary IS the signal — Claude does not literally exit the session. User workflow is NEVER blocked regardless of verdict.
 
+## Where the result comes from
+
+**The report file is the source of the verdict. The console text is not.** Every gate
+in `code-quality-tools` writes `<report-dir>/solid-report.json` on **every** path it can take,
+including the ones where it measured nothing, and that file carries the fields a verdict
+needs: `status`, `rating`, `mode`, `measured`, `skip_reason`, `tools_absent[]`,
+`tools_failed[]`, `tools_unmeasured[]`, `analyzers_ran`. Its console line does not. This
+wrapper used to claim "no stable JSON surface exists yet upstream" and parse prose
+instead, and that claim was false when it was written.
+
+Parsing prose is not merely less precise here, it inverts the answer. `solid-check.sh` prints `[PASS] SOLID compliance acceptable` when phpstan and phpmd are
+both absent, so the old table's first row — "Explicit PASS" — matched, won, and the
+coverage rows below it never ran.
+
+**Locating the report.** Run `bash "<code-quality-tools path>/skills/code-quality-audit/scripts/core/report-dir.sh" --latest`
+(Bash) and read `solid-report.json` from the directory it prints. `--latest` is the reader's mode:
+it answers where the most recent run actually wrote, which is a different question from
+where the next one would. Do **not** hardcode `.reports/` — it stopped being the default
+in code-quality-tools v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`, so a
+wrapper looking there finds nothing on a normal run and concludes the gate did not run.
+`--latest` prints nothing and exits 1 when no run has ever written; treat that exactly
+like a missing file, below.
+
 ## Verdict interpretation
 
-`/code-quality:solid` output has to be mapped to our 4-value verdict enum. Heuristics (ordered; first match wins):
+Resolve in this order. **A is checked before B and B before C** — a coverage question
+answered after a findings question is answered too late, which is how the previous
+version of this section went wrong.
 
-| Signal in output | Our verdict |
+**A. Was a report written at all?** No `solid-report.json` — the file is missing, unparseable, or
+`--latest` exited 1 — ⇒ `skipped`, with `unresolved: true` in `messages[]` saying no
+report was found and naming where it looked. A gate that wrote no report cannot tell you
+what it measured, and its console text is the least reliable thing in the room. Use the
+text heuristics at the bottom of this section **only** to populate `messages[]` with
+whatever the run did say; they never set the verdict on this path.
+
+**B. Did it measure anything?** Ordered; first match wins.
+
+| Signal in `solid-report.json` | Our verdict |
 |---|---|
-| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | `pass` |
-| Explicit "FAIL" / "✗" / "violations found" / "tests missing for <x>" | `fail` |
-| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | `warning` |
-| `analyzers_ran == 0` — every analyzer absent | `skipped`, and put `unresolved: true` in `messages[]`, naming each entry of `tools_absent[]` |
-| `analyzers_ran >= 1` with a non-empty `tools_absent[]` — some analyzers ran, some did not | `warning`, naming the absent tools and what went unchecked. Never `pass` |
-| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | `skipped` |
-| Ambiguous or empty output | `warning` (conservative — surface for human review) |
+| `status` or `rating` is `unmeasured`, or `measured` is `false` | `skipped`, and put `unresolved: true` in `messages[]` quoting the report's reason |
+| Every **binary** analyzer the report names — `phpstan` and `phpmd` — appears in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]` | `skipped`, and put `unresolved: true` in `messages[]`, naming them |
+| Some but not all of them do | `warning`, naming the absent or failed tools and what went unchecked. Never `pass` |
+| Otherwise | fall through to C |
 
-SOLID is multi-analyzer — phpstan, phpmd, and an always-on `\Drupal::` static-call grep that needs no binary — so unlike DRY it has a real partial state, and the two rows above are the reason it needs two: a run with phpmd missing still measured something, a run with nothing installed measured nothing at all. Reporting either as `pass` says the code has no SOLID violations when what happened is that nobody looked. The `analyzers_ran == 0` row fails closed via `/review` step 8 rule 2; the partial row surfaces the hole without blocking, because a partial measurement is still a measurement.
+**Do not use `analyzers_ran == 0` as the zero-coverage test.** It is a trap.
+`solid-check.sh` increments that counter for its always-on `\Drupal::` static-call grep,
+which needs no binary, so on any project with a readable modules path it is `>= 1` even
+when phpstan and phpmd are both missing — and when the modules path IS missing the status
+is `unmeasured`, which row 1 already catches. The counter is real and worth carrying in
+`--details`, but it counts checks, not coverage. Derive coverage from the tool lists.
 
-If `/code-quality:solid` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
+The three rows exist because SOLID, unlike DRY, has a real partial state. With phpstan
+and phpmd gone the grep still runs, so something was measured and `unresolved` would
+overstate the damage; with all three gone nothing was. What neither may be is `pass`:
+`solid-check.sh` prints `[PASS] SOLID compliance acceptable` and sets `status:"pass"` with
+both analyzers absent, because `tools_absent[]` deliberately does not move its own verdict
+(it says so at `drupal/solid-check.sh` near line 552) — that is the gate declining to
+judge the machine, and reading coverage off it is this wrapper's job, not the gate's.
+
+**C. It measured. Map the finding.**
+
+| `status` in `solid-report.json` | Our verdict |
+|---|---|
+| `pass` | `pass` |
+| `warning` or `partial` | `warning` |
+| `fail` | `fail` |
+| anything unrecognised | `warning`, naming the status verbatim |
+
+The gate's exit code corroborates and never overrides: `4` is `unmeasured` (B catches it
+from the report; if the report and the exit code disagree, the disagreement itself is
+`unresolved`), `1` is a real fail, `2` is a bad invocation, `0` covers pass, warning and
+the benign skips.
+
+**Last resort — text heuristics.** For `messages[]` only, and for the verdict **only** on
+path A, where there is nothing else. Ordered; first match wins.
+
+| Signal in output | Reading |
+|---|---|
+| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | clean |
+| Explicit "FAIL" / "✗" / "violations found" | findings |
+| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | observations |
+| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | a skip |
+| Ambiguous or empty output | say so in `messages[]` |
 
 ## Emitting the envelope (per `references/validation-gate-result.md`)
 
@@ -66,7 +133,7 @@ If `/code-quality:solid` emits JSON via a `--json` flag (future enhancement), pr
   --task-folder "<abs path to the task folder>" \
   --verdict "<pass|warning|fail|skipped>" \
   --details "$(jq -n \
-      --arg raw "<path to .reports/solid.json if produced, else empty>" \
+      --arg raw "<absolute path to solid-report.json as resolved by report-dir.sh --latest, else empty>" \
       --arg cqt "<version from plugin.json of code-quality-tools>" \
       '{source: "code-quality-tools:solid",
         raw_output_path: (if $raw == "" then null else $raw end),
@@ -138,4 +205,4 @@ On `pass`: 0-2 messages (usually "all checks passed" + a brief observation). On 
 
 ## Output
 
-Writes the result envelope to `<task_folder>/validations/latest/solid.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:solid` flow may also leave `.reports/solid.json` in the code being checked; when it does, its path is recorded in the envelope rather than written by this command. Prints the verdict, the top messages, and both persisted paths.
+Writes the result envelope to `<task_folder>/validations/latest/solid.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:solid` flow writes `solid-report.json` wherever `report-dir.sh` resolves — by default outside the audited repository, never `.reports/` unless `REPORT_DIR_IN_REPO=1` asked for it; its path is recorded in the envelope rather than written by this command. Prints the verdict, the top messages, and both persisted paths.

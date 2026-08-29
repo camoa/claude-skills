@@ -28,7 +28,8 @@ JSON_MODE=0
 # commands have had since v5.29.0 and this one never did. v5.33.0 raised
 # `review` 127 -> 129 for step 5.0f, the assertion gate that makes the
 # build-critique rung able to fail, and v5.35.5 raised it 129 -> 131 for step
-# 8b, the contract-drift diff. This script is not called by the Makefile or any
+# 8b, the contract-drift diff; v5.35.6 raised it 131 -> 132 for step 8's rule on a
+# hard-block `warning`, a legal verdict no rule named. This script is not called by the Makefile or any
 # test, so a budget it never caught up on went unreported: keep the `review`
 # number in lockstep with tests/review-command-spec.sh, which is the copy CI
 # runs. Every command
@@ -41,7 +42,7 @@ declare -A BUDGETS=(
   [design]=80
   [implement]=120
   [complete]=100
-  [review]=131
+  [review]=132
 )
 
 # Body line count = total lines minus frontmatter (between first two --- lines, inclusive).

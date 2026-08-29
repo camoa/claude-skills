@@ -3,43 +3,87 @@
 ## [5.35.6] - 2026-08-29
 
 ### Fixed
-- **A quality gate whose analyzer was not installed reported the answer a clean tree would
+- **A quality gate whose analyzers were missing reported the answer a clean tree would
   have given.** With phpcpd absent, `dry-check.sh` is honest — `status:"skipped"`,
   `skip_reason:"tool_absent"`, `tools_absent:["phpcpd"]`, exit 0. phpcpd is the DRY gate's
   only analyzer, so duplication was never measured. `commands/validate-dry.md` mapped that
   onto a plain `skipped`, `/review` step 8 rule 4 listed "a tool-unavailable soft skip"
   among the benign states that do not prevent a pass, and the review went green carrying a
-  duplication verdict nothing had produced. phpmd and the SOLID complexity layer had the
-  same hole with a partial-coverage twist: phpstan and an always-on `\Drupal::` grep still
-  ran, so part of that gate was real and part of it was silence.
+  duplication verdict nothing had produced.
 
-- **The four wrappers now mark a could-not-check run `unresolved`.** `validate-tdd.md` has
-  emitted the literal `unresolved: true` inside `messages[]` since its own no-test-executed
-  path was found, and `review.md` step 8 rule 2 reads it back out and fails closed. Nothing
-  else knew: the string appeared zero times in `validation-envelope-write.sh`, zero times in
-  the envelope contract, and zero times in the other three wrappers. `validate-dry.md` now
-  emits it when phpcpd is absent; `validate-solid.md` and `validate-security.md` emit it on
-  `analyzers_ran == 0` and report partial coverage as `warning`, naming the absent tools —
-  never `pass`. `tools_absent` and `analyzers_ran` ride through `--details`, which passes
-  arbitrary structured JSON verbatim, so no script changed.
+- **The four wrappers now resolve their verdict from the gate's JSON report, not its
+  console output.** This is the actual fix, and the first attempt at it was decorative
+  without it. The verdict tables are documented as "ordered; first match wins" and their
+  first row matches `Explicit "PASS" / "✓"` — while `solid-check.sh` prints
+  `[PASS] SOLID compliance acceptable` with phpstan AND phpmd both absent, and
+  `security-check.sh` prints `✓ Security audit passed` with gitleaks, semgrep, trivy and
+  psalm all absent, because `tools_absent[]` deliberately does not move either gate's own
+  verdict. A coverage row added below that first row can never evaluate.
+
+  `dry-report.json`, `solid-report.json` and `security-report.json` are written on every
+  path including the absent and unmeasured ones, and carry `status`, `rating`, `mode`,
+  `measured`, `skip_reason`, `tools_absent[]`, `tools_failed[]`, `tools_unmeasured[]` and
+  `analyzers_ran`. The claim these files carried — "v1 uses heuristics because no stable
+  JSON surface exists yet upstream" — was false when it was written, and is gone. Each
+  wrapper now locates its report with `report-dir.sh --latest` rather than a hardcoded
+  `.reports/`, which stopped being the default in code-quality-tools v3.9.6 and would have
+  found nothing on a normal run.
+
+- **The states that mean "nothing was checked" have rules, and they are checked first.**
+  Each wrapper resolves report-present, then coverage, then findings, in that order. A
+  missing report is `unresolved`; so is `status:"unmeasured"` / `measured:false`, the
+  gates' own exit-4 state, which previously fell through "Ambiguous or empty output" to a
+  benign `warning`. Zero coverage on a multi-analyzer gate is derived from the tool lists,
+  **not** from `analyzers_ran == 0`: that counter is unreachable at zero for SOLID, whose
+  always-on `\Drupal::` grep needs no binary and increments it, and it is absent entirely
+  from `security-check.sh`'s standard path. `tools_failed[]` now disqualifies exactly as
+  `tools_absent[]` does — a crashed analyzer produced no evidence either. Partial coverage
+  is `warning`, naming what went unchecked, never `pass`.
+
+- **`validate-tdd.md` is the deliberate exception, and now says so.** `tdd-workflow.sh`
+  writes no JSON report on any path and states in its own source that "the exit code is
+  not a fallback channel — it is the only one there is". Its primary channel is therefore
+  the exit code, with `4` (`CQT_EXIT_UNMEASURED`) mapping to `unresolved`. Applying the
+  missing-report rule there would have marked every TDD run unresolved and fail-closed
+  every review on a gate behaving exactly as designed.
+
+- **`/review` step 8 now has a rule for `warning`.** It is a legal `gates_run[].verdict`
+  per `references/gate-audit-schema.md` that none of the four rules named, so aggregation
+  fell off the end of the list and a partially-covered gate reached a green
+  `overall_verdict` with no rule allowing it. New rule 4 resolves a hard-block `warning` to
+  `fail` — `overall_verdict` has only {`pass`, `fail`, `bypassed`} available and `bypassed`
+  means a human recorded a reason, so `fail` is the one left; it routes to step 9 where
+  `[s]` records on disk why the gap is accepted. Ranked below bypass, above the pass rule.
 
 - **`references/validation-gate-result.md` documents the convention it depended on.** The
-  file that calls itself the shared envelope contract never mentioned `unresolved`: what the
-  string is, that it lives in `messages[]`, that `review.md` step 8 rule 2 consumes it
+  file that calls itself the shared envelope contract never mentioned `unresolved`: what
+  the string is, that it lives in `messages[]`, that `review.md` step 8 rule 2 consumes it
   fail-closed, and which path in each gate must emit it. Its `skipped` definition folded
-  "the underlying tool is unavailable" into a benign skip, which was the bug in written form.
-  `tools_absent` and `analyzers_ran` are now documented as stable `--details` keys.
+  "the underlying tool is unavailable" into a benign skip, which was the bug in written
+  form. `tools_absent`, `tools_failed` and `analyzers_ran` are documented as stable
+  `--details` keys, with the two traps written down beside them.
 
 - **Two stale line budgets.** `tests/review-command-spec.sh`'s comment said the review body
   budget was 129 while the line below enforced 131, and `scripts/command-body-lengths.sh`
   still carried 129 — a script no Makefile target or test calls, so it reported `review.md`
-  over budget and nothing saw it.
+  over budget and nothing saw it. Both now read 132, raised for step 8's new rule.
 
 ### Added
-- `tests/gate-coverage-honesty-spec.sh` — asserts each wrapper emits the marker on its own
-  could-not-check path, that the contract documents it, and that `review.md` rule 2 still
-  reads it out of `validations/latest/<gate>.json`. That last one is the point: delete the
-  consumer and every producer becomes decorative while all their own assertions stay green.
+- `tests/gate-coverage-honesty-spec.sh` — 72 assertions on the DECISION and its ORDER,
+  not on the presence of words. Every coverage rule is paired with an assertion that it is
+  reached before the findings rule that would otherwise shadow it, because a rule MOVED
+  below `Explicit "PASS"` is still present and still dead. It also asserts the consumer
+  half: delete `review.md` rule 2 and every producer becomes decorative while all of their
+  own assertions stay green.
+
+### Known remaining
+- **The Next.js gates have no coverage surface, and this release does not add one.**
+  `nextjs/solid-check.sh` emits neither `analyzers_ran` nor `tools_absent[]`, so a wrapper
+  cannot establish what it measured; `nextjs/dry-check.sh` exits 1 on a missing jscpd and
+  writes no report at all. The second case is safe by construction — no report is
+  `unresolved` under the new rule — but the first means a Next.js SOLID run reports its own
+  `status` with coverage unstated. Fixing that means changing the Next.js gates in
+  `code-quality-tools`, which is a separate change to a separate plugin.
 
 ## [5.35.5] - 2026-08-29
 

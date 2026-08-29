@@ -99,18 +99,47 @@ into a pass. That consumer is the only thing making the marker load-bearing: if
 rule 2 is ever deleted, every producer below becomes decorative.
 
 **When a wrapper must emit it.** Whenever the gate was invoked and could not
-actually check the thing it exists to check:
+actually check the thing it exists to check. Each wrapper resolves this from the
+gate's **JSON report**, located with
+`scripts/core/report-dir.sh --latest` — never from the console text, and never
+from a hardcoded `.reports/`, which stopped being the default in
+code-quality-tools v3.9.6:
 
-| Gate | The could-not-check path |
-|---|---|
-| `tdd` | No `--files` list, so no test ran — the whole-tree mode is usage text, not a scan |
-| `dry` | phpcpd absent. It is the gate's only analyzer, so duplication was not measured at all |
-| `solid` | `analyzers_ran == 0` — phpstan and phpmd both absent |
-| `security` | `analyzers_ran == 0`, or every entry of `meta.tools` absent or unmeasured |
+| Gate | Report | The could-not-check path |
+|---|---|---|
+| `dry` | `dry-report.json` | `status`/`rating` `unmeasured`, `measured:false`, `skip_reason:"tool_absent"`, or phpcpd in `tools_absent[]`/`tools_failed[]`. It is the gate's only analyzer, so any of those means duplication was not measured at all |
+| `solid` | `solid-report.json` | `unmeasured`, or every **binary** analyzer (`phpstan`, `phpmd`) in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]` |
+| `security` | `security-report.json` | `unmeasured`, or every entry of `meta.tools[]` in `meta.tools_absent[]` ∪ `meta.tools_failed[]` ∪ `meta.tools_unmeasured[]` |
+| `tdd` | none — by design | Exit `4` (`CQT_EXIT_UNMEASURED`), no `--files` list so no test ran, or output carrying no evidence a test ran |
+
+**A missing report is itself unresolved** for the three gates that write one: a
+gate that wrote no report cannot tell you what it measured. `tdd` is the
+deliberate exception — `tdd-workflow.sh` writes no JSON report on any path and
+says so in its own source, so its primary channel is the exit code and treating
+an absent report as unresolved there would fail-close every review.
+
+**Do not derive coverage from `analyzers_ran`.** It counts checks, not
+analyzers: `solid-check.sh` increments it for its always-on `\Drupal::` grep,
+which needs no binary, so it is `>= 1` with phpstan and phpmd both gone. And
+`security-check.sh` emits it only in `--changed` mode, so it is absent from half
+of that gate's runs. Carry it in `details`; derive coverage from the tool lists.
+
+**`tools_failed[]` counts as heavily as `tools_absent[]`.** An analyzer that was
+found and returned nothing usable produced no evidence either. Omitting it from
+the derivation is how a crashed gitleaks reads as a clean one.
 
 A gate that ran SOME of its analyzers is a different state: `warning`, naming
 what went unchecked, never `pass` and never `unresolved`. A partial measurement
-is still a measurement.
+is still a measurement — and since v5.35.6 `review.md` step 8 rule 4 names
+`warning` explicitly, so that state can no longer reach a green
+`overall_verdict` by having no rule.
+
+**The gate's own `status` is not a coverage signal, and must not be read as
+one.** `solid-check.sh` prints `[PASS] SOLID compliance acceptable` with both
+analyzers absent, and `security-check.sh` prints `✓ Security audit passed` with
+every scanner absent, because `tools_absent[]` deliberately does not move their
+verdicts — that is each gate declining to judge the machine it runs on. Reading
+coverage off the tool lists is the wrapper's job, not the gate's.
 
 What is NOT unresolved: a `--skip` bypass, a `skipped-not-shipped` gate, the
 Spec axis skipping for want of an `alignment.md`, an empty change set. Those
@@ -129,15 +158,17 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
   "raw_output_path": "/abs/path/.reports/tdd.json",
   "code_quality_tools_version": "3.0.0",
   "analyzers_ran": 2,
-  "tools_absent": ["phpmd"]
+  "tools_absent": ["phpmd"],
+  "tools_failed": []
 }
 ```
 
 - `source` — the underlying skill invoked (always `code-quality-tools:<gate>`)
 - `raw_output_path` — absolute path to the unmodified output from the wrapped tool, for deep diagnosis
 - `code_quality_tools_version` — version of the dependency at run time
-- `analyzers_ran` — how many of the gate's analyzers actually produced a measurement. Copied from the underlying report where it emits one: `solid-check.sh` does on both paths, `security-check.sh` only in `--changed` mode, and on its standard path the wrapper derives it from `meta.tools` minus `meta.tools_absent`/`meta.tools_unmeasured`. Optional, but the field that lets a reader tell a clean gate from an unrun one
-- `tools_absent` — the analyzer names the underlying report listed as not installed. Optional; present whenever the report names any
+- `analyzers_ran` — the underlying report's own counter, copied through where it exists (`solid-check.sh` on both paths, `security-check.sh` in `--changed` mode only). Observability, **not** the coverage test: it counts checks, and one of SOLID's needs no binary
+- `tools_absent` — analyzer names the report listed as not installed. Optional; present whenever the report names any
+- `tools_failed` — analyzer names that were found and returned nothing usable. Disjoint from `tools_absent` and equally disqualifying: neither produced evidence
 
 Both are passed straight through — `--details` is handed to the emitter verbatim
 and only checked for object shape and duplicate keys, so carrying them needs no

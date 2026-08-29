@@ -29,7 +29,7 @@ for field in description allowed-tools argument-hint; do
   fi
 done
 
-# 2. Body line count ≤131 (120 -> 125 in v5.23.0 for the mandatory ## Output
+# 2. Body line count ≤132 (120 -> 125 in v5.23.0 for the mandatory ## Output
 #    section; 125 -> 127 in v5.30.3 for the step-0 phase declaration the other
 #    three phase commands have had since v5.29.0 and this one never did;
 #    127 -> 129 in v5.33.0 for step 5.0f, the gate that makes the build-critique
@@ -37,13 +37,19 @@ done
 #    enforcement and none that could;
 #    129 -> 131 in v5.35.5 for step 8b, the contract-drift diff. Step 0 absorbed the
 #    baseline capture rather than adding a step of its own, so the growth is the one
-#    genuinely new gate step and not its prose.
+#    genuinely new gate step and not its prose;
+#    131 -> 132 in v5.35.6 for step 8's rule on a hard-block `warning`. `warning` is a
+#    legal gates_run[].verdict that none of the four rules named, so aggregation fell off
+#    the end of the list and a partially-covered gate reached green with no rule allowing
+#    it. The rules are an ORDERED resolution and their rank is the contract, so this could
+#    not be folded into the `pass` rule's line without leaving the new case unranked —
+#    which is the same defect in a different place.
 #    kept in lockstep with scripts/command-body-lengths.sh)
 BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
-if [ "$BODY_LINES" -le 131 ]; then
-  pass_check "body line count $BODY_LINES ≤ 131"
+if [ "$BODY_LINES" -le 132 ]; then
+  pass_check "body line count $BODY_LINES ≤ 132"
 else
-  fail_check "body line count $BODY_LINES > 131"
+  fail_check "body line count $BODY_LINES > 132"
 fi
 
 # 3. 5-mechanism markers
