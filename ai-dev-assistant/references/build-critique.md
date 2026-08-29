@@ -366,6 +366,18 @@ goes into the record's `contract` block.
 | `changed[]` non-empty, no `reason` | fail | `true` | 1 |
 | `changed[]` non-empty with a `reason` | pass | `false` | 0 |
 | `baseline: captured`, nothing changed | pass | `false` | 0 |
+| `changed[]` disagrees with the baseline on disk | fail | `true` | 1 |
+
+**`changed[]` is re-derived, not read (v5.35.1+).** The gate runs `contract-baseline.sh diff`
+itself and compares the result against what the record claims. They must agree. This closes a
+gap that only a live record exposed: one asserted `changed: []` and, in the same object, a
+`reason` arguing at length that the empty diff was "true and meaningless" -- while the diff on
+that same folder returned `status: changed` and named two architecture files a later round had
+rewritten. Both the count and the argument built on it were wrong, and the rule directly beneath
+(a changed file needs a reason) keys on that count, so it could not fire. The measured set is
+also what the reason requirement now keys on, so a record cannot under-report its way past it.
+When no baseline exists, or the diff cannot run, the gate records `contract_recheck` as
+`unresolved` or `unavailable` and manufactures no agreement in either direction.
 
 **Amending the contract mid-build is legitimate.** A design can be discovered to be
 unbuildable, and on the build that produced this rule one was: its recipe for a fixture shape
@@ -399,9 +411,9 @@ without merging their verdicts.
 | `phase` | string | Always `"implement"`. |
 | `verdict` | enum | `pass` \| `concern` \| `critical` \| `unresolved` \| `skipped`. The rung's overall answer. |
 | `components[]` | array | One row per component: `component`, `risk_tier`, `lenses[]`, `verdict`, `blocking`, `checkpoint_before`, `checkpoint_after`, `critique_ref`, `findings_count`. |
-| `components_declared` | integer | How many components the architecture declares. |
-| `components_critiqued` | integer | How many actually got a critique. |
-| `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. |
+| `components_declared` | integer or array | How many components the architecture declares. An array of component names is accepted and its length is the count. |
+| `components_critiqued` | integer or array | How many actually got a critique. Same two shapes. |
+| `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. **Every entry needs a non-empty `reason`.** |
 | `alignment` | object | `{verdict, missing_requirements[], scope_creep[], spec_ref}`, or `{verdict: "skipped", reason}`. |
 | `tdd` | object | `{red_observed, passed_first_run, unobserved[], reason}` — the RED-observation half, from loop step 4, aggregated across the whole phase (v5.34.0+, required). See above. |
 
@@ -410,6 +422,20 @@ and a partial run must not be able to read as a complete one.** A rung that crit
 recorded only its three green rows is a record that cannot say what it did not look at,
 which is the failure this framework keeps finding in itself. Any gap is named in
 `uncritiqued[]` with a reason.
+
+**A reason per gap, checked (v5.35.1+).** Until v5.35.1 the gate printed "N left uncritiqued
+with reasons" and no code read a single one, so the sentence above was a convention rather than
+a rule. An entry naming a component and saying nothing about why it was skipped now fails. A
+bare string in place of an object fails for the same cause: it can carry no reason. This is the
+mechanism that forces a deviation from one-component-per-rung into the record, because a build
+that critiques its components together owes a reason for each one it did not critique alone.
+
+**Both count fields accept two shapes (v5.35.1+).** A number, or the list of component names
+whose length is that number. A live record wrote the list form and every arithmetic test against
+it printed `integer expression expected` to stderr and evaluated FALSE, silently disabling the
+check beneath: seven declared, none critiqued, and the gate could not fail on it. A shape that
+is neither collapses to the omission failure, which is the honest answer for a field the gate
+cannot read.
 
 `verdict: "skipped"` is legitimate in exactly two cases, each carrying its reason: the
 phase-level checkpoint range is empty, or no architecture file exists (a task with no design

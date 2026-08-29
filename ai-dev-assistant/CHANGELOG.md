@@ -1,5 +1,48 @@
 # Changelog
 
+## [5.35.1] - 2026-08-29
+
+### Fixed
+- **`uncritiqued[]` entries now need a reason, and the gate reads them.** The line printed
+  `"N left uncritiqued with reasons"` and no code looked at a single reason, so the sentence was
+  a convention rather than a rule. A build that decided not to critique something and would
+  rather not say so produced the same artifact as one that explained itself. An entry naming a
+  component and saying nothing about why now fails, and a bare string in place of the object
+  fails for the same cause: it can carry no reason.
+
+  This is also what forces a deviation from one-component-per-rung into the record. A build that
+  critiques its components together owes a reason for each one it did not critique alone, which
+  is the honest way to record a choice the framework does not otherwise capture.
+
+- **`contract.changed` is measured rather than read.** It described something this plugin can
+  compute and was reaching the record as a field an agent wrote. Seen live: a record asserting
+  `changed: []` alongside a `reason` arguing at length that the empty diff was "true and
+  meaningless", while `contract-baseline.sh diff` on that same folder returned `status: changed`
+  and named two architecture files a later round had rewritten. Both the count and the argument
+  built on it were wrong, and the rule directly beneath — a changed contract file needs a reason
+  — keys on that count, so it could not fire.
+
+  The gate now runs the diff itself and fails when the record disagrees with disk. The measured
+  set is what the reason requirement keys on, so a record cannot under-report its way past it.
+  With no baseline, or a diff that cannot run, it records `contract_recheck` as `unresolved` or
+  `unavailable` and manufactures no agreement in either direction.
+
+- **`components_declared` and `components_critiqued` accept the list shape they were already
+  being written in.** Both arrive either as a number or as the array of component names whose
+  length is that number. Against the array, every arithmetic test printed `integer expression
+  expected` to stderr and evaluated FALSE — which silently disabled the check directly beneath
+  it, so a record declaring seven components and critiquing none could not fail on it. Same
+  defect as v5.35.0's `rounds`-as-string: a check keyed on a type it assumed rather than
+  established. A shape that is neither collapses to the omission failure, which is the honest
+  answer for a field the gate cannot read.
+
+  All three were found by running the gate against a live record, not by reading it.
+
+### Testing
+- `tests/record-claims-recheck-spec.sh`, 36 assertions against real fixture task folders with
+  real baselines captured by `contract-baseline.sh`. Mutation-verified: removing the reason
+  check turns 8 assertions red, removing the disk comparison 3, reverting the count handling 6.
+
 ## [5.35.0] - 2026-08-28
 
 ### Added

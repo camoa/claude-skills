@@ -117,8 +117,23 @@ if [ -e "$REC" ]; then
   set_ev blocking_components "$BLOCKING"
   BLOCKING_N=$(jq -r 'length' <<<"$BLOCKING")
 
-  DECLARED=$(jq -r '(.components_declared // -1)' <<<"$PAYLOAD")
-  CRITIQUED=$(jq -r '(.components_critiqued // -1)' <<<"$PAYLOAD")
+  # Both count fields reach this record in two shapes, and both are honest: a number, or the
+  # list of component names whose length IS the number. A live record wrote the list form, and
+  # every arithmetic test below then compared a pretty-printed JSON array against an integer --
+  # bash printed `integer expression expected` to stderr and evaluated the test FALSE. The
+  # casualty was the check directly beneath: a build that declared seven components and
+  # critiqued none could not fail it. Same shape as the `rounds`-as-string defect: a check
+  # keyed on a field whose type it assumed rather than established.
+  #
+  # A shape that is neither collapses to -1, which the omission check below already treats as
+  # a record that cannot say what it did not look at.
+  as_count() { # as_count <json value>
+    jq -r 'if type == "number" then .
+           elif type == "array" then length
+           else -1 end' <<<"${1:-null}" 2>/dev/null || printf '%s' -1
+  }
+  DECLARED=$(as_count "$(jq -c '(.components_declared // null)' <<<"$PAYLOAD")")
+  CRITIQUED=$(as_count "$(jq -c '(.components_critiqued // null)' <<<"$PAYLOAD")")
   UNCRIT_N=$(jq -r '(.uncritiqued // []) | length' <<<"$PAYLOAD")
   set_ev components_declared "$DECLARED"
   set_ev components_critiqued "$CRITIQUED"
@@ -179,7 +194,27 @@ if [ -e "$REC" ]; then
   fi
 
   if [ "$UNCRIT_N" -gt 0 ]; then
-    add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued with reasons"
+    # This line used to say "left uncritiqued with reasons" and nothing checked that a single
+    # one carried a reason. The claim was in the message, not in the code -- the same shape as
+    # every defect this rung was built to catch. An entry naming a component and saying nothing
+    # about why it was skipped is what a build produces when it decided not to critique
+    # something and would rather not say so. That decision is legitimate; leaving it unstated
+    # is what makes a partial run read like a complete one.
+    UNREASONED=$(jq -c \
+      '[(.uncritiqued // [])[]
+        | if type == "object"
+          then select(((.reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+               | (.component // "unnamed")
+          else tostring end]' \
+      <<<"$PAYLOAD" 2>/dev/null) || UNREASONED='[]'
+    UNREASONED_N=$(jq -r 'length' <<<"$UNREASONED" 2>/dev/null) || UNREASONED_N=0
+    if [ "$UNREASONED_N" -gt 0 ]; then
+      set_ev unreasoned_uncritiqued "$UNREASONED"
+      add_msg "$UNREASONED_N uncritiqued component(s) carry no reason: $UNREASONED"
+      add_msg "say why each was not critiqued; an unexplained gap is indistinguishable from one nobody noticed"
+      emit fail true "" 1
+    fi
+    add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued, each with a reason"
   fi
 
   # ------------------------------------------------------- the RED observation (v5.34.0+)
@@ -388,6 +423,48 @@ if [ -e "$REC" ]; then
   CON_REASON=$(jq -r '(.reason // "") | tostring' <<<"$CON")
   [ "$CON_REASON" = "null" ] && CON_REASON=""
   set_ev contract "$CON"
+
+  # Re-derive rather than trust. `changed` describes something this plugin can measure, and it
+  # was reaching the record as a field an agent wrote. Seen live: a record asserting
+  # `changed: []` and, in the same object, a reason arguing at length that the empty diff was
+  # "true and meaningless" -- while `contract-baseline.sh diff` on that same folder returned
+  # `status: changed` and named two architecture files a later round had rewritten. Both the
+  # count and the argument built on it were wrong, and the check downstream of them (a change
+  # needs a reason) could not fire because the count it keys on said zero.
+  #
+  # So the count comes from disk. When the baseline is missing or the sibling script cannot
+  # run, this records `unavailable` and says so rather than inventing agreement -- the gate's
+  # own question is whether the build was challenged, and a broken install is not an answer
+  # to it either way.
+  CB_SCRIPT="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/contract-baseline.sh"
+  CON_RECHECK="unavailable"
+  DISK_DIFF='[]'
+  if [ -f "$CB_SCRIPT" ]; then
+    CB_OUT=$(bash "$CB_SCRIPT" diff "$TASK_DIR" 2>/dev/null) || CB_OUT=""
+    if [ -n "$CB_OUT" ] && jq -e 'type == "object"' >/dev/null 2>&1 <<<"$CB_OUT"; then
+      case "$(jq -r '(.status // "") | tostring' <<<"$CB_OUT")" in
+        changed|unchanged)
+          CON_RECHECK="measured"
+          DISK_DIFF=$(jq -c '((.changed // []) + (.added // []) + (.removed // [])) | sort' <<<"$CB_OUT")
+          ;;
+        *) CON_RECHECK="unresolved" ;;
+      esac
+    fi
+  fi
+  set_ev_s contract_recheck "$CON_RECHECK"
+  if [ "$CON_RECHECK" = "measured" ]; then
+    set_ev contract_changed_on_disk "$DISK_DIFF"
+    CLAIMED=$(jq -c 'sort' <<<"$CON_CHANGED" 2>/dev/null) || CLAIMED='[]'
+    if [ "$CLAIMED" != "$DISK_DIFF" ]; then
+      add_msg "the record says the contract files $CLAIMED changed during the build; the baseline on disk says $DISK_DIFF"
+      add_msg "re-run contract-baseline.sh diff and record what it returns, with a reason for each file"
+      emit fail true "" 1
+    fi
+    # From here the measured set is what the reason requirement keys on, so a record cannot
+    # under-report its way past it.
+    CON_CHANGED="$DISK_DIFF"
+    CON_N=$(jq -r 'length' <<<"$CON_CHANGED")
+  fi
 
   # `late` is the migration state: a task already building when this mechanism landed cannot
   # produce an honest baseline, because the contract has already moved under it. Failing it
