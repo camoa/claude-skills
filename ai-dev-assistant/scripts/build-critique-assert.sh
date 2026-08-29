@@ -24,11 +24,17 @@
 # the one case a "could not tell" reading would wave through — which is exactly how the gap
 # above stayed open. There is deliberately no path here from "no evidence" to `pass`.
 #
-# Usage: build-critique-assert.sh <task_folder> [--change-set-empty]
+# Usage: build-critique-assert.sh <task_folder> [--change-set-empty] [--change-set-file <path>]
 #
 #   --change-set-empty  the caller resolved an empty change set (`/review` step 4's
 #                       `empty_reason: no_changes_anywhere`). Only consulted when there is no
 #                       record at all: nothing changed, so there was nothing to critique.
+#   --change-set-file   the JSON `review-change-set.sh` emitted at `/review` step 4. Required on
+#                       the in-session path (v5.35.5+), where it answers the question no check
+#                       here asked before: is this record about the code being reviewed? The
+#                       caller passes its own resolved change set rather than this script
+#                       re-deriving one, so the gate cannot judge a change set the reviewer is
+#                       not looking at.
 #
 # Emits ONE JSON object on stdout:
 #   { schema_version, task_folder, build_path, verdict, unresolved, bypass_reason,
@@ -45,10 +51,12 @@ set -uo pipefail
 
 TASK_DIR="${1:-}"
 CHANGE_SET_EMPTY=0
+CHANGE_SET_FILE=""
 shift 2>/dev/null || true
 while [ $# -gt 0 ]; do
   case "$1" in
     --change-set-empty) CHANGE_SET_EMPTY=1 ;;
+    --change-set-file) shift; CHANGE_SET_FILE="${1:-}" ;;
     *) ;;
   esac
   shift
@@ -635,6 +643,83 @@ if [ -e "$REC" ]; then
   if [ "$CON_N" -gt 0 ]; then
     add_msg "$CON_N contract file(s) were amended during the build: $CON_REASON"
   fi
+
+  # ------------------------------------------------ is this record about the code being reviewed?
+  #
+  # Every check above asks whether the record is internally consistent. None asks whether it
+  # describes the build in front of the reviewer, and until v5.35.5 nothing did. The record
+  # carried per-component checkpoint ranges as free-text prose that nothing parsed.
+  #
+  # `/review`'s remediate branch guarantees the gap rather than risking it. `[r]` means exit, fix,
+  # re-run — fixing is the point — so every remediation produces a build the record predates.
+  # Observed live: three gates failed, the operator chose [r], eleven files changed including a
+  # deleted branch and a new fixture shape, and the re-run would have read the same record and
+  # passed. The one gate that asks "was this build challenged by something other than the context
+  # that built it?" would have answered yes about the previous build.
+  #
+  # `files_digest` is a sha256 over the sorted file list the critics were handed. The comparison
+  # is deliberately over the file SET and not over content: a file whose content changed after the
+  # critique is caught by `head`, and a set comparison stays meaningful when the change is
+  # uncommitted, which at review time it usually is.
+  #
+  # A record with no `build_identity` cannot say which build it describes. That is unresolved, not
+  # a pass — the same posture as every other could-not-tell in this file. There is no grandfather
+  # clause for records written before the field existed: a record that cannot answer the question
+  # is exactly the state this check exists to surface, and its age does not make it able to answer.
+  BI=$(jq -c '(.build_identity // null)' <<<"$PAYLOAD" 2>/dev/null) || BI=null
+  if [ "$BI" = "null" ]; then
+    set_ev_s build_identity "absent"
+    add_msg "the record does not say which build it describes, so whether the critics saw this code cannot be determined"
+    add_msg "record build_identity {head, files_digest, files} at the close of the rung; see references/build-critique.md"
+    emit fail true "" 1
+  fi
+
+  REC_HEAD=$(jq -r '(.head // "")' <<<"$BI" 2>/dev/null) || REC_HEAD=""
+  REC_DIGEST=$(jq -r '(.files_digest // "")' <<<"$BI" 2>/dev/null) || REC_DIGEST=""
+  if [ -z "$REC_HEAD" ] || [ -z "$REC_DIGEST" ]; then
+    set_ev_s build_identity "incomplete"
+    add_msg "build_identity is present but missing head or files_digest, so it identifies no build"
+    emit fail true "" 1
+  fi
+
+  # The caller resolved the change set at step 4 and passes it here rather than this script
+  # re-deriving it. Two reasons: the resolution rules live in review-change-set.sh and must not be
+  # reimplemented, and a gate that judges a change set the reviewer did not use is judging
+  # something nobody is looking at.
+  if [ -z "$CHANGE_SET_FILE" ]; then
+    set_ev_s build_identity "uncompared"
+    add_msg "no change set was passed, so the record could not be checked against the code under review"
+    add_msg "call this script with --change-set-file <path to review-change-set.sh output>"
+    emit fail true "" 1
+  fi
+  if [ ! -f "$CHANGE_SET_FILE" ]; then
+    set_ev_s build_identity "uncompared"
+    add_msg "the change set file does not exist: $CHANGE_SET_FILE"
+    emit fail true "" 1
+  fi
+
+  NOW_HEAD=$(jq -r '(.head // "")' "$CHANGE_SET_FILE" 2>/dev/null) || NOW_HEAD=""
+  NOW_DIGEST=$(printf '%s' "$(jq -r '((.files // []) | sort | join("\n"))' "$CHANGE_SET_FILE" 2>/dev/null)" \
+    | sha256sum 2>/dev/null | cut -d' ' -f1) || NOW_DIGEST=""
+  if [ -z "$NOW_HEAD" ] || [ -z "$NOW_DIGEST" ]; then
+    set_ev_s build_identity "uncompared"
+    add_msg "the change set file could not be read for a head and a file list: $CHANGE_SET_FILE"
+    emit fail true "" 1
+  fi
+
+  if [ "$REC_HEAD" != "$NOW_HEAD" ] || [ "$REC_DIGEST" != "$NOW_DIGEST" ]; then
+    set_ev_s build_identity "stale"
+    REC_FILES=$(jq -c '(.files // [])' <<<"$BI" 2>/dev/null) || REC_FILES='[]'
+    NOW_FILES=$(jq -c '((.files // []) | sort)' "$CHANGE_SET_FILE" 2>/dev/null) || NOW_FILES='[]'
+    UNSEEN=$(jq -rc --argjson r "$REC_FILES" '. - $r | join(", ")' <<<"$NOW_FILES" 2>/dev/null) || UNSEEN=""
+    add_msg "the critics reviewed a different build than the one under review; this record does not describe this code"
+    [ -n "$UNSEEN" ] && add_msg "file(s) in the change set that no critic saw: $UNSEEN"
+    [ "$REC_HEAD" != "$NOW_HEAD" ] && add_msg "record head $REC_HEAD, change set head $NOW_HEAD"
+    add_msg "re-run the build-critique rung over the delta, then write the record again"
+    emit fail true "" 1
+  fi
+
+  set_ev_s build_identity "matches"
 
   add_msg "the build was challenged in-session: $CRITIQUED component critique(s), verdict $RV"
   emit pass false "" 0

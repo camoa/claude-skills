@@ -47,7 +47,7 @@ command -v jq >/dev/null 2>&1 || { printf 'FAIL: jq required\n' >&2; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # A payload that satisfies every key the schema's build-critique table marks required.
-GOOD='{"phase":"implement","verdict":"pass",
+GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"phase":"implement","verdict":"pass",
  "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
@@ -122,7 +122,7 @@ set -e
 # One folder PER KEY. Sharing a folder meant every iteration after the first was a REWRITE, and
 # since v5.35.3 a rewrite that drops a key the record already has is refused. That refusal is a
 # different rule from the one under test here, which is about a payload missing a documented key.
-for K in phase verdict components components_declared components_critiqued alignment tdd contract; do
+for K in phase verdict components components_declared components_critiqued alignment tdd contract closing_fixes build_identity; do
   mkdir -p "$T/keys/$K"
   PAY=$(printf '%s' "$GOOD" | jq -c --arg k "$K" 'del(.[$k])')
   set +e

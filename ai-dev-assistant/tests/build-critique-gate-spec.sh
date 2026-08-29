@@ -43,7 +43,7 @@ command -v jq >/dev/null 2>&1 || { printf 'FAIL: jq required\n' >&2; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # A payload satisfying every key the schema marks required for build-critique.
-GOOD='{"phase":"implement","verdict":"pass",
+GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"phase":"implement","verdict":"pass",
  "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
@@ -62,10 +62,16 @@ write_record() {
 }
 
 # run <folder> [flags...] -> sets OUT (json) and RC
+# The build-critique gate compares the record's build_identity against the change set the caller
+# resolved. This spec is about a different block, so it hands the gate a change set that agrees
+# with GOOD's identity and keeps the subject of each case the thing it is named for.
+CSF="$(mktemp)"
+printf '%s' '{"schema_version":"1.0","base":"main","merge_base":"abc","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files":["src/A.php"],"untracked":[],"empty_reason":null,"warnings":[]}' > "$CSF"
+
 run() {
   d="$1"; shift
   set +e
-  OUT=$(bash "$G" "$d" "$@" 2>/dev/null); RC=$?
+  OUT=$(bash "$G" "$d" --change-set-file "$CSF" "$@" 2>/dev/null); RC=$?
   set -e
 }
 
@@ -215,7 +221,7 @@ run "$D" --change-set-empty
 verdict_is fail "--change-set-empty does not excuse a blocking record that exists"
 
 set +e
-OUT=$(bash "$G" "$T/does-not-exist" 2>/dev/null); RC=$?
+OUT=$(bash "$G" "$T/does-not-exist" --change-set-file "$CSF" 2>/dev/null); RC=$?
 set -e
 [ "$RC" = "2" ] && pass_check "a task folder that is not a directory is a usage error, exit 2" \
   || fail_check "a missing task folder exited $RC instead of 2"

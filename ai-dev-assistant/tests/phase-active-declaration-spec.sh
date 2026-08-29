@@ -64,17 +64,58 @@ for phase in implement none; do
     || fail_check "the phase=$phase record must carry schema_version, gate_type and gate_specific"
 done
 
-# --- the three phase commands declare themselves --------------------------------
-for c in research design implement; do
+# --- the phase commands declare themselves --------------------------------------
+for c in research design implement review; do
   grep -q 'phase-active-write.sh' "$PLUGIN_ROOT/commands/$c.md" \
     && pass_check "/$c declares its phase on entry" \
     || fail_check "commands/$c.md must call phase-active-write.sh before writing anything"
+done
+
+# --- every phase a command declares is a phase the writer accepts ----------------
+#
+# The check the earlier version of this file did not make. It asserted that each command CALLS
+# the writer, and separately that the writer refuses nonsense, and never crossed the two. So
+# commands/review.md called `phase-active-write.sh review` for five releases against a whitelist
+# of research|design|implement, the script answered `unrecognised phase: review` and exited 0, and
+# every review that ever ran declared nothing. phase-records-check.sh meanwhile listed
+# `_phase-active.json` as REQUIRED for the review phase — one half of the contract demanding a
+# record the other half could not write.
+#
+# The phase name is read out of the command file rather than listed here, so a new phase command
+# is covered the day it is added and a hardcoded list cannot fall behind the thing it describes.
+for f in "$PLUGIN_ROOT"/commands/*.md; do
+  while IFS= read -r declared; do
+    [ -n "$declared" ] || continue
+    TDX=$(mktemp -d)
+    if bash "$W" "$declared" "$TDX" >/dev/null 2>&1; then
+      pass_check "/$(basename "$f" .md) declares phase '$declared', which the writer accepts"
+    else
+      fail_check "commands/$(basename "$f") declares phase '$declared' and phase-active-write.sh rejects it"
+    fi
+    rm -rf "$TDX"
+  done < <(grep -o 'phase-active-write\.sh" [a-z]\{1,\}' "$f" | awk '{print $2}' | sort -u)
 done
 
 # --- a malformed phase is refused, never recorded as fact ------------------------
 [ "$(bash "$W" nonsense | jq -r .ok)" = "false" ] \
   && pass_check "an unrecognised phase is refused" \
   || fail_check "an unrecognised phase must not be written"
+
+# An unrecognised phase is a CALLER bug, so it must reach the caller through the one channel a
+# caller reads. `ok:false` on exit 0 is what let /review's dead declaration survive five releases:
+# nothing checks a JSON field it has no reason to expect. Every other failure here stays exit 0
+# because it is an environment degradation the caller cannot act on.
+RC=0; bash "$W" nonsense >/dev/null 2>&1 || RC=$?
+[ "$RC" = "2" ] \
+  && pass_check "an unrecognised phase exits non-zero, so a caller finds out" \
+  || fail_check "an unrecognised phase must exit 2, got $RC"
+
+for ok_phase in research design implement review none; do
+  RC=0; bash "$W" "$ok_phase" >/dev/null 2>&1 || RC=$?
+  [ "$RC" = "0" ] \
+    && pass_check "phase '$ok_phase' exits 0" \
+    || fail_check "phase '$ok_phase' must exit 0, got $RC"
+done
 
 # ---------------------------------------- the declaration outlives the session file
 

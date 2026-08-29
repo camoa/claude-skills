@@ -334,7 +334,7 @@ arr_empty added "removing alone after a late capture adds nothing"
 
 # An otherwise-valid, otherwise-passing build-critique payload: components clean, tdd
 # block clean. The contract key is added or omitted per fixture below.
-GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
+GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
  "components":[{"component":"a","runtime":"executed","blocking":false}],
  "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},"integration":{"ran":false,"reason":"single-component fixture"}}'
@@ -344,10 +344,16 @@ write_record() { # write_record <folder> <jq filter over GOOD>
 }
 
 # run <folder> [flags...] -> sets OUT (json) and RC
+# The build-critique gate compares the record's build_identity against the change set the caller
+# resolved. This spec is about a different block, so it hands the gate a change set that agrees
+# with GOOD's identity and keeps the subject of each case the thing it is named for.
+CSF="$(mktemp)"
+printf '%s' '{"schema_version":"1.0","base":"main","merge_base":"abc","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files":["src/A.php"],"untracked":[],"empty_reason":null,"warnings":[]}' > "$CSF"
+
 run() {
   d="$1"; shift
   set +e
-  OUT=$(bash "$G" "$d" "$@" 2>/dev/null); RC=$?
+  OUT=$(bash "$G" "$d" --change-set-file "$CSF" "$@" 2>/dev/null); RC=$?
   set -e
 }
 

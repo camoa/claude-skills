@@ -54,12 +54,18 @@ WARNINGS='[]'
 add_warn() { WARNINGS=$(printf '%s' "$WARNINGS" | jq -c --arg w "$1" '. + [$w]'); }
 
 emit() { # emit <merge_base> <committed_json> <tree_json> <untracked_json> <empty_reason>
+  # `head` (v5.35.5+) is the commit the change set was resolved against. The build-critique gate
+  # compares it with the head the critics saw, which is how a record describing an earlier build
+  # stops reading as a record of this one. Empty outside a git repository, like merge_base.
+  HEAD_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || HEAD_SHA=""
   jq -n --arg b "$BASE" --arg mb "$1" --argjson c "$2" --argjson t "$3" --argjson u "$4" \
+        --arg hd "$HEAD_SHA" \
         --arg er "$5" --argjson w "$WARNINGS" '
     ($c + $t | unique) as $files |
     {schema_version: "1.0",
      base: $b,
      merge_base: (if $mb == "" then null else $mb end),
+     head: (if $hd == "" then null else $hd end),
      counts: {committed: ($c|length), working_tree: ($t|length), untracked: ($u|length)},
      source_used: (if ($c|length) > 0 and ($t|length) > 0 then "both"
                    elif ($c|length) > 0 then "committed"

@@ -83,6 +83,24 @@ for it.
 
 A complete envelope is still accepted, so no existing caller changed.
 
+**Pass a large payload from a file: `@<path>` (v5.35.5+).** A payload given on the command line
+is capped at 128 KB by the kernel, not by this script — Linux `MAX_ARG_STRLEN`, which cannot be
+raised. Past it `execve` fails with `argument list too long` and bash never starts, so nothing
+below runs: not the JSON validation, not the atomic rename, not the key-loss refusal. The script
+has no opportunity to report anything, because the script is not running.
+
+`gate-audit-write.sh <task_folder> <gate_type> @/path/to/payload.json` reads the payload from a
+file instead, which has no size limit and reaches every check. Nothing else differs — the same
+normalisation, the same stamps, the same refusals. A payload file that does not exist or cannot
+be read is exit 2 with a message naming the path.
+
+**Use it for `build-critique` and `review`.** Those two records have no upper bound: one grows
+per component per critique round, the other carries every gate's messages and detail. Observed
+live at 136 KB on a nine-component build with six rounds, at which point the only way left to
+update the file was to edit it by hand — the precise rewrite the key-loss guard below exists to
+refuse, performed with the guard unreachable. A size limit standing in front of a guard disables
+the guard.
+
 **A rewrite cannot drop what the last write recorded (v5.35.3+).** When a record for that gate
 type already exists, the script compares the incoming payload's top-level `gate_specific` keys
 against it and **refuses**, exit 2, if any would be lost, naming them and telling the caller to
@@ -247,11 +265,18 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "overall_verdict": "pass | fail | bypassed",
   "pr_ready": true,
   "pr_body_path": "<task>/PR_BODY.md or null",
+  "contract_drift": { /* v5.35.5+, required — see below */ },
   "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
 
 `user_choice` enum: `"automatic" | "r" | "s" | "a"` (`"automatic"` when no `review-gate-fail` prompt fired; `"r"`/`"s"`/`"a"` from the prompt). `pr_ready: true` only when `overall_verdict == "pass"` AND not `--dry-run` — bypass paths get `pr_ready: false`. `gates_run[]` is always the full hard-block set, regardless of how populated (rerun-failed merges previous-run passes with this-run reruns).
+
+**`contract_drift` (v5.35.5+, required).** `{checked, status, changed[], reason}` — did `alignment.md` or `architecture/` move between the start of the review and its verdict? `/review` captures a baseline at step 0 (`contract-baseline.sh capture --slot review`) and diffs it at step 8b.
+
+Review reads the contract as it stands at the moment each gate fires, and review can edit it. That is legitimate: a document specifying behaviour just found defective has to be corrected. Editing it invisibly is not, which is the same argument that put a baseline in front of the build in v5.34.0 — there the concern was a builder describing the code it had written, here it is a reviewer moving the standard it is judging against. `checked: false` carrying a reason is the honest answer when the step-0 capture did not run; a diff with no baseline must never read as an unchanged contract.
+
+**Never blocking on its own.** One consequence is not advisory: `alignment.md` in `changed[]` means the Spec gate at 5.0d judged a criteria list that is no longer the one on disk, so its verdict describes a contract that no longer exists. 5.0d is re-run, or its `gates_run[]` entry becomes `skipped` with `unresolved: true`, which step 8 rule 2 already treats as fail-closed. Observed live: a review corrected two architecture documents and deleted four acceptance criteria describing a withdrawn check, between one run of the Spec gate and the next. A criterion that no longer exists cannot be reported as unimplemented.
 
 **`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
@@ -791,6 +816,7 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 | `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. **Every entry must carry a non-empty `reason` (v5.35.1+)**; an entry without one, or a bare string in place of the object, is fail-closed. |
 | `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. When the axis ran, it also carries `criteria_unverifiable[]` (v5.35.2+, required): `{criterion, reason, what_would_verify}` for every success criterion that NO test at the levels this design chose can verify. An empty array is the positive claim that every criterion has something shipped that could prove it; absence is fail-closed. Distinct from `criteria_not_implemented`, which means the code is not written yet. |
 | `contract` | yes | Required as of v5.34.0. `{baseline, changed[], reason}` from `contract-baseline.sh diff` — whether `alignment.md` / `architecture/` were amended during the build, against a baseline frozen at Runtime Step 11. `reason` is required when `changed[]` is non-empty. As of v5.35.1 the gate re-runs `contract-baseline.sh diff` itself and fails when `changed[]` disagrees with what the baseline on disk reports, so the count cannot be written down rather than measured; the measured set is what the `reason` requirement keys on. `baseline` is `captured` (frozen before any code), `late` (taken after the build began, which passes only with a `reason` — for a task that predates the mechanism), or anything else, which is fail-closed since a build that never froze the contract cannot say whether it changed. |
+| `build_identity` | yes | v5.35.5+. `{head, files, files_digest}` — which build the critics actually saw. `head` is `git rev-parse HEAD` at the close of the rung, `files` the sorted list handed to the critics, `files_digest` a sha256 over that list joined by newlines. `/review` recomputes the digest from its own step-4 change set and compares both; a mismatch means the critics reviewed a different build and the gate fails, naming the files no critic saw. Absent is fail-closed, with no grandfather clause for records written before the field existed — a record that cannot say which build it describes is the exact state this check surfaces, and its age does not make it able to answer. Exists because `[r]` at the review prompt means exit, fix, re-run: every remediation produces a build the record predates. |
 | `closing_fixes` | yes | v5.35.3+. `{applied, verified_by, reason}` — what changed AFTER the last critique pass. `applied: 0` is a valid answer. `applied > 0` needs a non-empty `verified_by`; when that names the author, self, nobody, none, or unverified anywhere in the string, a `reason` is required too, because the honest answer is usually mixed (some fixes read by a fresh context, the rest resting on their author) and a mixed answer is exactly the one that must not skip the question. Absent is fail-closed: a record that cannot say whether anything shipped uncritiqued. |
 | `rounds[]` | no | v5.35.0+. One entry per critique round: `{round, wo, tier, overall, blocking, lenses, headline}`. Absent means one round. May also carry `resolution` (the escalation decision for that round), `repair_growth` `{net_lines, reason}` — net lines against the previous round's checkpoint, a reason required when positive — and `deferred[]` `{finding, blocked_on, why_now_is_wrong}` for findings only a later component can answer. A deferral with no `blocked_on` is fail-closed. |
 | `escalation` | conditional | v5.35.0+. `{reason}`. **Required once any component's `rounds` reaches 3** — who decided to continue and why. Absent past the threshold is fail-closed. |

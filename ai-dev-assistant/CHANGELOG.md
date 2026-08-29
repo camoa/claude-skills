@@ -1,5 +1,112 @@
 # Changelog
 
+## [5.35.5] - 2026-08-29
+
+### Fixed
+- **`/review` can now declare its phase.** `commands/review.md` step 0 has told the command to run
+  `phase-active-write.sh review` since v5.30.3. That script's list of accepted phases was
+  `research|design|implement`. It answered `{"ok":false,"reason":"unrecognised phase: review"}`
+  and exited 0, so the declaration never happened on any review that has ever run, and nothing
+  said so.
+
+  Meanwhile `phase-records-check.sh` lists `_phase-active.json` as **required** for the review
+  phase. One half of the contract demanded a record the other half could not write, and the two
+  halves were never compared.
+
+- **An unrecognised phase now exits 2 instead of 0.** Every other failure in that script is an
+  environment degradation a caller cannot act on — no `jq`, an unwritable session file — where
+  carrying on is right. A phase name the script does not know is a caller bug, and `ok:false` on
+  a successful exit reaches nobody: no caller reads a JSON field it has no reason to expect. That
+  is what let the dead review declaration survive five releases.
+
+- **A gate audit payload can be passed from a file: `@<path>`.** A payload given as a command-line
+  argument is capped at 128 KB by the kernel, not by the script. Past `MAX_ARG_STRLEN` the exec
+  fails with `argument list too long` before bash starts, so nothing in `gate-audit-write.sh`
+  runs — including the v5.35.3 refusal that stops a rewrite dropping keys the record already has.
+
+  `_build-critique.json` grows per component per critique round and has no upper bound; it
+  measured 136 KB on a nine-component build with six rounds. At that size the only remaining way
+  to update it was a hand edit, which is exactly the rewrite the guard refuses. A size limit
+  standing in front of a guard disables the guard.
+
+  `gate-audit-write.sh <task> <gate> @/path/to/payload.json` reads the payload from a file, which
+  has no size limit and reaches every check. Nothing else changes: same normalisation, same
+  stamps, same refusals. A missing or unreadable file is exit 2, naming the path. The inline form
+  is untouched and all 28 documented call sites still work; `/implement` step 12 and `/review`
+  step 10, the two that write unbounded records, now document the file form.
+
+- **The build-critique gate now asks whether its record describes the code being reviewed.** Every
+  check it made was a question about the record — counts agree, gaps carry reasons, the contract
+  re-derived from disk. None was a question about the tree.
+
+  The review prompt's `[r]` branch turns that from a risk into a certainty. `[r]` means exit, fix,
+  re-run, so **every remediation produces a build the record predates.** Observed live: three
+  hard-block gates failed, the operator chose `[r]`, eleven files changed including a deleted
+  branch and a new test fixture, and the re-run would have read the same record and passed. The
+  gate whose question is "was this build challenged by something other than the context that built
+  it?" would have answered yes about the build before the fix.
+
+  The record already carried the shas. Each component's rev range sat in it as prose nothing
+  parsed — the fact present, no code reading it, which is the shape of most of what this gate has
+  had to grow.
+
+  New required `build_identity` `{head, files, files_digest}`, written once at the close of the
+  rung. `/review` recomputes the digest from the change set it resolved at step 4 and compares
+  both halves; a mismatch fails and names the files no critic saw. `review-change-set.sh` reports
+  `head` for that comparison, and `build-critique-assert.sh` takes `--change-set-file` so the gate
+  judges the reviewer's own change set rather than re-deriving one.
+
+  A record with no `build_identity` is `unresolved` and fail-closed. There is deliberately no
+  grandfather clause: a record that cannot say which build it describes is the exact state this
+  check exists to surface, and its age does not make it able to answer.
+
+- **The review can move the goalposts, and now says when it did.** v5.34.0 froze the contract in
+  front of the build, because a builder can edit `alignment.md` and `architecture/` and a scope
+  question then resolves against text written to describe the code it is judging. Every word of
+  that applies to `/review`, which reads the same two documents at the moment each gate fires and
+  can edit them, and which had no baseline at all.
+
+  Observed live: a review found a defect, corrected the two architecture documents that had
+  specified the defective behaviour, and deleted four acceptance criteria describing a check that
+  was withdrawn — between one run of the Spec gate and the next. Every edit was right. None was
+  recorded. A criterion that no longer exists cannot be reported as unimplemented.
+
+  `contract-baseline.sh` gains `--slot`, so review keeps its own baseline beside the build's. The
+  two answer different questions and cannot share one: capture refuses to overwrite, which is the
+  property that makes a baseline worth anything. `/review` captures at step 0, diffs at step 8b,
+  and records `contract_drift` in `_review.json`.
+
+  **It never blocks on its own** — correcting a document that specified defective behaviour is the
+  review doing its job, and the point is visibility, not prohibition. One consequence is not
+  advisory: `alignment.md` among the changed files means the Spec gate judged a criteria list that
+  is no longer on disk, so 5.0d is re-run or its entry becomes `skipped` with `unresolved: true`.
+  A stale verdict must not be reported as a current one.
+
+### Testing
+- New `tests/review-contract-drift-spec.sh`, 13 assertions: the two slots are independent, an
+  amended architecture document and a deleted success criterion are both recorded by name, a diff
+  with no baseline never reads as an unchanged contract, and an unknown slot is a usage error
+  rather than a silent third baseline. Ignoring `--slot` turns 1 red, as does falling back to the
+  build slot on an unknown name, and as does dropping the Spec-gate staleness rule from
+  `review.md`.
+- New `tests/build-identity-spec.sh`, 19 assertions: a matching identity passes, file order is
+  irrelevant, an added file and a moved head each fail and name what moved, and absent, incomplete
+  or uncomparable each fail closed with distinguishable evidence. Removing the whole block turns
+  11 red; comparing only the head turns 3; letting an absent identity pass turns 1; removing all
+  three uncomparable guards turns 7.
+- The eight specs that build a `build-critique` fixture gained the field and pass the gate their
+  own change set, so each keeps testing the block it is named for.
+- `tests/phase-active-declaration-spec.sh` gains the check it was missing: every phase name a
+  command actually passes to `phase-active-write.sh` must be a phase that script accepts. The
+  name is read out of the command file rather than listed in the spec, so a new phase command is
+  covered the day it is added. Restoring the old whitelist turns 2 assertions red; restoring
+  exit 0 on an unrecognised phase turns 1 red.
+- New `tests/gate-audit-payload-size-spec.sh`, 21 assertions. It builds a payload past
+  `MAX_ARG_STRLEN`, confirms the command-line form genuinely cannot carry it, then asserts the
+  file form writes it whole, stamps it identically, and still refuses a rewrite that drops a key.
+  Removing `@<path>` support turns 13 red; resolving it after the JSON validation turns 13 red;
+  making a missing payload file silently write an empty record turns 1 red.
+
 ## [5.35.4] - 2026-08-29
 
 ### Fixed

@@ -29,7 +29,27 @@ set -uo pipefail
 
 SUB="${1:-}"; TASK="${2:-}"
 case "$SUB" in capture|diff) ;; *)
-  echo "contract-baseline: usage: contract-baseline.sh capture|diff <task_folder>" >&2; exit 2 ;;
+  echo "contract-baseline: usage: contract-baseline.sh capture|diff <task_folder> [--slot <name>]" >&2; exit 2 ;;
+esac
+
+# --slot names which baseline this is (v5.35.5+). The build's lives under `build-critique/`, and
+# review keeps its own under `review/`, because they answer different questions: the build's asks
+# whether the design moved while the code was being written, review's asks whether the contract
+# moved while the code was being judged. One baseline cannot answer both — a review that reused
+# the build's would report the build's own legitimate amendments as review drift, and capture
+# refuses to overwrite, which is the property that makes a baseline worth anything.
+SLOT="build-critique"
+shift 2>/dev/null || true; shift 2>/dev/null || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --slot) shift; SLOT="${1:-build-critique}" ;;
+    *) ;;
+  esac
+  shift
+done
+case "$SLOT" in
+  build-critique|review) ;;
+  *) echo "contract-baseline: unknown slot: $SLOT" >&2; exit 2 ;;
 esac
 [ -n "$TASK" ] || { echo "contract-baseline: task folder is required" >&2; exit 2; }
 [ -d "$TASK" ] || { echo "contract-baseline: not a directory: $TASK" >&2; exit 4; }
@@ -37,7 +57,7 @@ command -v jq >/dev/null 2>&1 || {
   # A check that could not run has established nothing.
   printf '{"schema_version":"1.0","action":"%s","status":"unresolved","reason":"jq_missing"}\n' "$SUB"; exit 4; }
 
-BASE="$TASK/build-critique/_contract-baseline"
+BASE="$TASK/$SLOT/_contract-baseline"
 
 # The contract is these two things. A task may legitimately have either, or neither before
 # /design has run; "absent" is recorded rather than treated as empty.

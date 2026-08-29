@@ -9,8 +9,9 @@
 #                playbook-load | review | e2e | visual_regression | visual_parity |
 #                recipe-load | agentic-recipe | internal-prior-art | framework |
 #                build-critique
-#   <json_payload>: EITHER the gate_specific object on its own (preferred — this
-#                   script builds the envelope around it), OR a complete audit JSON
+#   <json_payload>: `@<path>` to read the JSON from a file (see below), or the JSON
+#                   itself. EITHER the gate_specific object on its own (preferred —
+#                   this script builds the envelope around it), OR a complete audit JSON
 #                   object conforming to
 #                   references/gate-audit-schema.md (v1.0 for the original 7
 #                   gate types; v1.1 adds `review`; v1.2 — v4.11.0 — adds `e2e`
@@ -35,10 +36,28 @@
 # - Writes to <task_folder>/_<gate_type>.json (overwrite-on-fire)
 # - Atomic via temp + rename
 #
+# Reading the payload from a file (v5.35.5+):
+#
+#   gate-audit-write.sh <task_folder> <gate_type> @/path/to/payload.json
+#
+# A payload passed on the command line is capped by the kernel, not by this script: Linux
+# MAX_ARG_STRLEN is 128 KB per argument and cannot be raised. Past it the exec fails with
+# "argument list too long" before bash starts, so nothing here — no validation, no key-loss
+# guard, no error message of ours — ever runs. Records grow: a `build-critique` record for a
+# nine-component build with six rounds of critique measured 136 KB live, and the only way left
+# to update it was to hand-edit the file, which is precisely the rewrite the v5.35.3 key-loss
+# guard exists to police. A size limit that routes around a guard disables the guard.
+#
+# So `@<path>` reads the payload from a file, which has no size limit and reaches every check
+# below. Prefer it for `build-critique` and `review`, the two records with no upper bound on
+# their size. A literal payload that begins with `@` is not a JSON object and would be
+# rejected anyway.
+#
 # Exit codes:
 #   0 — written successfully
 #   1 — bash-level write failure (permissions, disk, missing folder)
-#   2 — invalid input (bad JSON, schema mismatch, missing fields, bad gate_type)
+#   2 — invalid input (bad JSON, schema mismatch, missing fields, bad gate_type,
+#       unreadable @<path>)
 
 set -uo pipefail
 
@@ -47,6 +66,19 @@ GATE_TYPE="${2:?gate type required}"
 PAYLOAD="${3:?JSON payload required}"
 ALLOW_KEY_LOSS=0
 [[ "${4:-}" == "--allow-key-loss" ]] && ALLOW_KEY_LOSS=1
+
+# Resolve @<path> before anything reads PAYLOAD.
+if [[ "$PAYLOAD" == @* ]]; then
+  PAYLOAD_FILE="${PAYLOAD#@}"
+  if [[ ! -f "$PAYLOAD_FILE" ]]; then
+    echo "gate-audit-write: payload file not found: $PAYLOAD_FILE" >&2
+    exit 2
+  fi
+  if ! PAYLOAD=$(cat -- "$PAYLOAD_FILE"); then
+    echo "gate-audit-write: payload file unreadable: $PAYLOAD_FILE" >&2
+    exit 2
+  fi
+fi
 
 # Validate gate_type
 case "$GATE_TYPE" in
@@ -207,7 +239,7 @@ case "$GATE_TYPE" in
   # in a bare list, and neither says how far the cascade had to go before a method was found. That is
   # the whole point of the record, so `identified_by` and `cascade_step_reached` are not optional.
   framework)          REQUIRED_KEYS="frameworks identified_by cascade_step_reached" ;;
-  build-critique)     REQUIRED_KEYS="phase verdict components components_declared components_critiqued uncritiqued alignment tdd contract closing_fixes" ;;
+  build-critique)     REQUIRED_KEYS="phase verdict components components_declared components_critiqued uncritiqued alignment tdd contract closing_fixes build_identity" ;;
   coverage-mapping)   REQUIRED_KEYS="verdict" ;;
   *)                  REQUIRED_KEYS="" ;;
 esac
