@@ -84,6 +84,11 @@ one by enumerating the tree and passing it as `--changed`:** on any project that
 its framework that means mapping every core and vendor source to a co-located test, which
 is both wrong and unbounded.
 
+**This gate has no partial state either, so it never emits `coverage_partial: true`.**
+It has one channel and one question — did tests run — and section A answers it as
+`unresolved` when the answer is no. `validate-solid` and `validate-security` emit that
+marker because they stack several analyzers and can lose some while keeping others.
+
 **B. It measured. Map the finding.** Ordered; first match wins.
 
 | Signal in output | Our verdict |

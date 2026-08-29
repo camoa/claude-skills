@@ -47,13 +47,26 @@
   missing-report rule there would have marked every TDD run unresolved and fail-closed
   every review on a gate behaving exactly as designed.
 
-- **`/review` step 8 now has a rule for `warning`.** It is a legal `gates_run[].verdict`
-  per `references/gate-audit-schema.md` that none of the four rules named, so aggregation
-  fell off the end of the list and a partially-covered gate reached a green
-  `overall_verdict` with no rule allowing it. New rule 4 resolves a hard-block `warning` to
-  `fail` — `overall_verdict` has only {`pass`, `fail`, `bypassed`} available and `bypassed`
-  means a human recorded a reason, so `fail` is the one left; it routes to step 9 where
-  `[s]` records on disk why the gap is accepted. Ranked below bypass, above the pass rule.
+- **`/review` step 8 now has a rule for partial coverage, keyed on a marker rather than on
+  `verdict: "warning"`.** `warning` is a legal `gates_run[].verdict` that none of the four
+  rules named, so aggregation fell off the end of the list and a partially-covered gate
+  reached a green `overall_verdict` with no rule allowing it. But `warning` is overloaded:
+  `dry-check.sh` sets it for duplication over the 5% target and `solid-check.sh` for more
+  than ten SOLID warnings, and both are fully measured runs on machines where every tool is
+  installed. A rule keyed on the bare verdict would fail those, blocking reviews for
+  ordinary findings that never blocked before and teaching everyone to reach for
+  `--skip-<gate>` — the bypass that makes this whole mechanism worthless.
+
+  So partial coverage gets its own marker, `coverage_partial: true` in `messages[]`, the
+  sibling of `unresolved: true`: one means **nothing** was measured, the other means
+  **part** of it was. `validate-solid` and `validate-security` emit it on their partial
+  rows; `validate-dry` and `validate-tdd` have one analyzer and one channel each, so they
+  state plainly that they have no partial state rather than leaving a reader looking for
+  one. New rule 4 fails on the marker; `overall_verdict` has only {`pass`, `fail`,
+  `bypassed`} available and `bypassed` means a human recorded a reason, so `fail` is the
+  one left, routing to step 9 where `[s]` records why the gap is accepted. Rule 5's benign
+  list now says in as many words that an ordinary `warning` from a fully measured gate
+  stays non-blocking, so the next reader does not re-derive it and get it backwards.
 
 - **`references/validation-gate-result.md` documents the convention it depended on.** The
   file that calls itself the shared envelope contract never mentioned `unresolved`: what
@@ -69,12 +82,15 @@
   over budget and nothing saw it. Both now read 132, raised for step 8's new rule.
 
 ### Added
-- `tests/gate-coverage-honesty-spec.sh` — 72 assertions on the DECISION and its ORDER,
+- `tests/gate-coverage-honesty-spec.sh` — 89 assertions on the DECISION and its ORDER,
   not on the presence of words. Every coverage rule is paired with an assertion that it is
   reached before the findings rule that would otherwise shadow it, because a rule MOVED
-  below `Explicit "PASS"` is still present and still dead. It also asserts the consumer
-  half: delete `review.md` rule 2 and every producer becomes decorative while all of their
-  own assertions stay green.
+  below `Explicit "PASS"` is still present and still dead. It asserts the consumer half:
+  delete `review.md` rule 2 and every producer becomes decorative while all of their own
+  assertions stay green. And it asserts both directions of the marker — that a
+  partial-coverage warning blocks AND that an ordinary measured one does not — with the
+  second checked unconditionally rather than inside the first's branch, since the mutation
+  it defends against is the one that deletes that branch.
 
 ### Known remaining
 - **The Next.js gates have no coverage surface, and this release does not add one.**

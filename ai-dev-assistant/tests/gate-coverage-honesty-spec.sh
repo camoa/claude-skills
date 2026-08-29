@@ -60,6 +60,9 @@ for f in "$TDD" "$SOLID" "$DRY" "$SEC" "$REVIEW" "$CONTRACT"; do
 done
 
 MARK='unresolved: true'
+# The partial-coverage sibling. Deliberately a token that cannot occur in prose for an
+# unrelated reason, which is the trap that hollowed out two assertions in an earlier draft.
+PMARK='coverage_partial: true'
 
 # Line number of the first line matching a fixed string, or empty. Line numbers are the
 # whole point here: this file asserts what comes BEFORE what.
@@ -183,6 +186,32 @@ for pair in "solid:$SOLID" "security:$SEC"; do
   else
     fail_check "$gate wrapper has no partial-coverage row mapping to warning and excluding pass"
   fi
+  # DIRECTION 1 of the pair: the partial row carries the marker that makes rule 4 fire.
+  if [ -n "$PARTIAL" ] && printf '%s' "$PARTIAL" | grep -qF "$PMARK"; then
+    pass_check "$gate wrapper emits '$PMARK' on its partial-coverage row"
+  else
+    fail_check "$gate wrapper's partial-coverage row carries no '$PMARK' — rule 4 has nothing to fire on"
+  fi
+  # DIRECTION 2: the marker must NOT be attached to the fully measured mapping. A gate
+  # that measured everything and found a number over a soft threshold has always been
+  # non-blocking, and marking it would fail projects for ordinary findings.
+  CL=$(lineno "$file" 'C. It measured. Map the finding.')
+  if [ -z "$CL" ]; then
+    fail_check "$gate wrapper has no C section to check for marker leakage"
+  else
+    CBODY=$(sed -n "${CL},\$p" "$file" | awk '/^## /{exit} {print}')
+    if printf '%s' "$CBODY" | grep -E '^\|' | grep -qF "$PMARK"; then
+      fail_check "$gate wrapper attaches '$PMARK' to a fully measured verdict row — an ordinary warning would block"
+    else
+      pass_check "$gate wrapper keeps '$PMARK' off its fully measured verdict rows"
+    fi
+  fi
+  # And it has to say WHY, or the next edit re-keys rule 4 on the bare verdict.
+  if grep -qiE 'never on `?verdict: "warning"|not key on `?verdict: "warning"' "$file"; then
+    pass_check "$gate wrapper states the marker, not the verdict, is what blocks"
+  else
+    fail_check "$gate wrapper does not say why rule 4 keys on the marker rather than the verdict"
+  fi
 done
 
 # The counter is a trap in a DIFFERENT way in each gate, so each file must name its own.
@@ -199,6 +228,22 @@ if grep -qE 'analyzers_ran.{0,200}`?--changed`? mode' "$SEC"; then
 else
   fail_check "security wrapper does not say analyzers_ran is absent on the standard path"
 fi
+
+# Single-analyzer gates have no partial state, and must say so where a reader would
+# otherwise go looking for one — and must not emit the marker.
+for pair in "dry:$DRY" "tdd:$TDD"; do
+  gate="${pair%%:*}"; file="${pair#*:}"
+  if grep -qiE 'no partial state' "$file"; then
+    pass_check "$gate wrapper states it has no partial state"
+  else
+    fail_check "$gate wrapper does not say whether it has a partial state"
+  fi
+  if grep -E '^\|' "$file" | grep -qF "$PMARK"; then
+    fail_check "$gate wrapper emits '$PMARK' from a verdict row despite having no partial state"
+  else
+    pass_check "$gate wrapper emits no '$PMARK' from any verdict row"
+  fi
+done
 
 # ------------------------------------------------------- 1c. tdd is the stated exception
 # It writes no report on any path. Applying the missing-report rule to it would mark every
@@ -336,6 +381,28 @@ else
   fail_check "contract does not record why tdd is exempt from report-first"
 fi
 
+# The contract has to carry the marker, its consumer, and the distinction from unresolved.
+if grep -qE '^### `coverage_partial`' "$CONTRACT" && grep -qF "$PMARK" "$CONTRACT"; then
+  pass_check "contract has a section documenting the '$PMARK' marker"
+else
+  fail_check "contract has no coverage_partial section — the mechanism rule 4 depends on is undocumented"
+fi
+if grep -qiE 'rule 4' "$CONTRACT"; then
+  pass_check "contract names review.md step 8 rule 4 as the marker's consumer"
+else
+  fail_check "contract documents the marker without naming what consumes it"
+fi
+if grep -qiE 'nothing.{0,40}measured.{0,120}part|`unresolved` means \*\*nothing\*\*' "$CONTRACT"; then
+  pass_check "contract distinguishes unresolved (nothing measured) from coverage_partial (part measured)"
+else
+  fail_check "contract does not distinguish the two markers"
+fi
+if grep -qiE 'NEVER on `?verdict: "warning"|never on `verdict' "$CONTRACT"; then
+  pass_check "contract records that rule 4 keys on the marker, not on verdict: warning"
+else
+  fail_check "contract does not record why rule 4 avoids keying on verdict: warning"
+fi
+
 # The skipped row that was the bug in prose.
 SKIPPED_ROW=$(grep -E '^\| `skipped` \|' "$CONTRACT" || true)
 if [ -z "$SKIPPED_ROW" ]; then
@@ -386,40 +453,62 @@ fi
 # covered fail, unresolved, bypass and all-pass, and `warning` fell off the end of the
 # list. Falling off the end is not a rule, and it is how a partially-covered gate reached
 # a green overall_verdict.
-WARN_RULE=$(grep -nE '^ +[0-9]+\. `[a-z]+` if any hard-block gate has `verdict: "warning"`' "$REVIEW" || true)
-if [ -z "$WARN_RULE" ]; then
-  fail_check "review.md step 8 has no rule for a hard-block warning — aggregation still falls off the end of the list"
+# THE PAIR THAT MATTERS MOST IN THIS WHOLE CHANGE. Getting it backwards ships a false
+# green on every under-covered project, or a false red on every ordinary one.
+#   - a PARTIAL-COVERAGE warning must fail:    rule 4 must key on the marker
+#   - an ORDINARY MEASURED warning must not:   rule 4 must NOT key on `verdict: "warning"`
+# Round 2 shipped the second half backwards. `dry-check.sh` sets warning for duplication
+# over its 5% target and `solid-check.sh` for more than ten SOLID warnings; both are fully
+# measured runs on machines where every tool is installed, and failing them teaches people
+# to reach for --skip-<gate>, which is the bypass that makes the coverage fix worthless.
+# DIRECTION 2, checked first and unconditionally: NO step-8 rule may resolve a verdict
+# on the bare value `warning`. Kept outside the marker rule's branch on purpose — the
+# mutation this defends against removes that branch.
+if grep -qE '^ +[0-9]+\. `[a-z]+` if any hard-block gate has `verdict: "warning"`' "$REVIEW"; then
+  fail_check "DIRECTION 2 FAILED: a step-8 rule keys on the bare verdict: \"warning\" — an ordinary fully measured warning (6% duplication, 11 SOLID warnings) now fails the review"
 else
-  WN="${WARN_RULE%%:*}"
-  WTEXT="${WARN_RULE#*:}"
+  pass_check "DIRECTION 2: no step-8 rule keys on the bare verdict: \"warning\""
+fi
+
+COV_RULE=$(grep -nE '^ +[0-9]+\. `[a-z]+` if any hard-block gate carries the literal `coverage_partial: true`' "$REVIEW" || true)
+if [ -z "$COV_RULE" ]; then
+  fail_check "review.md step 8 has no rule keyed on '$PMARK' — a partially covered gate reaches green"
+else
+  WN="${COV_RULE%%:*}"
+  WTEXT="${COV_RULE#*:}"
   RESOLVES=$(printf '%s' "$WTEXT" | sed -n 's/^ *[0-9]*\. `\([a-z]*\)` if any hard-block.*/\1/p')
   case "$RESOLVES" in
-    pass) fail_check "review.md resolves a hard-block warning to pass — a partially-covered gate goes green" ;;
-    fail|bypassed) pass_check "review.md resolves a hard-block warning to $RESOLVES, not pass" ;;
-    *) fail_check "review.md's warning rule resolves to '$RESOLVES', not a legal overall_verdict" ;;
+    pass) fail_check "review.md resolves a partial-coverage gate to pass — it goes green having measured half its ground" ;;
+    fail|bypassed) pass_check "DIRECTION 1: a partial-coverage gate resolves to $RESOLVES, not pass" ;;
+    *) fail_check "review.md's coverage rule resolves to '$RESOLVES', not a legal overall_verdict" ;;
   esac
-  if printf '%s' "$WTEXT" | grep -qiE 'why|because|only \{|left'; then
-    pass_check "review.md's warning rule says why it resolves the way it does"
+  if printf '%s' "$WTEXT" | grep -qiE 'never on `?verdict: "warning"|Keyed on the marker'; then
+    pass_check "review.md's rule 4 says explicitly that it keys on the marker, not the verdict"
   else
-    fail_check "review.md's warning rule states a verdict with no reason"
+    fail_check "review.md's rule 4 does not state that it keys on the marker rather than the verdict"
+  fi
+  if printf '%s' "$WTEXT" | grep -qiE 'why|because|only \{|left|overloaded'; then
+    pass_check "review.md's rule 4 says why it resolves the way it does"
+  else
+    fail_check "review.md's rule 4 states a verdict with no reason"
   fi
   # It has to be RANKED. An unranked rule in an ordered resolution is the same defect.
-  PASSRULE=$(grep -nE '^ +[0-9]+\. `pass` if \*\*all\*\* hard-block gates' "$REVIEW" | cut -d: -f1 || true)
+  PASSRULE=$(grep -nE '^ +[0-9]+\. `pass` if (every|\*\*all\*\*) hard-block gate' "$REVIEW" | cut -d: -f1 || true)
   if [ -n "$PASSRULE" ] && [ "$WN" -lt "$PASSRULE" ]; then
-    pass_check "review.md's warning rule is ranked before the pass rule"
+    pass_check "review.md's coverage rule is ranked before the pass rule"
   else
-    fail_check "review.md's warning rule is not ranked before the pass rule (warning=$WN pass=$PASSRULE)"
+    fail_check "review.md's coverage rule is not ranked before the pass rule (coverage=$WN pass=$PASSRULE)"
   fi
 fi
 
 # ------------------------------------------ 4b. the pass rule no longer authorizes it
-PASS_RULE=$(grep -E '^ +[0-9]+\. `pass` if \*\*all\*\* hard-block gates' "$REVIEW" || true)
+PASS_RULE=$(grep -E '^ +[0-9]+\. `pass` if (every|\*\*all\*\*) hard-block gate' "$REVIEW" || true)
 if [ -z "$PASS_RULE" ]; then
   fail_check "review.md step 8 has no pass rule"
 else
   # Read the parenthesised benign list only: the rule legitimately mentions absent
   # analyzers now, in the clause saying they are NOT benign.
-  BENIGN=$(printf '%s' "$PASS_RULE" | sed -n 's/.*Benign non-blocking states (\([^)]*\)).*/\1/p')
+  BENIGN=$(printf '%s' "$PASS_RULE" | sed -n 's/.*[Bb]enign non-blocking state[s]* (\([^)]*\)).*/\1/p')
   if [ -z "$BENIGN" ]; then
     fail_check "review.md's pass rule has no parenthesised benign-state list to check"
   elif printf '%s' "$BENIGN" | grep -qiE 'tool|analyz'; then
@@ -427,10 +516,18 @@ else
   else
     pass_check "review.md's pass rule names no tool-availability state as benign"
   fi
-  if printf '%s' "$PASS_RULE" | grep -qF 'warning'; then
-    pass_check "review.md's pass rule excludes warning explicitly"
+  # DIRECTION 2, restated where a reader will actually look. The benign list must SAY an
+  # ordinary measured warning stays non-blocking, so the next editor does not re-derive it
+  # and get it backwards again.
+  if printf '%s' "$PASS_RULE" | grep -qiE 'ordinary `?warning`?.{0,80}(fully measured|measured gate)|fully measured.{0,80}`?warning`?'; then
+    pass_check "DIRECTION 2: review.md's pass rule names an ordinary measured warning as benign"
   else
-    fail_check "review.md's pass rule does not exclude warning"
+    fail_check "DIRECTION 2 FAILED: review.md's pass rule does not say an ordinary measured warning stays non-blocking"
+  fi
+  if printf '%s' "$PASS_RULE" | grep -qF "$PMARK"; then
+    pass_check "review.md's pass rule excludes the partial-coverage marker from benign"
+  else
+    fail_check "review.md's pass rule does not exclude '$PMARK' from its benign states"
   fi
   if printf '%s' "$PASS_RULE" | grep -qF 'unresolved'; then
     pass_check "review.md's pass rule routes the absent-analyzer case to unresolved"

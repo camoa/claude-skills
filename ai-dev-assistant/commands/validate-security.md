@@ -81,7 +81,7 @@ whatever the run did say; they never set the verdict on this path.
 |---|---|
 | `summary.overall_status` is `unmeasured`, or `meta.tools_unmeasured[]` is non-empty with nothing measured | `skipped`, and put `unresolved: true` in `messages[]` quoting the report's reason |
 | Every entry of `meta.tools[]` appears in `meta.tools_absent[]` ∪ `meta.tools_failed[]` ∪ `meta.tools_unmeasured[]` | `skipped`, and put `unresolved: true` in `messages[]`, naming the layers |
-| Some but not all of them do | `warning`, naming the absent or failed tools and which layers went unchecked. Never `pass` |
+| Some but not all of them do | `warning`, **with the literal `coverage_partial: true` in `messages[]`**, naming the absent or failed tools and which layers went unchecked. Never `pass` |
 | Otherwise | fall through to C |
 
 `analyzers_ran` is present **only in `--changed` mode**, which is `/review`'s default
@@ -99,6 +99,19 @@ missing only the secret scanner reports a clean tree while nothing read a single
 credential. `tools_absent[]` is documented as expected-absent and deliberately does not
 move `security-check.sh`'s own status, which is what makes naming it here the wrapper's
 job.
+
+**The marker, not the verdict, is what makes a partial run block.** `coverage_partial: true`
+goes in `messages[]` only on the row above — a `warning` this wrapper produced *because*
+part of the gate did not run. `/review` step 8 rule 4 reads that string and fails closed on
+it. A `warning` from path C is a different animal: the gate measured everything and found a
+number over a soft threshold, and those have never blocked a review. Rule 4 deliberately
+does not key on `verdict: "warning"` for exactly that reason, so **do not attach the marker
+to a fully measured warning** — doing so fails projects for ordinary findings and trains
+people to reach for `--skip-security`, which is the bypass that makes this whole mechanism
+worthless.
+
+It is the sibling of `unresolved: true`, and the two are not interchangeable:
+`unresolved` means **nothing** was measured, `coverage_partial` means **part** of it was.
 
 **C. It measured. Map the finding.**
 

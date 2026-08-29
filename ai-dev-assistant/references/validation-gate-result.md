@@ -90,7 +90,8 @@ checked and why. It is a convention on message TEXT, not a field — nothing in
 `scripts/validation-envelope-write.sh` produces or validates it, so a producer
 that misspells it emits an envelope that reads clean.
 
-**Who consumes it.** `commands/review.md` step 8 rule 2. When a gate's
+**Who consumes it.** `commands/review.md` step 8 rule 2 (its sibling
+`coverage_partial: true`, below, is read by rule 4). When a gate's
 `validations/latest/<gate>.json` carries `unresolved: true` in `messages[]`,
 `/review` propagates it into that gate's `gates_run[]` entry and resolves
 `overall_verdict: "fail"` — **fail-closed, ranked above bypass**, while the
@@ -128,11 +129,38 @@ of that gate's runs. Carry it in `details`; derive coverage from the tool lists.
 found and returned nothing usable produced no evidence either. Omitting it from
 the derivation is how a crashed gitleaks reads as a clean one.
 
-A gate that ran SOME of its analyzers is a different state: `warning`, naming
-what went unchecked, never `pass` and never `unresolved`. A partial measurement
-is still a measurement — and since v5.35.6 `review.md` step 8 rule 4 names
-`warning` explicitly, so that state can no longer reach a green
-`overall_verdict` by having no rule.
+### `coverage_partial` — part of it was measured, part was not
+
+A gate that ran SOME of its analyzers is a different state from both a clean run
+and an unresolved one: `warning`, naming what went unchecked, never `pass` and
+never `unresolved`. A partial measurement is still a measurement.
+
+**The marker.** The literal string `coverage_partial: true` in one of the
+envelope's `messages[]` entries, alongside a message naming which analyzers were
+absent, crashed or had nothing to read. Same shape as `unresolved: true`, same
+lack of schema support, and the same one consumer: `commands/review.md` step 8
+rule 4 reads it and resolves `overall_verdict: "fail"`.
+
+**The two are not interchangeable.** `unresolved` means **nothing** was measured
+and the gate's own verdict is `skipped`. `coverage_partial` means **part** of it
+was and the verdict is `warning`. Both are facts about what was looked at rather
+than findings about the code, which is why both block and neither is a `fail`
+from the gate itself.
+
+**Only `validate-solid` and `validate-security` emit it.** They stack several
+analyzers and can lose some while keeping others. `validate-dry` runs one
+analyzer and `validate-tdd` has one channel, so for those the answer is binary
+and the unresolved rules above cover it.
+
+**Rule 4 keys on the marker, NEVER on `verdict: "warning"`, and this distinction
+is the whole point.** `warning` is overloaded and mostly means a fully measured
+run with a mildly bad number: `dry-check.sh` sets it for duplication over the
+5% target, `solid-check.sh` for more than ten SOLID warnings. Those runs had
+every tool installed and measured everything they exist to measure. Failing them
+would block reviews for ordinary findings that never blocked before, and would
+teach everyone to reach for `--skip-<gate>` — the bypass that makes the whole
+coverage mechanism worthless. An ordinary `warning` stays exactly as
+non-blocking as it has always been; `review.md` rule 5's benign list says so.
 
 **The gate's own `status` is not a coverage signal, and must not be read as
 one.** `solid-check.sh` prints `[PASS] SOLID compliance acceptable` with both

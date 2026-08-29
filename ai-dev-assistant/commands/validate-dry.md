@@ -92,6 +92,14 @@ phpcpd is the same fact as an absent one: a tool that returned nothing usable pr
 evidence, so `tools_failed[]` is treated exactly as seriously as `tools_absent[]`.
 "Not measured" must never be reported as "no duplication".
 
+**This gate has no partial state, so it never emits `coverage_partial: true`.** Its
+siblings `validate-solid` and `validate-security` do, on a `warning` caused by some
+analyzers being gone, and `/review` step 8 rule 4 fails on that marker. DRY runs one
+analyzer: it either measured duplication or it did not, and the rows above cover the
+second case as `unresolved`. A `warning` from this gate is always a fully measured run
+whose duplication exceeded a soft threshold, which has never blocked a review and still
+does not.
+
 **C. It measured. Map the finding.**
 
 | `status` in `dry-report.json` | Our verdict |
