@@ -77,7 +77,11 @@ Based on project type, run available tools:
 **Drupal:**
 ```bash
 # PHPStan (if available)
-ddev exec vendor/bin/phpstan analyse {path} --level=5 --error-format=json 2>/dev/null || true
+# The level is .code-quality.json's phpstan.level. Never a number here: a --level on
+# the command line overrides a placed phpstan.neon without saying so.
+ddev exec vendor/bin/phpstan analyse {path} \
+  --level="$(jq -r '.phpstan.level' .code-quality.json)" \
+  --error-format=json 2>/dev/null || true
 
 # PHPCS (if available)
 ddev exec vendor/bin/phpcs --standard=Drupal {path} --report=json 2>/dev/null || true

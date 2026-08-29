@@ -86,9 +86,15 @@ ENVSH="${ROOT}/core/detect-environment.sh"
 FULL="${ROOT}/core/full-audit.sh"
 COV="${ROOT}/drupal/coverage-report.sh"
 LINT="${ROOT}/drupal/lint-check.sh"
+# The three gates this spec never touched. Named here and guarded below, so a rename
+# is a fatal error rather than a section that silently does nothing — which is how
+# three defects in dry-check.sh survived a suite built to find exactly their shape.
+DRY="${ROOT}/drupal/dry-check.sh"
+TDD="${ROOT}/drupal/tdd-workflow.sh"
+RECTOR="${ROOT}/drupal/rector-fix.sh"
 SCANLIB="${ROOT}/core/secret-scan.sh"
 
-for f in "$SOLID" "$SEC" "$NEXTSEC" "$ENVSH" "$FULL" "$COV" "$LINT"; do
+for f in "$SOLID" "$SEC" "$NEXTSEC" "$ENVSH" "$FULL" "$COV" "$LINT" "$DRY" "$TDD" "$RECTOR"; do
   [[ -f "$f" ]] || { echo "FATAL: missing $f" >&2; exit 2; }
 done
 
@@ -1170,6 +1176,13 @@ run_security_gate() {
   work="$(mktemp -d "$TMP/gate.XXXXXX")"
   rdir="$work/.reports"
   mkdir -p "$work/markers"
+  # A project with custom code in it. Not decoration: every path-taking layer here — the
+  # pattern greps, php-security-linter, semgrep — now refuses to certify ground it could
+  # not read, so a fixture with no web/modules/custom would cap EVERY scenario below at
+  # "unmeasured" and this section would stop being able to tell a tool that failed from
+  # a tool that was never installed, which is the only thing it exists to say.
+  mkdir -p "$work/web/modules/custom/m/src" "$work/web/themes/custom/t"
+  printf '<?php\n// nothing to find here\n' > "$work/web/modules/custom/m/src/A.php"
   # The container's own filesystem, deliberately NOT under $work: $work is the project,
   # i.e. the bind mount, and the two being different places is the whole point. Anything
   # a container tool writes to a path outside /var/www/html lands here and is invisible
@@ -1403,18 +1416,18 @@ STUB_SEMGREP_WHERE=host run_security_gate "$SEC" 0 absent >/dev/null
 assert_eq "[drupal] semgrep on HOST only -> the HOST binary is the one invoked" \
   "host" "$(last_markers)"
 assert_eq "[drupal] semgrep on HOST only -> it ran, so it is NOT in tools_absent" \
-  "custom_patterns,gitleaks,php-security-linter,psalm,security_review,trivy" "$(last_absent)"
+  "gitleaks,php-security-linter,psalm,security_review,trivy" "$(last_absent)"
 
 STUB_SEMGREP_WHERE=container run_security_gate "$SEC" 0 absent >/dev/null
 assert_eq "[drupal] semgrep in CONTAINER only -> the CONTAINER binary is the one invoked" \
   "container" "$(last_markers)"
 assert_eq "[drupal] semgrep in CONTAINER only -> it ran, so it is NOT in tools_absent" \
-  "custom_patterns,gitleaks,php-security-linter,psalm,security_review,trivy" "$(last_absent)"
+  "gitleaks,php-security-linter,psalm,security_review,trivy" "$(last_absent)"
 
 STUB_SEMGREP_WHERE=none run_security_gate "$SEC" 0 absent >/dev/null
 assert_eq "[drupal] semgrep in NEITHER -> no binary invoked at all" "" "$(last_markers)"
 assert_eq "[drupal] semgrep in NEITHER is named in tools_absent, not tools_failed" \
-  "custom_patterns,gitleaks,php-security-linter,psalm,security_review,semgrep,trivy" \
+  "gitleaks,php-security-linter,psalm,security_review,semgrep,trivy" \
   "$(last_absent)"
 
 # The same three, on the --changed path (:326). It is the CI/pre-merge path and carries
@@ -1443,7 +1456,7 @@ assert_eq "[drupal --changed] semgrep in NEITHER is named in tools_absent" \
 # exactly, per mode. Adding a layer or dropping a recording changes this string.
 run_security_gate "$SEC" 0 absent >/dev/null
 assert_eq "[drupal] every non-producing SCANNER is named in tools_absent" \
-  "custom_patterns,gitleaks,php-security-linter,psalm,security_review,semgrep,trivy" \
+  "gitleaks,php-security-linter,psalm,security_review,semgrep,trivy" \
   "$(last_absent)"
 
 run_changed_gate 0 >/dev/null
@@ -1478,7 +1491,7 @@ H2K_RESULT=$(run_security_gate "$SEC" 0 crash)
 assert_eq "[drupal] a crashed tool IS recorded in tools_failed, at this same scenario" \
   "0|skipped|gitleaks|0,0,0" "$H2K_RESULT"
 assert_eq "[drupal] and is NOT in tools_absent, which lists exactly the expected absences" \
-  "custom_patterns,php-security-linter,psalm,security_review,semgrep,trivy" "$(last_absent)"
+  "php-security-linter,psalm,security_review,semgrep,trivy" "$(last_absent)"
 
 # H2h: the psalm findings transform. resolve_tool_result accepts this report (its
 # `length` count works), so the failure is downstream: the transform aborts on entries
@@ -2308,9 +2321,15 @@ assert_eq "[drupal lint] no modules dir -> themes are scanned, verdict is not a 
   "$(run_lint_gate themes)"
 
 # K5: neither directory exists. Zero violations were found by not looking, so the verdict
-# must not be "pass". Unfixed this is the same [PASS]-plus-unparseable-report as K4.
-assert_eq "[drupal lint] nothing to scan -> skipped, never pass" \
-  "0|skipped|||" \
+# must not be "pass". Unfixed this was the same [PASS]-plus-unparseable-report as K4.
+#
+# Re-pinned to the unmeasured contract. It said "skipped" and exited 0 until this task:
+# "skipped" in this suite already means the TOOL is absent, which is a legitimate state
+# of the machine, and a zero exit is read as a pass by every caller that has only the
+# exit code — standalone runs and AIDA's /validate-* wrappers among them. A path that is
+# not there is a configuration fact about the project and now says so, at exit 4.
+assert_eq "[drupal lint] nothing to scan -> unmeasured and non-zero, never pass" \
+  "4|unmeasured|||" \
   "$(run_lint_gate none)"
 
 # K6: DRUPAL_THEMES_PATH is READ, not just defaulted. scope-targeting.md documents it as
@@ -2341,8 +2360,8 @@ assert_eq "[drupal lint --changed] a changed theme file is scanned" \
 # string, not zero, and unfixed that reaches the "pass" branch and emits `"errors": ,`.
 # A missing scan path was only the most reachable way in; this is the same false clean
 # with the paths all present, so K4 and K5 alone would leave it live.
-assert_eq "[drupal lint] phpcs emits an empty report -> skipped, not a pass with unparseable counts" \
-  "0|skipped|web/modules/custom,web/themes/custom|web/modules/custom,web/themes/custom|web/modules/custom,web/themes/custom" \
+assert_eq "[drupal lint] phpcs emits an empty report -> unmeasured, not a pass with unparseable counts" \
+  "4|unmeasured|web/modules/custom,web/themes/custom|web/modules/custom,web/themes/custom|web/modules/custom,web/themes/custom" \
   "$(LINT_PHPCS_EMPTY=1 run_lint_gate both)"
 
 # ── L. custom paths follow the detected Drupal root (item 5) ─────────────────
@@ -3344,12 +3363,39 @@ PY
 # independently of level, so a lower level costs no Drupal coverage while an
 # excludePaths entry costs all of it. If a future edit raises the level back, that is a
 # real decision and should have to change this line to make it.
-assert_eq "[O, harness guard + shipped level] the template still parses, still configures phpstan, and still ships level 5" \
-  "5|1|present" \
+#
+# The level is ALSO the reason cqt-install.sh rewrites the `level:` LINE at placement
+# rather than substituting a token into it: a token here makes this file unparseable,
+# and every assertion in this section reads it with a YAML parser. The literal below is
+# the same value .code-quality.json defaults to, so the template and the config cannot
+# silently disagree.
+#
+# The third field changed with config_driven_installer, and the change is the point.
+# It used to be `'present' if p.get('ignoreErrors')`, i.e. the list is NON-EMPTY. The
+# template now ships `ignoreErrors: []` deliberately: it carried three pre-emptive
+# suppressions while reportUnmatchedIgnoredErrors was true, and an unmatched suppression
+# is itself an error, so on a project with zero custom PHP all three failed and the
+# template could not run clean on the case it is most likely to be adopted on. A
+# truthiness probe would now be satisfied only by that defect. What the guard actually
+# needs is that the KEY is still there and still a list — an unparseable or truncated
+# file gives neither — and that it is empty, which is the shipped state this task
+# settled on. Emptying rather than removing the key, and leaving
+# reportUnmatchedIgnoredErrors on, is what keeps a future stale suppression visible.
+assert_eq "[O, harness guard + shipped level] the template still parses, still configures phpstan, and still ships level 5 with an empty ignoreErrors" \
+  "5|1|empty-list" \
   "$(python3 -c "
 import yaml
 p = (yaml.safe_load(open('$NEON')) or {}).get('parameters') or {}
-print('%s|%s|%s' % (p.get('level'), len(p.get('paths') or []), 'present' if p.get('ignoreErrors') else 'absent'))
+ie = p.get('ignoreErrors', 'MISSING')
+print('%s|%s|%s' % (p.get('level'), len(p.get('paths') or []),
+                    'empty-list' if ie == [] else ('non-empty' if isinstance(ie, list) else 'MISSING')))
+")"
+assert_eq "[O] and reportUnmatchedIgnoredErrors stays on, so a stale suppression is still an error" \
+  "True" \
+  "$(python3 -c "
+import yaml
+p = (yaml.safe_load(open('$NEON')) or {}).get('parameters') or {}
+print(p.get('reportUnmatchedIgnoredErrors'))
 ")"
 
 # O1: the reported defect. None of the three files a default-enabled rule needs to
@@ -3360,15 +3406,24 @@ assert_eq "[contract, not behavioural] no shipped excludePaths pattern hides .mo
 # O2: and the assertion above genuinely discriminates. Put the old exclusion block
 # back and it must report all three files hidden. Without this, "0" would also be the
 # reading for a config whose excludePaths key we simply failed to find.
+# Injected INTO the excludePaths list the template now ships, not as a second
+# excludePaths key. The template gained an analyseAndScan block excluding vendored
+# third-party trees (node_modules, and vendor/ inside a custom module or theme), so a
+# second top-level `excludePaths:` would simply be the duplicate key a YAML parser
+# discards — the mutation would write a file, change nothing a parser can see, and the
+# assertion below would report "0 hidden" for the wrong reason. Putting the pre-fix
+# patterns into the list that exists is what actually restores the old blindness.
 O_EXCL_INJECT='
-    excludePaths:
-        - web/modules/custom/*/tests/*
-        - web/modules/custom/*/*.module
-        - web/modules/custom/*/*.install
-'
+            - web/modules/custom/*/tests/*
+            - web/modules/custom/*/*.module
+            - web/modules/custom/*/*.install'
+# The anchor is the shipped excludePaths block itself. `paths:` is no longer usable as
+# one: it now names a quoted placeholder, substituted at placement from
+# project.layout.modules, because a static config file cannot detect whether a project's
+# web root is web/ or docroot/ and this one used to guess.
 assert_eq "[O, mutation] the pre-fix excludePaths block re-inserts at exactly one anchor" \
-  "ok" "$(o_mutate "$NEON" "$TMP/neon_excl" '    paths:
-        - web/modules/custom' "$O_EXCL_INJECT" 1)"
+  "ok" "$(o_mutate "$NEON" "$TMP/neon_excl" '    excludePaths:
+        analyseAndScan:' "$O_EXCL_INJECT" 1)"
 assert_eq "[O, mutation] with the pre-fix exclusions back, all three files are hidden again" \
   "3" "$(o_hidden "$TMP/neon_excl")"
 
@@ -3420,15 +3475,17 @@ assert_eq "[O, mutation] a drupal_root key re-inserts at exactly one anchor" \
 assert_eq "[O, mutation] an injected drupal_root is detected" \
   "present" "$(o_key "$TMP/neon_root" parameters.drupal.drupal_root)"
 
-# O9: the template's header tells the reader that the SOLID gate takes its level from
-# whatever phpstan discovers in the project root, because solid-check.sh passes neither
-# --level nor --configuration. That is a claim about a DIFFERENT file, which is exactly
-# the kind of statement that rots silently: the moment solid-check.sh starts pinning its
-# own --level, the shipped template is lying and nothing else would notice.
+# O9: the template's header makes a claim about a DIFFERENT file — what solid-check.sh
+# does about the analysis level. That is exactly the kind of statement that rots
+# silently, so it is asserted here against the gate itself.
 #
-# Read-only on solid-check.sh — that file belongs to another work-order and is not
-# edited here. If this assertion goes red because a --level was deliberately added,
-# the fix is to correct the template's header, not to delete this line.
+# The claim CHANGED with the level fix, and the header was rewritten with it: the gate
+# used to pass neither --level nor --configuration, inheriting a discovered config or
+# phpstan's built-in 0, and now passes one or the other explicitly. Both flags are
+# counted, so the assertion holds whichever branch the gate is reading.
+#
+# Read-only on solid-check.sh. If this goes red, the fix is to reconcile the template
+# header with what the gate does, not to delete this line.
 o_gate_pins_level() {
   python3 - "$1" <<'PY'
 import sys, re
@@ -3442,19 +3499,27 @@ for line in open(sys.argv[1]):
 print(n)
 PY
 }
-assert_eq "[contract, not behavioural] the SOLID gate pins no phpstan level, as the template header states" \
-  "0" "$(o_gate_pins_level "$SOLID")"
+# Exactly two: the two branches of the choice, `--configuration <file>` when one is
+# placed and `--level N` when none is. Counted rather than asserted as "more than zero",
+# so a third spelling of the level appearing somewhere else goes red.
+assert_eq "[contract, not behavioural] the SOLID gate pins a phpstan level, as the template header now states" \
+  "2" "$(o_gate_pins_level "$SOLID")"
+
+# And both phpstan call sites expand the array those two branches build. The count above
+# lives in one place now, so on its own it no longer says that the whole-tree path and
+# the --changed path both carry it; this is the half that does.
+assert_eq "[contract, not behavioural] both phpstan call sites expand the pinned argument list" \
+  "2" "$(grep -c 'PHPSTAN_ARGS\[@\]' "$SOLID")"
 
 # O10: and that reading is not simply blind to the flag. The anchor is expected TWICE,
 # because solid-check.sh invokes phpstan at two call sites (the --changed path and the
-# whole-modules-path one) and both would have to pin a level for the header's claim to
-# be wrong. o_mutate rewrites only the first, so exactly one injected flag comes back —
-# which also proves the reader is not merely counting anchors.
+# whole-modules-path one). o_mutate rewrites only the first, so exactly one extra flag
+# comes back — which also proves the reader is not merely counting anchors.
 assert_eq "[O, mutation] the gate's phpstan invocation is found at both of its call sites" \
   "ok" "$(o_mutate "$SOLID" "$TMP/solid_level" '        --error-format=json' '
         --level=8' 2)"
-assert_eq "[O, mutation] an injected --level in the gate is detected" \
-  "1" "$(o_gate_pins_level "$TMP/solid_level")"
+assert_eq "[O, mutation] an extra injected --level in the gate is detected" \
+  "3" "$(o_gate_pins_level "$TMP/solid_level")"
 
 # O8: the 2.1.0 jump is documented where someone hits it. Pure documentation
 # assertions — they prove the text is present, never that it is correct.
@@ -3523,7 +3588,17 @@ printf '{"project_type": "%s"%s}\n' "${P_PTYPE:-drupal}" "${P_FIELDS:-}" \
   > "${REPORT_DIR:-.reports}/environment.json"
 exit "${P_DETECT_EXIT:-0}"
 STUB
-printf '#!/usr/bin/env bash\nexit 0\n' > "$P_ROOT/core/install-tools.sh"
+# The installer under simulation. P_TOOLS_STATUS is written verbatim (empty = the file
+# is never created, which models an installer that died before writing one), and
+# P_INSTALL_EXIT is the status full-audit.sh used to discard with `|| true`.
+cat > "$P_ROOT/core/install-tools.sh" <<'STUB'
+#!/usr/bin/env bash
+mkdir -p "${REPORT_DIR:-.reports}"
+if [ -n "${P_TOOLS_STATUS:-}" ]; then
+  printf '%s\n' "${P_TOOLS_STATUS}" > "${REPORT_DIR:-.reports}/tools-status.json"
+fi
+exit "${P_INSTALL_EXIT:-0}"
+STUB
 printf '#!/usr/bin/env bash\nexit 0\n' > "$P_ROOT/core/report-processor.sh"
 
 # Every non-SOLID gate: records the two paths it was handed, then passes. `-UNSET-`
@@ -3554,7 +3629,17 @@ done
 chmod +x "$P_ROOT"/core/*.sh "$P_ROOT"/drupal/*.sh "$P_ROOT"/nextjs/*.sh
 
 P_BIN="$TMP/pa_bin"; mkdir -p "$P_BIN"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$P_BIN/ddev"; chmod +x "$P_BIN/ddev"
+# P_PHPSTAN_PRESENT=0 makes step 2's fast-path probe fail, which is the only way to
+# reach the installer at all — and the installer's outcome is what section AG is about.
+cat > "$P_BIN/ddev" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1-}" = "exec" ] && [ "${2-}" = "vendor/bin/phpstan" ]; then
+  [ "${P_PHPSTAN_PRESENT:-1}" = "1" ] && exit 0
+  exit 1
+fi
+exit 0
+STUB
+chmod +x "$P_BIN/ddev"
 
 # Runs the real full-audit.sh in a fresh sandbox; echoes the work directory so the
 # caller can read the report, the recorded environments and the printed output.
@@ -3567,7 +3652,13 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$P_BIN/ddev"; chmod +x "$P_BIN/ddev"
 run_p_audit() {
   local ptype="$1" fields="$2" solid_status="$3" solid_exit="$4" solid_write="$5" stale="$6"
   local detect_exit="${7:-0}"
-  local work rc=0
+  local work rc=0 p_tools
+  # A healthy installer unless the caller says otherwise. Step 2 now STOPS the run when
+  # tools-status.json does not say all_ok, so a scenario that is about something else
+  # entirely — an empty path field, a stale report — needs the installer to have
+  # succeeded or it never reaches the thing it is testing. Set-but-empty is honoured, so
+  # section AG can still model an installer that wrote no status file at all.
+  if [ "${P_TOOLS_STATUS+set}" = "set" ]; then p_tools="$P_TOOLS_STATUS"; else p_tools='{"all_ok": true}'; fi
   work="$(mktemp -d "$TMP/pa.XXXXXX")"
   mkdir -p "$work/.reports"
   # A report left behind by a PREVIOUS run. Reading the report as the verdict is only
@@ -3580,6 +3671,8 @@ run_p_audit() {
       PATH="$P_BIN:/usr/bin:/bin" REPORT_DIR="$work/.reports" \
       P_PTYPE="$ptype" P_FIELDS="$fields" P_DETECT_EXIT="$detect_exit" \
       P_SOLID_STATUS="$solid_status" P_SOLID_EXIT="$solid_exit" P_SOLID_WRITE="$solid_write" \
+      P_PHPSTAN_PRESENT="${P_PHPSTAN_PRESENT:-1}" \
+      P_INSTALL_EXIT="${P_INSTALL_EXIT:-0}" P_TOOLS_STATUS="$p_tools" \
       bash "$P_ROOT/core/full-audit.sh"
   ) > "$work/out.txt" 2>&1 || rc=$?
   printf '%s' "$rc" > "$work/rc"
@@ -4279,7 +4372,7 @@ while IFS= read -r r_f; do R_ALL+=("$r_f"); done < <(
 )
 R_EXPECTED=(
   core/detect-environment.sh core/full-audit.sh core/install-tools.sh
-  core/report-processor.sh
+  core/install-verify.sh core/report-processor.sh
   drupal/coverage-report.sh drupal/dry-check.sh drupal/lint-check.sh
   drupal/rector-fix.sh drupal/security-check.sh drupal/solid-check.sh
   nextjs/coverage-report.sh nextjs/dry-check.sh nextjs/lint-check.sh
@@ -7051,6 +7144,3876 @@ V3STUB
       "yes|yes|failed|yes" \
       "$(u_has "$(u_out "$V8W")" '[SCOPE]')|$(u_has "$(u_out "$V8W")" '[SKIP]')|$(jq -r '.status // "MISSING"' "$V8W/out.txt.scope" 2>/dev/null || echo ERR)|$(u_has "$V8S" 'nothing was scanned')"
   done
+fi
+
+# ── X. one place answers "where is the custom code", and no gate answers it itself ──
+echo ""
+echo "X: layout resolution lives in core/path-resolve.sh, and every gate asks it"
+
+# Nine call sites re-hardcoded ${DRUPAL_MODULES_PATH:-web/modules/custom} instead of
+# calling the resolver detect-environment.sh already shipped, so every docroot-layout
+# (Acquia) project had each gate pointed at a directory that script had already ruled
+# out. The fix extracts the resolution DOWNWARD into a library every gate can source,
+# rather than sourcing detect-environment.sh itself — that script is `set -e`, prints a
+# banner, sources report-dir.sh and clobbers fourteen caller globals at load time, two
+# of them the names full-audit.sh:155-157 owns.
+#
+# So the library's first contract is that SOURCING IT DOES NOTHING. Asserted by running
+# it, not by reading it: a `set -e` or an echo added later would be invisible to a grep
+# and fatal to seven gates.
+
+PRESOLVE="${ROOT}/core/path-resolve.sh"
+if [[ ! -f "$PRESOLVE" ]]; then
+  bad "core/path-resolve.sh exists (the library every gate sources)"
+else
+  # X1: sourcing is silent and side-effect free. stdout and stderr are both captured:
+  # a banner on either one lands in the middle of a gate's own output, and the JSON
+  # reports several gates build with `cat > file << EOF` would take it with them.
+  X_SRC=$(bash -c '. "$1"; echo ok' _ "$PRESOLVE" 2>&1)
+  assert_eq "[lib] sourcing path-resolve.sh prints nothing at all" "ok" "$X_SRC"
+
+  # X2: and it does not turn on `set -e` in the caller. The gates rely on not having
+  # it — lint-check.sh uses bare `jq ... || echo "0"` forms whose behaviour changes
+  # under -e — so this is the specific side effect that made sourcing
+  # detect-environment.sh unusable.
+  X_E=$(bash -c '. "$1"; case "$-" in *e*) echo has-e ;; *) echo no-e ;; esac' _ "$PRESOLVE" 2>&1)
+  assert_eq "[lib] sourcing does not set -e in the caller's shell" "no-e" "$X_E"
+
+  # X3: nor does it write a report directory, run ddev, or exit. Run with a PATH that
+  # holds nothing at all: any external command at load time would be a fatal
+  # "command not found" here rather than a silent dependency.
+  X_BARE=$(PATH="/cqt-nonexistent" /bin/bash -c '. "$1"; echo ok' _ "$PRESOLVE" 2>&1)
+  assert_eq "[lib] sourcing runs no external command (an unusable PATH still works)" "ok" "$X_BARE"
+
+  # X4: the three layouts research/gate-behaviour.md §B traces, plus the
+  # no-detection fallback. cqt_drupal_root_prefix is the function moved down from
+  # detect-environment.sh:142 and its answers must not change.
+  x_prefix() {
+    bash -c '. "$1"; PROJECT_ROOT="$2" DRUPAL_ROOT="$3"; printf "[%s]" "$(cqt_drupal_root_prefix)"' \
+      _ "$PRESOLVE" "$2" "$3" 2>&1
+  }
+  assert_eq "[lib] root layout -> empty prefix" "[]" "$(x_prefix _ /p /p)"
+  assert_eq "[lib] composer layout -> web" "[web]" "$(x_prefix _ /p /p/web)"
+  assert_eq "[lib] Acquia layout -> docroot" "[docroot]" "$(x_prefix _ /p /p/docroot)"
+  assert_eq "[lib] nothing detected -> the historical web fallback, not an invention" \
+    "[web]" "$(x_prefix _ /p '')"
+
+  # X5: the exit vocabulary. 4, never 3. 3 means version drift in two places already
+  # (detect-environment.sh:373, full-audit.sh:146) and a gate exiting 3 would give a
+  # caller two meanings for one number.
+  X_CONST=$(bash -c '. "$1"; printf "%s|%s|%s|%s|%s" \
+      "$CQT_EXIT_PASS" "$CQT_EXIT_WARNING" "$CQT_EXIT_FAIL" "$CQT_EXIT_UNMEASURED" \
+      "$CQT_STATUS_UNMEASURED"' _ "$PRESOLVE" 2>&1)
+  assert_eq "[lib] the suite's exit words, with unmeasured at 4" \
+    "0|1|2|4|unmeasured" "$X_CONST"
+
+  # X6: cqt_scan_path_state tests -e, not -d. references/scope-targeting.md documents
+  # pointing these variables at a single module directory OR a single file, and phpcs
+  # accepts a file, so a -d test would call a legitimately scoped run unmeasured.
+  X_STATE_DIR="$TMP/x_state"; mkdir -p "$X_STATE_DIR/d"; : > "$X_STATE_DIR/f"
+  X_STATE=$(bash -c '. "$1"; printf "%s|%s|%s" \
+      "$(cqt_scan_path_state "$2/d")" "$(cqt_scan_path_state "$2/f")" \
+      "$(cqt_scan_path_state "$2/nope")"' _ "$PRESOLVE" "$X_STATE_DIR" 2>&1)
+  assert_eq "[lib] scan state: a directory and a file are both ok, an absent path is missing" \
+    "ok|ok|missing" "$X_STATE"
+
+  # X7: an explicit value wins and is NEVER second-guessed, even when it does not
+  # exist — the rule resolve_custom_path already stated. A typo in a scope override
+  # must be reported as a typo, not silently swapped for another tree.
+  X_EXPL=$(bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      DRUPAL_MODULES_PATH="docroot/modules/custom/nosuch"
+      cqt_resolve_custom_path DRUPAL_MODULES_PATH modules
+      printf "%s|%s|%s" "$DRUPAL_MODULES_PATH" "$CQT_PATH_ORIGIN" "$CQT_PATH_STATE"
+    ' _ "$PRESOLVE" "$TMP" 2>&1)
+  assert_eq "[lib] an explicit path that does not exist is kept, and reported missing" \
+    "docroot/modules/custom/nosuch|explicit|missing" "$X_EXPL"
+
+  # X8: with nothing explicit, both paths are derived from the detected Drupal root.
+  # This is the defect in one assertion: the fixture is an Acquia layout, so a gate
+  # that resolves through the library gets docroot/... where the hardcoded default
+  # gave it web/... .
+  X_DOC="$TMP/x_docroot"; mkdir -p "$X_DOC/docroot/core/lib" \
+    "$X_DOC/docroot/modules/custom" "$X_DOC/docroot/themes/custom"
+  printf "const VERSION = '10.5.0';\n" > "$X_DOC/docroot/core/lib/Drupal.php"
+  X_DERIVED=$(env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$DRUPAL_MODULES_PATH" "$DRUPAL_THEMES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] an Acquia layout derives both paths under docroot/, with no literal" \
+    "docroot/modules/custom|docroot/themes/custom" "$X_DERIVED"
+
+  # X9: and under /audit, where full-audit.sh has already re-exported resolved values,
+  # the library must do NOTHING — the export is explicit and wins. Pointed at the same
+  # docroot fixture with a web/ value exported, so a library that re-derived would
+  # visibly overwrite it.
+  X_EXPORTED=$(DRUPAL_MODULES_PATH="web/modules/custom" DRUPAL_THEMES_PATH="web/themes/custom" \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$DRUPAL_MODULES_PATH" "$DRUPAL_THEMES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] values full-audit.sh already exported are left exactly as they are" \
+    "web/modules/custom|web/themes/custom" "$X_EXPORTED"
+
+  # X12: HOW a path came by its value survives the resolution that assigned it.
+  #
+  # A gate reports a missing EXPLICIT path differently from a missing derived one: the
+  # first is a typo in someone's override, the second is a project with no custom code.
+  # So the question is only ever asked AFTER cqt_resolve_drupal_paths has run — and
+  # that call exports the variable on every branch, the not-found one included. Any
+  # answer computed from "is the variable non-empty" is therefore "explicit" every
+  # time, and a project with no custom modules at all gets reported as a config typo.
+  #
+  # Asserted through the resolve-then-ask sequence a gate actually performs, not by
+  # calling the origin helper on a pristine environment, because the pristine call is
+  # the one case where guessing from emptiness happens to be right.
+  X_ORIGIN=$(env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$(cqt_path_origin DRUPAL_MODULES_PATH)" \
+                     "$(cqt_path_origin DRUPAL_THEMES_PATH)"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] a derived path still reads as derived after it has been resolved" \
+    "derived|derived" "$X_ORIGIN"
+
+  # X14: RESOLVING TWICE IN ONE PROCESS GIVES THE SAME ANSWER.
+  #
+  # cqt_resolve_custom_path exports the variable on every branch and then reads that same
+  # variable as `explicit` on the next call, so a second resolution in one process reports
+  # a typo in an override nobody wrote — the exact failure the origin record exists to
+  # prevent, arrived at through the record itself. Not reachable in shipped code today:
+  # each gate calls cqt_resolve_drupal_paths once. It is a trap for the next caller that
+  # resolves twice — a retry, or a --changed path that re-resolves — and the fix is one
+  # line, so it is closed rather than documented.
+  X_TWICE=$(env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      first="$(cqt_path_origin DRUPAL_MODULES_PATH)|$DRUPAL_MODULES_PATH"
+      cqt_resolve_drupal_paths
+      printf "%s || %s|%s" "$first" "$(cqt_path_origin DRUPAL_MODULES_PATH)" "$DRUPAL_MODULES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] resolving twice in one process does not turn a derived path into an override" \
+    "derived|docroot/modules/custom || derived|docroot/modules/custom" "$X_TWICE"
+
+  # X15: and a REAL explicit value still survives a second resolution. Without this, the
+  # fix could have been "ignore the variable on every call", which would discard the
+  # caller's override the moment anything resolved twice.
+  X_TWICE_EXPL=$(env -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    DRUPAL_MODULES_PATH="docroot/modules/custom/nosuch" \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$(cqt_path_origin DRUPAL_MODULES_PATH)" "$DRUPAL_MODULES_PATH"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] an explicit override is still explicit, and still itself, after two calls" \
+    "explicit|docroot/modules/custom/nosuch" "$X_TWICE_EXPL"
+
+  # X13: and the two paths keep separate answers. cqt_resolve_drupal_paths resolves
+  # modules and then themes, so a single CQT_PATH_ORIGIN global holds only the themes
+  # answer by the time either is read; asking about modules must not return it.
+  X_ORIGIN_MIX=$(env -u DRUPAL_THEMES_PATH -u DRUPAL_ROOT \
+    DRUPAL_MODULES_PATH="docroot/modules/custom/nosuch" \
+    bash -c '
+      . "$1"
+      cd "$2" || exit 9
+      cqt_resolve_drupal_paths
+      printf "%s|%s" "$(cqt_path_origin DRUPAL_MODULES_PATH)" \
+                     "$(cqt_path_origin DRUPAL_THEMES_PATH)"
+    ' _ "$PRESOLVE" "$X_DOC" 2>&1)
+  assert_eq "[lib] an explicit modules path and a derived themes path keep separate origins" \
+    "explicit|derived" "$X_ORIGIN_MIX"
+fi
+
+# X10: THE CRITERION-1 VERIFY. No gate script carries a layout literal any more.
+# Counted over the shipped gate and core scripts; scripts/tests/ is excluded because
+# its stubs legitimately contain the string they are modelling.
+X_HARDCODED=$(grep -l 'DRUPAL_MODULES_PATH:-web/' "$ROOT"/drupal/*.sh "$ROOT"/core/*.sh 2>/dev/null \
+  | sed "s|^${ROOT}/||" | paste -sd, - | tr -d '\n')
+assert_eq "no gate or core script defaults DRUPAL_MODULES_PATH to a web/ literal" \
+  "" "$X_HARDCODED"
+
+# X11: and 3 still means exactly one thing. The unmeasured contract deliberately picked
+# 4 so that a caller reading 3 gets version drift and nothing else; this is what stops a
+# later edit from reaching for 3 because it looks free.
+# Files, not file:line: the line numbers moved the moment detect-environment.sh handed
+# its path functions down to the library, and an assertion that goes red for a shift in
+# an unrelated part of a file it is not about is a false alarm, not a guard.
+X_EXIT3=$(grep -rlE '(^|[^0-9])exit 3([^0-9]|$)' "$ROOT"/core "$ROOT"/drupal "$ROOT"/nextjs 2>/dev/null \
+  | sed "s|^${ROOT}/||" | sort | paste -sd, - | tr -d '\n')
+assert_eq "exit 3 is still only the two version-drift files, never a gate" \
+  "core/detect-environment.sh,core/full-audit.sh" \
+  "$X_EXIT3"
+
+# ── Y. phpcs is told which extensions Drupal uses (criterion 10) ─────────────
+echo ""
+echo "Y: every phpcs/phpcbf invocation carries --extensions, and .module is scanned"
+
+# phpcs checks .php and .inc and nothing else unless told otherwise. Every invocation in
+# this gate omitted --extensions, so .module, .install, .profile, .theme and .engine —
+# the file types that only exist in Drupal, and where hook implementations and theme
+# preprocess live — were never read. The gate reported a clean tree having skipped the
+# most Drupal-specific half of it.
+#
+# Asserted behaviourally, not by grepping the script for the flag: the stub below models
+# the extension filter, so a violating .module is invisible to an invocation that did not
+# carry --extensions. A grep would be satisfied by the flag appearing on one of the four
+# invocations, or in a comment.
+#
+# NO LANGUAGE FLAVOUR in the value. `module/php` was the phpcs 3 way to name a
+# tokenizer; PHPCS 4.0 removed the JS and CSS tokenizers outright and, with them, the
+# flavour syntax — "the --extensions command-line argument no longer takes a language
+# 'flavour' … remove any language part, i.e. php,inc/php becomes php,inc" (PHPCS 4.0
+# User Upgrade Guide, retrieved 2026-08-28). The sibling child pins coder ^9.0, so this
+# gate will run under phpcs 4; the bare form is the only spelling both majors accept.
+# `js` is deliberately absent for the same reason: phpcs 4 cannot tokenize JavaScript at
+# all, and naming it bare would have BOTH majors read .js files as PHP.
+Y_EXTS="php,module,inc,install,profile,theme,engine"
+Y_IGNORE="*/node_modules/*,*/vendor/*,*/bower_components/*"
+
+YSTUB="$TMP/lintstub2"; mkdir -p "$YSTUB"
+cat > "$YSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+# phpcs/phpcbf stub that MODELS THE EXTENSION FILTER and the --ignore patterns, so
+# "did the gate pass --extensions" is answerable from a verdict rather than from a grep.
+# A file counts as a finding when it contains the token VIOLATION.
+record() {
+  local dest="$1"; shift
+  [ -n "${STUB_MARKER_DIR:-}" ] || return 0
+  printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/$dest"
+}
+sub="${1-}"; shift 2>/dev/null || true
+[ "$sub" = "describe" ] && exit 0
+[ "$sub" = "exec" ] || exit 0
+tool="${1-}"; shift 2>/dev/null || true
+case "$tool" in vendor/bin/phpcs|vendor/bin/phpcbf) ;; *) exit 0 ;; esac
+if [ "${1-}" = "--version" ]; then
+  printf 'PHP_CodeSniffer version %s by Squiz\n' "${STUB_PHPCS_VERSION:-3.13.6}"
+  exit 0
+fi
+
+ALL_ARGS=("$@")
+fmt="none"; exts="php,inc"; ignore=""; paths=()
+for a in "$@"; do
+  case "$a" in
+    --report=*)     fmt="${a#--report=}" ;;
+    --extensions=*) exts="${a#--extensions=}" ;;
+    --ignore=*)     ignore="${a#--ignore=}" ;;
+    -*) ;;
+    *) paths+=("$a") ;;
+  esac
+done
+
+# Real phpcs aborts the whole run when any argument path is absent: error on stderr,
+# nothing on stdout, non-zero exit. Modelled, because it is what turns one missing
+# themes directory into a clean report for the modules that were there.
+for p in "${paths[@]+"${paths[@]}"}"; do
+  if [ ! -e "$p" ]; then
+    printf 'ERROR: The file "%s" does not exist.\n' "$p" >&2
+    exit 3
+  fi
+done
+
+case "$tool" in
+  vendor/bin/phpcs)  record "phpcs_${fmt}" "${ALL_ARGS[@]}" ;;
+  vendor/bin/phpcbf) record "phpcbf" "${ALL_ARGS[@]}" ;;
+esac
+
+count=0
+IFS=',' read -r -a EXT_LIST <<< "$exts"
+IFS=',' read -r -a IGN_LIST <<< "$ignore"
+for p in "${paths[@]+"${paths[@]}"}"; do
+  while IFS= read -r f; do
+    skip=0
+    for g in "${IGN_LIST[@]+"${IGN_LIST[@]}"}"; do
+      [ -n "$g" ] || continue
+      # shellcheck disable=SC2254
+      case "$f" in $g) skip=1 ;; esac
+    done
+    [ "$skip" = 1 ] && continue
+    ext="${f##*.}"
+    match=0
+    for e in "${EXT_LIST[@]+"${EXT_LIST[@]}"}"; do
+      # phpcs 3 accepted an ext/tokenizer flavour; take the extension half so the stub
+      # does not reward or punish a spelling it is not the judge of.
+      [ "$ext" = "${e%%/*}" ] && match=1
+    done
+    [ "$match" = 1 ] || continue
+    grep -qF VIOLATION "$f" 2>/dev/null && count=$((count + 1))
+  done < <(find "$p" -type f 2>/dev/null)
+done
+
+if [ "$tool" = "vendor/bin/phpcbf" ]; then
+  printf 'PHPCBF RESULT SUMMARY\n'
+  exit "${STUB_PHPCS_EXIT:-0}"
+fi
+
+case "${STUB_PHPCS_BODY:-default}" in
+  empty)   : ;;
+  default) case "$fmt" in
+             json)    printf '{"totals":{"errors":%s,"warnings":0,"fixable":%s},"files":{}}\n' "$count" "$count" ;;
+             summary) printf 'PHPCS RESULT SUMMARY\nA TOTAL OF %s ERRORS WERE FOUND\n' "$count" ;;
+           esac ;;
+  *)       [ "$fmt" = "json" ] && printf '%s\n' "$STUB_PHPCS_BODY" ;;
+esac
+
+rc=0
+[ "$count" -gt 0 ] && rc=2
+exit "${STUB_PHPCS_EXIT:-$rc}"
+STUB
+chmod +x "$YSTUB/ddev"
+
+# A composer-layout project with a REAL Drupal root, so the paths the gate scans are
+# derived by the library rather than falling back to the historical web/ default. That
+# matters here: an assertion that passes only because the fallback happens to be right
+# would not notice the resolver being bypassed.
+mk_l2() {
+  local work; work="$(mktemp -d "$TMP/l2.XXXXXX")"
+  mkdir -p "$work/web/core/lib" "$work/web/modules/custom/m/src" "$work/web/themes/custom/t"
+  printf "const VERSION = '10.5.0';\n" > "$work/web/core/lib/Drupal.php"
+  printf '<?php\n' > "$work/web/modules/custom/m/src/A.php"
+  printf '%s' "$work"
+}
+
+# Runs the shipped gate in a SEPARATE process against a caller-built fixture and echoes
+#   "<exit>|<status>|<errors>|<warnings>"
+# Knobs are read from L2_* in the caller's environment.
+run_l2() {
+  local work="$1"; shift
+  local bin rdir rc=0
+  rdir="$work/.reports"; mkdir -p "$work/markers"
+  bin="$(mktemp -d "$TMP/l2bin.XXXXXX")"; cp "$YSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_MARKER_DIR="$work/markers" \
+       DRUPAL_MODULES_PATH="${L2_MODULES:-}" DRUPAL_THEMES_PATH="${L2_THEMES:-}" \
+       STUB_PHPCS_VERSION="${L2_VERSION:-3.13.6}" \
+       STUB_PHPCS_EXIT="${L2_EXIT:-}" STUB_PHPCS_BODY="${L2_BODY:-default}" \
+       bash "$LINT" "$@" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.status // "MISSING"' "$rdir/lint-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.errors // "MISSING"' "$rdir/lint-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.warnings // "MISSING"' "$rdir/lint-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# The recorded argv of one invocation, whole. A substring check passes against a flag
+# added to one of the four call sites and forgotten on the other three.
+l2_argv() { tr -d '\n' < "$1/markers/$2" 2>/dev/null || printf 'NEVER-INVOKED'; }
+
+# Y1: a violating .module. The defect in one assertion — without --extensions the stub
+# reads only .php and .inc, finds nothing, and the gate certifies a clean tree.
+Y_W1="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Y_W1/web/modules/custom/m/m.module"
+assert_eq "[drupal lint] a violating .module is reported, not skipped for its extension" \
+  "2|fail|1|0" "$(run_l2 "$Y_W1")"
+
+# Y2: the full argv of all three directory-scanning invocations. Asserted whole,
+# because the flag has to be on every one of them: phpcbf without it auto-fixes only
+# .php, leaving every .module violation in place while reporting the tree fixed.
+Y_EXPECT_SCAN="--standard=Drupal,DrupalPractice --report=json --extensions=${Y_EXTS} --ignore=${Y_IGNORE} web/modules/custom web/themes/custom"
+assert_eq "[drupal lint] phpcs --report=json argv carries --extensions and --ignore" \
+  "$Y_EXPECT_SCAN" "$(l2_argv "$Y_W1" phpcs_json)"
+assert_eq "[drupal lint] phpcs --report=summary argv carries --extensions and --ignore" \
+  "${Y_EXPECT_SCAN/--report=json/--report=summary}" "$(l2_argv "$Y_W1" phpcs_summary)"
+
+Y_W2="$(mk_l2)"
+run_l2 "$Y_W2" --fix > /dev/null
+assert_eq "[drupal lint] phpcbf argv carries --extensions and --ignore too" \
+  "--standard=Drupal,DrupalPractice --extensions=${Y_EXTS} --ignore=${Y_IGNORE} web/modules/custom web/themes/custom" \
+  "$(l2_argv "$Y_W2" phpcbf)"
+
+# Y3: the value carries no language flavour and no js. Read off the recorded argv, so
+# this is the spelling phpcs was actually handed. PHPCS 4.0 removed the flavour syntax
+# and the JS tokenizer; `module/php` would be a legacy spelling and a bare `js` would
+# have both majors tokenize JavaScript as PHP.
+Y_EXTVAL=$(tr ' ' '\n' < "$Y_W1/markers/phpcs_json" 2>/dev/null | grep '^--extensions=' | head -1)
+assert_eq "[drupal lint] --extensions names Drupal's file types, with no /flavour and no js" \
+  "--extensions=php,module,inc,install,profile,theme,engine" "$Y_EXTVAL"
+
+# Y4: a vendored tree under a custom theme is somebody else's code (criterion 7). The
+# other six gates' arms of this are section AE; lint's lives here because it needs this
+# stub's --ignore model. The planted violation is a .module so that only the --ignore
+# patterns can suppress it — an extension filter would suppress it too, and then this
+# assertion would pass for the wrong reason.
+Y_W3="$(mk_l2)"
+mkdir -p "$Y_W3/web/themes/custom/t/node_modules/pkg"
+printf '<?php\n// VIOLATION\n' > "$Y_W3/web/themes/custom/t/node_modules/pkg/p.module"
+assert_eq "[drupal lint] a violation inside themes/custom/t/node_modules is not reported" \
+  "0|pass|0|0" "$(run_l2 "$Y_W3")"
+
+# Y5: --changed carries the flag as well. phpcs applies extension filtering only to
+# directory arguments, so this changes nothing for a named file today — it is here so
+# that no future edit has to rediscover which of the four invocations mattered, and so
+# a .module in a changed set cannot be dropped by a later filtering change.
+Y_W4="$(mk_l2)"
+printf '<?php\n' > "$Y_W4/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Y_W4/changed.txt"
+run_l2 "$Y_W4" --changed "$Y_W4/changed.txt" > /dev/null
+assert_eq "[drupal lint --changed] the scoped invocation carries --extensions too" \
+  "--standard=Drupal,DrupalPractice --report=json --extensions=${Y_EXTS} web/modules/custom/m/m.module" \
+  "$(l2_argv "$Y_W4" phpcs_json)"
+
+# Y7: A DYING phpcbf IS NOT A CLEAN FIX. `cmd 2>&1 | tee file` followed by `$?` captures
+# TEE's status, and tee succeeds whenever it can write the file — so a phpcbf that never
+# ran read as exit 0, which is the most reassuring of this branch's three messages.
+# rector-fix.sh:127-131 states this rule; the same shape survived three lines below the
+# code this task edited.
+# The gate's own stdout is the channel here — --fix's three messages are for a human, and
+# which one is printed is the whole finding.
+y_fix_out() {   # <work> <phpcbf exit>
+  local work="$1" ex="$2" bin
+  bin="$(mktemp -d "$TMP/y7b.XXXXXX")"; cp "$YSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$work/.reports" \
+       STUB_MARKER_DIR="$work/markers" STUB_PHPCS_EXIT="$ex" \
+       bash "$LINT" --fix 2>&1 )
+}
+
+Y_W6="$(mk_l2)"; mkdir -p "$Y_W6/markers"
+Y_FIX_OUT="$(y_fix_out "$Y_W6" 9)"
+assert_eq "[drupal lint --fix] a phpcbf that died is not reported as all issues corrected" \
+  "no|yes" \
+  "$(u_has "$Y_FIX_OUT" 'All fixable issues corrected')|$(u_has "$Y_FIX_OUT" 'could not be auto-fixed')"
+
+# Y8: and the partner. A phpcbf that really did exit 0 still gets the reassuring line, so
+# Y7 is not satisfied by a branch that never reports success.
+Y_W7="$(mk_l2)"; mkdir -p "$Y_W7/markers"
+assert_eq "[drupal lint --fix] a phpcbf that exited 0 still says so" \
+  "yes" "$(u_has "$(y_fix_out "$Y_W7" 0)" 'All fixable issues corrected')"
+
+# Y6: --changed's exclusion list is derived from the resolved layout, not from a second
+# hardcoded web/. On an Acquia project every path in a changed set begins docroot/, and
+# the shipped regex excluded web/core/ — so docroot/core/ was linted as custom code
+# while docroot/modules/custom was the only thing that should have been.
+Y_W5="$(mktemp -d "$TMP/l2doc.XXXXXX")"
+mkdir -p "$Y_W5/docroot/core/lib" "$Y_W5/docroot/core/modules/node" \
+         "$Y_W5/docroot/modules/custom/m" "$Y_W5/docroot/themes/custom/t"
+printf "const VERSION = '10.5.0';\n" > "$Y_W5/docroot/core/lib/Drupal.php"
+printf '<?php\n' > "$Y_W5/docroot/core/modules/node/node.module"
+printf '<?php\n' > "$Y_W5/docroot/modules/custom/m/m.module"
+printf 'docroot/core/modules/node/node.module\ndocroot/modules/custom/m/m.module\n' \
+  > "$Y_W5/changed.txt"
+run_l2 "$Y_W5" --changed "$Y_W5/changed.txt" > /dev/null
+assert_eq "[drupal lint --changed] core is excluded at the layout's own prefix, not at web/" \
+  "--standard=Drupal,DrupalPractice --report=json --extensions=${Y_EXTS} docroot/modules/custom/m/m.module" \
+  "$(l2_argv "$Y_W5" phpcs_json)"
+
+# ── Z. a phpcs run that did not measure is not a pass (criteria 9, 11, 13) ───
+echo ""
+echo "Z: the verdict comes from the report, and an unusable report is unmeasured"
+
+# PHPCS_EXIT was captured at :277 and read nowhere in the file. The fix is not "read 3
+# correctly" — 3 means a processing error under phpcs 3 and `1+2 issues found` under
+# phpcs 4, and a gate that decides by decoding the number needs a version table that has
+# to be re-checked against every phpcs release. The rule taken instead needs no version:
+#
+#   non-zero exit WITH a usable JSON report  -> findings
+#   non-zero exit with NO usable report      -> unmeasured
+#
+# Every assertion below is run under BOTH version banners and asserts the SAME verdict
+# for a given report state. That is the proof that the version is not consulted; a
+# classifier would make the two columns differ.
+z_both() {   # <desc> <expected> ; runs the caller's Z_RUN under 3.13.6 and 4.0.4
+  local desc="$1" want="$2" got3 got4
+  got3="$(L2_VERSION=3.13.6 "${Z_RUN[@]}")"
+  got4="$(L2_VERSION=4.0.4  "${Z_RUN[@]}")"
+  assert_eq "${desc} (phpcs 3.13.6)" "$want" "$got3"
+  assert_eq "${desc} (phpcs 4.0.4)"  "$want" "$got4"
+  assert_eq "${desc} — identical under both majors, so no version was consulted" \
+    "same" "$([ "$got3" = "$got4" ] && echo same || echo "3:${got3} 4:${got4}")"
+}
+
+# Z1: exit 3 WITH a populated report. Under phpcs 4 that is `1 auto-fixable + 2
+# non-auto-fixable`; under phpcs 3 it was the processing error. The report says one
+# error was found, so it is findings either way. Measured red before the fix, though for
+# the extension reason rather than the exit one — the unfixed gate could not see a
+# .module violation at all. Against the exit rule specifically it is a guard: the
+# unfixed script ignores PHPCS_EXIT entirely, so only a classifier being ADDED later
+# would turn this red again, which is what it is here to prevent.
+Z_W1="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W1/web/modules/custom/m/m.module"
+z_run_exit3() { L2_EXIT=3 run_l2 "$Z_W1"; }
+Z_RUN=(z_run_exit3)
+z_both "[drupal lint] exit 3 with a populated report is findings" "2|fail|1|0"
+
+# Z2: the same exit 3 with an EMPTY report. phpcs died before writing anything, so
+# nothing was measured and nothing may be certified. Unfixed this is `[SKIP]` and exit
+# 0 — a gate that examined no code, reporting no problem, with a zero the caller reads
+# as a pass.
+Z_W2="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W2/web/modules/custom/m/m.module"
+z_run_exit3_empty() { L2_EXIT=3 L2_BODY=empty run_l2 "$Z_W2"; }
+Z_RUN=(z_run_exit3_empty)
+z_both "[drupal lint] exit 3 with an empty report is unmeasured, never a pass" "4|unmeasured|0|0"
+
+# Z3: phpcs 4's genuine processing error, 16. Same rule, same answer, no version table.
+z_run_exit16() { L2_EXIT=16 L2_BODY=empty run_l2 "$Z_W2"; }
+Z_RUN=(z_run_exit16)
+z_both "[drupal lint] exit 16 with an empty report is unmeasured, not findings" "4|unmeasured|0|0"
+
+# Z4: THE PARSER DOES NOT MOVE (criterion 11). phpcs 4's JSON carries .totals.errors and
+# .totals.warnings in the same place with the same types as phpcs 3's, which is why the
+# verdict can be taken from the report instead of from the version. Asserted against a
+# phpcs-4-shaped body rather than left as an untested assumption.
+Z_W3="$(mk_l2)"
+z_run_p4json() {
+  L2_VERSION=4.0.4 L2_EXIT=3 \
+  L2_BODY='{"totals":{"errors":7,"warnings":4,"fixable":2},"files":{"web/modules/custom/m/m.module":{"errors":7,"warnings":4,"messages":[]}}}' \
+  run_l2 "$Z_W3"
+}
+Z_RUN=(z_run_p4json)
+z_both "[drupal lint] a phpcs 4 report is parsed by the unchanged .totals expressions" \
+  "2|fail|7|4"
+
+# Z5: --changed at a path that is not on disk. Measured on the shipped script: phpcs
+# aborts, the redirection leaves an empty file, `jq` prints nothing, the count becomes
+# the empty string, `[ "" -gt 0 ]` errors and `if` swallows it, and the gate prints
+# [PASS] and exits 0 having scanned nothing. Under phpcs 4 the same path is reached with
+# an empty report instead of an ERROR-polluted one — both ended in a pass.
+Z_W4="$(mk_l2)"
+printf 'web/modules/custom/m/gone.php\n' > "$Z_W4/changed.txt"
+z_run_changed_absent() { run_l2 "$Z_W4" --changed "$Z_W4/changed.txt"; }
+Z_RUN=(z_run_changed_absent)
+z_both "[drupal lint --changed] a changed file that is not on disk is unmeasured, never a pass" \
+  "4|unmeasured|0|0"
+
+# Z6: --changed with the file present but the report empty. The standard path has an
+# integer-validation guard for this; --changed had none, which is the other half of the
+# measured defect.
+Z_W5="$(mk_l2)"
+printf '<?php\n' > "$Z_W5/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Z_W5/changed.txt"
+z_run_changed_empty() { L2_BODY=empty run_l2 "$Z_W5" --changed "$Z_W5/changed.txt"; }
+Z_RUN=(z_run_changed_empty)
+z_both "[drupal lint --changed] an empty report is unmeasured, not a pass with empty counts" \
+  "4|unmeasured|0|0"
+
+# Z9: THE TRUNCATED REPORT. The half of "no usable report" that an empty-file test
+# cannot reach. phpcs killed mid-write (OOM, a full disk, a container that went away)
+# leaves valid-JSON-so-far and nothing more: non-empty, so `[ -s ]` is satisfied, and
+# unparseable, so `jq` exits non-zero and prints nothing. The `|| echo "0"` that guards
+# the EMPTY case then supplies a literal 0, which validates as an integer, and the gate
+# certifies a clean tree from a scan that died. Measured on the shipped script before
+# the fix: `[PASS]`, exit 0, and a report reading {"phpcs_exit": 2, "report_usable":
+# true, "errors": 0, "warnings": 0, "status": "pass"}.
+#
+# The fix is to read jq's OWN status instead of substituting a value for it: a jq that
+# failed means the report is unusable, which is what CHANGED_USABLE/PHPCS_USABLE exist
+# to say. Section J already tests this shape for gitleaks, composer audit and drush;
+# the lint gate had only the empty body.
+Z_TRUNC='{"totals":{"errors":7,"warnings":2,"fixab'
+Z_W7="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W7/web/modules/custom/m/m.module"
+z_run_trunc() { L2_EXIT=2 L2_BODY="$Z_TRUNC" run_l2 "$Z_W7"; }
+Z_RUN=(z_run_trunc)
+z_both "[drupal lint] a TRUNCATED report is unmeasured, not a clean tree" "4|unmeasured|0|0"
+
+# Z9b: and the report says so in the field a machine reads, not only in the exit code.
+# report_usable:true over counts nobody could parse is the record that misleads a reader
+# after the run is over.
+# `has(...)`, not `// "MISSING"`: jq's alternative operator fires on false as well as on
+# absent, so the `//` spelling reports MISSING for the exact value this asserts.
+assert_eq "[drupal lint] the truncated run records report_usable:false" "false" \
+  "$(jq -r 'if has("report_usable") then .report_usable else "MISSING" end' \
+     "$Z_W7/.reports/lint-report.json" 2>/dev/null || echo MISSING)"
+
+# Z10: the same truncation in --changed mode. Same defect, same `|| echo "0"`, and this
+# is the mode CI and AIDA's /validate-* wrappers actually invoke.
+Z_W8="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W8/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Z_W8/changed.txt"
+z_run_changed_trunc() { L2_EXIT=2 L2_BODY="$Z_TRUNC" run_l2 "$Z_W8" --changed "$Z_W8/changed.txt"; }
+Z_RUN=(z_run_changed_trunc)
+z_both "[drupal lint --changed] a TRUNCATED report is unmeasured, not a clean tree" \
+  "4|unmeasured|0|0"
+
+# Z11: the guard that keeps Z9/Z10 honest. A report that IS valid JSON and says zero is
+# a real clean tree and must still pass, or the fix above would have been "call
+# everything unusable".
+Z_W9="$(mk_l2)"
+z_run_valid_zero() { L2_BODY='{"totals":{"errors":0,"warnings":0,"fixable":0},"files":{}}' run_l2 "$Z_W9"; }
+Z_RUN=(z_run_valid_zero)
+z_both "[drupal lint] a valid report of zero findings is still a pass" "0|pass|0|0"
+
+# Z7: a changed set with nothing lintable in it is NOT unmeasured. A docs-only diff asks
+# the gate to check no PHP at all, which it can honestly answer. Keeping this distinct
+# from Z5 is the difference between "there was nothing to measure" and "what I was told
+# to measure was not there".
+Z_W6="$(mk_l2)"
+printf 'README.md\n' > "$Z_W6/changed.txt"
+printf '# hi\n' > "$Z_W6/README.md"
+z_run_changed_nonlintable() { run_l2 "$Z_W6" --changed "$Z_W6/changed.txt"; }
+Z_RUN=(z_run_changed_nonlintable)
+z_both "[drupal lint --changed] a docs-only changed set is a clean skip, not unmeasured" \
+  "0|skipped|0|0"
+
+# Z12: A PARTIALLY MEASURABLE CHANGED SET. One file present, one named and not on disk.
+#
+# The shipped gate returned exit 0, status "pass", report_usable true, with the absent
+# path recorded only in paths_missing and an [UNMEASURED] line on the stdout that
+# full-audit.sh discards. Criterion 3's rule — an absent path never yields exit 0 from
+# any gate — does not hold at this grain, and AIDA's /validate-* wrappers are exactly the
+# caller that reads the exit code with nobody watching stdout.
+#
+# THE VERDICT RECORDED FOR THIS SHAPE IS "partial", EXIT 1, and the reasoning is:
+#
+#   not 0    — the contract decision of 2026-08-27. A caller with only the exit code
+#              reads 0 as a clean pass, which is what this gate did not earn.
+#   not 4    — "unmeasured" in this suite means the gate covered NOTHING. Something was
+#              measured here, and filing the two under one word makes them
+#              indistinguishable to full-audit.sh, which is the argument path-resolve.sh
+#              already gives for not reusing "skipped".
+#   not 2    — the files that WERE read came back clean. A changed set that deletes a PHP
+#              file is ordinary, and a gate that fails every such diff is a check that
+#              fires on every run.
+#
+# So: findings win, and a would-be PASS is capped. paths_missing[] names what was not
+# read, in the report as well as on stdout.
+Z_W10="$(mk_l2)"
+printf '<?php\n' > "$Z_W10/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\nweb/modules/custom/m/gone.module\n' > "$Z_W10/changed.txt"
+z_run_partial() { run_l2 "$Z_W10" --changed "$Z_W10/changed.txt"; }
+Z_RUN=(z_run_partial)
+z_both "[drupal lint --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial|0|0"
+assert_eq "[drupal lint --changed] and the report names what it could not read" \
+  "web/modules/custom/m/gone.module" \
+  "$(jq -r '.paths_missing | join(",")' "$Z_W10/.reports/lint-report.json" 2>/dev/null || echo MISSING)"
+
+# Z13: findings outrank the cap. The present half of the same partial set carries a
+# violation, so the verdict is the finding — "partial" must not soften a real failure.
+Z_W11="$(mk_l2)"
+printf '<?php\n// VIOLATION\n' > "$Z_W11/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\nweb/modules/custom/m/gone.module\n' > "$Z_W11/changed.txt"
+z_run_partial_fail() { run_l2 "$Z_W11" --changed "$Z_W11/changed.txt"; }
+Z_RUN=(z_run_partial_fail)
+z_both "[drupal lint --changed] a finding in the measured half still fails the gate" \
+  "2|fail|1|0"
+
+# Z14: and the fully-present set is untouched. Without this, "cap the pass" is
+# satisfiable by a gate that never passes.
+Z_W12="$(mk_l2)"
+printf '<?php\n' > "$Z_W12/web/modules/custom/m/m.module"
+printf 'web/modules/custom/m/m.module\n' > "$Z_W12/changed.txt"
+z_run_all_present() { run_l2 "$Z_W12" --changed "$Z_W12/changed.txt"; }
+Z_RUN=(z_run_all_present)
+z_both "[drupal lint --changed] a changed set that is entirely on disk still passes" \
+  "0|pass|0|0"
+
+# Z8: no version inference anywhere outside the two availability probes. The classifier
+# was dropped on purpose; this is what stops it coming back the next time an exit code
+# looks ambiguous.
+Z_VERSION_SITES=$(grep -cE 'PHPCS_MAJOR|phpcs_major|--version' "$LINT")
+assert_eq "[drupal lint] phpcs --version appears only as the two availability probes" \
+  "2" "$Z_VERSION_SITES"
+
+# ── AB. the SOLID gate runs at a level somebody chose, and says what it did not measure ──
+echo ""
+echo "AB: phpstan's level is chosen, and an absent path is unmeasured rather than clean"
+
+# Two defects in one gate.
+#
+# 1. The DIP check is `ddev exec grep -r ... "$DRUPAL_MODULES_PATH" ... | wc -l`. `wc -l`
+#    of an error is 0, so a directory that is not there produced
+#    "[OK] No static \Drupal:: calls found" — a clean bill of health for code nobody
+#    read. The count is now `null` in the report rather than `0`, because a count nobody
+#    took is not a count of zero.
+#
+# 2. phpstan was invoked with neither --level nor --configuration, so it inherited a
+#    discovered config's level or fell back to phpstan's built-in 0 when no template had
+#    been placed, while references/solid-detection.md documented the gate as running at
+#    a level of its own. Nobody chose the level the gate actually ran at.
+
+ABSTUB="$TMP/abstub"; mkdir -p "$ABSTUB"
+
+# Records the FULL argv of each analyzer, and models phpmd's --exclude and grep's
+# --exclude-dir, so the vendored-tree assertions are answered by a verdict rather than
+# by a grep over the script.
+cat > "$ABSTUB/analyzer" <<'STUB'
+#!/usr/bin/env bash
+tool="$1"; shift
+[ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/argv_$tool"
+case "$tool" in
+  phpstan) printf '{"totals":{"errors":0,"file_errors":0},"files":{}}\n' ;;
+  phpmd)
+    # Model --exclude: a violation is reported for each file under the target that
+    # contains the token SMELL and is not matched by an exclude pattern.
+    target="${1-}"; excl=""
+    prev=""
+    for a in "$@"; do
+      [ "$prev" = "--exclude" ] && excl="$a"
+      prev="$a"
+    done
+    hits=0
+    IFS=',' read -r -a EX <<< "$excl"
+    while IFS= read -r f; do
+      skip=0
+      for g in "${EX[@]+"${EX[@]}"}"; do
+        [ -n "$g" ] || continue
+        # shellcheck disable=SC2254
+        case "$f" in $g) skip=1 ;; esac
+      done
+      [ "$skip" = 1 ] && continue
+      grep -qF SMELL "$f" 2>/dev/null && hits=$((hits + 1))
+    done < <(find "$target" -type f -name '*.php' 2>/dev/null)
+    if [ "$hits" -gt 0 ]; then
+      printf '{"version":"2.15.0","files":[{"file":"x.php","violations":[{"rule":"CyclomaticComplexity","priority":1,"beginLine":3,"description":"too complex"}]}]}\n'
+      exit 2
+    fi
+    printf '{"version":"2.15.0","files":[]}\n' ;;
+esac
+exit 0
+STUB
+chmod +x "$ABSTUB/analyzer"
+
+cat > "$ABSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  exec)
+    shift
+    case "${1-}" in
+      test) t="${3##*/}"; case ",${STUB_VENDOR_TOOLS:-}," in *",$t,"*) exit 0 ;; *) exit 1 ;; esac ;;
+      grep) shift
+            [ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - >> "$STUB_MARKER_DIR/argv_grep"
+            grep "$@" 2>/dev/null; exit 0 ;;
+      vendor/bin/*) t="${1##*/}"; shift; exec "$STUB_ANALYZER" "$t" "$@" ;;
+      *) exit 127 ;;
+    esac ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$ABSTUB/ddev"
+
+# Composer layout with a REAL Drupal root, so the scanned path is derived rather than
+# reached by the historical web/ fallback.
+mk_ab() {
+  local work; work="$(mktemp -d "$TMP/ab.XXXXXX")"
+  mkdir -p "$work/markers" "$work/web/core/lib" "$work/web/modules/custom/m/src"
+  printf "const VERSION = '10.5.0';\n" > "$work/web/core/lib/Drupal.php"
+  printf '<?php\nclass A {}\n' > "$work/web/modules/custom/m/src/A.php"
+  printf '%s' "$work"
+}
+
+# Echoes "<exit>|<status>|<static_drupal_calls>|<phpstan_level>|<tools_unmeasured csv>".
+# phpstan_level is read with `has(...)` rather than `// "MISSING"`: jq's alternative
+# operator fires on null, and `null` is a value this field is required to be able to
+# carry — a config whose level comes from an `includes:` file.
+run_ab() {
+  local work="$1"; shift
+  local bin rdir rc=0
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/abbin.XXXXXX")"; cp "$ABSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_MARKER_DIR="$work/markers" \
+       STUB_ANALYZER="$ABSTUB/analyzer" STUB_VENDOR_TOOLS="phpstan,phpmd" \
+       bash "$SOLID" "$@" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.status // "MISSING"' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.metrics.static_drupal_calls' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r 'if has("phpstan_level") then (.phpstan_level | tostring) else "MISSING" end' \
+         "$rdir/solid-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$rdir/solid-report.json" 2>/dev/null || echo MISSING)"
+}
+
+ab_argv() { tr -d '\n' < "$1/markers/argv_$2" 2>/dev/null || printf 'NEVER-INVOKED'; }
+
+# AB1: no phpstan.neon anywhere. The gate must name a level rather than let phpstan pick
+# its built-in 0 — a level 0 run finds almost nothing and reports a clean tree.
+AB_W1="$(mk_ab)"
+assert_eq "[solid] with no config placed, the gate runs at a level it chose" \
+  "0|pass|0|5|" "$(run_ab "$AB_W1")"
+assert_eq "[solid] and the phpstan argv says so" \
+  "analyse web/modules/custom --level 5 --error-format=json --no-progress --memory-limit=1500M" \
+  "$(ab_argv "$AB_W1" phpstan)"
+
+# AB2: a placed phpstan.neon wins, and the level recorded in the report is the file's,
+# not the flag default. The installer's job is to place the config; the gate's job is to
+# use it and say which one it used.
+AB_W2="$(mk_ab)"
+cat > "$AB_W2/phpstan.neon" <<'NEON'
+parameters:
+    level: 5
+    paths:
+        - web/modules/custom
+NEON
+assert_eq "[solid] a placed phpstan.neon is passed with --configuration" \
+  "0|pass|0|5|" "$(run_ab "$AB_W2")"
+assert_eq "[solid] and --level is not passed alongside it, which phpstan would reject" \
+  "analyse web/modules/custom --configuration phpstan.neon --error-format=json --no-progress --memory-limit=1500M" \
+  "$(ab_argv "$AB_W2" phpstan)"
+
+# AB3: a config naming a DIFFERENT level is reported as that level. Pins that the field
+# is read from the file rather than restating the flag default, which would agree with
+# the file by coincidence at 5 and disagree everywhere else.
+AB_W3="$(mk_ab)"
+printf 'parameters:\n    level: 8\n' > "$AB_W3/phpstan.neon"
+assert_eq "[solid] the reported level is the config's, not a restated default" \
+  "0|pass|0|8|" "$(run_ab "$AB_W3")"
+
+# AB3b: A NON-NUMERIC LEVEL. `level: max` is valid phpstan and common in Drupal
+# projects. The extractor matched digits only, found nothing, and fell back to
+# ${PHPSTAN_LEVEL:-5} — so the report claimed level 5 while phpstan ran, under
+# --configuration, at max. That is the same defect the commit says it fixed (the docs
+# naming a number no run used), one layer down.
+AB_W3B="$(mk_ab)"
+printf 'parameters:\n    level: max\n' > "$AB_W3B/phpstan.neon"
+assert_eq "[solid] a config at level: max is reported as max, not as a fallback 5" \
+  "0|pass|0|max|" "$(run_ab "$AB_W3B")"
+
+# AB3c: and the report is still JSON. `"phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE},`
+# unquoted wrote `"phpstan_level": max,`; jq then failed on the whole report with
+# "Invalid numeric literal", full-audit.sh read no status from it and silently fell back
+# to the exit code — bypassing the verdict-from-report mechanism entirely. Asserted by
+# parsing the file, which is the thing that was broken.
+assert_eq "[solid] and the report still parses as JSON with a non-numeric level" \
+  "pass" \
+  "$(jq -r '.status' "$AB_W3B/.reports/solid-report.json" 2>/dev/null || echo UNPARSEABLE)"
+
+# AB3d: a numeric level stays a JSON NUMBER. Quoting everything would fix AB3c and break
+# every consumer that compares the level arithmetically.
+assert_eq "[solid] a numeric level is emitted as a number, not as a string" \
+  "number" \
+  "$(jq -r '.phpstan_level | type' "$AB_W3/.reports/solid-report.json" 2>/dev/null || echo MISSING)"
+
+# AB3e: PHPSTAN_LEVEL=max on the command line, with no config placed. The env var is
+# passed straight to --level, so the same value has to survive into the report.
+AB_W3E="$(mk_ab)"
+assert_eq "[solid] PHPSTAN_LEVEL=max with no config placed reports max and still parses" \
+  "0|pass|0|max|" "$(PHPSTAN_LEVEL=max run_ab "$AB_W3E")"
+
+# AB3f: a config whose level comes from an `includes:` file. The gate cannot see that
+# level without resolving phpstan's own include graph, and restating the default 5 would
+# be a number no run used — the exact defect. Reported as null: the config is in force,
+# and what level it settles on is not knowable from here.
+AB_W3F="$(mk_ab)"
+printf 'includes:\n    - vendor/x/base.neon\nparameters:\n    paths:\n        - web/modules/custom\n' \
+  > "$AB_W3F/phpstan.neon"
+assert_eq "[solid] a level this gate cannot read is null, not a restated default" \
+  "0|pass|0|null|" "$(run_ab "$AB_W3F")"
+
+# AB4: THE DIP DEFECT. The modules path is not there. `wc -l` of grep's error is 0, so
+# the gate printed "[OK] No static \Drupal:: calls found" and exited 0 — a pass earned
+# by looking at nothing.
+AB_W4="$(mktemp -d "$TMP/abmiss.XXXXXX")"; mkdir -p "$AB_W4/markers" "$AB_W4/web/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AB_W4/web/core/lib/Drupal.php"
+assert_eq "[solid] an absent modules path is unmeasured with a null count, never a clean DIP result" \
+  "4|unmeasured|null|5|phpmd,phpstan,static_calls" "$(run_ab "$AB_W4")"
+
+# AB5: and nothing was invoked against the path that is not there. A gate that ran the
+# analyzers anyway and then labelled the result unmeasured would be doing the work twice
+# and trusting neither half.
+assert_eq "[solid] no analyzer is invoked against a path that does not exist" \
+  "NEVER-INVOKED|NEVER-INVOKED" \
+  "$(ab_argv "$AB_W4" phpstan)|$(ab_argv "$AB_W4" phpmd)"
+
+# AB6: vendored trees (criterion 7). A smell planted under node_modules must not be
+# attributed to this project. phpmd's --exclude is modelled by the stub, so this is
+# answered by the verdict rather than by the flag's presence.
+AB_W5="$(mk_ab)"
+mkdir -p "$AB_W5/web/modules/custom/m/node_modules/pkg"
+printf '<?php\n// SMELL\n' > "$AB_W5/web/modules/custom/m/node_modules/pkg/p.php"
+assert_eq "[solid] a smell inside node_modules is not a finding of this project's" \
+  "0|pass|0|5|" "$(run_ab "$AB_W5")"
+
+# AB7: the same for the DIP grep, which walks the tree itself rather than through phpmd.
+AB_W6="$(mk_ab)"
+mkdir -p "$AB_W6/web/modules/custom/m/node_modules/pkg"
+printf '<?php\n\\Drupal::service("x");\n' > "$AB_W6/web/modules/custom/m/node_modules/pkg/p.php"
+assert_eq "[solid] a static \\Drupal:: call inside node_modules is not counted" \
+  "0|pass|0|5|" "$(run_ab "$AB_W6")"
+
+# AB8: and the guard that keeps AB6/AB7 honest — the same planted file OUTSIDE
+# node_modules IS reported. Without this, an exclusion that swallowed everything would
+# satisfy both.
+AB_W7="$(mk_ab)"
+printf '<?php\n\\Drupal::service("x");\n' > "$AB_W7/web/modules/custom/m/src/B.php"
+assert_eq "[solid] the same call in the project's own tree IS counted" \
+  "0|pass|1|5|" "$(run_ab "$AB_W7")"
+
+# AB9: the same partially-measurable changed set, in the gate with the same guard shape.
+# solid-check.sh:248 was unmeasured only when RELEVANT_FILES was empty AND MISSING_FILES
+# was not; one present file made the whole set a pass. Same verdict as the lint gate, for
+# the same reasons, recorded once at Z12.
+AB_W8="$(mk_ab)"
+printf 'web/modules/custom/m/src/A.php\nweb/modules/custom/m/src/Gone.php\n' > "$AB_W8/changed.txt"
+assert_eq "[solid --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial|0|5|" "$(run_ab "$AB_W8" --changed "$AB_W8/changed.txt")"
+assert_eq "[solid --changed] and the report names what it could not read" \
+  "web/modules/custom/m/src/Gone.php" \
+  "$(jq -r '(.paths_missing // ["MISSING"]) | join(",")' "$AB_W8/.reports/solid-report.json" 2>/dev/null || echo MISSING)"
+
+# AB10: the partner. A changed set entirely on disk is still a plain pass.
+AB_W9="$(mk_ab)"
+printf 'web/modules/custom/m/src/A.php\n' > "$AB_W9/changed.txt"
+assert_eq "[solid --changed] a changed set that is entirely on disk still passes" \
+  "0|pass|0|5|" "$(run_ab "$AB_W9" --changed "$AB_W9/changed.txt")"
+
+# ── AD. the DRY gate proves it measured something (criterion 5) ──────────────
+echo ""
+echo "AD: phpcpd's complaint reaches the file the parser reads, and 0% is not free"
+
+# dry-check.sh appears NOWHERE in this spec today, which is how three defects in it
+# survived a task built to find exactly this shape:
+#
+#   1. `2>&1 > "$PHPCPD_OUTPUT"`. Bash applies redirections left to right, so fd 2 is
+#      duplicated onto the CALLER's stdout before fd 1 is moved to the file. phpcpd's
+#      complaint never reaches the file the metrics parser reads — and under /audit it
+#      never reaches a terminal either, because full-audit.sh calls this gate with
+#      2>/dev/null.
+#   2. `PHPCPD_EXIT=$?` is captured and never referenced again.
+#   3. Every metric defaults to 0 through `|| echo "0"`, and 0% duplication is
+#      `[PASS] Duplication 0% is excellent`. A run that produced nothing at all is
+#      indistinguishable from a clean tree.
+
+ADSTUB="$TMP/adstub"; mkdir -p "$ADSTUB"
+cat > "$ADSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+# phpcpd stub. Models --exclude by directory name, writes its bad-path complaint to
+# STDERR the way phpcpd does, and reports a clone for every *.php file holding the
+# token CLONE.
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+[ "${1-}" = "vendor/bin/phpcpd" ] || exit 127
+shift
+if [ "${1-}" = "--version" ]; then
+  [ "${STUB_PHPCPD_ABSENT:-0}" = 1 ] && exit 127
+  printf 'phpcpd 8.2.1 by Sebastian Bergmann.\n'; exit 0
+fi
+[ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/phpcpd"
+excl=(); target=""
+for a in "$@"; do
+  case "$a" in
+    --exclude=*) excl+=("${a#--exclude=}") ;;
+    -*) ;;
+    *) target="$a" ;;
+  esac
+done
+if [ ! -e "$target" ]; then
+  printf 'ERROR: The directory "%s" does not exist.\n' "$target" >&2
+  exit 1
+fi
+# A run that emitted nothing at all: the shape a crashed phpcpd leaves behind.
+[ "${STUB_PHPCPD_SILENT:-0}" = 1 ] && exit "${STUB_PHPCPD_EXIT:-0}"
+if [ "${STUB_PHPCPD_STDERR:-0}" = 1 ]; then
+  printf 'ERROR: could not parse %s\n' "$target" >&2
+  exit "${STUB_PHPCPD_EXIT:-1}"
+fi
+hits=0
+while IFS= read -r f; do
+  skip=0
+  for e in "${excl[@]+"${excl[@]}"}"; do
+    [ -n "$e" ] || continue
+    case "/$f/" in */"$e"/*) skip=1 ;; esac
+  done
+  [ "$skip" = 1 ] && continue
+  grep -qF CLONE "$f" 2>/dev/null && hits=$((hits + 1))
+done < <(find "$target" -type f -name '*.php' 2>/dev/null)
+if [ "$hits" -gt 0 ]; then
+  printf 'Found 1 clones with 40 duplicated lines in %s files\n\n' "$hits"
+  printf '  - /var/www/html/%s/A.php:1-20\n    /var/www/html/%s/B.php:1-20\n\n' "$target" "$target"
+  printf '40.00%% duplicated lines out of 100 total lines of code\n'
+else
+  printf 'No clones found.\n\n'
+  printf '0.00%% duplicated lines out of 100 total lines of code\n'
+fi
+exit "${STUB_PHPCPD_EXIT:-0}"
+STUB
+chmod +x "$ADSTUB/ddev"
+
+mk_ad() {
+  local work; work="$(mktemp -d "$TMP/ad.XXXXXX")"
+  mkdir -p "$work/markers" "$work/web/core/lib" "$work/web/modules/custom/m"
+  printf "const VERSION = '10.5.0';\n" > "$work/web/core/lib/Drupal.php"
+  printf '<?php\nclass A {}\n' > "$work/web/modules/custom/m/A.php"
+  printf '%s' "$work"
+}
+
+# Echoes "<exit>|<status>|<duplication_percentage>|<measured>|<phpcpd_exit>"
+#
+# `measured` is read with has() rather than `// "MISSING"`: jq's alternative operator
+# treats `false` as empty, so the default would fire on exactly the value these
+# assertions exist to check.
+run_ad() {
+  local work="$1"; shift
+  local bin rdir rc=0
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/adbin.XXXXXX")"; cp "$ADSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_MARKER_DIR="$work/markers" \
+       STUB_PHPCPD_SILENT="${AD_SILENT:-0}" STUB_PHPCPD_STDERR="${AD_STDERR:-0}" \
+       STUB_PHPCPD_EXIT="${AD_EXIT:-0}" \
+       bash "$DRY" "$@" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.status // "MISSING"' "$rdir/dry-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.duplication_percentage // "MISSING"' "$rdir/dry-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r 'if has("measured") then .measured else "MISSING" end' "$rdir/dry-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.phpcpd_exit // "MISSING"' "$rdir/dry-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# AD1: THE REDIRECT (criterion 5). phpcpd complains on stderr; the parser reads
+# $PHPCPD_OUTPUT. Asserted on the CONTENT OF THAT FILE, not on the gate's own stdout —
+# stdout is where the text went wrong, and full-audit.sh discards it.
+AD_W1="$(mk_ad)"
+AD_STDERR=1 AD_EXIT=1 run_ad "$AD_W1" > /dev/null
+AD_CAPTURED=$(grep -c 'could not parse' "$AD_W1/.reports/dry/phpcpd-output.txt" 2>/dev/null || echo 0)
+assert_eq "[dry] phpcpd's stderr lands in the file the metrics parser reads" "1" "$AD_CAPTURED"
+
+# AD2: and that run is not a pass. It produced no summary line, so nothing was
+# measured; every metric defaulted to 0 and 0% is "excellent".
+assert_eq "[dry] a run that emitted no measurement is unmeasured, not 0% excellent" \
+  "4|unmeasured|0|false|1" "$(AD_STDERR=1 AD_EXIT=1 run_ad "$AD_W1")"
+
+# AD3: the modules path is not there. Checked before phpcpd is invoked, so the verdict
+# does not depend on what phpcpd chooses to do with a bad argument.
+AD_W2="$(mktemp -d "$TMP/admiss.XXXXXX")"; mkdir -p "$AD_W2/markers" "$AD_W2/web/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AD_W2/web/core/lib/Drupal.php"
+assert_eq "[dry] an absent modules path is unmeasured and non-zero, never a pass" \
+  "4|unmeasured|0|false|MISSING" "$(run_ad "$AD_W2")"
+assert_eq "[dry] and phpcpd is not invoked against it" \
+  "NEVER-INVOKED" "$(tr -d '\n' < "$AD_W2/markers/phpcpd" 2>/dev/null || printf 'NEVER-INVOKED')"
+
+# AD4: a shell-level exit. 127 is "command not found" inside the container, which is a
+# run that never happened whatever the text on stdout says.
+assert_eq "[dry] a 127 exit is unmeasured, not a clean tree" \
+  "4|unmeasured|0|false|127" "$(AD_SILENT=1 AD_EXIT=127 run_ad "$(mk_ad)")"
+
+# AD5: a real measurement of a clean tree still passes, and says it measured. Without
+# this, "unmeasured on anything unusual" would be satisfied by a gate that never passes.
+assert_eq "[dry] a clean tree that WAS measured still passes" \
+  "0|pass|0.00|true|0" "$(run_ad "$(mk_ad)")"
+
+# AD6: and a real finding still fails.
+AD_W3="$(mk_ad)"
+printf '<?php\n// CLONE\n' > "$AD_W3/web/modules/custom/m/B.php"
+assert_eq "[dry] a measured duplication over the critical threshold still fails" \
+  "2|fail|40.00|true|0" "$(run_ad "$AD_W3")"
+
+# AD7: vendored trees (criterion 7). The same planted clone under node_modules is
+# somebody else's duplication. Modelled by the stub's --exclude handling, so this is
+# answered by the verdict rather than by the flag being present in the argv.
+AD_W4="$(mk_ad)"
+mkdir -p "$AD_W4/web/modules/custom/m/node_modules/pkg"
+printf '<?php\n// CLONE\n' > "$AD_W4/web/modules/custom/m/node_modules/pkg/p.php"
+assert_eq "[dry] a clone inside node_modules is not this project's duplication" \
+  "0|pass|0.00|true|0" "$(run_ad "$AD_W4")"
+
+
+# AD8: A PATH WITH A DOUBLE QUOTE IN IT. `"paths_missing": ["${DRUPAL_MODULES_PATH}"]`
+# interpolated the resolved path straight into a JSON heredoc, so a quote in the value
+# produced a report jq then refuses to read. The verdict and the exit code were right;
+# the RECORD of them was unreadable, and full-audit.sh falls back to the exit code when a
+# report will not parse — so the verdict-from-report mechanism this task relies on was
+# bypassed by a path.
+#
+# security-check.sh:1069-1076 argues the case for refusing such a path when it has to go
+# into generated XML. Here it goes into JSON, where jq can encode it correctly, so it is
+# ENCODED rather than refused: `jq -R -s` is the same treatment lint-check.sh already
+# gives its own paths_missing.
+AD_W9="$(mktemp -d "$TMP/adq.XXXXXX")"
+mkdir -p "$AD_W9/markers" "$AD_W9/web/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AD_W9/web/core/lib/Drupal.php"
+AD_Q_BIN="$(mktemp -d "$TMP/adqbin.XXXXXX")"; cp "$ADSTUB/ddev" "$AD_Q_BIN/"
+( cd "$AD_W9" \
+  && PATH="$AD_Q_BIN:/usr/bin:/bin" REPORT_DIR="$AD_W9/.reports" \
+     DRUPAL_MODULES_PATH='doc"root/x' \
+     bash "$DRY" ) >/dev/null 2>&1 || true
+assert_eq "[dry] a path containing a double quote still produces a readable report" \
+  "unmeasured|doc\"root/x" \
+  "$(jq -r '.status' "$AD_W9/.reports/dry-report.json" 2>/dev/null || echo UNPARSEABLE)|$(jq -r '.paths_missing | join(",")' "$AD_W9/.reports/dry-report.json" 2>/dev/null || echo UNPARSEABLE)"
+# ── AA. generated tool configs carry the resolved paths (criterion 2) ────────
+echo ""
+echo "AA: a config this suite WRITES names the layout it detected, not web/"
+
+# security-check.sh writes a minimal psalm.xml when the project has none, inside
+# `cat > psalm.xml <<'EOF'` — a QUOTED heredoc, which no substitution can reach — and
+# hardcodes <directory name="web/modules/custom" /> in it. On a docroot-layout project
+# the generated config points psalm at two directories that do not exist, and the taint
+# layer analyses nothing for the life of that file: it is written once and then found on
+# every later run, so the wrong layout persists after the gate itself is fixed.
+#
+# The heredoc stays quoted — it is XML full of characters a shell would otherwise
+# interpret — and the paths go in through placeholders and one substitution pass.
+
+AASTUB="$TMP/aastub"; mkdir -p "$AASTUB"
+cat > "$AASTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+# Enough DDEV to reach the psalm.xml generation and the custom-pattern layer. Every
+# other analyzer is absent, which is the ordinary state of a developer machine.
+case "${1-}" in
+  describe) exit 0 ;;
+  composer) exit 1 ;;
+  drush)    exit 1 ;;
+  exec) shift ;;
+  *) exit 1 ;;
+esac
+case "${1-}" in
+  test)
+    case "${3-}" in
+      vendor/bin/psalm) [ "${STUB_PSALM:-0}" = 1 ] && exit 0; exit 1 ;;
+      psalm.xml) exit 1 ;;
+      *) exit 1 ;;
+    esac ;;
+  grep)    shift; grep "$@" 2>/dev/null; exit 0 ;;
+  mkdir|rm) exit 0 ;;
+  cat)     shift; cat "$@" 2>/dev/null; exit 0 ;;
+  # The two layers with no absent branch — DDEV is a hard prerequisite for them, so a
+  # failure in either is correctly a failure and would cap every scenario here at
+  # "skipped" before the path assertions could say anything. Both answer as a healthy
+  # site with nothing to report.
+  drush)   printf '[]\n'; exit 0 ;;
+  composer) printf '{"advisories":{}}\n'; exit 0 ;;
+  vendor/bin/psalm) exit 127 ;;
+  *) exit 127 ;;
+esac
+STUB
+chmod +x "$AASTUB/ddev"
+
+# A semgrep that MODELS --exclude, so "does the gate exclude vendored trees" is answered
+# by a verdict rather than by grepping the script for the flag. A file is a finding when
+# it contains the token SEMGREP-HIT; a path with a component equal to an --exclude value
+# is not read. That is a model of semgrep's exclusion, not a reimplementation of it, and
+# it is the half this assertion needs.
+cat > "$AASTUB/semgrep" <<'STUB'
+#!/usr/bin/env bash
+[ "${1-}" = "--version" ] && { printf '1.172.0\n'; exit 0; }
+[ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/semgrep_argv"
+excludes=(); paths=()
+for a in "$@"; do
+  case "$a" in
+    scan|--config=*|--json) ;;
+    --exclude=*) excludes+=("${a#--exclude=}") ;;
+    -*) ;;
+    *) paths+=("$a") ;;
+  esac
+done
+results=""
+for p in "${paths[@]+"${paths[@]}"}"; do
+  while IFS= read -r f; do
+    skip=0
+    for g in "${excludes[@]+"${excludes[@]}"}"; do
+      [ -n "$g" ] || continue
+      case "/$f/" in */"$g"/*) skip=1 ;; esac
+    done
+    [ "$skip" = 1 ] && continue
+    grep -qF SEMGREP-HIT "$f" 2>/dev/null || continue
+    results="${results}${results:+,}$(printf '{"path":"%s","start":{"line":1},"extra":{"severity":"WARNING","message":"m","metadata":{}}}' "$f")"
+  done < <(find "$p" -type f 2>/dev/null)
+done
+printf '{"results":[%s],"errors":[]}\n' "$results"
+exit 0
+STUB
+chmod +x "$AASTUB/semgrep"
+
+# An Acquia-layout project: the case the hardcoded web/ literal gets wrong.
+mk_aa() {
+  local root="${1:-docroot}"
+  local work; work="$(mktemp -d "$TMP/aa.XXXXXX")"
+  mkdir -p "$work/${root}/core/lib" "$work/${root}/modules/custom/m" "$work/${root}/themes/custom/t"
+  printf "const VERSION = '10.5.0';\n" > "$work/${root}/core/lib/Drupal.php"
+  printf '<?php\nclass A {}\n' > "$work/${root}/modules/custom/m/A.php"
+  printf '%s' "$work"
+}
+
+# Echoes "<exit>|<overall_status>|<tools_unmeasured csv>|<medium count>"
+run_aa() {
+  local work="$1"; shift
+  local bin rdir rc=0
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/aabin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  # Opt-in, because most of this section is about the layers that run with no analyzer
+  # installed at all — the ordinary state of a developer machine.
+  [ "${AA_SEMGREP:-0}" = 1 ] && cp "$AASTUB/semgrep" "$bin/"
+  mkdir -p "$work/markers"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM="${AA_PSALM:-0}" \
+       STUB_MARKER_DIR="$work/markers" \
+       bash "$SEC" "$@" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.summary.overall_status // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.meta.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.summary.by_severity.medium // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# AA1: the generated psalm.xml names the detected layout. Asserted on the FILE the gate
+# wrote, because that file outlives the run.
+AA_W1="$(mk_aa docroot)"
+AA_PSALM=1 run_aa "$AA_W1" > /dev/null
+# Scoped to what psalm is told to READ. The ignore list below it is AA1b's subject, and
+# folding the two into one expected string would make either assertion satisfiable by
+# moving a directory between the sections.
+AA_DIRS=$(sed -n '/<projectFiles>/,/<ignoreFiles>/p' "$AA_W1/psalm.xml" 2>/dev/null \
+  | grep -o 'name="[^"]*"' | paste -sd, - | tr -d '\n')
+assert_eq "[security] the generated psalm.xml points at the layout that was detected" \
+  'name="docroot/modules/custom",name="docroot/themes/custom"' "$AA_DIRS"
+
+# AA1b: and its <ignoreFiles> names the vendored trees, not `vendor` alone (criterion 7).
+# architecture/security-check.md:57-59 committed to three exclusions for this gate — the
+# pattern greps, semgrep's --exclude, and this — and only the greps shipped. This file
+# outlives the run that wrote it, so a config that scans somebody else's bundled code
+# keeps doing it long after the gate is fixed. Asserted on the FILE, for that reason.
+AA_IGNORED=$(sed -n '/<ignoreFiles>/,/<\/ignoreFiles>/p' "$AA_W1/psalm.xml" 2>/dev/null \
+  | grep -o 'name="[^"]*"' | paste -sd, - | tr -d '\n')
+assert_eq "[security] the generated psalm.xml ignores the vendored trees under both paths" \
+  'name="vendor",name="docroot/modules/custom/*/vendor",name="docroot/themes/custom/*/vendor",name="docroot/modules/custom/*/node_modules",name="docroot/themes/custom/*/node_modules"' \
+  "$AA_IGNORED"
+
+# AA2: and carries no web/ string at all. A substitution that added the right paths
+# while leaving the old ones behind would satisfy AA1.
+# `grep -c` prints its count and exits 1 when that count is zero, so an `|| echo 0`
+# here appends a SECOND zero rather than supplying a missing one.
+AA_WEB=$(grep -c 'web/' "$AA_W1/psalm.xml" 2>/dev/null || true)
+assert_eq "[security] and no web/ literal survives anywhere in it" "0" "${AA_WEB:-MISSING}"
+
+# AA3: the heredoc stays QUOTED. It is XML, full of characters an unquoted heredoc would
+# interpret; the fix is a placeholder plus one substitution pass, not un-quoting it.
+AA_HEREDOC=$(grep -cF "cat > psalm.xml <<'EOF'" "$SEC" 2>/dev/null || echo 0)
+assert_eq "[security] the psalm.xml heredoc is still quoted" "1" "$AA_HEREDOC"
+
+# AA4: THE ABSENT-PATH CASE. Neither custom directory exists. The pattern layer already
+# recorded itself, but as tools_absent — "expected, does not move the verdict" — so the
+# gate reported a pass having scanned no custom code at all.
+AA_W2="$(mktemp -d "$TMP/aamiss.XXXXXX")"; mkdir -p "$AA_W2/docroot/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AA_W2/docroot/core/lib/Drupal.php"
+# tools_unmeasured names only the pattern layer here, and that is the intended
+# precedence: php-security-linter and semgrep are not installed in this sandbox, so they
+# are ABSENT, which is a fact about the machine and is reported as such. A layer is
+# "unmeasured" only when the tool was there and the ground was not.
+assert_eq "[security] with neither custom path present the verdict is unmeasured, never a pass" \
+  "4|unmeasured|custom_patterns|0" "$(run_aa "$AA_W2")"
+
+# AA5: ONE missing path does not erase the other. This gate runs ten layers; a themes
+# directory that is not there must not stop the modules scan, and vice versa. The
+# fixture has themes but no modules, and the Twig |raw layer — which reads BOTH paths —
+# still reports its finding.
+AA_W3="$(mktemp -d "$TMP/aathemes.XXXXXX")"
+mkdir -p "$AA_W3/docroot/core/lib" "$AA_W3/docroot/themes/custom/t/templates"
+printf "const VERSION = '10.5.0';\n" > "$AA_W3/docroot/core/lib/Drupal.php"
+printf '{{ content|raw }}\n' > "$AA_W3/docroot/themes/custom/t/templates/page.html.twig"
+# The verdict is capped — the modules directory was not read — but the finding the
+# themes scan DID make is still in the report. That is the whole point of per-layer
+# recording: one absent path must not erase the layers that ran.
+assert_eq "[security] an absent modules path does not suppress the themes scan" \
+  "4|unmeasured|custom_patterns|1" "$(run_aa "$AA_W3")"
+
+# AA6: vendored trees (criterion 7). The same |raw inside a theme's node_modules is
+# somebody else's template.
+AA_W4="$(mk_aa docroot)"
+mkdir -p "$AA_W4/docroot/themes/custom/t/node_modules/pkg"
+printf '{{ content|raw }}\n' > "$AA_W4/docroot/themes/custom/t/node_modules/pkg/x.html.twig"
+assert_eq "[security] a |raw inside a theme's node_modules is not this project's finding" \
+  "0|pass||0" "$(run_aa "$AA_W4")"
+
+
+# AA7: and the guard that keeps AA6 honest — the same file outside node_modules IS
+# reported, so an exclusion that swallowed the whole scan would not pass.
+AA_W5="$(mk_aa docroot)"
+mkdir -p "$AA_W5/docroot/themes/custom/t/templates"
+printf '{{ content|raw }}\n' > "$AA_W5/docroot/themes/custom/t/templates/page.html.twig"
+# One medium finding is under this gate's warning threshold (>10), so the VERDICT is
+# still pass — the assertion is on the count, which is what AA6 is refuting.
+assert_eq "[security] the same |raw in the theme's own templates IS reported" \
+  "0|pass||1" "$(run_aa "$AA_W5")"
+
+# AA6-sem / AA7-sem: THE SAME CRITERION, WITH THE TOOL PRESENT.
+#
+# AA6 above passes with semgrep absent and STUB_PSALM defaulting to 0, so it exercises the
+# grep layer alone — and the roll-up then recorded this gate as answering criterion 7 with
+# two thirds of it unbuilt. A green that cannot fail, inside the fix for checks that
+# cannot fail. These two run the layer that was never exercised.
+AA_W12="$(mk_aa docroot)"
+mkdir -p "$AA_W12/docroot/modules/custom/m/node_modules/pkg"
+printf '<?php\n// SEMGREP-HIT\n' > "$AA_W12/docroot/modules/custom/m/node_modules/pkg/p.php"
+assert_eq "[security] with semgrep PRESENT, a hit inside node_modules is not reported" \
+  "0|pass||0" "$(AA_SEMGREP=1 run_aa "$AA_W12")"
+
+AA_W13="$(mk_aa docroot)"
+printf '<?php\n// SEMGREP-HIT\n' > "$AA_W13/docroot/modules/custom/m/Hit.php"
+assert_eq "[security] and the same hit in the project's own tree IS reported" \
+  "0|pass||1" "$(AA_SEMGREP=1 run_aa "$AA_W13")"
+
+# AA6-argv: the exclusions are on the invocation, not only in the outcome. Read off the
+# recorded argv, so a stub that happened not to descend into node_modules could not
+# satisfy it.
+# NEVER-INVOKED and NONE are kept apart: a run where semgrep was never reached and one
+# where it was reached without the flag are different failures, and one fallback string
+# for both is the shape this whole spec exists to refuse.
+if [ -f "$AA_W13/markers/semgrep_argv" ]; then
+  # LC_ALL=C: the list contains a dot-prefixed entry, and a locale-aware sort orders
+  # `.git` and `bower_components` differently from a byte sort. The assertion is about
+  # WHICH flags were passed, not about the collation of the machine running the suite.
+  AA_SEM_ARGV=$(tr ' ' '\n' < "$AA_W13/markers/semgrep_argv" \
+    | grep '^--exclude=' | LC_ALL=C sort | paste -sd, - | tr -d '\n')
+  AA_SEM_ARGV="${AA_SEM_ARGV:-NONE}"
+else
+  AA_SEM_ARGV="NEVER-INVOKED"
+fi
+assert_eq "[security] and the semgrep invocation carries the vendored-tree exclusions" \
+  "--exclude=.git,--exclude=bower_components,--exclude=node_modules,--exclude=vendor" \
+  "$AA_SEM_ARGV"
+
+# AA8: THE TENTH CALL SITE. `--changed`'s exclusion regex was the one place in this
+# gate that still spelled the layout as a `web/` literal —
+# `^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)` — the
+# byte-identical string that was replaced in lint-check.sh and solid-check.sh in the same
+# commit. On an Acquia project every changed path begins docroot/, so `docroot/core/`
+# matched nothing and Drupal core was handed to semgrep and the pattern layer as this
+# project's custom code.
+#
+# Asserted on the file list the gate PRINTS, so a regex that merely mentions the prefix
+# without excluding anything cannot satisfy it.
+run_aa_changed() {   # <work> <changed-file> ; echoes the printed relevant-file list, csv
+  local work="$1" changed="$2" bin rdir
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/aacbin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM=0 \
+       bash "$SEC" --changed "$changed" 2>/dev/null ) \
+    | sed -n '/^Relevant SAST files/,/^$/p' | sed -n 's/^  //p' | paste -sd, - | tr -d '\n'
+}
+
+AA_W6="$(mk_aa docroot)"
+printf 'docroot/core/lib/Drupal.php\ndocroot/modules/custom/m/A.php\n' > "$AA_W6/changed.txt"
+assert_eq "[security --changed] core is excluded at the layout's own prefix, not at web/" \
+  "docroot/modules/custom/m/A.php" "$(run_aa_changed "$AA_W6" "$AA_W6/changed.txt")"
+
+# AA9: and the composer-layout project the old literal happened to get right still
+# behaves. A conversion that swapped one hardcoded layout for another would pass AA8
+# and fail here.
+AA_W7="$(mk_aa web)"
+mkdir -p "$AA_W7/web/modules/contrib/x" "$AA_W7/vendor/pkg"
+printf '<?php\n' > "$AA_W7/web/modules/contrib/x/x.module"
+printf '<?php\n' > "$AA_W7/vendor/pkg/v.php"
+printf 'web/core/lib/Drupal.php\nweb/modules/contrib/x/x.module\nvendor/pkg/v.php\nweb/modules/custom/m/A.php\n' \
+  > "$AA_W7/changed.txt"
+assert_eq "[security --changed] core, contrib and vendor are all still excluded on a web/ layout" \
+  "web/modules/custom/m/A.php" "$(run_aa_changed "$AA_W7" "$AA_W7/changed.txt")"
+
+# AA10-AA13: THE --changed BRANCH HAD NO UNMEASURED CONTRACT AT ALL, behind a comment
+# that said it did. `UNMEASURED_TOOLS=()` was declared at :361 and never appended to and
+# never read; every append site was in the standard path, and the changed-mode report
+# emitted no tools_unmeasured field. The branch also had no on-disk existence filter —
+# the one this commit added to lint-check.sh and solid-check.sh — so a changed set of
+# deleted files reached semgrep, php-security-linter and the pattern greps as nonexistent
+# paths and their empty output was read exactly the way a clean scan is.
+#
+# Echoes "<exit>|<overall_status>|<tools_unmeasured csv>|<paths_missing csv>".
+run_aa_changed_v() {
+  local work="$1" changed="$2" bin rdir rc=0
+  rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/aacvbin.XXXXXX")"; cp "$AASTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" STUB_PSALM=0 \
+       bash "$SEC" --changed "$changed" ) >/dev/null 2>&1 || rc=$?
+  printf '%s|%s|%s|%s' "$rc" \
+    "$(jq -r '.summary.overall_status // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.meta.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '(.meta.paths_missing // ["MISSING"]) | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# AA10: every named PHP file is gone from disk. The shipped gate took the
+# "no relevant files" branch and reported a CLEAN SKIP with exit 0 — a set of files it
+# was asked about and could not read, answered with the same code as a docs-only diff.
+AA_W8="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/Gone.php\n' > "$AA_W8/changed.txt"
+assert_eq "[security --changed] a changed set with nothing left on disk is unmeasured, not a clean skip" \
+  "4|unmeasured|custom_patterns,php-security-linter,semgrep|docroot/modules/custom/m/Gone.php" \
+  "$(run_aa_changed_v "$AA_W8" "$AA_W8/changed.txt")"
+
+# AA11: a docs-only changed set is still a clean skip. The distinction AA10 depends on:
+# "there was nothing to measure" is not "what I was told to measure was not there".
+AA_W9="$(mk_aa docroot)"
+printf '# hi\n' > "$AA_W9/README.md"
+printf 'README.md\n' > "$AA_W9/changed.txt"
+assert_eq "[security --changed] a docs-only changed set is still a clean skip" \
+  "0|skipped||" "$(run_aa_changed_v "$AA_W9" "$AA_W9/changed.txt")"
+
+# AA12: the partial set. One file present, one gone. Same verdict as the other two
+# --changed gates, for the reasons recorded once at Z12.
+AA_W10="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/A.php\ndocroot/modules/custom/m/Gone.php\n' > "$AA_W10/changed.txt"
+assert_eq "[security --changed] a partly-absent changed set is partial, never a pass" \
+  "1|partial||docroot/modules/custom/m/Gone.php" \
+  "$(run_aa_changed_v "$AA_W10" "$AA_W10/changed.txt")"
+
+# AA13: the partner that keeps AA12 honest — a fully present set still passes with 0.
+AA_W11="$(mk_aa docroot)"
+printf 'docroot/modules/custom/m/A.php\n' > "$AA_W11/changed.txt"
+assert_eq "[security --changed] a changed set that is entirely on disk still passes" \
+  "0|pass||" "$(run_aa_changed_v "$AA_W11" "$AA_W11/changed.txt")"
+
+# ── AA-rector. the generated rector.php carries the resolved paths ───────────
+echo ""
+echo "AA (rector half): the config this gate writes names the detected layout"
+
+# Same defect class as psalm.xml, in a file the criteria do not name: a hardcoded
+# layout inside a QUOTED heredoc that no substitution can reach. Criterion 1's prose
+# ("no gate script contains a hardcoded layout default") covers it.
+#
+# Two more here, found in the same file while fixing that one:
+#
+#   * `cmd | tee file` followed by `RECTOR_EXIT=$?` captures TEE's status, not
+#     rector's. tee succeeds whenever it can write the file, so a rector that died is
+#     read as a rector that exited 0 — and the dry-run guard is
+#     `[ "$CHANGES" -gt 0 ] || [ "$RECTOR_EXIT" -ne 0 ]`, so half of it has never worked.
+#   * The gate invokes rector unconditionally on a path it never checks.
+#
+# rector-fix.sh writes no JSON report, so its exit code is not a fallback channel: it
+# is read by a direct caller or by AIDA's /validate-* wrappers and is all there is.
+
+ARSTUB="$TMP/arstub"; mkdir -p "$ARSTUB"
+cat > "$ARSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+[ "${1-}" = "vendor/bin/rector" ] || exit 127
+shift
+[ "${1-}" = "--version" ] && { printf 'Rector 1.2.0\n'; exit 0; }
+[ -n "${STUB_MARKER_DIR:-}" ] && printf '%s\n' "$@" | paste -sd' ' - > "$STUB_MARKER_DIR/rector"
+case "${STUB_RECTOR:-clean}" in
+  clean)   printf '[OK] Rector is done!\n' ;;
+  changes) printf ' 1 file with changes\n===================\n1) x.php:3\n    ---------- would be applied ----------\n' ;;
+  crash)   printf 'PHP Fatal error: allowed memory size exhausted\n' >&2 ;;
+esac
+exit "${STUB_RECTOR_EXIT:-0}"
+STUB
+chmod +x "$ARSTUB/ddev"
+
+mk_ar() {
+  local work; work="$(mktemp -d "$TMP/ar.XXXXXX")"
+  mkdir -p "$work/markers" "$work/docroot/core/lib" "$work/docroot/modules/custom/m" \
+           "$work/docroot/themes/custom/t"
+  printf "const VERSION = '10.5.0';\n" > "$work/docroot/core/lib/Drupal.php"
+  printf '%s' "$work"
+}
+
+# Echoes "<exit>|<saw 'No deprecations found!'>"
+run_ar() {
+  local work="$1"; shift
+  local bin rc=0 out
+  bin="$(mktemp -d "$TMP/arbin.XXXXXX")"; cp "$ARSTUB/ddev" "$bin/"
+  out=$( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$work/.reports" STUB_MARKER_DIR="$work/markers" \
+       STUB_RECTOR="${AR_MODE:-clean}" STUB_RECTOR_EXIT="${AR_EXIT:-0}" \
+       bash "$RECTOR" "$@" 2>&1 ) || rc=$?
+  printf '%s|%s' "$rc" "$(u_has "$out" 'No deprecations found!')"
+}
+
+# AR1: the generated rector.php names the detected layout. Asserted on the file, which
+# outlives the run: it is written only when the project has none, and found on every
+# later run, so a literal in here survives the gate being fixed.
+AR_W1="$(mk_ar)"
+run_ar "$AR_W1" > /dev/null
+AR_PATHS=$(grep -o "__DIR__ \. '[^']*'" "$AR_W1/rector.php" 2>/dev/null | paste -sd, - | tr -d '\n')
+assert_eq "[rector] the generated rector.php points at the layout that was detected" \
+  "__DIR__ . '/docroot/modules/custom',__DIR__ . '/docroot/themes/custom'" "$AR_PATHS"
+
+AR_WEB=$(grep -c "web/" "$AR_W1/rector.php" 2>/dev/null || true)
+assert_eq "[rector] and no web/ literal survives in it" "0" "${AR_WEB:-MISSING}"
+
+# AR2: vendored trees (criterion 7) reach the generated config's skip list, next to the
+# tests entry that is already there.
+AR_SKIP=$(grep -cE "'\*/(node_modules|vendor)/\*'" "$AR_W1/rector.php" 2>/dev/null || true)
+assert_eq "[rector] the generated config skips vendored trees" "2" "${AR_SKIP:-MISSING}"
+
+# AR3: THE ABSENT PATH. Today rector is invoked at it regardless, and whether that
+# yields a false clean depends on rector's own choice of exit code — which was never
+# exercised. The gate no longer needs to know.
+AR_W2="$(mktemp -d "$TMP/armiss.XXXXXX")"; mkdir -p "$AR_W2/markers" "$AR_W2/docroot/core/lib"
+printf "const VERSION = '10.5.0';\n" > "$AR_W2/docroot/core/lib/Drupal.php"
+assert_eq "[rector] an absent modules path is unmeasured, and never 'No deprecations found!'" \
+  "4|no" "$(run_ar "$AR_W2")"
+assert_eq "[rector] and rector is not invoked against it" \
+  "NEVER-INVOKED" "$(tr -d '\n' < "$AR_W2/markers/rector" 2>/dev/null || printf 'NEVER-INVOKED')"
+
+# AR4: THE PIPE. rector dies; tee writes the file happily and exits 0, so `$?` after the
+# pipeline is tee's. With PIPESTATUS[0] the death is visible, and a crash with no output
+# is unmeasured rather than a clean tree.
+assert_eq "[rector] a rector that died through the tee pipeline is not read as exit 0" \
+  "4|no" "$(AR_MODE=crash AR_EXIT=127 run_ar "$(mk_ar)")"
+
+# AR5: and the ordinary answers still hold, so AR3/AR4 are not satisfied by a gate that
+# never reports anything.
+assert_eq "[rector] a clean dry run still says so, and exits 0" \
+  "0|yes" "$(run_ar "$(mk_ar)")"
+assert_eq "[rector] a dry run with deprecations still exits 1" \
+  "1|no" "$(AR_MODE=changes AR_EXIT=2 run_ar "$(mk_ar)")"
+
+# ── AC. RED means one thing (criterion 6) ────────────────────────────────────
+echo ""
+echo "AC: a container with no PHPUnit is not a test that failed as expected"
+
+# tdd-workflow.sh appears nowhere in this spec today either. run_test() returns PHPUnit's
+# raw status uninterpreted and phase_red() sends EVERY non-zero to
+# "[OK] Test failed as expected. RED phase complete." — so a container with no PHPUnit
+# and a genuinely failing test are the same signal, and the false one is the reassuring
+# one. This gate writes no JSON report, so the exit code is not a fallback channel here:
+# it is the only one there is.
+#
+# The fix is a PROBE, not a reinterpretation of the status. Probing before the call
+# means RED keeps meaning exactly one thing, which is easier to keep true than a
+# classifier inside the phase.
+
+ACSTUB="$TMP/acstub"; mkdir -p "$ACSTUB"
+cat > "$ACSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+case "${1-}" in
+  test)
+    # `ddev exec test -f vendor/bin/phpunit`, the probe install-tools.sh already uses.
+    case "${3-}" in
+      vendor/bin/phpunit) [ "${STUB_PHPUNIT:-1}" = 1 ] && exit 0; exit 1 ;;
+      *) exit 1 ;;
+    esac ;;
+  vendor/bin/phpunit)
+    [ "${STUB_PHPUNIT:-1}" = 1 ] || { printf 'exec: vendor/bin/phpunit: not found\n' >&2; exit 127; }
+    printf 'PHPUnit 10.5.0\n'
+    exit "${STUB_PHPUNIT_EXIT:-1}" ;;
+  *) exit 127 ;;
+esac
+STUB
+chmod +x "$ACSTUB/ddev"
+
+# Echoes "<exit>|<saw RED phase complete>|<saw the runner-missing line>"
+run_tdd() {
+  local phpunit="$1" punit_exit="$2"; shift 2
+  local work bin rc=0 out
+  work="$(mktemp -d "$TMP/tdd.XXXXXX")"
+  mkdir -p "$work/web/core" "$work/web/modules/custom/m/tests/src/Unit"
+  printf '<phpunit/>\n' > "$work/web/core/phpunit.xml.dist"
+  bin="$(mktemp -d "$TMP/tddbin.XXXXXX")"; cp "$ACSTUB/ddev" "$bin/"
+  out=$( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" STUB_PHPUNIT="$phpunit" STUB_PHPUNIT_EXIT="$punit_exit" \
+       bash "$TDD" "$@" 2>&1 ) || rc=$?
+  printf '%s|%s|%s' "$rc" "$(u_has "$out" 'RED phase complete')" "$(u_has "$out" 'no PHPUnit runner')"
+}
+
+# AC1: THE DEFECT. No PHPUnit in the container, and the old gate reports the RED phase
+# complete — the most reassuring line it can print, produced by a runner that was never
+# there. `no` on the middle field, not NOTHING: the gate printed plenty, just not that.
+assert_eq "[tdd] runner absent -> exit 4, and RED is NOT reported complete" \
+  "4|no|yes" "$(run_tdd 0 1 red)"
+
+# AC2: the partner case, and the one that stops AC1 being satisfied by a gate that never
+# reports RED at all. Runner present, test genuinely fails, RED is complete and exit 0.
+assert_eq "[tdd] runner present + a genuinely failing test -> RED complete, exit 0" \
+  "0|yes|no" "$(run_tdd 1 1 red)"
+
+# AC3: and a test that PASSES in the red phase is still the unexpected case it always
+# was — the probe must not have flattened the phase's own logic.
+assert_eq "[tdd] runner present + a passing test in RED -> still unexpected, exit 1" \
+  "1|no|no" "$(run_tdd 1 0 red)"
+
+# AC4: green with no runner is 4, not 1. 1 is "the tests failed", which is a measurement
+# nobody took.
+assert_eq "[tdd] green with the runner absent -> exit 4, not the failure code" \
+  "4|no|yes" "$(run_tdd 0 1 green)"
+
+# AC5: --changed has its own DDEV check and needed its own probe beside it.
+AC_W="$(mktemp -d "$TMP/tddchg.XXXXXX")"
+mkdir -p "$AC_W/web/core" "$AC_W/web/modules/custom/m/src" \
+         "$AC_W/web/modules/custom/m/tests/src/Unit"
+printf '<phpunit/>\n' > "$AC_W/web/core/phpunit.xml.dist"
+printf '<?php\n' > "$AC_W/web/modules/custom/m/src/A.php"
+printf '<?php\n' > "$AC_W/web/modules/custom/m/tests/src/Unit/ATest.php"
+AC_CHG=0
+AC_OUT=$( cd "$AC_W" && PATH="$(dirname "$ACSTUB")/acstub:/usr/bin:/bin" \
+  STUB_PHPUNIT=0 bash "$TDD" --changed web/modules/custom/m/src/A.php 2>&1 ) || AC_CHG=$?
+assert_eq "[tdd --changed] runner absent -> exit 4 and a runner-missing line" \
+  "4|yes" "${AC_CHG}|$(u_has "$AC_OUT" 'no PHPUnit runner')"
+
+# AC6: [contract, not behavioural] watch mode's own file walk skips vendored trees.
+# Behavioural coverage is impossible here — both branches are infinite loops — so this
+# checks the two walkers carry an exclusion, and says so rather than implying more.
+AC_WATCH=$(grep -vE '^[[:space:]]*#' "$TDD" | grep -cE 'node_modules' || true)
+assert_eq "[tdd] [contract, not behavioural] both watch walkers exclude vendored trees" \
+  "2" "${AC_WATCH:-MISSING}"
+
+# ── AF. an unmeasured gate reaches the aggregate (criterion 3) ───────────────
+echo ""
+echo "AF: full-audit reads the word from the report, and refuses to certify a pass on it"
+
+# resolve_overall_status() counts anything that is not skipped/unknown as a PRODUCED
+# result, so a gate reporting the new "unmeasured" status would have been counted as
+# evidence and the audit would have said pass. The word has to travel all the way, or
+# seven gates learned to say "I did not measure this" into a receiver that hears "fine".
+
+# AF1: the shipped function, sourced and called. Extracted the same way section E does.
+sed -n '/^resolve_overall_status()/,/^}/p' "$FULL" > "$TMP/resolve_af.sh"
+if [[ ! -s "$TMP/resolve_af.sh" ]]; then
+  bad "extracted resolve_overall_status() from full-audit.sh (AF)"
+else
+  # shellcheck source=/dev/null
+  source "$TMP/resolve_af.sh"
+  assert_eq "[aggregate] one unmeasured gate caps a would-be pass at warning" "warning" \
+    "$(resolve_overall_status pass pass unmeasured unknown unknown unknown)"
+  assert_eq "[aggregate] every gate unmeasured -> nothing was produced at all" "unknown" \
+    "$(resolve_overall_status pass unmeasured unmeasured unmeasured unmeasured unmeasured)"
+  assert_eq "[aggregate] a real failure still outranks an unmeasured gate" "fail" \
+    "$(resolve_overall_status fail pass unmeasured unknown unknown unknown)"
+  # The partner assertion. Without it, "unmeasured caps a pass" is satisfiable by a
+  # function that caps everything.
+  assert_eq "[aggregate] two gates that DID produce a result still pass" "pass" \
+    "$(resolve_overall_status pass pass pass unknown unknown unknown)"
+
+  # AF1b: "partial" is the one status that is BOTH. A gate that measured part of a
+  # changed set produced evidence — so it is not "nothing ran" — and its coverage was
+  # incomplete — so it must not certify a pass. Filing it under either existing arm
+  # loses one of the two halves.
+  assert_eq "[aggregate] a partial gate is evidence, so the run is not 'unknown'" "warning" \
+    "$(resolve_overall_status pass partial unknown unknown unknown unknown)"
+  assert_eq "[aggregate] and it caps a would-be pass the way unmeasured does" "warning" \
+    "$(resolve_overall_status pass pass partial unknown unknown unknown)"
+  assert_eq "[aggregate] a real failure still outranks a partial gate" "fail" \
+    "$(resolve_overall_status fail partial unknown unknown unknown unknown)"
+fi
+
+# AF2: and the word is read from the REPORT, not the exit code. The SOLID stub writes
+# `unmeasured` into its report while exiting 0 — the exact shape a gate has when its
+# exit code cannot carry the verdict — so a full-audit that judged by the status would
+# record a pass here.
+P_UNMEAS="$(run_p_audit drupal '' unmeasured 0 1 0)"
+assert_eq "[aggregate] a gate whose REPORT says unmeasured is recorded as unmeasured" \
+  "unmeasured" "$(p_field "$P_UNMEAS" solid_score)"
+assert_eq "[aggregate] and the overall verdict is capped, not passed" \
+  "warning" "$(p_field "$P_UNMEAS" overall_score)"
+assert_eq "[aggregate] and the run exits non-zero" "1" "$(p_rc "$P_UNMEAS")"
+
+# AF3: the reader is told WHICH gate capped it. "WARNING" with zero warnings counted is
+# otherwise a puzzle, and the existing loop only named gates that said "skipped".
+assert_eq "[aggregate] the summary names the gate that covered no ground" \
+  "yes" "$(u_has "$(cat "$P_UNMEAS/out.txt")" 'the SOLID gate covered no ground')"
+
+# AF4: a gate with NO report still falls back to its exit code, and exit 4 is read as
+# unmeasured rather than lumped in with the failures. rector-fix.sh and tdd-workflow.sh
+# write no report at all, so for them this is the only channel there is.
+P_EXIT4="$(run_p_audit drupal '' pass 4 0 0)"
+assert_eq "[aggregate] a reportless gate exiting 4 is unmeasured, not fail" \
+  "unmeasured" "$(p_field "$P_EXIT4" solid_score)"
+assert_eq "[aggregate] and it caps rather than fails the run" \
+  "warning" "$(p_field "$P_EXIT4" overall_score)"
+
+# ── AG. a failed install cannot read as a success (criterion 12) ─────────────
+echo ""
+echo "AG: the installer's verdict is read, not discarded"
+
+# `"${SCRIPT_DIR}/install-tools.sh" || true` followed by an unconditional
+# `[OK] Tools available`. Both halves are the defect: the status was thrown away, and
+# the line printed either way — so an audit whose tools never installed announced that
+# they had, and every gate below then reported "tool absent" into a run that had already
+# said it was fine.
+#
+# install-tools.sh writes tools-status.json with a per-tool map and an all_ok flag,
+# which is strictly more informative than full-audit re-probing phpstan alone: exit 1
+# can mean "phpmd missing, phpstan fine", and the exit status alone cannot say so.
+
+# AG1: THE DEFECT. The installer exits non-zero.
+AG_FAIL="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=1 P_TOOLS_STATUS='{"all_ok": false}' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] a failed install does not announce that tools are available" \
+  "no" "$(u_has "$(cat "$AG_FAIL/out.txt")" 'Tools available')"
+assert_eq "[install] and the audit exits non-zero" "2" "$(p_rc "$AG_FAIL")"
+
+# AG2: the quieter half — the installer exits 0 while recording that not everything
+# installed. The exit status alone would have called this a success.
+#
+# THE TWO OUTCOMES ARE NOT THE SAME OUTCOME. An earlier version of this section asserted
+# a STOP here, and full-audit.sh's own comment beside the code described the opposite
+# case ("phpmd missing, phpstan fine, which is still a usable run") as one it allowed.
+# The rewritten installer then widened the gap: it sets all_ok=false for any tool outside
+# machine scope that is not resolvable — psalm, phpmd and phpcpd included — so an
+# ordinary developer machine ran ZERO gates and exited 2 where it used to run the whole
+# audit with the DRY gate skipped. The reconciliation splits the two:
+#
+#   installer failed, or wrote nothing readable  -> STOP (AG1, AG3, AG4)
+#   installer succeeded, some tools absent       -> RUN, and refuse to certify a pass
+#
+# The refusal is not new machinery: each gate already records its absent tool and reports
+# "skipped", and resolve_overall_status already caps a would-be pass over any of them.
+# What this branch adds is that the run gets there.
+AG_PARTIAL="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": false}' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] all_ok:false is read even when the installer exited 0" \
+  "no" "$(u_has "$(cat "$AG_PARTIAL/out.txt")" 'Tools available')"
+assert_eq "[install] and the run continues to its gates rather than stopping at step 2" \
+  "coverage-report,dry-check,security-check,solid-check" "$(p_gates "$AG_PARTIAL")"
+assert_eq "[install] and it says why, naming the record instead of just warning" \
+  "yes" "$(u_has "$(cat "$AG_PARTIAL/out.txt")" 'not every tool is available')"
+
+# AG2b: and the incomplete tool set reaches the VERDICT, which is the whole reason
+# continuing is safe. The solid stub passes and writes a report; without the cap this
+# run would certify a pass over an audit missing analyzers.
+AG_CAP="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": false}' \
+  run_p_audit nextjs '' pass 0 1 0)"
+assert_eq "[install] an incomplete tool set caps the overall verdict at warning" \
+  "warning" "$(p_field "$AG_CAP" overall_score)"
+assert_eq "[install] and the summary names that as the reason" \
+  "yes" "$(u_has "$(cat "$AG_CAP/out.txt")" 'not every analyzer is installed')"
+
+# AG2c: the partner. The same nextjs run with a healthy install still certifies a pass,
+# so AG2b is not satisfied by an audit that can never pass.
+AG_NOCAP="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": true}' \
+  run_p_audit nextjs '' pass 0 1 0)"
+assert_eq "[install] a healthy install leaves the verdict uncapped" \
+  "pass" "$(p_field "$AG_NOCAP" overall_score)"
+
+# AG3: no status file at all — an installer that died before writing one. Absence is
+# not consent.
+AG_NOFILE="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] a missing tools-status.json is not read as success" \
+  "no" "$(u_has "$(cat "$AG_NOFILE/out.txt")" 'Tools available')"
+assert_eq "[install] and that run exits non-zero" "2" "$(p_rc "$AG_NOFILE")"
+
+# AG3b: a status file with no all_ok key at all — an older or truncated document. It
+# must land with AG3, not with AG2: "the installer did not say" is not "the installer
+# said no".
+#
+# This pins the read, and the read is where it went wrong. `.all_ok // empty` cannot tell
+# the two apart, because jq's alternative operator fires on the value `false` as well as
+# on an absent key. It was harmless while both answers produced the same stop, and it
+# decides the outcome now that they do not.
+AG_NOKEY="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"tools": {}}' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] a status file that never says all_ok stops the run, like no file at all" \
+  "NO-GATE-RAN|2" "$(p_gates "$AG_NOKEY")|$(p_rc "$AG_NOKEY")"
+
+# AG4: an unparseable one, same answer.
+AG_JUNK="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='not json at all' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] an unparseable tools-status.json is not read as success" \
+  "no" "$(u_has "$(cat "$AG_JUNK/out.txt")" 'Tools available')"
+
+# AG5: and the success path still works, so AG1-AG4 are not satisfied by an audit that
+# can never get past step 2.
+AG_OK="$(P_PHPSTAN_PRESENT=0 P_INSTALL_EXIT=0 P_TOOLS_STATUS='{"all_ok": true}' \
+  run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] a successful install does announce that tools are available" \
+  "yes" "$(u_has "$(cat "$AG_OK/out.txt")" 'Tools available')"
+assert_eq "[install] and the run reaches its gates" \
+  "coverage-report,dry-check,security-check,solid-check" "$(p_gates "$AG_OK")"
+
+# AG6: the fast path is untouched — phpstan already present means no install is
+# attempted and the line is still earned.
+AG_PROBE="$(run_p_audit drupal '' pass 0 1 0)"
+assert_eq "[install] with the tools already present the installer is not run at all" \
+  "yes|MISSING" \
+  "$(u_has "$(cat "$AG_PROBE/out.txt")" 'Tools available')|$(jq -r '.all_ok' "$AG_PROBE/.reports/tools-status.json" 2>/dev/null || echo MISSING)"
+
+# ── W. every Drupal gate, at a path that is not there (criteria 3, 4, 12, 14) ─
+echo ""
+echo "W: all seven gates, one scenario each, and the count comes off the disk"
+
+# The per-gate sections above each prove one gate's absent-path behaviour in detail.
+# This one sweeps ALL SEVEN in one table and derives the number of gates from the
+# filesystem, so an eighth gate landing without a case fails the suite. A hand-written
+# 7 passes forever; that is exactly the failure mode that let this task exist, since the
+# prior task built this detector and pointed it at two gates out of seven.
+#
+# Every scenario runs the shipped gate as a SEPARATE PROCESS against a project with a
+# real Drupal root and no custom code under it, and reads BOTH channels: the status the
+# gate wrote into its report and the exit code it left behind.
+
+# A glob, not `ls | ...`: the shell already sorts it, and it survives a filename this
+# repo will never have but a linter is right to insist on.
+W_GATES=()
+for w_path in "$ROOT"/drupal/*.sh; do
+  w_name="$(basename "$w_path")"
+  [ "$w_name" = "lib-changed-mapping.sh" ] && continue
+  W_GATES+=("$w_name")
+done
+assert_eq "the number of Drupal gates is read off the disk, not written down" \
+  "7" "${#W_GATES[@]}"
+
+WSTUB="$TMP/wstub"; mkdir -p "$WSTUB"
+# One stub for all seven. Every analyzer these gates need is PRESENT and healthy, so
+# nothing here can be mistaken for "the tool was missing" — the only thing absent is the
+# ground. PHPUnit is the exception and is absent on purpose: for tdd-workflow.sh the
+# runner IS the ground it reads, and that gate takes no scan path.
+cat > "$WSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  drush)    exit 1 ;;
+  composer) exit 1 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+case "${1-}" in
+  test)
+    case "${3-}" in
+      vendor/bin/phpunit) exit 1 ;;
+      *) exit 1 ;;
+    esac ;;
+  grep) shift; grep "$@" 2>/dev/null; exit 0 ;;
+  mkdir|rm) exit 0 ;;
+  drush)    printf '[]\n'; exit 0 ;;
+  composer) printf '{"advisories":{}}\n'; exit 0 ;;
+  vendor/bin/phpcs)
+    [ "${2-}" = "--version" ] || [ "${1-}" = "--version" ] && { printf 'PHP_CodeSniffer version 3.13.6\n'; exit 0; }
+    exit 0 ;;
+  vendor/bin/phpcpd) printf 'phpcpd 8.2.1\n'; exit 0 ;;
+  vendor/bin/rector) printf 'Rector 1.2.0\n'; exit 0 ;;
+  vendor/bin/phpunit) exit 127 ;;
+  *) exit 127 ;;
+esac
+STUB
+chmod +x "$WSTUB/ddev"
+
+# A project with a Drupal root and NO custom code under it.
+mk_w() {
+  local work; work="$(mktemp -d "$TMP/w.XXXXXX")"
+  mkdir -p "$work/web/core/lib"
+  printf "const VERSION = '10.5.0';\n" > "$work/web/core/lib/Drupal.php"
+  printf '%s' "$work"
+}
+
+# Runs one gate and echoes "<exit>|<status from its report, or NO-REPORT>".
+w_run() {
+  local gate="$1" report="$2"; shift 2
+  local work bin rdir rc=0 status
+  work="$(mk_w)"; rdir="$work/.reports"
+  bin="$(mktemp -d "$TMP/wbin.XXXXXX")"; cp "$WSTUB/ddev" "$bin/"
+  ( cd "$work" \
+    && env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH \
+       PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" \
+       bash "$ROOT/drupal/$gate" "$@" ) >/dev/null 2>&1 || rc=$?
+  if [ -n "$report" ] && [ -f "$rdir/$report" ]; then
+    status=$(jq -r '.status // .summary.overall_status // "NO-STATUS"' "$rdir/$report" 2>/dev/null || echo NO-STATUS)
+  else
+    status="NO-REPORT"
+  fi
+  printf '%s|%s' "$rc" "$status"
+}
+
+# The five gates that write a report say the word in it AND leave 4 behind. The two that
+# write none have only the exit code, which is why it has to be 4 rather than 0.
+assert_eq "[W] lint-check.sh at an absent path" \
+  "4|unmeasured" "$(w_run lint-check.sh lint-report.json)"
+assert_eq "[W] solid-check.sh at an absent path" \
+  "4|unmeasured" "$(w_run solid-check.sh solid-report.json)"
+assert_eq "[W] dry-check.sh at an absent path" \
+  "4|unmeasured" "$(w_run dry-check.sh dry-report.json)"
+assert_eq "[W] security-check.sh at an absent path" \
+  "4|unmeasured" "$(w_run security-check.sh security-report.json)"
+assert_eq "[W] rector-fix.sh at an absent path (writes no report; the exit is all there is)" \
+  "4|NO-REPORT" "$(w_run rector-fix.sh '')"
+assert_eq "[W] tdd-workflow.sh with no runner (writes no report either)" \
+  "4|NO-REPORT" "$(w_run tdd-workflow.sh '' red)"
+
+# coverage-report.sh is the SEVENTH, and it is the one gate deliberately left alone.
+# It already refuses an early exit 0 on an unmeasured path, with this task's own
+# argument written into the file at :485-494: "full-audit.sh reads this gate's exit
+# status and maps 0 to pass, so exiting 0 on a path that was never measured would report
+# clean coverage for code nobody looked at." Falling through leaves PHPUnit with nothing
+# to run, no Lines: in its output, 0% coverage and a non-zero exit — wrong in the loud
+# direction. Converting it to `unmeasured` would churn the exemplar to match the copies.
+#
+# So the assertion here is the CONTRACT, not the word: non-zero, and never 3.
+W_COV="$(w_run coverage-report.sh coverage-report.json)"
+W_COV_RC="${W_COV%%|*}"
+assert_eq "[W] coverage-report.sh at an absent path is non-zero (the exemplar, unchanged)" \
+  "non-zero-and-not-3" \
+  "$([ "$W_COV_RC" != "0" ] && [ "$W_COV_RC" != "3" ] && printf 'non-zero-and-not-3' || printf "rc=${W_COV_RC}")"
+
+# W-COV2: THE REASON IS IN THE FILE, which is what this gate is cited for.
+#
+# The claim in coverage-report.sh:65-71 — repeated in the decision block of this task's
+# alignment.md, where it is the whole basis for the failure-signal contract — is that this
+# gate "already refuses an early exit 0 with the reason written into the file". The first
+# half was true of the artifact and the second was not: the report carried
+# {"scope": "...", "line_coverage": 0, "status": "fail"} with no reason, no paths_missing,
+# and nothing to separate "measured 0%" from "measured nothing". The reason lived only on
+# stdout, which full-audit.sh does not parse.
+#
+# `line_coverage` stays a NUMBER: schemas/audit-report.schema.json types it "number",
+# unlike branch_coverage which is explicitly ["number","null"]. `measured` is the field
+# that carries the distinction, and the reader who sees 0 has it beside them.
+# Its own stub: the shared W one has PHPUnit ABSENT on purpose (tdd-workflow.sh needs
+# that), and this gate exits at the runner probe before it ever reaches the scope check.
+# Here PHPUnit is present and simply finds nothing to run, which is the shape the
+# assertion is about.
+W_COV2_BIN="$(mktemp -d "$TMP/wcovbin.XXXXXX")"
+cat > "$W_COV2_BIN/ddev" <<'STUB'
+#!/usr/bin/env bash
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 0 ;;
+esac
+case "${1-}" in
+  test) case "${3-}" in vendor/bin/phpunit) exit 0 ;; *) exit 1 ;; esac ;;
+  mkdir|rm) exit 0 ;;
+  cat)  shift; cat "$@" 2>/dev/null; exit 0 ;;
+  php)  shift ;;
+esac
+case "${1-}" in
+  vendor/bin/phpunit)
+    [ "${2-}" = "--version" ] && { printf 'PHPUnit 10.5.0
+'; exit 0; }
+    # A real PHPUnit handed a path with no tests under it: no "Lines:", no "Tests:".
+    printf 'No tests executed!
+'; exit 0 ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$W_COV2_BIN/ddev"
+W_COV2_WORK="$(mk_w)"
+W_COV2_RDIR="$W_COV2_WORK/.reports"
+( cd "$W_COV2_WORK" \
+  && env -u DRUPAL_MODULES_PATH -u DRUPAL_THEMES_PATH \
+     PATH="$W_COV2_BIN:/usr/bin:/bin" REPORT_DIR="$W_COV2_RDIR" \
+     bash "$COV" ) >/dev/null 2>&1 || true
+assert_eq "[W] the coverage report records that it measured nothing, and what it could not read" \
+  "false|web/modules/custom|yes" \
+  "$(jq -r 'if has("measured") then (.measured | tostring) else "MISSING" end' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null || echo MISSING)|$(jq -r '(.paths_missing // ["MISSING"]) | join(",")' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null || echo MISSING)|$(u_has "$(jq -r '.reason // ""' \
+       "$W_COV2_RDIR/coverage-report.json" 2>/dev/null)" 'does not exist')"
+
+# And the loop that makes the count mean something: every gate on disk must appear in
+# the scenario table above. A gate present on disk and absent from the table fails here,
+# which is the check that a hand-written 7 cannot perform.
+W_COVERED="coverage-report.sh dry-check.sh lint-check.sh rector-fix.sh security-check.sh solid-check.sh tdd-workflow.sh"
+W_MISSING=""
+for w_gate in "${W_GATES[@]}"; do
+  case " ${W_COVERED} " in
+    *" ${w_gate} "*) ;;
+    *) W_MISSING="${W_MISSING}${W_MISSING:+,}${w_gate}" ;;
+  esac
+done
+assert_eq "every Drupal gate on disk has a missing-path scenario above" "" "$W_MISSING"
+
+# ── AE. no gate reports somebody else's code (criterion 7) ───────────────────
+echo ""
+echo "AE: a finding planted under node_modules belongs to whoever vendored it"
+
+# Each gate's behavioural arm lives with that gate — Y4 (lint), AB6/AB7 (solid),
+# AD7 (dry), AA6/AA7 (security) — because each needs its own tool stub to model the
+# exclusion it passes. This section is the roll-up: every gate on disk has an answer,
+# and the two that answer differently say why.
+
+# security-check.sh names four arms, not two, and the reason is worth the extra words:
+# AA6/AA7 exercise the grep layer with every analyzer ABSENT, which is the state that let
+# this gate be recorded as answering the criterion while two thirds of it were unbuilt.
+# AA1b covers the generated psalm.xml's ignore list and AA6-sem covers semgrep's
+# --exclude, both with the tool PRESENT.
+AE_ANSWERED="lint-check.sh:Y4 solid-check.sh:AB6+AB7 dry-check.sh:AD7 security-check.sh:AA1b+AA6+AA7+AA6-sem rector-fix.sh:AR2 tdd-workflow.sh:AC6 coverage-report.sh:exempt"
+AE_MISSING=""
+for ae_gate in "${W_GATES[@]}"; do
+  case " ${AE_ANSWERED} " in
+    *" ${ae_gate}:"*) ;;
+    *) AE_MISSING="${AE_MISSING}${AE_MISSING:+,}${ae_gate}" ;;
+  esac
+done
+assert_eq "every Drupal gate on disk has a vendored-tree answer" "" "$AE_MISSING"
+
+# coverage-report.sh's exemption, asserted with its MECHANISM rather than assumed.
+# PHPUnit discovers tests by file under a path argument and has no ignore flag, so
+# there is nothing to exclude — and the reason that is safe is that a node_modules tree
+# carries no *Test.php for it to discover. That second half is the part worth checking:
+# it is a claim about npm packages, not about PHPUnit, and it is the one that would stop
+# being true first.
+#
+# The original verify for this criterion was `grep -l node_modules scripts/drupal/*.sh`,
+# which this gate could satisfy only by containing the WORD in a comment. That is gaming
+# the check, so the exemption is asserted here instead.
+AE_NM="$TMP/ae_nm"; mkdir -p "$AE_NM/web/themes/custom/t/node_modules/pkg/src"
+printf 'module.exports = {};\n' > "$AE_NM/web/themes/custom/t/node_modules/pkg/index.js"
+printf '<?php\nclass Helper {}\n' > "$AE_NM/web/themes/custom/t/node_modules/pkg/src/Helper.php"
+AE_TESTS=$(find "$AE_NM/web/themes/custom/t/node_modules" -name '*Test.php' | wc -l | tr -d ' ')
+assert_eq "[AE] a vendored npm tree carries no PHPUnit test file to discover" "0" "$AE_TESTS"
+
+# And the other half of the exemption: the coverage gate hands PHPUnit a PATH, and
+# PHPUnit has no ignore flag to carry. [contract, not behavioural] — this reads the
+# shipped invocation rather than running PHPUnit, which needs PHP and a Drupal install.
+AE_COV_IGNORE=$(grep -cE '\--ignore|--exclude' "$COV" 2>/dev/null || true)
+assert_eq "[AE] [contract, not behavioural] the coverage gate passes no exclusion flag, because there is none to pass" \
+  "0" "${AE_COV_IGNORE:-MISSING}"
+
+# ── DOC. the documented CI gate reads the status, not only the counts ────────
+echo ""
+echo "DOC: the snippet a caller copies out of the command docs rejects an unmeasured run"
+
+# Seven gates gained a new exit code and a new status word, and the surface a caller
+# actually reads had no entry for either. commands/security.md gave the CI gate as
+# `CRIT=$(jq '.summary.critical'); HIGH=$(jq '.summary.high'); if [ $CRIT -gt 0 ] || ...`
+# — and an unmeasured security run has critical=0 and high=0 BY CONSTRUCTION, so the
+# documented consumer read it as clean. The mechanism was right in full-audit.sh and
+# absent from the one place a person copies.
+#
+# THE SNIPPET IS EXTRACTED AND RUN, not grepped. A grep for the word "overall_status"
+# passes on a snippet that reads the field and does nothing with it.
+DOC_CMDS="${ROOT}/../../../commands"
+DOC_SEC="${DOC_CMDS}/security.md"
+
+if [[ ! -f "$DOC_SEC" ]]; then
+  bad "[DOC] commands/security.md is where the documented CI gate lives"
+else
+  # The fenced block that opens with the documented invocation, up to its closing fence.
+  awk '/^result=\$\(\/code-quality-tools:security --json\)$/ {inb=1} inb && /^```$/ {exit} inb {print}' \
+    "$DOC_SEC" > "$TMP/doc_sec_gate.sh"
+  # The one line that cannot run here is the invocation itself; everything below it is
+  # the gate, and that is what is under test.
+  sed -i '1s|.*|result=$(cat "$1")|' "$TMP/doc_sec_gate.sh"
+
+  doc_gate() {   # <json> ; echoes the exit status the documented gate would leave
+    local f="$TMP/doc_fixture.json" rc=0
+    printf '%s' "$1" > "$f"
+    bash "$TMP/doc_sec_gate.sh" "$f" >/dev/null 2>&1 || rc=$?
+    printf '%s' "$rc"
+  }
+
+  assert_eq "[DOC] the extracted snippet is non-empty (so the assertions below mean something)" \
+    "yes" "$([ -s "$TMP/doc_sec_gate.sh" ] && printf yes || printf no)"
+
+  # DOC1: THE DEFECT. An unmeasured run: zero critical, zero high, and nothing scanned.
+  assert_eq "[DOC] the documented gate rejects an unmeasured security run" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"unmeasured","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC2: and a partial one, for the same reason at a finer grain.
+  assert_eq "[DOC] and a partial one" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"partial","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC3: and a skipped one — the word that already existed and was already read as clean.
+  assert_eq "[DOC] and a skipped one" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"skipped","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC4: a real clean run still passes. Without this the fix could be "reject
+  # everything", and a gate that fires on every run carries no information.
+  assert_eq "[DOC] a run that covered its ground and found nothing still passes" "0" \
+    "$(doc_gate '{"summary":{"overall_status":"pass","critical":0,"high":0},"meta":{},"findings":[]}')"
+
+  # DOC5: and the counts still gate, which is what the snippet was there for.
+  assert_eq "[DOC] a covered run with a critical finding still fails" "1" \
+    "$(doc_gate '{"summary":{"overall_status":"fail","critical":1,"high":0},"meta":{},"findings":[{"severity":"critical"}]}')"
+fi
+
+# DOC6: [contract, not behavioural] every gate command doc names exit 4 and the word.
+# The snippet above is the one consumer that can be executed; the rest is a table a
+# person reads, and a table that omits the code is how a caller comes to write the
+# snippet DOC1 refutes.
+DOC_MISSING=""
+for doc_cmd in security lint solid dry; do
+  doc_f="${DOC_CMDS}/${doc_cmd}.md"
+  if [[ ! -f "$doc_f" ]]; then DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:absent"; continue; fi
+  grep -q 'unmeasured' "$doc_f" || DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:no-word"
+  grep -qE '\| 4 \|' "$doc_f" || DOC_MISSING="${DOC_MISSING}${DOC_MISSING:+,}${doc_cmd}:no-exit-4"
+done
+assert_eq "[DOC] [contract, not behavioural] every gate command doc names exit 4 and 'unmeasured'" \
+  "" "$DOC_MISSING"
+
+# DOC8: the SCHEMA admits the words the tool emits. `unmeasured` has been written into
+# summary.*_score since 10b1c9b while the enum still read
+# ["pass","warning","fail","unknown"], and `partial` widened the same gap — a schema that
+# forbids a value the tool produces is a false record of the same kind this task is
+# about. `lint_score` and `security_score` were absent from it entirely while
+# full-audit.sh:610-615 has always written both.
+DOC_SCHEMA="${ROOT}/../schemas/audit-report.schema.json"
+DOC_SCORE_MISSING=""
+for doc_k in overall_score coverage_score solid_score lint_score dry_score security_score; do
+  jq -e --arg k "$doc_k" '.properties.summary.properties | has($k)' "$DOC_SCHEMA" >/dev/null 2>&1 \
+    || DOC_SCORE_MISSING="${DOC_SCORE_MISSING}${DOC_SCORE_MISSING:+,}${doc_k}"
+done
+assert_eq "[DOC] every summary score full-audit.sh writes is in the schema" \
+  "" "$DOC_SCORE_MISSING"
+
+# The overall verdict is deliberately NOT widened: resolve_overall_status maps the
+# coverage words onto warning and only ever returns these four. Asserted so that adding
+# them there later has to be a decision rather than a copy-paste.
+assert_eq "[DOC] overall_score keeps the four words resolve_overall_status can return" \
+  "fail,pass,unknown,warning" \
+  "$(jq -r '.properties.summary.properties.overall_score.enum | sort | join(",")' "$DOC_SCHEMA" 2>/dev/null || echo MISSING)"
+
+DOC_ENUM_MISSING=""
+for doc_k in coverage_score solid_score lint_score dry_score security_score; do
+  for doc_w in skipped unmeasured partial; do
+    jq -e --arg k "$doc_k" --arg w "$doc_w" \
+      '.properties.summary.properties[$k].enum | index($w) != null' "$DOC_SCHEMA" >/dev/null 2>&1 \
+      || DOC_ENUM_MISSING="${DOC_ENUM_MISSING}${DOC_ENUM_MISSING:+,}${doc_k}:${doc_w}"
+  done
+done
+assert_eq "[DOC] and every per-gate score admits skipped, unmeasured and partial" \
+  "" "$DOC_ENUM_MISSING"
+
+# DOC7: and the two gates that carry the partial verdict document it, since it is the
+# only status in this suite that exits 1 while the report says the tree is clean.
+DOC_PARTIAL=""
+for doc_cmd in security lint solid; do
+  grep -q 'partial' "${DOC_CMDS}/${doc_cmd}.md" || DOC_PARTIAL="${DOC_PARTIAL}${DOC_PARTIAL:+,}${doc_cmd}"
+done
+assert_eq "[DOC] the three --changed gates document the partial verdict" "" "$DOC_PARTIAL"
+
+# ── IN. the config-driven installer (config_driven_installer child) ──────────
+#
+# Eleven sections, IN-A through IN-K. The prefix is deliberate: letters A-W and
+# AA-AG are already taken by this file and by the gate_path_resolution sibling,
+# and a section letter that collides is a section somebody deletes by accident.
+#
+# What they assert, and the criterion each one carries:
+#
+#   IN-A  the tool catalog is one list, and every entry's scope cites the rule (2, 3)
+#   IN-B  the config schema expresses the five matrix dimensions, and one
+#         fixture per dimension round-trips through the installer (1)
+#   IN-C  the config reader refuses; it never falls back to a default (19)
+#   IN-D  a derived config resolves the same package list as a written one, and
+#         leaves no file behind (8)
+#   IN-E  allow-plugins is written by `composer config`, before any require (5, 9)
+#   IN-F  nothing is installed that the config did not ask for (6)
+#   IN-G  an isolated tool stays out of require-dev and resolves through
+#         resolve_analyzer's fourth location (2, 4)
+#   IN-H  the placed templates carry the layout, exclude only what is not ours,
+#         ship no pre-emptive suppressions, and name no in-repo report path (10, 11, 12, 16)
+#   IN-I  the installer refuses to shadow a config it did not write (13)
+#   IN-J  the install verifies itself, and the verification is asserted red
+#         before it is asserted green (14)
+#   IN-K  setup.md holds no install, and the generated region cannot be edited
+#         away silently (7, 15, 17)
+
+SKILLROOT="${ROOT}/.."
+PLUGINROOT="${ROOT}/../../.."
+REPOROOT="${ROOT}/../../../.."
+CATALOG="${SKILLROOT}/schema/tool-catalog.json"
+CQSCHEMA="${SKILLROOT}/schema/code-quality.schema.json"
+CFGDOC="${SKILLROOT}/references/config-schema.md"
+CQTCONFIG="${ROOT}/core/cqt-config.sh"
+CQTINSTALL="${ROOT}/core/cqt-install.sh"
+CQTVERIFY="${ROOT}/core/install-verify.sh"
+SHIM="${ROOT}/core/install-tools.sh"
+SETUPMD="${PLUGINROOT}/commands/setup.md"
+GENDOC="${REPOROOT}/scripts/gen-setup-doc.sh"
+
+# ── IN-A. one list of tools, and every scope cites the rule (criteria 2, 3) ───
+echo ""
+echo "IN-A: the tool catalog states its rule and every entry cites it"
+
+if [[ ! -f "$CATALOG" ]]; then
+  bad "[IN-A] the tool catalog exists at schema/tool-catalog.json"
+else
+  ok "[IN-A] the tool catalog exists at schema/tool-catalog.json"
+
+  assert_eq "[IN-A] the catalog is valid JSON" "yes" \
+    "$(jq -e . "$CATALOG" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # The rule itself, not a paraphrase of it. Criterion 3 asks that scope be
+  # assigned "by a stated rule, not per-tool taste", so the rule has to be IN the
+  # file a reader opens, and it has to be the predicate the mechanism challenge
+  # settled: "tools which do not autoload your code".
+  RULE=$(jq -r '.scope_rule // ""' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] the catalog states a scope rule" "yes" \
+    "$([[ -n "$RULE" ]] && echo yes || echo no)"
+  assert_eq "[IN-A] the stated rule names autoloading the project's own code" "yes" \
+    "$(u_has "$RULE" "autoload")"
+
+  # Vocabulary. A fourth word would be a scope the installer cannot route.
+  BADSCOPE=$(jq -r '[.tools | to_entries[] | select(.value.scope as $s | ["project","isolated","machine"] | index($s) | not) | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every tool's scope is project|isolated|machine" "" "$BADSCOPE"
+
+  # The citation is the half criterion 3 is actually about. An entry with a scope
+  # and no reason is exactly the per-tool taste the criterion refuses.
+  NOREASON=$(jq -r '[.tools | to_entries[] | select((.value.scope_reason // "") == "") | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every tool carries a non-empty scope_reason" "" "$NOREASON"
+
+  # isolated is the MINORITY case. The predicate excludes every tool that
+  # resolves project classes, so phpstan-drupal, coder, PHPUnit and Rector all
+  # stay project — a catalog that isolates them has misread the rule.
+  ISO=$(jq -r '[.tools | to_entries[] | select(.value.scope == "isolated") | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] exactly four tools are isolated" \
+    "php-security-linter,phpcpd,phpmd,psalm" "$ISO"
+
+  for keep in phpstan-drupal coder rector phpunit roave; do
+    assert_eq "[IN-A] $keep stays at project scope" "project" \
+      "$(jq -r --arg k "$keep" '.tools[$k].scope // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  done
+
+  # required_when is what makes criterion 8 hold for the derived path too: it is
+  # the catalog fact cqt_config_load re-checks as an invariant.
+  for req in phpstan-extension-installer phpstan-drupal phpstan-deprecation-rules; do
+    assert_eq "[IN-A] $req is required when the project is Drupal" "drupal" \
+      "$(jq -r --arg k "$req" '.tools[$k].required_when["project.type"] // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  done
+
+  GATED=$(jq -r '[.tools | to_entries[] | select(.value.consent_gated == true) | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] grumphp and husky are the only consent-gated tools" "grumphp,husky" "$GATED"
+
+  # A machine tool has no package to require, so an entry that carries one would
+  # reach `composer require` with a name Composer has never heard of. The hint is
+  # what replaces the `curl | sh` install-tools.sh:144,:157 used to run.
+  MACHPKG=$(jq -r '[.tools | to_entries[] | select(.value.scope == "machine") | select((.value.packages | length) > 0) | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] no machine-scope tool carries a package list" "" "$MACHPKG"
+  MACHHINT=$(jq -r '[.tools | to_entries[] | select(.value.scope == "machine") | select((.value.install_hint // "") == "") | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every machine-scope tool carries an install_hint" "" "$MACHHINT"
+
+  # The pin the epic settled, and the reason recorded WHERE the pin is. Stating
+  # it only in a changelog is what left drupal-ai-contrib's ^8.3.x reading as an
+  # accident.
+  assert_eq "[IN-A] drupal/coder pins ^9.0" "^9.0" \
+    "$(jq -r '.tools.coder.packages[0].constraint // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  assert_eq "[IN-A] the coder pin carries its own constraint_reason" "yes" \
+    "$([[ -n "$(jq -r '.tools.coder.constraint_reason // ""' "$CATALOG" 2>/dev/null)" ]] && echo yes || echo no)"
+
+  # Every package name reaches a composer/npm command line eventually. The
+  # catalog is trusted input, which is not a reason for it to hold a name that
+  # would not survive being one.
+  BADNAME=$(jq -r '[.tools | to_entries[] | .value.packages[]? | select(.name | test("^[a-z0-9@][a-zA-Z0-9._/-]*$") | not) | .name] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every package name is a plain package name" "" "$BADNAME"
+
+  # ── the rule and its one exception have to agree ─────────────────────────
+  #
+  # psalm is `isolated`, and the generated psalm.xml hands it
+  # <autoloader>vendor/autoload.php</autoloader> with resolveFromConfigFile="true" —
+  # autoloading the project's own code, which is the rule's own predicate for `project`.
+  # The entry declared the contradiction openly in scope_reason and recorded a
+  # reversal_condition, but the RULE did not admit that an exception could exist, so a
+  # reader comparing the two found the catalog contradicting its own stated rule. The rule
+  # now names the mechanism, and these assertions hold the exception to it.
+  assert_eq "[IN-A] the rule admits an exception only against a recorded reason" "yes" \
+    "$(u_has "$RULE" "scope_reason")"
+  assert_eq "[IN-A] and a reversal_condition naming what would move it" "yes" \
+    "$(u_has "$RULE" "reversal_condition")"
+  # Every isolated entry that says it sits on the wrong side of the predicate must carry
+  # the reversal condition the rule requires. An undeclared one would be the oversight.
+  NORECON=$(jq -r '[.tools | to_entries[]
+    | select(.value.scope == "isolated")
+    | select((.value.scope_reason // "") | test("wrong side"))
+    | select((.value.reversal_condition // "") == "")
+    | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every declared exception carries its reversal_condition" "" "$NORECON"
+  assert_eq "[IN-A] psalm is the one entry that declares it" "psalm" \
+    "$(jq -r '[.tools | to_entries[] | select((.value.scope_reason // "") | test("wrong side")) | .key] | sort | join(",")' "$CATALOG" 2>/dev/null)"
+  # And the exception is bounded: the tools the predicate plainly covers stay isolated
+  # with no exception clause of their own.
+  assert_eq "[IN-A] the other three isolated tools claim no exception" "" \
+    "$(jq -r '[.tools | to_entries[] | select(.value.scope == "isolated") | select(.key != "psalm") | select((.value.scope_reason // "") | test("wrong side")) | .key] | join(",")' "$CATALOG" 2>/dev/null)"
+fi
+
+# Criterion 3 asks the rule be "stated in the schema docs". A rule that lives only
+# in the data file is not stated where the person reading about the schema is.
+if [[ ! -f "$CFGDOC" ]]; then
+  bad "[IN-A] references/config-schema.md exists"
+else
+  ok "[IN-A] references/config-schema.md exists"
+  DOCRULE=$(cat "$CFGDOC")
+  CATRULE=$(jq -r '.scope_rule // "NORULE"' "$CATALOG" 2>/dev/null || echo NORULE)
+  assert_eq "[IN-A] the schema doc states the catalog's scope rule verbatim" "yes" \
+    "$(u_has "$DOCRULE" "$CATRULE")"
+fi
+
+# ── IN-B. the schema expresses what an install needs (criterion 1) ───────────
+echo ""
+echo "IN-B: the config schema carries the five matrix dimensions"
+
+if [[ ! -f "$CQSCHEMA" ]]; then
+  bad "[IN-B] the config schema exists at schema/code-quality.schema.json"
+else
+  ok "[IN-B] the config schema exists at schema/code-quality.schema.json"
+  assert_eq "[IN-B] the schema is valid JSON" "yes" \
+    "$(jq -e . "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # One assertion per matrix dimension, by the path the fixtures use. A schema
+  # that cannot express a dimension is a schema the wizard has to work around,
+  # which is how judgment leaks back into the prose.
+  assert_eq "[IN-B] schema_version is required" "true" \
+    "$(jq -r '[.required[]?] | index("schema_version") != null' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] dimension: project.type" "yes" \
+    "$(jq -e '.properties.project.properties.type' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: project.layout.web_root" "yes" \
+    "$(jq -e '.properties.project.properties.layout.properties.web_root' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: per-tool scope" "yes" \
+    "$(jq -e '.properties.tools.additionalProperties.properties.scope' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  # allow_plugins is REQUIRED, not optional-with-an-empty-default. The one entry
+  # that matters is not derivable from the package list — drupal/coder pulls
+  # dealerdirect/phpcodesniffer-composer-installer transitively and never names it —
+  # so a config that may omit the key is a config that can silently disable the
+  # Drupal phpcs standard, which is the defect this task exists to remove.
+  assert_eq "[IN-B] allow_plugins is a required per-tool key" "true" \
+    "$(jq -r '[.properties.tools.additionalProperties.required[]?] | index("allow_plugins") != null' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] dimension: phpstan.level" "yes" \
+    "$(jq -e '.properties.phpstan.properties.level' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] dimension: git_hooks.enabled" "yes" \
+    "$(jq -e '.properties.git_hooks.properties.enabled' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+  assert_eq "[IN-B] the templates list is a dimension the config carries" "yes" \
+    "$(jq -e '.properties.templates' "$CQSCHEMA" >/dev/null 2>&1 && echo yes || echo no)"
+
+  # web_root is an enum of three, not a free string: it is substituted into every
+  # placed template, and a traversal there is a write outside the project root.
+  assert_eq "[IN-B] web_root is an enum of web|docroot|empty" ",docroot,web" \
+    "$(jq -r '[.properties.project.properties.layout.properties.web_root.enum[]?] | sort | join(",")' "$CQSCHEMA" 2>/dev/null)"
+  assert_eq "[IN-B] tool scope is an enum of the three words" "isolated,machine,project" \
+    "$(jq -r '[.properties.tools.additionalProperties.properties.scope.enum[]?] | sort | join(",")' "$CQSCHEMA" 2>/dev/null)"
+fi
+
+# ── IN-C. the config reader refuses; it never defaults (criterion 19) ────────
+echo ""
+echo "IN-C: a contract file that cannot be read is not a contract that may be assumed"
+
+# The single input surface for every fixture below. One helper that materialises a
+# throwaway project from a .code-quality.json plus a directory skeleton, so a
+# criterion's verify is one fixture and one assertion rather than a new scaffold
+# each time.
+#
+#   in_config <type> <web_root> <hooks> [tools-json-override]
+#
+# Emits a schema-valid document on stdout. `hooks` is true|false and decides both
+# git_hooks.enabled and whether phpro/grumphp is present, because those two are
+# the same answer (invariant 4).
+in_config() {
+  local ptype="$1" webroot="$2" hooks="$3" tools_override="${4:-}"
+  local mods themes
+  if [[ -n "$webroot" ]]; then mods="${webroot}/modules/custom"; themes="${webroot}/themes/custom"
+  else mods="modules/custom"; themes="themes/custom"; fi
+  local tools
+  if [[ -n "$tools_override" ]]; then
+    tools="$tools_override"
+  elif [[ "$ptype" == "nextjs" ]]; then
+    tools='{"eslint":{"scope":"project","packages":[{"name":"eslint","constraint":""}],"allow_plugins":[],"bin":"eslint"}}'
+  else
+    tools='{
+      "phpstan":{"scope":"project","packages":[{"name":"phpstan/phpstan","constraint":"^2.0"}],"allow_plugins":[],"bin":"phpstan"},
+      "phpstan-extension-installer":{"scope":"project","packages":[{"name":"phpstan/extension-installer","constraint":"^1.4"}],"allow_plugins":["phpstan/extension-installer"],"bin":null},
+      "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^2.1.2"}],"allow_plugins":[],"bin":null},
+      "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^2.0"}],"allow_plugins":[],"bin":null},
+      "coder":{"scope":"project","packages":[{"name":"drupal/coder","constraint":"^9.0"}],"allow_plugins":["dealerdirect/phpcodesniffer-composer-installer"],"bin":"phpcs"},
+      "phpmd":{"scope":"isolated","packages":[{"name":"phpmd/phpmd","constraint":"^2.15"}],"allow_plugins":[],"bin":"phpmd"},
+      "gitleaks":{"scope":"machine","packages":[],"allow_plugins":[],"bin":"gitleaks","install_hint":"brew install gitleaks"}
+    }'
+  fi
+  if [[ "$hooks" == "true" ]]; then
+    tools=$(jq -c '. + {"grumphp":{"scope":"project","packages":[{"name":"phpro/grumphp","constraint":"^2.0"}],"allow_plugins":["phpro/grumphp"],"bin":"grumphp"}}' <<< "$tools")
+    HOOKBLOCK='{"enabled":true,"tool":"grumphp","tasks":["phpcs","phpstan"]}'
+  else
+    HOOKBLOCK='{"enabled":false,"tool":null,"tasks":[]}'
+  fi
+  jq -nc --arg t "$ptype" --arg w "$webroot" --arg m "$mods" --arg th "$themes" \
+     --argjson tools "$(jq -c . <<< "$tools")" --argjson hooks "$HOOKBLOCK" '
+    {schema_version:"3.0",
+     project:{type:$t, layout:{web_root:$w, modules:$m, themes:$th}},
+     tools:$tools,
+     phpstan:{level:5},
+     isolation:{package:"bamarni/composer-bin-plugin",constraint:"^1.9",
+                allow_plugin:"bamarni/composer-bin-plugin",
+                forward_command_key:"extra.bamarni-bin.forward-command"},
+     templates:["drupal/phpstan.neon","drupal/phpmd.xml","drupal/phpunit.xml"],
+     git_hooks:$hooks,
+     thresholds:{coverage:80,complexity:10,duplication:5,security_severity:"medium"}}'
+}
+
+# Run cqt_config_load in its OWN process against a document, and report
+# "<exit>|<combined output>". A separate process because the whole point of the
+# library is what it does to the exit status, and sourcing it into the spec would
+# let the spec's own `set` decide that.
+in_load() {   # <path-or-dash> [stdin-doc]
+  local arg="$1" doc="${2-}"
+  if [[ -n "$doc" ]]; then
+    printf '%s' "$doc" | bash -c '. "$1"; cqt_config_load "$2"' _ "$CQTCONFIG" "$arg" 2>&1
+    printf '|%s' "${PIPESTATUS[0]}"   # placeholder, replaced below
+  fi
+}
+
+# Simpler and honest: run it, capture output and status separately.
+in_load_status() {  # <path-or-dash> ; stdin is the doc when path is "-"
+  bash -c '. "$1"; cqt_config_load "$2" >/dev/null 2>&1' _ "$CQTCONFIG" "$1"
+  printf '%s' "$?"
+}
+in_load_out() {     # <path-or-dash> ; stdin is the doc when path is "-"
+  bash -c '. "$1"; cqt_config_load "$2" 2>&1' _ "$CQTCONFIG" "$1" || true
+}
+
+if [[ ! -f "$CQTCONFIG" ]]; then
+  bad "[IN-C] core/cqt-config.sh exists"
+else
+  ok "[IN-C] core/cqt-config.sh exists"
+
+  IN_C="$TMP/in_c"; mkdir -p "$IN_C"
+
+  # Each failure is its OWN message naming its own condition. One generic
+  # "invalid config" would tell a user nothing they could act on, and the
+  # criterion is specifically about failing loudly.
+  printf '{ "schema_version": ' > "$IN_C/malformed.json"
+  : > "$IN_C/empty.json"
+  in_config drupal web false > "$IN_C/good.json"
+  printf '%s' "$(in_config drupal web false)" | jq -c '.schema_version = "9.0"' > "$IN_C/futuremajor.json"
+  printf '%s' "$(in_config drupal web false)" | jq -c 'del(.tools["phpstan-drupal"])' > "$IN_C/nomglaman.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.tools.grumphp = {"scope":"project","packages":[{"name":"phpro/grumphp","constraint":"^2.0"}],"allow_plugins":["phpro/grumphp"],"bin":"grumphp"}' \
+    > "$IN_C/hookless-grumphp.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.tools.phpstan.packages[0].name = "phpstan/phpstan; rm -rf /"' > "$IN_C/metachar.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.templates = ["../../etc/passwd"]' > "$IN_C/badtemplate.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.project.layout.modules = "../../../etc"' > "$IN_C/traversal.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c 'del(.project.type)' > "$IN_C/notype.json"
+  printf '%s' "$(in_config drupal web false)" \
+    | jq -c '.project.layout.web_root = "public"' > "$IN_C/badwebroot.json"
+
+  assert_eq "[IN-C] a valid config loads and exits 0" "0" "$(in_load_status "$IN_C/good.json")"
+
+  for case in \
+    "missing:$IN_C/nothing-here.json:no such file" \
+    "malformed:$IN_C/malformed.json:not valid JSON" \
+    "empty:$IN_C/empty.json:empty" \
+    "unknown major:$IN_C/futuremajor.json:schema_version" \
+    "drupal set incomplete:$IN_C/nomglaman.json:mglaman/phpstan-drupal" \
+    "consent-gated without consent:$IN_C/hookless-grumphp.json:phpro/grumphp" \
+    "shell metacharacter in a package name:$IN_C/metachar.json:package name" \
+    "template id outside the allowlist:$IN_C/badtemplate.json:templates" \
+    "path traversal in layout:$IN_C/traversal.json:layout" \
+    "project.type absent:$IN_C/notype.json:project.type" \
+    "web_root outside the enum:$IN_C/badwebroot.json:web_root" \
+  ; do
+    label="${case%%:*}"; rest="${case#*:}"; path="${rest%%:*}"; want="${rest#*:}"
+    assert_eq "[IN-C] $label exits 2" "2" "$(in_load_status "$path")"
+    OUTC="$(in_load_out "$path")"
+    assert_eq "[IN-C] $label names its field or condition" "yes" "$(u_has "$OUTC" "$want")"
+  done
+
+  # An unreadable file is its own condition, and not the same one as a missing
+  # file: "chmod 000" and "not there" call for different fixes.
+  cp "$IN_C/good.json" "$IN_C/unreadable.json"; chmod 000 "$IN_C/unreadable.json"
+  if [[ -r "$IN_C/unreadable.json" ]]; then
+    # Running as root, where mode 000 is still readable. Say so rather than
+    # asserting something the environment has already decided.
+    SKIP_NOTE="[IN-C] unreadable-file case not asserted: this user can read mode 000"
+    echo "  skip  $SKIP_NOTE"
+  else
+    assert_eq "[IN-C] an unreadable file exits 2" "2" "$(in_load_status "$IN_C/unreadable.json")"
+    assert_eq "[IN-C] an unreadable file names readability" "yes" \
+      "$(u_has "$(in_load_out "$IN_C/unreadable.json")" "not readable")"
+  fi
+  chmod 644 "$IN_C/unreadable.json" 2>/dev/null || true
+
+  # No path through the reader falls back to a default. This is the defect the
+  # criterion names by file:line — install-tools.sh:25-27 read two scalars with
+  # grep -oP and then did PROJECT_TYPE="${PROJECT_TYPE:-drupal}", so a renamed
+  # field produced a Drupal install on a project nobody had established was one.
+  # Comment lines are stripped first. This library's header NAMES the defect it
+  # exists to remove, quoting install-tools.sh:25-27 verbatim, and a check that a
+  # comment can trip would push the next author into deleting the explanation to
+  # get the suite green.
+  DEFAULTED=$(sed 's/[[:space:]]*#.*$//' "$CQTCONFIG" | grep -cE ':-(drupal|nextjs|monorepo|true|false)\}' || true)
+  assert_eq "[IN-C] the reader carries no fall-back-to-default for a config value" "0" "${DEFAULTED:-MISSING}"
+  assert_eq "[IN-C] the reader parses with jq, not by line-scraping" "0" \
+    "$(grep -cE "grep -oP|sed -n 's/.*\"" "$CQTCONFIG" || true)"
+
+  # Reading a config changes nothing on disk. The library is sourced by an AUDIT,
+  # so a write here would be a change to somebody's repository they did not ask for.
+  IN_C_TREE="$TMP/in_c_tree"; mkdir -p "$IN_C_TREE"
+  cp "$IN_C/good.json" "$IN_C_TREE/.code-quality.json"
+  BEFORE=$(cd "$IN_C_TREE" && find . -type f | sort | md5sum)
+  ( cd "$IN_C_TREE" && bash -c '. "$1"; cqt_config_load .code-quality.json' _ "$CQTCONFIG" >/dev/null 2>&1 )
+  AFTER=$(cd "$IN_C_TREE" && find . -type f | sort | md5sum)
+  assert_eq "[IN-C] loading a config leaves the tree byte-for-byte unchanged" "$BEFORE" "$AFTER"
+
+  # The accessors. cqt_config_tools emits NUL-separated specs so a package name
+  # never has to survive being re-split on whitespace.
+  ACC=$(bash -c '
+    . "$1"
+    cqt_config_load "$2" >/dev/null
+    printf "%s|" "$(cqt_config_get .project.layout.web_root)"
+    printf "%s|" "$(cqt_config_get .phpstan.level)"
+    printf "%s|" "$(cqt_config_source)"
+    cqt_config_tools project | tr "\0" ","
+  ' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
+  assert_eq "[IN-C] the accessors return the config's own values" \
+    "web|5|file|phpstan/phpstan:^2.0,phpstan/extension-installer:^1.4,mglaman/phpstan-drupal:^2.1.2,phpstan/phpstan-deprecation-rules:^2.0,drupal/coder:^9.0," \
+    "$ACC"
+
+  ISOSPEC=$(bash -c '. "$1"; cqt_config_load "$2" >/dev/null; cqt_config_tools isolated | tr "\0" ","' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
+  assert_eq "[IN-C] the isolated scope is addressable on its own" "phpmd:phpmd/phpmd:^2.15," "$ISOSPEC"
+
+  # `-` reads the document from stdin, which is how a derived config is validated
+  # without ever becoming a file.
+  STDIN_STATUS=$(in_config drupal web false | bash -c '. "$1"; cqt_config_load - >/dev/null 2>&1' _ "$CQTCONFIG"; echo $?)
+  assert_eq "[IN-C] a document on stdin validates the same way a file does" "0" "$STDIN_STATUS"
+fi
+
+# ── IN-D..IN-I fixtures ──────────────────────────────────────────────────────
+#
+# One project skeleton builder, used by every section below. A criterion's verify
+# is then one fixture plus one assertion rather than a new scaffold each time.
+#
+#   in_project <dir> <web_root>   composer.json, the web root, a custom module and
+#                                 a custom theme, and a node_modules tree inside the
+#                                 theme carrying PHP that ships inside an npm package.
+in_project() {
+  local dir="$1" webroot="$2" prefix=""
+  [[ -n "$webroot" ]] && prefix="${webroot}/"
+  mkdir -p "$dir/${prefix}modules/custom/mymod/src" \
+           "$dir/${prefix}modules/custom/mymod/tests/src/Unit" \
+           "$dir/${prefix}themes/custom/mytheme/node_modules/flatted/php"
+  printf '{\n  "name": "acme/site",\n  "require": {}\n}\n' > "$dir/composer.json"
+  printf '<?php\nnamespace Drupal\\mymod;\nclass Thing {}\n' > "$dir/${prefix}modules/custom/mymod/src/Thing.php"
+  printf '<?php\nfunction mymod_help() {}\n' > "$dir/${prefix}modules/custom/mymod/mymod.module"
+  printf '<?php\nfunction mymod_install() {}\n' > "$dir/${prefix}modules/custom/mymod/mymod.install"
+  printf '<?php\nnamespace Drupal\\Tests\\mymod\\Unit;\nclass ThingTest {}\n' \
+    > "$dir/${prefix}modules/custom/mymod/tests/src/Unit/ThingTest.php"
+  # Real, and the reason criterion 11 exists: a custom theme's npm tree ships PHP.
+  printf '<?php\nclass Flatted {}\n' > "$dir/${prefix}themes/custom/mytheme/node_modules/flatted/php/flatted.php"
+}
+
+# Run the installer in --dry-run from inside a fixture, and return what it printed.
+# --dry-run writes nothing, so every package-list and ordering assertion runs with
+# no Composer, no npm and no DDEV.
+in_dry() {   # <dir> <config-path-relative-to-dir>
+  ( cd "$1" && bash "$CQTINSTALL" --config "$2" --dry-run 2>&1 )
+}
+
+# The same, but performing every filesystem step for real and printing the Composer
+# and npm invocations instead of running them. This is what the template-placement,
+# shadow-refusal and vendor-bin assertions need: real files, no package manager.
+in_place() {   # <dir> <config-path-relative-to-dir>
+  ( cd "$1" && bash "$CQTINSTALL" --config "$2" --no-composer 2>&1 )
+}
+
+# ── IN-D. a derived config resolves what a written one does (criterion 8) ────
+echo ""
+echo "IN-D: the resolved package list does not depend on which door you came through"
+
+if [[ ! -f "$CQTINSTALL" || ! -f "$SHIM" ]]; then
+  bad "[IN-D] core/cqt-install.sh and core/install-tools.sh both exist"
+else
+  ok "[IN-D] core/cqt-install.sh and core/install-tools.sh both exist"
+
+  IN_D="$TMP/in_d"; in_project "$IN_D" web
+  in_config drupal web false > "$IN_D/.code-quality.json"
+
+  # The wizard's path: a file on disk.
+  D_FILE=$(bash -c '
+    . "$1"; cqt_config_load "$2" >/dev/null
+    cqt_config_tools project | tr "\0" "\n"
+  ' _ "$CQTCONFIG" "$IN_D/.code-quality.json" | sort | tr '\n' ',')
+
+  # The full-audit.sh path: nothing on disk, derived from the catalog in memory.
+  D_DERIVED=$(bash -c '
+    . "$1"
+    cqt_config_derive drupal web | cqt_config_load - >/dev/null 2>&1 || true
+    cqt_config_derive drupal web > "$2/derived.json"
+    cqt_config_load "$2/derived.json" >/dev/null
+    cqt_config_tools project | tr "\0" "\n"
+  ' _ "$CQTCONFIG" "$TMP" | sort | tr '\n' ',')
+
+  # The three packages that make PHPStan Drupal-aware are the whole point of the
+  # criterion: the prose path omitted them, and because the shipped phpstan.neon
+  # carries no `includes:` block their absence produces no error at all.
+  for p in phpstan/extension-installer mglaman/phpstan-drupal phpstan/phpstan-deprecation-rules; do
+    assert_eq "[IN-D] the file-driven path resolves $p" "yes" "$(u_has "$D_FILE" "$p")"
+    assert_eq "[IN-D] the derived path resolves $p" "yes" "$(u_has "$D_DERIVED" "$p")"
+  done
+
+  # And the equality itself, which is what the criterion actually names.
+  D_BOTH=$(bash -c '
+    . "$1"
+    cqt_config_derive drupal web > "$2/derived2.json"
+    cqt_config_load "$2/derived2.json" >/dev/null
+    for s in project isolated machine; do cqt_config_tools "$s" | tr "\0" "\n"; done
+  ' _ "$CQTCONFIG" "$TMP" | grep -E '^(phpstan|mglaman|drupal|roave|palantirnet)/' | sort | tr '\n' ',')
+  D_FILEALL=$(bash -c '
+    . "$1"; cqt_config_load "$2" >/dev/null
+    for s in project isolated machine; do cqt_config_tools "$s" | tr "\0" "\n"; done
+  ' _ "$CQTCONFIG" "$IN_D/.code-quality.json" | grep -E '^(phpstan|mglaman|drupal)/' | sort | tr '\n' ',')
+  assert_eq "[IN-D] the derived list is not empty" "yes" "$([[ -n "$D_BOTH" ]] && echo yes || echo no)"
+  assert_eq "[IN-D] every Drupal package the file-driven path resolves, the derived path resolves too" "yes" \
+    "$(python3 - "$D_FILEALL" "$D_BOTH" <<'PY'
+import sys
+a=[x for x in sys.argv[1].split(',') if x]
+b=set(x for x in sys.argv[2].split(',') if x)
+print("yes" if all(x in b for x in a) else "no: missing " + ",".join(x for x in a if x not in b))
+PY
+)"
+
+  # And the derived path writes NOTHING. This is the assertion that would have
+  # silently passed under the earlier design, where the derived config was
+  # persisted, so it is asserted directly rather than inferred from the other two.
+  IN_D2="$TMP/in_d2"; in_project "$IN_D2" web
+  D_BEFORE=$(cd "$IN_D2" && find . | sort | md5sum)
+  ( cd "$IN_D2" && bash "$SHIM" --dry-run >/dev/null 2>&1 ) || true
+  D_AFTER=$(cd "$IN_D2" && find . | sort | md5sum)
+  assert_eq "[IN-D] a run with no .code-quality.json leaves the tree unchanged" "$D_BEFORE" "$D_AFTER"
+  assert_eq "[IN-D] and leaves no .code-quality.json behind" "no" \
+    "$([[ -f "$IN_D2/.code-quality.json" ]] && echo yes || echo no)"
+
+  D_ANNOUNCE=$( cd "$IN_D2" && PROJECT_TYPE=drupal bash "$SHIM" --dry-run 2>&1 || true )
+  assert_eq "[IN-D] the run announces that it derived a config" "yes" "$(u_has "$D_ANNOUNCE" "Derived a complete config")"
+  assert_eq "[IN-D] the announcement names the command that would persist it" "yes" \
+    "$(u_has "$D_ANNOUNCE" "/code-quality-tools:setup")"
+  assert_eq "[IN-D] the announcement prints the resolved package list" "yes" \
+    "$(u_has "$D_ANNOUNCE" "mglaman/phpstan-drupal")"
+
+  # ── the sentence a reader acts on has to be true when it is printed ──────
+  #
+  # It used to read "Nothing was written." It was false at the moment of printing: a
+  # find(1) snapshot across a derived audit shows phpstan.neon, phpmd.xml, phpunit.xml
+  # and psalm.xml added to the project root and composer.json modified. The narrow claim
+  # — no .code-quality.json — does hold and is asserted separately just above, so the
+  # sentence now makes the narrow claim and the run names what it WILL place.
+  assert_eq "[IN-D] the announcement no longer claims nothing was written" "no" \
+    "$(u_has "$D_ANNOUNCE" "Nothing was written")"
+  assert_eq "[IN-D] it says instead that no .code-quality.json was written" "yes" \
+    "$(u_has "$D_ANNOUNCE" "No .code-quality.json was")"
+  assert_eq "[IN-D] and states that the install does write to the project" "yes" \
+    "$(u_has "$D_ANNOUNCE" "DOES write to the project")"
+  assert_eq "[IN-D] naming composer.json" "yes" "$(u_has "$D_ANNOUNCE" "composer.json")"
+  for placed in phpstan.neon phpmd.xml phpunit.xml psalm.xml; do
+    assert_eq "[IN-D] and naming ./$placed before it places it" "yes" \
+      "$(u_has "$D_ANNOUNCE" "./$placed")"
+  done
+
+  # ── the shim's file branch, which is the branch a configured project takes ──
+  #
+  # cqt_config_load used to be called ONLY inside the derived branch. On the file branch
+  # — --config given, or .code-quality.json present, which is the normal state after
+  # /setup — CQT_CONFIG_DOC was the empty string, so cqt_config_doc fed jq nothing, the
+  # per-tool loop never ran an iteration, and the record read {"tools":{},"all_ok":true}
+  # having probed nothing. full-audit.sh:256-265 gates the whole audit on that flag.
+  #
+  # Asserted on the RECORD rather than by grepping for the call, because the call being
+  # present somewhere in the file is what was true while the defect stood.
+  IN_D3="$TMP/in_d3"; in_project "$IN_D3" web
+  in_config drupal web false > "$IN_D3/.code-quality.json"
+  D_STUB="$TMP/in_d3_stub"; mkdir -p "$D_STUB"
+  for b in composer npm; do printf '#!/bin/bash\nexit 0\n' > "$D_STUB/$b"; chmod +x "$D_STUB/$b"; done
+  ( cd "$IN_D3" && PATH="$D_STUB:$PATH" REPORT_DIR="$IN_D3/.r" bash "$SHIM" --config .code-quality.json ) \
+    > /dev/null 2>&1 || true
+  D_STATUS="$IN_D3/.r/tools-status.json"
+  if [[ ! -f "$D_STATUS" ]]; then
+    bad "[IN-D] the file branch writes tools-status.json"
+  else
+    ok "[IN-D] the file branch writes tools-status.json"
+    assert_eq "[IN-D] the file branch resolved a per-tool map rather than an empty one" "yes" \
+      "$([[ "$(jq -r '.tools | length' "$D_STATUS")" -gt 0 ]] && echo yes || echo no)"
+    assert_eq "[IN-D] it records the project type it resolved" "drupal" \
+      "$(jq -r '.project_type // "EMPTY"' "$D_STATUS")"
+    assert_eq "[IN-D] and that the config came from a file" "file" \
+      "$(jq -r '.config_source // "EMPTY"' "$D_STATUS")"
+    assert_eq "[IN-D] every tool the config named appears in the map" "yes" \
+      "$(python3 - "$D_STATUS" "$IN_D3/.code-quality.json" <<'PY'
+import json,sys
+rec=json.load(open(sys.argv[1])); cfg=json.load(open(sys.argv[2]))
+want={k for k,v in cfg["tools"].items() if v.get("bin")}
+got=set(rec.get("tools",{}))
+print("yes" if want and want <= got else "no: missing " + ",".join(sorted(want-got)))
+PY
+)"
+  fi
+
+  # ── the guard, on a fixture where the guard is the only thing holding the line ──
+  #
+  # "all_ok is never true with an empty tool map" used to be asserted on IN_D3 above,
+  # where it could not fail for its stated reason and did not go red when the guard was
+  # deleted. Two things masked it. The map there is never empty, so the implication is
+  # satisfied without the guard; and that run's install-verify returns 4, so install_exit
+  # forces ALL_OK=false before the guard is ever consulted. An assertion that passes for a
+  # reason unrelated to what it asserts is the defect this whole task exists to remove,
+  # so the fixture is rebuilt to remove both masks:
+  #
+  #   * the config names ONLY packages with no binary — the three that make PHPStan
+  #     Drupal-aware are libraries, not tools — so the resolved map is legitimately empty
+  #     even with the load working perfectly, and the guard is the only thing left;
+  #   * the install SUCCEEDS: composer is stubbed, phpcs lists Drupal, GeneratedConfig
+  #     names mglaman, so verification passes both applicable checks and skips the hook
+  #     one (partial, 5), which the installer does not treat as a failure. install_exit is
+  #     0 and cannot stand in for the guard.
+  #
+  # Both of those are ASSERTED, not assumed. If the fixture ever stops producing an empty
+  # map or a zero exit, the assertion below would go quietly vacuous again — so the thing
+  # that would make it vacuous is itself a failing assertion.
+  IN_D4="$TMP/in_d4"; in_project "$IN_D4" web
+  in_config drupal web false '{
+    "phpstan-extension-installer":{"scope":"project","packages":[{"name":"phpstan/extension-installer","constraint":"^1.4"}],"allow_plugins":["phpstan/extension-installer"],"bin":null},
+    "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^2.1.2"}],"allow_plugins":[],"bin":null},
+    "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^2.0"}],"allow_plugins":[],"bin":null}
+  }' > "$IN_D4/.code-quality.json"
+  D4_STUB="$TMP/in_d4_stub"; mkdir -p "$D4_STUB"
+  for b in composer npm; do printf '#!/bin/bash\nexit 0\n' > "$D4_STUB/$b"; chmod +x "$D4_STUB/$b"; done
+  cat > "$D4_STUB/phpcs" <<'D4PHPCS'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are Drupal, DrupalPractice and PEAR"; exit 0; }
+exit 0
+D4PHPCS
+  chmod +x "$D4_STUB/phpcs"
+  mkdir -p "$IN_D4/vendor/phpstan/extension-installer/src"
+  cat > "$IN_D4/vendor/phpstan/extension-installer/src/GeneratedConfig.php" <<'D4GEN'
+<?php
+final class GeneratedConfig
+{
+    public const EXTENSIONS = ['mglaman/phpstan-drupal' => ['install_path' => '...']];
+}
+D4GEN
+  D4_EXIT=$( ( cd "$IN_D4" && PATH="$D4_STUB:/usr/bin:/bin" REPORT_DIR="$IN_D4/.r" \
+      bash "$SHIM" --config .code-quality.json ) > "$TMP/d4_out" 2>&1; printf '%s' "$?" )
+  D4_STATUS="$IN_D4/.r/tools-status.json"
+  if [[ ! -f "$D4_STATUS" ]]; then
+    bad "[IN-D] the no-binary config still writes tools-status.json"
+  else
+    ok "[IN-D] the no-binary config still writes tools-status.json"
+    # Precondition 1: the run really did succeed, so all_ok is not being forced false by
+    # install_exit. This is the assertion that keeps the next one honest.
+    assert_eq "[IN-D] the install itself succeeded, so install_exit cannot stand in for the guard" "0" "$D4_EXIT"
+    # Precondition 2: the map really is empty, so the implication below is not vacuous.
+    assert_eq "[IN-D] a config naming only binary-less packages resolves an empty tool map" "0" \
+      "$(jq -r '.tools | length' "$D4_STATUS")"
+    # And the refutation itself: all_ok cannot be true off a map that names nothing.
+    # Deleting the empty-map guard turns exactly this red, and nothing else does.
+    assert_eq "[IN-D] all_ok is never true with an empty tool map" "false" \
+      "$(jq -r '.all_ok' "$D4_STATUS")"
+    assert_eq "[IN-D] and the record it writes for that is a fail, not a pass" "fail" \
+      "$(jq -r '.status' "$D4_STATUS")"
+    assert_eq "[IN-D] the run says why: it probed no tool" "yes" \
+      "$(u_has "$(cat "$TMP/d4_out")" "named no probeable tool")"
+  fi
+
+  # A doctored catalog must produce a refusal, not a quiet install: otherwise the
+  # derivation is a path around the validator rather than an input to it.
+  jq 'del(.tools["phpstan-drupal"])' "$CATALOG" > "$TMP/catalog-doctored.json"
+  D_DOCTORED_STATUS=$(bash -c '
+    CQT_CATALOG="$3"
+    . "$1"
+    cqt_config_derive drupal web | cqt_config_load - >/dev/null 2>&1
+  ' _ "$CQTCONFIG" "" "$TMP/catalog-doctored.json"; echo $?)
+  assert_eq "[IN-D] a catalog missing mglaman/phpstan-drupal is refused, not quietly installed" "2" "$D_DOCTORED_STATUS"
+fi
+
+# ── IN-E. allow-plugins, written by Composer, before any require (5, 9) ──────
+echo ""
+echo "IN-E: the two lines that decide whether the toolchain runs Drupal rules at all"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_E="$TMP/in_e"; in_project "$IN_E" web
+  in_config drupal web false > "$IN_E/.code-quality.json"
+  E_OUT=$(in_dry "$IN_E" .code-quality.json)
+
+  assert_eq "[IN-E] the dry run printed a command sequence" "yes" "$([[ -n "$E_OUT" ]] && echo yes || echo no)"
+
+  for p in phpstan/extension-installer dealerdirect/phpcodesniffer-composer-installer; do
+    assert_eq "[IN-E] allow-plugins is written for $p" "yes" \
+      "$(u_has "$E_OUT" "composer config --no-plugins allow-plugins.${p} true")"
+  done
+
+  # Ordering is the criterion, not content. A plugin refused on first activation
+  # does not retroactively activate when the key appears later, so every
+  # allow-plugins write has to precede every require.
+  E_LAST_ALLOW=$(grep -n 'allow-plugins\.' <<< "$E_OUT" | tail -1 | cut -d: -f1)
+  E_FIRST_REQ=$(grep -nE 'composer (bin [a-z0-9-]+ )?require' <<< "$E_OUT" | head -1 | cut -d: -f1)
+  assert_eq "[IN-E] every allow-plugins write precedes every require" "yes" \
+    "$([[ -n "$E_LAST_ALLOW" && -n "$E_FIRST_REQ" && "$E_LAST_ALLOW" -lt "$E_FIRST_REQ" ]] && echo yes || echo "no (last allow=$E_LAST_ALLOW, first require=$E_FIRST_REQ)")"
+
+  # Composer writes composer.json, never this script. Handing it the job hands
+  # Composer the merge with an existing block, global-config precedence, the key's
+  # location on the running version, and the file's formatting.
+  E_HANDWRITE=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" \
+    | grep -cE '(jq[^|]*>[[:space:]]*[^ ]*composer\.json|>[[:space:]]*"?\$?\{?[A-Za-z_]*\}?/?composer\.json)' || true)
+  assert_eq "[IN-E] nothing in the installer writes composer.json itself" "0" "${E_HANDWRITE:-MISSING}"
+  assert_eq "[IN-E] every allow-plugins write goes through 'composer config'" "0" \
+    "$(grep -c 'allow-plugins' <<< "$E_OUT" | tr -d ' ' >/dev/null; grep 'allow-plugins' <<< "$E_OUT" | grep -cv 'composer config --no-plugins' || true)"
+
+  # --no-plugins on every one of them, because these writes run BEFORE the plugins
+  # they are authorising are allowed to load.
+  assert_eq "[IN-E] each allow-plugins write passes --no-plugins" "0" \
+    "$(grep 'allow-plugins' <<< "$E_OUT" | grep -cv -- '--no-plugins' || true)"
+
+  # The security half of the same stage. install-tools.sh:144,:157 piped a moving
+  # branch of somebody's install script into `sh` and wrote /usr/local/bin during
+  # what the user had asked to be an audit.
+  assert_eq "[IN-E] the installer runs no curl-pipe-shell" "0" \
+    "$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" | grep -cE 'curl[^|]*\|[[:space:]]*(sudo[[:space:]]+)?sh' || true)"
+  assert_eq "[IN-E] and writes nothing into /usr/local/bin" "0" \
+    "$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" | grep -c '/usr/local/bin' || true)"
+
+  # A real Composer, when there is one: an unrelated allow-plugins entry the
+  # project already had must survive. That merge is precisely the work a
+  # hand-written JSON write would have had to reimplement, and get right.
+  if command -v composer >/dev/null 2>&1; then
+    IN_E2="$TMP/in_e2"; in_project "$IN_E2" web
+    in_config drupal web false > "$IN_E2/.code-quality.json"
+    ( cd "$IN_E2" && composer config --no-plugins allow-plugins.acme/unrelated true >/dev/null 2>&1 )
+    ( cd "$IN_E2" && bash "$CQTINSTALL" --config .code-quality.json --no-composer >/dev/null 2>&1 ) || true
+    assert_eq "[IN-E] a pre-existing allow-plugins entry survives (real composer)" "true" \
+      "$(jq -r '.config["allow-plugins"]["acme/unrelated"] // "GONE"' "$IN_E2/composer.json" 2>/dev/null)"
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-E] pre-existing allow-plugins merge: composer is not installed"
+  fi
+fi
+
+# ── IN-F. nothing is installed that the config did not ask for (criterion 6) ─
+echo ""
+echo "IN-F: there is one install list, and it is the config"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_F="$TMP/in_f"; in_project "$IN_F" web
+  in_config drupal web false > "$IN_F/.code-quality.json"
+  F_OFF=$(in_dry "$IN_F" .code-quality.json)
+
+  IN_F2="$TMP/in_f2"; in_project "$IN_F2" web
+  in_config drupal web true > "$IN_F2/.code-quality.json"
+  F_ON=$(in_dry "$IN_F2" .code-quality.json)
+
+  # setup.md:76 installed grumphp in the unconditional Quick Install block, before
+  # the hooks prompt at :196 was reached, and :206 installed it a second time. So a
+  # user who declined hooks still got it. The opt-in guarded `grumphp git:init`,
+  # not the dependency.
+  assert_eq "[IN-F] git_hooks.enabled:false installs no phpro/grumphp" "no" "$(u_has "$F_OFF" "phpro/grumphp")"
+  assert_eq "[IN-F] git_hooks.enabled:true does" "yes" "$(u_has "$F_ON" "phpro/grumphp")"
+  assert_eq "[IN-F] and its allow-plugins entry follows the same consent" "no" \
+    "$(u_has "$F_OFF" "allow-plugins.phpro/grumphp")"
+  assert_eq "[IN-F] the hook is registered only when hooks were consented to" "yes" \
+    "$(u_has "$F_ON" "grumphp git:init")"
+  assert_eq "[IN-F] and not otherwise" "no" "$(u_has "$F_OFF" "git:init")"
+
+  # One install list, asserted structurally: the script must not carry a hardcoded
+  # package name of its own. Comments are stripped, because the reasons above name
+  # the packages they are about.
+  F_HARDCODED=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL" \
+    | grep -cE '(phpstan/phpstan|mglaman/|drupal/coder|phpmd/phpmd|systemsdk/|vimeo/psalm|roave/|palantirnet/|bamarni/)' || true)
+  assert_eq "[IN-F] the installer carries no package list of its own" "0" "${F_HARDCODED:-MISSING}"
+
+  # Every package that reaches the sequence is one the config named.
+  # The isolation mechanism is named by the config too, under .isolation, so it
+  # counts as invited. That it is NOT hardcoded in the installer is the point of
+  # carrying it there, and the structural assertion above is what checks it.
+  F_NAMES=$( { bash -c '. "$1"; cqt_config_load "$2" >/dev/null; for s in project isolated; do cqt_config_tools "$s" | tr "\0" "\n"; done' \
+                _ "$CQTCONFIG" "$IN_F/.code-quality.json" | sed 's/^[a-z0-9-]*://' | cut -d: -f1
+              jq -r '.isolation.package' "$IN_F/.code-quality.json"; } | sort -u)
+  F_UNINVITED=""
+  while IFS= read -r req; do
+    for w in $req; do
+      case "$w" in
+        */*) pkg="${w%%:*}"
+             grep -qxF -- "$pkg" <<< "$F_NAMES" || F_UNINVITED="${F_UNINVITED}${F_UNINVITED:+,}${pkg}" ;;
+      esac
+    done
+  done <<< "$(grep -E 'composer (bin [a-z0-9-]+ )?require' <<< "$F_OFF")"
+  assert_eq "[IN-F] no package reaches a require that the config did not name" "" "$F_UNINVITED"
+fi
+
+# ── IN-G. the isolated scope, write side and read side (criteria 2, 4) ──────
+echo ""
+echo "IN-G: four analysers with their own dependency trees stay out of require-dev"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_G="$TMP/in_g"; in_project "$IN_G" web
+  in_config drupal web false > "$IN_G/.code-quality.json"
+  G_OUT=$(in_dry "$IN_G" .code-quality.json)
+
+  G_PROJECT_REQ=$(grep -E 'composer require' <<< "$G_OUT" | grep -v 'composer bin ' || true)
+  assert_eq "[IN-G] an isolated tool never appears in the project's require-dev" "no" \
+    "$(u_has "$G_PROJECT_REQ" "phpmd/phpmd")"
+  assert_eq "[IN-G] it is installed into its own bin namespace instead" "yes" \
+    "$(u_has "$G_OUT" "composer bin phpmd require --dev phpmd/phpmd")"
+  assert_eq "[IN-G] the isolation mechanism itself is required once" "yes" \
+    "$(u_has "$G_OUT" "bamarni/composer-bin-plugin")"
+  assert_eq "[IN-G] and allowed, like any other Composer plugin" "yes" \
+    "$(u_has "$G_OUT" "allow-plugins.bamarni/composer-bin-plugin true")"
+  # forward-command is the single reason this beats a hand-rolled tools/composer.json:
+  # a developer's plain `composer install` installs the bin namespaces too.
+  assert_eq "[IN-G] forward-command is set so a plain composer install covers the namespaces" "yes" \
+    "$(u_has "$G_OUT" "extra.bamarni-bin.forward-command")"
+
+  # Read side: the fourth location in solid-check.sh's existing three-location
+  # lookup, not a new resolver. Second in the order, so a project that deliberately
+  # pinned a tool in its own vendor/bin still wins, and an isolated install still
+  # beats whatever the machine happens to have.
+  G_FN=$(sed -n '/^resolve_analyzer()/,/^}/p' "$SOLID")
+  assert_eq "[IN-G] resolve_analyzer knows the vendor-bin location" "yes" \
+    "$(u_has "$G_FN" 'vendor-bin/$tool/vendor/bin/$tool')"
+  G_ORDER=$(grep -nE 'vendor/bin/\$tool|vendor-bin/\$tool|command -v "\$tool"|COMPOSER_GLOBAL_BIN' <<< "$G_FN" | cut -d: -f1 | tr '\n' ' ')
+  G_POS_PROJECT=$(grep -n 'ddev exec test -f "vendor/bin/\$tool"' <<< "$G_FN" | head -1 | cut -d: -f1)
+  G_POS_BIN=$(grep -n 'vendor-bin/\$tool' <<< "$G_FN" | head -1 | cut -d: -f1)
+  G_POS_PATH=$(grep -n 'command -v "\$tool"' <<< "$G_FN" | head -1 | cut -d: -f1)
+  assert_eq "[IN-G] vendor-bin is looked up second: after the project's own vendor/bin, before the host PATH" "yes" \
+    "$([[ -n "$G_POS_PROJECT" && -n "$G_POS_BIN" && -n "$G_POS_PATH" && "$G_POS_PROJECT" -lt "$G_POS_BIN" && "$G_POS_BIN" -lt "$G_POS_PATH" ]] \
+       && echo yes || echo "no (project=$G_POS_PROJECT bin=$G_POS_BIN path=$G_POS_PATH; order line numbers: $G_ORDER)")"
+
+  # And it is the SAME function, not a second resolver. dry-check.sh and
+  # security-check.sh resolve their own way; unifying them is gate path handling,
+  # which the gate_path_resolution sibling owns.
+  assert_eq "[IN-G] no new analyzer resolver was added beside it" "1" \
+    "$(grep -c '^resolve_analyzer()' "$SOLID" || true)"
+fi
+
+# ── IN-I. the installer refuses to shadow a config it did not write (13) ────
+echo ""
+echo "IN-I: declining to create a shadow, and saying why"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  IN_I="$TMP/in_i"; in_project "$IN_I" web
+  in_config drupal web false > "$IN_I/.code-quality.json"
+  # drupal/core-dev ships one, and drupal-ai-contrib writes one. PHPUnit resolves
+  # phpunit.xml before phpunit.xml.dist, so writing ours would silently take a
+  # project's test configuration away from it.
+  printf '<?xml version="1.0"?>\n<phpunit bootstrap="web/core/tests/bootstrap.php"/>\n' > "$IN_I/phpunit.xml.dist"
+  I_OUT=$(in_place "$IN_I" .code-quality.json)
+
+  assert_eq "[IN-I] no phpunit.xml is written where a .dist would be shadowed" "no" \
+    "$([[ -f "$IN_I/phpunit.xml" ]] && echo yes || echo no)"
+  assert_eq "[IN-I] the run names the file it declined to shadow" "yes" "$(u_has "$I_OUT" "phpunit.xml.dist")"
+  assert_eq "[IN-I] and states the reason rather than failing silently" "yes" "$(u_has "$I_OUT" "did not generate")"
+  # A refusal, not an error: the rest of the install still happens.
+  assert_eq "[IN-I] the other templates are still placed" "yes" \
+    "$([[ -f "$IN_I/phpstan.neon" ]] && echo yes || echo no)"
+  # And it never takes ownership of the file it declined to shadow.
+  assert_eq "[IN-I] the pre-existing .dist is untouched" \
+    "$(printf '<?xml version="1.0"?>\n<phpunit bootstrap="web/core/tests/bootstrap.php"/>\n' | md5sum)" \
+    "$(md5sum < "$IN_I/phpunit.xml.dist")"
+
+  # The same refusal for a file the project already wrote itself, which is the
+  # other direction of "does not take ownership of a file it did not write".
+  IN_I2="$TMP/in_i2"; in_project "$IN_I2" web
+  in_config drupal web false > "$IN_I2/.code-quality.json"
+  printf 'parameters:\n    level: 9\n' > "$IN_I2/phpstan.neon"
+  I2_OUT=$(in_place "$IN_I2" .code-quality.json)
+  assert_eq "[IN-I] an existing phpstan.neon this plugin did not write is not overwritten" \
+    "$(printf 'parameters:\n    level: 9\n' | md5sum)" "$(md5sum < "$IN_I2/phpstan.neon")"
+  assert_eq "[IN-I] and the run says so" "yes" "$(u_has "$I2_OUT" "phpstan.neon")"
+
+  # Re-running over a file this plugin DID write is not a refusal: the provenance
+  # comment is what tells the two cases apart, so a second /setup can update its
+  # own output.
+  I3_OUT=$(in_place "$IN_I" .code-quality.json)
+  assert_eq "[IN-I] a template this plugin generated is refreshed, not refused" "yes" \
+    "$(u_has "$(cat "$IN_I/phpstan.neon")" "code-quality-tools:generated")"
+  assert_eq "[IN-I] the re-run still produced output" "yes" "$([[ -n "$I3_OUT" ]] && echo yes || echo no)"
+fi
+
+# ── IN-H. the placed templates (criteria 10, 11, 12, 16) ────────────────────
+echo ""
+echo "IN-H: the layout is substituted, and the exclusions exclude only what is not ours"
+
+if [[ -f "$CQTINSTALL" ]]; then
+  # Three layouts, because the whole reason these tokens exist is that a static
+  # config file cannot detect which one a project uses, and the template used to
+  # hardcode one of the three.
+  for layout in web docroot ""; do
+    tag="${layout:-root}"
+    d="$TMP/in_h_${tag}"; in_project "$d" "$layout"
+    in_config drupal "$layout" false > "$d/.code-quality.json"
+    H_OUT=$(in_place "$d" .code-quality.json)
+    want_mods="${layout:+${layout}/}modules/custom"
+    want_themes="${layout:+${layout}/}themes/custom"
+
+    assert_eq "[IN-H:$tag] phpstan.neon was placed" "yes" \
+      "$([[ -f "$d/phpstan.neon" ]] && echo yes || echo no)"
+    if [[ -f "$d/phpstan.neon" ]]; then
+      NEON=$(cat "$d/phpstan.neon")
+      assert_eq "[IN-H:$tag] paths: names the configured modules path" "yes" \
+        "$(u_has "$NEON" "- ${want_mods}")"
+      # The empty-web_root case is the one a naive join gets wrong: it must be
+      # modules/custom, never /modules/custom.
+      assert_eq "[IN-H:$tag] no absolute path was produced by an empty web root" "no" \
+        "$(u_has "$NEON" "- /modules/custom")"
+      assert_eq "[IN-H:$tag] no token survived substitution" "no" "$(u_has "$NEON" "{{")"
+      assert_eq "[IN-H:$tag] the placed file carries its provenance" "yes" \
+        "$(u_has "$NEON" "code-quality-tools:generated")"
+      assert_eq "[IN-H:$tag] the level came from the config" "yes" "$(u_has "$NEON" "level: 5")"
+      assert_eq "[IN-H:$tag] the vendored-tree excludes name this project's own paths" "yes" \
+        "$(u_has "$NEON" "${want_themes}/*/vendor/*")"
+    fi
+    if [[ -f "$d/phpunit.xml" ]]; then
+      PU=$(cat "$d/phpunit.xml")
+      # The joined-prefix case. A template that assembles "{{WEB_ROOT}}/core/..." itself
+      # produces "/core/tests/bootstrap.php" on a root-layout project: an absolute path
+      # into the filesystem root, which is why the installer computes the joined prefix
+      # once instead.
+      assert_eq "[IN-H:$tag] phpunit bootstrap follows the layout" "yes" \
+        "$(u_has "$PU" "bootstrap=\"${layout:+${layout}/}core/tests/bootstrap.php\"")"
+      assert_eq "[IN-H:$tag] and is never absolute" "no" "$(u_has "$PU" 'bootstrap="/')"
+    else
+      bad "[IN-H:$tag] phpunit.xml was placed"
+    fi
+    if [[ -f "$d/grumphp.yml" ]]; then
+      assert_eq "[IN-H:$tag] grumphp.yml was not placed: no hooks were consented to" "unexpected" "placed"
+    else
+      ok "[IN-H:$tag] grumphp.yml is absent, because hooks were not consented to"
+    fi
+  done
+
+  # ── criterion 11, asserted behaviourally rather than by reading the file ──
+  #
+  # The finding came from a live run, not from inspection: a custom theme's npm
+  # tree ships PHP (flatted/php/flatted.php) and phpstan's `paths:` reaches it. The
+  # template's 25-line "excludePaths: DELIBERATELY ABSENT" argument is entirely
+  # about excluding OUR OWN source — tests/ hides TestClassSuffixNameRule, *.module
+  # hides ProceduralHookEntityOperationCacheabilityRule — and none of that reasoning
+  # covers somebody else's vendored bundle. Excluding our source hides rules we
+  # want; excluding a vendored bundle hides nothing of ours.
+  #
+  # So the assertion resolves the shipped patterns against real files, the way
+  # section O does, instead of grepping for a string.
+  HD="$TMP/in_h_web"
+  if [[ -f "$HD/phpstan.neon" ]]; then
+    # The reset condition is a TOP-LEVEL key (exactly four spaces), not any key: the
+    # entries live one level down under analyseAndScan, and a reset on "any letter"
+    # would stop reading at that nested key and then assert against an empty list —
+    # which passes for the wrong reason.
+    H_PATTERNS=$(awk '/^[[:space:]]*excludePaths:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{gsub(/^[[:space:]]*-[[:space:]]*/,"");print;next} f&&/^ {4}[a-zA-Z]/{f=0}' "$HD/phpstan.neon" | tr -d '\r')
+    assert_eq "[IN-H] the placed config carries at least one excludePaths entry" "yes" \
+      "$([[ -n "$H_PATTERNS" ]] && echo yes || echo no)"
+
+    h_excluded() {   # <path> -> yes|no
+      local p="$1" pat
+      while IFS= read -r pat; do
+        [[ -z "$pat" ]] && continue
+        # A NEON entry may be quoted — the vendored-tree patterns are, so the template
+        # parses as YAML with its placeholders in place — and the quotes are not part
+        # of the pattern.
+        pat="${pat%\"}"; pat="${pat#\"}"
+        # shellcheck disable=SC2053
+        [[ "$p" == $pat ]] && { printf 'yes'; return 0; }
+      done <<< "$H_PATTERNS"
+      printf 'no'
+    }
+
+    assert_eq "[IN-H] a theme's node_modules PHP is excluded" "yes" \
+      "$(h_excluded "web/themes/custom/mytheme/node_modules/flatted/php/flatted.php")"
+    assert_eq "[IN-H] a module's vendored tree is excluded" "yes" \
+      "$(h_excluded "web/modules/custom/mymod/vendor/acme/lib/Lib.php")"
+    # And the three the DELIBERATELY ABSENT comment is about are still analysed.
+    assert_eq "[IN-H] tests/ is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/tests/src/Unit/ThingTest.php")"
+    assert_eq "[IN-H] *.module is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/mymod.module")"
+    assert_eq "[IN-H] *.install is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/mymod.install")"
+    assert_eq "[IN-H] ordinary src/ is still analysed" "no" \
+      "$(h_excluded "web/modules/custom/mymod/src/Thing.php")"
+
+    # An exclude under analyseAndScan is not the same as a bare one: a bare list is
+    # analyseAndScan shorthand, so an excluded file is not even read for symbol
+    # discovery and PHPStan then gives wrong answers elsewhere rather than fewer
+    # answers here. The vendored trees are what we want gone entirely, so
+    # analyseAndScan is correct HERE and would not be correct for our own source.
+    assert_eq "[IN-H] the excludes are scoped under analyseAndScan deliberately" "yes" \
+      "$(u_has "$(cat "$HD/phpstan.neon")" "analyseAndScan")"
+  fi
+
+  # ── criterion 12: no pre-emptive suppressions ────────────────────────────
+  #
+  # The shipped template carried three ignoreErrors patterns AND
+  # reportUnmatchedIgnoredErrors: true. A suppression that matches nothing is itself
+  # an error, so on a project with zero custom PHP all three fail: the template
+  # cannot run clean on the case it is most likely to be adopted on. Emptying the
+  # list rather than turning off the check keeps the mechanism that makes stale
+  # suppressions visible.
+  H_TPL="${SKILLROOT}/templates/drupal/phpstan.neon"
+  H_IGN=$(awk '/^[[:space:]]*ignoreErrors:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{c++} f&&/^[[:space:]]*[a-zA-Z]/{f=0} END{print c+0}' "$H_TPL")
+  assert_eq "[IN-H] the shipped phpstan.neon ships zero ignoreErrors entries" "0" "$H_IGN"
+  assert_eq "[IN-H] and keeps reportUnmatchedIgnoredErrors on, so a stale one stays visible" "yes" \
+    "$(u_has "$(cat "$H_TPL")" "reportUnmatchedIgnoredErrors: true")"
+  if [[ -f "$HD/phpstan.neon" ]]; then
+    H_IGN_PLACED=$(awk '/^[[:space:]]*ignoreErrors:/{f=1;next} f&&/^[[:space:]]*-[[:space:]]/{c++} f&&/^[[:space:]]*[a-zA-Z]/{f=0} END{print c+0}' "$HD/phpstan.neon")
+    assert_eq "[IN-H] the PLACED file ships zero of them too" "0" "$H_IGN_PLACED"
+  fi
+
+  # ── criterion 10's second half: phpunit.xml names no in-repo report path ──
+  #
+  # Removed, not repointed. PHPUnit runs in the DDEV web container and no host path
+  # is valid there, so a resolved host path would be as wrong as the hardcoded one.
+  # coverage-report.sh:69-99 reached this already: it writes coverage to a
+  # container-local stage and passes --coverage-clover on the command line, and a
+  # CLI report flag overrides the XML. <source> stays, and it is what actually
+  # scopes coverage, so removing the report blocks costs the gates nothing.
+  if [[ -f "$HD/phpunit.xml" ]]; then
+    # XML comments are stripped first. The placed file EXPLAINS the removal, naming the
+    # blocks and the paths it used to carry, and a check that a comment can trip pushes
+    # the next author into deleting the explanation to get the suite green. What the
+    # criterion is about is what PHPUnit would act on.
+    H_PU=$(python3 -c 'import sys,re; print(re.sub(r"<!--.*?-->", "", open(sys.argv[1]).read(), flags=re.S))' "$HD/phpunit.xml")
+    assert_eq "[IN-H] the placed phpunit.xml names no reports/ path" "no" "$(u_has "$H_PU" "reports/")"
+    assert_eq "[IN-H] it carries no <coverage><report> block" "no" "$(u_has "$H_PU" "<report>")"
+    assert_eq "[IN-H] it carries no <logging> block" "no" "$(u_has "$H_PU" "<logging>")"
+    assert_eq "[IN-H] <source> stays, because that is what scopes coverage" "yes" "$(u_has "$H_PU" "<source>")"
+    assert_eq "[IN-H] and the bootstrap follows the configured layout" "yes" \
+      "$(u_has "$H_PU" 'bootstrap="web/core/tests/bootstrap.php"')"
+    assert_eq "[IN-H] no absolute host path survives in it" "no" "$(u_has "$H_PU" "$TMP")"
+  else
+    bad "[IN-H] phpunit.xml was placed on the web-layout fixture"
+  fi
+
+  # ── criterion 16: grumphp testsuites and docroot variants ────────────────
+  HG="$TMP/in_h_hooks"; in_project "$HG" docroot
+  in_config drupal docroot true > "$HG/.code-quality.json"
+  # grumphp.yml is only placed when it is in templates[], which the wizard adds on
+  # consent. The fixture asks for it explicitly, which is what a consented config
+  # looks like.
+  jq -c '.templates += ["grumphp.yml"]' "$HG/.code-quality.json" > "$HG/tmp.json" && mv "$HG/tmp.json" "$HG/.code-quality.json"
+  in_place "$HG" .code-quality.json > /dev/null
+  if [[ -f "$HG/grumphp.yml" ]]; then
+    HGY=$(cat "$HG/grumphp.yml")
+    assert_eq "[IN-H] grumphp.yml carries a testsuites block" "yes" "$(u_has "$HGY" "testsuites:")"
+    assert_eq "[IN-H] named git_pre_commit" "yes" "$(u_has "$HGY" "git_pre_commit:")"
+    assert_eq "[IN-H] whose tasks are the ones the config asked for" "yes" "$(u_has "$HGY" "[phpcs, phpstan]")"
+    assert_eq "[IN-H] and a docroot/ whitelist variant" "yes" "$(u_has "$HGY" 'docroot\/modules\/custom')"
+    assert_eq "[IN-H] and a docroot/ force-pattern variant" "yes" \
+      "$(awk '/force_patterns:/{f=1} f&&/docroot/{print "yes";exit}' <<< "$HGY" | head -1 | tr -d '\n')"
+    assert_eq "[IN-H] the existing web/ variants are kept, not replaced" "yes" "$(u_has "$HGY" 'web\/modules\/custom')"
+  else
+    bad "[IN-H] grumphp.yml was placed on the consented fixture"
+  fi
+
+  # ── psalm.xml, the one isolation that is not free ────────────────────────
+  H_PSALM="${SKILLROOT}/templates/drupal/psalm.xml"
+  assert_eq "[IN-H] a psalm.xml template ships" "yes" "$([[ -f "$H_PSALM" ]] && echo yes || echo no)"
+  if [[ -f "$H_PSALM" ]]; then
+    assert_eq "[IN-H] it hands an isolated Psalm the project's autoloader explicitly" "yes" \
+      "$(u_has "$(cat "$H_PSALM")" "<autoloader>vendor/autoload.php</autoloader>")"
+  fi
+
+  # ── every template still parses as its own format, tokens unsubstituted ──
+  #
+  # A token in a VALUE position is what makes this possible, and it is why the
+  # tokens are not spliced into keys or structure. A template that has to be
+  # substituted before it can be linted is a template nobody lints.
+  for x in "${SKILLROOT}"/templates/drupal/*.xml; do
+    assert_eq "[IN-H] $(basename "$x") parses as XML with tokens in place" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+  done
+  if python3 -c 'import yaml' 2>/dev/null; then
+    assert_eq "[IN-H] grumphp.yml parses as YAML with tokens in place" "ok" \
+      "$(python3 -c 'import sys,yaml
+try:
+    yaml.safe_load(open(sys.argv[1])); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "${SKILLROOT}/templates/grumphp.yml")"
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-H] grumphp.yml YAML parse: PyYAML is not installed"
+  fi
+  # [contract, not behavioural] NEON has no parser available here, so the shipped
+  # file is checked for the structure the gate reads rather than parsed. Said out
+  # loud rather than left as an implied equivalence.
+  assert_eq "[IN-H] [contract, not behavioural] the phpstan template still opens with parameters:" "yes" \
+    "$(u_has "$(cat "$H_TPL")" "parameters:")"
+
+  # ── every PLACED XML parses, which the template assertions above cannot say ──
+  #
+  # The templates were asserted to parse; the OUTPUT was not, and the output was what
+  # broke. `dest` is built as "./$(basename ...)", so `${dest#*.}` stripped through the
+  # period in "./" and expanded to "/psalm.xml" — never "xml". The declaration-preserving
+  # branch therefore never ran once, and all three placed XML files carried the provenance
+  # comment ABOVE the declaration, which libxml refuses outright: "XML declaration allowed
+  # only at the start of the document". libxml is the parser PHPUnit, PHPMD and Psalm all
+  # sit on, so each tool the installer had just configured could not read its own config.
+  #
+  # Asserted with a real parser against a real placed file, never by grepping for a
+  # string, because a string check is what the in-code comment already was.
+  if [[ -d "$HD" ]]; then
+    for x in "$HD"/*.xml; do
+      [[ -f "$x" ]] || continue
+      assert_eq "[IN-H] the PLACED $(basename "$x") parses as XML" "ok" \
+        "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+      assert_eq "[IN-H] and its declaration is still the first line of $(basename "$x")" "yes" \
+        "$(head -1 "$x" | grep -q '^<?xml' && echo yes || echo no)"
+      assert_eq "[IN-H] with the provenance comment beneath it, not above" "yes" \
+        "$(sed -n '2p' "$x" | grep -q 'code-quality-tools:generated' && echo yes || echo no)"
+    done
+    # The NEON case gets the quotes REMOVED, which is why the quoted-token pass exists at
+    # all. The XML case must NOT, and is asserted on the psalm fixture further down —
+    # $HD's templates list does not include psalm.xml, and an assertion guarded on a file
+    # that is never there passes by never running.
+    if [[ -f "$HD/phpstan.neon" ]]; then
+      assert_eq "[IN-H] a substituted NEON list entry loses its quotes, as it must" "yes" \
+        "$(u_has "$(cat "$HD/phpstan.neon")" "- web/modules/custom")"
+    fi
+  fi
+
+  # ── the provenance comment cannot corrupt the file it describes ────────────
+  #
+  # CONFIG_PATH is interpolated into the comment body, and XML forbids `--` inside a
+  # comment. `--config my--cfg.json` produced a first line DOMDocument rejected with
+  # "Double hyphen within comment" — a second, independent corruption vector that would
+  # have survived the ${dest#*.} fix above.
+  IN_HD="$TMP/in_h_dash"; in_project "$IN_HD" web
+  in_config drupal web false > "$IN_HD/my--cfg.json"
+  in_place "$IN_HD" 'my--cfg.json' > /dev/null 2>&1
+  for x in "$IN_HD"/*.xml; do
+    [[ -f "$x" ]] || continue
+    assert_eq "[IN-H] $(basename "$x") still parses when the config path contains --" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$x")"
+  done
+  if [[ -f "$IN_HD/phpmd.xml" ]]; then
+    # The BODY of the comment, between the delimiters — `<!--` itself contains the two
+    # hyphens that are legal only there.
+    assert_eq "[IN-H] no XML comment BODY carries a double hyphen" "0" \
+      "$(python3 -c 'import sys,re
+line = open(sys.argv[1]).read().split("\n")[1]
+m = re.match(r"^<!--(.*)-->\s*$", line)
+print(0 if (m and "--" not in m.group(1)) else 1)' "$IN_HD/phpmd.xml")"
+    assert_eq "[IN-H] and the provenance is still legible after separation" "yes" \
+      "$(u_has "$(sed -n '2p' "$IN_HD/phpmd.xml")" "code-quality-tools:generated")"
+    assert_eq "[IN-H] the config path is still recognisable in it" "yes" \
+      "$(u_has "$(sed -n '2p' "$IN_HD/phpmd.xml")" "cfg.json")"
+  fi
+
+  # ── what actually decides that a template is placed ────────────────────────
+  #
+  # psalm.xml claimed it was placed "only when psalm is in the config's tools".
+  # stage_templates iterates .templates[] and never reads .tools, and cqt_config_derive
+  # hardcodes the four-template Drupal list independently of which tools it picked, so a
+  # config with .tools.psalm deleted still got a psalm.xml. `templates` is the field that
+  # decides, and the file now says so.
+  IN_HT="$TMP/in_h_tpl"; in_project "$IN_HT" web
+  in_config drupal web false > "$IN_HT/.code-quality.json"
+  jq -c '.templates += ["drupal/psalm.xml"] | del(.tools.psalm)' "$IN_HT/.code-quality.json" \
+    > "$IN_HT/t.json" && mv "$IN_HT/t.json" "$IN_HT/.code-quality.json"
+  in_place "$IN_HT" .code-quality.json > /dev/null 2>&1
+  assert_eq "[IN-H] templates[] decides placement: psalm.xml is placed with no psalm tool" "yes" \
+    "$([[ -f "$IN_HT/psalm.xml" ]] && echo yes || echo no)"
+
+  # psalm.xml is the one template whose tokens sit in ATTRIBUTE values, where the quotes
+  # are syntax rather than part of the value. The quoted-token pass that YAML and NEON
+  # need would eat them and produce `<directory name=web/modules/custom />`, which no
+  # parser accepts — a defect that stayed invisible while every placed XML was already
+  # unparseable for the declaration reason above. So the format decides, and it is
+  # asserted here, on the only fixture that actually places the file.
+  if [[ -f "$IN_HT/psalm.xml" ]]; then
+    assert_eq "[IN-H] the placed psalm.xml parses as XML" "ok" \
+      "$(python3 -c 'import sys,xml.etree.ElementTree as E
+try:
+    E.parse(sys.argv[1]); print("ok")
+except Exception as e:
+    print("FAIL: %s" % e)' "$IN_HT/psalm.xml")"
+    assert_eq "[IN-H] a substituted XML attribute keeps its quotes" "yes" \
+      "$(u_has "$(cat "$IN_HT/psalm.xml")" '<directory name="web/modules/custom" />')"
+    assert_eq "[IN-H] and no directory attribute was left unquoted by the substitution" "0" \
+      "$(grep -cE '<directory name=[^"]' "$IN_HT/psalm.xml" || true)"
+    assert_eq "[IN-H] its declaration is still the first line" "yes" \
+      "$(head -1 "$IN_HT/psalm.xml" | grep -q '^<?xml' && echo yes || echo no)"
+  else
+    bad "[IN-H] psalm.xml was placed on the templates fixture"
+  fi
+  assert_eq "[IN-H] and the template no longer claims the tools list gates it" "no" \
+    "$(u_has "$(cat "$H_PSALM")" "only when psalm is in")"
+  assert_eq "[IN-H] it names templates as the field that does" "yes" \
+    "$(u_has "$(cat "$H_PSALM")" "config's \`templates\` list")"
+  IN_HT2="$TMP/in_h_tpl2"; in_project "$IN_HT2" web
+  in_config drupal web false > "$IN_HT2/.code-quality.json"
+  in_place "$IN_HT2" .code-quality.json > /dev/null 2>&1
+  assert_eq "[IN-H] and dropping it from templates[] is what stops it being placed" "no" \
+    "$([[ -f "$IN_HT2/psalm.xml" ]] && echo yes || echo no)"
+fi
+
+# ── IN-J. the install verifies itself, red before green (criterion 14) ──────
+echo ""
+echo "IN-J: three claims about the installed toolchain that are false today and produce no error"
+
+if [[ ! -f "$CQTVERIFY" ]]; then
+  bad "[IN-J] core/install-verify.sh exists"
+else
+  ok "[IN-J] core/install-verify.sh exists"
+
+  # It is a SEPARATE process from the installer, which is the design and not a
+  # file-layout preference: a thing asking itself whether it worked verifies nothing.
+  assert_eq "[IN-J] the installer hands off to it rather than checking its own work" "yes" \
+    "$(u_has "$(cat "$CQTINSTALL")" "install-verify.sh")"
+
+  # Plant a phpcs that answers a fixed way, so `phpcs -i` can be driven to both
+  # states. The three environment-dependent checks are the reason this section
+  # stubs rather than skips: a suite that skips them reports zero failures having
+  # asserted nothing, which is the shape this repo's own CLAUDE.md names as the
+  # defect worth avoiding.
+  J_STUB="$TMP/in_j_stub"; mkdir -p "$J_STUB"
+  j_phpcs() {   # <standards-line>
+    cat > "$J_STUB/phpcs" <<STUB
+#!/bin/bash
+if [ "\$1" = "-i" ]; then echo "$1"; exit 0; fi
+grep -rqF 'cqt-known-violation' "\$@" 2>/dev/null && exit 2
+exit 0
+STUB
+    chmod +x "$J_STUB/phpcs"
+  }
+
+  # Prints the exit status; the OUTPUT goes to a file, not to a variable. `X=$(j_run ...)`
+  # runs the function in a subshell, so anything it assigned is discarded and the caller
+  # silently reads the previous run's value — the same trap last_absent() upstream in this
+  # file documents, and it produced two assertions here that "passed" against an empty
+  # string until they were written as refutations that notice emptiness.
+  j_out() { cat "$TMP/j_out" 2>/dev/null || printf 'NOTHING'; }
+  j_run() {   # <dir> <config> ; prints "<exit>", output lands in $(j_out)
+    ( cd "$1" && REPORT_DIR="$1/.verify-reports" \
+      PATH="$J_STUB:/usr/bin:/bin" bash "$CQTVERIFY" --config "$2" ) > "$TMP/j_out" 2>&1
+    printf '%s' "$?"
+  }
+
+  IN_J="$TMP/in_j"; in_project "$IN_J" web
+  in_config drupal web false > "$IN_J/.code-quality.json"
+
+  # ── the mutation, and the RED half is the state a project is in today ──
+  #
+  # Without the allow-plugins entries, dealerdirect never registers the Drupal
+  # standard and extension-installer never writes a GeneratedConfig naming mglaman.
+  # Neither absence produces an error anywhere: phpcs --standard=Drupal has nothing
+  # to load, and PHPStan analyses Drupal as plain PHP and exits 0.
+  j_phpcs "The installed coding standards are PEAR, PSR1, PSR2, PSR12, Squiz and Zend"
+  mkdir -p "$IN_J/vendor"
+  J_RED=$(j_run "$IN_J" .code-quality.json)
+  assert_eq "[IN-J] RED: with the standard unregistered and no GeneratedConfig, verification fails" "1" "$J_RED"
+  assert_eq "[IN-J] RED: it says phpcs does not list Drupal" "yes" "$(u_has "$(j_out)" "Drupal")"
+  assert_eq "[IN-J] RED: and that mglaman is not registered" "yes" "$(u_has "$(j_out)" "mglaman")"
+
+  # ── the GREEN half, one mutation apart ──
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice, PEAR, PSR2 and Squiz"
+  mkdir -p "$IN_J/vendor/phpstan/extension-installer/src"
+  cat > "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" <<'GEN'
+<?php
+final class GeneratedConfig
+{
+    public const EXTENSIONS = ['mglaman/phpstan-drupal' => ['install_path' => '...']];
+}
+GEN
+  J_GREEN=$(j_run "$IN_J" .code-quality.json)
+
+  # ── one check of the three did not apply, and that is not a pass ────────
+  #
+  # This fixture has git_hooks.enabled false, so check 3 skips. The aggregate used to
+  # fold that into `pass`: it exited 0 and printed "[OK] the installed toolchain can
+  # fail" — a sentence about all three checks — having applied two. Executed on a real
+  # project this is the partially-installed case: hooks installed, no phpcs and no
+  # vendor/ reported {"status":"pass","passed":1,"skipped":2} and said the toolchain
+  # could fail.
+  #
+  # It is `partial` rather than `unmeasured` because git_hooks.enabled false is a
+  # legitimate config — every derived config carries it — so treating the skip as "we
+  # never looked" would fire on a large share of correct installs and stop meaning
+  # anything. The word has to distinguish "we applied two of three and both passed" from
+  # both neighbours, which is why there are four states and not three.
+  assert_eq "[IN-J] two of three applied: the aggregate is partial, not pass" "partial" \
+    "$(jq -r '.status // "ABSENT"' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)"
+  assert_eq "[IN-J] and it exits 5 for it, not 0" "5" "$J_GREEN"
+  assert_eq "[IN-J] partial is the suite's word, read from path-resolve.sh" "partial" \
+    "$(grep -o 'CQT_STATUS_PARTIAL="[a-z]*"' "${ROOT}/core/path-resolve.sh" | sed 's/.*="//;s/"//')"
+  assert_eq "[IN-J] 5 is what path-resolve.sh calls CQT_EXIT_PARTIAL" "5" \
+    "$(grep -o 'CQT_EXIT_PARTIAL=[0-9]' "${ROOT}/core/path-resolve.sh" | cut -d= -f2)"
+  # The printed line is the half a person reads, and it has to say what the verdict
+  # covers. An unqualified [OK] about two of three checks is the defect itself.
+  assert_eq "[IN-J] it does not print the unqualified toolchain-can-fail line" "no" \
+    "$(u_has "$(j_out)" "the installed toolchain can fail")"
+  assert_eq "[IN-J] it prints PARTIAL instead" "yes" "$(u_has "$(j_out)" "PARTIAL")"
+  assert_eq "[IN-J] and names the checks it DID apply" "yes" "$(u_has "$(j_out)" "phpcs_lists_drupal")"
+  assert_eq "[IN-J] and names the one it did not" "yes" "$(u_has "$(j_out)" "NOT checked here")"
+  assert_eq "[IN-J] naming that check by name too" "yes" "$(u_has "$(j_out)" "hook_can_fail")"
+  # The word travels in the report as well as the exit code, because the exit code is the
+  # fallback channel and the report is the one full-audit.sh prefers.
+  assert_eq "[IN-J] the report records which checks were not applied" "1" \
+    "$(jq -r '.skipped // -1' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)"
+  assert_eq "[IN-J] and the reason names both halves rather than only the passing one" "yes" \
+    "$(u_has "$(jq -r '.reason // ""' "$IN_J/.verify-reports/install-verify.json" 2>/dev/null)" "could not be applied")"
+
+  # One at a time, so neither check is carrying the other.
+  j_phpcs "The installed coding standards are PEAR and Squiz"
+  assert_eq "[IN-J] only phpcs mutated back: still fails" "1" "$(j_run "$IN_J" .code-quality.json)"
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+  mv "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" "$IN_J/gen.bak"
+  assert_eq "[IN-J] only GeneratedConfig mutated back: still fails" "1" "$(j_run "$IN_J" .code-quality.json)"
+  mv "$IN_J/gen.bak" "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+
+  # ── the report ──
+  J_REPORT="$IN_J/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] a machine-readable report is written" "yes" \
+    "$([[ -f "$J_REPORT" ]] && echo yes || echo no)"
+  if [[ -f "$J_REPORT" ]]; then
+    assert_eq "[IN-J] it carries status, findings and timestamp, per the repo convention" "yes" \
+      "$(jq -e 'has("status") and has("findings") and has("timestamp")' "$J_REPORT" >/dev/null 2>&1 && echo yes || echo no)"
+    # A check that could not APPLY reports skipped, never passed. Same three-state
+    # discipline check_version_drift() uses for "unchecked", and for the same
+    # reason: a consumer has to tell "we looked and it was fine" from "we never
+    # looked".
+    assert_eq "[IN-J] the hook check reports skipped, not passed, when hooks were not installed" "skipped" \
+      "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_REPORT" 2>/dev/null)"
+    assert_eq "[IN-J] and says why it was skipped" "yes" \
+      "$([[ -n "$(jq -r '.checks.hook_can_fail.reason // ""' "$J_REPORT" 2>/dev/null)" ]] && echo yes || echo no)"
+    assert_eq "[IN-J] a skipped check does not count as a pass in the totals" "0" \
+      "$(jq -r '[.checks[] | select(.status == "skipped")] | map(select(.counted_as_pass == true)) | length' "$J_REPORT" 2>/dev/null)"
+  fi
+
+  # ── check 3, the replacement for a verification that cannot fail ──
+  #
+  # setup.md:222 verified GrumPHP with `git commit --allow-empty`. That stages no
+  # files, GrumPHP's pre-commit context is git-staged-files, so it inspected an
+  # empty set and passed. This is the replacement, and it is asserted red before
+  # it is asserted green.
+  #
+  # [stubbed hook] The hook planted below stands in for GrumPHP: it refuses any
+  # staged file carrying the marker. What is under test is install-verify.sh —
+  # that it stages the violation, runs the hook, reads the status, and restores
+  # the index — not GrumPHP itself, which needs a live Composer install.
+  IN_JH="$TMP/in_jh"; in_project "$IN_JH" web
+  in_config drupal web true > "$IN_JH/.code-quality.json"
+  mkdir -p "$IN_JH/vendor/phpstan/extension-installer/src"
+  cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+     "$IN_JH/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+  ( cd "$IN_JH" && git init -q . && git config user.email t@e && git config user.name t \
+      && git add -A && git commit -qm base ) >/dev/null 2>&1
+  cat > "$IN_JH/.git/hooks/pre-commit" <<'HOOK'
+#!/bin/bash
+# Stands in for GrumPHP: refuses any staged file carrying the marker.
+files=$(git diff --cached --name-only)
+[ -n "$files" ] || exit 0
+for f in $files; do
+  [ -f "$f" ] || continue
+  grep -qF 'cqt-known-violation' "$f" && { echo "hook: refused $f"; exit 1; }
+done
+exit 0
+HOOK
+  chmod +x "$IN_JH/.git/hooks/pre-commit"
+  j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+
+  J_INDEX_BEFORE=$(md5sum < "$IN_JH/.git/index")
+  J_HOOK_STATUS=$(j_run "$IN_JH" .code-quality.json)
+  J_INDEX_AFTER=$(md5sum < "$IN_JH/.git/index")
+  J_HREPORT="$IN_JH/.verify-reports/install-verify.json"
+
+  assert_eq "[IN-J] GREEN: a hook that refuses the seeded violation passes the check" "0" "$J_HOOK_STATUS"
+  assert_eq "[IN-J] the hook check ran rather than being skipped" "passed" \
+    "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  # This is the only fixture in which all three checks APPLY, and it is the only one that
+  # earns a `pass`. That is the point of the four states: exit 0 now means every claim the
+  # [OK] sentence makes was actually tested, so the sentence and the evidence are the same
+  # width. A run with a skip in it leaves by the partial branch instead.
+  assert_eq "[IN-J] all three applied: the aggregate is a pass" "pass" \
+    "$(jq -r '.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] with nothing skipped" "0" "$(jq -r '.skipped // -1' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the [OK] line says how many checks it is speaking for" "yes" \
+    "$(u_has "$(j_out)" "all 3 checks applied")"
+  # The index is restored on every exit path. Leaving a staged file in somebody's
+  # repository after an audit is a real harm, so it is asserted byte for byte.
+  assert_eq "[IN-J] the git index is byte-identical afterwards" "$J_INDEX_BEFORE" "$J_INDEX_AFTER"
+  assert_eq "[IN-J] and the violation file is gone from the working tree" "0" \
+    "$(find "$IN_JH" -name '*cqt*violation*' 2>/dev/null | wc -l | tr -d ' ')"
+
+  # RED: a hook that passes everything is a hook that cannot fail, which is the
+  # exact state setup.md's `git commit --allow-empty` verification left behind.
+  cat > "$IN_JH/.git/hooks/pre-commit" <<'HOOK'
+#!/bin/bash
+exit 0
+HOOK
+  chmod +x "$IN_JH/.git/hooks/pre-commit"
+  J_INDEX_BEFORE2=$(md5sum < "$IN_JH/.git/index")
+  J_HOOK_RED=$(j_run "$IN_JH" .code-quality.json)
+  assert_eq "[IN-J] RED: a hook that passes the seeded violation fails verification" "1" "$J_HOOK_RED"
+  assert_eq "[IN-J] and the report records that check as failed" "failed" \
+    "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$J_HREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] the index is restored on the failing path too" "$J_INDEX_BEFORE2" \
+    "$(md5sum < "$IN_JH/.git/index")"
+
+  # And the thing it replaces is gone from the command.
+  assert_eq "[IN-J] setup.md no longer verifies with a commit that stages nothing" "0" \
+    "$(grep -c 'allow-empty' "$SETUPMD" || true)"
+
+  # ── check 1 may not read a fatal for content ────────────────────────────
+  #
+  # It captured `out="$(phpcs -i 2>&1)"`, discarding the exit status, then grepped the
+  # merged streams for the literal "Drupal". A phpcs exiting 255 whose fatal names
+  # /home/dev/Sites/Drupal10/vendor/... was recorded {"status":"passed"}: the tool had
+  # not run, no standard was listed, and the PROJECT PATH answered the question. That
+  # path shape is ordinary among Drupal developers, not contrived.
+  IN_JF="$TMP/in_jf"; in_project "$IN_JF" web
+  in_config drupal web false > "$IN_JF/.code-quality.json"
+  mkdir -p "$IN_JF/vendor/bin" "$IN_JF/vendor/phpstan/extension-installer/src"
+  cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+     "$IN_JF/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+  cat > "$IN_JF/vendor/bin/phpcs" <<'FATAL'
+#!/bin/bash
+echo "PHP Fatal error: Uncaught Error in /home/dev/Sites/Drupal10/vendor/squizlabs/php_codesniffer/src/Runner.php" >&2
+exit 255
+FATAL
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  J_FATAL_EXIT=$(j_run "$IN_JF" .code-quality.json)
+  J_FREPORT="$IN_JF/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] a phpcs that exits 255 is not recorded as a pass" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the reason names the exit status rather than the path" "yes" \
+    "$(u_has "$(jq -r '.checks.phpcs_lists_drupal.reason // ""' "$J_FREPORT" 2>/dev/null)" "exited 255")"
+  assert_eq "[IN-J] a fatal naming a Drupal path does not answer for a registration" "1" "$J_FATAL_EXIT"
+
+  # phpcs exiting 0 with no standards line is the same class: nothing to read.
+  printf '#!/bin/bash\nexit 0\n' > "$IN_JF/vendor/bin/phpcs"; chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_null_exit=$(j_run "$IN_JF" .code-quality.json)
+  assert_eq "[IN-J] phpcs printing no standards list is a failure, not a pass" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and the run exits non-zero for it" "1" "$j_null_exit"
+
+  # The match is against the standards phpcs NAMES, as whole tokens: "DrupalPractice"
+  # alone is a different standard and does not register Drupal.
+  cat > "$IN_JF/vendor/bin/phpcs" <<'PRACTICE'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are DrupalPractice, PEAR and Squiz"; exit 0; }
+exit 0
+PRACTICE
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_run "$IN_JF" .code-quality.json > /dev/null
+  assert_eq "[IN-J] DrupalPractice alone does not satisfy the Drupal standard" "failed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+  cat > "$IN_JF/vendor/bin/phpcs" <<'REAL'
+#!/bin/bash
+[ "$1" = "-i" ] && { echo "The installed coding standards are Drupal, DrupalPractice, PEAR and Squiz"; exit 0; }
+exit 0
+REAL
+  chmod +x "$IN_JF/vendor/bin/phpcs"
+  j_run "$IN_JF" .code-quality.json > /dev/null
+  assert_eq "[IN-J] and a real standards list naming Drupal still passes" "passed" \
+    "$(jq -r '.checks.phpcs_lists_drupal.status // "ABSENT"' "$J_FREPORT" 2>/dev/null)"
+
+  # ── the aggregate: skips do not add up to a pass ────────────────────────
+  #
+  # `status` was `if failures == 0 then "pass" else "fail"`, so a project with nothing
+  # installed wrote {"status":"pass","passed":0,"failed":0,"skipped":3}, printed "[OK] the
+  # installed toolchain can fail" and exited 0. cqt-install.sh reads only that exit code,
+  # so its sole consumer could not tell zero-checks-ran from three-checks-passed.
+  #
+  # The word and the code are the suite's existing ones — path-resolve.sh's
+  # CQT_STATUS_UNMEASURED and CQT_EXIT_UNMEASURED — not a second vocabulary.
+  IN_JU="$TMP/in_ju"; mkdir -p "$IN_JU"
+  in_config drupal web false > "$IN_JU/.code-quality.json"
+  J_EMPTY_STUB="$TMP/in_ju_nostub"; mkdir -p "$J_EMPTY_STUB"
+  J_UNMEAS_EXIT=$( ( cd "$IN_JU" && REPORT_DIR="$IN_JU/.verify-reports" \
+      PATH="$J_EMPTY_STUB:/usr/bin:/bin" bash "$CQTVERIFY" --config .code-quality.json ) \
+      > "$TMP/j_out" 2>&1; printf '%s' "$?" )
+  J_UREPORT="$IN_JU/.verify-reports/install-verify.json"
+  assert_eq "[IN-J] nothing installed: all three checks skip" "3" \
+    "$(jq -r '.skipped // -1' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] and none of them passed" "0" "$(jq -r '.passed // -1' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] the aggregate is unmeasured, not pass" "unmeasured" \
+    "$(jq -r '.status // "ABSENT"' "$J_UREPORT" 2>/dev/null)"
+  assert_eq "[IN-J] it uses the suite's existing word for this, not a new one" "unmeasured" \
+    "$(grep -o 'CQT_STATUS_UNMEASURED="[a-z]*"' "${ROOT}/core/path-resolve.sh" | sed 's/.*="//;s/"//')"
+  assert_eq "[IN-J] the report says why nothing could be measured" "yes" \
+    "$([[ -n "$(jq -r '.reason // ""' "$J_UREPORT" 2>/dev/null)" ]] && echo yes || echo no)"
+  assert_eq "[IN-J] and it exits 4, the suite's unmeasured code, not 0" "4" "$J_UNMEAS_EXIT"
+  assert_eq "[IN-J] 4 is what path-resolve.sh calls CQT_EXIT_UNMEASURED" "4" \
+    "$(grep -o 'CQT_EXIT_UNMEASURED=[0-9]' "${ROOT}/core/path-resolve.sh" | cut -d= -f2)"
+  assert_eq "[IN-J] and it does not print the toolchain-can-fail line" "no" \
+    "$(u_has "$(j_out)" "the installed toolchain can fail")"
+  assert_eq "[IN-J] it prints UNMEASURED instead" "yes" "$(u_has "$(j_out)" "UNMEASURED")"
+
+  # The sole consumer reads that status as four states, not two. `|| FAILED=1` collapses
+  # 4 into "failed", which is the right verdict and the wrong report: "we could not look"
+  # and "we looked and it is broken" call for different fixes. And 5 must not fail the
+  # install at all — that behaviour is held by the IN-D no-binary fixture above, which
+  # asserts the shim exits 0 on a run whose verification came back partial.
+  J_CONSUMER=$(sed 's/[[:space:]]*#.*$//' "$CQTINSTALL")
+  assert_eq "[IN-J] the installer reads the verifier's status as more than zero-or-not" "yes" \
+    "$(u_has "$J_CONSUMER" "4)")"
+  assert_eq "[IN-J] and gives the partial code its own arm rather than the catch-all" "yes" \
+    "$(u_has "$J_CONSUMER" "5)")"
+  assert_eq "[IN-J] and does not capture it with \$? after a pipe" "0" \
+    "$(printf '%s' "$J_CONSUMER" | grep -A2 'config -$' | grep -c 'vexit=\$?' || true)"
+
+  # ── check 3 in a linked worktree, where .git is a FILE ──────────────────
+  #
+  # `[ ! -d .git ]` recorded "this is not a git working tree" about a worktree that
+  # plainly is one — hooks run there normally — and silently disabled the one check that
+  # replaces setup.md's `git commit --allow-empty`. This repository develops in
+  # worktrees, so the wrong branch was the reachable one.
+  if git --version > /dev/null 2>&1; then
+    IN_JW="$TMP/in_jw"; mkdir -p "$IN_JW"
+    ( cd "$IN_JW" && git init -q . && git config user.email t@e && git config user.name t \
+        && printf 'x\n' > f.txt && git add -A && git commit -qm base \
+        && git worktree add -q "$TMP/in_jw_wt" -b jwbranch ) > /dev/null 2>&1
+    if [[ -f "$TMP/in_jw_wt/.git" ]]; then
+      ok "[IN-J] the fixture worktree has .git as a FILE, which is the case under test"
+      in_config drupal web true > "$TMP/in_jw_wt/.code-quality.json"
+      mkdir -p "$TMP/in_jw_wt/vendor/phpstan/extension-installer/src"
+      cp "$IN_J/vendor/phpstan/extension-installer/src/GeneratedConfig.php" \
+         "$TMP/in_jw_wt/vendor/phpstan/extension-installer/src/GeneratedConfig.php"
+      JW_HOOKS=$( cd "$TMP/in_jw_wt" && git rev-parse --git-path hooks )
+      mkdir -p "$JW_HOOKS"
+      cat > "$JW_HOOKS/pre-commit" <<'HOOK'
+#!/bin/bash
+files=$(git diff --cached --name-only)
+[ -n "$files" ] || exit 0
+for f in $files; do
+  [ -f "$f" ] || continue
+  grep -qF 'cqt-known-violation' "$f" && { echo "hook: refused $f"; exit 1; }
+done
+exit 0
+HOOK
+      chmod +x "$JW_HOOKS/pre-commit"
+      j_phpcs "The installed coding standards are Drupal, DrupalPractice and PEAR"
+      JW_INDEX=$( cd "$TMP/in_jw_wt" && git rev-parse --git-path index )
+      JW_BEFORE=$(md5sum < "$JW_INDEX")
+      JW_EXIT=$(j_run "$TMP/in_jw_wt" .code-quality.json)
+      JW_REPORT="$TMP/in_jw_wt/.verify-reports/install-verify.json"
+      assert_eq "[IN-J] in a worktree the hook check RUNS rather than skipping" "passed" \
+        "$(jq -r '.checks.hook_can_fail.status // "ABSENT"' "$JW_REPORT" 2>/dev/null)"
+      # Read off the whole report, not off the reason field: a passed check's reason is
+      # the empty string, and u_has answers NOTHING rather than no on an empty haystack.
+      assert_eq "[IN-J] it does not claim a worktree is not a git working tree" "no" \
+        "$(u_has "$(cat "$JW_REPORT" 2>/dev/null)" "not a git working tree")"
+      assert_eq "[IN-J] and the run is a pass there" "0" "$JW_EXIT"
+      assert_eq "[IN-J] the worktree's own index is restored byte for byte" "$JW_BEFORE" \
+        "$(md5sum < "$JW_INDEX")"
+      assert_eq "[IN-J] and no violation file is left in the worktree" "0" \
+        "$(find "$TMP/in_jw_wt" -name '*cqt*violation*' 2>/dev/null | wc -l | tr -d ' ')"
+
+      # RED in the worktree too, so the check is not merely running but still able to fail.
+      printf '#!/bin/bash\nexit 0\n' > "$JW_HOOKS/pre-commit"; chmod +x "$JW_HOOKS/pre-commit"
+      assert_eq "[IN-J] RED in a worktree: a hook that passes everything still fails" "1" \
+        "$(j_run "$TMP/in_jw_wt" .code-quality.json)"
+      ( cd "$IN_JW" && git worktree remove --force "$TMP/in_jw_wt" ) > /dev/null 2>&1 || true
+    else
+      SKIP=$((SKIP + 1))
+      echo "  skip  [IN-J] worktree hook case: git worktree add did not produce a .git file here"
+    fi
+  else
+    SKIP=$((SKIP + 1))
+    echo "  skip  [IN-J] worktree hook case: git is not installed"
+  fi
+fi
+
+# ── IN-K. setup.md holds no install, and the region cannot be edited away ────
+echo ""
+echo "IN-K: the prose keeps the judgment; the generated region keeps the inventory"
+
+if [[ ! -f "$SETUPMD" ]]; then
+  bad "[IN-K] commands/setup.md exists"
+else
+  # Criteria 7 and 15, which are literally grep counts. Cheap, and they are the
+  # verify text the contract names.
+  assert_eq "[IN-K] setup.md carries no composer require" "0" "$(grep -c 'composer require' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no allow-empty verification" "0" "$(grep -c 'allow-empty' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no cp of a template" "0" "$(grep -cE '^\s*cp .*templates?/' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and no npm install block" "0" "$(grep -c 'npm install' "$SETUPMD" || true)"
+
+  # The doc half of the same finding the announcement fixed. cqt_config_announce_derived
+  # stopped saying "Nothing was written." because the sentence was false at the moment it
+  # printed — the install that follows a derived audit places the template files and lets
+  # Composer edit composer.json. setup.md described the same path in the same reassuring
+  # shape ("keeps a run somebody asked to be an audit from leaving a config file in their
+  # repository") and was not updated with it, so the prose outlived the string it was
+  # describing. Asserted here rather than trusted, because that is exactly how it drifted.
+  assert_eq "[IN-K] setup.md keeps the narrow claim: no .code-quality.json is left behind" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "no audit leaves a")"
+  assert_eq "[IN-K] and states that the install after a derived audit DOES write" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "does write to the project")"
+  assert_eq "[IN-K] naming composer.json as one of the things it writes" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "Composer edits")"
+  assert_eq "[IN-K] and the templates it places" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "placed at the project root")"
+  # The sentence the announcement dropped must not survive in the prose either.
+  assert_eq "[IN-K] setup.md no longer says an audit leaves nothing in the repository" "0" \
+    "$(grep -c 'from leaving a config file in their repository' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and does not claim no external script is needed" "0" \
+    "$(grep -c 'no external script needed' "$SETUPMD" || true)"
+
+  # What it gained: one step, naming the script that does the work.
+  assert_eq "[IN-K] it hands off to the installer" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "scripts/core/install-tools.sh")"
+  assert_eq "[IN-K] and writes the config that installer reads" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" ".code-quality.json")"
+  # make outputs fails a command with no '## Output' section, and this one still
+  # changes the project, so the section has to stay and has to be true.
+  assert_eq "[IN-K] the ## Output section survives the rewrite" "yes" \
+    "$(grep -c '^## Output$' "$SETUPMD" | grep -q '^1$' && echo yes || echo no)"
+  assert_eq "[IN-K] the frontmatter still carries description and allowed-tools" "2" \
+    "$(head -6 "$SETUPMD" | grep -cE '^(description|allowed-tools):' || true)"
+
+  # The generated region: markers, banner, checksum. Three things, each answering a
+  # different reader. The markers bound what the generator owns; the banner is
+  # INSIDE the region because that is where a person editing it is looking
+  # (terraform-docs shipped exactly this after issue #309); the checksum is what
+  # makes the generator refuse rather than silently destroy that person's edit
+  # (cog -c). Without it, generation turns a visible disagreement into a lost one.
+  assert_eq "[IN-K] the region has a begin marker" "1" \
+    "$(grep -c '^<!-- BEGIN GENERATED: tool-catalog -->$' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and an end marker carrying a 64-hex digest" "1" \
+    "$(grep -cE '^<!-- END GENERATED: tool-catalog sha256:[0-9a-f]{64} -->$' "$SETUPMD" || true)"
+  assert_eq "[IN-K] and a do-not-modify banner inside the region" "yes" \
+    "$(u_has "$(cat "$SETUPMD")" "Do not modify this region directly")"
+  # The region names tools and holds no command, which is how criterion 17 and
+  # criterion 7 stop fighting: what is generated is the tool INVENTORY.
+  K_REGION=$(awk '/^<!-- BEGIN GENERATED: tool-catalog -->$/{f=1;next} /^<!-- END GENERATED/{f=0} f' "$SETUPMD")
+  assert_eq "[IN-K] the generated region holds no install command" "no" "$(u_has "$K_REGION" "composer ")"
+  assert_eq "[IN-K] and does name the tools" "yes" "$(u_has "$K_REGION" "mglaman/phpstan-drupal")"
+  assert_eq "[IN-K] with the scope beside each" "yes" "$(u_has "$K_REGION" "isolated")"
+fi
+
+if [[ ! -f "$GENDOC" ]]; then
+  bad "[IN-K] scripts/gen-setup-doc.sh exists"
+else
+  ok "[IN-K] scripts/gen-setup-doc.sh exists"
+
+  assert_eq "[IN-K] --check passes on the committed tree" "0" \
+    "$( bash "$GENDOC" --check >/dev/null 2>&1; echo $? )"
+
+  # Everything below runs on a COPY. A spec that regenerates the real setup.md
+  # would be a test that edits the repository it is testing.
+  K="$TMP/in_k"; mkdir -p "$K"
+  cp "$SETUPMD" "$K/setup.md"; cp "$CATALOG" "$K/catalog.json"
+  k_gen() { bash "$GENDOC" --setup-md "$K/setup.md" --catalog "$K/catalog.json" "$@" 2>&1; }
+  k_status() { k_gen "$@" >/dev/null 2>&1; printf '%s' "$?"; }
+
+  assert_eq "[IN-K] --check passes on an untouched copy" "0" "$(k_status --check)"
+
+  # A hand edit inside the region. This is the failure the whole mechanism exists
+  # for: without a guard the edit is destroyed silently, because both mature tools
+  # replace everything between their markers.
+  python3 - "$K/setup.md" <<'PY'
+import io,sys
+p=sys.argv[1]
+s=io.open(p,encoding='utf-8').read()
+i=s.index('<!-- BEGIN GENERATED: tool-catalog -->')
+j=s.index('<!-- END GENERATED')
+s=s[:j] + '| handedited | acme/thing | project | quality |\n' + s[j:]
+io.open(p,'w',encoding='utf-8').write(s)
+PY
+  K_EDITED=$(md5sum < "$K/setup.md")
+
+  assert_eq "[IN-K] --check fails on a hand edit inside the region" "1" "$(k_status --check)"
+  K_CHECK_OUT=$(k_gen --check)
+  assert_eq "[IN-K] and names the checksum mismatch" "yes" "$(u_has "$K_CHECK_OUT" "checksum")"
+  assert_eq "[IN-K] and prints the diff, so the reader sees what moved" "yes" \
+    "$(u_has "$K_CHECK_OUT" "handedited")"
+
+  # The write path REFUSES rather than overwriting. A two-step
+  # regenerate-and-diff would pass even if the write path silently destroyed the
+  # edit, which is why this is asserted between the red and the green.
+  assert_eq "[IN-K] a plain regenerate refuses on that tree" "1" "$(k_status)"
+  assert_eq "[IN-K] and leaves the region byte-identical" "$K_EDITED" "$(md5sum < "$K/setup.md")"
+  # Not just "it failed": the refusal PRINTS the region as committed, so the person
+  # standing there can see the edit that is about to be lost and move it somewhere
+  # that survives. A refusal that only says no leaves them to find it themselves.
+  K_REFUSAL=$(k_gen)
+  assert_eq "[IN-K] the refusal names itself as a refusal" "yes" "$(u_has "$K_REFUSAL" "REFUSING")"
+  assert_eq "[IN-K] and prints the edit it would have destroyed" "yes" "$(u_has "$K_REFUSAL" "handedited")"
+
+  # --force is the deliberate override, for somebody who has read the refusal and
+  # moved their edit somewhere that survives. Nothing in make calls it.
+  assert_eq "[IN-K] --force regenerates" "0" "$(k_status --force)"
+  assert_eq "[IN-K] and --check is green again" "0" "$(k_status --check)"
+  assert_eq "[IN-K] the hand edit is gone, deliberately this time" "no" \
+    "$(u_has "$(cat "$K/setup.md")" "handedited")"
+  # Comment lines stripped: the Makefile's own comment explains that --force exists
+  # and that no target calls it, and a check a comment can trip pushes the next
+  # author into deleting the explanation.
+  assert_eq "[IN-K] nothing in the Makefile calls --force" "0" \
+    "$(sed 's/^[[:space:]]*#.*$//' "$REPOROOT/Makefile" | grep -c 'gen-setup-doc.sh --force' || true)"
+
+  # A change to the CATALOG must move the region too, or generation is decorative.
+  jq '.tools.phpmd.category = "duplication-detection"' "$K/catalog.json" > "$K/c2.json" && mv "$K/c2.json" "$K/catalog.json"
+  assert_eq "[IN-K] --check fails when the catalog moved and the doc did not" "1" "$(k_status --check)"
+  assert_eq "[IN-K] --force brings them back into agreement" "0" "$(k_status --force)"
+  assert_eq "[IN-K] and the new value is what landed" "yes" \
+    "$(u_has "$(cat "$K/setup.md")" "duplication-detection")"
+
+  # ── failing honestly: a check that found nothing to check is a failure ──
+  #
+  # The repo's stated rule, applied to a sixth target. Every one of these would
+  # otherwise be a green run that asserted nothing.
+  cp "$SETUPMD" "$K/setup.md"
+  jq '.tools = {}' "$CATALOG" > "$K/empty-catalog.json"
+  assert_eq "[IN-K] an empty catalog fails rather than generating an empty table" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/setup.md" --catalog "$K/empty-catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  grep -v '^<!-- BEGIN GENERATED: tool-catalog -->$' "$SETUPMD" > "$K/nomarker.md"
+  assert_eq "[IN-K] a missing marker fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nomarker.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  sed 's/^<!-- END GENERATED: tool-catalog sha256:[0-9a-f]* -->$/<!-- END GENERATED: tool-catalog -->/' \
+    "$SETUPMD" > "$K/nodigest.md"
+  assert_eq "[IN-K] a missing checksum fails, and is not treated as a region to adopt" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nodigest.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  sed 's/sha256:[0-9a-f]\{64\}/sha256:notahex/' "$SETUPMD" > "$K/baddigest.md"
+  assert_eq "[IN-K] a malformed checksum fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/baddigest.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+
+  assert_eq "[IN-K] a setup.md that is not there fails" "1" \
+    "$( bash "$GENDOC" --setup-md "$K/nothing-here.md" --catalog "$K/catalog.json" --check >/dev/null 2>&1; echo $? )"
+fi
+
+# ── the target joins the ones that already run ───────────────────────────────
+if [[ -f "$REPOROOT/Makefile" ]]; then
+  MK=$(cat "$REPOROOT/Makefile")
+  assert_eq "[IN-K] make setup-doc exists" "yes" "$(u_has "$MK" "setup-doc:")"
+  assert_eq "[IN-K] make setup-doc-check exists" "yes" "$(u_has "$MK" "setup-doc-check:")"
+  # In the ci loop, or it is a check nobody runs — which is the same shape as a
+  # check that lands in a different task from the thing it checks.
+  MK_CI=$(awk '/^ci:/{f=1} f' "$REPOROOT/Makefile")
+  assert_eq "[IN-K] and it is in the ci loop" "yes" "$(u_has "$MK_CI" "setup-doc-check")"
+  assert_eq "[IN-K] make help documents it" "yes" \
+    "$(awk '/^help:/{f=1} /^[a-z-]*:$/&&!/^help:/{if(f&&NR>5)f=0} f' "$REPOROOT/Makefile" | grep -c 'setup-doc' | grep -qv '^0$' && echo yes || echo no)"
+  # CLAUDE.md documents each target by what it can fail on, and a sixth
+  # undocumented target breaks that.
+  assert_eq "[IN-K] CLAUDE.md gained a row for it" "yes" \
+    "$(u_has "$(cat "$REPOROOT/CLAUDE.md")" "setup-doc-check")"
+  # And CI runs the same set, or `make ci` stops being the PR check.
+  assert_eq "[IN-K] the CI workflow runs it too" "yes" \
+    "$(u_has "$(cat "$REPOROOT/.github/workflows/ci.yml")" "make setup-doc-check")"
+fi
+
+# ── IN-B2. the matrix, one fixture per dimension (criterion 1) ──────────────
+echo ""
+echo "IN-B2: one fixture per matrix dimension round-trips through the installer"
+
+# Three of the five dimensions are exercised where their consequence lives:
+# project.layout.web_root by IN-H (three layouts, three placed template sets),
+# tool scope by IN-G (an isolated tool absent from require-dev and present in its own
+# bin namespace), git_hooks.enabled by IN-F (both values, both directions). The two
+# that have no other home are asserted here, so the criterion has a fixture for each
+# of the five rather than three and an assumption.
+if [[ -f "$CQTINSTALL" ]]; then
+  # project.type — the other stack. A Next.js config must reach npm and must NOT
+  # reach Composer at all, or the shim's "keep the Next.js path working" non-goal is
+  # quietly broken by the Drupal-shaped stages.
+  B2N="$TMP/in_b2_next"; mkdir -p "$B2N"
+  printf '{"name":"x","dependencies":{"next":"14.0.0"}}\n' > "$B2N/package.json"
+  in_config nextjs "" false > "$B2N/.code-quality.json"
+  B2_OUT=$(in_dry "$B2N" .code-quality.json)
+  assert_eq "[IN-B2] a nextjs config installs through npm" "yes" \
+    "$(u_has "$B2_OUT" "npm install --save-dev eslint")"
+  assert_eq "[IN-B2] and never reaches composer" "no" "$(u_has "$B2_OUT" "composer ")"
+  assert_eq "[IN-B2] and asks for no bin namespace, which npm has no mechanism for" "no" \
+    "$(u_has "$B2_OUT" "vendor-bin")"
+
+  # phpstan.level — the dimension the epic settled as the single source of truth.
+  # Asserted by PLACING the file, because the level is the one value the installer
+  # rewrites as a line rather than substituting as a token, and a token-only
+  # assertion would not exercise that path at all.
+  B2L="$TMP/in_b2_level"; in_project "$B2L" web
+  in_config drupal web false | jq -c '.phpstan.level = 8' > "$B2L/.code-quality.json"
+  in_place "$B2L" .code-quality.json > /dev/null
+  assert_eq "[IN-B2] the placed phpstan.neon carries the level the config chose" "yes" \
+    "$(u_has "$(cat "$B2L/phpstan.neon")" "level: 8")"
+  assert_eq "[IN-B2] and not the template's shipped default" "no" \
+    "$(u_has "$(grep -vE '^\s*#' "$B2L/phpstan.neon")" "level: 5")"
+  # The template's own literal is still 5, so template and config default agree and
+  # neither can drift without somebody editing a pinned assertion.
+  assert_eq "[IN-B2] while the shipped template still reads 5" "yes" \
+    "$(u_has "$(grep -vE '^\s*#' "${SKILLROOT}/templates/drupal/phpstan.neon")" "level: 5")"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

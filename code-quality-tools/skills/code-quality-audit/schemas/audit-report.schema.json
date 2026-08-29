@@ -75,15 +75,28 @@
         },
         "coverage_score": {
           "type": "string",
-          "enum": ["pass", "warning", "fail", "unknown"]
+          "enum": ["pass", "warning", "fail", "unknown", "skipped", "unmeasured", "partial"],
+          "description": "A per-gate verdict, copied from that gate's own report. skipped = a tool was absent; unmeasured = the path or file list was not there; partial = a --changed set was only partly on disk. None of the three is a pass, and full-audit.sh caps the overall verdict on any of them."
         },
         "solid_score": {
           "type": "string",
-          "enum": ["pass", "warning", "fail", "unknown"]
+          "enum": ["pass", "warning", "fail", "unknown", "skipped", "unmeasured", "partial"],
+          "description": "A per-gate verdict, copied from that gate's own report. skipped = a tool was absent; unmeasured = the path or file list was not there; partial = a --changed set was only partly on disk. None of the three is a pass, and full-audit.sh caps the overall verdict on any of them."
+        },
+        "lint_score": {
+          "type": "string",
+          "enum": ["pass", "warning", "fail", "unknown", "skipped", "unmeasured", "partial"],
+          "description": "A per-gate verdict, copied from that gate's own report. skipped = a tool was absent; unmeasured = the path or file list was not there; partial = a --changed set was only partly on disk. None of the three is a pass, and full-audit.sh caps the overall verdict on any of them."
+        },
+        "security_score": {
+          "type": "string",
+          "enum": ["pass", "warning", "fail", "unknown", "skipped", "unmeasured", "partial"],
+          "description": "A per-gate verdict, copied from that gate's own report. skipped = a tool was absent; unmeasured = the path or file list was not there; partial = a --changed set was only partly on disk. None of the three is a pass, and full-audit.sh caps the overall verdict on any of them."
         },
         "dry_score": {
           "type": "string",
-          "enum": ["pass", "warning", "fail", "unknown"]
+          "enum": ["pass", "warning", "fail", "unknown", "skipped", "unmeasured", "partial"],
+          "description": "A per-gate verdict, copied from that gate's own report. skipped = a tool was absent; unmeasured = the path or file list was not there; partial = a --changed set was only partly on disk. None of the three is a pass, and full-audit.sh caps the overall verdict on any of them."
         },
         "critical_issues": {
           "type": "integer",

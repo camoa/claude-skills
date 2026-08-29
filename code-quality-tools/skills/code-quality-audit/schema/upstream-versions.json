@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "_comment": [
+    "What upstream published, per package, at the date recorded on that package's row.",
+    "",
+    "This file exists because an upstream version is the one claim this repo cannot settle",
+    "offline. Everything else `make claims` checks is an in-repo authority disagreeing with",
+    "an in-repo claim; a version is a fact about somebody else's release, so it is recorded",
+    "here with the date it was read and re-read on demand by `check-claims.sh --upstream`.",
+    "CI never fetches: a check that needs the network is a check that fails on a green tree",
+    "when the network is down.",
+    "",
+    "The PHP-ecosystem version table in references/tool-comparison.md is GENERATED from this",
+    "file joined to schema/tool-catalog.json — package and constraint come from the catalog,",
+    "version and PHP requirement come from here. That join is what makes criterion 9 a",
+    "comparison rather than a reading: the constraint in the table is the constraint the",
+    "installer resolves, not a second copy of it.",
+    "",
+    "`checked` is per package and never per table. A heading date invites exactly the drift",
+    "it was supposed to record: `## Tool Versions (December 2025)` stood over two rows that",
+    "had gone wrong, and nothing said which rows had been re-read.",
+    "",
+    "Every value below was fetched from https://repo.packagist.org/p2/<package>.json on the",
+    "date on its row. `php` is the package's own `require.php`, verbatim.",
+    "",
+    "Packages not in the catalog appear here when the docs make a claim about them:",
+    "mglaman/drupal-check and pheromone/phpcs-security-audit are both named in prose that",
+    "used to call them abandoned, and `abandoned` is a Composer field this file records",
+    "rather than a judgement the prose makes."
+  ],
+
+  "packages": {
+    "phpstan/phpstan": {
+      "version": "2.2.9",
+      "released": "2026-08-22",
+      "php": "^7.4|^8.0",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "phpstan/extension-installer": {
+      "version": "1.4.3",
+      "released": "2024-09-04",
+      "php": "^7.2 || ^8.0",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "mglaman/phpstan-drupal": {
+      "version": "2.1.2",
+      "released": "2026-08-13",
+      "php": "^8.1",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "The PHP floor moved to 8.1 in the 2.1 line. A prior reading of this row as PHP 7.4+ was wrong; 2.1.2's own require.php is ^8.1."
+    },
+    "phpstan/phpstan-deprecation-rules": {
+      "version": "2.0.5",
+      "released": "2026-07-22",
+      "php": "^7.4 || ^8.0",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "drupal/coder": {
+      "version": "9.0.1",
+      "released": "2026-06-21",
+      "php": ">=7.4",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "9.0.1 requires squizlabs/php_codesniffer ^4.0.1, which is why the constraint and the lint gate's exit-code handling move together. Drupal contribution work pins ^8.3 instead, tracking drupal/core-dev; see the catalog's constraint_reason."
+    },
+    "palantirnet/drupal-rector": {
+      "version": "1.1.2",
+      "released": "2026-07-31",
+      "php": null,
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "Declares no require.php of its own; the floor comes from its dependencies."
+    },
+    "drupal/core-dev": {
+      "version": "11.4.5",
+      "released": "2026-08-06",
+      "php": null,
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "A metapackage locked to the site's Drupal minor, which is why the catalog constrains it with `*`. The version here is the newest published, not one this plugin asks for."
+    },
+    "roave/security-advisories": {
+      "version": null,
+      "released": null,
+      "php": null,
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "Has no tagged release by design: the package IS the dev-master branch, rebuilt as advisories land. A null version is the fact, not a gap in this file."
+    },
+    "phpro/grumphp": {
+      "version": "2.23.0",
+      "released": "2026-07-22",
+      "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "phpmd/phpmd": {
+      "version": "2.15.0",
+      "released": "2023-12-11",
+      "php": ">=5.3.9",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "Not marked abandoned on Packagist, and 2.7 years without a release. Both facts are recorded; neither is a judgement. The table prints the release date for that reason."
+    },
+    "systemsdk/phpcpd": {
+      "version": "9.0.0",
+      "released": "2026-03-08",
+      "php": ">=8.4",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "The maintained fork of the archived sebastian/phpcpd. 9.0.0 raised the floor to PHP 8.4; the 8.3 line requires 8.3."
+    },
+    "yousha/php-security-linter": {
+      "version": "3.1.8.6",
+      "released": "2026-08-17",
+      "php": ">=8.2",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "vimeo/psalm": {
+      "version": "6.16.1",
+      "released": "2026-03-19",
+      "php": "~8.1.31 || ~8.2.27 || ~8.3.16 || ~8.4.3 || ~8.5.0",
+      "abandoned": false,
+      "checked": "2026-08-28"
+    },
+    "mglaman/drupal-check": {
+      "version": "1.5.0",
+      "released": "2024-08-14",
+      "php": "^7.2.5|^8.0",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "Not installed by this plugin, and recorded because the docs make a claim about it. 1.5.0's require block pins mglaman/phpstan-drupal ^1.0.0 and phpstan/phpstan-deprecation-rules ^1.0.0, and names phpstan/phpstan nowhere in require. PHPStan 1.x arrives transitively: phpstan-drupal 1.3.9 requires phpstan/phpstan ^1.12. Not abandoned on Packagist and not archived on GitHub (checked 2026-08-28)."
+    },
+    "pheromone/phpcs-security-audit": {
+      "version": "2.0.1",
+      "released": "2019-08-05",
+      "php": ">=5.4",
+      "abandoned": false,
+      "checked": "2026-08-28",
+      "note": "Recorded for the same reason as drupal-check: the docs named it abandoned and Packagist does not. Seven years without a release is the fact that stands."
+    }
+  }
+}

@@ -27,9 +27,9 @@ $ /code-quality-tools:security
   → security-report.json written (same run directory)
 ```
 
-Reports land outside the repository being audited, because they quote its source and name the files a secret scanner matched in. The run prints where it wrote; `--latest` on the resolver finds it again.
+Reports land outside the repository being audited, because they quote its source and name the files a secret scanner matched in. The run prints where it wrote, and `--latest` on the resolver finds it again.
 
-Nothing here decided your architecture or waved off the one High finding. `/setup` detected the stack and asked before installing anything beyond the core toolchain; `/audit` told you which files multiple tools independently flagged, which is where the compounding risk usually lives; `/security` gave you a number, not a vibe. Full report shapes and the review-scoring rubric are in [docs/usage.md](docs/usage.md).
+Nothing here decided your architecture or waved off the one High finding. `/setup` detected the stack and asked before installing anything beyond the core toolchain. `/audit` told you which files multiple tools independently flagged, which is where the compounding risk usually lives. `/security` gave you a number, not a vibe. Full report shapes and the review-scoring rubric are in [docs/usage.md](docs/usage.md).
 
 ## When to reach for it
 
@@ -41,7 +41,7 @@ Nothing here decided your architecture or waved off the one High finding. `/setu
 
 ## Commands
 
-`/code-quality-tools:setup` detects your project type and installs the matching toolchain; every other command auto-detects too, so you never specify Drupal vs. Next.js yourself.
+`/code-quality-tools:setup` detects your project type and installs the matching toolchain. Every other command auto-detects too, so you never specify Drupal or Next.js yourself.
 
 | Command | Purpose |
 |---------|---------|
@@ -67,24 +67,37 @@ All commands are prefixed `code-quality-tools:`. Rubric scoring, the cross-tool 
 /plugin install code-quality-tools@camoa-skills
 ```
 
-Then run the setup wizard, which detects your project type and installs the right tools:
+Then run the setup wizard, which analyses your project, asks what you want, and writes
+`.code-quality.json`:
 
 ```
 /code-quality-tools:setup
 ```
+
+`.code-quality.json` is the contract. It records your layout, the tools to install and the
+scope each runs in, the PHPStan level, and whether git hooks are wanted. A deterministic
+script reads it to install, configure and verify. Nothing about the install is decided by
+prose. Commit it, and the next person gets the toolchain you got.
+
+Two things are worth knowing before you run it. **GrumPHP is optional.** It is installed
+only when you enable git hooks, because it writes a pre-commit hook into your repository.
+And the installer **verifies its own work and fails when it cannot**. It checks that phpcs
+registers the Drupal standard, that the PHPStan extension registered `mglaman`, and that a
+staged violation drives the hook to a non-zero exit. An install that cannot fail tells you
+nothing, so this one exits non-zero rather than reporting a pass it did not earn.
 
 Or install manually.
 
 **Drupal (via DDEV):**
 ```bash
 ddev composer require --dev \
-  phpstan/phpstan \
-  phpmd/phpmd \
-  systemsdk/phpcpd \
-  vimeo/psalm \
-  drupal/coder \
+  phpstan/phpstan:^2.0 \
+  phpmd/phpmd:^2.15 \
+  systemsdk/phpcpd:^9.0 \
+  vimeo/psalm:^6.0 \
+  drupal/coder:^9.0 \
   drupal/security_review \
-  roave/security-advisories
+  roave/security-advisories:dev-master
 ```
 
 **Next.js:**
@@ -115,7 +128,7 @@ npm install --save-dev \
 
 ## Where this fits in defense-in-depth
 
-This plugin is the whole-codebase, CI-grade SAST stage. It is one layer among several Claude Code already gives you, not a replacement for the others: **security-guidance** (a separate plugin, offered during `/setup`) watches Claude's own edits in-session; native `/security-review` is a one-shot, diff-scoped pass; **Code Review** (`/code-review ultra`) covers the PR with full-codebase context. This plugin adds the framework-aware, multi-tool SAST and the OWASP-mapped debate none of the others run:
+This plugin is the whole-codebase, CI-grade SAST stage. It is one layer among several Claude Code already gives you, not a replacement for the others: **security-guidance** (a separate plugin, offered during `/setup`) watches Claude's own edits in-session. Native `/security-review` is a one-shot, diff-scoped pass. **Code Review** (`/code-review ultra`) covers the PR with full-codebase context. This plugin adds the framework-aware, multi-tool SAST and the OWASP-mapped debate none of the others run:
 
 **Drupal, 10 layers:** Drush `pm:security`, Composer audit, PHPCS security rules (OWASP/CIS), Psalm taint analysis (XSS/SQLi data flow), custom Drupal patterns (raw `db_query`, form/access-callback checks), Security Review module, Semgrep (20,000+ rules), Trivy, Gitleaks, Roave Security Advisories.
 

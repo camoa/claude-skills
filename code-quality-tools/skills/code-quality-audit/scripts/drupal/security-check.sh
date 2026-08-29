@@ -30,8 +30,15 @@ cqt_announce_report_dir
 # silently narrower scan later.
 # shellcheck source=../core/secret-scan.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/secret-scan.sh"
-DRUPAL_MODULES_PATH="${DRUPAL_MODULES_PATH:-web/modules/custom}"
-DRUPAL_THEMES_PATH="${DRUPAL_THEMES_PATH:-web/themes/custom}"
+
+# Where this project's custom code lives is answered in ONE place, for every gate. Both
+# of these used to default to a web/ literal here, which on a docroot-layout (Acquia)
+# project pointed every path-taking layer at directories detect-environment.sh had
+# already ruled out — and, because the pattern layer is gated on the modules path
+# existing, silently removed it from the scan altogether.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
+cqt_resolve_drupal_paths
 
 # ── host filesystem vs container filesystem ───────────────────────────────────
 #
@@ -64,6 +71,18 @@ cqt_fetch_from_container() {
     [ -s "${dest}" ] || { rm -f "${dest}" 2>/dev/null; return 1; }
     return 0
 }
+
+# Somebody else's code, vendored into this tree — the list cqt_vendor_excludes publishes,
+# in the spelling semgrep takes. architecture/security-check.md committed this gate to
+# three exclusions and only the pattern greps shipped: the semgrep invocations carried
+# `--config=auto --json` and nothing else, so a node_modules bundle under a custom theme
+# produced findings attributed to this project on both the whole-tree and --changed paths.
+#
+# Built once, used at both call sites, so the two cannot drift.
+SEMGREP_EXCLUDES=()
+while IFS= read -r _cqt_ex; do
+    [ -n "$_cqt_ex" ] && SEMGREP_EXCLUDES+=("--exclude=${_cqt_ex}")
+done < <(cqt_vendor_excludes)
 
 # Serialise a bash array to a JSON string array (empty array → []).
 to_json_array() {
@@ -278,17 +297,40 @@ if [ -n "$CHANGED_FILE" ]; then
     # PHP/Twig extensions for SAST
     LINTABLE_EXTS="\.php$|\.module$|\.inc$|\.install$|\.profile$|\.theme$|\.engine$|\.twig$|\.js$"
 
-    # Filter: keep relevant extensions, exclude vendor/core/contrib
+    # What is not this project's code, expressed against THIS project's layout. The list
+    # used to name web/core/, web/themes/contrib/ and web/modules/contrib/ — the same
+    # literal that was replaced in lint-check.sh and solid-check.sh, left in place here.
+    # On an Acquia project every changed path begins docroot/, so nothing matched and
+    # Drupal core was handed to semgrep and the pattern layer as custom code. The core
+    # prefix now comes from the resolved Drupal root, and everything else is matched
+    # wherever it appears in the path rather than at one layout's spelling of it.
+    CHANGED_ROOT_PREFIX="$(cqt_drupal_root_prefix)"
+    [ -n "$CHANGED_ROOT_PREFIX" ] && CHANGED_ROOT_PREFIX="${CHANGED_ROOT_PREFIX}/"
+    CHANGED_EXCLUDE_RE="^(vendor/|${CHANGED_ROOT_PREFIX}core/)|(^|/)(vendor|node_modules|bower_components|contrib)/"
+
+    # Filter: keep relevant extensions, exclude vendor/core/contrib, and keep only what
+    # is actually on disk.
+    #
+    # The on-disk filter is the same one lint-check.sh and solid-check.sh carry, and for
+    # the same reason: semgrep, php-security-linter and the pattern greps are all handed
+    # these paths directly and none of them can report on a file that is not there. A
+    # changed set of deleted files used to reach them as nonexistent paths, and their
+    # empty output was read exactly the way a clean scan is.
     RELEVANT_FILES=()
+    MISSING_FILES=()
     while IFS= read -r f; do
         [ -z "$f" ] && continue
         if ! echo "$f" | grep -qE "$LINTABLE_EXTS"; then
             continue
         fi
-        if echo "$f" | grep -qE '^(vendor/|web/core/|.*/(contrib)/|web/themes/contrib/|web/modules/contrib/)'; then
+        if echo "$f" | grep -qE "$CHANGED_EXCLUDE_RE"; then
             continue
         fi
-        RELEVANT_FILES+=("$f")
+        if [ -e "$f" ]; then
+            RELEVANT_FILES+=("$f")
+        else
+            MISSING_FILES+=("$f")
+        fi
     done < "$CHANGED_FILE"
 
     # Composer files in changed set — triggers composer audit
@@ -304,6 +346,47 @@ if [ -n "$CHANGED_FILE" ]; then
     # Advisory-layer skip note (recorded in messages[])
     ADVISORY_SKIP_NOTE="Advisory layers (drush pm:security, Psalm taint, Trivy, Security Review, Gitleaks, Roave) are whole-project scans — skipped under --changed mode. Run the full security-check.sh without --changed for a complete audit."
 
+    CHANGED_MISSING_JSON=$(printf '%s\n' "${MISSING_FILES[@]+"${MISSING_FILES[@]}"}" \
+        | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+
+    # Named PHP files, none of them on disk. The gate was ASKED about them and cannot
+    # answer, which is not the same question as a docs-only diff — and the branch below
+    # answered both with a clean skip and exit 0. Every SAST layer here reads the file
+    # list directly, so with nothing on disk all three had no ground: that is what
+    # tools_unmeasured records, and it is the field the --changed branch declared and
+    # never wrote.
+    if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "${#MISSING_FILES[@]}" -gt 0 ] \
+       && [ "$HAS_COMPOSER" = false ]; then
+        cqt_unmeasured "every SAST-eligible file in the changed set is missing from disk — security was NOT checked" \
+            "${MISSING_FILES[@]}"
+        jq -n \
+            --arg note "$ADVISORY_SKIP_NOTE" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg status "${CQT_STATUS_UNMEASURED}" \
+            --argjson missing "$CHANGED_MISSING_JSON" \
+            '{
+                meta: {
+                    timestamp: $ts,
+                    scan_type: "security_audit_changed",
+                    mode: "changed",
+                    tools_run: [],
+                    tools_absent: [],
+                    tools_failed: [],
+                    tools_unmeasured: ["semgrep","php-security-linter","custom_patterns"],
+                    paths_missing: $missing,
+                    tools_skipped: ["drush_pm_security","composer_audit","psalm_taint","security_review","trivy","gitleaks","roave"]
+                },
+                summary: {
+                    overall_status: $status,
+                    total_issues: 0,
+                    by_severity: {critical:0,high:0,medium:0,low:0}
+                },
+                messages: [$note],
+                issues: []
+            }' > "${REPORT_DIR}/security-report.json"
+        exit "$CQT_EXIT_UNMEASURED"
+    fi
+
     if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "$HAS_COMPOSER" = false ]; then
         echo -e "${GREEN}[SKIP]${NC} No relevant files in the changed set — clean skip."
         jq -n \
@@ -315,6 +398,10 @@ if [ -n "$CHANGED_FILE" ]; then
                     scan_type: "security_audit_changed",
                     mode: "changed",
                     tools_run: [],
+                    tools_absent: [],
+                    tools_failed: [],
+                    tools_unmeasured: [],
+                    paths_missing: [],
                     tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"]
                 },
                 summary: {
@@ -346,6 +433,12 @@ if [ -n "$CHANGED_FILE" ]; then
     # Tool-availability tracking: which SAST analyzers ran vs were absent.
     # absence ≠ failure; if NO analyzer runs the gate verdict is "skipped" (exit 0).
     SKIPPED_TOOLS=()
+    # Layers whose TOOL was present but whose GROUND was not there. Distinct from both
+    # neighbours: absent = not installed (a fact about the machine, expected, does not
+    # move the verdict); failed = ran and returned nothing usable; unmeasured = never
+    # asked, because the path it would have read does not exist. Filing the third under
+    # the first is what let an audit of no custom code at all report a pass.
+    UNMEASURED_TOOLS=()
     # The tools that were never installed. Most analyzers here are optional by design and
     # missing on a normal machine, so their absence is expected and must NOT bear on the
     # verdict: treating "never installed" as failed coverage would put every real run at
@@ -386,10 +479,12 @@ if [ -n "$CHANGED_FILE" ]; then
             if [ "$SEMGREP_RUNNER" = "container" ]; then
                 # shellcheck disable=SC2046
                 ddev exec semgrep scan --config=auto --json \
+                    "${SEMGREP_EXCLUDES[@]}" \
                     "${RELEVANT_FILES[@]}" > "$SEMGREP_JSON" 2>/dev/null
             else
                 # shellcheck disable=SC2046
                 semgrep scan --config=auto --json \
+                    "${SEMGREP_EXCLUDES[@]}" \
                     "${RELEVANT_FILES[@]}" > "$SEMGREP_JSON" 2>/dev/null
             fi
             SEMGREP_EXIT=$?
@@ -440,9 +535,18 @@ if [ -n "$CHANGED_FILE" ]; then
         # No eligible files is a real non-result and has to land in a bucket like any
         # other, or a scan that examined nothing reports the same "pass" as one that
         # examined everything. Expected, so it does not move the verdict.
-        echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
-        SKIPPED_TOOLS+=("semgrep")
-        ABSENT_TOOLS+=("semgrep")
+        if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+            # The tool may well be here; the GROUND is not. Three different findings,
+            # and filing this one under "absent" is what let a changed set of deleted
+            # files read as expected coverage.
+            echo -e "  ${YELLOW}[UNMEASURED]${NC} the changed files are not on disk — Semgrep had nothing to read"
+            SKIPPED_TOOLS+=("semgrep")
+            UNMEASURED_TOOLS+=("semgrep")
+        else
+            echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
+            SKIPPED_TOOLS+=("semgrep")
+            ABSENT_TOOLS+=("semgrep")
+        fi
     fi
 
     # =====================
@@ -503,9 +607,18 @@ if [ -n "$CHANGED_FILE" ]; then
             ABSENT_TOOLS+=("php-security-linter")
         fi
     else
-        echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
-        SKIPPED_TOOLS+=("php-security-linter")
-        ABSENT_TOOLS+=("php-security-linter")
+        if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+            # The tool may well be here; the GROUND is not. Three different findings,
+            # and filing this one under "absent" is what let a changed set of deleted
+            # files read as expected coverage.
+            echo -e "  ${YELLOW}[UNMEASURED]${NC} the changed files are not on disk — php-security-linter had nothing to read"
+            SKIPPED_TOOLS+=("php-security-linter")
+            UNMEASURED_TOOLS+=("php-security-linter")
+        else
+            echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
+            SKIPPED_TOOLS+=("php-security-linter")
+            ABSENT_TOOLS+=("php-security-linter")
+        fi
     fi
 
     # =====================
@@ -567,9 +680,18 @@ if [ -n "$CHANGED_FILE" ]; then
             echo -e "  ${GREEN}No custom pattern violations${NC}"
         fi
     else
-        echo -e "  ${YELLOW}No SAST-eligible files — skipping custom patterns${NC}"
-        SKIPPED_TOOLS+=("custom_patterns")
-        ABSENT_TOOLS+=("custom_patterns")
+        if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+            # The tool may well be here; the GROUND is not. Three different findings,
+            # and filing this one under "absent" is what let a changed set of deleted
+            # files read as expected coverage.
+            echo -e "  ${YELLOW}[UNMEASURED]${NC} the changed files are not on disk — custom patterns had nothing to read"
+            SKIPPED_TOOLS+=("custom_patterns")
+            UNMEASURED_TOOLS+=("custom_patterns")
+        else
+            echo -e "  ${YELLOW}No SAST-eligible files — skipping custom patterns${NC}"
+            SKIPPED_TOOLS+=("custom_patterns")
+            ABSENT_TOOLS+=("custom_patterns")
+        fi
     fi
 
     # =====================
@@ -669,8 +791,12 @@ if [ -n "$CHANGED_FILE" ]; then
     # union is "everything this scan did not cover".
     SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
     ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+    UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
+    # Three disjoint sets, the same arithmetic the standard path uses: everything that
+    # recorded a skip, minus the two kinds that have a name for why.
     FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
-        --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+        --argjson absent "$ABSENT_TOOLS_JSON" \
+        --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
     FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
     if [ "$RAN_ANALYZERS" -eq 0 ]; then
@@ -678,6 +804,21 @@ if [ -n "$CHANGED_FILE" ]; then
     else
         OVERALL_STATUS=$(resolve_security_status \
             "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
+    fi
+
+    # A layer that was never asked CAPS a would-be pass, exactly as it does on the
+    # standard path.
+    if [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ] \
+       && { [ "$OVERALL_STATUS" = "pass" ] || [ "$OVERALL_STATUS" = "skipped" ]; }; then
+        OVERALL_STATUS="${CQT_STATUS_UNMEASURED}"
+    fi
+
+    # A PARTIALLY MEASURABLE SET: some of the named files were read and some are not on
+    # disk. The verdict for that shape, and why it is neither 0 nor 4 nor a failure, is
+    # recorded once in lint-check.sh's --changed branch. Last, so a real finding is never
+    # softened into a coverage note.
+    if [ "${#MISSING_FILES[@]}" -gt 0 ] && [ "$OVERALL_STATUS" = "pass" ]; then
+        OVERALL_STATUS="partial"
     fi
 
     REPORT_FILE="${REPORT_DIR}/security-report.json"
@@ -692,6 +833,8 @@ if [ -n "$CHANGED_FILE" ]; then
         --argjson analyzers_ran "$RAN_ANALYZERS" \
         --argjson tools_absent "$ABSENT_TOOLS_JSON" \
         --argjson tools_failed "$FAILED_TOOLS_JSON" \
+        --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
+        --argjson paths_missing "$CHANGED_MISSING_JSON" \
         --arg advisory_note "$ADVISORY_SKIP_NOTE" \
         '{
             meta: {
@@ -702,6 +845,8 @@ if [ -n "$CHANGED_FILE" ]; then
                 tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
                 tools_absent: $tools_absent,
                 tools_failed: $tools_failed,
+                tools_unmeasured: $tools_unmeasured,
+                paths_missing: $paths_missing,
                 tools_skipped: ["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"]
             },
             summary: {
@@ -736,7 +881,15 @@ if [ -n "$CHANGED_FILE" ]; then
     echo -e "Low:      ${LOW_COUNT}"
     echo ""
 
-    if [ "$OVERALL_STATUS" = "skipped" ]; then
+    if [ "$OVERALL_STATUS" = "${CQT_STATUS_UNMEASURED}" ]; then
+        echo -e "${YELLOW}[UNMEASURED]${NC} $(echo "$UNMEASURED_TOOLS_JSON" | jq -r 'join(", ")') had nothing to read — security was NOT verified for the changed set"
+        echo -e "Report: ${REPORT_FILE}"
+        exit "$CQT_EXIT_UNMEASURED"
+    elif [ "$OVERALL_STATUS" = "partial" ]; then
+        echo -e "${YELLOW}[PARTIAL]${NC} No findings in what was read, but ${#MISSING_FILES[@]} changed file(s) were not on disk — coverage is incomplete"
+        echo -e "Report: ${REPORT_FILE}"
+        exit "$CQT_EXIT_WARNING"
+    elif [ "$OVERALL_STATUS" = "skipped" ]; then
         if [ "$RAN_ANALYZERS" -eq 0 ]; then
             echo -e "${YELLOW}[SKIP]${NC} No security SAST analyzers available (all tools absent) — gate skipped"
         else
@@ -787,6 +940,32 @@ SKIPPED_TOOLS=()
 # absence expected. drush pm:security and composer audit have no absent branch at all
 # (DDEV is a hard prerequisite here), so a failure in either is correctly a failure.
 ABSENT_TOOLS=()
+
+# Layers whose TOOL was present but whose GROUND was not. See the note in the --changed
+# branch: absent, failed and unmeasured are three different findings, and only the first
+# is allowed not to move the verdict.
+UNMEASURED_TOOLS=()
+
+# The custom-code paths that are actually there, and the ones that are not. Resolved
+# once, here, and read by every layer below that takes a path — so a themes directory
+# this project does not have cannot take the modules scan down with it, and an absent
+# modules directory cannot silently remove the pattern layer.
+SEC_SCAN_PATHS=()
+SEC_MISSING_PATHS=()
+for sec_candidate in "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}"; do
+    [ -n "$sec_candidate" ] || continue
+    if [ "$(cqt_scan_path_state "$sec_candidate")" = "ok" ]; then
+        SEC_SCAN_PATHS+=("$sec_candidate")
+    else
+        SEC_MISSING_PATHS+=("$sec_candidate")
+    fi
+done
+SEC_MODULES_STATE="$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")"
+
+# Trees that are somebody else's code, vendored into this one. The Next.js gates already
+# exclude these; the Drupal pattern greps did not, so a node_modules tree under a custom
+# theme produced findings attributed to this project.
+SEC_GREP_EXCLUDES=(--exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=bower_components)
 
 
 echo -e "${BLUE}[1/10]${NC} Checking Drupal security advisories..."
@@ -950,10 +1129,19 @@ echo -e "${BLUE}[3/10]${NC} Running PHPCS security linter (OWASP/CIS)..."
 # =====================
 PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
 
-if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+if ddev exec test -f vendor/bin/php-security-linter &> /dev/null && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
+    # The tool is installed and there is nothing for it to read. Not "absent" — that is
+    # a fact about the machine and is allowed not to move the verdict — and not a
+    # failure either, because it never ran.
+    cqt_unmeasured "php-security-linter was not run: no custom code path exists" \
+        "${SEC_MISSING_PATHS[@]+"${SEC_MISSING_PATHS[@]}"}"
+    SKIPPED_TOOLS+=("php-security-linter")
+    UNMEASURED_TOOLS+=("php-security-linter")
+    PHPCS_ISSUES="[]"
+elif ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
     set +e
     ddev exec vendor/bin/php-security-linter scan \
-        "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" \
+        "${SEC_SCAN_PATHS[@]}" \
         --format=json \
         2>/dev/null > "$PHPCS_SECURITY_JSON"
     PHPCS_SEC_EXIT=$?
@@ -1011,6 +1199,30 @@ PSALM_TAINT_JSON="${REPORT_DIR}/security/psalm-taint.json"
 if ddev exec test -f vendor/bin/psalm &> /dev/null; then
     # Check if psalm.xml exists, if not create minimal config
     if ! ddev exec test -f psalm.xml &> /dev/null; then
+        # The heredoc STAYS QUOTED — it is XML, and an unquoted one would have the shell
+        # interpret it — so the resolved paths cannot be interpolated into it. They go in
+        # as placeholders and one substitution pass afterwards.
+        #
+        # TWO ARTIFACTS, ONE FILENAME. templates/drupal/psalm.xml is a different file:
+        # cqt-install.sh places it at install time, only when psalm is in the config's
+        # tools, and it carries an <autoloader> and the same ignore list. This heredoc is
+        # what a project that never ran /code-quality-tools:setup gets, written by the
+        # gate at scan time. Neither is dead — they cover disjoint cases — and both have
+        # to carry the exclusions, because a project only ever has one of them.
+        #
+        # This file outlives the run that wrote it: it is created only when the project
+        # has none, and found on every later run. A layout literal baked in here
+        # therefore keeps psalm pointed at directories that do not exist long after the
+        # gate itself has been fixed, and the taint layer analyses nothing for as long
+        # as the file survives.
+        #
+        # A path containing a double quote would break the XML attribute, so it is
+        # refused rather than written. The same guard rector-fix.sh applies for a
+        # single quote in generated PHP.
+        if [ "${DRUPAL_MODULES_PATH}" != "${DRUPAL_MODULES_PATH//\"/}" ] \
+           || [ "${DRUPAL_THEMES_PATH}" != "${DRUPAL_THEMES_PATH//\"/}" ]; then
+            echo -e "  ${YELLOW}[SKIP]${NC} psalm.xml not generated: a custom path contains a double quote"
+        else
         echo -e "  ${YELLOW}Creating minimal psalm.xml${NC}"
         cat > psalm.xml <<'EOF'
 <?xml version="1.0"?>
@@ -1022,14 +1234,36 @@ if ddev exec test -f vendor/bin/psalm &> /dev/null; then
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
 >
     <projectFiles>
-        <directory name="web/modules/custom" />
-        <directory name="web/themes/custom" />
+        <directory name="@CQT_MODULES@" />
+        <directory name="@CQT_THEMES@" />
         <ignoreFiles>
+            <!--
+              Somebody else's code, vendored into this tree. `vendor` alone left psalm
+              analysing every bundled dependency under a custom module or theme and
+              attributing what it found to this project — and this file outlives the run
+              that wrote it, so it kept doing so long after the gate was fixed. The same
+              list the placed templates/drupal/psalm.xml carries; see the note above the
+              heredoc on why these are two different artifacts.
+            -->
             <directory name="vendor" />
+            <directory name="@CQT_MODULES@/*/vendor" />
+            <directory name="@CQT_THEMES@/*/vendor" />
+            <directory name="@CQT_MODULES@/*/node_modules" />
+            <directory name="@CQT_THEMES@/*/node_modules" />
         </ignoreFiles>
     </projectFiles>
 </psalm>
 EOF
+        # `|` as the sed delimiter, because the values are paths and contain `/`.
+        # `g`: the placeholders now appear more than once each (projectFiles and
+        # ignoreFiles), and a substitution without it would leave the ignore list naming
+        # a literal @CQT_MODULES@ directory that exists nowhere.
+        sed -i.cqtbak \
+            -e "s|@CQT_MODULES@|${DRUPAL_MODULES_PATH}|g" \
+            -e "s|@CQT_THEMES@|${DRUPAL_THEMES_PATH}|g" \
+            psalm.xml
+        rm -f psalm.xml.cqtbak
+        fi
     fi
 
     set +e
@@ -1132,12 +1366,16 @@ echo -e "${BLUE}[5/10]${NC} Checking custom Drupal security patterns..."
 # =====================
 CUSTOM_ISSUES="[]"
 
-# SQL Injection patterns
-if [ -d "${DRUPAL_MODULES_PATH}" ]; then
+# SQL Injection patterns.
+#
+# Gated per PATH rather than all-or-nothing on the modules directory. The |raw check
+# reads BOTH paths, so a project with themes and no custom modules had its Twig
+# templates silently dropped from the scan along with everything else.
+if [ "$SEC_MODULES_STATE" = "ok" ]; then
     # Unsafe db_query usage. The pattern matches interpolation inside a double-quoted
     # first argument, or concatenation onto it, so the safe placeholder-array form
     # (db_query('... :id', [':id' => $id])) no longer counts as a finding.
-    DB_QUERY_UNSAFE=$(grep -rEHn 'db_query([^"]*"[^"]*\$|.*\.[[:space:]]*\$)' "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" --include="*.inc" 2>/dev/null || true)
+    DB_QUERY_UNSAFE=$(grep -rEHn 'db_query([^"]*"[^"]*\$|.*\.[[:space:]]*\$)' "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" --include="*.inc" "${SEC_GREP_EXCLUDES[@]}" 2>/dev/null || true)
     if [ -n "$DB_QUERY_UNSAFE" ]; then
         DB_ISSUES=$(pattern_issues "$DB_QUERY_UNSAFE" \
             "SQL Injection Risk" "high" \
@@ -1151,23 +1389,8 @@ if [ -d "${DRUPAL_MODULES_PATH}" ]; then
         fi
     fi
 
-    # Twig |raw filter. Kept as a basic-regex grep: under -E the '|' would be alternation.
-    RAW_FILTER=$(grep -rHn "|raw" "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" --include="*.twig" 2>/dev/null || true)
-    if [ -n "$RAW_FILTER" ]; then
-        RAW_ISSUES=$(pattern_issues "$RAW_FILTER" \
-            "XSS Risk" "medium" \
-            "Use of |raw filter may expose XSS vulnerabilities" \
-            "A03:2021" "Remove |raw or ensure input is sanitized")
-        RAW_COUNT=$(echo "$RAW_ISSUES" | jq 'length')
-        if [ "$RAW_COUNT" -gt 0 ]; then
-            echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter in Twig${NC}"
-            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
-            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$RAW_ISSUES" '. + $add')
-        fi
-    fi
-
     # unserialize() on user input
-    UNSERIALIZE=$(grep -rHn "unserialize.*\$_" "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" 2>/dev/null || true)
+    UNSERIALIZE=$(grep -rHn "unserialize.*\$_" "${DRUPAL_MODULES_PATH}" --include="*.php" --include="*.module" "${SEC_GREP_EXCLUDES[@]}" 2>/dev/null || true)
     if [ -n "$UNSERIALIZE" ]; then
         UNSER_ISSUES=$(pattern_issues "$UNSERIALIZE" \
             "Insecure Deserialization" "high" \
@@ -1182,15 +1405,37 @@ if [ -d "${DRUPAL_MODULES_PATH}" ]; then
     fi
 fi
 
-if [ ! -d "${DRUPAL_MODULES_PATH}" ]; then
-    # The pattern layer scanned nothing because the configured path does not exist —
-    # an empty site, or DRUPAL_MODULES_PATH pointing somewhere wrong. Either way it
-    # produced no coverage and must say so instead of contributing a silent zero.
-    # Recorded as expected: a site with no custom modules is a legitimate setup, so
-    # this is visible in tools_absent without moving the verdict.
-    echo -e "  ${YELLOW}[SKIP]${NC} ${DRUPAL_MODULES_PATH} does not exist — no custom code scanned"
+# The Twig layer reads whichever of the two paths is there. Its own gate, because a
+# theme-only project is a legitimate shape and its templates are custom code.
+if [ "${#SEC_SCAN_PATHS[@]}" -gt 0 ]; then
+    # Twig |raw filter. Kept as a basic-regex grep: under -E the '|' would be alternation.
+    RAW_FILTER=$(grep -rHn "|raw" "${SEC_SCAN_PATHS[@]}" --include="*.twig" "${SEC_GREP_EXCLUDES[@]}" 2>/dev/null || true)
+    if [ -n "$RAW_FILTER" ]; then
+        RAW_ISSUES=$(pattern_issues "$RAW_FILTER" \
+            "XSS Risk" "medium" \
+            "Use of |raw filter may expose XSS vulnerabilities" \
+            "A03:2021" "Remove |raw or ensure input is sanitized")
+        RAW_COUNT=$(echo "$RAW_ISSUES" | jq 'length')
+        if [ "$RAW_COUNT" -gt 0 ]; then
+            echo -e "  ${YELLOW}Found ${RAW_COUNT} uses of |raw filter in Twig${NC}"
+            MEDIUM_COUNT=$((MEDIUM_COUNT + RAW_COUNT))
+            CUSTOM_ISSUES=$(echo "$CUSTOM_ISSUES" | jq --argjson add "$RAW_ISSUES" '. + $add')
+        fi
+    fi
+fi
+
+if [ "$SEC_MODULES_STATE" != "ok" ]; then
+    # The pattern layer scanned no PHP because the configured path does not exist — an
+    # empty site, or DRUPAL_MODULES_PATH pointing somewhere wrong. It produced no
+    # coverage and must say so instead of contributing a silent zero.
+    #
+    # This used to be recorded in tools_absent, which is documented as "expected, does
+    # not move the verdict" — so a run that read none of the project's custom code
+    # reported a pass. It is unmeasured: the check was there, the ground was not.
+    cqt_unmeasured "the custom modules path is not there — no custom PHP was scanned" \
+        "${DRUPAL_MODULES_PATH}"
     SKIPPED_TOOLS+=("custom_patterns")
-    ABSENT_TOOLS+=("custom_patterns")
+    UNMEASURED_TOOLS+=("custom_patterns")
 elif [ "$CUSTOM_ISSUES" = "[]" ]; then
     echo -e "  ${GREEN}No custom pattern violations${NC}"
 fi
@@ -1265,15 +1510,22 @@ elif command -v semgrep &> /dev/null; then
     SEMGREP_RUNNER="host"
 fi
 
-if [ -n "$SEMGREP_RUNNER" ]; then
+if [ -n "$SEMGREP_RUNNER" ] && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
+    cqt_unmeasured "semgrep was not run: no custom code path exists" \
+        "${SEC_MISSING_PATHS[@]+"${SEC_MISSING_PATHS[@]}"}"
+    SKIPPED_TOOLS+=("semgrep")
+    UNMEASURED_TOOLS+=("semgrep")
+elif [ -n "$SEMGREP_RUNNER" ]; then
     set +e
     # Run Semgrep with auto config (includes security rules)
     if [ "$SEMGREP_RUNNER" = "container" ]; then
         ddev exec semgrep scan --config=auto --json \
-            "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" > "$SEMGREP_JSON" 2>/dev/null
+            "${SEMGREP_EXCLUDES[@]}" \
+            "${SEC_SCAN_PATHS[@]}" > "$SEMGREP_JSON" 2>/dev/null
     else
         semgrep scan --config=auto --json \
-            "${DRUPAL_MODULES_PATH}" "${DRUPAL_THEMES_PATH}" > "$SEMGREP_JSON" 2>/dev/null
+            "${SEMGREP_EXCLUDES[@]}" \
+            "${SEC_SCAN_PATHS[@]}" > "$SEMGREP_JSON" 2>/dev/null
     fi
     SEMGREP_EXIT=$?
     set -e
@@ -1887,12 +2139,24 @@ ISSUES=$(jq -n \
 # union is "everything this scan did not cover".
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
+# Three disjoint sets now, and the failed one is still derived rather than listed by
+# hand: everything that recorded a skip, minus the two kinds with a name for why.
 FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
-    --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+    --argjson absent "$ABSENT_TOOLS_JSON" \
+    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
 FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
 OVERALL_STATUS=$(resolve_security_status \
     "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
+
+# A layer that was never asked CAPS a would-be pass, and does not touch a real finding.
+# Ten layers run here; two absent paths must not erase the eight that produced results,
+# and must not let the two that did not produce a clean bill of health either.
+if [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ] \
+   && { [ "$OVERALL_STATUS" = "pass" ] || [ "$OVERALL_STATUS" = "skipped" ]; }; then
+    OVERALL_STATUS="${CQT_STATUS_UNMEASURED}"
+fi
 
 # =====================
 # Generate final report
@@ -1909,6 +2173,7 @@ jq -n \
     --argjson issues "$ISSUES" \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
+    --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
     --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
@@ -1917,6 +2182,7 @@ jq -n \
             tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
             tools_absent: $tools_absent,
             tools_failed: $tools_failed,
+            tools_unmeasured: $tools_unmeasured,
             secret_scan: $secret_scan
         },
         summary: {
@@ -1948,7 +2214,15 @@ echo -e "Medium:   ${MEDIUM_COUNT}"
 echo -e "Low:      ${LOW_COUNT}"
 echo ""
 
-if [ "$OVERALL_STATUS" = "skipped" ]; then
+if [ "$OVERALL_STATUS" = "${CQT_STATUS_UNMEASURED}" ]; then
+    # NOT exit 0, unlike "skipped". A layer that was never asked is a configuration fact
+    # about the project, and a caller with only the exit code — a standalone run, or
+    # AIDA's /validate-* wrappers — reads a zero as a pass. 4, never 3, which already
+    # means the installed tree does not match composer.lock.
+    echo -e "${YELLOW}⚠ Security audit incomplete — $(echo "$UNMEASURED_TOOLS_JSON" | jq -r 'join(", ")') had nothing to read${NC}"
+    echo -e "Report: ${REPORT_FILE}"
+    exit "$CQT_EXIT_UNMEASURED"
+elif [ "$OVERALL_STATUS" = "skipped" ]; then
     # Zero findings, but the scan did not cover its ground. Exits 0 like the pass it
     # would otherwise have been — the consequence is carried by the status, which
     # full-audit.sh reads from the report and does not count as a produced result.

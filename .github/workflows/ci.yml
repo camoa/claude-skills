@@ -98,7 +98,7 @@ jobs:
       - name: Install the claude CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      # The five checks below each run even when an earlier one failed, so a
+      # The checks below each run even when an earlier one failed, so a
       # single run reports every problem instead of stopping at the first.
       # `make ci` aggregates the same way, which is what keeps the promise in
       # CLAUDE.md that `make ci` is the same as the PR check.
@@ -109,6 +109,22 @@ jobs:
       - name: Check command output sections
         if: ${{ !cancelled() }}
         run: make outputs
+
+      # setup.md's tool inventory is generated from the catalog. This fails when
+      # the two disagree, and separately when the region no longer matches the
+      # checksum on its own end marker — the state a hand edit inside the markers
+      # produces.
+      - name: Check the generated setup.md region
+        run: make setup-doc-check
+
+      # Compares a claim recorded in code-quality-tools/ against the in-repo file that
+      # is the authority for it. Offline by design: check-claims.sh --upstream re-reads
+      # Packagist and is never run here, because a check that needs the network fails a
+      # green tree when the network is down. It exits 4, not 0, when a rule compared
+      # nothing.
+      - name: Check documented claims
+        if: ${{ !cancelled() }}
+        run: make claims
 
       - name: Check shell scripts
         if: ${{ !cancelled() }}

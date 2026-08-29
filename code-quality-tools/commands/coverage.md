@@ -79,6 +79,11 @@ Based on detection result, executes:
 ## Output
 
 - JSON report: `$REPORT_DIR/coverage-report.json`
+
+`.measured` is `false` when the scanned path does not exist, with `.reason` and
+`.paths_missing[]` saying which one. `.line_coverage` is still `0` in that case — the
+schema types it as a number — so a consumer that reads the percentage alone cannot tell a
+real 0% from a directory nobody looked at. Read `.measured` first.
 - HTML/raw coverage: `$REPORT_DIR/coverage/`
 
 `$REPORT_DIR` is announced by the script on start; it is not inside the audited repository.

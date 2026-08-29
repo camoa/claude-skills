@@ -1,14 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  PHPUnit configuration for Drupal custom modules
-  Copy to project root and adjust paths as needed
+  PHPUnit configuration for Drupal custom modules.
+
+  Placed at the project root by scripts/core/cqt-install.sh, which substitutes
+  {{WEB_ROOT_PREFIX}} and {{MODULES_PATH}} from project.layout in .code-quality.json. The
+  tokens sit in attribute and element VALUES, so this file still parses as XML with
+  them in place and can be linted in the repo unsubstituted.
+
+  {{WEB_ROOT_PREFIX}} is the JOINED prefix - "web/", "docroot/", or empty on a
+  root-layout project - computed once by the installer rather than assembled here out
+  of a web root and a slash. Assembling it per template is how a root-layout project
+  gets "/core/tests/bootstrap.php", an absolute path into the filesystem root.
 
   Usage:
     ddev exec php -d pcov.enabled=1 vendor/bin/phpunit
+
+  NO REPORT PATHS. The <coverage><report> and <logging> blocks this file used to carry
+  named reports/coverage/ and reports/junit.xml, inside the repository. They are
+  REMOVED rather than repointed at the resolved report directory, because PHPUnit runs
+  in the DDEV web container and no host path is valid there: a resolved host path would
+  be as wrong as the hardcoded one. coverage-report.sh:69-99 already reached this and
+  passes the coverage-clover flag to a container-local stage instead, and a CLI report flag
+  overrides the XML anyway. <source> below stays, and it is what actually scopes
+  coverage, so nothing about the gates changes. Nothing in this plugin reads
+  reports/junit.xml.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-         bootstrap="web/core/tests/bootstrap.php"
+         bootstrap="{{WEB_ROOT_PREFIX}}core/tests/bootstrap.php"
          colors="true"
          beStrictAboutTestsThatDoNotTestAnything="true"
          beStrictAboutOutputDuringTests="true"
@@ -20,7 +39,7 @@
         <ini name="memory_limit" value="512M"/>
         <env name="SIMPLETEST_BASE_URL" value="http://localhost"/>
         <env name="SIMPLETEST_DB" value="mysql://db:db@db/db"/>
-        <env name="BROWSERTEST_OUTPUT_DIRECTORY" value="/var/www/html/web/sites/simpletest/browser_output"/>
+        <env name="BROWSERTEST_OUTPUT_DIRECTORY" value="/var/www/html/{{WEB_ROOT_PREFIX}}sites/simpletest/browser_output"/>
 
         <!-- Symfony deprecation handling -->
         <env name="SYMFONY_DEPRECATIONS_HELPER" value="weak"/>
@@ -29,59 +48,42 @@
     <testsuites>
         <!-- Unit tests - fastest, no database -->
         <testsuite name="unit">
-            <directory>web/modules/custom/*/tests/src/Unit</directory>
+            <directory>{{MODULES_PATH}}/*/tests/src/Unit</directory>
         </testsuite>
 
         <!-- Kernel tests - has container, database -->
         <testsuite name="kernel">
-            <directory>web/modules/custom/*/tests/src/Kernel</directory>
+            <directory>{{MODULES_PATH}}/*/tests/src/Kernel</directory>
         </testsuite>
 
         <!-- Functional tests - full Drupal bootstrap -->
         <testsuite name="functional">
-            <directory>web/modules/custom/*/tests/src/Functional</directory>
+            <directory>{{MODULES_PATH}}/*/tests/src/Functional</directory>
         </testsuite>
 
         <!-- JavaScript functional tests -->
         <testsuite name="functional-javascript">
-            <directory>web/modules/custom/*/tests/src/FunctionalJavascript</directory>
+            <directory>{{MODULES_PATH}}/*/tests/src/FunctionalJavascript</directory>
         </testsuite>
 
         <!-- All tests -->
         <testsuite name="all">
-            <directory>web/modules/custom/*/tests/src</directory>
+            <directory>{{MODULES_PATH}}/*/tests/src</directory>
         </testsuite>
     </testsuites>
 
     <!-- Source code to analyze for coverage -->
     <source>
         <include>
-            <directory suffix=".php">web/modules/custom</directory>
+            <directory suffix=".php">{{MODULES_PATH}}</directory>
         </include>
         <exclude>
             <!-- Exclude test files -->
-            <directory>web/modules/custom/*/tests</directory>
+            <directory>{{MODULES_PATH}}/*/tests</directory>
             <!-- Exclude .module files (procedural) -->
-            <file>web/modules/custom/*/*.module</file>
+            <file>{{MODULES_PATH}}/*/*.module</file>
             <!-- Exclude install files -->
-            <file>web/modules/custom/*/*.install</file>
+            <file>{{MODULES_PATH}}/*/*.install</file>
         </exclude>
     </source>
-
-    <!-- Coverage report configuration -->
-    <coverage>
-        <report>
-            <!-- Console output -->
-            <text outputFile="php://stdout" showOnlySummary="true"/>
-            <!-- XML for CI tools -->
-            <clover outputFile="reports/coverage/clover.xml"/>
-            <!-- HTML for manual review -->
-            <html outputDirectory="reports/coverage/html"/>
-        </report>
-    </coverage>
-
-    <!-- Logging -->
-    <logging>
-        <junit outputFile="reports/junit.xml"/>
-    </logging>
 </phpunit>

@@ -90,17 +90,28 @@ switch ($entity->getEntityTypeId()) {
 
 | Tool | Check | Threshold |
 |------|-------|-----------|
-| PHPStan Level 8 | Return type violations | 0 errors |
-| PHPStan Level 8 | Parameter type violations | 0 errors |
+| PHPStan (gate level) | Return type violations | 0 errors |
+| PHPStan (gate level) | Parameter type violations | 0 errors |
 | Psalm Level 1 | Covariance/contravariance | 0 errors |
+
+**"Gate level" is the level `solid-check.sh` actually ran at, and it is recorded as
+`phpstan_level` in `solid-report.json` — read it there rather than from this page.** The
+gate passes `--configuration` when a `phpstan.neon` or `phpstan.neon.dist` is in the
+project root and takes the level from that file; with none placed it passes `--level 5`,
+the value `templates/drupal/phpstan.neon` ships. This table used to name 8, which no run
+of the gate has ever used. Return and parameter type violations are levels 6-8 material,
+so a project that wants them has to raise the level in its own config; the gate reports
+which level answered, and never silently falls back to phpstan's built-in 0.
 
 ### Commands
 
 ```bash
-# PHPStan strict type checking
+# PHPStan, run by hand. The level comes from .code-quality.json's phpstan.level, the
+# one source of truth; raise it there if you want 6-8 strictness, rather than passing a
+# number here that disagrees with what the gate runs.
 ddev exec vendor/bin/phpstan analyse \
     web/modules/custom \
-    --level=8 \
+    --level="$(jq -r '.phpstan.level' .code-quality.json)" \
     --error-format=json
 ```
 
@@ -197,7 +208,6 @@ interface ContentManagerInterface {
 |------|-----------|----------|
 | phpstan-drupal | Static `\Drupal::service()` | Warning |
 | phpstan-drupal | Static `\Drupal::entityTypeManager()` | Warning |
-| drupal-check | Deprecated service usage | Critical |
 | PHPMD | StaticAccess rule | Warning |
 
 ### Commands
@@ -208,11 +218,10 @@ ddev exec grep -rn "\\\\Drupal::" web/modules/custom \
     --include="*.php" \
     --exclude-dir=tests
 
-# drupal-check deprecations
-ddev exec vendor/bin/drupal-check web/modules/custom
-
-# PHPStan with Drupal rules
-ddev exec vendor/bin/phpstan analyse web/modules/custom --level=8
+# PHPStan with Drupal rules, by hand. The gate takes its level from your phpstan.neon
+# when you have one, and reports it as phpstan_level.
+ddev exec vendor/bin/phpstan analyse web/modules/custom \
+    --level="$(jq -r '.phpstan.level' .code-quality.json)"
 ```
 
 ### Bad Pattern (Static calls)
