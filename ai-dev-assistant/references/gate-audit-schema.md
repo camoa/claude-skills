@@ -772,12 +772,12 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 |---|---|---|
 | `phase` | yes | Always `"implement"`. |
 | `verdict` | yes | The rung's overall answer. `critical` iff any component blocked and was not overridden; `unresolved` iff any component or the alignment axis came back undetermined and none blocked. |
-| `components[]` | yes | One row per component actually critiqued. May be empty when `verdict` is `skipped`. |
-| `components_declared` | yes | How many components the architecture declares. |
-| `components_critiqued` | yes | How many got a critique. |
-| `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. |
-| `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. |
-| `contract` | yes | Required as of v5.34.0. `{baseline, changed[], reason}` from `contract-baseline.sh diff` — whether `alignment.md` / `architecture/` were amended during the build, against a baseline frozen at Runtime Step 11. `reason` is required when `changed[]` is non-empty; `baseline` is `captured` (frozen before any code), `late` (taken after the build began, which passes only with a `reason` — for a task that predates the mechanism), or anything else, which is fail-closed since a build that never froze the contract cannot say whether it changed. |
+| `components[]` | yes | One row per component actually critiqued. May be empty when `verdict` is `skipped`. Each row carries `runtime` (v5.35.2+): `executed` \| `static_only` \| `not_run`, with a non-empty `runtime_reason` for the last two. A row that cannot say whether its code ever ran is fail-closed. |
+| `components_declared` | yes | How many components the architecture declares. An integer, or the array of component names whose length is that count (v5.35.1+); any other shape is fail-closed. |
+| `components_critiqued` | yes | How many got a critique. Same two shapes. |
+| `uncritiqued[]` | yes | `{component, reason}` for every declared component with no critique. Empty array when there are none. **Every entry must carry a non-empty `reason` (v5.35.1+)**; an entry without one, or a bare string in place of the object, is fail-closed. |
+| `alignment` | yes | The `spec-axis-reviewer` result, or `{verdict: "skipped", reason}`. When the axis ran, it also carries `criteria_unverifiable[]` (v5.35.2+, required): `{criterion, reason, what_would_verify}` for every success criterion that NO test at the levels this design chose can verify. An empty array is the positive claim that every criterion has something shipped that could prove it; absence is fail-closed. Distinct from `criteria_not_implemented`, which means the code is not written yet. |
+| `contract` | yes | Required as of v5.34.0. `{baseline, changed[], reason}` from `contract-baseline.sh diff` — whether `alignment.md` / `architecture/` were amended during the build, against a baseline frozen at Runtime Step 11. `reason` is required when `changed[]` is non-empty. As of v5.35.1 the gate re-runs `contract-baseline.sh diff` itself and fails when `changed[]` disagrees with what the baseline on disk reports, so the count cannot be written down rather than measured; the measured set is what the `reason` requirement keys on. `baseline` is `captured` (frozen before any code), `late` (taken after the build began, which passes only with a `reason` — for a task that predates the mechanism), or anything else, which is fail-closed since a build that never froze the contract cannot say whether it changed. |
 | `rounds[]` | no | v5.35.0+. One entry per critique round: `{round, wo, tier, overall, blocking, lenses, headline}`. Absent means one round. May also carry `resolution` (the escalation decision for that round), `repair_growth` `{net_lines, reason}` — net lines against the previous round's checkpoint, a reason required when positive — and `deferred[]` `{finding, blocked_on, why_now_is_wrong}` for findings only a later component can answer. A deferral with no `blocked_on` is fail-closed. |
 | `escalation` | conditional | v5.35.0+. `{reason}`. **Required once any component's `rounds` reaches 3** — who decided to continue and why. Absent past the threshold is fail-closed. |
 | `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. |
@@ -814,7 +814,9 @@ enforcement rationale and the who-runs-the-test-by-`run_mode` rule: `references/
 them must be itemised.** A rung that critiqued three of seven components and recorded only
 its three green rows is a record that cannot say what it did not look at — the exact
 failure shape this schema keeps closing elsewhere. `uncritiqued[]` is what makes a partial
-run legible instead of letting it read as a complete one.
+run legible instead of letting it read as a complete one, and as of v5.35.1 each of its
+entries owes a reason, because until then the gate said "left uncritiqued with reasons" and
+read none of them.
 
 **`verdict: "skipped"`** is legitimate in exactly two cases, each carrying its reason in
 the payload: an empty change set, or a task with no architecture file (no design phase).

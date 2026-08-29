@@ -44,14 +44,14 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # A payload satisfying every key the schema marks required for build-critique.
 GOOD='{"phase":"implement","verdict":"pass",
- "components":[{"component":"main","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
+ "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline":"captured","changed":[]},
  "integration":{"ran":false,"reason":"single-component fixture"},
- "alignment":{"verdict":"pass","missing_requirements":[],"scope_creep":[],"spec_ref":null}}'
+ "alignment":{"verdict":"pass","missing_requirements":[],"scope_creep":[],"criteria_unverifiable":[],"spec_ref":null}}'
 
 mktask() { d="$T/$1"; mkdir -p "$d" >/dev/null 2>&1; printf '%s' "$d"; }
 

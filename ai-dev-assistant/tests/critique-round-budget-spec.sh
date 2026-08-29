@@ -39,7 +39,7 @@ GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncrit
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline":"captured","changed":[]},
  "integration":{"ran":false,"reason":"single-component fixture"},
- "components":[{"component":"a","blocking":false}]}'
+ "components":[{"component":"a","runtime":"executed","blocking":false}]}'
 
 mktask() { d="$T/$1"; mkdir -p "$d" >/dev/null 2>&1; printf '%s' "$d"; }
 
@@ -89,7 +89,7 @@ msg_lacks() { # msg_lacks <substring> <label>
 # ---------------------------------------------------- 1. under the limit, no rounds field
 
 D=$(mktask rounds_1)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]'
 run "$D"
 verdict_is pass "rounds:1 is under the limit and passes"
 unresolved_is false "rounds:1 is not unresolved"
@@ -97,7 +97,7 @@ rc_is 0 "rounds:1 exits 0"
 msg_lacks "or more critique rounds" "rounds:1 never mentions the round budget at all"
 
 D=$(mktask rounds_2)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]'
 run "$D"
 verdict_is pass "a single round is under the limit and passes"
 unresolved_is false "a single round is not unresolved"
@@ -105,7 +105,7 @@ rc_is 0 "a single round exits 0"
 msg_lacks "or more critique rounds" "a single round never mentions the round budget"
 
 D=$(mktask rounds_absent)
-write_record "$D" '.components=[{"component":"a","blocking":false}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false}]'
 run "$D"
 verdict_is pass "a component with no rounds key at all defaults to 1 and passes"
 unresolved_is false "a missing rounds key is not unresolved"
@@ -115,7 +115,7 @@ msg_lacks "or more critique rounds" "a missing rounds key never mentions the rou
 # ------------------------------------------- 2. at the limit, no escalation: hard fail
 
 D=$(mktask rounds_3_noesc)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":3}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":3}]'
 run "$D"
 verdict_is fail "rounds:3 with no escalation fails the gate"
 unresolved_is true "an unescalated round-budget breach is unresolved, not a clean fail"
@@ -126,7 +126,7 @@ msg_has "1 component(s) reached 2 or more critique rounds with no escalation rec
 # ------------------------------------------------ 3. past the limit, with escalation
 
 D=$(mktask rounds_4_esc)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":4}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":4}]
   | .escalation={"reason":"human confirmed a fourth round after the third fixed a shared helper both critics flagged"}'
 run "$D"
 verdict_is pass "rounds:4 with a recorded escalation reason passes"
@@ -138,7 +138,7 @@ msg_has "1 component(s) ran to 2 or more rounds; continuing was a recorded decis
 # ---------------------------------------------- 4. exactly at the limit, with escalation
 
 D=$(mktask rounds_3_esc)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":3}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":3}]
   | .escalation={"reason":"three rounds were each independently correct; keeping going was a deliberate call"}'
 run "$D"
 verdict_is pass "rounds:3 (the boundary itself) with a recorded reason passes"
@@ -150,8 +150,8 @@ msg_has "continuing was a recorded decision: three rounds were each independentl
 # ------------------------------ 5. multiple components, only one over budget: count named
 
 D=$(mktask rounds_mixed_one_over)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1},
-  {"component":"b","blocking":false,"rounds":3}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1},
+  {"component":"b","runtime":"executed","blocking":false,"rounds":3}]'
 run "$D"
 verdict_is fail "one over-budget component among several still fails"
 unresolved_is true "one over-budget component among several is still unresolved"
@@ -166,8 +166,8 @@ msg_has "1 component(s) reached 2 or more critique rounds with no escalation rec
 # script: ESC is read from `.escalation.reason` on PAYLOAD, never scoped per component.
 
 D=$(mktask rounds_all_over_one_reason)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":3},
-  {"component":"b","blocking":false,"rounds":5}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":3},
+  {"component":"b","runtime":"executed","blocking":false,"rounds":5}]
   | .escalation={"reason":"both stalled on the same root cause; one fix, reviewed once, cleared both"}'
 run "$D"
 verdict_is pass "two over-budget components clear on a single shared escalation reason"
@@ -184,7 +184,7 @@ msg_has "2 component(s) ran to 2 or more rounds; continuing was a recorded decis
 # assertion, not assumed from the script text.
 
 D=$(mktask rounds_esc_empty_reason)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":3}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":3}]
   | .escalation={"reason":""}'
 run "$D"
 verdict_is fail "an escalation object with an empty reason string is treated as no escalation"
@@ -199,14 +199,14 @@ msg_has "1 component(s) reached 2 or more critique rounds with no escalation rec
 # decision belongs with its round -- and this check originally demanded the other shape, so a
 # build that DID escalate and DID record the answer would have failed.
 D=$(mktask escalation_per_round)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":5}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
   | .rounds=[{"round":5,"resolution":"owner chose the bounded fix"}]'
 run "$D"
 verdict_is pass "a resolution on the round it settled satisfies the escalation requirement"
 rc_is 0 "a per-round resolution exits 0"
 
 D=$(mktask escalation_per_round_empty)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":5}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
   | .rounds=[{"round":5,"resolution":""}]'
 run "$D"
 verdict_is fail "an empty per-round resolution is no decision at all"
@@ -214,7 +214,7 @@ msg_has "no escalation recorded" "an empty resolution reads as unescalated"
 
 # ------------------------- 7c. the exact boundary: two rounds is at the limit
 D=$(mktask rounds_exactly_two)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":2}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2}]'
 run "$D"
 verdict_is fail "two rounds is AT the limit, not under it"
 msg_has "2 or more critique rounds" "the boundary case names the budget"
@@ -224,7 +224,7 @@ msg_has "2 or more critique rounds" "the boundary case names the budget"
 # the smallest fix, and every new mechanism was fresh attack surface. Growth is allowed;
 # unexamined growth is not.
 D=$(mktask growth_unjustified)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"repair_growth":{"net_lines":140}}]'
 run "$D"
 verdict_is fail "a repair round that grew the component with no reason fails"
@@ -233,20 +233,20 @@ rc_is 1 "unexplained repair growth exits 1"
 msg_has "grew the component with no reason recorded" "the message says what is missing"
 
 D=$(mktask growth_justified)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"reason":"the fix needed a new failure path"}}]'
 run "$D"
 verdict_is pass "growth passes once the round says why the minimum fix would not do"
 rc_is 0 "justified repair growth exits 0"
 
 D=$(mktask growth_negative)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"repair_growth":{"net_lines":-44}}]'
 run "$D"
 verdict_is pass "a repair that SHRANK the component needs no justification"
 
 D=$(mktask growth_zero)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"repair_growth":{"net_lines":0}}]'
 run "$D"
 verdict_is pass "a repair that changed no net lines needs no justification"
@@ -256,7 +256,7 @@ verdict_is pass "a repair that changed no net lines needs no justification"
 # components away. With nowhere to put it, a live build wrote a spec for the absent caller,
 # and that answer produced the next round's critical.
 D=$(mktask deferral_no_blocker)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller"}]}]'
 run "$D"
 verdict_is fail "a deferral naming no blocked_on fails"
@@ -264,7 +264,7 @@ unresolved_is true "an unanchored deferral is a could-not-tell"
 msg_has "name no blocked_on component" "the message says why the deferral is not acceptable"
 
 D=$(mktask deferral_good)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"deferred":[{"finding":"verify() has no production caller",
       "blocked_on":"drush-commands","why_now_is_wrong":"the caller is step 6 of the build order"}]}]'
 run "$D"
@@ -273,7 +273,7 @@ rc_is 0 "a well-formed deferral exits 0"
 msg_has "deferred to a component not yet built" "deferred findings are surfaced, not silently dropped"
 
 D=$(mktask deferral_empty_finding)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":1}]
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
   | .rounds=[{"round":1,"deferred":[{"finding":"","blocked_on":"drush-commands"}]}]'
 run "$D"
 verdict_is fail "a deferral with no finding text fails too"
@@ -287,7 +287,7 @@ verdict_is fail "a deferral with no finding text fails too"
 # happened. A count that is not a number is a malformed record, not a high one, so it is
 # rejected on its own terms and named as unreadable.
 D=$(mktask rounds_string_three)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":"3"}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":"3"}]'
 run "$D"
 verdict_is fail "rounds recorded as the STRING \"3\" is rejected rather than compared"
 unresolved_is true "an unreadable rounds count is a could-not-tell"
@@ -297,7 +297,7 @@ msg_lacks "reached 2 or more critique rounds" \
   "it never claims a round count it could not read"
 
 D=$(mktask rounds_string_word)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":"a"}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":"a"}]'
 run "$D"
 verdict_is fail "a rounds value of \"a\" is rejected too, not silently ranked above every number"
 msg_has "non-numeric rounds count" "the same message covers a non-numeric string"
@@ -305,7 +305,7 @@ msg_has "non-numeric rounds count" "the same message covers a non-numeric string
 # `null` is falsy to jq's `//`, so `.rounds // 1` on an explicit null defaults to 1, same as
 # an absent key: not over budget.
 D=$(mktask rounds_null)
-write_record "$D" '.components=[{"component":"a","blocking":false,"rounds":null}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":null}]'
 run "$D"
 verdict_is pass "rounds explicitly recorded as null defaults to 1 and passes, same as an absent key"
 unresolved_is false "a null rounds value is not unresolved"
@@ -316,7 +316,7 @@ msg_lacks "or more critique rounds" "a null rounds value never mentions the roun
 # budget, so a payload that violates both never reaches the round-budget code at all.
 
 D=$(mktask order_tdd_before_rounds)
-write_record "$D" 'del(.tdd) | .components=[{"component":"a","blocking":false,"rounds":9}]'
+write_record "$D" 'del(.tdd) | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":9}]'
 run "$D"
 verdict_is fail "a payload missing tdd AND over the round budget still fails"
 unresolved_is true "the double violation is unresolved"
@@ -336,7 +336,7 @@ N_MSGS=$(printf '%s' "$OUT" | jq -r '.messages|length')
 # so a payload that violates both reports the round-budget breach, not the missing contract.
 
 D=$(mktask order_rounds_before_contract)
-write_record "$D" 'del(.contract) | .components=[{"component":"a","blocking":false,"rounds":9}]'
+write_record "$D" 'del(.contract) | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":9}]'
 run "$D"
 verdict_is fail "a payload over the round budget AND missing its contract block still fails"
 unresolved_is true "the double violation is unresolved"

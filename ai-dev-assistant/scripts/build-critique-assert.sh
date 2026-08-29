@@ -117,8 +117,23 @@ if [ -e "$REC" ]; then
   set_ev blocking_components "$BLOCKING"
   BLOCKING_N=$(jq -r 'length' <<<"$BLOCKING")
 
-  DECLARED=$(jq -r '(.components_declared // -1)' <<<"$PAYLOAD")
-  CRITIQUED=$(jq -r '(.components_critiqued // -1)' <<<"$PAYLOAD")
+  # Both count fields reach this record in two shapes, and both are honest: a number, or the
+  # list of component names whose length IS the number. A live record wrote the list form, and
+  # every arithmetic test below then compared a pretty-printed JSON array against an integer --
+  # bash printed `integer expression expected` to stderr and evaluated the test FALSE. The
+  # casualty was the check directly beneath: a build that declared seven components and
+  # critiqued none could not fail it. Same shape as the `rounds`-as-string defect: a check
+  # keyed on a field whose type it assumed rather than established.
+  #
+  # A shape that is neither collapses to -1, which the omission check below already treats as
+  # a record that cannot say what it did not look at.
+  as_count() { # as_count <json value>
+    jq -r 'if type == "number" then .
+           elif type == "array" then length
+           else -1 end' <<<"${1:-null}" 2>/dev/null || printf '%s' -1
+  }
+  DECLARED=$(as_count "$(jq -c '(.components_declared // null)' <<<"$PAYLOAD")")
+  CRITIQUED=$(as_count "$(jq -c '(.components_critiqued // null)' <<<"$PAYLOAD")")
   UNCRIT_N=$(jq -r '(.uncritiqued // []) | length' <<<"$PAYLOAD")
   set_ev components_declared "$DECLARED"
   set_ev components_critiqued "$CRITIQUED"
@@ -179,7 +194,27 @@ if [ -e "$REC" ]; then
   fi
 
   if [ "$UNCRIT_N" -gt 0 ]; then
-    add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued with reasons"
+    # This line used to say "left uncritiqued with reasons" and nothing checked that a single
+    # one carried a reason. The claim was in the message, not in the code -- the same shape as
+    # every defect this rung was built to catch. An entry naming a component and saying nothing
+    # about why it was skipped is what a build produces when it decided not to critique
+    # something and would rather not say so. That decision is legitimate; leaving it unstated
+    # is what makes a partial run read like a complete one.
+    UNREASONED=$(jq -c \
+      '[(.uncritiqued // [])[]
+        | if type == "object"
+          then select(((.reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+               | (.component // "unnamed")
+          else tostring end]' \
+      <<<"$PAYLOAD" 2>/dev/null) || UNREASONED='[]'
+    UNREASONED_N=$(jq -r 'length' <<<"$UNREASONED" 2>/dev/null) || UNREASONED_N=0
+    if [ "$UNREASONED_N" -gt 0 ]; then
+      set_ev unreasoned_uncritiqued "$UNREASONED"
+      add_msg "$UNREASONED_N uncritiqued component(s) carry no reason: $UNREASONED"
+      add_msg "say why each was not critiqued; an unexplained gap is indistinguishable from one nobody noticed"
+      emit fail true "" 1
+    fi
+    add_msg "$CRITIQUED of $DECLARED component(s) critiqued; $UNCRIT_N left uncritiqued, each with a reason"
   fi
 
   # ------------------------------------------------------- the RED observation (v5.34.0+)
@@ -353,6 +388,92 @@ if [ -e "$REC" ]; then
     add_msg "$DEFERRED_N finding(s) deferred to a component not yet built; they carry forward rather than being answered speculatively"
   fi
 
+  # ------------------- can each criterion be verified by anything shipped? (v5.35.2+)
+  #
+  # `criteria_not_implemented` says a criterion has no code behind it yet. It was also being
+  # used for a different fact it cannot express: a criterion that no test at the level this
+  # design chose can verify AT ALL. Seen live: a criterion asserting a count of the site's
+  # actual content, against a test strategy that selected kernel tests, which run on an empty
+  # database and cannot observe it at any level of effort. Nothing surfaced that until a critic
+  # was briefed by hand at the end of the build, which is the most expensive moment to learn it
+  # and the furthest from the design decision that caused it.
+  #
+  # The two facts have opposite remedies -- one is "write the code", the other is "the plan for
+  # proving this is wrong" -- so they get separate fields. `criteria_unverifiable` is required
+  # whenever the alignment axis actually ran: an empty array is the positive claim that every
+  # criterion has something shipped that could verify it, which is an answer. Silence is not.
+  if [ "$ALIGN" != "" ] && [ "$ALIGN" != "skipped" ]; then
+    if ! jq -e '.alignment | has("criteria_unverifiable")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+      add_msg "the alignment block does not say whether any success criterion is unverifiable at the test levels this design chose"
+      add_msg "add criteria_unverifiable[] (empty asserts every criterion has something that could prove it)"
+      emit fail true "" 1
+    fi
+    CU_BAD=$(jq -c \
+      '[(.alignment.criteria_unverifiable // [])[]
+        | if type != "object" then {criterion:(tostring), why:"not an object"}
+          elif (((.criterion // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:"unnamed", why:"no criterion named"}
+          elif (((.reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:(.criterion | tostring), why:"no reason"}
+          elif (((.what_would_verify // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:(.criterion | tostring), why:"does not say what would verify it"}
+          else empty end]' \
+      <<<"$PAYLOAD" 2>/dev/null) || CU_BAD='[]'
+    CU_BAD_N=$(jq -r 'length' <<<"$CU_BAD" 2>/dev/null) || CU_BAD_N=0
+    if [ "$CU_BAD_N" -gt 0 ]; then
+      set_ev malformed_unverifiable "$CU_BAD"
+      add_msg "$CU_BAD_N unverifiable-criterion entr(ies) are incomplete: $CU_BAD"
+      add_msg "each needs criterion, reason, and what_would_verify; naming the gap without naming the fix leaves it where it was found"
+      emit fail true "" 1
+    fi
+    CU_N=$(jq -r '(.alignment.criteria_unverifiable // []) | length' <<<"$PAYLOAD" 2>/dev/null) || CU_N=0
+    if [ "$CU_N" -gt 0 ]; then
+      set_ev criteria_unverifiable "$CU_N"
+      add_msg "$CU_N criterion(a) cannot be verified at the test levels this design chose; each records what would verify it"
+    fi
+  fi
+
+  # ------------------------------------------- was the component ever RUN? (v5.35.2+)
+  #
+  # Every gate this rung fires can pass over code that has never been executed. Seen live: a
+  # Drush command class shipped with phpcs clean, phpstan clean and 58 kernel tests green,
+  # while its attribute discovery, option parsing and output were entirely unproven -- because
+  # installing the module to exercise the command would also have armed a cron hook that
+  # unpublishes site content. Declining to run it was the right call. The defect is that the
+  # decision lived in a chat window and the record said nothing, so `/review` would have gone
+  # green over a component nobody had run.
+  #
+  # This is deliberately NOT a demand that everything be executed. Static-only verification is
+  # legitimate and sometimes the only safe option. What is refused is leaving it unsaid: a row
+  # that cannot say whether its code ever ran is the same "could not tell" this gate refuses
+  # everywhere else.
+  RUNTIME_BAD=$(jq -c \
+    '[(.components // [])[]
+      | (.component // "unnamed") as $n
+      | (.runtime // null) as $r
+      | if $r == null then {component:$n, why:"no runtime field"}
+        elif ($r | type) != "string" then {component:$n, why:"runtime is not a string"}
+        elif ($r == "executed") then empty
+        elif ($r == "static_only" or $r == "not_run") then
+          (if (((.runtime_reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+           then {component:$n, why:("runtime " + $r + " with no runtime_reason")}
+           else empty end)
+        else {component:$n, why:("unknown runtime value: " + $r)}
+        end]' \
+    <<<"$PAYLOAD" 2>/dev/null) || RUNTIME_BAD='[]'
+  RUNTIME_BAD_N=$(jq -r 'length' <<<"$RUNTIME_BAD" 2>/dev/null) || RUNTIME_BAD_N=0
+  if [ "$RUNTIME_BAD_N" -gt 0 ]; then
+    set_ev runtime_unstated "$RUNTIME_BAD"
+    add_msg "$RUNTIME_BAD_N critiqued component(s) cannot say whether their code was ever run: $RUNTIME_BAD"
+    add_msg "each row needs runtime: executed | static_only | not_run, and a runtime_reason for the last two"
+    emit fail true "" 1
+  fi
+  STATIC_N=$(jq -r '[(.components // [])[] | select((.runtime // "") != "executed")] | length' <<<"$PAYLOAD" 2>/dev/null) || STATIC_N=0
+  if [ "$STATIC_N" -gt 0 ]; then
+    set_ev components_not_executed "$STATIC_N"
+    add_msg "$STATIC_N critiqued component(s) were verified without being executed; the reason is recorded on each row"
+  fi
+
   # ------------------------------------------------- the contract baseline (v5.34.0+)
   #
   # `meets-ac` and the alignment axis both judge the change against `alignment.md` and
@@ -388,6 +509,48 @@ if [ -e "$REC" ]; then
   CON_REASON=$(jq -r '(.reason // "") | tostring' <<<"$CON")
   [ "$CON_REASON" = "null" ] && CON_REASON=""
   set_ev contract "$CON"
+
+  # Re-derive rather than trust. `changed` describes something this plugin can measure, and it
+  # was reaching the record as a field an agent wrote. Seen live: a record asserting
+  # `changed: []` and, in the same object, a reason arguing at length that the empty diff was
+  # "true and meaningless" -- while `contract-baseline.sh diff` on that same folder returned
+  # `status: changed` and named two architecture files a later round had rewritten. Both the
+  # count and the argument built on it were wrong, and the check downstream of them (a change
+  # needs a reason) could not fire because the count it keys on said zero.
+  #
+  # So the count comes from disk. When the baseline is missing or the sibling script cannot
+  # run, this records `unavailable` and says so rather than inventing agreement -- the gate's
+  # own question is whether the build was challenged, and a broken install is not an answer
+  # to it either way.
+  CB_SCRIPT="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/contract-baseline.sh"
+  CON_RECHECK="unavailable"
+  DISK_DIFF='[]'
+  if [ -f "$CB_SCRIPT" ]; then
+    CB_OUT=$(bash "$CB_SCRIPT" diff "$TASK_DIR" 2>/dev/null) || CB_OUT=""
+    if [ -n "$CB_OUT" ] && jq -e 'type == "object"' >/dev/null 2>&1 <<<"$CB_OUT"; then
+      case "$(jq -r '(.status // "") | tostring' <<<"$CB_OUT")" in
+        changed|unchanged)
+          CON_RECHECK="measured"
+          DISK_DIFF=$(jq -c '((.changed // []) + (.added // []) + (.removed // [])) | sort' <<<"$CB_OUT")
+          ;;
+        *) CON_RECHECK="unresolved" ;;
+      esac
+    fi
+  fi
+  set_ev_s contract_recheck "$CON_RECHECK"
+  if [ "$CON_RECHECK" = "measured" ]; then
+    set_ev contract_changed_on_disk "$DISK_DIFF"
+    CLAIMED=$(jq -c 'sort' <<<"$CON_CHANGED" 2>/dev/null) || CLAIMED='[]'
+    if [ "$CLAIMED" != "$DISK_DIFF" ]; then
+      add_msg "the record says the contract files $CLAIMED changed during the build; the baseline on disk says $DISK_DIFF"
+      add_msg "re-run contract-baseline.sh diff and record what it returns, with a reason for each file"
+      emit fail true "" 1
+    fi
+    # From here the measured set is what the reason requirement keys on, so a record cannot
+    # under-report its way past it.
+    CON_CHANGED="$DISK_DIFF"
+    CON_N=$(jq -r 'length' <<<"$CON_CHANGED")
+  fi
 
   # `late` is the migration state: a task already building when this mechanism landed cannot
   # produce an honest baseline, because the contract has already moved under it. Failing it
