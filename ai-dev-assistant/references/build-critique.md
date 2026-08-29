@@ -35,6 +35,32 @@ and `scripts/wo-critique-aggregate.sh` for the verdict.
 A design that genuinely has one component gets one critique. A flat `architecture.md` with
 no component files is one unit named `main`.
 
+## Which build the record describes
+
+`build_identity` closes the rung. Three fields, written once when every component is done:
+
+- `head` — `git -C <codePath> rev-parse HEAD`
+- `files` — the sorted union of every component's realized file list
+- `files_digest` — `printf '%s' "$(printf '%s\n' <those files, sorted>)" | sha256sum | cut -d' ' -f1`
+
+`/review` recomputes that digest from the change set it resolved at step 4 and compares both
+halves. A mismatch means the critics reviewed a different build, and the gate fails naming the
+files no critic saw.
+
+It exists because the review prompt's `[r]` branch means exit, fix, re-run. Fixing is the point,
+so **every remediation produces a build the record predates.** Observed live: three hard-block
+gates failed, the operator chose `[r]`, eleven files changed including a deleted branch and a new
+fixture shape, and the re-run would have read the same record and passed — the gate that asks
+whether the build was challenged answering yes about the build before the fix.
+
+The shas were already here. Each component records its rev range at step 4 below, and that range
+sat in the record as prose nothing parsed. The fact was present and no code read it, which is the
+shape of nearly everything this gate has had to grow.
+
+After a remediation, re-run the rung over the delta — the same delta-scoping the later rounds
+already use — and write the record again. Both halves move together: a new critique and a new
+identity.
+
 ## The boundary problem, and the checkpoint
 
 The work-order loop hands each critic a `<before>..<after>` git rev range and gets both

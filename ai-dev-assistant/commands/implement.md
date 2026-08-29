@@ -259,8 +259,18 @@ Reached when the last component closes. All four parts are required.
    per round, a command-line argument is capped at 128 KB by the kernel, and past that the write
    dies with "argument list too long" before the script starts — taking the key-loss guard with
    it and leaving a hand edit as the only way to update the file, which is the exact rewrite that
-   guard refuses. Measured live at 136 KB on a nine-component build. **`components_declared`,
-   `components_critiqued` and
+   guard refuses. Measured live at 136 KB on a nine-component build.
+
+   **`build_identity` is required and says which build the critics saw.** Three fields:
+   `head` (`git -C <codePath> rev-parse HEAD` at the close of the rung), `files` (the sorted file
+   list handed to the critics), and `files_digest` (`printf '%s' "$(printf '%s\n' <sorted files>)"
+   | sha256sum`, the same digest `/review` recomputes). Without it the review gate cannot tell
+   whether this record describes the code under review, which is `unresolved` and fail-closed —
+   not a pass. It exists because `[r]` at the review prompt means exit, fix, re-run: every
+   remediation produces a build the record predates, and the gate that asks whether the build was
+   challenged would otherwise answer yes about the previous one.
+
+   **`components_declared`, `components_critiqued` and
    `uncritiqued[]` are all required and must be honest.** A rung that critiqued three of seven
    components and recorded only its three green rows is a record that cannot say what it did
    not look at. Every gap gets a `{component, reason}` row.

@@ -35,7 +35,39 @@
   is untouched and all 28 documented call sites still work; `/implement` step 12 and `/review`
   step 10, the two that write unbounded records, now document the file form.
 
+- **The build-critique gate now asks whether its record describes the code being reviewed.** Every
+  check it made was a question about the record — counts agree, gaps carry reasons, the contract
+  re-derived from disk. None was a question about the tree.
+
+  The review prompt's `[r]` branch turns that from a risk into a certainty. `[r]` means exit, fix,
+  re-run, so **every remediation produces a build the record predates.** Observed live: three
+  hard-block gates failed, the operator chose `[r]`, eleven files changed including a deleted
+  branch and a new test fixture, and the re-run would have read the same record and passed. The
+  gate whose question is "was this build challenged by something other than the context that built
+  it?" would have answered yes about the build before the fix.
+
+  The record already carried the shas. Each component's rev range sat in it as prose nothing
+  parsed — the fact present, no code reading it, which is the shape of most of what this gate has
+  had to grow.
+
+  New required `build_identity` `{head, files, files_digest}`, written once at the close of the
+  rung. `/review` recomputes the digest from the change set it resolved at step 4 and compares
+  both halves; a mismatch fails and names the files no critic saw. `review-change-set.sh` reports
+  `head` for that comparison, and `build-critique-assert.sh` takes `--change-set-file` so the gate
+  judges the reviewer's own change set rather than re-deriving one.
+
+  A record with no `build_identity` is `unresolved` and fail-closed. There is deliberately no
+  grandfather clause: a record that cannot say which build it describes is the exact state this
+  check exists to surface, and its age does not make it able to answer.
+
 ### Testing
+- New `tests/build-identity-spec.sh`, 19 assertions: a matching identity passes, file order is
+  irrelevant, an added file and a moved head each fail and name what moved, and absent, incomplete
+  or uncomparable each fail closed with distinguishable evidence. Removing the whole block turns
+  11 red; comparing only the head turns 3; letting an absent identity pass turns 1; removing all
+  three uncomparable guards turns 7.
+- The eight specs that build a `build-critique` fixture gained the field and pass the gate their
+  own change set, so each keeps testing the block it is named for.
 - `tests/phase-active-declaration-spec.sh` gains the check it was missing: every phase name a
   command actually passes to `phase-active-write.sh` must be a phase that script accepts. The
   name is read out of the command file rather than listed in the spec, so a new phase command is

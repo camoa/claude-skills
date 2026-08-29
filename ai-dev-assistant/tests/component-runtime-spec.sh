@@ -40,7 +40,7 @@ command -v jq >/dev/null 2>&1 || { printf 'FAIL: jq required\n' >&2; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # Baseline: one executed component, an alignment axis that ran and claims nothing unverifiable.
-GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
+GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
  "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline_status":"captured","changed":[]},
@@ -49,7 +49,13 @@ GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncrit
 
 mktask() { mktemp -d "$T/task.XXXXXX"; }
 write_record() { bash "$W" "$1" build-critique "$(printf '%s' "$GOOD" | jq -c "$2")" >/dev/null 2>&1; }
-run() { d="$1"; shift; set +e; OUT=$(bash "$G" "$d" "$@" 2>/dev/null); RC=$?; set -e; }
+# The build-critique gate compares the record's build_identity against the change set the caller
+# resolved. This spec is about a different block, so it hands the gate a change set that agrees
+# with GOOD's identity and keeps the subject of each case the thing it is named for.
+CSF="$(mktemp)"
+printf '%s' '{"schema_version":"1.0","base":"main","merge_base":"abc","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files":["src/A.php"],"untracked":[],"empty_reason":null,"warnings":[]}' > "$CSF"
+
+run() { d="$1"; shift; set +e; OUT=$(bash "$G" "$d" --change-set-file "$CSF" "$@" 2>/dev/null); RC=$?; set -e; }
 verdict_is() { V=$(printf '%s' "$OUT" | jq -r '.verdict'); [ "$V" = "$1" ] && pass_check "$2" || fail_check "$2 (verdict=$V)"; }
 rc_is() { [ "$RC" = "$1" ] && pass_check "$2" || fail_check "$2 (rc=$RC, wanted $1)"; }
 ev_is() { V=$(printf '%s' "$OUT" | jq -r --arg k "$1" '.evidence[$k] // "absent" | tostring'); [ "$V" = "$2" ] && pass_check "$3" || fail_check "$3 (evidence.$1=$V)"; }
