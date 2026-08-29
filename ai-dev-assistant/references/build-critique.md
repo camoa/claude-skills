@@ -92,7 +92,9 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    --label <component>.before`; keep the sha.
 2. Build the component.
 3. **When its acceptance criteria are built**, capture `--label <component>.after`.
-4. **Realize the file list.** `git -C <codePath> diff --name-only <before>..<after> >
+4. **Realize the file list**, scoped to THIS round. Round 1's base is `<component>.before`;
+   every later round's base is the **previous round's `.after`**, never the component base.
+   `git -C <codePath> diff --name-only <base-for-this-round>..<after> >
    <task_folder>/build-critique/<component>.files.txt`. The classifier takes a file list, not
    a rev range.
 5. **Tier.** `wo-risk-classify.sh --files-from <that file> --gate-floor
@@ -254,6 +256,91 @@ rule would have made the honest record a violation. A gate that punishes the tru
 teaches a builder to write a different one. As everywhere else in this rung, the gate checks
 that the question was answered, not that the answer is true. **Applies to the in-session build
 path only** — see below.
+
+## The round budget — two blocking rounds, then somebody decides
+
+`[a]ddress` starts a new round on the component. Nothing counted them, so the loop could run
+indefinitely and no artifact said whether it was converging.
+
+Live, one component ran four blocking rounds. Round 1 found a fixture that proved the inverse of
+its purpose. Round 2's critical was caused by round 1's repair. Round 3's two criticals were both
+caused by round 2's repair. Round 4 then proved the premise behind the round-3 cut was
+arithmetically false. Every round was individually correct — the critics found real defects and
+the builder fixed them — and the sequence as a whole was not converging. The builder stopped and
+asked the operator whether to continue, which was the right instinct arriving from nowhere: no
+rule told it to, and an unattended run has nobody to ask.
+
+At the second blocking round on one component, halt.
+
+| `run_mode` | What happens |
+|---|---|
+| `interactive` | Put it to the person: continue, cut scope, or accept and record a bypass |
+| `autonomous` | **HALT.** Never start a fourth round unattended |
+
+Record the outcome either as a top-level `escalation.reason` or as a `resolution` on the
+`rounds[]` entry it settled — the per-round form is the one a live build produced, and it is the
+better of the two, since a decision belongs with the round that provoked it. Keep a `rounds`
+count on each component row, and a `rounds[]` history of what each round found. Past the threshold the gate fails a record with no
+`escalation.reason`.
+
+**This caps unsupervised iteration, not quality.** A fourth round is a legitimate choice; an
+unrecorded fourth round is not. The reason is the same one the whole rung rests on: a builder that
+has been wrong twice running is the least reliable judge of whether the third attempt is
+different.
+
+**Why two and not three.** Measured on the run this rule came from: rounds 1 and 2 found real
+behavioural defects that no test caught and no amount of reading would have surfaced. Rounds 3, 4
+and 5 produced 58 findings between them and not one concerned a defect that pre-existed the
+round-1 and round-2 repairs. The value is front-loaded. Past that the loop audits its own repairs.
+
+## Each round reviews its own delta, not the whole component again
+
+Round 1's range is `<component>.before..<component>.after`. **Every later round's base is the
+previous round's `.after`.** A repair round that re-diffs from the component base hands three
+critics every line they already reviewed, and they find new things in old code every time, so
+findings accumulate instead of converging on what the repair actually changed.
+
+Measured on the run this rule came from: five rounds re-diffed the whole component from base and
+none came back clean. The sixth scoped to the delta and was the first non-blocking round of the
+six. The build's own orchestrator named it — "five rounds of critics re-reading already-reviewed
+code is a large part of why findings never converged."
+
+Keep each round's `.after` sha. It is the next round's base.
+
+**What this gives up, and nothing currently covers it.** A critic seeing only the delta cannot
+judge whether the repair fits the component as a whole, and no pass in this framework answers
+that: `wo-critic` only ever sees one unit's diff, on both build paths, while the alignment axis
+and the deterministic gates judge the whole change without an adversary. Delta-scoping trades a
+known cost — findings that never converge because every round re-reads reviewed code — for a
+gap that was already there. Do not read the trade as a transfer.
+
+## Repair the minimum, and defer what cannot be answered yet
+
+Two rules, one cause. The churn was never the critics.
+
+**Growth during repair.** Each round the builder answered a `concern` with new mechanism instead
+of the smallest fix, and every new mechanism was fresh attack surface. A method that did not
+exist before one round's repair collected 38 of the 58 findings raised in the three rounds after
+it; production code grew 72% across the loop while behaviour stopped changing after round 3.
+Record `repair_growth: {net_lines, reason}` on each repair round, measured against the previous
+round's checkpoint. Growth with no reason fails. Growth is allowed; unexamined growth is not.
+
+**Findings that cannot be answered yet.** "This method has no production caller" is true and
+unfixable when the caller is three components away. With nowhere to put it, the builder wrote a
+specification for the absent caller — and that answer produced the next round's critical, whose
+answer produced the round after. Three of the four unanswerable findings in that build were
+generated by trying to close the first one. A critic now reports these in `deferred[]` as
+`{finding, blocked_on, why_now_is_wrong}`. Deferred findings do not block and are re-checked when
+`blocked_on` is built. A deferral naming no `blocked_on` fails: a finding nobody will return to is
+a dropped finding wearing a label.
+
+Neither rule is machine-checkable as "was this minimal" or "was this premature". Both are
+checkable as "did you say so", which is the same standard the rest of this record holds.
+
+**What this cannot do.** It counts rounds, not progress — three rounds that each fix something
+real trip the same threshold as three that thrash. It reads `rounds` off the record, so a builder
+that runs four rounds and writes `1` defeats it, exactly like every other self-reported field
+here.
 
 ## The contract baseline — Runtime Step 11, before any code exists
 

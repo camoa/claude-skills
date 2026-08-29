@@ -54,6 +54,7 @@ GOOD='{"phase":"implement","verdict":"pass",
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline":"captured","changed":[]},
+ "integration":{"ran":false,"reason":"single-component fixture"},
  "alignment":{"verdict":"pass","missing_requirements":[],"scope_creep":[],"spec_ref":null}}'
 
 # ------------------------------------------------------------------ 1. the gate type is wired

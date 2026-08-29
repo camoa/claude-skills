@@ -142,7 +142,13 @@ AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePa
           --label <component>.after | jq -r .sha)
 
 # 2. the realized file list, which is what the classifier takes (it has no rev-range input)
-git -C <codePath> diff --name-only <before-sha>..$AFTER > "$CD/<component>.files.txt"
+# ROUND 1 diffs from <component>.before. EVERY LATER ROUND diffs from the PREVIOUS ROUND's
+# .after, not from the component base. A repair round that re-diffs the whole component hands
+# three critics ~670 lines they already reviewed, and they find new things in old code every
+# time — findings accumulate instead of converging. Measured live: five rounds re-diffed from
+# base and none was clean; the sixth scoped to the delta and was the first non-blocking round
+# of the six. Keep each round's .after sha; the next round's base is that sha.
+git -C <codePath> diff --name-only <base-for-this-round>..$AFTER > "$CD/<component>.files.txt"
 
 # 3. the tier. --gate-floor is REQUIRED here: there is no work-order file to read it from,
 #    and the classifier tiers everything high when both are missing.
@@ -159,7 +165,7 @@ security lens is guaranteed at `medium` and above, so executable code always get
 **5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
 **fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
 challenge. Give each the inputs the existing contract specifies: `<worktree>` = `codePath`,
-the `<before-sha>..$AFTER` range, the component's acceptance criteria as injected content, its
+the `<base-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
 lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
 `<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
 must not read an absent gate record as a clean one.
@@ -193,6 +199,33 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
 
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
+
+**The round budget (v5.35.0+): two blocking rounds on one component, then stop and ask.** Each
+`[a]ddress` starts a new round on that component, and a repair is itself unreviewed work — live,
+one component took four rounds and rounds 2 and 3 were each caused by the repair before them.
+Every round was individually correct while the sequence was not converging, and nothing said so.
+At the third blocking round, halt: in an attended run put the choice to the person (continue, cut
+scope, or accept and record a bypass); with `run_mode: autonomous` there is nobody to ask, so
+**HALT** rather than start a fourth. Record the outcome in the payload's `escalation.reason`,
+and carry a `rounds` count on each component row plus a `rounds[]` history of what each round
+found. Past the threshold the gate fails a record with no `escalation.reason`. This caps
+unsupervised iteration, not quality: a fourth round is fine, an unrecorded one is not. A builder
+wrong twice running is the least reliable judge of whether the third attempt differs.
+
+**Repair the minimum, and record it when you cannot.** The churn that made this budget necessary
+was not the critics: each round the builder answered a `concern` with new mechanism instead of
+the smallest fix, and every new mechanism was fresh attack surface. One method that did not exist
+before a round-2 repair collected 38 of the 58 findings raised in the three rounds after it.
+Measure each repair round against the previous round's checkpoint and record
+`repair_growth: {net_lines, reason}` on the round; growth with no reason fails the gate. Growth
+is allowed, unexamined growth is not.
+
+**A finding you cannot answer yet is deferred, not fixed speculatively.** When a critic reports
+something whose resolution lives in a component later in the build order, carry it in the round's
+`deferred[]` as `{finding, blocked_on, why_now_is_wrong}` rather than inventing a fix for absent
+code. In the same live build, answering one such finding produced the next round's critical and
+that answer produced the round after. Deferred findings do not block; they are re-checked when
+`blocked_on` is built.
 
 ### Runtime Step 12 — close the phase
 

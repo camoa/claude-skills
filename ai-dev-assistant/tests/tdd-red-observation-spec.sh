@@ -36,7 +36,8 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 # An otherwise-valid, otherwise-passing build-critique payload with no tdd block yet.
 GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
  "components":[{"component":"a","blocking":false}],
- "contract":{"baseline":"captured","changed":[]}}'
+ "contract":{"baseline":"captured","changed":[]},
+ "integration":{"ran":false,"reason":"single-component fixture"}}'
 
 mktask() { d="$T/$1"; mkdir -p "$d" >/dev/null 2>&1; printf '%s' "$d"; }
 
