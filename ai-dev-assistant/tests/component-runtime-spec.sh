@@ -41,6 +41,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # Baseline: one executed component, an alignment axis that ran and claims nothing unverifiable.
 GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
+ "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline_status":"captured","changed":[]},
  "alignment":{"verdict":"pass","missing_requirements":[],"criteria_unverifiable":[]},

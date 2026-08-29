@@ -388,6 +388,59 @@ if [ -e "$REC" ]; then
     add_msg "$DEFERRED_N finding(s) deferred to a component not yet built; they carry forward rather than being answered speculatively"
   fi
 
+  # ----------------------- the repair AFTER the last critique pass (v5.35.3+)
+  #
+  # The rung critiques a build and then the findings get repaired -- and on the path where the
+  # repair is the last thing that happens, nothing critiques it. Under per-component rounds the
+  # next round sees the repair. Under a single closing pass there is no next round, so the code
+  # that ships is not the code any critic read.
+  #
+  # This is not hypothetical and it is not rare. One live record invented
+  # `rung_resolution.closing_fixes_not_critiqued: true` because the situation existed and this
+  # schema had no field for it; that ad-hoc key appears nowhere in this plugin and nothing has
+  # ever read it. On the build that produced this rule, six fixes landed after all three lenses
+  # returned -- including a CRITICAL in the branch that decides whether published content gets
+  # unpublished, whose fix was written by the same agent that wrote the bug. The orchestrator
+  # dispatched a fresh-eyes verifier by hand, correctly, and nothing in the framework asked it
+  # to.
+  #
+  # `applied: 0` is a real answer and passes. What fails is a repair the critics never saw with
+  # nobody named as having checked it, because the author of a fix is the one person who cannot
+  # independently confirm it.
+  if ! jq -e 'has("closing_fixes")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+    set_ev_s closing_fixes "absent"
+    add_msg "the record cannot say whether anything was changed after the last critique pass"
+    add_msg "add closing_fixes {applied, verified_by, reason}; applied:0 is an answer"
+    emit fail true "" 1
+  fi
+  CF=$(jq -c '.closing_fixes' <<<"$PAYLOAD")
+  set_ev closing_fixes "$CF"
+  CF_N=$(jq -r 'if (.applied | type) == "number" then .applied else -1 end' <<<"$CF" 2>/dev/null) || CF_N=-1
+  if [ "$CF_N" = "-1" ]; then
+    add_msg "closing_fixes.applied is missing or not a number, so the record cannot say how much shipped uncritiqued"
+    emit fail true "" 1
+  fi
+  if [ "$CF_N" -gt 0 ]; then
+    CF_BY=$(jq -r '((.verified_by // "") | tostring | gsub("^\\s+|\\s+$"; ""))' <<<"$CF" 2>/dev/null) || CF_BY=""
+    CF_WHY=$(jq -r '((.reason // "") | tostring | gsub("^\\s+|\\s+$"; ""))' <<<"$CF" 2>/dev/null) || CF_WHY=""
+    if [ -z "$CF_BY" ]; then
+      add_msg "$CF_N fix(es) landed after the last critique pass and nobody is named as having checked them"
+      add_msg "name who verified the repair in verified_by, or record author/none with a reason"
+      emit fail true "" 1
+    fi
+    case "$CF_BY" in
+      author|none|self)
+        if [ -z "$CF_WHY" ]; then
+          add_msg "$CF_N closing fix(es) verified only by their author, with no reason recorded"
+          add_msg "the author of a fix cannot independently confirm it; say why no fresh context read it"
+          emit fail true "" 1
+        fi
+        add_msg "$CF_N closing fix(es) shipped without independent verification: $CF_WHY"
+        ;;
+      *) add_msg "$CF_N closing fix(es) landed after the critics and were verified by $CF_BY" ;;
+    esac
+  fi
+
   # ------------------- can each criterion be verified by anything shipped? (v5.35.2+)
   #
   # `criteria_not_implemented` says a criterion has no code behind it yet. It was also being

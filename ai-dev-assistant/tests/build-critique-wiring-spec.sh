@@ -52,6 +52,7 @@ GOOD='{"phase":"implement","verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],
+ "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline":"captured","changed":[]},
  "integration":{"ran":false,"reason":"single-component fixture"},
@@ -118,11 +119,14 @@ set -e
 # under test cannot notice the list shrinking. Each key is dropped from an otherwise complete
 # payload and the warning must name exactly that key.
 
-mkdir -p "$T/keys"
+# One folder PER KEY. Sharing a folder meant every iteration after the first was a REWRITE, and
+# since v5.35.3 a rewrite that drops a key the record already has is refused. That refusal is a
+# different rule from the one under test here, which is about a payload missing a documented key.
 for K in phase verdict components components_declared components_critiqued alignment tdd contract; do
+  mkdir -p "$T/keys/$K"
   PAY=$(printf '%s' "$GOOD" | jq -c --arg k "$K" 'del(.[$k])')
   set +e
-  bash "$W" "$T/keys" build-critique "$PAY" >/dev/null 2>"$T/keys/$K.err"
+  bash "$W" "$T/keys/$K" build-critique "$PAY" >/dev/null 2>"$T/keys/$K.err"
   KRC=$?
   set -e
   if [ "$KRC" != "0" ]; then

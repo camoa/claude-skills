@@ -1,85 +1,97 @@
 # Changelog
 
+## [5.35.3] - 2026-08-29
+
+### Added
+- **The record says what changed after the last critique pass, and who checked it.** New
+  `closing_fixes` `{applied, verified_by, reason}`. `applied: 0` is a real answer and passes.
+  `applied > 0` needs a named `verified_by`, and when that is `author`, `none` or `self` it needs
+  a `reason` as well.
+
+  The rung critiques a build, findings come back, and the findings get repaired. Where that
+  repair is the last thing to happen, nothing critiques it: under per-component rounds the next
+  round sees the repair, but under a single closing pass there is no next round, so the code that
+  ships is not the code any critic read. The author of a fix is also the one person who cannot
+  independently confirm it. Shipping without that confirmation stays allowed; doing it silently
+  does not.
+
+- **A rewrite of a gate record cannot silently drop what the last write recorded.**
+  `gate-audit-write.sh` now compares the incoming payload's top-level keys against the record on
+  disk and refuses a write that loses any of them, naming the keys and telling the caller to
+  merge onto the existing record. `--allow-key-loss` as a fourth argument makes a deliberate
+  removal explicit.
+
+  Every write replaces the whole record, which suits one writer and not the way these records are
+  produced: an orchestrator writes, an agent it dispatched writes, a later pass corrects one
+  field. Each assembles a payload from what it knows, and a writer that never saw an earlier key
+  omits it. The rename is atomic, so nothing is corrupt. The record is just quietly shorter, with
+  no error and no diff.
+
+  The comparison is one-directional and top-level only. A key set grows or holds, while
+  corrections to values and to nested contents are untouched.
+
+### Testing
+- `tests/closing-fixes-spec.sh`, 22 assertions, mutation-verified.
+- `tests/record-key-loss-spec.sh`, 14 assertions, mutation-verified.
+
 ## [5.35.2] - 2026-08-29
 
 ### Added
-- **Every critiqued component says whether its code was ever run.** Each `components[]` row now
+- **Every critiqued component says whether its code was ever run.** Each `components[]` row
   carries `runtime`: `executed`, `static_only`, or `not_run`, the last two needing a
   `runtime_reason`. A row that cannot say which is fail-closed.
 
-  Every gate this rung fires can pass over code that has never been executed. Live, a Drush
-  command class shipped with phpcs clean, phpstan clean and 58 kernel tests green while its
-  attribute discovery, option parsing and output were entirely unproven, because installing the
-  module to exercise the command would also have armed a cron hook that unpublishes site content.
-  Declining to run it was the right call. The defect is that the decision lived in a chat window
-  and the record said nothing, so `/review` would have gone green over a component nobody had
-  run.
-
-  This is not a demand that everything be executed. Static-only verification is legitimate and
-  sometimes the only safe option. What is refused is leaving it unsaid.
+  Every gate this rung fires can pass over code that has never been executed: a clean linter, a
+  clean static analyser and a green unit suite say nothing about whether the component was
+  exercised. Static-only verification is legitimate and sometimes the only safe option, so it
+  passes with its reason recorded. What is refused is leaving it unsaid.
 
 - **A criterion nothing shipped can verify is a separate fact from a criterion not yet built.**
   When the alignment axis runs, the payload carries `criteria_unverifiable[]`, each entry
   `{criterion, reason, what_would_verify}`. An empty array is required and is an answer.
 
-  `criteria_not_implemented` says the code is not written. It was also carrying a fact it cannot
-  express: a criterion that no test at the level this design chose can verify at all. Live, a
-  criterion asserting a count of the site's actual content sat against a test strategy that
-  selected kernel tests, which run on an empty database and cannot observe it at any level of
-  effort. Nothing surfaced that until a critic was briefed by hand at the end of the build, which
-  is the most expensive moment to learn it and the furthest from the design decision that caused
-  it. The two have opposite remedies, so they get separate fields. `what_would_verify` is
-  required, because naming a gap without naming the fix leaves it where it was found.
+  `criteria_not_implemented` says the code is not written. It cannot express the other case: a
+  criterion that no test at the level this design chose can verify at all, such as one asserting
+  a fact about live site content against a suite of kernel tests on empty databases. The two have
+  opposite remedies, so they get separate fields. `what_would_verify` is required, because naming
+  a gap without naming the fix leaves it where it was found.
 
 ### Testing
-- `tests/component-runtime-spec.sh`, 30 assertions asserting verdict, evidence, message content
-  and exit code. Mutation-verified: disabling the runtime check turns 12 assertions red, dropping
-  the `criteria_unverifiable` presence requirement 3, disabling the malformed-entry check 5.
-- Fixtures in five existing specs gained `runtime` on their component rows, and the gate spec's
-  fixture gained `criteria_unverifiable`, which is what a new required key costs.
+- `tests/component-runtime-spec.sh`, 30 assertions, mutation-verified.
+- Fixtures in five existing specs gained `runtime`, and the gate spec's fixture gained
+  `criteria_unverifiable`, which is what a new required key costs.
 
 ## [5.35.1] - 2026-08-29
 
 ### Fixed
 - **`uncritiqued[]` entries now need a reason, and the gate reads them.** The line printed
   `"N left uncritiqued with reasons"` and no code looked at a single reason, so the sentence was
-  a convention rather than a rule. A build that decided not to critique something and would
-  rather not say so produced the same artifact as one that explained itself. An entry naming a
-  component and saying nothing about why now fails, and a bare string in place of the object
-  fails for the same cause: it can carry no reason.
+  a convention rather than a rule. An entry naming a component and saying nothing about why now
+  fails, and a bare string in place of the object fails for the same cause: it can carry no
+  reason.
 
   This is also what forces a deviation from one-component-per-rung into the record. A build that
-  critiques its components together owes a reason for each one it did not critique alone, which
-  is the honest way to record a choice the framework does not otherwise capture.
+  critiques its components together owes a reason for each one it did not critique alone.
 
 - **`contract.changed` is measured rather than read.** It described something this plugin can
-  compute and was reaching the record as a field an agent wrote. Seen live: a record asserting
-  `changed: []` alongside a `reason` arguing at length that the empty diff was "true and
-  meaningless", while `contract-baseline.sh diff` on that same folder returned `status: changed`
-  and named two architecture files a later round had rewritten. Both the count and the argument
-  built on it were wrong, and the rule directly beneath — a changed contract file needs a reason
-  — keys on that count, so it could not fire.
-
-  The gate now runs the diff itself and fails when the record disagrees with disk. The measured
-  set is what the reason requirement keys on, so a record cannot under-report its way past it.
-  With no baseline, or a diff that cannot run, it records `contract_recheck` as `unresolved` or
-  `unavailable` and manufactures no agreement in either direction.
+  compute and was reaching the record as a field an agent wrote, so a record could disagree with
+  the baseline on disk and the rule beneath it (a changed contract file needs a reason) keys on
+  that count and could not fire. The gate now runs `contract-baseline.sh diff` itself and fails
+  when the record disagrees. The measured set is what the reason requirement keys on, so a record
+  cannot under-report its way past it. With no baseline, or a diff that cannot run, it records
+  `contract_recheck` as `unresolved` or `unavailable` and manufactures no agreement in either
+  direction.
 
 - **`components_declared` and `components_critiqued` accept the list shape they were already
   being written in.** Both arrive either as a number or as the array of component names whose
   length is that number. Against the array, every arithmetic test printed `integer expression
-  expected` to stderr and evaluated FALSE — which silently disabled the check directly beneath
-  it, so a record declaring seven components and critiquing none could not fail on it. Same
-  defect as v5.35.0's `rounds`-as-string: a check keyed on a type it assumed rather than
-  established. A shape that is neither collapses to the omission failure, which is the honest
-  answer for a field the gate cannot read.
-
-  All three were found by running the gate against a live record, not by reading it.
+  expected` to stderr and evaluated FALSE, which silently disabled the check directly beneath it,
+  so a record declaring seven components and critiquing none could not fail on it. Same defect as
+  5.35.0's `rounds`-as-string: a check keyed on a type it assumed rather than established. A
+  shape that is neither collapses to the omission failure.
 
 ### Testing
-- `tests/record-claims-recheck-spec.sh`, 36 assertions against real fixture task folders with
-  real baselines captured by `contract-baseline.sh`. Mutation-verified: removing the reason
-  check turns 8 assertions red, removing the disk comparison 3, reverting the count handling 6.
+- `tests/record-claims-recheck-spec.sh`, 36 assertions, mutation-verified.
 
 ## [5.35.0] - 2026-08-28
 

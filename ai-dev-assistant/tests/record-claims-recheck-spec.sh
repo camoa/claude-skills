@@ -45,6 +45,7 @@ command -v jq >/dev/null 2>&1 || { printf 'FAIL: jq required\n' >&2; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 GOOD='{"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
+ "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},
  "contract":{"baseline_status":"captured","changed":[]},
  "components":[{"component":"a","runtime":"executed","blocking":false}]}'

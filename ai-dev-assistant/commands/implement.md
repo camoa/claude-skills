@@ -276,6 +276,11 @@ Reached when the last component closes. All four parts are required.
    `passed_first_run` is a blocking violation. This is the only place the RED observation is
    written down, and `/review` step 5.0f is what reads it back.
 
+   **The payload carries `closing_fixes` (v5.35.3+):** `{applied, verified_by, reason}` — what
+   changed after the last critique pass. Anything repaired after the critics returned is code no
+   critic read, so name who checked it. `applied: 0` is an answer. When the fix's own author is
+   the only reader, say so and say why.
+
    **Every `components[]` row carries `runtime` (v5.35.2+):** `executed`, `static_only`, or
    `not_run`, and the last two need a `runtime_reason`. Every gate this rung fires can pass over
    code that was never executed, so a green phpcs / phpstan / unit run says nothing about whether

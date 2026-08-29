@@ -37,6 +37,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
  "components":[{"component":"a","runtime":"executed","blocking":false}],
  "contract":{"baseline":"captured","changed":[]},
+ "closing_fixes":{"applied":0},
  "integration":{"ran":false,"reason":"single-component fixture"}}'
 
 mktask() { d="$T/$1"; mkdir -p "$d" >/dev/null 2>&1; printf '%s' "$d"; }
