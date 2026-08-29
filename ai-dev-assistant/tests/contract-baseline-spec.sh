@@ -335,7 +335,7 @@ arr_empty added "removing alone after a late capture adds nothing"
 # An otherwise-valid, otherwise-passing build-critique payload: components clean, tdd
 # block clean. The contract key is added or omitted per fixture below.
 GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
- "components":[{"component":"a","blocking":false}],
+ "components":[{"component":"a","runtime":"executed","blocking":false}],
  "tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[]},"integration":{"ran":false,"reason":"single-component fixture"}}'
 
 write_record() { # write_record <folder> <jq filter over GOOD>

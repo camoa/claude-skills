@@ -1,5 +1,43 @@
 # Changelog
 
+## [5.35.2] - 2026-08-29
+
+### Added
+- **Every critiqued component says whether its code was ever run.** Each `components[]` row now
+  carries `runtime`: `executed`, `static_only`, or `not_run`, the last two needing a
+  `runtime_reason`. A row that cannot say which is fail-closed.
+
+  Every gate this rung fires can pass over code that has never been executed. Live, a Drush
+  command class shipped with phpcs clean, phpstan clean and 58 kernel tests green while its
+  attribute discovery, option parsing and output were entirely unproven, because installing the
+  module to exercise the command would also have armed a cron hook that unpublishes site content.
+  Declining to run it was the right call. The defect is that the decision lived in a chat window
+  and the record said nothing, so `/review` would have gone green over a component nobody had
+  run.
+
+  This is not a demand that everything be executed. Static-only verification is legitimate and
+  sometimes the only safe option. What is refused is leaving it unsaid.
+
+- **A criterion nothing shipped can verify is a separate fact from a criterion not yet built.**
+  When the alignment axis runs, the payload carries `criteria_unverifiable[]`, each entry
+  `{criterion, reason, what_would_verify}`. An empty array is required and is an answer.
+
+  `criteria_not_implemented` says the code is not written. It was also carrying a fact it cannot
+  express: a criterion that no test at the level this design chose can verify at all. Live, a
+  criterion asserting a count of the site's actual content sat against a test strategy that
+  selected kernel tests, which run on an empty database and cannot observe it at any level of
+  effort. Nothing surfaced that until a critic was briefed by hand at the end of the build, which
+  is the most expensive moment to learn it and the furthest from the design decision that caused
+  it. The two have opposite remedies, so they get separate fields. `what_would_verify` is
+  required, because naming a gap without naming the fix leaves it where it was found.
+
+### Testing
+- `tests/component-runtime-spec.sh`, 30 assertions asserting verdict, evidence, message content
+  and exit code. Mutation-verified: disabling the runtime check turns 12 assertions red, dropping
+  the `criteria_unverifiable` presence requirement 3, disabling the malformed-entry check 5.
+- Fixtures in five existing specs gained `runtime` on their component rows, and the gate spec's
+  fixture gained `criteria_unverifiable`, which is what a new required key costs.
+
 ## [5.35.1] - 2026-08-29
 
 ### Fixed

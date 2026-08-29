@@ -388,6 +388,92 @@ if [ -e "$REC" ]; then
     add_msg "$DEFERRED_N finding(s) deferred to a component not yet built; they carry forward rather than being answered speculatively"
   fi
 
+  # ------------------- can each criterion be verified by anything shipped? (v5.35.2+)
+  #
+  # `criteria_not_implemented` says a criterion has no code behind it yet. It was also being
+  # used for a different fact it cannot express: a criterion that no test at the level this
+  # design chose can verify AT ALL. Seen live: a criterion asserting a count of the site's
+  # actual content, against a test strategy that selected kernel tests, which run on an empty
+  # database and cannot observe it at any level of effort. Nothing surfaced that until a critic
+  # was briefed by hand at the end of the build, which is the most expensive moment to learn it
+  # and the furthest from the design decision that caused it.
+  #
+  # The two facts have opposite remedies -- one is "write the code", the other is "the plan for
+  # proving this is wrong" -- so they get separate fields. `criteria_unverifiable` is required
+  # whenever the alignment axis actually ran: an empty array is the positive claim that every
+  # criterion has something shipped that could verify it, which is an answer. Silence is not.
+  if [ "$ALIGN" != "" ] && [ "$ALIGN" != "skipped" ]; then
+    if ! jq -e '.alignment | has("criteria_unverifiable")' <<<"$PAYLOAD" >/dev/null 2>&1; then
+      add_msg "the alignment block does not say whether any success criterion is unverifiable at the test levels this design chose"
+      add_msg "add criteria_unverifiable[] (empty asserts every criterion has something that could prove it)"
+      emit fail true "" 1
+    fi
+    CU_BAD=$(jq -c \
+      '[(.alignment.criteria_unverifiable // [])[]
+        | if type != "object" then {criterion:(tostring), why:"not an object"}
+          elif (((.criterion // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:"unnamed", why:"no criterion named"}
+          elif (((.reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:(.criterion | tostring), why:"no reason"}
+          elif (((.what_would_verify // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+            then {criterion:(.criterion | tostring), why:"does not say what would verify it"}
+          else empty end]' \
+      <<<"$PAYLOAD" 2>/dev/null) || CU_BAD='[]'
+    CU_BAD_N=$(jq -r 'length' <<<"$CU_BAD" 2>/dev/null) || CU_BAD_N=0
+    if [ "$CU_BAD_N" -gt 0 ]; then
+      set_ev malformed_unverifiable "$CU_BAD"
+      add_msg "$CU_BAD_N unverifiable-criterion entr(ies) are incomplete: $CU_BAD"
+      add_msg "each needs criterion, reason, and what_would_verify; naming the gap without naming the fix leaves it where it was found"
+      emit fail true "" 1
+    fi
+    CU_N=$(jq -r '(.alignment.criteria_unverifiable // []) | length' <<<"$PAYLOAD" 2>/dev/null) || CU_N=0
+    if [ "$CU_N" -gt 0 ]; then
+      set_ev criteria_unverifiable "$CU_N"
+      add_msg "$CU_N criterion(a) cannot be verified at the test levels this design chose; each records what would verify it"
+    fi
+  fi
+
+  # ------------------------------------------- was the component ever RUN? (v5.35.2+)
+  #
+  # Every gate this rung fires can pass over code that has never been executed. Seen live: a
+  # Drush command class shipped with phpcs clean, phpstan clean and 58 kernel tests green,
+  # while its attribute discovery, option parsing and output were entirely unproven -- because
+  # installing the module to exercise the command would also have armed a cron hook that
+  # unpublishes site content. Declining to run it was the right call. The defect is that the
+  # decision lived in a chat window and the record said nothing, so `/review` would have gone
+  # green over a component nobody had run.
+  #
+  # This is deliberately NOT a demand that everything be executed. Static-only verification is
+  # legitimate and sometimes the only safe option. What is refused is leaving it unsaid: a row
+  # that cannot say whether its code ever ran is the same "could not tell" this gate refuses
+  # everywhere else.
+  RUNTIME_BAD=$(jq -c \
+    '[(.components // [])[]
+      | (.component // "unnamed") as $n
+      | (.runtime // null) as $r
+      | if $r == null then {component:$n, why:"no runtime field"}
+        elif ($r | type) != "string" then {component:$n, why:"runtime is not a string"}
+        elif ($r == "executed") then empty
+        elif ($r == "static_only" or $r == "not_run") then
+          (if (((.runtime_reason // "") | tostring | gsub("^\\s+|\\s+$"; "")) == "")
+           then {component:$n, why:("runtime " + $r + " with no runtime_reason")}
+           else empty end)
+        else {component:$n, why:("unknown runtime value: " + $r)}
+        end]' \
+    <<<"$PAYLOAD" 2>/dev/null) || RUNTIME_BAD='[]'
+  RUNTIME_BAD_N=$(jq -r 'length' <<<"$RUNTIME_BAD" 2>/dev/null) || RUNTIME_BAD_N=0
+  if [ "$RUNTIME_BAD_N" -gt 0 ]; then
+    set_ev runtime_unstated "$RUNTIME_BAD"
+    add_msg "$RUNTIME_BAD_N critiqued component(s) cannot say whether their code was ever run: $RUNTIME_BAD"
+    add_msg "each row needs runtime: executed | static_only | not_run, and a runtime_reason for the last two"
+    emit fail true "" 1
+  fi
+  STATIC_N=$(jq -r '[(.components // [])[] | select((.runtime // "") != "executed")] | length' <<<"$PAYLOAD" 2>/dev/null) || STATIC_N=0
+  if [ "$STATIC_N" -gt 0 ]; then
+    set_ev components_not_executed "$STATIC_N"
+    add_msg "$STATIC_N critiqued component(s) were verified without being executed; the reason is recorded on each row"
+  fi
+
   # ------------------------------------------------- the contract baseline (v5.34.0+)
   #
   # `meets-ac` and the alignment axis both judge the change against `alignment.md` and

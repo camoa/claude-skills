@@ -276,6 +276,18 @@ Reached when the last component closes. All four parts are required.
    `passed_first_run` is a blocking violation. This is the only place the RED observation is
    written down, and `/review` step 5.0f is what reads it back.
 
+   **Every `components[]` row carries `runtime` (v5.35.2+):** `executed`, `static_only`, or
+   `not_run`, and the last two need a `runtime_reason`. Every gate this rung fires can pass over
+   code that was never executed, so a green phpcs / phpstan / unit run says nothing about whether
+   the component was ever exercised. Static-only is a legitimate answer and sometimes the only
+   safe one; what fails is a row that cannot say which it was.
+
+   **When the alignment axis runs, the payload carries `criteria_unverifiable[]` (v5.35.2+):**
+   `{criterion, reason, what_would_verify}` for each success criterion that no test at the levels
+   this design chose can verify at all. That is a different fact from `criteria_not_implemented`,
+   which means the code is not written yet, and the two have opposite remedies. An empty array is
+   required and asserts that every criterion has something shipped that could prove it.
+
 3. **The records check.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/phase-records-check.sh
    "<task_folder>" --phase implement` and surface its verdict. A missing `_build-critique.json`
    makes the verdict `incomplete` and lifts `missing_required` — the row is

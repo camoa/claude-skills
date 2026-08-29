@@ -35,7 +35,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # An otherwise-valid, otherwise-passing build-critique payload with no tdd block yet.
 GOOD='{"verdict":"pass","components_declared":2,"components_critiqued":2,"uncritiqued":[],
- "components":[{"component":"a","blocking":false}],
+ "components":[{"component":"a","runtime":"executed","blocking":false}],
  "contract":{"baseline":"captured","changed":[]},
  "integration":{"ran":false,"reason":"single-component fixture"}}'
 

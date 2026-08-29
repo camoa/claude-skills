@@ -379,6 +379,34 @@ also what the reason requirement now keys on, so a record cannot under-report it
 When no baseline exists, or the diff cannot run, the gate records `contract_recheck` as
 `unresolved` or `unavailable` and manufactures no agreement in either direction.
 
+**Was the component ever run? (v5.35.2+)** Each `components[]` row carries `runtime`:
+`executed`, `static_only`, or `not_run`, and the last two need a non-empty `runtime_reason`.
+
+Every gate this rung fires can pass over code that has never been executed. Live, a Drush command
+class shipped with phpcs clean, phpstan clean and 58 kernel tests green while its attribute
+discovery, option parsing and output were entirely unproven, because installing the module to
+exercise the command would also have armed a cron hook that unpublishes site content. Declining
+to run it was the right call. The defect is that the decision lived in a chat window and the
+record said nothing, so `/review` would have gone green over a component nobody had run.
+
+This is not a demand that everything be executed. Static-only verification is legitimate and
+sometimes the only safe option. What is refused is leaving it unsaid.
+
+**Can each criterion be verified by anything shipped? (v5.35.2+)** When the alignment axis runs,
+it carries `criteria_unverifiable[]`, each entry `{criterion, reason, what_would_verify}`. An
+empty array is required and is an answer: every criterion has something shipped that could prove
+it. Absence is fail-closed.
+
+`criteria_not_implemented` says a criterion has no code behind it yet. It was also being used for
+a fact it cannot express: a criterion that no test at the level this design chose can verify at
+all. Live, a criterion asserting a count of the site's actual content sat against a test strategy
+that selected kernel tests, which run on an empty database and cannot observe it at any level of
+effort. Nothing surfaced that until a critic was briefed by hand at the end of the build, which
+is the most expensive moment to learn it and the furthest from the design decision that caused
+it. The two facts have opposite remedies, one being "write the code" and the other "the plan for
+proving this is wrong", so they get separate fields. `what_would_verify` is required because
+naming a gap without naming the fix leaves it exactly where it was found.
+
 **Amending the contract mid-build is legitimate.** A design can be discovered to be
 unbuildable, and on the build that produced this rule one was: its recipe for a fixture shape
 could not be constructed against the contrib source it depended on. What the gate refuses is an
@@ -410,7 +438,7 @@ without merging their verdicts.
 |---|---|---|
 | `phase` | string | Always `"implement"`. |
 | `verdict` | enum | `pass` \| `concern` \| `critical` \| `unresolved` \| `skipped`. The rung's overall answer. |
-| `components[]` | array | One row per component: `component`, `risk_tier`, `lenses[]`, `verdict`, `blocking`, `checkpoint_before`, `checkpoint_after`, `critique_ref`, `findings_count`. |
+| `components[]` | array | One row per component: `component`, `risk_tier`, `lenses[]`, `verdict`, `blocking`, `checkpoint_before`, `checkpoint_after`, `critique_ref`, `findings_count`, and `runtime` (v5.35.2+). |
 | `components_declared` | integer or array | How many components the architecture declares. An array of component names is accepted and its length is the count. |
 | `components_critiqued` | integer or array | How many actually got a critique. Same two shapes. |
 | `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. **Every entry needs a non-empty `reason`.** |
