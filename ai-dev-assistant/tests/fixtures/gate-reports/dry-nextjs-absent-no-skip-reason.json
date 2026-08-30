@@ -1,0 +1,10 @@
+{
+  "mode": "whole-project",
+  "measured": true,
+  "status": "pass",
+  "rating": "good",
+  "duplication_percentage": 0,
+  "clones_count": 0,
+  "tools_absent": ["jscpd"],
+  "generated_at": "2026-08-29T12:00:00Z"
+}

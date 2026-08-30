@@ -224,23 +224,95 @@ done
 #   * an EXACT expected count per file, and the names pushed. Deleting one push changes
 #     both, so the single-deletion mutation the reviewer showed both AIDA specs missing is
 #     now caught twice over.
+#
+# THE WALKER, AND WHY IT IS A FUNCTION. The previous cut pushed a level on `if` AND on
+# `elif`, and popped only on a line that was exactly `fi`. So `elif`, `else`, a one-line
+# `if ...; fi` and `case`/`esac` never balanced and the stack only ever grew: measured on
+# security-check.sh, depth 25 at end of file where the real nesting is 3. Every push below
+# roughly line 1478 was therefore checked against a chain holding every earlier `if` in
+# the file, somebody else's availability probe included. ADDING, REMOVING or RENAMING a
+# push was still caught by the exact count and exact names below; MOVING one into a scope
+# branch was not — and that is the mutation this check exists for. Verified by moving
+# `ABSENT_TOOLS+=("trivy")` out of the else of `if command -v trivy` into a
+# `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: same count, same names, and the old walker
+# reported nothing.
+#
+#   if      opens a level and puts its condition on it
+#   elif    is the SAME level with a second condition APPENDED, not a new level
+#   else    changes no level: the branch is still guarded by the `if` above it, which is
+#           where all ten of these pushes actually sit — the else of `if <probe>`
+#   case    opens a level carrying an EMPTY condition, so its `esac` has something to
+#           close and a case pattern is never mistaken for a test for a binary
+#   fi/esac close a level, counted as WORDS anywhere on the line, so `if X; then Y; fi`
+#           balances and the `fi` inside `specific` closes nothing
+#
+# A PROBE MAY BE ONE VARIABLE AWAY. semgrep's absence is recorded in the else of
+# `if [ -n "$SEMGREP_RUNNER" ]`, and SEMGREP_RUNNER is set inside
+# `if ddev exec semgrep --version` / `elif command -v semgrep`. Pass 1 records the
+# variables a direct probe assigns a LITERAL to; pass 2 accepts a condition testing one of
+# them. Literal right-hand sides only, deliberately: `PHPCS_ISSUES=$(...)` holds a tool's
+# OUTPUT rather than the outcome of probing for it, and admitting command substitutions
+# marked 44 variables across these producers where the literal rule marks three.
+#
+# It is a function because a walker only the real producers exercise is a walker whose
+# failure mode is whatever those producers happen not to do. The self-test below runs it
+# over a file built to contain each construct plus the mutation, so the check has a
+# negative control and cannot quietly stop being able to fail.
+WALKER_AWK='
+function is_probe(s) {
+  return (s ~ /command -v|test -[fx]|\[ -[fx] |vendor\/bin|--version|resolve_analyzer|ddev exec test|pm:list/)
+}
+function chain_probes(  i, v) {
+  for (i = 1; i <= top; i++) {
+    if (is_probe(cond[i])) return 1
+    for (v in PROBEVAR) if (cond[i] ~ ("[$][{]?" v "[^A-Za-z0-9_]")) return 1
+  }
+  return 0
+}
+FNR == 1 { top = 0; delete cond; pass++ }
+/^[[:space:]]*#/ { next }
+/^[[:space:]]*if[[:space:]]/   { cond[++top] = $0 }
+/^[[:space:]]*elif[[:space:]]/ { if (top > 0) cond[top] = cond[top] " " $0 }
+/^[[:space:]]*case[[:space:]]/ { cond[++top] = "" }
+pass == 1 && /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=["'"'"'][A-Za-z0-9_.\/-]*["'"'"']?[[:space:]]*$/ {
+  if (top > 0 && is_probe(cond[top])) {
+    n = $0; sub(/^[[:space:]]*/, "", n); sub(/=.*/, "", n); PROBEVAR[n] = 1
+  }
+}
+pass == 2 && /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
+  if (!chain_probes()) printf "BAD %d:%s\n", FNR, $0
+}
+{
+  t = $0
+  n1 = gsub(/(^|[[:space:];&|])fi([[:space:];&|]|$)/, " ", t)
+  n2 = gsub(/(^|[[:space:];&|])esac([[:space:];&|]|$)/, " ", t)
+  top -= (n1 + n2)
+  if (top < 0) { under++; top = 0 }
+}
+END { printf "DEPTH %d %d\n", top, under + 0 }
+'
+# walk_absent_pushes <file> — "BAD <line>:<text>" per unguarded push, then "DEPTH <n> <n>".
+# The file is read TWICE: pass 1 collects the probe variables, pass 2 checks the pushes.
+walk_absent_pushes() { awk "$WALKER_AWK" "$1" "$1"; }
+
 NEXTSOLID_P="$NEXTSOLID"
 for spec in "$SEC:8:gitleaks,php-security-linter,php-security-linter,psalm,security_review,semgrep,semgrep,trivy" \
             "$NEXTSOLID_P:2:eslint,madge"; do
   pf="${spec%%:*}"; rest="${spec#*:}"; want_n="${rest%%:*}"; want_names="${rest#*:}"
   [ -f "$pf" ] || { fail_check "producer $pf missing"; continue; }
-  # For each push, walk back to the nearest branch keyword and collect the whole condition
-  # chain guarding it, then require an availability probe somewhere in that chain.
-  BADLINES=$(awk '
-    /^[[:space:]]*(if|elif)[[:space:]]/ { cond[++top] = $0; depth[top] = NR }
-    /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
-      ok = 0
-      for (i = 1; i <= top; i++)
-        if (cond[i] ~ /command -v|test -f|vendor\/bin|--version|resolve_analyzer|ddev exec test/) ok = 1
-      if (!ok) printf "%d:%s\n", NR, $0
-    }
-    /^[[:space:]]*fi[[:space:]]*$/ { if (top > 0) top-- }
-  ' "$pf")
+  WALK=$(walk_absent_pushes "$pf")
+  BADLINES=$(printf '%s\n' "$WALK" | sed -n 's/^BAD //p')
+  BALANCE=$(printf '%s\n' "$WALK" | sed -n 's/^DEPTH //p')
+  WDEPTH="${BALANCE%% *}"; WUNDER="${BALANCE##* }"
+  # THE WALKER HAS TO END WHERE IT STARTED. A stack that does not return to zero has lost
+  # its place, and a push it then checks is checked against conditions that closed long
+  # before — which is the whole of the defect this replaced, stated as something the
+  # check itself can detect rather than something a reader has to notice.
+  if [ "$WDEPTH" = "0" ] && [ "$WUNDER" = "0" ]; then
+    pass_check "$(basename "$pf"): the condition walker opens and closes every branch, ending at depth 0"
+  else
+    fail_check "$(basename "$pf"): the condition walker ended at depth $WDEPTH with $WUNDER underflow(s) — it has lost its place, so every push below the leak is checked against a chain containing conditions that closed above it, and moving a push into a scope branch passes"
+  fi
   NPUSH=$(grep -cE '(^|[[:space:]])ABSENT_TOOLS\+=\(' "$pf" || true)
   GOTNAMES=$(grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' "$pf" | sed -E 's/.*"([^"]+)".*/\1/' | sort | paste -sd, -)
   if [ "$NPUSH" -ne "$want_n" ]; then
@@ -253,6 +325,69 @@ for spec in "$SEC:8:gitleaks,php-security-linter,php-security-linter,psalm,secur
     fail_check "$(basename "$pf"): tools_absent[] is filled by a branch with no availability probe in its condition chain — $(printf '%s' "$BADLINES" | tr '\n' ' '). A layer the changed set scoped out belongs in tools_skipped[]; in tools_absent[] it reads as missing coverage and reds an ordinary pull request."
   fi
 done
+
+# THE WALKER'S OWN NEGATIVE CONTROL. Everything above reports "no unguarded pushes", which
+# is also what a walker that had stopped working would report, and what a probe test broad
+# enough to accept any condition would report. Neither is distinguishable from a clean
+# result by running it on the producers, because the producers are clean. So it is run on a
+# file that is not: one push that MUST be flagged, two that must not, and every construct
+# that made the previous stack grow.
+WALK_FIXTURE=$(mktemp)
+cat > "$WALK_FIXTURE" <<'WALKFIXTURE'
+#!/usr/bin/env bash
+# The shape all ten real pushes have: the else of a direct probe. MUST NOT be flagged.
+if command -v realtool > /dev/null 2>&1; then
+    echo ran
+else
+    ABSENT_TOOLS+=("realtool")
+fi
+# One variable away from the probe, which is how semgrep's absence is recorded.
+# MUST NOT be flagged.
+INDIRECT_RUNNER=""
+if ddev exec indirect --version > /dev/null 2>&1; then
+    INDIRECT_RUNNER="container"
+elif command -v indirect > /dev/null 2>&1; then
+    INDIRECT_RUNNER="host"
+fi
+if [ -n "$INDIRECT_RUNNER" ]; then
+    echo ran
+else
+    ABSENT_TOOLS+=("indirect")
+fi
+# The constructs the old walker never closed. None of them may leak a level, and the
+# push below them is checked against whatever they leave behind.
+if [ "$MODE" = "changed" ]; then
+    echo a
+elif [ "$MODE" = "whole" ]; then
+    echo b
+else
+    echo c
+fi
+if [ -n "$SOMETHING" ]; then echo one-line; fi
+case "$MODE" in
+  changed) echo d ;;
+  *) echo e ;;
+esac
+# THE MUTATION. A push in a scope branch, no probe anywhere above it. MUST be flagged —
+# this is the one the old walker passed green once the stack had grown past it.
+if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
+    ABSENT_TOOLS+=("scoped-out-tool")
+fi
+WALKFIXTURE
+SELF=$(walk_absent_pushes "$WALK_FIXTURE")
+SELF_BAD=$(printf '%s\n' "$SELF" | sed -n 's/^BAD //p')
+SELF_BAL=$(printf '%s\n' "$SELF" | sed -n 's/^DEPTH //p')
+SELF_NBAD=$(printf '%s\n' "$SELF_BAD" | grep -c . || true)
+rm -f "$WALK_FIXTURE"
+if [ "$SELF_BAL" != "0 0" ]; then
+  fail_check "the walker does not balance on elif/else/one-line-if/case: it ended at depth ${SELF_BAL% *} with ${SELF_BAL#* } underflow(s). That is the defect it replaced, and the producer runs above cannot see it because they end at 0 for the wrong reasons too"
+elif [ "$SELF_NBAD" -eq 1 ] && printf '%s' "$SELF_BAD" | grep -q 'scoped-out-tool'; then
+  pass_check "the walker discriminates: it flags a push in a scope branch, clears one in the else of a direct probe and one behind a probe-assigned variable, and balances across elif, else, a one-line if and a case"
+elif [ "$SELF_NBAD" -eq 0 ]; then
+  fail_check "the walker flagged NOTHING on a file containing a push in a scope branch with no probe above it — it can no longer fail, so the clean results it reports on the producers mean nothing"
+else
+  fail_check "the walker flagged $SELF_NBAD push(es) where exactly one is planted: $(printf '%s' "$SELF_BAD" | tr '\n' ' '). A push in the else of an availability probe is the shape every real one has, and flagging it would red the producers as they stand"
+fi
 # A GATE THAT MEASURED NOTHING MUST SAY SO IN A FILE.
 #
 # The resolver reads reports, so a gate that ends its run without writing one tells it
@@ -282,6 +417,40 @@ else
     fail_check "dry-check.sh (nextjs) has only $NEMIT report emitter(s) — at least one non-measuring path ends the run silently"
   fi
 fi
+
+# WHAT A DRY REPORT'S tools_absent[] CAN NAME, checked in the producers that fill it.
+#
+# The resolver's dry branch used to grep that list for the literal `phpcpd` — the DRUPAL
+# analyzer. The Next.js gate's analyzer is `jscpd`, so a Next.js report naming it matched
+# nothing and the branch fell through to resolve on `.status` alone. It came out right
+# anyway and for an unrelated reason: nextjs/dry-check.sh also writes
+# skip_reason "tool_absent", which the same condition tests first. Same class as the
+# `["phpstan","phpmd"]` literal the solid branch already dropped, and the same fix — the
+# resolver now reads ANY name in tools_absent[] as this one-analyzer gate's analyzer and
+# carries no name of its own.
+#
+# That reading is correct only while a dry producer's tools_absent[] cannot name anything
+# but its analyzer, so that is what is asserted, and asserted in the producer. Two claims,
+# both derived from the file rather than restated here: the non-empty literal names EXACTLY
+# ONE tool, and that name is one this script probes for. A rename in the producer moves
+# both sides together; a second name appearing in the list fails, because the resolver
+# would then read a layer that is not the analyzer as the analyzer being gone.
+for dp in "$DRYP" "$NEXTDRY"; do
+  [ -f "$dp" ] || { fail_check "dry producer $dp missing — the resolver's one-analyzer reading is checked against nothing"; continue; }
+  DNAMES=$(grep -oE '"tools_absent": *\[[^]]*\]' "$dp" \
+           | grep -oE '"[A-Za-z][A-Za-z0-9_.-]*"' | tr -d '"' \
+           | grep -v '^tools_absent$' | sort -u)
+  DN=$(printf '%s\n' "$DNAMES" | grep -c . || true)
+  if [ "$DN" -eq 0 ]; then
+    fail_check "$(basename "$(dirname "$dp")")/$(basename "$dp"): no tools_absent[] literal names a tool at all — the gate has stopped recording which analyzer went missing, and the resolver reads that list as its only channel for it"
+  elif [ "$DN" -gt 1 ]; then
+    fail_check "$(basename "$(dirname "$dp")")/$(basename "$dp"): tools_absent[] can name $DN different tools ($(printf '%s' "$DNAMES" | paste -sd, -)) — the resolver reads ANY name there as this gate's one analyzer being gone, so a second name resolves an ordinary run unresolved"
+  elif grep -qE "(command -v|npx|vendor/bin/|test -[fx]).*${DNAMES}|${DNAMES}.*--version" "$dp"; then
+    pass_check "$(basename "$(dirname "$dp")")/$(basename "$dp"): tools_absent[] names exactly one tool, $DNAMES, and it is the one this script probes for — so the resolver needs no analyzer name of its own"
+  else
+    fail_check "$(basename "$(dirname "$dp")")/$(basename "$dp"): tools_absent[] names $DNAMES, which this script never probes for — the name in the report is not the analyzer whose absence was tested, so reading it as the analyzer is reading the wrong thing"
+  fi
+done
 
 # And the by-design list has to actually be filled, or the branches above simply vanished.
 NSCOPED=$(grep -cE 'SCOPED_OUT_TOOLS\+=\(' "$SEC" || true)
@@ -504,6 +673,14 @@ expect dry-measured-false.json  dry skipped true  false "status pass but measure
 expect dry-nextjs-clean.json       dry pass    false false "Next.js jscpd ran and duplication is within target"
 expect dry-nextjs-tool-absent.json dry skipped true  false "Next.js jscpd absent — its only analyzer, and now it says so in a report"
 expect dry-nextjs-tool-failed.json dry skipped true  false "Next.js jscpd present but produced nothing — 0% is not a measurement"
+# THE STACK-SPECIFIC LITERAL. The dry branch grepped tools_absent[] for `phpcpd`, the
+# Drupal analyzer, so a Next.js report naming `jscpd` matched nothing and the gate resolved
+# on its status alone: a clean `pass` from a run whose only analyzer was missing. It never
+# showed, because nextjs/dry-check.sh also writes skip_reason "tool_absent" and the same
+# condition tests that first — the right answer for an unrelated reason. This fixture drops
+# the skip_reason so the name is the only channel left, which is the state a producer that
+# stopped writing that field would produce.
+expect dry-nextjs-absent-no-skip-reason.json dry skipped true false "a Next.js report naming jscpd absent and NO skip_reason: the analyzer is read from the report, so the one-analyzer rule fires on the name this stack uses"
 
 # ----------------------------------------------------- solid: multi-analyzer, the trap
 expect solid-whole-clean.json      solid pass    false false "every analyzer ran, nothing over threshold"
@@ -555,6 +732,13 @@ expect sec-whole-absent-closeable.json     security warning false true  "psalm a
 expect sec-fail-with-absent-closeable.json security fail    false true  "a real fail AND a closeable coverage gap: the fail is not softened, and both facts are carried"
 expect sec-scope-skip-hides-closeable.json security warning false true  "composer_audit scoped out by the diff AND psalm genuinely not installed — the second one still blocks"
 expect sec-no-eligible-contradiction.json  security skipped true  false "a report claiming nothing was in scope while naming a layer that failed: it contradicts itself, so it is unresolved"
+# The other half of the same short-circuit. Benign here rests on two claims — nothing was
+# eligible, and nothing was denied anything — and only the first is in this report. The
+# second was manufactured by `// []` out of a report that carries no coverage lists and no
+# analyzers_ran, which is the undetermined-coverage state the non-skip path already refuses
+# to read as complete. Latent while the producer hardcodes the lists on this path; this
+# file's premise is that a producer is checked, not trusted.
+expect sec-no-eligible-no-lists.json       security skipped true  false "a scope skip with NO coverage lists and no analyzers_ran: nothing in it establishes that no layer was denied anything, so it does not reach benign"
 # THE DEFAULT IS FAIL-CLOSED. A tool the catalog does not classify has unknown scope, and
 # unknown is treated as closeable so that a gap nobody has thought about still blocks. The
 # alternative — defaulting to `machine` — would let any newly added layer stop blocking the
@@ -823,11 +1007,26 @@ fi
 MATRIX_DIR="$(mktemp -d)"
 trap 'rm -rf "$MATRIX_DIR"' EXIT
 
-# contract_expect <findings> <blocking:0|1> <zero:none|hard|soft>
+# contract_expect <findings> <blocking:0|1> <zero:none|hard|soft> [coverage-key]
 # Echoes "<verdict> <unresolved> <coverage_partial>".
 contract_expect() {
-  local f="$1" blocking="$2" zero="$3" v partial
+  local f="$1" blocking="$2" zero="$3" cov="${4:-}" v partial
   case "$f" in
+    # A CORRECTLY SCOPED NO-OP is the one `skipped` that is benign, and it rests on TWO
+    # claims the report has to carry: nothing was eligible, which only skip_reason can
+    # say, AND nothing was denied anything, which the coverage lists say by being empty.
+    # A layer named in any of the three unavailability lists is the second claim
+    # contradicting itself; NO coverage fields at all is the second claim never made and
+    # `// []` supplying it out of silence. Both are unresolved. The columns that reach
+    # benign are the ones where the lists are present and name nothing that failed to
+    # produce — including `all-absent`, which for a security report is analyzers_ran 0
+    # with empty lists, exactly what a run with nothing eligible should look like.
+    skipped-no-eligible)
+      case "$cov" in
+        full|scoped-out|all-absent) printf 'skipped false false' ;;
+        *)                          printf 'skipped true false' ;;
+      esac
+      return ;;
     unmeasured|skipped) printf 'skipped true false'; return ;;
   esac
   if [ "$zero" = "hard" ]; then printf 'skipped true false'; return; fi
@@ -866,10 +1065,21 @@ coverage_facts() {
 build_report() {
   local shape="$1" f="$2" cov="$3"
   local closeable both absent='[]' failed='[]' unmeas='[]' skipped='[]' ran=3
+  # The scope-skip row is `skipped` on the findings axis PLUS the one field that tells the
+  # two meanings of that word apart. Without meta.skip_reason it is the other `skipped` —
+  # the tools were there and returned nothing usable — and the producer is the only thing
+  # that can say which.
+  local status="$f" skipreason=""
+  if [ "$f" = "skipped-no-eligible" ]; then status="skipped"; skipreason="no_eligible_changes"; fi
+  f="$status"
   case "$shape" in
     solid-drupal) closeable='["phpmd"]';  both='["phpstan","phpmd"]' ;;
     solid-nextjs) closeable='["madge"]';  both='["madge","eslint"]' ;;
-    dry)          closeable='["phpcpd"]'; both='[]' ;;   # its ONE analyzer
+    # Its ONE analyzer, and the two stacks call it different things. The resolver used to
+    # carry the Drupal name as a literal, so the Next.js column below is the one that
+    # resolved on `.status` alone.
+    dry)          closeable='["phpcpd"]'; both='[]' ;;
+    dry-nextjs)   closeable='["jscpd"]';  both='[]' ;;
     *)            closeable='["psalm"]';  both='[]' ;;
   esac
   case "$cov" in
@@ -890,7 +1100,9 @@ build_report() {
       solid-drupal|solid-nextjs)
         jq -n --arg s "$f" '{status:$s, generated_at:"2026-08-29T12:00:00Z"}' ;;
       security-changed|security-whole)
-        jq -n --arg s "$f" '{meta:{timestamp:"2026-08-29T12:00:00Z"}, summary:{overall_status:$s, total_issues:0}}' ;;
+        jq -n --arg s "$f" --arg sr "$skipreason" \
+          '{meta:({timestamp:"2026-08-29T12:00:00Z"} + (if $sr == "" then {} else {skip_reason:$sr} end)),
+            summary:{overall_status:$s, total_issues:0}}' ;;
     esac
     return 0
   fi
@@ -901,17 +1113,18 @@ build_report() {
         '{status:$s, analyzers_ran:$r, binary_analyzers:$b, tools_absent:$a, tools_failed:$fl,
           tools_unmeasured:$u, tools_skipped:$sk, generated_at:"2026-08-29T12:00:00Z"}' ;;
     security-changed)
-      jq -n --arg s "$f" --argjson a "$absent" --argjson fl "$failed" --argjson u "$unmeas" \
-            --argjson sk "$skipped" --argjson r "$ran" \
-        '{meta:{timestamp:"2026-08-29T12:00:00Z", mode:"changed", analyzers_ran:$r,
-                tools_absent:$a, tools_failed:$fl, tools_unmeasured:$u, tools_skipped:$sk},
+      jq -n --arg s "$f" --arg sr "$skipreason" --argjson a "$absent" --argjson fl "$failed" \
+            --argjson u "$unmeas" --argjson sk "$skipped" --argjson r "$ran" \
+        '{meta:({timestamp:"2026-08-29T12:00:00Z", mode:"changed", analyzers_ran:$r,
+                 tools_absent:$a, tools_failed:$fl, tools_unmeasured:$u, tools_skipped:$sk}
+                + (if $sr == "" then {} else {skip_reason:$sr} end)),
           summary:{overall_status:$s, total_issues:0}}' ;;
     security-whole)
       jq -n --arg s "$f" --argjson a "$absent" --argjson fl "$failed" --argjson u "$unmeas" \
         '{meta:{timestamp:"2026-08-29T12:00:00Z", tools_absent:$a, tools_failed:$fl,
                 tools_unmeasured:$u},
           summary:{overall_status:$s, total_issues:0}}' ;;
-    dry)
+    dry|dry-nextjs)
       jq -n --arg s "$f" --argjson a "$absent" \
         '{mode:"whole-project", measured:true, tools_absent:$a, status:$s, rating:$s,
           generated_at:"2026-08-29T12:00:00Z"}' ;;
@@ -922,6 +1135,11 @@ build_report() {
 # `unreachable <shape> <findings> <coverage>` echoes the reason, or nothing.
 unreachable() {
   case "$1:$2:$3" in
+    # skip_reason lives under `optional_in: changed` — the whole-project scan has no diff
+    # to find nothing eligible in, so it never writes the field that makes a `skipped`
+    # benign. A whole-project `skipped` is always the other one.
+    security-whole:skipped-no-eligible:*) printf 'meta.skip_reason is emitted only by the --changed path: a whole-project scan has no changed set to find nothing eligible in' ;;
+    solid-*:skipped-no-eligible:*|dry*:skipped-no-eligible:*) printf 'skip_reason "no_eligible_changes" is a security-report field; the solid and dry gates carry no such state' ;;
     solid-nextjs:partial:*)  printf 'nextjs/solid-check.sh has no --changed mode, so it never emits status "partial"' ;;
     security-whole:*:all-absent) printf 'the whole-project security emitter carries no analyzers_ran, so its zero-coverage state cannot be expressed' ;;
     security-whole:*:scoped-out|security-whole:*:scoped-absent) printf 'the whole-project security emitter has no tools_skipped[]: it scans everything, so nothing is scoped out by a diff' ;;
@@ -937,11 +1155,18 @@ unreachable() {
 
 MATRIX_CELLS=0; MATRIX_UNREACHABLE=0; MATRIX_OVERCLAIMS=0; MATRIX_INCOMPLETE=0; MATRIX_NONBLOCKING=0
 MATRIX_FINDINGS_SEEN=""; MATRIX_COVERAGE_SEEN=""
-for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
+for shape in solid-drupal solid-nextjs security-changed security-whole dry dry-nextjs; do
   case "$shape" in
     solid-*)   gate="solid";    FINDINGS="pass warning fail partial unmeasured";        COVS="full one-absent all-absent failed unmeasured-tool scoped-out scoped-absent no-lists" ;;
-    security-*) gate="security"; FINDINGS="pass warning fail partial skipped unmeasured"; COVS="full one-absent machine-absent layer-absent machine-failed all-absent failed unmeasured-tool scoped-out scoped-absent no-lists" ;;
-    dry)       gate="dry";      FINDINGS="pass warning fail partial";                    COVS="full one-absent" ;;
+    # `skipped-no-eligible` is `skipped` with meta.skip_reason set, and it is a separate
+    # findings state rather than a coverage one: it is the producer's claim that nothing
+    # was in scope, which is the only thing that makes a `skipped` benign. Crossed with
+    # every coverage column because the claim and the coverage lists can disagree, and
+    # that disagreement is the whole question — a report saying nothing was eligible while
+    # naming a layer that did not produce, or while saying nothing at all about coverage,
+    # is not a report a benign reading can rest on.
+    security-*) gate="security"; FINDINGS="pass warning fail partial skipped skipped-no-eligible unmeasured"; COVS="full one-absent machine-absent layer-absent machine-failed all-absent failed unmeasured-tool scoped-out scoped-absent no-lists" ;;
+    dry*)      gate="dry";      FINDINGS="pass warning fail partial";                    COVS="full one-absent" ;;
   esac
   SHAPE_BAD=""
   SHAPE_N=0
@@ -955,12 +1180,12 @@ for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
       fi
       # dry has ONE analyzer, so its only coverage gap is "the analyzer is gone", which is
       # zero coverage rather than a partial one. Modelled explicitly instead of skipped.
-      if [ "$shape" = "dry" ] && [ "$cov" = "one-absent" ]; then
+      if [ "$gate" = "dry" ] && [ "$cov" = "one-absent" ]; then
         BLOCK_F=1; ZERO_F="hard"
       else
         read -r BLOCK_F ZERO_F <<<"$(coverage_facts "$gate" "$cov")"
       fi
-      read -r WV WU WP <<<"$(contract_expect "$f" "$BLOCK_F" "$ZERO_F")"
+      read -r WV WU WP <<<"$(contract_expect "$f" "$BLOCK_F" "$ZERO_F" "$cov")"
       RPT="${MATRIX_DIR}/${shape}-${f}-${cov}.json"
       build_report "$shape" "$f" "$cov" > "$RPT"
       OUT=$(run_resolver 0 "$gate" "$RPT" || true)
@@ -994,7 +1219,7 @@ for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
   # Per-shape floor. The whole-matrix floor below can stay satisfied while ONE shape
   # collapses to a single column, which is precisely the state the fixture set was in.
   SHAPE_MIN=8
-  case "$shape" in dry) SHAPE_MIN=8 ;; solid-*) SHAPE_MIN=28 ;; security-*) SHAPE_MIN=30 ;; esac
+  case "$shape" in dry*) SHAPE_MIN=8 ;; solid-*) SHAPE_MIN=28 ;; security-changed) SHAPE_MIN=70 ;; security-*) SHAPE_MIN=30 ;; esac
   if [ "$SHAPE_N" -lt "$SHAPE_MIN" ]; then
     fail_check "matrix $shape ran only $SHAPE_N cells, below its floor of $SHAPE_MIN — this shape has stopped being a cross-product and a hole in it is invisible"
   elif [ -z "$SHAPE_BAD" ]; then

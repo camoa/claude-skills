@@ -120,6 +120,52 @@
   than an unconfigured one. Both now say `unknown`, as does the whole
   `project_state_read_failed` branch, which had been reporting `default` after reading
   nothing.
+- **The producer control-flow walker only ever grew its stack.** The `awk` in
+  `tests/gate-verdict-resolve-spec.sh` that checks every `ABSENT_TOOLS+=` sits under an
+  availability probe pushed a level on `if` AND on `elif`, and popped only on a line that
+  was exactly `fi`. So `elif`, `else`, a one-line `if ...; fi` and `case`/`esac` never
+  balanced: measured on `security-check.sh`, depth 25 at end of file where the real nesting
+  is 3, and every push below roughly line 1478 was checked against a chain holding every
+  earlier `if` in the file, somebody else's availability probe included. Adding, removing or
+  renaming a push was still caught by the exact count and exact names beside it; MOVING one
+  into a scope branch was not, and that is the mutation the check exists for. `elif` now
+  appends to the level it is on rather than opening a new one, `else` leaves the level alone
+  because that is where all ten real pushes sit, `case` opens a level carrying no condition
+  so `esac` has something to close, and `fi`/`esac` are counted as words anywhere on the
+  line. The walker also resolves one variable of indirection, which is how semgrep's absence
+  is recorded: the push is in the else of `if [ -n "$SEMGREP_RUNNER" ]`, and that variable
+  is a literal assigned inside `if ddev exec semgrep --version`. Restricted to literal
+  right-hand sides on purpose — `PHPCS_ISSUES=$(...)` holds a tool's output rather than the
+  outcome of probing for it, and admitting command substitutions marked 44 variables where
+  the literal rule marks three. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
+  of `if command -v trivy` into a `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: push count 8
+  and the eight names unchanged, the old walker reported nothing, the new one goes red.
+- **A security scope skip resolved benign on a report that never said what it covered.**
+  `scripts/gate-verdict-resolve.sh`'s benign `skipped` rests on two claims, and only the
+  first was ever checked: nothing was eligible, which `meta.skip_reason` says, AND nothing
+  was denied anything, which the coverage lists say by being empty. A report carrying the
+  skip reason and NO coverage lists and no `analyzers_ran` had the second claim manufactured
+  for it by `// []`, and came back `skipped` / `unresolved:false` / `coverage_partial:false`
+  — the same undetermined-coverage hole the non-skip path already refuses to read as
+  complete, still open on this one. It now resolves unresolved, beside the
+  self-contradiction case (a scope skip naming a layer that did not produce) that the branch
+  already caught. Latent while the producer hardcodes the lists on that path, which is the
+  reason it survived a round: this file's premise is that a producer is checked, not
+  trusted.
+- **The dry branch named the Drupal analyzer while reasoning about a Next.js report.** The
+  condition that catches "this gate's one analyzer is gone" grepped `tools_absent[]` for the
+  literal `phpcpd`. The Next.js gate's analyzer is `jscpd`, so a Next.js report naming it
+  matched nothing and the branch fell through to resolve on `.status` alone: a clean `pass`
+  from a run whose only analyzer was missing. It came out right anyway and for an unrelated
+  reason — `nextjs/dry-check.sh` also writes `skip_reason: "tool_absent"`, which the same
+  condition tests first, so changing that one field in the producer would have exposed it.
+  Same class as the `["phpstan","phpmd"]` literal the solid branch dropped in 5.35.6, and
+  the same fix: this gate has exactly ONE analyzer, so ANY name in `tools_absent[]` is that
+  analyzer and the resolver carries no analyzer name of its own. A report that says the
+  analyzer is gone without saying which one now reads "which one is not stated in this
+  report" rather than being given a name this file guessed. The narrow instance only; the
+  broader question of stack knowledge hardcoded in this file — the producer paths and the
+  stack semantics — is the `stack_facts_in_recipes` task's subject and is untouched here.
 
 ### Added
 - `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
@@ -151,6 +197,32 @@
   distances are `null` and no missing-upstream claim is made, because there is no head to
   make it about). Three of its assertions exist to hold the fact advisory — the change set,
   its `files[]` and its `empty_reason` must all come out unchanged.
+- `tests/gate-verdict-resolve-spec.sh`: the condition walker is now a function with its own
+  negative control, and the fixture matrix grew an axis and a stack. The walker is asserted
+  to return to depth 0 on every producer it reads, which is the defect above stated as
+  something the check itself detects rather than something a reader has to notice, and it is
+  run over a file built to contain the mutation plus every construct that made the old stack
+  grow: one push that must be flagged, one in the else of a direct probe and one behind a
+  probe-assigned variable that must not, and `elif` / `else` / a one-line `if` / `case` that
+  must not leak a level. Without it, "no unguarded pushes" is also what a walker that had
+  stopped working reports. A dry producer's `tools_absent[]` is now held to naming exactly
+  one tool, and that tool to being one the same script probes for, which is the invariant the
+  resolver's analyzer-name-free reading depends on. The matrix gains
+  `skipped-no-eligible` as a findings state crossed with all eleven coverage columns —
+  because the scope claim and the coverage lists can disagree, and that disagreement is the
+  whole question — and `dry-nextjs` as a shape, so the Drupal and Next.js DRY analyzers are
+  both driven through the same cells. `security-whole` names all eleven scope-skip cells
+  unreachable with their reason: `meta.skip_reason` is emitted only by the `--changed` path.
+  150 cells to 205, 155 assertions to 174. Six mutations run against the group, each
+  verified applied before the suite ran: moving a push into a scope branch (1 red), reverting
+  the walker (3 red, reproducing depth 25 and depth 8), a probe test that accepts anything
+  (1 red), dropping the variable indirection (2 red), dropping either half of the scope-skip
+  refusal (2 red each), restoring the `phpcpd` literal (7 red), and a dry producer naming a
+  second tool in `tools_absent[]` (1 red).
+- Two fixtures for the states above: `sec-no-eligible-no-lists.json`, a scope skip carrying
+  no coverage lists at all, and `dry-nextjs-absent-no-skip-reason.json`, a Next.js DRY report
+  naming `jscpd` absent with the `skip_reason` removed, so the analyzer name is the only
+  channel left and the literal that used to be here has nothing else to hide behind.
 - `tests/validate-playbook-adherence-spec.sh` gains the playbook-configuration group, eight
   assertions, six of them behavioral rather than doc-matching: the state reader resolves an
   absent line plus an empty `defaults.json` to `default-empty`, a NON-EMPTY `defaults.json`
@@ -468,19 +540,6 @@
 ### Known remaining
 These are open. Each was found, measured, and deliberately not fixed in this release.
 
-- **The producer control-flow walker only ever grows its stack.** The `awk` in
-  `tests/gate-verdict-resolve-spec.sh` that checks every `ABSENT_TOOLS+=` sits under an
-  availability probe pushes on `if`/`elif` and pops only on a bare `fi`, so `elif`, `else`,
-  a one-line `if` and `case` never balance. Measured on `security-check.sh`: depth 25 at
-  end of file where the real nesting is about 3, meaning every push after the first few is
-  checked against a condition chain containing every earlier `if` in the file. What it
-  still catches: ADDING, REMOVING or RENAMING a push, through the exact-count and
-  exact-names assertions beside it. What it does not catch: MOVING an existing push into a
-  scope branch below roughly line 1478 of that file — the stack by then contains a probe
-  from somewhere else and the check passes green. The two assertions it sits with are what
-  actually held the line in the round-8 mutations; the walker itself is weaker than it
-  reads.
-
 - **`nextjs/security-check.sh` is an undeclared producer.** `--field-paths` gives `also`
   blocks to `dry` and `solid` only; `security` declares the Drupal producer alone. That
   file emits `.summary.overall_status` and the three coverage lists — `tools_unmeasured`
@@ -489,20 +548,6 @@ These are open. Each was found, measured, and deliberately not fixed in this rel
   earlier note in this entry said the Next.js gates were not an open gap; that was drawn
   from `nextjs/solid-check.sh` and `nextjs/dry-check.sh`, which are declared, and did not
   cover this third file.
-
-- **A security `skipped` with `skip_reason: "no_eligible_changes"` and NO coverage fields
-  resolves benign.** The scope-skip branch returns before the undetermined-coverage check
-  this release added, so `{"meta":{"mode":"changed","skip_reason":"no_eligible_changes"},
-  "summary":{"overall_status":"skipped"}}` comes back `skipped` / `unresolved:false` /
-  `coverage_partial:false` — the same short-circuit hole closed on the non-skip path, still
-  open on this one. Today's producer always writes the lists on that path, so it is latent.
-
-- **The dry branch names `phpcpd` on the Next.js stack, where the analyzer is `jscpd`.**
-  `gate-verdict-resolve.sh:541` greps `tools_absent[]` for `phpcpd` specifically. A Next.js
-  report with `jscpd` in that list and no `skip_reason` would not match, and the gate would
-  resolve on its status alone. It resolves correctly today only because
-  `nextjs/dry-check.sh` writes `skip_reason: "tool_absent"` on that path, which the same
-  condition checks first.
 
 - **The scope classification needs code-quality-tools 3.10.2 or newer.** With an older
   catalog the `layers` map is absent, `security_review` and its six neighbours fall back to

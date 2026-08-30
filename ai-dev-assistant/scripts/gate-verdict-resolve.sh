@@ -538,8 +538,24 @@ case "$GATE" in
     # The gate's ONE analyzer is gone, so nothing was measured. Not scope-aware: phpcpd is
     # `isolated` and jscpd `project`, both installable, and in any case a gate with a
     # single analyzer has no partial state to be lenient about — this is zero coverage.
-    if [ "$SKIP" = "tool_absent" ] || printf '%s' "$ABSENT" | grep -q 'phpcpd'; then
-      unresolved_out "dry: phpcpd absent (${SKIP:-tools_absent}) — it is this gate's only analyzer, so duplication was not measured" "$MODE" "$EV"
+    #
+    # THE NAME COMES FROM THE REPORT. This condition used to grep the list for the literal
+    # `phpcpd`, which is the DRUPAL analyzer; the Next.js gate's is `jscpd`, so a Next.js
+    # report naming it matched nothing and the branch fell through to resolve on `.status`
+    # alone. It came out right anyway, and for an unrelated reason: nextjs/dry-check.sh
+    # also writes skip_reason "tool_absent", which the same condition tests first. Change
+    # that producer's skip_reason and a Next.js gate whose only analyzer was missing
+    # resolves `pass`. Same class as the `["phpstan","phpmd"]` literal the solid branch
+    # dropped one section down, and the same fix: this gate has exactly ONE analyzer, so
+    # ANY name in tools_absent[] is that analyzer and no literal here needs to know which.
+    # tests/gate-verdict-resolve-spec.sh holds the producers to it — a dry report's
+    # tools_absent[] may name one tool and it must be the one that script probes for.
+    NABSENT=$(jqlen '.tools_absent')
+    if [ "$SKIP" = "tool_absent" ] || [ "$NABSENT" -gt 0 ]; then
+      # A report can say the analyzer is gone without saying which one it was. Say that,
+      # rather than filling the gap with a name this file guessed.
+      WHICH="$ABSENT"; [ -n "$WHICH" ] || WHICH="which one is not stated in this report"
+      unresolved_out "dry: this gate's only analyzer is absent ($WHICH; ${SKIP:-tools_absent}) — duplication was not measured" "$MODE" "$EV"
     fi
     if [ "$STATUS" = "skipped" ]; then
       unresolved_out "dry: the gate skipped without measuring (status=skipped)" "$MODE" "$EV"
@@ -743,15 +759,24 @@ case "$GATE" in
     # defines benign by exclusion — not unresolved, no coverage_partial marker, not a
     # fail. Fail-closing here would red every documentation pull request.
     #
-    # THE COVERAGE LISTS ARE READ FIRST. This branch used to sit above them and
-    # short-circuit, so a report carrying this skip reason AND `tools_failed: ["psalm"]`
-    # resolved benign with no markers at all. Only the current producer's hardcoded empty
-    # lists kept that latent, and the premise of this file is that a producer is checked,
-    # not trusted. A scope skip claims nothing was denied anything; a non-empty coverage
-    # list is that claim contradicting itself, and the contradiction is unresolved.
+    # THE COVERAGE LISTS ARE READ FIRST, AND SO IS THEIR ABSENCE. This branch used to sit
+    # above both and short-circuit. Only the current producer's hardcoded empty lists kept
+    # either latent, and the premise of this file is that a producer is checked, not
+    # trusted. Benign here rests on TWO claims, and the report has to carry both:
+    #
+    #   nothing was eligible          skip_reason says so, and only the producer can.
+    #   nothing was denied anything   the coverage lists say so by being empty.
+    #
+    # A non-empty coverage list is the second claim contradicting itself. NO coverage
+    # fields at all is the second claim never made: `// []` manufactures it out of
+    # silence, which is the same "undetermined read as complete" the non-skip path below
+    # closed. Both are unresolved, and neither may reach the benign emit.
     if [ "$STATUS" = "skipped" ] && [ "$SKIP_REASON" = "no_eligible_changes" ]; then
       if [ "$NGONE" -gt 0 ]; then
         unresolved_out "security: the report claims nothing was in scope (skip_reason=no_eligible_changes) while naming $NGONE layer(s) that did not produce ($(printf '%s' "$GONE" | jq -r 'join(", ")')) — a scope skip denies no layer anything, so this report contradicts itself" "$MODE" "$EV"
+      fi
+      if [ "$SEC_HAVE_LISTS" = "no" ]; then
+        unresolved_out "security: the report claims nothing was in scope (skip_reason=no_eligible_changes) and carries no coverage lists and no analyzers_ran — nothing in it says no layer was denied anything, and that is the half of the benign reading a report has to state rather than have assumed" "$MODE" "$EV"
       fi
       emit skipped false false false "$MODE" "$EV" "security: nothing in the changed set is in this gate's scope — no layer was denied anything, so this is not a coverage gap"
     fi
