@@ -1,5 +1,111 @@
 # Changelog
 
+## [5.36.0] - 2026-08-30
+
+### Added
+- **The critic that finds a defect now says what would fix it.** Every blocking or surfaced
+  finding carries a `remedy`: the smallest change that resolves it, naming every site it must
+  touch. A finding that asserts a class of defect backs the claim with an enumeration, and a
+  search that was not exhaustive says so. Deferred findings carry none, because a remedy for
+  code that does not exist is the speculative fix a deferral exists to prevent.
+
+  It exists because the repair rules could not work without it. Those rules ask the builder to
+  keep a repair minimal and to explain any growth, and the builder was the only party in that
+  transaction: it counted its own lines and wrote its own reason. Nobody who saw the defect ever
+  said what fixing it should have cost, so there was nothing for a repair to be wrong about.
+  Measured on a live build, one repair answered a one-line concern with 277 lines and a new
+  public interface method, and that repair alone authored 6 of the 10 criticals raised in the
+  rounds after it. Its growth reason would have passed.
+
+  A second measurement drove the enumeration half. Round one named the correct defect class 71%
+  of the time and bound nobody. Where a class statement claimed uniqueness the claim was false,
+  which excluded the sibling sites by construction, so the fixer changed one place and the rest
+  surfaced a round later.
+
+- **A finding built on a number states the threshold that makes the number matter.** When the
+  argument for acting is a measurement, the finding carries the quantity, the measured value in
+  its own units, the threshold at which it becomes worth acting on, and what makes that the
+  threshold. A ratio, a multiple or a delta is not admissible alone, and the threshold has to
+  come from outside the measurement.
+
+  Three critique rounds went to an import arrangement justified by a 130x ratio. The value was
+  about 90 ms: under the point where a person notices anything, and faster than two of that
+  project's own development dependencies. All three re-measurements improved the accuracy of the
+  number and none asked whether it mattered. That is a relevance failure, not a severity one:
+  89 concerns across the same corpus cost zero rounds, so the severity sort already works.
+
+  The rule stops at measurements deliberately. "Every finding must justify its worth" applies to
+  all of them, is satisfied by a sentence, and so can never come back false.
+
+- **A repair is measured against the remedy, and work outside it is sorted rather than excused.**
+  Anything beyond the remedy falls into one of three buckets, decided before the code is written.
+  A remedy that turned out to be insufficient is done and recorded against the remedy. A
+  different defect noticed in passing is recorded as a finding and not fixed in that repair. An
+  improvement the finding did not ask for is refused, and has no value to be recorded under, so
+  a record naming one is malformed rather than explained.
+
+  The refusal holds in both run modes, which is the point. "Do more and write a reason" documents
+  scope creep instead of stopping it, and on an unattended run nobody reads the reason before the
+  code lands. The third bucket is what makes the refusal affordable: a builder that sees a real
+  problem is told that noticing is a finding and fixing is a repair, and that the two do not
+  travel together.
+
+  From round two on, the critic is handed the previous round's remedy along with the delta and
+  rules on whether the repair matched it. The bucket a builder writes is still self-reported, the
+  same weakness that defeats the round count; what changed is that misreporting now requires
+  writing a false record where before it required nothing.
+
+### Fixed
+- **Three new checks shipped unable to fail, and were caught before release.** The first draft of
+  the membership test used jq's `index` against an array, which searches for a subarray rather
+  than an element. It threw on every record, the surrounding fallback turned the error into an
+  empty result, and all three checks passed every fixture including the four written to fail
+  them. Found by running eight fixtures against the script rather than reading the branch. The
+  membership test now uses `IN`, and a reader that throws is reported as unreadable and blocks
+  rather than falling back to "nothing found". Each of the three checks was then mutated out and
+  confirmed to let a previously blocking record through.
+- **A record could skip the whole mechanism by staying silent.** The bucket check was guarded by a
+  presence test and every downstream check defaulted the missing key to the passing value, so a
+  round that recorded a line count and no bucket passed. The exact live defect this release was
+  written for — a 277-line repair answering a one-line concern — passed as `{net_lines: 277,
+  reason: "needed"}`. Absence is now the failure: a round after the first owes a bucket, and a
+  `repair_growth` that is absent or is not an object fails the same way. Every sibling block in
+  that file already failed closed on a missing key; this one did not.
+- **The rule for a measurement with no establishable threshold escalated instead of relaxing.** It
+  said to call the point `unresolved`. Running the real aggregation kernel across all three risk
+  tiers shows `unresolved` under `--required` is blocking at every one, so a critic that measured
+  90 ms and could not name a perception limit would have halted the build — the founding case this
+  rule exists to stop costing anything. It stays a non-blocking concern carrying a null threshold.
+- **The critic was told to raise every over-remedy repair and forbidden to read the record that
+  distinguishes them.** A legitimate insufficient-remedy repair therefore drew a finding by
+  construction, and no severity was named, so the model chose between a blocking and a
+  non-blocking verdict. It is now a `concern`, and the critic describes the difference rather than
+  ruling on whether it was permitted.
+- The critic's output template said "write exactly this JSON" and had no slot for `deferred[]`,
+  which the same file requires and a downstream gate reads.
+- The finding shape is documented in four places, not two. The record schema named the two new
+  keys and neither of the two it already had. `tests/finding-shape-agreement-spec.sh` now fails
+  when the sites disagree.
+- The growth check compared `net_lines` without a type guard. jq orders every string above every
+  number, so a line count arriving as a string demanded a reason regardless of sign. The same file
+  already guarded the round count against this.
+- The handoff of the previous round's remedy was described in three documents and instructed at
+  none; the dispatch step now carries it, in both the command and the reference. It is plural: a
+  round runs up to three lenses and can raise several blocking findings.
+- A comment in the repair-growth block claimed version 5.36.0 for work that shipped in 5.35.0.
+
+### Known remaining
+- **`remedy` never reaches the build record.** It lives on the critic's verdict file and reaches
+  the per-component critique envelope, so the gate reads a `beyond_remedy` claim about a remedy it
+  cannot see. Copying remedies into the record would close it and would also be new mechanism
+  answering a finding nobody raised.
+- **The escalation threshold disagrees with both documents that describe it, and predates this
+  release.** `build-critique-assert.sh` sets it at two rounds; `references/gate-audit-schema.md`
+  and `commands/implement.md` both say three. A component that ran two rounds and converged is
+  rejected for not recording a decision nobody made. Reproduced against the real script. Recorded
+  rather than fixed here, because which number is right is a separate decision.
+- `why_now_is_wrong` is named as part of a deferred finding in four files and read by none.
+
 ## [5.35.7] - 2026-08-30
 
 ### Fixed

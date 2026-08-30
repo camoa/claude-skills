@@ -345,7 +345,7 @@ if [ -e "$REC" ]; then
     add_msg "$OVER_N component(s) ran to $ROUND_LIMIT or more rounds; continuing was a recorded decision: $ESC"
   fi
 
-  # ---------------------------------------- repair growth and deferrals (v5.36.0+)
+  # ---------------------------------------- repair growth and deferrals (v5.35.0+)
   #
   # TWO defects, one cause. Measured across five rounds on one component:
   #
@@ -369,6 +369,7 @@ if [ -e "$REC" ]; then
 
   UNJUSTIFIED_GROWTH=$(jq -c \
     '[ .[] | select((.repair_growth // null) != null)
+           | select((.repair_growth.net_lines | type) == "number")
            | select(((.repair_growth.net_lines // 0) > 0)
                     and (((.repair_growth.reason // "") | tostring) == ""))
            | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || UNJUSTIFIED_GROWTH='[]'
@@ -379,8 +380,126 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
 
+  # ------------------------------------ the repair against its remedy (v5.36.0+)
+  #
+  # The growth check above is the builder judging the builder. It counts lines the repair
+  # produced and asks the repair to explain them, and a reason is a sentence. Nobody who saw
+  # the defect ever said what fixing it should have cost, so there was nothing for a repair
+  # to be wrong ABOUT. Measured: one repair answered a one-line concern with 277 lines and a
+  # new public interface method, and that repair alone authored 6 of the 10 criticals raised
+  # in the rounds after it. Its `net_lines` reason would have passed.
+  #
+  # A finding now carries a `remedy` (agents/wo-critic.md): the smallest change that resolves
+  # it, written by the critic. `beyond_remedy` says which of three buckets the repair landed
+  # in, and it is INDEPENDENT of `net_lines` -- a repair can exceed its remedy while shrinking
+  # a file, and grow a file while staying inside it. Two of the buckets are legal:
+  #
+  #   none                 the repair did the remedy and nothing else
+  #   remedy_insufficient  the remedy did not work; what had to be added is recorded, and the
+  #                        correction lands against the REMEDY rather than being absorbed
+  #   new_finding          the builder saw a different defect. It is recorded AS a finding and
+  #                        NOT fixed in this repair, so noticing stays legal while fixing waits
+  #
+  # There is deliberately NO value for the fourth thing a repair can do: an improvement the
+  # finding did not ask for. That is the whole of the measured churn, it is refused, and it
+  # therefore has no legal way to be recorded. A record naming one is malformed, and reaches
+  # the enum check below rather than passing as an explained excess.
+  #
+  # This is still self-report -- a builder writing `none` where the truth is otherwise defeats
+  # it, exactly like `rounds`. What changes is that doing so now requires writing a FALSE
+  # record where before it required nothing at all, and the next round's critic is handed the
+  # remedy and rules on the match.
+  # A jq error must NOT read as "nothing found". The three filters below each fall back to a
+  # SENTINEL rather than to `[]`, and the sentinel is reported as unresolved. The first draft
+  # of this block used `index()` for the membership test; on an array `index` searches for a
+  # SUBARRAY, so it threw "Cannot index array with string" on every record, the `|| VAR='[]'`
+  # swallowed it, and all three checks passed everything. Use IN(), and make a throw loud.
+  BEYOND_ENUM='["none","remedy_insufficient","new_finding"]'
+  JQ_ERR="__jq_error__"
+
+  # ABSENCE IS THE FAILURE, not just a wrong value. Every sibling block in this file fails
+  # closed on a missing key, and the first draft of this one did not: it guarded the enum test
+  # with `has("beyond_remedy")` and defaulted the missing key to "none" everywhere downstream.
+  # A record could then skip the whole mechanism by staying silent, and the exact live defect
+  # this release was written for -- a 277-line repair answering a one-line concern -- passed as
+  # `{net_lines: 277, reason: "needed"}` with no bucket at all. The record did not have to lie.
+  # A round after the first is a repair round and owes both keys; round 1 built the component
+  # and owes neither.
+  MISSING_BEYOND=$(jq -c \
+    '[ .[] | select(((.round // 1) | if type == "number" then . else 2 end) > 1)
+           | select(((.repair_growth // null) == null)
+                    or ((.repair_growth | type) != "object")
+                    or ((.repair_growth | has("beyond_remedy")) | not))
+           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || MISSING_BEYOND="$JQ_ERR"
+  if [ "$MISSING_BEYOND" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the repair-against-remedy check could not read the rounds history"
+    emit fail true "" 1
+  fi
+  MB_N=$(jq -r 'length' <<<"$MISSING_BEYOND")
+  if [ "$MB_N" -gt 0 ]; then
+    set_ev missing_beyond_remedy_rounds "$MISSING_BEYOND"
+    add_msg "$MB_N repair round(s) record no beyond_remedy, so whether the repair stayed inside the remedy was never answered; a round after the first owes one"
+    emit fail true "" 1
+  fi
+
+  BAD_BEYOND=$(jq -c --argjson ok "$BEYOND_ENUM" \
+    '[ .[] | select((.repair_growth // null) != null)
+           | select((.repair_growth | type) == "object")
+           | select(.repair_growth | has("beyond_remedy"))
+           | select((.repair_growth.beyond_remedy | IN($ok[])) | not)
+           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_BEYOND="$JQ_ERR"
+  if [ "$BAD_BEYOND" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the repair-against-remedy check could not read the rounds history, so whether any repair went outside its remedy is unknown"
+    emit fail true "" 1
+  fi
+  BB_N=$(jq -r 'length' <<<"$BAD_BEYOND")
+  if [ "$BB_N" -gt 0 ]; then
+    set_ev malformed_beyond_remedy "$BAD_BEYOND"
+    add_msg "$BB_N repair round(s) record a beyond_remedy outside none|remedy_insufficient|new_finding; there is no legal value for an improvement the finding did not ask for, because that work is refused rather than explained"
+    emit fail true "" 1
+  fi
+
+  UNEXPLAINED_EXCESS=$(jq -c \
+    '[ .[] | select((.repair_growth // null) != null)
+           | select(((.repair_growth.beyond_remedy // "none") | tostring) != "none")
+           | select((((.repair_growth.reason // "") | tostring) | gsub("^\\s+|\\s+$";"")) == "")
+           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || UNEXPLAINED_EXCESS="$JQ_ERR"
+  if [ "$UNEXPLAINED_EXCESS" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the check for a repair that went outside its remedy could not read the rounds history"
+    emit fail true "" 1
+  fi
+  UX_N=$(jq -r 'length' <<<"$UNEXPLAINED_EXCESS")
+  if [ "$UX_N" -gt 0 ]; then
+    set_ev unexplained_beyond_remedy_rounds "$UNEXPLAINED_EXCESS"
+    add_msg "$UX_N repair round(s) went outside the remedy with no reason recorded; this is independent of net_lines, so a repair that shrank the file still owes one"
+    emit fail true "" 1
+  fi
+
+  # A `new_finding` that records no finding is a dropped finding wearing a label, the same
+  # failure as a deferral with no `blocked_on`. The bucket exists so that refusing to fix the
+  # thing does not mean losing it.
+  EMPTY_NEW_FINDING=$(jq -c \
+    '[ .[] | select((.repair_growth // null) != null)
+           | select(((.repair_growth.beyond_remedy // "") | tostring) == "new_finding")
+           | select((((.repair_growth.finding // "") | tostring) | gsub("^\\s+|\\s+$";"")) == "")
+           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || EMPTY_NEW_FINDING="$JQ_ERR"
+  if [ "$EMPTY_NEW_FINDING" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the check for a recorded new finding could not read the rounds history"
+    emit fail true "" 1
+  fi
+  EN_N=$(jq -r 'length' <<<"$EMPTY_NEW_FINDING")
+  if [ "$EN_N" -gt 0 ]; then
+    set_ev empty_new_finding_rounds "$EMPTY_NEW_FINDING"
+    add_msg "$EN_N repair round(s) claim beyond_remedy new_finding and record no finding; the bucket exists so a defect noticed during a repair is kept rather than fixed inline, and an empty one loses it either way"
+    emit fail true "" 1
+  fi
+
   BAD_DEFERRALS=$(jq -c \
-    '[ .[] | (.deferred // [])[] 
+    '[ .[] | (.deferred // [])[]
            | select((((.blocked_on // "") | tostring) == "")
                     or (((.finding // "") | tostring) == ""))
            | ((.finding // "unnamed") | tostring) ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_DEFERRALS='[]'

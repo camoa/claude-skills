@@ -207,14 +207,14 @@ msg_has "1 component(s) reached 2 or more critique rounds with no escalation rec
 # build that DID escalate and DID record the answer would have failed.
 D=$(mktask escalation_per_round)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
-  | .rounds=[{"round":5,"resolution":"owner chose the bounded fix"}]'
+  | .rounds=[{"round":5,"resolution":"owner chose the bounded fix","repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
 run "$D"
 verdict_is pass "a resolution on the round it settled satisfies the escalation requirement"
 rc_is 0 "a per-round resolution exits 0"
 
 D=$(mktask escalation_per_round_empty)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
-  | .rounds=[{"round":5,"resolution":""}]'
+  | .rounds=[{"round":5,"resolution":"","repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
 run "$D"
 verdict_is fail "an empty per-round resolution is no decision at all"
 msg_has "no escalation recorded" "an empty resolution reads as unescalated"
