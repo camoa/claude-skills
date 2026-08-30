@@ -209,8 +209,8 @@
   is recorded: the push is in the else of `if [ -n "$SEMGREP_RUNNER" ]`, and that variable
   is a literal assigned inside `if ddev exec semgrep --version`. Restricted to literal
   right-hand sides on purpose — `PHPCS_ISSUES=$(...)` holds a tool's output rather than the
-  outcome of probing for it, and admitting command substitutions marked 44 variables where
-  the literal rule marks. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
+  outcome of probing for it, and admitting command substitutions marks 17 variables across the
+  two producers where the literal rule marks 3. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
   of `if command -v trivy` into a `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: push count 8
   and the eight names unchanged, the old walker reported nothing, the new one goes red.
 - **That walker balanced and still accepted too much, and three known-remaining items were
@@ -231,6 +231,52 @@
   with `ABSENT_TOOLS+=("trivy")` moved into a scope branch nested inside `if command -v
   trivy`: the previous walker reported nothing, this one flags line 1690, and the unmutated
   producer stays clean at depth 0.
+- **The third cut asked the wrong question, and the moved push it was written for still passed.**
+  Cut three replaced "is any level in the chain a probe" with "is the INNERMOST branch a probe".
+  That fixed the two shapes it named and broke others, and it did not fix the one it existed for.
+  Measured on a copy of `security-check.sh`: moving `ABSENT_TOOLS+=("trivy")` out of the else of
+  `if command -v trivy` into the top-level `if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s … ]` left
+  push count 8 and all eight names unchanged, and the walker reported no finding — because
+  `[ -f … ]` matched its file-test probe form, and that producer has seven file tests, every one
+  of them on a report artifact rather than on a tool. The known-remaining text shipped an hour
+  earlier claimed that move was caught. It was not.
+  Two questions replace the one, and both are derived from the file rather than listed in it.
+  **A branch guards a push only when it is entered because a probe FAILED** — being inside a
+  probe's `then` means the tool is present, which is `tools_skipped[]` — so the walker records per
+  level whether the current branch is a negation (`else`, `elif`, or `if !`) and walks outward
+  until it finds one whose failed conditions include a probe. **And the guard must name the tool
+  the push names**: `is_probe` matches the shape of an availability test and says nothing about
+  which tool it tests, so cut three also passed `ABSENT_TOOLS+=("trivy")` moved into the else of
+  psalm's probe — a structurally perfect guard and a lie. All ten real pushes name their tool in
+  the condition that guards them, including the two behind a variable and the four behind a
+  `vendor/bin` path, so the comparison is the pushed name against the guard text under one
+  normalisation. A file test is a probe only when its operand carries a binary-directory marker or
+  is a variable assigned one, collected in pass 1 like the sentinel variables.
+  **This also corrects cut three on `elif`.** Its fixture asserted that a push in the `elif` of a
+  probe must be flagged "because reaching the elif means the probe SUCCEEDED", which is backwards:
+  reaching an elif means the `if` condition was FALSE, so `if command -v x; …; elif …; then
+  ABSENT_TOOLS+=("x")` records something true. That assertion was a false red. The elif shape that
+  IS wrong is the other one — `elif <probe for x>; then ABSENT_TOOLS+=("x")` — and the fixture
+  plants that instead. Two more false reds cut three added go with it: a push in a `case` arm and
+  a push in a nested `if`, both inside the else of a probe, each flagged because the innermost
+  branch is a scope test even though the tool really is absent there. And `else` now matches a
+  line carrying a trailing comment.
+  **The known-remaining, stated as behaviour and measured rather than reasoned about.** What this
+  catches: a push added, removed or renamed (the count and names beside it), and a push moved into
+  any branch that is not the negation of a probe naming that same tool — including the two moves
+  above. What it does NOT catch: a scope test on a CONTINUATION line, where the else is reachable
+  with the tool present and the walker reads one physical line per condition — a silent pass. What
+  it wrongly flags: a probe written as a loop (`while ! command -v x`), and a probe factored into
+  a helper function, since the condition then names the function rather than the test. It does not
+  reliably catch every moved push and this entry does not claim it does; it catches the two that
+  were reported and the class each belongs to, and names the three shapes it gets wrong.
+  Seven mutations on the walker, each 1 red, plus one that restores cut three's rule and goes 2
+  red. The fixture grows to seven shapes that must be flagged and twelve that must not, asserted
+  by name — three of the seven are shapes an earlier cut passed green and four of the twelve are
+  shapes an earlier cut flagged on a correct producer, so it carries both directions of every
+  correction. And the moved push is now planted in a COPY of `security-check.sh` by the suite
+  itself rather than by hand, asserting alongside it that the push count is still 8 and the eight
+  names still the same eight — which is why neither of those checks can stand in for this one.
 - **What counted as a probe was a literal this file guessed.** `command -v`, `test -f`/`-x`,
   `vendor/bin`, `--version`, `resolve_analyzer`, `ddev exec test`, `pm:list` and nothing else,
   so a correct producer written `if hash trivy 2>/dev/null`, `if [ -e "$TRIVY_BIN" ]` or
@@ -247,8 +293,12 @@
   `if command -v gitleaks` that say nothing whatever about whether gitleaks is there. Testing
   any of them licensed a push. The rule is now the shape `[ -n "$VAR" ]` actually reads: an
   EMPTY sentinel assigned somewhere, and a NON-EMPTY literal assigned inside a probe branch.
-  Measured across both producers: 35 variables with any right-hand side, 6 with a literal one,
-  1 with the sentinel rule — `SEMGREP_RUNNER`, the case the indirection exists for. The
+  Measured across both producers, by the rule as it stands after the entry below: 9 variables
+  carry an empty sentinel somewhere, 3 are assigned a literal inside a probe branch, and 1 does
+  both — `SEMGREP_RUNNER`, the case the indirection exists for. (The earlier figures here — 35
+  with any right-hand side, 6 with a literal one — were not reproducible against any reading of
+  either producer, and the six named above were counted under the chain-based branch rule two
+  entries down replaced.) The
   fixture plants the counter-case (a `SCAN_MODE="tree"` set inside a probe branch and then
   tested) and asserts the resolved sentinel count is exactly one, so neither direction can
   drift silently.
