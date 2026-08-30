@@ -8904,6 +8904,174 @@ AC_WATCH=$(grep -vE '^[[:space:]]*#' "$TDD" | grep -cE 'node_modules' || true)
 assert_eq "[tdd] [contract, not behavioural] both watch walkers exclude vendored trees" \
   "2" "${AC_WATCH:-MISSING}"
 
+# ── AH. an isolated-scope analyzer is found where it is actually installed ───
+echo ""
+echo "AH: a correct php-security-linter / psalm install does not read as tools_absent"
+
+# schema/tool-catalog.json scopes php-security-linter and psalm `isolated`, so
+# cqt-install.sh puts each in its own bamarni bin namespace — vendor-bin/<tool>/vendor/bin/<tool>
+# — and NOT in the project's vendor/bin. This gate probed vendor/bin alone for both, so
+# a CORRECT install landed in tools_absent[], and under the coverage rules a missing
+# installable tool blocks a review: somebody hits the gate, runs the install command the
+# gate itself prints, and the gate still reports the tool missing. Same defect the DRY
+# gate had, and the same shared resolver fixes it.
+#
+# THREE directions, because a probe that always finds and a probe that always misses
+# both pass a one-sided test:
+#   AH1  installed ONLY in the bin namespace   -> found, ran, findings counted
+#   AH2  installed nowhere at all              -> absent, and absent is still reachable
+#   AH3  psalm resolved on the HOST            -> found, and its out-of-band report
+#        still arrives, which is the half the runner decides
+#
+# AH3 is not decoration. psalm is the one analyzer here that writes via --report rather
+# than stdout, and the path it is handed is read by whoever ran it. A host psalm told to
+# write into the container's staging directory produces a file the fetch cannot see, and
+# an analyzer that ran perfectly well is then recorded as a FAILED layer. Absent, failed
+# and ran-clean are three different findings and this section refuses to conflate them.
+
+AHSTUB="$TMP/ahstub"; mkdir -p "$AHSTUB"
+cat > "$AHSTUB/ddev" <<'STUB'
+#!/usr/bin/env bash
+# The container's filesystem is MODELLED, not shared with the host: an absolute path
+# is rewritten under $STUB_CONTAINER_ROOT, while a relative one is left alone because
+# that is the bind-mounted repository and really is the same file on both sides. That
+# separation is the whole point — with one shared /tmp, a host analyzer writing to a
+# container path would appear to work here and the defect AH3 exists to catch would be
+# invisible.
+cpath() { case "${1-}" in /*) printf '%s%s' "${STUB_CONTAINER_ROOT:-}" "$1" ;; *) printf '%s' "${1-}" ;; esac; }
+case "${1-}" in
+  describe) exit 0 ;;
+  exec) shift ;;
+  *) exit 1 ;;
+esac
+case "${1-}" in
+  test)
+    shift
+    case "${2-}" in
+      # Nothing is ever in the project's own vendor/bin. That IS the fixture: a correct
+      # install of an `isolated` tool puts nothing there.
+      vendor/bin/psalm|vendor/bin/php-security-linter) exit 1 ;;
+      vendor-bin/psalm/vendor/bin/psalm|vendor-bin/php-security-linter/vendor/bin/php-security-linter)
+        [ "${STUB_ISOLATED:-0}" = 1 ] && exit 0 || exit 1 ;;
+      psalm.xml) exit 1 ;;
+    esac
+    test "${1-}" "$(cpath "${2-}")" ;;
+  grep)  shift; grep "$@" 2>/dev/null; exit 0 ;;
+  mkdir) shift; mkdir "${1-}" "$(cpath "${2-}")" 2>/dev/null; exit 0 ;;
+  rm)    shift; rm "${1-}" "$(cpath "${2-}")" 2>/dev/null; exit 0 ;;
+  cat)   shift; cat "$(cpath "${1-}")" 2>/dev/null; exit 0 ;;
+  drush)    printf '[]\n'; exit 0 ;;
+  composer) printf '{"advisories":{}}\n'; exit 0 ;;
+  vendor-bin/php-security-linter/vendor/bin/php-security-linter)
+    # Findings on stdout, captured by a host-side redirection — which is why this one
+    # works the same wherever it was resolved.
+    printf '{"files":{"web/modules/custom/m/A.php":{"messages":[{"type":"ERROR","source":"Sec.Eval","line":3,"message":"eval() on user input"}]}}}\n'
+    exit 0 ;;
+  vendor-bin/psalm/vendor/bin/psalm)
+    shift
+    rep=""
+    for a in "$@"; do case "$a" in --report=*) rep="${a#--report=}" ;; esac; done
+    [ -n "$rep" ] || exit 2
+    rep="$(cpath "$rep")"
+    printf '[{"type":"TaintedSql","severity":1,"file_path":"web/modules/custom/m/A.php","line_from":3,"message":"tainted sql"}]\n' > "$rep"
+    # psalm exits non-zero when it FINDS something, which is not a failure.
+    exit 2 ;;
+  *) exit 127 ;;
+esac
+STUB
+chmod +x "$AHSTUB/ddev"
+
+cat > "$AHSTUB/psalm" <<'STUB'
+#!/usr/bin/env bash
+# psalm on the host PATH — what `composer global require` leaves behind, and the polite
+# install when adding an analyzer to a client's require-dev is not acceptable. It writes
+# to the path it was GIVEN. It has no idea a container exists.
+rep=""
+for a in "$@"; do case "$a" in --report=*) rep="${a#--report=}" ;; esac; done
+[ -n "$rep" ] || exit 2
+printf '[{"type":"TaintedSql","severity":1,"file_path":"web/modules/custom/m/A.php","line_from":3,"message":"tainted sql"}]\n' > "$rep"
+exit 2
+STUB
+chmod +x "$AHSTUB/psalm"
+
+cat > "$AHSTUB/composer" <<'STUB'
+#!/usr/bin/env bash
+# Present and unhelpful, so the resolver's composer-global lookup contributes nothing
+# and the three directions below differ ONLY in where the binaries are.
+exit 1
+STUB
+chmod +x "$AHSTUB/composer"
+
+# The premise of AH2 and AH3 is that these two names do not resolve from the system bin
+# dirs. If either ever did, "installed nowhere" would silently stop being true and the
+# absent direction would pass for the wrong reason.
+AH_LEAK=""
+for t in psalm php-security-linter; do
+  if PATH="/usr/bin:/bin" command -v "$t" >/dev/null 2>&1; then
+    AH_LEAK="${AH_LEAK}${AH_LEAK:+,}${t}"
+  fi
+done
+assert_eq "[AH] neither analyzer leaks in from the system bin dirs" "" "$AH_LEAK"
+
+mk_ah() {
+  local work; work="$(mktemp -d "$TMP/ah.XXXXXX")"
+  mkdir -p "$work/web/core/lib" "$work/web/modules/custom/m" "$work/web/themes/custom/t"
+  printf "const VERSION = '10.5.0';\n" > "$work/web/core/lib/Drupal.php"
+  printf '<?php\nclass A {}\n' > "$work/web/modules/custom/m/A.php"
+  printf '%s' "$work"
+}
+
+# <isolated> <host-psalm>; echoes "<absent∩{the two}>|<failed∩{the two}>|<high count>".
+# absent and failed are read SEPARATELY because they are the two wrong answers this fix
+# has to avoid, and they are different wrong answers: a resolver that never finds
+# anything shows up in the first, a report path that follows the wrong runner in the
+# second, and a single "did it pass" tuple would hide whichever one was not happening.
+run_ah() {
+  local isolated="$1" host_psalm="$2"
+  local work bin rdir croot
+  work="$(mk_ah)"
+  rdir="$work/.reports"
+  croot="$work/container"; mkdir -p "$croot"
+  bin="$(mktemp -d "$TMP/ahbin.XXXXXX")"
+  cp "$AHSTUB/ddev" "$AHSTUB/composer" "$bin/"
+  [ "$host_psalm" = 1 ] && cp "$AHSTUB/psalm" "$bin/"
+  ( cd "$work" \
+    && PATH="$bin:/usr/bin:/bin" REPORT_DIR="$rdir" \
+       STUB_ISOLATED="$isolated" STUB_CONTAINER_ROOT="$croot" \
+       bash "$SEC" ) >/dev/null 2>&1 || true
+  printf '%s|%s|%s' \
+    "$(jq -r '[(.meta.tools_absent // ["MISSING"])[] | select(. == "psalm" or . == "php-security-linter")] | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '[(.meta.tools_failed // ["MISSING"])[] | select(. == "psalm" or . == "php-security-linter")] | sort | join(",")' "$rdir/security-report.json" 2>/dev/null || echo MISSING)" \
+    "$(jq -r '.summary.by_severity.high // "MISSING"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)"
+}
+
+# AH1: the direction the defect got wrong. Both tools installed exactly where the
+# catalog's `isolated` scope puts them, and nothing in vendor/bin.
+assert_eq "[AH1] an isolated-scope install is found, runs, and its findings are counted" \
+  "||2" "$(run_ah 1 0)"
+
+# AH2: the partner. Nowhere at all is still reachable — a probe that always finds is as
+# useless as one that never does.
+assert_eq "[AH2] and a tool that is genuinely nowhere is still reported absent" \
+  "php-security-linter,psalm||0" "$(run_ah 0 0)"
+
+# AH3: psalm on the host. Found by the resolver's third location, and its out-of-band
+# report has to be written somewhere the host can read back. Before the report path
+# followed the runner, this produced psalm in tools_failed[] and a high count of 0 — a
+# working analyzer recorded as a broken one.
+assert_eq "[AH3] a host-resolved psalm is neither absent nor failed, and its report arrives" \
+  "php-security-linter||1" "$(run_ah 0 1)"
+
+# And the fix is the SHARED resolver, not a third copy of the location list. Asserted at
+# the call sites, because sourcing the file proves nothing about what the probes below
+# it still do.
+assert_eq "[AH] the security gate sources the shared resolver" "yes" \
+  "$(grep -q 'analyzer-resolve.sh' "$SEC" && echo yes || echo no)"
+assert_eq "[AH] and defines no resolver of its own" "0" \
+  "$(grep -c '^resolve_analyzer()' "$SEC" || true)"
+assert_eq "[AH] no hardcoded vendor/bin probe survives in it" "0" \
+  "$(grep -cE 'ddev exec (test -f )?vendor/bin/(psalm|php-security-linter)' "$SEC" || true)"
+
 # ── AF. an unmeasured gate reaches the aggregate (criterion 3) ───────────────
 echo ""
 echo "AF: full-audit reads the word from the report, and refuses to certify a pass on it"

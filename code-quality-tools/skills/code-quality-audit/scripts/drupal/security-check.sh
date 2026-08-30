@@ -40,6 +40,18 @@ cqt_announce_report_dir
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_resolve_drupal_paths
 
+# Where an analyzer binary actually IS, answered in ONE place for every gate. Two of the
+# layers here — php-security-linter and psalm — are `scope: isolated` in
+# schema/tool-catalog.json, so cqt-install.sh puts them in their own bamarni bin
+# namespace at vendor-bin/<tool>/vendor/bin/<tool> and NOT at vendor/bin/<tool>. This
+# gate probed vendor/bin alone, so a correctly installed pair landed in tools_absent[]
+# — and under the coverage rules a missing installable tool blocks a review. Somebody
+# hits the gate, runs the install command the gate itself prints, and the gate still
+# reports the tool missing. Same defect the DRY gate had; same shared resolver fixes it,
+# rather than a third copy of the location list.
+# shellcheck source=../core/analyzer-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/analyzer-resolve.sh"
+
 # ── host filesystem vs container filesystem ───────────────────────────────────
 #
 # Nearly every in-container tool here writes to STDOUT and is captured by a host-side
@@ -571,11 +583,16 @@ if [ -n "$CHANGED_FILE" ]; then
     PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
-        if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+        # Four locations, not one: this analyzer is installed at `isolated` scope, so a
+        # correct install is at vendor-bin/php-security-linter/vendor/bin/, and the
+        # resolver is also what decides whether to dispatch into the container or run it
+        # on the host. Its findings arrive on stdout, captured by a host-side
+        # redirection, so the runner does not change anything below.
+        if resolve_analyzer php-security-linter; then
             RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
             set +e
             # shellcheck disable=SC2046
-            ddev exec vendor/bin/php-security-linter scan \
+            "${ANALYZER_CMD[@]}" scan \
                 "${RELEVANT_FILES[@]}" \
                 --format=json \
                 2>/dev/null > "$PHPCS_SECURITY_JSON"
@@ -1177,7 +1194,21 @@ echo -e "${BLUE}[3/10]${NC} Running PHPCS security linter (OWASP/CIS)..."
 # =====================
 PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
 
-if ddev exec test -f vendor/bin/php-security-linter &> /dev/null && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
+# Resolved ONCE, and the answer branched on twice. Both arms asked the same question
+# before, and the question was the wrong one: `isolated` scope puts this binary in its
+# own bin namespace, so the vendor/bin probe read a correct install as absent. Resolving
+# here rather than inside each arm also means the two arms cannot come to disagree, and
+# keeps the resolver's own ANALYZER_CMD from being clobbered by the psalm block below
+# before this one has used it.
+if resolve_analyzer php-security-linter; then
+    PHPCS_SEC_PRESENT=1
+    PHPCS_SEC_CMD=("${ANALYZER_CMD[@]}")
+else
+    PHPCS_SEC_PRESENT=0
+    PHPCS_SEC_CMD=()
+fi
+
+if [ "$PHPCS_SEC_PRESENT" -eq 1 ] && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
     # The tool is installed and there is nothing for it to read. Not "absent" — that is
     # a fact about the machine and is allowed not to move the verdict — and not a
     # failure either, because it never ran.
@@ -1186,9 +1217,9 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null && [ "${#SEC_SC
     SKIPPED_TOOLS+=("php-security-linter")
     UNMEASURED_TOOLS+=("php-security-linter")
     PHPCS_ISSUES="[]"
-elif ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+elif [ "$PHPCS_SEC_PRESENT" -eq 1 ]; then
     set +e
-    ddev exec vendor/bin/php-security-linter scan \
+    "${PHPCS_SEC_CMD[@]}" scan \
         "${SEC_SCAN_PATHS[@]}" \
         --format=json \
         2>/dev/null > "$PHPCS_SECURITY_JSON"
@@ -1244,7 +1275,9 @@ echo -e "${BLUE}[4/10]${NC} Running Psalm taint analysis..."
 # =====================
 PSALM_TAINT_JSON="${REPORT_DIR}/security/psalm-taint.json"
 
-if ddev exec test -f vendor/bin/psalm &> /dev/null; then
+if resolve_analyzer psalm; then
+    PSALM_CMD=("${ANALYZER_CMD[@]}")
+    PSALM_RUNNER="$ANALYZER_RUNNER"
     # Check if psalm.xml exists, if not create minimal config
     if ! ddev exec test -f psalm.xml &> /dev/null; then
         # The heredoc STAYS QUOTED — it is XML, and an unquoted one would have the shell
@@ -1318,21 +1351,36 @@ EOF
     # psalm writes out of band via --report, so a report from an earlier run would
     # otherwise be read as this run's result.
     clear_stale_report "$PSALM_TAINT_JSON"
-    # --report is read by the CONTAINER; PSALM_TAINT_JSON is a HOST path. See the
-    # host/container note at the top of this file.
-    PSALM_TAINT_CONTAINER="${CQT_CONTAINER_STAGE}/psalm-taint.json"
-    ddev exec mkdir -p "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
-    ddev exec vendor/bin/psalm --taint-analysis \
-        --report="${PSALM_TAINT_CONTAINER}" \
+    # --report is read by WHOEVER RUNS PSALM, and since the resolver that found this
+    # binary can hand back a host one — a global composer install is the polite way to
+    # audit third-party code — the path it is given has to follow the runner. A host
+    # psalm told to write into the container's /tmp would write a host file nobody reads
+    # back, the fetch below would find nothing, and a psalm that ran perfectly well
+    # would be recorded as a FAILED layer. Resolved-but-broken and absent are different
+    # findings, and neither of them is what a working analyzer deserves.
+    # See the host/container note at the top of this file for the container half.
+    if [ "$PSALM_RUNNER" = "container" ]; then
+        PSALM_TAINT_CONTAINER="${CQT_CONTAINER_STAGE}/psalm-taint.json"
+        ddev exec mkdir -p "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+        PSALM_REPORT_TARGET="${PSALM_TAINT_CONTAINER}"
+    else
+        # REPORT_DIR/security is created unconditionally near the top of this script, so
+        # the host target's directory is already there.
+        PSALM_REPORT_TARGET="${PSALM_TAINT_JSON}"
+    fi
+    "${PSALM_CMD[@]}" --taint-analysis \
+        --report="${PSALM_REPORT_TARGET}" \
         --output-format=json \
         --no-cache \
         2>/dev/null
     PSALM_EXIT=$?
     # Carried across before the status is judged. A psalm that wrote a report and exited
     # non-zero is a psalm that found taint, and the report has to be here for the
-    # resolve_tool_result call below to read it.
-    cqt_fetch_from_container "${PSALM_TAINT_CONTAINER}" "${PSALM_TAINT_JSON}"
-    ddev exec rm -rf "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+    # resolve_tool_result call below to read it. A host runner already wrote it there.
+    if [ "$PSALM_RUNNER" = "container" ]; then
+        cqt_fetch_from_container "${PSALM_TAINT_CONTAINER}" "${PSALM_TAINT_JSON}"
+        ddev exec rm -rf "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+    fi
     set -e
 
     # psalm exits non-zero when it finds issues, so the status cannot separate "found
@@ -2204,7 +2252,9 @@ ISSUES=$(jq -n \
 # full four-way split and why conflating them was a defect.
 #   tools_absent[]     the BINARY IS NOT INSTALLED — a fact about the machine, and the
 #                      only one of the three that is a coverage gap. Every push into it
-#                      on this path is a `command -v` / `test -f vendor/bin/...` miss.
+#                      on this path is a `command -v` miss or a resolve_analyzer miss,
+#                      and resolve_analyzer means all four install locations — a probe
+#                      of vendor/bin alone called a correctly isolated install absent.
 #   tools_failed[]     present and returned nothing usable — a zero from it is not
 #                      evidence, so it downgrades a would-be pass to "skipped".
 #   tools_unmeasured[] never asked, because the path it would have read is not there.
