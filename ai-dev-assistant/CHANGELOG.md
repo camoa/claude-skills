@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.35.7] - 2026-08-30
+
+### Fixed
+- **`/complete` refused to archive a task `/review` had passed.** `commands/complete.md`
+  told the reader to verify `_review.json` carries `gate_specific.pr_ready: true` or
+  `overall_verdict: "bypassed"` — the full path for one field of that record and a bare name
+  for the other. `gate-audit-write.sh` nests every payload under `gate_specific`, so a record
+  it wrote has no top-level `overall_verdict`. Measured across 63 real `_review.json` files:
+  55 carry `gate_specific.pr_ready`, 51 carry `gate_specific.overall_verdict`, and the 7 with
+  a top-level one all lack the nested one and predate the writer. Live consequence: a task
+  reviewed four times and closed `bypassed` with both bypass reasons populated took the
+  missing-audit branch, printed "`/review` did not run; gates not validated. Continue without
+  `/review`? [y/N]" — which is false — and defaulted to `[N]`, aborting the archive. Five
+  other consumers read the nested path correctly; this was the only outlier, established by
+  sweeping all 144 tracked command, reference and skill markdown files against an allowlist
+  derived from the writer.
+
+### Added
+- `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
+  point where `gate-audit-write.sh` puts the field. Both sides derived from the artifacts:
+  the top-level allowlist from the writer's own envelope construction, the payload keys from
+  the schema's own `"gate_specific": { … }` examples, so a key added to the schema is picked
+  up without anyone updating a list. It fires on a line that qualifies one payload key with
+  `gate_specific.` and names another bare — one object described two ways — which is the
+  defect above and does not fire on the many lines telling a PRODUCER what to write.
+
 ## [5.35.6] - 2026-08-29
 
 ### Fixed
@@ -253,32 +279,10 @@
   `evidence.exit_code_check`, and no flag at all reports `no-exit-code` rather than
   `agrees`.
 
-- **`/complete` refused to archive a task `/review` had passed.** `commands/complete.md`
-  told the reader to verify `_review.json` carries `gate_specific.pr_ready: true` or
-  `overall_verdict: "bypassed"` — the full path for one field of that record and a bare name
-  for the other. `gate-audit-write.sh` nests every payload under `gate_specific`, so a record
-  it wrote has no top-level `overall_verdict`. Measured across 63 real `_review.json` files:
-  55 carry `gate_specific.pr_ready`, 51 carry `gate_specific.overall_verdict`, and the 7 with
-  a top-level one all lack the nested one and predate the writer. Live consequence: a task
-  reviewed four times and closed `bypassed` with both bypass reasons populated took the
-  missing-audit branch, printed "`/review` did not run; gates not validated. Continue without
-  `/review`? [y/N]" — which is false — and defaulted to `[N]`, aborting the archive. Five
-  other consumers read the nested path correctly; this was the only outlier, established by
-  sweeping all 144 tracked command, reference and skill markdown files against an allowlist
-  derived from the writer.
-
 ### Added
 - `scripts/gate-verdict-resolve.sh` — the report-to-verdict mapping as an executable, with
   `--field-paths` publishing the contract the spec holds it to and `--tool-catalog` taking
   the scope authority.
-- `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
-  point where `gate-audit-write.sh` puts the field. Both sides derived from the artifacts:
-  the top-level allowlist from the writer's own envelope construction, the payload keys from
-  the schema's own `"gate_specific": { … }` examples, so a key added to the schema is picked
-  up without anyone updating a list. It fires on a line that qualifies one payload key with
-  `gate_specific.` and names another bare — one object described two ways — which is the
-  defect above and does not fire on the many lines telling a PRODUCER what to write.
-
 - `tests/gate-verdict-resolve-spec.sh` — the field paths checked against each producer,
   61 fixture reports, a 186-cell findings × coverage matrix, the exit-code cross-check and
   its bound, and the producer-side control-flow claims no fixture can hold.
