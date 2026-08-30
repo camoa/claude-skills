@@ -390,6 +390,86 @@ else
   done <<< "$BAD"
 fi
 
+# --- group 6: the artifact the validator keys on is the one /design actually writes -------
+#
+# Group 5 above derives the required input from the AGENT'S OWN BODY and then demands a benign
+# path for it in that same body. Both halves come from one document, so the document agreeing
+# with itself is the whole of the test — and it passed while the agent keyed its benign skip on
+# `architecture/main.md`, a filename `commands/design.md` never writes. That file is the PROJECT
+# stub `skills/project-initializer/SKILL.md` creates reading `{To be designed in Phase 2}`, which
+# breaks the gate in both directions at once: the stub exists for every project made by `/new`, so
+# the missing-input case never fires and the false red it was added to remove survives; and where
+# no stub exists every task skips benignly, so `architecture-fit` — a hard-block gate — can never
+# fail.
+#
+# So this group compares the agent against something OUTSIDE it. The authority is not another
+# document but a script that is run: `scripts/contract-baseline.sh` already resolves a task's
+# architecture set on disk (`present_list`, the `architecture/` directory at maxdepth 1 plus
+# `architecture.md`), and that is what `/review` step 0 freezes as the contract this very phase is
+# judged against. A fixture task folder is built, the script captures it, and the files it actually
+# copied are the ground truth. Both sides are derived: the patterns off the agent's body, the
+# filenames off a script's behaviour on a real directory. An artifact the authority captures and no
+# pattern covers is a task whose architecture the validator cannot see; a pattern that covers
+# nothing the authority captures is a filename nobody writes.
+CBASE="${PLUGIN_ROOT}/scripts/contract-baseline.sh"
+VALIDATOR_MD="${PLUGIN_ROOT}/agents/architecture-validator.md"
+if [ ! -f "$CBASE" ] || [ ! -f "$VALIDATOR_MD" ] || ! command -v jq >/dev/null 2>&1; then
+  fail_check "cannot resolve the task architecture set: contract-baseline.sh, the validator agent or jq is missing, so this group established nothing"
+else
+  CBTASK=$(mktemp -d)
+  mkdir -p "$CBTASK/architecture/sub"
+  printf '# hub\n'   > "$CBTASK/architecture.md"
+  printf '# main\n'  > "$CBTASK/architecture/main.md"
+  printf '# svc\n'   > "$CBTASK/architecture/svc.md"
+  printf 'notes\n'   > "$CBTASK/architecture/notes.txt"
+  printf '# deep\n'  > "$CBTASK/architecture/sub/deep.md"
+  bash "$CBASE" capture "$CBTASK" --slot review >/dev/null 2>&1 || true
+  CBBASE="$CBTASK/review/_contract-baseline"
+  CAPTURED=$(cd "$CBBASE" 2>/dev/null && find . -type f -name '*.md' 2>/dev/null \
+             | sed 's|^\./||' | grep '^architecture' | sort || true)
+  # The patterns the agent keys its missing-input skip on, taken as backticked path tokens
+  # rooted at `architecture`. A `{project_path}/`-prefixed token does not match, which is the
+  # point: this asks what the agent resolves RELATIVE TO THE TASK FOLDER.
+  APATS=$(grep -oE '`architecture(\.md|/[A-Za-z0-9_*.-]+\.md)`' "$VALIDATOR_MD" \
+          | tr -d '`' | sort -u)
+  NCAP=$(printf '%s\n' "$CAPTURED" | grep -c . || true)
+  NPAT=$(printf '%s\n' "$APATS" | grep -c . || true)
+  if [ "$NCAP" -ge 3 ] && [ "$NPAT" -ge 1 ]; then
+    pass_check "contract-baseline.sh captured $NCAP architecture artifact(s) for a task folder, checked against $NPAT pattern(s) the validator keys on"
+  else
+    fail_check "contract-baseline.sh captured ${NCAP:-0} architecture artifact(s) and the validator names ${NPAT:-0} pattern(s) — below the hub-plus-two-components fixture this group builds, so it could not have failed on anything"
+  fi
+  UNCOVERED=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    hit=0
+    while IFS= read -r pat; do
+      [ -n "$pat" ] || continue
+      # shellcheck disable=SC2254
+      case "$f" in $pat) hit=1 ;; esac
+    done <<< "$APATS"
+    [ "$hit" = "0" ] && UNCOVERED="${UNCOVERED} ${f}"
+  done <<< "$CAPTURED"
+  EMPTYPAT=""
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    hit=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # shellcheck disable=SC2254
+      case "$f" in $pat) hit=1 ;; esac
+    done <<< "$CAPTURED"
+    [ "$hit" = "0" ] && EMPTYPAT="${EMPTYPAT} ${pat}"
+  done <<< "$APATS"
+  if [ -z "$UNCOVERED" ] && [ -z "$EMPTYPAT" ]; then
+    pass_check "every architecture artifact /design leaves for a task is covered by a pattern the validator keys its benign skip on, and every pattern it names covers one"
+  else
+    [ -n "$UNCOVERED" ] && fail_check "contract-baseline.sh captures${UNCOVERED} for a task and agents/architecture-validator.md keys its missing-input skip on none of them. A task with that architecture on disk reads to the validator as a task with none, so \`architecture-fit\` — a hard-block gate — returns a benign skip and can never fail. The validator names [$(printf '%s' "$APATS" | tr '\n' ' ')]."
+    [ -n "$EMPTYPAT" ] && fail_check "agents/architecture-validator.md keys its missing-input skip on${EMPTYPAT}, which contract-baseline.sh captures for no task. Either \`/design\` never writes it — the \`architecture/main.md\` case, where the file that DOES exist is the \`{project_path}\` stub \`/new\` creates, so the skip never fires and the false red survives — or the authority stopped resolving it."
+  fi
+  rm -rf "$CBTASK"
+fi
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && { printf 'gate-verdict-sidecar-spec: all checks passed\n'; exit 0; }
 printf 'gate-verdict-sidecar-spec: FAILURES\n' >&2; exit 1

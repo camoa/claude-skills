@@ -64,7 +64,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 ## Process
 
 1. **Read the injected recipe.** If the command injected a `=== RESOLVED RECIPE ... ===` block, that is your framework-specific check set. Follow it.
-2. **Load the architecture.** Read `architecture/main.md` and the relevant component files. **If it does not exist, stop and return `verdict: "skipped"`** with the reason (see the verdict enum below). A task that never ran `/design` has no architecture to fit; that is a legitimate state, not a gate you could not evaluate.
+2. **Load the architecture — the TASK's, not the project's.** Your subject is the architecture `/design` wrote for the task under review: `architecture.md` (the hub) plus `architecture/*.md` (one file per component), both **relative to the task folder**. That is the same set `scripts/contract-baseline.sh` freezes for this task, and it is the set the dispatcher gave you a task folder to resolve. It is NOT `{project_path}/architecture/main.md` — the project-level file `/new` creates as a stub reading `{To be designed in Phase 2}` and `task-context-loader` reads for orientation. Keying on that one is how this check fails in both directions at once: the stub exists for every project, so the missing-input case never fires, and a task with a complete `architecture.md` looks like it has no architecture at all. **If the set is empty, or every file in it is a placeholder, stop and return `verdict: "skipped"`** with the reason (see the verdict enum below). A task that never ran `/design` has no architecture to fit; that is a legitimate state, not a gate you could not evaluate.
 3. **Understand the change.** Review what was implemented (the diff or the named component/file).
 4. **Check pattern match.** Does the approach use the documented patterns and dependencies?
 5. **Run all five gates.** SOLID, Library-First/CLI-First principles, DRY, TDD, Security — apply the recipe's concrete rules where injected, the stack-neutral checks below otherwise.
@@ -170,13 +170,28 @@ exactly this JSON to it, and write it *before* composing the markdown report bel
 - `verdict` maps one-to-one onto the `### Status` line below: `blocked` = BLOCKED, `needs_adjustment` =
   NEEDS ADJUSTMENT, `proceed` = APPROVED. `unresolved` is for a gate you genuinely could not evaluate —
   **never guess `proceed`**, and never soften a blocking failure into a warning to keep a sidecar tidy.
-- **`skipped` is for a MISSING INPUT, and it is not `unresolved`.** When `architecture/main.md` does
-  not exist there is no architecture to fit, so return `skipped` and say so in the reason. That is a
-  fact about the task, not about your ability to look: a task that never ran `/design` is a legitimate
-  state, and `/review` step 5.0 treats an all-`skipped` result as a benign skip that does not block.
-  `unresolved` means you were asked a question about a document that exists and could not answer it.
-  Keep the two apart in both directions — do **not** return `skipped` because a check was hard to run,
-  and do **not** return `unresolved` merely because the architecture document is absent.
+- **`skipped` is for a MISSING INPUT, and it is not `unresolved`.** The input is the task-level set
+  from step 2 — `architecture.md` plus `architecture/*.md` under the task folder — and it has THREE
+  states, not two:
+  - **absent** — no such file. Return `skipped`, reason `no_architecture_artifact`.
+  - **placeholder** — the files exist and none of them carries a design: empty, or nothing but a
+    heading and a `{…}` stand-in such as the `{To be designed in Phase 2}` line `/new` writes. Return
+    `skipped`, reason `architecture_placeholder_only`. A stub is not an architecture, and fitting a
+    change against one produces findings about a sentence nobody wrote as a design. This state is
+    the reason the two-state reading was wrong in the other direction: treat a stub as present and
+    you cannot fit it, cannot honestly say `proceed`, and fall to `unresolved` — a hard red for a
+    document nobody promised.
+  - **present** — at least one file carries real design content. Validate against it; `skipped` is
+    now off the table, and so is returning it because the fit was hard to judge.
+
+  In every skipped case the reason is a fact about the task, not about your ability to look: a task
+  that never ran `/design` is a legitimate state, and `/review` step 5.0 treats an all-`skipped`
+  result as a benign skip that does not block. `unresolved` means you were asked a question about an
+  architecture that exists and could not answer it. Keep the two apart in both directions — do **not**
+  return `skipped` because a check was hard to run, and do **not** return `unresolved` merely because
+  the architecture artifact is absent. **`/review` step 5.0 re-checks the disk before it believes a
+  `skipped`:** the set is a path list it can stat, so a `skipped` returned over an architecture that
+  is on disk and not a placeholder is `unresolved`, not a benign skip.
 - `findings[]` carries every blocking issue and every warning, each tagged with the gate it came from.
   This is the whole of your verdict: the orchestrator reads scalars off this file and does not parse the
   markdown report.

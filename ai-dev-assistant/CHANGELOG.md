@@ -12,13 +12,61 @@
   release before, and nothing about the task changed. Step 5.0d has had the equivalent since v5.20.0
   — no `alignment.md` is a benign, non-`unresolved` skip — and step 5.0 shipped without it, which is
   the asymmetry that made this reachable rather than anything about the code. The agent's verdict
-  enum gains `skipped` for a missing architecture document, `/review` step 5.0 maps an all-`skipped`
+  enum gains `skipped` for a missing architecture artifact, `/review` step 5.0 maps an all-`skipped`
   result to a benign skip that rule 5 lets pass, and `gate-audit-schema.md` §5.12 defines the state
   on `arch_validate.verdict`. A validator that was dispatched and could not answer is untouched and
   stays fail-closed: the two are different facts and the agent's contract now says so in both
   directions. Ranked last, so a sibling framework's `blocked` or `unresolved` can never be masked by
   a skip. This is a FALSE RED, the opposite direction from everything else in this release, and it
-  was invisible to all of it — every assertion here checks that silence fails closed.
+  was invisible to all of it — every assertion here checks that silence fails closed. **The first
+  cut of it keyed on the wrong file; see the next entry.**
+- **That skip keyed on a filename `/design` never writes, and broke the gate in both directions.**
+  The benign skip above was keyed on `architecture/main.md`. `commands/design.md` mentions
+  `architecture.md` ten times and `architecture/main.md` zero times: what `/design` writes for a task
+  is `architecture.md` as the hub plus `architecture/<component>.md` per component, which is exactly
+  the set `scripts/contract-baseline.sh` already freezes at step 0 and the set step 5.0d reads.
+  `architecture/main.md` is a different file at a different root — the PROJECT-level stub
+  `skills/project-initializer/SKILL.md` creates reading `{To be designed in Phase 2}` and
+  `task-context-loader` reads for orientation. Both readings were broken. With the stub present, which
+  is every project made by `/new`, the file exists, the skip never fires, the validator gets a
+  placeholder it cannot fit, and its own never-guess-`proceed` rule returns `unresolved` — the false
+  red this release exists to remove, still reachable. With the stub absent, every task returns
+  `skipped`, so `architecture-fit` — the hard-block gate this release added — passes benignly on a
+  task with a complete architecture, permanently. The agent and `/review` step 5.0 now both key on
+  the task-level set, `architecture.md` plus `architecture/*.md` under the task folder, and
+  `gate-audit-schema.md` §5.12 names it too.
+- **A stub is a third state, and having only two is how the defect worked in the other direction.**
+  `absent`, `placeholder` and `present` are now distinct: a file holding nothing but a heading and a
+  `{…}` stand-in is not an architecture, and a validator told to fit a change against one cannot
+  honestly say `proceed` and falls to `unresolved`. `placeholder` earns the same benign `skipped` as
+  `absent`, with its own reason, so the state that is neither a design nor a missing file has a
+  disposition instead of falling through to a hard red.
+- **A `skipped` was the one gate state taken on trust.** `no_return` is verified — the orchestrator
+  observes an absent sidecar itself. `skipped` was whatever the agent said. Now that it is keyed on a
+  path list, step 5.0 stats the disk: a `skipped` returned over an architecture that is present and
+  carries content is `unresolved` and fail-closed, not a benign pass.
+- **A mixed architecture-fit result hit no rule and fell off the end of aggregation.** `pass` required
+  every framework to return `proceed` and the benign skip required every framework to return
+  `skipped`, so a `proceed` + `skipped` pair — one framework designed, one not — matched none of the
+  five clauses. That is the defect step 8 rule 4 exists to close, reintroduced one gate down.
+  Aggregation now sets the `skipped` frameworks aside first and decides on the ones that answered;
+  only when none answered is the entry itself the benign skip. Ranking falls out of that rather than
+  being asserted beside it.
+- **A failed archive skipped the review record and then wrote a PR body anyway.** Step 10's abort
+  named the `_review.json` write and step 12's Phase-4 mark. Step 11 has no test of its own — its
+  condition is `pr_ready != true`, computed inside the write that was just skipped — so a green pass
+  emitted `PR_BODY.md` with no review record behind it, which is the state `/complete` then refuses.
+  Both steps now name the abort.
+- **The fifth assertion group compared a document to itself.** It derived the required input from the
+  agent's own body and then demanded a benign path for it in that same body, so it passed while the
+  filename was one no command writes. A sixth group compares the agent against something outside it:
+  it builds a task folder, runs `contract-baseline.sh capture` over it, and takes the files the script
+  actually copied as ground truth. An artifact captured that no pattern in the agent covers is a task
+  whose architecture the validator cannot see; a pattern covering nothing the script captures is a
+  filename nobody writes. Four mutations, each red: the agent keying only on `architecture/main.md`
+  (the shipped defect, 1 red), naming only the hub so component files go unseen (1), naming a file
+  `/design` never writes (1), and the authority itself dropping the `architecture/` directory (2 —
+  the non-vacuity floor and the empty pattern).
 - **A failed archive would have been followed by the overwrite it exists to prevent.** Step 10 runs
   `review-record-archive.sh` before writing `_review.json`, and said nothing about the script exiting
   1 — reachable with a read-only task folder, and also on a copy that does not land or an archive
