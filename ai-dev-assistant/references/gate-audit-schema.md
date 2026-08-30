@@ -236,14 +236,17 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 "gate_specific": {
   "phase": "research | design | implement",
   "playbook_sets_loaded": ["<framework>/best-practices/<author>"],
-  "playbook_sets_source": "explicit | explicit-none | default",
+  "playbook_sets_source": "explicit | explicit-none | default | default-empty | unknown",
   "user_playbook_loaded": "/abs/path/to/playbook.md or null",
+  "user_playbook_state": "set | docs-only-no-playbook | unset | unknown",
   "plays_by_section": {"CSS / SCSS": 5, "Architecture": 4},
   "conflicts_detected": []
 }
 ```
 
 `user_choice`: always `null` (deterministic; no prompt).
+
+**v5.35.7+ — an empty playbook is not one state.** `default` used to name the source of an empty list: `defaults.json` ships `{"playbookSets": []}`, so a project with no `**Playbook Sets:**` line got `default` while zero sets were applied, and a reader concluded a default set had been. `default` now means a NON-EMPTY default list was applied (the case a fork populating `defaults.json` gets); `default-empty` means the project never chose and there is nothing to fall back to. Both still mean "the project did not choose", so a consumer nudging on implicit inheritance must match BOTH. `unknown` is emitted only by the loader's `project_state_read_failed` branch, which observed no configuration at all — it must never be reported as a configured state. `user_playbook_state` is new and mirrors the reader's `userPlaybookState`; without it the record could not distinguish a recorded `docs-only-no-playbook` opt-out from a user playbook nobody ever set, and `validate-playbook-adherence` step 3 needs exactly that to tell a deliberate opt-out from a never-configured project.
 
 ### 5.8 `review` (v1.1+)
 
@@ -254,7 +257,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "dry_run": false,
   "gates_run": [
     {
-      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | agentic-verifier",
+      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | architecture-fit | agentic-verifier | mechanism-challenge | spec | internal-prior-art | build-critique",
       "kind": "hard-block | soft",
       "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
       "envelope_path": "<task>/validations/latest/<gate>.json or null",
@@ -266,6 +269,8 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "pr_ready": true,
   "pr_body_path": "<task>/PR_BODY.md or null",
   "contract_drift": { /* v5.35.5+, required — see below */ },
+  "head_upstream": { /* v5.35.7+, advisory — see below */ },
+  "base_distance": { /* v5.35.7+, advisory — see below */ },
   "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
@@ -277,6 +282,23 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 Review reads the contract as it stands at the moment each gate fires, and review can edit it. That is legitimate: a document specifying behaviour just found defective has to be corrected. Editing it invisibly is not, which is the same argument that put a baseline in front of the build in v5.34.0 — there the concern was a builder describing the code it had written, here it is a reviewer moving the standard it is judging against. `checked: false` carrying a reason is the honest answer when the step-0 capture did not run; a diff with no baseline must never read as an unchanged contract.
 
 **Never blocking on its own.** One consequence is not advisory: `alignment.md` in `changed[]` means the Spec gate at 5.0d judged a criteria list that is no longer the one on disk, so its verdict describes a contract that no longer exists. 5.0d is re-run, or its `gates_run[]` entry becomes `skipped` with `unresolved: true`, which step 8 rule 2 already treats as fail-closed. Observed live: a review corrected two architecture documents and deleted four acceptance criteria describing a withdrawn check, between one run of the Spec gate and the next. A criterion that no longer exists cannot be reported as unimplemented.
+
+**`head_upstream` / `base_distance` (v5.35.7+, advisory).** Copied verbatim from step 4's
+`review-change-set.sh` output: `head_upstream` is `{configured, ref, ahead, behind}` and `base_distance`
+is `{ahead, behind}` against the review's `--base`. They answer a question `/review` never asked while
+computing `pr_ready` — does the reviewed work exist anywhere but this machine? Measured live: two feature
+branches with no upstream, one seven commits ahead of `origin/staging`, and every gate reasoned about
+them without noticing.
+
+**Advisory, and it has to stay advisory.** A local-only branch is a legitimate state — reviews routinely
+run before the first push, the same reason the change set includes the working tree at all. Being unable
+to tell is the defect. `head_upstream.configured: false` never changes `pr_ready`, `overall_verdict`, or
+an exit code; it changes what the operator is told alongside them. Every numeric field is `null` when it
+could not be established, so "no upstream configured" and "could not ask" are never the same answer.
+
+**`architecture-fit` gate (v5.35.7+, conditional hard-block).** When `/review` step 5.0 dispatched at least one `ai-dev-assistant:architecture-validator` (one per framework whose review recipe resolved), it adds ONE aggregate hard-block `gates_run[]` entry named `architecture-fit`, taken as scalars off the `_arch-validate-<framework-slug>.json` sidecars. **Aggregate over the frameworks that answered.** First set aside every framework that returned `skipped` — a task with no architecture artifact of its own is a missing input, not a result — then decide on the remainder: `fail` on any `blocked` (step-8 rule 1); `skipped` + `unresolved: true` on any `no_return` — an **absent** sidecar — or on any `unresolved`, which step-8 rule 2 fails closed; `warning` when the worst remaining is `needs_adjustment` (a measured result under the block threshold, benign by rule 5); `pass` when every remaining framework returned `proceed`. Only when NO framework answered — every dispatched one returned `skipped` — is the entry itself `skipped` **without** `unresolved`, the benign shape rule 5 lets pass. The ranking falls out of that order, so a sibling framework's `blocked` or `unresolved` decides the entry and a skip can never mask one. Until v5.35.7 the clause list had no set-aside step and no all-skipped case, so a mixed `proceed` + `skipped` result — one framework designed, one not — matched none of the clauses and fell off the end of the list, which is the defect step 8 rule 4 exists to close reappearing one gate down. **Absent** entirely when no validator was dispatched — a stack-neutral project resolves no review recipe, and that path is degrade-first by design, so no dispatch is no gate rather than a failure.
+
+**Why the verdict is not left in `_recipe-load.json`.** That record is observability-only and never blocks (§5.12), so until v5.35.7 nothing consumed the architecture-fit verdict at all: a validator that returned `blocked` and a validator that returned nothing both reached `overall_verdict: "pass"`, while `commands/review.md` step 5.0 asserted a BLOCK posture in prose that no rule evaluated. The per-framework detail still lands in `frameworks[].arch_validate` for the audit trail — that file records, this entry adjudicates, the same split `agentic-verifier` uses against `_agentic-recipe.json`.
 
 **`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
@@ -427,6 +449,8 @@ Expected `gate_specific` shape:
         "summary": {"expected": 2, "present": 1, "absent_recommended": 1} },
       "method_fit": { "verdict": "mismatch",
         "reason": "method is contrib-module prior art; this task installs no module" },
+      "arch_validate": { "verdict": "no_return", "sidecar": "<abs path or null>",
+        "reason": "dispatched with an output path; no file at it when the gate read" },
       "advisory": "expected '## Change-impact globs' absent — gate uses the neutral floor"
     }
   ],
@@ -442,6 +466,7 @@ Expected `gate_specific` shape:
 | `frameworks[].source` | enum \| null | Provenance — only `dev-guides` is `verified:true`. `null` when nothing resolved. |
 | `frameworks[].declarations_audit` | object \| null | Verbatim `recipe-declarations-audit.sh` output for declaration-bearing phases; `null` otherwise. |
 | `frameworks[].method_fit` | object \| null | **v5.30.1+.** `{verdict, reason}`. `verdict` is `fits` \| `partial` \| `mismatch` \| `undetermined`; `reason` is one line and is required for `partial` and `mismatch`. Expected on every `available:true` entry — the writer warns when it is absent, because an unassessed recipe otherwise reads as a suitable one. `undetermined` is the honest answer when nobody looked. |
+| `frameworks[].arch_validate` | object \| null | **v5.35.7+, `phase: "review"` only.** The step-5.0 `architecture-validator` outcome for this framework: `{verdict, sidecar, reason}`. `verdict` is `proceed` \| `blocked` \| `needs_adjustment` \| `unresolved` \| **`no_return`** \| **`skipped`** — `no_return` being an absent sidecar after a dispatch that supplied an output path, which is never read as `proceed`, and `skipped` being a task whose own architecture artifact — `<task_folder>/architecture.md` plus `<task_folder>/architecture/*.md`, the set `contract-baseline.sh` freezes, never the `{project_path}/architecture/main.md` stub `/new` writes — is absent or is a placeholder, which is a benign missing-input state and is deliberately NOT `unresolved`. `reason` is one line and is required for `no_return`, `unresolved` and `skipped`; this field is where that reason lives, and `commands/review.md` step 5.0 named this record before the field existed, which is the `notes` failure below in a second place. `null` on an entry that dispatched no validator. **Recorded here, adjudicated elsewhere** — the gate consequence is the `architecture-fit` `gates_run[]` entry in `_review.json` (§5.8), because this record never blocks. |
 | `frameworks[].advisory` | string \| null | One-line human note emitted when a `recommended:true` declaration is `absent` (the surfaced fail-open). `null` when clean. |
 | `bypass` | object \| null | `{ "reason": "no_frameworks_defined \| navigator_unavailable \| recipe_not_published \| user_declined" }` when the phase proceeded stack-neutral with no recipe; `null` on a normal resolve. Records the deliberate degrade-first path so it is auditable rather than silent. |
 
@@ -608,7 +633,12 @@ settled disposition forward; `mechanisms_hash` lets a consumer detect a stale re
 Records the Spec-axis verdict: does the change faithfully implement the task's `alignment.md` contract,
 independent from the Standards gate battery (`references/spec-axis-review.md` for full semantics). Audit
 file `_spec.json`, own `schema_version: "1.0"`. Written by `/review` step 5.0d, which dispatches
-`agents/spec-axis-reviewer.md` and captures its returned verdict — the agent itself writes nothing.
+`agents/spec-axis-reviewer.md` with an output path and reads the scalars back off that agent's sidecar,
+`<task_folder>/_spec-axis.json` (v5.35.7+ — before that the agent had no `Write` tool and returned its
+verdict as prose, which truncated in transit on a live review). An **absent** sidecar after dispatch is
+`no_return`: `verdict: "skipped"` with `skip_reason: "spec_axis_reviewer_no_return"` and `unresolved: true`
+in the gate's `messages[]`, so step 8 rule 2 fails closed. It is never a `pass` — `pass` is the claim that
+somebody looked and found nothing missing.
 
 ```json
 {
@@ -644,7 +674,12 @@ file `_spec.json`, own `schema_version: "1.0"`. Written by `/review` step 5.0d, 
 
 ## 6. Invariants
 
-- **One file per gate per task.** Overwrite-on-fire. No history kept in this file.
+- **One file per gate per task.** Overwrite-on-fire. No history kept in this file. `_review.json` is
+  the one record whose replaced copies are preserved *beside* it: `/review` step 10 runs
+  `scripts/review-record-archive.sh` first, copying the outgoing record to
+  `<task_folder>/review-rounds/_review-<n>.json`. The invariant is unchanged — the current record is
+  still one file, still overwritten, still read at the same field paths — because `[r]` makes re-review
+  routine and a task that ran four passes had three of them in no surviving record.
 - **Absolute paths.** `task_folder` is always absolute. Consumers who need cross-machine portability use it as-is.
 - **JSON parses cleanly.** `gate-audit-write.sh` validates against this schema before writing; refuses on schema_version mismatch or missing required fields.
 - **Bypass is recorded, not silent.** When `bypass_reason` is non-null, the file still exists and `user_choice` is `"bypassed"`. The user CAN choose to skip; they CAN'T silently skip.

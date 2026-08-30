@@ -15,8 +15,9 @@
 # Output (per references/gate-audit-schema.md gate_specific shape):
 #   {
 #     "playbook_sets_loaded": [...],
-#     "playbook_sets_source": "explicit | explicit-none | default",
+#     "playbook_sets_source": "explicit | explicit-none | default | default-empty | unknown",
 #     "user_playbook_loaded": "/abs/path or null",
+#     "user_playbook_state": "set | docs-only-no-playbook | unset | unknown",
 #     "plays_by_section": {"CSS / SCSS": 5, ...},
 #     "conflicts_detected": [],
 #     "warnings": []
@@ -43,10 +44,14 @@ PLAYBOOK_READ="$SCRIPT_DIR/playbook-read.sh"
 STATE_JSON=$(bash "$PROJECT_STATE_READ" "$PROJECT_FOLDER" 2>/dev/null)
 
 if [[ -z "$STATE_JSON" ]]; then
+  # This branch read nothing. "default" here would name a configuration state nobody observed,
+  # which is the same defect as reporting a clean skip after checking nothing — so say "unknown"
+  # and let the consumer treat an unknown result as its own third state (v5.35.7).
   jq -nc '{
     playbook_sets_loaded: [],
-    playbook_sets_source: "default",
+    playbook_sets_source: "unknown",
     user_playbook_loaded: null,
+    user_playbook_state: "unknown",
     plays_by_section: {},
     conflicts_detected: [],
     warnings: [{code: "project_state_read_failed", detail: "could not read project_state.md"}]
@@ -55,9 +60,13 @@ if [[ -z "$STATE_JSON" ]]; then
 fi
 
 PB_SETS=$(echo "$STATE_JSON" | jq -c '.playbookSets // []')
-PB_SOURCE=$(echo "$STATE_JSON" | jq -r '.playbookSetsSource // "default"')
+# The `//` fallbacks fire when the reader's JSON lacks the field — which means this script did not
+# observe a configuration, not that it observed an unconfigured one. They said "default" and "unset",
+# both of which name a state nobody looked at; "unknown" is the honest value and the consumer already
+# treats it as its own third state (v5.35.7).
+PB_SOURCE=$(echo "$STATE_JSON" | jq -r '.playbookSetsSource // "unknown"')
 USER_PB=$(echo "$STATE_JSON" | jq -r '.userPlaybook // empty')
-USER_PB_STATE=$(echo "$STATE_JSON" | jq -r '.userPlaybookState // "unset"')
+USER_PB_STATE=$(echo "$STATE_JSON" | jq -r '.userPlaybookState // "unknown"')
 
 # Default outputs
 PLAYS_BY_SECTION='{}'
@@ -107,12 +116,14 @@ jq -nc \
   --argjson sets "$PB_SETS" \
   --arg source "$PB_SOURCE" \
   --arg up "$USER_PB_OUT" \
+  --arg ups "$USER_PB_STATE" \
   --argjson plays "$PLAYS_BY_SECTION" \
   --argjson warnings "$WARNINGS" '
   {
     playbook_sets_loaded: $sets,
     playbook_sets_source: $source,
     user_playbook_loaded: (if $up == "null" then null else $up end),
+    user_playbook_state: $ups,
     plays_by_section: $plays,
     conflicts_detected: [],
     warnings: $warnings

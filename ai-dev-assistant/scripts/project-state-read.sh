@@ -17,7 +17,7 @@
 #     "codePath": "<absolute path or null>",
 #     "folder": "<abs path to project folder>",
 #     "playbookSets": ["<set-id>", ...],
-#     "playbookSetsSource": "explicit" | "explicit-none" | "default",
+#     "playbookSetsSource": "explicit" | "explicit-none" | "default" | "default-empty",
 #     "userPlaybook": "<absolute path or null>",
 #     "userPlaybookState": "unset" | "docs-only-no-playbook" | "set",
 #     "playbookResolutions": [{"topic": "<t>", "set": "<set-id>"}, ...],
@@ -171,10 +171,23 @@ get_default_playbook_sets() {
 
 DEFAULT_PB_SETS=$(get_default_playbook_sets)
 
+# v5.35.7: "default" named the source of a list that is usually EMPTY. defaults.json ships
+# `{"playbookSets": []}`, so on an unmodified plugin the absent-line case falls back to nothing
+# at all, and a reader seeing `default` reasonably concludes a default set was applied. Split the
+# two states: "default" keeps its original meaning — a NON-EMPTY default was applied, which is
+# what a fork populating defaults.json gets — and "default-empty" is the project that never chose
+# and has nothing to fall back to. Both remain "the project did not choose", so every consumer
+# that nudges on implicit inheritance must accept BOTH values.
+if [ "$(printf '%s' "$DEFAULT_PB_SETS" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+  DEFAULT_PB_SOURCE="default"
+else
+  DEFAULT_PB_SOURCE="default-empty"
+fi
+
 # H1 fix (v4.1.0): missing arg → defensive emit, do NOT exit 1
 if [ -z "$PROJECT_DIR" ]; then
   emit_json "(no project)" "null" "" '[{"code": "missing_arg", "detail": "path to project folder required as $1"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
+    "$DEFAULT_PB_SETS" "$DEFAULT_PB_SOURCE" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
@@ -193,13 +206,13 @@ parse_bool() {
 
 if [ ! -d "$PROJECT_DIR" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "folder_missing", "detail": "project folder does not exist"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
+    "$DEFAULT_PB_SETS" "$DEFAULT_PB_SOURCE" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
 if [ ! -f "$PROJECT_STATE" ]; then
   emit_json "$FOLDER_NAME" "null" "$PROJECT_DIR" '[{"code": "project_state_md_missing", "detail": "project_state.md not found in folder"}]' \
-    "$DEFAULT_PB_SETS" "default" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
+    "$DEFAULT_PB_SETS" "$DEFAULT_PB_SOURCE" "null" "unset" "[]" "false" "[]" "null" "[]" "interactive"
   exit 0
 fi
 
@@ -254,7 +267,7 @@ PB_SETS_RAW=$(awk '
 
 if [ -z "$PB_SETS_RAW" ]; then
   PB_SETS_OUT="$DEFAULT_PB_SETS"
-  PB_SETS_SOURCE="default"
+  PB_SETS_SOURCE="$DEFAULT_PB_SOURCE"
 elif [ "$PB_SETS_RAW" = "none" ]; then
   PB_SETS_OUT="[]"
   PB_SETS_SOURCE="explicit-none"

@@ -218,8 +218,15 @@ finder's narrative — and writes `<task_folder>/_prior-art-confirm-<aspect>.jso
 (`{ aspect, verdict_under_review, confirmation: agree|disagree|downgrade, downgrade_to, reason,
 dimensions_checked, sources_read, confirmed_at }`). It does not return its verdict as prose: an agent
 whose only output channel is its final message can go idle having produced nothing, indistinguishable
-from a genuine empty result, so it follows `agents/wo-critic.md`'s sidecar posture, not
-`agents/spec-axis-reviewer.md`'s returns-prose posture. An absent sidecar after dispatch is recorded as
+from a genuine empty result, so it follows `agents/wo-critic.md`'s sidecar posture. As of v5.35.7 that is
+every agent whose verdict a gate reads off disk as a scalar: `spec-axis-reviewer` and
+`architecture-validator` were the two still on prose, and both were moved to sidecars after their
+reports truncated on a live review. It is **not** every verdict-returning agent in the framework, and
+saying so would be wrong in a way that matters: `analysis-agent`, `ai-test-selector` and
+`guides-matcher` each return a structured verdict as their response and each carry `Write` in
+`disallowedTools:`. Nothing gates on those three, so a truncated report there costs a re-dispatch
+rather than a false green — the rule is about a machine consuming a verdict, not about who produces
+one. An absent sidecar after dispatch is recorded as
 `confirmation: "no_return"` in `_internal-prior-art.json` — never folded into `agree` or `disagree`.
 
 ## Where it runs / asserts at `/review`

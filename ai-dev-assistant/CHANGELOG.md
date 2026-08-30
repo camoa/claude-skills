@@ -1,5 +1,601 @@
 # Changelog
 
+## [5.35.7] - 2026-08-30
+
+### Fixed
+- **A task that never ran `/design` would have failed the review this release added.** Making
+  `architecture-fit` a real hard-block `gates_run[]` entry — the entry below this one — gave the
+  `architecture-validator` verdict a consumer for the first time. It gave it no case for the input
+  being absent. The agent is told to Read `architecture/main.md` and told never to guess `proceed`,
+  so a project whose review recipe resolves but whose task has no architecture document leaves it
+  `unresolved`, step 8 rule 2 fails closed, and `--headless` exits non-zero. That run passed the
+  release before, and nothing about the task changed. Step 5.0d has had the equivalent since v5.20.0
+  — no `alignment.md` is a benign, non-`unresolved` skip — and step 5.0 shipped without it, which is
+  the asymmetry that made this reachable rather than anything about the code. The agent's verdict
+  enum gains `skipped` for a missing architecture artifact, `/review` step 5.0 maps an all-`skipped`
+  result to a benign skip that rule 5 lets pass, and `gate-audit-schema.md` §5.12 defines the state
+  on `arch_validate.verdict`. A validator that was dispatched and could not answer is untouched and
+  stays fail-closed: the two are different facts and the agent's contract now says so in both
+  directions. Ranked last, so a sibling framework's `blocked` or `unresolved` can never be masked by
+  a skip. This is a FALSE RED, the opposite direction from everything else in this release, and it
+  was invisible to all of it — every assertion here checks that silence fails closed. **The first
+  cut of it keyed on the wrong file; see the next entry.**
+- **That skip keyed on a filename `/design` never writes, and broke the gate in both directions.**
+  The benign skip above was keyed on `architecture/main.md`. `commands/design.md` mentions
+  `architecture.md` ten times and `architecture/main.md` zero times: what `/design` writes for a task
+  is `architecture.md` as the hub plus `architecture/<component>.md` per component, which is exactly
+  the set `scripts/contract-baseline.sh` already freezes at step 0 and the set step 5.0d reads.
+  `architecture/main.md` is a different file at a different root — the PROJECT-level stub
+  `skills/project-initializer/SKILL.md` creates reading `{To be designed in Phase 2}` and
+  `task-context-loader` reads for orientation. Both readings were broken. With the stub present, which
+  is every project made by `/new`, the file exists, the skip never fires, the validator gets a
+  placeholder it cannot fit, and its own never-guess-`proceed` rule returns `unresolved` — the false
+  red this release exists to remove, still reachable. With the stub absent, every task returns
+  `skipped`, so `architecture-fit` — the hard-block gate this release added — passes benignly on a
+  task with a complete architecture, permanently. The agent and `/review` step 5.0 now both key on
+  the task-level set, `architecture.md` plus `architecture/*.md` under the task folder, and
+  `gate-audit-schema.md` §5.12 names it too.
+- **A stub is a third state, and having only two is how the defect worked in the other direction.**
+  `absent`, `placeholder` and `present` are now distinct: a file holding nothing but a heading and a
+  `{…}` stand-in is not an architecture, and a validator told to fit a change against one cannot
+  honestly say `proceed` and falls to `unresolved`. `placeholder` earns the same benign `skipped` as
+  `absent`, with its own reason, so the state that is neither a design nor a missing file has a
+  disposition instead of falling through to a hard red.
+- **A `skipped` was the one gate state taken on trust.** `no_return` is verified — the orchestrator
+  observes an absent sidecar itself. `skipped` was whatever the agent said. Now that it is keyed on a
+  path list, step 5.0 stats the disk: a `skipped` returned over an architecture that is present and
+  carries content is `unresolved` and fail-closed, not a benign pass.
+- **A mixed architecture-fit result hit no rule and fell off the end of aggregation.** `pass` required
+  every framework to return `proceed` and the benign skip required every framework to return
+  `skipped`, so a `proceed` + `skipped` pair — one framework designed, one not — matched none of the
+  five clauses. That is the defect step 8 rule 4 exists to close, reintroduced one gate down.
+  Aggregation now sets the `skipped` frameworks aside first and decides on the ones that answered;
+  only when none answered is the entry itself the benign skip. Ranking falls out of that rather than
+  being asserted beside it.
+- **A failed archive skipped the review record and then wrote a PR body anyway.** Step 10's abort
+  named the `_review.json` write and step 12's Phase-4 mark. Step 11 has no test of its own — its
+  condition is `pr_ready != true`, computed inside the write that was just skipped — so a green pass
+  emitted `PR_BODY.md` with no review record behind it, which is the state `/complete` then refuses.
+  Both steps now name the abort.
+- **The fifth assertion group compared a document to itself.** It derived the required input from the
+  agent's own body and then demanded a benign path for it in that same body, so it passed while the
+  filename was one no command writes. A sixth group compares the agent against something outside it:
+  it builds a task folder, runs `contract-baseline.sh capture` over it, and takes the files the script
+  actually copied as ground truth. An artifact captured that no pattern in the agent covers is a task
+  whose architecture the validator cannot see; a pattern covering nothing the script captures is a
+  filename nobody writes. Four mutations, each red: the agent keying only on `architecture/main.md`
+  (the shipped defect, 1 red), naming only the hub so component files go unseen (1), naming a file
+  `/design` never writes (1), and the authority itself dropping the `architecture/` directory (2 —
+  the non-vacuity floor and the empty pattern).
+- **A failed archive would have been followed by the overwrite it exists to prevent.** Step 10 runs
+  `review-record-archive.sh` before writing `_review.json`, and said nothing about the script exiting
+  1 — reachable with a read-only task folder, and also on a copy that does not land or an archive
+  that does not match the record it came from. Falling through to the write then destroys the very
+  pass the archive step was added to keep. Step 10 now says what happens: surface the script's stderr
+  verbatim, skip the `_review.json` write and step 12's Phase-4 mark, still print the step-13 summary
+  so this pass's gate verdicts survive, and exit non-zero in every mode. An unrecorded pass is a
+  state an operator can see and fix. A first pass is not this case — no existing record is
+  `archived: false`, `reason: "no_current_record"`, exit 0.
+- **`/complete` refused to archive a task `/review` had passed.** `commands/complete.md`
+  told the reader to verify `_review.json` carries `gate_specific.pr_ready: true` or
+  `overall_verdict: "bypassed"` — the full path for one field of that record and a bare name
+  for the other. `gate-audit-write.sh` nests every payload under `gate_specific`, so a record
+  it wrote has no top-level `overall_verdict`. Measured across 63 real `_review.json` files:
+  55 carry `gate_specific.pr_ready`, 51 carry `gate_specific.overall_verdict`, and the 7 with
+  a top-level one all lack the nested one and predate the writer. Live consequence: a task
+  reviewed four times and closed `bypassed` with both bypass reasons populated took the
+  missing-audit branch, printed "`/review` did not run; gates not validated. Continue without
+  `/review`? [y/N]" — which is false — and defaulted to `[N]`, aborting the archive. Five
+  other consumers read the nested path correctly; this was the only outlier, established by
+  sweeping all 144 tracked command, reference and skill markdown files against an allowlist
+  derived from the writer.
+
+- **Two gate agents could not write their verdict, so a long finding truncated.**
+  `agents/wo-critic.md` carries `Write` and writes a structured verdict sidecar;
+  `agents/architecture-validator.md` and `agents/spec-axis-reviewer.md` carried `Read, Grep,
+  Glob, Bash` and returned their verdicts as their Task response. On a live review those
+  reports truncated in transit repeatedly and the session had to improvise a scratchpad file
+  mid-review to recover them. `architecture-validator` found a content-destroying defect on
+  all four passes of that review: the gate most likely to have a long verdict was the one
+  that could not record it. Both now write a sidecar — `_arch-validate-<framework-slug>.json`
+  and `_spec-axis.json` — and `/review` steps 5.0 and 5.0d read scalars off disk instead of
+  parsing prose. An absent sidecar is `no_return`, a recorded third state with its own
+  reason, never read as "the agent found nothing"; for the `spec` gate it carries
+  `unresolved: true` so step 8 rule 2 fails closed. Follows
+  `prior-art-verdict-confirmer`'s `confirmation: "no_return"` precedent.
+- **The architecture-fit verdict had nowhere to be recorded and nothing to consume it.** Two
+  gaps left by the sidecar fix above, both pointing the same way. First, `commands/review.md`
+  step 5.0 said the `no_return` reason is recorded "in the step-5.0 `_recipe-load.json` entry
+  for that framework", and §5.12 of `references/gate-audit-schema.md`, the section that
+  defines that entry's fields, was never given one. That section's own prose already names the
+  consequence: an undefined key "is where an observation goes to be lost". Second, and larger,
+  nothing consumed the verdict at all. `_recipe-load.json` is observability-only and never
+  blocks, `architecture-validator` produced no `gates_run[]` entry anywhere, and step 5.0's
+  "keeps its BLOCK posture" was a sentence no rule evaluated, so a validator returning
+  `blocked` and a validator returning nothing both reached `overall_verdict: "pass"`. The
+  schema now defines `frameworks[].arch_validate` (`{verdict, sidecar, reason}`, verdict
+  including `no_return`), and step 5.0 adds one aggregate hard-block `gates_run[]` entry
+  `architecture-fit`: `blocked` gives `fail` by rule 1, `no_return` or `unresolved` gives
+  `skipped` + `unresolved: true` and fails closed by rule 2, `needs_adjustment` is a benign
+  warning, and no dispatch emits no entry so a stack-neutral project is not gated on a
+  validator that never ran. Fixing only the absent-sidecar half would have left `/review`
+  failing on a silent validator while passing one that said `blocked`.
+  `tests/gate-verdict-sidecar-spec.sh` gained the assertion, derived from review.md's own
+  text rather than a copied list: every `gates_run[]` name the command mandates must appear in
+  §5.8's `name` enum, which was missing five of them including `spec`, and every record an
+  absent-sidecar line names must resolve to a schema section that defines the state.
+- **Re-reviewing a task destroyed the record of every earlier pass.** `_review.json` is
+  overwrite-on-fire, which is right for a current-verdict file and wrong for the only
+  surviving account of what a review found — `/review`'s `[r]` branch means exit, fix,
+  re-run, so a task that needed work is reviewed more than once by construction. One live
+  task ran FOUR passes; passes 1-3 exist nowhere, and a defect pass 3 found is in no
+  surviving record. Step 10 now runs `scripts/review-record-archive.sh` before the write,
+  copying the outgoing record to `<task_folder>/review-rounds/_review-<n>.json`.
+  `_review.json` keeps its meaning, its location and its field paths, so no consumer
+  changes; there is no round budget, no delta-scoping and no new control flow.
+- **The remediation dispatch had no file-ownership discipline.** `/review`'s `[r]` branch
+  means exit, fix, re-run, and the fix is normally more than one agent. Live, a
+  mutation-testing verifier and a test-author ran concurrently against the same source file:
+  the orchestrator inspected the verifier's live `if (FALSE)` mutation and reported it as the
+  frozen clean state, the verifier's backup predated the author's edit so restoring it would
+  have silently reverted work the tests already asserted, and a passing test run had to be
+  retracted because a mutation landed inside its window. Two of the dispatched agents flagged
+  the contention before the orchestrator did. New step 9a states the rule — concurrent
+  remediation agents do not share a mutable working tree, and an agent that mutates-and-
+  restores owns its file exclusively — and points at the mechanisms that already exist,
+  `/worktree` and the parallel conductor's pairwise-disjoint batching, rather than inventing
+  a second one.
+- **The change set never asked whether the reviewed work exists anywhere but this machine.**
+  `scripts/review-change-set.sh` resolved a base and a head and never looked for an upstream.
+  Measured live: both feature branches of a reviewed site had NO upstream and one was seven
+  commits ahead of `origin/staging`, while `/review` computed `pr_ready` and no gate noticed.
+  The change set now reports `head_upstream` (`configured`, `ref`, `ahead`, `behind`) and
+  `base_distance`, `/review` surfaces them on the `pr_ready` line, and a missing upstream
+  raises a `head_has_no_upstream` warning. **Advisory only** — a local-only branch is
+  legitimate and being unable to tell is the defect, so it never changes `pr_ready`,
+  `overall_verdict` or an exit code. Every numeric field is `null` where it could not be
+  established, so "no upstream configured" and "could not ask" stay different answers.
+  `review-change-set.sh` output is `schema_version` 1.1 (additive).
+- **An unconfigured playbook set reported as a clean skip.**
+  `validate-playbook-adherence` step 3 collapsed every empty playbook into one reason,
+  `no_playbook_declared`, annotated "a genuine no-op / intentional opt-out — benign". Those
+  are two different facts and the gate could already tell them apart: `project_state.md`
+  distinguishes `**Playbook Sets:** none`, a recorded opt-out, from an absent line, which is
+  a project that never chose. Observed live on a real Drupal project across all four passes
+  of one review: the user has a published 28-guide playbook set, the project simply had no
+  `**Playbook Sets:**` line, `_playbook-load.json` recorded zero plays, and the gate passed
+  quietly. The gate was right that nothing was in scope and wrong to present that as a
+  result. Step 3 now resolves three states, all still `verdict: "skipped"` and none blocking:
+  `playbook_opt_out` when every empty channel was explicitly chosen, which stays silent
+  because a project that recorded its answer has answered; `playbook_never_configured` when a
+  channel was never chosen, which names the channel and carries the same "this skip is NOT
+  coverage" warning the vacuous-skip case already had; and `playbook_config_unknown` when the
+  loader could not read `project_state.md` at all. The resolved reason is carried as
+  `details.skip_reason`, so a reader of the JSON can tell which applied. The user-playbook
+  half of the distinction was not observable before this: `playbook-load-deterministic.sh`
+  read `userPlaybookState` and threw it away, so a recorded `docs-only-no-playbook` opt-out
+  and a playbook nobody ever set arrived as one state. The loader now emits
+  `user_playbook_state` beside `user_playbook_loaded`.
+- **`playbook_sets_source: "default"` named an empty list.** `defaults.json` ships
+  `{"playbookSets": []}`, so on an unmodified plugin the absent-line case fell back to
+  nothing at all while the record said `default` — which a reader takes to mean a default set
+  was applied. Verified live: the field read `default` while zero plays loaded. `default` now
+  means what it says, a NON-EMPTY default list was applied, which is what a fork populating
+  `defaults.json` gets; `default-empty` is the project that never chose and has nothing to
+  fall back to. The existing value stays valid and reachable rather than being renamed out
+  from under a reader, and all five documented readers of the field were found and updated to
+  accept both spellings, since both still mean "the project did not choose": the `/next`
+  playbook nudge, `/upgrade-project` gap detection, `references/upgrade-walkthrough.md`,
+  `/set-playbook-sets`'s printed source line, and this gate's own implicit-inheritance hint.
+  Two more instances of the same defect surfaced while checking those readers: the loader's
+  `.playbookSetsSource // "default"` and `.userPlaybookState // "unset"` fallbacks fire when
+  the reader emitted no such field, which means the script observed no configuration rather
+  than an unconfigured one. Both now say `unknown`, as does the whole
+  `project_state_read_failed` branch, which had been reporting `default` after reading
+  nothing.
+- **The producer control-flow walker only ever grew its stack.** The `awk` in
+  `tests/gate-verdict-resolve-spec.sh` that checks every `ABSENT_TOOLS+=` sits under an
+  availability probe pushed a level on `if` AND on `elif`, and popped only on a line that
+  was exactly `fi`. So `elif`, `else`, a one-line `if ...; fi` and `case`/`esac` never
+  balanced: measured on `security-check.sh`, depth 25 at end of file where the real nesting
+  is 3, and every push below roughly line 1478 was checked against a chain holding every
+  earlier `if` in the file, somebody else's availability probe included. Adding, removing or
+  renaming a push was still caught by the exact count and exact names beside it; MOVING one
+  into a scope branch was not, and that is the mutation the check exists for. `elif` now
+  appends to the level it is on rather than opening a new one, `else` leaves the level alone
+  because that is where all ten real pushes sit, `case` opens a level carrying no condition
+  so `esac` has something to close, and `fi`/`esac` are counted as words anywhere on the
+  line. The walker also resolves one variable of indirection, which is how semgrep's absence
+  is recorded: the push is in the else of `if [ -n "$SEMGREP_RUNNER" ]`, and that variable
+  is a literal assigned inside `if ddev exec semgrep --version`. Restricted to literal
+  right-hand sides on purpose — `PHPCS_ISSUES=$(...)` holds a tool's output rather than the
+  outcome of probing for it, and admitting command substitutions marks 17 variables across the
+  two producers where the literal rule marks 3. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
+  of `if command -v trivy` into a `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: push count 8
+  and the eight names unchanged, the old walker reported nothing, the new one goes red.
+- **That walker balanced and still accepted too much, and three known-remaining items were
+  dropped on the strength of it.** It asked whether ANY level in the enclosing chain was a
+  probe, and its negative control planted the mutation at top level only, so two shapes were
+  invisible to both. A push MOVED INSIDE the probe branch — `if command -v trivy; then if
+  [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then ABSENT_TOOLS+=("trivy")` — passes, and trivy is
+  installed there; that is `tools_skipped[]`, and in `tools_absent[]` it reds an ordinary pull
+  request. The same hole one construct over: `elif` appends its condition to the level, so a
+  push in the `elif` of `if <probe>` was checked against a string still holding the `if` half's
+  probe text, and reaching that `elif` means the probe SUCCEEDED. The walker now tracks a
+  level's CHAIN and its CURRENT BRANCH separately — `elif` replaces the branch and appends to
+  the chain, `else` takes the whole chain, which is the negation of every condition above it
+  and is where all ten real pushes sit — and a push is guarded only when the INNERMOST branch
+  tests for the binary, or when the push line carries its own probe. Nesting itself stays fine:
+  an inner probe under an outer scope test guards its push, and the fixture asserts that.
+  Verified on a COPY of `security-check.sh` (the plugin is not edited to test a check on it)
+  with `ABSENT_TOOLS+=("trivy")` moved into a scope branch nested inside `if command -v
+  trivy`: the previous walker reported nothing, this one flags line 1690, and the unmutated
+  producer stays clean at depth 0.
+- **The third cut asked the wrong question, and the moved push it was written for still passed.**
+  Cut three replaced "is any level in the chain a probe" with "is the INNERMOST branch a probe".
+  That fixed the two shapes it named and broke others, and it did not fix the one it existed for.
+  Measured on a copy of `security-check.sh`: moving `ABSENT_TOOLS+=("trivy")` out of the else of
+  `if command -v trivy` into the top-level `if [ -f "$COMPOSER_AUDIT_JSON" ] && [ -s … ]` left
+  push count 8 and all eight names unchanged, and the walker reported no finding — because
+  `[ -f … ]` matched its file-test probe form, and that producer has seven file tests, every one
+  of them on a report artifact rather than on a tool. The known-remaining text shipped an hour
+  earlier claimed that move was caught. It was not.
+  Two questions replace the one, and both are derived from the file rather than listed in it.
+  **A branch guards a push only when it is entered because a probe FAILED** — being inside a
+  probe's `then` means the tool is present, which is `tools_skipped[]` — so the walker records per
+  level whether the current branch is a negation (`else`, `elif`, or `if !`) and walks outward
+  until it finds one whose failed conditions include a probe. **And the guard must name the tool
+  the push names**: `is_probe` matches the shape of an availability test and says nothing about
+  which tool it tests, so cut three also passed `ABSENT_TOOLS+=("trivy")` moved into the else of
+  psalm's probe — a structurally perfect guard and a lie. All ten real pushes name their tool in
+  the condition that guards them, including the two behind a variable and the four behind a
+  `vendor/bin` path, so the comparison is the pushed name against the guard text under one
+  normalisation. A file test is a probe only when its operand carries a binary-directory marker or
+  is a variable assigned one, collected in pass 1 like the sentinel variables.
+  **This also corrects cut three on `elif`.** Its fixture asserted that a push in the `elif` of a
+  probe must be flagged "because reaching the elif means the probe SUCCEEDED", which is backwards:
+  reaching an elif means the `if` condition was FALSE, so `if command -v x; …; elif …; then
+  ABSENT_TOOLS+=("x")` records something true. That assertion was a false red. The elif shape that
+  IS wrong is the other one — `elif <probe for x>; then ABSENT_TOOLS+=("x")` — and the fixture
+  plants that instead. Two more false reds cut three added go with it: a push in a `case` arm and
+  a push in a nested `if`, both inside the else of a probe, each flagged because the innermost
+  branch is a scope test even though the tool really is absent there. And `else` now matches a
+  line carrying a trailing comment.
+  **The known-remaining, stated as behaviour and measured rather than reasoned about.** What this
+  catches: a push added, removed or renamed (the count and names beside it), and a push moved into
+  any branch that is not the negation of a probe naming that same tool — including the two moves
+  above. What it does NOT catch: a scope test on a CONTINUATION line, where the else is reachable
+  with the tool present and the walker reads one physical line per condition — a silent pass. What
+  it wrongly flags: a probe written as a loop (`while ! command -v x`), and a probe factored into
+  a helper function, since the condition then names the function rather than the test — **the
+  helper case is closed by the entry three below, which also corrects the counts in the rest of
+  this paragraph.** It does not reliably catch every moved push and this entry does not claim it
+  does; it catches the two that were reported and the class each belongs to, and names the shapes
+  it gets wrong.
+  Seven mutations on the walker, each 1 red, plus one that restores cut three's rule and goes 2
+  red. The fixture grows to seven shapes that must be flagged and twelve that must not, asserted
+  by name — three of the seven are shapes an earlier cut passed green and four of the twelve are
+  shapes an earlier cut flagged on a correct producer, so it carries both directions of every
+  correction. And the moved push is now planted in a COPY of `security-check.sh` by the suite
+  itself rather than by hand, asserting alongside it that the push count is still 8 and the eight
+  names still the same eight — which is why neither of those checks can stand in for this one.
+- **What counted as a probe was a literal this file guessed.** `command -v`, `test -f`/`-x`,
+  `vendor/bin`, `--version`, `resolve_analyzer`, `ddev exec test`, `pm:list` and nothing else,
+  so a correct producer written `if hash trivy 2>/dev/null`, `if [ -e "$TRIVY_BIN" ]` or
+  `command -v trivy || ABSENT_TOOLS+=("trivy")` was flagged — a FALSE RED on a green tree,
+  the same class as the `phpcpd` literal the resolver's dry branch dropped in the entry above.
+  `hash`, `type -p`, `which`, `-e`/`-r` file tests, `node_modules/.bin`, `npx --no-install`
+  and a probe on the push's own line are recognised now. Widening is the safe direction here:
+  a form admitted in error costs a missed mutation on a producer nobody has written that way,
+  where a form omitted reds a correct tree today. **The list itself is gone; see two entries
+  below.**
+- **A trailing comment satisfied the guard, on the real producer, in silence.** The walker skipped
+  full-line comments and read the rest of every line as code. A push carries its tool name by
+  construction, so the only thing gating its own-line rule was whether the line looked like a
+  probe — and `ABSENT_TOOLS+=("trivy")  # trivy --version checked above`, moved out of its guard
+  into the composer-audit scope branch, looked like one. Push count still 8, the same 8 names, no
+  finding. The file's own prose said "No amount of echo wording satisfies that" while a comment
+  did. Two independent fixes, because one of them being right is not a thing this file gets to
+  assume: every line is now stripped of its trailing `#` comment before anything reads it,
+  quote-aware so `${#ARR[@]}` and a `#` inside quotes survive; and the own-line rule requires the
+  structure it is named for, a probe joined to the push by `||`, so the push text can never be its
+  own guard. Measured separately — dropping the stripper alone loses the condition-line case (1
+  red), reverting the own-line rule alone loses everything, because under the widened probe rule
+  below a bare `ABSENT_TOOLS+=(…)` line reads as a command and every push passes (5 red). On the
+  real producer the commented move is now flagged with the count and names still unchanged.
+- **It was measured on half the producers while saying it was measured on both.** Four scripts push
+  into `ABSENT_TOOLS` — `drupal/security-check.sh`, `drupal/solid-check.sh`,
+  `nextjs/security-check.sh`, `nextjs/solid-check.sh` — and the spec walked two, naming them in a
+  literal list, while its prose read "measured on both producers". The two it skipped were checked
+  by nothing, and one of them was carrying a FALSE RED: `npm list eslint-plugin-security` guarding
+  `ABSENT_TOOLS+=("eslint_security")` at `nextjs/security-check.sh:330` failed both halves of the
+  rule at once, and CI stayed green only because nobody looked. The set is now derived — any TRACKED script
+  under the audit scripts directory that pushes into `ABSENT_TOOLS` is walked, the same
+  tracked-files-only rule every scanning check in this repo follows — and compared
+  against the pinned per-file counts and names in both directions, so a fifth producer is a failure
+  rather than an omission (1 red, planted) and a pinned file that stops producing is one too (1
+  red). Two identity mutations, one in each newly-walked file, swap two pushes between the branches
+  that guard them: 2 red each, with the push count and the pushed names identical by construction,
+  and both completely silent before.
+- **The registry of probe forms was the same guess three times, so it was inverted.** Cuts one
+  through four recognised an availability test by matching a LIST of command spellings, and the
+  list missed a real form twice. A shell condition is a TEST on shell state (`[ … ]`, `[[ … ]]`,
+  `(( … ))`, `test …`) or a COMMAND run for its exit status, and only the second can ask whether a
+  binary is there — so a probe is any condition that runs a command, plus the file-test-on-a-tool-
+  path form, which is a test and would otherwise be refused. That closes `npm list`, closes the
+  helper-function false red named three entries up (`resolve_analyzer phpstan` on
+  `drupal/solid-check.sh` is that shape in the tree today), and needs no entry for the next form
+  nobody has written yet. **What it costs, stated rather than assumed:** a command naming the tool
+  for some other reason — `grep -q trivy composer.json` — now reads as a probe. That is a real
+  loosening, taken because a form omitted reds a green tree today where a form admitted in error
+  costs a missed mutation on a producer nobody has written that way. What holds it in check is the
+  name test, which is why that was tightened in the same cut.
+- **The guard-names-the-tool test read the condition as one string, and welded words together.**
+  Normalising a whole condition with whitespace dropped made `command -v scatter tool_helper` name
+  `scattertool` — a guard for two other tools satisfying a push for a third, which is the identity
+  failure this test exists to prevent, reintroduced by its own normalisation. The match is now PER
+  WORD: some whitespace-delimited word of the guard must carry the pushed name's tokens in order.
+  Tighter in that direction and wider in the other, because the guard may name the PACKAGE where
+  the push names the TOOL — `npm list eslint-plugin-security` for `eslint_security`, where a
+  contiguous-substring test fails since `eslintsecurity` is not a substring of
+  `eslintpluginsecurity`. Reverting to the old rule is 3 red: the false red returns on the real
+  producer, and the fixture's welded-words case stops being flagged. Measured after both changes:
+  all 18 real pushes across all four producers are clean, and the sentinel figures the indirection
+  rule turns on — 20 empty sentinels, 6 literals assigned in a probe branch, 2 resolved — are
+  unchanged by the widening, which is the measured answer to whether "runs a command" starts
+  admitting variables merely set near one.
+- **The schema described a bug the command no longer has.** `commands/review.md` step 5.0 was fixed
+  in this release to set `skipped` frameworks aside and aggregate `architecture-fit` over the ones
+  that answered. `references/gate-audit-schema.md` §5.8 — the reference that command cites — still
+  read `pass` "when every dispatched framework returned `proceed`", with no `skipped` clause at
+  all, so a reader following the citation got the fall-off-the-end aggregation the command had
+  stopped running. §5.12 was updated in the same commit; §5.8 was not. Both now describe one rule,
+  and something compares them: every value of the `arch_validate.verdict` enum — taken from §5.12,
+  a third document neither of the two can quietly agree with itself about — must be given a
+  disposition in both the §5.8 clause list and the step-5.0 rules, and both must name the same
+  aggregate verdicts. Four mutations, each red: the shipped §5.8 wording restored (2 — `skipped`
+  and `no_return`), the command's `blocked` clause removed (1), the schema gaining a `bypassed` the
+  command never names (1), and the §5.12 enum row made unparseable, which trips the non-vacuity
+  floor rather than passing on an empty comparison (1). It is a shape rule over prose and is
+  documented as one: it can tell that a value has no disposition on one side, not that two clauses
+  naming it assign the same outcome.
+- **The variable indirection marked five variables it had no business marking.** The comment
+  and the entry above both said the literal rule marks three; measured across the two
+  producers it marks SIX — `SEMGREP_RUNNER` plus `GITLEAKS_MODE`, `GITLEAKS_RANGE`,
+  `GITLEAKS_RANGE_KIND`, `GITLEAKS_PLAN` and `GITLEAKS_PLAN_REASON`, five defaults set inside
+  `if command -v gitleaks` that say nothing whatever about whether gitleaks is there. Testing
+  any of them licensed a push. The rule is now the shape `[ -n "$VAR" ]` actually reads: an
+  EMPTY sentinel assigned somewhere, and a NON-EMPTY literal assigned inside a probe branch.
+  Measured across both producers, by the rule as it stands after the entry below: 9 variables
+  carry an empty sentinel somewhere, 3 are assigned a literal inside a probe branch, and 1 does
+  both — `SEMGREP_RUNNER`, the case the indirection exists for. (The earlier figures here — 35
+  with any right-hand side, 6 with a literal one — were not reproducible against any reading of
+  either producer, and the six named above were counted under the chain-based branch rule two
+  entries down replaced.) The
+  fixture plants the counter-case (a `SCAN_MODE="tree"` set inside a probe branch and then
+  tested) and asserts the resolved sentinel count is exactly one, so neither direction can
+  drift silently.
+- **A security scope skip resolved benign on a report that never said what it covered.**
+  `scripts/gate-verdict-resolve.sh`'s benign `skipped` rests on two claims, and only the
+  first was ever checked: nothing was eligible, which `meta.skip_reason` says, AND nothing
+  was denied anything, which the coverage lists say by being empty. A report carrying the
+  skip reason and NO coverage lists and no `analyzers_ran` had the second claim manufactured
+  for it by `// []`, and came back `skipped` / `unresolved:false` / `coverage_partial:false`
+  — the same undetermined-coverage hole the non-skip path already refuses to read as
+  complete, still open on this one. It now resolves unresolved, beside the
+  self-contradiction case (a scope skip naming a layer that did not produce) that the branch
+  already caught. Latent while the producer hardcodes the lists on that path, which is the
+  reason it survived a round: this file's premise is that a producer is checked, not
+  trusted.
+- **The dry branch named the Drupal analyzer while reasoning about a Next.js report.** The
+  condition that catches "this gate's one analyzer is gone" grepped `tools_absent[]` for the
+  literal `phpcpd`. The Next.js gate's analyzer is `jscpd`, so a Next.js report naming it
+  matched nothing and the branch fell through to resolve on `.status` alone: a clean `pass`
+  from a run whose only analyzer was missing. It came out right anyway and for an unrelated
+  reason — `nextjs/dry-check.sh` also writes `skip_reason: "tool_absent"`, which the same
+  condition tests first, so changing that one field in the producer would have exposed it.
+  Same class as the `["phpstan","phpmd"]` literal the solid branch dropped in 5.35.6, and
+  the same fix: this gate has exactly ONE analyzer, so ANY name in `tools_absent[]` is that
+  analyzer and the resolver carries no analyzer name of its own. A report that says the
+  analyzer is gone without saying which one now reads "which one is not stated in this
+  report" rather than being given a name this file guessed. The narrow instance only; the
+  broader question of stack knowledge hardcoded in this file — the producer paths and the
+  stack semantics — is the `stack_facts_in_recipes` task's subject and is untouched here.
+
+- **"Every verdict-returning agent in the framework" was three agents short of true.**
+  `references/internal-prior-art.md` said the sidecar move covered all of them.
+  `analysis-agent`, `ai-test-selector` and `guides-matcher` each return a structured verdict
+  as their response and each carry `Write` in `disallowedTools:`. The claim now says what is
+  true — every agent whose verdict a gate reads off disk as a scalar — and names the three
+  that are not in it, with the reason it does not matter for them: nothing gates on those, so
+  a truncated report costs a re-dispatch rather than a false green.
+- **A path-scoped rules file described a write-block that no longer exists.**
+  `.claude/rules/agent-conventions.md` said `architecture-validator`'s `disallowedTools: Edit,
+  Write` "remains the reliable write-block mechanism". It is `disallowedTools: Edit` as of this
+  release, because the agent was given `Write` for its verdict sidecar. So the frontmatter
+  blocks no writes at all, and what keeps the agent out of the tree it reviews is its body.
+  The rule says that instead, since a convention file is read as current fact.
+- **A budget checker nobody ran, guarding bodies that tripled.**
+  `scripts/command-body-lengths.sh` has held the runtime budgets for the five phase command
+  bodies since v4.0.2 and was called by nothing: not the `Makefile`, not a test, not CI. It
+  was written because those bodies load into Claude's context on every Skill invocation, and
+  v4.0.2 had just cut them from 1465 lines to 265. Run now for the first time in four months,
+  it reports three of five over: `research` 142 against 105, `design` 82 against 80, and
+  `implement` 363 against 120, which is 5x the 72-line body the budget was set against and
+  three times the budget itself. The one budget that IS enforced, `review` at 135 via
+  `tests/review-command-spec.sh`, sits at its ceiling with a written reason for each of its
+  seven raises. Same repo, same four months, same kind of command: the difference is that one
+  of them had something that ran. The script is now run by
+  `tests/command-body-lengths-spec.sh`, which `make test` discovers and `make ci` runs, so
+  this is inside the existing seven checks and adds no eighth. The four stale budgets are
+  RESET TO MEASURED, not raised to a number anyone judged: each is the body length that
+  command had on 2026-08-30, which makes the file a ratchet against further growth and says
+  so in its own header. 363 is recorded, not endorsed; shrinking `implement` is its own task
+  with its own risk and is NOT done here. What is guaranteed from now on is that 363 cannot
+  become 400 without a deliberate edit to that line, which is exactly the guarantee that was
+  missing while the number said 120. The script also gained the two refusals the repo asks of
+  a check: a phase named in the list with no budget recorded fails, and a run that measured
+  no bodies at all fails rather than reporting five silent successes.
+- **The review body budget was written down in two files.** `tests/review-command-spec.sh`
+  enforced the number and `scripts/command-body-lengths.sh` kept a hand-mirrored copy, which
+  is one edit away from disagreeing and did disagree: at v5.35.5 the spec enforced 131 while
+  the script still said 129, and nothing caught it because nothing ran the script. The script
+  is now the single home for the value and gained a `--budget <phase>` mode; the spec reads
+  it from there and FAILS if it cannot, with no fallback default, because a budget that
+  cannot be read is an unmeasured check. The reasoning for each raise stays in the spec where
+  it was written. Verified by lowering the script's number to 100 and confirming the review
+  spec goes red, and by removing the script entirely and confirming the spec fails instead of
+  defaulting.
+
+### Added
+- `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
+  point where `gate-audit-write.sh` puts the field. Both sides derived from the artifacts:
+  the top-level allowlist from the writer's own envelope construction, the payload keys from
+  the schema's own `"gate_specific": { … }` examples, so a key added to the schema is picked
+  up without anyone updating a list. It fires on a line that qualifies one payload key with
+  `gate_specific.` and names another bare — one object described two ways — which is the
+  defect above and does not fire on the many lines telling a PRODUCER what to write.
+- `scripts/review-record-archive.sh` — preserves the outgoing `_review.json` before the next
+  pass overwrites it. Never overwrites an archive: if the next slot is taken it steps past
+  it, because losing a pass is the one outcome the script exists to prevent. Verifies the
+  copy is byte-identical and exits non-zero if it is not.
+- `tests/review-record-archive-spec.sh` — behavioral, running the script against real
+  directories: four passes leave four readable rounds, the archive is byte-identical, an
+  occupied slot is stepped past rather than overwritten, and `_review.json` comes out
+  untouched at the field paths its consumers read.
+- `tests/gate-verdict-sidecar-spec.sh` — an agent told to write a verdict file must be able
+  to, and the orchestrator that reads it must say what an ABSENT one means. Both sides
+  derived from the artifacts: the class is every `agents/*.md` whose own body instructs a
+  Write-tool write, and the sidecar path each dispatch site must name is parsed out of that
+  agent's own body rather than held in a list. Also checks that the `[r]` remediation rule
+  points at mechanisms that exist and still carry the discipline they are cited for. Two
+  earlier cuts of its absent-sidecar check scored zero red under mutation — one matched
+  `no_return` inside `spec_axis_reviewer_no_return`, the other inside the sentence citing the
+  precedent — so it now requires the line to tie the absence to the state. A fifth group runs the
+  other direction: a dispatched agent's REQUIRED input can be absent, and both the agent's contract
+  and the dispatch site must call that benign. Derived on both sides — the DOCUMENT off the agent's
+  own body (the file it is told to Read, or a bullet under its `## Inputs` heading, with anything
+  qualified "if present" dropped), and the benign path demanded within a window of that document
+  rather than anywhere in the file. The dispatch-site half must NEGATE `unresolved`, not merely
+  contain the word: every one of these paragraphs mentions it, so the bare token asserts nothing —
+  a first cut keyed on it scored zero red on the mutation that removed the benign path.
+- `tests/review-change-set-spec.sh` gains the upstream group: a local-only branch, a pushed
+  branch, a commit the upstream has not seen, and a path that is not a repository (where the
+  distances are `null` and no missing-upstream claim is made, because there is no head to
+  make it about). Three of its assertions exist to hold the fact advisory — the change set,
+  its `files[]` and its `empty_reason` must all come out unchanged.
+- `tests/gate-verdict-resolve-spec.sh`: the condition walker is now a function with its own
+  negative control, and the fixture matrix grew an axis and a stack. The walker is asserted
+  to return to depth 0 on every producer it reads, which is the defect above stated as
+  something the check itself detects rather than something a reader has to notice, and it is
+  run over a file built to contain the mutation plus every construct that made the old stack
+  grow: one push that must be flagged, one in the else of a direct probe and one behind a
+  probe-assigned variable that must not, and `elif` / `else` / a one-line `if` / `case` that
+  must not leak a level. Without it, "no unguarded pushes" is also what a walker that had
+  stopped working reports. A dry producer's `tools_absent[]` is now held to naming exactly
+  one tool, and that tool to being one the same script probes for, which is the invariant the
+  resolver's analyzer-name-free reading depends on. The matrix gains
+  `skipped-no-eligible` as a findings state crossed with all eleven coverage columns —
+  because the scope claim and the coverage lists can disagree, and that disagreement is the
+  whole question — and `dry-nextjs` as a shape, so the Drupal and Next.js DRY analyzers are
+  both driven through the same cells. `security-whole` names all eleven scope-skip cells
+  unreachable with their reason: `meta.skip_reason` is emitted only by the `--changed` path.
+  150 cells to 205, 155 assertions to 174. Six mutations run against the group, each
+  verified applied before the suite ran: moving a push into a scope branch (1 red), reverting
+  the walker (3 red, reproducing depth 25 and depth 8), a probe test that accepts anything
+  (1 red), dropping the variable indirection (2 red), dropping either half of the scope-skip
+  refusal (2 red each), restoring the `phpcpd` literal (7 red), and a dry producer naming a
+  second tool in `tools_absent[]` (1 red).
+  The walker's negative control then grew from three planted shapes to eleven, because a
+  fixture whose only mutation is at top level cannot see a walker that accepts a nested one.
+  Four must be flagged — a push in a top-level scope branch, one nested inside its own probe,
+  one in the `elif` of its probe, and one behind a variable that is merely set near a probe —
+  and seven must NOT be, which is the half that was missing entirely: the else of a direct
+  probe, a probe-assigned sentinel, an inner probe under an outer scope test, the else of a
+  chain whose last branch is a scope test, a probe on the push's own line, and the `hash` and
+  `[ -e ]` forms. Both lists are asserted BY NAME, not by count: a count alone passes when the
+  walker flags the wrong four, which on this fixture is a walker that has started reding every
+  producer rather than one that stopped working. The resolved sentinel count is asserted too,
+  at exactly one, so the indirection cannot silently widen back out or collapse to zero. Six
+  further mutations, each verified applied and each 1 red: reverting to the any-level chain
+  test, narrowing `is_probe` back to the four literal forms, dropping the empty-sentinel half
+  of the variable rule, dropping the `else` rule, a probe test that accepts anything, and
+  dropping the own-line probe allowance. The nested case is also demonstrated at producer
+  scale on a COPY of `security-check.sh`: the previous walker reports nothing, this one flags
+  it, and the unmutated producer stays clean.
+- Two fixtures for the states above: `sec-no-eligible-no-lists.json`, a scope skip carrying
+  no coverage lists at all, and `dry-nextjs-absent-no-skip-reason.json`, a Next.js DRY report
+  naming `jscpd` absent with the `skip_reason` removed, so the analyzer name is the only
+  channel left and the literal that used to be here has nothing else to hide behind.
+- `tests/validate-playbook-adherence-spec.sh` gains the playbook-configuration group, eight
+  assertions, six of them behavioral rather than doc-matching: the state reader resolves an
+  absent line plus an empty `defaults.json` to `default-empty`, a NON-EMPTY `defaults.json`
+  still yields `default` with the set applied (the half that proves the old value was not
+  renamed away), the loader distinguishes a recorded user-playbook opt-out from one never
+  set, and a loader whose state reader returns nothing reports `unknown/unknown` instead of a
+  configured-looking state. The reader sweep is derived from `git ls-files`, not a maintained
+  list, so a new consumer of the field is caught: any place naming `playbook_sets_source`
+  within forty characters of the literal `"default"` must carry `"default-empty"` within
+  eighty characters of the match. Two earlier cuts of that sweep scored zero red under
+  mutation — one required the alternative only somewhere on the same line, which a realistic
+  revert satisfied with prose further along the sentence, and one required an `==` or `:`
+  operator, which never scanned this gate's own reader because it is phrased "is". It also
+  fails, rather than passes, when the sweep matches no files or finds no reader at all. All
+  thirteen mutations run against the group came out red, each verified to have actually
+  applied to the file before the suite was run.
+
+- `tests/command-body-lengths-spec.sh` — runs the phase-command body ratchet and proves it
+  can fail. Every mutation is seeded against a COPY of `commands/` through the new
+  `COMMAND_BODY_LENGTHS_DIR` override, so the real tree is never edited to test the check on
+  it. Five mutations, all red: a body one line over its budget (the minimal case the script
+  exists for, not a 200-line overrun), the same mutation on a second command so the red is
+  not a property of one file's frontmatter, a named command file removed, an empty directory
+  with nothing to measure, and a mirrored literal budget reintroduced into a copy of
+  `review-command-spec.sh` so the anti-mirror assertion is itself shown to be able to say no.
+  An unmutated copy is asserted green afterwards, so the reds are attributable to the
+  mutations and not to the copying. The red count is written out rather than derived from the
+  loop that produced it: a count that counts whatever happened cannot tell you a mutation
+  stopped landing.
+
+### Known remaining
+These are open. Each was found, measured, and deliberately not fixed in this release.
+
+- **The condition walker reads one physical line, and only where `if`/`elif` starts it.** The
+  class it covers is narrower than "a push into `tools_absent[]` is guarded by an availability
+  probe", and both directions have a shape that escapes. Measured on a fixture, not reasoned
+  about:
+  * A SILENT PASS, the same class this release closed twice. A scope test on a continuation
+    line of the probe's own `if` is never read:
+    `if command -v conttool >/dev/null 2>&1 \` / `   && [ "${#SCAN_PATHS[@]}" -eq 0 ]; then`
+    → the walker sees `command -v` on line one, calls the branch probe-guarded, and passes a
+    push that is scoped out.
+  * A FALSE RED, the class of the `is_probe` widening above. A probe factored into a helper —
+    `if have_tool trivy; then … else ABSENT_TOOLS+=("trivy")` — is not recognised, and the
+    push is flagged on a correct producer. `resolve_analyzer` is in the recognised list only
+    because somebody added that one name; nothing derives helper names from the producers.
+  Neither shape occurs in either producer today — all ten pushes sit in the `else` of a
+  single-line `if` — which is why this is recorded rather than fixed. Joining continuation
+  lines and resolving helper functions is a shell parser, and a shell parser written as an
+  `awk` walker is how the first two cuts of this one got their defects. What it does catch:
+  adding, removing or renaming a push (the exact count and exact names beside it); moving one
+  into a scope branch at top level, nested inside its own probe, or into the `elif` of its
+  probe; and a variable tested as an availability sentinel that is not one.
+- **`nextjs/security-check.sh` is still an undeclared producer.** Carried forward from 5.35.6
+  unchanged: `--field-paths` gives `also` blocks to `dry` and `solid` only, and nothing checks
+  that file's emitted shape against what the resolver reads.
+- **`meta.tools[]` in `security-check.sh`'s whole-project report is still a wrong literal.**
+  Carried forward from 5.35.6. The resolver does not read it and the field-paths declaration
+  says why, so nothing depends on it; the literal is untouched and nothing asserts it.
+- **The resolver's catalog lookup is still a path guess when it is not given one.** Carried
+  forward from 5.35.6. `--tool-catalog` is the reliable channel and both wrappers pass it; a
+  direct call without the flag gets stricter blocking than intended and says so in
+  `evidence.coverage_gap.scope_source`.
+- **`commands/review.md` is at exactly its 135-line body budget again.** Both of this round's
+  fixes to it — the missing-architecture benign path and the failed-archive branch — extended
+  lines that already existed. The next addition to that file needs the budget raised in
+  `scripts/command-body-lengths.sh`, which `tests/review-command-spec.sh` records as a
+  deliberate act with a written reason.
+
 ## [5.35.6] - 2026-08-29
 
 ### Fixed
@@ -300,19 +896,6 @@
 ### Known remaining
 These are open. Each was found, measured, and deliberately not fixed in this release.
 
-- **The producer control-flow walker only ever grows its stack.** The `awk` in
-  `tests/gate-verdict-resolve-spec.sh` that checks every `ABSENT_TOOLS+=` sits under an
-  availability probe pushes on `if`/`elif` and pops only on a bare `fi`, so `elif`, `else`,
-  a one-line `if` and `case` never balance. Measured on `security-check.sh`: depth 25 at
-  end of file where the real nesting is about 3, meaning every push after the first few is
-  checked against a condition chain containing every earlier `if` in the file. What it
-  still catches: ADDING, REMOVING or RENAMING a push, through the exact-count and
-  exact-names assertions beside it. What it does not catch: MOVING an existing push into a
-  scope branch below roughly line 1478 of that file — the stack by then contains a probe
-  from somewhere else and the check passes green. The two assertions it sits with are what
-  actually held the line in the round-8 mutations; the walker itself is weaker than it
-  reads.
-
 - **`nextjs/security-check.sh` is an undeclared producer.** `--field-paths` gives `also`
   blocks to `dry` and `solid` only; `security` declares the Drupal producer alone. That
   file emits `.summary.overall_status` and the three coverage lists — `tools_unmeasured`
@@ -321,20 +904,6 @@ These are open. Each was found, measured, and deliberately not fixed in this rel
   earlier note in this entry said the Next.js gates were not an open gap; that was drawn
   from `nextjs/solid-check.sh` and `nextjs/dry-check.sh`, which are declared, and did not
   cover this third file.
-
-- **A security `skipped` with `skip_reason: "no_eligible_changes"` and NO coverage fields
-  resolves benign.** The scope-skip branch returns before the undetermined-coverage check
-  this release added, so `{"meta":{"mode":"changed","skip_reason":"no_eligible_changes"},
-  "summary":{"overall_status":"skipped"}}` comes back `skipped` / `unresolved:false` /
-  `coverage_partial:false` — the same short-circuit hole closed on the non-skip path, still
-  open on this one. Today's producer always writes the lists on that path, so it is latent.
-
-- **The dry branch names `phpcpd` on the Next.js stack, where the analyzer is `jscpd`.**
-  `gate-verdict-resolve.sh:541` greps `tools_absent[]` for `phpcpd` specifically. A Next.js
-  report with `jscpd` in that list and no `skip_reason` would not match, and the gate would
-  resolve on its status alone. It resolves correctly today only because
-  `nextjs/dry-check.sh` writes `skip_reason: "tool_absent"` on that path, which the same
-  condition checks first.
 
 - **The scope classification needs code-quality-tools 3.10.2 or newer.** With an older
   catalog the `layers` map is absent, `security_review` and its six neighbours fall back to

@@ -1,0 +1,590 @@
+#!/usr/bin/env bash
+# gate-verdict-sidecar-spec.sh — an agent told to write a verdict file must be able to, and the
+# orchestrator that reads that file must say what an ABSENT one means.
+#
+# THE DEFECT THIS EXISTS FOR. `agents/wo-critic.md` carries `tools: Read, Grep, Glob, Bash, Write`
+# and writes a structured verdict sidecar. `agents/architecture-validator.md` and
+# `agents/spec-axis-reviewer.md` carried `tools: Read, Grep, Glob, Bash` — no `Write` — and returned
+# their verdicts as their Task response. On a live review those reports truncated in transit
+# repeatedly and the session had to improvise a scratchpad file mid-review to recover them.
+# `architecture-validator` found a content-destroying defect on all four passes of that review: the
+# gate most likely to have a long verdict was the one that could not record it.
+#
+# The second half is the one that is easy to ship broken. A verdict channel that can go silent needs
+# a name for the silence. `agents/prior-art-verdict-confirmer.md` already had it —
+# `confirmation: "no_return"`, recorded and never folded into `agree` or `disagree` — and without it
+# an absent sidecar reads as the agent having found nothing, which is the opposite of what it means.
+#
+# BOTH SIDES ARE DERIVED FROM THE ARTIFACTS.
+#   * The CLASS is every `agents/*.md` whose own body instructs it to write with the Write tool.
+#     Nobody registers an agent here; write that instruction into a new agent and it is checked on
+#     the next run.
+#   * The PATH each dispatch site must name is parsed out of the agent's own body, not held in a
+#     list here. An agent that declares no literal path contributes no path assertion.
+#
+# SCOPE, and why it is `commands/review.md`. `/review` is the dispatcher that reads these verdicts as
+# GATE RESULTS — off disk, as scalars, feeding `overall_verdict`. `commands/validate.md` dispatches
+# `architecture-validator` too and is deliberately not covered: it prints the report to a human who
+# reads it, supplies no output path, and has no aggregation to poison. The rule is about a machine
+# consuming a verdict, so it is scoped to the command that does.
+#
+# The third group is the `[r]` remediation path's file-ownership rule, checked the only way a
+# documented rule can be: the mechanisms it points at must exist and must contain what it cites.
+#
+# The fourth group closes the other half. Saying an absent sidecar is recorded is worth nothing if the
+# record has no field to hold it: `commands/review.md` step 5.0 said the `no_return` reason lands in the
+# `_recipe-load.json` entry for the framework, and §5.12 — the section that defines that entry's fields —
+# never grew one. That section's own prose already names the failure: an undefined key "is not a field, it
+# is where an observation goes to be lost". Both halves are derived, not listed here:
+#   * The gates_run[] entry NAMES are the ones review.md itself mandates, matched as `name: "X"`, and each
+#     must appear in the §5.8 `gates_run[].name` enum. Add a gate to review.md and it is checked next run.
+#   * The RECORD each absent-sidecar line names is bound to the schema section that declares itself the
+#     audit file for it, and that section must define the `no_return` state.
+# Not attempted: harvesting every backticked token off those lines and demanding each in the bound
+# section. Those lines cite OTHER records as precedent — `prior-art-verdict-confirmer`'s
+# `confirmation: "no_return"` sits on the same line as `_recipe-load.json` — so a token sweep asserts
+# fields against the wrong record, which is the match-for-an-unrelated-reason failure this file already
+# documents twice.
+#
+# The fifth group is the other direction, and it is a FALSE RED rather than a false green. Every rule
+# above makes silence fail closed, which is right for an agent that was asked and could not answer and
+# wrong for an input that was never there. Step 5.0 shipped `architecture-fit` as a hard-block
+# `gates_run[]` entry with no case for a task that has no `architecture/main.md`: the agent's own
+# "never guess `proceed`" rule then leaves it `unresolved`, and rule 2 fails a review that passed the
+# release before, for a document nobody promised. Step 5.0d has always had the equivalent for
+# `alignment.md`. Both sides are derived — the DOCUMENT off the agent's own body, the benign path
+# demanded within a window of it in both the agent and the dispatch site — so the asymmetry that made
+# this reachable is now the thing being compared, rather than each half being read on its own.
+#
+# The seventh group is the same failure one document over. Groups 4 and 5 check that the schema
+# DEFINES the things the command records. Nothing checked that the two DESCRIBE THE SAME RULE, and
+# they stopped doing so in the commit that fixed the mixed-result bug: `commands/review.md` step 5.0
+# learned to set the `skipped` frameworks aside and decide on the ones that answered, and
+# `references/gate-audit-schema.md` §5.8 — the reference that command cites — still said `pass`
+# "when every dispatched framework returned `proceed`" with no `skipped` clause at all. So the
+# schema described the fall-off-the-end bug the command no longer had, and a reader following the
+# citation got the old rule. §5.12 was updated in that same commit; §5.8 was not.
+#
+# Exit 0 on all-pass; 1 on any fail.
+
+set -eu
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REVIEW="${PLUGIN_ROOT}/commands/review.md"
+
+FAIL=0
+fail_check() { printf 'FAIL: %s\n' "$1" >&2; FAIL=1; }
+pass_check() { printf 'OK   %s\n' "$1"; }
+
+[ -f "$REVIEW" ] || { printf 'FAIL: %s missing\n' "$REVIEW" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { printf 'FAIL: python3 required\n' >&2; exit 1; }
+
+cd "$PLUGIN_ROOT"
+
+OUT=$(python3 - <<'PY'
+import os, re, glob
+
+def frontmatter(text):
+    m = re.match(r'^---\n(.*?)\n---\n', text, re.S)
+    return m.group(1) if m else ''
+
+def field(fm, name):
+    m = re.search(r'^%s:\s*(.*)$' % re.escape(name), fm, re.M)
+    return m.group(1).strip() if m else ''
+
+# ---- 1. The class: an agent whose own body tells it to write with the Write tool.
+sidecar_agents = {}
+for path in sorted(glob.glob('agents/*.md')):
+    text = open(path, encoding='utf-8', errors='replace').read()
+    fm = frontmatter(text)
+    body = text[len(fm) + 8:] if fm else text
+    if not re.search(r'\*\*Write tool\*\*', body, re.I):
+        continue
+    name = field(fm, 'name') or os.path.basename(path)[:-3]
+    tools = [t.strip() for t in field(fm, 'tools').split(',') if t.strip()]
+    disallowed = [t.strip() for t in field(fm, 'disallowedTools').split(',') if t.strip()]
+    # A PreToolUse matcher naming Write blocks the very write the body demands.
+    matchers = re.findall(r'^\s*-\s*matcher:\s*"([^"]*)"', fm, re.M)
+    # The literal sidecar path the agent declares for itself, reduced to its stable prefix. Read
+    # only off lines that call it an output path — an agent also names the records it READS
+    # (`prior-art-verdict-confirmer` opens `_internal-prior-art.json`), and demanding a dispatcher
+    # name an input as if it were a verdict channel would be a check firing on the wrong fact.
+    paths = set()
+    for line in body.split('\n'):
+        if not re.search(r'output path', line, re.I):
+            continue
+        for tok in re.findall(r'<task_folder>/(_[a-z0-9-]+)', line):
+            paths.add(tok)
+    sidecar_agents[name] = {
+        'file': path, 'tools': tools, 'disallowed': disallowed,
+        'matchers': matchers, 'paths': sorted(paths), 'body': body,
+    }
+
+print("CLASS %d" % len(sidecar_agents))
+for name, a in sorted(sidecar_agents.items()):
+    if 'Write' not in a['tools']:
+        print("NOWRITE %s %s" % (name, a['file']))
+    if 'Write' in a['disallowed']:
+        print("DISALLOWED %s %s" % (name, a['file']))
+    for m in a['matchers']:
+        if 'Write' in m:
+            print("HOOKBLOCK %s %s %s" % (name, a['file'], m))
+
+# ---- 2. The dispatch site must name the path and the absent-sidecar state.
+review = open('commands/review.md', encoding='utf-8', errors='replace').read()
+lines = review.split('\n')
+dispatched = [n for n in sidecar_agents
+              if re.search(r'ai-dev-assistant:%s\b' % re.escape(n), review)]
+print("DISPATCHED %d" % len(dispatched))
+checked_paths = 0
+for name in sorted(dispatched):
+    for prefix in sidecar_agents[name]['paths']:
+        checked_paths += 1
+        naming = [l for l in lines if prefix in l]
+        if not naming:
+            print("NOPATH %s %s" % (name, prefix))
+            continue
+        # The line must tie the ABSENCE to the state — not merely contain the token. Two earlier
+        # cuts of this scored zero red on the mutation that deleted the declaration: matching
+        # `no_return` anywhere hit `skip_reason: "spec_axis_reviewer_no_return"` (the value the
+        # state produces), and requiring a standalone token still hit the sentence citing
+        # `prior-art-verdict-confirmer`'s `confirmation: "no_return"` as precedent. Both matched
+        # for a reason unrelated to what is being asserted, which is the whole failure mode.
+        if not any(re.search(r'(?:absent|missing)\b[^\n]{0,60}?(?<![_a-z])no_return\b', l)
+                   for l in naming):
+            print("NOSILENCE %s %s" % (name, prefix))
+print("PATHS %d" % checked_paths)
+
+# ---- 3. The [r] remediation ownership rule points at mechanisms that exist.
+own = [l for l in lines if 'mutable working tree' in l]
+print("OWNLINES %d" % len(own))
+refs = 0
+for l in own:
+    for skill in re.findall(r'`(skills/[A-Za-z0-9_./-]+SKILL\.md)`', l):
+        refs += 1
+        if not os.path.isfile(skill):
+            print("DANGLING %s" % skill)
+        elif 'pairwise disjoint' not in open(skill, encoding='utf-8', errors='replace').read():
+            print("NOAUTHORITY %s pairwise-disjoint" % skill)
+    for cmd in re.findall(r'/ai-dev-assistant:([a-z-]+)', l):
+        refs += 1
+        if not os.path.isfile('commands/%s.md' % cmd):
+            print("DANGLING commands/%s.md" % cmd)
+print("OWNREFS %d" % refs)
+
+# ---- 4. The schema defines what the dispatch sites claim to write.
+schema = open('references/gate-audit-schema.md', encoding='utf-8', errors='replace').read()
+sections = []
+for m in re.finditer(r'^(#{2,3}) ([^\n]*)\n(.*?)(?=^#{2,3} |\Z)', schema, re.S | re.M):
+    sections.append((m.group(2), m.group(3)))
+flat = lambda t: re.sub(r'\s+', ' ', t)
+
+# 4a. Every gates_run[] entry name review.md mandates is in the S5.8 name enum.
+review_sec = [b for h, b in sections if h.startswith('5.8 ')]
+enum = set()
+if review_sec:
+    em = re.search(r'"name":\s*"([^"]*)"', review_sec[0])
+    if em:
+        enum = set(n.strip() for n in em.group(1).split('|') if n.strip())
+mandated = set()
+for l in lines:
+    if 'gates_run[]' not in l:
+        continue
+    mandated.update(re.findall(r'`name:\s*"([a-z0-9-]+)"`', l))
+print("ENUM %d" % len(enum))
+print("MANDATED %d" % len(mandated))
+for n in sorted(mandated - enum):
+    print("UNDEFINEDNAME %s" % n)
+
+# 4b. The record an absent-sidecar line names must be defined, and define the state.
+by_file = {}
+for h, b in sections:
+    for rec in re.findall(r'[Aa]udit file `(_[a-z0-9-]+\.json)`', flat(b)):
+        by_file[rec] = (h, b)
+# One binding per RECORD, not per line that mentions it. The same record is named on more than
+# one absent-sidecar line (each cites the other's posture as precedent), and reporting a missing
+# field once per mention is the same finding three times.
+records = set()
+for name in sorted(dispatched):
+    for prefix in sidecar_agents[name]['paths']:
+        for l in lines:
+            if prefix not in l:
+                continue
+            if not re.search(r'(?:absent|missing)\b[^\n]{0,60}?(?<![_a-z])no_return\b', l):
+                continue
+            # An agent's OWN sidecar is not a schema audit record — it is the file the agent
+            # writes and the command reads. Excluded by derivation (every declared sidecar
+            # prefix), not by name, so a new gate agent needs no edit here.
+            for rec in re.findall(r'`(_[a-z0-9-]+\.json)`', l):
+                if any(rec.startswith(px) for a in sidecar_agents.values() for px in a['paths']):
+                    continue
+                records.add(rec)
+for rec in sorted(records):
+    if rec not in by_file:
+        print("NOSECTION %s" % rec)
+    elif not re.search(r'(?<![_a-z])no_return\b', by_file[rec][1]):
+        print("NOSTATEFIELD %s %s" % (rec, by_file[rec][0].split()[0]))
+print("BINDINGS %d" % len(records))
+
+# ---- 5. A dispatched agent's REQUIRED input can be absent, and both sides must call that benign.
+#
+# `no_return` and `unresolved` are fail-closed on purpose: an agent that was asked and could not
+# answer must not read as an agent that found nothing. A MISSING INPUT is the other fact, and it
+# needs its own name or the fail-closed rule swallows it. Step 5.0d has always had one — no
+# `alignment.md` is a benign, non-`unresolved` skip — and step 5.0 shipped its hard-block
+# `gates_run[]` entry with no equivalent, so a task that never ran `/design` hit the agent's
+# "never guess `proceed`" rule, came back `unresolved`, and hard-failed a review that passed the
+# release before. A false red, not a false green, and invisible to every assertion above.
+#
+# BOTH SIDES ARE DERIVED. The DOCUMENT comes from the agent's own body — the file it is told to
+# Read, or a bullet under its `## Inputs` heading — with anything qualified "if present" dropped,
+# because an optional input needs no benign path. Framework docs (`references/`, `skills/`, …) are
+# not task inputs and are excluded by prefix. Then the agent's contract and the dispatch site must
+# BOTH tie that document's absence to a benign state, within a window rather than merely somewhere
+# in the file: `benign` a thousand characters away from the document it is about is not an
+# assertion. Add a required input to a dispatched agent and it is checked on the next run.
+def required_inputs(body):
+    found, in_inputs = set(), False
+    for line in body.split('\n'):
+        if line.startswith('## '):
+            in_inputs = line.lower().startswith('## inputs')
+            continue
+        if not (in_inputs or re.search(r'\b(?:Read|Load)\b', line)):
+            continue
+        if re.search(r'if present|if it exists|optional', line, re.I):
+            continue
+        for tok in re.findall(r'`([A-Za-z0-9_./<>-]+\.md)`', line):
+            if re.match(r'^(?:references|agents|skills|commands|scripts|templates)/', tok):
+                continue
+            found.add(tok)
+    return sorted(found)
+
+ABSENT_RE = r'absent|does not exist|missing|not present|no such'
+pairs = 0
+for name in sorted(dispatched):
+    body = sidecar_agents[name]['body']
+    for doc in required_inputs(body):
+        pairs += 1
+        if not any(re.search(ABSENT_RE, w, re.I) and re.search(r'benign|skipped', w, re.I)
+                   for w in (body[max(0, m.start() - 300):m.end() + 300]
+                             for m in re.finditer(re.escape(doc), body))):
+            print("AGENTNOBENIGN %s %s" % (name, doc))
+        # The window must NEGATE `unresolved`, not merely contain the word: every one of these
+        # paragraphs mentions it, so matching the bare token asserts nothing.
+        if not any(re.search(r'benign', w, re.I)
+                   and re.search(r'(?:not|non-?|never|without)[^\n]{0,40}unresolved', w, re.I)
+                   for w in (review[m.end():m.end() + 300]
+                             for m in re.finditer(r'(?:no|absent|missing|without)\s*[`*]*'
+                                                  + re.escape(doc), review, re.I))):
+            print("REVIEWNOBENIGN %s %s" % (name, doc))
+print("INPUTS %d" % pairs)
+PY
+)
+
+count() { printf '%s' "$OUT" | grep "^$1 " | awk '{print $2}'; }
+
+NCLASS=$(count CLASS); NDISPATCHED=$(count DISPATCHED)
+NPATHS=$(count PATHS); NOWNLINES=$(count OWNLINES); NOWNREFS=$(count OWNREFS)
+NENUM=$(count ENUM); NMANDATED=$(count MANDATED); NBINDINGS=$(count BINDINGS)
+NINPUTS=$(count INPUTS)
+
+# --- the derivation must have found something -------------------------------------------
+# Every group below passes trivially on an empty derivation, which is the failure mode this
+# whole file is about. wo-critic and prior-art-verdict-confirmer were in the class before this
+# change and the two gate agents joined it, so four is the floor, not a tuned number.
+if [ "${NCLASS:-0}" -ge 4 ]; then
+  pass_check "$NCLASS agents instruct themselves to write a verdict sidecar"
+else
+  fail_check "only ${NCLASS:-0} agents were found to instruct a sidecar write — the agent bodies are not being parsed, and a check that derived nothing cannot fail"
+fi
+
+if [ "${NDISPATCHED:-0}" -ge 2 ] && [ "${NPATHS:-0}" -ge 2 ]; then
+  pass_check "$NDISPATCHED of them are dispatched by /review, declaring $NPATHS sidecar paths between them"
+else
+  fail_check "/review dispatches ${NDISPATCHED:-0} sidecar-writing agents declaring ${NPATHS:-0} paths — below the two gate agents this exists for"
+fi
+
+# --- group 1: the capability matches the instruction -------------------------------------
+BAD=$(printf '%s' "$OUT" | grep -E '^(NOWRITE|DISALLOWED|HOOKBLOCK) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "every agent told to write a verdict file can actually write it"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      NOWRITE)    fail_check "$3: $2's body says to write its verdict with the Write tool, and Write is not in its \`tools:\`. Its verdict can only come back as prose, which is the channel that truncated on a live review." ;;
+      DISALLOWED) fail_check "$3: $2 lists Write in \`disallowedTools:\` while its body instructs a Write. One of the two is wrong and the agent silently loses its verdict channel." ;;
+      HOOKBLOCK)  fail_check "$3: $2 has a PreToolUse matcher \"$4\" covering Write while its body instructs a Write — the hook blocks the agent's own verdict sidecar." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 2: the dispatch site names the path, and names the silence ---------------------
+BAD=$(printf '%s' "$OUT" | grep -E '^(NOPATH|NOSILENCE) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "every dispatched sidecar path is named in review.md alongside its absent-sidecar state"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      NOPATH)    fail_check "commands/review.md dispatches $2 but never names \`$3\`, the sidecar that agent writes — so the verdict is still being read out of prose." ;;
+      NOSILENCE) fail_check "commands/review.md names \`$3\` but never says what an absent one means. Without a recorded third state a missing verdict reads as the agent having found nothing, which is the opposite of the truth. \`prior-art-verdict-confirmer\`'s \`no_return\` is the precedent." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 3: the remediation ownership rule, and that it points somewhere real ------------
+if [ "${NOWNLINES:-0}" -ge 1 ] && [ "${NOWNREFS:-0}" -ge 2 ]; then
+  pass_check "the [r] remediation path states the one-tree-per-agent rule and points at $NOWNREFS existing mechanisms"
+else
+  fail_check "the [r] remediation path has ${NOWNLINES:-0} line(s) about a mutable working tree citing ${NOWNREFS:-0} mechanisms. Live, a mutation-testing verifier and a test-author ran against one tree: the orchestrator read a live \`if (FALSE)\` mutation as the frozen clean state, a backup predating another agent's edit would have reverted work, and a passing test run had to be retracted."
+fi
+
+BAD=$(printf '%s' "$OUT" | grep -E '^(DANGLING|NOAUTHORITY) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "each cited ownership mechanism exists and carries the discipline it is cited for"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      DANGLING)    fail_check "the remediation rule points at $2, which does not exist — a rule that names a mechanism nobody can open is guidance to nowhere." ;;
+      NOAUTHORITY) fail_check "$2 is cited for its $3 discipline and no longer contains it — the pointer resolves and the thing it promised does not." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 4: the schema defines what the dispatch sites say they write -------------------
+# Same non-vacuity floor as the groups above: both derivations pass trivially on an empty one.
+if [ "${NMANDATED:-0}" -ge 4 ] && [ "${NENUM:-0}" -ge 4 ] && [ "${NBINDINGS:-0}" -ge 2 ]; then
+  pass_check "$NMANDATED gates_run[] name(s) mandated by review.md checked against a ${NENUM}-value schema enum; $NBINDINGS absent-sidecar record binding(s) resolved"
+else
+  fail_check "derived ${NMANDATED:-0} mandated gate name(s), a ${NENUM:-0}-value enum and ${NBINDINGS:-0} record binding(s) — below the floor, so this group could not have failed on anything"
+fi
+
+BAD=$(printf '%s' "$OUT" | grep -E '^(UNDEFINEDNAME|NOSECTION|NOSTATEFIELD) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "every gate name and absent-sidecar state review.md records has a field defined for it"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      UNDEFINEDNAME) fail_check "commands/review.md mandates a \`gates_run[]\` entry named \`$2\` that the §5.8 \`gates_run[].name\` enum does not list. A consumer reading the schema does not know the entry exists, and \`gate_type\` being enum-bound is a stated invariant." ;;
+      NOSECTION)     fail_check "commands/review.md records an absent-sidecar state into \`$2\` and gate-audit-schema.md declares no section for that audit file — the record it names is undefined." ;;
+      NOSTATEFIELD)  fail_check "commands/review.md says the absent-sidecar reason is recorded in \`$2\`, and §$3 defines that record's fields without a \`no_return\` one. §5.12 says it best: an undefined key is where an observation goes to be lost." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 5: a required input that is absent is a benign skip on BOTH sides -------------
+if [ "${NINPUTS:-0}" -ge 2 ]; then
+  pass_check "$NINPUTS required task input(s) derived from the dispatched agents' own bodies"
+else
+  fail_check "derived ${NINPUTS:-0} required task input(s) from the dispatched agents — below the two gate agents' own documents (\`architecture/main.md\`, \`alignment.md\`), so this group could not have failed on anything"
+fi
+
+BAD=$(printf '%s' "$OUT" | grep -E '^(AGENTNOBENIGN|REVIEWNOBENIGN) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "each dispatched agent's required input has a benign, non-unresolved missing path on both sides"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      AGENTNOBENIGN)  fail_check "agents/$2.md is told to read \`$3\` and never says what to return when it is not there. Its own contract says never to guess \`proceed\`, so the honest fallback left to it is \`unresolved\` — which /review fails closed." ;;
+      REVIEWNOBENIGN) fail_check "commands/review.md dispatches $2 against \`$3\` and defines no benign, non-\`unresolved\` outcome for that document being absent. A task that never produced it is a legitimate state; without this case its hard-block gate reds a review that passed before the gate existed." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 6: the artifact the validator keys on is the one /design actually writes -------
+#
+# Group 5 above derives the required input from the AGENT'S OWN BODY and then demands a benign
+# path for it in that same body. Both halves come from one document, so the document agreeing
+# with itself is the whole of the test — and it passed while the agent keyed its benign skip on
+# `architecture/main.md`, a filename `commands/design.md` never writes. That file is the PROJECT
+# stub `skills/project-initializer/SKILL.md` creates reading `{To be designed in Phase 2}`, which
+# breaks the gate in both directions at once: the stub exists for every project made by `/new`, so
+# the missing-input case never fires and the false red it was added to remove survives; and where
+# no stub exists every task skips benignly, so `architecture-fit` — a hard-block gate — can never
+# fail.
+#
+# So this group compares the agent against something OUTSIDE it. The authority is not another
+# document but a script that is run: `scripts/contract-baseline.sh` already resolves a task's
+# architecture set on disk (`present_list`, the `architecture/` directory at maxdepth 1 plus
+# `architecture.md`), and that is what `/review` step 0 freezes as the contract this very phase is
+# judged against. A fixture task folder is built, the script captures it, and the files it actually
+# copied are the ground truth. Both sides are derived: the patterns off the agent's body, the
+# filenames off a script's behaviour on a real directory. An artifact the authority captures and no
+# pattern covers is a task whose architecture the validator cannot see; a pattern that covers
+# nothing the authority captures is a filename nobody writes.
+CBASE="${PLUGIN_ROOT}/scripts/contract-baseline.sh"
+VALIDATOR_MD="${PLUGIN_ROOT}/agents/architecture-validator.md"
+if [ ! -f "$CBASE" ] || [ ! -f "$VALIDATOR_MD" ] || ! command -v jq >/dev/null 2>&1; then
+  fail_check "cannot resolve the task architecture set: contract-baseline.sh, the validator agent or jq is missing, so this group established nothing"
+else
+  CBTASK=$(mktemp -d)
+  mkdir -p "$CBTASK/architecture/sub"
+  printf '# hub\n'   > "$CBTASK/architecture.md"
+  printf '# main\n'  > "$CBTASK/architecture/main.md"
+  printf '# svc\n'   > "$CBTASK/architecture/svc.md"
+  printf 'notes\n'   > "$CBTASK/architecture/notes.txt"
+  printf '# deep\n'  > "$CBTASK/architecture/sub/deep.md"
+  bash "$CBASE" capture "$CBTASK" --slot review >/dev/null 2>&1 || true
+  CBBASE="$CBTASK/review/_contract-baseline"
+  CAPTURED=$(cd "$CBBASE" 2>/dev/null && find . -type f -name '*.md' 2>/dev/null \
+             | sed 's|^\./||' | grep '^architecture' | sort || true)
+  # The patterns the agent keys its missing-input skip on, taken as backticked path tokens
+  # rooted at `architecture`. A `{project_path}/`-prefixed token does not match, which is the
+  # point: this asks what the agent resolves RELATIVE TO THE TASK FOLDER.
+  APATS=$(grep -oE '`architecture(\.md|/[A-Za-z0-9_*.-]+\.md)`' "$VALIDATOR_MD" \
+          | tr -d '`' | sort -u)
+  NCAP=$(printf '%s\n' "$CAPTURED" | grep -c . || true)
+  NPAT=$(printf '%s\n' "$APATS" | grep -c . || true)
+  if [ "$NCAP" -ge 3 ] && [ "$NPAT" -ge 1 ]; then
+    pass_check "contract-baseline.sh captured $NCAP architecture artifact(s) for a task folder, checked against $NPAT pattern(s) the validator keys on"
+  else
+    fail_check "contract-baseline.sh captured ${NCAP:-0} architecture artifact(s) and the validator names ${NPAT:-0} pattern(s) — below the hub-plus-two-components fixture this group builds, so it could not have failed on anything"
+  fi
+  UNCOVERED=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    hit=0
+    while IFS= read -r pat; do
+      [ -n "$pat" ] || continue
+      # shellcheck disable=SC2254
+      case "$f" in $pat) hit=1 ;; esac
+    done <<< "$APATS"
+    [ "$hit" = "0" ] && UNCOVERED="${UNCOVERED} ${f}"
+  done <<< "$CAPTURED"
+  EMPTYPAT=""
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    hit=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # shellcheck disable=SC2254
+      case "$f" in $pat) hit=1 ;; esac
+    done <<< "$CAPTURED"
+    [ "$hit" = "0" ] && EMPTYPAT="${EMPTYPAT} ${pat}"
+  done <<< "$APATS"
+  if [ -z "$UNCOVERED" ] && [ -z "$EMPTYPAT" ]; then
+    pass_check "every architecture artifact /design leaves for a task is covered by a pattern the validator keys its benign skip on, and every pattern it names covers one"
+  else
+    [ -n "$UNCOVERED" ] && fail_check "contract-baseline.sh captures${UNCOVERED} for a task and agents/architecture-validator.md keys its missing-input skip on none of them. A task with that architecture on disk reads to the validator as a task with none, so \`architecture-fit\` — a hard-block gate — returns a benign skip and can never fail. The validator names [$(printf '%s' "$APATS" | tr '\n' ' ')]."
+    [ -n "$EMPTYPAT" ] && fail_check "agents/architecture-validator.md keys its missing-input skip on${EMPTYPAT}, which contract-baseline.sh captures for no task. Either \`/design\` never writes it — the \`architecture/main.md\` case, where the file that DOES exist is the \`{project_path}\` stub \`/new\` creates, so the skip never fires and the false red survives — or the authority stopped resolving it."
+  fi
+  rm -rf "$CBTASK"
+fi
+
+# --- group 7: the schema and the command describe the same aggregation -------------------
+#
+# THREE DOCUMENTS, AND THE THIRD IS THE AUTHORITY FOR THE COMPARISON. The input side of
+# `architecture-fit` is the per-framework `arch_validate.verdict` enum, and §5.12 is where that
+# enum is DEFINED — not in either of the two texts being compared, so neither can quietly drop a
+# value by agreeing with itself. Every value of it must be given a disposition in BOTH the §5.8
+# clause list and the step-5.0 aggregation rules in `commands/review.md`. Add a verdict to §5.12
+# and both sides go red until each says what it does with it.
+#
+# "Given a disposition" is read as the token appearing behind one of the words these two texts use
+# to introduce a framework-side value — `returned`, `any`, `worst`, `verdict is` — within a short
+# window, rather than merely appearing somewhere in the paragraph. That distinction is the whole
+# check: `skipped` appears four times in the drifted §5.8 as the gate's OWN verdict and not once as
+# a framework's, so bare token presence passes the very drift this exists for. It is a shape rule
+# over prose and it is stated as one; what it cannot do is judge whether two clauses that both name
+# a value assign it the same outcome.
+#
+# The second half is the output side, and it is derived from the schema's own `gates_run[].verdict`
+# enum: the set of aggregate verdicts each text names for this gate must be the same set. One side
+# gaining a `bypassed` the other has never heard of is the next version of this defect.
+SCHEMA_MD="${PLUGIN_ROOT}/references/gate-audit-schema.md"
+if [ ! -f "$SCHEMA_MD" ]; then
+  fail_check "references/gate-audit-schema.md is missing — the schema half of this comparison could not be read"
+else
+  AGREE=$(python3 - "$SCHEMA_MD" "$REVIEW" <<'PY'
+import re, sys
+
+schema = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+review = open(sys.argv[2], encoding='utf-8', errors='replace').read()
+
+def section(text, num):
+    m = re.search(r'^#{2,3} %s [^\n]*\n(.*?)(?=^#{2,3} |\Z)' % re.escape(num), text, re.S | re.M)
+    return m.group(1) if m else ''
+
+s58, s512 = section(schema, '5.8'), section(schema, '5.12')
+
+# The INPUT enum, defined in neither text being compared — off §5.12's own `arch_validate` row,
+# not the first `verdict` sentence in the section, which belongs to a different field.
+row = ''
+for line in s512.split('\n'):
+    if re.match(r'\|\s*`frameworks\[\]\.arch_validate`\s*\|', line):
+        row = line
+        break
+m = re.search(r'`verdict` is ((?:[*\s]*`[a-z_]+`[*\s]*(?:\\\||\|)?)+)', row)
+inputs = [t for t in re.findall(r'`([a-z_]+)`', m.group(1))] if m else []
+# The OUTPUT enum, off the gates_run[] shape in the section being compared.
+m = re.search(r'"verdict":\s*"([^"]*)"', s58)
+outputs = [t.strip() for t in m.group(1).split('|')] if m else []
+
+# The two texts. The schema's is the architecture-fit paragraph; the command's is everything the
+# bullet says after it declares the entry, which is where its aggregation rules live.
+m = re.search(r'\*\*`architecture-fit` gate[^\n]*', s58)
+schema_txt = m.group(0) if m else ''
+m = re.search(r'`name:\s*"architecture-fit"`[^\n]*', review)
+review_txt = m.group(0) if m else ''
+
+print("INPUTS %d" % len(inputs))
+print("OUTPUTS %d" % len(outputs))
+print("SCHEMALEN %d" % len(schema_txt))
+print("REVIEWLEN %d" % len(review_txt))
+
+TRIG = r'(?:returned|any|worst|verdict is)'
+def dispositioned(text, tok):
+    for m in re.finditer(r'`%s`' % re.escape(tok), text):
+        if re.search(TRIG, text[max(0, m.start() - 60):m.start()], re.I):
+            return True
+    return False
+
+for v in inputs:
+    ds, dr = dispositioned(schema_txt, v), dispositioned(review_txt, v)
+    if ds != dr:
+        print("DRIFT %s %s %s" % (v, 'schema' if ds else '-', 'review' if dr else '-'))
+    elif not ds:
+        print("UNDISPOSED %s" % v)
+
+named = lambda text: sorted(o for o in outputs if re.search(r'`%s`' % re.escape(o), text))
+if named(schema_txt) != named(review_txt):
+    print("OUTDRIFT %s | %s" % (','.join(named(schema_txt)) or '-', ','.join(named(review_txt)) or '-'))
+PY
+)
+  NIN=$(printf '%s' "$AGREE" | sed -n 's/^INPUTS //p')
+  NOUT=$(printf '%s' "$AGREE" | sed -n 's/^OUTPUTS //p')
+  LSCHEMA=$(printf '%s' "$AGREE" | sed -n 's/^SCHEMALEN //p')
+  LREVIEW=$(printf '%s' "$AGREE" | sed -n 's/^REVIEWLEN //p')
+  if [ "${NIN:-0}" -ge 5 ] && [ "${NOUT:-0}" -ge 4 ] && [ "${LSCHEMA:-0}" -ge 200 ] && [ "${LREVIEW:-0}" -ge 200 ]; then
+    pass_check "the architecture-fit aggregation is compared across two documents: a ${NIN}-value input enum from §5.12, a ${NOUT}-value output enum from §5.8, against ${LSCHEMA} characters of schema clause list and ${LREVIEW} of command rules"
+  else
+    fail_check "derived a ${NIN:-0}-value input enum, a ${NOUT:-0}-value output enum, ${LSCHEMA:-0} characters of §5.8 architecture-fit paragraph and ${LREVIEW:-0} of review.md aggregation — one of the four anchors did not resolve, so this group compared nothing"
+  fi
+  BAD=$(printf '%s' "$AGREE" | grep -E '^(DRIFT|UNDISPOSED|OUTDRIFT) ' || true)
+  if [ -z "$BAD" ]; then
+    pass_check "every arch_validate verdict has a disposition in both §5.8 and review.md step 5.0, and both name the same aggregate verdicts"
+  else
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      # shellcheck disable=SC2086
+      set -- $l
+      case "$1" in
+        DRIFT)      fail_check "the framework verdict \`$2\` is dispositioned in $3$4 and not in the other. \`commands/review.md\` step 5.0 and \`references/gate-audit-schema.md\` §5.8 describe one mechanism, and the command cites the schema, so a reader following that citation gets a rule the command does not run. This is the shape the \`skipped\` clause drifted in: the command learned to set skipped frameworks aside and §5.8 kept describing the fall-off-the-end aggregation it replaced." ;;
+        UNDISPOSED) fail_check "the framework verdict \`$2\` is defined in §5.12 and dispositioned in NEITHER §5.8 nor review.md step 5.0. A value the aggregation never names is a value that falls off the end of the clause list, which is step 8 rule 4's defect one gate down." ;;
+        OUTDRIFT)   fail_check "§5.8 names aggregate verdicts [$2] for architecture-fit and review.md names [$4] — the two documents disagree about what this gate can return." ;;
+      esac
+    done <<< "$BAD"
+  fi
+fi
+
+printf '\n'
+[ "$FAIL" -eq 0 ] && { printf 'gate-verdict-sidecar-spec: all checks passed\n'; exit 0; }
+printf 'gate-verdict-sidecar-spec: FAILURES\n' >&2; exit 1

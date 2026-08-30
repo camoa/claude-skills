@@ -39,7 +39,7 @@ Runs `bash scripts/project-state-read.sh <project>`. For `**Review Required:**`,
 
 Builds `gaps[]` for fields a fresh project would have today:
 - `**Code Path:**` (v3.11.0) — absent / `code_path_unknown`
-- `**Playbook Sets:**` (v3.15.0) — `playbook_sets_source: "default"` (implicit inheritance)
+- `**Playbook Sets:**` (v3.15.0) — `playbook_sets_source: "default"` or `"default-empty"` (implicit inheritance)
 - `**User Playbook:**` + `**User Playbook State:**` (v3.15.0) — state `unset`
 - `**Worktree By Default:**` (v3.16.0) — absent (defaults `false`)
 - `**Review Required:**` (v4.1.0) — absent (legacy default: `false` for projects with completed/ non-empty)
