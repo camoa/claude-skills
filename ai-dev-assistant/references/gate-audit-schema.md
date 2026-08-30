@@ -254,7 +254,7 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "dry_run": false,
   "gates_run": [
     {
-      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | agentic-verifier",
+      "name": "tdd | solid | dry | security | guides | playbook-adherence | skill-review | plugin-validate | e2e | visual-regression | visual-parity | architecture-fit | agentic-verifier | mechanism-challenge | spec | internal-prior-art | build-critique",
       "kind": "hard-block | soft",
       "verdict": "pass | warning | fail | skipped | bypassed | skipped-not-shipped",
       "envelope_path": "<task>/validations/latest/<gate>.json or null",
@@ -292,6 +292,10 @@ run before the first push, the same reason the change set includes the working t
 to tell is the defect. `head_upstream.configured: false` never changes `pr_ready`, `overall_verdict`, or
 an exit code; it changes what the operator is told alongside them. Every numeric field is `null` when it
 could not be established, so "no upstream configured" and "could not ask" are never the same answer.
+
+**`architecture-fit` gate (v5.35.7+, conditional hard-block).** When `/review` step 5.0 dispatched at least one `ai-dev-assistant:architecture-validator` (one per framework whose review recipe resolved), it adds ONE aggregate hard-block `gates_run[]` entry named `architecture-fit`, taken as scalars off the `_arch-validate-<framework-slug>.json` sidecars: `pass` when every dispatched framework returned `proceed`; `fail` on any `blocked` (step-8 rule 1); `warning` when the worst is `needs_adjustment` (a measured result under the block threshold, benign by rule 5); `skipped` + `unresolved: true` when a sidecar is **absent** (`no_return`) or its verdict is `unresolved`, which step-8 rule 2 fails closed. **Absent** entirely when no validator was dispatched — a stack-neutral project resolves no review recipe, and that path is degrade-first by design, so no dispatch is no gate rather than a failure.
+
+**Why the verdict is not left in `_recipe-load.json`.** That record is observability-only and never blocks (§5.12), so until v5.35.7 nothing consumed the architecture-fit verdict at all: a validator that returned `blocked` and a validator that returned nothing both reached `overall_verdict: "pass"`, while `commands/review.md` step 5.0 asserted a BLOCK posture in prose that no rule evaluated. The per-framework detail still lands in `frameworks[].arch_validate` for the audit trail — that file records, this entry adjudicates, the same split `agentic-verifier` uses against `_agentic-recipe.json`.
 
 **`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
@@ -442,6 +446,8 @@ Expected `gate_specific` shape:
         "summary": {"expected": 2, "present": 1, "absent_recommended": 1} },
       "method_fit": { "verdict": "mismatch",
         "reason": "method is contrib-module prior art; this task installs no module" },
+      "arch_validate": { "verdict": "no_return", "sidecar": "<abs path or null>",
+        "reason": "dispatched with an output path; no file at it when the gate read" },
       "advisory": "expected '## Change-impact globs' absent — gate uses the neutral floor"
     }
   ],
@@ -457,6 +463,7 @@ Expected `gate_specific` shape:
 | `frameworks[].source` | enum \| null | Provenance — only `dev-guides` is `verified:true`. `null` when nothing resolved. |
 | `frameworks[].declarations_audit` | object \| null | Verbatim `recipe-declarations-audit.sh` output for declaration-bearing phases; `null` otherwise. |
 | `frameworks[].method_fit` | object \| null | **v5.30.1+.** `{verdict, reason}`. `verdict` is `fits` \| `partial` \| `mismatch` \| `undetermined`; `reason` is one line and is required for `partial` and `mismatch`. Expected on every `available:true` entry — the writer warns when it is absent, because an unassessed recipe otherwise reads as a suitable one. `undetermined` is the honest answer when nobody looked. |
+| `frameworks[].arch_validate` | object \| null | **v5.35.7+, `phase: "review"` only.** The step-5.0 `architecture-validator` outcome for this framework: `{verdict, sidecar, reason}`. `verdict` is `proceed` \| `blocked` \| `needs_adjustment` \| `unresolved` \| **`no_return`** — `no_return` being an absent sidecar after a dispatch that supplied an output path, which is never read as `proceed`. `reason` is one line and is required for `no_return` and `unresolved`; this field is where that reason lives, and `commands/review.md` step 5.0 named this record before the field existed, which is the `notes` failure below in a second place. `null` on an entry that dispatched no validator. **Recorded here, adjudicated elsewhere** — the gate consequence is the `architecture-fit` `gates_run[]` entry in `_review.json` (§5.8), because this record never blocks. |
 | `frameworks[].advisory` | string \| null | One-line human note emitted when a `recommended:true` declaration is `absent` (the surfaced fail-open). `null` when clean. |
 | `bypass` | object \| null | `{ "reason": "no_frameworks_defined \| navigator_unavailable \| recipe_not_published \| user_declined" }` when the phase proceeded stack-neutral with no recipe; `null` on a normal resolve. Records the deliberate degrade-first path so it is auditable rather than silent. |
 

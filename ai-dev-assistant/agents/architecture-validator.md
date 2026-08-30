@@ -185,6 +185,13 @@ after a dispatch that gave you a path is a distinct outcome the orchestrator rec
 never read as "the validator found nothing". Do not write a partial or placeholder file to avoid that
 outcome; either finish the verdict or do not write at all.
 
+**Your verdict has a gate consequence, so nothing here is cosmetic.** Under `/review` step 5.0 these
+scalars drive one aggregate hard-block `gates_run[]` entry, `architecture-fit`: `blocked` fails the review,
+`unresolved` and an absent sidecar (`no_return`) make it fail closed, `needs_adjustment` is a non-blocking
+warning, and only `proceed` passes. A placeholder `proceed` written to keep a gate green is therefore the
+exact failure this channel exists to prevent — a silent validator blocking the review is the intended
+outcome, not a bug to work around.
+
 **Dispatched without an output path** (the interactive `/ai-dev-assistant:validate` path, where a human
 reads the result directly), return the markdown report below as your response and write nothing.
 

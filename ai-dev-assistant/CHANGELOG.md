@@ -30,6 +30,27 @@
   reason, never read as "the agent found nothing"; for the `spec` gate it carries
   `unresolved: true` so step 8 rule 2 fails closed. Follows
   `prior-art-verdict-confirmer`'s `confirmation: "no_return"` precedent.
+- **The architecture-fit verdict had nowhere to be recorded and nothing to consume it.** Two
+  gaps left by the sidecar fix above, both pointing the same way. First, `commands/review.md`
+  step 5.0 said the `no_return` reason is recorded "in the step-5.0 `_recipe-load.json` entry
+  for that framework", and §5.12 of `references/gate-audit-schema.md`, the section that
+  defines that entry's fields, was never given one. That section's own prose already names the
+  consequence: an undefined key "is where an observation goes to be lost". Second, and larger,
+  nothing consumed the verdict at all. `_recipe-load.json` is observability-only and never
+  blocks, `architecture-validator` produced no `gates_run[]` entry anywhere, and step 5.0's
+  "keeps its BLOCK posture" was a sentence no rule evaluated, so a validator returning
+  `blocked` and a validator returning nothing both reached `overall_verdict: "pass"`. The
+  schema now defines `frameworks[].arch_validate` (`{verdict, sidecar, reason}`, verdict
+  including `no_return`), and step 5.0 adds one aggregate hard-block `gates_run[]` entry
+  `architecture-fit`: `blocked` gives `fail` by rule 1, `no_return` or `unresolved` gives
+  `skipped` + `unresolved: true` and fails closed by rule 2, `needs_adjustment` is a benign
+  warning, and no dispatch emits no entry so a stack-neutral project is not gated on a
+  validator that never ran. Fixing only the absent-sidecar half would have left `/review`
+  failing on a silent validator while passing one that said `blocked`.
+  `tests/gate-verdict-sidecar-spec.sh` gained the assertion, derived from review.md's own
+  text rather than a copied list: every `gates_run[]` name the command mandates must appear in
+  §5.8's `name` enum, which was missing five of them including `spec`, and every record an
+  absent-sidecar line names must resolve to a schema section that defines the state.
 - **Re-reviewing a task destroyed the record of every earlier pass.** `_review.json` is
   overwrite-on-fire, which is right for a current-verdict file and wrong for the only
   surviving account of what a review found — `/review`'s `[r]` branch means exit, fix,

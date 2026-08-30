@@ -31,6 +31,21 @@
 # The third group is the `[r]` remediation path's file-ownership rule, checked the only way a
 # documented rule can be: the mechanisms it points at must exist and must contain what it cites.
 #
+# The fourth group closes the other half. Saying an absent sidecar is recorded is worth nothing if the
+# record has no field to hold it: `commands/review.md` step 5.0 said the `no_return` reason lands in the
+# `_recipe-load.json` entry for the framework, and §5.12 — the section that defines that entry's fields —
+# never grew one. That section's own prose already names the failure: an undefined key "is not a field, it
+# is where an observation goes to be lost". Both halves are derived, not listed here:
+#   * The gates_run[] entry NAMES are the ones review.md itself mandates, matched as `name: "X"`, and each
+#     must appear in the §5.8 `gates_run[].name` enum. Add a gate to review.md and it is checked next run.
+#   * The RECORD each absent-sidecar line names is bound to the schema section that declares itself the
+#     audit file for it, and that section must define the `no_return` state.
+# Not attempted: harvesting every backticked token off those lines and demanding each in the bound
+# section. Those lines cite OTHER records as precedent — `prior-art-verdict-confirmer`'s
+# `confirmation: "no_return"` sits on the same line as `_recipe-load.json` — so a token sweep asserts
+# fields against the wrong record, which is the match-for-an-unrelated-reason failure this file already
+# documents twice.
+#
 # Exit 0 on all-pass; 1 on any fail.
 
 set -eu
@@ -136,6 +151,60 @@ for l in own:
         if not os.path.isfile('commands/%s.md' % cmd):
             print("DANGLING commands/%s.md" % cmd)
 print("OWNREFS %d" % refs)
+
+# ---- 4. The schema defines what the dispatch sites claim to write.
+schema = open('references/gate-audit-schema.md', encoding='utf-8', errors='replace').read()
+sections = []
+for m in re.finditer(r'^(#{2,3}) ([^\n]*)\n(.*?)(?=^#{2,3} |\Z)', schema, re.S | re.M):
+    sections.append((m.group(2), m.group(3)))
+flat = lambda t: re.sub(r'\s+', ' ', t)
+
+# 4a. Every gates_run[] entry name review.md mandates is in the S5.8 name enum.
+review_sec = [b for h, b in sections if h.startswith('5.8 ')]
+enum = set()
+if review_sec:
+    em = re.search(r'"name":\s*"([^"]*)"', review_sec[0])
+    if em:
+        enum = set(n.strip() for n in em.group(1).split('|') if n.strip())
+mandated = set()
+for l in lines:
+    if 'gates_run[]' not in l:
+        continue
+    mandated.update(re.findall(r'`name:\s*"([a-z0-9-]+)"`', l))
+print("ENUM %d" % len(enum))
+print("MANDATED %d" % len(mandated))
+for n in sorted(mandated - enum):
+    print("UNDEFINEDNAME %s" % n)
+
+# 4b. The record an absent-sidecar line names must be defined, and define the state.
+by_file = {}
+for h, b in sections:
+    for rec in re.findall(r'[Aa]udit file `(_[a-z0-9-]+\.json)`', flat(b)):
+        by_file[rec] = (h, b)
+# One binding per RECORD, not per line that mentions it. The same record is named on more than
+# one absent-sidecar line (each cites the other's posture as precedent), and reporting a missing
+# field once per mention is the same finding three times.
+records = set()
+for name in sorted(dispatched):
+    for prefix in sidecar_agents[name]['paths']:
+        for l in lines:
+            if prefix not in l:
+                continue
+            if not re.search(r'(?:absent|missing)\b[^\n]{0,60}?(?<![_a-z])no_return\b', l):
+                continue
+            # An agent's OWN sidecar is not a schema audit record — it is the file the agent
+            # writes and the command reads. Excluded by derivation (every declared sidecar
+            # prefix), not by name, so a new gate agent needs no edit here.
+            for rec in re.findall(r'`(_[a-z0-9-]+\.json)`', l):
+                if any(rec.startswith(px) for a in sidecar_agents.values() for px in a['paths']):
+                    continue
+                records.add(rec)
+for rec in sorted(records):
+    if rec not in by_file:
+        print("NOSECTION %s" % rec)
+    elif not re.search(r'(?<![_a-z])no_return\b', by_file[rec][1]):
+        print("NOSTATEFIELD %s %s" % (rec, by_file[rec][0].split()[0]))
+print("BINDINGS %d" % len(records))
 PY
 )
 
@@ -143,6 +212,7 @@ count() { printf '%s' "$OUT" | grep "^$1 " | awk '{print $2}'; }
 
 NCLASS=$(count CLASS); NDISPATCHED=$(count DISPATCHED)
 NPATHS=$(count PATHS); NOWNLINES=$(count OWNLINES); NOWNREFS=$(count OWNREFS)
+NENUM=$(count ENUM); NMANDATED=$(count MANDATED); NBINDINGS=$(count BINDINGS)
 
 # --- the derivation must have found something -------------------------------------------
 # Every group below passes trivially on an empty derivation, which is the failure mode this
@@ -208,6 +278,29 @@ else
     case "$1" in
       DANGLING)    fail_check "the remediation rule points at $2, which does not exist — a rule that names a mechanism nobody can open is guidance to nowhere." ;;
       NOAUTHORITY) fail_check "$2 is cited for its $3 discipline and no longer contains it — the pointer resolves and the thing it promised does not." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 4: the schema defines what the dispatch sites say they write -------------------
+# Same non-vacuity floor as the groups above: both derivations pass trivially on an empty one.
+if [ "${NMANDATED:-0}" -ge 4 ] && [ "${NENUM:-0}" -ge 4 ] && [ "${NBINDINGS:-0}" -ge 2 ]; then
+  pass_check "$NMANDATED gates_run[] name(s) mandated by review.md checked against a ${NENUM}-value schema enum; $NBINDINGS absent-sidecar record binding(s) resolved"
+else
+  fail_check "derived ${NMANDATED:-0} mandated gate name(s), a ${NENUM:-0}-value enum and ${NBINDINGS:-0} record binding(s) — below the floor, so this group could not have failed on anything"
+fi
+
+BAD=$(printf '%s' "$OUT" | grep -E '^(UNDEFINEDNAME|NOSECTION|NOSTATEFIELD) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "every gate name and absent-sidecar state review.md records has a field defined for it"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      UNDEFINEDNAME) fail_check "commands/review.md mandates a \`gates_run[]\` entry named \`$2\` that the §5.8 \`gates_run[].name\` enum does not list. A consumer reading the schema does not know the entry exists, and \`gate_type\` being enum-bound is a stated invariant." ;;
+      NOSECTION)     fail_check "commands/review.md records an absent-sidecar state into \`$2\` and gate-audit-schema.md declares no section for that audit file — the record it names is undefined." ;;
+      NOSTATEFIELD)  fail_check "commands/review.md says the absent-sidecar reason is recorded in \`$2\`, and §$3 defines that record's fields without a \`no_return\` one. §5.12 says it best: an undefined key is where an observation goes to be lost." ;;
     esac
   done <<< "$BAD"
 fi
