@@ -86,9 +86,23 @@
 - The finding shape is documented in four places, not two. The record schema named the two new
   keys and neither of the two it already had. `tests/finding-shape-agreement-spec.sh` now fails
   when the sites disagree.
-- The growth check compared `net_lines` without a type guard. jq orders every string above every
-  number, so a line count arriving as a string demanded a reason regardless of sign. The same file
-  already guarded the round count against this.
+- **Three defects found by a third reviewer after the first two rounds, all by running the
+  committed script.** Which entries in the rounds history are repair rounds was decided by the
+  self-reported `round` number, so omitting the key skipped the check entirely: two entries with no
+  number, or two both numbered 1, carried a 277-line repair past all four checks. Position in the
+  array now decides, with the stated number still counting when it is above one so a record may
+  report a single round honestly; a `round` present and not a number is malformed.
+- **A guard meant to prevent a false reject turned a blocking record into a passing one.** The
+  growth check skipped a `net_lines` that was not a number, citing the round-count guard sixty
+  lines above as precedent — but that guard *fails* a non-numeric count and names it. `net_lines`
+  arriving as the string `"277"` with no reason went from rejected to accepted. It now fails, in
+  the same direction as the rule it was modelled on.
+- **The critic instructions contradicted themselves on the case the measurement rule exists for.**
+  One sentence said a measurement below its threshold could be raised as a concern; another said
+  not to raise it. A concern is a raised finding — the kernel lifts a verdict to the worst severity
+  among its findings — so the permissive sentence re-authorised the 90 ms case verbatim. It came
+  from having nowhere to record something checked and found clean, so the agent body now says
+  plainly that there is no such slot and not to invent one.
 - The handoff of the previous round's remedy was described in three documents and instructed at
   none; the dispatch step now carries it, in both the command and the reference. It is plural: a
   round runs up to three lenses and can raise several blocking findings.

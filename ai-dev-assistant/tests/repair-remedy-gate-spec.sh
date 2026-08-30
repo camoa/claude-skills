@@ -83,11 +83,26 @@ case_expect "did the remedy, no reason owed"       pass  '[{"round":2,"repair_gr
 case_expect "new finding, none recorded"           block '[{"round":2,"repair_growth":{"net_lines":0,"beyond_remedy":"new_finding","reason":"saw one","finding":"  "}}]'
 case_expect "new finding, recorded"                pass  '[{"round":2,"repair_growth":{"net_lines":0,"beyond_remedy":"new_finding","reason":"saw one","finding":"unguarded call at Foo::bar"}}]'
 
+# --- evasion by omitting the round number, not by writing a false one ---
+# The first draft keyed on `.round`, defaulting a missing key to 1, so an entry with no round
+# number was skipped. Two such entries carrying a 277-line repair passed every check. Position
+# in the array is the round order; the number is a label.
+case_expect "no round key at all, two entries"     block '[{"repair_growth":{"net_lines":277,"reason":"new interface method"}},{"repair_growth":{"net_lines":9,"reason":"x"}}]'
+case_expect "both entries numbered 1"              block '[{"round":1,"repair_growth":{"net_lines":277,"reason":"x"}},{"round":1,"repair_growth":{"net_lines":9,"reason":"y"}}]'
+case_expect "a non-numeric round number"           block '[{"round":"two","repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
+case_expect "one entry, no round key, is round 1"  pass  '[{"repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
+case_expect "growth with no reason still fails"    block '[{"repair_growth":{"net_lines":3,"beyond_remedy":"none","reason":""}}]'
+
+# --- a line count that is not a number is malformed, as the round count is ---
+case_expect "net_lines as a string, no reason"     block '[{"round":2,"repair_growth":{"net_lines":"277","beyond_remedy":"none","reason":""}}]'
+case_expect "net_lines as a string, with a reason" block '[{"round":2,"repair_growth":{"net_lines":"-44","beyond_remedy":"none","reason":"x"}}]'
+case_expect "net_lines absent is legal"            pass  '[{"round":2,"repair_growth":{"beyond_remedy":"none","reason":""}}]'
+
 # --- a reader that throws must not read as clean ---
 case_expect "rounds is a string, not a list"       block '"four"'
 
 # --- the line count is only compared when it is a number ---
-case_expect "net_lines as a string is not growth"  pass  '[{"round":2,"repair_growth":{"net_lines":"-44","beyond_remedy":"none","reason":""}}]'
+
 
 # --- mutation: neutralise each check, confirm a blocking case slips through ---
 mutate_survives() { # mutate_survives <label> <count var> <rounds json>
@@ -108,8 +123,8 @@ mutate_survives "the missing-reason check" UX '[{"round":2,"repair_growth":{"net
 mutate_survives "the kept-finding check"   EN '[{"round":2,"repair_growth":{"net_lines":0,"beyond_remedy":"new_finding","reason":"saw one","finding":"  "}}]'
 
 # A spec that asserted nothing has not passed.
-if [ "$pass_n" -lt 20 ]; then
-  echo "FAIL: only $pass_n assertions ran; this spec expects 20"
+if [ "$pass_n" -lt 27 ]; then
+  echo "FAIL: only $pass_n assertions ran; this spec expects 27"
   fail=1
 fi
 

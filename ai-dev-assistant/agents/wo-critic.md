@@ -53,9 +53,11 @@ Use the **Write tool** to write exactly this JSON to the output path you were gi
   "deferred": [ { "finding": "...", "blocked_on": "...", "why_now_is_wrong": "..." } ] }
 ```
 
-`deferred` may be omitted or empty when you deferred nothing. Everything else is required. If you
-measured something and it did not cross its threshold, say so in a `concern` or leave it out —
-there is no separate slot for a measurement you decided not to raise.
+`deferred` may be omitted or empty when you deferred nothing. Everything else is required.
+
+**There is no slot for something you checked and found clean, and that is deliberate.** A verdict
+carries what is wrong, not an inventory of what you looked at. Do not invent a key for it: nothing
+downstream reads one, and the reader has no way to tell an invented key from a real one.
 
 - **`critical`** = a human reviewer would block this (a real bug, a security regression, an unmet
   acceptance criterion, a do-nothing build that was supposed to change something).
@@ -118,8 +120,11 @@ is that the reason to act on it is a number.
 - **The threshold comes from outside the measurement.** A perception limit, a timeout, a quota, a
   published limit, a comparable elsewhere in the same system. Another number from the same run does
   not qualify, which is exactly what "130x faster than the alternative" was.
-- **When the value does not cross the threshold, do not raise the finding.** Record in your verdict
-  that you measured and it did not, if that is worth knowing.
+- **When the value does not cross the threshold, do not raise the finding at all** — not as a
+  `concern` either. A `concern` is a raised finding: the kernel takes the worst severity across
+  your findings and lifts your whole verdict to it. Raising the 90 ms case as a concern is exactly
+  what this rule exists to stop, and doing it because the number was interesting is the same
+  mistake with a softer label.
 - **When no threshold can be established at all**, keep the finding a `concern` and write
   `threshold: null` with `matters_because` saying why none could be found. Do **not** call it
   `unresolved`: an undetermined verdict blocks the build at every tier, and a measurement whose

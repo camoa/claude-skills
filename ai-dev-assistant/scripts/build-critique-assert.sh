@@ -369,7 +369,7 @@ if [ -e "$REC" ]; then
 
   UNJUSTIFIED_GROWTH=$(jq -c \
     '[ .[] | select((.repair_growth // null) != null)
-           | select((.repair_growth.net_lines | type) == "number")
+           | select((.repair_growth | type) == "object")
            | select(((.repair_growth.net_lines // 0) > 0)
                     and (((.repair_growth.reason // "") | tostring) == ""))
            | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || UNJUSTIFIED_GROWTH='[]'
@@ -417,6 +417,28 @@ if [ -e "$REC" ]; then
   BEYOND_ENUM='["none","remedy_insufficient","new_finding"]'
   JQ_ERR="__jq_error__"
 
+  # A line count that is not a number is MALFORMED, not skipped. An earlier draft skipped it,
+  # citing the round-count guard 60 lines above as precedent -- but that guard fails a
+  # non-numeric count and names it, and skipping turned a record that blocked into one that
+  # passed: `net_lines: "277"` with no reason went from rejected to accepted. Same rule, same
+  # direction, in both places.
+  BAD_NET=$(jq -c \
+    '[ .[] | select((.repair_growth // null) != null)
+           | select((.repair_growth | type) == "object")
+           | select(.repair_growth | has("net_lines"))
+           | select((.repair_growth.net_lines | type) != "number")
+           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_NET="$JQ_ERR"
+  if [ "$BAD_NET" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the rounds history could not be read for repair line counts"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$BAD_NET")" -gt 0 ]; then
+    set_ev malformed_net_lines "$BAD_NET"
+    add_msg "a repair round records a non-numeric net_lines, so how much the repair grew cannot be read"
+    emit fail true "" 1
+  fi
+
   # ABSENCE IS THE FAILURE, not just a wrong value. Every sibling block in this file fails
   # closed on a missing key, and the first draft of this one did not: it guarded the enum test
   # with `has("beyond_remedy")` and defaulted the missing key to "none" everywhere downstream.
@@ -425,12 +447,37 @@ if [ -e "$REC" ]; then
   # `{net_lines: 277, reason: "needed"}` with no bucket at all. The record did not have to lie.
   # A round after the first is a repair round and owes both keys; round 1 built the component
   # and owes neither.
+  # WHICH entries are repair rounds is decided by POSITION, not by the self-reported number.
+  # Keying on `.round` made the check evadable by omission: `(.round // 1) > 1` skips an entry
+  # with no `round` key, and `round` is optional everywhere else in this file. Two entries with
+  # no number, or two both numbered 1, passed every check below with a 277-line repair in them.
+  # The array order IS the round order, so index 0 is the build and every later index is a
+  # repair. The stated number still counts when it is above one, because a record may legitimately
+  # list only the round it is reporting on rather than every round from the first. Position closes
+  # the omission hole; the number keeps a partial history honest. A `round` that is present and not
+  # a number is separately malformed: it is what the messages name, and a record whose labels
+  # cannot be read is not a record.
+  BAD_ROUND_NO=$(jq -c \
+    '[ to_entries[] | select(.value | has("round"))
+                    | select((.value.round | type) != "number")
+                    | .key ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_ROUND_NO="$JQ_ERR"
+  if [ "$BAD_ROUND_NO" = "$JQ_ERR" ]; then
+    set_ev_s beyond_remedy_check "unreadable"
+    add_msg "the rounds history could not be read for round numbers"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$BAD_ROUND_NO")" -gt 0 ]; then
+    set_ev malformed_round_numbers "$BAD_ROUND_NO"
+    add_msg "a round records a non-numeric round number, so which round the messages below name cannot be read"
+    emit fail true "" 1
+  fi
+
   MISSING_BEYOND=$(jq -c \
-    '[ .[] | select(((.round // 1) | if type == "number" then . else 2 end) > 1)
-           | select(((.repair_growth // null) == null)
-                    or ((.repair_growth | type) != "object")
-                    or ((.repair_growth | has("beyond_remedy")) | not))
-           | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || MISSING_BEYOND="$JQ_ERR"
+    '[ to_entries[] | select((.key > 0) or ((.value.round // 1) > 1))
+                    | select(((.value.repair_growth // null) == null)
+                             or ((.value.repair_growth | type) != "object")
+                             or ((.value.repair_growth | has("beyond_remedy")) | not))
+                    | (.value.round // (.key + 1)) ]' <<<"$ROUNDS_ARR" 2>/dev/null) || MISSING_BEYOND="$JQ_ERR"
   if [ "$MISSING_BEYOND" = "$JQ_ERR" ]; then
     set_ev_s beyond_remedy_check "unreadable"
     add_msg "the repair-against-remedy check could not read the rounds history"
