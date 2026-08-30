@@ -236,14 +236,17 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 "gate_specific": {
   "phase": "research | design | implement",
   "playbook_sets_loaded": ["<framework>/best-practices/<author>"],
-  "playbook_sets_source": "explicit | explicit-none | default",
+  "playbook_sets_source": "explicit | explicit-none | default | default-empty | unknown",
   "user_playbook_loaded": "/abs/path/to/playbook.md or null",
+  "user_playbook_state": "set | docs-only-no-playbook | unset | unknown",
   "plays_by_section": {"CSS / SCSS": 5, "Architecture": 4},
   "conflicts_detected": []
 }
 ```
 
 `user_choice`: always `null` (deterministic; no prompt).
+
+**v5.35.7+ — an empty playbook is not one state.** `default` used to name the source of an empty list: `defaults.json` ships `{"playbookSets": []}`, so a project with no `**Playbook Sets:**` line got `default` while zero sets were applied, and a reader concluded a default set had been. `default` now means a NON-EMPTY default list was applied (the case a fork populating `defaults.json` gets); `default-empty` means the project never chose and there is nothing to fall back to. Both still mean "the project did not choose", so a consumer nudging on implicit inheritance must match BOTH. `unknown` is emitted only by the loader's `project_state_read_failed` branch, which observed no configuration at all — it must never be reported as a configured state. `user_playbook_state` is new and mirrors the reader's `userPlaybookState`; without it the record could not distinguish a recorded `docs-only-no-playbook` opt-out from a user playbook nobody ever set, and `validate-playbook-adherence` step 3 needs exactly that to tell a deliberate opt-out from a never-configured project.
 
 ### 5.8 `review` (v1.1+)
 

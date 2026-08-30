@@ -83,6 +83,43 @@
   `overall_verdict` or an exit code. Every numeric field is `null` where it could not be
   established, so "no upstream configured" and "could not ask" stay different answers.
   `review-change-set.sh` output is `schema_version` 1.1 (additive).
+- **An unconfigured playbook set reported as a clean skip.**
+  `validate-playbook-adherence` step 3 collapsed every empty playbook into one reason,
+  `no_playbook_declared`, annotated "a genuine no-op / intentional opt-out — benign". Those
+  are two different facts and the gate could already tell them apart: `project_state.md`
+  distinguishes `**Playbook Sets:** none`, a recorded opt-out, from an absent line, which is
+  a project that never chose. Observed live on a real Drupal project across all four passes
+  of one review: the user has a published 28-guide playbook set, the project simply had no
+  `**Playbook Sets:**` line, `_playbook-load.json` recorded zero plays, and the gate passed
+  quietly. The gate was right that nothing was in scope and wrong to present that as a
+  result. Step 3 now resolves three states, all still `verdict: "skipped"` and none blocking:
+  `playbook_opt_out` when every empty channel was explicitly chosen, which stays silent
+  because a project that recorded its answer has answered; `playbook_never_configured` when a
+  channel was never chosen, which names the channel and carries the same "this skip is NOT
+  coverage" warning the vacuous-skip case already had; and `playbook_config_unknown` when the
+  loader could not read `project_state.md` at all. The resolved reason is carried as
+  `details.skip_reason`, so a reader of the JSON can tell which applied. The user-playbook
+  half of the distinction was not observable before this: `playbook-load-deterministic.sh`
+  read `userPlaybookState` and threw it away, so a recorded `docs-only-no-playbook` opt-out
+  and a playbook nobody ever set arrived as one state. The loader now emits
+  `user_playbook_state` beside `user_playbook_loaded`.
+- **`playbook_sets_source: "default"` named an empty list.** `defaults.json` ships
+  `{"playbookSets": []}`, so on an unmodified plugin the absent-line case fell back to
+  nothing at all while the record said `default` — which a reader takes to mean a default set
+  was applied. Verified live: the field read `default` while zero plays loaded. `default` now
+  means what it says, a NON-EMPTY default list was applied, which is what a fork populating
+  `defaults.json` gets; `default-empty` is the project that never chose and has nothing to
+  fall back to. The existing value stays valid and reachable rather than being renamed out
+  from under a reader, and all five documented readers of the field were found and updated to
+  accept both spellings, since both still mean "the project did not choose": the `/next`
+  playbook nudge, `/upgrade-project` gap detection, `references/upgrade-walkthrough.md`,
+  `/set-playbook-sets`'s printed source line, and this gate's own implicit-inheritance hint.
+  Two more instances of the same defect surfaced while checking those readers: the loader's
+  `.playbookSetsSource // "default"` and `.userPlaybookState // "unset"` fallbacks fire when
+  the reader emitted no such field, which means the script observed no configuration rather
+  than an unconfigured one. Both now say `unknown`, as does the whole
+  `project_state_read_failed` branch, which had been reporting `default` after reading
+  nothing.
 
 ### Added
 - `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
@@ -114,6 +151,22 @@
   distances are `null` and no missing-upstream claim is made, because there is no head to
   make it about). Three of its assertions exist to hold the fact advisory — the change set,
   its `files[]` and its `empty_reason` must all come out unchanged.
+- `tests/validate-playbook-adherence-spec.sh` gains the playbook-configuration group, eight
+  assertions, six of them behavioral rather than doc-matching: the state reader resolves an
+  absent line plus an empty `defaults.json` to `default-empty`, a NON-EMPTY `defaults.json`
+  still yields `default` with the set applied (the half that proves the old value was not
+  renamed away), the loader distinguishes a recorded user-playbook opt-out from one never
+  set, and a loader whose state reader returns nothing reports `unknown/unknown` instead of a
+  configured-looking state. The reader sweep is derived from `git ls-files`, not a maintained
+  list, so a new consumer of the field is caught: any place naming `playbook_sets_source`
+  within forty characters of the literal `"default"` must carry `"default-empty"` within
+  eighty characters of the match. Two earlier cuts of that sweep scored zero red under
+  mutation — one required the alternative only somewhere on the same line, which a realistic
+  revert satisfied with prose further along the sentence, and one required an `==` or `:`
+  operator, which never scanned this gate's own reader because it is phrased "is". It also
+  fails, rather than passes, when the sweep matches no files or finds no reader at all. All
+  thirteen mutations run against the group came out red, each verified to have actually
+  applied to the file before the suite was run.
 
 ## [5.35.6] - 2026-08-29
 

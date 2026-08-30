@@ -23,7 +23,7 @@ Fields:
 - `codePath` — absolute path (string) if declared and resolves, or `null` if docs-only / unknown
 - `folder` — the absolute path passed in
 - `playbookSets` — *(v1.1+)* array of dev-guides path slugs the project subscribes to (e.g., `["<framework>/best-practices/<author>"]`). Falls back to the plugin's `defaults.json` `playbookSets` when field absent. Empty array when explicit `none`.
-- `playbookSetsSource` — *(v1.1+)* `"explicit"` (field present with values) \| `"explicit-none"` (field is literal `none`) \| `"default"` (field absent, defaults applied)
+- `playbookSetsSource` — *(v1.1+)* `"explicit"` (field present with values) \| `"explicit-none"` (field is literal `none`) \| `"default"` (field absent, a NON-EMPTY `defaults.json` list applied) \| `"default-empty"` (*v5.35.7+*) (field absent and the `defaults.json` fallback is itself empty — the project never chose and there is nothing to fall back to; this is what the shipped `defaults.json` yields)
 - `userPlaybook` — *(v1.1+)* absolute path to project-local playbook file, or `null` when state is `unset` or `docs-only-no-playbook`
 - `userPlaybookState` — *(v1.1+)* `"unset"` \| `"docs-only-no-playbook"` \| `"set"`
 - `playbookResolutions` — *(v1.1+)* array of `{topic, set}` entries recording per-topic multi-set contradiction resolutions
@@ -65,7 +65,7 @@ Case-insensitive match on the label.
 |---|---|
 | `**Playbook Sets:** <ids,...>` | Comma-separated set IDs |
 | `**Playbook Sets:** none` | Explicit opt-out — empty list, source `explicit-none` |
-| (line absent) | Use the plugin's `defaults.json` `playbookSets`; source `default` |
+| (line absent) | Use the plugin's `defaults.json` `playbookSets`; source `default` when that list is non-empty, `default-empty` when it is not |
 | `**User Playbook:** <abs path>` | Project-local playbook file |
 | `**User Playbook State:** unset \| docs-only-no-playbook \| set` | 3-state field; mirrors `Code Path State` precedent |
 | `**Playbook Resolutions:**` (multi-line list) | Per-topic multi-set choices |
