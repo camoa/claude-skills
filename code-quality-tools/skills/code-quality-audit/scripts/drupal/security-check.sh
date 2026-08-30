@@ -1206,6 +1206,15 @@ if resolve_analyzer php-security-linter; then
 else
     PHPCS_SEC_PRESENT=0
     PHPCS_SEC_CMD=()
+    # Recorded here, in the branch the probe's failure opens, rather than in the distant
+    # else below. Both are reached on exactly the same condition, but only this one says so
+    # to a reader walking outward from the push: the coverage walker in
+    # ai-dev-assistant/tests/gate-verdict-resolve-spec.sh asks whether the control flow a
+    # push sits in establishes that THIS tool is absent, and a probe whose result was
+    # captured into a variable several branches earlier does not answer that question.
+    echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
+    SKIPPED_TOOLS+=("php-security-linter")
+    ABSENT_TOOLS+=("php-security-linter")
 fi
 
 if [ "$PHPCS_SEC_PRESENT" -eq 1 ] && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
@@ -1262,9 +1271,7 @@ elif [ "$PHPCS_SEC_PRESENT" -eq 1 ]; then
         fi
     fi
 else
-    echo -e "  ${YELLOW}[SKIP]${NC} php-security-linter not installed (tool absent)"
-    SKIPPED_TOOLS+=("php-security-linter")
-    ABSENT_TOOLS+=("php-security-linter")
+    # Absence is recorded at the probe above; this arm only needs the empty result.
     PHPCS_ISSUES="[]"
 fi
 
