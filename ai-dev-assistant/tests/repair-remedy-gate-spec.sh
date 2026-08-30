@@ -93,15 +93,26 @@ case_expect "a non-numeric round number"           block '[{"round":"two","repai
 case_expect "one entry, no round key, is round 1"  pass  '[{"repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
 case_expect "growth with no reason still fails"    block '[{"repair_growth":{"net_lines":3,"beyond_remedy":"none","reason":""}}]'
 
+# --- the record this release exists for, at every position a history can put it ---
+# Two earlier fixes narrowed this without closing it: the first keyed on the self-reported round
+# number, the second added array position, and index 0 fell through both. What makes an entry a
+# repair round is that it carries a repair_growth at all.
+case_expect "unbucketed repair, single entry"      block '[{"repair_growth":{"net_lines":277,"reason":"needed"}}]'
+case_expect "unbucketed repair, stated round 1"    block '[{"round":1,"repair_growth":{"net_lines":277,"reason":"needed"}}]'
+case_expect "unbucketed repair first, clean after" block '[{"repair_growth":{"net_lines":277,"reason":"needed"}},{"round":1,"repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
+
 # --- a line count that is not a number is malformed, as the round count is ---
-case_expect "net_lines as a string, no reason"     block '[{"round":2,"repair_growth":{"net_lines":"277","beyond_remedy":"none","reason":""}}]'
-case_expect "net_lines as a string, with a reason" block '[{"round":2,"repair_growth":{"net_lines":"-44","beyond_remedy":"none","reason":"x"}}]'
-case_expect "net_lines absent is legal"            pass  '[{"round":2,"repair_growth":{"beyond_remedy":"none","reason":""}}]'
+# The no-reason case is caught earlier by the growth check; this block is what catches a
+# non-numeric count carrying a reason, which would otherwise pass unread. null is exempt in
+# both places: an absent measurement is not a malformed one.
+case_expect "string count with a reason is malformed" block '[{"round":2,"repair_growth":{"net_lines":"-44","beyond_remedy":"none","reason":"x"}}]'
+case_expect "string count with no reason is growth"  block '[{"round":2,"repair_growth":{"net_lines":"277","beyond_remedy":"none","reason":""}}]'
+case_expect "net_lines null is exempt, as rounds is" pass  '[{"round":2,"repair_growth":{"net_lines":null,"beyond_remedy":"none","reason":""}}]'
+case_expect "net_lines absent is legal"              pass  '[{"round":2,"repair_growth":{"beyond_remedy":"none","reason":""}}]'
 
 # --- a reader that throws must not read as clean ---
 case_expect "rounds is a string, not a list"       block '"four"'
 
-# --- the line count is only compared when it is a number ---
 
 
 # --- mutation: neutralise each check, confirm a blocking case slips through ---
@@ -123,8 +134,8 @@ mutate_survives "the missing-reason check" UX '[{"round":2,"repair_growth":{"net
 mutate_survives "the kept-finding check"   EN '[{"round":2,"repair_growth":{"net_lines":0,"beyond_remedy":"new_finding","reason":"saw one","finding":"  "}}]'
 
 # A spec that asserted nothing has not passed.
-if [ "$pass_n" -lt 27 ]; then
-  echo "FAIL: only $pass_n assertions ran; this spec expects 27"
+if [ "$pass_n" -lt 31 ]; then
+  echo "FAIL: only $pass_n assertions ran; this spec expects 31"
   fail=1
 fi
 

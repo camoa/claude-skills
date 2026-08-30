@@ -389,10 +389,11 @@ That is not a severity problem — 89 concerns across the corpus cost zero round
 gate sorted them correctly. It is a relevance failure, and nothing in this rung asked about
 relevance at all. So a ratio, multiple or delta is not admissible on its own; the measured value is
 reported in its own units and compared against a threshold sourced from outside the measurement. A
-value that does not cross its threshold is not a finding. A threshold that cannot be established
-leaves the finding a `concern` carrying `threshold: null`, and never `unresolved` — an undetermined
-verdict is blocking at every tier under `--required`, so calling it that would halt the build on the
-exact case this rule exists to stop costing anything.
+value that does not cross its threshold is not a finding, and neither is one whose threshold cannot
+be established at all: a measurement with no threshold behind it is a number with no argument, which
+is the whole of what this rule stops. It is never `unresolved` either — an undetermined verdict is
+blocking at every tier under `--required`, so calling it that would halt the build on the exact case
+the rule exists to make free.
 
 **The rule stops at measurements, deliberately.** "Every finding must justify its worth" applies to
 all of them and is satisfied by a sentence, so nothing could fail it. Measurements are where the

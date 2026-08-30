@@ -420,12 +420,15 @@ if [ -e "$REC" ]; then
   # A line count that is not a number is MALFORMED, not skipped. An earlier draft skipped it,
   # citing the round-count guard 60 lines above as precedent -- but that guard fails a
   # non-numeric count and names it, and skipping turned a record that blocked into one that
-  # passed: `net_lines: "277"` with no reason went from rejected to accepted. Same rule, same
-  # direction, in both places.
+  # passed: `net_lines: "-44"` WITH a reason went from rejected to accepted, which is where this
+  # block earns its place. The no-reason case is caught earlier by the growth check, which the
+  # same repair fixed by dropping its skip. `null` is exempt here exactly as it is in the
+  # round-count guard: an absent measurement is not a malformed one.
   BAD_NET=$(jq -c \
     '[ .[] | select((.repair_growth // null) != null)
            | select((.repair_growth | type) == "object")
            | select(.repair_growth | has("net_lines"))
+           | select(.repair_growth.net_lines != null)
            | select((.repair_growth.net_lines | type) != "number")
            | (.round // "?") ]' <<<"$ROUNDS_ARR" 2>/dev/null) || BAD_NET="$JQ_ERR"
   if [ "$BAD_NET" = "$JQ_ERR" ]; then
@@ -447,16 +450,21 @@ if [ -e "$REC" ]; then
   # `{net_lines: 277, reason: "needed"}` with no bucket at all. The record did not have to lie.
   # A round after the first is a repair round and owes both keys; round 1 built the component
   # and owes neither.
-  # WHICH entries are repair rounds is decided by POSITION, not by the self-reported number.
-  # Keying on `.round` made the check evadable by omission: `(.round // 1) > 1` skips an entry
-  # with no `round` key, and `round` is optional everywhere else in this file. Two entries with
-  # no number, or two both numbered 1, passed every check below with a 277-line repair in them.
-  # The array order IS the round order, so index 0 is the build and every later index is a
-  # repair. The stated number still counts when it is above one, because a record may legitimately
-  # list only the round it is reporting on rather than every round from the first. Position closes
-  # the omission hole; the number keeps a partial history honest. A `round` that is present and not
-  # a number is separately malformed: it is what the messages name, and a record whose labels
-  # cannot be read is not a record.
+  # WHAT MAKES AN ENTRY A REPAIR ROUND is that it carries `repair_growth`. That block measures a
+  # repair against the previous checkpoint; round 1 builds the component and has no repair to
+  # measure, so a `repair_growth` is only ever written by a repair. Presence is therefore the
+  # signal, and it cannot be evaded by moving or omitting a label.
+  #
+  # Two earlier attempts each narrowed the hole without closing it. The first keyed on the
+  # self-reported `round` number, defaulting a missing key to 1, so an unnumbered entry was
+  # skipped. The second added array position, so index 0 still fell through the same `// 1`
+  # default: `[{repair_growth: {net_lines: 277, reason: "needed"}}]`, one entry, no bucket, the
+  # exact record this release exists for, passed both times.
+  #
+  # Position and the stated number are still used, for the other direction: an entry that is not
+  # the first, by either measure, owes a `repair_growth` at all. That catches a later round that
+  # records no growth block rather than one that records a block with no bucket. A `round` present
+  # and not a number is separately malformed, because it is what the messages name.
   BAD_ROUND_NO=$(jq -c \
     '[ to_entries[] | select(.value | has("round"))
                     | select((.value.round | type) != "number")
@@ -473,11 +481,16 @@ if [ -e "$REC" ]; then
   fi
 
   MISSING_BEYOND=$(jq -c \
-    '[ to_entries[] | select((.key > 0) or ((.value.round // 1) > 1))
-                    | select(((.value.repair_growth // null) == null)
-                             or ((.value.repair_growth | type) != "object")
-                             or ((.value.repair_growth | has("beyond_remedy")) | not))
-                    | (.value.round // (.key + 1)) ]' <<<"$ROUNDS_ARR" 2>/dev/null) || MISSING_BEYOND="$JQ_ERR"
+    '[ to_entries[]
+       | select(
+           # any entry carrying a repair_growth owes a bucket, wherever it sits
+           ((.value.repair_growth // null) != null)
+           # and any entry that is not the first owes a repair_growth to carry one in
+           or (.key > 0) or ((.value.round // 1) > 1))
+       | select(((.value.repair_growth // null) == null)
+                or ((.value.repair_growth | type) != "object")
+                or ((.value.repair_growth | has("beyond_remedy")) | not))
+       | (.value.round // (.key + 1)) ]' <<<"$ROUNDS_ARR" 2>/dev/null) || MISSING_BEYOND="$JQ_ERR"
   if [ "$MISSING_BEYOND" = "$JQ_ERR" ]; then
     set_ev_s beyond_remedy_check "unreadable"
     add_msg "the repair-against-remedy check could not read the rounds history"

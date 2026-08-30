@@ -232,7 +232,7 @@ msg_has "2 or more critique rounds" "the boundary case names the budget"
 # unexamined growth is not.
 D=$(mktask growth_unjustified)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is fail "a repair round that grew the component with no reason fails"
 unresolved_is true "unexplained growth is a could-not-tell"
@@ -241,20 +241,20 @@ msg_has "grew the component with no reason recorded" "the message says what is m
 
 D=$(mktask growth_justified)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"reason":"the fix needed a new failure path"}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none","reason":"the fix needed a new failure path"}}]'
 run "$D"
 verdict_is pass "growth passes once the round says why the minimum fix would not do"
 rc_is 0 "justified repair growth exits 0"
 
 D=$(mktask growth_negative)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":-44}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":-44,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is pass "a repair that SHRANK the component needs no justification"
 
 D=$(mktask growth_zero)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":0}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":0,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is pass "a repair that changed no net lines needs no justification"
 

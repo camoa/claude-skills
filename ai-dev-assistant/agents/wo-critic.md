@@ -125,12 +125,15 @@ is that the reason to act on it is a number.
   your findings and lifts your whole verdict to it. Raising the 90 ms case as a concern is exactly
   what this rule exists to stop, and doing it because the number was interesting is the same
   mistake with a softer label.
-- **When no threshold can be established at all**, keep the finding a `concern` and write
-  `threshold: null` with `matters_because` saying why none could be found. Do **not** call it
-  `unresolved`: an undetermined verdict blocks the build at every tier, and a measurement whose
-  relevance nobody can establish is the exact case this rule exists to stop costing anything.
-  `unresolved` is for a question about correctness or safety you could not settle, which is a
-  different thing.
+- **When no threshold can be established at all, do not raise it.** Not as a `concern`, and
+  emphatically not as `unresolved`, which blocks the build at every tier. A measurement you cannot
+  attach a threshold to is a number with no argument behind it, and that is the whole of what this
+  rule exists to stop. Losing it costs nothing: nobody could have acted on it.
+
+  This should be rare, because the sources above are wide — a perception limit, a timeout, a quota,
+  a published limit, or any comparable elsewhere in the same system. If you reach for all of those
+  and still have nothing, you have learned that the quantity does not matter here, which is an
+  answer rather than a gap.
 
 This rule stops at measurements. It is deliberately not "every finding must justify its worth" —
 that applies to all of them, is satisfied by a sentence, and so can never come back false.

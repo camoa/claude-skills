@@ -86,23 +86,30 @@
 - The finding shape is documented in four places, not two. The record schema named the two new
   keys and neither of the two it already had. `tests/finding-shape-agreement-spec.sh` now fails
   when the sites disagree.
-- **Three defects found by a third reviewer after the first two rounds, all by running the
-  committed script.** Which entries in the rounds history are repair rounds was decided by the
-  self-reported `round` number, so omitting the key skipped the check entirely: two entries with no
-  number, or two both numbered 1, carried a 277-line repair past all four checks. Position in the
-  array now decides, with the stated number still counting when it is above one so a record may
-  report a single round honestly; a `round` present and not a number is malformed.
+- **A record could skip the bucket check, and two consecutive fixes narrowed the hole without
+  closing it.** The first keyed on the self-reported `round` number, defaulting a missing key to 1,
+  so an unnumbered entry was skipped. The second added array position, and index 0 fell through the
+  same default: one entry, no bucket, a 277-line repair, passed both times. What makes an entry a
+  repair round is that it carries a `repair_growth` at all, because that block measures a repair
+  and round 1 has no repair to measure. Presence now decides and cannot be evaded by moving or
+  omitting a label; position and the stated number still catch a later round that records no growth
+  block. A `round` present and not a number is malformed.
 - **A guard meant to prevent a false reject turned a blocking record into a passing one.** The
   growth check skipped a `net_lines` that was not a number, citing the round-count guard sixty
   lines above as precedent — but that guard *fails* a non-numeric count and names it. `net_lines`
-  arriving as the string `"277"` with no reason went from rejected to accepted. It now fails, in
-  the same direction as the rule it was modelled on.
+  arriving as the string `"-44"` with a reason went from rejected to accepted, which is where the
+  block earns its place; the no-reason case is caught earlier by the growth check, whose own skip
+  the same fix removed. `null` is exempt exactly as it is in the rule this was modelled on, since
+  an absent measurement is not a malformed one.
 - **The critic instructions contradicted themselves on the case the measurement rule exists for.**
   One sentence said a measurement below its threshold could be raised as a concern; another said
   not to raise it. A concern is a raised finding — the kernel lifts a verdict to the worst severity
   among its findings — so the permissive sentence re-authorised the 90 ms case verbatim. It came
   from having nowhere to record something checked and found clean, so the agent body now says
-  plainly that there is no such slot and not to invent one.
+  plainly that there is no such slot and not to invent one. A measurement whose threshold cannot be
+  established at all is no longer raised in any form: it is a number with no argument behind it,
+  and the escape had narrowed the contradiction to "did you look for a threshold" rather than
+  removing it.
 - The handoff of the previous round's remedy was described in three documents and instructed at
   none; the dispatch step now carries it, in both the command and the reference. It is plural: a
   round runs up to three lenses and can raise several blocking findings.
