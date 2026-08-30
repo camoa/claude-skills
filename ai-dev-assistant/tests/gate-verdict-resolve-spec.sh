@@ -218,9 +218,9 @@ done
 # still passed. Both are now pinned:
 #
 #   * the availability test itself. A push into ABSENT_TOOLS must sit inside a branch whose
-#     condition PROBES FOR THE BINARY — `command -v`, `test -f vendor/bin/...`,
-#     `npx <tool> --version`, `resolve_analyzer` — searching back to the nearest enclosing
-#     `if`/`elif`/`else`. No amount of echo wording satisfies that.
+#     condition PROBES FOR THE BINARY and NAMES the tool being pushed, searching back through
+#     every enclosing `if`/`elif`/`else`. An `echo` line cannot satisfy that: it is not a
+#     condition, and nothing here reads one. A COMMENT could, and did — see the stripper below.
 #   * an EXACT expected count per file, and the names pushed. Deleting one push changes
 #     both, so the single-deletion mutation the reviewer showed both AIDA specs missing is
 #     now caught twice over.
@@ -281,23 +281,64 @@ done
 # TWO: A GUARD MUST NAME THE TOOL THE PUSH NAMES.
 # `is_probe` matches the SHAPE of an availability test and says nothing about WHICH tool it tests,
 # so cut three also passed `ABSENT_TOOLS+=("trivy")` moved into the else of psalm's probe —
-# structurally a perfect guard, and a lie. Measured on both producers, all ten real pushes name
-# their tool in the condition that guards them, including the two behind a variable
-# (`[ -n "$SEMGREP_RUNNER" ]` for `semgrep`) and the four behind a path
-# (`vendor/bin/php-security-linter`). So the guard's text, lowercased with non-alphanumerics
-# dropped, must contain the pushed name under the same normalisation — which also makes
-# `security_review` match `--filter=security_review` and `php-security-linter` match its
-# `vendor/bin` path. This is DERIVED from the push, never a registry of tools.
+# structurally a perfect guard, and a lie. Measured across all four producers, all eighteen real
+# pushes name their tool in the condition that guards them, including the two behind a variable
+# (`[ -n "$SEMGREP_RUNNER" ]` for `semgrep`, `[ -n "$ANALYZER_RUNNER" ]` for the Drupal analyzers)
+# and the four behind a path (`vendor/bin/php-security-linter`).
 #
-# A FILE TEST IS A PROBE ONLY WHEN ITS OPERAND IS A TOOL.
-# `[ -e "$TRIVY_BIN" ]` is an availability test; `[ -f "$COMPOSER_AUDIT_JSON" ]` is a report
-# artifact and reading it as one is what let the moved push through. The operand must carry a
-# binary-directory marker itself, or be a variable assigned one somewhere in the file — collected
-# in pass 1 the same way the sentinel variables are, so nothing here is a list of paths this file
-# guessed. The other probe forms stay broad on purpose: `hash`, `type -p`, `which`,
-# `node_modules/.bin`, `npx --no-install` and `--version` are all recognised, because a form
-# admitted in error costs a missed mutation on a producer nobody has written that way, where a
-# form omitted reds a green tree today.
+# The test is PER WORD of the guard, not on the guard as one string. A guard names the tool when
+# some whitespace-delimited word of it, lowercased with non-alphanumerics dropped, contains the
+# pushed name's own tokens IN ORDER under the same normalisation. Two corrections in opposite
+# directions, both measured:
+#   * TIGHTER. Normalising the whole condition to one string welds adjacent words together, so
+#     `command -v scatter tool_helper` read as naming `scattertool` — a guard for two other tools
+#     satisfying a push for a third. Confining the match to one word ends that, and costs nothing:
+#     every real guard names its tool inside a single argument.
+#   * WIDER. The guard may name the PACKAGE where the push names the TOOL.
+#     `npm list eslint-plugin-security` guards `ABSENT_TOOLS+=("eslint_security")` on
+#     nextjs/security-check.sh, and a contiguous-substring test fails it — `eslintsecurity` is not
+#     a substring of `eslintpluginsecurity`. Requiring the pushed name's tokens in order within the
+#     one word admits it, while still refusing a word that carries only some of them.
+# It also keeps `security_review` matching `--filter=security_review` and `php-security-linter`
+# matching its `vendor/bin` path. This is DERIVED from the push, never a registry of tools.
+#
+# A PROBE IS A CONDITION THAT RUNS SOMETHING. THE REGISTRY OF FORMS IS GONE.
+# Cuts one through four recognised a probe by matching a LIST of command spellings — `command -v`,
+# `hash`, `type -p`, `which`, `npx --no-install`, `--version`, `resolve_analyzer`. That list is a
+# set of shapes this file guessed, and it missed a real one twice: `npm list eslint-plugin-security`
+# on nextjs/security-check.sh is an availability test no entry covered, so a CORRECT producer was
+# flagged. Adding `npm list` to the list would have been the same mistake a third time, so the
+# question was inverted. A shell condition is one of two things: a TEST on shell state (`[ … ]`,
+# `[[ … ]]`, `(( … ))`, `test …`) or a COMMAND run for its exit status. Only the second can ask
+# whether a binary is there, so a probe is any condition that runs a command — with the tool name
+# still required by `names()` above, which is what stops "runs a command" from meaning "anything
+# standing near the push".
+#
+# What that widening costs, stated rather than assumed: a condition that runs a command naming the
+# tool for some OTHER reason — `grep -q trivy composer.json` — is now read as a probe where the
+# form list would have refused it. That is a genuine loosening, and it is the trade taken on
+# purpose: a form omitted reds a green tree today, where a form admitted in error costs a missed
+# mutation on a producer nobody has written that way. It also CLOSES one of the false reds listed
+# below: a probe factored into a helper (`have_x() { command -v x; }` then `if have_x`) is a command
+# that names the tool, and `resolve_analyzer phpstan` on drupal/solid-check.sh is that shape in the
+# tree today.
+#
+# A FILE TEST IS A PROBE ONLY WHEN ITS OPERAND IS A TOOL, and it is the one form kept, because a
+# file test is a TEST and the inversion above would refuse it. `[ -e "$TRIVY_BIN" ]` is an
+# availability test; `[ -f "$COMPOSER_AUDIT_JSON" ]` is a report artifact and reading it as one is
+# what let the moved push through. The operand must carry a binary-directory marker itself, or be a
+# variable assigned one somewhere in the file — collected in pass 1 the same way the sentinel
+# variables are, so nothing here is a list of paths this file guessed.
+#
+# A COMMENT IS NOT CODE, AND IT SATISFIED THE GUARD TWICE OVER.
+# Every line is stripped of its trailing `#` comment before anything reads it — quote-aware, so a
+# `#` inside quotes and the `#` of `${#ARR[@]}` are left alone. Two silent passes close with it. On
+# a CONDITION line, `if [ scope ]; then  # command -v x checked above` read as a probe for x and
+# licensed the push in its else. On the PUSH'S OWN line — the reported case, verified on the real
+# producer — `ABSENT_TOOLS+=("trivy")  # trivy --version checked above` moved out of its guard was a
+# silent pass: push count still 8, the same 8 names, no BAD. The own-line rule now also requires the
+# structure it is named for, a probe joined to the push by `||`, so the push text itself can never
+# be its own guard.
 #
 # A PROBE MAY BE ONE VARIABLE AWAY, AND THE VARIABLE MUST BE AN AVAILABILITY SENTINEL.
 # semgrep's absence is recorded in the else of `if [ -n "$SEMGREP_RUNNER" ]`, and SEMGREP_RUNNER is
@@ -306,11 +347,14 @@ done
 # defaults set inside `if command -v gitleaks` that say nothing about whether gitleaks is there,
 # and testing one of them would license a push. The rule is the SHAPE `[ -n "$VAR" ]` reads: an
 # EMPTY sentinel assigned somewhere, AND a non-empty literal assigned in a probe branch. Measured
-# across both producers on this tree: 9 variables carry an empty sentinel, 3 are assigned a literal
-# in a probe branch, and 1 does both — SEMGREP_RUNNER, the one this exists for. Admitting command
-# substitutions instead of literals raises the second figure from 3 to 17 and resolves 2 sentinels
-# where the literal rule resolves 1; `PHPCS_ISSUES=$(…)` holds a tool's OUTPUT, not the outcome of
-# probing for it.
+# across all four producers on this tree: 20 variables carry an empty sentinel, 6 are assigned a
+# literal in a probe branch, and 2 do both — SEMGREP_RUNNER on drupal/security-check.sh, the one
+# this exists for, and ANALYZER_RUNNER on drupal/solid-check.sh. Widening `is_probe` from a form
+# list to "runs a command" changed none of those three figures on this tree, which is the measured
+# answer to whether the wider rule starts admitting variables merely set near a command. Admitting
+# command substitutions instead of literals raises the middle figure sharply and resolves sentinels
+# the literal rule does not; `PHPCS_ISSUES=$(…)` holds a tool's OUTPUT, not the outcome of probing
+# for it.
 #
 # WHAT THIS DOES NOT CATCH, stated as behaviour rather than as a class:
 #   * a scope test on a CONTINUATION line — `if command -v x >/dev/null &&\n   [ scope ]; then …
@@ -318,41 +362,88 @@ done
 #     physical line per condition, so it sees only the probe. A SILENT PASS.
 #   * a probe expressed as a loop — `while ! command -v x; do ABSENT_TOOLS+=("x")`. No level is
 #     opened for `while`. A FALSE RED on a correct producer.
-#   * a probe factored into a helper — `have_x() { command -v x; }` then `if have_x; …; else
-#     ABSENT_TOOLS+=("x")`. The condition names the function, not the test. A FALSE RED.
-# Each of the three is a shape neither producer has, and each was measured, not reasoned about.
+#   * a `#` on a line whose quotes do not balance — a heredoc or jq body carrying a lone `"` and
+#     then a ` #`. The stripper tracks quote state per physical line, so it can cut at the wrong
+#     place there. Measured: on all four producers, stripping changes neither the BAD set nor the
+#     depth, so nothing in the tree today is read differently for it.
+# Each is a shape no producer has, and each was measured, not reasoned about. The third entry on
+# this list — a probe factored into a helper — was CLOSED by the inversion above and is gone.
 #
 # It is a function because a walker only the real producers exercise is a walker whose failure
 # mode is whatever those producers happen not to do. The self-test below runs it over a file built
-# to contain each construct plus seven mutations and twelve shapes that must stay clean, so the
+# to contain each construct plus eleven mutations and thirteen shapes that must stay clean, so the
 # check has a negative control in both directions and cannot quietly stop being able to fail — or
 # quietly start failing everything.
 WALKER_AWK='
 function norm(s) { s = tolower(s); gsub(/[^a-z0-9]/, "", s); return s }
+function strip_comment(s,   i, c, p, q) {
+  q = ""
+  for (i = 1; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    if (q != "") { if (c == q) q = "" ; continue }
+    if (c == "\"" || c == "'"'"'") { q = c; continue }
+    if (c == "#") {
+      p = (i == 1) ? "" : substr(s, i - 1, 1)
+      if (p == "" || p == " " || p == "\t") return substr(s, 1, i - 1)
+    }
+  }
+  return s
+}
+function cond_text(s) {
+  gsub(/\|\||&&|;/, "\n", s)
+  gsub(/(^|\n|[[:space:]])(if|elif|else|then|do|while|until|fi)([[:space:]]|\n|$)/, "\n", s)
+  return s
+}
+function runs_command(s,   n, parts, i, seg) {
+  n = split(s, parts, "\n")
+  for (i = 1; i <= n; i++) {
+    seg = parts[i]
+    gsub(/^[[:space:]]+/, "", seg); gsub(/[[:space:]]+$/, "", seg)
+    sub(/^![[:space:]]*/, "", seg); gsub(/^[[:space:]]+/, "", seg)
+    if (seg == "") continue
+    if (seg ~ /^(\[|\(\(|test[[:space:]])/) continue
+    return 1
+  }
+  return 0
+}
 function is_tool_file_test(s,   v) {
   if (s !~ /(\[|(^|[^-[:alnum:]_])test)[[:space:]]+-[efxr][[:space:]]/) return 0
   if (s ~ /(vendor\/bin|node_modules\/\.bin|\/bin\/|\/sbin\/)/) return 1
   for (v in TOOLPATHVAR) if (s ~ ("[$][{]?" v "[^A-Za-z0-9_]")) return 1
   return 0
 }
-function is_probe(s) {
-  return (s ~ /(^|[^-[:alnum:]_])command[[:space:]]+-v[[:space:]]/ ||
-          s ~ /(^|[^-[:alnum:]_])hash[[:space:]]+[[:alnum:]]/ ||
-          s ~ /(^|[^-[:alnum:]_])type[[:space:]]+-[pPt]([[:space:]]|$)/ ||
-          s ~ /(^|[^-[:alnum:]_])which[[:space:]]/ ||
-          is_tool_file_test(s) ||
-          s ~ /vendor\/bin|node_modules\/\.bin/ ||
-          s ~ /--version/ ||
-          s ~ /npx[[:space:]]+--no-install/ ||
-          s ~ /resolve_analyzer|ddev exec test|pm:list/)
-}
+function is_probe(s) { return (runs_command(cond_text(s)) || is_tool_file_test(s)) }
 function probe_cond(s,   v) {
   if (s == "") return 0
   if (is_probe(s)) return 1
   for (v in PROBEVAR) if (s ~ ("[$][{]?" v "[^A-Za-z0-9_]")) return 1
   return 0
 }
-function names(s, tool) { return (index(norm(s), norm(tool)) > 0) }
+function word_names(w, tool,   tt, nt, i, pos, p, seen) {
+  w = norm(w)
+  if (w == "") return 0
+  nt = split(tolower(tool), tt, /[^a-z0-9]+/)
+  pos = 0; seen = 0
+  for (i = 1; i <= nt; i++) {
+    if (tt[i] == "") continue
+    seen = 1
+    p = index(substr(w, pos + 1), tt[i])
+    if (p == 0) return 0
+    pos = pos + p + length(tt[i]) - 1
+  }
+  return seen
+}
+function names(s, tool,   n, w, i) {
+  n = split(s, w, /[[:space:]]+/)
+  for (i = 1; i <= n; i++) if (word_names(w[i], tool)) return 1
+  return 0
+}
+function own_line_guard(s, tool,   pre) {
+  if (s !~ /\|\|[[:space:]]*ABSENT_TOOLS\+=/) return 0
+  pre = s
+  sub(/\|\|[[:space:]]*ABSENT_TOOLS\+=.*$/, "", pre)
+  return (is_probe(pre) && names(pre, tool))
+}
 function guarded(tool,   i) {
   for (i = top; i >= 1; i--) {
     if (!neg[i]) continue
@@ -362,6 +453,7 @@ function guarded(tool,   i) {
   }
   return 0
 }
+{ $0 = strip_comment($0) }
 FNR == 1 {
   top = 0; delete prior; delete cond; delete neg; pass++
   if (pass == 2) for (v in CANDVAR) if (v in EMPTYVAR) PROBEVAR[v] = 1
@@ -391,7 +483,7 @@ pass == 1 && /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=["'"'"'][A-Za-z0-9_.\/-]*["'"'
 pass == 2 && /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
   tool = $0
   sub(/^.*ABSENT_TOOLS\+=\("?/, "", tool); sub(/"?\).*$/, "", tool)
-  if (!guarded(tool) && !(is_probe($0) && names($0, tool))) printf "BAD %d:%s\n", FNR, $0
+  if (!guarded(tool) && !own_line_guard($0, tool)) printf "BAD %d:%s\n", FNR, $0
 }
 {
   t = $0
@@ -409,10 +501,49 @@ END {
 '
 walk_absent_pushes() { awk "$WALKER_AWK" "$1" "$1"; }
 
-NEXTSOLID_P="$NEXTSOLID"
-for spec in "$SEC:8:gitleaks,php-security-linter,php-security-linter,psalm,security_review,semgrep,semgrep,trivy" \
-            "$NEXTSOLID_P:2:eslint,madge"; do
-  pf="${spec%%:*}"; rest="${spec#*:}"; want_n="${rest%%:*}"; want_names="${rest#*:}"
+# EVERY PRODUCER IS WALKED, AND THE SET IS DISCOVERED RATHER THAN LISTED.
+#
+# Until this cut the loop below named TWO files. There are four: drupal/security-check.sh,
+# drupal/solid-check.sh, nextjs/security-check.sh and nextjs/solid-check.sh all push into
+# ABSENT_TOOLS, and this file said the walker was "measured on both producers" while measuring half
+# of them. The two it skipped are not incidental — nextjs/security-check.sh is the file carrying
+# the `npm list` guard that the old probe rule flagged, so the FALSE RED on a correct producer was
+# invisible for exactly the reason the false green would have been: nobody looked. Two identity
+# mutations planted below, one in each unwalked file, are red now and were silent before, with the
+# push count and the pushed names unchanged in both.
+#
+# So the SET comes from the producers. Any tracked script under the audit scripts directory that
+# pushes into ABSENT_TOOLS is walked. The per-file COUNT and NAMES stay pinned, because that is the
+# anti-deletion assertion and it cannot be derived from the file it is asserting about — but the
+# two lists are compared in BOTH directions, so a fifth producer is a FAILURE rather than a silent
+# omission, and a pinned file that stops producing is one too. A hardcoded list of two is how this
+# was missed; a hardcoded list of four with nothing checking it would be the same mistake waiting.
+SCRIPTS_DIR="${CQT}/skills/code-quality-audit/scripts"
+# Tracked files only, the same rule every scanning check in this repo follows: a producer is not
+# walked until it is `git add`ed, and a scratch copy left in the tree is not a producer.
+DISCOVERED=$(git -C "$SCRIPTS_DIR" ls-files -- . 2>/dev/null \
+             | while IFS= read -r f; do
+                 grep -qF 'ABSENT_TOOLS+=(' "${SCRIPTS_DIR}/${f}" 2>/dev/null \
+                   && printf '%s\n' "$f"
+               done | sort || true)
+PRODUCER_SPECS="drupal/security-check.sh:8:gitleaks,php-security-linter,php-security-linter,psalm,security_review,semgrep,semgrep,trivy
+drupal/solid-check.sh:4:phpmd,phpmd,phpstan,phpstan
+nextjs/security-check.sh:4:eslint_security,gitleaks,semgrep,trivy
+nextjs/solid-check.sh:2:eslint,madge"
+PINNED=$(printf '%s\n' "$PRODUCER_SPECS" | cut -d: -f1 | sort)
+NDISC=$(printf '%s\n' "$DISCOVERED" | grep -c . || true)
+if [ "$NDISC" -lt 4 ]; then
+  fail_check "found $NDISC file(s) pushing into ABSENT_TOOLS under $SCRIPTS_DIR — below the four producers this tree has, so the walker below runs on nothing and its clean result means nothing"
+elif [ "$DISCOVERED" != "$PINNED" ]; then
+  fail_check "the set of ABSENT_TOOLS producers on disk is [$(printf '%s' "$DISCOVERED" | tr '\n' ' ')] and this file pins [$(printf '%s' "$PINNED" | tr '\n' ' ')]. A producer nobody walks is a producer whose pushes can be moved, renamed or deleted with every check in this file still green — which is exactly how nextjs/security-check.sh carried a false red past CI. Add it to PRODUCER_SPECS with its push count and names, or explain the removal."
+else
+  pass_check "all $NDISC ABSENT_TOOLS producers under $SCRIPTS_DIR are walked, discovered from the producers rather than listed"
+fi
+
+while IFS= read -r spec; do
+  [ -n "$spec" ] || continue
+  rel="${spec%%:*}"; rest="${spec#*:}"; want_n="${rest%%:*}"; want_names="${rest#*:}"
+  pf="${SCRIPTS_DIR}/${rel}"
   [ -f "$pf" ] || { fail_check "producer $pf missing"; continue; }
   WALK=$(walk_absent_pushes "$pf")
   BADLINES=$(printf '%s\n' "$WALK" | sed -n 's/^BAD //p')
@@ -423,22 +554,24 @@ for spec in "$SEC:8:gitleaks,php-security-linter,php-security-linter,psalm,secur
   # before — which is the whole of the defect this replaced, stated as something the
   # check itself can detect rather than something a reader has to notice.
   if [ "$WDEPTH" = "0" ] && [ "$WUNDER" = "0" ]; then
-    pass_check "$(basename "$pf"): the condition walker opens and closes every branch, ending at depth 0"
+    pass_check "$rel: the condition walker opens and closes every branch, ending at depth 0"
   else
-    fail_check "$(basename "$pf"): the condition walker ended at depth $WDEPTH with $WUNDER underflow(s) — it has lost its place, so every push below the leak is checked against a chain containing conditions that closed above it, and moving a push into a scope branch passes"
+    fail_check "$rel: the condition walker ended at depth $WDEPTH with $WUNDER underflow(s) — it has lost its place, so every push below the leak is checked against a chain containing conditions that closed above it, and moving a push into a scope branch passes"
   fi
   NPUSH=$(grep -cE '(^|[[:space:]])ABSENT_TOOLS\+=\(' "$pf" || true)
   GOTNAMES=$(grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' "$pf" | sed -E 's/.*"([^"]+)".*/\1/' | sort | paste -sd, -)
   if [ "$NPUSH" -ne "$want_n" ]; then
-    fail_check "$(basename "$pf"): $NPUSH pushes into tools_absent[], expected exactly $want_n — a push was added or removed, and either changes what the resolver can see as a coverage gap"
+    fail_check "$rel: $NPUSH pushes into tools_absent[], expected exactly $want_n — a push was added or removed, and either changes what the resolver can see as a coverage gap"
   elif [ "$GOTNAMES" != "$want_names" ]; then
-    fail_check "$(basename "$pf"): tools_absent[] is filled with '$GOTNAMES', expected '$want_names' — a tool that stopped recording its own absence is a tool whose absence a consumer cannot see"
+    fail_check "$rel: tools_absent[] is filled with '$GOTNAMES', expected '$want_names' — a tool that stopped recording its own absence is a tool whose absence a consumer cannot see"
   elif [ -z "$BADLINES" ]; then
-    pass_check "$(basename "$pf"): all $want_n pushes into tools_absent[] are guarded by an availability probe, and they name exactly $want_names"
+    pass_check "$rel: all $want_n pushes into tools_absent[] are guarded by an availability probe, and they name exactly $want_names"
   else
-    fail_check "$(basename "$pf"): tools_absent[] is filled by a branch with no availability probe in its condition chain — $(printf '%s' "$BADLINES" | tr '\n' ' '). A layer the changed set scoped out belongs in tools_skipped[]; in tools_absent[] it reads as missing coverage and reds an ordinary pull request."
+    fail_check "$rel: tools_absent[] is filled by a branch with no availability probe in its condition chain — $(printf '%s' "$BADLINES" | tr '\n' ' '). A layer the changed set scoped out belongs in tools_skipped[]; in tools_absent[] it reads as missing coverage and reds an ordinary pull request."
   fi
-done
+done <<PRODUCERS
+$PRODUCER_SPECS
+PRODUCERS
 
 # THE WALKER'S OWN NEGATIVE CONTROL. Everything above reports "no unguarded pushes", which
 # is also what a walker that had stopped working would report, and what a probe test broad
@@ -601,6 +734,47 @@ fi
 if command -v combotool > /dev/null 2>&1 && ! [ -d "$SCAN_DIR" ]; then
     ABSENT_TOOLS+=("combotool")
 fi
+# --- ONE MORE SHAPE THAT MUST STAY CLEAN --------------------------------------------------
+# A probe that is neither `command -v` nor a file test: the package manager is asked whether the
+# package is installed, and the guard names the PACKAGE (`npmlist-plugin-security`) where the push
+# names the TOOL (`npmlist_security`). This is the real form on nextjs/security-check.sh, and the
+# registry of command spellings had never heard of it, so a correct producer was flagged on both
+# halves at once — the probe form and the name.
+if npm list npmlist-plugin-security &> /dev/null; then
+    echo ran
+else
+    ABSENT_TOOLS+=("npmlist_security")
+fi
+# --- FOUR MORE SHAPES THAT MUST BE FLAGGED ------------------------------------------------
+# A pure test on an ordinary variable that NAMES the tool. Reading a probe as "the condition runs a
+# command" must not decay into "the condition mentions the tool": nothing here asked whether the
+# binary is there, and the variable is not an availability sentinel.
+if [ "$SETTINGTOOL_ENABLED" = "1" ]; then
+    echo ran
+else
+    ABSENT_TOOLS+=("settingtool")
+fi
+# A probe for two OTHER tools whose adjacent words spell this one once whitespace is dropped.
+# Normalising the whole condition to a single string welded them together, so the guard read as
+# naming a tool it never mentions — which is what keeps a command-shaped probe rule from being
+# satisfied by any command standing near the push.
+if command -v scatter tool_helper > /dev/null 2>&1; then
+    echo ran
+else
+    ABSENT_TOOLS+=("scattertool")
+fi
+# A scope condition carrying a trailing COMMENT that mentions a probe, with the push in its else.
+# The comment is not code, and reading it as the guard passes a push nothing guards.
+if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then  # command -v commentcondtool checked above
+    echo scoped
+else
+    ABSENT_TOOLS+=("commentcondtool")
+fi
+# The push's OWN line carrying a trailing comment that mentions a probe. This is the reported
+# defect: the own-line rule tested the whole line for a probe, and a comment satisfied it.
+if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
+    ABSENT_TOOLS+=("commentpushtool")  # commentpushtool --version checked above
+fi
 WALKFIXTURE
 SELF=$(walk_absent_pushes "$WALK_FIXTURE")
 SELF_BAD=$(printf '%s\n' "$SELF" | sed -n 's/^BAD //p')
@@ -608,14 +782,16 @@ SELF_BAL=$(printf '%s\n' "$SELF" | sed -n 's/^DEPTH //p')
 SELF_PV=$(printf '%s\n' "$SELF" | sed -n 's/^PROBEVARS //p')
 SELF_NBAD=$(printf '%s\n' "$SELF_BAD" | grep -c . || true)
 rm -f "$WALK_FIXTURE"
-# The seven that MUST be flagged and the twelve that MUST NOT are named, not counted. A count
-# alone passes when the walker flags the wrong seven, which on this fixture is a walker that
-# has started reding every producer instead of one that stopped working. Three of the six are
-# shapes an earlier cut of this walker passed green, and four of the twelve are shapes an
+# The eleven that MUST be flagged and the thirteen that MUST NOT are named, not counted. A count
+# alone passes when the walker flags the wrong eleven, which on this fixture is a walker that
+# has started reding every producer instead of one that stopped working. Six of the eleven are
+# shapes an earlier cut of this walker passed green, and five of the thirteen are shapes an
 # earlier cut flagged on a correct producer, so the fixture carries both directions of every
-# correction rather than only the direction the current cut was written for.
-WANT_BAD="combotool elifpresenttool identitytool modetool nestedtool reportfiletool scopedtool"
-WANT_CLEAN="bangtool casetool chaintool commenttool elifabsenttool etool hashtool indirect innertool nestedelsetool orlisttool realtool"
+# correction rather than only the direction the current cut was written for. The four newest —
+# `scattertool`, `commentcondtool` and `commentpushtool` flagged, `npmlist_security` clean — were
+# each measured against the previous cut: it missed the first three and flagged the last.
+WANT_BAD="combotool commentcondtool commentpushtool elifpresenttool identitytool modetool nestedtool reportfiletool scattertool scopedtool settingtool"
+WANT_CLEAN="bangtool casetool chaintool commenttool elifabsenttool etool hashtool indirect innertool nestedelsetool npmlist_security orlisttool realtool"
 GOT_BAD=$(printf '%s\n' "$SELF_BAD" | grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' \
           | sed -E 's/.*"([^"]+)".*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
 MISFLAGGED=""
@@ -627,7 +803,7 @@ if [ "$SELF_BAL" != "0 0" ]; then
 elif [ "$SELF_PV" != "1" ]; then
   fail_check "the walker resolved ${SELF_PV:-0} availability sentinel(s) on a fixture carrying exactly one (INDIRECT_RUNNER). At 0 the semgrep-shaped push behind a variable is flagged and the producers go red; above 1 the rule is admitting variables that are merely set near a probe, which is what let a scope test on \$SCAN_MODE read as an availability test"
 elif [ "$GOT_BAD" = "$WANT_BAD" ]; then
-  pass_check "the walker discriminates: it flags a push in a scope branch, one in a scope test inside a probe's THEN, one in an elif whose own condition is the probe, one behind a probe-adjacent variable that is not an availability sentinel, one guarded by a DIFFERENT tool's probe, one guarded by a file test on a report artifact, and one in the THEN of a condition carrying an unrelated \`!\`; it clears the else of a direct probe, a probe-assigned sentinel, an inner probe under a scope test, the else of a chain ending in a scope test, a probe on the push's own line, the hash and tool-path file-test forms, a case arm and a nested if inside the else of a probe, an else carrying a comment, a bare negated probe, and the elif of a chain whose earlier condition was the probe; and it balances across elif, else, a one-line if and a case"
+  pass_check "the walker discriminates: it flags a push in a scope branch, one in a scope test inside a probe's THEN, one in an elif whose own condition is the probe, one behind a probe-adjacent variable that is not an availability sentinel, one guarded by a DIFFERENT tool's probe, one guarded by a file test on a report artifact, one in the THEN of a condition carrying an unrelated \`!\`, one guarded by a pure test that merely NAMES the tool, one guarded by a probe for two other tools whose adjacent words spell this one, one guarded by a COMMENT on the condition line, and one guarded by a comment on its OWN line; it clears the else of a direct probe, a probe-assigned sentinel, an inner probe under a scope test, the else of a chain ending in a scope test, a probe on the push's own line, the hash and tool-path file-test forms, a case arm and a nested if inside the else of a probe, an else carrying a comment, a bare negated probe, the elif of a chain whose earlier condition was the probe, and a package-manager probe naming the package where the push names the tool; and it balances across elif, else, a one-line if and a case"
 elif [ -n "$MISFLAGGED" ]; then
   fail_check "the walker flagged${MISFLAGGED}, which must NOT be flagged — each is the shape a correct producer has, so this reds a green tree. Flagged: [$GOT_BAD]"
 elif [ "$SELF_NBAD" -eq 0 ]; then
@@ -644,17 +820,14 @@ fi
 # the record shows why they cannot stand in for it: the push count is still 8 and the eight names
 # are still the same eight, because a move changes neither.
 SECMUT=$(mktemp)
-awk '
+if awk '
   /ABSENT_TOOLS\+=\("trivy"\)/ && !moved { moved = 1; next }
   { print }
   /^if \[ -f "\$COMPOSER_AUDIT_JSON" \] && \[ -s "\$COMPOSER_AUDIT_JSON" \]; then$/ && !placed {
     placed = 1; print "    ABSENT_TOOLS+=(\"trivy\")"
   }
   END { exit (moved && placed) ? 0 : 3 }
-' "$SEC" > "$SECMUT"
-if [ $? -ne 0 ]; then
-  fail_check "could not plant the moved-push mutation in a copy of security-check.sh — the producer no longer has the trivy push or the composer-audit scope branch this walker was reported against, so nothing here was demonstrated on real shell"
-else
+' "$SEC" > "$SECMUT"; then
   MUTWALK=$(walk_absent_pushes "$SECMUT")
   MUTBAD=$(printf '%s\n' "$MUTWALK" | sed -n 's/^BAD //p')
   MUTN=$(grep -cE '(^|[[:space:]])ABSENT_TOOLS\+=\(' "$SECMUT" || true)
@@ -666,8 +839,81 @@ else
   else
     fail_check "on a copy of security-check.sh with ABSENT_TOOLS+=(\"trivy\") moved into the top-level composer-audit scope branch, the walker reported [$(printf '%s' "$MUTBAD" | tr '\n' ' ')] and no finding for trivy. The count is still 8 and the names are still the same 8, so nothing in this file sees the move — which is the class this walker exists for and the class three previous cuts each reported closed."
   fi
+else
+  fail_check "could not plant the moved-push mutation in a copy of security-check.sh — the producer no longer has the trivy push or the composer-audit scope branch this walker was reported against, so nothing here was demonstrated on real shell"
 fi
 rm -f "$SECMUT"
+
+# THE SAME MOVE, WITH A COMMENT ON IT. The rule above reads the push's own line, because a probe
+# written `command -v x || ABSENT_TOOLS+=("x")` is correct and idiomatic and needs no enclosing
+# branch. A comment sits on that same line, so until this cut the moved push above became a SILENT
+# PASS by carrying `# trivy --version checked above` beside it: the own-line test matched
+# `--version` in the comment and the tool name in the push text, and the file's own prose claimed
+# "No amount of echo wording satisfies that" while a comment did. Same plant as above, one comment
+# added, asserted on the real producer rather than on the fixture.
+SECMUTC=$(mktemp)
+if awk '
+  /ABSENT_TOOLS\+=\("trivy"\)/ && !moved { moved = 1; next }
+  { print }
+  /^if \[ -f "\$COMPOSER_AUDIT_JSON" \] && \[ -s "\$COMPOSER_AUDIT_JSON" \]; then$/ && !placed {
+    placed = 1; print "    ABSENT_TOOLS+=(\"trivy\")  # trivy --version checked above"
+  }
+  END { exit (moved && placed) ? 0 : 3 }
+' "$SEC" > "$SECMUTC"; then
+  MUTCBAD=$(walk_absent_pushes "$SECMUTC" | sed -n 's/^BAD //p')
+  MUTCN=$(grep -cE '(^|[[:space:]])ABSENT_TOOLS\+=\(' "$SECMUTC" || true)
+  if [ "$MUTCN" != "8" ]; then
+    fail_check "the commented moved-push copy of security-check.sh has $MUTCN pushes, not 8 — the mutation changed the count instead of moving one push, so it is not the case the count check is blind to"
+  elif printf '%s' "$MUTCBAD" | grep -q 'trivy'; then
+    pass_check "on a real producer, a moved push carrying a trailing comment that names a probe is still flagged — a comment cannot be a guard"
+  else
+    fail_check "on a copy of security-check.sh with ABSENT_TOOLS+=(\"trivy\") moved into the composer-audit scope branch and carrying \`# trivy --version checked above\`, the walker reported [$(printf '%s' "$MUTCBAD" | tr '\n' ' ')] and no finding for trivy. The comment satisfied the guard, which is the whole of the defect: a line of prose beside a push is not a control-flow fact about it."
+  fi
+else
+  fail_check "could not plant the commented moved-push mutation in a copy of security-check.sh — the producer no longer has the trivy push or the composer-audit scope branch, so the comment case was not demonstrated on real shell"
+fi
+rm -f "$SECMUTC"
+
+# THE MUTATION ON A PRODUCER NOBODY WAS WALKING. Everything above runs on drupal/security-check.sh,
+# which was one of the two files this file did walk. The other two were checked by nothing, so the
+# strongest statement available about them was that they had never been looked at. This plants an
+# IDENTITY mutation in each: two pushes swapped between the branches that guard them, so each push
+# now sits under a probe for the OTHER tool. Count and names are unchanged by construction — that is
+# the point of choosing a swap — and before this cut both mutations were completely silent.
+for swap in "drupal/solid-check.sh:phpstan:phpmd:phpmd,phpmd,phpstan,phpstan" \
+            "nextjs/security-check.sh:trivy:gitleaks:eslint_security,gitleaks,semgrep,trivy"; do
+  srel="${swap%%:*}"; srest="${swap#*:}"
+  sa="${srest%%:*}"; srest="${srest#*:}"
+  sb="${srest%%:*}"; swant="${srest#*:}"
+  spf="${SCRIPTS_DIR}/${srel}"
+  SWAPMUT=$(mktemp)
+  # Swap the LAST push of each of the two tools, so both land under the other's probe.
+  if awk -v a="$sa" -v b="$sb" '
+    NR == FNR {
+      if (index($0, "ABSENT_TOOLS+=(\"" a "\")")) la = FNR
+      if (index($0, "ABSENT_TOOLS+=(\"" b "\")")) lb = FNR
+      next
+    }
+    FNR == la { sub("\"" a "\"", "\"" b "\""); print; next }
+    FNR == lb { sub("\"" b "\"", "\"" a "\""); print; next }
+    { print }
+    END { exit (la && lb) ? 0 : 3 }
+  ' "$spf" "$spf" > "$SWAPMUT"; then
+    SWAPNAMES=$(grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' "$SWAPMUT" | sed -E 's/.*"([^"]+)".*/\1/' | sort | paste -sd, -)
+    SWAPBAD=$(walk_absent_pushes "$SWAPMUT" | sed -n 's/^BAD //p')
+    NSWAPBAD=$(printf '%s\n' "$SWAPBAD" | grep -c . || true)
+    if [ "$SWAPNAMES" != "$swant" ]; then
+      fail_check "the identity-swap copy of $srel names '$SWAPNAMES', expected '$swant' — the mutation renamed a push instead of swapping two, so it is not the case the names check is blind to"
+    elif [ "$NSWAPBAD" -eq 2 ]; then
+      pass_check "$srel: swapping the $sa and $sb pushes between their guards is flagged twice, with the push count and the pushed names identical — a producer this file walked nothing of until now"
+    else
+      fail_check "$srel: swapping the $sa and $sb pushes so each sits under the other's probe produced $NSWAPBAD finding(s), expected 2 — [$(printf '%s' "$SWAPBAD" | tr '\n' ' ')]. The names are still '$SWAPNAMES' and the count is unchanged, so nothing else in this file can see it. This producer was not walked at all before this cut, which is how the false red it carried survived CI."
+    fi
+  else
+    fail_check "could not plant the identity mutation in a copy of $srel — it no longer pushes both $sa and $sb, so this producer was not demonstrated on real shell"
+  fi
+  rm -f "$SWAPMUT"
+done
 
 # A GATE THAT MEASURED NOTHING MUST SAY SO IN A FILE.
 #

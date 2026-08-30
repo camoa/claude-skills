@@ -56,6 +56,15 @@
 # demanded within a window of it in both the agent and the dispatch site — so the asymmetry that made
 # this reachable is now the thing being compared, rather than each half being read on its own.
 #
+# The seventh group is the same failure one document over. Groups 4 and 5 check that the schema
+# DEFINES the things the command records. Nothing checked that the two DESCRIBE THE SAME RULE, and
+# they stopped doing so in the commit that fixed the mixed-result bug: `commands/review.md` step 5.0
+# learned to set the `skipped` frameworks aside and decide on the ones that answered, and
+# `references/gate-audit-schema.md` §5.8 — the reference that command cites — still said `pass`
+# "when every dispatched framework returned `proceed`" with no `skipped` clause at all. So the
+# schema described the fall-off-the-end bug the command no longer had, and a reader following the
+# citation got the old rule. §5.12 was updated in that same commit; §5.8 was not.
+#
 # Exit 0 on all-pass; 1 on any fail.
 
 set -eu
@@ -468,6 +477,112 @@ else
     [ -n "$EMPTYPAT" ] && fail_check "agents/architecture-validator.md keys its missing-input skip on${EMPTYPAT}, which contract-baseline.sh captures for no task. Either \`/design\` never writes it — the \`architecture/main.md\` case, where the file that DOES exist is the \`{project_path}\` stub \`/new\` creates, so the skip never fires and the false red survives — or the authority stopped resolving it."
   fi
   rm -rf "$CBTASK"
+fi
+
+# --- group 7: the schema and the command describe the same aggregation -------------------
+#
+# THREE DOCUMENTS, AND THE THIRD IS THE AUTHORITY FOR THE COMPARISON. The input side of
+# `architecture-fit` is the per-framework `arch_validate.verdict` enum, and §5.12 is where that
+# enum is DEFINED — not in either of the two texts being compared, so neither can quietly drop a
+# value by agreeing with itself. Every value of it must be given a disposition in BOTH the §5.8
+# clause list and the step-5.0 aggregation rules in `commands/review.md`. Add a verdict to §5.12
+# and both sides go red until each says what it does with it.
+#
+# "Given a disposition" is read as the token appearing behind one of the words these two texts use
+# to introduce a framework-side value — `returned`, `any`, `worst`, `verdict is` — within a short
+# window, rather than merely appearing somewhere in the paragraph. That distinction is the whole
+# check: `skipped` appears four times in the drifted §5.8 as the gate's OWN verdict and not once as
+# a framework's, so bare token presence passes the very drift this exists for. It is a shape rule
+# over prose and it is stated as one; what it cannot do is judge whether two clauses that both name
+# a value assign it the same outcome.
+#
+# The second half is the output side, and it is derived from the schema's own `gates_run[].verdict`
+# enum: the set of aggregate verdicts each text names for this gate must be the same set. One side
+# gaining a `bypassed` the other has never heard of is the next version of this defect.
+SCHEMA_MD="${PLUGIN_ROOT}/references/gate-audit-schema.md"
+if [ ! -f "$SCHEMA_MD" ]; then
+  fail_check "references/gate-audit-schema.md is missing — the schema half of this comparison could not be read"
+else
+  AGREE=$(python3 - "$SCHEMA_MD" "$REVIEW" <<'PY'
+import re, sys
+
+schema = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+review = open(sys.argv[2], encoding='utf-8', errors='replace').read()
+
+def section(text, num):
+    m = re.search(r'^#{2,3} %s [^\n]*\n(.*?)(?=^#{2,3} |\Z)' % re.escape(num), text, re.S | re.M)
+    return m.group(1) if m else ''
+
+s58, s512 = section(schema, '5.8'), section(schema, '5.12')
+
+# The INPUT enum, defined in neither text being compared — off §5.12's own `arch_validate` row,
+# not the first `verdict` sentence in the section, which belongs to a different field.
+row = ''
+for line in s512.split('\n'):
+    if re.match(r'\|\s*`frameworks\[\]\.arch_validate`\s*\|', line):
+        row = line
+        break
+m = re.search(r'`verdict` is ((?:[*\s]*`[a-z_]+`[*\s]*(?:\\\||\|)?)+)', row)
+inputs = [t for t in re.findall(r'`([a-z_]+)`', m.group(1))] if m else []
+# The OUTPUT enum, off the gates_run[] shape in the section being compared.
+m = re.search(r'"verdict":\s*"([^"]*)"', s58)
+outputs = [t.strip() for t in m.group(1).split('|')] if m else []
+
+# The two texts. The schema's is the architecture-fit paragraph; the command's is everything the
+# bullet says after it declares the entry, which is where its aggregation rules live.
+m = re.search(r'\*\*`architecture-fit` gate[^\n]*', s58)
+schema_txt = m.group(0) if m else ''
+m = re.search(r'`name:\s*"architecture-fit"`[^\n]*', review)
+review_txt = m.group(0) if m else ''
+
+print("INPUTS %d" % len(inputs))
+print("OUTPUTS %d" % len(outputs))
+print("SCHEMALEN %d" % len(schema_txt))
+print("REVIEWLEN %d" % len(review_txt))
+
+TRIG = r'(?:returned|any|worst|verdict is)'
+def dispositioned(text, tok):
+    for m in re.finditer(r'`%s`' % re.escape(tok), text):
+        if re.search(TRIG, text[max(0, m.start() - 60):m.start()], re.I):
+            return True
+    return False
+
+for v in inputs:
+    ds, dr = dispositioned(schema_txt, v), dispositioned(review_txt, v)
+    if ds != dr:
+        print("DRIFT %s %s %s" % (v, 'schema' if ds else '-', 'review' if dr else '-'))
+    elif not ds:
+        print("UNDISPOSED %s" % v)
+
+named = lambda text: sorted(o for o in outputs if re.search(r'`%s`' % re.escape(o), text))
+if named(schema_txt) != named(review_txt):
+    print("OUTDRIFT %s | %s" % (','.join(named(schema_txt)) or '-', ','.join(named(review_txt)) or '-'))
+PY
+)
+  NIN=$(printf '%s' "$AGREE" | sed -n 's/^INPUTS //p')
+  NOUT=$(printf '%s' "$AGREE" | sed -n 's/^OUTPUTS //p')
+  LSCHEMA=$(printf '%s' "$AGREE" | sed -n 's/^SCHEMALEN //p')
+  LREVIEW=$(printf '%s' "$AGREE" | sed -n 's/^REVIEWLEN //p')
+  if [ "${NIN:-0}" -ge 5 ] && [ "${NOUT:-0}" -ge 4 ] && [ "${LSCHEMA:-0}" -ge 200 ] && [ "${LREVIEW:-0}" -ge 200 ]; then
+    pass_check "the architecture-fit aggregation is compared across two documents: a ${NIN}-value input enum from §5.12, a ${NOUT}-value output enum from §5.8, against ${LSCHEMA} characters of schema clause list and ${LREVIEW} of command rules"
+  else
+    fail_check "derived a ${NIN:-0}-value input enum, a ${NOUT:-0}-value output enum, ${LSCHEMA:-0} characters of §5.8 architecture-fit paragraph and ${LREVIEW:-0} of review.md aggregation — one of the four anchors did not resolve, so this group compared nothing"
+  fi
+  BAD=$(printf '%s' "$AGREE" | grep -E '^(DRIFT|UNDISPOSED|OUTDRIFT) ' || true)
+  if [ -z "$BAD" ]; then
+    pass_check "every arch_validate verdict has a disposition in both §5.8 and review.md step 5.0, and both name the same aggregate verdicts"
+  else
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      # shellcheck disable=SC2086
+      set -- $l
+      case "$1" in
+        DRIFT)      fail_check "the framework verdict \`$2\` is dispositioned in $3$4 and not in the other. \`commands/review.md\` step 5.0 and \`references/gate-audit-schema.md\` §5.8 describe one mechanism, and the command cites the schema, so a reader following that citation gets a rule the command does not run. This is the shape the \`skipped\` clause drifted in: the command learned to set skipped frameworks aside and §5.8 kept describing the fall-off-the-end aggregation it replaced." ;;
+        UNDISPOSED) fail_check "the framework verdict \`$2\` is defined in §5.12 and dispositioned in NEITHER §5.8 nor review.md step 5.0. A value the aggregation never names is a value that falls off the end of the clause list, which is step 8 rule 4's defect one gate down." ;;
+        OUTDRIFT)   fail_check "§5.8 names aggregate verdicts [$2] for architecture-fit and review.md names [$4] — the two documents disagree about what this gate can return." ;;
+      esac
+    done <<< "$BAD"
+  fi
 fi
 
 printf '\n'

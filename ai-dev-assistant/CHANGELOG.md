@@ -267,9 +267,11 @@
   above. What it does NOT catch: a scope test on a CONTINUATION line, where the else is reachable
   with the tool present and the walker reads one physical line per condition — a silent pass. What
   it wrongly flags: a probe written as a loop (`while ! command -v x`), and a probe factored into
-  a helper function, since the condition then names the function rather than the test. It does not
-  reliably catch every moved push and this entry does not claim it does; it catches the two that
-  were reported and the class each belongs to, and names the three shapes it gets wrong.
+  a helper function, since the condition then names the function rather than the test — **the
+  helper case is closed by the entry three below, which also corrects the counts in the rest of
+  this paragraph.** It does not reliably catch every moved push and this entry does not claim it
+  does; it catches the two that were reported and the class each belongs to, and names the shapes
+  it gets wrong.
   Seven mutations on the walker, each 1 red, plus one that restores cut three's rule and goes 2
   red. The fixture grows to seven shapes that must be flagged and twelve that must not, asserted
   by name — three of the seven are shapes an earlier cut passed green and four of the twelve are
@@ -285,7 +287,78 @@
   `hash`, `type -p`, `which`, `-e`/`-r` file tests, `node_modules/.bin`, `npx --no-install`
   and a probe on the push's own line are recognised now. Widening is the safe direction here:
   a form admitted in error costs a missed mutation on a producer nobody has written that way,
-  where a form omitted reds a correct tree today.
+  where a form omitted reds a correct tree today. **The list itself is gone; see two entries
+  below.**
+- **A trailing comment satisfied the guard, on the real producer, in silence.** The walker skipped
+  full-line comments and read the rest of every line as code. A push carries its tool name by
+  construction, so the only thing gating its own-line rule was whether the line looked like a
+  probe — and `ABSENT_TOOLS+=("trivy")  # trivy --version checked above`, moved out of its guard
+  into the composer-audit scope branch, looked like one. Push count still 8, the same 8 names, no
+  finding. The file's own prose said "No amount of echo wording satisfies that" while a comment
+  did. Two independent fixes, because one of them being right is not a thing this file gets to
+  assume: every line is now stripped of its trailing `#` comment before anything reads it,
+  quote-aware so `${#ARR[@]}` and a `#` inside quotes survive; and the own-line rule requires the
+  structure it is named for, a probe joined to the push by `||`, so the push text can never be its
+  own guard. Measured separately — dropping the stripper alone loses the condition-line case (1
+  red), reverting the own-line rule alone loses everything, because under the widened probe rule
+  below a bare `ABSENT_TOOLS+=(…)` line reads as a command and every push passes (5 red). On the
+  real producer the commented move is now flagged with the count and names still unchanged.
+- **It was measured on half the producers while saying it was measured on both.** Four scripts push
+  into `ABSENT_TOOLS` — `drupal/security-check.sh`, `drupal/solid-check.sh`,
+  `nextjs/security-check.sh`, `nextjs/solid-check.sh` — and the spec walked two, naming them in a
+  literal list, while its prose read "measured on both producers". The two it skipped were checked
+  by nothing, and one of them was carrying a FALSE RED: `npm list eslint-plugin-security` guarding
+  `ABSENT_TOOLS+=("eslint_security")` at `nextjs/security-check.sh:330` failed both halves of the
+  rule at once, and CI stayed green only because nobody looked. The set is now derived — any TRACKED script
+  under the audit scripts directory that pushes into `ABSENT_TOOLS` is walked, the same
+  tracked-files-only rule every scanning check in this repo follows — and compared
+  against the pinned per-file counts and names in both directions, so a fifth producer is a failure
+  rather than an omission (1 red, planted) and a pinned file that stops producing is one too (1
+  red). Two identity mutations, one in each newly-walked file, swap two pushes between the branches
+  that guard them: 2 red each, with the push count and the pushed names identical by construction,
+  and both completely silent before.
+- **The registry of probe forms was the same guess three times, so it was inverted.** Cuts one
+  through four recognised an availability test by matching a LIST of command spellings, and the
+  list missed a real form twice. A shell condition is a TEST on shell state (`[ … ]`, `[[ … ]]`,
+  `(( … ))`, `test …`) or a COMMAND run for its exit status, and only the second can ask whether a
+  binary is there — so a probe is any condition that runs a command, plus the file-test-on-a-tool-
+  path form, which is a test and would otherwise be refused. That closes `npm list`, closes the
+  helper-function false red named three entries up (`resolve_analyzer phpstan` on
+  `drupal/solid-check.sh` is that shape in the tree today), and needs no entry for the next form
+  nobody has written yet. **What it costs, stated rather than assumed:** a command naming the tool
+  for some other reason — `grep -q trivy composer.json` — now reads as a probe. That is a real
+  loosening, taken because a form omitted reds a green tree today where a form admitted in error
+  costs a missed mutation on a producer nobody has written that way. What holds it in check is the
+  name test, which is why that was tightened in the same cut.
+- **The guard-names-the-tool test read the condition as one string, and welded words together.**
+  Normalising a whole condition with whitespace dropped made `command -v scatter tool_helper` name
+  `scattertool` — a guard for two other tools satisfying a push for a third, which is the identity
+  failure this test exists to prevent, reintroduced by its own normalisation. The match is now PER
+  WORD: some whitespace-delimited word of the guard must carry the pushed name's tokens in order.
+  Tighter in that direction and wider in the other, because the guard may name the PACKAGE where
+  the push names the TOOL — `npm list eslint-plugin-security` for `eslint_security`, where a
+  contiguous-substring test fails since `eslintsecurity` is not a substring of
+  `eslintpluginsecurity`. Reverting to the old rule is 3 red: the false red returns on the real
+  producer, and the fixture's welded-words case stops being flagged. Measured after both changes:
+  all 18 real pushes across all four producers are clean, and the sentinel figures the indirection
+  rule turns on — 20 empty sentinels, 6 literals assigned in a probe branch, 2 resolved — are
+  unchanged by the widening, which is the measured answer to whether "runs a command" starts
+  admitting variables merely set near one.
+- **The schema described a bug the command no longer has.** `commands/review.md` step 5.0 was fixed
+  in this release to set `skipped` frameworks aside and aggregate `architecture-fit` over the ones
+  that answered. `references/gate-audit-schema.md` §5.8 — the reference that command cites — still
+  read `pass` "when every dispatched framework returned `proceed`", with no `skipped` clause at
+  all, so a reader following the citation got the fall-off-the-end aggregation the command had
+  stopped running. §5.12 was updated in the same commit; §5.8 was not. Both now describe one rule,
+  and something compares them: every value of the `arch_validate.verdict` enum — taken from §5.12,
+  a third document neither of the two can quietly agree with itself about — must be given a
+  disposition in both the §5.8 clause list and the step-5.0 rules, and both must name the same
+  aggregate verdicts. Four mutations, each red: the shipped §5.8 wording restored (2 — `skipped`
+  and `no_return`), the command's `blocked` clause removed (1), the schema gaining a `bypassed` the
+  command never names (1), and the §5.12 enum row made unparseable, which trips the non-vacuity
+  floor rather than passing on an empty comparison (1). It is a shape rule over prose and is
+  documented as one: it can tell that a value has no disposition on one side, not that two clauses
+  naming it assign the same outcome.
 - **The variable indirection marked five variables it had no business marking.** The comment
   and the entry above both said the literal rule marks three; measured across the two
   producers it marks SIX — `SEMGREP_RUNNER` plus `GITLEAKS_MODE`, `GITLEAKS_RANGE`,
