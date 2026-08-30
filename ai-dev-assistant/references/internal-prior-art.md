@@ -218,16 +218,48 @@ finder's narrative — and writes `<task_folder>/_prior-art-confirm-<aspect>.jso
 (`{ aspect, verdict_under_review, confirmation: agree|disagree|downgrade, downgrade_to, reason,
 dimensions_checked, sources_read, confirmed_at }`). It does not return its verdict as prose: an agent
 whose only output channel is its final message can go idle having produced nothing, indistinguishable
-from a genuine empty result, so it follows `agents/wo-critic.md`'s sidecar posture. As of v5.35.7 that is
-every agent whose verdict a gate reads off disk as a scalar: `spec-axis-reviewer` and
-`architecture-validator` were the two still on prose, and both were moved to sidecars after their
-reports truncated on a live review. It is **not** every verdict-returning agent in the framework, and
-saying so would be wrong in a way that matters: `analysis-agent`, `ai-test-selector` and
-`guides-matcher` each return a structured verdict as their response and each carry `Write` in
-`disallowedTools:`. Nothing gates on those three, so a truncated report there costs a re-dispatch
-rather than a false green — the rule is about a machine consuming a verdict, not about who produces
-one. An absent sidecar after dispatch is recorded as
-`confirmation: "no_return"` in `_internal-prior-art.json` — never folded into `agree` or `disagree`.
+from a genuine empty result, so it follows `agents/wo-critic.md`'s sidecar posture. An absent sidecar
+after dispatch is recorded as `confirmation: "no_return"` in `_internal-prior-art.json` — never
+folded into `agree` or `disagree`.
+
+### Which agents owe a sidecar, and the test
+
+**The test is what the caller does, not what the agent is.** An agent owes a sidecar when any
+dispatch site branches on its return: when the return decides whether something blocks, or changes
+what the phase does next. An agent whose return is only surfaced or recorded does not. Apply the
+test; do not trust this list to have stayed current, because it has already been wrong once.
+
+**Covered as of v5.37.0:** `wo-critic`, `distill-agent`, `prior-art-verdict-confirmer`,
+`spec-axis-reviewer`, `architecture-validator`, `analysis-agent`, `prior-art-researcher`,
+`guides-matcher`, `ai-test-selector`.
+
+**Excepted, one:** `agents/pattern-recommender.md`. Its two dispatch sites are
+`commands/pattern.md`, which prints the recommendation for a person to read, and `commands/design.md`,
+where it informs a pattern choice a human or the drafter then makes. Neither branches on the return,
+so a lost report costs a re-dispatch. That is the evidence; the exception rests on it rather than on
+an assertion.
+
+**This passage was wrong until v5.37.0, and how it was wrong is worth keeping.** It excused
+`analysis-agent`, `ai-test-selector` and `guides-matcher` together, on the ground that "nothing gates
+on those three, so a truncated report there costs a re-dispatch rather than a false green." Each half
+was false, in the direction that hides a failure:
+
+- An empty selection from `ai-test-selector` made `commands/validate-visual-regression.md` emit
+  `verdict: skipped` and stop. A skipped gate, not a re-dispatch.
+- Empty matches from `guides-matcher` meant no `domain_coverage_gaps`, so the gate whose purpose is
+  noticing unconsulted guides returned `pass`.
+- `analysis-agent` drives seven dispatch sites, every one a phase decision.
+
+And `prior-art-researcher` appeared on neither list while being tier 3 of the mechanism challenge, so
+its silence resolved as "no native pattern found" and a build proceeded on an unchallenged mechanism.
+A list of exceptions is only as good as the test behind it, which is why the test is stated above the
+list.
+
+**What blocks a write is `tools:`, not `disallowedTools:`.** The earlier text said these agents
+"carry `Write` in `disallowedTools:`", which is true and does not bind: `disallowedTools` has no
+effect when an agent is dispatched explicitly through the Task tool, which is how every agent here is
+dispatched. An agent can write exactly when `Write` appears in its `tools:` list. A reader planning a
+conversion should budget a `tools:` change and ignore `disallowedTools` entirely.
 
 ## Where it runs / asserts at `/review`
 

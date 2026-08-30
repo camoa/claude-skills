@@ -80,6 +80,14 @@ list from the `ai-test-selector` agent), **narrow the surface set to
 `selected_surfaces`** before proceeding. Surfaces not in `selected_surfaces` are
 excluded from this run — they skip baseline checks, diffing, and classification.
 
+- If the dispatcher recorded `no_return` for this gate — the `ai-test-selector`
+  sidecar `<task_folder>/_test-selection-visual_regression.json` it was handed came
+  back absent or unreadable (`references/gate-audit-schema.md`) — emit
+  `verdict: skipped` **with `unresolved: true`**, message `"AI surface selection:
+  no_return — the selector wrote no sidecar; surface set unresolved"`, persist, and
+  stop. Until v5.37.0 an errored selector and a genuine "nothing was affected"
+  produced the same plain `skipped`, and only one of them is a run that looked. The
+  verdict rules below are unchanged; this changes which of them the run reaches.
 - If `selected_surfaces` is empty → emit `verdict: skipped`, message
   `"AI surface selection: no affected visual_regression surfaces"`, persist,
   and stop.

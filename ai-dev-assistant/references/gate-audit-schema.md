@@ -907,6 +907,51 @@ files show the build went through `/run-work-orders` and owes those instead. An 
 a `bypass_reason` on this record, which the writer hoists to the envelope and the gate
 surfaces rather than absorbs.
 
+## Agent sidecars (v5.37.0+)
+
+Four agents that delivered by message now write their payload to a path the dispatcher hands them and
+return a pointer. These files are agent artifacts, not `gate-audit-write.sh` envelopes, the same
+relationship `_prior-art-confirm-<aspect>.json` has to the confirmer.
+
+**Why they exist.** An agent whose only output channel is its final message can finish having
+produced nothing, and a caller cannot tell that from an honest empty result. Four live failures are on
+record. Until v5.37.0 a passage in `references/internal-prior-art.md` excused three of these agents on
+the ground that nothing gated on them; that was false for all three, and each one's empty return
+produced a passing verdict rather than a re-dispatch.
+
+| Agent | Sidecar | Payload shape |
+|---|---|---|
+| `analysis-agent` | `<task_folder>/_analysis-<mode>.json` | `references/analysis-agent-schema.md` |
+| `prior-art-researcher` | `<task_folder>/_prior-art-<aspect>.json` plus a markdown body | `references/prior-art-researcher-schema.md` |
+| `guides-matcher` | `<task_folder>/_guides-match-<mode>.json` | `references/guides-matcher-schema.md` |
+| `ai-test-selector` | `<task_folder>/_test-selection-<gate>.json` | `references/ai-test-selector-schema.md` |
+
+**The suffix is load-bearing.** `analysis-agent` is dispatched up to seven times in one task across
+three modes and `guides-matcher` three times from one command. A fixed filename would have a later
+dispatch overwrite an earlier one, which is a defect this plugin has shipped before in a different
+record. The dispatcher supplies the whole path; the agent never constructs one.
+
+**Absence is `no_return`**, the value defined once above and already used by
+`prior-art-verdict-confirmer.confirmation`, `frameworks[].arch_validate.verdict` and
+`spec_axis_reviewer_no_return`: an absent sidecar after a dispatch that supplied an output path,
+never read as a passing result.
+
+**The consequence of `no_return` belongs to the consumer, not to this schema.** A missing surface
+selection is not the same event as a missing epic verdict, and the framework distinguishes them
+deliberately. Each dispatch site records what it costs there:
+
+| Consumer | `no_return` costs it |
+|---|---|
+| `commands/validate-visual-regression.md` | `skipped` with `unresolved: true`. An unselected surface set is not an empty one. |
+| `commands/validate-guides.md` | The coverage-gap check is `unresolved`, rather than contributing zero gaps to a pass. |
+| The mechanism-challenge tier-3 cascade | Grounding `not_searched`, never `none`. The kernel treats those differently and only one is honest. |
+| The epic and phase-decision sites | `insufficient_info`, which `references/analysis-agent-schema.md` already defines, rather than the `keep_flat` a silent default produces. |
+
+**`pattern-recommender` is the one agent deliberately left on prose.** Both its dispatch sites
+surface its recommendation for a person; neither branches on it. The exception and its evidence are
+recorded in `references/internal-prior-art.md`, and `tests/sidecar-contract-spec.sh` fails if an
+agent in the load-bearing set has no documented contract here.
+
 The per-critic verdict files under `<task_folder>/build-critique/` follow the `wo-critic`
 verdict-file pattern and are **not** written through `gate-audit-write.sh`; they are agent
 artifacts the orchestrator reads back, the same relationship `_critique.json` has to the

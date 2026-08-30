@@ -4,7 +4,7 @@ description: "Use when researching whether an existing solution (a library, pack
 capabilities: ["existing-solution-search", "prior-art-analysis", "pattern-extraction", "integration-discovery"]
 version: 1.0.0
 model: sonnet
-tools: Read, Grep, Glob, WebFetch, WebSearch
+tools: Read, Grep, Glob, WebFetch, WebSearch, Write
 disallowedTools: Edit, Write, Bash
 maxTurns: 15
 ---
@@ -59,7 +59,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 
 ## Output Format
 
-Return findings in this format (caller writes to `{project_path}/architecture/research_{topic}.md`):
+Write the findings in this format to the markdown path the dispatcher handed you. The caller no longer transcribes them from your message.
 
 ```markdown
 # Research: {Topic}
@@ -90,8 +90,41 @@ How to integrate with the existing codebase.
 - Grep/Glob for analyzing local code.
 - Read for examining specific implementations.
 
+## Deliver by file, not by message
+
+**Write your payload to the output path the dispatcher hands you, with the `Write` tool, and return
+a short pointer.** The file is your deliverable. Your final message is not.
+
+An agent whose only output channel is its final message can finish having produced nothing, and a
+caller cannot tell that from an honest empty result: no file, no verdict, no complaint. Four live
+failures are on record across this framework, including one of them this agent, which returned a transitional sentence in place of its findings on a live research phase. The dispatcher reads scalars off
+your file and does not parse your prose.
+
+- **You write TWO files**, both at paths the dispatcher hands you, because your deliverable is prose
+  a person reads and a caller cannot branch on prose. The research goes to
+  `<task_folder>/research/prior-art-<aspect>.md` in the markdown shape below. The scalars a caller
+  branches on go to `<task_folder>/_prior-art-<aspect>.json` per
+  `references/prior-art-researcher-schema.md`, and that JSON carries `body_path` pointing at the
+  markdown. Neither name is fixed: a task researches more than one aspect.
+- **`recommendation: "none_found"` is an answer, not an absence.** It means you searched and the
+  world has nothing. Record `searched: true` with it. Reserve `searched: false` plus a `skip_reason`
+  for a search that could not run at all.
+- **Write the same payload you would have returned.** Nothing about the shape changes; only where it
+  goes.
+- **Return a pointer plus the few scalars the caller branches on.** Keep it short. A long return is
+  the channel that truncates.
+- **If you cannot write the file, say so plainly in your return.** An absent file is recorded by the
+  caller as `no_return` and is never read as a passing result, so a silent failure to write is the
+  one outcome that costs the caller its answer.
+- **The file is written before you return.** A pointer to a file you did not write is worse than no
+  pointer.
+
+You follow `agents/wo-critic.md`'s sidecar posture. `references/gate-audit-schema.md` documents the
+shape and the absent-state rule.
+
 ## Human Control Points
 
 - Developer chooses what to research.
-- Developer reviews findings before storage.
+- Developer reviews findings after you write them, not before storage. You write the file; the
+  review is of the file.
 - Developer makes the final use/extend/build decision.

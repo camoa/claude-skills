@@ -86,6 +86,27 @@ enforcement, so invariant 2 is **also** enforced by a script.
 if .code_read == false and .confidence != "low" then .confidence = "low"
 ```
 
+### Read the exit code (v5.37.0+)
+
+The script has three, and **a caller that ignores them gets the defect this release exists for**:
+
+| Exit | Meaning | What the caller does |
+|---|---|---|
+| `0` | Normalized. A clamp may or may not have fired. | Branch on `decision` as usual. |
+| `1` | The input was not valid JSON. The raw text is echoed on stdout. | There is text but no verdict. Record `no_return` and do not parse the echo for a decision. |
+| `2` | The input was **empty**, or valid JSON missing `decision`, `confidence` or `code_read`. | The agent delivered no answer. Record `no_return` and treat the decision as `insufficient_info`, never `keep_flat`. |
+
+Exit `2` is separate from `1` on purpose. `1` says "here is text I could not parse"; `2` says there
+was nothing to parse. Before v5.37.0 an empty input exited `0` with empty output, because `jq empty`
+calls an empty stream valid, so an agent that returned nothing was indistinguishable from a run that
+legitimately filtered everything out. A payload missing `code_read` also passed through untouched,
+since a missing field is not equal to `false` in jq, so the clamp could not fire and the result read
+as already checked.
+
+**The five callers** are `/research` (pre-analysis and the post-research epic check), `/design`,
+`/implement` and `/propose-epics`. Each reads the exit code. A better error on a channel nobody reads
+would change nothing observable, which is the failure shape this plugin keeps finding in itself.
+
 When it clamps, it appends a `notes[]` entry citing this invariant so the
 adjustment is visible in `/audit-status` and the on-disk audit. Every consumer
 (`/research` pre-analysis + post-research epic check, `/propose-epics`,

@@ -42,6 +42,9 @@ Invoke `ai-dev-assistant:analysis-agent` via Task tool with:
 - `task_folder` = absolute path to the task folder (the folder now contains `task.md` + `alignment.md` + `research.md` — maximum context the agent has ever had for this task)
 - `codePath` = resolved via `project-state-reader` on the active project
 - `schema_version: "1.0"`
+- `output_path` = `<task_folder>/_analysis-folder.json` — the agent writes its payload there, and you read `decision` and `proposed_decomposition[]` off the file rather than out of its message, which is a channel an agent can finish having left empty
+
+**An absent or unreadable sidecar is `no_return`** (`references/gate-audit-schema.md`), which is `insufficient_info` at Step 2 — the silent branch, but recorded as such rather than as the `keep_flat` a default produces.
 
 ### Step 2 — Branch on `decision`
 
@@ -411,8 +414,8 @@ Refactored flow:
    - Task name + description total length > 500 chars
    - Description has ≥3 distinct bullet points
    - Description contains explicit conjunction phrasing (`and also`, `plus`, `as well as`, `in addition to`)
-2. Invoke `ai-dev-assistant:analysis-agent` (via Task tool) in description mode regardless of signal state.
-3. Save output to `<task>/_pre-analysis.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh`.
+2. Invoke `ai-dev-assistant:analysis-agent` (via Task tool) in description mode regardless of signal state, handing it `output_path` = `<task>/_analysis-description.json` and reading `decision` off that file rather than out of its message. An absent or unreadable sidecar is `no_return`, which is `insufficient_info` here and never `keep_flat`.
+3. Save output to `<task>/_pre-analysis.json` via `${CLAUDE_PLUGIN_ROOT}/scripts/gate-audit-write.sh`, recording the `no_return` there when that is what happened.
 4. Render the verdict prompt with `scripts/prompt-render.sh` and show exactly what it printed. The template ID is chosen by `decision`: `pre-analysis-decision-epic-candidate`, `pre-analysis-decision-keep-flat`, or `pre-analysis-decision-insufficient-info`. Each renders whole — the renderer fills `{{key}}` placeholders and evaluates nothing else, so one verdict gets one template rather than one template carrying three branches. Do NOT paraphrase, and do not explain which branch applies; the rendered block is already the only one.
 5. Block on user response per the template's option list.
 6. Record decision in `_pre-analysis.json`.
@@ -510,7 +513,7 @@ Default: `[c]`.
 
 1. Invoke `alignment-reader` skill against the task folder.
 
-2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `ai-dev-assistant:analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`). Inspect the returned `signals_used[]` for `scope_contract_recommended`.
+2. **Task-level retrofit check (v3.12.2+)** — if the task folder ALREADY existed before this `/research` invocation (i.e., the user is running `/research` on a pre-existing flat task created outside the hook flow, NOT a fresh task just created by this command) AND `sections.task_level.present: false` AND the pre-analysis hook did NOT run this session → invoke `ai-dev-assistant:analysis-agent` in **folder mode** (`task_folder` set to the task directory, `codePath` resolved via `project-state-reader`, `schema_version: "1.0"`, `output_path` = `<task_folder>/_analysis-folder.json`). Inspect `signals_used[]` **off that file**, not out of the agent's message. An absent or unreadable sidecar is `no_return`, which is `insufficient_info`: take the same silent path as the failure branch below, but record it rather than let it read as a task the agent looked at and judged self-contained.
 
    - If present → print soft-nudge in plain language:
      > **Before I dig into research:** this task has no task-level scope recorded yet, and I'm seeing signals that scope could drift (multiple distinct deliverables, or a description that reads several ways). Want to pin down what it's really trying to deliver first?
