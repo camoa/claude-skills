@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-08-29
+
+### Fixed
+
+- `security-check.sh`'s `tools_absent[]` said three different things, and a reader could not tell which. Its own documentation named them: the tool is not installed, there was nothing eligible to scan, the target path is not there. Only the first is a coverage gap. In change-scoped mode the script pushed `composer_audit` into that list on every diff that did not touch `composer.json` or `composer.lock`, and the three SAST layers on every diff with no PHP in it — both of which are the scoping working exactly as designed. A consumer that treats the list as a gap (the only reading that catches a genuinely missing gitleaks) therefore flagged incomplete coverage on the majority of pull requests; a consumer that treats it as benign lets the missing gitleaks through. Neither reading was available, because the distinction was not in the data. By-design non-runs now go to `meta.tools_skipped[]`, which change-scoped mode already emitted for the whole-project-only advisory layers, and `tools_absent[]` means one thing: the binary is not installed. The whole-project path was audited for the same conflation and has none — every push there is a `command -v` miss.
+
+- A changed set this gate has no business reading — a docs-only or CSS-only diff — wrote `overall_status: "skipped"`, the same word the whole-project path uses for the very different state "the tools were here and returned nothing usable". Indistinguishable to a reader, so the safe reading applied to both. It now writes `meta.skip_reason: "no_eligible_changes"` so a correctly scoped no-op can be told from a scan that learned nothing it was meant to learn.
+
+- `nextjs/solid-check.sh` printed `[SKIP] madge not installed`, set `status` to `pass`, and emitted a report with no coverage fields at all. A Next.js project with every analyzer missing was indistinguishable from one where every analyzer ran and found nothing — the same defect the Drupal gates were rewritten to remove, left in place one directory over. It now emits `tools_absent[]`, `tools_failed[]`, `tools_unmeasured[]`, `tools_skipped[]`, `analyzers_ran` and `binary_analyzers[]`, degrades to `unmeasured` with exit 4 when nothing produced a measurement, and no longer reports `[PASS] Complexity within limits` for an ESLint run that wrote no report. A JavaScript project's absent `tsconfig.json` is recorded as skipped by design, not as missing coverage, so it does not put every one of them on a permanent red.
+
+- `nextjs/dry-check.sh` exited 1 with no report when jscpd was missing. Exit 1 is also this gate's duplication-warning code, so the exit status said "ordinary warning"; and because `report-dir.sh` falls back to the newest existing report directory, a reader looking for the report found the previous run's. Both channels described a measurement that never happened. It now writes an unmeasured report and exits 4. The same branch covers jscpd running and producing nothing, which used to leave the counters at their initialised zeros and report 0% duplication.
+
+### Added
+
+- `binary_analyzers[]` in both SOLID gates' reports, naming the analyzers that need installing. `analyzers_ran` is not a coverage test on its own — the Drupal gate's always-on `\Drupal::` grep and the Next.js gate's file-size scan both increment it without any binary present — so a consumer asking "did every analyzer that needs installing go missing?" has to know which names those are. Until now the one consumer that asks carried them as a literal of its own, compared to nothing.
+
 ## [3.10.0] - 2026-08-28
 
 ### Fixed

@@ -17,5 +17,9 @@
   ],
   "tools_failed": [],
   "generated_at": "2026-08-29T12:00:00Z",
-  "status": "unmeasured"
+  "status": "unmeasured",
+  "binary_analyzers": [
+    "phpstan",
+    "phpmd"
+  ]
 }

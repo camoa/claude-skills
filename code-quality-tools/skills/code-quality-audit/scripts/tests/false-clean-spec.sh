@@ -21,11 +21,13 @@
 #               "PCOV available" cannot be printed when pcov is absent.
 #   G  (item 2) composer audit is invoked so that its output survives a non-zero exit.
 #   H  (item 3) a tool that FAILED has consequences, a tool that was never installed
-#               does not. An analyzer that was present and returned nothing usable
-#               (tools_failed[]) downgrades a would-be "pass" to "skipped"; an optional
-#               analyzer that is simply not installed (tools_absent[]) does not, or
-#               every run on a normal machine would report incomplete. A skipped gate
-#               then caps the full-audit verdict, so the consequence reaches the caller.
+#               does not, and a layer the diff scoped out is neither. An analyzer that was
+#               present and returned nothing usable (tools_failed[]) downgrades a would-be
+#               "pass" to "skipped"; an optional analyzer that is simply not installed
+#               (tools_absent[]) does not, or every run on a normal machine would report
+#               incomplete; a layer the changed set gave nothing to do (tools_skipped[])
+#               is the scoping working. A skipped gate then caps the full-audit verdict,
+#               so the consequence reaches the caller.
 #   K  (item 4) the lint gate scans themes as well as modules. lint-check.sh read only
 #               DRUPAL_MODULES_PATH, so every custom theme was omitted from the standards
 #               gate while security-check.sh next door scanned both paths.
@@ -153,6 +155,10 @@ trap 'rm -rf "$TMP"' EXIT
 # is discarded and the caller silently reads the PREVIOUS run's value — which is how the
 # disjointness assertion came to be checked against a different stack's result.
 last_absent() { tr -d '\n' < "$TMP/last_absent" 2>/dev/null || printf 'MISSING'; }
+# The by-design half of the split. tools_absent[] used to hold both "the binary is not
+# installed" and "the changed set gave this layer nothing to do", and the assertions below
+# read only the first name, so the conflation was invisible to all of them.
+last_scoped() { tr -d '\n' < "$TMP/last_scoped" 2>/dev/null || printf 'MISSING'; }
 # Which semgrep binary the last run actually invoked: "host", "container", both, or
 # empty. The verdict tuple alone cannot distinguish "ran cleanly" from "never found" —
 # both are a clean pass with no skip recorded — so the stubs record their own
@@ -844,17 +850,26 @@ echo "H: a security 'pass' requires that the tools which were there actually rep
 # alone, so gitleaks could crash, be faithfully listed in tools_absent, and the same
 # report still say overall_status "pass".
 #
-# But "did not contribute" covers two different claims, and collapsing them breaks the
-# verdict in the opposite direction:
+# But "did not contribute" covers THREE different claims, and collapsing any two of them
+# breaks the verdict in one direction or the other:
 #
-#   EXPECTED absence   the tool was never installed. semgrep, trivy, psalm and
+#   EXPECTED absence   the BINARY IS NOT INSTALLED. semgrep, trivy, psalm and
 #                      eslint-plugin-security are optional and missing on a normal
 #                      machine. Nothing was promised, so nothing is owed. Reported in
-#                      tools_absent[], no effect on the verdict.
+#                      tools_absent[], no effect on THIS gate's verdict — but it IS the
+#                      coverage gap a consumer reads, so nothing else may share the list.
 #   UNEXPECTED failure the tool WAS there and returned nothing usable — crashed, wrote
 #                      an unparseable report, left a stale one. Something expected to
 #                      cover ground did not, and its zero is not evidence. Reported in
 #                      tools_failed[], and it downgrades a would-be pass to "skipped".
+#   SCOPED OUT         the layer had nothing to do because of the CHANGED SET: composer
+#                      audit with no dependency file in the diff, the SAST layers with no
+#                      PHP in it. The scoping working as designed, not a gap in it.
+#                      Reported in tools_skipped[] since 3.10.1. It shared tools_absent[]
+#                      before that, and a consumer reading that list as a coverage gap —
+#                      the only reading that catches a genuinely missing gitleaks — then
+#                      flagged incomplete coverage on the majority of pull requests, since
+#                      most touch PHP and not composer.lock.
 #
 # Treating expected absence as failed coverage puts every real run at "skipped", and a
 # verdict that fires on 100% of runs carries no information. The guards below pin BOTH
@@ -1223,6 +1238,8 @@ run_security_gate() {
   counts=$(jq -r '.summary.by_severity | "\(.critical),\(.high),\(.medium)"' "$rdir/security-report.json" 2>/dev/null || echo "MISSING")
   jq -r '(.meta.tools_absent // []) | sort | join(",")' "$rdir/security-report.json" \
     2>/dev/null > "$TMP/last_absent" || printf 'MISSING' > "$TMP/last_absent"
+  jq -r '(.meta.tools_skipped // []) | sort | join(",")' "$rdir/security-report.json" \
+    2>/dev/null > "$TMP/last_scoped" || printf 'MISSING' > "$TMP/last_scoped"
   ls "$work/markers" 2>/dev/null | sed 's/^semgrep_//' | sort | paste -sd, - > "$TMP/last_markers"
   printf '%s|%s|%s|%s' "$rc" "$status" "$failed" "$counts"
 }
@@ -1309,6 +1326,8 @@ run_changed_gate() {
   counts=$(jq -r '.summary.by_severity | "\(.critical),\(.high),\(.medium)"' "$rdir/security-report.json" 2>/dev/null || echo MISSING)
   jq -r '(.meta.tools_absent // []) | sort | join(",")' "$rdir/security-report.json" \
     2>/dev/null > "$TMP/last_absent" || printf 'MISSING' > "$TMP/last_absent"
+  jq -r '(.meta.tools_skipped // []) | sort | join(",")' "$rdir/security-report.json" \
+    2>/dev/null > "$TMP/last_scoped" || printf 'MISSING' > "$TMP/last_scoped"
   ls "$work/markers" 2>/dev/null | sed 's/^semgrep_//' | sort | paste -sd, - > "$TMP/last_markers"
   printf '%s|%s|%s|%s' "$rc" "$status" "$failed" "$counts"
 }
@@ -1442,7 +1461,15 @@ assert_eq "[drupal --changed] semgrep in CONTAINER only -> the CONTAINER binary 
 STUB_SEMGREP_WHERE=none run_changed_gate 0 >/dev/null
 assert_eq "[drupal --changed] semgrep in NEITHER -> no binary invoked at all" "" "$(last_markers)"
 assert_eq "[drupal --changed] semgrep in NEITHER is named in tools_absent" \
-  "composer_audit,php-security-linter,semgrep" "$(last_absent)"
+  "php-security-linter,semgrep" "$(last_absent)"
+# And composer_audit is NOT there. It did not run because no dependency file changed —
+# the scoping working, not a gap in it — and it is the only name in these strings whose
+# absence is a fact about the DIFF rather than about the machine. Sharing a list with
+# genuine absences is what put a coverage-gap red on the majority of pull requests, since
+# most of them touch PHP and not composer.lock. Asserted at the same scenario as the
+# line above, so a regression cannot satisfy one half by breaking the other.
+assert_eq "[drupal --changed] composer_audit is scoped out by the diff, so it is in tools_skipped and NOT in tools_absent" \
+  "composer_audit,drush_pm_security,gitleaks,psalm_taint,roave,security_review,trivy" "$(last_scoped)"
 
 # H2j: every SCANNER that produced nothing is NAMED. "Scanner" is deliberate and the
 # expected strings below match it: Drupal's roave and Next.js's socket are prevention
@@ -1461,15 +1488,28 @@ assert_eq "[drupal] every non-producing SCANNER is named in tools_absent" \
 
 run_changed_gate 0 >/dev/null
 assert_eq "[drupal --changed] every non-producing SCANNER is named in tools_absent" \
-  "composer_audit,php-security-linter,semgrep" "$(last_absent)"
+  "php-security-linter,semgrep" "$(last_absent)"
+assert_eq "[drupal --changed] and the layer the diff scoped out is named in tools_skipped" \
+  "composer_audit,drush_pm_security,gitleaks,psalm_taint,roave,security_review,trivy" "$(last_scoped)"
 
 # The no-eligible-files branches are a separate path and need a changed set that
 # reaches them: composer.json alone, so composer audit runs but every SAST layer has
 # nothing to look at. Without this, a scan that examined zero files reported exactly
 # what a scan that examined everything reports.
 run_changed_gate 1 "" composer >/dev/null
-assert_eq "[drupal --changed] a changed set with no eligible files names all three SAST layers" \
-  "custom_patterns,php-security-linter,semgrep" "$(last_absent)"
+assert_eq "[drupal --changed] a changed set with no eligible files names all three SAST layers, beside the advisory layers this mode never runs" \
+  "custom_patterns,drush_pm_security,gitleaks,php-security-linter,psalm_taint,roave,security_review,semgrep,trivy" \
+  "$(last_scoped)"
+# composer_audit is deliberately NOT in that string: composer.json IS in this changed set,
+# so that layer ran. The by-design list is per-run, not a fixed literal, and asserting the
+# whole of it exactly is what makes a dropped recording visible.
+# Every tool IS installed in this run, so nothing belongs in tools_absent at all. The
+# three SAST layers produced nothing because a composer.json-only diff gave them nothing
+# to read, which is a fact about the changed set. Both halves asserted at this scenario:
+# an empty tools_absent alone would also be satisfied by a run that recorded nothing
+# anywhere, which is the state this whole block exists to rule out.
+assert_eq "[drupal --changed] and nothing is in tools_absent, because every tool is installed" \
+  "" "$(last_absent)"
 
 run_security_gate "$NEXTSEC" 0 absent >/dev/null
 assert_eq "[nextjs] every non-producing SCANNER is named in tools_absent" \

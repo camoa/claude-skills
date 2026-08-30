@@ -32,6 +32,19 @@ COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
 MODULES_STATE="$(cqt_scan_path_state "${DRUPAL_MODULES_PATH}")"
 UNMEASURED_TOOLS=()
 
+# The analyzers that NEED A BINARY, named here and emitted in the report.
+#
+# analyzers_ran is not the coverage test on its own: the always-on \Drupal:: grep needs
+# nothing installed and increments it, so it is >= 1 with phpstan and phpmd both gone.
+# A consumer asking "did every analyzer that needs installing go missing?" therefore has
+# to know WHICH names those are — and until 3.10.1 the one consumer that asks
+# (ai-dev-assistant's gate-verdict-resolve.sh) carried them as a hardcoded literal on
+# its own side, checked against nothing. Renaming a tool here would have left that
+# literal matching no name, every binary analyzer would have looked present, and an
+# all-analyzers-absent run would have resolved to a pass. The names belong to the
+# producer, so the producer states them.
+BINARY_ANALYZERS='["phpstan","phpmd"]'
+
 # Trees that are somebody else's code. The Next.js gates already exclude these.
 PHPMD_EXCLUDE="*/tests/*,*/node_modules/*,*/vendor/*"
 
@@ -605,6 +618,7 @@ EOF
   "relevant_files": ${#RELEVANT_FILES[@]},
   "paths_missing": ${CHANGED_MISSING_JSON},
   "analyzers_ran": ${RAN_ANALYZERS},
+  "binary_analyzers": ${BINARY_ANALYZERS},
   "skipped_tools": ${SKIPPED_TOOLS_JSON},
   "tools_absent": ${ABSENT_TOOLS_JSON},
   "tools_failed": ${FAILED_TOOLS_JSON},
@@ -913,6 +927,7 @@ cat > "${REPORT_DIR}/solid-report.json" << EOF
     "phpmd_violations": ${PHPMD_VIOLATIONS_COUNT:-0}
   },
   "analyzers_ran": ${RAN_ANALYZERS},
+  "binary_analyzers": ${BINARY_ANALYZERS},
   "phpstan_level": ${PHPSTAN_LEVEL_EFFECTIVE_JSON},
   "phpstan_config": ${PHPSTAN_CONFIG_JSON},
   "skipped_tools": ${SKIPPED_TOOLS_JSON},

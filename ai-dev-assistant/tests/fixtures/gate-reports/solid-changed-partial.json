@@ -20,5 +20,9 @@
   "changed_file": "/tmp/changed.txt",
   "paths_missing": [
     "src/Gone.php"
+  ],
+  "binary_analyzers": [
+    "phpstan",
+    "phpmd"
   ]
 }

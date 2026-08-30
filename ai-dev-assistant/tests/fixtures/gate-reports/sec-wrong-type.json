@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "mode": "whole-project",
+    "tools_absent": "gitleaks",
+    "tools_failed": [],
+    "tools_unmeasured": []
+  },
+  "summary": {
+    "overall_status": "pass",
+    "total_issues": 0
+  }
+}

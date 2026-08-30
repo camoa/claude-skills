@@ -25,9 +25,9 @@
   too few paths to mean anything. The previous spec's assertions compared this plugin's
   prose against this plugin's prose; not one opened `dry-check.sh`, `solid-check.sh` or
   `security-check.sh`, which is why none of the three defects above was visible to it while
-  it reported 89 passing assertions. Twenty-seven fixture reports drive the resolver
-  through each state in both modes, including malformed JSON, an absent file, and a report
-  whose shape is not recognised.
+  it reported 89 passing assertions. Forty-eight fixture reports drive the resolver
+  through each state in both modes and both stacks, including malformed JSON, an absent
+  file, a report that is not an object, and one carrying a field of the wrong type.
 
 - **A report older than the run it is read for is `unresolved`, when the caller can say
   when the run began.** `--not-before` compares the report's timestamp; without it,
@@ -126,14 +126,80 @@
   second checked unconditionally rather than inside the first's branch, since the mutation
   it defends against is the one that deletes that branch.
 
+- **A correctly scoped security scan was being reported as missing coverage, and no
+  consumer-side change could have fixed it.** `security-check.sh`'s `tools_absent[]`
+  documented itself as three different facts — the tool is not installed, there was nothing
+  eligible to scan, the target path is not there — and only the first is a coverage gap.
+  In change-scoped mode, `/review`'s default path, it pushed `composer_audit` into that
+  list on every diff that did not touch `composer.json` or `composer.lock`. That is most
+  pull requests. Reading the list as a gap, which is the only reading that catches a
+  genuinely missing gitleaks, therefore put `coverage_partial: true` and step 8 rule 4's
+  fail on a fully tooled clean scan; reading it as benign would have let the missing
+  gitleaks through. Both readings were wrong because the distinction was not in the data.
+  The producer now separates them (code-quality-tools 3.10.1), `tools_absent[]` means one
+  thing, and the resolver reads by-design skips out of `meta.tools_skipped[]` where they no
+  longer count as a gap. Four fixtures assert the scoped runs do not block and that a
+  genuine absence sitting beside one still does.
+
+- **A changed set with nothing in this gate's scope no longer fail-closes the review.**
+  A docs-only or CSS-only diff makes `security-check.sh` write `overall_status: "skipped"`,
+  the same word the whole-project path uses for "the tools were here and returned nothing
+  usable" — which is genuinely unresolved. Indistinguishable, so the safe reading applied
+  to both and every documentation pull request failed `/review`. The producer now writes
+  `meta.skip_reason: "no_eligible_changes"` on that path, and the resolver returns
+  `skipped` with `unresolved: false`: benign under rule 5, which defines benign by
+  exclusion.
+
+- **The resolver no longer names its own tool list.** `BINARY='["phpstan","phpmd"]'` was a
+  literal here, checked against nothing — the same shape as the `meta.tools[]` bug this
+  release started from, reintroduced one file over. Renaming an analyzer in
+  `solid-check.sh` would have left it matching nothing, every binary analyzer would have
+  looked present, and an all-analyzers-absent run would have resolved `pass`. The names
+  come from the report's `binary_analyzers[]`, the producer declares them, and the spec
+  checks each declared name against a branch that can actually record it absent. The
+  "every binary analyzer is gone" test is now against the producer's own count rather than
+  the number 2, so a gate that grows a third analyzer does not start passing with two
+  missing.
+
+- **A report that parses but carries a wrongly-typed field resolves `unresolved` instead
+  of crashing.** `{"meta":{"tools_absent":"gitleaks"}}` made the set arithmetic die inside
+  a command substitution: empty stdout, exit 2 — the code documented as "usage error", so a
+  caller could not tell a bad invocation from an unreadable report. Every gate now checks
+  the shape of the fields it reads before reading them, a top-level array or string is
+  rejected the same way, and exit 2 is reserved for genuine usage errors.
+
+- **`.measured: false` was unreadable.** The read went through a helper that appends
+  `// empty`, and jq's `//` treats `false` exactly as it treats null, so the one value the
+  field exists to carry came back as the empty string, took no branch, and printed
+  `measured: null` in the evidence.
+
+- **The field-path check had a hole in its own derivation.** It matched
+  `jqr`/`jqlen`/`jqjoin` calls over `[a-z_.]` only. Five reads went through a bare inline
+  `jq -c` and were invisible to it; renaming one to `.meta.toolsUnmeasured` was invisible
+  twice over, once for the shape and once for the capital letter — undeclared, unchecked
+  against any producer, swallowed by `// []`, with every assertion still green. Every read
+  now goes through a named helper or a `require_shape` argument, the extraction reads both
+  and allows the full identifier character set, and three assertions require it to have
+  FOUND the compound reads rather than merely finding nothing to complain about.
+
+### Changed
+- `tests/gate-verdict-resolve-spec.sh` now declares a SECOND producer per gate, so the
+  Next.js emitters are checked too, and reads the producers' control flow for two claims
+  no hand-written fixture can hold: every push into `tools_absent[]` sits under a
+  "not installed" branch, and the Next.js DRY gate writes a report on the path where its
+  only analyzer is missing. Both were verified by mutation — moving `composer_audit` back
+  into `ABSENT_TOOLS` and deleting that report write each left all fixtures green before
+  these were added.
+
 ### Known remaining
-- **The Next.js gates have no coverage surface, and this release does not add one.**
-  `nextjs/solid-check.sh` emits neither `analyzers_ran` nor `tools_absent[]`, so a wrapper
-  cannot establish what it measured; `nextjs/dry-check.sh` exits 1 on a missing jscpd and
-  writes no report at all. The second case is safe by construction — no report is
-  `unresolved` under the new rule — but the first means a Next.js SOLID run reports its own
-  `status` with coverage unstated. Fixing that means changing the Next.js gates in
-  `code-quality-tools`, which is a separate change to a separate plugin.
+- Nothing from the Next.js gap recorded in the first draft of this entry: code-quality-tools
+  3.10.1 gives `nextjs/solid-check.sh` the same `tools_absent[]` / `tools_failed[]` /
+  `tools_unmeasured[]` / `tools_skipped[]` / `analyzers_ran` / `binary_analyzers[]` surface
+  the Drupal gates emit, and `nextjs/dry-check.sh` now writes an unmeasured report and
+  exits 4 rather than exiting 1 silently. The earlier claim that the first case was merely
+  "coverage unstated" understated it: the gate hardcoded `status: "pass"` with madge and
+  ESLint both missing, so the original defect of this release was untouched in that
+  directory — and this spec asserted that outcome as intended behaviour.
 
 ## [5.35.5] - 2026-08-29
 

@@ -22,6 +22,10 @@ NC='\033[0m'
 # repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
 # shellcheck source=../core/report-dir.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+# CQT_STATUS_UNMEASURED / CQT_EXIT_UNMEASURED: the word and the exit code for "this gate
+# produced no measurement", so a caller with only an exit status cannot read it as a pass.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
 COMPLEXITY_MAX="${COMPLEXITY_MAX:-10}"
@@ -52,6 +56,38 @@ WARNING_COUNT=0
 CIRCULAR_DEPS=0
 COMPLEXITY_VIOLATIONS=0
 LARGE_FILES=0
+
+# COVERAGE VOCABULARY — the same four lists the Drupal gates emit, and for the same
+# reason. Until 3.10.1 this gate printed "[SKIP] madge not installed", set status to
+# "pass" and emitted a report with NO tool lists at all, so a Next.js project with every
+# analyzer missing was indistinguishable from one where every analyzer ran and found
+# nothing. That is the exact defect the Drupal side was rewritten to remove, left in
+# place one directory over.
+#
+#   tools_absent[]     the analyzer IS NOT INSTALLED — a fact about the machine, and the
+#                      only one of the four that is a coverage gap.
+#   tools_failed[]     it was there and returned nothing usable. A zero from it is not
+#                      evidence.
+#   tools_unmeasured[] never asked, because the ground it would have read is not there
+#                      (a source tree with no TS/JS in it).
+#   tools_skipped[]    omitted BY DESIGN — a JavaScript project has no tsconfig.json and
+#                      that is not a gap in the audit.
+#
+# analyzers_ran counts CHECKS THAT PRODUCED A MEASUREMENT, and like the Drupal gate's it
+# is NOT the coverage test on its own: the file-size scan needs no binary, so it can be
+# 1 with both real analyzers gone. binary_analyzers[] names the ones that DO need a
+# binary, so a consumer can ask "did every analyzer that needs installing go missing?"
+# without hardcoding this gate's tool names on its own side.
+ABSENT_TOOLS=()
+FAILED_TOOLS=()
+UNMEASURED_TOOLS=()
+SKIPPED_BY_DESIGN=()
+RAN_ANALYZERS=0
+BINARY_ANALYZERS='["madge","eslint"]'
+
+to_json_array() {
+    if [ "$#" -eq 0 ]; then printf '[]'; else printf '%s\n' "$@" | jq -R . | jq -s -c .; fi
+}
 
 # Determine source directory
 SOURCE_DIR="src"
@@ -85,8 +121,11 @@ if npx madge --version &> /dev/null 2>&1; then
     MADGE_EXIT=$?
     set -e
 
-    if [ -f "${CIRCULAR_REPORT}" ]; then
+    # madge writes a JSON array whenever it can run at all. No file, or a file jq cannot
+    # read, means it did not produce a result — and a missing result is not zero cycles.
+    if [ -f "${CIRCULAR_REPORT}" ] && jq -e 'type == "array"' "${CIRCULAR_REPORT}" >/dev/null 2>&1; then
         CIRCULAR_DEPS=$(jq 'length' "${CIRCULAR_REPORT}" 2>/dev/null || echo "0")
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 
         if [ "$CIRCULAR_DEPS" -gt 0 ]; then
             echo -e "${RED}[FAIL]${NC} Found ${CIRCULAR_DEPS} circular dependency chain(s)"
@@ -101,10 +140,14 @@ if npx madge --version &> /dev/null 2>&1; then
         else
             echo -e "${GREEN}[PASS]${NC} No circular dependencies found"
         fi
+    else
+        echo -e "${YELLOW}[FAIL]${NC} madge produced no usable report (exit ${MADGE_EXIT}) — circular dependencies were NOT checked"
+        FAILED_TOOLS+=("madge")
     fi
 else
     echo -e "${YELLOW}[SKIP]${NC} madge not installed (run install-tools.sh)"
     echo '[]' > "${CIRCULAR_REPORT}"
+    ABSENT_TOOLS+=("madge")
 fi
 
 echo ""
@@ -128,8 +171,13 @@ if npx eslint --version &> /dev/null 2>&1; then
         2>/dev/null > "${COMPLEXITY_REPORT}" || true
     set -e
 
-    if [ -f "${COMPLEXITY_REPORT}" ] && [ -s "${COMPLEXITY_REPORT}" ]; then
+    # ESLint with --format json prints a JSON array whenever it runs, even for a clean
+    # tree. An empty or unparseable file means it did not run to completion, and reading
+    # that as "complexity within limits" is a clean bill of health nobody issued.
+    if [ -f "${COMPLEXITY_REPORT}" ] && [ -s "${COMPLEXITY_REPORT}" ] \
+       && jq -e 'type == "array"' "${COMPLEXITY_REPORT}" >/dev/null 2>&1; then
         COMPLEXITY_VIOLATIONS=$(jq '[.[].messages[] | select(.ruleId == "complexity" or .ruleId == "max-lines-per-function")] | length' "${COMPLEXITY_REPORT}" 2>/dev/null || echo "0")
+        RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 
         if [ "$COMPLEXITY_VIOLATIONS" -gt 0 ]; then
             echo -e "${YELLOW}[WARN]${NC} ${COMPLEXITY_VIOLATIONS} complexity violation(s)"
@@ -145,12 +193,14 @@ if npx eslint --version &> /dev/null 2>&1; then
             echo -e "${GREEN}[PASS]${NC} Complexity within limits"
         fi
     else
-        echo -e "${GREEN}[PASS]${NC} Complexity within limits"
+        echo -e "${YELLOW}[FAIL]${NC} ESLint produced no usable report — complexity was NOT checked"
         echo '[]' > "${COMPLEXITY_REPORT}"
+        FAILED_TOOLS+=("eslint")
     fi
 else
     echo -e "${YELLOW}[SKIP]${NC} ESLint not available"
     echo '[]' > "${COMPLEXITY_REPORT}"
+    ABSENT_TOOLS+=("eslint")
 fi
 
 echo ""
@@ -165,8 +215,12 @@ LARGE_FILES_REPORT="${REPORT_DIR}/solid/large-files.json"
 # Find large TypeScript/JavaScript files
 echo "[" > "${LARGE_FILES_REPORT}"
 FIRST=true
+# How many files this layer actually read. Zero is not "all files within size limits";
+# it means the layer was pointed at ground with no TS/JS in it and measured nothing.
+SCANNED_FILES=0
 
 while IFS= read -r -d '' file; do
+    SCANNED_FILES=$((SCANNED_FILES + 1))
     lines=$(wc -l < "$file")
     if [ "$lines" -gt "$MAX_FILE_LINES" ]; then
         if [ "$FIRST" = true ]; then
@@ -190,8 +244,14 @@ if [ "$LARGE_FILES" -gt 0 ]; then
     echo ""
     jq -r '.[] | "  \(.file): \(.lines) lines"' "${LARGE_FILES_REPORT}" 2>/dev/null | head -5
     WARNING_COUNT=$((WARNING_COUNT + LARGE_FILES))
+elif [ "$SCANNED_FILES" -eq 0 ]; then
+    echo -e "${YELLOW}[UNMEASURED]${NC} no TS/JS files under ${SOURCE_DIR} — file sizes were NOT measured"
+    UNMEASURED_TOOLS+=("large_files")
 else
-    echo -e "${GREEN}[PASS]${NC} All files within size limits"
+    echo -e "${GREEN}[PASS]${NC} All ${SCANNED_FILES} files within size limits"
+fi
+if [ "$SCANNED_FILES" -gt 0 ]; then
+    RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 fi
 
 echo ""
@@ -235,9 +295,13 @@ EOF
         TS_ISSUES=$((TS_ISSUES + 1))
         WARNING_COUNT=$((WARNING_COUNT + 1))
     fi
+    RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
 else
-    echo -e "${YELLOW}[SKIP]${NC} No tsconfig.json found"
+    # By design, not a gap: a JavaScript Next.js project has no tsconfig.json, and
+    # calling that missing coverage would put every one of them on a permanent red.
+    echo -e "${YELLOW}[SKIP]${NC} No tsconfig.json found — not a TypeScript project"
     echo '{"strict": null, "strictNullChecks": null, "noImplicitAny": null}' > "${TS_CONFIG_REPORT}"
+    SKIPPED_BY_DESIGN+=("typescript_strict")
 fi
 
 echo ""
@@ -246,14 +310,29 @@ echo ""
 # Generate Summary Report
 # =====================
 
-# Determine overall status
+ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+FAILED_TOOLS_JSON=$(to_json_array "${FAILED_TOOLS[@]+"${FAILED_TOOLS[@]}"}")
+UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
+SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_BY_DESIGN[@]+"${SKIPPED_BY_DESIGN[@]}"}")
+
+# Determine overall status. Real findings outrank every coverage state — a critical
+# violation one layer DID find is not softened because another layer was absent — and
+# "nothing was measured at all" is never a pass.
 SOLID_STATUS="pass"
-if [ "$CRITICAL_COUNT" -gt 0 ]; then
+if [ "$RAN_ANALYZERS" -eq 0 ]; then
+    SOLID_STATUS="${CQT_STATUS_UNMEASURED}"
+elif [ "$CRITICAL_COUNT" -gt 0 ]; then
     SOLID_STATUS="fail"
 elif [ "$WARNING_COUNT" -gt 5 ]; then
     SOLID_STATUS="fail"
 elif [ "$WARNING_COUNT" -gt 0 ]; then
     SOLID_STATUS="warning"
+elif [ "${#FAILED_TOOLS[@]}" -gt 0 ]; then
+    # No findings, but an analyzer that WAS here returned nothing usable. Its zero is
+    # not evidence, so this is not a pass.
+    SOLID_STATUS="skipped"
+elif [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ]; then
+    SOLID_STATUS="${CQT_STATUS_UNMEASURED}"
 fi
 
 # Build violations array for report-processor compatibility
@@ -302,6 +381,12 @@ VIOLATIONS_JSON+="]"
 cat > "${REPORT_DIR}/solid-report.json" << EOF
 {
   "status": "${SOLID_STATUS}",
+  "analyzers_ran": ${RAN_ANALYZERS},
+  "binary_analyzers": ${BINARY_ANALYZERS},
+  "tools_absent": ${ABSENT_TOOLS_JSON},
+  "tools_failed": ${FAILED_TOOLS_JSON},
+  "tools_unmeasured": ${UNMEASURED_TOOLS_JSON},
+  "tools_skipped": ${SKIPPED_TOOLS_JSON},
   "violations": ${VIOLATIONS_JSON},
   "metrics": {
     "circular_dependencies": ${CIRCULAR_DEPS},
@@ -354,12 +439,28 @@ printf "  | Dependency Inversion   | %-7s | %6d |\n" "$([ "$CIRCULAR_DEPS" -eq 0
 echo ""
 echo "  Critical: ${CRITICAL_COUNT}"
 echo "  Warnings: ${WARNING_COUNT}"
+echo "  Analyzers that produced a measurement: ${RAN_ANALYZERS}"
+echo "  Not installed: $(echo "$ABSENT_TOOLS_JSON" | jq -r 'if length == 0 then "none" else join(", ") end')"
+echo "  Returned nothing usable: $(echo "$FAILED_TOOLS_JSON" | jq -r 'if length == 0 then "none" else join(", ") end')"
+echo "  Nothing to read: $(echo "$UNMEASURED_TOOLS_JSON" | jq -r 'if length == 0 then "none" else join(", ") end')"
+echo "  Skipped by design: $(echo "$SKIPPED_TOOLS_JSON" | jq -r 'if length == 0 then "none" else join(", ") end')"
 echo ""
 
+# `unmeasured` exits 4 and never 0. The status is the primary channel, but a caller with
+# only the exit code — full-audit.sh, an AIDA /validate-* wrapper — reads a zero as a
+# pass, which is how a Next.js project with no analyzers installed went green.
 case "$SOLID_STATUS" in
     pass)
         echo -e "${GREEN}[PASS]${NC} SOLID principles check passed"
         exit 0
+        ;;
+    skipped)
+        echo -e "${YELLOW}[SKIP]${NC} No violations, but $(echo "$FAILED_TOOLS_JSON" | jq -r 'join(", ")') returned no usable result"
+        exit 0
+        ;;
+    "${CQT_STATUS_UNMEASURED}")
+        echo -e "${YELLOW}[UNMEASURED]${NC} nothing was measured — this is not a clean tree, it is an unchecked one"
+        exit "$CQT_EXIT_UNMEASURED"
         ;;
     warning)
         echo -e "${YELLOW}[WARN]${NC} Some SOLID issues found"

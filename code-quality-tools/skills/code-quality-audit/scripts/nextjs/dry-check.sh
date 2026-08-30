@@ -14,6 +14,9 @@ NC='\033[0m'
 # repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
 # shellcheck source=../core/report-dir.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+# CQT_STATUS_UNMEASURED / CQT_EXIT_UNMEASURED — see the tool-absent branch below.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
 DUPLICATION_MAX="${DUPLICATION_MAX:-5}"
@@ -28,14 +31,34 @@ if ! command -v npm &> /dev/null; then
     exit 2
 fi
 
-# Check for jscpd
+mkdir -p "${REPORT_DIR}/dry"
+
+# Check for jscpd. It is this gate's ONLY analyzer, so its absence means duplication was
+# not measured — and that has to be WRITTEN somewhere a consumer reads.
+#
+# Until 3.10.1 this branch exited 1 and wrote no report at all. Exit 1 is also this
+# gate's "duplication over the soft target" code, so a caller reading the exit status saw
+# an ordinary warning; a caller reading the report saw whatever the PREVIOUS run left in
+# the report directory, since report-dir.sh falls back to the newest existing one. Both
+# readings are of a measurement that never happened.
 if ! npx jscpd --version &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} jscpd is not installed"
     echo "  Run: npm install -D jscpd"
-    exit 1
+    cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "mode": "whole-project",
+  "measured": false,
+  "skip_reason": "tool_absent",
+  "tools_absent": ["jscpd"],
+  "duplication_percentage": null,
+  "clones_count": null,
+  "status": "${CQT_STATUS_UNMEASURED}",
+  "rating": "${CQT_STATUS_UNMEASURED}",
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    exit "$CQT_EXIT_UNMEASURED"
 fi
-
-mkdir -p "${REPORT_DIR}/dry"
 
 echo "Scanning for duplicate code..."
 echo "  Max acceptable: ${DUPLICATION_MAX}%"
@@ -73,11 +96,34 @@ CLONES_COUNT=0
 DUPLICATED_LINES=0
 TOTAL_LINES=0
 
+MEASURED=false
 if [ -f "$JSCPD_JSON" ] && command -v jq &> /dev/null; then
     DUPLICATION_PCT=$(jq '.statistics.total.percentage // 0' "$JSCPD_JSON" 2>/dev/null || echo "0")
     CLONES_COUNT=$(jq '.statistics.total.clones // 0' "$JSCPD_JSON" 2>/dev/null || echo "0")
     DUPLICATED_LINES=$(jq '.statistics.total.duplicatedLines // 0' "$JSCPD_JSON" 2>/dev/null || echo "0")
     TOTAL_LINES=$(jq '.statistics.total.lines // 0' "$JSCPD_JSON" 2>/dev/null || echo "0")
+    MEASURED=true
+fi
+
+# jscpd was here and still produced no report — it crashed, or jq is missing so nothing
+# could be read out of it. The counters above are still at their initialised zeros, and
+# writing those out says "0% duplication" about a run that measured nothing.
+if [ "$MEASURED" = false ]; then
+    echo -e "${RED}[UNMEASURED]${NC} jscpd produced no usable report (exit ${JSCPD_EXIT}) — duplication was NOT measured"
+    cat > "${REPORT_DIR}/dry-report.json" << EOF
+{
+  "mode": "whole-project",
+  "measured": false,
+  "skip_reason": "tool_failed",
+  "tools_absent": [],
+  "duplication_percentage": null,
+  "clones_count": null,
+  "status": "${CQT_STATUS_UNMEASURED}",
+  "rating": "${CQT_STATUS_UNMEASURED}",
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    exit "$CQT_EXIT_UNMEASURED"
 fi
 
 echo ""
@@ -93,6 +139,10 @@ fi
 # Generate report
 cat > "${REPORT_DIR}/dry-report.json" << EOF
 {
+  "mode": "whole-project",
+  "measured": true,
+  "skip_reason": null,
+  "tools_absent": [],
   "duplication_percentage": ${DUPLICATION_PCT},
   "clones_count": ${CLONES_COUNT},
   "duplicated_lines": ${DUPLICATED_LINES},
@@ -102,6 +152,7 @@ cat > "${REPORT_DIR}/dry-report.json" << EOF
     "warning": ${DUPLICATION_WARN}
   },
   "status": "${DRY_STATUS}",
+  "rating": "${DRY_STATUS}",
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
