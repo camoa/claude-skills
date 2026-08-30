@@ -25,7 +25,7 @@
   too few paths to mean anything. The previous spec's assertions compared this plugin's
   prose against this plugin's prose; not one opened `dry-check.sh`, `solid-check.sh` or
   `security-check.sh`, which is why none of the three defects above was visible to it while
-  it reported 89 passing assertions. Forty-eight fixture reports drive the resolver
+  it reported 89 passing assertions. Fifty-seven fixture reports drive the resolver
   through each state in both modes and both stacks, including malformed JSON, an absent
   file, a report that is not an object, and one carrying a field of the wrong type.
 
@@ -182,14 +182,70 @@
   and allows the full identifier character set, and three assertions require it to have
   FOUND the compound reads rather than merely finding nothing to complain about.
 
+- **A SOLID gate reported a hard failure as a warning, and a `--skip` on an unrelated gate
+  then shipped it green.** The partial-coverage rung emitted `warning` unconditionally, so
+  phpmd absent — catalog scope `isolated`, routinely missing — plus phpstan reporting 37
+  errors resolved to `warning` with `coverage_partial: true`. `review.md` step 8 rule 1
+  never fired; add any single `--skip-dry <reason>` and rule 3 returned
+  `overall_verdict: "bypassed"` before rule 4 was reached, which exits 0 under `--headless`.
+  A hard failure shipped past the rule whose own text says a fail is never masked by another
+  gate's explicit skip. Findings and coverage are two independent axes and every branch now
+  resolves them separately and emits once: a `fail` stays a `fail` and carries the marker
+  beside it, a `warning` is never erased, and only a would-be `pass` moves. Audited across
+  all four gates — the same shape was in the solid branch's no-tool-lists rung and its
+  no-`binary_analyzers` rung, and `dry` was rewritten to the same two-axis form even though
+  its single analyzer cannot currently reach the state.
+
+- **A missing semgrep failed an ordinary review on every developer machine.**
+  `schema/tool-catalog.json` records semgrep, gitleaks and trivy as scope `machine`, and
+  `install-tools.sh` has no mechanism for host binaries, so they are simply absent on a
+  normal machine — and the resolver unioned them into the coverage gap, so rule 4 failed a
+  fully clean change-scoped review. That contradicts `security-check.sh`'s own source ("a
+  verdict that fires on every run carries no information") and is the `--skip` training
+  round 3 argued against. Blocking is now scope-aware, reading the catalog rather than any
+  list of this plugin's own: a `project`/`isolated` gap is closeable and blocks, a `machine`
+  gap does not — until `CI` is set, which is this repo's own `make lint` pattern. An
+  unclassified tool, or no catalog at all, is treated as closeable, so the default stays
+  fail-closed. Pass it with `--tool-catalog`; the wrappers already hold the plugin path from
+  `plugin-dep-check.sh`.
+
+  **Not blocking is not not reporting.** A non-blocking gap arrives as a
+  `coverage_gap_nonblocking:` line in `messages[]` and as `evidence.coverage_gap`
+  (`{blocking[], non_blocking[], scope_source, ci}`), and rule 5 now says in as many words
+  that it must be rendered in the gates table and carried into `_review.json`.
+
+- **A scope skip could hide a failed layer.** The `no_eligible_changes` branch
+  short-circuited before the coverage lists were read, so a report carrying that skip reason
+  alongside `tools_failed: ["psalm"]` resolved benign with no markers. Latent, because the
+  producer hardcodes empty lists there — but the premise of this file is that a producer is
+  checked, not trusted. The lists are read first, and a report claiming nothing was in scope
+  while naming a layer that did not produce is a report contradicting itself: unresolved.
+
 ### Changed
+- **The spec's fixtures are a CROSS-PRODUCT now, not a list.** They were built one axis at a
+  time, and it left a hole with a shape: every `solid-*` fixture with `status: "fail"` had
+  all coverage lists empty, and every fixture with a non-empty list had `status: "pass"`. The
+  combination that mattered had no fixture, which is why the downgrade above was invisible to
+  131 tests. 144 cells now run findings state × coverage state for each gate and mode
+  — pass/warning/fail/partial/skipped/unmeasured against
+  full/one-absent/machine-absent/all-absent/failed/unmeasured/scoped-out/scoped-out-plus-absent
+  — each asserted against the contract restated independently in the spec rather than against
+  the resolver's own output, which would bless whatever it does. 30 further cells are named
+  UNREACHABLE with the producer-side reason; an omitted cell is indistinguishable from an
+  untested one. A whole-matrix floor and a per-shape floor both fail if it stops covering
+  either axis.
+
 - `tests/gate-verdict-resolve-spec.sh` now declares a SECOND producer per gate, so the
   Next.js emitters are checked too, and reads the producers' control flow for two claims
-  no hand-written fixture can hold: every push into `tools_absent[]` sits under a
-  "not installed" branch, and the Next.js DRY gate writes a report on the path where its
-  only analyzer is missing. Both were verified by mutation — moving `composer_audit` back
-  into `ABSENT_TOOLS` and deleting that report write each left all fixtures green before
-  these were added.
+  no hand-written fixture can hold: every push into `tools_absent[]` is guarded by a branch
+  whose condition PROBES FOR THE BINARY, and the Next.js DRY gate writes a report on the
+  path where its only analyzer is missing. Both were verified by mutation — moving
+  `composer_audit` back into `ABSENT_TOOLS` and deleting that report write each left all
+  fixtures green before these were added. The first check originally scanned four lines back
+  for the words "not installed", which a scope branch passes by containing them, and its
+  floor was "at least 2 pushes" in a file with eight, so deleting seven still passed; it now
+  reads the enclosing condition chain and pins the exact count and the exact tool names, and
+  deleting a single push goes red.
 
 ### Known remaining
 - Nothing from the Next.js gap recorded in the first draft of this entry: code-quality-tools

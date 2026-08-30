@@ -47,6 +47,18 @@
 #      to the producer. The resolver now derives those names from the report, and the
 #      names get checked where they are written.
 #
+# A sixth review found the fixtures were still a LIST, and the list had a hole with a shape:
+# every `solid-*` fixture whose status was `fail` had all coverage lists empty, and every
+# fixture with a non-empty list had status `pass`. The combination that mattered had no
+# fixture at all, so the resolver downgrading a hard SOLID failure to a warning was invisible
+# to 131 tests. Hence:
+#
+#   6. THE FIXTURES ARE A CROSS-PRODUCT. Section 2b runs findings × coverage for every gate
+#      and mode, asserts each cell against the contract RESTATED INDEPENDENTLY here — a
+#      matrix filled in from the resolver's own output would bless whatever it does — and
+#      names every unreachable cell with its producer-side reason, because an omitted cell
+#      is indistinguishable from an untested one.
+#
 # Exit 0 on all-pass; 1 on any fail.
 
 set -eu
@@ -200,25 +212,45 @@ done
 # a message that says the tool is not installed — that is the invariant the resolver's
 # reading depends on, and the scope-based branches say something else entirely ("No
 # SAST-eligible files", "composer.json/lock not in changed set").
+# The check is on CONTROL FLOW, not on wording. An earlier version scanned four lines back
+# for the string "not installed", which a scope branch passes simply by containing those
+# words; and its floor was "at least 2 pushes" in a file with eight, so deleting seven
+# still passed. Both are now pinned:
+#
+#   * the availability test itself. A push into ABSENT_TOOLS must sit inside a branch whose
+#     condition PROBES FOR THE BINARY — `command -v`, `test -f vendor/bin/...`,
+#     `npx <tool> --version`, `resolve_analyzer` — searching back to the nearest enclosing
+#     `if`/`elif`/`else`. No amount of echo wording satisfies that.
+#   * an EXACT expected count per file, and the names pushed. Deleting one push changes
+#     both, so the single-deletion mutation the reviewer showed both AIDA specs missing is
+#     now caught twice over.
 NEXTSOLID_P="$NEXTSOLID"
-for pf in "$SEC" "$NEXTSOLID_P"; do
+for spec in "$SEC:8:gitleaks,php-security-linter,php-security-linter,psalm,security_review,semgrep,semgrep,trivy" \
+            "$NEXTSOLID_P:2:eslint,madge"; do
+  pf="${spec%%:*}"; rest="${spec#*:}"; want_n="${rest%%:*}"; want_names="${rest#*:}"
   [ -f "$pf" ] || { fail_check "producer $pf missing"; continue; }
+  # For each push, walk back to the nearest branch keyword and collect the whole condition
+  # chain guarding it, then require an availability probe somewhere in that chain.
   BADLINES=$(awk '
-    /(ABSENT_TOOLS)\+=\(/ {
+    /^[[:space:]]*(if|elif)[[:space:]]/ { cond[++top] = $0; depth[top] = NR }
+    /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
       ok = 0
-      for (i = NR - 1; i >= NR - 4 && i >= 1; i--)
-        if (index(seen[i], "not installed") > 0 || index(seen[i], "not available") > 0) ok = 1
+      for (i = 1; i <= top; i++)
+        if (cond[i] ~ /command -v|test -f|vendor\/bin|--version|resolve_analyzer|ddev exec test/) ok = 1
       if (!ok) printf "%d:%s\n", NR, $0
     }
-    { seen[NR] = $0 }
+    /^[[:space:]]*fi[[:space:]]*$/ { if (top > 0) top-- }
   ' "$pf")
-  NPUSH=$(grep -cE '(ABSENT_TOOLS)\+=\(' "$pf" || true)
-  if [ "$NPUSH" -lt 2 ]; then
-    fail_check "$(basename "$pf"): only $NPUSH pushes into tools_absent[] found — this check is looking at nothing"
+  NPUSH=$(grep -cE '(^|[[:space:]])ABSENT_TOOLS\+=\(' "$pf" || true)
+  GOTNAMES=$(grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' "$pf" | sed -E 's/.*"([^"]+)".*/\1/' | sort | paste -sd, -)
+  if [ "$NPUSH" -ne "$want_n" ]; then
+    fail_check "$(basename "$pf"): $NPUSH pushes into tools_absent[], expected exactly $want_n — a push was added or removed, and either changes what the resolver can see as a coverage gap"
+  elif [ "$GOTNAMES" != "$want_names" ]; then
+    fail_check "$(basename "$pf"): tools_absent[] is filled with '$GOTNAMES', expected '$want_names' — a tool that stopped recording its own absence is a tool whose absence a consumer cannot see"
   elif [ -z "$BADLINES" ]; then
-    pass_check "$(basename "$pf"): all $NPUSH pushes into tools_absent[] sit under a 'not installed' branch — the list means one thing, which is what makes reading it as a coverage gap correct"
+    pass_check "$(basename "$pf"): all $want_n pushes into tools_absent[] are guarded by an availability probe, and they name exactly $want_names"
   else
-    fail_check "$(basename "$pf"): tools_absent[] is filled by a branch that is NOT about a missing binary — $(printf '%s' "$BADLINES" | tr '\n' ' '). A layer the changed set scoped out belongs in tools_skipped[]; in tools_absent[] it reads as missing coverage and reds an ordinary pull request."
+    fail_check "$(basename "$pf"): tools_absent[] is filled by a branch with no availability probe in its condition chain — $(printf '%s' "$BADLINES" | tr '\n' ' '). A layer the changed set scoped out belongs in tools_skipped[]; in tools_absent[] it reads as missing coverage and reds an ordinary pull request."
   fi
 done
 # A GATE THAT MEASURED NOTHING MUST SAY SO IN A FILE.
@@ -303,13 +335,36 @@ done
 # 2. THE MAPPING, EXECUTED — one fixture per state, per mode.
 # ==========================================================================================
 
+# THE CATALOG AND THE CI FLAG ARE PASSED EXPLICITLY, ALWAYS.
+#
+# Blocking is scope-aware: a gap in a tool the project can install blocks, a `machine`-scope
+# host binary does not unless the environment declares CI. Both inputs therefore decide
+# every expectation below, and neither may be inherited. `CI` in particular is SET while
+# this suite runs under CI, so a spec that let it leak would assert one thing locally and
+# another in the pipeline — and the local answer is the one nobody would see fail.
+CATALOG="${CQT}/skills/code-quality-audit/schema/tool-catalog.json"
+if [ -f "$CATALOG" ]; then
+  pass_check "the tool catalog is where the resolver expects it ($(basename "$CATALOG"))"
+else
+  fail_check "tool-catalog.json not found at $CATALOG — every scope expectation below would be checked against a resolver that fell back to treating all gaps as closeable"
+fi
+# run_resolver <ci:0|1> <gate> <report> [extra args...]
+run_resolver() {
+  local ci="$1" gate="$2" path="$3"; shift 3
+  if [ "$ci" = "1" ]; then
+    CI=1 bash "$R" "$gate" "$path" --tool-catalog "$CATALOG" "$@" 2>/dev/null
+  else
+    env -u CI bash "$R" "$gate" "$path" --tool-catalog "$CATALOG" "$@" 2>/dev/null
+  fi
+}
+
 # expect <fixture> <gate> <verdict> <unresolved> <coverage_partial> <what it proves>
 expect() {
   local fx="$1" gate="$2" want_v="$3" want_u="$4" want_p="$5" why="$6"; shift 6
   local path="${FIX}/${fx}"
   if [ ! -f "$path" ]; then fail_check "fixture $fx missing"; return; fi
   local out
-  if ! out=$(bash "$R" "$gate" "$path" "$@" 2>/dev/null); then
+  if ! out=$(run_resolver 0 "$gate" "$path" "$@"); then
     fail_check "$fx: resolver exited non-zero"; return
   fi
   local v u p
@@ -353,6 +408,15 @@ expect dry-nextjs-tool-failed.json dry skipped true  false "Next.js jscpd presen
 expect solid-whole-clean.json      solid pass    false false "every analyzer ran, nothing over threshold"
 expect solid-whole-warning.json    solid warning false false "11 SOLID warnings with every tool present — a full measurement"
 expect solid-whole-fail.json       solid fail    false false "over the hard threshold"
+# CRITICAL, round 6. The partial-coverage rung emitted `warning` unconditionally, so phpmd
+# absent (catalog scope `isolated`, routinely missing) plus 37 phpstan errors resolved to
+# `warning`: review.md rule 1 never fired, and one --skip-dry <reason> then let rule 3
+# return `bypassed` and exit 0 under --headless. A hard SOLID failure shipped green, past
+# the rule whose own text says a fail is never masked by another gate's explicit skip.
+expect solid-fail-with-absent.json    solid fail    false true  "a fail AND a closeable gap: BOTH facts, and the fail is the verdict"
+expect solid-warning-with-absent.json solid warning false true  "a warning AND a closeable gap: the warning is not upgraded and not erased"
+expect solid-fail-all-absent.json     solid fail    false true  "every binary analyzer gone, and the analyzer-free grep still found a hard failure: findings are evidence a partial run produced, so this is a fail, not unresolved"
+expect solid-legacy-no-lists-fail.json solid fail   false false "a report with no tool lists and a hard failure: the fail survives coverage being undeterminable"
 expect solid-one-absent.json       solid warning false true  "phpmd absent while the gate still says pass — partial coverage"
 expect solid-all-absent.json       solid skipped true  false "phpstan AND phpmd absent while analyzers_ran is 1 — THE analyzers_ran trap"
 expect solid-tools-failed.json     solid skipped true  false "both binary analyzers crashed: no evidence, same as absent"
@@ -379,14 +443,29 @@ expect solid-nextjs-js-project.json  solid pass    false false "a JavaScript pro
 expect sec-whole-clean.json      security pass    false false "every layer ran, nothing over threshold"
 expect sec-whole-warning.json    security warning false false "findings under the fail threshold, every layer present"
 expect sec-whole-fail.json       security fail    false false "CRITICAL finding — the case the .status slip turned green"
-expect sec-whole-absent.json     security warning false true  "gitleaks and semgrep absent while the gate says pass"
-expect sec-fail-with-absent.json security fail    false true  "a real fail AND a coverage gap: the fail is not softened"
+# SCOPE. gitleaks, semgrep and trivy are `machine` in tool-catalog.json: host binaries
+# install-tools.sh has no mechanism for, so they are simply absent on an ordinary developer
+# machine. Blocking on them fails a clean review on every such machine, which is the
+# --skip training round 3 argued against and security-check.sh's own source calls a verdict
+# that carries no information. Reported, never dropped, and blocking under CI.
+expect sec-whole-absent.json     security pass    false false "gitleaks and semgrep are machine-scope host tools: reported, not blocking, on a developer machine"
+expect sec-fail-with-absent.json security fail    false false "a real fail, with only machine-scope gaps beside it: still a fail, and the gap does not add a second reason to block"
+expect sec-whole-absent-closeable.json     security warning false true  "psalm and php-security-linter are installable by the project, so their absence IS a closeable gap and blocks"
+expect sec-fail-with-absent-closeable.json security fail    false true  "a real fail AND a closeable coverage gap: the fail is not softened, and both facts are carried"
+expect sec-scope-skip-hides-closeable.json security warning false true  "composer_audit scoped out by the diff AND psalm genuinely not installed — the second one still blocks"
+expect sec-no-eligible-contradiction.json  security skipped true  false "a report claiming nothing was in scope while naming a layer that failed: it contradicts itself, so it is unresolved"
+# THE DEFAULT IS FAIL-CLOSED. A tool the catalog does not classify has unknown scope, and
+# unknown is treated as closeable so that a gap nobody has thought about still blocks. The
+# alternative — defaulting to `machine` — would let any newly added layer stop blocking the
+# moment somebody forgot to catalogue it, which is the silent-downgrade shape this whole
+# branch exists to remove.
+expect sec-unclassified-absent.json security warning false true "a tool with no catalog entry has unknown scope, and unknown blocks"
 expect sec-status-partial.json   security warning false true  "the gate's own status:partial"
 expect sec-unmeasured.json       security skipped true  false "the gate's own unmeasured state"
 expect sec-skipped.json          security skipped true  false "zero findings but tools returned nothing usable"
 expect sec-changed-clean.json    security pass    false false "--changed mode, /review's DEFAULT path, fully covered"
 expect sec-changed-zero.json     security skipped true  false "--changed mode with analyzers_ran 0"
-expect sec-changed-partial.json  security warning false true  "--changed mode with gitleaks absent — invisible before this change"
+expect sec-changed-partial.json  security pass    false false "--changed mode with gitleaks absent: machine scope, so reported and not blocking"
 expect sec-wrong-shape.json      security skipped true  false "a top-level .status, the shape the prose assumed: refuse to guess"
 expect sec-wrong-type.json       security skipped true  false "tools_absent is a string where an array belongs — unresolved, not a jq crash and exit 2"
 expect sec-not-object.json       security skipped true  false "the report parses but is an array — indexing it is a jq error, not a null"
@@ -405,7 +484,7 @@ expect sec-changed-lock-only.json        security pass    false false "a compose
 expect sec-changed-no-eligible.json      security skipped false false "a docs-only diff: nothing in scope, so no layer was denied anything. skipped WITHOUT unresolved, or every documentation PR fails review"
 # And the direction that must survive the fix: a by-design skip in the same report must
 # not launder a genuine absence sitting beside it.
-expect sec-scope-skip-hides-absent.json  security warning false true  "composer_audit scoped out AND semgrep genuinely not installed — the second one still blocks"
+expect sec-scope-skip-hides-absent.json  security pass    false false "composer_audit scoped out and semgrep machine-scope absent: neither blocks, and both are reported"
 
 # ------------------------------------------------------------------ no report, bad report
 if OUT=$(bash "$R" dry "${FIX}/does-not-exist.json" 2>/dev/null) \
@@ -460,6 +539,206 @@ else
   fail_check "freshness is silently assumed when no baseline is supplied"
 fi
 
+# AND WITH NO CATALOG AT ALL. The resolver falls back to treating every gap as closeable,
+# so a machine-scope absence that would not block with the catalog present DOES block
+# without it. Asserted at the same fixture as DIRECTION 4 below, so the two answers are
+# known to differ for the reason claimed rather than by coincidence.
+NOCAT=$(env -u CI bash "$R" security "${FIX}/sec-whole-absent.json" --tool-catalog /nonexistent/tool-catalog.json 2>/dev/null || true)
+NOCAT_P=$(printf '%s' "$NOCAT" | jq -r '.coverage_partial')
+NOCAT_SRC=$(printf '%s' "$NOCAT" | jq -r '.evidence.coverage_gap.scope_source')
+if [ "$NOCAT_P" = "true" ] && printf '%s' "$NOCAT_SRC" | grep -q 'no tool-catalog'; then
+  pass_check "with no tool-catalog.json the resolver blocks the same gap it would let through with one, and says in evidence that it could not look"
+else
+  fail_check "with no catalog the resolver returned coverage_partial=$NOCAT_P (want true) and scope_source='$NOCAT_SRC' — a resolver that cannot read the scope rule must not quietly apply the lenient half of it"
+fi
+
+# ==========================================================================================
+# 2b. THE CROSS-PRODUCT MATRIX — findings × coverage, every cell, for every gate and mode.
+#
+# WHY THIS SECTION EXISTS. The fixture set above was built one axis at a time, and it left a
+# hole with a shape: every `solid-*` fixture whose status was `fail` had all coverage lists
+# EMPTY, and every fixture with a non-empty list had status `pass`. The combination that
+# matters had no fixture at all — so the resolver's partial-coverage rung, which emitted
+# `warning` unconditionally, downgraded a hard SOLID failure to a warning and 131 tests saw
+# nothing. review.md rule 1 never fired; one `--skip-dry <reason>` then let rule 3 return
+# `bypassed` and exit 0. An omitted cell is indistinguishable from an untested one, which is
+# this task's whole subject, so the cells are enumerated rather than chosen.
+#
+# THE EXPECTATION IS THE CONTRACT, RESTATED HERE, NOT THE RESOLVER'S OUTPUT RECORDED. A
+# matrix filled in by running the resolver would bless whatever it does, which is the
+# failure this section is a response to. `contract_expect` below is the rule in the file
+# header written out again, independently, in six lines:
+#
+#   findings axis   pass|partial -> pass, warning -> warning, fail -> fail.
+#                   unmeasured / an unexplained skipped -> nothing was measured.
+#   coverage axis   partial iff a BLOCKING gap, or the producer's own `partial` status.
+#                   A `machine`-scope gap is not blocking off CI (see DIRECTION 4).
+#   combine         a would-be pass with a gap becomes `warning`; a `warning` and a `fail`
+#                   are never softened, because findings a partial run produced are still
+#                   findings. This is the line the defect crossed.
+#
+# ZERO COVERAGE DIFFERS BY GATE, and the difference is real rather than an oversight:
+#   security  `analyzers_ran: 0` is the producer stating no scanner produced a measurement.
+#             A findings verdict in the same report contradicts that, so the report is
+#             unresolved whatever it claims to have found.
+#   solid     every BINARY analyzer gone still leaves the always-on \Drupal:: grep, which
+#             needs nothing installed. A clean result is then not evidence — but a `fail`
+#             the grep produced is, so only a would-be pass becomes unresolved.
+# ==========================================================================================
+
+MATRIX_DIR="$(mktemp -d)"
+trap 'rm -rf "$MATRIX_DIR"' EXIT
+
+# contract_expect <findings> <blocking:0|1> <zero:none|hard|soft>
+# Echoes "<verdict> <unresolved> <coverage_partial>".
+contract_expect() {
+  local f="$1" blocking="$2" zero="$3" v partial
+  case "$f" in
+    unmeasured|skipped) printf 'skipped true false'; return ;;
+  esac
+  if [ "$zero" = "hard" ]; then printf 'skipped true false'; return; fi
+  case "$f" in
+    pass|partial) v="pass" ;;
+    warning)      v="warning" ;;
+    fail)         v="fail" ;;
+  esac
+  if [ "$zero" = "soft" ] && [ "$v" = "pass" ]; then printf 'skipped true false'; return; fi
+  partial=false
+  if [ "$blocking" = "1" ] || [ "$f" = "partial" ] || [ "$zero" = "soft" ]; then partial=true; fi
+  if [ "$v" = "pass" ] && [ "$partial" = "true" ]; then v="warning"; fi
+  printf '%s false %s' "$v" "$partial"
+}
+
+# coverage_facts <gate> <coverage-key> -> "<blocking> <zero>"
+coverage_facts() {
+  case "$2" in
+    full|scoped-out)  printf '0 none' ;;
+    machine-absent)   printf '0 none' ;;   # tool-catalog scope `machine`, and CI unset
+    one-absent|failed|unmeasured-tool|scoped-absent) printf '1 none' ;;
+    all-absent)       if [ "$1" = "security" ]; then printf '1 hard'; else printf '1 soft'; fi ;;
+  esac
+}
+
+# build_report <shape> <findings> <coverage> > file
+build_report() {
+  local shape="$1" f="$2" cov="$3"
+  local closeable both absent='[]' failed='[]' unmeas='[]' skipped='[]' ran=3
+  case "$shape" in
+    solid-drupal) closeable='["phpmd"]';  both='["phpstan","phpmd"]' ;;
+    solid-nextjs) closeable='["madge"]';  both='["madge","eslint"]' ;;
+    dry)          closeable='["phpcpd"]'; both='[]' ;;   # its ONE analyzer
+    *)            closeable='["psalm"]';  both='[]' ;;
+  esac
+  case "$cov" in
+    full)             ;;
+    one-absent)       absent="$closeable" ;;
+    machine-absent)   absent='["semgrep"]' ;;
+    all-absent)       if [ "${shape#solid}" != "$shape" ]; then absent="$both"; else ran=0; fi ;;
+    failed)           failed="$closeable" ;;
+    unmeasured-tool)  unmeas="$closeable" ;;
+    scoped-out)       skipped='["composer_audit","typescript_strict"]' ;;
+    scoped-absent)    skipped='["composer_audit"]'; absent="$closeable" ;;
+  esac
+  case "$shape" in
+    solid-drupal|solid-nextjs)
+      jq -n --arg s "$f" --argjson b "$both" --argjson a "$absent" --argjson fl "$failed" \
+            --argjson u "$unmeas" --argjson sk "$skipped" --argjson r "$ran" \
+        '{status:$s, analyzers_ran:$r, binary_analyzers:$b, tools_absent:$a, tools_failed:$fl,
+          tools_unmeasured:$u, tools_skipped:$sk, generated_at:"2026-08-29T12:00:00Z"}' ;;
+    security-changed)
+      jq -n --arg s "$f" --argjson a "$absent" --argjson fl "$failed" --argjson u "$unmeas" \
+            --argjson sk "$skipped" --argjson r "$ran" \
+        '{meta:{timestamp:"2026-08-29T12:00:00Z", mode:"changed", analyzers_ran:$r,
+                tools_absent:$a, tools_failed:$fl, tools_unmeasured:$u, tools_skipped:$sk},
+          summary:{overall_status:$s, total_issues:0}}' ;;
+    security-whole)
+      jq -n --arg s "$f" --argjson a "$absent" --argjson fl "$failed" --argjson u "$unmeas" \
+        '{meta:{timestamp:"2026-08-29T12:00:00Z", tools_absent:$a, tools_failed:$fl,
+                tools_unmeasured:$u},
+          summary:{overall_status:$s, total_issues:0}}' ;;
+    dry)
+      jq -n --arg s "$f" --argjson a "$absent" \
+        '{mode:"whole-project", measured:true, tools_absent:$a, status:$s, rating:$s,
+          generated_at:"2026-08-29T12:00:00Z"}' ;;
+  esac
+}
+
+# A cell the PRODUCER cannot reach is named with its reason, never quietly omitted.
+# `unreachable <shape> <findings> <coverage>` echoes the reason, or nothing.
+unreachable() {
+  case "$1:$2:$3" in
+    solid-nextjs:partial:*)  printf 'nextjs/solid-check.sh has no --changed mode, so it never emits status "partial"' ;;
+    security-whole:*:all-absent) printf 'the whole-project security emitter carries no analyzers_ran, so its zero-coverage state cannot be expressed' ;;
+    security-whole:*:scoped-out|security-whole:*:scoped-absent) printf 'the whole-project security emitter has no tools_skipped[]: it scans everything, so nothing is scoped out by a diff' ;;
+    security-whole:partial:*) printf 'status "partial" is set only by the --changed path, from files named in the diff but not on disk' ;;
+    dry:*:*) printf '' ;;
+    *) printf '' ;;
+  esac
+}
+
+MATRIX_CELLS=0; MATRIX_UNREACHABLE=0
+MATRIX_FINDINGS_SEEN=""; MATRIX_COVERAGE_SEEN=""
+for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
+  case "$shape" in
+    solid-*)   gate="solid";    FINDINGS="pass warning fail partial unmeasured";        COVS="full one-absent all-absent failed unmeasured-tool scoped-out scoped-absent" ;;
+    security-*) gate="security"; FINDINGS="pass warning fail partial skipped unmeasured"; COVS="full one-absent machine-absent all-absent failed unmeasured-tool scoped-out scoped-absent" ;;
+    dry)       gate="dry";      FINDINGS="pass warning fail partial";                    COVS="full one-absent" ;;
+  esac
+  SHAPE_BAD=""
+  SHAPE_N=0
+  for f in $FINDINGS; do
+    for cov in $COVS; do
+      WHY=$(unreachable "$shape" "$f" "$cov")
+      if [ -n "$WHY" ]; then
+        pass_check "matrix $shape [$f × $cov] is UNREACHABLE from the producer: $WHY"
+        MATRIX_UNREACHABLE=$((MATRIX_UNREACHABLE + 1))
+        continue
+      fi
+      # dry has ONE analyzer, so its only coverage gap is "the analyzer is gone", which is
+      # zero coverage rather than a partial one. Modelled explicitly instead of skipped.
+      if [ "$shape" = "dry" ] && [ "$cov" = "one-absent" ]; then
+        BLOCK_F=1; ZERO_F="hard"
+      else
+        read -r BLOCK_F ZERO_F <<<"$(coverage_facts "$gate" "$cov")"
+      fi
+      read -r WV WU WP <<<"$(contract_expect "$f" "$BLOCK_F" "$ZERO_F")"
+      RPT="${MATRIX_DIR}/${shape}-${f}-${cov}.json"
+      build_report "$shape" "$f" "$cov" > "$RPT"
+      OUT=$(run_resolver 0 "$gate" "$RPT" || true)
+      GV=$(printf '%s' "$OUT" | jq -r '.verdict' 2>/dev/null || echo ERR)
+      GU=$(printf '%s' "$OUT" | jq -r '.unresolved' 2>/dev/null || echo ERR)
+      GP=$(printf '%s' "$OUT" | jq -r '.coverage_partial' 2>/dev/null || echo ERR)
+      MATRIX_CELLS=$((MATRIX_CELLS + 1)); SHAPE_N=$((SHAPE_N + 1))
+      case "$MATRIX_FINDINGS_SEEN" in *" $f "*) ;; *) MATRIX_FINDINGS_SEEN="$MATRIX_FINDINGS_SEEN $f " ;; esac
+      case "$MATRIX_COVERAGE_SEEN" in *" $cov "*) ;; *) MATRIX_COVERAGE_SEEN="$MATRIX_COVERAGE_SEEN $cov " ;; esac
+      if [ "$GV" != "$WV" ] || [ "$GU" != "$WU" ] || [ "$GP" != "$WP" ]; then
+        SHAPE_BAD="${SHAPE_BAD}
+    [$f × $cov] got $GV/$GU/$GP, contract says $WV/$WU/$WP"
+      fi
+    done
+  done
+  # Per-shape floor. The whole-matrix floor below can stay satisfied while ONE shape
+  # collapses to a single column, which is precisely the state the fixture set was in.
+  SHAPE_MIN=8
+  case "$shape" in dry) SHAPE_MIN=8 ;; solid-*) SHAPE_MIN=25 ;; security-*) SHAPE_MIN=20 ;; esac
+  if [ "$SHAPE_N" -lt "$SHAPE_MIN" ]; then
+    fail_check "matrix $shape ran only $SHAPE_N cells, below its floor of $SHAPE_MIN — this shape has stopped being a cross-product and a hole in it is invisible"
+  elif [ -z "$SHAPE_BAD" ]; then
+    pass_check "matrix $shape: all $SHAPE_N reachable findings×coverage cells match the contract"
+  else
+    fail_check "matrix $shape disagrees with the contract on:${SHAPE_BAD}"
+  fi
+done
+
+# The floor. A matrix that stopped covering one of its two axes would go on passing while
+# testing a line instead of a plane, which is the exact state the fixture set was in.
+NF=$(printf '%s' "$MATRIX_FINDINGS_SEEN" | wc -w); NC=$(printf '%s' "$MATRIX_COVERAGE_SEEN" | wc -w)
+if [ "$MATRIX_CELLS" -ge 100 ] && [ "$NF" -ge 5 ] && [ "$NC" -ge 7 ]; then
+  pass_check "matrix floor: $MATRIX_CELLS cells over $NF findings states × $NC coverage states, plus $MATRIX_UNREACHABLE cells named unreachable with a reason"
+else
+  fail_check "matrix floor: only $MATRIX_CELLS cells over $NF findings states and $NC coverage states — it has stopped being a cross-product, and a hole in it is invisible"
+fi
+
 # ==========================================================================================
 # 3. THE DIRECTIONAL PAIR — keyed off the resolver's OUTPUT, not off any file's wording.
 # Getting this backwards ships a false green on every under-covered project, or a false red
@@ -470,7 +749,7 @@ fi
 ORDINARY="dry-whole-warning.json:dry solid-whole-warning.json:solid sec-whole-warning.json:security"
 for pair in $ORDINARY; do
   fx="${pair%%:*}"; gate="${pair##*:}"
-  out=$(bash "$R" "$gate" "${FIX}/${fx}" 2>/dev/null || true)
+  out=$(run_resolver 0 "$gate" "${FIX}/${fx}" || true)
   v=$(printf '%s' "$out" | jq -r '.verdict'); u=$(printf '%s' "$out" | jq -r '.unresolved'); p=$(printf '%s' "$out" | jq -r '.coverage_partial')
   if [ "$v" = "warning" ] && [ "$u" = "false" ] && [ "$p" = "false" ]; then
     pass_check "DIRECTION 1: $gate's ordinary measured warning carries NEITHER marker — it does not block"
@@ -479,10 +758,10 @@ for pair in $ORDINARY; do
   fi
 done
 
-PARTIAL="solid-one-absent.json:solid sec-whole-absent.json:security sec-changed-partial.json:security"
+PARTIAL="solid-one-absent.json:solid sec-whole-absent-closeable.json:security sec-scope-skip-hides-closeable.json:security"
 for pair in $PARTIAL; do
   fx="${pair%%:*}"; gate="${pair##*:}"
-  out=$(bash "$R" "$gate" "${FIX}/${fx}" 2>/dev/null || true)
+  out=$(run_resolver 0 "$gate" "${FIX}/${fx}" || true)
   p=$(printf '%s' "$out" | jq -r '.coverage_partial')
   if [ "$p" = "true" ]; then
     pass_check "DIRECTION 2: $gate's partial coverage ($fx) DOES carry the blocking marker"
@@ -498,7 +777,7 @@ done
 SCOPED="sec-changed-scope-skipped.json:security sec-changed-lock-only.json:security sec-changed-no-eligible.json:security solid-nextjs-js-project.json:solid"
 for pair in $SCOPED; do
   fx="${pair%%:*}"; gate="${pair##*:}"
-  out=$(bash "$R" "$gate" "${FIX}/${fx}" 2>/dev/null || true)
+  out=$(run_resolver 0 "$gate" "${FIX}/${fx}" || true)
   u=$(printf '%s' "$out" | jq -r '.unresolved'); p=$(printf '%s' "$out" | jq -r '.coverage_partial')
   if [ "$u" = "false" ] && [ "$p" = "false" ]; then
     pass_check "DIRECTION 3: $fx is a by-design scope skip and carries NEITHER blocking marker"
@@ -507,14 +786,36 @@ for pair in $SCOPED; do
   fi
 done
 
+# DIRECTION 4: a gap the project cannot close. gitleaks, semgrep and trivy are `machine`
+# in tool-catalog.json — host binaries install-tools.sh has no mechanism for — so on an
+# ordinary developer machine they are absent and blocking on them fails every clean local
+# review. Not blocking is NOT not reporting: the marker is absent, the message is not, and
+# CI flips it to blocking. Both halves are asserted at the same fixture, so a resolver that
+# simply dropped the gap would fail the second.
+MACHINE="sec-whole-absent.json:security sec-changed-partial.json:security sec-scope-skip-hides-absent.json:security"
+for pair in $MACHINE; do
+  fx="${pair%%:*}"; gate="${pair##*:}"
+  out=$(run_resolver 0 "$gate" "${FIX}/${fx}" || true)
+  p_local=$(printf '%s' "$out" | jq -r '.coverage_partial')
+  msg=$(printf '%s' "$out" | jq -r '[.messages[] | select(startswith("coverage_gap_nonblocking:"))] | length')
+  nb=$(printf '%s' "$out" | jq -r '.evidence.coverage_gap.non_blocking | length')
+  out_ci=$(run_resolver 1 "$gate" "${FIX}/${fx}" || true)
+  p_ci=$(printf '%s' "$out_ci" | jq -r '.coverage_partial')
+  if [ "$p_local" = "false" ] && [ "$msg" -ge 1 ] && [ "$nb" -ge 1 ] && [ "$p_ci" = "true" ]; then
+    pass_check "DIRECTION 4: $fx's machine-scope gap does not block locally, IS reported in messages[] and evidence, and DOES block under CI"
+  else
+    fail_check "DIRECTION 4 FAILED: $fx local partial=$p_local (want false), nonblocking messages=$msg (want >=1), evidence names=$nb (want >=1), CI partial=$p_ci (want true). Either an unclosable gap is failing every developer's review, or a real gap is being silently dropped."
+  fi
+done
+
 # The three directions must be DISTINGUISHABLE, not merely all present: if the resolver
 # marked everything, direction 2 would pass while meaning nothing.
-NMARK=$(for pair in $ORDINARY $PARTIAL $SCOPED; do fx="${pair%%:*}"; gate="${pair##*:}";
-  bash "$R" "$gate" "${FIX}/${fx}" 2>/dev/null | jq -r '.coverage_partial'; done | sort | uniq -c | wc -l)
+NMARK=$(for pair in $ORDINARY $PARTIAL $SCOPED $MACHINE; do fx="${pair%%:*}"; gate="${pair##*:}";
+  run_resolver 0 "$gate" "${FIX}/${fx}" | jq -r '.coverage_partial'; done | sort | uniq -c | wc -l)
 if [ "$NMARK" -eq 2 ]; then
-  pass_check "the marker discriminates: some of these ten carry it and some do not"
+  pass_check "the marker discriminates: some of these thirteen carry it and some do not"
 else
-  fail_check "every one of the ten fixtures got the same marker value — it discriminates nothing"
+  fail_check "every one of the thirteen fixtures got the same marker value — it discriminates nothing"
 fi
 
 if [ "$FAIL" = "0" ]; then

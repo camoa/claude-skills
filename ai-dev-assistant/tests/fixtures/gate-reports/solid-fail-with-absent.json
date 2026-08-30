@@ -1,0 +1,10 @@
+{
+  "status": "fail",
+  "analyzers_ran": 2,
+  "binary_analyzers": ["phpstan", "phpmd"],
+  "tools_absent": ["phpmd"],
+  "tools_failed": [],
+  "tools_unmeasured": [],
+  "metrics": {"total_violations": 37, "critical_count": 37},
+  "generated_at": "2026-08-29T12:00:00Z"
+}

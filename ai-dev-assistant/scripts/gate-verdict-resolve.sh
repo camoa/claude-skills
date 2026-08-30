@@ -37,6 +37,10 @@
 #   --not-before T  ISO-8601 UTC. A report generated before T is STALE and unresolved.
 #                   See "Freshness" below. Omit and freshness is reported `unchecked`,
 #                   never assumed.
+#   --tool-catalog P  code-quality-tools' schema/tool-catalog.json, the authority on
+#                   whether a missing tool is one the project can install. Defaults to
+#                   $CQT_TOOL_CATALOG, then a sibling-plugin lookup. Not found ⇒ every gap
+#                   is treated as closeable, which is the fail-closed direction.
 #
 # Output: one JSON object on stdout.
 #   {gate, verdict, unresolved, coverage_partial, measured, mode, messages[], evidence{}}
@@ -124,11 +128,12 @@ GATE="${1:-}"; REPORT="${2:-}"
 case "$GATE" in tdd|solid|dry|security) ;; *) die "unknown gate: $GATE (tdd|solid|dry|security)" ;; esac
 shift || true; shift || true
 
-EXIT_CODE=""; NOT_BEFORE=""
+EXIT_CODE=""; NOT_BEFORE=""; TOOL_CATALOG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --exit-code) EXIT_CODE="${2:-}"; shift 2 || die "--exit-code needs a value" ;;
     --not-before) NOT_BEFORE="${2:-}"; shift 2 || die "--not-before needs a value" ;;
+    --tool-catalog) TOOL_CATALOG="${2:-}"; shift 2 || die "--tool-catalog needs a value" ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -253,6 +258,106 @@ if [ -n "$NOT_BEFORE" ]; then
   fi
 fi
 
+# =========================================================================================
+# THE TWO AXES, AND WHICH COVERAGE GAPS A DEVELOPER CAN ACTUALLY CLOSE.
+#
+# FINDINGS and COVERAGE are independent. A gate answers two questions — what did it find,
+# and how much of its ground did it look at — and the answers do not constrain each other.
+# Every branch below computes them separately and emits once, because writing them as one
+# `case` is how a `fail` came to be reported as a `warning`: the solid branch's partial
+# rung emitted `warning` unconditionally, so phpmd absent plus 37 phpstan errors resolved
+# `warning`, review.md rule 1 never fired, and a single `--skip-dry <reason>` then let rule
+# 3 return `bypassed` and exit 0. A hard failure shipped green, past the rule whose own text
+# says a fail is never masked by another gate's explicit skip.
+#
+#   verdict          comes from the findings axis and NOTHING else. pass/warning/fail.
+#                    The one adjustment: a would-be `pass` with a blocking gap becomes
+#                    `warning`, because a clean result from a half-run gate is not a clean
+#                    result. A `fail` and a `warning` are never softened — they carry
+#                    evidence, and evidence a partial run produced is still evidence.
+#   coverage_partial comes from the coverage axis and NOTHING else.
+#
+# SCOPE. Not every gap is the project's to close, and blocking on one that is not trains
+# the `--skip` habit that makes this whole mechanism worthless — the argument round 3 made
+# and this round nearly undid. `schema/tool-catalog.json` already classifies every tool it
+# installs, so the classification is READ, never restated here; a hardcoded tool list is
+# the bug this branch has now fixed twice.
+#
+#   project / isolated   the project CAN install it. install-tools.sh does exactly that.
+#                        A gap here is closeable, so it BLOCKS.
+#   machine              a host binary (semgrep, gitleaks, trivy). install-tools.sh has no
+#                        mechanism for these, so on an ordinary developer machine they are
+#                        simply absent. Blocking would fire on nearly every local review,
+#                        and security-check.sh's own source says it: "a verdict that fires
+#                        on every run carries no information". Reported, never silently
+#                        dropped, and it BLOCKS when the environment declares CI.
+#   unknown              not in the catalog, or no catalog found. Treated as closeable, so
+#                        the default is fail-CLOSED and a tool nobody classified cannot
+#                        quietly stop blocking.
+#
+# The CI escalation is this repo's own pattern, not a new one: `make lint` skips locally
+# when its linter binary is absent and fails outright when `CI` is set, so a CI step never
+# goes green without checking anything (repo CLAUDE.md, "Neither lint nor validate can pass
+# without doing work").
+#
+# ZERO coverage is NOT scope-aware and blocks whatever the scopes are. Letting a partial
+# gap through is a judgement that the rest of the gate still measured something; there is
+# no rest when nothing ran.
+# =========================================================================================
+
+CATALOG=""
+if [ -n "$TOOL_CATALOG" ]; then
+  CATALOG="$TOOL_CATALOG"
+elif [ -n "${CQT_TOOL_CATALOG:-}" ]; then
+  CATALOG="${CQT_TOOL_CATALOG}"
+else
+  PLUGIN_ROOT="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd || true)"
+  for cand in \
+    "${PLUGIN_ROOT}/../code-quality-tools/skills/code-quality-audit/schema/tool-catalog.json" \
+    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/../code-quality-tools/skills/code-quality-audit/schema/tool-catalog.json"; do
+    if [ -f "$cand" ]; then CATALOG="$cand"; break; fi
+  done
+fi
+SCOPES='{}'
+SCOPE_SOURCE="none — no tool-catalog.json found, so every gap is treated as closeable"
+if [ -n "$CATALOG" ] && [ -f "$CATALOG" ]; then
+  if SCOPES=$(jq -c '.tools | with_entries({key: .key, value: (.value.scope // "unknown")})' "$CATALOG" 2>/dev/null) \
+     && [ -n "$SCOPES" ]; then
+    SCOPE_SOURCE="$CATALOG"
+  else
+    SCOPES='{}'
+    SCOPE_SOURCE="$CATALOG (unreadable — every gap is treated as closeable)"
+  fi
+fi
+CI_DECLARED=false
+if [ -n "${CI:-}" ]; then CI_DECLARED=true; fi
+
+# classify_gap <json array of tool names>
+# Sets GAP_BLOCKING and GAP_NONBLOCKING, both JSON arrays. Their union is the input.
+GAP_BLOCKING='[]'; GAP_NONBLOCKING='[]'
+classify_gap() {
+  GAP_BLOCKING=$(printf '%s' "$1" | jq -c --argjson s "$SCOPES" --argjson ci "$CI_DECLARED" \
+    '[ .[] | select($ci or (($s[.] // "unknown") != "machine")) ]' 2>/dev/null || printf '%s' "$1")
+  GAP_NONBLOCKING=$(printf '%s' "$1" | jq -c --argjson s "$SCOPES" --argjson ci "$CI_DECLARED" \
+    '[ .[] | select(($ci | not) and (($s[.] // "unknown") == "machine")) ]' 2>/dev/null || printf '[]')
+}
+
+# The evidence every gate attaches, so a reader can see what was and was not held against
+# the review and why, without re-deriving the scope rule.
+coverage_evidence() {
+  jq -n --argjson b "$GAP_BLOCKING" --argjson n "$GAP_NONBLOCKING" \
+        --arg src "$SCOPE_SOURCE" --argjson ci "$CI_DECLARED" \
+    '{blocking:$b, non_blocking:$n, scope_source:$src, ci:$ci}'
+}
+
+# The message that keeps a non-blocking gap VISIBLE. Not blocking is not the same as not
+# reporting: part of the gate did not run, the review summary and _review.json both say so,
+# and the marker prefix is stable so a reader can grep for it.
+nonblocking_message() {
+  printf 'coverage_gap_nonblocking: %s — host tools this project cannot install (tool-catalog scope `machine`); reported, not blocking. Set CI to make them block.' \
+    "$(printf '%s' "$GAP_NONBLOCKING" | jq -r 'join(", ")')"
+}
+
 case "$GATE" in
 
   # --------------------------------------------------------------------------------- dry
@@ -287,16 +392,35 @@ case "$GATE" in
     if [ "$STATUS" = "unmeasured" ] || [ "$RATING" = "unmeasured" ] || [ "$MEASURED" = "false" ]; then
       unresolved_out "dry: the report says nothing was measured (status=$STATUS, measured=$MEASURED)" "$MODE" "$EV"
     fi
+    # The gate's ONE analyzer is gone, so nothing was measured. Not scope-aware: phpcpd is
+    # `isolated` and jscpd `project`, both installable, and in any case a gate with a
+    # single analyzer has no partial state to be lenient about — this is zero coverage.
     if [ "$SKIP" = "tool_absent" ] || printf '%s' "$ABSENT" | grep -q 'phpcpd'; then
       unresolved_out "dry: phpcpd absent (${SKIP:-tools_absent}) — it is this gate's only analyzer, so duplication was not measured" "$MODE" "$EV"
     fi
+    if [ "$STATUS" = "skipped" ]; then
+      unresolved_out "dry: the gate skipped without measuring (status=skipped)" "$MODE" "$EV"
+    fi
+    # ---- AXIS 1: findings. ---- AXIS 2: coverage, whose ONLY source here is `partial`,
+    # the producer's word for "some changed files were not on disk". Written as two axes
+    # like its neighbours even though this gate has one analyzer, so the shape that let a
+    # solid `fail` resolve to `warning` cannot appear here later.
     case "$STATUS" in
-      pass)    emit pass    false false true "$MODE" "$EV" "dry: duplication measured and within target" ;;
-      warning) emit warning false false true "$MODE" "$EV" "dry: duplication over the soft target (rating=$RATING) — a full measurement, not a coverage gap" ;;
-      partial) emit warning false true  true "$MODE" "$EV" "dry: some changed files were not on disk, so part of the change was not read" ;;
-      fail)    emit fail    false false true "$MODE" "$EV" "dry: duplication over the hard threshold (rating=$RATING)" ;;
-      skipped) unresolved_out "dry: the gate skipped without measuring (status=skipped)" "$MODE" "$EV" ;;
-      *)       unresolved_out "dry: unrecognised status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+      pass|partial) V="pass" ;;
+      warning)      V="warning" ;;
+      fail)         V="fail" ;;
+      *)            unresolved_out "dry: unrecognised status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+    esac
+    PARTIAL=false
+    if [ "$STATUS" = "partial" ]; then PARTIAL=true; fi
+    if [ "$V" = "pass" ] && [ "$PARTIAL" = "true" ]; then V="warning"; fi
+    case "${V}:${PARTIAL}" in
+      pass:false)    emit pass    false false true "$MODE" "$EV" "dry: duplication measured and within target" ;;
+      warning:false) emit warning false false true "$MODE" "$EV" "dry: duplication over the soft target (rating=$RATING) — a full measurement, not a coverage gap" ;;
+      warning:true)  emit warning false true  true "$MODE" "$EV" "dry: some changed files were not on disk, so part of the change was not read" ;;
+      fail:false)    emit fail    false false true "$MODE" "$EV" "dry: duplication over the hard threshold (rating=$RATING)" ;;
+      fail:true)     emit fail    false true  true "$MODE" "$EV" "dry: duplication over the hard threshold (rating=$RATING), AND some changed files were not on disk" ;;
+      *)             unresolved_out "dry: internal — no rule for verdict=$V partial=$PARTIAL" "$MODE" "$EV" ;;
     esac
     ;;
 
@@ -328,51 +452,75 @@ case "$GATE" in
     NBIN=$(printf '%s' "$BINARY" | jq 'length')
     MISSING=$(printf '%s' "$GONE" | jq -c --argjson b "$BINARY" '[.[] | select(. as $x | $b | index($x))]')
     NMISS=$(printf '%s' "$MISSING" | jq 'length')
+    classify_gap "$GONE"
+    NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
+    NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
     EV=$(jq -n --arg s "$STATUS" --arg r "${RAN:-unset}" --argjson g "$GONE" --argjson m "$MISSING" \
                --argjson b "$BINARY" --arg h "$HAVE_LISTS" --arg f "$FRESH" \
+               --argjson cov "$(coverage_evidence)" \
          '{status:$s, analyzers_ran:$r, unavailable:$g, binary_analyzers:$b,
-           binary_analyzers_missing:$m, tool_lists:$h, freshness:$f}')
+           binary_analyzers_missing:$m, tool_lists:$h, freshness:$f, coverage_gap:$cov}')
     if [ -z "$STATUS" ]; then
       unresolved_out "solid: report has no .status — shape not recognised" "$MODE" "$EV"
     fi
     if [ "$STATUS" = "unmeasured" ]; then
       unresolved_out "solid: the report says nothing was measured" "$MODE" "$EV"
     fi
-    # No tool lists at all — the Next.js emitter. Coverage CANNOT BE DETERMINED, which is
-    # not the same as nothing having run: treating it as zero coverage would put every
-    # healthy Next.js project on a false red.
-    if [ "$HAVE_LISTS" = "no" ]; then
-      case "$STATUS" in
-        pass)    emit pass    false false true "$MODE" "$EV" "solid: measured; this report carries no tool lists, so coverage is undetermined, not assumed complete" ;;
-        warning|partial) emit warning false false true "$MODE" "$EV" "solid: findings over the soft threshold; coverage undetermined (report carries no tool lists)" ;;
-        fail)    emit fail    false false true "$MODE" "$EV" "solid: findings over the hard threshold" ;;
-        *)       unresolved_out "solid: unrecognised status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
-      esac
+    if [ "$STATUS" = "skipped" ]; then
+      unresolved_out "solid: the gate skipped without measuring" "$MODE" "$EV"
     fi
-    # EVERY analyzer that needs installing is gone, so whatever `analyzers_ran` says was
-    # produced by the checks that need nothing installed. Compared against the producer's
-    # own count, not against the number 2 — a gate that grows a third binary analyzer must
-    # not quietly start passing with two of them missing.
-    if [ "$NBIN" -gt 0 ] && [ "$NMISS" -ge "$NBIN" ]; then
-      unresolved_out "solid: every binary analyzer is unavailable ($(printf '%s' "$MISSING" | jq -r 'join(", ")')) — only the checks that need no binary ran" "$MODE" "$EV"
-    fi
-    # Lists are present but the producer named no binary analyzers, so "did they all go
-    # missing?" cannot be asked. Anything unavailable is still partial coverage; the point
-    # is that this branch never reaches a pass by failing to find a contradiction.
-    if [ "$NBIN" -eq 0 ] && [ "$(printf '%s' "$GONE" | jq 'length')" -gt 0 ]; then
-      WHAT=$(printf '%s' "$GONE" | jq -r 'join(", ")')
-      emit warning false true true "$MODE" "$EV" "solid: layers unavailable ($WHAT), and the report declares no binary_analyzers[], so how much of the gate that is cannot be determined"
-    fi
-    if [ "$NMISS" -ge 1 ] || [ "$STATUS" = "partial" ]; then
-      WHAT=$(printf '%s' "$MISSING" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
-      emit warning false true true "$MODE" "$EV" "solid: measured with part of the gate unavailable ($WHAT)"
-    fi
+
+    # ---- AXIS 1: findings. From `.status` and nothing else.
     case "$STATUS" in
-      pass)    emit pass    false false true "$MODE" "$EV" "solid: every analyzer ran and nothing exceeded a threshold" ;;
-      warning) emit warning false false true "$MODE" "$EV" "solid: findings over the soft threshold with every analyzer present — a full measurement, not a coverage gap" ;;
-      fail)    emit fail    false false true "$MODE" "$EV" "solid: findings over the hard threshold" ;;
-      skipped) unresolved_out "solid: the gate skipped without measuring" "$MODE" "$EV" ;;
-      *)       unresolved_out "solid: unrecognised status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+      pass|partial) V="pass" ;;   # `partial` is the producer's no-findings coverage state
+      warning)      V="warning" ;;
+      fail)         V="fail" ;;
+      *)            unresolved_out "solid: unrecognised status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+    esac
+
+    # ---- AXIS 2: coverage. From the tool lists and nothing else.
+    #
+    # ZERO: every analyzer that needs installing is gone, so whatever `analyzers_ran` says
+    # was produced by the checks that need nothing installed. Against the producer's own
+    # count, never the number 2 — a gate that grows a third binary analyzer must not
+    # quietly start passing with two of them missing. Not scope-aware: letting a gap
+    # through is a judgement that the rest of the gate still measured something.
+    ZERO=false
+    if [ "$NBIN" -gt 0 ] && [ "$NMISS" -ge "$NBIN" ]; then ZERO=true; fi
+    PARTIAL=false
+    if [ "$NBLOCK" -gt 0 ] || [ "$STATUS" = "partial" ]; then PARTIAL=true; fi
+    # Lists present but the producer named no binary analyzers, so "did they all go
+    # missing?" cannot be asked. Whatever is unavailable is still a gap; the point is that
+    # this never reaches a pass by failing to find a contradiction.
+    UNDETERMINED=false
+    if [ "$HAVE_LISTS" = "no" ]; then UNDETERMINED=true; fi
+
+    MSGS=()
+    if [ "$UNDETERMINED" = "true" ]; then
+      MSGS+=("solid: this report carries no tool lists, so coverage is undetermined, not assumed complete")
+    fi
+    if [ "$NNONBLOCK" -gt 0 ]; then MSGS+=("$(nonblocking_message)"); fi
+
+    # ---- COMBINE. The two axes meet here, once.
+    #
+    # A `fail` or a `warning` is never softened by a coverage gap: it carries findings, and
+    # findings a partial run produced are still findings. Only a would-be `pass` moves,
+    # because a clean result from a half-run gate is not a clean result. Writing this as
+    # one `case` over `.status` is what let `fail` + phpmd-absent resolve to `warning`.
+    if [ "$ZERO" = "true" ] && [ "$V" = "pass" ]; then
+      unresolved_out "solid: every binary analyzer is unavailable ($(printf '%s' "$MISSING" | jq -r 'join(", ")')) — only the checks that need no binary ran, so a clean result is not evidence" "$MODE" "$EV"
+    fi
+    if [ "$ZERO" = "true" ]; then PARTIAL=true; fi
+    if [ "$V" = "pass" ] && [ "$PARTIAL" = "true" ]; then V="warning"; fi
+
+    WHAT=$(printf '%s' "$GAP_BLOCKING" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
+    case "${V}:${PARTIAL}" in
+      pass:false)    emit pass    false false true "$MODE" "$EV" "solid: every analyzer ran and nothing exceeded a threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:false) emit warning false false true "$MODE" "$EV" "solid: findings over the soft threshold with every analyzer present — a full measurement, not a coverage gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:true)  emit warning false true  true "$MODE" "$EV" "solid: measured with part of the gate unavailable ($WHAT)" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:false)    emit fail    false false true "$MODE" "$EV" "solid: findings over the hard threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:true)     emit fail    false true  true "$MODE" "$EV" "solid: findings over the hard threshold, AND part of the gate did not run ($WHAT) — the fail is not softened by the gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      *)             unresolved_out "solid: internal — no rule for verdict=$V partial=$PARTIAL" "$MODE" "$EV" ;;
     esac
     ;;
 
@@ -410,10 +558,15 @@ case "$GATE" in
     # putting three different facts in it.
     GONE=$(jqc '((.meta.tools_absent // []) + (.meta.tools_failed // []) + (.meta.tools_unmeasured // [])) | unique')
     SKIPPED_BY_DESIGN=$(jqc '.meta.tools_skipped // []')
+    NGONE=$((NABS + NFAIL + NUNM))
+    classify_gap "$GONE"
+    NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
+    NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
     EV=$(jq -n --arg s "$STATUS" --arg r "$RAN" --argjson g "$GONE" --argjson sk "$SKIPPED_BY_DESIGN" \
                --arg sr "$SKIP_REASON" --arg m "$MODE" --arg f "$FRESH" \
+               --argjson cov "$(coverage_evidence)" \
          '{overall_status:$s, analyzers_ran:$r, unavailable:$g, skipped_by_design:$sk,
-           skip_reason:$sr, mode:$m, freshness:$f}')
+           skip_reason:$sr, mode:$m, freshness:$f, coverage_gap:$cov}')
     if [ -z "$STATUS" ]; then
       unresolved_out "security: report has no .summary.overall_status — shape not recognised (there is no top-level .status in this gate)" "$MODE" "$EV"
     fi
@@ -425,7 +578,17 @@ case "$GATE" in
     # Reported `skipped` with unresolved FALSE: benign per review.md step 8 rule 5, which
     # defines benign by exclusion — not unresolved, no coverage_partial marker, not a
     # fail. Fail-closing here would red every documentation pull request.
+    #
+    # THE COVERAGE LISTS ARE READ FIRST. This branch used to sit above them and
+    # short-circuit, so a report carrying this skip reason AND `tools_failed: ["psalm"]`
+    # resolved benign with no markers at all. Only the current producer's hardcoded empty
+    # lists kept that latent, and the premise of this file is that a producer is checked,
+    # not trusted. A scope skip claims nothing was denied anything; a non-empty coverage
+    # list is that claim contradicting itself, and the contradiction is unresolved.
     if [ "$STATUS" = "skipped" ] && [ "$SKIP_REASON" = "no_eligible_changes" ]; then
+      if [ "$NGONE" -gt 0 ]; then
+        unresolved_out "security: the report claims nothing was in scope (skip_reason=no_eligible_changes) while naming $NGONE layer(s) that did not produce ($(printf '%s' "$GONE" | jq -r 'join(", ")')) — a scope skip denies no layer anything, so this report contradicts itself" "$MODE" "$EV"
+      fi
       emit skipped false false false "$MODE" "$EV" "security: nothing in the changed set is in this gate's scope — no layer was denied anything, so this is not a coverage gap"
     fi
     if [ "$RAN" != "null" ] && [ "$RAN" = "0" ]; then
@@ -435,18 +598,29 @@ case "$GATE" in
       unmeasured) unresolved_out "security: the report says nothing was measured" "$MODE" "$EV" ;;
       skipped)    unresolved_out "security: zero findings, but installed tools returned nothing usable ($(printf '%s' "$GONE" | jq -r 'join(", ")')) — that is not evidence of a clean tree" "$MODE" "$EV" ;;
     esac
-    if [ "$((NABS + NFAIL + NUNM))" -gt 0 ] || [ "$STATUS" = "partial" ]; then
-      WHAT=$(printf '%s' "$GONE" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
-      case "$STATUS" in
-        fail) emit fail false true true "$MODE" "$EV" "security: findings over the hard threshold, AND part of the scan did not run ($WHAT)" ;;
-        *)    emit warning false true true "$MODE" "$EV" "security: scanned with layers unavailable ($WHAT) — those layers found nothing because they did not look" ;;
-      esac
-    fi
+
+    # ---- AXIS 1: findings.
     case "$STATUS" in
-      pass)    emit pass    false false true "$MODE" "$EV" "security: every layer ran and found nothing over threshold" ;;
-      warning) emit warning false false true "$MODE" "$EV" "security: findings over the soft threshold with every layer present — a full measurement, not a coverage gap" ;;
-      fail)    emit fail    false false true "$MODE" "$EV" "security: findings over the hard threshold" ;;
-      *)       unresolved_out "security: unrecognised overall_status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+      pass|partial) V="pass" ;;
+      warning)      V="warning" ;;
+      fail)         V="fail" ;;
+      *)            unresolved_out "security: unrecognised overall_status '$STATUS' — refusing to guess" "$MODE" "$EV" ;;
+    esac
+    # ---- AXIS 2: coverage.
+    PARTIAL=false
+    if [ "$NBLOCK" -gt 0 ] || [ "$STATUS" = "partial" ]; then PARTIAL=true; fi
+    MSGS=()
+    if [ "$NNONBLOCK" -gt 0 ]; then MSGS+=("$(nonblocking_message)"); fi
+    # ---- COMBINE, once.
+    if [ "$V" = "pass" ] && [ "$PARTIAL" = "true" ]; then V="warning"; fi
+    WHAT=$(printf '%s' "$GAP_BLOCKING" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
+    case "${V}:${PARTIAL}" in
+      pass:false)    emit pass    false false true "$MODE" "$EV" "security: every layer ran and found nothing over threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:false) emit warning false false true "$MODE" "$EV" "security: findings over the soft threshold with every layer present — a full measurement, not a coverage gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:true)  emit warning false true  true "$MODE" "$EV" "security: scanned with layers unavailable ($WHAT) — those layers found nothing because they did not look" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:false)    emit fail    false false true "$MODE" "$EV" "security: findings over the hard threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:true)     emit fail    false true  true "$MODE" "$EV" "security: findings over the hard threshold, AND part of the scan did not run ($WHAT)" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      *)             unresolved_out "security: internal — no rule for verdict=$V partial=$PARTIAL" "$MODE" "$EV" ;;
     esac
     ;;
 esac

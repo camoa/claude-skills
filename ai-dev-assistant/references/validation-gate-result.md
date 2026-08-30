@@ -161,6 +161,49 @@ A gate that ran SOME of its analyzers is a different state from both a clean run
 and an unresolved one: `warning`, naming what went unchecked, never `pass` and
 never `unresolved`. A partial measurement is still a measurement.
 
+**Findings and coverage are TWO AXES, resolved separately.** The verdict comes
+from what the gate found; the marker comes from how much of its ground it looked
+at; and neither constrains the other. A `pass` with a blocking gap becomes
+`warning`, because a clean result from a half-run gate is not a clean result. A
+`warning` and a `fail` are never softened — findings a partial run produced are
+still findings — and they carry the marker alongside, so both facts reach the
+review. Writing the two as one `case` over the gate's status is not a style
+choice: it is how a hard SOLID `fail` with phpmd absent came to resolve as
+`warning`, so `review.md` rule 1 never fired and a single `--skip-dry <reason>`
+let rule 3 return `bypassed` and exit 0 under `--headless`.
+
+**Not every gap is the project's to close, and blocking on one that is not
+trains the `--skip` habit this whole mechanism depends on people not having.**
+`code-quality-tools`' `schema/tool-catalog.json` classifies every tool it
+installs, and `gate-verdict-resolve.sh` READS that classification rather than
+carrying a tool list of its own — a hardcoded list is the bug this area has
+fixed twice. A `project`- or `isolated`-scope gap is closeable by
+`install-tools.sh`, so it blocks. A `machine`-scope gap (semgrep, gitleaks,
+trivy) is a host binary the installer has no mechanism for, so on an ordinary
+developer machine it is simply absent; blocking there fires on nearly every
+local review, and `security-check.sh`'s own source names the consequence: "a
+verdict that fires on every run carries no information". A tool the catalog does
+not classify, or no catalog at all, is treated as closeable — the fail-closed
+direction. Pass the catalog with `--tool-catalog`; the wrappers already have the
+plugin path from `plugin-dep-check.sh`.
+
+**A gap that does not block is still REPORTED.** Not blocking is not the same as
+not reporting. The gate emits a `coverage_gap_nonblocking: <tools>` line in
+`messages[]` and the full split in `evidence.coverage_gap`
+(`{blocking[], non_blocking[], scope_source, ci}`), both of which reach the
+review summary and `_review.json` unedited. Part of the gate did not run, and a
+reader has to be able to see that without re-deriving the scope rule.
+
+**CI escalates it.** With the `CI` environment variable set, a `machine`-scope
+gap blocks like any other. This is the repo's own pattern rather than a new one:
+`make lint` skips when shellcheck is missing locally and fails outright under
+`CI`, so a CI step never goes green without checking anything.
+
+**Zero coverage is NOT scope-aware.** Letting a partial gap through is a
+judgement that the rest of the gate still measured something; there is no rest
+when nothing ran, so an all-analyzers-gone run is `unresolved` whatever the
+scopes say.
+
 **The marker.** The literal string `coverage_partial: true` in one of the
 envelope's `messages[]` entries, alongside a message naming which analyzers were
 absent, crashed or had nothing to read. Same shape as `unresolved: true`, same
