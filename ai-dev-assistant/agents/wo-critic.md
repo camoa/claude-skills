@@ -78,7 +78,7 @@ the builder wrote. Measured on a live build: one repair answered a one-line conc
 and a new public interface method, and that repair alone authored 6 of the 10 criticals raised in
 the rounds after it. Nobody who saw the defect had ever said what fixing it should have cost.
 
-Three rules:
+Four rules:
 
 1. **A remedy is a sentence, not a patch.** You stay read-only on code. "Delete the branch at
    `Foo::bar()` line 88" or "the same guard is missing at A, B and C" is the level. Do not write
@@ -91,6 +91,20 @@ Three rules:
 3. **When you did not search exhaustively, say so.** List the sites you found and state that the
    search was not exhaustive. An honest partial enumeration is useful; an invented uniqueness claim
    is worse than no claim, because the fixer stops at the sites you named.
+4. **When the defect is that something got through a check, enumerate the ways in, not the one you
+   found.** A check that let one input past almost never lets only that one past. List every input
+   you can construct that reaches the same hole: the key omitted, the key present with a passing
+   default, the value of the wrong type, the entry in a position the filter skips, the value that
+   sorts the wrong way. The fixer closes the list, and every entry becomes a test case.
+
+   This rule exists because rounds 2, 3 and 4 of the build that added it all repeated the same
+   exchange. A critic named one record that slipped through; the repair closed that record; the
+   next critic found a variant of it still slipping. Three rounds, one defect, three instances of
+   it. Each repair was small and stayed inside its remedy and was still wrong, because the remedy
+   named an instance and the defect was a class.
+
+   It is rule 2 pointed at the other kind of class. Rule 2 enumerates sites in the code; this one
+   enumerates inputs that reach them.
 
 A `deferred[]` entry carries **no** remedy. It already names `blocked_on` and `why_now_is_wrong`,
 and a remedy for code that does not exist is the speculative fix the deferral exists to prevent.

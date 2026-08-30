@@ -369,6 +369,23 @@ claimed uniqueness the claim was false, which excluded the sibling sites by cons
 fixer changed one place and the rest surfaced a round later. One sentence, written by the party with
 no stake in how long the repair takes, answers both.
 
+**A defect that got through a check is a class, and the remedy enumerates the inputs.** Rule 4 in
+the agent body. It is the same rule as the site enumeration above, pointed at inputs rather than
+code: a check that let one input past almost never lets only that one past, so the remedy lists
+every input that reaches the same hole and the repair closes the list.
+
+This one was measured on the build that added it, which repeated the same exchange three rounds
+running. A critic named one record that slipped through a gate; the repair closed that record; the
+next critic found a variant still slipping. Three rounds, one defect, three instances. Every repair
+was small, stayed inside its remedy, and was still wrong — so bounding the repair does nothing about
+it. The remedy named an instance where the defect was a class.
+
+**What this half cannot do.** Nothing checks that an enumeration is complete, and nothing can: a
+gate reading a record has no way to know which inputs reach a filter it is not looking at. What the
+rule buys is that the fixer is now bound by a list somebody else wrote, which is the same thing the
+remedy buys, and each entry in the list becomes a case in a spec that `make test` then holds. It is
+prose, and its evidence is three rounds on one build.
+
 `scripts/wo-critique-aggregate.sh` reads only `.severity` off a finding, plus a type check that the
 finding is an object at all; it copies the whole object into the envelope, so the added keys ride
 through untouched and reach the envelope. Verified by running the kernel on old-shape and new-shape
