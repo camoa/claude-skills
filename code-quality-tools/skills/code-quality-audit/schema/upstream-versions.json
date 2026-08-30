@@ -28,14 +28,13 @@
     "used to call them abandoned, and `abandoned` is a Composer field this file records",
     "rather than a judgement the prose makes."
   ],
-
   "packages": {
     "phpstan/phpstan": {
-      "version": "2.2.9",
-      "released": "2026-08-22",
+      "version": "2.2.10",
+      "released": "2026-08-30",
       "php": "^7.4|^8.0",
       "abandoned": false,
-      "checked": "2026-08-28"
+      "checked": "2026-08-30"
     },
     "phpstan/extension-installer": {
       "version": "1.4.3",
