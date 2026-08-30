@@ -46,6 +46,16 @@
 # fields against the wrong record, which is the match-for-an-unrelated-reason failure this file already
 # documents twice.
 #
+# The fifth group is the other direction, and it is a FALSE RED rather than a false green. Every rule
+# above makes silence fail closed, which is right for an agent that was asked and could not answer and
+# wrong for an input that was never there. Step 5.0 shipped `architecture-fit` as a hard-block
+# `gates_run[]` entry with no case for a task that has no `architecture/main.md`: the agent's own
+# "never guess `proceed`" rule then leaves it `unresolved`, and rule 2 fails a review that passed the
+# release before, for a document nobody promised. Step 5.0d has always had the equivalent for
+# `alignment.md`. Both sides are derived — the DOCUMENT off the agent's own body, the benign path
+# demanded within a window of it in both the agent and the dispatch site — so the asymmetry that made
+# this reachable is now the thing being compared, rather than each half being read on its own.
+#
 # Exit 0 on all-pass; 1 on any fail.
 
 set -eu
@@ -97,7 +107,7 @@ for path in sorted(glob.glob('agents/*.md')):
             paths.add(tok)
     sidecar_agents[name] = {
         'file': path, 'tools': tools, 'disallowed': disallowed,
-        'matchers': matchers, 'paths': sorted(paths),
+        'matchers': matchers, 'paths': sorted(paths), 'body': body,
     }
 
 print("CLASS %d" % len(sidecar_agents))
@@ -205,6 +215,59 @@ for rec in sorted(records):
     elif not re.search(r'(?<![_a-z])no_return\b', by_file[rec][1]):
         print("NOSTATEFIELD %s %s" % (rec, by_file[rec][0].split()[0]))
 print("BINDINGS %d" % len(records))
+
+# ---- 5. A dispatched agent's REQUIRED input can be absent, and both sides must call that benign.
+#
+# `no_return` and `unresolved` are fail-closed on purpose: an agent that was asked and could not
+# answer must not read as an agent that found nothing. A MISSING INPUT is the other fact, and it
+# needs its own name or the fail-closed rule swallows it. Step 5.0d has always had one — no
+# `alignment.md` is a benign, non-`unresolved` skip — and step 5.0 shipped its hard-block
+# `gates_run[]` entry with no equivalent, so a task that never ran `/design` hit the agent's
+# "never guess `proceed`" rule, came back `unresolved`, and hard-failed a review that passed the
+# release before. A false red, not a false green, and invisible to every assertion above.
+#
+# BOTH SIDES ARE DERIVED. The DOCUMENT comes from the agent's own body — the file it is told to
+# Read, or a bullet under its `## Inputs` heading — with anything qualified "if present" dropped,
+# because an optional input needs no benign path. Framework docs (`references/`, `skills/`, …) are
+# not task inputs and are excluded by prefix. Then the agent's contract and the dispatch site must
+# BOTH tie that document's absence to a benign state, within a window rather than merely somewhere
+# in the file: `benign` a thousand characters away from the document it is about is not an
+# assertion. Add a required input to a dispatched agent and it is checked on the next run.
+def required_inputs(body):
+    found, in_inputs = set(), False
+    for line in body.split('\n'):
+        if line.startswith('## '):
+            in_inputs = line.lower().startswith('## inputs')
+            continue
+        if not (in_inputs or re.search(r'\b(?:Read|Load)\b', line)):
+            continue
+        if re.search(r'if present|if it exists|optional', line, re.I):
+            continue
+        for tok in re.findall(r'`([A-Za-z0-9_./<>-]+\.md)`', line):
+            if re.match(r'^(?:references|agents|skills|commands|scripts|templates)/', tok):
+                continue
+            found.add(tok)
+    return sorted(found)
+
+ABSENT_RE = r'absent|does not exist|missing|not present|no such'
+pairs = 0
+for name in sorted(dispatched):
+    body = sidecar_agents[name]['body']
+    for doc in required_inputs(body):
+        pairs += 1
+        if not any(re.search(ABSENT_RE, w, re.I) and re.search(r'benign|skipped', w, re.I)
+                   for w in (body[max(0, m.start() - 300):m.end() + 300]
+                             for m in re.finditer(re.escape(doc), body))):
+            print("AGENTNOBENIGN %s %s" % (name, doc))
+        # The window must NEGATE `unresolved`, not merely contain the word: every one of these
+        # paragraphs mentions it, so matching the bare token asserts nothing.
+        if not any(re.search(r'benign', w, re.I)
+                   and re.search(r'(?:not|non-?|never|without)[^\n]{0,40}unresolved', w, re.I)
+                   for w in (review[m.end():m.end() + 300]
+                             for m in re.finditer(r'(?:no|absent|missing|without)\s*[`*]*'
+                                                  + re.escape(doc), review, re.I))):
+            print("REVIEWNOBENIGN %s %s" % (name, doc))
+print("INPUTS %d" % pairs)
 PY
 )
 
@@ -213,6 +276,7 @@ count() { printf '%s' "$OUT" | grep "^$1 " | awk '{print $2}'; }
 NCLASS=$(count CLASS); NDISPATCHED=$(count DISPATCHED)
 NPATHS=$(count PATHS); NOWNLINES=$(count OWNLINES); NOWNREFS=$(count OWNREFS)
 NENUM=$(count ENUM); NMANDATED=$(count MANDATED); NBINDINGS=$(count BINDINGS)
+NINPUTS=$(count INPUTS)
 
 # --- the derivation must have found something -------------------------------------------
 # Every group below passes trivially on an empty derivation, which is the failure mode this
@@ -301,6 +365,27 @@ else
       UNDEFINEDNAME) fail_check "commands/review.md mandates a \`gates_run[]\` entry named \`$2\` that the §5.8 \`gates_run[].name\` enum does not list. A consumer reading the schema does not know the entry exists, and \`gate_type\` being enum-bound is a stated invariant." ;;
       NOSECTION)     fail_check "commands/review.md records an absent-sidecar state into \`$2\` and gate-audit-schema.md declares no section for that audit file — the record it names is undefined." ;;
       NOSTATEFIELD)  fail_check "commands/review.md says the absent-sidecar reason is recorded in \`$2\`, and §$3 defines that record's fields without a \`no_return\` one. §5.12 says it best: an undefined key is where an observation goes to be lost." ;;
+    esac
+  done <<< "$BAD"
+fi
+
+# --- group 5: a required input that is absent is a benign skip on BOTH sides -------------
+if [ "${NINPUTS:-0}" -ge 2 ]; then
+  pass_check "$NINPUTS required task input(s) derived from the dispatched agents' own bodies"
+else
+  fail_check "derived ${NINPUTS:-0} required task input(s) from the dispatched agents — below the two gate agents' own documents (\`architecture/main.md\`, \`alignment.md\`), so this group could not have failed on anything"
+fi
+
+BAD=$(printf '%s' "$OUT" | grep -E '^(AGENTNOBENIGN|REVIEWNOBENIGN) ' || true)
+if [ -z "$BAD" ]; then
+  pass_check "each dispatched agent's required input has a benign, non-unresolved missing path on both sides"
+else
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    set -- $l
+    case "$1" in
+      AGENTNOBENIGN)  fail_check "agents/$2.md is told to read \`$3\` and never says what to return when it is not there. Its own contract says never to guess \`proceed\`, so the honest fallback left to it is \`unresolved\` — which /review fails closed." ;;
+      REVIEWNOBENIGN) fail_check "commands/review.md dispatches $2 against \`$3\` and defines no benign, non-\`unresolved\` outcome for that document being absent. A task that never produced it is a legitimate state; without this case its hard-block gate reds a review that passed before the gate existed." ;;
     esac
   done <<< "$BAD"
 fi

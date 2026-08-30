@@ -64,7 +64,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 ## Process
 
 1. **Read the injected recipe.** If the command injected a `=== RESOLVED RECIPE ... ===` block, that is your framework-specific check set. Follow it.
-2. **Load the architecture.** Read `architecture/main.md` and the relevant component files.
+2. **Load the architecture.** Read `architecture/main.md` and the relevant component files. **If it does not exist, stop and return `verdict: "skipped"`** with the reason (see the verdict enum below). A task that never ran `/design` has no architecture to fit; that is a legitimate state, not a gate you could not evaluate.
 3. **Understand the change.** Review what was implemented (the diff or the named component/file).
 4. **Check pattern match.** Does the approach use the documented patterns and dependencies?
 5. **Run all five gates.** SOLID, Library-First/CLI-First principles, DRY, TDD, Security — apply the recipe's concrete rules where injected, the stack-neutral checks below otherwise.
@@ -161,7 +161,7 @@ exactly this JSON to it, and write it *before* composing the markdown report bel
 ```json
 { "agent": "architecture-validator",
   "framework": "<the framework key whose recipe was injected, or null>",
-  "verdict": "proceed | blocked | needs_adjustment | unresolved",
+  "verdict": "proceed | blocked | needs_adjustment | unresolved | skipped",
   "findings": [ { "severity": "blocking | warning",
                   "gate": "architecture-fit | library-first | solid | dry | tdd | security | purposefulness",
                   "text": "<specific, evidence-anchored — the code or behavior, not a vibe>" } ] }
@@ -170,6 +170,13 @@ exactly this JSON to it, and write it *before* composing the markdown report bel
 - `verdict` maps one-to-one onto the `### Status` line below: `blocked` = BLOCKED, `needs_adjustment` =
   NEEDS ADJUSTMENT, `proceed` = APPROVED. `unresolved` is for a gate you genuinely could not evaluate —
   **never guess `proceed`**, and never soften a blocking failure into a warning to keep a sidecar tidy.
+- **`skipped` is for a MISSING INPUT, and it is not `unresolved`.** When `architecture/main.md` does
+  not exist there is no architecture to fit, so return `skipped` and say so in the reason. That is a
+  fact about the task, not about your ability to look: a task that never ran `/design` is a legitimate
+  state, and `/review` step 5.0 treats an all-`skipped` result as a benign skip that does not block.
+  `unresolved` means you were asked a question about a document that exists and could not answer it.
+  Keep the two apart in both directions — do **not** return `skipped` because a check was hard to run,
+  and do **not** return `unresolved` merely because the architecture document is absent.
 - `findings[]` carries every blocking issue and every warning, each tagged with the gate it came from.
   This is the whole of your verdict: the orchestrator reads scalars off this file and does not parse the
   markdown report.
@@ -188,7 +195,8 @@ outcome; either finish the verdict or do not write at all.
 **Your verdict has a gate consequence, so nothing here is cosmetic.** Under `/review` step 5.0 these
 scalars drive one aggregate hard-block `gates_run[]` entry, `architecture-fit`: `blocked` fails the review,
 `unresolved` and an absent sidecar (`no_return`) make it fail closed, `needs_adjustment` is a non-blocking
-warning, and only `proceed` passes. A placeholder `proceed` written to keep a gate green is therefore the
+warning, `skipped` is a benign non-blocking skip when every dispatched framework returned it, and only
+`proceed` passes. A placeholder `proceed` written to keep a gate green is therefore the
 exact failure this channel exists to prevent — a silent validator blocking the review is the intended
 outcome, not a bug to work around.
 

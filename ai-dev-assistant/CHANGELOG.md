@@ -3,6 +3,31 @@
 ## [5.35.7] - 2026-08-30
 
 ### Fixed
+- **A task that never ran `/design` would have failed the review this release added.** Making
+  `architecture-fit` a real hard-block `gates_run[]` entry — the entry below this one — gave the
+  `architecture-validator` verdict a consumer for the first time. It gave it no case for the input
+  being absent. The agent is told to Read `architecture/main.md` and told never to guess `proceed`,
+  so a project whose review recipe resolves but whose task has no architecture document leaves it
+  `unresolved`, step 8 rule 2 fails closed, and `--headless` exits non-zero. That run passed the
+  release before, and nothing about the task changed. Step 5.0d has had the equivalent since v5.20.0
+  — no `alignment.md` is a benign, non-`unresolved` skip — and step 5.0 shipped without it, which is
+  the asymmetry that made this reachable rather than anything about the code. The agent's verdict
+  enum gains `skipped` for a missing architecture document, `/review` step 5.0 maps an all-`skipped`
+  result to a benign skip that rule 5 lets pass, and `gate-audit-schema.md` §5.12 defines the state
+  on `arch_validate.verdict`. A validator that was dispatched and could not answer is untouched and
+  stays fail-closed: the two are different facts and the agent's contract now says so in both
+  directions. Ranked last, so a sibling framework's `blocked` or `unresolved` can never be masked by
+  a skip. This is a FALSE RED, the opposite direction from everything else in this release, and it
+  was invisible to all of it — every assertion here checks that silence fails closed.
+- **A failed archive would have been followed by the overwrite it exists to prevent.** Step 10 runs
+  `review-record-archive.sh` before writing `_review.json`, and said nothing about the script exiting
+  1 — reachable with a read-only task folder, and also on a copy that does not land or an archive
+  that does not match the record it came from. Falling through to the write then destroys the very
+  pass the archive step was added to keep. Step 10 now says what happens: surface the script's stderr
+  verbatim, skip the `_review.json` write and step 12's Phase-4 mark, still print the step-13 summary
+  so this pass's gate verdicts survive, and exit non-zero in every mode. An unrecorded pass is a
+  state an operator can see and fix. A first pass is not this case — no existing record is
+  `archived: false`, `reason: "no_current_record"`, exit 0.
 - **`/complete` refused to archive a task `/review` had passed.** `commands/complete.md`
   told the reader to verify `_review.json` carries `gate_specific.pr_ready: true` or
   `overall_verdict: "bypassed"` — the full path for one field of that record and a bare name
@@ -223,7 +248,14 @@
   points at mechanisms that exist and still carry the discipline they are cited for. Two
   earlier cuts of its absent-sidecar check scored zero red under mutation — one matched
   `no_return` inside `spec_axis_reviewer_no_return`, the other inside the sentence citing the
-  precedent — so it now requires the line to tie the absence to the state.
+  precedent — so it now requires the line to tie the absence to the state. A fifth group runs the
+  other direction: a dispatched agent's REQUIRED input can be absent, and both the agent's contract
+  and the dispatch site must call that benign. Derived on both sides — the DOCUMENT off the agent's
+  own body (the file it is told to Read, or a bullet under its `## Inputs` heading, with anything
+  qualified "if present" dropped), and the benign path demanded within a window of that document
+  rather than anywhere in the file. The dispatch-site half must NEGATE `unresolved`, not merely
+  contain the word: every one of these paragraphs mentions it, so the bare token asserts nothing —
+  a first cut keyed on it scored zero red on the mutation that removed the benign path.
 - `tests/review-change-set-spec.sh` gains the upstream group: a local-only branch, a pushed
   branch, a commit the upstream has not seen, and a path that is not a repository (where the
   distances are `null` and no missing-upstream claim is made, because there is no head to
