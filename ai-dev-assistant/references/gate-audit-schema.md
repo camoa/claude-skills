@@ -266,6 +266,8 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
   "pr_ready": true,
   "pr_body_path": "<task>/PR_BODY.md or null",
   "contract_drift": { /* v5.35.5+, required — see below */ },
+  "head_upstream": { /* v5.35.7+, advisory — see below */ },
+  "base_distance": { /* v5.35.7+, advisory — see below */ },
   "dispatch_plan": { /* v1.2+, optional — see below */ }
 }
 ```
@@ -277,6 +279,19 @@ These are optional; existing v1.0/v1.1 audits without them are valid. No schema 
 Review reads the contract as it stands at the moment each gate fires, and review can edit it. That is legitimate: a document specifying behaviour just found defective has to be corrected. Editing it invisibly is not, which is the same argument that put a baseline in front of the build in v5.34.0 — there the concern was a builder describing the code it had written, here it is a reviewer moving the standard it is judging against. `checked: false` carrying a reason is the honest answer when the step-0 capture did not run; a diff with no baseline must never read as an unchanged contract.
 
 **Never blocking on its own.** One consequence is not advisory: `alignment.md` in `changed[]` means the Spec gate at 5.0d judged a criteria list that is no longer the one on disk, so its verdict describes a contract that no longer exists. 5.0d is re-run, or its `gates_run[]` entry becomes `skipped` with `unresolved: true`, which step 8 rule 2 already treats as fail-closed. Observed live: a review corrected two architecture documents and deleted four acceptance criteria describing a withdrawn check, between one run of the Spec gate and the next. A criterion that no longer exists cannot be reported as unimplemented.
+
+**`head_upstream` / `base_distance` (v5.35.7+, advisory).** Copied verbatim from step 4's
+`review-change-set.sh` output: `head_upstream` is `{configured, ref, ahead, behind}` and `base_distance`
+is `{ahead, behind}` against the review's `--base`. They answer a question `/review` never asked while
+computing `pr_ready` — does the reviewed work exist anywhere but this machine? Measured live: two feature
+branches with no upstream, one seven commits ahead of `origin/staging`, and every gate reasoned about
+them without noticing.
+
+**Advisory, and it has to stay advisory.** A local-only branch is a legitimate state — reviews routinely
+run before the first push, the same reason the change set includes the working tree at all. Being unable
+to tell is the defect. `head_upstream.configured: false` never changes `pr_ready`, `overall_verdict`, or
+an exit code; it changes what the operator is told alongside them. Every numeric field is `null` when it
+could not be established, so "no upstream configured" and "could not ask" are never the same answer.
 
 **`agentic-verifier` gate (v5.13.0+, conditional hard-block).** When the task has ≥1 `adopted` agentic recipe (`commands/review.md` step 5.0b), `/review` adds ONE aggregate hard-block `gates_run[]` entry named `agentic-verifier`: `verdict: "pass"` only if **every** adopted recipe's `## Verifier` passed, `"fail"` if any failed, and an unresolved `"skipped"` + `unresolved: true` (a verifier that could not run) ⇒ fail-closed via step-8 rule 2. It folds the per-recipe verifier outcome (also kept in the `_agentic-recipe.json` sidecar's `recipes[].verifier`) into `overall_verdict` so a verifier fail blocks the PR. **Absent** entirely when the task has no adopted recipe (no false gate).
 
@@ -608,7 +623,12 @@ settled disposition forward; `mechanisms_hash` lets a consumer detect a stale re
 Records the Spec-axis verdict: does the change faithfully implement the task's `alignment.md` contract,
 independent from the Standards gate battery (`references/spec-axis-review.md` for full semantics). Audit
 file `_spec.json`, own `schema_version: "1.0"`. Written by `/review` step 5.0d, which dispatches
-`agents/spec-axis-reviewer.md` and captures its returned verdict — the agent itself writes nothing.
+`agents/spec-axis-reviewer.md` with an output path and reads the scalars back off that agent's sidecar,
+`<task_folder>/_spec-axis.json` (v5.35.7+ — before that the agent had no `Write` tool and returned its
+verdict as prose, which truncated in transit on a live review). An **absent** sidecar after dispatch is
+`no_return`: `verdict: "skipped"` with `skip_reason: "spec_axis_reviewer_no_return"` and `unresolved: true`
+in the gate's `messages[]`, so step 8 rule 2 fails closed. It is never a `pass` — `pass` is the claim that
+somebody looked and found nothing missing.
 
 ```json
 {
@@ -644,7 +664,12 @@ file `_spec.json`, own `schema_version: "1.0"`. Written by `/review` step 5.0d, 
 
 ## 6. Invariants
 
-- **One file per gate per task.** Overwrite-on-fire. No history kept in this file.
+- **One file per gate per task.** Overwrite-on-fire. No history kept in this file. `_review.json` is
+  the one record whose replaced copies are preserved *beside* it: `/review` step 10 runs
+  `scripts/review-record-archive.sh` first, copying the outgoing record to
+  `<task_folder>/review-rounds/_review-<n>.json`. The invariant is unchanged — the current record is
+  still one file, still overwritten, still read at the same field paths — because `[r]` makes re-review
+  routine and a task that ran four passes had three of them in no surviving record.
 - **Absolute paths.** `task_folder` is always absolute. Consumers who need cross-machine portability use it as-is.
 - **JSON parses cleanly.** `gate-audit-write.sh` validates against this schema before writing; refuses on schema_version mismatch or missing required fields.
 - **Bypass is recorded, not silent.** When `bypass_reason` is non-null, the file still exists and `user_choice` is `"bypassed"`. The user CAN choose to skip; they CAN'T silently skip.

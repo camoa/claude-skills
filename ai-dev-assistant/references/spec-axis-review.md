@@ -49,10 +49,18 @@ it still drives `overall_verdict` via step 8 rule 1 exactly as before.
 
 `/review` dispatches `agents/spec-axis-reviewer.md` (Task tool, read-only, generic) with the parsed success
 criteria + `architecture.md` (if present) + the change set — the same command-owns-resolution /
-agent-stays-generic pattern `/review` step 5.0 already uses for `architecture-validator`. The agent returns
-its verdict as its Task response (it does not write files); `/review` captures it into
-`<task_folder>/_spec.json` via `gate-audit-write.sh <task> spec <payload>` (`gate-audit-schema.md` §5.15)
-and adds `gates_run[]` entry `name: "spec"`, `kind: "hard-block"`.
+agent-stays-generic pattern `/review` step 5.0 already uses for `architecture-validator`. The dispatch
+hands it an **output path** and it writes its verdict to `<task_folder>/_spec-axis.json` (v5.35.7+);
+`/review` reads `verdict` / `missing_requirements[]` / `scope_creep[]` back as scalars and captures them
+into `<task_folder>/_spec.json` via `gate-audit-write.sh <task> spec <payload>` (`gate-audit-schema.md`
+§5.15), adding `gates_run[]` entry `name: "spec"`, `kind: "hard-block"`.
+
+Until v5.35.7 the agent had no `Write` tool and its verdict was its Task response alone. On a live review
+that response truncated in transit repeatedly and the session had to improvise a scratchpad file mid-run
+to recover it — and the verdict most likely to be long is a full list of unimplemented criteria, which is
+exactly the one that matters. An **absent** sidecar is `no_return`, a third state with its own reason:
+`verdict: "skipped"` + `skip_reason: "spec_axis_reviewer_no_return"` + `unresolved: true`, fail-closed via
+step 8 rule 2. It is never folded into `pass`, which is the claim that somebody looked.
 
 **Second caller (v5.33.0+).** `/implement` dispatches the same agent once at the end of Phase 3, as the
 alignment axis of the build-critique rung (`references/build-critique.md`). Same inputs, same verdict rule.

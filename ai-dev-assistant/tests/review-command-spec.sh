@@ -44,12 +44,22 @@ done
 #    it. The rules are an ORDERED resolution and their rank is the contract, so this could
 #    not be folded into the `pass` rule's line without leaving the new case unranked —
 #    which is the same defect in a different place.
+#    132 -> 135 in v5.35.7, three lines for two fixes that had nowhere else to go. ONE is the
+#    sidecar bullet under step 5.0: architecture-validator and spec-axis-reviewer now write their
+#    verdict to a file instead of returning it as prose, and the dispatch site has to say where and
+#    what an ABSENT sidecar means — a nested bullet under the existing dispatch bullet, because it
+#    is a second instruction about the same dispatch and not a step. TWO is step 9a, the file-
+#    ownership rule on the [r] remediation path; it is a new step because [r] is a branch of step 9
+#    that nothing downstream describes, and folding it into step 9's line would bury a rule about
+#    concurrent agents inside the prompt-wording paragraph. The remaining four changes of this
+#    version — the spec sidecar, the record archive, the upstream advisory, the Output section —
+#    extended lines that already existed and cost nothing.
 #    kept in lockstep with scripts/command-body-lengths.sh)
 BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
-if [ "$BODY_LINES" -le 132 ]; then
-  pass_check "body line count $BODY_LINES ≤ 132"
+if [ "$BODY_LINES" -le 135 ]; then
+  pass_check "body line count $BODY_LINES ≤ 135"
 else
-  fail_check "body line count $BODY_LINES > 132"
+  fail_check "body line count $BODY_LINES > 135"
 fi
 
 # 3. 5-mechanism markers

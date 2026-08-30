@@ -1,18 +1,18 @@
 ---
 name: architecture-validator
-description: "Use when validating implemented code against the documented architecture - checks the approach matches documented patterns and dependencies, and enforces the architecture principles (business logic out of the UI layer, reusable services over UI-layer logic, SOLID, DRY) plus test presence and security. Trigger: 'check my code', 'does this match the architecture', 'validate implementation', 'architecture review', 'code review against architecture'. Validates against all 5 gates: SOLID, Library-First/CLI-First as principles, DRY, TDD, Security. BLOCK on violations — do not just warn. Use proactively after code changes during implementation."
-capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles", "security-validation"]
-version: 3.2.0
+description: "Use when validating implemented code against the documented architecture - checks the approach matches documented patterns and dependencies, and enforces the architecture principles (business logic out of the UI layer, reusable services over UI-layer logic, SOLID, DRY) plus test presence and security. Trigger: 'check my code', 'does this match the architecture', 'validate implementation', 'architecture review', 'code review against architecture'. Validates against all 5 gates: SOLID, Library-First/CLI-First as principles, DRY, TDD, Security. BLOCK on violations — do not just warn. Read-only on code; when a dispatcher gives it an output path it writes its verdict to that sidecar, which is the channel an orchestrator reads. Use proactively after code changes during implementation."
+capabilities: ["architecture-validation", "pattern-matching", "solid-principles", "dependency-check", "architecture-principles", "security-validation", "artifact-derived-verdict"]
+version: 3.3.0
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 memory: project
-disallowedTools: Edit, Write
+disallowedTools: Edit
 hooks:
   PreToolUse:
-    - matcher: "Write|Edit"
+    - matcher: "Edit"
       hooks:
         - type: prompt
-          prompt: "The architecture-validator agent is read-only and should not modify files. It attempted to use a write tool. Return 'block' to prevent this action."
+          prompt: "The architecture-validator agent is read-only on code. Its only legitimate write is its own verdict sidecar at the output path it was given. It attempted to edit a file. Return 'block' to prevent this action."
 maxTurns: 20
 ---
 
@@ -152,7 +152,45 @@ These are the always-on checks. The resolved review recipe sharpens each one wit
 | Null checks on injected dependencies | Misunderstanding of DI | WARN |
 | "// This handles the X functionality" on obvious code | Prompt artifact | WARN |
 
+## Your output — WRITE a structured verdict sidecar (the orchestrator reads it from disk, never your prose)
+
+Your **output path** is `<task_folder>/_arch-validate-<framework-slug>.json` (`/review` step 5.0, one per
+framework whose recipe it injected). When the dispatcher gives you one, use the **Write tool** to write
+exactly this JSON to it, and write it *before* composing the markdown report below:
+
+```json
+{ "agent": "architecture-validator",
+  "framework": "<the framework key whose recipe was injected, or null>",
+  "verdict": "proceed | blocked | needs_adjustment | unresolved",
+  "findings": [ { "severity": "blocking | warning",
+                  "gate": "architecture-fit | library-first | solid | dry | tdd | security | purposefulness",
+                  "text": "<specific, evidence-anchored — the code or behavior, not a vibe>" } ] }
+```
+
+- `verdict` maps one-to-one onto the `### Status` line below: `blocked` = BLOCKED, `needs_adjustment` =
+  NEEDS ADJUSTMENT, `proceed` = APPROVED. `unresolved` is for a gate you genuinely could not evaluate —
+  **never guess `proceed`**, and never soften a blocking failure into a warning to keep a sidecar tidy.
+- `findings[]` carries every blocking issue and every warning, each tagged with the gate it came from.
+  This is the whole of your verdict: the orchestrator reads scalars off this file and does not parse the
+  markdown report.
+
+**Why this exists.** This agent used to have no write tool and returned its verdict only as its Task
+response. Measured on a live review, that response truncated in transit repeatedly, and the orchestrator
+had to improvise a scratchpad file mid-review to recover it — for the gate that found a content-destroying
+defect on all four passes. The gate most likely to have a long verdict was the one that could not record
+it. Prose is the truncating channel; the sidecar is not.
+
+**Write nothing else.** No other file, no edits to the tree you are reviewing. The absence of this file
+after a dispatch that gave you a path is a distinct outcome the orchestrator records as `no_return` — it is
+never read as "the validator found nothing". Do not write a partial or placeholder file to avoid that
+outcome; either finish the verdict or do not write at all.
+
+**Dispatched without an output path** (the interactive `/ai-dev-assistant:validate` path, where a human
+reads the result directly), return the markdown report below as your response and write nothing.
+
 ## Output Format
+
+Return this alongside the sidecar — it is what a human reads.
 
 ```markdown
 ## Validation Result: {Component}

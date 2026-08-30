@@ -17,6 +17,52 @@
   sweeping all 144 tracked command, reference and skill markdown files against an allowlist
   derived from the writer.
 
+- **Two gate agents could not write their verdict, so a long finding truncated.**
+  `agents/wo-critic.md` carries `Write` and writes a structured verdict sidecar;
+  `agents/architecture-validator.md` and `agents/spec-axis-reviewer.md` carried `Read, Grep,
+  Glob, Bash` and returned their verdicts as their Task response. On a live review those
+  reports truncated in transit repeatedly and the session had to improvise a scratchpad file
+  mid-review to recover them. `architecture-validator` found a content-destroying defect on
+  all four passes of that review: the gate most likely to have a long verdict was the one
+  that could not record it. Both now write a sidecar — `_arch-validate-<framework-slug>.json`
+  and `_spec-axis.json` — and `/review` steps 5.0 and 5.0d read scalars off disk instead of
+  parsing prose. An absent sidecar is `no_return`, a recorded third state with its own
+  reason, never read as "the agent found nothing"; for the `spec` gate it carries
+  `unresolved: true` so step 8 rule 2 fails closed. Follows
+  `prior-art-verdict-confirmer`'s `confirmation: "no_return"` precedent.
+- **Re-reviewing a task destroyed the record of every earlier pass.** `_review.json` is
+  overwrite-on-fire, which is right for a current-verdict file and wrong for the only
+  surviving account of what a review found — `/review`'s `[r]` branch means exit, fix,
+  re-run, so a task that needed work is reviewed more than once by construction. One live
+  task ran FOUR passes; passes 1-3 exist nowhere, and a defect pass 3 found is in no
+  surviving record. Step 10 now runs `scripts/review-record-archive.sh` before the write,
+  copying the outgoing record to `<task_folder>/review-rounds/_review-<n>.json`.
+  `_review.json` keeps its meaning, its location and its field paths, so no consumer
+  changes; there is no round budget, no delta-scoping and no new control flow.
+- **The remediation dispatch had no file-ownership discipline.** `/review`'s `[r]` branch
+  means exit, fix, re-run, and the fix is normally more than one agent. Live, a
+  mutation-testing verifier and a test-author ran concurrently against the same source file:
+  the orchestrator inspected the verifier's live `if (FALSE)` mutation and reported it as the
+  frozen clean state, the verifier's backup predated the author's edit so restoring it would
+  have silently reverted work the tests already asserted, and a passing test run had to be
+  retracted because a mutation landed inside its window. Two of the dispatched agents flagged
+  the contention before the orchestrator did. New step 9a states the rule — concurrent
+  remediation agents do not share a mutable working tree, and an agent that mutates-and-
+  restores owns its file exclusively — and points at the mechanisms that already exist,
+  `/worktree` and the parallel conductor's pairwise-disjoint batching, rather than inventing
+  a second one.
+- **The change set never asked whether the reviewed work exists anywhere but this machine.**
+  `scripts/review-change-set.sh` resolved a base and a head and never looked for an upstream.
+  Measured live: both feature branches of a reviewed site had NO upstream and one was seven
+  commits ahead of `origin/staging`, while `/review` computed `pr_ready` and no gate noticed.
+  The change set now reports `head_upstream` (`configured`, `ref`, `ahead`, `behind`) and
+  `base_distance`, `/review` surfaces them on the `pr_ready` line, and a missing upstream
+  raises a `head_has_no_upstream` warning. **Advisory only** — a local-only branch is
+  legitimate and being unable to tell is the defect, so it never changes `pr_ready`,
+  `overall_verdict` or an exit code. Every numeric field is `null` where it could not be
+  established, so "no upstream configured" and "could not ask" stay different answers.
+  `review-change-set.sh` output is `schema_version` 1.1 (additive).
+
 ### Added
 - `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
   point where `gate-audit-write.sh` puts the field. Both sides derived from the artifacts:
@@ -25,6 +71,28 @@
   up without anyone updating a list. It fires on a line that qualifies one payload key with
   `gate_specific.` and names another bare — one object described two ways — which is the
   defect above and does not fire on the many lines telling a PRODUCER what to write.
+- `scripts/review-record-archive.sh` — preserves the outgoing `_review.json` before the next
+  pass overwrites it. Never overwrites an archive: if the next slot is taken it steps past
+  it, because losing a pass is the one outcome the script exists to prevent. Verifies the
+  copy is byte-identical and exits non-zero if it is not.
+- `tests/review-record-archive-spec.sh` — behavioral, running the script against real
+  directories: four passes leave four readable rounds, the archive is byte-identical, an
+  occupied slot is stepped past rather than overwritten, and `_review.json` comes out
+  untouched at the field paths its consumers read.
+- `tests/gate-verdict-sidecar-spec.sh` — an agent told to write a verdict file must be able
+  to, and the orchestrator that reads it must say what an ABSENT one means. Both sides
+  derived from the artifacts: the class is every `agents/*.md` whose own body instructs a
+  Write-tool write, and the sidecar path each dispatch site must name is parsed out of that
+  agent's own body rather than held in a list. Also checks that the `[r]` remediation rule
+  points at mechanisms that exist and still carry the discipline they are cited for. Two
+  earlier cuts of its absent-sidecar check scored zero red under mutation — one matched
+  `no_return` inside `spec_axis_reviewer_no_return`, the other inside the sentence citing the
+  precedent — so it now requires the line to tie the absence to the state.
+- `tests/review-change-set-spec.sh` gains the upstream group: a local-only branch, a pushed
+  branch, a commit the upstream has not seen, and a path that is not a repository (where the
+  distances are `null` and no missing-upstream claim is made, because there is no head to
+  make it about). Three of its assertions exist to hold the fact advisory — the change set,
+  its `files[]` and its `empty_reason` must all come out unchanged.
 
 ## [5.35.6] - 2026-08-29
 

@@ -29,6 +29,16 @@
 # `no_changes_anywhere` — a real, reportable nothing, which is grounds for a gate to skip — from
 # `base_unresolvable`, where the base branch does not exist and the comparison never happened.
 # A gate that skips on the second is answering a question it could not ask.
+#
+# `head_upstream` and `base_distance` (v5.35.7+) answer a question this script resolved a base and a
+# head for and never asked: does the head exist anywhere but here? Measured live: both feature
+# branches of a reviewed site had NO upstream and one was seven commits ahead of `origin/staging`,
+# and every gate reasoned about them without noticing that the work existed on one laptop.
+# `/review` was computing `pr_ready` while nothing knew whether a PR was even possible.
+#
+# It is ADVISORY and must stay advisory. A local-only branch is a legitimate state — plenty of
+# reviews run before the first push, which is the same reason the change set includes the working
+# tree at all. Being unable to tell is the defect, not the branch.
 
 set -uo pipefail
 
@@ -58,14 +68,47 @@ emit() { # emit <merge_base> <committed_json> <tree_json> <untracked_json> <empt
   # compares it with the head the critics saw, which is how a record describing an earlier build
   # stops reading as a record of this one. Empty outside a git repository, like merge_base.
   HEAD_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || HEAD_SHA=""
+
+  # Does the head exist anywhere but here, and how far is it from its base? Advisory, both of them.
+  # Every value stays null when it could not be established, so "no upstream configured" and "could
+  # not ask" are never the same answer.
+  UP_REF=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) || UP_REF=""
+  UP_AHEAD=""; UP_BEHIND=""
+  if [ -n "$UP_REF" ]; then
+    # `--left-right --count A...B` prints "<only in A> <only in B>": behind, then ahead.
+    UP_COUNTS=$(git -C "$REPO" rev-list --left-right --count "$UP_REF"...HEAD 2>/dev/null) || UP_COUNTS=""
+    if [ -n "$UP_COUNTS" ]; then
+      UP_BEHIND=$(printf '%s' "$UP_COUNTS" | awk '{print $1}')
+      UP_AHEAD=$(printf '%s' "$UP_COUNTS" | awk '{print $2}')
+    fi
+  elif [ -n "$HEAD_SHA" ]; then
+    # Only claim this where there is a head to claim it about. Outside a repository, or on a branch
+    # with no commit yet, "no upstream" is not something we established.
+    add_warn "head_has_no_upstream"
+  fi
+  BASE_AHEAD=""; BASE_BEHIND=""
+  BASE_COUNTS=$(git -C "$REPO" rev-list --left-right --count "$BASE"...HEAD 2>/dev/null) || BASE_COUNTS=""
+  if [ -n "$BASE_COUNTS" ]; then
+    BASE_BEHIND=$(printf '%s' "$BASE_COUNTS" | awk '{print $1}')
+    BASE_AHEAD=$(printf '%s' "$BASE_COUNTS" | awk '{print $2}')
+  fi
+
   jq -n --arg b "$BASE" --arg mb "$1" --argjson c "$2" --argjson t "$3" --argjson u "$4" \
         --arg hd "$HEAD_SHA" \
+        --arg ur "$UP_REF" --arg ua "$UP_AHEAD" --arg ub "$UP_BEHIND" \
+        --arg ba "$BASE_AHEAD" --arg bb "$BASE_BEHIND" \
         --arg er "$5" --argjson w "$WARNINGS" '
+    def num: if . == "" then null else tonumber end;
     ($c + $t | unique) as $files |
-    {schema_version: "1.0",
+    {schema_version: "1.1",
      base: $b,
      merge_base: (if $mb == "" then null else $mb end),
      head: (if $hd == "" then null else $hd end),
+     head_upstream: {configured: ($ur != ""),
+                     ref: (if $ur == "" then null else $ur end),
+                     ahead: ($ua|num),
+                     behind: ($ub|num)},
+     base_distance: {ahead: ($ba|num), behind: ($bb|num)},
      counts: {committed: ($c|length), working_tree: ($t|length), untracked: ($u|length)},
      source_used: (if ($c|length) > 0 and ($t|length) > 0 then "both"
                    elif ($c|length) > 0 then "committed"
