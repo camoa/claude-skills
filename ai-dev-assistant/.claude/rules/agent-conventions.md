@@ -20,7 +20,7 @@ paths:
 
 ## Agent Frontmatter Limitations
 - `hooks`, `mcpServers`, and `permissionMode` in agent frontmatter are **not supported** when agents are invoked as sub-agents via the Agent SDK or spawned programmatically. These fields only take effect when the agent runs as the top-level session.
-- `architecture-validator` currently uses `hooks: PreToolUse` in frontmatter — this works for interactive sessions but will be silently ignored if the agent is ever invoked as a sub-agent. The `disallowedTools: Edit, Write` field remains the reliable write-block mechanism.
+- `architecture-validator` currently uses `hooks: PreToolUse` in frontmatter — this works for interactive sessions but will be silently ignored if the agent is ever invoked as a sub-agent. Its `disallowedTools` is **`Edit` alone** as of v5.35.7: the agent was given `Write` so it can record its verdict sidecar, which its Task response kept truncating. So the frontmatter no longer blocks writes at all, and `disallowedTools: Edit` is the only restriction that survives a sub-agent dispatch. What keeps the agent from writing anywhere but its own sidecar is its body, not its frontmatter — do not describe that as a mechanism the harness enforces.
 
 ## Body Structure
 1. Purpose section — what the agent does

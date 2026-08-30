@@ -225,7 +225,7 @@ done
 #     both, so the single-deletion mutation the reviewer showed both AIDA specs missing is
 #     now caught twice over.
 #
-# THE WALKER, AND WHY IT IS A FUNCTION. The previous cut pushed a level on `if` AND on
+# THE WALKER, AND WHY IT IS A FUNCTION. The first cut pushed a level on `if` AND on
 # `elif`, and popped only on a line that was exactly `fi`. So `elif`, `else`, a one-line
 # `if ...; fi` and `case`/`esac` never balanced and the stack only ever grew: measured on
 # security-check.sh, depth 25 at end of file where the real nesting is 3. Every push below
@@ -237,50 +237,100 @@ done
 # `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: same count, same names, and the old walker
 # reported nothing.
 #
-#   if      opens a level and puts its condition on it
-#   elif    is the SAME level with a second condition APPENDED, not a new level
-#   else    changes no level: the branch is still guarded by the `if` above it, which is
-#           where all ten of these pushes actually sit — the else of `if <probe>`
+# THE SECOND CUT BALANCED AND STILL ACCEPTED TOO MUCH. It asked whether ANY level in the
+# enclosing chain was a probe, so a push MOVED INSIDE a probe branch still passed:
+#
+#   if command -v trivy >/dev/null 2>&1; then
+#     if [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
+#       ABSENT_TOOLS+=("trivy")     # trivy IS installed. This is tools_skipped[].
+#
+# The same hole one construct over: `elif` appends its condition to the level, so a push in
+# the `elif` of `if <probe>` was checked against a string still containing the probe — and
+# reaching that `elif` means the probe SUCCEEDED. The fixture below plants both, and the
+# negative control planted only the top-level shape, so neither was visible. The question is
+# not whether a probe is somewhere above the push; it is whether the branch the push is
+# ACTUALLY IN is guarded by one. So the walker tracks two things per level:
+#
+#   if      opens a level; its condition is both the level's chain and the current branch
+#   elif    is the SAME level: its condition is APPENDED to the chain and REPLACES the
+#           branch, because reaching an elif means every condition before it was false
+#   else    is the SAME level with the whole chain as its branch — the negation of every
+#           condition above it, which is where all ten real pushes sit: the else of a probe
 #   case    opens a level carrying an EMPTY condition, so its `esac` has something to
 #           close and a case pattern is never mistaken for a test for a binary
 #   fi/esac close a level, counted as WORDS anywhere on the line, so `if X; then Y; fi`
 #           balances and the `fi` inside `specific` closes nothing
 #
-# A PROBE MAY BE ONE VARIABLE AWAY. semgrep's absence is recorded in the else of
-# `if [ -n "$SEMGREP_RUNNER" ]`, and SEMGREP_RUNNER is set inside
-# `if ddev exec semgrep --version` / `elif command -v semgrep`. Pass 1 records the
-# variables a direct probe assigns a LITERAL to; pass 2 accepts a condition testing one of
-# them. Literal right-hand sides only, deliberately: `PHPCS_ISSUES=$(...)` holds a tool's
-# OUTPUT rather than the outcome of probing for it, and admitting command substitutions
-# marked 44 variables across these producers where the literal rule marks three.
+# and a push is guarded only when the INNERMOST branch is a probe, or when the push line
+# carries its own (`command -v trivy || ABSENT_TOOLS+=("trivy")`, which had no enclosing
+# condition to look at and was flagged). Nesting is not itself the problem — an inner probe
+# under an outer scope test still guards its push, and the fixture asserts that stays clean.
+#
+# WHAT COUNTS AS A PROBE IS DELIBERATELY BROADER THAN THE FOUR FORMS THESE PRODUCERS USE.
+# The list was a literal this file guessed, and a legitimate producer written
+# `if hash trivy 2>/dev/null` or `if [ -e "$TRIVY_BIN" ]` was flagged — a FALSE RED on a
+# correct tree, the same class as the `phpcpd` literal the resolver's dry branch dropped.
+# `hash`, `type -p`, `which`, `-e`/`-r` file tests, `node_modules/.bin` and
+# `npx --no-install` are recognised alongside the originals. This direction is safe to widen:
+# a form admitted in error costs a missed mutation on a producer nobody has written that way,
+# where a form omitted reds a green tree today.
+#
+# A PROBE MAY BE ONE VARIABLE AWAY, AND THE VARIABLE MUST BE AN AVAILABILITY SENTINEL.
+# semgrep's absence is recorded in the else of `if [ -n "$SEMGREP_RUNNER" ]`, and
+# SEMGREP_RUNNER is set inside `if ddev exec semgrep --version` / `elif command -v semgrep`.
+# "Assigned a literal inside a probe branch" is too loose for that: measured on these two
+# producers it marks SIX variables — SEMGREP_RUNNER plus GITLEAKS_MODE, GITLEAKS_RANGE,
+# GITLEAKS_RANGE_KIND, GITLEAKS_PLAN and GITLEAKS_PLAN_REASON, five defaults set inside
+# `if command -v gitleaks` that say nothing about whether gitleaks is there. Testing one of
+# them would have licensed a push. The rule is the SHAPE `[ -n "$VAR" ]` actually reads: an
+# EMPTY sentinel assigned somewhere, and a NON-EMPTY literal assigned inside a probe branch.
+# Measured across both producers: 35 variables with any right-hand side, 6 with a literal
+# right-hand side, 1 with the sentinel rule — SEMGREP_RUNNER, the one this exists for.
+# `PHPCS_ISSUES=$(...)` is excluded twice over: it holds a tool's OUTPUT, not the outcome of
+# probing for it, and it has no empty sentinel.
 #
 # It is a function because a walker only the real producers exercise is a walker whose
 # failure mode is whatever those producers happen not to do. The self-test below runs it
-# over a file built to contain each construct plus the mutation, so the check has a
-# negative control and cannot quietly stop being able to fail.
+# over a file built to contain each construct plus four mutations and seven shapes that must
+# stay clean, so the check has a negative control in both directions and cannot quietly stop
+# being able to fail — or quietly start failing everything.
 WALKER_AWK='
 function is_probe(s) {
-  return (s ~ /command -v|test -[fx]|\[ -[fx] |vendor\/bin|--version|resolve_analyzer|ddev exec test|pm:list/)
+  return (s ~ /(^|[^-[:alnum:]_])command[[:space:]]+-v[[:space:]]/ ||
+          s ~ /(^|[^-[:alnum:]_])hash[[:space:]]+[[:alnum:]]/ ||
+          s ~ /(^|[^-[:alnum:]_])type[[:space:]]+-[pPt]([[:space:]]|$)/ ||
+          s ~ /(^|[^-[:alnum:]_])which[[:space:]]/ ||
+          s ~ /(^|[^-[:alnum:]_])test[[:space:]]+-[efxr][[:space:]]/ ||
+          s ~ /\[[[:space:]]+-[efxr][[:space:]]/ ||
+          s ~ /vendor\/bin|node_modules\/\.bin/ ||
+          s ~ /--version/ ||
+          s ~ /npx[[:space:]]+--no-install/ ||
+          s ~ /resolve_analyzer|ddev exec test|pm:list/)
 }
-function chain_probes(  i, v) {
-  for (i = 1; i <= top; i++) {
-    if (is_probe(cond[i])) return 1
-    for (v in PROBEVAR) if (cond[i] ~ ("[$][{]?" v "[^A-Za-z0-9_]")) return 1
-  }
+function branch_probes(  v) {
+  if (top < 1) return 0
+  if (is_probe(branch[top])) return 1
+  for (v in PROBEVAR) if (branch[top] ~ ("[$][{]?" v "[^A-Za-z0-9_]")) return 1
   return 0
 }
-FNR == 1 { top = 0; delete cond; pass++ }
+FNR == 1 {
+  top = 0; delete branch; delete chain; pass++
+  if (pass == 2) for (v in CANDVAR) if (v in EMPTYVAR) PROBEVAR[v] = 1
+}
 /^[[:space:]]*#/ { next }
-/^[[:space:]]*if[[:space:]]/   { cond[++top] = $0 }
-/^[[:space:]]*elif[[:space:]]/ { if (top > 0) cond[top] = cond[top] " " $0 }
-/^[[:space:]]*case[[:space:]]/ { cond[++top] = "" }
+/^[[:space:]]*if[[:space:]]/   { chain[++top] = $0; branch[top] = $0 }
+/^[[:space:]]*elif[[:space:]]/ { if (top > 0) { chain[top] = chain[top] " " $0; branch[top] = $0 } }
+/^[[:space:]]*else[[:space:]]*$/ { if (top > 0) branch[top] = chain[top] }
+/^[[:space:]]*case[[:space:]]/ { chain[++top] = ""; branch[top] = "" }
 pass == 1 && /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=["'"'"'][A-Za-z0-9_.\/-]*["'"'"']?[[:space:]]*$/ {
-  if (top > 0 && is_probe(cond[top])) {
-    n = $0; sub(/^[[:space:]]*/, "", n); sub(/=.*/, "", n); PROBEVAR[n] = 1
-  }
+  n = $0; sub(/^[[:space:]]*/, "", n); rhs = n
+  sub(/^[^=]*=/, "", rhs); sub(/=.*/, "", n)
+  gsub(/["'"'"']/, "", rhs); gsub(/[[:space:]]/, "", rhs)
+  if (rhs == "") EMPTYVAR[n] = 1
+  else if (top > 0 && is_probe(branch[top])) CANDVAR[n] = 1
 }
 pass == 2 && /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
-  if (!chain_probes()) printf "BAD %d:%s\n", FNR, $0
+  if (!branch_probes() && !is_probe($0)) printf "BAD %d:%s\n", FNR, $0
 }
 {
   t = $0
@@ -289,9 +339,15 @@ pass == 2 && /(^|[[:space:]])ABSENT_TOOLS\+=\(/ {
   top -= (n1 + n2)
   if (top < 0) { under++; top = 0 }
 }
-END { printf "DEPTH %d %d\n", top, under + 0 }
+END {
+  nprobevar = 0
+  for (v in PROBEVAR) nprobevar++
+  printf "PROBEVARS %d\n", nprobevar
+  printf "DEPTH %d %d\n", top, under + 0
+}
 '
-# walk_absent_pushes <file> — "BAD <line>:<text>" per unguarded push, then "DEPTH <n> <n>".
+# walk_absent_pushes <file> — "BAD <line>:<text>" per unguarded push, then "PROBEVARS <n>"
+# and "DEPTH <n> <n>".
 # The file is read TWICE: pass 1 collects the probe variables, pass 2 checks the pushes.
 walk_absent_pushes() { awk "$WALKER_AWK" "$1" "$1"; }
 
@@ -368,25 +424,108 @@ case "$MODE" in
   changed) echo d ;;
   *) echo e ;;
 esac
+# Nesting is not itself the problem: an inner probe still guards the push, whatever sits
+# above it. MUST NOT be flagged, or the innermost rule below would red any producer that
+# scopes its probes.
+if [ "$MODE" = "whole" ]; then
+    if command -v innertool > /dev/null 2>&1; then
+        echo ran
+    else
+        ABSENT_TOOLS+=("innertool")
+    fi
+fi
+# The else of a chain whose LAST branch is a scope test. Reaching it means the probe failed
+# AND the scope test failed, so the tool really is absent — the `else` branch is guarded by
+# the whole chain, not by the condition immediately above it. MUST NOT be flagged. Without
+# this case nothing here exercises the else rule at all: every other push sits in the else
+# of a chain whose branches are ALL probes, which reads the same with the rule removed.
+if command -v chaintool > /dev/null 2>&1; then
+    echo ran
+elif [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
+    echo scoped
+else
+    ABSENT_TOOLS+=("chaintool")
+fi
+# A probe on the push's OWN line, with no `if` anywhere. Correct and idiomatic, and flagged
+# until v5.35.7 because the walker only ever looked at enclosing conditions. MUST NOT be
+# flagged.
+command -v orlisttool > /dev/null 2>&1 || ABSENT_TOOLS+=("orlisttool")
+# Probe forms the walker did not recognise before v5.35.7. A producer written either way is
+# correct and was flagged, which reds a green tree. MUST NOT be flagged.
+if hash hashtool 2>/dev/null; then
+    echo ran
+else
+    ABSENT_TOOLS+=("hashtool")
+fi
+ETOOL_BIN="/usr/local/bin/etool"
+if [ -e "$ETOOL_BIN" ]; then
+    echo ran
+else
+    ABSENT_TOOLS+=("etool")
+fi
 # THE MUTATION. A push in a scope branch, no probe anywhere above it. MUST be flagged —
 # this is the one the old walker passed green once the stack had grown past it.
 if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
     ABSENT_TOOLS+=("scoped-out-tool")
 fi
+# THE NESTED MUTATION. A probe DOES sit above it, and the branch the push is actually in is
+# a scope test — the tool is present and the layer was scoped out, which is tools_skipped[].
+# `chain_probes` accepted this because any level in the chain being a probe was enough.
+# MUST be flagged.
+if command -v nestedtool > /dev/null 2>&1; then
+    if [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
+        ABSENT_TOOLS+=("nested-scoped-tool")
+    fi
+fi
+# THE ELIF MUTATION. Reaching the elif means the probe SUCCEEDED, so recording the tool as
+# absent there is wrong. `elif` appends to its level, so the if half`s probe text was still
+# in the condition the push was checked against. MUST be flagged.
+if command -v eliftool > /dev/null 2>&1; then
+    echo ran
+elif [ "${#SCAN_PATHS[@]}" -eq 0 ]; then
+    ABSENT_TOOLS+=("elif-scoped-tool")
+fi
+# THE SENTINEL MUTATION. A variable assigned a literal inside a probe branch is not thereby
+# an availability outcome: `GITLEAKS_MODE="tree"` is set inside `if command -v gitleaks` and
+# testing it says nothing about whether gitleaks is there. Only a variable with an EMPTY
+# sentinel elsewhere and a non-empty literal in a probe branch is the `[ -n "$VAR" ]` shape
+# the indirection exists for. MUST be flagged.
+if command -v sentineltool > /dev/null 2>&1; then
+    SCAN_MODE="tree"
+fi
+if [ "$SCAN_MODE" = "tree" ]; then
+    ABSENT_TOOLS+=("mode-is-not-availability")
+fi
 WALKFIXTURE
 SELF=$(walk_absent_pushes "$WALK_FIXTURE")
 SELF_BAD=$(printf '%s\n' "$SELF" | sed -n 's/^BAD //p')
 SELF_BAL=$(printf '%s\n' "$SELF" | sed -n 's/^DEPTH //p')
+SELF_PV=$(printf '%s\n' "$SELF" | sed -n 's/^PROBEVARS //p')
 SELF_NBAD=$(printf '%s\n' "$SELF_BAD" | grep -c . || true)
 rm -f "$WALK_FIXTURE"
+# The four that MUST be flagged and the seven that MUST NOT are named, not counted. A count
+# alone passes when the walker flags the wrong four, which on this fixture is a walker that
+# has started reding every producer instead of one that stopped working.
+WANT_BAD="elif-scoped-tool mode-is-not-availability nested-scoped-tool scoped-out-tool"
+WANT_CLEAN="chaintool etool hashtool indirect innertool orlisttool realtool"
+GOT_BAD=$(printf '%s\n' "$SELF_BAD" | grep -oE 'ABSENT_TOOLS\+=\("[^"]+"\)' \
+          | sed -E 's/.*"([^"]+)".*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
+MISFLAGGED=""
+for n in $WANT_CLEAN; do
+  case " $GOT_BAD " in *" $n "*) MISFLAGGED="${MISFLAGGED} ${n}" ;; esac
+done
 if [ "$SELF_BAL" != "0 0" ]; then
   fail_check "the walker does not balance on elif/else/one-line-if/case: it ended at depth ${SELF_BAL% *} with ${SELF_BAL#* } underflow(s). That is the defect it replaced, and the producer runs above cannot see it because they end at 0 for the wrong reasons too"
-elif [ "$SELF_NBAD" -eq 1 ] && printf '%s' "$SELF_BAD" | grep -q 'scoped-out-tool'; then
-  pass_check "the walker discriminates: it flags a push in a scope branch, clears one in the else of a direct probe and one behind a probe-assigned variable, and balances across elif, else, a one-line if and a case"
+elif [ "$SELF_PV" != "1" ]; then
+  fail_check "the walker resolved ${SELF_PV:-0} availability sentinel(s) on a fixture carrying exactly one (INDIRECT_RUNNER). At 0 the semgrep-shaped push behind a variable is flagged and the producers go red; above 1 the rule is admitting variables that are merely set near a probe, which is what let a scope test on \$SCAN_MODE read as an availability test"
+elif [ "$GOT_BAD" = "$WANT_BAD" ]; then
+  pass_check "the walker discriminates: it flags a push in a scope branch, one nested inside a probe branch, one in the elif of a probe and one behind a probe-adjacent variable that is not an availability sentinel; it clears the else of a direct probe, a probe-assigned sentinel, an inner probe under a scope test, the else of a chain ending in a scope test, a probe on the push's own line, and the hash/[ -e ] probe forms; and it balances across elif, else, a one-line if and a case"
+elif [ -n "$MISFLAGGED" ]; then
+  fail_check "the walker flagged${MISFLAGGED}, which must NOT be flagged — each is the shape a correct producer has, so this reds a green tree. Flagged: [$GOT_BAD]"
 elif [ "$SELF_NBAD" -eq 0 ]; then
-  fail_check "the walker flagged NOTHING on a file containing a push in a scope branch with no probe above it — it can no longer fail, so the clean results it reports on the producers mean nothing"
+  fail_check "the walker flagged NOTHING on a file containing four pushes it must reject — it can no longer fail, so the clean results it reports on the producers mean nothing"
 else
-  fail_check "the walker flagged $SELF_NBAD push(es) where exactly one is planted: $(printf '%s' "$SELF_BAD" | tr '\n' ' '). A push in the else of an availability probe is the shape every real one has, and flagging it would red the producers as they stand"
+  fail_check "the walker flagged [$GOT_BAD], expected exactly [$WANT_BAD]. A push it stopped flagging is a mutation that would now pass on the producers"
 fi
 # A GATE THAT MEASURED NOTHING MUST SAY SO IN A FILE.
 #

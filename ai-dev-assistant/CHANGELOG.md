@@ -162,9 +162,48 @@
   is a literal assigned inside `if ddev exec semgrep --version`. Restricted to literal
   right-hand sides on purpose — `PHPCS_ISSUES=$(...)` holds a tool's output rather than the
   outcome of probing for it, and admitting command substitutions marked 44 variables where
-  the literal rule marks three. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
+  the literal rule marks. Verified by moving `ABSENT_TOOLS+=("trivy")` out of the else
   of `if command -v trivy` into a `[ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]` branch: push count 8
   and the eight names unchanged, the old walker reported nothing, the new one goes red.
+- **That walker balanced and still accepted too much, and three known-remaining items were
+  dropped on the strength of it.** It asked whether ANY level in the enclosing chain was a
+  probe, and its negative control planted the mutation at top level only, so two shapes were
+  invisible to both. A push MOVED INSIDE the probe branch — `if command -v trivy; then if
+  [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then ABSENT_TOOLS+=("trivy")` — passes, and trivy is
+  installed there; that is `tools_skipped[]`, and in `tools_absent[]` it reds an ordinary pull
+  request. The same hole one construct over: `elif` appends its condition to the level, so a
+  push in the `elif` of `if <probe>` was checked against a string still holding the `if` half's
+  probe text, and reaching that `elif` means the probe SUCCEEDED. The walker now tracks a
+  level's CHAIN and its CURRENT BRANCH separately — `elif` replaces the branch and appends to
+  the chain, `else` takes the whole chain, which is the negation of every condition above it
+  and is where all ten real pushes sit — and a push is guarded only when the INNERMOST branch
+  tests for the binary, or when the push line carries its own probe. Nesting itself stays fine:
+  an inner probe under an outer scope test guards its push, and the fixture asserts that.
+  Verified on a COPY of `security-check.sh` (the plugin is not edited to test a check on it)
+  with `ABSENT_TOOLS+=("trivy")` moved into a scope branch nested inside `if command -v
+  trivy`: the previous walker reported nothing, this one flags line 1690, and the unmutated
+  producer stays clean at depth 0.
+- **What counted as a probe was a literal this file guessed.** `command -v`, `test -f`/`-x`,
+  `vendor/bin`, `--version`, `resolve_analyzer`, `ddev exec test`, `pm:list` and nothing else,
+  so a correct producer written `if hash trivy 2>/dev/null`, `if [ -e "$TRIVY_BIN" ]` or
+  `command -v trivy || ABSENT_TOOLS+=("trivy")` was flagged — a FALSE RED on a green tree,
+  the same class as the `phpcpd` literal the resolver's dry branch dropped in the entry above.
+  `hash`, `type -p`, `which`, `-e`/`-r` file tests, `node_modules/.bin`, `npx --no-install`
+  and a probe on the push's own line are recognised now. Widening is the safe direction here:
+  a form admitted in error costs a missed mutation on a producer nobody has written that way,
+  where a form omitted reds a correct tree today.
+- **The variable indirection marked five variables it had no business marking.** The comment
+  and the entry above both said the literal rule marks three; measured across the two
+  producers it marks SIX — `SEMGREP_RUNNER` plus `GITLEAKS_MODE`, `GITLEAKS_RANGE`,
+  `GITLEAKS_RANGE_KIND`, `GITLEAKS_PLAN` and `GITLEAKS_PLAN_REASON`, five defaults set inside
+  `if command -v gitleaks` that say nothing whatever about whether gitleaks is there. Testing
+  any of them licensed a push. The rule is now the shape `[ -n "$VAR" ]` actually reads: an
+  EMPTY sentinel assigned somewhere, and a NON-EMPTY literal assigned inside a probe branch.
+  Measured across both producers: 35 variables with any right-hand side, 6 with a literal one,
+  1 with the sentinel rule — `SEMGREP_RUNNER`, the case the indirection exists for. The
+  fixture plants the counter-case (a `SCAN_MODE="tree"` set inside a probe branch and then
+  tested) and asserts the resolved sentinel count is exactly one, so neither direction can
+  drift silently.
 - **A security scope skip resolved benign on a report that never said what it covered.**
   `scripts/gate-verdict-resolve.sh`'s benign `skipped` rests on two claims, and only the
   first was ever checked: nothing was eligible, which `meta.skip_reason` says, AND nothing
@@ -192,6 +231,19 @@
   broader question of stack knowledge hardcoded in this file — the producer paths and the
   stack semantics — is the `stack_facts_in_recipes` task's subject and is untouched here.
 
+- **"Every verdict-returning agent in the framework" was three agents short of true.**
+  `references/internal-prior-art.md` said the sidecar move covered all of them.
+  `analysis-agent`, `ai-test-selector` and `guides-matcher` each return a structured verdict
+  as their response and each carry `Write` in `disallowedTools:`. The claim now says what is
+  true — every agent whose verdict a gate reads off disk as a scalar — and names the three
+  that are not in it, with the reason it does not matter for them: nothing gates on those, so
+  a truncated report costs a re-dispatch rather than a false green.
+- **A path-scoped rules file described a write-block that no longer exists.**
+  `.claude/rules/agent-conventions.md` said `architecture-validator`'s `disallowedTools: Edit,
+  Write` "remains the reliable write-block mechanism". It is `disallowedTools: Edit` as of this
+  release, because the agent was given `Write` for its verdict sidecar. So the frontmatter
+  blocks no writes at all, and what keeps the agent out of the tree it reviews is its body.
+  The rule says that instead, since a convention file is read as current fact.
 - **A budget checker nobody ran, guarding bodies that tripled.**
   `scripts/command-body-lengths.sh` has held the runtime budgets for the five phase command
   bodies since v4.0.2 and was called by nothing: not the `Makefile`, not a test, not CI. It
@@ -283,6 +335,23 @@
   (1 red), dropping the variable indirection (2 red), dropping either half of the scope-skip
   refusal (2 red each), restoring the `phpcpd` literal (7 red), and a dry producer naming a
   second tool in `tools_absent[]` (1 red).
+  The walker's negative control then grew from three planted shapes to eleven, because a
+  fixture whose only mutation is at top level cannot see a walker that accepts a nested one.
+  Four must be flagged — a push in a top-level scope branch, one nested inside its own probe,
+  one in the `elif` of its probe, and one behind a variable that is merely set near a probe —
+  and seven must NOT be, which is the half that was missing entirely: the else of a direct
+  probe, a probe-assigned sentinel, an inner probe under an outer scope test, the else of a
+  chain whose last branch is a scope test, a probe on the push's own line, and the `hash` and
+  `[ -e ]` forms. Both lists are asserted BY NAME, not by count: a count alone passes when the
+  walker flags the wrong four, which on this fixture is a walker that has started reding every
+  producer rather than one that stopped working. The resolved sentinel count is asserted too,
+  at exactly one, so the indirection cannot silently widen back out or collapse to zero. Six
+  further mutations, each verified applied and each 1 red: reverting to the any-level chain
+  test, narrowing `is_probe` back to the four literal forms, dropping the empty-sentinel half
+  of the variable rule, dropping the `else` rule, a probe test that accepts anything, and
+  dropping the own-line probe allowance. The nested case is also demonstrated at producer
+  scale on a COPY of `security-check.sh`: the previous walker reports nothing, this one flags
+  it, and the unmutated producer stays clean.
 - Two fixtures for the states above: `sec-no-eligible-no-lists.json`, a scope skip carrying
   no coverage lists at all, and `dry-nextjs-absent-no-skip-reason.json`, a Next.js DRY report
   naming `jscpd` absent with the `skip_reason` removed, so the analyzer name is the only
@@ -316,6 +385,45 @@
   mutations and not to the copying. The red count is written out rather than derived from the
   loop that produced it: a count that counts whatever happened cannot tell you a mutation
   stopped landing.
+
+### Known remaining
+These are open. Each was found, measured, and deliberately not fixed in this release.
+
+- **The condition walker reads one physical line, and only where `if`/`elif` starts it.** The
+  class it covers is narrower than "a push into `tools_absent[]` is guarded by an availability
+  probe", and both directions have a shape that escapes. Measured on a fixture, not reasoned
+  about:
+  * A SILENT PASS, the same class this release closed twice. A scope test on a continuation
+    line of the probe's own `if` is never read:
+    `if command -v conttool >/dev/null 2>&1 \` / `   && [ "${#SCAN_PATHS[@]}" -eq 0 ]; then`
+    → the walker sees `command -v` on line one, calls the branch probe-guarded, and passes a
+    push that is scoped out.
+  * A FALSE RED, the class of the `is_probe` widening above. A probe factored into a helper —
+    `if have_tool trivy; then … else ABSENT_TOOLS+=("trivy")` — is not recognised, and the
+    push is flagged on a correct producer. `resolve_analyzer` is in the recognised list only
+    because somebody added that one name; nothing derives helper names from the producers.
+  Neither shape occurs in either producer today — all ten pushes sit in the `else` of a
+  single-line `if` — which is why this is recorded rather than fixed. Joining continuation
+  lines and resolving helper functions is a shell parser, and a shell parser written as an
+  `awk` walker is how the first two cuts of this one got their defects. What it does catch:
+  adding, removing or renaming a push (the exact count and exact names beside it); moving one
+  into a scope branch at top level, nested inside its own probe, or into the `elif` of its
+  probe; and a variable tested as an availability sentinel that is not one.
+- **`nextjs/security-check.sh` is still an undeclared producer.** Carried forward from 5.35.6
+  unchanged: `--field-paths` gives `also` blocks to `dry` and `solid` only, and nothing checks
+  that file's emitted shape against what the resolver reads.
+- **`meta.tools[]` in `security-check.sh`'s whole-project report is still a wrong literal.**
+  Carried forward from 5.35.6. The resolver does not read it and the field-paths declaration
+  says why, so nothing depends on it; the literal is untouched and nothing asserts it.
+- **The resolver's catalog lookup is still a path guess when it is not given one.** Carried
+  forward from 5.35.6. `--tool-catalog` is the reliable channel and both wrappers pass it; a
+  direct call without the flag gets stricter blocking than intended and says so in
+  `evidence.coverage_gap.scope_source`.
+- **`commands/review.md` is at exactly its 135-line body budget again.** Both of this round's
+  fixes to it — the missing-architecture benign path and the failed-archive branch — extended
+  lines that already existed. The next addition to that file needs the budget raised in
+  `scripts/command-body-lengths.sh`, which `tests/review-command-spec.sh` records as a
+  deliberate act with a written reason.
 
 ## [5.35.6] - 2026-08-29
 
