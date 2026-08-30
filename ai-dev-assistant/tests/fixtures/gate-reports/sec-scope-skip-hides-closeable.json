@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "mode": "changed",
+    "analyzers_ran": 2,
+    "tools_absent": ["psalm"],
+    "tools_failed": [],
+    "tools_unmeasured": [],
+    "tools_skipped": ["composer_audit", "gitleaks", "trivy"]
+  },
+  "summary": {
+    "overall_status": "pass",
+    "total_issues": 0,
+    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0}
+  }
+}

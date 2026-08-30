@@ -382,5 +382,63 @@
       "allow_plugins": [],
       "install_hint": "apt-get install inotify-tools (Linux) or brew install fswatch (macOS)"
     }
+  },
+
+  "layers_comment": "Names a GATE can report in tools_absent[] / tools_failed[] / tools_unmeasured[] that are not entries in `tools` above, because install-tools.sh does not install them. `scope` answers HOW THE INSTALLER PROVIDES A TOOL; these have no answer to that question, and leaving them out made a consumer classify them `unknown` and, being fail-closed, block on them. /review then failed on every Drupal project without the security_review contrib module, escapable only with --skip-security — the exact habit the scope rule exists to prevent. Two kinds, plus aliases. `builtin`: provided by something the project already has, or implemented in the gate itself, so there is nothing to install and an absence is never a missing install. `optional-contrib`: a third-party add-on this plugin deliberately does not install and does not require. NEITHER BLOCKS WHEN ABSENT. Both still block when they land in tools_failed[] or tools_unmeasured[], which are facts about THIS RUN rather than about what is installed, and which no scope can excuse. `alias_of` exists because a gate's report name and its catalog key are not always the same word; without it psalm_taint and phpcs_security_linter fell through to `unknown` and blocked.",
+
+  "layers": {
+    "custom_patterns": {
+      "kind": "builtin",
+      "reason": "A grep implemented inside security-check.sh. There is no package.",
+      "reported_by": ["drupal/security-check.sh"]
+    },
+    "static_calls": {
+      "kind": "builtin",
+      "reason": "The always-on \\Drupal:: grep in solid-check.sh. Needs no binary, which is also why that gate's analyzers_ran is never 0 and cannot be used as its coverage test.",
+      "reported_by": ["drupal/solid-check.sh"]
+    },
+    "composer_audit": {
+      "kind": "builtin",
+      "reason": "A subcommand of composer, which any Drupal project already has. Not something this toolchain could install to close a gap.",
+      "reported_by": ["drupal/security-check.sh"]
+    },
+    "drush_pm_security": {
+      "kind": "builtin",
+      "reason": "A drush command. drush is the project's own dependency and a hard prerequisite of the gate, so a non-result from it is a failure and has no absent branch at all.",
+      "reported_by": ["drupal/security-check.sh"]
+    },
+    "npm_audit": {
+      "kind": "builtin",
+      "reason": "A subcommand of npm, a hard prerequisite of the Next.js gates. Same reasoning as drush_pm_security: no absent branch exists.",
+      "reported_by": ["nextjs/security-check.sh"]
+    },
+    "large_files": {
+      "kind": "builtin",
+      "reason": "A find + wc pass in nextjs/solid-check.sh. Needs no binary.",
+      "reported_by": ["nextjs/solid-check.sh"]
+    },
+    "typescript_strict": {
+      "kind": "builtin",
+      "reason": "Reads tsconfig.json directly. A JavaScript project has none, which the gate records as skipped by design rather than as a gap.",
+      "reported_by": ["nextjs/solid-check.sh"]
+    },
+    "security_review": {
+      "kind": "optional-contrib",
+      "reason": "The drupal/security_review contrib module. install-tools.sh does not install it and this plugin does not require it, so blocking on its absence fails every Drupal project that has not chosen to add it.",
+      "reported_by": ["drupal/security-check.sh"]
+    },
+    "eslint_security": {
+      "kind": "optional-contrib",
+      "reason": "eslint-plugin-security. An npm dev dependency a project can add, but not one install-tools.sh places.",
+      "reported_by": ["nextjs/security-check.sh"]
+    },
+    "psalm_taint": {
+      "alias_of": "psalm",
+      "reason": "security-check.sh names the taint-analysis LAYER; the catalog keys the BINARY that runs it."
+    },
+    "phpcs_security_linter": {
+      "alias_of": "php-security-linter",
+      "reason": "The report keeps the historical phpcs- name for the layer; the catalog keys the binary the installer places."
+    }
   }
 }

@@ -1,0 +1,29 @@
+{
+  "violations": [],
+  "metrics": {
+    "total_violations": 0,
+    "critical_count": 0,
+    "warning_count": 0,
+    "suggestion_count": 0,
+    "static_drupal_calls": 0,
+    "phpstan_errors": 0,
+    "phpmd_violations": 0
+  },
+  "analyzers_ran": 1,
+  "skipped_tools": [
+    "phpstan",
+    "phpmd"
+  ],
+  "tools_absent": [
+    "phpstan",
+    "phpmd"
+  ],
+  "tools_unmeasured": [],
+  "tools_failed": [],
+  "generated_at": "2026-08-29T12:00:00Z",
+  "status": "pass",
+  "binary_analyzers": [
+    "phpstan",
+    "phpmd"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "mode": "whole-project",
+  "measured": true,
+  "skip_reason": null,
+  "tools_absent": [],
+  "duplication_percentage": 1.4,
+  "clones_count": 2,
+  "duplicated_lines": 30,
+  "total_lines": 2100,
+  "thresholds": {"max_acceptable": 5, "warning": 10},
+  "status": "pass",
+  "rating": "pass",
+  "generated_at": "2026-08-29T12:00:00Z"
+}

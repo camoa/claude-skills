@@ -1,0 +1,12 @@
+{
+  "status": "unmeasured",
+  "analyzers_ran": 0,
+  "binary_analyzers": ["madge", "eslint"],
+  "tools_absent": ["madge", "eslint"],
+  "tools_failed": [],
+  "tools_unmeasured": ["large_files"],
+  "tools_skipped": ["typescript_strict"],
+  "violations": [],
+  "metrics": {"circular_dependencies": 0, "complexity_violations": 0, "large_files": 0, "typescript_issues": 0},
+  "generated_at": "2026-08-29T12:00:00Z"
+}

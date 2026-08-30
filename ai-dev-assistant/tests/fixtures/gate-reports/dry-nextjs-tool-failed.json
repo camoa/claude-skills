@@ -1,0 +1,11 @@
+{
+  "mode": "whole-project",
+  "measured": false,
+  "skip_reason": "tool_failed",
+  "tools_absent": [],
+  "duplication_percentage": null,
+  "clones_count": null,
+  "status": "unmeasured",
+  "rating": "unmeasured",
+  "generated_at": "2026-08-29T12:00:00Z"
+}

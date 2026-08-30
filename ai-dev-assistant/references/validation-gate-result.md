@@ -38,7 +38,7 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
   "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
-    "raw_output_path": "/abs/path/.reports/tdd.json"
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json"
   },
   "messages": [
     "3 changed source files mapped to a co-located test; all mapped tests pass",
@@ -71,11 +71,187 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | Verdict | Meaning | Exit behavior |
 |---|---|---|
 | `pass` | Gate's criteria met. Nothing to fix | Command prints summary + exits 0 |
-| `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking | Command prints summary + exits 0 |
+| `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking **on the verdict** — but a `warning` carrying `coverage_partial: true` blocks through `review.md` rule 4, which keys on the marker and never on this word | Command prints summary + exits 0 |
 | `fail` | Gate's criteria NOT met. Action required | Command prints summary + exits 1 (signals failure; user/AI can see + fix) |
-| `skipped` | Gate was invoked but not run (e.g., user passed `--skip`, or the underlying tool is unavailable) | Command prints reason + exits 0 |
+| `skipped` | Gate was invoked and did not run, for a reason that leaves nothing unknown — the user passed `--skip`, the gate is not applicable, the change set is empty. **Not** the state for "the analyzer was missing, so nothing got measured": that is a `skipped` carrying `unresolved`, below | Command prints reason + exits 0 |
 
 All gates are advisory by default — `fail` does NOT block the user's workflow (soft-nudge posture). The exit code communicates the result to invokers that want to chain (e.g., CI, `/validate:all` orchestration).
+
+### `unresolved` — invoked, and could not check anything
+
+The four verdicts answer "what did the gate find?". They cannot answer "did the
+gate look?", and those are different questions: a gate whose only analyzer is
+not installed finds no violations, which is not the same fact as a clean tree.
+`unresolved` is the marker for the second case.
+
+**What it is.** The literal string `unresolved: true` inside one of the
+envelope's `messages[]` entries, alongside a message naming what could not be
+checked and why. It is a convention on message TEXT, not a field — nothing in
+`scripts/validation-envelope-write.sh` produces or validates it, so a producer
+that misspells it emits an envelope that reads clean.
+
+**Who consumes it.** `commands/review.md` step 8 rule 2 (its sibling
+`coverage_partial: true`, below, is read by rule 4). When a gate's
+`validations/latest/<gate>.json` carries `unresolved: true` in `messages[]`,
+`/review` propagates it into that gate's `gates_run[]` entry and resolves
+`overall_verdict: "fail"` — **fail-closed, ranked above bypass**, while the
+gate's own `verdict` stays `skipped`. An unknown gate result is never absorbed
+into a pass. That consumer is the only thing making the marker load-bearing: if
+rule 2 is ever deleted, every producer below becomes decorative.
+
+**Who emits it: `scripts/gate-verdict-resolve.sh`, not the wrapper.** The four
+`validate-*.md` commands hand it the gate's report path, exit code and a
+freshness baseline, and use the `verdict`, `unresolved`, `coverage_partial` and
+`messages[]` it returns. The markers are already inside those `messages[]` when
+they come back, so a wrapper that edits, reorders or trims the list drops the
+only thing `/review` reads.
+
+That indirection is not tidiness. The mapping lived in prose for three revisions
+and the prose got the field paths wrong every time — `security-report.json` has
+no top-level `.status`, `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` on any path. A field path is a claim
+about a producer, checkable only by reading the producer, and
+`tests/gate-verdict-resolve-spec.sh` now does exactly that for every path the
+resolver declares, plus fixture reports for each state of each mode. A table in
+a command file cannot be run, so it was never checked, so it was wrong.
+
+**When it applies.** Whenever the gate was invoked and could not check the thing
+it exists to check. The resolver reads the gate's **JSON report**, located with
+`scripts/core/report-dir.sh --latest` — never the console text, and never a
+hardcoded `.reports/`, which stopped being the default in code-quality-tools
+v3.9.6:
+
+| Gate | Report | The could-not-check path |
+|---|---|---|
+| `dry` | `dry-report.json` | `status`/`rating` `unmeasured`, `measured:false`, `skip_reason:"tool_absent"`, or `phpcpd` in `tools_absent[]`. It is the gate's only analyzer, so any of those means duplication was not measured at all. **There is no `tools_failed` on this report, on any path** — do not read one |
+| `solid` | `solid-report.json` | `unmeasured`, or every analyzer named in the report's own `binary_analyzers[]` present in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]`. **The names come from the report, never from this document**: they are `phpstan`/`phpmd` on Drupal and `madge`/`eslint` on Next.js, and a list written here could not be either |
+| `security` | `security-report.json` | `unmeasured`, or `meta.analyzers_ran == 0` — the producer stating no scanner measured anything. **`meta.tools[]` is not read and must not be**: it exists only in whole-project mode, and its literal names `phpcs_security_linter`/`psalm_taint`/`roave` where the code pushes `php-security-linter`/`psalm` and never pushes `roave`, so a set relation over it cannot be satisfied |
+| `tdd` | none — by design | Exit `4` (`CQT_EXIT_UNMEASURED`), no `--files` list so no test ran, or output carrying no evidence a test ran |
+
+**A missing report is itself unresolved** for the three gates that write one: a
+gate that wrote no report cannot tell you what it measured. `tdd` is the
+deliberate exception — `tdd-workflow.sh` writes no JSON report on any path and
+says so in its own source, so its primary channel is the exit code and treating
+an absent report as unresolved there would fail-close every review.
+
+**Freshness is checked, not assumed.** `report-dir.sh`'s `project` origin resolves
+to a DATED directory and falls back to the newest existing one, so a rerun that
+dies before writing anything — DDEV down, the gate exits 2 with no report —
+leaves the PREVIOUS run's report on disk and a reader picks up a stale green.
+Each wrapper stamps `date -u +%Y-%m-%dT%H:%M:%SZ` before invoking its gate and
+passes it as `--not-before`; a report generated earlier than that is `unresolved`
+with `freshness: "stale"` in `evidence`. Omit the baseline and the resolver
+reports `freshness: "unchecked"` rather than treating an undated read as current
+— a resolver that silently assumed freshness would be the same false green one
+level down.
+
+**`analyzers_ran` is not the coverage test for SOLID, and it is the whole of it
+for security.** It counts CHECKS, not analyzers: `solid-check.sh` increments it
+for its always-on `\Drupal::` grep, which needs no binary, so it is `>= 1` with
+phpstan and phpmd both gone — derive that gate's zero-coverage state from
+`binary_analyzers[]` against the tool lists instead. `security-check.sh` has no
+analyzer-free layer, so a `0` there is that producer stating no scanner measured
+anything and is read as zero coverage directly; it emits the field only in
+`--changed` mode, and its absence is not a zero. One counter, two gates, two
+different answers, which is why it is asked of each gate in the terms that gate
+can answer rather than applied as one rule.
+
+**`tools_failed[]` counts as heavily as `tools_absent[]`, and more.** An analyzer
+that was found and returned nothing usable produced no evidence either. Omitting
+it from the derivation is how a crashed gitleaks reads as a clean one. And the
+scope rule below relieves **absence only**: `tools_failed[]` and
+`tools_unmeasured[]` are facts about THIS RUN rather than about what is
+installed, so no scope excuses them — a crashed semgrep blocks whoever installs
+semgrep. The first version of the scope rule classified the whole union and
+stopped blocking on crashed machine-scope tools with it.
+
+### `coverage_partial` — part of it was measured, part was not
+
+A gate that ran SOME of its analyzers is a different state from both a clean run
+and an unresolved one: `warning`, naming what went unchecked, never `pass` and
+never `unresolved`. A partial measurement is still a measurement.
+
+**Findings and coverage are TWO AXES, resolved separately.** The verdict comes
+from what the gate found; the marker comes from how much of its ground it looked
+at; and neither constrains the other. A `pass` with a blocking gap becomes
+`warning`, because a clean result from a half-run gate is not a clean result. A
+`warning` and a `fail` are never softened — findings a partial run produced are
+still findings — and they carry the marker alongside, so both facts reach the
+review. Writing the two as one `case` over the gate's status is not a style
+choice: it is how a hard SOLID `fail` with phpmd absent came to resolve as
+`warning`, so `review.md` rule 1 never fired and a single `--skip-dry <reason>`
+let rule 3 return `bypassed` and exit 0 under `--headless`.
+
+**Not every gap is the project's to close, and blocking on one that is not
+trains the `--skip` habit this whole mechanism depends on people not having.**
+`code-quality-tools`' `schema/tool-catalog.json` classifies every tool it
+installs, and `gate-verdict-resolve.sh` READS that classification rather than
+carrying a tool list of its own — a hardcoded list is the bug this area has
+fixed twice. A `project`- or `isolated`-scope gap is closeable by
+`install-tools.sh`, so it blocks. A `machine`-scope gap (semgrep, gitleaks,
+trivy) is a host binary the installer has no mechanism for, so on an ordinary
+developer machine it is simply absent; blocking there fires on nearly every
+local review, and `security-check.sh`'s own source names the consequence: "a
+verdict that fires on every run carries no information". A tool the catalog does
+not classify, or no catalog at all, is treated as closeable — the fail-closed
+direction. Pass the catalog with `--tool-catalog`; the wrappers already have the
+plugin path from `plugin-dep-check.sh`.
+
+**A gap that does not block is still REPORTED.** Not blocking is not the same as
+not reporting. The gate emits a `coverage_gap_nonblocking: <tools>` line in
+`messages[]` and the full split in `evidence.coverage_gap`
+(`{blocking[], non_blocking[], scope_source, ci}`), both of which reach the
+review summary and `_review.json` unedited. Part of the gate did not run, and a
+reader has to be able to see that without re-deriving the scope rule.
+
+**CI escalates it.** With the `CI` environment variable set, a `machine`-scope
+gap blocks like any other. This is the repo's own pattern rather than a new one:
+`make lint` skips when shellcheck is missing locally and fails outright under
+`CI`, so a CI step never goes green without checking anything.
+
+**Zero coverage is NOT scope-aware.** Letting a partial gap through is a
+judgement that the rest of the gate still measured something; there is no rest
+when nothing ran, so an all-analyzers-gone run is `unresolved` whatever the
+scopes say.
+
+**The marker.** The literal string `coverage_partial: true` in one of the
+envelope's `messages[]` entries, alongside a message naming which analyzers were
+absent, crashed or had nothing to read. Same shape as `unresolved: true`, same
+lack of schema support, and the same one consumer: `commands/review.md` step 8
+rule 4 reads it and resolves `overall_verdict: "fail"`.
+
+**The two are not interchangeable.** `unresolved` means **nothing** was measured
+and the gate's own verdict is `skipped`. `coverage_partial` means **part** of it
+was and the verdict is `warning`. Both are facts about what was looked at rather
+than findings about the code, which is why both block and neither is a `fail`
+from the gate itself.
+
+**Only `validate-solid` and `validate-security` emit it.** They stack several
+analyzers and can lose some while keeping others. `validate-dry` runs one
+analyzer and `validate-tdd` has one channel, so for those the answer is binary
+and the unresolved rules above cover it.
+
+**Rule 4 keys on the marker, NEVER on `verdict: "warning"`, and this distinction
+is the whole point.** `warning` is overloaded and mostly means a fully measured
+run with a mildly bad number: `dry-check.sh` sets it for duplication over the
+5% target, `solid-check.sh` for more than ten SOLID warnings. Those runs had
+every tool installed and measured everything they exist to measure. Failing them
+would block reviews for ordinary findings that never blocked before, and would
+teach everyone to reach for `--skip-<gate>` — the bypass that makes the whole
+coverage mechanism worthless. An ordinary `warning` stays exactly as
+non-blocking as it has always been; `review.md` rule 5's benign list says so.
+
+**The gate's own `status` is not a coverage signal, and must not be read as
+one.** `solid-check.sh` prints `[PASS] SOLID compliance acceptable` with both
+analyzers absent, and `security-check.sh` prints `✓ Security audit passed` with
+every scanner absent, because `tools_absent[]` deliberately does not move their
+verdicts — that is each gate declining to judge the machine it runs on. Reading
+coverage off the tool lists is the wrapper's job, not the gate's.
+
+What is NOT unresolved: a `--skip` bypass, a `skipped-not-shipped` gate, the
+Spec axis skipping for want of an `alignment.md`, an empty change set. Those
+leave nothing unknown, and marking them unresolved would fail a review that had
+nothing to fail on.
 
 ## 4. `details` — gate-specific structures
 
@@ -86,14 +262,26 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 ```json
 "details": {
   "source": "code-quality-tools:tdd",
-  "raw_output_path": "/abs/path/.reports/tdd.json",
-  "code_quality_tools_version": "3.0.0"
+  "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json",
+  "code_quality_tools_version": "3.0.0",
+  "analyzers_ran": 2,
+  "tools_absent": ["phpmd"],
+  "tools_failed": []
 }
 ```
 
 - `source` — the underlying skill invoked (always `code-quality-tools:<gate>`)
 - `raw_output_path` — absolute path to the unmodified output from the wrapped tool, for deep diagnosis
 - `code_quality_tools_version` — version of the dependency at run time
+- `analyzers_ran` — the underlying report's own counter, copied through where it exists (`solid-check.sh` on both paths, `security-check.sh` in `--changed` mode only). Observability, **not** the coverage test: it counts checks, and one of SOLID's needs no binary
+- `tools_absent` — analyzer names the report listed as NOT INSTALLED, and nothing else. It carried three different facts until code-quality-tools 3.10.1, which is why a correctly scoped run read as missing coverage
+- `tools_failed` — analyzer names that were found and returned nothing usable. Disjoint from `tools_absent` and equally disqualifying: neither produced evidence
+- `tools_skipped` — layers the mode omitted BY DESIGN: the whole-project-only advisory scanners, and anything the changed set gave nothing to do. Not a coverage gap and never counted as one. Change-scoped mode only
+- `binary_analyzers` — the analyzers of that gate that need installing, named by the producer. "Did they all go missing?" is asked of this list rather than of one the consumer keeps itself
+
+Both are passed straight through — `--details` is handed to the emitter verbatim
+and only checked for object shape and duplicate keys, so carrying them needs no
+change to `validation-envelope-write.sh`.
 
 ### Guides gate (framework-owned)
 
@@ -325,7 +513,7 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
   "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
-    "raw_output_path": "/abs/path/.reports/tdd.json",
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json",
     "code_quality_tools_version": "3.0.0"
   },
   "messages": ["3 changed source files mapped to a co-located test; all mapped tests pass"],
@@ -348,7 +536,7 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
   "status": "warning",
   "details": {
     "source": "code-quality-tools:solid",
-    "raw_output_path": "/abs/path/.reports/solid.json",
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/solid.json",
     "code_quality_tools_version": "3.0.0"
   },
   "messages": [

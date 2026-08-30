@@ -29,9 +29,9 @@ Run the TDD (Red-Green-Refactor discipline) quality gate against the current tas
 
    The predecessor to this step confirmed the directory was non-empty and then declared a 3.0.0 minimum it never checked, so a cache holding only 2.x passed. Separately, a live run resolved that plugin's path with a lexically-sorted glob and read 3.9.6 while 3.9.8 sat beside it.
 
-3. **Invoke the check** — execute the `/code-quality:tdd` flow as documented in the `code-quality-tools` plugin's `commands/tdd.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. **When `--files` is absent there is no whole-project TDD check to run, and this command says so rather than inventing one.** Emit `verdict: "skipped"` with `unresolved: true` in `messages[]`, naming the missing capability, and do not invoke the underlying flow at all. The bare invocation runs no test: `code-quality-tools/commands/tdd.md` calls `tdd-workflow.sh` with no argument, the script defaults `ACTION="${1:-help}"`, and the whole "whole-project TDD scan" is its usage text printed to stdout. The verdict table below then read that as ambiguous output and scored it `warning` — neither `fail` nor unresolved — so `/review --full-audit` ran a TDD gate that executed nothing and still went green. Reporting `unresolved` makes that mode fail closed via `/review` step 8 rule 2, which is the honest answer until the underlying tool grows a whole-tree mode. **Do not synthesise one by enumerating the tree and passing it as `--changed`:** on any project that vendors its framework that means mapping every core and vendor source to a co-located test, which is both wrong and unbounded. Capture the output for envelope construction in step 4.
+3. **Invoke the check** — execute the `/code-quality:tdd` flow as documented in the `code-quality-tools` plugin's `commands/tdd.md` within this command's own execution context. Do NOT attempt to shell out to the sibling slash command. If a `--files <list>` parameter was supplied to this wrapper, forward it to the underlying flow as `--changed <list>` — this scopes the gate to the listed files; the code-quality tool handles the empty-list → clean-skip case internally. **When `--files` is absent, do not invoke the underlying flow at all** — see path A of "Verdict interpretation" for what that mode is and why it is `unresolved`. Capture the exit code and console output for step 4.
 
-4. **Parse the result** — classify the output into our verdict space (`pass | warning | fail | skipped`) per the "Verdict interpretation" section below. Extract any actionable findings into `messages[]`. If `/code-quality:tdd` wrote a JSON report to `.reports/tdd.json` (disk-read fallback), capture its path.
+4. **Resolve the verdict with the script** — run `${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh tdd "" --exit-code "<the gate's exit status>"` (Bash) and use its JSON verbatim per "Verdict interpretation" below. This gate writes no report, so the path argument is empty and the exit code carries the whole answer; the resolver knows that and does not treat the absence as unresolved. `raw_output_path` in `--details` stays `null`. Pass `messages[]` through unedited and `evidence{}` into `--details`.
 
 5. **Emit and persist the envelope** — call `${CLAUDE_PLUGIN_ROOT}/scripts/validation-envelope-write.sh` (Bash) with the verdict, the findings and this gate's `details`. See "Emitting the envelope" below. The script builds the envelope and writes both files; do not assemble the JSON by hand.
 
@@ -39,20 +39,69 @@ Run the TDD (Red-Green-Refactor discipline) quality gate against the current tas
 
 7. **Print CLI summary** — show verdict, top 3 messages, and the persisted-result paths. When invoked non-interactively (chained from `/validate:all` or CI equivalents), signal verdict via exit code: 0 for `pass`/`warning`/`skipped`; 1 for `fail`. In interactive use the printed summary IS the signal — Claude does not literally exit the session. User workflow is NEVER blocked regardless of verdict.
 
+## Where the result comes from
+
+**`scripts/gate-verdict-resolve.sh` decides the verdict. This file does not.** It used to
+carry the mapping as prose, and prose got the field paths wrong every round it was
+rewritten: `security-report.json` has no top-level `.status` (it is
+`.summary.overall_status`), `meta.tools[]` does not exist in `--changed` mode, and
+`dry-report.json` has no `tools_failed` at all. Each was a claim about a producer, and a
+claim about a producer is only checkable by reading the producer — which
+`tests/gate-verdict-resolve-spec.sh` now does, against every path the resolver declares.
+A table in a command file cannot be run, so it was never checked, so it was wrong.
+
+**This gate writes no JSON report on any path**, and says so where it sets its exit
+codes: "This gate writes no JSON report, so the exit code is not a fallback channel — it
+is the only one there is." So pass an empty report path and the exit code; the resolver
+resolves this gate from the code alone, and does NOT treat the absent report as
+unresolved. Doing so would mark every TDD run on every project unresolved and fail-close
+every review, on a gate behaving exactly as designed.
+
+Exit `4` is `CQT_EXIT_UNMEASURED` — no test runner, nothing tested — and is the one state
+that must not read as a finding. It is `unresolved`.
+
+**When `--files` is absent, do not invoke the underlying flow at all.** There is no
+whole-project TDD mode: `code-quality-tools/commands/tdd.md` calls `tdd-workflow.sh` with
+no argument, the script defaults `ACTION="${1:-help}"`, and the "whole-project scan" is its
+usage text printed to stdout. Emit `verdict: "skipped"` with `unresolved: true` naming the
+missing capability. Do not synthesise a whole-tree mode by enumerating the tree and passing
+it as `--changed`: on any project that vendors its framework that means mapping every core
+and vendor source to a co-located test, which is both wrong and unbounded.
+
+**This gate has no partial state at all** — one channel, one question — so it never sets
+`coverage_partial`. It is the only one of the four that does not: `validate-dry` has a
+single analyzer and still reaches a partial state through `--changed` mode's
+files-not-on-disk case.
+
 ## Verdict interpretation
 
-`/code-quality:tdd` output has to be mapped to our 4-value verdict enum. Heuristics (ordered; first match wins):
+There is no table here on purpose. Run the resolver and use what it returns:
 
-| Signal in output | Our verdict |
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" tdd "" \
+  --exit-code "<the gate's exit status>" --not-before "<the step-3 timestamp>"
+```
+
+It prints one JSON object:
+
+| Field | Use it for |
 |---|---|
-| Explicit "PASS" / "✓" / "all checks passed" / "no violations" | `pass` |
-| Explicit "FAIL" / "✗" / "violations found" / "tests missing for <x>" | `fail` |
-| Warnings-but-not-fatal phrasing ("1 concern", "minor issue", "consider") | `warning` |
-| Skip indicators ("not applicable", "no code changes to check", "skipped — <reason>") | `skipped` |
-| Output carries no evidence a test ran (usage text, an action list, an empty run) | `skipped`, and put `unresolved: true` in `messages[]` |
-| Ambiguous or empty output | `warning` (conservative — surface for human review) |
+| `verdict` | the envelope's `--verdict`, verbatim: `pass` \| `warning` \| `fail` \| `skipped` |
+| `unresolved` | `true` ⇒ **nothing** was measured. The resolver has already put the literal `unresolved: true` in `messages[]`; pass those messages through unchanged. `/review` step 8 rule 2 reads it and fails closed |
+| `coverage_partial` | `true` ⇒ **part** of it was measured. Same deal: the literal `coverage_partial: true` is already in `messages[]`, and `/review` step 8 rule 4 fails closed on it |
+| `messages[]` | one `--message` per entry, in order. **Do not edit, reorder or drop any of them** — the two markers live in here, and a marker a caller trims is a green review |
+| `evidence{}` | put it in `--details` as-is. It records which fields were read and what they held, so a verdict can be argued with |
+| `measured`, `mode` | context for the CLI summary |
 
-If `/code-quality:tdd` emits JSON via a `--json` flag (future enhancement), prefer structured parsing over heuristics. v1 uses heuristics because no stable JSON surface exists yet upstream.
+Both markers are never set at once: nothing-measured and part-measured are different
+facts. An ordinary `warning` — a real, complete measurement whose number sits over a soft
+threshold — carries **neither**, and stays exactly as non-blocking as it has always been.
+Failing those would block projects where every tool is installed and teach everyone to
+reach for `--skip-tdd`, which is the bypass that makes this whole mechanism worthless.
+
+**If the resolver cannot be run**, emit `verdict: "skipped"` with `unresolved: true` and
+say so. Do not fall back to reading the console text: guessing from prose is the thing
+this replaced.
 
 ## Emitting the envelope (per `references/validation-gate-result.md`)
 
@@ -63,7 +112,7 @@ If `/code-quality:tdd` emits JSON via a `--json` flag (future enhancement), pref
   --task-folder "<abs path to the task folder>" \
   --verdict "<pass|warning|fail|skipped>" \
   --details "$(jq -n \
-      --arg raw "<path to .reports/tdd.json if produced, else empty>" \
+      --arg raw "" \
       --arg cqt "<version from plugin.json of code-quality-tools>" \
       '{source: "code-quality-tools:tdd",
         raw_output_path: (if $raw == "" then null else $raw end),
@@ -135,4 +184,4 @@ On `pass`: 0-2 messages (usually "all checks passed" + a brief observation). On 
 
 ## Output
 
-Writes the result envelope to `<task_folder>/validations/latest/tdd.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:tdd` flow may also leave `.reports/tdd.json` in the code being checked; when it does, its path is recorded in the envelope rather than written by this command. Prints the verdict, the top messages, and both persisted paths.
+Writes the result envelope to `<task_folder>/validations/latest/tdd.json`, overwriting the previous run, and appends the same envelope as one line to `<task_folder>/validations/history.jsonl`. The wrapped `/code-quality:tdd` flow writes no JSON report of its own, so the envelope's `raw_output_path` is `null` for this gate. Prints the verdict, the top messages, and both persisted paths.

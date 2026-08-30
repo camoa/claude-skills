@@ -1,0 +1,11 @@
+{
+  "status": "pass",
+  "violations": [],
+  "metrics": {
+    "circular_dependencies": 0,
+    "complexity_violations": 0,
+    "large_files": 0,
+    "typescript_issues": 0
+  },
+  "principles": {}
+}

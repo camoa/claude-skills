@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "analyzers_ran": "three",
+  "binary_analyzers": ["phpstan", "phpmd"],
+  "tools_absent": [],
+  "tools_failed": [],
+  "tools_unmeasured": [],
+  "generated_at": "2026-08-29T12:00:00Z"
+}

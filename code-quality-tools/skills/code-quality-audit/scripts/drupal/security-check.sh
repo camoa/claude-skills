@@ -387,6 +387,12 @@ if [ -n "$CHANGED_FILE" ]; then
         exit "$CQT_EXIT_UNMEASURED"
     fi
 
+    # Nothing in the diff this gate has any business reading — a docs-only or CSS-only
+    # change. `overall_status: "skipped"` is the same word the standard path uses for the
+    # very different state "the tools were here and returned nothing usable", so this
+    # branch names its reason in meta.skip_reason. Without it a consumer cannot tell a
+    # correctly scoped no-op from a scan that learned nothing it was supposed to learn,
+    # and the safe reading of the ambiguity — fail closed — puts a red on every docs PR.
     if [ "${#RELEVANT_FILES[@]}" -eq 0 ] && [ "$HAS_COMPOSER" = false ]; then
         echo -e "${GREEN}[SKIP]${NC} No relevant files in the changed set — clean skip."
         jq -n \
@@ -402,7 +408,8 @@ if [ -n "$CHANGED_FILE" ]; then
                     tools_failed: [],
                     tools_unmeasured: [],
                     paths_missing: [],
-                    tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"]
+                    tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"],
+                    skip_reason: "no_eligible_changes"
                 },
                 summary: {
                     overall_status: "skipped",
@@ -451,6 +458,13 @@ if [ -n "$CHANGED_FILE" ]; then
     # absence expected. drush pm:security and composer audit have no absent branch at all
     # (DDEV is a hard prerequisite here), so a failure in either is correctly a failure.
     ABSENT_TOOLS=()
+    # Layers this mode did not run because the CHANGED SET gave them nothing to do:
+    # composer audit with no composer.json/lock in the diff, the SAST layers with no
+    # PHP in it. That is scoping working exactly as designed, and it is a different
+    # fact from "the binary is not installed" — which is why it no longer shares a
+    # list with it. These names join the by-design tools_skipped[] the mode already
+    # emits; they are NOT a coverage gap and nothing downstream may read them as one.
+    SCOPED_OUT_TOOLS=()
     RAN_ANALYZERS=0
 
     # =====================
@@ -545,7 +559,7 @@ if [ -n "$CHANGED_FILE" ]; then
         else
             echo -e "  ${YELLOW}No SAST-eligible files — skipping Semgrep${NC}"
             SKIPPED_TOOLS+=("semgrep")
-            ABSENT_TOOLS+=("semgrep")
+            SCOPED_OUT_TOOLS+=("semgrep")
         fi
     fi
 
@@ -617,7 +631,7 @@ if [ -n "$CHANGED_FILE" ]; then
         else
             echo -e "  ${YELLOW}No SAST-eligible files — skipping php-security-linter${NC}"
             SKIPPED_TOOLS+=("php-security-linter")
-            ABSENT_TOOLS+=("php-security-linter")
+            SCOPED_OUT_TOOLS+=("php-security-linter")
         fi
     fi
 
@@ -690,7 +704,7 @@ if [ -n "$CHANGED_FILE" ]; then
         else
             echo -e "  ${YELLOW}No SAST-eligible files — skipping custom patterns${NC}"
             SKIPPED_TOOLS+=("custom_patterns")
-            ABSENT_TOOLS+=("custom_patterns")
+            SCOPED_OUT_TOOLS+=("custom_patterns")
         fi
     fi
 
@@ -758,10 +772,15 @@ if [ -n "$CHANGED_FILE" ]; then
             echo -e "  ${GREEN}No package vulnerabilities${NC}"
         fi
     else
-        # Scoped out by design in this mode, but still a layer that produced nothing.
+        # Scoped out by design: no dependency file changed, so there is nothing for an
+        # advisory scan to be about. This is the mode doing its job, not a gap in it,
+        # and it belongs in tools_skipped[] beside the other by-design omissions. It sat
+        # in tools_absent[] until 3.10.1, and every consumer that treats that list as a
+        # coverage gap therefore put a false red on the majority of pull requests: most
+        # of them touch PHP and not composer.lock.
         echo -e "${YELLOW}[SKIP]${NC} composer audit — composer.json/lock not in changed set"
         SKIPPED_TOOLS+=("composer_audit")
-        ABSENT_TOOLS+=("composer_audit")
+        SCOPED_OUT_TOOLS+=("composer_audit")
     fi
 
     # =====================
@@ -778,26 +797,45 @@ if [ -n "$CHANGED_FILE" ]; then
     # degrade to "skipped" (exit 0) rather than a hollow PASS. Otherwise the verdict
     # comes from the checks that DID run, and from whether a tool that WAS there failed
     # to report. Tool absence never inverts pass↔fail and never downgrades on its own:
-    # SKIPPED_TOOLS holds both kinds here, and ABSENT_TOOLS names the ones whose absence
-    # was expected, so the difference is what bears on the verdict. The whole-project
-    # layers this mode omits by design are declared separately again, in tools_skipped
-    # and the advisory note.
-    # tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
-    # says. tools_absent = the layer never ran and that was expected (tool not installed,
-    # nothing eligible to scan, target path absent) — it does not move the verdict.
-    # tools_failed = the layer was there and returned nothing usable (crashed, unparseable
-    # report, stale report) — a zero from it is not evidence, so it downgrades a would-be
-    # pass to "skipped". Every non-produced result lands in exactly one of the two; the
-    # union is "everything this scan did not cover".
+    # SKIPPED_TOOLS is the union of every non-producing layer, and the three named lists
+    # below say why each one did not produce, so only the unnamed remainder — the ones
+    # that failed — bears on the verdict.
+    # FOUR disjoint lists, and each one states ONE fact. Until 3.10.1 tools_absent[]
+    # documented itself as three facts at once — "tool not installed, nothing eligible to
+    # scan, target path absent" — and a reader could not tell them apart, so every reading
+    # of it was wrong in one direction or the other. A consumer that treats the list as a
+    # coverage gap red-flags a correctly scoped run; one that does not lets a genuinely
+    # missing gitleaks through.
+    #
+    #   tools_absent[]     the BINARY IS NOT INSTALLED. A fact about the machine, and the
+    #                      only one of the four that is a coverage gap.
+    #   tools_failed[]     the layer was there and returned nothing usable (crashed,
+    #                      unparseable report, stale report). A zero from it is not
+    #                      evidence, so it downgrades a would-be pass to "skipped".
+    #   tools_unmeasured[] the layer was never asked, because the path it would have read
+    #                      does not exist. A configuration fact about the project.
+    #   tools_skipped[]    omitted BY DESIGN — the whole-project-only advisory layers this
+    #                      mode never runs, plus the layers the changed set gave nothing to
+    #                      do. Not a gap; the scoping working.
+    #
+    # Every non-produced result lands in exactly one of the four.
     SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
     ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
     UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
-    # Three disjoint sets, the same arithmetic the standard path uses: everything that
-    # recorded a skip, minus the two kinds that have a name for why.
+    SCOPED_OUT_TOOLS_JSON=$(to_json_array "${SCOPED_OUT_TOOLS[@]+"${SCOPED_OUT_TOOLS[@]}"}")
+    # The failed list stays DERIVED rather than listed by hand, so it cannot drift from the
+    # recorded skips and the default stays fail-CLOSED: a name counts as a failure unless a
+    # branch explicitly declared why it did not run.
     FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
         --argjson absent "$ABSENT_TOOLS_JSON" \
-        --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
+        --argjson unmeasured "$UNMEASURED_TOOLS_JSON" \
+        --argjson scoped "$SCOPED_OUT_TOOLS_JSON" \
+        '$skipped - $absent - $unmeasured - $scoped')
     FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
+    # The by-design list a reader sees: the advisory layers this mode never runs, plus
+    # whatever the changed set scoped out on this particular run.
+    TOOLS_SKIPPED_JSON=$(jq -n --argjson scoped "$SCOPED_OUT_TOOLS_JSON" \
+        '(["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"] + $scoped) | unique')
 
     if [ "$RAN_ANALYZERS" -eq 0 ]; then
         OVERALL_STATUS="skipped"
@@ -834,6 +872,7 @@ if [ -n "$CHANGED_FILE" ]; then
         --argjson tools_absent "$ABSENT_TOOLS_JSON" \
         --argjson tools_failed "$FAILED_TOOLS_JSON" \
         --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
+        --argjson tools_skipped "$TOOLS_SKIPPED_JSON" \
         --argjson paths_missing "$CHANGED_MISSING_JSON" \
         --arg advisory_note "$ADVISORY_SKIP_NOTE" \
         '{
@@ -847,7 +886,7 @@ if [ -n "$CHANGED_FILE" ]; then
                 tools_failed: $tools_failed,
                 tools_unmeasured: $tools_unmeasured,
                 paths_missing: $paths_missing,
-                tools_skipped: ["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"]
+                tools_skipped: $tools_skipped
             },
             summary: {
                 overall_status: $status,
@@ -2128,15 +2167,18 @@ ISSUES=$(jq -n \
 # =====================
 # The severity counts are only half the verdict. The failed set — the analyzers that
 # were present and still returned nothing usable — is what a zero cannot be trusted
-# from. Absent-by-design tools stay in tools_absent[] and are reported, but they do not
+# from. An uninstalled binary stays in tools_absent[] and is reported, but it does not
 # move the verdict; see resolve_security_status().
-# tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
-# says. tools_absent = the layer never ran and that was expected (tool not installed,
-# nothing eligible to scan, target path absent) — it does not move the verdict.
-# tools_failed = the layer was there and returned nothing usable (crashed, unparseable
-# report, stale report) — a zero from it is not evidence, so it downgrades a would-be
-# pass to "skipped". Every non-produced result lands in exactly one of the two; the
-# union is "everything this scan did not cover".
+# The three lists are DISJOINT and each states ONE fact; see the --changed path for the
+# full four-way split and why conflating them was a defect.
+#   tools_absent[]     the BINARY IS NOT INSTALLED — a fact about the machine, and the
+#                      only one of the three that is a coverage gap. Every push into it
+#                      on this path is a `command -v` / `test -f vendor/bin/...` miss.
+#   tools_failed[]     present and returned nothing usable — a zero from it is not
+#                      evidence, so it downgrades a would-be pass to "skipped".
+#   tools_unmeasured[] never asked, because the path it would have read is not there.
+# This path scans the whole project, so nothing here is scoped out by the diff and there
+# is no by-design skipped list to emit.
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
 UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")

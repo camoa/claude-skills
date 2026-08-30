@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "timestamp": "2026-08-29T12:00:00Z",
+    "scan_type": "security_audit_changed",
+    "mode": "changed",
+    "tools_run": [],
+    "tools_absent": [],
+    "tools_failed": [],
+    "tools_unmeasured": [],
+    "paths_missing": [],
+    "tools_skipped": ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
+    "skip_reason": "no_eligible_changes"
+  },
+  "summary": {
+    "overall_status": "skipped",
+    "total_issues": 0,
+    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0}
+  }
+}

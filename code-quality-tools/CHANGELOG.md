@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.3] - 2026-08-30
+
+### Fixed
+
+- `nextjs/security-check.sh` reported an absent PATH as an absent TOOL. When `SRC_PATH` did not exist the custom-pattern layer scanned nothing at all and recorded `custom_patterns` in `tools_absent[]` — but that layer is a grep implemented in the gate and is always present, so what was absent was the ground, not the tool. Filed there it read as an expected absence, and once 3.10.2 classified `custom_patterns` as `builtin` (nothing to install, so never blocking) it stopped bearing on the verdict at all: a Next.js scan that read no source reported what a scan that read every file reports. It is `tools_unmeasured[]` now, which no scope excuses, and the gate grew the third list and the `unmeasured` status and exit 4 that go with it. Every remaining `ABSENT_TOOLS` push in both security gates was audited and each one is a genuine "not installed" branch.
+
+### Known remaining
+
+- `nextjs/security-check.sh` is not a declared producer in `ai-dev-assistant`'s `gate-verdict-resolve.sh --field-paths`, which gives second-producer blocks to the `dry` and `solid` gates only. It emits `.summary.overall_status` and the three coverage lists but no `analyzers_ran`, `tools_skipped` or `binary_analyzers`, and nothing checks any of that against what the consumer reads.
+
+## [3.10.2] - 2026-08-29
+
+### Added
+
+- `layers` in `schema/tool-catalog.json`: the names a GATE can report in `tools_absent[]` / `tools_failed[]` / `tools_unmeasured[]` that are not entries in `tools`, because `install-tools.sh` does not install them. `scope` answers how the installer provides a binary; these have no answer to that question, and their absence from the catalog made a consumer classify them `unknown` and, being fail-closed, block on them. `security_review` is the drupal/security_review contrib module, so `/review --full-audit` failed on every Drupal project that had not chosen to add it, escapable only with `--skip-security` — the habit the scope rule exists to prevent. Two kinds: `builtin` for what is provided by composer, drush or npm or implemented in the gate itself (`custom_patterns`, `static_calls`, `composer_audit`, `drush_pm_security`, `npm_audit`, `large_files`, `typescript_strict`), where there is nothing to install and an absence can never be a missing install; and `optional-contrib` for a third-party add-on this plugin deliberately does not install or require (`security_review`, `eslint_security`). Neither blocks when absent. Both still block when they land in `tools_failed[]` or `tools_unmeasured[]`, which are facts about a run rather than about what is installed.
+
+- `alias_of` in the same map, for the second way into that wrong answer: a gate's report name and its catalog key are not always the same word. `psalm_taint` is the catalogued `psalm` and `phpcs_security_linter` is `php-security-linter`, and without the alias both fell through to `unknown` and blocked. Eleven entries in all, nine kinds and two aliases, covering 10 of the 22 names the gates can report; the other 12 are catalogued `tools`. `ai-dev-assistant`'s gate-verdict spec now fails when a producer can report a name this file classifies neither way, which is worth more than the eleven.
+
+## [3.10.1] - 2026-08-29
+
+### Fixed
+
+- `security-check.sh`'s `tools_absent[]` said three different things, and a reader could not tell which. Its own documentation named them: the tool is not installed, there was nothing eligible to scan, the target path is not there. Only the first is a coverage gap. In change-scoped mode the script pushed `composer_audit` into that list on every diff that did not touch `composer.json` or `composer.lock`, and the three SAST layers on every diff with no PHP in it — both of which are the scoping working exactly as designed. A consumer that treats the list as a gap (the only reading that catches a genuinely missing gitleaks) therefore flagged incomplete coverage on the majority of pull requests; a consumer that treats it as benign lets the missing gitleaks through. Neither reading was available, because the distinction was not in the data. By-design non-runs now go to `meta.tools_skipped[]`, which change-scoped mode already emitted for the whole-project-only advisory layers, and `tools_absent[]` means one thing: the binary is not installed. The whole-project path was audited for the same conflation and has none — every push there is a `command -v` miss.
+
+- A changed set this gate has no business reading — a docs-only or CSS-only diff — wrote `overall_status: "skipped"`, the same word the whole-project path uses for the very different state "the tools were here and returned nothing usable". Indistinguishable to a reader, so the safe reading applied to both. It now writes `meta.skip_reason: "no_eligible_changes"` so a correctly scoped no-op can be told from a scan that learned nothing it was meant to learn.
+
+- `nextjs/solid-check.sh` printed `[SKIP] madge not installed`, set `status` to `pass`, and emitted a report with no coverage fields at all. A Next.js project with every analyzer missing was indistinguishable from one where every analyzer ran and found nothing — the same defect the Drupal gates were rewritten to remove, left in place one directory over. It now emits `tools_absent[]`, `tools_failed[]`, `tools_unmeasured[]`, `tools_skipped[]`, `analyzers_ran` and `binary_analyzers[]`, degrades to `unmeasured` with exit 4 when nothing produced a measurement, and no longer reports `[PASS] Complexity within limits` for an ESLint run that wrote no report. A JavaScript project's absent `tsconfig.json` is recorded as skipped by design, not as missing coverage, so it does not put every one of them on a permanent red.
+
+- `nextjs/dry-check.sh` exited 1 with no report when jscpd was missing. Exit 1 is also this gate's duplication-warning code, so the exit status said "ordinary warning"; and because `report-dir.sh` falls back to the newest existing report directory, a reader looking for the report found the previous run's. Both channels described a measurement that never happened. It now writes an unmeasured report and exits 4. The same branch covers jscpd running and producing nothing, which used to leave the counters at their initialised zeros and report 0% duplication.
+
+### Added
+
+- `binary_analyzers[]` in both SOLID gates' reports, naming the analyzers that need installing. `analyzers_ran` is not a coverage test on its own — the Drupal gate's always-on `\Drupal::` grep and the Next.js gate's file-size scan both increment it without any binary present — so a consumer asking "did every analyzer that needs installing go missing?" has to know which names those are. Until now the one consumer that asks carried them as a literal of its own, compared to nothing.
+
 ## [3.10.0] - 2026-08-28
 
 ### Fixed
