@@ -20,7 +20,9 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
   "critics": [
     { "lens": "security", "verdict": "pass|concern|critical|unresolved",
       "effective": "pass|concern|critical|unresolved",
-      "findings": [ { "severity": "concern|critical", "text": "<evidence-anchored>" } ] }
+      "findings": [ { "severity": "concern|critical", "text": "<evidence-anchored>",
+                      "remedy": "<smallest change that resolves this, naming every site>",
+                      "measured": null } ] }
   ],
   "overall": "pass | concern | critical | not_evaluated",
   "blocking": true,
@@ -35,6 +37,8 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
 | `evaluated` | `false` ⇒ the rung did not run (dial off / budget skip). A **present, explicit** skip — NOT an absent file. |
 | `overall` | `not_evaluated` ≠ `pass`. A required/high WO whose file is absent/unreadable is fail-closed to blocking by the **consumer** (③/`wo-ship-gate.sh`), not silently treated as pass. |
 | `critics[].effective` | `max(self verdict, worst finding severity)` — a `pass` carrying a `critical` finding is `critical` (the kernel's F8 cross-check). |
+| `critics[].findings[].remedy` | v5.36.0+. The smallest change that resolves the finding, naming every site it must touch, written by the critic that found it. It is what a repair is measured against, so that the repair is not the only party judging its own size. A class or uniqueness claim is backed by an enumeration; a search that was not exhaustive says so. `deferred[]` entries carry none. Rules live in `agents/wo-critic.md`. |
+| `critics[].findings[].measured` | v5.36.0+. `null` unless the argument for acting on the finding is a number, in which case `{quantity, value, threshold, matters_because}` with all four populated. A ratio, multiple or delta on its own is not admissible: the measured value is compared against a threshold sourced from outside the measurement. |
 | `missing` | `expected − present`; each missing critic is a synthetic `unresolved`. |
 | **`blocking`** | The single field ③ acts on. `true` ⇒ ③ withholds auto-merge (treated like a recorded bypass). `wo-ship-gate.sh` ANDs every WO's `blocking==false` into `ship_ok`. |
 | `degraded` | `mode==team-fallback-to-fanout`. On a **high** tier this forces `blocking`. |
