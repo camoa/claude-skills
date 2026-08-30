@@ -92,16 +92,28 @@ Run each enabled job locally at CI strictness; capture each one's output as the 
 | `cspell` | `cspell` with the project's `.cspell-project-words.txt` loaded |
 | `eslint` / `stylelint` | only when JS/CSS present and not `SKIP_ESLINT` / `SKIP_STYLELINT`; resolve the project's own merged config, never a rebuilt command (§1) |
 
-**Why `drupal/coder` is pinned `^8.3` here, and `^9.0` in `code-quality-tools`.** Same
-package, two profiles, one stated reason each. This skill exists to reproduce drupal.org's
-own pipeline locally, and that pipeline installs coder through `drupal/core-dev`, which
-pins `^8.3.30` on 11.x and 11.3.x and `^8.3.10` on 10.6.x — no core branch has moved to
-`^9`. Pinning `^8.3` is therefore the only pin that reproduces the CI that judges the
-patch; tracking the current major here would run a stricter phpcs than the one the
-gate is imitating, and fail a patch core's CI would have passed. `code-quality-tools`
-audits custom site code, is bound to no core-dev pin, and tracks the current major at
-`^9.0` for that reason. Verified against core-dev's `composer.json` and
-`gitlab_templates`' `include.drupalci.main.yml` on 2026-08-27.
+**Why `drupal/coder` is pinned `^8.3` here, and `^8.3.30||^9.0` in
+`code-quality-tools`.** Same package, two profiles, one stated reason each. This skill
+exists to reproduce drupal.org's own pipeline locally, and that pipeline installs coder
+through `drupal/core-dev`, which pins `^8.3.30` on 11.x and 11.3.x and `^8.3.10` on 10.6.x
+— no core branch has moved to `^9`. Pinning `^8.3` is therefore the only pin that
+reproduces the CI that judges the patch; tracking the current major here would run a
+stricter phpcs than the one the gate is imitating, and fail a patch core's CI would have
+passed.
+
+`code-quality-tools` audits custom site code rather than a patch, so it is free to accept
+coder 9 where a project can resolve it — but it is not free to REQUIRE it. It pins the
+range `^8.3.30||^9.0` and lets Composer take the newest version the project can actually
+install. This corrects what this page said until 2026-08-30, that the sibling plugin
+"tracks the current major at `^9.0`": a bare `^9.0` cannot install alongside
+`drupal/core-dev` on either supported major, because core-dev requires coder `^8.3.10` on
+Drupal 10 and `^8.3.30` on Drupal 11, and core-dev is present on most Drupal development
+sites. The reasoning was right about intent and wrong about the fact underneath it.
+
+Verified against core-dev's `composer.json` and `gitlab_templates`'
+`include.drupalci.main.yml` on 2026-08-27; the range and its reason are recorded in
+`code-quality-tools/skills/code-quality-audit/schema/tool-catalog.json` under
+`constraint_reason` and `resolves_against`, checked 2026-08-30.
 
 **Opt-in variants** — `OPT_IN_TEST_PREVIOUS_MAJOR` / `_PREVIOUS_MINOR` / `_NEXT_MINOR` /
 `_MAX_PHP`. `gitlab_templates` v1.15.0+ moved these to **manual trigger** — they do not
