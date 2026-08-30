@@ -167,6 +167,38 @@
   broader question of stack knowledge hardcoded in this file — the producer paths and the
   stack semantics — is the `stack_facts_in_recipes` task's subject and is untouched here.
 
+- **A budget checker nobody ran, guarding bodies that tripled.**
+  `scripts/command-body-lengths.sh` has held the runtime budgets for the five phase command
+  bodies since v4.0.2 and was called by nothing: not the `Makefile`, not a test, not CI. It
+  was written because those bodies load into Claude's context on every Skill invocation, and
+  v4.0.2 had just cut them from 1465 lines to 265. Run now for the first time in four months,
+  it reports three of five over: `research` 142 against 105, `design` 82 against 80, and
+  `implement` 363 against 120, which is 5x the 72-line body the budget was set against and
+  three times the budget itself. The one budget that IS enforced, `review` at 135 via
+  `tests/review-command-spec.sh`, sits at its ceiling with a written reason for each of its
+  seven raises. Same repo, same four months, same kind of command: the difference is that one
+  of them had something that ran. The script is now run by
+  `tests/command-body-lengths-spec.sh`, which `make test` discovers and `make ci` runs, so
+  this is inside the existing seven checks and adds no eighth. The four stale budgets are
+  RESET TO MEASURED, not raised to a number anyone judged: each is the body length that
+  command had on 2026-08-30, which makes the file a ratchet against further growth and says
+  so in its own header. 363 is recorded, not endorsed; shrinking `implement` is its own task
+  with its own risk and is NOT done here. What is guaranteed from now on is that 363 cannot
+  become 400 without a deliberate edit to that line, which is exactly the guarantee that was
+  missing while the number said 120. The script also gained the two refusals the repo asks of
+  a check: a phase named in the list with no budget recorded fails, and a run that measured
+  no bodies at all fails rather than reporting five silent successes.
+- **The review body budget was written down in two files.** `tests/review-command-spec.sh`
+  enforced the number and `scripts/command-body-lengths.sh` kept a hand-mirrored copy, which
+  is one edit away from disagreeing and did disagree: at v5.35.5 the spec enforced 131 while
+  the script still said 129, and nothing caught it because nothing ran the script. The script
+  is now the single home for the value and gained a `--budget <phase>` mode; the spec reads
+  it from there and FAILS if it cannot, with no fallback default, because a budget that
+  cannot be read is an unmeasured check. The reasoning for each raise stays in the spec where
+  it was written. Verified by lowering the script's number to 100 and confirming the review
+  spec goes red, and by removing the script entirely and confirming the spec fails instead of
+  defaulting.
+
 ### Added
 - `tests/gate-audit-path-spec.sh` — a documented field path for a gate-audit record must
   point where `gate-audit-write.sh` puts the field. Both sides derived from the artifacts:
@@ -239,6 +271,19 @@
   fails, rather than passes, when the sweep matches no files or finds no reader at all. All
   thirteen mutations run against the group came out red, each verified to have actually
   applied to the file before the suite was run.
+
+- `tests/command-body-lengths-spec.sh` — runs the phase-command body ratchet and proves it
+  can fail. Every mutation is seeded against a COPY of `commands/` through the new
+  `COMMAND_BODY_LENGTHS_DIR` override, so the real tree is never edited to test the check on
+  it. Five mutations, all red: a body one line over its budget (the minimal case the script
+  exists for, not a 200-line overrun), the same mutation on a second command so the red is
+  not a property of one file's frontmatter, a named command file removed, an empty directory
+  with nothing to measure, and a mirrored literal budget reintroduced into a copy of
+  `review-command-spec.sh` so the anti-mirror assertion is itself shown to be able to say no.
+  An unmutated copy is asserted green afterwards, so the reds are attributable to the
+  mutations and not to the copying. The red count is written out rather than derived from the
+  loop that produced it: a count that counts whatever happened cannot tell you a mutation
+  stopped landing.
 
 ## [5.35.6] - 2026-08-29
 

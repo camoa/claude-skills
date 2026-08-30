@@ -54,12 +54,29 @@ done
 #    concurrent agents inside the prompt-wording paragraph. The remaining four changes of this
 #    version — the spec sidecar, the record archive, the upstream advisory, the Output section —
 #    extended lines that already existed and cost nothing.
-#    kept in lockstep with scripts/command-body-lengths.sh)
-BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
-if [ "$BODY_LINES" -le 135 ]; then
-  pass_check "body line count $BODY_LINES ≤ 135"
+#    The reasoning for each raise lives here; the NUMBER lives in
+#    scripts/command-body-lengths.sh and is read from it below. It used to be
+#    written out in both files, and at v5.35.5 they disagreed — this spec
+#    enforced 131 while that script still said 129 — which nothing caught,
+#    because nothing ran that script. One number, one home.)
+BUDGET_SCRIPT="${PLUGIN_ROOT}/scripts/command-body-lengths.sh"
+if [ ! -x "$BUDGET_SCRIPT" ] && [ ! -f "$BUDGET_SCRIPT" ]; then
+  fail_check "budget source $BUDGET_SCRIPT not found"
+  BUDGET=""
 else
-  fail_check "body line count $BODY_LINES > 135"
+  BUDGET=$(bash "$BUDGET_SCRIPT" --budget review 2>/dev/null || true)
+fi
+if ! printf '%s' "$BUDGET" | grep -qE '^[0-9]+$'; then
+  # No default. A budget that cannot be read is an unmeasured check, and an
+  # unmeasured check does not pass.
+  fail_check "could not read the review body budget from $BUDGET_SCRIPT"
+else
+  BODY_LINES=$(awk 'BEGIN{f=0;d=0;n=0} /^---$/&&!d{f++;if(f==2)d=1;next} f==1&&!d{next} {n++} END{print n}' "$TARGET")
+  if [ "$BODY_LINES" -le "$BUDGET" ]; then
+    pass_check "body line count $BODY_LINES ≤ $BUDGET"
+  else
+    fail_check "body line count $BODY_LINES > $BUDGET"
+  fi
 fi
 
 # 3. 5-mechanism markers
