@@ -32,8 +32,17 @@
 #   <gate>          tdd | solid | dry | security
 #   <report-path>   the gate's JSON report. Pass "" or a nonexistent path when there is
 #                   none; for `tdd` there never is one and the path is ignored.
-#   --exit-code N   the gate's exit status. Required for tdd (its only channel); advisory
-#                   for the rest, where a disagreement with the report is itself unresolved.
+#   --exit-code N   the gate's exit status. Required for tdd (its only channel). For the
+#                   other three it is a CROSS-CHECK against the report, and the two pairs
+#                   below are the whole of it — a contract that named an enforcement
+#                   nothing performed is this file's own subject, so the bound is stated:
+#                     exit 4 (CQT_EXIT_UNMEASURED) with a report that does not say
+#                       `unmeasured` — the gate declared it measured nothing and the report
+#                       in hand says otherwise, so it is a previous run's.
+#                     exit 2 with a report claiming `pass` — 2 is `fail` for solid and dry
+#                       and a hard error for security; a passing report cannot accompany it.
+#                   Either is `unresolved`. Every other pairing is NOT cross-checked, and
+#                   `evidence.exit_code_check` says which of the three states applied.
 #   --not-before T  ISO-8601 UTC. A report generated before T is STALE and unresolved.
 #                   See "Freshness" below. Omit and freshness is reported `unchecked`,
 #                   never assumed.
@@ -108,7 +117,7 @@ emit_field_paths() {
   },
   "security": {
     "producer": "skills/code-quality-audit/scripts/drupal/security-check.sh",
-    "paths": [".summary.overall_status", ".meta.timestamp", ".meta.mode", ".meta.skip_reason", ".meta.tools_absent", ".meta.tools_failed", ".meta.tools_unmeasured", ".meta.tools_skipped", ".meta.analyzers_ran"],
+    "paths": [".summary.overall_status", ".meta", ".meta.timestamp", ".meta.mode", ".meta.skip_reason", ".meta.tools_absent", ".meta.tools_failed", ".meta.tools_unmeasured", ".meta.tools_skipped", ".meta.analyzers_ran"],
     "optional_in": {".meta.analyzers_ran": "changed", ".meta.mode": "changed", ".meta.skip_reason": "changed", ".meta.tools_skipped": "changed"},
     "note": "There is NO top-level .status. meta.tools[] is whole-project-only AND its literal disagrees with the names the code pushes, so it is deliberately not read. meta.tools_absent[] means ONE thing since cqt 3.10.1 — the binary is not installed; layers the changed set scoped out are in meta.tools_skipped[] and are NOT a coverage gap."
   },
@@ -318,11 +327,22 @@ else
     if [ -f "$cand" ]; then CATALOG="$cand"; break; fi
   done
 fi
+# ONE map from every name a gate can report to what a project could do about it. Built from
+# the catalog's `tools` (how the installer provides a binary) AND its `layers` (the names
+# that are not installed at all, plus the aliases where a gate's report name and the catalog
+# key are different words). A name missing from both is "unknown", which blocks.
 SCOPES='{}'
 SCOPE_SOURCE="none — no tool-catalog.json found, so every gap is treated as closeable"
 if [ -n "$CATALOG" ] && [ -f "$CATALOG" ]; then
-  if SCOPES=$(jq -c '.tools | with_entries({key: .key, value: (.value.scope // "unknown")})' "$CATALOG" 2>/dev/null) \
-     && [ -n "$SCOPES" ]; then
+  if SCOPES=$(jq -c '
+        (.tools // {} | with_entries({key: .key, value: (.value.scope // "unknown")})) as $t
+        | $t + ((.layers // {}) | with_entries({
+            key: .key,
+            value: (if (.value.alias_of // null) != null
+                    then ($t[.value.alias_of] // "unknown")
+                    else ("layer:" + (.value.kind // "unknown")) end)
+          }))' "$CATALOG" 2>/dev/null) \
+     && [ -n "$SCOPES" ] && printf '%s' "$SCOPES" | jq -e 'type == "object"' >/dev/null 2>&1; then
     SCOPE_SOURCE="$CATALOG"
   else
     SCOPES='{}'
@@ -332,14 +352,80 @@ fi
 CI_DECLARED=false
 if [ -n "${CI:-}" ]; then CI_DECLARED=true; fi
 
-# classify_gap <json array of tool names>
-# Sets GAP_BLOCKING and GAP_NONBLOCKING, both JSON arrays. Their union is the input.
+# THE EXIT-CODE CROSS-CHECK, bounded to the two pairings that cannot both be true.
+#
+# `--exit-code` was documented as an advisory cross-check where "a disagreement with the
+# report is itself unresolved", read into a variable, and then used only by the `tdd`
+# branch. All four wrappers passed it and no other branch looked at it: a contract
+# describing an enforcement nothing performed, in the file whose subject is exactly that.
+#
+# The valuable direction is a STALE report. report-dir.sh falls back to the newest existing
+# report directory, so a gate that exits 4 having written nothing leaves the previous run's
+# passing report where the resolver looks. `--not-before` catches that when the caller
+# stamps a time; the exit code catches it when the caller does not.
+#
+# cross_check_exit <report status word> <mode> <evidence json>
+EXIT_CHECK="no-exit-code"
+cross_check_exit() {
+  [ -n "$EXIT_CODE" ] || return 0
+  EXIT_CHECK="not-cross-checked"
+  case "$EXIT_CODE" in
+    4)
+      case "$1" in
+        unmeasured) EXIT_CHECK="agrees" ;;
+        *) unresolved_out "$GATE: the gate exited 4 (nothing measured) and the report in hand says '$1' — the report is not this run's" "$2" "$3" ;;
+      esac
+      ;;
+    2)
+      case "$1" in
+        pass) unresolved_out "$GATE: the gate exited 2 and the report in hand says 'pass' — 2 is a hard failure or a hard error for this gate, so the two cannot both describe one run" "$2" "$3" ;;
+        *) EXIT_CHECK="agrees" ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
+# classify_gap <absent[]> <failed[]> <unmeasured[]>
+# Sets GAP_BLOCKING and GAP_NONBLOCKING, both JSON arrays. Their union is the input union.
+#
+# SCOPE RELIEVES ABSENCE ONLY, and that is the whole of it. `tools_absent[]` is a fact about
+# what is INSTALLED, so "could the project install it?" is the right question to ask of it.
+# `tools_failed[]` and `tools_unmeasured[]` are facts about THIS RUN — the tool was there and
+# returned nothing usable, or the ground it would have read is not there — and no scope
+# excuses either. A crashed semgrep is a gap you can act on whoever installs semgrep. The
+# first version of this classified the whole union, so a machine-scope tool that CRASHED
+# stopped blocking too.
+#
+# blocks(name) when absent:
+#   project / isolated   the installer places it, so the gap is closeable       → blocks
+#   machine              a host binary install-tools.sh cannot provide          → CI only
+#   layer:builtin        provided by composer/drush/npm or by the gate's own
+#                        grep; there is NOTHING to install, so no action closes
+#                        it and a verdict that fires on every run says nothing   → never
+#   layer:optional-contrib  a third-party add-on this plugin deliberately does
+#                        not install or require                                  → never
+#   unknown              nobody classified it                                    → blocks
+#
+# `unknown` blocking is the fail-closed default and it is load-bearing, which is exactly why
+# tests/gate-verdict-resolve-spec.sh fails when a producer can report a name the catalog does
+# not classify: fail-closed on an unclassified name means an ordinary review fails, and the
+# only escape is the --skip this rule exists to prevent. That is how `security_review` — a
+# contrib module, not a binary — failed /review on every Drupal project without it.
 GAP_BLOCKING='[]'; GAP_NONBLOCKING='[]'
 classify_gap() {
-  GAP_BLOCKING=$(printf '%s' "$1" | jq -c --argjson s "$SCOPES" --argjson ci "$CI_DECLARED" \
-    '[ .[] | select($ci or (($s[.] // "unknown") != "machine")) ]' 2>/dev/null || printf '%s' "$1")
-  GAP_NONBLOCKING=$(printf '%s' "$1" | jq -c --argjson s "$SCOPES" --argjson ci "$CI_DECLARED" \
-    '[ .[] | select(($ci | not) and (($s[.] // "unknown") == "machine")) ]' 2>/dev/null || printf '[]')
+  local absent="${1:-[]}" failed="${2:-[]}" unmeasured="${3:-[]}"
+  GAP_BLOCKING=$(jq -n -c --argjson a "$absent" --argjson f "$failed" --argjson u "$unmeasured" \
+    --argjson s "$SCOPES" --argjson ci "$CI_DECLARED" '
+      [ $a[] | select(
+          ($s[.] // "unknown") as $sc
+          | if $sc == "machine" then $ci
+            elif ($sc | startswith("layer:")) then false
+            else true end) ]
+      + $f + $u | unique' 2>/dev/null \
+    || jq -n -c --argjson a "$absent" --argjson f "$failed" --argjson u "$unmeasured" '($a + $f + $u) | unique')
+  GAP_NONBLOCKING=$(jq -n -c --argjson a "$absent" --argjson b "$GAP_BLOCKING" \
+    '[ $a[] | select(. as $x | ($b | index($x)) == null) ] | unique' 2>/dev/null || printf '[]')
 }
 
 # The evidence every gate attaches, so a reader can see what was and was not held against
@@ -418,6 +504,8 @@ case "$GATE" in
     if [ -z "$STATUS" ]; then
       unresolved_out "dry: report has no .status — shape not recognised" "$MODE" "$EV"
     fi
+    cross_check_exit "$STATUS" "$MODE" "$EV"
+    EV=$(printf '%s' "$EV" | jq -c --arg e "$EXIT_CHECK" '. + {exit_code_check:$e}')
     if [ "$STATUS" = "unmeasured" ] || [ "$RATING" = "unmeasured" ] || [ "$MEASURED" = "false" ]; then
       unresolved_out "dry: the report says nothing was measured (status=$STATUS, measured=$MEASURED)" "$MODE" "$EV"
     fi
@@ -471,6 +559,7 @@ case "$GATE" in
     STATUS=$(jqr '.status'); RAN=$(jqr '.analyzers_ran')
     SKIPPED_BY_DESIGN=$(jqc '.tools_skipped // []')
     GONE=$(jqc '((.tools_absent // []) + (.tools_failed // []) + (.tools_unmeasured // [])) | unique')
+    ABSENT_L=$(jqc '.tools_absent // []'); FAILED_L=$(jqc '.tools_failed // []'); UNMEAS_L=$(jqc '.tools_unmeasured // []')
     HAVE_LISTS=$(jqc 'if (has("tools_absent") or has("tools_failed") or has("tools_unmeasured")) then "yes" else "no" end' | tr -d '"')
     # THE NAMES COME FROM THE PRODUCER. This used to be `BINARY='["phpstan","phpmd"]'`
     # written here, asserted against nothing — the same class of bug as the `meta.tools[]`
@@ -483,7 +572,7 @@ case "$GATE" in
     NBIN=$(printf '%s' "$BINARY" | jq 'length')
     MISSING=$(printf '%s' "$GONE" | jq -c --argjson b "$BINARY" '[.[] | select(. as $x | $b | index($x))]')
     NMISS=$(printf '%s' "$MISSING" | jq 'length')
-    classify_gap "$GONE"
+    classify_gap "$ABSENT_L" "$FAILED_L" "$UNMEAS_L"
     NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
     NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
     set_did_not_run "$SKIPPED_BY_DESIGN"
@@ -497,6 +586,8 @@ case "$GATE" in
     if [ -z "$STATUS" ]; then
       unresolved_out "solid: report has no .status — shape not recognised" "$MODE" "$EV"
     fi
+    cross_check_exit "$STATUS" "$MODE" "$EV"
+    EV=$(printf '%s' "$EV" | jq -c --arg e "$EXIT_CHECK" '. + {exit_code_check:$e}')
     if [ "$STATUS" = "unmeasured" ]; then
       unresolved_out "solid: the report says nothing was measured" "$MODE" "$EV"
     fi
@@ -523,11 +614,16 @@ case "$GATE" in
     if [ "$NBIN" -gt 0 ] && [ "$NMISS" -ge "$NBIN" ]; then ZERO=true; fi
     PARTIAL=false
     if [ "$NBLOCK" -gt 0 ] || [ "$STATUS" = "partial" ]; then PARTIAL=true; fi
-    # Lists present but the producer named no binary analyzers, so "did they all go
-    # missing?" cannot be asked. Whatever is unavailable is still a gap; the point is that
-    # this never reaches a pass by failing to find a contradiction.
+    # NO TOOL LISTS AT ALL: coverage cannot be determined, and undetermined is not benign.
+    # This used to add a prose message and touch nothing else, so a report carrying
+    # {"status":"pass"} and no coverage fields resolved pass / unresolved:false /
+    # coverage_partial:false — a clean review from a report that never said what it looked
+    # at. Unreachable from today's producers and perfectly reachable from a pre-3.10.0 one,
+    # and the premise of this file is that it does not trust a producer's shape. NOT
+    # `unresolved`: something plainly ran, we cannot tell how much, so it is the partial
+    # marker and rule 4 rather than rule 2.
     UNDETERMINED=false
-    if [ "$HAVE_LISTS" = "no" ]; then UNDETERMINED=true; fi
+    if [ "$HAVE_LISTS" = "no" ]; then UNDETERMINED=true; PARTIAL=true; fi
 
     MSGS=()
     if [ "$UNDETERMINED" = "true" ]; then
@@ -591,9 +687,10 @@ case "$GATE" in
     # "the binary is not installed" — and it is right only because the producer stopped
     # putting three different facts in it.
     GONE=$(jqc '((.meta.tools_absent // []) + (.meta.tools_failed // []) + (.meta.tools_unmeasured // [])) | unique')
+    ABSENT_L=$(jqc '.meta.tools_absent // []'); FAILED_L=$(jqc '.meta.tools_failed // []'); UNMEAS_L=$(jqc '.meta.tools_unmeasured // []')
     SKIPPED_BY_DESIGN=$(jqc '.meta.tools_skipped // []')
     NGONE=$((NABS + NFAIL + NUNM))
-    classify_gap "$GONE"
+    classify_gap "$ABSENT_L" "$FAILED_L" "$UNMEAS_L"
     NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
     NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
     set_did_not_run "$SKIPPED_BY_DESIGN"
@@ -605,6 +702,12 @@ case "$GATE" in
     if [ -z "$STATUS" ]; then
       unresolved_out "security: report has no .summary.overall_status — shape not recognised (there is no top-level .status in this gate)" "$MODE" "$EV"
     fi
+    # The same undetermined state as SOLID's, one file over: a report carrying none of the
+    # three coverage lists and no analyzers_ran says nothing about what it looked at, and
+    # `// []` turns that silence into "no gaps". Not benign.
+    SEC_HAVE_LISTS=$(jqc 'if ((.meta // {}) | (has("tools_absent") or has("tools_failed") or has("tools_unmeasured") or has("analyzers_ran"))) then "yes" else "no" end' | tr -d '"')
+    cross_check_exit "$STATUS" "$MODE" "$EV"
+    EV=$(printf '%s' "$EV" | jq -c --arg e "$EXIT_CHECK" '. + {exit_code_check:$e}')
     # A CORRECTLY SCOPED NO-OP, and the one `skipped` that is not a coverage failure.
     # The changed set held nothing this gate reads — a docs-only or CSS-only diff — so
     # there was nothing to measure and no scanner was denied anything. The producer says
@@ -645,6 +748,10 @@ case "$GATE" in
     PARTIAL=false
     if [ "$NBLOCK" -gt 0 ] || [ "$STATUS" = "partial" ]; then PARTIAL=true; fi
     MSGS=()
+    if [ "$SEC_HAVE_LISTS" = "no" ]; then
+      PARTIAL=true
+      MSGS+=("security: this report carries no coverage lists and no analyzers_ran, so how much of the scan ran cannot be determined — not assumed complete")
+    fi
     if [ "$NNONBLOCK" -gt 0 ]; then MSGS+=("$(nonblocking_message)"); fi
     # ---- COMBINE, once.
     if [ "$V" = "pass" ] && [ "$PARTIAL" = "true" ]; then V="warning"; fi

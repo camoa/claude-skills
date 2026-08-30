@@ -38,7 +38,7 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
   "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
-    "raw_output_path": "/abs/path/.reports/tdd.json"
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json"
   },
   "messages": [
     "3 changed source files mapped to a co-located test; all mapped tests pass",
@@ -71,7 +71,7 @@ One difference remains: this envelope's `status` can be `skipped`, which the oth
 | Verdict | Meaning | Exit behavior |
 |---|---|---|
 | `pass` | Gate's criteria met. Nothing to fix | Command prints summary + exits 0 |
-| `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking | Command prints summary + exits 0 |
+| `warning` | Gate passes but with observations worth surfacing (e.g., "2 changed source files have no co-located test"). Not blocking **on the verdict** — but a `warning` carrying `coverage_partial: true` blocks through `review.md` rule 4, which keys on the marker and never on this word | Command prints summary + exits 0 |
 | `fail` | Gate's criteria NOT met. Action required | Command prints summary + exits 1 (signals failure; user/AI can see + fix) |
 | `skipped` | Gate was invoked and did not run, for a reason that leaves nothing unknown — the user passed `--skip`, the gate is not applicable, the change set is empty. **Not** the state for "the analyzer was missing, so nothing got measured": that is a `skipped` carrying `unresolved`, below | Command prints reason + exits 0 |
 
@@ -123,9 +123,9 @@ v3.9.6:
 
 | Gate | Report | The could-not-check path |
 |---|---|---|
-| `dry` | `dry-report.json` | `status`/`rating` `unmeasured`, `measured:false`, `skip_reason:"tool_absent"`, or phpcpd in `tools_absent[]`/`tools_failed[]`. It is the gate's only analyzer, so any of those means duplication was not measured at all |
-| `solid` | `solid-report.json` | `unmeasured`, or every **binary** analyzer (`phpstan`, `phpmd`) in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]` |
-| `security` | `security-report.json` | `unmeasured`, or every entry of `meta.tools[]` in `meta.tools_absent[]` ∪ `meta.tools_failed[]` ∪ `meta.tools_unmeasured[]` |
+| `dry` | `dry-report.json` | `status`/`rating` `unmeasured`, `measured:false`, `skip_reason:"tool_absent"`, or `phpcpd` in `tools_absent[]`. It is the gate's only analyzer, so any of those means duplication was not measured at all. **There is no `tools_failed` on this report, on any path** — do not read one |
+| `solid` | `solid-report.json` | `unmeasured`, or every analyzer named in the report's own `binary_analyzers[]` present in `tools_absent[]` ∪ `tools_failed[]` ∪ `tools_unmeasured[]`. **The names come from the report, never from this document**: they are `phpstan`/`phpmd` on Drupal and `madge`/`eslint` on Next.js, and a list written here could not be either |
+| `security` | `security-report.json` | `unmeasured`, or `meta.analyzers_ran == 0` — the producer stating no scanner measured anything. **`meta.tools[]` is not read and must not be**: it exists only in whole-project mode, and its literal names `phpcs_security_linter`/`psalm_taint`/`roave` where the code pushes `php-security-linter`/`psalm` and never pushes `roave`, so a set relation over it cannot be satisfied |
 | `tdd` | none — by design | Exit `4` (`CQT_EXIT_UNMEASURED`), no `--files` list so no test ran, or output carrying no evidence a test ran |
 
 **A missing report is itself unresolved** for the three gates that write one: a
@@ -145,15 +145,25 @@ reports `freshness: "unchecked"` rather than treating an undated read as current
 — a resolver that silently assumed freshness would be the same false green one
 level down.
 
-**Do not derive coverage from `analyzers_ran`.** It counts checks, not
-analyzers: `solid-check.sh` increments it for its always-on `\Drupal::` grep,
-which needs no binary, so it is `>= 1` with phpstan and phpmd both gone. And
-`security-check.sh` emits it only in `--changed` mode, so it is absent from half
-of that gate's runs. Carry it in `details`; derive coverage from the tool lists.
+**`analyzers_ran` is not the coverage test for SOLID, and it is the whole of it
+for security.** It counts CHECKS, not analyzers: `solid-check.sh` increments it
+for its always-on `\Drupal::` grep, which needs no binary, so it is `>= 1` with
+phpstan and phpmd both gone — derive that gate's zero-coverage state from
+`binary_analyzers[]` against the tool lists instead. `security-check.sh` has no
+analyzer-free layer, so a `0` there is that producer stating no scanner measured
+anything and is read as zero coverage directly; it emits the field only in
+`--changed` mode, and its absence is not a zero. One counter, two gates, two
+different answers, which is why it is asked of each gate in the terms that gate
+can answer rather than applied as one rule.
 
-**`tools_failed[]` counts as heavily as `tools_absent[]`.** An analyzer that was
-found and returned nothing usable produced no evidence either. Omitting it from
-the derivation is how a crashed gitleaks reads as a clean one.
+**`tools_failed[]` counts as heavily as `tools_absent[]`, and more.** An analyzer
+that was found and returned nothing usable produced no evidence either. Omitting
+it from the derivation is how a crashed gitleaks reads as a clean one. And the
+scope rule below relieves **absence only**: `tools_failed[]` and
+`tools_unmeasured[]` are facts about THIS RUN rather than about what is
+installed, so no scope excuses them — a crashed semgrep blocks whoever installs
+semgrep. The first version of the scope rule classified the whole union and
+stopped blocking on crashed machine-scope tools with it.
 
 ### `coverage_partial` — part of it was measured, part was not
 
@@ -252,7 +262,7 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 ```json
 "details": {
   "source": "code-quality-tools:tdd",
-  "raw_output_path": "/abs/path/.reports/tdd.json",
+  "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json",
   "code_quality_tools_version": "3.0.0",
   "analyzers_ran": 2,
   "tools_absent": ["phpmd"],
@@ -264,8 +274,10 @@ The `details` object's shape depends on `gate`. Consumers reading it should guar
 - `raw_output_path` — absolute path to the unmodified output from the wrapped tool, for deep diagnosis
 - `code_quality_tools_version` — version of the dependency at run time
 - `analyzers_ran` — the underlying report's own counter, copied through where it exists (`solid-check.sh` on both paths, `security-check.sh` in `--changed` mode only). Observability, **not** the coverage test: it counts checks, and one of SOLID's needs no binary
-- `tools_absent` — analyzer names the report listed as not installed. Optional; present whenever the report names any
+- `tools_absent` — analyzer names the report listed as NOT INSTALLED, and nothing else. It carried three different facts until code-quality-tools 3.10.1, which is why a correctly scoped run read as missing coverage
 - `tools_failed` — analyzer names that were found and returned nothing usable. Disjoint from `tools_absent` and equally disqualifying: neither produced evidence
+- `tools_skipped` — layers the mode omitted BY DESIGN: the whole-project-only advisory scanners, and anything the changed set gave nothing to do. Not a coverage gap and never counted as one. Change-scoped mode only
+- `binary_analyzers` — the analyzers of that gate that need installing, named by the producer. "Did they all go missing?" is asked of this list rather than of one the consumer keeps itself
 
 Both are passed straight through — `--details` is handed to the emitter verbatim
 and only checked for object shape and duplicate keys, so carrying them needs no
@@ -501,7 +513,7 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
   "status": "pass",
   "details": {
     "source": "code-quality-tools:tdd",
-    "raw_output_path": "/abs/path/.reports/tdd.json",
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/tdd.json",
     "code_quality_tools_version": "3.0.0"
   },
   "messages": ["3 changed source files mapped to a co-located test; all mapped tests pass"],
@@ -524,7 +536,7 @@ jq -e '.schema_version | test("^1\\.")' <envelope> >/dev/null || exit 1
   "status": "warning",
   "details": {
     "source": "code-quality-tools:solid",
-    "raw_output_path": "/abs/path/.reports/solid.json",
+    "raw_output_path": "/abs/path/<report-dir.sh --latest>/solid.json",
     "code_quality_tools_version": "3.0.0"
   },
   "messages": [

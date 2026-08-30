@@ -467,14 +467,14 @@ expect solid-whole-fail.json       solid fail    false false "over the hard thre
 expect solid-fail-with-absent.json    solid fail    false true  "a fail AND a closeable gap: BOTH facts, and the fail is the verdict"
 expect solid-warning-with-absent.json solid warning false true  "a warning AND a closeable gap: the warning is not upgraded and not erased"
 expect solid-fail-all-absent.json     solid fail    false true  "every binary analyzer gone, and the analyzer-free grep still found a hard failure: findings are evidence a partial run produced, so this is a fail, not unresolved"
-expect solid-legacy-no-lists-fail.json solid fail   false false "a report with no tool lists and a hard failure: the fail survives coverage being undeterminable"
+expect solid-legacy-no-lists-fail.json solid fail   false true  "a report with no tool lists and a hard failure: the fail survives, and the undetermined coverage is carried beside it"
 expect solid-one-absent.json       solid warning false true  "phpmd absent while the gate still says pass — partial coverage"
 expect solid-all-absent.json       solid skipped true  false "phpstan AND phpmd absent while analyzers_ran is 1 — THE analyzers_ran trap"
 expect solid-tools-failed.json     solid skipped true  false "both binary analyzers crashed: no evidence, same as absent"
 expect solid-tools-unmeasured.json solid warning false true  "phpmd had nothing to read"
 expect solid-changed-partial.json  solid warning false true  "the gate's own status:partial"
 expect solid-unmeasured.json       solid skipped true  false "the gate's own unmeasured state"
-expect solid-legacy-no-lists.json  solid pass    false false "a report with NO tool lists at all: coverage undetermined, which is NOT nothing-ran"
+expect solid-legacy-no-lists.json  solid warning false true  "a report with NO tool lists at all: coverage undetermined, and undetermined does not resolve benign. Not unresolved either — something ran, we cannot tell how much"
 expect solid-wrong-type.json       solid skipped true  false "analyzers_ran is a string — an unrecognised shape resolves unresolved, it does not crash"
 expect solid-no-binary-decl.json   solid warning false true  "lists present, binary_analyzers[] absent: how much of the gate is unavailable cannot be told, so it does not reach a pass"
 
@@ -511,6 +511,18 @@ expect sec-no-eligible-contradiction.json  security skipped true  false "a repor
 # moment somebody forgot to catalogue it, which is the silent-downgrade shape this whole
 # branch exists to remove.
 expect sec-unclassified-absent.json security warning false true "a tool with no catalog entry has unknown scope, and unknown blocks"
+# ...and a name the catalog DOES classify as not-installable does not block. `security_review`
+# is the drupal/security_review contrib MODULE, not a binary; being unclassified it fell to
+# `unknown`, blocked, and failed /review --full-audit on every Drupal project without it,
+# escapable only with --skip-security. Asserted at the same fixture as three machine-scope
+# absences, so a resolver that started blocking layers again cannot pass by chance.
+expect sec-contrib-module-absent.json security pass    false false "semgrep/trivy/gitleaks are machine-scope and security_review is a contrib module this toolchain does not install: nothing here is a gap a project could close"
+# SCOPE RELIEVES ABSENCE ONLY. semgrep is machine-scope, so its ABSENCE does not block —
+# but a semgrep that was there and returned nothing usable is a fact about this run, and no
+# scope excuses it. The first version of the rule classified the whole union and stopped
+# blocking on this.
+expect sec-machine-tool-crashed.json  security warning false true  "a machine-scope tool that CRASHED still blocks: tools_failed[] is about this run, not about what is installed"
+expect sec-builtin-unmeasured.json    security warning false true  "custom_patterns is a grep with nothing to install, and it still blocks when it had no ground to read — tools_unmeasured[] is about this run too"
 expect sec-status-partial.json   security warning false true  "the gate's own status:partial"
 expect sec-unmeasured.json       security skipped true  false "the gate's own unmeasured state"
 expect sec-skipped.json          security skipped true  false "zero findings but tools returned nothing usable"
@@ -603,6 +615,126 @@ else
   fail_check "with no catalog the resolver returned coverage_partial=$NOCAT_P (want true) and scope_source='$NOCAT_SRC' — a resolver that cannot read the scope rule must not quietly apply the lenient half of it"
 fi
 
+# THE EXIT-CODE CROSS-CHECK, and its bound.
+#
+# `--exit-code` was documented as an advisory cross-check where "a disagreement with the
+# report is itself unresolved", read into a variable, and used ONLY by the tdd branch. All
+# four wrappers passed it; no other branch looked at it. A contract naming an enforcement
+# nothing performs is this suite's own subject, so the enforcement exists now and its BOUND
+# is asserted too: a pairing outside the two rules must NOT invent a disagreement.
+EXITCHK_FAIL=""
+# <gate>:<fixture>:<exit>:<want verdict>:<want unresolved>:<want evidence.exit_code_check>
+for c in "solid:solid-whole-clean.json:4:skipped:true:agrees" \
+         "security:sec-whole-clean.json:4:skipped:true:agrees" \
+         "dry:dry-whole-clean.json:4:skipped:true:agrees" \
+         "solid:solid-unmeasured.json:4:skipped:true:agrees" \
+         "security:sec-whole-clean.json:2:skipped:true:agrees" \
+         "solid:solid-whole-fail.json:2:fail:false:agrees" \
+         "solid:solid-whole-clean.json:0:pass:false:not-cross-checked" \
+         "solid:solid-whole-warning.json:1:warning:false:not-cross-checked" \
+         "dry:dry-whole-clean.json:0:pass:false:not-cross-checked"; do
+  g="${c%%:*}"; r="${c#*:}"; fxc="${r%%:*}"; r="${r#*:}"; ec="${r%%:*}"; r="${r#*:}"
+  wv="${r%%:*}"; r="${r#*:}"; wu="${r%%:*}"; we="${r##*:}"
+  o=$(run_resolver 0 "$g" "${FIX}/${fxc}" --exit-code "$ec" || true)
+  gv=$(printf '%s' "$o" | jq -r '.verdict'); gu=$(printf '%s' "$o" | jq -r '.unresolved')
+  ge=$(printf '%s' "$o" | jq -r '.evidence.exit_code_check // "MISSING"')
+  # A run that resolved unresolved before the cross-check ran carries no evidence key; the
+  # verdict is what matters there.
+  if [ "$gv" = "$wv" ] && [ "$gu" = "$wu" ] && { [ "$ge" = "$we" ] || [ "$gu" = "true" ]; }; then
+    :
+  else
+    EXITCHK_FAIL="${EXITCHK_FAIL} [$g $fxc exit=$ec → $gv/$gu/$ge, want $wv/$wu/$we]"
+  fi
+done
+if [ -z "$EXITCHK_FAIL" ]; then
+  pass_check "the --exit-code cross-check fires on exit 4 with a non-unmeasured report and on exit 2 with a passing one, and on nothing else — every other pairing reports 'not-cross-checked' rather than inventing a disagreement"
+else
+  fail_check "the --exit-code cross-check disagrees with its documented bound:${EXITCHK_FAIL}"
+fi
+# And without the flag it must say so rather than claiming agreement it never checked.
+o=$(run_resolver 0 solid "${FIX}/solid-whole-clean.json" || true)
+if [ "$(printf '%s' "$o" | jq -r '.evidence.exit_code_check')" = "no-exit-code" ]; then
+  pass_check "with no --exit-code the evidence says so, never 'agrees'"
+else
+  fail_check "with no --exit-code the resolver reported $(printf '%s' "$o" | jq -r '.evidence.exit_code_check') — an unperformed check must not read as a passed one"
+fi
+
+# ==========================================================================================
+# EVERY NAME A GATE CAN REPORT IS CLASSIFIED. The class, not the instances.
+#
+# The resolver blocks on an unclassified name, fail-closed, because a tool nobody has thought
+# about must not quietly stop blocking. That default is right for an unknown BINARY and wrong
+# for what the gates actually report: `security_review` is the drupal/security_review contrib
+# MODULE, not something install-tools.sh places, and being unclassified it blocked — so
+# `/review --full-audit` failed on every Drupal project without that module, escapable only
+# with `--skip-security <reason>`, the exact habit the scope rule exists to prevent. Five
+# names were missing from the catalog entirely and two more differed from their catalog key
+# (`psalm_taint` for `psalm`, `phpcs_security_linter` for `php-security-linter`), which is a
+# second way into the same wrong answer.
+#
+# Both sides come from the artifacts: the NAMES from the producers' own pushes and their
+# emitters' list literals, the CLASSIFICATION from tool-catalog.json's `tools` and `layers`.
+# Adding a layer to a gate without classifying it fails here, which is worth more than the
+# seven entries it forced.
+CATALOG_NAMES=$(mktemp); REPORTED_NAMES=$(mktemp)
+trap 'rm -f "$CATALOG_NAMES" "$REPORTED_NAMES"' EXIT
+if [ -f "$CATALOG" ]; then
+  jq -r '((.tools // {}) | keys[]), ((.layers // {}) | keys[])' "$CATALOG" | sort -u > "$CATALOG_NAMES"
+fi
+GATE_SCRIPTS=$(find "${CQT}/skills/code-quality-audit/scripts/drupal" \
+                    "${CQT}/skills/code-quality-audit/scripts/nextjs" \
+                    -name '*-check.sh' -o -name '*-workflow.sh' 2>/dev/null | sort)
+if [ -z "$GATE_SCRIPTS" ]; then
+  fail_check "found no gate scripts to read layer names out of — this check is looking at nothing"
+else
+  # Two sources, because a name reaches a coverage list two ways. SKIPPED_TOOLS counts: the
+  # failed list is derived as skipped minus the named kinds, so any name pushed there can
+  # surface in tools_failed[].
+  # shellcheck disable=SC2086
+  grep -hoE '(ABSENT|FAILED|UNMEASURED|SKIPPED)_TOOLS\+=\("[^"]+"\)' $GATE_SCRIPTS 2>/dev/null \
+    | sed -E 's/.*"([^"]+)".*/\1/' > "$REPORTED_NAMES" || true
+  # shellcheck disable=SC2086
+  grep -hoE '"?tools_(absent|failed|unmeasured|skipped)"?: ?\[[^]]*\]' $GATE_SCRIPTS 2>/dev/null \
+    | grep -oE '"[A-Za-z][A-Za-z0-9_-]*"' | tr -d '"' \
+    | grep -vE '^tools_(absent|failed|unmeasured|skipped)$' >> "$REPORTED_NAMES" || true
+  sort -u -o "$REPORTED_NAMES" "$REPORTED_NAMES"
+  NREPORTED=$(grep -c . "$REPORTED_NAMES" || true)
+  UNCLASSIFIED=$(comm -23 "$REPORTED_NAMES" "$CATALOG_NAMES" | paste -sd, - || true)
+  if [ "$NREPORTED" -lt 15 ]; then
+    fail_check "only $NREPORTED reportable layer names were extracted from $(printf '%s' "$GATE_SCRIPTS" | wc -l) gate scripts — the extraction has stopped seeing the producers"
+  elif [ -z "$UNCLASSIFIED" ]; then
+    pass_check "all $NREPORTED names the gates can report are classified in tool-catalog.json (tools[] or layers[])"
+  else
+    fail_check "these names can appear in a coverage list and tool-catalog.json classifies none of them: ${UNCLASSIFIED}. The resolver treats an unclassified name as closeable and BLOCKS on it, so each one fails an ordinary review with --skip as the only way out. Add a tools[] entry if the installer places it, or a layers[] entry saying why it is not installable."
+  fi
+fi
+
+# And the classification has to DISCRIMINATE. A catalog that answered "builtin" to everything
+# would satisfy the check above and block nothing.
+if [ -f "$CATALOG" ]; then
+  NKINDS=$(jq -r '[ ((.tools // {}) | to_entries[] | .value.scope // empty),
+                    ((.layers // {}) | to_entries[] | .value.kind // empty) ] | unique | length' "$CATALOG")
+  NBUILTIN=$(jq -r '[(.layers // {}) | to_entries[] | select((.value.kind // "") == "builtin")] | length' "$CATALOG")
+  NALIAS=$(jq -r '[(.layers // {}) | to_entries[] | select(.value.alias_of != null)] | length' "$CATALOG")
+  if [ "$NKINDS" -ge 4 ] && [ "$NBUILTIN" -ge 1 ] && [ "$NALIAS" -ge 1 ]; then
+    pass_check "the catalog distinguishes $NKINDS kinds of provenance, including $NBUILTIN with nothing to install and $NALIAS report-name aliases"
+  else
+    fail_check "the catalog collapsed to $NKINDS kind(s) with $NBUILTIN builtin and $NALIAS alias entries — a classification that answers the same thing for everything decides nothing"
+  fi
+  # Every alias must point at a real tools[] key, or it resolves to unknown and blocks —
+  # which is the failure mode the alias exists to remove.
+  BADALIAS=$(jq -r '(.tools // {}) as $t
+                    | [ (.layers // {}) | to_entries[]
+                        | select(.value.alias_of != null)
+                        | select(($t[.value.alias_of] // null) == null)
+                        | .key ] | join(", ")' "$CATALOG")
+  if [ -z "$BADALIAS" ]; then
+    pass_check "every layers[] alias_of points at a real tools[] entry"
+  else
+    fail_check "layers[] aliases point at nothing: ${BADALIAS} — an alias that does not resolve falls through to unknown and blocks, which is what it was added to stop"
+  fi
+fi
+
 # ==========================================================================================
 # 2b. THE CROSS-PRODUCT MATRIX — findings × coverage, every cell, for every gate and mode.
 #
@@ -664,6 +796,15 @@ contract_expect() {
 coverage_facts() {
   case "$2" in
     full|scoped-out)  printf '0 none' ;;
+    # No coverage fields at all. Not zero coverage — something plainly ran — but how much
+    # cannot be told, and undetermined does not resolve benign.
+    no-lists)         printf '1 none' ;;
+    # A name the catalog classifies as having nothing to install (layer:builtin /
+    # layer:optional-contrib). Absent, it is not a gap any project could close.
+    layer-absent)     printf '0 none' ;;
+    # A machine-scope tool that was THERE and returned nothing usable. Scope relieves
+    # absence only; this is a fact about the run.
+    machine-failed)   printf '1 none' ;;
     machine-absent)   printf '0 none' ;;   # tool-catalog scope `machine`, and CI unset
     one-absent|failed|unmeasured-tool|scoped-absent) printf '1 none' ;;
     all-absent)       if [ "$1" = "security" ]; then printf '1 hard'; else printf '1 soft'; fi ;;
@@ -684,12 +825,24 @@ build_report() {
     full)             ;;
     one-absent)       absent="$closeable" ;;
     machine-absent)   absent='["semgrep"]' ;;
+    layer-absent)     absent='["security_review"]' ;;
+    machine-failed)   failed='["semgrep"]' ;;
     all-absent)       if [ "${shape#solid}" != "$shape" ]; then absent="$both"; else ran=0; fi ;;
     failed)           failed="$closeable" ;;
     unmeasured-tool)  unmeas="$closeable" ;;
     scoped-out)       skipped='["composer_audit","typescript_strict"]' ;;
     scoped-absent)    skipped='["composer_audit"]'; absent="$closeable" ;;
   esac
+  # The one shape that is defined by what the report does NOT carry.
+  if [ "$cov" = "no-lists" ]; then
+    case "$shape" in
+      solid-drupal|solid-nextjs)
+        jq -n --arg s "$f" '{status:$s, generated_at:"2026-08-29T12:00:00Z"}' ;;
+      security-changed|security-whole)
+        jq -n --arg s "$f" '{meta:{timestamp:"2026-08-29T12:00:00Z"}, summary:{overall_status:$s, total_issues:0}}' ;;
+    esac
+    return 0
+  fi
   case "$shape" in
     solid-drupal|solid-nextjs)
       jq -n --arg s "$f" --argjson b "$both" --argjson a "$absent" --argjson fl "$failed" \
@@ -722,6 +875,10 @@ unreachable() {
     security-whole:*:all-absent) printf 'the whole-project security emitter carries no analyzers_ran, so its zero-coverage state cannot be expressed' ;;
     security-whole:*:scoped-out|security-whole:*:scoped-absent) printf 'the whole-project security emitter has no tools_skipped[]: it scans everything, so nothing is scoped out by a diff' ;;
     security-whole:partial:*) printf 'status "partial" is set only by the --changed path, from files named in the diff but not on disk' ;;
+    solid-*:*:layer-absent) printf 'no SOLID analyzer is a layer with nothing to install: its tools_absent[] can only name phpstan/phpmd on Drupal or madge/eslint on Next.js, every one of which install-tools.sh places' ;;
+    solid-*:*:machine-failed) printf 'no SOLID analyzer is machine-scope; phpstan and phpmd are project and isolated, madge and eslint are project' ;;
+    dry:*:layer-absent|dry:*:machine-failed) printf 'phpcpd and jscpd are the only names this gate reports, and neither is machine-scope or a non-installable layer' ;;
+    dry:*:no-lists) printf 'the dry report has no tool lists to omit: coverage there is `measured` plus a one-analyzer skip_reason, both of which the other columns cover' ;;
     dry:*:*) printf '' ;;
     *) printf '' ;;
   esac
@@ -731,8 +888,8 @@ MATRIX_CELLS=0; MATRIX_UNREACHABLE=0; MATRIX_OVERCLAIMS=0; MATRIX_INCOMPLETE=0
 MATRIX_FINDINGS_SEEN=""; MATRIX_COVERAGE_SEEN=""
 for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
   case "$shape" in
-    solid-*)   gate="solid";    FINDINGS="pass warning fail partial unmeasured";        COVS="full one-absent all-absent failed unmeasured-tool scoped-out scoped-absent" ;;
-    security-*) gate="security"; FINDINGS="pass warning fail partial skipped unmeasured"; COVS="full one-absent machine-absent all-absent failed unmeasured-tool scoped-out scoped-absent" ;;
+    solid-*)   gate="solid";    FINDINGS="pass warning fail partial unmeasured";        COVS="full one-absent all-absent failed unmeasured-tool scoped-out scoped-absent no-lists" ;;
+    security-*) gate="security"; FINDINGS="pass warning fail partial skipped unmeasured"; COVS="full one-absent machine-absent layer-absent machine-failed all-absent failed unmeasured-tool scoped-out scoped-absent no-lists" ;;
     dry)       gate="dry";      FINDINGS="pass warning fail partial";                    COVS="full one-absent" ;;
   esac
   SHAPE_BAD=""
@@ -780,7 +937,7 @@ for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
   # Per-shape floor. The whole-matrix floor below can stay satisfied while ONE shape
   # collapses to a single column, which is precisely the state the fixture set was in.
   SHAPE_MIN=8
-  case "$shape" in dry) SHAPE_MIN=8 ;; solid-*) SHAPE_MIN=25 ;; security-*) SHAPE_MIN=20 ;; esac
+  case "$shape" in dry) SHAPE_MIN=8 ;; solid-*) SHAPE_MIN=28 ;; security-*) SHAPE_MIN=30 ;; esac
   if [ "$SHAPE_N" -lt "$SHAPE_MIN" ]; then
     fail_check "matrix $shape ran only $SHAPE_N cells, below its floor of $SHAPE_MIN — this shape has stopped being a cross-product and a hole in it is invisible"
   elif [ -z "$SHAPE_BAD" ]; then
@@ -801,7 +958,7 @@ elif [ "$MATRIX_INCOMPLETE" -lt 20 ]; then
 fi
 
 NF=$(printf '%s' "$MATRIX_FINDINGS_SEEN" | wc -w); NC=$(printf '%s' "$MATRIX_COVERAGE_SEEN" | wc -w)
-if [ "$MATRIX_CELLS" -ge 100 ] && [ "$NF" -ge 5 ] && [ "$NC" -ge 7 ]; then
+if [ "$MATRIX_CELLS" -ge 150 ] && [ "$NF" -ge 5 ] && [ "$NC" -ge 10 ]; then
   pass_check "matrix floor: $MATRIX_CELLS cells over $NF findings states × $NC coverage states, plus $MATRIX_UNREACHABLE cells named unreachable with a reason"
 else
   fail_check "matrix floor: only $MATRIX_CELLS cells over $NF findings states and $NC coverage states — it has stopped being a cross-product, and a hole in it is invisible"

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.2] - 2026-08-29
+
+### Added
+
+- `layers` in `schema/tool-catalog.json`: the names a GATE can report in `tools_absent[]` / `tools_failed[]` / `tools_unmeasured[]` that are not entries in `tools`, because `install-tools.sh` does not install them. `scope` answers how the installer provides a binary; these have no answer to that question, and their absence from the catalog made a consumer classify them `unknown` and, being fail-closed, block on them. `security_review` is the drupal/security_review contrib module, so `/review --full-audit` failed on every Drupal project that had not chosen to add it, escapable only with `--skip-security` — the habit the scope rule exists to prevent. Two kinds: `builtin` for what is provided by composer, drush or npm or implemented in the gate itself (`custom_patterns`, `static_calls`, `composer_audit`, `drush_pm_security`, `npm_audit`, `large_files`, `typescript_strict`), where there is nothing to install and an absence can never be a missing install; and `optional-contrib` for a third-party add-on this plugin deliberately does not install or require (`security_review`, `eslint_security`). Neither blocks when absent. Both still block when they land in `tools_failed[]` or `tools_unmeasured[]`, which are facts about a run rather than about what is installed.
+
+- `alias_of` in the same map, for the second way into that wrong answer: a gate's report name and its catalog key are not always the same word. `psalm_taint` is the catalogued `psalm` and `phpcs_security_linter` is `php-security-linter`, and without the alias both fell through to `unknown` and blocked. Seven entries in all, and `ai-dev-assistant`'s gate-verdict spec now fails when a producer can report a name this file classifies neither way — the assertion is worth more than the seven.
+
 ## [3.10.1] - 2026-08-29
 
 ### Fixed

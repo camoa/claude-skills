@@ -211,13 +211,54 @@
   checked, not trusted. The lists are read first, and a report claiming nothing was in scope
   while naming a layer that did not produce is a report contradicting itself: unresolved.
 
+- **The fail-closed scope default blocked on layers nobody can install.** "Unclassified is
+  closeable" is right for an unknown BINARY and wrong for what the security gate reports:
+  `security_review` is the drupal/security_review contrib MODULE, absent from
+  `tool-catalog.json`, so it classified `unknown`, blocked whatever `CI` said, and failed
+  `/review --full-audit` on every Drupal project without that module — escapable only with
+  `--skip-security <reason>`, the habit the scope rule exists to prevent. Whole-project path
+  only, which is why change-scoped testing never met it. Five names were missing from the
+  catalog outright and two more differed from their catalog key (`psalm_taint` for `psalm`,
+  `phpcs_security_linter` for `php-security-linter`), a second route to the same wrong
+  answer. code-quality-tools 3.10.2 classifies all seven, and a spec assertion takes the
+  NAMES from the producers' own pushes and the CLASSIFICATION from the catalog and fails
+  listing anything unclassified — the class rather than the seven instances.
+
+- **Scope relieves ABSENCE only.** `classify_gap` was applied to the whole
+  absent ∪ failed ∪ unmeasured union, so a machine-scope tool that was there and CRASHED
+  stopped blocking too. `tools_absent[]` is a fact about what is installed, which is the
+  only one of the three "could the project install it?" is the right question to ask of.
+  `tools_failed[]` and `tools_unmeasured[]` are facts about the run, and no scope excuses
+  either.
+
+- **A report carrying no coverage fields at all resolved benign.** `HAVE_LISTS=no` added a
+  prose message saying coverage was undetermined and touched neither marker, so
+  `{"status":"pass"}` with nothing else resolved `pass` / `unresolved:false` /
+  `coverage_partial:false` — a clean review from a report that never said what it looked at.
+  Unreachable from today's producers, reachable from a pre-3.10.0 one, and this file's
+  premise is that it does not trust a producer's shape. It is now `coverage_partial`, not
+  `unresolved`: something plainly ran, we cannot tell how much. The same state is now
+  recognised on the security side, where `// []` was turning the same silence into "no gaps".
+  The 144-cell matrix could not see it because every cell it built carried lists; it has a
+  column that does not.
+
+- **`--exit-code` was documented as an enforcement nothing performed.** The header called it
+  an advisory cross-check where "a disagreement with the report is itself unresolved", it
+  was read into a variable, all four wrappers passed it, and only the `tdd` branch ever
+  looked at it. It is implemented now and its BOUND is documented and asserted, because an
+  unbounded cross-check invents disagreements: exit 4 with a report that does not say
+  `unmeasured` is a previous run's report, and exit 2 with a report claiming `pass` cannot
+  describe one run. Every other pairing reports `not-cross-checked` in
+  `evidence.exit_code_check`, and no flag at all reports `no-exit-code` rather than
+  `agrees`.
+
 ### Added
 - `scripts/gate-verdict-resolve.sh` — the report-to-verdict mapping as an executable, with
   `--field-paths` publishing the contract the spec holds it to and `--tool-catalog` taking
   the scope authority.
-- `tests/gate-verdict-resolve-spec.sh` — 141 assertions: the field paths checked against
-  each producer, 57 fixture reports, a 144-cell findings × coverage matrix, and the
-  producer-side control-flow claims no fixture can hold.
+- `tests/gate-verdict-resolve-spec.sh` — the field paths checked against each producer,
+  60 fixture reports, a 186-cell findings × coverage matrix, the exit-code cross-check and
+  its bound, and the producer-side control-flow claims no fixture can hold.
 - `tests/gate-coverage-honesty-spec.sh` — 48 assertions on the DECISION and its ORDER,
   not on the presence of words. Every coverage rule is paired with an assertion that it is
   reached before the findings rule that would otherwise shadow it, because a rule MOVED
@@ -233,11 +274,12 @@
   time, and it left a hole with a shape: every `solid-*` fixture with `status: "fail"` had
   all coverage lists empty, and every fixture with a non-empty list had `status: "pass"`. The
   combination that mattered had no fixture, which is why the downgrade above was invisible to
-  131 tests. 144 cells now run findings state × coverage state for each gate and mode
+  131 tests. 186 cells now run findings state × coverage state for each gate and mode
   — pass/warning/fail/partial/skipped/unmeasured against
-  full/one-absent/machine-absent/all-absent/failed/unmeasured/scoped-out/scoped-out-plus-absent
+  full/one-absent/machine-absent/layer-absent/machine-failed/all-absent/failed/unmeasured/
+  scoped-out/scoped-out-plus-absent/no-lists
   — each asserted against the contract restated independently in the spec rather than against
-  the resolver's own output, which would bless whatever it does. 30 further cells are named
+  the resolver's own output, which would bless whatever it does. 34 further cells are named
   UNREACHABLE with the producer-side reason; an omitted cell is indistinguishable from an
   untested one. A whole-matrix floor and a per-shape floor both fail if it stops covering
   either axis.
@@ -255,6 +297,12 @@
   deleting a single push goes red.
 
 ### Known remaining
+- **The scope classification needs code-quality-tools 3.10.2 or newer.** With an older
+  catalog the `layers` map is absent, `security_review` and its six neighbours fall back to
+  `unknown`, and the resolver blocks on them again. It degrades fail-closed and says so in
+  `evidence.coverage_gap.scope_source`, and the wrappers' dependency floor is left at 3.0.0
+  deliberately: raising it would abort the gate entirely on an older install, which is worse
+  than blocking more than intended.
 - **`meta.tools[]` in `security-check.sh`'s whole-project report is still a wrong literal.**
   It names `phpcs_security_linter`, `psalm_taint` and `roave` where the code pushes
   `php-security-linter` and `psalm` and never pushes `roave`. The resolver does not read it
