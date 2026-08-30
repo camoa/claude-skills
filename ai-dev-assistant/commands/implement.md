@@ -204,7 +204,7 @@ the same context that built it, which is the judgment being checked.
 
 **The round budget (v5.35.0+): two blocking rounds on one component, then stop.** Each
 `[a]ddress` starts a round, and a repair is itself unreviewed work — live, one component ran four
-rounds, each of 2 and 3 caused by the repair before it. At the third blocking round put the choice
+rounds, each of 2 and 3 caused by the repair before it. At the second blocking round put the choice
 to the person; with `run_mode: autonomous` there is nobody to ask, so **HALT**.
 Record it in `escalation.reason` and carry a `rounds` count per component plus a `rounds[]` history; past the threshold the gate fails a record with no `escalation.reason`.
 

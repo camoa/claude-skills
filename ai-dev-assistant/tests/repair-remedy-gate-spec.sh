@@ -110,6 +110,15 @@ case_expect "string count with no reason is growth"  block '[{"round":2,"repair_
 case_expect "net_lines null is exempt, as rounds is" pass  '[{"round":2,"repair_growth":{"net_lines":null,"beyond_remedy":"none","reason":""}}]'
 case_expect "net_lines absent is legal"              pass  '[{"round":2,"repair_growth":{"beyond_remedy":"none","reason":""}}]'
 
+# --- a deferral carries three things, and all three are now read ---
+# `why_now_is_wrong` was required in four documents and enforced nowhere until v5.36.0. It is the
+# sentence separating a finding genuinely blocked on absent code from one nobody wanted to address.
+DEF='{"round":1,"repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""},"deferred":[%s]}'
+case_expect "deferral with all three present"      pass  "[$(printf "$DEF" '{"finding":"no caller","blocked_on":"wo-04","why_now_is_wrong":"the caller is three components away"}')]"
+case_expect "deferral, why_now_is_wrong blank"     block "[$(printf "$DEF" '{"finding":"no caller","blocked_on":"wo-04","why_now_is_wrong":"   "}')]"
+case_expect "deferral, why_now_is_wrong absent"    block "[$(printf "$DEF" '{"finding":"no caller","blocked_on":"wo-04"}')]"
+case_expect "deferral, blocked_on blank"           block "[$(printf "$DEF" '{"finding":"no caller","blocked_on":"","why_now_is_wrong":"x"}')]"
+
 # --- a reader that throws must not read as clean ---
 case_expect "rounds is a string, not a list"       block '"four"'
 
@@ -134,8 +143,8 @@ mutate_survives "the missing-reason check" UX '[{"round":2,"repair_growth":{"net
 mutate_survives "the kept-finding check"   EN '[{"round":2,"repair_growth":{"net_lines":0,"beyond_remedy":"new_finding","reason":"saw one","finding":"  "}}]'
 
 # A spec that asserted nothing has not passed.
-if [ "$pass_n" -lt 31 ]; then
-  echo "FAIL: only $pass_n assertions ran; this spec expects 31"
+if [ "$pass_n" -lt 35 ]; then
+  echo "FAIL: only $pass_n assertions ran; this spec expects 35"
   fail=1
 fi
 

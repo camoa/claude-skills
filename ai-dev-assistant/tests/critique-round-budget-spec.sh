@@ -268,7 +268,7 @@ write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking"
 run "$D"
 verdict_is fail "a deferral naming no blocked_on fails"
 unresolved_is true "an unanchored deferral is a could-not-tell"
-msg_has "name no blocked_on component" "the message says why the deferral is not acceptable"
+msg_has "the component they wait on" "the message says why the deferral is not acceptable"
 
 D=$(mktask deferral_good)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
