@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.5] - 2026-08-30
+
+Corrected what `contribution-verify` says about the OTHER plugin's `drupal/coder` pin. It
+told a reader that `code-quality-tools` "tracks the current major at `^9.0`". That stopped
+being true on 2026-08-30, when that plugin moved to the range `^8.3.30||^9.0` after the
+bare `^9.0` was found unable to install alongside `drupal/core-dev` on either supported
+major. This plugin's own `^8.3` pin is unchanged and its reason is unchanged; only the
+sentence describing the sibling was wrong.
+
+Worth naming because of how it survived: `scripts/check-claims.sh` is scoped to
+`code-quality-tools/`, so a claim about that plugin's constraint, written in this one, is
+outside every rule that would have caught it. The check did what it says; nothing was
+looking here.
+
 ## [0.4.4] - 2026-08-28
 
 The `drupal/coder` pin at `^8.3.x` now says why it is there. It reproduces Drupal

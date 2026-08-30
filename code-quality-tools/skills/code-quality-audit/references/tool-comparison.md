@@ -278,7 +278,7 @@ while two of its six rows had gone wrong, and nothing said which rows had been r
 
 | Tool | Package | Installed as | Upstream latest | PHP requirement | Checked |
 |---|---|---|---|---|---|
-| `phpstan` | phpstan/phpstan | `^1.12.4||^2.0` | 2.2.9 (2026-08-22) | `^7.4\|^8.0` | 2026-08-28 |
+| `phpstan` | phpstan/phpstan | `^1.12.4||^2.0` | 2.2.10 (2026-08-30) | `^7.4\|^8.0` | 2026-08-30 |
 | `phpstan-extension-installer` | phpstan/extension-installer | `^1.4` | 1.4.3 (2024-09-04) | `^7.2 \|\| ^8.0` | 2026-08-28 |
 | `phpstan-drupal` | mglaman/phpstan-drupal | `^1.2.12||^2.1.2` | 2.1.2 (2026-08-13) | `^8.1` | 2026-08-28 |
 | `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules | `^1.2||^2.0` | 2.0.5 (2026-07-22) | `^7.4 \|\| ^8.0` | 2026-08-28 |
@@ -291,7 +291,7 @@ while two of its six rows had gone wrong, and nothing said which rows had been r
 | `phpcpd` | systemsdk/phpcpd | `^9.0` | 9.0.0 (2026-03-08) | `>=8.4` | 2026-08-28 |
 | `php-security-linter` | yousha/php-security-linter | `^3.1` | 3.1.8.6 (2026-08-17) | `>=8.2` | 2026-08-28 |
 | `psalm` | vimeo/psalm | `^6.0` | 6.16.1 (2026-03-19) | `~8.1.31 \|\| ~8.2.27 \|\| ~8.3.16 \|\| ~8.4.3 \|\| ~8.5.0` | 2026-08-28 |
-<!-- END GENERATED: tool-versions sha256:dcc22c2ff76b373e64392802da31243b4646ba63b914112055ba183e86fe169c -->
+<!-- END GENERATED: tool-versions sha256:f5cd7953d654e4eaac74de74e1178a3eee7690f2d0140375945f2aea10ce52a3 -->
 
 > **Note**: `mglaman/drupal-check` cannot be installed into a project this skill
 > configures. Its 1.5.0 `composer.json` declares `mglaman/phpstan-drupal ^1.0.0` and
