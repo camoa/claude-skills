@@ -58,11 +58,13 @@ ddev exec vendor/bin/phpstan analyse \
 # Check
 ddev exec vendor/bin/phpcs \
     --standard=Drupal,DrupalPractice \
+    --extensions=php,module,inc,install,profile,theme,engine \
     web/modules/custom
 
 # Fix
 ddev exec vendor/bin/phpcbf \
     --standard=Drupal \
+    --extensions=php,module,inc,install,profile,theme,engine \
     web/modules/custom
 ```
 
@@ -92,7 +94,7 @@ npx eslint src/ --ext .ts,.tsx
 **SOLID:** SRP detection
 
 ```bash
-ddev exec vendor/bin/phpmd \
+ddev exec vendor-bin/phpmd/vendor/bin/phpmd \
     web/modules/custom \
     json \
     cleancode,codesize,design
@@ -127,7 +129,7 @@ npm install -D \
 **Package:** `systemsdk/phpcpd`
 
 ```bash
-ddev exec vendor/bin/phpcpd \
+ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd \
     --min-lines=10 \
     --min-tokens=70 \
     web/modules/custom
@@ -213,21 +215,28 @@ ddev exec vendor/bin/phpmetrics \
 ### Drupal Project
 
 ```bash
-# Install all tools
+# Install the project-scope tools: the analysers that resolve the project's own classes.
+# The constraints are ranges because drupal/core-dev pins the same packages; a bare
+# ^9.0 or ^2.0 does not install on a Drupal site that has it.
 ddev composer require --dev \
-    phpstan/phpstan:^2.0 \
+    "phpstan/phpstan:^1.12.4||^2.0" \
     phpstan/extension-installer:^1.4 \
-    mglaman/phpstan-drupal:^2.1.2 \
-    phpstan/phpstan-deprecation-rules:^2.0 \
-    phpmd/phpmd:^2.15 \
-    systemsdk/phpcpd:^9.0 \
-    drupal/coder:^9.0
+    "mglaman/phpstan-drupal:^1.2.12||^2.1.2" \
+    "phpstan/phpstan-deprecation-rules:^1.2||^2.0" \
+    "drupal/coder:^8.3.30||^9.0"
+
+# Install the isolated-scope tools: one bin namespace each, so their dependency trees
+# never have to agree with the site's.
+ddev composer require --dev bamarni/composer-bin-plugin:^1.9
+ddev composer config extra.bamarni-bin.forward-command true
+ddev composer bin phpmd require --dev phpmd/phpmd:^2.15
+ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
 
 # Run all checks
 ddev exec vendor/bin/phpstan analyse web/modules/custom
-ddev exec vendor/bin/phpmd web/modules/custom text cleancode,codesize
-ddev exec vendor/bin/phpcpd web/modules/custom
-ddev exec vendor/bin/phpcs --standard=Drupal web/modules/custom
+ddev exec vendor-bin/phpmd/vendor/bin/phpmd web/modules/custom text cleancode,codesize
+ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd web/modules/custom
+ddev exec vendor/bin/phpcs --standard=Drupal --extensions=php,module,inc,install,profile,theme,engine web/modules/custom
 ddev exec vendor/bin/phpunit --coverage-clover coverage.xml
 ```
 
@@ -269,12 +278,12 @@ while two of its six rows had gone wrong, and nothing said which rows had been r
 
 | Tool | Package | Installed as | Upstream latest | PHP requirement | Checked |
 |---|---|---|---|---|---|
-| `phpstan` | phpstan/phpstan | `^2.0` | 2.2.9 (2026-08-22) | `^7.4\|^8.0` | 2026-08-28 |
+| `phpstan` | phpstan/phpstan | `^1.12.4||^2.0` | 2.2.9 (2026-08-22) | `^7.4\|^8.0` | 2026-08-28 |
 | `phpstan-extension-installer` | phpstan/extension-installer | `^1.4` | 1.4.3 (2024-09-04) | `^7.2 \|\| ^8.0` | 2026-08-28 |
-| `phpstan-drupal` | mglaman/phpstan-drupal | `^2.1.2` | 2.1.2 (2026-08-13) | `^8.1` | 2026-08-28 |
-| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules | `^2.0` | 2.0.5 (2026-07-22) | `^7.4 \|\| ^8.0` | 2026-08-28 |
-| `coder` | drupal/coder | `^9.0` | 9.0.1 (2026-06-21) | `>=7.4` | 2026-08-28 |
-| `rector` | palantirnet/drupal-rector | `^1.1` | 1.1.2 (2026-07-31) | not declared | 2026-08-28 |
+| `phpstan-drupal` | mglaman/phpstan-drupal | `^1.2.12||^2.1.2` | 2.1.2 (2026-08-13) | `^8.1` | 2026-08-28 |
+| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules | `^1.2||^2.0` | 2.0.5 (2026-07-22) | `^7.4 \|\| ^8.0` | 2026-08-28 |
+| `coder` | drupal/coder | `^8.3.30||^9.0` | 9.0.1 (2026-06-21) | `>=7.4` | 2026-08-28 |
+| `rector` | palantirnet/drupal-rector | `^0.20||^1.1` | 1.1.2 (2026-07-31) | not declared | 2026-08-28 |
 | `phpunit` | drupal/core-dev | `*` | 11.4.5 (2026-08-06) | not declared | 2026-08-28 |
 | `roave` | roave/security-advisories | `dev-master` | no tagged release | not declared | 2026-08-28 |
 | `grumphp` | phpro/grumphp | `^2.0` | 2.23.0 (2026-07-22) | `~8.2.0 \|\| ~8.3.0 \|\| ~8.4.0 \|\| ~8.5.0` | 2026-08-28 |
@@ -282,7 +291,7 @@ while two of its six rows had gone wrong, and nothing said which rows had been r
 | `phpcpd` | systemsdk/phpcpd | `^9.0` | 9.0.0 (2026-03-08) | `>=8.4` | 2026-08-28 |
 | `php-security-linter` | yousha/php-security-linter | `^3.1` | 3.1.8.6 (2026-08-17) | `>=8.2` | 2026-08-28 |
 | `psalm` | vimeo/psalm | `^6.0` | 6.16.1 (2026-03-19) | `~8.1.31 \|\| ~8.2.27 \|\| ~8.3.16 \|\| ~8.4.3 \|\| ~8.5.0` | 2026-08-28 |
-<!-- END GENERATED: tool-versions sha256:32039b805f171d77cbe959de5dd28ca0dc9d78dfeadda42fd6bdfd0e60749ef6 -->
+<!-- END GENERATED: tool-versions sha256:dcc22c2ff76b373e64392802da31243b4646ba63b914112055ba183e86fe169c -->
 
 > **Note**: `mglaman/drupal-check` cannot be installed into a project this skill
 > configures. Its 1.5.0 `composer.json` declares `mglaman/phpstan-drupal ^1.0.0` and

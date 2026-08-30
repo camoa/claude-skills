@@ -35,7 +35,7 @@ fi
 # Check if rector is available
 if ! ddev exec vendor/bin/rector --version &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} Rector is not installed"
-    echo "  Run: ddev composer require --dev palantirnet/drupal-rector:^1.1"
+    echo "  Run: ddev composer require --dev \"palantirnet/drupal-rector:^0.20||^1.1\""
     exit 1
 fi
 

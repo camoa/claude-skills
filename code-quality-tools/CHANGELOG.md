@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.4] - 2026-08-30
+
+### Fixed
+
+- **The documented Drupal install did not install.** Five packages were pinned to a major that cannot resolve on a Drupal site with `drupal/core-dev`, which is most development sites: `drupal/coder` at `^9.0` where core-dev requires `^8.3.x`, and `phpstan/phpstan`, `mglaman/phpstan-drupal`, `phpstan/phpstan-deprecation-rules` and `palantirnet/drupal-rector` at majors Drupal 10 cannot reach. Each is a range now — `^8.3.30||^9.0`, `^1.12.4||^2.0` and so on — so Composer takes the newest version the stack can actually resolve instead of failing the whole batch. Every range was established by Composer resolver runs against two built fixtures, one at Drupal 10.6 and one at 11.4, and each catalog entry records the dependency edge it was measured against and why the range must not be narrowed back. On Drupal 10 that means PHPStan resolves to 1.x and phpcs to 3.x, while the shipped `phpstan.neon` and the lint gate's exit classifier are written for 2.x and phpcs 4; the catalog says so rather than leaving it to be discovered.
+
+- **Fourteen documented install lines put a tool in the wrong place.** `phpcpd`, `phpmd`, `psalm` and `php-security-linter` are `isolated` scope — each gets its own Composer bin namespace so its dependency tree never has to agree with the site's — and the README, the setup and security operations docs, the tool comparison, the resource list, the CI templates and one gate's remediation message all told you to install them into the project instead. For phpcpd that install cannot succeed at all: no release of it resolves against Drupal 10 with core-dev present, and only an eight-release-old 8.0.0 does on Drupal 11. Every documented install and the run commands beside them now use the isolated path.
+
+- **The DRY gate skipped on projects that had phpcpd installed correctly.** It probed `vendor/bin/phpcpd` only, so an install at the isolated location the catalog specifies was reported as `tools_absent` and the duplication check silently did not run. It resolves the binary across all four locations now, through the same resolver the SOLID gate uses — moved into `scripts/core/analyzer-resolve.sh` so there is one implementation rather than a copy per gate.
+
+- **The Next.js Socket layer could not report a finding.** `SOCKET_OUTPUT=$(npx socket-npm audit 2>&1 || true)` put the `|| true` inside the command substitution, so the exit status was always 0, the guard that opens the findings branch never fired, and an installed Socket CLI printed "No supply chain issues detected" whatever it had found. One of the seven layers that gate advertises could not fail. It reads the audit's own status now, reports supply-chain findings, and records a run that failed with nothing readable as a failed layer rather than a clean one.
+
+- **Two security gates named layers they could not report on.** The Drupal gate's report declared `phpcs_security_linter`, `psalm_taint` and `roave` while its code recorded `php-security-linter` and `psalm`, so a consumer reading "the layers this gate claims" against "the layers it reported on" saw three permanently missing and two it had never heard of — two vocabularies in one file, three lines apart in the same report. The Next.js gate declared `socket` and recorded it nowhere, so a missing Socket CLI reached no coverage list. Both now use one vocabulary, and the two prevention layers — `roave` and `socket` — are recorded as deliberately not measured rather than as missing installs, so their absence stays visible without blocking a review on every project that has not installed them.
+
+### Added
+
+- `make claims` R1 compares the SCOPE of a documented install, not just the constraint. All fourteen wrong-scope lines above agreed with the catalog on the version and contradicted it on where the package goes, and the rule passed every one of them. `composer bin <namespace> require` is also an install context now, so an isolated install is compared on both fields rather than skipped entirely. R1 reports scope comparisons as their own number and returns UNMEASURED when it made none.
+
+- A spec that fails when a gate declares a layer it has no way to record. Both sets are derived — the declared one from the gate's own report literals, the recorded one from its own assignment sites — so adding a layer to a gate and forgetting to record it goes red without anyone maintaining a list.
+
 ## [3.10.3] - 2026-08-30
 
 ### Fixed

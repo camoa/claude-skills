@@ -40,6 +40,18 @@ cqt_announce_report_dir
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_resolve_drupal_paths
 
+# Where an analyzer binary actually IS, answered in ONE place for every gate. Two of the
+# layers here — php-security-linter and psalm — are `scope: isolated` in
+# schema/tool-catalog.json, so cqt-install.sh puts them in their own bamarni bin
+# namespace at vendor-bin/<tool>/vendor/bin/<tool> and NOT at vendor/bin/<tool>. This
+# gate probed vendor/bin alone, so a correctly installed pair landed in tools_absent[]
+# — and under the coverage rules a missing installable tool blocks a review. Somebody
+# hits the gate, runs the install command the gate itself prints, and the gate still
+# reports the tool missing. Same defect the DRY gate had; same shared resolver fixes it,
+# rather than a third copy of the location list.
+# shellcheck source=../core/analyzer-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/analyzer-resolve.sh"
+
 # ── host filesystem vs container filesystem ───────────────────────────────────
 #
 # Nearly every in-container tool here writes to STDOUT and is captured by a host-side
@@ -374,7 +386,7 @@ if [ -n "$CHANGED_FILE" ]; then
                     tools_failed: [],
                     tools_unmeasured: ["semgrep","php-security-linter","custom_patterns"],
                     paths_missing: $missing,
-                    tools_skipped: ["drush_pm_security","composer_audit","psalm_taint","security_review","trivy","gitleaks","roave"]
+                    tools_skipped: ["drush_pm_security","composer_audit","psalm","security_review","trivy","gitleaks","roave"]
                 },
                 summary: {
                     overall_status: $status,
@@ -408,7 +420,7 @@ if [ -n "$CHANGED_FILE" ]; then
                     tools_failed: [],
                     tools_unmeasured: [],
                     paths_missing: [],
-                    tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"],
+                    tools_skipped: ["drush_pm_security","composer_audit","php-security-linter","psalm","security_review","semgrep","trivy","gitleaks","roave"],
                     skip_reason: "no_eligible_changes"
                 },
                 summary: {
@@ -571,11 +583,16 @@ if [ -n "$CHANGED_FILE" ]; then
     PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
 
     if [ "${#RELEVANT_FILES[@]}" -gt 0 ]; then
-        if ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+        # Four locations, not one: this analyzer is installed at `isolated` scope, so a
+        # correct install is at vendor-bin/php-security-linter/vendor/bin/, and the
+        # resolver is also what decides whether to dispatch into the container or run it
+        # on the host. Its findings arrive on stdout, captured by a host-side
+        # redirection, so the runner does not change anything below.
+        if resolve_analyzer php-security-linter; then
             RAN_ANALYZERS=$((RAN_ANALYZERS + 1))
             set +e
             # shellcheck disable=SC2046
-            ddev exec vendor/bin/php-security-linter scan \
+            "${ANALYZER_CMD[@]}" scan \
                 "${RELEVANT_FILES[@]}" \
                 --format=json \
                 2>/dev/null > "$PHPCS_SECURITY_JSON"
@@ -835,7 +852,7 @@ if [ -n "$CHANGED_FILE" ]; then
     # The by-design list a reader sees: the advisory layers this mode never runs, plus
     # whatever the changed set scoped out on this particular run.
     TOOLS_SKIPPED_JSON=$(jq -n --argjson scoped "$SCOPED_OUT_TOOLS_JSON" \
-        '(["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"] + $scoped) | unique')
+        '(["drush_pm_security","psalm","security_review","trivy","gitleaks","roave"] + $scoped) | unique')
 
     if [ "$RAN_ANALYZERS" -eq 0 ]; then
         OVERALL_STATUS="skipped"
@@ -881,7 +898,7 @@ if [ -n "$CHANGED_FILE" ]; then
                 scan_type: "security_audit_changed",
                 mode: "changed",
                 analyzers_ran: $analyzers_ran,
-                tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
+                tools_run: ["semgrep","php-security-linter","custom_patterns","composer_audit"],
                 tools_absent: $tools_absent,
                 tools_failed: $tools_failed,
                 tools_unmeasured: $tools_unmeasured,
@@ -984,6 +1001,15 @@ ABSENT_TOOLS=()
 # branch: absent, failed and unmeasured are three different findings, and only the first
 # is allowed not to move the verdict.
 UNMEASURED_TOOLS=()
+
+# Layers deliberately not measured on this path, recorded so a consumer can compute
+# `declared - reported`. The whole-project path has no diff to scope anything out, so
+# until 3.10.4 it emitted no by-design list at all — and `roave`, a PREVENTION layer
+# whose absence is a finding rather than a coverage gap, was declared in meta.tools[]
+# and pushed nowhere. This is where it goes. It is NOT tools_absent[]: a fail-closed
+# consumer reading absence as an install gap would block a review on every project
+# without the package.
+SKIPPED_BY_DESIGN=()
 
 # The custom-code paths that are actually there, and the ones that are not. Resolved
 # once, here, and read by every layer below that takes a path — so a themes directory
@@ -1168,7 +1194,21 @@ echo -e "${BLUE}[3/10]${NC} Running PHPCS security linter (OWASP/CIS)..."
 # =====================
 PHPCS_SECURITY_JSON="${REPORT_DIR}/security/phpcs-security.json"
 
-if ddev exec test -f vendor/bin/php-security-linter &> /dev/null && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
+# Resolved ONCE, and the answer branched on twice. Both arms asked the same question
+# before, and the question was the wrong one: `isolated` scope puts this binary in its
+# own bin namespace, so the vendor/bin probe read a correct install as absent. Resolving
+# here rather than inside each arm also means the two arms cannot come to disagree, and
+# keeps the resolver's own ANALYZER_CMD from being clobbered by the psalm block below
+# before this one has used it.
+if resolve_analyzer php-security-linter; then
+    PHPCS_SEC_PRESENT=1
+    PHPCS_SEC_CMD=("${ANALYZER_CMD[@]}")
+else
+    PHPCS_SEC_PRESENT=0
+    PHPCS_SEC_CMD=()
+fi
+
+if [ "$PHPCS_SEC_PRESENT" -eq 1 ] && [ "${#SEC_SCAN_PATHS[@]}" -eq 0 ]; then
     # The tool is installed and there is nothing for it to read. Not "absent" — that is
     # a fact about the machine and is allowed not to move the verdict — and not a
     # failure either, because it never ran.
@@ -1177,9 +1217,9 @@ if ddev exec test -f vendor/bin/php-security-linter &> /dev/null && [ "${#SEC_SC
     SKIPPED_TOOLS+=("php-security-linter")
     UNMEASURED_TOOLS+=("php-security-linter")
     PHPCS_ISSUES="[]"
-elif ddev exec test -f vendor/bin/php-security-linter &> /dev/null; then
+elif [ "$PHPCS_SEC_PRESENT" -eq 1 ]; then
     set +e
-    ddev exec vendor/bin/php-security-linter scan \
+    "${PHPCS_SEC_CMD[@]}" scan \
         "${SEC_SCAN_PATHS[@]}" \
         --format=json \
         2>/dev/null > "$PHPCS_SECURITY_JSON"
@@ -1235,7 +1275,9 @@ echo -e "${BLUE}[4/10]${NC} Running Psalm taint analysis..."
 # =====================
 PSALM_TAINT_JSON="${REPORT_DIR}/security/psalm-taint.json"
 
-if ddev exec test -f vendor/bin/psalm &> /dev/null; then
+if resolve_analyzer psalm; then
+    PSALM_CMD=("${ANALYZER_CMD[@]}")
+    PSALM_RUNNER="$ANALYZER_RUNNER"
     # Check if psalm.xml exists, if not create minimal config
     if ! ddev exec test -f psalm.xml &> /dev/null; then
         # The heredoc STAYS QUOTED — it is XML, and an unquoted one would have the shell
@@ -1309,21 +1351,36 @@ EOF
     # psalm writes out of band via --report, so a report from an earlier run would
     # otherwise be read as this run's result.
     clear_stale_report "$PSALM_TAINT_JSON"
-    # --report is read by the CONTAINER; PSALM_TAINT_JSON is a HOST path. See the
-    # host/container note at the top of this file.
-    PSALM_TAINT_CONTAINER="${CQT_CONTAINER_STAGE}/psalm-taint.json"
-    ddev exec mkdir -p "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
-    ddev exec vendor/bin/psalm --taint-analysis \
-        --report="${PSALM_TAINT_CONTAINER}" \
+    # --report is read by WHOEVER RUNS PSALM, and since the resolver that found this
+    # binary can hand back a host one — a global composer install is the polite way to
+    # audit third-party code — the path it is given has to follow the runner. A host
+    # psalm told to write into the container's /tmp would write a host file nobody reads
+    # back, the fetch below would find nothing, and a psalm that ran perfectly well
+    # would be recorded as a FAILED layer. Resolved-but-broken and absent are different
+    # findings, and neither of them is what a working analyzer deserves.
+    # See the host/container note at the top of this file for the container half.
+    if [ "$PSALM_RUNNER" = "container" ]; then
+        PSALM_TAINT_CONTAINER="${CQT_CONTAINER_STAGE}/psalm-taint.json"
+        ddev exec mkdir -p "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+        PSALM_REPORT_TARGET="${PSALM_TAINT_CONTAINER}"
+    else
+        # REPORT_DIR/security is created unconditionally near the top of this script, so
+        # the host target's directory is already there.
+        PSALM_REPORT_TARGET="${PSALM_TAINT_JSON}"
+    fi
+    "${PSALM_CMD[@]}" --taint-analysis \
+        --report="${PSALM_REPORT_TARGET}" \
         --output-format=json \
         --no-cache \
         2>/dev/null
     PSALM_EXIT=$?
     # Carried across before the status is judged. A psalm that wrote a report and exited
     # non-zero is a psalm that found taint, and the report has to be here for the
-    # resolve_tool_result call below to read it.
-    cqt_fetch_from_container "${PSALM_TAINT_CONTAINER}" "${PSALM_TAINT_JSON}"
-    ddev exec rm -rf "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+    # resolve_tool_result call below to read it. A host runner already wrote it there.
+    if [ "$PSALM_RUNNER" = "container" ]; then
+        cqt_fetch_from_container "${PSALM_TAINT_CONTAINER}" "${PSALM_TAINT_JSON}"
+        ddev exec rm -rf "${CQT_CONTAINER_STAGE}" >/dev/null 2>&1
+    fi
     set -e
 
     # psalm exits non-zero when it finds issues, so the status cannot separate "found
@@ -2124,10 +2181,30 @@ echo -e "${BLUE}[10/10]${NC} Verifying Roave Security Advisories (prevention lay
 # =====================
 ROAVE_ISSUES="[]"
 
-if ddev composer show roave/security-advisories &> /dev/null; then
+# `roave` was DECLARED in meta.tools[] below and pushed into no coverage array at all,
+# so a consumer computing coverage as `declared - reported` saw a layer permanently
+# missing. It is a PREVENTION layer, not a scanner: when it is absent that is a finding,
+# not a coverage gap, so it belongs in the by-design list rather than tools_absent[] —
+# filing it under absence would block a review on every project that has not installed
+# it. The probe's status is read explicitly, because `composer show` failing because the
+# package is not required and `ddev` failing because it cannot run are different facts
+# and the `&> /dev/null` test answered both with "not installed".
+set +e
+ROAVE_PROBE_OUT=$(ddev composer show roave/security-advisories 2>&1)
+ROAVE_PROBE_EXIT=$?
+set -e
+
+if [ "$ROAVE_PROBE_EXIT" -eq 0 ]; then
     echo -e "  ${GREEN}Roave Security Advisories is installed${NC}"
     echo -e "  ${BLUE}[INFO]${NC} Prevents installation of packages with known vulnerabilities"
     # Roave is installed - no issues to report (it prevents issues at install time)
+elif [ "$ROAVE_PROBE_EXIT" -ge 126 ]; then
+    # 126/127 and 128+N are shell-level: the command could not be run or was killed.
+    # Nothing was learned about the project, and a layer that was never asked must not
+    # read as one that answered.
+    echo -e "  ${YELLOW}[UNMEASURED]${NC} could not ask composer about roave/security-advisories (exit ${ROAVE_PROBE_EXIT}): $(printf '%s' "$ROAVE_PROBE_OUT" | head -1)"
+    SKIPPED_TOOLS+=("roave")
+    UNMEASURED_TOOLS+=("roave")
 else
     echo -e "  ${YELLOW}Roave Security Advisories not installed (recommended)${NC}"
     echo -e "  ${BLUE}[INFO]${NC} Install with: ddev composer require --dev roave/security-advisories:dev-master"
@@ -2144,6 +2221,8 @@ else
     }]')
 
     LOW_COUNT=$((LOW_COUNT + 1))
+    SKIPPED_TOOLS+=("roave")
+    SKIPPED_BY_DESIGN+=("roave")
 fi
 
 # =====================
@@ -2173,20 +2252,27 @@ ISSUES=$(jq -n \
 # full four-way split and why conflating them was a defect.
 #   tools_absent[]     the BINARY IS NOT INSTALLED — a fact about the machine, and the
 #                      only one of the three that is a coverage gap. Every push into it
-#                      on this path is a `command -v` / `test -f vendor/bin/...` miss.
+#                      on this path is a `command -v` miss or a resolve_analyzer miss,
+#                      and resolve_analyzer means all four install locations — a probe
+#                      of vendor/bin alone called a correctly isolated install absent.
 #   tools_failed[]     present and returned nothing usable — a zero from it is not
 #                      evidence, so it downgrades a would-be pass to "skipped".
 #   tools_unmeasured[] never asked, because the path it would have read is not there.
-# This path scans the whole project, so nothing here is scoped out by the diff and there
-# is no by-design skipped list to emit.
+#   tools_skipped[]    deliberately not measured — the prevention layer whose absence
+#                      is already a finding. Nothing here is scoped out by a diff, but
+#                      "no diff-scoping" is not the same as "nothing by design", and
+#                      reading it that way left `roave` declared and unreportable.
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
 UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
-# Three disjoint sets now, and the failed one is still derived rather than listed by
-# hand: everything that recorded a skip, minus the two kinds with a name for why.
+BY_DESIGN_TOOLS_JSON=$(to_json_array "${SKIPPED_BY_DESIGN[@]+"${SKIPPED_BY_DESIGN[@]}"}")
+# Four disjoint sets now, and the failed one is still derived rather than listed by
+# hand: everything that recorded a skip, minus the three kinds with a name for why.
 FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
     --argjson absent "$ABSENT_TOOLS_JSON" \
-    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
+    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson by_design "$BY_DESIGN_TOOLS_JSON" \
+    '$skipped - $absent - $unmeasured - $by_design')
 FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
 OVERALL_STATUS=$(resolve_security_status \
@@ -2216,15 +2302,17 @@ jq -n \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
     --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson tools_skipped "$BY_DESIGN_TOOLS_JSON" \
     --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
-            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
+            tools: ["drush_pm_security", "composer_audit", "php-security-linter", "psalm", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
             tools_absent: $tools_absent,
             tools_failed: $tools_failed,
             tools_unmeasured: $tools_unmeasured,
+            tools_skipped: $tools_skipped,
             secret_scan: $secret_scan
         },
         summary: {

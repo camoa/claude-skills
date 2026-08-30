@@ -59,8 +59,8 @@ latter being `/review`'s default path — and they do not carry the same keys. T
 handles both and reads the verdict from `.summary.overall_status`, because there is no
 top-level `.status`. A wrapper that read one went green on a project with a critical
 finding. `meta.tools[]` is deliberately not consulted: it exists only in whole-project
-mode, and its literal names `phpcs_security_linter` / `psalm_taint` / `roave` while the
-code pushes `php-security-linter` and `psalm` and never pushes `roave`.
+mode, and `--changed` is the default path. Its names disagreed with the ones the code
+pushed until cqt 3.10.4; that half is fixed and the mode half is not.
 
 ## Verdict interpretation
 

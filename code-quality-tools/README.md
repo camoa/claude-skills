@@ -89,16 +89,34 @@ nothing, so this one exits non-zero rather than reporting a pass it did not earn
 Or install manually.
 
 **Drupal (via DDEV):**
+
+Two scopes, because the tools split into two kinds. What reads the project's own
+code goes into the project. What only tokenises or scans it gets its own dependency
+tree, so its requirements never have to agree with the site's.
+
 ```bash
+# Project scope: analysers that resolve the project's own classes.
 ddev composer require --dev \
-  phpstan/phpstan:^2.0 \
-  phpmd/phpmd:^2.15 \
-  systemsdk/phpcpd:^9.0 \
-  vimeo/psalm:^6.0 \
-  drupal/coder:^9.0 \
+  "phpstan/phpstan:^1.12.4||^2.0" \
+  "drupal/coder:^8.3.30||^9.0" \
   drupal/security_review \
   roave/security-advisories:dev-master
 ```
+
+```bash
+# Isolated scope: one bin namespace per tool.
+ddev composer require --dev bamarni/composer-bin-plugin:^1.9
+ddev composer config extra.bamarni-bin.forward-command true
+ddev composer bin phpmd require --dev phpmd/phpmd:^2.15
+ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
+ddev composer bin psalm require --dev vimeo/psalm:^6.0
+```
+
+The ranges are ranges on purpose. `drupal/core-dev` requires `drupal/coder ^8.3.x` and
+holds `phpstan/phpstan` at `^1.12.4` on Drupal 10, so a bare `^9.0` or `^2.0` does not
+install at all on a normal Drupal development site. The range lets Composer take the
+newest version that actually resolves. `schema/tool-catalog.json` records the resolver
+runs behind each one.
 
 **Next.js:**
 ```bash

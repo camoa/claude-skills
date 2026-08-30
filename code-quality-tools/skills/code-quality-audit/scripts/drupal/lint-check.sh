@@ -187,7 +187,7 @@ EOF
     fi
     if ! ddev exec vendor/bin/phpcs --version &> /dev/null; then
         echo -e "${RED}[ERROR]${NC} PHP_CodeSniffer is not installed"
-        echo "  Run: ddev composer require --dev drupal/coder:^9.0"
+        echo "  Run: ddev composer require --dev \"drupal/coder:^8.3.30||^9.0\""
         exit 1
     fi
 
@@ -328,7 +328,7 @@ fi
 # Check if phpcs is available
 if ! ddev exec vendor/bin/phpcs --version &> /dev/null; then
     echo -e "${RED}[ERROR]${NC} PHP_CodeSniffer is not installed"
-    echo "  Run: ddev composer require --dev drupal/coder:^9.0"
+    echo "  Run: ddev composer require --dev \"drupal/coder:^8.3.30||^9.0\""
     exit 1
 fi
 

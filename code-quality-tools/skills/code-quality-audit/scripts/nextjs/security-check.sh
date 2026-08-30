@@ -205,6 +205,18 @@ ABSENT_TOOLS=()
 # unmeasured layer: it is a fact about THIS RUN, not about what is installed.
 UNMEASURED_TOOLS=()
 
+# Layers deliberately not measured, recorded so `declared - reported` is computable.
+#
+# A PREVENTION layer is not a scanner. Socket CLI absent already produces its own
+# low-severity finding recommending installation, so filing it under tools_absent[]
+# would make a consumer's fail-closed scope rule block a Next.js review on every
+# project that has not installed it — the class of wrong answer cqt 3.10.0 removed on
+# the Drupal side. But pushing it NOWHERE was the other error: `socket` was declared in
+# meta.tools[] and appeared in no coverage array at all, so a missing Socket CLI could
+# not reach any list a consumer reads. This is the third answer: recorded, visible,
+# and not a coverage gap. It is subtracted from the derived failed list below.
+SKIPPED_BY_DESIGN=()
+
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
 
@@ -955,12 +967,20 @@ if npx socket-npm --version &> /dev/null 2>&1; then
     echo -e "  ${BLUE}[INFO]${NC} Socket CLI detects supply chain attacks in npm packages"
 
     # Run Socket CLI audit (lightweight check)
+    #
+    # The `|| true` used to sit INSIDE this command substitution. A substitution's exit
+    # status is the status of the command inside it, so `$(... || true)` always
+    # succeeded and SOCKET_EXIT was 0 on every run. The guard below is `-ne 0`, so its
+    # findings branch was unreachable: an INSTALLED Socket CLI printed "No supply chain
+    # issues detected" whatever it had actually found, and one of the seven layers this
+    # gate advertises could not report anything. `set +e` is what keeps the non-zero
+    # from aborting the script; the `|| true` was never doing that job.
     set +e
-    SOCKET_OUTPUT=$(npx socket-npm audit 2>&1 || true)
+    SOCKET_OUTPUT=$(npx socket-npm audit 2>&1)
     SOCKET_EXIT=$?
     set -e
 
-    if [ $SOCKET_EXIT -ne 0 ] && echo "$SOCKET_OUTPUT" | grep -q "issues found"; then
+    if [ "$SOCKET_EXIT" -ne 0 ] && echo "$SOCKET_OUTPUT" | grep -q "issues found"; then
         echo -e "  ${YELLOW}Socket CLI found supply chain issues${NC}"
         # Add informational issue
         SOCKET_ISSUES=$(jq -n '[{
@@ -973,6 +993,13 @@ if npx socket-npm --version &> /dev/null 2>&1; then
             remediation: "Review Socket CLI output: npx socket-npm audit"
         }]')
         MEDIUM_COUNT=$((MEDIUM_COUNT + 1))
+    elif [ "$SOCKET_EXIT" -ne 0 ]; then
+        # It ran, it failed, and it said nothing this gate can read — not authenticated,
+        # no network, an unrecognised subcommand. That is not a clean bill of health, so
+        # it is recorded as a skip and lands in tools_failed[] through the derivation
+        # below. Reachable only because SOCKET_EXIT is now the audit's own status.
+        echo -e "  ${YELLOW}[SKIP]${NC} Socket CLI exited ${SOCKET_EXIT} with no readable result"
+        SKIPPED_TOOLS+=("socket")
     else
         echo -e "  ${GREEN}No supply chain issues detected${NC}"
     fi
@@ -992,6 +1019,10 @@ else
     }]')
 
     LOW_COUNT=$((LOW_COUNT + 1))
+    # Declared in meta.tools[] and pushed nowhere until 3.10.4, so a missing Socket CLI
+    # reached no coverage list. By-design rather than absent: see SKIPPED_BY_DESIGN.
+    SKIPPED_TOOLS+=("socket")
+    SKIPPED_BY_DESIGN+=("socket")
 fi
 
 # =====================
@@ -1024,9 +1055,12 @@ ISSUES=$(jq -n \
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
 UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
+BY_DESIGN_TOOLS_JSON=$(to_json_array "${SKIPPED_BY_DESIGN[@]+"${SKIPPED_BY_DESIGN[@]}"}")
 FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
     --argjson absent "$ABSENT_TOOLS_JSON" \
-    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
+    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson by_design "$BY_DESIGN_TOOLS_JSON" \
+    '$skipped - $absent - $unmeasured - $by_design')
 FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
 OVERALL_STATUS=$(resolve_security_status \
@@ -1055,6 +1089,7 @@ jq -n \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
     --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson tools_skipped "$BY_DESIGN_TOOLS_JSON" \
     --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
@@ -1065,6 +1100,7 @@ jq -n \
             tools_absent: $tools_absent,
             tools_failed: $tools_failed,
             tools_unmeasured: $tools_unmeasured,
+            tools_skipped: $tools_skipped,
             secret_scan: $secret_scan
         },
         summary: {

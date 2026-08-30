@@ -36,11 +36,19 @@
       "category": "static-analysis",
       "scope": "project",
       "scope_reason": "Autoloads the project's own code: phpstan-drupal boots Drupal's container and resolves project classes, which is the predicate's exact exclusion. Invoked by scripts/drupal/solid-check.sh.",
-      "packages": [{ "name": "phpstan/phpstan", "constraint": "^2.0" }],
+      "packages": [{ "name": "phpstan/phpstan", "constraint": "^1.12.4||^2.0" }],
       "bin": "phpstan",
       "required_when": null,
       "consent_gated": false,
-      "allow_plugins": []
+      "allow_plugins": [],
+      "resolves_against": {
+        "shared_dependency": "phpstan/phpstan, required directly by drupal/core-dev",
+        "forced_by": "drupal/core-dev 10.6.15 requires phpstan/phpstan ^1.12.4; 11.4.5 requires ^1.12.27 || ^2.2.0",
+        "drupal_10": "1.12.x only — ^2.0 alone does not resolve",
+        "drupal_11": "1.x or 2.x, and Composer takes 2.x",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "A RANGE, not a stale pin, and widening it is what gets a site the newest PHPStan its stack can actually resolve. A bare ^2.0 does not install at all on Drupal 10 with core-dev present, which is most Drupal development sites; a failed install is not modern software. Written without spaces so a documented install line needs only ordinary shell quoting and one literal token to compare against. KNOWN CONSEQUENCE, recorded rather than hidden: on Drupal 10 only the lower branch resolves, so PHPStan lands on 1.x while templates/drupal/phpstan.neon and lint-check.sh's exit classifier were written for 2.x. No gate detects that difference yet."
     },
 
     "phpstan-extension-installer": {
@@ -61,12 +69,20 @@
       "category": "static-analysis",
       "scope": "project",
       "scope_reason": "Loads Drupal's container and resolves the project's own classes. The predicate excludes it from isolation by its letter.",
-      "packages": [{ "name": "mglaman/phpstan-drupal", "constraint": "^2.1.2" }],
+      "packages": [{ "name": "mglaman/phpstan-drupal", "constraint": "^1.2.12||^2.1.2" }],
       "bin": null,
       "required_when": { "project.type": "drupal" },
       "consent_gated": false,
       "allow_plugins": [],
-      "required_reason": "The whole reason PHPStan knows anything about Drupal. Its absence is silent for the reason recorded on phpstan-extension-installer."
+      "required_reason": "The whole reason PHPStan knows anything about Drupal. Its absence is silent for the reason recorded on phpstan-extension-installer.",
+      "resolves_against": {
+        "shared_dependency": "phpstan/phpstan, which this package and drupal/core-dev both constrain",
+        "forced_by": "drupal/core-dev 10.6.15 requires mglaman/phpstan-drupal ^1.2.12; 11.4.5 requires ^1.3.9 || ^2.0.15",
+        "drupal_10": "1.2.x only — ^2.1.2 alone does not resolve",
+        "drupal_11": "1.x or 2.x, and Composer takes 2.x",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "A RANGE, not a stale pin. It moves with phpstan's, because 1.x of this package requires phpstan ^1.12 and 2.x requires phpstan ^2.0, so the two branches have to be offered together or one of them cannot be chosen. See the pin_reason on phpstan for the Drupal 10 consequence."
     },
 
     "phpstan-deprecation-rules": {
@@ -74,12 +90,20 @@
       "category": "static-analysis",
       "scope": "project",
       "scope_reason": "A PHPStan rule set registered through extension-installer, so it exists only as an edge in the project's resolution.",
-      "packages": [{ "name": "phpstan/phpstan-deprecation-rules", "constraint": "^2.0" }],
+      "packages": [{ "name": "phpstan/phpstan-deprecation-rules", "constraint": "^1.2||^2.0" }],
       "bin": null,
       "required_when": { "project.type": "drupal" },
       "consent_gated": false,
       "allow_plugins": [],
-      "required_reason": "Drupal's deprecation policy is the thing a version-upgrade audit is mostly looking for; without this rule set the deprecation findings are simply not produced."
+      "required_reason": "Drupal's deprecation policy is the thing a version-upgrade audit is mostly looking for; without this rule set the deprecation findings are simply not produced.",
+      "resolves_against": {
+        "shared_dependency": "phpstan/phpstan",
+        "forced_by": "1.x of this rule set requires phpstan ^1.12 and 2.x requires phpstan ^2.0, so it is pinned by whichever phpstan branch the site resolved",
+        "drupal_10": "1.2.x only, because phpstan there is 1.12.x",
+        "drupal_11": "2.x",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "A RANGE, not a stale pin. It has to offer both branches for the same reason phpstan-drupal does: the rule set follows phpstan's major, so a single-branch constraint makes the whole PHPStan stack unresolvable on one of the two supported Drupal majors."
     },
 
     "coder": {
@@ -87,12 +111,20 @@
       "category": "standards",
       "scope": "project",
       "scope_reason": "drupal/coder is `type: phpcodesniffer-standard`, a rule set rather than a tool. It registers the Drupal standard through dealerdirect/phpcodesniffer-composer-installer, so it works only as an edge in the project's own resolution and cannot be isolated.",
-      "packages": [{ "name": "drupal/coder", "constraint": "^9.0" }],
+      "packages": [{ "name": "drupal/coder", "constraint": "^8.3.30||^9.0" }],
       "bin": "phpcs",
       "required_when": null,
       "consent_gated": false,
       "allow_plugins": ["dealerdirect/phpcodesniffer-composer-installer"],
-      "constraint_reason": "^9.0 here, and drupal-ai-contrib keeps ^8.3.x. Two profiles, one stated reason each. That project's patches run through core's CI and are bound to core-dev's pin; this plugin audits custom site code and is not. Established empirically 2026-08-27: coder 9.0.1 pulls phpcs 4.0.4, whose JSON report shape is identical to phpcs 3's but whose exit codes are a bitfield, which is why lint-check.sh's exit classifier moves with the pin. Recorded here rather than only in a CHANGELOG, so the divergence is visible where the pin is."
+      "constraint_reason": "A RANGE from 2026-08-30, replacing a bare ^9.0. The earlier reasoning for ^9.0 — that this plugin audits custom site code and is not bound to core's CI the way drupal-ai-contrib is — was sound about intent and wrong about fact: drupal/core-dev REQUIRES drupal/coder ^8.3.10 (Drupal 10) or ^8.3.30 (Drupal 11), so a bare ^9.0 cannot install on either supported major when core-dev is present, which is most Drupal development sites. Established empirically 2026-08-27: coder 9.0.1 pulls phpcs 4.0.4, whose JSON report shape is identical to phpcs 3's but whose exit codes are a bitfield, which is why lint-check.sh's exit classifier moves with the pin.",
+      "resolves_against": {
+        "shared_dependency": "drupal/coder itself, required directly by drupal/core-dev",
+        "forced_by": "drupal/core-dev 10.6.15 requires drupal/coder ^8.3.10; 11.4.5 requires ^8.3.30",
+        "drupal_10": "8.3.x only",
+        "drupal_11": "8.3.x only — core-dev's own requirement excludes 9.x on both majors today",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "A RANGE, not a stale pin. Do not narrow it back to ^9.0: that reads as an upgrade and is an install failure on every site with core-dev. The upper branch is here so a site WITHOUT core-dev gets coder 9. KNOWN CONSEQUENCE, recorded rather than hidden: with core-dev present only 8.3.x resolves, so phpcs stays on 3.x while lint-check.sh's exit classifier is written for the phpcs 4 bitfield. No gate detects that difference yet."
     },
 
     "rector": {
@@ -100,11 +132,19 @@
       "category": "standards",
       "scope": "project",
       "scope_reason": "Parses and rewrites the project's own source, so it resolves that source. Isolating it would hand it a resolver that cannot see the code it edits.",
-      "packages": [{ "name": "palantirnet/drupal-rector", "constraint": "^1.1" }],
+      "packages": [{ "name": "palantirnet/drupal-rector", "constraint": "^0.20||^1.1" }],
       "bin": "rector",
       "required_when": null,
       "consent_gated": false,
-      "allow_plugins": []
+      "allow_plugins": [],
+      "resolves_against": {
+        "shared_dependency": "phpstan/phpstan, which rector's own PHPStan bridge constrains",
+        "forced_by": "drupal-rector 1.x resolves onto the phpstan 2.x line; on Drupal 10 core-dev holds phpstan at ^1.12.4, which excludes it",
+        "drupal_10": "0.20.x only — ^1.1 alone does not resolve",
+        "drupal_11": "1.1.x",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "A RANGE, not a stale pin. Rector's constraint follows the phpstan one because it analyses through PHPStan, so narrowing it to ^1.1 makes an install fail on Drupal 10 rather than getting anybody a newer Rector."
     },
 
     "phpunit": {
@@ -165,6 +205,14 @@
       "scope": "isolated",
       "scope_reason": "A copy-paste detector: it tokenises source and never resolves it. Only dry-check.sh runs it.",
       "packages": [{ "name": "systemsdk/phpcpd", "constraint": "^9.0" }],
+      "resolves_against": {
+        "shared_dependency": "sebastian/cli-parser, sebastian/version, phpunit/php-file-iterator, phpunit/php-timer — four that move as a set, one phpcpd release line per PHPUnit major",
+        "forced_by": "drupal/core-dev, through phpunit/phpunit: 9.6.x on Drupal 10 (cli-parser ^1.0.2), 11.5.x on Drupal 11 (cli-parser ^3.0.2)",
+        "drupal_10": "PROJECT scope: no version of this package resolves at all. ISOLATED scope: unconstrained by the project, and ^9.0 resolves",
+        "drupal_11": "PROJECT scope: only 8.0.0, an eight-release downgrade Composer takes silently. ISOLATED scope: ^9.0 resolves",
+        "method": "Composer 2.10.2 dry-run require -W against two built fixtures — drupal/core-recommended + drupal/core-dev at ^10.6 on PHP 8.3.20, and at ^11.4 on PHP 8.4.10 (checked 2026-08-30)"
+      },
+      "pin_reason": "^9.0 is correct ONLY in the isolated scope this entry declares, and it stays. A project-scope install of this package is a defect, not an alternative: no single constraint satisfies Drupal 10 and Drupal 11 together, and widening to ^8.0||^9.0 buys a silent downgrade on one major and still nothing on the other. Six documented install lines used project scope until 2026-08-30, and every one of them failed for anyone who followed it.",
       "bin": "phpcpd",
       "required_when": null,
       "consent_gated": false,
@@ -434,11 +482,11 @@
     },
     "psalm_taint": {
       "alias_of": "psalm",
-      "reason": "security-check.sh names the taint-analysis LAYER; the catalog keys the BINARY that runs it."
+      "reason": "HISTORICAL, kept for reports written before 3.10.4. security-check.sh named the taint-analysis LAYER in its declared roster while pushing the BINARY name into every coverage array, so one file used two vocabularies. The roster now says `psalm`, and this alias stays only so a report produced by an older gate still classifies."
     },
     "phpcs_security_linter": {
       "alias_of": "php-security-linter",
-      "reason": "The report keeps the historical phpcs- name for the layer; the catalog keys the binary the installer places."
+      "reason": "HISTORICAL, kept for reports written before 3.10.4, for the same reason as psalm_taint. The roster now says `php-security-linter`, which is what the code has always pushed."
     }
   }
 }

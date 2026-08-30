@@ -116,12 +116,12 @@ Drupal as plain PHP and exiting 0.
 
 | Tool | Package | Scope | Category |
 |---|---|---|---|
-| `phpstan` | phpstan/phpstan ^2.0 | project | static-analysis |
+| `phpstan` | phpstan/phpstan ^1.12.4||^2.0 | project | static-analysis |
 | `phpstan-extension-installer` | phpstan/extension-installer ^1.4 | project | static-analysis |
-| `phpstan-drupal` | mglaman/phpstan-drupal ^2.1.2 | project | static-analysis |
-| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules ^2.0 | project | static-analysis |
-| `coder` | drupal/coder ^9.0 | project | standards |
-| `rector` | palantirnet/drupal-rector ^1.1 | project | standards |
+| `phpstan-drupal` | mglaman/phpstan-drupal ^1.2.12||^2.1.2 | project | static-analysis |
+| `phpstan-deprecation-rules` | phpstan/phpstan-deprecation-rules ^1.2||^2.0 | project | static-analysis |
+| `coder` | drupal/coder ^8.3.30||^9.0 | project | standards |
+| `rector` | palantirnet/drupal-rector ^0.20||^1.1 | project | standards |
 | `phpunit` | drupal/core-dev * | project | testing |
 | `roave` | roave/security-advisories dev-master | project | security |
 | `grumphp` | phpro/grumphp ^2.0 | project | hooks |
@@ -142,7 +142,7 @@ Drupal as plain PHP and exiting 0.
 | `gitleaks` | _(no package; installed on the machine)_ | machine | security |
 | `pcov` | _(no package; installed on the machine)_ | machine | testing |
 | `inotifywait` | _(no package; installed on the machine)_ | machine | quality |
-<!-- END GENERATED: tool-catalog sha256:a371766a2b392fb8c462cdfa1cbc273afe2d3545c5445f39de425bcb37120615 -->
+<!-- END GENERATED: tool-catalog sha256:3c367422135b955d16c22dde78bf133b8e630bbec4a68fad5fd965f6aeb7b7b7 -->
 
 `scope` is assigned by a stated rule, not per tool taste:
 

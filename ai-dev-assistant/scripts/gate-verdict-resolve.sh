@@ -12,9 +12,12 @@
 #   - `meta.tools[]` exists only in whole-project mode. `--changed` mode, which is
 #     `/review`'s DEFAULT path, emits `meta.tools_run[]` / `meta.tools_skipped[]` instead. A
 #     set relation over `meta.tools[]` is undefined on the path almost every review takes.
-#   - `meta.tools[]` is a hardcoded literal naming `phpcs_security_linter`, `psalm_taint`
-#     and `roave`, while the code pushes `php-security-linter` and `psalm` and never pushes
-#     `roave`. Set relations over it cannot be satisfied.
+#   - `meta.tools[]` was a hardcoded literal naming `phpcs_security_linter`, `psalm_taint`
+#     and `roave` while the code pushed `php-security-linter` and `psalm` and pushed
+#     `roave` nowhere, so set relations over it could not be satisfied. cqt 3.10.4 made
+#     the roster and the pushes one vocabulary and gave `roave` a by-design record, and a
+#     spec assertion now fails when a declared name has no push site. The MODE half of
+#     the objection stands unchanged, so this file still does not read it.
 #   - `dry-report.json` has no `tools_failed` at all; a wrapper was told to read one.
 #
 # Every one of those is a field path, and a field path is exactly the kind of claim a script
@@ -700,10 +703,11 @@ case "$GATE" in
   # The verdict is at .summary.overall_status. There is NO top-level .status, and reading
   # one was a green review on a project with a critical finding.
   #
-  # meta.tools[] is deliberately NOT read: whole-project only, and its literal names
-  # phpcs_security_linter / psalm_taint / roave while the code pushes php-security-linter
-  # and psalm and never pushes roave. Coverage comes from the three unavailability lists,
-  # which BOTH modes emit, plus analyzers_ran where the mode provides it.
+  # meta.tools[] is deliberately NOT read: it exists in whole-project mode only, and
+  # --changed is /review's default path. Its names agreed with nothing the code pushed
+  # until cqt 3.10.4; they agree now, and the mode objection alone is still sufficient.
+  # Coverage comes from the three unavailability lists, which BOTH modes emit, plus
+  # analyzers_ran where the mode provides it.
   security)
     MODE=$(jqr '.meta.mode'); [ -n "$MODE" ] || MODE="whole-project"
     require_shape "$MODE" \

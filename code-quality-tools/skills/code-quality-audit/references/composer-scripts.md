@@ -18,7 +18,7 @@ Add to `composer.json`:
     "quality:phpstan": "phpstan analyse web/modules/custom",
     "quality:phpmd": "phpmd web/modules/custom text phpmd.xml",
     "quality:dry": "phpcpd web/modules/custom --min-lines=10",
-    "quality:cs": "phpcs --standard=Drupal,DrupalPractice web/modules/custom",
+    "quality:cs": "phpcs --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine web/modules/custom",
     "quality:all": ["@quality:phpstan", "@quality:phpmd", "@quality:dry"]
   }
 }

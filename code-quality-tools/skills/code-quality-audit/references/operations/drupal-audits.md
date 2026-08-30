@@ -22,8 +22,8 @@ Run `scripts/core/full-audit.sh` or execute manually:
 1. Verify tools installed
 2. Run all checks on `web/modules/custom`:
    - PHPStan: `ddev exec vendor/bin/phpstan analyse {path} --error-format=json`
-   - PHPMD: `ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design`
-   - PHPCPD: `ddev exec vendor/bin/phpcpd {path} --min-lines=10`
+   - PHPMD: `ddev exec vendor-bin/phpmd/vendor/bin/phpmd {path} json cleancode,codesize,design`
+   - PHPCPD: `ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd {path} --min-lines=10`
    - Static calls: `grep -rn "\\Drupal::" {path} --include="*.php"`
    - Coverage: `ddev exec php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text`
 3. Save `$REPORT_DIR/audit-report.json` following `schemas/audit-report.schema.json`
@@ -69,7 +69,7 @@ When user says "find SOLID violations", "run PHPStan", "check complexity":
 Run `scripts/drupal/solid-check.sh` or:
 
 1. PHPStan: `ddev exec vendor/bin/phpstan analyse {path} --error-format=json`
-2. PHPMD: `ddev exec vendor/bin/phpmd {path} json cleancode,codesize,design`
+2. PHPMD: `ddev exec vendor-bin/phpmd/vendor/bin/phpmd {path} json cleancode,codesize,design`
 3. Static calls: `grep -rn "\\Drupal::" {path} --include="*.php" --exclude-dir=tests`
 4. Categorize by principle:
 
@@ -90,7 +90,7 @@ When user says "check duplication", "find duplicate code", "DRY check":
 
 Run `scripts/drupal/dry-check.sh` or:
 
-1. Execute: `ddev exec vendor/bin/phpcpd {path} --min-lines=10 --min-tokens=70 --exclude tests`
+1. Execute: `ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd {path} --min-lines=10 --min-tokens=70 --exclude tests`
 2. Parse duplication percentage
 3. **Before recommending extraction**, evaluate per `references/dry-detection.md`:
 
@@ -117,14 +117,14 @@ When user says "lint code", "check coding standards", "run phpcs":
 
 Run `scripts/drupal/lint-check.sh` or:
 
-1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path} --report=json`
+1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {path} --report=json`
 2. Save `$REPORT_DIR/lint-report.json`
 3. Show summary with error/warning counts
 
 **Auto-fix mode:**
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh" --fix
-# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice {path}
+# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {path}
 ```
 
 ---

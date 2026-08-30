@@ -45,18 +45,29 @@ jobs:
       - name: Install dependencies
         run: ddev composer install --no-interaction
 
-      - name: Install quality tools
+      # Two scopes, because the tools split into two kinds. The project-scope
+      # analysers resolve the project's own classes; the isolated ones only read
+      # source, so each gets its own bin namespace and its requirements never have
+      # to agree with the site's. The constraints are RANGES because drupal/core-dev
+      # pins the same packages: a bare ^9.0 or ^2.0 does not install at all on a
+      # Drupal site that has it.
+      - name: Install quality tools (project scope)
         run: |
           ddev composer require --dev \
-            phpstan/phpstan:^2.0 \
-            mglaman/phpstan-drupal:^2.1.2 \
+            "phpstan/phpstan:^1.12.4||^2.0" \
+            "mglaman/phpstan-drupal:^1.2.12||^2.1.2" \
             phpstan/extension-installer:^1.4 \
-            phpmd/phpmd:^2.15 \
-            systemsdk/phpcpd:^9.0 \
-            drupal/coder:^9.0 \
-            vimeo/psalm:^6.0 \
-            yousha/php-security-linter:^3.1 \
+            "drupal/coder:^8.3.30||^9.0" \
             --no-interaction
+
+      - name: Install quality tools (isolated scope)
+        run: |
+          ddev composer require --dev bamarni/composer-bin-plugin:^1.9 --no-interaction
+          ddev composer config extra.bamarni-bin.forward-command true
+          ddev composer bin phpmd require --dev phpmd/phpmd:^2.15
+          ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
+          ddev composer bin psalm require --dev vimeo/psalm:^6.0
+          ddev composer bin php-security-linter require --dev yousha/php-security-linter:^3.1
 
       # =====================
       # Static Analysis
@@ -86,7 +97,7 @@ jobs:
       # =====================
       - name: PHPMD Analysis
         run: |
-          ddev exec vendor/bin/phpmd \
+          ddev exec vendor-bin/phpmd/vendor/bin/phpmd \
             web/modules/custom \
             github \
             cleancode,codesize,design
@@ -97,7 +108,7 @@ jobs:
       # =====================
       - name: PHPCPD Duplication
         run: |
-          ddev exec vendor/bin/phpcpd \
+          ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd \
             --min-lines=10 \
             --min-tokens=70 \
             --exclude=tests \
@@ -111,7 +122,7 @@ jobs:
         run: |
           ddev exec vendor/bin/phpcs \
             --standard=Drupal,DrupalPractice \
-            --extensions=php,module,inc,install \
+            --extensions=php,module,inc,install,profile,theme,engine \
             --report=checkstyle \
             web/modules/custom
         continue-on-error: true
@@ -121,7 +132,7 @@ jobs:
       # =====================
       - name: Psalm Taint Analysis
         run: |
-          ddev exec vendor/bin/psalm \
+          ddev exec vendor-bin/psalm/vendor/bin/psalm \
             --taint-analysis \
             --no-cache \
             --output-format=github \
@@ -130,7 +141,7 @@ jobs:
 
       - name: PHP Security Linter (OWASP/CIS)
         run: |
-          ddev exec vendor/bin/php-security-linter scan \
+          ddev exec vendor-bin/php-security-linter/vendor/bin/php-security-linter scan \
             web/modules/custom web/themes/custom \
             --format=github
         continue-on-error: true

@@ -12,7 +12,7 @@ Run before every commit:
 # Quick lint check (~5s)
 ddev exec vendor/bin/phpcs \
     --standard=Drupal \
-    --extensions=php,module \
+    --extensions=php,module,inc,install,profile,theme,engine \
     web/modules/custom/my_module
 ```
 

@@ -90,7 +90,7 @@ Many violations can be auto-fixed:
 
 **Drupal:**
 ```bash
-ddev exec phpcbf --standard=Drupal,DrupalPractice web/modules/custom/
+ddev exec phpcbf --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine web/modules/custom/
 ```
 
 **Next.js:**
