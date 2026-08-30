@@ -358,6 +358,56 @@ run_resolver() {
   fi
 }
 
+# NO PRIMARY MESSAGE MAY CLAIM MORE COVERAGE THAN THE RUN HAD.
+#
+# messages[0] is the summary line: the first thing a reader sees, and for any consumer that
+# renders one line the only thing. On the non-blocking path it read "security: every layer
+# ran and found nothing over threshold" while semgrep had not run — the second message
+# corrected it, and a one-line render showed only the first. Deciding not to BLOCK on a gap
+# is a judgement about consequences; "every layer ran" is a statement of fact, and it was
+# false. The by-design skips were the same: change-scoped mode never runs the whole-project
+# advisory scanners, so that sentence was untrue there on every run.
+#
+# Keyed on the CLAIM FAMILY, not on one sentence, so a rephrase cannot slip past: any
+# "every/all <thing> ran|present", "full measurement", "complete coverage" or "nothing was
+# skipped" counts as a completeness claim. And the check is TWO-SIDED — when something did
+# not run the summary line must also SAY SO, or a resolver that simply deleted the claim
+# would pass while still telling a reader nothing.
+#
+# THE "SOMETHING DID NOT RUN" FACT IS READ FROM THE REPORT, NOT FROM THE RESOLVER'S OWN
+# `evidence.did_not_run`. Keying on the resolver's field would let a resolver that stopped
+# counting by-design skips pass twice over: the field empties, the check returns early, and
+# the summary line goes back to claiming every layer ran. The report is the independent
+# source, and both report shapes are read — flat for solid/dry, under `.meta` for security.
+#
+# assert_no_overclaim <label> <resolver output json> <report path>
+CLAIM_RE='every (layer|analyzer|tool|scanner|check)|all (layers|analyzers|tools|scanners) (ran|present)|full measurement|complete coverage|nothing (was )?skipped'
+ADMITS_RE='did not run|did not produce|not run|unavailable|not installed|absent|not measured|returned nothing usable|the layers that ran|the analyzers that ran|undetermined|nothing was measured|no scanner produced|only the checks that need no binary|in this gate.s scope|skipped|contradicts itself'
+assert_no_overclaim() {
+  local label="$1" out="$2" report="${3:-}" primary missing claims admits
+  primary=$(printf '%s' "$out" | jq -r '.messages[0] // ""')
+  missing=0
+  if [ -n "$report" ] && [ -f "$report" ]; then
+    missing=$(jq -r '[(.meta // .) | (.tools_absent // []) + (.tools_failed // [])
+                      + (.tools_unmeasured // []) + (.tools_skipped // [])] | flatten | length' \
+                "$report" 2>/dev/null || echo 0)
+  fi
+  [ -n "$missing" ] || missing=0
+  [ "$missing" -gt 0 ] || return 0
+  claims=0; admits=0
+  printf '%s' "$primary" | grep -qEi "$CLAIM_RE" && claims=1
+  printf '%s' "$primary" | grep -qEi "$ADMITS_RE" && admits=1
+  if [ "$claims" = "1" ]; then
+    fail_check "$label: $missing layer(s) did not run, and the summary line claims complete coverage anyway — \"$primary\". A consumer rendering one line renders that claim."
+    return 1
+  fi
+  if [ "$admits" = "0" ]; then
+    fail_check "$label: $missing layer(s) did not run and the summary line neither says so nor names them — \"$primary\". Dropping the false claim is not the same as stating the fact."
+    return 1
+  fi
+  return 0
+}
+
 # expect <fixture> <gate> <verdict> <unresolved> <coverage_partial> <what it proves>
 expect() {
   local fx="$1" gate="$2" want_v="$3" want_u="$4" want_p="$5" why="$6"; shift 6
@@ -387,6 +437,7 @@ expect() {
   if [ "$u" = "true" ] && [ "$p" = "true" ]; then
     fail_check "$fx: both markers set — nothing-measured and part-measured are different facts"
   fi
+  assert_no_overclaim "$fx" "$out" "$path" || true
 }
 
 # ------------------------------------------------------------------ dry: ONE analyzer
@@ -676,7 +727,7 @@ unreachable() {
   esac
 }
 
-MATRIX_CELLS=0; MATRIX_UNREACHABLE=0
+MATRIX_CELLS=0; MATRIX_UNREACHABLE=0; MATRIX_OVERCLAIMS=0; MATRIX_INCOMPLETE=0
 MATRIX_FINDINGS_SEEN=""; MATRIX_COVERAGE_SEEN=""
 for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
   case "$shape" in
@@ -715,6 +766,15 @@ for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
         SHAPE_BAD="${SHAPE_BAD}
     [$f × $cov] got $GV/$GU/$GP, contract says $WV/$WU/$WP"
       fi
+      # And the summary line for this cell must not claim coverage the cell did not have.
+      # Run over every cell rather than a chosen few: the overclaim this catches was on the
+      # non-blocking path, which is exactly the path nobody thought to look at.
+      if ! assert_no_overclaim "matrix $shape [$f × $cov]" "$OUT" "$RPT"; then
+        MATRIX_OVERCLAIMS=$((MATRIX_OVERCLAIMS + 1))
+      fi
+      if [ "$(jq -r '[(.meta // .) | (.tools_absent // []) + (.tools_failed // []) + (.tools_unmeasured // []) + (.tools_skipped // [])] | flatten | length' "$RPT" 2>/dev/null || echo 0)" -gt 0 ]; then
+        MATRIX_INCOMPLETE=$((MATRIX_INCOMPLETE + 1))
+      fi
     done
   done
   # Per-shape floor. The whole-matrix floor below can stay satisfied while ONE shape
@@ -732,6 +792,14 @@ done
 
 # The floor. A matrix that stopped covering one of its two axes would go on passing while
 # testing a line instead of a plane, which is the exact state the fixture set was in.
+# The overclaim check has to have had incomplete cells to look at, or it passed by never
+# meeting the state it exists for.
+if [ "$MATRIX_INCOMPLETE" -ge 20 ] && [ "$MATRIX_OVERCLAIMS" -eq 0 ]; then
+  pass_check "no summary line claims complete coverage across $MATRIX_INCOMPLETE matrix cells where something did not run, and each one names what did not"
+elif [ "$MATRIX_INCOMPLETE" -lt 20 ]; then
+  fail_check "only $MATRIX_INCOMPLETE matrix cells had a layer that did not run — the summary-line check is passing because it never met the state it exists for"
+fi
+
 NF=$(printf '%s' "$MATRIX_FINDINGS_SEEN" | wc -w); NC=$(printf '%s' "$MATRIX_COVERAGE_SEEN" | wc -w)
 if [ "$MATRIX_CELLS" -ge 100 ] && [ "$NF" -ge 5 ] && [ "$NC" -ge 7 ]; then
   pass_check "matrix floor: $MATRIX_CELLS cells over $NF findings states × $NC coverage states, plus $MATRIX_UNREACHABLE cells named unreachable with a reason"

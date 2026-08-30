@@ -358,6 +358,35 @@ nonblocking_message() {
     "$(printf '%s' "$GAP_NONBLOCKING" | jq -r 'join(", ")')"
 }
 
+# EVERYTHING THAT DID NOT RUN, from every source: the gaps that block, the gaps that do
+# not, and the layers the mode omitted by design. `messages[0]` is the SUMMARY LINE — the
+# first thing a reader sees, and for any consumer that renders one line the only thing —
+# so it may never claim more coverage than the run had.
+#
+# It did. On the non-blocking path the primary message read "security: every layer ran and
+# found nothing over threshold" while semgrep had not run; the second message corrected it,
+# and a one-line render showed only the first. Deciding not to BLOCK on a gap is a
+# judgement about consequences; "every layer ran" is a statement of fact, and it was false.
+# The by-design skips were in the same position: change-scoped mode never runs the
+# whole-project advisory scanners, so "every layer ran" is untrue on that path too, on
+# every run.
+DID_NOT_RUN='[]'; NRAN_MISSING=0
+set_did_not_run() {
+  DID_NOT_RUN=$(jq -n --argjson b "$GAP_BLOCKING" --argjson n "$GAP_NONBLOCKING" --argjson s "${1:-[]}" \
+    '(($b // []) + ($n // []) + ($s // [])) | unique' 2>/dev/null || printf '[]')
+  NRAN_MISSING=$(printf '%s' "$DID_NOT_RUN" | jq 'length')
+}
+# pick_msg <text when coverage was complete> <lead-in when it was not>
+# The second form NAMES what did not run, so the summary line carries the fact rather than
+# depending on a reader reaching the second message.
+pick_msg() {
+  if [ "$NRAN_MISSING" -eq 0 ]; then
+    printf '%s' "$1"
+  else
+    printf '%s; these did not run: %s' "$2" "$(printf '%s' "$DID_NOT_RUN" | jq -r 'join(", ")')"
+  fi
+}
+
 case "$GATE" in
 
   # --------------------------------------------------------------------------------- dry
@@ -437,8 +466,10 @@ case "$GATE" in
       '.binary_analyzers' array \
       '.tools_absent' array \
       '.tools_failed' array \
-      '.tools_unmeasured' array
+      '.tools_unmeasured' array \
+      '.tools_skipped' array
     STATUS=$(jqr '.status'); RAN=$(jqr '.analyzers_ran')
+    SKIPPED_BY_DESIGN=$(jqc '.tools_skipped // []')
     GONE=$(jqc '((.tools_absent // []) + (.tools_failed // []) + (.tools_unmeasured // [])) | unique')
     HAVE_LISTS=$(jqc 'if (has("tools_absent") or has("tools_failed") or has("tools_unmeasured")) then "yes" else "no" end' | tr -d '"')
     # THE NAMES COME FROM THE PRODUCER. This used to be `BINARY='["phpstan","phpmd"]'`
@@ -455,11 +486,14 @@ case "$GATE" in
     classify_gap "$GONE"
     NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
     NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
+    set_did_not_run "$SKIPPED_BY_DESIGN"
     EV=$(jq -n --arg s "$STATUS" --arg r "${RAN:-unset}" --argjson g "$GONE" --argjson m "$MISSING" \
                --argjson b "$BINARY" --arg h "$HAVE_LISTS" --arg f "$FRESH" \
+               --argjson sk "$SKIPPED_BY_DESIGN" --argjson dnr "$DID_NOT_RUN" \
                --argjson cov "$(coverage_evidence)" \
          '{status:$s, analyzers_ran:$r, unavailable:$g, binary_analyzers:$b,
-           binary_analyzers_missing:$m, tool_lists:$h, freshness:$f, coverage_gap:$cov}')
+           binary_analyzers_missing:$m, tool_lists:$h, freshness:$f,
+           skipped_by_design:$sk, did_not_run:$dnr, coverage_gap:$cov}')
     if [ -z "$STATUS" ]; then
       unresolved_out "solid: report has no .status — shape not recognised" "$MODE" "$EV"
     fi
@@ -515,10 +549,10 @@ case "$GATE" in
 
     WHAT=$(printf '%s' "$GAP_BLOCKING" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
     case "${V}:${PARTIAL}" in
-      pass:false)    emit pass    false false true "$MODE" "$EV" "solid: every analyzer ran and nothing exceeded a threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
-      warning:false) emit warning false false true "$MODE" "$EV" "solid: findings over the soft threshold with every analyzer present — a full measurement, not a coverage gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      pass:false)    emit pass    false false true "$MODE" "$EV" "$(pick_msg "solid: every analyzer ran and nothing exceeded a threshold" "solid: the analyzers that ran found nothing over threshold")" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:false) emit warning false false true "$MODE" "$EV" "$(pick_msg "solid: findings over the soft threshold with every analyzer present — a full measurement, not a coverage gap" "solid: findings over the soft threshold from the analyzers that ran")" "${MSGS[@]+"${MSGS[@]}"}" ;;
       warning:true)  emit warning false true  true "$MODE" "$EV" "solid: measured with part of the gate unavailable ($WHAT)" "${MSGS[@]+"${MSGS[@]}"}" ;;
-      fail:false)    emit fail    false false true "$MODE" "$EV" "solid: findings over the hard threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:false)    emit fail    false false true "$MODE" "$EV" "$(pick_msg "solid: findings over the hard threshold" "solid: findings over the hard threshold from the analyzers that ran")" "${MSGS[@]+"${MSGS[@]}"}" ;;
       fail:true)     emit fail    false true  true "$MODE" "$EV" "solid: findings over the hard threshold, AND part of the gate did not run ($WHAT) — the fail is not softened by the gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
       *)             unresolved_out "solid: internal — no rule for verdict=$V partial=$PARTIAL" "$MODE" "$EV" ;;
     esac
@@ -562,11 +596,12 @@ case "$GATE" in
     classify_gap "$GONE"
     NBLOCK=$(printf '%s' "$GAP_BLOCKING" | jq 'length')
     NNONBLOCK=$(printf '%s' "$GAP_NONBLOCKING" | jq 'length')
+    set_did_not_run "$SKIPPED_BY_DESIGN"
     EV=$(jq -n --arg s "$STATUS" --arg r "$RAN" --argjson g "$GONE" --argjson sk "$SKIPPED_BY_DESIGN" \
                --arg sr "$SKIP_REASON" --arg m "$MODE" --arg f "$FRESH" \
-               --argjson cov "$(coverage_evidence)" \
+               --argjson dnr "$DID_NOT_RUN" --argjson cov "$(coverage_evidence)" \
          '{overall_status:$s, analyzers_ran:$r, unavailable:$g, skipped_by_design:$sk,
-           skip_reason:$sr, mode:$m, freshness:$f, coverage_gap:$cov}')
+           skip_reason:$sr, mode:$m, freshness:$f, did_not_run:$dnr, coverage_gap:$cov}')
     if [ -z "$STATUS" ]; then
       unresolved_out "security: report has no .summary.overall_status — shape not recognised (there is no top-level .status in this gate)" "$MODE" "$EV"
     fi
@@ -615,10 +650,10 @@ case "$GATE" in
     if [ "$V" = "pass" ] && [ "$PARTIAL" = "true" ]; then V="warning"; fi
     WHAT=$(printf '%s' "$GAP_BLOCKING" | jq -r 'join(", ")'); [ -n "$WHAT" ] || WHAT="changed files not on disk"
     case "${V}:${PARTIAL}" in
-      pass:false)    emit pass    false false true "$MODE" "$EV" "security: every layer ran and found nothing over threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
-      warning:false) emit warning false false true "$MODE" "$EV" "security: findings over the soft threshold with every layer present — a full measurement, not a coverage gap" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      pass:false)    emit pass    false false true "$MODE" "$EV" "$(pick_msg "security: every layer ran and found nothing over threshold" "security: the layers that ran found nothing over threshold")" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      warning:false) emit warning false false true "$MODE" "$EV" "$(pick_msg "security: findings over the soft threshold with every layer present — a full measurement, not a coverage gap" "security: findings over the soft threshold from the layers that ran")" "${MSGS[@]+"${MSGS[@]}"}" ;;
       warning:true)  emit warning false true  true "$MODE" "$EV" "security: scanned with layers unavailable ($WHAT) — those layers found nothing because they did not look" "${MSGS[@]+"${MSGS[@]}"}" ;;
-      fail:false)    emit fail    false false true "$MODE" "$EV" "security: findings over the hard threshold" "${MSGS[@]+"${MSGS[@]}"}" ;;
+      fail:false)    emit fail    false false true "$MODE" "$EV" "$(pick_msg "security: findings over the hard threshold" "security: findings over the hard threshold from the layers that ran")" "${MSGS[@]+"${MSGS[@]}"}" ;;
       fail:true)     emit fail    false true  true "$MODE" "$EV" "security: findings over the hard threshold, AND part of the scan did not run ($WHAT)" "${MSGS[@]+"${MSGS[@]}"}" ;;
       *)             unresolved_out "security: internal — no rule for verdict=$V partial=$PARTIAL" "$MODE" "$EV" ;;
     esac

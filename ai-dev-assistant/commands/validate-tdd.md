@@ -68,8 +68,10 @@ missing capability. Do not synthesise a whole-tree mode by enumerating the tree 
 it as `--changed`: on any project that vendors its framework that means mapping every core
 and vendor source to a co-located test, which is both wrong and unbounded.
 
-**This gate has no partial state either** — one channel, one question — so it never sets
-`coverage_partial`.
+**This gate has no partial state at all** — one channel, one question — so it never sets
+`coverage_partial`. It is the only one of the four that does not: `validate-dry` has a
+single analyzer and still reaches a partial state through `--changed` mode's
+files-not-on-disk case.
 
 ## Verdict interpretation
 

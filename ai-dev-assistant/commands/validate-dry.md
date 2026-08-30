@@ -56,9 +56,14 @@ the most recent run actually wrote, which is a different question from where the
 would. Never hardcode `.reports/` — it stopped being the default in code-quality-tools
 v3.9.6 and is now opt-in behind `REPORT_DIR_IN_REPO=1`.
 
-**This gate has one analyzer, so it has no partial state.** phpcpd either measured
-duplication or it did not; the resolver returns `unresolved` for the second case and never
-sets `coverage_partial` for this gate.
+**This gate has one ANALYZER, so its coverage gap is binary — but it does have a partial
+state, from a different source.** phpcpd either measured duplication or it did not, and
+the resolver returns `unresolved` for the second case; no absent tool ever makes this gate
+partial. `--changed` mode is the exception: when some named files are not on disk the gate
+writes `status: "partial"`, part of the change went unread, and the resolver returns
+`warning` with `coverage_partial: true` for it. This file used to say the gate never sets
+the marker at all, which was wrong from the moment the resolver started reading the
+report.
 
 ## Verdict interpretation
 

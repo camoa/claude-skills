@@ -6,8 +6,9 @@
 - **The mapping from a gate's report to a verdict is a script, not a table a model reads.**
   `scripts/gate-verdict-resolve.sh <gate> <report-path>` returns one JSON object —
   `verdict`, `unresolved`, `coverage_partial`, `measured`, `messages[]`, `evidence{}` — and
-  owns every field path, both report modes, the tool lists, and the single-versus-multi
-  analyzer distinction. The wrappers call it and use what it returns.
+  owns every field path, both report modes, the tool lists, the single-versus-multi analyzer
+  distinction, and — from the round that added it — which coverage gaps a project can
+  actually close. The wrappers call it and use what it returns.
 
   Three rounds of encoding this as prose produced three rounds of defects that only a
   script can prevent: a table keyed on a top-level `status` that `security-report.json`
@@ -36,7 +37,6 @@
   a dated report directory that is a green from this morning answering for code from this
   afternoon.
 
-### Fixed
 - **A quality gate whose analyzers were missing reported the answer a clean tree would
   have given.** With phpcpd absent, `dry-check.sh` is honest — `status:"skipped"`,
   `skip_reason:"tool_absent"`, `tools_absent:["phpcpd"]`, exit 0. phpcpd is the DRY gate's
@@ -45,34 +45,34 @@
   among the benign states that do not prevent a pass, and the review went green carrying a
   duplication verdict nothing had produced.
 
-- **The four wrappers now resolve their verdict from the gate's JSON report, not its
-  console output.** This is the actual fix, and the first attempt at it was decorative
-  without it. The verdict tables are documented as "ordered; first match wins" and their
-  first row matches `Explicit "PASS" / "✓"` — while `solid-check.sh` prints
+- **The verdict comes from the gate's JSON report, not its console output.** The verdict
+  tables the wrappers carried were documented as "ordered; first match wins" and their
+  first row matched `Explicit "PASS" / "✓"` — while `solid-check.sh` prints
   `[PASS] SOLID compliance acceptable` with phpstan AND phpmd both absent, and
   `security-check.sh` prints `✓ Security audit passed` with gitleaks, semgrep, trivy and
   psalm all absent, because `tools_absent[]` deliberately does not move either gate's own
-  verdict. A coverage row added below that first row can never evaluate.
+  verdict. A coverage row added below that first row can never evaluate. Those tables are
+  gone: the wrappers locate the report with `report-dir.sh --latest` (never a hardcoded
+  `.reports/`, which stopped being the default in code-quality-tools v3.9.6), hand it to
+  `gate-verdict-resolve.sh`, and pass its JSON through. They decide nothing.
 
   `dry-report.json`, `solid-report.json` and `security-report.json` are written on every
   path including the absent and unmeasured ones, and carry `status`, `rating`, `mode`,
-  `measured`, `skip_reason`, `tools_absent[]`, `tools_failed[]`, `tools_unmeasured[]` and
-  `analyzers_ran`. The claim these files carried — "v1 uses heuristics because no stable
-  JSON surface exists yet upstream" — was false when it was written, and is gone. Each
-  wrapper now locates its report with `report-dir.sh --latest` rather than a hardcoded
-  `.reports/`, which stopped being the default in code-quality-tools v3.9.6 and would have
-  found nothing on a normal run.
+  `measured`, `skip_reason`, `tools_absent[]`, `tools_failed[]`, `tools_unmeasured[]`,
+  `tools_skipped[]`, `binary_analyzers[]` and `analyzers_ran`. The claim these files
+  carried — "v1 uses heuristics because no stable JSON surface exists yet upstream" — was
+  false when it was written, and is gone.
 
-- **The states that mean "nothing was checked" have rules, and they are checked first.**
-  Each wrapper resolves report-present, then coverage, then findings, in that order. A
+- **The states that mean "nothing was checked" have rules, and the resolver checks them
+  first.** Report-present, then coverage, then findings, in that order, in one script. A
   missing report is `unresolved`; so is `status:"unmeasured"` / `measured:false`, the
   gates' own exit-4 state, which previously fell through "Ambiguous or empty output" to a
-  benign `warning`. Zero coverage on a multi-analyzer gate is derived from the tool lists,
-  **not** from `analyzers_ran == 0`: that counter is unreachable at zero for SOLID, whose
-  always-on `\Drupal::` grep needs no binary and increments it, and it is absent entirely
-  from `security-check.sh`'s standard path. `tools_failed[]` now disqualifies exactly as
-  `tools_absent[]` does — a crashed analyzer produced no evidence either. Partial coverage
-  is `warning`, naming what went unchecked, never `pass`.
+  benign `warning`. Zero coverage is asked of each gate in the terms that gate can answer:
+  for SOLID from `binary_analyzers[]` against the tool lists, because `analyzers_ran` is
+  unreachable at zero there — the always-on `\Drupal::` grep needs no binary and increments
+  it; for security from `analyzers_ran == 0`, which its `--changed` path emits and which is
+  that producer stating no scanner measured anything. `tools_failed[]` disqualifies exactly
+  as `tools_absent[]` does — a crashed analyzer produced no evidence either.
 
 - **`validate-tdd.md` is the deliberate exception, and now says so.** `tdd-workflow.sh`
   writes no JSON report on any path and states in its own source that "the exit code is
@@ -93,10 +93,11 @@
 
   So partial coverage gets its own marker, `coverage_partial: true` in `messages[]`, the
   sibling of `unresolved: true`: one means **nothing** was measured, the other means
-  **part** of it was. `validate-solid` and `validate-security` emit it on their partial
-  rows; `validate-dry` and `validate-tdd` have one analyzer and one channel each, so they
-  state plainly that they have no partial state rather than leaving a reader looking for
-  one. New rule 4 fails on the marker; `overall_verdict` has only {`pass`, `fail`,
+  **part** of it was. The resolver emits both, so no caller can forget to attach one.
+  `validate-tdd` is the only gate that never reaches a partial state — one channel, one
+  question. `validate-dry` has a single analyzer and still reaches one, through `--changed`
+  mode's files-named-but-not-on-disk case; that file claimed the opposite until 5.35.6 and
+  now says so. New rule 4 fails on the marker; `overall_verdict` has only {`pass`, `fail`,
   `bypassed`} available and `bypassed` means a human recorded a reason, so `fail` is the
   one left, routing to step 9 where `[s]` records why the gap is accepted. Rule 5's benign
   list now says in as many words that an ordinary `warning` from a fully measured gate
@@ -114,17 +115,6 @@
   budget was 129 while the line below enforced 131, and `scripts/command-body-lengths.sh`
   still carried 129 — a script no Makefile target or test calls, so it reported `review.md`
   over budget and nothing saw it. Both now read 132, raised for step 8's new rule.
-
-### Added
-- `tests/gate-coverage-honesty-spec.sh` — 89 assertions on the DECISION and its ORDER,
-  not on the presence of words. Every coverage rule is paired with an assertion that it is
-  reached before the findings rule that would otherwise shadow it, because a rule MOVED
-  below `Explicit "PASS"` is still present and still dead. It asserts the consumer half:
-  delete `review.md` rule 2 and every producer becomes decorative while all of their own
-  assertions stay green. And it asserts both directions of the marker — that a
-  partial-coverage warning blocks AND that an ordinary measured one does not — with the
-  second checked unconditionally rather than inside the first's branch, since the mutation
-  it defends against is the one that deletes that branch.
 
 - **A correctly scoped security scan was being reported as missing coverage, and no
   consumer-side change could have fixed it.** `security-check.sh`'s `tools_absent[]`
@@ -221,6 +211,23 @@
   checked, not trusted. The lists are read first, and a report claiming nothing was in scope
   while naming a layer that did not produce is a report contradicting itself: unresolved.
 
+### Added
+- `scripts/gate-verdict-resolve.sh` — the report-to-verdict mapping as an executable, with
+  `--field-paths` publishing the contract the spec holds it to and `--tool-catalog` taking
+  the scope authority.
+- `tests/gate-verdict-resolve-spec.sh` — 141 assertions: the field paths checked against
+  each producer, 57 fixture reports, a 144-cell findings × coverage matrix, and the
+  producer-side control-flow claims no fixture can hold.
+- `tests/gate-coverage-honesty-spec.sh` — 48 assertions on the DECISION and its ORDER,
+  not on the presence of words. Every coverage rule is paired with an assertion that it is
+  reached before the findings rule that would otherwise shadow it, because a rule MOVED
+  below `Explicit "PASS"` is still present and still dead. It asserts the consumer half:
+  delete `review.md` rule 2 and every producer becomes decorative while all of their own
+  assertions stay green. And it asserts both directions of the marker — that a
+  partial-coverage warning blocks AND that an ordinary measured one does not — with the
+  second checked unconditionally rather than inside the first's branch, since the mutation
+  it defends against is the one that deletes that branch.
+
 ### Changed
 - **The spec's fixtures are a CROSS-PRODUCT now, not a list.** They were built one axis at a
   time, and it left a hole with a shape: every `solid-*` fixture with `status: "fail"` had
@@ -248,14 +255,30 @@
   deleting a single push goes red.
 
 ### Known remaining
-- Nothing from the Next.js gap recorded in the first draft of this entry: code-quality-tools
-  3.10.1 gives `nextjs/solid-check.sh` the same `tools_absent[]` / `tools_failed[]` /
-  `tools_unmeasured[]` / `tools_skipped[]` / `analyzers_ran` / `binary_analyzers[]` surface
-  the Drupal gates emit, and `nextjs/dry-check.sh` now writes an unmeasured report and
-  exits 4 rather than exiting 1 silently. The earlier claim that the first case was merely
-  "coverage unstated" understated it: the gate hardcoded `status: "pass"` with madge and
-  ESLint both missing, so the original defect of this release was untouched in that
-  directory — and this spec asserted that outcome as intended behaviour.
+- **`meta.tools[]` in `security-check.sh`'s whole-project report is still a wrong literal.**
+  It names `phpcs_security_linter`, `psalm_taint` and `roave` where the code pushes
+  `php-security-linter` and `psalm` and never pushes `roave`. The resolver does not read it
+  and the field paths declaration says why, so nothing depends on it today; the literal
+  itself is untouched and nothing asserts it.
+- **The resolver's catalog lookup is a path guess when it is not given one.**
+  `--tool-catalog` is the reliable channel and both wrappers that need it pass it, but a
+  direct call without the flag falls back to a sibling-plugin path that is not guaranteed in
+  every install layout. It degrades loudly rather than silently — every gap is then treated
+  as closeable and `evidence.coverage_gap.scope_source` says the catalog was not found —
+  but a caller that omits the flag gets stricter blocking than intended.
+- **`commands/review.md` is at exactly its 132-line body budget.** Step 8's rule 5 was
+  extended in place this release rather than given new lines. The next addition to that file
+  needs the budget raised, which `tests/review-command-spec.sh` records as a deliberate act.
+
+### Note on the Next.js gates
+An earlier draft of this entry listed them as an open gap. They are not: code-quality-tools
+3.10.1 gives `nextjs/solid-check.sh` the same `tools_absent[]` / `tools_failed[]` /
+`tools_unmeasured[]` / `tools_skipped[]` / `analyzers_ran` / `binary_analyzers[]` surface the
+Drupal gates emit, and `nextjs/dry-check.sh` writes an unmeasured report and exits 4 rather
+than exiting 1 silently. That draft also understated the first case as "coverage unstated":
+the gate hardcoded `status: "pass"` with madge and ESLint both missing, so the original
+defect of this release stood untouched in that directory while this plugin's spec asserted
+the outcome as intended behaviour.
 
 ## [5.35.5] - 2026-08-29
 
