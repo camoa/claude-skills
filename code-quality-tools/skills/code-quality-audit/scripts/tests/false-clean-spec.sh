@@ -159,6 +159,9 @@ last_absent() { tr -d '\n' < "$TMP/last_absent" 2>/dev/null || printf 'MISSING';
 # installed" and "the changed set gave this layer nothing to do", and the assertions below
 # read only the first name, so the conflation was invisible to all of them.
 last_scoped() { tr -d '\n' < "$TMP/last_scoped" 2>/dev/null || printf 'MISSING'; }
+# The third list. An absent PATH and an absent TOOL are different facts, and the nextjs
+# gate reported the first as the second until 3.10.3.
+last_unmeasured() { tr -d '\n' < "$TMP/last_unmeasured" 2>/dev/null || printf 'MISSING'; }
 # Which semgrep binary the last run actually invoked: "host", "container", both, or
 # empty. The verdict tuple alone cannot distinguish "ran cleanly" from "never found" —
 # both are a clean pass with no skip recorded — so the stubs record their own
@@ -1198,6 +1201,12 @@ run_security_gate() {
   # a tool that was never installed, which is the only thing it exists to say.
   mkdir -p "$work/web/modules/custom/m/src" "$work/web/themes/custom/t"
   printf '<?php\n// nothing to find here\n' > "$work/web/modules/custom/m/src/A.php"
+  # The Next.js gate's equivalent. Same reasoning, and it was missing: nextjs/security-check.sh
+  # reads SRC_PATH (default `src`), and since 3.10.3 an absent one is tools_unmeasured rather
+  # than tools_absent, so a fixture without it caps every nextjs scenario below at
+  # "unmeasured" and this section stops being able to tell an absent tool from a failed one.
+  mkdir -p "$work/src"
+  printf 'export const ok = 1;\n' > "$work/src/index.ts"
   # The container's own filesystem, deliberately NOT under $work: $work is the project,
   # i.e. the bind mount, and the two being different places is the whole point. Anything
   # a container tool writes to a path outside /var/www/html lands here and is invisible
@@ -1240,6 +1249,8 @@ run_security_gate() {
     2>/dev/null > "$TMP/last_absent" || printf 'MISSING' > "$TMP/last_absent"
   jq -r '(.meta.tools_skipped // []) | sort | join(",")' "$rdir/security-report.json" \
     2>/dev/null > "$TMP/last_scoped" || printf 'MISSING' > "$TMP/last_scoped"
+  jq -r '(.meta.tools_unmeasured // []) | sort | join(",")' "$rdir/security-report.json" \
+    2>/dev/null > "$TMP/last_unmeasured" || printf 'MISSING' > "$TMP/last_unmeasured"
   ls "$work/markers" 2>/dev/null | sed 's/^semgrep_//' | sort | paste -sd, - > "$TMP/last_markers"
   printf '%s|%s|%s|%s' "$rc" "$status" "$failed" "$counts"
 }
@@ -1328,6 +1339,8 @@ run_changed_gate() {
     2>/dev/null > "$TMP/last_absent" || printf 'MISSING' > "$TMP/last_absent"
   jq -r '(.meta.tools_skipped // []) | sort | join(",")' "$rdir/security-report.json" \
     2>/dev/null > "$TMP/last_scoped" || printf 'MISSING' > "$TMP/last_scoped"
+  jq -r '(.meta.tools_unmeasured // []) | sort | join(",")' "$rdir/security-report.json" \
+    2>/dev/null > "$TMP/last_unmeasured" || printf 'MISSING' > "$TMP/last_unmeasured"
   ls "$work/markers" 2>/dev/null | sed 's/^semgrep_//' | sort | paste -sd, - > "$TMP/last_markers"
   printf '%s|%s|%s|%s' "$rc" "$status" "$failed" "$counts"
 }
@@ -1513,7 +1526,36 @@ assert_eq "[drupal --changed] and nothing is in tools_absent, because every tool
 
 run_security_gate "$NEXTSEC" 0 absent >/dev/null
 assert_eq "[nextjs] every non-producing SCANNER is named in tools_absent" \
-  "custom_patterns,eslint_security,gitleaks,semgrep,trivy" "$(last_absent)"
+  "eslint_security,gitleaks,semgrep,trivy" "$(last_absent)"
+# THE NO-SOURCE CASE, at its own scenario. SRC_PATH gone means the pattern layer scanned
+# nothing at all, and the gate must say `unmeasured` and exit 4 rather than report the same
+# clean bill of health as a scan that read every file. The gate is run in a work dir with
+# no src/ for exactly this one assertion.
+NOSRC_WORK="$(mktemp -d "$TMP/nosrc.XXXXXX")"
+NOSRC_RDIR="$NOSRC_WORK/.reports"
+NOSRC_BIN="$(mktemp -d "$TMP/nosrcbin.XXXXXX")"
+cp "$DSTUB/npm" "$DSTUB/npx" "$NOSRC_BIN/"
+NOSRC_RC=0
+( cd "$NOSRC_WORK" && PATH="$NOSRC_BIN:/usr/bin:/bin" REPORT_DIR="$NOSRC_RDIR" \
+    bash "$NEXTSEC" ) > /dev/null 2>&1 || NOSRC_RC=$?
+assert_eq "[nextjs] SRC_PATH absent -> the pattern layer is UNMEASURED, not an absent tool" \
+  "custom_patterns" \
+  "$(jq -r '(.meta.tools_unmeasured // ["MISSING"]) | sort | join(",")' "$NOSRC_RDIR/security-report.json" 2>/dev/null || echo MISSING)"
+assert_eq "[nextjs] SRC_PATH absent -> and NOT in tools_absent, where it read as expected and stopped blocking" \
+  "" \
+  "$(jq -r '[(.meta.tools_absent // []) | .[] | select(. == "custom_patterns")] | join(",")' "$NOSRC_RDIR/security-report.json" 2>/dev/null || echo MISSING)"
+assert_eq "[nextjs] SRC_PATH absent -> status unmeasured, so no reader takes it for a clean tree" \
+  "unmeasured" \
+  "$(jq -r '.summary.overall_status // "MISSING"' "$NOSRC_RDIR/security-report.json" 2>/dev/null || echo MISSING)"
+assert_eq "[nextjs] SRC_PATH absent -> exit 4, because a caller with only the exit code reads 0 as a pass" \
+  "4" "$NOSRC_RC"
+
+# custom_patterns is deliberately NOT in that string any more. It is a grep implemented in
+# the gate, always present, so it can never be an absent TOOL; what it can be is a layer
+# pointed at a path that is not there, which is tools_unmeasured. Filed under tools_absent
+# it read as an expected absence, and once the catalog classified it `builtin` (nothing to
+# install) it stopped blocking at all — so a Next.js scan that read no source reported what
+# a scan that read all of it reports. Asserted at its own scenario, below.
 
 # H2k: the two buckets are DISJOINT, not nested. tools_absent = never ran, expected.
 # tools_failed = was there and returned nothing usable. If a failed tool also appeared

@@ -5,13 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.3] - 2026-08-30
+
+### Fixed
+
+- `nextjs/security-check.sh` reported an absent PATH as an absent TOOL. When `SRC_PATH` did not exist the custom-pattern layer scanned nothing at all and recorded `custom_patterns` in `tools_absent[]` — but that layer is a grep implemented in the gate and is always present, so what was absent was the ground, not the tool. Filed there it read as an expected absence, and once 3.10.2 classified `custom_patterns` as `builtin` (nothing to install, so never blocking) it stopped bearing on the verdict at all: a Next.js scan that read no source reported what a scan that read every file reports. It is `tools_unmeasured[]` now, which no scope excuses, and the gate grew the third list and the `unmeasured` status and exit 4 that go with it. Every remaining `ABSENT_TOOLS` push in both security gates was audited and each one is a genuine "not installed" branch.
+
+### Known remaining
+
+- `nextjs/security-check.sh` is not a declared producer in `ai-dev-assistant`'s `gate-verdict-resolve.sh --field-paths`, which gives second-producer blocks to the `dry` and `solid` gates only. It emits `.summary.overall_status` and the three coverage lists but no `analyzers_ran`, `tools_skipped` or `binary_analyzers`, and nothing checks any of that against what the consumer reads.
+
 ## [3.10.2] - 2026-08-29
 
 ### Added
 
 - `layers` in `schema/tool-catalog.json`: the names a GATE can report in `tools_absent[]` / `tools_failed[]` / `tools_unmeasured[]` that are not entries in `tools`, because `install-tools.sh` does not install them. `scope` answers how the installer provides a binary; these have no answer to that question, and their absence from the catalog made a consumer classify them `unknown` and, being fail-closed, block on them. `security_review` is the drupal/security_review contrib module, so `/review --full-audit` failed on every Drupal project that had not chosen to add it, escapable only with `--skip-security` — the habit the scope rule exists to prevent. Two kinds: `builtin` for what is provided by composer, drush or npm or implemented in the gate itself (`custom_patterns`, `static_calls`, `composer_audit`, `drush_pm_security`, `npm_audit`, `large_files`, `typescript_strict`), where there is nothing to install and an absence can never be a missing install; and `optional-contrib` for a third-party add-on this plugin deliberately does not install or require (`security_review`, `eslint_security`). Neither blocks when absent. Both still block when they land in `tools_failed[]` or `tools_unmeasured[]`, which are facts about a run rather than about what is installed.
 
-- `alias_of` in the same map, for the second way into that wrong answer: a gate's report name and its catalog key are not always the same word. `psalm_taint` is the catalogued `psalm` and `phpcs_security_linter` is `php-security-linter`, and without the alias both fell through to `unknown` and blocked. Seven entries in all, and `ai-dev-assistant`'s gate-verdict spec now fails when a producer can report a name this file classifies neither way — the assertion is worth more than the seven.
+- `alias_of` in the same map, for the second way into that wrong answer: a gate's report name and its catalog key are not always the same word. `psalm_taint` is the catalogued `psalm` and `phpcs_security_linter` is `php-security-linter`, and without the alias both fell through to `unknown` and blocked. Eleven entries in all, nine kinds and two aliases, covering 10 of the 22 names the gates can report; the other 12 are catalogued `tools`. `ai-dev-assistant`'s gate-verdict spec now fails when a producer can report a name this file classifies neither way, which is worth more than the eleven.
 
 ## [3.10.1] - 2026-08-29
 

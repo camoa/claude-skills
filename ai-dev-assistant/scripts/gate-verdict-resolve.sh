@@ -412,7 +412,7 @@ cross_check_exit() {
 # not classify: fail-closed on an unclassified name means an ordinary review fails, and the
 # only escape is the --skip this rule exists to prevent. That is how `security_review` — a
 # contrib module, not a binary — failed /review on every Drupal project without it.
-GAP_BLOCKING='[]'; GAP_NONBLOCKING='[]'
+GAP_BLOCKING='[]'; GAP_NONBLOCKING='[]'; GAP_NONBLOCKING_BY_KIND='{}'
 classify_gap() {
   local absent="${1:-[]}" failed="${2:-[]}" unmeasured="${3:-[]}"
   GAP_BLOCKING=$(jq -n -c --argjson a "$absent" --argjson f "$failed" --argjson u "$unmeasured" \
@@ -426,6 +426,10 @@ classify_gap() {
     || jq -n -c --argjson a "$absent" --argjson f "$failed" --argjson u "$unmeasured" '($a + $f + $u) | unique')
   GAP_NONBLOCKING=$(jq -n -c --argjson a "$absent" --argjson b "$GAP_BLOCKING" \
     '[ $a[] | select(. as $x | ($b | index($x)) == null) ] | unique' 2>/dev/null || printf '[]')
+  # Grouped by WHY, because the reason differs per name and a reader is owed the real one.
+  GAP_NONBLOCKING_BY_KIND=$(jq -n -c --argjson n "$GAP_NONBLOCKING" --argjson s "$SCOPES" \
+    '$n | group_by($s[.] // "unknown") | map({key: ($s[.[0]] // "unknown"), value: .}) | from_entries' \
+    2>/dev/null || printf '{}')
 }
 
 # The evidence every gate attaches, so a reader can see what was and was not held against
@@ -439,9 +443,31 @@ coverage_evidence() {
 # The message that keeps a non-blocking gap VISIBLE. Not blocking is not the same as not
 # reporting: part of the gate did not run, the review summary and _review.json both say so,
 # and the marker prefix is stable so a reader can grep for it.
+#
+# ONE CLAUSE PER REASON, because there is more than one reason and they are not
+# interchangeable. This message hardcoded the machine-scope wording, so when the round that
+# added `layer:*` names put them in the same list, the gate shipped
+# "security_review — host tools this project cannot install (tool-catalog scope `machine`);
+# Set CI to make them block" about a contrib MODULE that `CI` demonstrably does not make
+# block. Two false statements in one line, in the branch whose whole subject is a gate not
+# claiming more than it did. `CI` is named only in the clause where `CI` is true.
 nonblocking_message() {
-  printf 'coverage_gap_nonblocking: %s — host tools this project cannot install (tool-catalog scope `machine`); reported, not blocking. Set CI to make them block.' \
-    "$(printf '%s' "$GAP_NONBLOCKING" | jq -r 'join(", ")')"
+  local clauses
+  clauses=$(printf '%s' "$GAP_NONBLOCKING_BY_KIND" | jq -r '
+    to_entries
+    | map(
+        (.value | join(", ")) as $names
+        | if .key == "machine" then
+            $names + " (host binaries install-tools.sh has no mechanism to place, tool-catalog scope machine; set CI to make them block)"
+          elif .key == "layer:builtin" then
+            $names + " (provided by composer, drush or npm, or implemented in the gate itself: there is nothing to install, and CI does not change that)"
+          elif .key == "layer:optional-contrib" then
+            $names + " (optional third-party add-ons this toolchain does not install and does not require; CI does not change that)"
+          else
+            $names + " (scope " + .key + ")"
+          end)
+    | join("; ")')
+  printf 'coverage_gap_nonblocking: %s. Reported, not blocking.' "$clauses"
 }
 
 # EVERYTHING THAT DID NOT RUN, from every source: the gaps that block, the gaps that do

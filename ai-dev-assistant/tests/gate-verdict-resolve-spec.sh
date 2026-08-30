@@ -374,6 +374,55 @@ run_resolver() {
 # not run the summary line must also SAY SO, or a resolver that simply deleted the claim
 # would pass while still telling a reader nothing.
 #
+# A NON-BLOCKING GAP'S EXPLANATION MUST MATCH ITS CLASS.
+#
+# `nonblocking_message()` hardcoded the machine-scope wording. When `layer:*` names joined
+# GAP_NONBLOCKING the gate started shipping "security_review — host tools this project
+# cannot install (tool-catalog scope `machine`); Set CI to make them block" about a contrib
+# MODULE that CI demonstrably does not make block: two false statements in one line, in the
+# branch whose subject is a gate not claiming more than it did. Keyed on the pairing of
+# NAME to REASON, so swapping the two explanations fails even though both sentences are
+# still present and well-formed.
+#
+# assert_reason_matches_class <label> <resolver output json>
+assert_reason_matches_class() {
+  local label="$1" out="$2" line kinds bad=""
+  line=$(printf '%s' "$out" | jq -r '[.messages[] | select(startswith("coverage_gap_nonblocking:"))] | first // ""')
+  [ -n "$line" ] || return 0
+  kinds=$(printf '%s' "$out" | jq -r '(.evidence.coverage_gap.non_blocking // [])[]')
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    # The clause this name sits in: from the name to the end of its parenthesis.
+    clause=$(printf '%s' "$line" | sed -n "s/.*\b${name}\b[^(]*(\([^)]*\)).*/\1/p" | head -1)
+    [ -n "$clause" ] || { bad="${bad} ${name}:no-reason-given"; continue; }
+    case "$(catalog_kind_of "$name")" in
+      machine)
+        printf '%s' "$clause" | grep -qi 'host binar' || bad="${bad} ${name}:machine-named-as-something-else"
+        printf '%s' "$clause" | grep -qi 'set CI'     || bad="${bad} ${name}:machine-without-the-CI-escalation"
+        ;;
+      layer:*)
+        printf '%s' "$clause" | grep -qi 'host binar' && bad="${bad} ${name}:layer-described-as-a-host-binary"
+        printf '%s' "$clause" | grep -qi 'CI does not change' || bad="${bad} ${name}:layer-not-told-CI-will-not-help"
+        ;;
+    esac
+  done <<< "$kinds"
+  if [ -n "$bad" ]; then
+    fail_check "$label: the non-blocking explanation does not match the class of what it names —${bad}. Line was: $line"
+    return 1
+  fi
+  return 0
+}
+# catalog_kind_of <name> — the same resolution the resolver does, read here independently.
+catalog_kind_of() {
+  jq -r --arg n "$1" '
+    if ((.tools // {})[$n] // null) != null then (.tools[$n].scope // "unknown")
+    elif ((.layers // {})[$n] // null) != null then
+      (if (.layers[$n].alias_of // null) != null
+       then ((.tools[.layers[$n].alias_of].scope) // "unknown")
+       else "layer:" + (.layers[$n].kind // "unknown") end)
+    else "unknown" end' "$CATALOG" 2>/dev/null || printf 'unknown'
+}
+
 # THE "SOMETHING DID NOT RUN" FACT IS READ FROM THE REPORT, NOT FROM THE RESOLVER'S OWN
 # `evidence.did_not_run`. Keying on the resolver's field would let a resolver that stopped
 # counting by-design skips pass twice over: the field empties, the check returns early, and
@@ -438,6 +487,7 @@ expect() {
     fail_check "$fx: both markers set — nothing-measured and part-measured are different facts"
   fi
   assert_no_overclaim "$fx" "$out" "$path" || true
+  assert_reason_matches_class "$fx" "$out" || true
 }
 
 # ------------------------------------------------------------------ dry: ONE analyzer
@@ -523,6 +573,7 @@ expect sec-contrib-module-absent.json security pass    false false "semgrep/triv
 # blocking on this.
 expect sec-machine-tool-crashed.json  security warning false true  "a machine-scope tool that CRASHED still blocks: tools_failed[] is about this run, not about what is installed"
 expect sec-builtin-unmeasured.json    security warning false true  "custom_patterns is a grep with nothing to install, and it still blocks when it had no ground to read — tools_unmeasured[] is about this run too"
+expect sec-nextjs-no-source.json      security skipped true  false "the Next.js gate with no src/: it scanned nothing, says unmeasured, and reaches here as unresolved — it used to file that under tools_absent and, once classified `builtin`, stop blocking entirely"
 expect sec-status-partial.json   security warning false true  "the gate's own status:partial"
 expect sec-unmeasured.json       security skipped true  false "the gate's own unmeasured state"
 expect sec-skipped.json          security skipped true  false "zero findings but tools returned nothing usable"
@@ -884,7 +935,7 @@ unreachable() {
   esac
 }
 
-MATRIX_CELLS=0; MATRIX_UNREACHABLE=0; MATRIX_OVERCLAIMS=0; MATRIX_INCOMPLETE=0
+MATRIX_CELLS=0; MATRIX_UNREACHABLE=0; MATRIX_OVERCLAIMS=0; MATRIX_INCOMPLETE=0; MATRIX_NONBLOCKING=0
 MATRIX_FINDINGS_SEEN=""; MATRIX_COVERAGE_SEEN=""
 for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
   case "$shape" in
@@ -929,6 +980,12 @@ for shape in solid-drupal solid-nextjs security-changed security-whole dry; do
       if ! assert_no_overclaim "matrix $shape [$f × $cov]" "$OUT" "$RPT"; then
         MATRIX_OVERCLAIMS=$((MATRIX_OVERCLAIMS + 1))
       fi
+      if ! assert_reason_matches_class "matrix $shape [$f × $cov]" "$OUT"; then
+        MATRIX_OVERCLAIMS=$((MATRIX_OVERCLAIMS + 1))
+      fi
+      if [ "$(printf '%s' "$OUT" | jq -r '((.evidence.coverage_gap.non_blocking // []) | length)')" -gt 0 ]; then
+        MATRIX_NONBLOCKING=$((MATRIX_NONBLOCKING + 1))
+      fi
       if [ "$(jq -r '[(.meta // .) | (.tools_absent // []) + (.tools_failed // []) + (.tools_unmeasured // []) + (.tools_skipped // [])] | flatten | length' "$RPT" 2>/dev/null || echo 0)" -gt 0 ]; then
         MATRIX_INCOMPLETE=$((MATRIX_INCOMPLETE + 1))
       fi
@@ -955,6 +1012,12 @@ if [ "$MATRIX_INCOMPLETE" -ge 20 ] && [ "$MATRIX_OVERCLAIMS" -eq 0 ]; then
   pass_check "no summary line claims complete coverage across $MATRIX_INCOMPLETE matrix cells where something did not run, and each one names what did not"
 elif [ "$MATRIX_INCOMPLETE" -lt 20 ]; then
   fail_check "only $MATRIX_INCOMPLETE matrix cells had a layer that did not run — the summary-line check is passing because it never met the state it exists for"
+fi
+
+if [ "$MATRIX_NONBLOCKING" -ge 10 ]; then
+  pass_check "every non-blocking gap across $MATRIX_NONBLOCKING matrix cells is explained by its own class — a host binary the installer cannot place, or a layer with nothing to install — and CI is named only where CI applies"
+else
+  fail_check "only $MATRIX_NONBLOCKING matrix cells produced a non-blocking gap — the explanation check is passing because it never met the state it exists for"
 fi
 
 NF=$(printf '%s' "$MATRIX_FINDINGS_SEEN" | wc -w); NC=$(printf '%s' "$MATRIX_COVERAGE_SEEN" | wc -w)

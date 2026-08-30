@@ -26,7 +26,7 @@
   too few paths to mean anything. The previous spec's assertions compared this plugin's
   prose against this plugin's prose; not one opened `dry-check.sh`, `solid-check.sh` or
   `security-check.sh`, which is why none of the three defects above was visible to it while
-  it reported 89 passing assertions. Fifty-seven fixture reports drive the resolver
+  it reported 89 passing assertions. Sixty-one fixture reports drive the resolver
   through each state in both modes and both stacks, including malformed JSON, an absent
   file, a report that is not an object, and one carrying a field of the wrong type.
 
@@ -220,9 +220,10 @@
   only, which is why change-scoped testing never met it. Five names were missing from the
   catalog outright and two more differed from their catalog key (`psalm_taint` for `psalm`,
   `phpcs_security_linter` for `php-security-linter`), a second route to the same wrong
-  answer. code-quality-tools 3.10.2 classifies all seven, and a spec assertion takes the
-  NAMES from the producers' own pushes and the CLASSIFICATION from the catalog and fails
-  listing anything unclassified — the class rather than the seven instances.
+  answer. Of the 22 names the gates can report, 12 are catalogued tools and the other
+  10 needed the new `layers` map; code-quality-tools 3.10.2 classifies all of them. A spec
+  assertion takes the NAMES from the producers' own pushes and the CLASSIFICATION from the
+  catalog and fails listing anything unclassified — the class rather than the ten instances.
 
 - **Scope relieves ABSENCE only.** `classify_gap` was applied to the whole
   absent ∪ failed ∪ unmeasured union, so a machine-scope tool that was there and CRASHED
@@ -239,7 +240,7 @@
   premise is that it does not trust a producer's shape. It is now `coverage_partial`, not
   `unresolved`: something plainly ran, we cannot tell how much. The same state is now
   recognised on the security side, where `// []` was turning the same silence into "no gaps".
-  The 144-cell matrix could not see it because every cell it built carried lists; it has a
+  The 186-cell matrix could not see it because every cell it built carried lists; it has a
   column that does not.
 
 - **`--exit-code` was documented as an enforcement nothing performed.** The header called it
@@ -257,7 +258,7 @@
   `--field-paths` publishing the contract the spec holds it to and `--tool-catalog` taking
   the scope authority.
 - `tests/gate-verdict-resolve-spec.sh` — the field paths checked against each producer,
-  60 fixture reports, a 186-cell findings × coverage matrix, the exit-code cross-check and
+  61 fixture reports, a 186-cell findings × coverage matrix, the exit-code cross-check and
   its bound, and the producer-side control-flow claims no fixture can hold.
 - `tests/gate-coverage-honesty-spec.sh` — 48 assertions on the DECISION and its ORDER,
   not on the presence of words. Every coverage rule is paired with an assertion that it is
@@ -292,11 +293,49 @@
   `composer_audit` back into `ABSENT_TOOLS` and deleting that report write each left all
   fixtures green before these were added. The first check originally scanned four lines back
   for the words "not installed", which a scope branch passes by containing them, and its
-  floor was "at least 2 pushes" in a file with eight, so deleting seven still passed; it now
+  floor was "at least 2 pushes" in a file with eight, so deleting six still passed; it now
   reads the enclosing condition chain and pins the exact count and the exact tool names, and
   deleting a single push goes red.
 
 ### Known remaining
+These are open. Each was found, measured, and deliberately not fixed in this release.
+
+- **The producer control-flow walker only ever grows its stack.** The `awk` in
+  `tests/gate-verdict-resolve-spec.sh` that checks every `ABSENT_TOOLS+=` sits under an
+  availability probe pushes on `if`/`elif` and pops only on a bare `fi`, so `elif`, `else`,
+  a one-line `if` and `case` never balance. Measured on `security-check.sh`: depth 25 at
+  end of file where the real nesting is about 3, meaning every push after the first few is
+  checked against a condition chain containing every earlier `if` in the file. What it
+  still catches: ADDING, REMOVING or RENAMING a push, through the exact-count and
+  exact-names assertions beside it. What it does not catch: MOVING an existing push into a
+  scope branch below roughly line 1478 of that file — the stack by then contains a probe
+  from somewhere else and the check passes green. The two assertions it sits with are what
+  actually held the line in the round-8 mutations; the walker itself is weaker than it
+  reads.
+
+- **`nextjs/security-check.sh` is an undeclared producer.** `--field-paths` gives `also`
+  blocks to `dry` and `solid` only; `security` declares the Drupal producer alone. That
+  file emits `.summary.overall_status` and the three coverage lists — `tools_unmeasured`
+  as of this release — but no `analyzers_ran`, no `tools_skipped` and no
+  `binary_analyzers`, and nothing checks any of it against what the resolver reads. An
+  earlier note in this entry said the Next.js gates were not an open gap; that was drawn
+  from `nextjs/solid-check.sh` and `nextjs/dry-check.sh`, which are declared, and did not
+  cover this third file.
+
+- **A security `skipped` with `skip_reason: "no_eligible_changes"` and NO coverage fields
+  resolves benign.** The scope-skip branch returns before the undetermined-coverage check
+  this release added, so `{"meta":{"mode":"changed","skip_reason":"no_eligible_changes"},
+  "summary":{"overall_status":"skipped"}}` comes back `skipped` / `unresolved:false` /
+  `coverage_partial:false` — the same short-circuit hole closed on the non-skip path, still
+  open on this one. Today's producer always writes the lists on that path, so it is latent.
+
+- **The dry branch names `phpcpd` on the Next.js stack, where the analyzer is `jscpd`.**
+  `gate-verdict-resolve.sh:541` greps `tools_absent[]` for `phpcpd` specifically. A Next.js
+  report with `jscpd` in that list and no `skip_reason` would not match, and the gate would
+  resolve on its status alone. It resolves correctly today only because
+  `nextjs/dry-check.sh` writes `skip_reason: "tool_absent"` on that path, which the same
+  condition checks first.
+
 - **The scope classification needs code-quality-tools 3.10.2 or newer.** With an older
   catalog the `layers` map is absent, `security_review` and its six neighbours fall back to
   `unknown`, and the resolver blocks on them again. It degrades fail-closed and says so in
@@ -319,7 +358,10 @@
   needs the budget raised, which `tests/review-command-spec.sh` records as a deliberate act.
 
 ### Note on the Next.js gates
-An earlier draft of this entry listed them as an open gap. They are not: code-quality-tools
+An earlier draft of this entry listed them as one open gap and a later one called them
+closed. Both were too broad: the claim covers the two DECLARED producers, and
+`nextjs/security-check.sh` is a third file neither statement was drawn from — see Known
+remaining. For the two that are declared: code-quality-tools
 3.10.1 gives `nextjs/solid-check.sh` the same `tools_absent[]` / `tools_failed[]` /
 `tools_unmeasured[]` / `tools_skipped[]` / `analyzers_ran` / `binary_analyzers[]` surface the
 Drupal gates emit, and `nextjs/dry-check.sh` writes an unmeasured report and exits 4 rather

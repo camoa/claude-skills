@@ -15,6 +15,10 @@ NC='\033[0m'
 # repository unless REPORT_DIR says so or REPORT_DIR_IN_REPO=1 asks for it.
 # shellcheck source=../core/report-dir.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/report-dir.sh"
+# CQT_STATUS_UNMEASURED / CQT_EXIT_UNMEASURED — the word and the exit code for "this gate
+# produced no measurement", so a caller with only an exit status cannot read it as a pass.
+# shellcheck source=../core/path-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_report_dir_init
 cqt_announce_report_dir
 # Phase 2 of secret scanning: for a secret phase 1 already found, when did it enter
@@ -191,6 +195,15 @@ SKIPPED_TOOLS=()
 #     over-reporting incompleteness is the safe direction; the "default machine" cases
 #     in false-clean-spec.sh section H catch it immediately if a branch is misfiled.
 ABSENT_TOOLS=()
+
+# Layers whose TOOL was present but whose GROUND was not. A third fact, distinct from both
+# neighbours: absent = not installed, a fact about the machine; failed = ran and returned
+# nothing usable; unmeasured = never asked, because the path it would have read does not
+# exist. The Drupal gate grew this list in 3.9.6 and this one did not, so its only
+# path-absent case — SRC_PATH missing, no source scanned for custom patterns at all — was
+# filed under tools_absent[] and read as an expected absence. No scope excuses an
+# unmeasured layer: it is a fact about THIS RUN, not about what is installed.
+UNMEASURED_TOOLS=()
 
 # Create temp directory for individual reports
 mkdir -p "${REPORT_DIR}/security"
@@ -917,12 +930,17 @@ if [ -d "$SRC_PATH" ]; then
         echo -e "  ${GREEN}No custom pattern violations${NC}"
     fi
 else
-    # SRC_PATH does not exist, so this layer scanned nothing. Recorded as expected —
-    # a project laying its source out differently is legitimate — but recorded, so a
-    # scan that examined no source cannot look identical to one that examined all of it.
-    echo -e "  ${YELLOW}${SRC_PATH} does not exist — no source scanned for custom patterns${NC}"
+    # SRC_PATH does not exist, so this layer scanned NOTHING. That is the GROUND being
+    # absent, not the TOOL: the pattern check is a grep implemented here and is always
+    # present. Recorded as tools_absent[] it read as an expected, non-blocking absence —
+    # and since 3.10.2 classifies custom_patterns as `builtin` (nothing to install), it
+    # stopped blocking altogether, so a Next.js scan that examined no source at all
+    # reported the same clean bill of health as one that examined everything. The two
+    # facts have been conflated in this codebase before; tools_unmeasured[] is the one
+    # that means "the path it would have read is not there", and no scope excuses it.
+    echo -e "  ${YELLOW}[UNMEASURED]${NC} ${SRC_PATH} does not exist — no source was scanned for custom patterns"
     SKIPPED_TOOLS+=("custom_patterns")
-    ABSENT_TOOLS+=("custom_patterns")
+    UNMEASURED_TOOLS+=("custom_patterns")
 fi
 
 echo ""
@@ -996,21 +1014,30 @@ ISSUES=$(jq -n \
 # were present and still returned nothing usable — is what a zero cannot be trusted
 # from. Absent-by-design tools stay in tools_absent[] and are reported, but they do not
 # move the verdict; see resolve_security_status().
-# tools_absent[] and tools_failed[] are DISJOINT, and each name means exactly what it
-# says. tools_absent = the layer never ran and that was expected (tool not installed,
-# nothing eligible to scan, target path absent) — it does not move the verdict.
-# tools_failed = the layer was there and returned nothing usable (crashed, unparseable
-# report, stale report) — a zero from it is not evidence, so it downgrades a would-be
-# pass to "skipped". Every non-produced result lands in exactly one of the two; the
-# union is "everything this scan did not cover".
+# THREE disjoint lists, each stating ONE fact — the same split the Drupal gate carries.
+# tools_absent = the BINARY IS NOT INSTALLED, a fact about the machine; it does not move
+# this gate's own verdict, and it is the only one of the three a consumer's scope rule may
+# excuse. tools_failed = the layer was there and returned nothing usable (crashed,
+# unparseable report, stale report) — a zero from it is not evidence, so it downgrades a
+# would-be pass. tools_unmeasured = the layer was never asked, because the path it would
+# have read does not exist. Every non-produced result lands in exactly one of the three.
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
+UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
 FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
-    --argjson absent "$ABSENT_TOOLS_JSON" '$skipped - $absent')
+    --argjson absent "$ABSENT_TOOLS_JSON" \
+    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
 FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
 OVERALL_STATUS=$(resolve_security_status \
     "$CRITICAL_COUNT" "$HIGH_COUNT" "$MEDIUM_COUNT" "$FAILED_COUNT")
+
+# A layer that was never asked CAPS a would-be pass, exactly as it does on the Drupal path.
+# A scan that read no source at all must not report what a scan that read all of it reports.
+if [ "${#UNMEASURED_TOOLS[@]}" -gt 0 ] \
+   && { [ "$OVERALL_STATUS" = "pass" ] || [ "$OVERALL_STATUS" = "skipped" ]; }; then
+    OVERALL_STATUS="${CQT_STATUS_UNMEASURED}"
+fi
 
 # =====================
 # Generate final report
@@ -1027,6 +1054,7 @@ jq -n \
     --argjson issues "$ISSUES" \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
+    --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
     --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
@@ -1036,6 +1064,7 @@ jq -n \
             tools: ["npm_audit", "eslint_security", "semgrep", "trivy", "gitleaks", "custom_patterns", "socket"],
             tools_absent: $tools_absent,
             tools_failed: $tools_failed,
+            tools_unmeasured: $tools_unmeasured,
             secret_scan: $secret_scan
         },
         summary: {
@@ -1067,7 +1096,14 @@ echo -e "Medium:   ${MEDIUM_COUNT}"
 echo -e "Low:      ${LOW_COUNT}"
 echo ""
 
-if [ "$OVERALL_STATUS" = "skipped" ]; then
+if [ "$OVERALL_STATUS" = "${CQT_STATUS_UNMEASURED}" ]; then
+    # A layer was never asked, because the path it would have read is not there. Exits 4
+    # and never 0: a caller with only the exit code reads a zero as a pass, which is how a
+    # Next.js scan that read no source at all reported a clean tree.
+    echo -e "${YELLOW}⚠ Security audit UNMEASURED — $(echo "$UNMEASURED_TOOLS_JSON" | jq -r 'join(", ")') had nothing to read${NC}"
+    echo -e "Report: ${REPORT_FILE}"
+    exit "$CQT_EXIT_UNMEASURED"
+elif [ "$OVERALL_STATUS" = "skipped" ]; then
     # Zero findings, but the scan did not cover its ground. Exits 0 like the pass it
     # would otherwise have been — the consequence is carried by the status, not by a
     # new exit code.

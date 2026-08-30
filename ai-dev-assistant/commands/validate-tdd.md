@@ -78,7 +78,7 @@ files-not-on-disk case.
 There is no table here on purpose. Run the resolver and use what it returns:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" tdd "<report path>" \
+"${CLAUDE_PLUGIN_ROOT}/scripts/gate-verdict-resolve.sh" tdd "" \
   --exit-code "<the gate's exit status>" --not-before "<the step-3 timestamp>"
 ```
 
