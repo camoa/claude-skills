@@ -1,5 +1,86 @@
 # Changelog
 
+## [5.37.0] - 2026-08-30
+
+### Added
+- **Four agents deliver by file instead of by message.** `analysis-agent`, `prior-art-researcher`,
+  `guides-matcher` and `ai-test-selector` now carry `Write`, are handed an output path at dispatch,
+  and write their payload there. No payload shape changed; only where it goes. The path carries the
+  mode, aspect or gate, because one task dispatches `analysis-agent` up to seven times and a fixed
+  filename would have a later run overwrite an earlier one.
+
+  An agent whose only channel is its final message can finish having produced nothing, and a caller
+  cannot tell that from an honest empty result. Four live failures are on record: two agents
+  returning nothing or a transitional sentence on one research phase, and two returning findings
+  that truncated in transit on a review.
+
+- **Every dispatch site reads the file and records `no_return` when it is absent.** That value is
+  not new; it is defined once in `references/gate-audit-schema.md` and three schemas already used
+  it. What each site *does* about it stays local, because the events differ: an unselected surface
+  set is `skipped` with `unresolved: true`, an absent guide match makes `domain_coverage_gaps` null
+  rather than empty so the `pass` rule cannot be satisfied, an absent tier-3 prior-art result is
+  `not_searched` rather than grounding `none`, and an absent scope verdict is `insufficient_info`
+  rather than `keep_flat`.
+
+- **`references/prior-art-researcher-schema.md`**, new. It was the only converted agent with no
+  published output contract, and the only one whose deliverable is prose a person reads rather than
+  a verdict a machine branches on, so it writes two files: the research as markdown and a small
+  record carrying the scalars plus a pointer to it. That record separates "I searched and the world
+  has nothing" from "I could not search", which were previously the same silence.
+
+- **Two specs.** `tests/sidecar-contract-spec.sh` fails when an agent in the load-bearing set cannot
+  write or has no documented contract, and when the one deliberately excepted agent's exception is
+  not written down. `tests/sidecar-absent-spec.sh` checks every consumer names the absent case with
+  a non-passing consequence, that the consequences differ rather than collapsing into one value, and
+  runs the normalizer against an empty payload.
+
+### Fixed
+- **The written list of agents excused from this rule was wrong about all three agents on it.**
+  `references/internal-prior-art.md` excused `analysis-agent`, `ai-test-selector` and
+  `guides-matcher` together, because "nothing gates on those three, so a truncated report there
+  costs a re-dispatch rather than a false green". Each half was false, in the direction that hides a
+  failure: an empty selection made the visual regression gate emit `skipped` and stop, empty matches
+  meant no coverage gaps and a clean `pass` on the gate whose purpose is noticing unconsulted
+  guides, and `analysis-agent` drives seven dispatch sites that are all phase decisions.
+
+  `prior-art-researcher` appeared on neither list while being tier 3 of the mechanism challenge, so
+  its silence resolved as "no native pattern found" and a build could proceed on an unchallenged
+  mechanism. The passage now states the test a reader should apply — does any caller branch on this
+  agent's return — above the list, so the list is checkable rather than trusted.
+
+- **The same passage named the wrong mechanism for blocking a write.** It said those agents "carry
+  `Write` in `disallowedTools:`", which is true and does not bind: `disallowedTools` has no effect
+  on an explicit Task dispatch, which is how every one of them is dispatched. What blocks a write is
+  `Write` being absent from `tools:`.
+
+- **An empty payload made the analysis-agent normalizer exit 0 with empty output.** `jq empty`
+  treats an empty stream as valid, so the validity check passed and the filter emitted nothing,
+  which is indistinguishable from a run that legitimately filtered everything out. A payload missing
+  `code_read` also passed through untouched, because a missing field is not equal to `false` in jq,
+  so the confidence clamp could not fire and the result read as already checked. Both are now exit
+  `2`, deliberately distinct from the existing exit `1`: `1` means "here is text I could not parse",
+  `2` means there was nothing to parse. The exit contract is documented once in
+  `references/analysis-agent-schema.md` and read by all five callers.
+
+- **The first version of that empty-input check rebuilt the defect it was fixing, and was caught
+  before release.** It checked for required keys without first checking the payload was an object.
+  A payload of literal `null` therefore reached the clamp, `.code_read` on null is null, null is not
+  `false`, so the clamp never fired and `null` came out on stdout with exit 0. A string, a number or
+  a boolean made the key check throw, and the `|| MISSING=""` fallback read the throw as "no keys
+  missing" before jq failed again downstream and leaked its own error with exit 5. That second shape
+  — a thrown error reading as a clean result — had been removed from
+  `scripts/build-critique-assert.sh` the day before and was rebuilt here within a day. The payload's
+  type is now checked first, all five non-object shapes exit 2 with a named reason, and the cases are
+  pinned in `tests/sidecar-absent-spec.sh`.
+
+### Known remaining
+- A sidecar establishes that an agent delivered, not that what it delivered is correct.
+- `wo-critic`'s own dispatch sites were not re-verified. It carries `Write` and is the origin of the
+  pattern, but only two of its callers were read, during a previous task.
+- `tests/sidecar-contract-spec.sh` checks that every agent in a named set has a contract. It cannot
+  check that the set is the right set, which is exactly how `prior-art-researcher` was missed. The
+  test a reader should apply is stated next to the list rather than enforced.
+
 ## [5.36.0] - 2026-08-30
 
 ### Added
