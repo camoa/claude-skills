@@ -28,6 +28,7 @@
     "used to call them abandoned, and `abandoned` is a Composer field this file records",
     "rather than a judgement the prose makes."
   ],
+
   "packages": {
     "phpstan/phpstan": {
       "version": "2.2.10",
