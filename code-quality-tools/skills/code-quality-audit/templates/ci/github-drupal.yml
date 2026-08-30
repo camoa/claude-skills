@@ -111,7 +111,7 @@ jobs:
         run: |
           ddev exec vendor/bin/phpcs \
             --standard=Drupal,DrupalPractice \
-            --extensions=php,module,inc,install \
+            --extensions=php,module,inc,install,profile,theme,engine \
             --report=checkstyle \
             web/modules/custom
         continue-on-error: true

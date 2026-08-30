@@ -60,7 +60,19 @@ new_fixture() {
   FIX="${TMPROOT}/fix${FIXN}"
   CQA="${FIX}/code-quality-tools/skills/code-quality-audit"
   mkdir -p "${CQA}/schema" "${CQA}/templates/drupal" "${CQA}/references" \
-           "${CQA}/scripts/tests" "${FIX}/code-quality-tools/commands"
+           "${CQA}/scripts/tests" "${CQA}/scripts/drupal" \
+           "${FIX}/code-quality-tools/commands"
+
+  # R6's authority, and its one green subject. The extension list is not a constant in
+  # check-claims.sh: it is read from the gate that already had to get it right.
+  cat > "${CQA}/scripts/drupal/lint-check.sh" <<'SH'
+#!/usr/bin/env bash
+PHPCS_EXTENSIONS="php,module,inc,install,profile,theme,engine"
+ddev exec vendor/bin/phpcs \
+    --standard=Drupal,DrupalPractice \
+    --extensions=php,module,inc,install,profile,theme,engine \
+    web/modules/custom
+SH
 
   cat > "${CQA}/schema/tool-catalog.json" <<'JSON'
 {
@@ -348,6 +360,50 @@ printf '\nInstall phpstan-deprecation-rules to report deprecated API calls in Dr
 run_check
 assert_eq "[R3] a recognised name whose own name contains deprecation, on a line saying deprecated, is green because the judgement is not attached to it" "0" "$RC"
 
+# The judgement stays case-sensitive so that E_USER_DEPRECATED is not read as a claim
+# about a package. That justification only ever covered ALL CAPS; sentence case was
+# missed in both halves, and a sentence, a table header or a badge beginning
+# "Deprecated" is the ordinary way the word is written.
+new_fixture
+printf '\nThe `mglaman/drupal-check` package is Deprecated.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] a sentence-case judgement beside a vendor/package token is a failure" "1" "$RC"
+
+new_fixture
+printf '\nDeprecated: drupal-check should not be used.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] a sentence-case judgement leading a line about a bare name is a failure" "1" "$RC"
+
+new_fixture
+printf '\nSetting drupal_root triggers E_USER_DEPRECATED, which `mglaman/phpstan-drupal` ignores.\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] and ALL CAPS is still not a judgement, which is the whole reason the match is case-sensitive" "0" "$RC"
+
+# The vendor half's subject was any lowercase `a/b` token, which is a file path, a URL
+# and a namespace as much as it is a package. 1628 of the 1824 lines it called
+# "carrying a vendor/package token" on this tree named no package at all, so its count
+# meant nothing and a sentence about deprecated code was refused for the path beside it.
+new_fixture
+printf '\nSee scripts/drupal/rector-fix.sh to auto-fix deprecated code.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] a file path is not a package name, so prose about deprecated code beside one is green" "0" "$RC"
+
+new_fixture
+printf '\nDocs at https://example.com/a/b explain deprecated APIs.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] a URL is not a package name either" "0" "$RC"
+
+new_fixture
+printf '\nRun `phpcs` from vendor/bin/phpcs; deprecated sniffs are skipped.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] a path segment of a longer path is not a package name" "0" "$RC"
+
+new_fixture
+printf '\n`mglaman/drupal-check` is deprecated.\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R3] while a real vendor/package token still fails, which is what keeps the narrowing honest" "1" "$RC"
+
 # ── R4: one phpstan level ─────────────────────────────────────────────────────
 echo ""
 echo "── R4: one source of truth for the level ──"
@@ -387,6 +443,178 @@ new_fixture
 printf 'PHPSTAN_LEVEL="${PHPSTAN_LEVEL:-5}"\n' > "${CQA}/scripts/runner.sh"
 run_check
 assert_eq "[R4] runnable code defaulting to the shipped value is green" "0" "$RC"
+
+# ── R4a: a --level on a command line the plugin ships to be RUN ───────────────
+#
+# R4a shipped unreachable. Its pattern was handed to grep as `grep -qE "--level..."`,
+# and a pattern beginning with `--` is parsed as a long option: grep exited 2 with
+# `unrecognized option` and the branch never ran. Every level fixture the spec seeded
+# went into references/notes.md or CHANGELOG.md, neither of which is a runnable path
+# under R4a's own scope, so 73 green assertions exercised R4b only.
+#
+# The distinguishing case is a level that EQUALS the shipped one. R4b cannot fire on it,
+# so a pass here can only come from R4a.
+echo ""
+echo "── R4a: no --level on a command line this plugin ships to be run ──"
+new_fixture
+cat > "${FIX}/code-quality-tools/commands/audit.md" <<'MD'
+# Audit
+
+```bash
+ddev exec vendor/bin/phpstan analyse --level 5 web/modules/custom
+```
+MD
+run_check
+assert_eq "[R4a] a --level on a shipped command line fails even when the number matches the template" "1" "$RC"
+assert_eq "[R4a] and the failure names R4a" "yes" "$(has "$OUT" "R4a")"
+assert_eq "[R4a] and says why: the command line overrides a placed phpstan.neon" "yes" \
+  "$(has "$OUT" "overrides a placed phpstan.neon")"
+
+new_fixture
+cat > "${FIX}/code-quality-tools/commands/audit.md" <<'MD'
+# Audit
+
+```bash
+ddev exec vendor/bin/phpstan analyse --level=8 web/modules/custom
+```
+MD
+run_check
+assert_eq "[R4a] a disagreeing level on the same command line is R4a, not the R4b value complaint" "yes" \
+  "$(has "$OUT" "R4a")"
+assert_eq "[R4a] and R4b does not also fire for it" "no" "$(has "$OUT" "R4b")"
+
+new_fixture
+cat > "${FIX}/code-quality-tools/commands/audit.md" <<'MD'
+# Audit
+
+```bash
+ddev exec vendor/bin/phpstan analyse \
+  --level="$(jq -r '.phpstan.level' .code-quality.json)" web/modules/custom
+```
+MD
+run_check
+assert_eq "[R4a] reading the level from .code-quality.json on the same command line is green" "0" "$RC"
+
+new_fixture
+printf '\n```bash\nphpstan analyse --level 5 src\n```\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R4a] the same command line in a reference doc is not a shipped runnable path, so R4b judges it and 5 agrees" "0" "$RC"
+
+# ── R6: phpcs never sees Drupal's file types without --extensions ─────────────
+#
+# phpcs reads .php and .inc and nothing else unless told otherwise, so a documented
+# invocation omitting --extensions never scans .module, .theme, .install, .profile or
+# .engine — the file types that only exist in Drupal. The gates were fixed; the
+# copy-paste lines the plugin ships for a person to run were not.
+#
+# Extension filtering applies to DIRECTORY arguments only, so the rule fires on a
+# directory-scanning invocation and stays silent on a named file.
+echo ""
+echo "── R6: a documented phpcs directory scan names the extensions ──"
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcs --standard=Drupal web/modules/custom\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] a directory scan with no --extensions is a failure" "1" "$RC"
+assert_eq "[R6] and the failure names the rule" "yes" "$(has "$OUT" "R6")"
+assert_eq "[R6] and names the extensions lint-check.sh passes" "yes" "$(has "$OUT" "php,module,inc,install,profile,theme,engine")"
+
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcs --standard=Drupal --extensions=php,module,inc,install,profile,theme,engine web/modules/custom\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] the same scan carrying the full list is green" "0" "$RC"
+
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcs --standard=Drupal --extensions=php,module web/modules/custom\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] a PARTIAL list is a failure, because the missing four are the Drupal-only types" "1" "$RC"
+
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcs --standard=Drupal web/modules/custom/my_module.php\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] a named file needs no --extensions, because phpcs filters directory arguments only" "0" "$RC"
+
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcbf --standard=Drupal web/modules/custom/\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] phpcbf rewrites the same file types, so it is held to the same list" "1" "$RC"
+
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+ddev exec vendor/bin/phpcs \
+    --standard=Drupal,DrupalPractice \
+    web/modules/custom
+```
+MD
+run_check
+assert_eq "[R6] an invocation split across continuation lines is read as one command" "1" "$RC"
+
+new_fixture
+printf '\nSkip anything `phpcs --standard=Drupal` catches, `vendor/`, `core/`.\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[R6] prose naming phpcs with no directory operand is not an invocation" "0" "$RC"
+
+new_fixture
+printf '\n# phpcs checks .php and .inc and nothing else unless told otherwise.\n' \
+  >> "${CQA}/scripts/runner.sh"
+run_check
+assert_eq "[R6] a comment about phpcs is not an invocation either" "0" "$RC"
+
+new_fixture
+rm -f "${CQA}/scripts/drupal/lint-check.sh"
+run_check
+assert_eq "[R6] with no lint-check.sh to derive the list from, R6 has no authority and the answer is UNMEASURED" "4" "$RC"
+
+# ── a path containing a space does not blind the scan ─────────────────────────
+#
+# R1 built its file list with `awk -f - "$PKGMAP" $(cat scan.abs)`, unquoted, with an
+# SC2046 suppression on the line above naming the exact bug. One tracked file whose name
+# contains a space split into two unopenable arguments, gawk aborted, and every file
+# after it went unread: R1 dropped from 103 comparisons to 14, missed a seeded
+# unconstrained drupal/coder, and the run printed "every rule compared something" and
+# exited 0.
+#
+# This is criterion 11's own failure mode — "cannot pass having compared nothing" —
+# inside the check written to enforce it. The count is asserted, not just the verdict:
+# a fix that keeps the run red while still dropping files is not a fix.
+r1_count() { printf '%s\n' "$1" | sed -n 's/^R1 .*:[[:space:]]*\([0-9][0-9]*\) comparisons.*/\1/p'; }
+
+echo ""
+echo "── a filename containing a space does not blind the scan ──"
+new_fixture
+printf '\n```bash\ncomposer require --dev drupal/coder\n```\n' >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[SPACE] control: the unconstrained install fails" "1" "$RC"
+SPACE_BEFORE="$(r1_count "$OUT")"
+: > "${CQA}/references/a b.md"
+run_check
+assert_eq "[SPACE] a tracked file whose name contains a space does not turn that failure into a pass" "1" "$RC"
+assert_eq "[SPACE] and R1 still compares as much as it did without it" "$SPACE_BEFORE" "$(r1_count "$OUT")"
+
+new_fixture
+printf '\n```bash\ncomposer require --dev drupal/coder\n```\n' >> "${CQA}/references/notes.md"
+printf 'a\tb\n' > "${CQA}/references/tabbed	name.md"
+run_check
+assert_eq "[SPACE] a tab in the name does not blind it either" "1" "$RC"
+
+new_fixture
+printf '\n```bash\ncomposer require --dev drupal/coder\n```\n' >> "${CQA}/references/notes.md"
+git_fixture
+run_check
+assert_eq "[SPACE] control, inside a work tree: the unconstrained install fails" "1" "$RC"
+SPACE_BEFORE="$(r1_count "$OUT")"
+: > "${CQA}/references/a b.md"
+git -C "$FIX" add -A > /dev/null 2>&1
+run_check
+assert_eq "[SPACE] and git ls-files hands the spaced path over whole" "1" "$RC"
+assert_eq "[SPACE] with no loss of coverage" "$SPACE_BEFORE" "$(r1_count "$OUT")"
 
 # ── R5: the generated version table ───────────────────────────────────────────
 echo ""
@@ -539,6 +767,31 @@ sed -i.bak 's|phpstan analyse --level=8 src|phpstan analyse --level=5 src|' \
   "${CQA}/references/notes.md"
 run_check
 assert_eq "[FLIP] R4 green once the literal equals the shipped level" "0" "$RC"
+
+new_fixture
+cat > "${FIX}/code-quality-tools/commands/audit.md" <<'MD'
+# Audit
+
+```bash
+ddev exec vendor/bin/phpstan analyse --level 5 web/modules/custom
+```
+MD
+run_check
+assert_eq "[FLIP] R4a red on a --level the shipped command line has no business stating" "1" "$RC"
+sed -i.bak 's|analyse --level 5 web/modules/custom|analyse web/modules/custom|' \
+  "${FIX}/code-quality-tools/commands/audit.md"
+run_check
+assert_eq "[FLIP] R4a green once the command line stops stating one" "0" "$RC"
+
+new_fixture
+printf '\n```bash\nddev exec vendor/bin/phpcs --standard=Drupal web/modules/custom\n```\n' \
+  >> "${CQA}/references/notes.md"
+run_check
+assert_eq "[FLIP] R6 red on a directory scan with no --extensions" "1" "$RC"
+sed -i.bak 's|--standard=Drupal web/modules/custom|--standard=Drupal --extensions=php,module,inc,install,profile,theme,engine web/modules/custom|' \
+  "${CQA}/references/notes.md"
+run_check
+assert_eq "[FLIP] R6 green once the extension list is named" "0" "$RC"
 
 new_fixture
 sed -i.bak 's/9\.0\.1/9.9.9/' "${CQA}/references/tool-comparison.md"

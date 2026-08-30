@@ -75,9 +75,9 @@ When user says "add composer scripts", "setup quality scripts":
        "quality:phpstan": "phpstan analyse {modules_path}",
        "quality:phpmd": "phpmd {modules_path} text phpmd.xml",
        "quality:dry": "phpcpd {modules_path} --min-lines=10",
-       "quality:cs": "phpcs --standard=Drupal,DrupalPractice {modules_path}",
+       "quality:cs": "phpcs --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {modules_path}",
        "quality:all": ["@quality:phpstan", "@quality:phpmd", "@quality:dry"],
-       "quality:fix": "phpcbf --standard=Drupal,DrupalPractice {modules_path}"
+       "quality:fix": "phpcbf --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {modules_path}"
      }
    }
    ```

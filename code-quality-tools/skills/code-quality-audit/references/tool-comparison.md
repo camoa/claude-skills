@@ -58,11 +58,13 @@ ddev exec vendor/bin/phpstan analyse \
 # Check
 ddev exec vendor/bin/phpcs \
     --standard=Drupal,DrupalPractice \
+    --extensions=php,module,inc,install,profile,theme,engine \
     web/modules/custom
 
 # Fix
 ddev exec vendor/bin/phpcbf \
     --standard=Drupal \
+    --extensions=php,module,inc,install,profile,theme,engine \
     web/modules/custom
 ```
 
@@ -227,7 +229,7 @@ ddev composer require --dev \
 ddev exec vendor/bin/phpstan analyse web/modules/custom
 ddev exec vendor/bin/phpmd web/modules/custom text cleancode,codesize
 ddev exec vendor/bin/phpcpd web/modules/custom
-ddev exec vendor/bin/phpcs --standard=Drupal web/modules/custom
+ddev exec vendor/bin/phpcs --standard=Drupal --extensions=php,module,inc,install,profile,theme,engine web/modules/custom
 ddev exec vendor/bin/phpunit --coverage-clover coverage.xml
 ```
 

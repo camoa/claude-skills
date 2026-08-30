@@ -84,7 +84,7 @@ ddev exec vendor/bin/phpstan analyse {path} \
   --error-format=json 2>/dev/null || true
 
 # PHPCS (if available)
-ddev exec vendor/bin/phpcs --standard=Drupal {path} --report=json 2>/dev/null || true
+ddev exec vendor/bin/phpcs --standard=Drupal --extensions=php,module,inc,install,profile,theme,engine {path} --report=json 2>/dev/null || true
 ```
 
 **Next.js:**

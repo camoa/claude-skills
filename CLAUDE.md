@@ -69,7 +69,7 @@ fails, so one run shows every problem. CI runs the same seven the same way.
 
 - `make claims` is the only check that compares a documented claim against
   the thing it describes, rather than two internal files against each other.
-  Five rules, each deriving its authority from a file that already exists,
+  Six rules, each deriving its authority from a file that already exists,
   all scoped to tracked files under `code-quality-tools/`:
   **R1** an install documented anywhere — a fenced block, a CI template, a
   remediation string a gate echoes — carries the constraint
@@ -80,23 +80,36 @@ fails, so one run shows every problem. CI runs the same seven the same way.
   age threshold fails a green tree with no commit behind it.
   **R3** no `deprecated` or `unmaintained` beside a package name — neither
   is a state Composer has. `abandoned` IS a Composer field, so it is allowed
-  on a line that also carries the date somebody read the flag. Two subjects:
+  on a line that also carries the date somebody read the flag. The judgement
+  matches lowercase and sentence case, never ALL CAPS, so
+  `E_USER_DEPRECATED` is not read as a claim about a package. Two subjects:
   a `vendor/package` token anywhere on the line, and a BARE tool name with
   the judgement attached to it (at most four filler words apart, either
   order). The bare half exists because the four sites this rule was written
   for all wrote `drupal-check` with no vendor prefix, so a rule reading only
-  slashed tokens passed every one of them. Recognised names are derived from
-  `schema/tool-catalog.json` and `schema/upstream-versions.json`, never
-  registered; a scoped npm name and a name under four characters contribute
-  nothing, which is what keeps `react` and `cli` out of a rule that reads
-  prose.
+  slashed tokens passed every one of them. The vendor token has to look like
+  a NAME rather than any two lowercase words with a slash: not preceded by
+  `/`, `.` or `:`, not followed by `/`, and no dot in the second segment,
+  which is what keeps file paths and URLs out of it. Recognised bare names
+  are derived from `schema/tool-catalog.json` and
+  `schema/upstream-versions.json`, never registered; a scoped npm name and a
+  name under four characters contribute nothing, which is what keeps `react`
+  and `cli` out of a rule that reads prose.
   **R4a** no `--level` on a command line the plugin ships to be run, because
   it silently overrides a placed `phpstan.neon`; **R4b** every other level
-  literal equals the one `templates/drupal/phpstan.neon` ships.
+  literal equals the one `templates/drupal/phpstan.neon` ships. R4 reports
+  the literals it compared and the sites reading `phpstan.level` as two
+  separate numbers, because only the first kind is a comparison.
   **R5** the generated version table in `references/tool-comparison.md`
   matches `schema/tool-catalog.json` and `schema/upstream-versions.json`,
   and every catalogued Drupal package has an upstream record.
-  `CHANGELOG.md` and specs are exempt from all five: a changelog records
+  **R6** a documented `phpcs`/`phpcbf` invocation scanning a DIRECTORY
+  passes the `--extensions` list `scripts/drupal/lint-check.sh` passes,
+  because phpcs otherwise reads `.php` and `.inc` only and never sees
+  `.module`, `.theme`, `.install`, `.profile` or `.engine`. A short list
+  fails the same way a missing one does. Extension filtering applies to
+  directory arguments only, so a named file is not a subject.
+  `CHANGELOG.md` and specs are exempt from all six: a changelog records
   what was believed then, and a spec must be able to name the value it
   asserts.
   It **exits 4, not 1**, when any rule compared nothing, so a caller can

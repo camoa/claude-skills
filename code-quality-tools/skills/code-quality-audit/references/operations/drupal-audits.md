@@ -117,14 +117,14 @@ When user says "lint code", "check coding standards", "run phpcs":
 
 Run `scripts/drupal/lint-check.sh` or:
 
-1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice {path} --report=json`
+1. Execute: `ddev exec vendor/bin/phpcs --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {path} --report=json`
 2. Save `$REPORT_DIR/lint-report.json`
 3. Show summary with error/warning counts
 
 **Auto-fix mode:**
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/drupal/lint-check.sh" --fix
-# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice {path}
+# or: ddev exec vendor/bin/phpcbf --standard=Drupal,DrupalPractice --extensions=php,module,inc,install,profile,theme,engine {path}
 ```
 
 ---
