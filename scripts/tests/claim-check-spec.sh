@@ -85,6 +85,10 @@ SH
       "stack": "drupal", "category": "standards", "scope": "project",
       "packages": [{ "name": "drupal/coder", "constraint": "^9.0" }]
     },
+    "phpcpd": {
+      "stack": "drupal", "category": "quality", "scope": "isolated",
+      "packages": [{ "name": "systemsdk/phpcpd", "constraint": "^9.0" }]
+    },
     "eslint": {
       "stack": "nextjs", "category": "static-analysis", "scope": "project",
       "packages": [
@@ -115,6 +119,10 @@ JSON
     "mglaman/drupal-check": {
       "version": "1.5.0", "released": "2024-08-14", "php": "^7.2 || ^8.0",
       "abandoned": false, "checked": "2026-08-28"
+    },
+    "systemsdk/phpcpd": {
+      "version": "9.0.0", "released": "2026-03-08", "php": ">=8.4",
+      "abandoned": false, "checked": "2026-08-28"
     }
   }
 }
@@ -143,6 +151,10 @@ than a silent pass, and so a seeded violation below is the only thing that chang
 
 ```bash
 composer require --dev drupal/coder:^9.0
+```
+
+```bash
+composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
 ```
 
 `mglaman/drupal-check` pins `mglaman/phpstan-drupal ^1.0.0` (checked 2026-08-28).
@@ -227,6 +239,74 @@ constraint, and vendor/drupal/coder/src/Sniff.php is a path.
 MD
 run_check
 assert_eq "[R1] a bare prose mention is not treated as an install" "0" "$RC"
+
+# ── R1: the SCOPE half ────────────────────────────────────────────────────────
+#
+# The constraint was checked and the scope was not, and that is the gap six documented
+# phpcpd install lines went through: every one agreed with the catalog on `^9.0` and
+# contradicted it on WHERE the package goes. `composer require --dev systemsdk/phpcpd`
+# resolves nowhere on Drupal 10 and only to an eight-release-old 8.0.0 on Drupal 11,
+# while the isolated install the catalog specifies resolves cleanly. A rule reading only
+# the constraint passed all six.
+echo ""
+echo "── R1: a documented install must also use the scope the catalog declares ──"
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+ddev composer require --dev systemsdk/phpcpd:^9.0
+```
+MD
+run_check
+assert_eq "[R1] an isolated-scope package installed into the project is a failure" "1" "$RC"
+assert_eq "[R1] and the failure says which scope the catalog declares" "yes" "$(has "$OUT" "isolated")"
+assert_eq "[R1] and names the package" "yes" "$(has "$OUT" "systemsdk/phpcpd")"
+
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
+```
+MD
+run_check
+assert_eq "[R1] the isolated install the catalog specifies is green" "0" "$RC"
+
+# The constraint half has to keep working inside an isolated install context, or the
+# scope check would have bought coverage of one field by losing the other: before this,
+# `composer bin ... require` did not match R1's install-context test at all, so an
+# isolated line with a wrong constraint was not compared either.
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+composer bin phpcpd require --dev systemsdk/phpcpd:^8.0
+```
+MD
+run_check
+assert_eq "[R1] a wrong constraint inside an isolated install is still a constraint failure" "1" "$RC"
+assert_eq "[R1] and the message shows the documented constraint" "yes" "$(has "$OUT" "^8.0")"
+
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+composer bin coder require --dev drupal/coder:^9.0
+```
+MD
+run_check
+assert_eq "[R1] a project-scope package installed into a bin namespace is a failure the other way round" "1" "$RC"
+assert_eq "[R1] and the failure says the catalog declares project scope" "yes" "$(has "$OUT" "project")"
+
+new_fixture
+cat >> "${CQA}/references/notes.md" <<'MD'
+
+```bash
+npm install --save-dev eslint
+```
+MD
+run_check
+assert_eq "[R1] an npm install is project scope and agrees with the catalog, so the scope half stays quiet on it" "0" "$RC"
 
 # ── R2: dated claims carry a per-row date ─────────────────────────────────────
 echo ""
@@ -640,7 +720,7 @@ assert_eq "[R5] and the failure says the checksum no longer matches" "yes" "$(ha
 
 new_fixture
 # The catalog moves and nobody regenerates: the content diff catches it.
-sed -i.bak 's/"\^9\.0"/"^10.0"/' "${CQA}/schema/tool-catalog.json"
+sed -i.bak 's|{ "name": "drupal/coder", "constraint": "\^9\.0" }|{ "name": "drupal/coder", "constraint": "^10.0" }|' "${CQA}/schema/tool-catalog.json"
 run_check
 assert_eq "[R5] a catalog change with no regeneration is a failure" "1" "$RC"
 
@@ -648,7 +728,7 @@ new_fixture
 # The catalog and the doc move together, which is the whole point: R1 holds the doc to
 # the catalog while R5 holds the table to it, so a pin change that updates only one of
 # them cannot go green.
-sed -i.bak 's/"\^9\.0"/"^10.0"/' "${CQA}/schema/tool-catalog.json"
+sed -i.bak 's|{ "name": "drupal/coder", "constraint": "\^9\.0" }|{ "name": "drupal/coder", "constraint": "^10.0" }|' "${CQA}/schema/tool-catalog.json"
 sed -i.bak 's/drupal\/coder:\^9\.0/drupal\/coder:^10.0/' "${CQA}/references/notes.md"
 bash "$GEN" --root "$FIX" --force > /dev/null 2>&1
 run_check

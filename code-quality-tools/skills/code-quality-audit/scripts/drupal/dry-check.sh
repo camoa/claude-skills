@@ -32,6 +32,14 @@ cqt_announce_report_dir
 # shellcheck source=../core/path-resolve.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/path-resolve.sh"
 cqt_resolve_drupal_paths
+
+# phpcpd is `scope: isolated` in schema/tool-catalog.json, so a correct install puts it
+# at vendor-bin/phpcpd/vendor/bin/phpcpd and NOT at vendor/bin/phpcpd. This gate probed
+# the second path only, so it reported a correctly installed phpcpd as `tools_absent`
+# and skipped, on exactly the projects that had followed the install instructions. The
+# resolver knows all four locations and is shared with solid-check.sh.
+# shellcheck source=../core/analyzer-resolve.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../core" && pwd)/analyzer-resolve.sh"
 DUPLICATION_MAX="${DUPLICATION_MAX:-5}"
 
 # PHPCPD settings
@@ -186,9 +194,10 @@ fi
 # this gate runs, so if it is absent there is no real DRY check to perform. Degrade
 # honestly (verdict = skipped, reason = tool_absent) and exit 0 — do NOT exit non-zero
 # purely because the tool is not installed.
-if ! ddev exec vendor/bin/phpcpd --version &> /dev/null; then
+if ! resolve_analyzer phpcpd; then
     echo -e "${YELLOW}[SKIP]${NC} phpcpd not installed — DRY gate skipped (tool absent)"
-    echo "  Install with: ddev composer require --dev systemsdk/phpcpd:^9.0"
+    echo "  Install with: ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0"
+    echo "  (isolated scope — a project-scope install of phpcpd resolves against no supported Drupal major)"
     mkdir -p "${REPORT_DIR}/dry"
     cat > "${REPORT_DIR}/dry-report.json" << EOF
 {
@@ -262,8 +271,8 @@ EOF
 fi
 
 # Get PHPCPD version
-PHPCPD_VERSION=$(ddev exec vendor/bin/phpcpd --version 2>/dev/null | head -1 || echo "unknown")
-echo "PHPCPD version: ${PHPCPD_VERSION}"
+PHPCPD_VERSION=$("${ANALYZER_CMD[@]}" --version 2>/dev/null | head -1 || echo "unknown")
+echo "PHPCPD version: ${PHPCPD_VERSION} [${ANALYZER_RUNNER}]"
 echo "Min lines: ${MIN_LINES}, Min tokens: ${MIN_TOKENS}"
 echo ""
 
@@ -274,7 +283,7 @@ mkdir -p "${REPORT_DIR}/dry"
 # Run PHPCPD (always whole-tree; scope is not applied here even in --changed mode)
 echo "Scanning for code duplication..."
 set +e
-ddev exec vendor/bin/phpcpd \
+"${ANALYZER_CMD[@]}" \
     --min-lines="${MIN_LINES}" \
     --min-tokens="${MIN_TOKENS}" \
     --exclude=tests \

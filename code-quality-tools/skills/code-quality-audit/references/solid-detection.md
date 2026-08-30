@@ -22,10 +22,10 @@ How each SOLID principle is detected and measured in Drupal projects.
 
 ```bash
 # PHPMD codesize ruleset
-ddev exec vendor/bin/phpmd web/modules/custom text codesize
+ddev exec vendor-bin/phpmd/vendor/bin/phpmd web/modules/custom text codesize
 
 # Check specific metric
-ddev exec vendor/bin/phpmd web/modules/custom text codesize \
+ddev exec vendor-bin/phpmd/vendor/bin/phpmd web/modules/custom text codesize \
     --minimumpriority 1
 ```
 

@@ -109,7 +109,8 @@ fi
 
 PKGMAP="${TMP}/packages.tsv"
 if [ -f "${CATALOG}" ]; then
-    jq -r '.tools | to_entries[] | .value.packages[]? | .name + "\t" + (.constraint // "")' \
+    jq -r '.tools | to_entries[] | . as $t | $t.value.packages[]?
+           | .name + "\t" + (.constraint // "") + "\t" + ($t.value.scope // "") + "\t" + $t.key' \
         "${CATALOG}" 2>/dev/null | sort -u > "${PKGMAP}" || : > "${PKGMAP}"
 else
     : > "${PKGMAP}"
@@ -168,17 +169,35 @@ is_exempt_path() {
 echo "check-claims: ${SCAN_COUNT} tracked files under ${PLUGIN_DIR}/, ${PKG_COUNT} packages in the catalog"
 echo ""
 
-# ── R1: a documented install carries the catalog's constraint ─────────────────
+# ── R1: a documented install carries the catalog's constraint AND its scope ───
 #
-# An install context is a line naming `composer require` or `npm install`, plus the lines
-# it continues onto through a trailing backslash. That covers the fenced blocks in the
-# docs, the multi-line block in the CI template, and a one-line remediation string echoed
-# by a gate, without needing to know which kind of file it is reading.
+# An install context is a line naming `composer require`, `composer bin <ns> require` or
+# `npm install`, plus the lines it continues onto through a trailing backslash. That
+# covers the fenced blocks in the docs, the multi-line block in the CI template, and a
+# one-line remediation string echoed by a gate, without needing to know which kind of
+# file it is reading.
+#
+# TWO fields are compared, because an install line makes two claims.
+#
+#   the CONSTRAINT — which version of the package.
+#   the SCOPE      — where the package goes: the project's own composer.json, or the
+#                    bin namespace `scope: isolated` means.
+#
+# Only the constraint was compared until 2026-08-30, and that is the gap six documented
+# phpcpd install lines went through. Every one of them agreed with the catalog on `^9.0`
+# and contradicted it on the scope, and a project-scope `systemsdk/phpcpd` resolves
+# nowhere on Drupal 10 and only to an eight-release-old 8.0.0 on Drupal 11. Six lines
+# nobody could follow, all six green.
+#
+# `composer bin <ns> require` was not an install context at all before that, so the
+# isolated form was not compared on either field. It is one now, which is why the
+# constraint half is asserted inside an isolated line as well as a project one.
 #
 # Lines inside a generated region are skipped: that region is checked by its generator
 # (R5), and text-matching a generated table would be checking the same bytes twice under
 # a weaker rule.
 R1_COMPARISONS=0
+R1_SCOPE_COMPARISONS=0
 R1_OUT="${TMP}/r1.txt"
 R1FILES=()
 while IFS= read -r -d '' rel; do
@@ -192,14 +211,27 @@ if [ "${PKG_COUNT}" -gt 0 ] && [ "${#R1FILES[@]}" -gt 0 ]; then
     # package) still occupies its own position instead of collapsing into the next one.
     awk -f - "${PKGMAP}" "${R1FILES[@]}" > "${R1_OUT}" <<'AWK'
 FNR == NR {
-    split($0, a, "\t"); pkg[a[1]] = a[2]; next
+    split($0, a, "\t")
+    pkg[a[1]] = a[2]; pscope[a[1]] = a[3]; ptool[a[1]] = a[4]
+    next
 }
-FNR == 1 { active = 0; gen = 0 }
+FNR == 1 { active = 0; gen = 0; ctxscope = ""; ctxns = "" }
 /<!-- BEGIN GENERATED:/ { gen = 1 }
 /<!-- END GENERATED:/   { gen = 0; next }
 gen { next }
 {
-    if ($0 ~ /composer require/ || $0 ~ /npm install/) active = 1
+    # The scope an install line CLAIMS, read off the invocation itself. `composer bin
+    # <ns> require` is tested first: it also contains the word `require`, and testing
+    # the plain form first would classify every isolated install as project scope.
+    if (match($0, /composer[ \t]+bin[ \t]+[A-Za-z0-9_.-]+[ \t]+require/)) {
+        active = 1; ctxscope = "isolated"
+        seg = substr($0, RSTART, RLENGTH)
+        sub(/^composer[ \t]+bin[ \t]+/, "", seg)
+        sub(/[ \t]+require$/, "", seg)
+        ctxns = seg
+    } else if ($0 ~ /composer require/ || $0 ~ /npm install/) {
+        active = 1; ctxscope = "project"; ctxns = ""
+    }
     if (active) {
         for (p in pkg) {
             start = 1
@@ -227,7 +259,8 @@ gen { next }
                 # A newline inside a path is escaped rather than emitted, so one record
                 # is always one line however the file was named.
                 fn = FILENAME; gsub(/\n/, "\\n", fn)
-                printf "%s\037%s\037%s\037%s\037%s\n", fn, FNR, p, pkg[p], con
+                printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", \
+                    fn, FNR, p, pkg[p], con, pscope[p], ptool[p], ctxscope, ctxns
                 start = pos + 1
             }
         }
@@ -235,9 +268,27 @@ gen { next }
     if (active && $0 !~ /\\[[:space:]]*$/) active = 0
 }
 AWK
-    while IFS="$(printf '\037')" read -r f n p want got; do
+    while IFS="$(printf '\037')" read -r f n p want got wantscope tool gotscope gotns; do
         R1_COMPARISONS=$((R1_COMPARISONS + 1))
         rel="${f#"${ROOT}"/}"
+
+        # The scope half. Only `project` and `isolated` are install-time placements a
+        # command line can express; `machine` and `system` entries carry no packages, so
+        # no record ever reaches here carrying one.
+        case "${wantscope}" in
+            project|isolated)
+                R1_SCOPE_COMPARISONS=$((R1_SCOPE_COMPARISONS + 1))
+                if [ "${wantscope}" = "isolated" ] && [ "${gotscope}" = "project" ]; then
+                    fail "R1 ${rel}:${n} installs ${p} into the project, while the catalog scopes ${tool} as isolated. Use 'composer bin ${tool} require --dev ${p}${want:+:${want}}'. A project-scope install puts this tool's dependency tree into the site's own resolver, which is the collision the scope exists to avoid — and for ${p} it is not a preference: no version of it resolves against a Drupal site carrying drupal/core-dev."
+                elif [ "${wantscope}" = "project" ] && [ "${gotscope}" = "isolated" ]; then
+                    fail "R1 ${rel}:${n} installs ${p} into the bin namespace '${gotns}', while the catalog scopes ${tool} as project. An isolated install hands it a resolver that cannot see the project's own code, which is exactly what this tool needs to read."
+                elif [ "${wantscope}" = "isolated" ] && [ "${gotscope}" = "isolated" ] \
+                     && [ -n "${tool}" ] && [ "${gotns}" != "${tool}" ]; then
+                    fail "R1 ${rel}:${n} installs ${p} into the bin namespace '${gotns}', while the catalog's id for it is '${tool}'. The gates probe vendor-bin/${tool}/vendor/bin/, so a tool installed under another name is reported absent by a gate that is looking straight at it."
+                fi
+                ;;
+        esac
+
         if [ -z "${want}" ] || [ "${want}" = "*" ]; then
             # The catalog states no opinion: an npm package, or drupal/core-dev, which is
             # a metapackage locked to the site's own Drupal minor. A doc that omits a
@@ -255,8 +306,14 @@ AWK
 fi
 if [ "${R1_COMPARISONS}" -eq 0 ]; then
     unmeasured "R1 found no documented install of any catalogued package. Nothing was compared, so nothing passed."
+elif [ "${R1_SCOPE_COMPARISONS}" -eq 0 ]; then
+    # Its own UNMEASURED, not folded into the one above. R1 compared constraints and
+    # compared no scope at all — which is the state the rule was in before 2026-08-30,
+    # and it printed a pass.
+    unmeasured "R1 compared ${R1_COMPARISONS} constraint(s) and no scope at all: no catalogued package in a documented install carries a project or isolated scope. Half the rule passed by not looking."
 else
-    printf 'R1  package constraints:    %s comparisons\n' "${R1_COMPARISONS}"
+    printf 'R1  package constraints:    %s comparisons, %s of them also scope-compared\n' \
+        "${R1_COMPARISONS}" "${R1_SCOPE_COMPARISONS}"
 fi
 
 # ── R2: no bare month-year stamp ──────────────────────────────────────────────

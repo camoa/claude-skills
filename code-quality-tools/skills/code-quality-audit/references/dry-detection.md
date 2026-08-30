@@ -20,24 +20,35 @@ Its last release was 6.0.3, 2020-12-07.
 
 ### Installation
 
+`isolated` scope, and that is not a preference. phpcpd's release lines each pin one
+PHPUnit major through `sebastian/cli-parser` and three siblings, so a project-scope
+install resolves to nothing at all on Drupal 10 and silently to an eight-release-old
+8.0.0 on Drupal 11. Its own bin namespace is unconstrained by the site, and `^9.0`
+resolves there.
+
 ```bash
-ddev composer require --dev systemsdk/phpcpd:^9.0
+ddev composer require --dev bamarni/composer-bin-plugin:^1.9
+ddev composer config extra.bamarni-bin.forward-command true
+ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
 ```
+
+The binary then lives at `vendor-bin/phpcpd/vendor/bin/phpcpd`, which is where the DRY
+gate looks for it.
 
 ### Basic Usage
 
 ```bash
 # Default settings
-ddev exec vendor/bin/phpcpd web/modules/custom
+ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd web/modules/custom
 
 # Custom thresholds
-ddev exec vendor/bin/phpcpd \
+ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd \
     --min-lines=10 \
     --min-tokens=70 \
     web/modules/custom
 
 # Exclude directories
-ddev exec vendor/bin/phpcpd \
+ddev exec vendor-bin/phpcpd/vendor/bin/phpcpd \
     --exclude=tests \
     --exclude=vendor \
     web/modules/custom

@@ -6,8 +6,12 @@
 #   ddev exec vendor/bin/phpstan analyse
 #
 # Required packages:
-#   composer require --dev phpstan/phpstan:^2.0 phpstan/extension-installer:^1.4 \
-#     mglaman/phpstan-drupal:^2.1.2 phpstan/phpstan-deprecation-rules:^2.0
+#   composer require --dev "phpstan/phpstan:^1.12.4||^2.0" phpstan/extension-installer:^1.4 \
+#     "mglaman/phpstan-drupal:^1.2.12||^2.1.2" "phpstan/phpstan-deprecation-rules:^1.2||^2.0"
+#
+#   Ranges, not stale pins: drupal/core-dev holds phpstan at ^1.12.4 on Drupal 10, so a
+#   bare ^2.0 does not install there. See schema/tool-catalog.json for the resolver runs.
+#   On Drupal 10 that means PHPStan 1.x, and this file is written for 2.x.
 #
 # Note: phpstan/extension-installer auto-loads extensions.
 #       Do NOT add an includes: block - it causes duplicate loading errors.

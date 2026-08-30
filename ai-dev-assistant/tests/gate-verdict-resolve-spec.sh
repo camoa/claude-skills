@@ -14,9 +14,11 @@
 #   .meta.tools in --changed mode          that mode emits tools_run / tools_skipped. The
 #                                          default /review path could detect no coverage
 #                                          gap at all.
-#   .meta.tools' literal contents          names phpcs_security_linter / psalm_taint /
-#                                          roave while the code pushes php-security-linter
-#                                          and psalm and never pushes roave.
+#   .meta.tools' literal contents          named phpcs_security_linter / psalm_taint /
+#                                          roave while the code pushed php-security-linter
+#                                          and psalm and pushed roave nowhere. cqt 3.10.4
+#                                          made them one vocabulary; the mode objection
+#                                          above stands on its own, so it is still unread.
 #   .tools_failed on dry-report.json       dry emits no such key on any path.
 #
 # So this spec does two things prose assertions cannot:
@@ -721,7 +723,8 @@ fi
 # with `--skip-security <reason>`, the exact habit the scope rule exists to prevent. Five
 # names were missing from the catalog entirely and two more differed from their catalog key
 # (`psalm_taint` for `psalm`, `phpcs_security_linter` for `php-security-linter`), which is a
-# second way into the same wrong answer.
+# second way into the same wrong answer, closed in cqt 3.10.4 by making the declared roster
+# and the pushed names one vocabulary.
 #
 # Both sides come from the artifacts: the NAMES from the producers' own pushes and their
 # emitters' list literals, the CLASSIFICATION from tool-catalog.json's `tools` and `layers`.
@@ -742,7 +745,7 @@ else
   # failed list is derived as skipped minus the named kinds, so any name pushed there can
   # surface in tools_failed[].
   # shellcheck disable=SC2086
-  grep -hoE '(ABSENT|FAILED|UNMEASURED|SKIPPED)_TOOLS\+=\("[^"]+"\)' $GATE_SCRIPTS 2>/dev/null \
+  grep -hoE '([A-Z_]+_TOOLS|[A-Z_]+_BY_DESIGN)\+=\("[^"]+"\)' $GATE_SCRIPTS 2>/dev/null \
     | sed -E 's/.*"([^"]+)".*/\1/' > "$REPORTED_NAMES" || true
   # shellcheck disable=SC2086
   grep -hoE '"?tools_(absent|failed|unmeasured|skipped)"?: ?\[[^]]*\]' $GATE_SCRIPTS 2>/dev/null \

@@ -283,7 +283,7 @@ echo "$result" | jq -e '.status == "pass" or .status == "warning"' >/dev/null ||
     "medium": 7,
     "low": 12,
     "layers_run": ["semgrep", "trivy", "gitleaks", "composer_audit"],
-    "layers_skipped": ["psalm_taint"]
+    "layers_skipped": ["psalm"]
   },
   "findings": [
     {

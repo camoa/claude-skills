@@ -90,8 +90,10 @@ jobs:
           # Quality tools (phpstan, phpstan-drupal, drupal/coder) are expected to
           # already be in the project's composer.json as dev dependencies. If
           # missing, add them once locally with:
-          #   ddev composer require --dev phpstan/phpstan:^2.0 mglaman/phpstan-drupal:^2.1.2 \
-          #     phpstan/extension-installer:^1.4 drupal/coder:^9.0
+          #   ddev composer require --dev "phpstan/phpstan:^1.12.4||^2.0" \
+          #     "mglaman/phpstan-drupal:^1.2.12||^2.1.2" phpstan/extension-installer:^1.4 \
+          #     "drupal/coder:^8.3.30||^9.0"
+          # The ranges are ranges because drupal/core-dev pins the same packages.
           # Re-installing them on every PR wastes CI minutes and can cause
           # transient resolver conflicts.
 

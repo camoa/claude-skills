@@ -17,12 +17,22 @@ When user says "setup tools", "install PHPStan", "install testing tools":
 
 1. Do **not** create a reports directory. `install-tools.sh` sources `scripts/core/report-dir.sh`, which resolves the location outside the audited repository and creates it
 2. Check installed: `ddev exec vendor/bin/phpstan --version`
-3. Install missing:
+3. Install missing, in two scopes. Project scope for what resolves the project's own
+   classes; isolated scope for what only tokenises or scans it, so its dependency tree
+   never has to agree with the site's:
    ```bash
-   ddev composer require --dev phpstan/phpstan:^2.0 phpstan/extension-installer:^1.4 \
-     mglaman/phpstan-drupal:^2.1.2 phpstan/phpstan-deprecation-rules:^2.0 \
-     phpmd/phpmd:^2.15 systemsdk/phpcpd:^9.0 drupal/coder:^9.0
+   ddev composer require --dev "phpstan/phpstan:^1.12.4||^2.0" phpstan/extension-installer:^1.4 \
+     "mglaman/phpstan-drupal:^1.2.12||^2.1.2" "phpstan/phpstan-deprecation-rules:^1.2||^2.0" \
+     "drupal/coder:^8.3.30||^9.0"
    ```
+   ```bash
+   ddev composer require --dev bamarni/composer-bin-plugin:^1.9
+   ddev composer config extra.bamarni-bin.forward-command true
+   ddev composer bin phpmd require --dev phpmd/phpmd:^2.15
+   ddev composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
+   ```
+   The ranges are ranges because `drupal/core-dev` pins the same packages. A bare `^9.0`
+   or `^2.0` cannot install on a Drupal site that has it, which is most of them.
 4. Copy templates to project root:
    - `templates/drupal/phpstan.neon` (PHPStan 2.x - extensions auto-load)
    - `templates/drupal/phpmd.xml`

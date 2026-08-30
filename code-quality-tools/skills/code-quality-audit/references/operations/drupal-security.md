@@ -42,13 +42,13 @@ The audit performs 10 complementary security checks:
 - **Type:** PHPCS security rules
 - **Coverage:** OWASP Top 10 + CIS benchmarks
 - **Status:** ✅ 3.1.8.6 released 2026-08-17; repository not archived (checked 2026-08-28)
-- **Installation:** `ddev composer require --dev yousha/php-security-linter:^3.1`
+- **Installation:** `ddev composer bin php-security-linter require --dev yousha/php-security-linter:^3.1` (isolated scope — see below)
 
 ### 4. Psalm Taint Analysis
 - **Type:** Dataflow analysis
 - **Coverage:** XSS, SQLi detection (OWASP A03:2021)
 - **Status:** ✅ Active (recommended but optional)
-- **Installation:** `ddev composer require --dev vimeo/psalm:^6.0`
+- **Installation:** `ddev composer bin psalm require --dev vimeo/psalm:^6.0` (isolated scope — see below)
 
 ### 5. Custom Drupal Patterns
 - **Type:** Regex-based detection
@@ -131,15 +131,22 @@ CQT_SECRET_SCAN=history CQT_SECRET_SCAN_TIMEOUT=1800 \
 ## Installation
 
 ### Required Tools
+Both scanners below are `isolated` scope: they read source without resolving the
+project's own classes, so they get their own bin namespace and their requirements never
+have to agree with the site's. The plugin prerequisite is installed once.
+
 ```bash
+ddev composer require --dev bamarni/composer-bin-plugin:^1.9
+ddev composer config extra.bamarni-bin.forward-command true
+
 # PHP Security Linter
-ddev composer require --dev yousha/php-security-linter:^3.1
+ddev composer bin php-security-linter require --dev yousha/php-security-linter:^3.1
 ```
 
 ### Recommended Tools
 ```bash
 # Psalm (for taint analysis)
-ddev composer require --dev vimeo/psalm:^6.0
+ddev composer bin psalm require --dev vimeo/psalm:^6.0
 
 # Roave Security Advisories (prevents vulnerable package installation)
 ddev composer require --dev roave/security-advisories:dev-master
@@ -178,8 +185,8 @@ cat "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/code-quality-audit/scripts/core/report
 {
   "meta": {
     "timestamp": "2025-12-19T12:00:00Z",
-    "tools": ["drush_pm_security", "composer_audit", "phpcs_security_linter",
-              "psalm_taint", "custom_patterns", "security_review",
+    "tools": ["drush_pm_security", "composer_audit", "php-security-linter",
+              "psalm", "custom_patterns", "security_review",
               "semgrep", "trivy", "gitleaks", "roave"]
   },
   "summary": {

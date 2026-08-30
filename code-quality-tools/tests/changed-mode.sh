@@ -886,7 +886,24 @@ rm -rf "$PHPUNIT_BIN"
 # its JSON report — never ERROR purely because a tool is not installed.
 # =====================
 
+# Resolution reaches beyond the container now: after the two container locations it
+# probes the host PATH and composer's global bin dir. A developer machine with a
+# `composer global require`d phpcpd — this one has — would otherwise make the
+# absent case below pass for a reason that has nothing to do with the gate, and would
+# let the isolated case pass without ever reading vendor-bin/. Both are sanitised: no
+# composer directory on PATH, and COMPOSER_HOME pointed at an empty tree.
+CQT_EMPTY_COMPOSER_HOME=$(mktemp -d)
+sanitised_path() {
+    printf '%s' "$ORIG_PATH" | tr ':' '\n' | grep -v composer | paste -sd: -
+}
+
 # ── Test 32: dry-check.sh --changed, phpcpd absent → SKIP-clean exit 0 ──────────
+#
+# The probe is `ddev exec test -f <path>` now, not `<path> --version`, because phpcpd is
+# `scope: isolated` and a correct install puts it under vendor-bin/. So "absent" means
+# BOTH locations are absent, and this stub has to answer the `test` the resolver runs
+# rather than falling through to a catch-all exit 0 — which would have made an absent
+# phpcpd look present.
 make_no_phpcpd_ddev() {
     local dir="$1"; mkdir -p "$dir"
     cat > "${dir}/ddev" <<'SH'
@@ -896,7 +913,57 @@ case "$1" in
     exec)
         shift
         case "$1" in
-            vendor/bin/phpcpd) exit 127 ;;   # absent: --version fails
+            # Only the phpcpd probes fail; every other `test` (the modules-path
+            # check, for one) still answers truthfully, or the gate reports
+            # `unmeasured` for a missing path instead of the absent tool.
+            test)
+                for a in "$@"; do
+                    case "$a" in
+                        *phpcpd) exit 1 ;;
+                    esac
+                done
+                test "$@" ;;
+            vendor/bin/phpcpd) exit 127 ;;
+            vendor-bin/phpcpd/vendor/bin/phpcpd) exit 127 ;;
+            *) exit 0 ;;
+        esac
+        ;;
+    *) exit 0 ;;
+esac
+SH
+    chmod +x "${dir}/ddev"
+}
+
+# The other half of the same fact: phpcpd installed where its declared scope PUTS it.
+# `scope: isolated` means vendor-bin/phpcpd/vendor/bin/phpcpd, and this gate probed
+# vendor/bin/phpcpd alone — so a project that had followed the install instructions got
+# `tools_absent: ["phpcpd"]` and a skipped DRY gate from a gate looking straight at the
+# binary. Without this stub the absent case above passes on its own, which is how the
+# defect survived.
+make_isolated_phpcpd_ddev() {
+    local dir="$1"; mkdir -p "$dir"
+    cat > "${dir}/ddev" <<'SH'
+#!/bin/bash
+case "$1" in
+    describe) exit 0 ;;
+    exec)
+        shift
+        case "$1" in
+            # `test -f vendor/bin/phpcpd` fails; the vendor-bin path succeeds.
+            test)
+                for a in "$@"; do
+                    case "$a" in
+                        vendor-bin/phpcpd/vendor/bin/phpcpd) exit 0 ;;
+                        vendor/bin/phpcpd) exit 1 ;;
+                    esac
+                done
+                exit 1 ;;
+            vendor/bin/phpcpd) exit 127 ;;   # NOT here: this is the whole point
+            vendor-bin/phpcpd/vendor/bin/phpcpd)
+                case "$2" in
+                    --version) echo "phpcpd 9.0.0" ; exit 0 ;;
+                    *) echo "0.00% duplicated lines out of 100 total lines of code." ; exit 0 ;;
+                esac ;;
             *) exit 0 ;;
         esac
         ;;
@@ -911,7 +978,8 @@ SH
     tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
     RDIR=$(mktemp -d)
     exit_code=0
-    output=$(PATH="${NOPCPD_BIN}:${ORIG_PATH}" REPORT_DIR="$RDIR" \
+    output=$(PATH="${NOPCPD_BIN}:$(sanitised_path)" COMPOSER_HOME="$CQT_EMPTY_COMPOSER_HOME" \
+        REPORT_DIR="$RDIR" \
         bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
     STATUS=$(jq -r '.status // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
     REASON=$(jq -r '.skip_reason // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
@@ -922,6 +990,26 @@ SH
         fail "$label → exit=${exit_code}, status='${STATUS}', reason='${REASON}', out=$(echo "$output" | tr '\n' '|')"
     fi
     rm -rf "$NOPCPD_BIN" "$RDIR"; rm -f "$tmpf"
+}
+
+# ── Test 32b: an ISOLATED phpcpd install is found, not reported absent ──────────
+{
+    label="dry-check.sh: phpcpd installed at its isolated scope is FOUND, not reported absent"
+    ISOPCPD_BIN=$(mktemp -d); make_isolated_phpcpd_ddev "$ISOPCPD_BIN"
+    tmpf=$(mktemp); printf '%s\n' "web/modules/custom/m/src/A.php" > "$tmpf"
+    RDIR=$(mktemp -d)
+    exit_code=0
+    output=$(PATH="${ISOPCPD_BIN}:$(sanitised_path)" COMPOSER_HOME="$CQT_EMPTY_COMPOSER_HOME" \
+        REPORT_DIR="$RDIR" \
+        bash "${DRUPAL_SCRIPTS}/dry-check.sh" --changed "$tmpf" 2>&1) || exit_code=$?
+    REASON=$(jq -r '.skip_reason // ""' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
+    ABSENT=$(jq -r '(.tools_absent // []) | join(",")' "${RDIR}/dry-report.json" 2>/dev/null || echo "")
+    if [ "$REASON" != "tool_absent" ] && [ "$ABSENT" != "phpcpd" ]; then
+        ok "$label (skip_reason='${REASON}', tools_absent='${ABSENT}')"
+    else
+        fail "$label → exit=${exit_code}, skip_reason='${REASON}', tools_absent='${ABSENT}', out=$(echo "$output" | tr '\n' '|')"
+    fi
+    rm -rf "$ISOPCPD_BIN" "$RDIR"; rm -f "$tmpf"
 }
 
 # ── Test 33: solid-check.sh --changed, phpstan+phpmd absent → exit 0, tools_absent ──

@@ -72,9 +72,16 @@ fails, so one run shows every problem. CI runs the same seven the same way.
   Six rules, each deriving its authority from a file that already exists,
   all scoped to tracked files under `code-quality-tools/`:
   **R1** an install documented anywhere — a fenced block, a CI template, a
-  remediation string a gate echoes — carries the constraint
-  `schema/tool-catalog.json` pins. A `*` there means the catalog states no
-  opinion and omitting a constraint agrees with it.
+  remediation string a gate echoes — carries the constraint AND the scope
+  `schema/tool-catalog.json` pins. A `*` constraint there means the catalog
+  states no opinion and omitting one agrees with it. The scope half compares
+  `composer require` against `composer bin <ns> require`: an `isolated` tool
+  documented as a project install fails, and so does the reverse, and so does
+  an isolated install into a namespace that is not the catalog's id for the
+  tool, because that is not where the gates look for the binary. Both forms
+  are install contexts, so an isolated line is compared on the constraint too.
+  R1 reports its scope comparisons as their own number and returns UNMEASURED
+  when it made none.
   **R2** no bare month-year stamp such as `(December 2025)`; dated claims
   read `checked YYYY-MM-DD`, one per row. Age is REPORTED, never failed: an
   age threshold fails a green tree with no commit behind it.

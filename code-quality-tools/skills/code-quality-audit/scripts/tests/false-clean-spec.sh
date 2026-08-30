@@ -1161,8 +1161,15 @@ cat > "$DSTUB/npx" <<'STUB'
 [ "${STUB_NEXT_TOOLS:-0}" = 1 ] || exit 1
 case "${1-}" in
   eslint)     printf '[]\n'; exit 0 ;;
+  # STUB_SOCKET_MODE models what an INSTALLED Socket CLI does. The findings branch was
+  # unreachable for the life of the layer — `$(... || true)` made the recorded exit
+  # status 0 on every run — so a stub that only ever exits 0 could not have caught it.
   socket-npm) [ "${2-}" = "--version" ] && { printf '1.0.0\n'; exit 0; }
-              printf 'no issues\n'; exit 0 ;;
+              case "${STUB_SOCKET_MODE:-clean}" in
+                issues) printf '2 issues found in 1 package\n'; exit 1 ;;
+                broken) printf 'Error: not authenticated\n' >&2; exit 3 ;;
+                *)      printf 'no issues\n'; exit 0 ;;
+              esac ;;
   *) exit 0 ;;
 esac
 STUB
@@ -1275,6 +1282,46 @@ assert_eq "[drupal] e2e: all tools present and clean -> pass, exit 0" \
   "0|pass||0,0,0" "$(run_security_gate "$SEC" 1 clean)"
 assert_eq "[nextjs] e2e: all tools present and clean -> pass, exit 0" \
   "0|pass||0,0,0" "$(run_security_gate "$NEXTSEC" 1 clean)"
+
+# THE SOCKET LAYER, which could not report anything at all until 3.10.4. The `|| true`
+# sat INSIDE the command substitution, so `SOCKET_EXIT=$?` read the assignment's status
+# and was 0 on every run; the guard is `-ne 0`, so an installed Socket CLI printed "No
+# supply chain issues detected" whatever it had found. One of the seven layers this gate
+# advertises could not fail, and no assertion in this file could see that, because every
+# scenario ran the CLI in a mode that exits 0.
+#
+# Asserted at both non-zero exits, because they are different facts: a supply-chain
+# finding is a finding, and a CLI that exited non-zero saying nothing this gate can read
+# produced no result and must not be counted as a clean one.
+# THE SOCKET LAYER, which could not report anything at all until 3.10.4. The `|| true`
+# sat INSIDE the command substitution, so `SOCKET_EXIT=$?` read the assignment's status
+# and was 0 on every run; the guard is `-ne 0`, so an installed Socket CLI printed "No
+# supply chain issues detected" whatever it had found. One of the seven layers this gate
+# advertises could not fail, and nothing here could see it, because every scenario in
+# this file ran the CLI in a mode that exits 0. STUB_SOCKET_MODE is what makes the
+# difference visible: at `clean` the run above is 0,0,0 and at `issues` it is not.
+assert_eq "[nextjs] socket: an installed CLI reporting supply-chain issues produces a medium finding" \
+  "0|pass||0,0,1" "$(STUB_SOCKET_MODE=issues run_security_gate "$NEXTSEC" 1 clean)"
+
+# The other non-zero exit, and a different fact. A CLI that failed saying nothing this
+# gate can read produced no result, so it is a FAILED layer and caps the verdict —
+# never a clean bill of health, which is what the unreachable guard used to make it.
+assert_eq "[nextjs] socket: an installed CLI that exits non-zero with nothing readable is a failed layer" \
+  "0|skipped|socket|0,0,0" "$(STUB_SOCKET_MODE=broken run_security_gate "$NEXTSEC" 1 clean)"
+
+# And absence is neither. It is a prevention layer: not installing it is already reported
+# as a low finding, so recording it in tools_absent[] would make a fail-closed consumer
+# block a review on every project that has not installed it. It goes in the by-design
+# list — which is the whole point, because before 3.10.4 it went in NO list at all while
+# being declared in meta.tools[].
+NEXTSOCK="$(run_security_gate "$NEXTSEC" 0 clean)"
+assert_eq "[nextjs] socket: an absent CLI is not a failed layer" "0|pass||0,0,0" "$NEXTSOCK"
+assert_eq "[nextjs] socket: an absent CLI is named in tools_skipped, by design" "socket" "$(last_scoped)"
+# gitleaks is installed in this scenario (mode `clean`), so the absent set is the three
+# npm/machine analyzers. Asserted exactly, because "socket is not in there" is only
+# evidence if the rest of the list is pinned too.
+assert_eq "[nextjs] socket: and NOT in tools_absent, where a scope rule would block on it" \
+  "eslint_security,semgrep,trivy" "$(last_absent)"
 
 # H2c: an INSTALLED tool that returns nothing usable. This is the false clean the whole
 # section exists for: gitleaks was there, it broke, it found no secrets because it never
@@ -1482,7 +1529,7 @@ assert_eq "[drupal --changed] semgrep in NEITHER is named in tools_absent" \
 # most of them touch PHP and not composer.lock. Asserted at the same scenario as the
 # line above, so a regression cannot satisfy one half by breaking the other.
 assert_eq "[drupal --changed] composer_audit is scoped out by the diff, so it is in tools_skipped and NOT in tools_absent" \
-  "composer_audit,drush_pm_security,gitleaks,psalm_taint,roave,security_review,trivy" "$(last_scoped)"
+  "composer_audit,drush_pm_security,gitleaks,psalm,roave,security_review,trivy" "$(last_scoped)"
 
 # H2j: every SCANNER that produced nothing is NAMED. "Scanner" is deliberate and the
 # expected strings below match it: Drupal's roave and Next.js's socket are prevention
@@ -1503,7 +1550,7 @@ run_changed_gate 0 >/dev/null
 assert_eq "[drupal --changed] every non-producing SCANNER is named in tools_absent" \
   "php-security-linter,semgrep" "$(last_absent)"
 assert_eq "[drupal --changed] and the layer the diff scoped out is named in tools_skipped" \
-  "composer_audit,drush_pm_security,gitleaks,psalm_taint,roave,security_review,trivy" "$(last_scoped)"
+  "composer_audit,drush_pm_security,gitleaks,psalm,roave,security_review,trivy" "$(last_scoped)"
 
 # The no-eligible-files branches are a separate path and need a changed set that
 # reaches them: composer.json alone, so composer audit runs but every SAST layer has
@@ -1511,7 +1558,7 @@ assert_eq "[drupal --changed] and the layer the diff scoped out is named in tool
 # what a scan that examined everything reports.
 run_changed_gate 1 "" composer >/dev/null
 assert_eq "[drupal --changed] a changed set with no eligible files names all three SAST layers, beside the advisory layers this mode never runs" \
-  "custom_patterns,drush_pm_security,gitleaks,php-security-linter,psalm_taint,roave,security_review,semgrep,trivy" \
+  "custom_patterns,drush_pm_security,gitleaks,php-security-linter,psalm,roave,security_review,semgrep,trivy" \
   "$(last_scoped)"
 # composer_audit is deliberately NOT in that string: composer.json IS in this changed set,
 # so that layer ran. The by-design list is per-run, not a fixed literal, and asserting the
@@ -4475,6 +4522,18 @@ for r_f in "${R_ALL[@]+"${R_ALL[@]}"}"; do
 done
 assert_eq "[contract, not behavioural] no script keeps its own in-repo .reports default" \
   "" "$R_STRAY"
+
+# Every script on the roster is EXECUTED by the probe below, so the executable bit is a
+# precondition of the whole section — and losing it does not look like losing it. The
+# probe reports `NO-LINE`, which is the same answer an unrouted script gives, so a mode
+# change reads as a routing defect and sends the reader into the wrong file. It is also
+# invisible to a content comparison: `cmp` and `git diff` on a mode-only change say the
+# files are identical, which is exactly how one reached this branch.
+R5_NOEXEC=""
+for r_f in "${R_ALL[@]+"${R_ALL[@]}"}"; do
+  [ -x "$ROOT/$r_f" ] || R5_NOEXEC="${R5_NOEXEC}${R5_NOEXEC:+,}${r_f}"
+done
+assert_eq "[R5 premise] every script the probe executes is executable" "" "$R5_NOEXEC"
 
 rm -f "$TMP/r5_driven"
 for r_f in "${R_ALL[@]+"${R_ALL[@]}"}"; do
@@ -8169,6 +8228,20 @@ case "${1-}" in
   exec) shift ;;
   *) exit 0 ;;
 esac
+# The gate probes for the binary with `test -f` through the shared resolver now, over
+# four locations, rather than running `<path> --version` at one. This project pins
+# phpcpd in its own vendor/bin, which is the first location and still wins.
+if [ "${1-}" = "test" ]; then
+  for a in "$@"; do
+    case "$a" in
+      vendor/bin/phpcpd)
+        [ "${STUB_PHPCPD_ABSENT:-0}" = 1 ] && exit 1
+        exit 0 ;;
+      vendor-bin/*) exit 1 ;;
+    esac
+  done
+  exit 1
+fi
 [ "${1-}" = "vendor/bin/phpcpd" ] || exit 127
 shift
 if [ "${1-}" = "--version" ]; then
@@ -9045,6 +9118,10 @@ case "${1-}" in
   test)
     case "${3-}" in
       vendor/bin/phpunit) exit 1 ;;
+      # PRESENT, like every other analyzer in this stub. dry-check.sh finds phpcpd
+      # through the shared `test -f` resolver now, so answering every `test` with 1
+      # would make this section assert an absent TOOL where it means an absent GROUND.
+      vendor/bin/phpcpd) exit 0 ;;
       *) exit 1 ;;
     esac ;;
   grep) shift; grep "$@" 2>/dev/null; exit 0 ;;
@@ -9449,8 +9526,24 @@ else
   # The pin the epic settled, and the reason recorded WHERE the pin is. Stating
   # it only in a changelog is what left drupal-ai-contrib's ^8.3.x reading as an
   # accident.
-  assert_eq "[IN-A] drupal/coder pins ^9.0" "^9.0" \
+  # A RANGE since 2026-08-30, and the range is the assertion. A bare ^9.0 cannot install
+  # on either supported Drupal major when drupal/core-dev is present, because core-dev
+  # itself requires drupal/coder ^8.3.x — so narrowing this back reads as an upgrade and
+  # is an install failure. The catalog records the resolver runs behind it.
+  assert_eq "[IN-A] drupal/coder pins a range that resolves on both supported majors" "^8.3.30||^9.0" \
     "$(jq -r '.tools.coder.packages[0].constraint // "ABSENT"' "$CATALOG" 2>/dev/null)"
+  # A range with no reason beside it is the next reader's "stale pin". Derived from the
+  # constraint shape, so a pin widened later without a reason goes red on its own.
+  PINMISS=$(jq -r '[.tools | to_entries[]
+      | select([.value.packages[]?.constraint // ""] | any(test("\\|\\|")))
+      | select(((.value.pin_reason // "") == "") and ((.value.constraint_reason // "") == ""))
+      | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] every multi-branch constraint records why it is a range" "" "$PINMISS"
+  RESMISS=$(jq -r '[.tools | to_entries[]
+      | select([.value.packages[]?.constraint // ""] | any(test("\\|\\|")))
+      | select((.value.resolves_against // null) == null)
+      | .key] | join(",")' "$CATALOG" 2>/dev/null)
+  assert_eq "[IN-A] and names the dependency edge it was measured against" "" "$RESMISS"
   assert_eq "[IN-A] the coder pin carries its own constraint_reason" "yes" \
     "$([[ -n "$(jq -r '.tools.coder.constraint_reason // ""' "$CATALOG" 2>/dev/null)" ]] && echo yes || echo no)"
 
@@ -9571,11 +9664,11 @@ in_config() {
     tools='{"eslint":{"scope":"project","packages":[{"name":"eslint","constraint":""}],"allow_plugins":[],"bin":"eslint"}}'
   else
     tools='{
-      "phpstan":{"scope":"project","packages":[{"name":"phpstan/phpstan","constraint":"^2.0"}],"allow_plugins":[],"bin":"phpstan"},
+      "phpstan":{"scope":"project","packages":[{"name":"phpstan/phpstan","constraint":"^1.12.4||^2.0"}],"allow_plugins":[],"bin":"phpstan"},
       "phpstan-extension-installer":{"scope":"project","packages":[{"name":"phpstan/extension-installer","constraint":"^1.4"}],"allow_plugins":["phpstan/extension-installer"],"bin":null},
-      "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^2.1.2"}],"allow_plugins":[],"bin":null},
-      "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^2.0"}],"allow_plugins":[],"bin":null},
-      "coder":{"scope":"project","packages":[{"name":"drupal/coder","constraint":"^9.0"}],"allow_plugins":["dealerdirect/phpcodesniffer-composer-installer"],"bin":"phpcs"},
+      "phpstan-drupal":{"scope":"project","packages":[{"name":"mglaman/phpstan-drupal","constraint":"^1.2.12||^2.1.2"}],"allow_plugins":[],"bin":null},
+      "phpstan-deprecation-rules":{"scope":"project","packages":[{"name":"phpstan/phpstan-deprecation-rules","constraint":"^1.2||^2.0"}],"allow_plugins":[],"bin":null},
+      "coder":{"scope":"project","packages":[{"name":"drupal/coder","constraint":"^8.3.30||^9.0"}],"allow_plugins":["dealerdirect/phpcodesniffer-composer-installer"],"bin":"phpcs"},
       "phpmd":{"scope":"isolated","packages":[{"name":"phpmd/phpmd","constraint":"^2.15"}],"allow_plugins":[],"bin":"phpmd"},
       "gitleaks":{"scope":"machine","packages":[],"allow_plugins":[],"bin":"gitleaks","install_hint":"brew install gitleaks"}
     }'
@@ -9719,7 +9812,7 @@ else
     cqt_config_tools project | tr "\0" ","
   ' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
   assert_eq "[IN-C] the accessors return the config's own values" \
-    "web|5|file|phpstan/phpstan:^2.0,phpstan/extension-installer:^1.4,mglaman/phpstan-drupal:^2.1.2,phpstan/phpstan-deprecation-rules:^2.0,drupal/coder:^9.0," \
+    "web|5|file|phpstan/phpstan:^1.12.4||^2.0,phpstan/extension-installer:^1.4,mglaman/phpstan-drupal:^1.2.12||^2.1.2,phpstan/phpstan-deprecation-rules:^1.2||^2.0,drupal/coder:^8.3.30||^9.0," \
     "$ACC"
 
   ISOSPEC=$(bash -c '. "$1"; cqt_config_load "$2" >/dev/null; cqt_config_tools isolated | tr "\0" ","' _ "$CQTCONFIG" "$IN_C/good.json" 2>&1)
@@ -10113,11 +10206,19 @@ if [[ -f "$CQTINSTALL" ]]; then
   assert_eq "[IN-G] forward-command is set so a plain composer install covers the namespaces" "yes" \
     "$(u_has "$G_OUT" "extra.bamarni-bin.forward-command")"
 
-  # Read side: the fourth location in solid-check.sh's existing three-location
-  # lookup, not a new resolver. Second in the order, so a project that deliberately
-  # pinned a tool in its own vendor/bin still wins, and an isolated install still
-  # beats whatever the machine happens to have.
-  G_FN=$(sed -n '/^resolve_analyzer()/,/^}/p' "$SOLID")
+  # Read side: the fourth location in the existing three-location lookup, not a new
+  # resolver. Second in the order, so a project that deliberately pinned a tool in its
+  # own vendor/bin still wins, and an isolated install still beats whatever the machine
+  # happens to have.
+  #
+  # The function moved to core/analyzer-resolve.sh in 3.10.4 and is SHARED. It had lived
+  # inside solid-check.sh, which is why dry-check.sh — the gate running the one analyzer
+  # the catalog scopes isolated — probed vendor/bin/phpcpd alone and reported a correctly
+  # installed phpcpd as absent.
+  G_RESOLVER="${ROOT}/core/analyzer-resolve.sh"
+  assert_eq "[IN-G] the resolver is a shared file, not a copy inside one gate" "yes" \
+    "$([[ -f "$G_RESOLVER" ]] && echo yes || echo no)"
+  G_FN=$(sed -n '/^resolve_analyzer()/,/^}/p' "$G_RESOLVER" 2>/dev/null)
   assert_eq "[IN-G] resolve_analyzer knows the vendor-bin location" "yes" \
     "$(u_has "$G_FN" 'vendor-bin/$tool/vendor/bin/$tool')"
   G_ORDER=$(grep -nE 'vendor/bin/\$tool|vendor-bin/\$tool|command -v "\$tool"|COMPOSER_GLOBAL_BIN' <<< "$G_FN" | cut -d: -f1 | tr '\n' ' ')
@@ -10128,11 +10229,24 @@ if [[ -f "$CQTINSTALL" ]]; then
     "$([[ -n "$G_POS_PROJECT" && -n "$G_POS_BIN" && -n "$G_POS_PATH" && "$G_POS_PROJECT" -lt "$G_POS_BIN" && "$G_POS_BIN" -lt "$G_POS_PATH" ]] \
        && echo yes || echo "no (project=$G_POS_PROJECT bin=$G_POS_BIN path=$G_POS_PATH; order line numbers: $G_ORDER)")"
 
-  # And it is the SAME function, not a second resolver. dry-check.sh and
-  # security-check.sh resolve their own way; unifying them is gate path handling,
-  # which the gate_path_resolution sibling owns.
-  assert_eq "[IN-G] no new analyzer resolver was added beside it" "1" \
-    "$(grep -c '^resolve_analyzer()' "$SOLID" || true)"
+  # And there is exactly ONE definition of it in the whole skill. A second copy is a
+  # second place for the four locations to disagree, which is what the move fixed.
+  assert_eq "[IN-G] exactly one analyzer resolver exists in the whole skill" "1" \
+    "$(grep -rhc '^resolve_analyzer()' "${ROOT}" --include='*.sh' 2>/dev/null | awk '{t+=$1} END{print t+0}')"
+  # Both gates that need it reach the shared one rather than defining their own.
+  for g in drupal/solid-check.sh drupal/dry-check.sh; do
+    assert_eq "[IN-G] $g sources the shared resolver" "yes" \
+      "$(grep -q 'analyzer-resolve.sh' "${ROOT}/$g" && echo yes || echo no)"
+    assert_eq "[IN-G] $g defines no resolver of its own" "0" \
+      "$(grep -c '^resolve_analyzer()' "${ROOT}/$g" || true)"
+  done
+  # The DRY gate's whole defect: it probed one location for a tool the catalog puts in
+  # another. Asserted at the call site, because sourcing the file proves nothing about
+  # whether the probe below still hardcodes a path.
+  assert_eq "[IN-G] the DRY gate probes phpcpd through the resolver, not a hardcoded vendor/bin" "yes" \
+    "$(grep -q 'resolve_analyzer phpcpd' "${ROOT}/drupal/dry-check.sh" && echo yes || echo no)"
+  assert_eq "[IN-G] and no longer runs a hardcoded vendor/bin/phpcpd" "0" \
+    "$(grep -c 'exec vendor/bin/phpcpd' "${ROOT}/drupal/dry-check.sh" || true)"
 fi
 
 # ── IN-I. the installer refuses to shadow a config it did not write (13) ────

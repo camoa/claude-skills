@@ -50,16 +50,31 @@ Links to official documentation and learning resources.
 
 ### Required (Drupal)
 
+Project scope — the analysers that resolve the project's own classes:
+
 ```bash
 composer require --dev \
-  phpstan/phpstan:^2.0 \
+  "phpstan/phpstan:^1.12.4||^2.0" \
   phpstan/extension-installer:^1.4 \
-  mglaman/phpstan-drupal:^2.1.2 \
-  phpstan/phpstan-deprecation-rules:^2.0 \
-  phpmd/phpmd:^2.15 \
-  systemsdk/phpcpd:^9.0 \
-  drupal/coder:^9.0
+  "mglaman/phpstan-drupal:^1.2.12||^2.1.2" \
+  "phpstan/phpstan-deprecation-rules:^1.2||^2.0" \
+  "drupal/coder:^8.3.30||^9.0"
 ```
+
+Isolated scope — one bin namespace per tool, so their dependency trees never have to
+agree with the site's:
+
+```bash
+composer require --dev bamarni/composer-bin-plugin:^1.9
+composer config extra.bamarni-bin.forward-command true
+composer bin phpmd require --dev phpmd/phpmd:^2.15
+composer bin phpcpd require --dev systemsdk/phpcpd:^9.0
+```
+
+The constraints above are ranges because `drupal/core-dev` pins the same packages:
+`drupal/coder ^8.3.x` on both supported majors, and `phpstan/phpstan ^1.12.4` on Drupal
+10. A single-branch constraint fails to install rather than delivering a newer tool.
+`schema/tool-catalog.json` carries the resolver run behind each range.
 
 > **Note**: `mglaman/drupal-check` cannot be installed into a project this skill
 > configures. Its 1.5.0 `composer.json` declares `mglaman/phpstan-drupal ^1.0.0` and

@@ -374,7 +374,7 @@ if [ -n "$CHANGED_FILE" ]; then
                     tools_failed: [],
                     tools_unmeasured: ["semgrep","php-security-linter","custom_patterns"],
                     paths_missing: $missing,
-                    tools_skipped: ["drush_pm_security","composer_audit","psalm_taint","security_review","trivy","gitleaks","roave"]
+                    tools_skipped: ["drush_pm_security","composer_audit","psalm","security_review","trivy","gitleaks","roave"]
                 },
                 summary: {
                     overall_status: $status,
@@ -408,7 +408,7 @@ if [ -n "$CHANGED_FILE" ]; then
                     tools_failed: [],
                     tools_unmeasured: [],
                     paths_missing: [],
-                    tools_skipped: ["drush_pm_security","composer_audit","phpcs_security_linter","psalm_taint","security_review","semgrep","trivy","gitleaks","roave"],
+                    tools_skipped: ["drush_pm_security","composer_audit","php-security-linter","psalm","security_review","semgrep","trivy","gitleaks","roave"],
                     skip_reason: "no_eligible_changes"
                 },
                 summary: {
@@ -835,7 +835,7 @@ if [ -n "$CHANGED_FILE" ]; then
     # The by-design list a reader sees: the advisory layers this mode never runs, plus
     # whatever the changed set scoped out on this particular run.
     TOOLS_SKIPPED_JSON=$(jq -n --argjson scoped "$SCOPED_OUT_TOOLS_JSON" \
-        '(["drush_pm_security","psalm_taint","security_review","trivy","gitleaks","roave"] + $scoped) | unique')
+        '(["drush_pm_security","psalm","security_review","trivy","gitleaks","roave"] + $scoped) | unique')
 
     if [ "$RAN_ANALYZERS" -eq 0 ]; then
         OVERALL_STATUS="skipped"
@@ -881,7 +881,7 @@ if [ -n "$CHANGED_FILE" ]; then
                 scan_type: "security_audit_changed",
                 mode: "changed",
                 analyzers_ran: $analyzers_ran,
-                tools_run: ["semgrep","phpcs_security_linter","custom_patterns","composer_audit_on_lock_change"],
+                tools_run: ["semgrep","php-security-linter","custom_patterns","composer_audit"],
                 tools_absent: $tools_absent,
                 tools_failed: $tools_failed,
                 tools_unmeasured: $tools_unmeasured,
@@ -984,6 +984,15 @@ ABSENT_TOOLS=()
 # branch: absent, failed and unmeasured are three different findings, and only the first
 # is allowed not to move the verdict.
 UNMEASURED_TOOLS=()
+
+# Layers deliberately not measured on this path, recorded so a consumer can compute
+# `declared - reported`. The whole-project path has no diff to scope anything out, so
+# until 3.10.4 it emitted no by-design list at all — and `roave`, a PREVENTION layer
+# whose absence is a finding rather than a coverage gap, was declared in meta.tools[]
+# and pushed nowhere. This is where it goes. It is NOT tools_absent[]: a fail-closed
+# consumer reading absence as an install gap would block a review on every project
+# without the package.
+SKIPPED_BY_DESIGN=()
 
 # The custom-code paths that are actually there, and the ones that are not. Resolved
 # once, here, and read by every layer below that takes a path — so a themes directory
@@ -2124,10 +2133,30 @@ echo -e "${BLUE}[10/10]${NC} Verifying Roave Security Advisories (prevention lay
 # =====================
 ROAVE_ISSUES="[]"
 
-if ddev composer show roave/security-advisories &> /dev/null; then
+# `roave` was DECLARED in meta.tools[] below and pushed into no coverage array at all,
+# so a consumer computing coverage as `declared - reported` saw a layer permanently
+# missing. It is a PREVENTION layer, not a scanner: when it is absent that is a finding,
+# not a coverage gap, so it belongs in the by-design list rather than tools_absent[] —
+# filing it under absence would block a review on every project that has not installed
+# it. The probe's status is read explicitly, because `composer show` failing because the
+# package is not required and `ddev` failing because it cannot run are different facts
+# and the `&> /dev/null` test answered both with "not installed".
+set +e
+ROAVE_PROBE_OUT=$(ddev composer show roave/security-advisories 2>&1)
+ROAVE_PROBE_EXIT=$?
+set -e
+
+if [ "$ROAVE_PROBE_EXIT" -eq 0 ]; then
     echo -e "  ${GREEN}Roave Security Advisories is installed${NC}"
     echo -e "  ${BLUE}[INFO]${NC} Prevents installation of packages with known vulnerabilities"
     # Roave is installed - no issues to report (it prevents issues at install time)
+elif [ "$ROAVE_PROBE_EXIT" -ge 126 ]; then
+    # 126/127 and 128+N are shell-level: the command could not be run or was killed.
+    # Nothing was learned about the project, and a layer that was never asked must not
+    # read as one that answered.
+    echo -e "  ${YELLOW}[UNMEASURED]${NC} could not ask composer about roave/security-advisories (exit ${ROAVE_PROBE_EXIT}): $(printf '%s' "$ROAVE_PROBE_OUT" | head -1)"
+    SKIPPED_TOOLS+=("roave")
+    UNMEASURED_TOOLS+=("roave")
 else
     echo -e "  ${YELLOW}Roave Security Advisories not installed (recommended)${NC}"
     echo -e "  ${BLUE}[INFO]${NC} Install with: ddev composer require --dev roave/security-advisories:dev-master"
@@ -2144,6 +2173,8 @@ else
     }]')
 
     LOW_COUNT=$((LOW_COUNT + 1))
+    SKIPPED_TOOLS+=("roave")
+    SKIPPED_BY_DESIGN+=("roave")
 fi
 
 # =====================
@@ -2177,16 +2208,21 @@ ISSUES=$(jq -n \
 #   tools_failed[]     present and returned nothing usable — a zero from it is not
 #                      evidence, so it downgrades a would-be pass to "skipped".
 #   tools_unmeasured[] never asked, because the path it would have read is not there.
-# This path scans the whole project, so nothing here is scoped out by the diff and there
-# is no by-design skipped list to emit.
+#   tools_skipped[]    deliberately not measured — the prevention layer whose absence
+#                      is already a finding. Nothing here is scoped out by a diff, but
+#                      "no diff-scoping" is not the same as "nothing by design", and
+#                      reading it that way left `roave` declared and unreportable.
 SKIPPED_TOOLS_JSON=$(to_json_array "${SKIPPED_TOOLS[@]+"${SKIPPED_TOOLS[@]}"}")
 ABSENT_TOOLS_JSON=$(to_json_array "${ABSENT_TOOLS[@]+"${ABSENT_TOOLS[@]}"}")
 UNMEASURED_TOOLS_JSON=$(to_json_array "${UNMEASURED_TOOLS[@]+"${UNMEASURED_TOOLS[@]}"}")
-# Three disjoint sets now, and the failed one is still derived rather than listed by
-# hand: everything that recorded a skip, minus the two kinds with a name for why.
+BY_DESIGN_TOOLS_JSON=$(to_json_array "${SKIPPED_BY_DESIGN[@]+"${SKIPPED_BY_DESIGN[@]}"}")
+# Four disjoint sets now, and the failed one is still derived rather than listed by
+# hand: everything that recorded a skip, minus the three kinds with a name for why.
 FAILED_TOOLS_JSON=$(jq -n --argjson skipped "$SKIPPED_TOOLS_JSON" \
     --argjson absent "$ABSENT_TOOLS_JSON" \
-    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" '$skipped - $absent - $unmeasured')
+    --argjson unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson by_design "$BY_DESIGN_TOOLS_JSON" \
+    '$skipped - $absent - $unmeasured - $by_design')
 FAILED_COUNT=$(echo "$FAILED_TOOLS_JSON" | jq 'length')
 
 OVERALL_STATUS=$(resolve_security_status \
@@ -2216,15 +2252,17 @@ jq -n \
     --argjson tools_absent "$ABSENT_TOOLS_JSON" \
     --argjson tools_failed "$FAILED_TOOLS_JSON" \
     --argjson tools_unmeasured "$UNMEASURED_TOOLS_JSON" \
+    --argjson tools_skipped "$BY_DESIGN_TOOLS_JSON" \
     --argjson secret_scan "$GITLEAKS_SCOPE_JSON" \
     '{
         meta: {
             timestamp: $timestamp,
             scan_type: "security_audit",
-            tools: ["drush_pm_security", "composer_audit", "phpcs_security_linter", "psalm_taint", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
+            tools: ["drush_pm_security", "composer_audit", "php-security-linter", "psalm", "custom_patterns", "security_review", "semgrep", "trivy", "gitleaks", "roave"],
             tools_absent: $tools_absent,
             tools_failed: $tools_failed,
             tools_unmeasured: $tools_unmeasured,
+            tools_skipped: $tools_skipped,
             secret_scan: $secret_scan
         },
         summary: {
