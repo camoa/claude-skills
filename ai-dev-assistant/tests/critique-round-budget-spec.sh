@@ -207,14 +207,14 @@ msg_has "1 component(s) reached 2 or more critique rounds with no escalation rec
 # build that DID escalate and DID record the answer would have failed.
 D=$(mktask escalation_per_round)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
-  | .rounds=[{"round":5,"resolution":"owner chose the bounded fix"}]'
+  | .rounds=[{"round":5,"resolution":"owner chose the bounded fix","repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
 run "$D"
 verdict_is pass "a resolution on the round it settled satisfies the escalation requirement"
 rc_is 0 "a per-round resolution exits 0"
 
 D=$(mktask escalation_per_round_empty)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":5}]
-  | .rounds=[{"round":5,"resolution":""}]'
+  | .rounds=[{"round":5,"resolution":"","repair_growth":{"net_lines":0,"beyond_remedy":"none","reason":""}}]'
 run "$D"
 verdict_is fail "an empty per-round resolution is no decision at all"
 msg_has "no escalation recorded" "an empty resolution reads as unescalated"
@@ -232,7 +232,7 @@ msg_has "2 or more critique rounds" "the boundary case names the budget"
 # unexamined growth is not.
 D=$(mktask growth_unjustified)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is fail "a repair round that grew the component with no reason fails"
 unresolved_is true "unexplained growth is a could-not-tell"
@@ -241,20 +241,20 @@ msg_has "grew the component with no reason recorded" "the message says what is m
 
 D=$(mktask growth_justified)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"reason":"the fix needed a new failure path"}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none","reason":"the fix needed a new failure path"}}]'
 run "$D"
 verdict_is pass "growth passes once the round says why the minimum fix would not do"
 rc_is 0 "justified repair growth exits 0"
 
 D=$(mktask growth_negative)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":-44}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":-44,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is pass "a repair that SHRANK the component needs no justification"
 
 D=$(mktask growth_zero)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":0}}]'
+  | .rounds=[{"round":1,"repair_growth":{"net_lines":0,"beyond_remedy":"none"}}]'
 run "$D"
 verdict_is pass "a repair that changed no net lines needs no justification"
 
@@ -268,7 +268,7 @@ write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking"
 run "$D"
 verdict_is fail "a deferral naming no blocked_on fails"
 unresolved_is true "an unanchored deferral is a could-not-tell"
-msg_has "name no blocked_on component" "the message says why the deferral is not acceptable"
+msg_has "the component they wait on" "the message says why the deferral is not acceptable"
 
 D=$(mktask deferral_good)
 write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]

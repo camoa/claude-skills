@@ -168,7 +168,9 @@ challenge. Give each the inputs the existing contract specifies: `<worktree>` = 
 the `<base-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
 lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
 `<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
-must not read an absent gate record as a clean one.
+must not read an absent gate record as a clean one. **From round 2 on, also pass every `remedy`
+from the previous round's blocking findings** and ask the critic to rule on whether the repair
+matched them; that is the only independent check on the `beyond_remedy` the builder writes itself.
 
 **Read each verdict from the file the critic wrote, never from its Task return.** An agent
 that died mid-response returns text that reads like an answer.
@@ -200,25 +202,23 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
 
-**The round budget (v5.35.0+): two blocking rounds on one component, then stop and ask.** Each
-`[a]ddress` starts a new round on that component, and a repair is itself unreviewed work — live,
-one component took four rounds and rounds 2 and 3 were each caused by the repair before them.
-Every round was individually correct while the sequence was not converging, and nothing said so.
-At the third blocking round, halt: in an attended run put the choice to the person (continue, cut
-scope, or accept and record a bypass); with `run_mode: autonomous` there is nobody to ask, so
-**HALT** rather than start a fourth. Record the outcome in the payload's `escalation.reason`,
-and carry a `rounds` count on each component row plus a `rounds[]` history of what each round
-found. Past the threshold the gate fails a record with no `escalation.reason`. This caps
-unsupervised iteration, not quality: a fourth round is fine, an unrecorded one is not. A builder
-wrong twice running is the least reliable judge of whether the third attempt differs.
+**The round budget (v5.35.0+): two blocking rounds on one component, then stop.** Each
+`[a]ddress` starts a round, and a repair is itself unreviewed work — live, one component ran four
+rounds, each of 2 and 3 caused by the repair before it. At the second blocking round put the choice
+to the person; with `run_mode: autonomous` there is nobody to ask, so **HALT**.
+Record it in `escalation.reason` and carry a `rounds` count per component plus a `rounds[]` history; past the threshold the gate fails a record with no `escalation.reason`.
 
-**Repair the minimum, and record it when you cannot.** The churn that made this budget necessary
-was not the critics: each round the builder answered a `concern` with new mechanism instead of
-the smallest fix, and every new mechanism was fresh attack surface. One method that did not exist
-before a round-2 repair collected 38 of the 58 findings raised in the three rounds after it.
-Measure each repair round against the previous round's checkpoint and record
-`repair_growth: {net_lines, reason}` on the round; growth with no reason fails the gate. Growth
-is allowed, unexamined growth is not.
+**Repair the minimum.** One method added by a round-2 repair collected 38 of the 58 findings raised
+in the three rounds after it. Measure each repair against the previous round's checkpoint; record
+`repair_growth: {net_lines, beyond_remedy, reason}`, and unexplained growth fails.
+
+**The repair does the remedy (v5.36.0+).** Every finding carries one: the smallest change that
+resolves it, naming every site, written by the critic that found it. Sort anything outside it
+**before writing it** and record the bucket in `beyond_remedy` — `none`, `remedy_insufficient`, or
+`new_finding` (record the defect in `repair_growth.finding`, do not fix it here). An improvement the
+finding did not ask for is **refused** and has no value to record it under. Every round after the
+first owes a bucket, and anything but `none` owes a `reason` whatever `net_lines` says. The refusal
+holds in **both** run modes, because "do more and write a reason" documents scope creep rather than stopping it. Rules: `references/build-critique.md`.
 
 **A finding you cannot answer yet is deferred, not fixed speculatively.** When a critic reports
 something whose resolution lives in a component later in the build order, carry it in the round's

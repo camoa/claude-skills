@@ -13,7 +13,11 @@
 #
 # Critic file (written by the wo-critic agent via Write): an OBJECT
 #   { "lens":..., "verdict":"pass|concern|critical|unresolved",
-#     "findings":[ {"severity":"concern|critical","text":...} ] }    # findings MUST be objects
+#     "findings":[ {"severity":"concern|critical","text":...,
+#                     "remedy":..., "measured":null|{...}} ] }         # findings MUST be objects
+# `remedy` and `measured` (v5.36.0+) are the critic's contract, not this kernel's: nothing here
+# reads them. They are carried through into the envelope with the rest of each finding object.
+# Shape and rules: agents/wo-critic.md.
 #
 # Fail-closed rules (AR-E + red-team CRIT-1/CRIT-2/HIGH-5/MED-7/MED-8):
 #   effective(critic): non-object/empty/unparseable file => unresolved; UNKNOWN verdict => unresolved;
