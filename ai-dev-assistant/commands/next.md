@@ -198,9 +198,9 @@ Enter a task name (e.g., "settings_form", "user_entity", "admin_dashboard")
 
 ### Playbook-config nudge (v4.2.1+)
 
-After resolving the project (Step 1) but before recommending a task action, run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and inspect its JSON. If `.playbookSetsSource == "default"` (Playbook Sets line absent — implicit inheritance from the plugin's `defaults.json`) **OR** `.userPlaybookState == "unset"`, print this one-line soft-nudge once per `/next` invocation:
+After resolving the project (Step 1) but before recommending a task action, run `${CLAUDE_PLUGIN_ROOT}/scripts/project-state-read.sh "<project_folder>"` (Bash) and inspect its JSON. If `.playbookSetsSource` is `"default"` **or** `"default-empty"` (Playbook Sets line absent — implicit inheritance from the plugin's `defaults.json`; `default-empty` means that fallback is itself empty, so no set was applied at all — match BOTH, the shipped `defaults.json` makes `default-empty` the value a real project gets) **OR** `.userPlaybookState == "unset"`, print this one-line soft-nudge once per `/next` invocation:
 
-> 💡 This project has not configured a playbook (`playbook_sets_source: default` and/or `user_playbook_state: unset`). Playbook loads at every phase entry. Consider `/ai-dev-assistant:set-playbook-sets` and `/ai-dev-assistant:set-user-playbook` before your first task. Or run `/ai-dev-assistant:upgrade-project` to retrofit all project-state fields at once. (Optional — never blocks.)
+> 💡 This project has not configured a playbook (`playbook_sets_source: default`/`default-empty` and/or `user_playbook_state: unset`). Playbook loads at every phase entry. Consider `/ai-dev-assistant:set-playbook-sets` and `/ai-dev-assistant:set-user-playbook` before your first task. Or run `/ai-dev-assistant:upgrade-project` to retrofit all project-state fields at once. (Optional — never blocks.)
 
 Print before the task-selection prompt (or before the "no tasks yet" message). Skip silently when both fields are explicit. Never block.
 

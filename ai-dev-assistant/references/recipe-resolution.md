@@ -141,7 +141,10 @@ callers cite instead of re-describing the steps inline.
      `scripts/gate-audit-write.sh "<task_folder>" recipe-load "<payload>"`. Include every framework the
      phase considered (resolved or not) with its `source`/`verified`/`available`/`body_path`, its
      `declarations_audit` (the kernel JSON, or `null` for `research`/`design`), its `method_fit` from the
-     step above, the surfaced `advisory` (or `null`), `resolved_count`, and a `bypass` object for any
+     step above, at `phase: review` its `arch_validate` outcome from the step-5.0 `architecture-validator`
+     dispatch (`{verdict, sidecar, reason}`, verdict including `no_return` for an absent sidecar — the
+     field the reason lives in; `references/gate-audit-schema.md` §5.12), the surfaced `advisory` (or
+     `null`), `resolved_count`, and a `bypass` object for any
      no-recipe outcome (`no_frameworks_defined`,
      `navigator_unavailable`, `recipe_not_published`, `user_declined`). This makes resolution **auditable
      and idempotent across resume** and records the degrade-first path rather than leaving it silent.

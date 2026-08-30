@@ -125,6 +125,74 @@ grep -q 'empty change set.*skipped' "$CMD" \
   && pass_check "an empty change set skips rather than failing every criterion" \
   || fail_check "an empty change set can still hard-fail a complete task"
 
+# --- does the reviewed work exist anywhere but this machine? -----------------------------
+#
+# The script resolved a base and a head and never asked whether the head had an upstream.
+# Measured live: both feature branches of a reviewed site had NO upstream, one was seven commits
+# ahead of `origin/staging`, and every gate reasoned about them without noticing. /review was
+# computing pr_ready while nothing knew whether a PR was even possible.
+
+git -C "$R" checkout -q -b local-only
+echo work >> "$R/tracked.txt"; git -C "$R" add .; git -C "$R" commit -qm "only here"
+OUT=$(cs main)
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.configured)" = "false" ] \
+  && pass_check "a branch that exists only on this machine says so" \
+  || fail_check "a local-only branch reported an upstream, or reported nothing about one"
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.ref)" = "null" ] \
+  && pass_check "there is no upstream ref to name" \
+  || fail_check "an upstream ref was named for a branch that has none"
+[ "$(printf '%s' "$OUT" | jq -r '.warnings|index("head_has_no_upstream")')" != "null" ] \
+  && pass_check "the missing upstream is in warnings, where a reader sees it" \
+  || fail_check "the head has no upstream and nothing in the record says so"
+[ "$(printf '%s' "$OUT" | jq -r .base_distance.ahead)" = "1" ] \
+  && pass_check "the distance from the base is reported: 1 commit ahead" \
+  || fail_check "base_distance.ahead is $(printf '%s' "$OUT" | jq -r .base_distance.ahead), not the 1 commit made"
+
+# It is ADVISORY. A local-only branch is legitimate — reviews routinely run before the first push,
+# the same reason the change set includes the working tree at all. It must not change the answer.
+[ "$(printf '%s' "$OUT" | jq -r .empty_reason)" = "null" ] \
+  && pass_check "no upstream does not turn a real change set into an empty one" \
+  || fail_check "the upstream check changed what the review is judging"
+[ "$(printf '%s' "$OUT" | jq -r '.files|length')" -gt 0 ] \
+  && pass_check "the files being judged are unaffected by the upstream fact" \
+  || fail_check "adding the upstream fact emptied the change set"
+
+# A branch WITH an upstream reports the ref and both distances.
+UP="$TMP/upstream.git"; git init -q --bare "$UP"
+git -C "$R" remote add origin "$UP"
+git -C "$R" push -q -u origin local-only
+OUT=$(cs main)
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.configured)" = "true" ] \
+  && pass_check "a pushed branch reports that it has an upstream" \
+  || fail_check "a branch with an upstream was reported as local-only"
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.ref)" = "origin/local-only" ] \
+  && pass_check "the upstream ref is named" \
+  || fail_check "the upstream ref is $(printf '%s' "$OUT" | jq -r .head_upstream.ref)"
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.ahead)" = "0" ] \
+  && pass_check "a just-pushed branch is zero commits ahead of its upstream" \
+  || fail_check "ahead is $(printf '%s' "$OUT" | jq -r .head_upstream.ahead) on a just-pushed branch"
+[ "$(printf '%s' "$OUT" | jq -r '.warnings|index("head_has_no_upstream")')" = "null" ] \
+  && pass_check "no missing-upstream warning once there is one" \
+  || fail_check "a pushed branch still warns that it has no upstream"
+
+echo unpushed >> "$R/tracked.txt"; git -C "$R" add .; git -C "$R" commit -qm "not pushed yet"
+[ "$(cs main | jq -r .head_upstream.ahead)" = "1" ] \
+  && pass_check "a commit the upstream has not seen is counted" \
+  || fail_check "work ahead of the upstream is not being counted"
+
+# "Could not ask" is never the same answer as "no upstream configured".
+OUT=$(bash "$K" --base main --repo "$TMP" 2>/dev/null)
+[ "$(printf '%s' "$OUT" | jq -r .head_upstream.ahead)" = "null" ] \
+  && pass_check "outside a repository the distance is null, not zero" \
+  || fail_check "a non-repository reported a numeric distance from an upstream it cannot have"
+[ "$(printf '%s' "$OUT" | jq -r '.warnings|index("head_has_no_upstream")')" = "null" ] \
+  && pass_check "outside a repository we do not claim the head has no upstream — there is no head" \
+  || fail_check "a non-repository was reported as a branch with no upstream, which is a fact nobody established"
+
+grep -q 'head_upstream' "$CMD" \
+  && pass_check "review surfaces the upstream fact where pr_ready is decided" \
+  || fail_check "review computes pr_ready without ever surfacing whether a PR is possible"
+
 printf '\n'
 [ "$FAIL" -eq 0 ] && { printf 'review-change-set-spec: all checks passed\n'; exit 0; }
 printf 'review-change-set-spec: FAILURES\n' >&2; exit 1

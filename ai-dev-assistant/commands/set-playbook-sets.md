@@ -64,7 +64,7 @@ Print:
 ```
 ✓ Playbook Sets updated for <project>:
   Active sets: <list>
-  Source: <explicit|explicit-none|default>
+  Source: <explicit|explicit-none|default|default-empty>
 
 Next phase command (research/design/implement/complete) will load these sets via dev-guides-navigator.
 ```
