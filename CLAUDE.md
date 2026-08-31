@@ -18,8 +18,37 @@ validator directly.
 | Check documented claims against their authority | `make claims` |
 | Everything, same as the PR check | `make ci` |
 
-Before opening a PR: `make ci`. It runs all seven checks even when one
-fails, so one run shows every problem. CI runs the same seven the same way.
+## What to run before a PR
+
+`make ci` runs all seven checks even when one fails, so one run shows every
+problem, and CI runs the same seven the same way. It also takes about seven
+minutes, and two checks are 99% of that. Measured on this tree with all seven
+green: `test` 366s, `lint` 59s, `validate` 4.1s, `claims` 3.8s, `outputs`
+0.4s, `manifests` 0.1s, `setup-doc-check` 0.1s. Both slow ones are serial, not
+large; making them parallel is a queued task, `repo_checks_runtime` in the
+`camoa_skills` project.
+
+Until then, run what the branch can actually break rather than the whole thing:
+
+1. **Always, on every branch.** The five cheap checks, 8.5 seconds together:
+   `make manifests outputs setup-doc-check claims validate`. Unlike `make ci`
+   this stops at the first failure, which at this speed is fine.
+2. **If the branch touched any `.sh`**, add `make lint`.
+3. **For tests**, `make test-<plugin>` for each plugin you touched. One plugin
+   is a fraction of the 366s.
+4. **Run the full `make ci`** before a release commit, when the branch changes
+   `scripts/` or `.claude-plugin/marketplace.json`, or any time you want the
+   number CI will produce.
+
+Two things this shortcut does not cover, so know you are skipping them. The
+specs are cross-plugin: ai-dev-assistant specs assert on `code-quality-tools`
+and `plugin-creation-tools`, code-quality-tools specs assert on
+`ai-dev-assistant` and `drupal-ai-contrib`, and `scripts/tests/claim-check-spec.sh`
+sits at repo root outside every plugin and tests code-quality-tools. So
+`make test-<plugin>` for the plugin you edited can miss a spec in a different
+plugin that your edit broke. And CI is not a required check on `main`, so a
+red CI does not block a merge on its own. A scoped local run is fast feedback,
+not a verdict.
 
 ## What each check can fail on
 
