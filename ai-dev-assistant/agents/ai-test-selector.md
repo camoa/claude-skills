@@ -5,7 +5,7 @@ capabilities: ["affected-surface-selection", "registry-parse", "diff-analysis", 
 version: 0.1.0
 model: sonnet
 tools: Read, Grep, Glob, Bash, Write
-disallowedTools: Edit, Write
+disallowedTools: Edit
 maxTurns: 10
 ---
 

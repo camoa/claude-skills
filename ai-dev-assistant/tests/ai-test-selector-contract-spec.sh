@@ -7,7 +7,8 @@
 # against prose regressions that would silently re-break the selection wiring.
 #
 # Coverage:
-#   wo-01 — agent frontmatter (read-only disallowedTools: Edit,Write + model: sonnet),
+#   wo-01 — agent frontmatter (disallowedTools: Edit, and NOT Write: the agent is read-only on the
+#            project but writes its own sidecar, so denying Write silently removes that channel),
 #            I/O contract, err-toward-inclusion, degraded fallback, schema doc present.
 #   wo-02 — dispatch step 6.2a invokes selector for e2e+VR (NOT parity), shows
 #            recommendation+selection together in step 6.3, --full-<gate>/
@@ -47,6 +48,15 @@ check() { # <description> <file> <grep -E pattern>
   fi
 }
 
+check_not() { # <description> <file> <grep -E pattern that must NOT match>
+  if grep -Eq "$3" "$2"; then
+    echo "FAIL: $1  (forbidden pattern present: $3)"
+    fail=1
+  else
+    echo "PASS: $1"
+  fi
+}
+
 # ── File presence ─────────────────────────────────────────────────────────────
 echo "--- file presence ---"
 for f in "$AGENT" "$SCHEMA" "$DISPATCH" "$VR_CMD" "$AUDIT_SCHEMA"; do
@@ -56,8 +66,20 @@ done
 # ── wo-01: Agent frontmatter — read-only ──────────────────────────────────────
 echo "--- wo-01: agent frontmatter ---"
 
-check "agent disallowedTools includes Edit and Write" "$AGENT" \
-  'disallowedTools:.*Edit.*Write|disallowedTools:.*Write.*Edit'
+check "agent disallowedTools includes Edit" "$AGENT" \
+  '^disallowedTools:.*Edit'
+
+# This clause used to REQUIRE Write in disallowedTools, and that is how 5.37.0 shipped an agent
+# granted Write in `tools:` and denied it in the same frontmatter. `disallowedTools` wins, so the
+# agent ran without the tool its own body tells it to use and delivered by message instead.
+# Measured: it reported "No such tool available: Write" on a live dispatch. The agent is still
+# read-only on the project; its ONE write is its own sidecar, which is why Edit stays denied and
+# Write must not be.
+check_not "agent does not deny the Write it is granted" "$AGENT" \
+  '^disallowedTools:.*(^|[,[:space:]])Write([,[:space:]]|$)'
+
+check "agent grants Write for its sidecar" "$AGENT" \
+  '^tools:.*Write'
 
 check "agent model is sonnet" "$AGENT" \
   '^model: sonnet'
