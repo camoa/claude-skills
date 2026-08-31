@@ -292,57 +292,271 @@ if [ -e "$REC" ]; then
   fi
   add_msg "$RED_N criterion/criteria were seen to fail before their implementation existed"
 
-  # ------------------------------------------------ the round budget (v5.35.0+)
+  # ------------------------------------------- the repair accept verdict (v5.42.0+)
   #
-  # The rung can loop forever and nothing noticed. Live: one component took FOUR blocking
-  # rounds, and rounds 2 and 3 were both caused by the repair that preceded them. Each round
-  # was individually correct -- critics found real defects, the builder fixed them -- while the
-  # sequence as a whole was not converging, and no artifact said so. The builder asked the
-  # human whether to keep going, which is the right instinct arriving from nowhere: no rule
-  # told it to, and in an unattended run there is nobody to ask.
+  # This replaces the round budget, which counted repair rounds and demanded a recorded
+  # decision once a component reached two of them. A count was never the closing condition;
+  # it was a proxy for one. The question that decides whether a component is done is whether
+  # its repair was accepted, and a component can reach that answer on round one or fail to
+  # reach it on round four. Keying the demand to the count asked a converged component to
+  # justify itself and asked nothing of an unconverged one that stopped early.
   #
-  # This does not cap quality or forbid a fifth round. It caps UNSUPERVISED iteration: past the
-  # threshold, continuing is a decision somebody made and recorded, not a default. The builder
-  # that has been wrong three times running is the least reliable judge of whether the fourth
-  # attempt is different, which is the same reason the rung exists at all.
-  # Two, not three. Measured on the run that produced this check: rounds 1 and 2 found real
-  # behavioural defects no test could have caught. Rounds 3, 4 and 5 produced 58 findings and
-  # not one of them concerned a defect that pre-existed the round-1 and round-2 repairs. The
-  # value is front-loaded; the tail is the loop auditing its own repairs.
-  ROUND_LIMIT=2
-  # `rounds` must be a number to be compared. jq orders every string above every number, so a
-  # bare `>=` reports `rounds: "3"` -- and `rounds: "a"` -- as over budget, and the message would
-  # then claim rounds that never happened. A count that is not a number is a malformed record,
-  # not a high one; it is caught here and named as such.
-  BADROUNDS=$(jq -c \
-    '[(.components // [])[] | select(has("rounds") and (.rounds != null) and ((.rounds | type) != "number")) | (.component // "unnamed")]' \
-    <<<"$PAYLOAD" 2>/dev/null) || BADROUNDS='[]'
-  if [ "$(jq -r 'length' <<<"$BADROUNDS")" -gt 0 ]; then
-    set_ev malformed_rounds "$BADROUNDS"
-    add_msg "a component records a non-numeric rounds count, so how many times it was critiqued cannot be read"
+  # `[a]ddress` still loops as it always did. What changed is what the record answers to. A
+  # repaired component carries `accept {action, suite, decided_by, reason}` on its row, where
+  # action is accepted | not_accepted | cannot_judge, and anything other than `accepted` is a
+  # component that shipped on somebody's decision rather than on a verdict. That decision is
+  # read from exactly where the escalation demand read it before, unchanged: a top-level
+  # `escalation.reason`, or the `resolution` on the round that settled it.
+  #
+  # A repaired component with no `accept` key at all is `unresolved`, not clean. Without that
+  # half the field is advisory and a builder routes around it by omission, which is the defect
+  # this repo has already found at five layers. The same answer covers a record that cannot
+  # say whether a component was repaired at all: a rounds count that is not a number is a
+  # malformed record, named as one rather than read as a component nobody touched.
+  #
+  # ALL FOUR FIELDS ARE READ, not just `action`. A verdict recording an action and nothing else
+  # is the advisory shape this block exists to end, and it is not how the two neighbouring
+  # checks in this file behave: `closing_fixes` demands `verified_by` and a non-blank `reason`,
+  # and a deferral is rejected short any of its three fields. `suite` and `decided_by` are
+  # closed enums `scripts/repair-accept-check.sh` always emits, so an absent or off-enum one is
+  # a transcription that lost the thing the verdict rests on, and `reason` is what says which
+  # of the kernel's reasons drove the action. An unreadable field is `unresolved`, the answer
+  # this file gives every other could-not-tell.
+  #
+  # WHAT THIS CANNOT SEE. `accept.suite` is a scalar the builder wrote down, not a suite this
+  # script ran; a self-reported `suite: green` and a green suite are byte-identical here. One
+  # live record shows why that matters -- phpcs, phpstan and phpunit all passed over a repaired
+  # tree that still carried two criticals a later critic found. The suite is a floor, not a
+  # proof. This block checks that the verdict was recorded, and that a non-acceptance was
+  # somebody's stated decision. It cannot check that either one is true.
+  #
+  # KNOWN CEILING, inherited from the escalation read this replaced and not introduced here.
+  # `ESC` below is computed ONCE from the whole payload, so one recorded decision clears every
+  # unaccepted component in the record: ten components ending `not_accepted` are satisfied by a
+  # single sentence written about one of them, and the message then prints that one reason
+  # beside the count of ten. Section 4 of the design says this read is kept "unchanged", so
+  # narrowing it to per-component is a separate change with its own record. It is named here
+  # and in `references/build-critique.md` so a builder does not read the per-round `resolution`
+  # form as a per-component demand.
+  #
+  # THE CEILING THAT MAKES THE OTHERS MOOT, and it is the one to fix first. Whether a component
+  # was repaired is read from the record's OWN `rounds` count and `rounds[]` entries. A build
+  # that repairs a component and writes `rounds: 1` with no `rounds[]` entry owes no verdict and
+  # passes clean, so every demand above rests on the builder having recorded that it repaired
+  # anything. That is inherited unchanged from the round budget this replaced, which read the
+  # same field the same way, and `agents/wo-critic.md` already names the weakness in its own
+  # words: a builder that runs four rounds and writes a count of one defeats it. Closing it
+  # needs a repair signal the builder does not author, which no artifact in this rung currently
+  # produces. Named rather than papered over: the three ceilings above are about a verdict that
+  # may be untrue, and this one is about a verdict that may never be demanded at all.
+  #
+  # The reads below run malformed-first: a verdict that cannot be read and a repair nobody
+  # recorded are both `unresolved`, and both would otherwise fall through to the decision
+  # demand and clear on an escalation reason written for something else.
+  ACCEPT_ACTIONS='["accepted","not_accepted","cannot_judge"]'
+  ACCEPT_SUITES='["green","red","not_run"]'
+  ACCEPT_DECIDERS='["suite_and_motion","motion","none"]'
+
+  # A JQ ERROR IS NOT AN EMPTY RESULT SET. Every read below used to end `2>/dev/null) || VAR='[]'`,
+  # which routed a jq failure into the same value as "I looked and found nothing wrong". That is
+  # a silent pass on a block whose entire purpose is to refuse silent passes, and it has already
+  # cost this file two checks: the first version of the suite and basis reads evaluated `.accept`
+  # against an array, jq exited 5 on every record, and both checks passed every fixture while
+  # enforcing nothing. Each read now falls back to this sentinel and is reported as unresolved,
+  # naming which read failed. It is the same sentinel and the same shape the deferral check
+  # further down already used; there is one mechanism here, not two.
+  JQ_ERR="__jq_error__"
+
+  # An action outside the enum is a verdict nobody can read. It is not the same as
+  # `not_accepted`: a typo and a refusal are different states, and picking one of them here
+  # would be the guess this file refuses everywhere else.
+  BAD_ACTION=$(jq -c --argjson ok "$ACCEPT_ACTIONS" \
+    '[(.components // [])[]
+      | select(has("accept"))
+      | select(if (.accept | type) != "object" then true
+               else (((.accept.action // "") | tostring) as $a
+                     | ($ok | index($a)) == null) end)
+      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_ACTION="$JQ_ERR"
+  if [ "$BAD_ACTION" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the accept action enum could not be read, so whether any repair was accepted is unknown"
     emit fail true "" 1
   fi
-  OVERBUDGET=$(jq -c --argjson lim "$ROUND_LIMIT" \
-    '[(.components // [])[] | select(((.rounds // 1) | if type == "number" then . else 1 end) >= $lim) | (.component // "unnamed")]' \
-    <<<"$PAYLOAD" 2>/dev/null) || OVERBUDGET='[]'
-  OVER_N=$(jq -r 'length' <<<"$OVERBUDGET")
-  set_ev over_budget_components "$OVERBUDGET"
-  if [ "$OVER_N" -gt 0 ]; then
+  if [ "$(jq -r 'length' <<<"$BAD_ACTION")" -gt 0 ]; then
+    set_ev malformed_accept "$BAD_ACTION"
+    add_msg "a component records an accept verdict that is not accepted, not_accepted or cannot_judge, so whether its repair was accepted cannot be read"
+    emit fail true "" 1
+  fi
+
+  # `suite` gets its own read because the whole account of what this verdict is worth rests on
+  # it: `accepted` means a green suite raised no objection, and a verdict that cannot say which
+  # suite result it weighed is a verdict about nothing. Absent and off-enum are one answer here
+  # -- both leave the value unreadable, and neither is `not_run`, which is a real result a
+  # builder states on purpose.
+  BAD_SUITE=$(jq -c --argjson ok "$ACCEPT_SUITES" \
+    '[(.components // [])[]
+      | select(has("accept") and ((.accept | type) == "object"))
+      | select((((.accept.suite // "") | tostring) as $s | ($ok | index($s)) == null))
+      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_SUITE="$JQ_ERR"
+  if [ "$BAD_SUITE" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the accept suite field could not be read, so what suite result each verdict weighed is unknown"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$BAD_SUITE")" -gt 0 ]; then
+    set_ev malformed_accept_suite "$BAD_SUITE"
+    add_msg "a component records an accept verdict with no readable suite; record suite green, red or not_run, because a verdict that cannot say what suite result it weighed says nothing"
+    emit fail true "" 1
+  fi
+
+  # The remaining two fields of the contract. `decided_by` names which of the two facts settled
+  # the action -- the suite, the test motion, or neither -- and it is a closed enum the kernel
+  # emits on every run. `reason` is the sentence carrying why; a blank one collapses a stated
+  # decision into a recorded shrug, which is why the two checks further down this file reject a
+  # blank `closing_fixes.reason` and a blank `why_now_is_wrong` on a deferral.
+  BAD_BASIS=$(jq -c --argjson ok "$ACCEPT_DECIDERS" \
+    '[(.components // [])[]
+      | select(has("accept") and ((.accept | type) == "object"))
+      | select(((((.accept.decided_by // "") | tostring) as $d | ($ok | index($d)) == null))
+               or ((((.accept.reason // "") | tostring) | gsub("^\\s+|\\s+$";"")) == ""))
+      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_BASIS="$JQ_ERR"
+  if [ "$BAD_BASIS" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the accept decided_by and reason fields could not be read, so what drove each action is unknown"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$BAD_BASIS")" -gt 0 ]; then
+    set_ev malformed_accept_basis "$BAD_BASIS"
+    add_msg "a component records an accept verdict with no readable decided_by or a blank reason; record decided_by suite_and_motion, motion or none, and say in reason what drove the action"
+    emit fail true "" 1
+  fi
+
+  # Whether a component was repaired is read two ways, because real records carry both: a
+  # `rounds` count above one on the component row, and a top-level `rounds[]` entry naming the
+  # component. A non-numeric count answers neither, and is reported as a repair state that
+  # could not be established rather than folded into the clean set.
+  UNREADABLE_REPAIR=$(jq -c \
+    '[(.components // [])[]
+      | select((has("accept") | not) and has("rounds") and (.rounds != null)
+               and ((.rounds | type) != "number"))
+      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || UNREADABLE_REPAIR="$JQ_ERR"
+  if [ "$UNREADABLE_REPAIR" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the component rounds counts could not be read, so which components were repaired is unknown"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$UNREADABLE_REPAIR")" -gt 0 ]; then
+    set_ev unreadable_repair_state "$UNREADABLE_REPAIR"
+    add_msg "a component records a non-numeric rounds count and no accept verdict, so whether it was repaired cannot be established; that is unresolved, not clean"
+    emit fail true "" 1
+  fi
+
+  # A `rounds[]` entry naming a component establishes a repair only from round 2. Round 1 is
+  # the initial critique, not a repair, and `references/build-critique.md` asks for an entry on
+  # every round including the first -- so reading any entry as a repair demanded an accept
+  # verdict from every component of every clean build that followed that instruction, and hard-
+  # failed it. That is the same round-number condition the component-row read already applies,
+  # which is why the two readings agreed on the row and disagreed here.
+  #
+  # An entry whose `round` is absent or is not a number is resolved as UNREADABLE, in the check
+  # directly below, rather than as either a repair or an untouched component. It cannot say
+  # which of the two it is: round 1 owes no verdict and round 3 owes one, and picking either
+  # silently is the guess this block refuses on `accept.action` twenty lines up. It is reported
+  # only when nothing else already settled the component's repair state, so a readable round-2
+  # entry beside a malformed one is still read as the repair it is.
+  UNREADABLE_ROUND=$(jq -c \
+    '(.rounds // []) as $r
+     | [(.components // [])[]
+        | . as $c
+        | select(has("accept") | not)
+        | (($c.component // "unnamed") | tostring) as $name
+        | select(((($c.rounds // 1) | if type == "number" then . else 1 end)) <= 1)
+        | select(any($r[]?; ((.component // .wo // "") | tostring) == $name
+                            and ((.round | type) == "number") and (.round > 1)) | not)
+        | select(any($r[]?; ((.component // .wo // "") | tostring) == $name
+                            and ((.round | type) != "number")))
+        | $name]' <<<"$PAYLOAD" 2>/dev/null) || UNREADABLE_ROUND="$JQ_ERR"
+  if [ "$UNREADABLE_ROUND" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the rounds[] entries could not be read, so whether each names a first critique or a repair is unknown"
+    emit fail true "" 1
+  fi
+  if [ "$(jq -r 'length' <<<"$UNREADABLE_ROUND")" -gt 0 ]; then
+    set_ev unreadable_repair_round "$UNREADABLE_ROUND"
+    add_msg "a rounds[] entry names a component with no accept verdict and carries no numeric round, so whether that entry is the first critique or a repair cannot be established; that is unresolved, not clean"
+    emit fail true "" 1
+  fi
+
+  NO_ACCEPT=$(jq -c \
+    '(.rounds // []) as $r
+     | [(.components // [])[]
+        | . as $c
+        | select(has("accept") | not)
+        | (($c.component // "unnamed") | tostring) as $name
+        | select((((($c.rounds // 1) | if type == "number" then . else 1 end)) > 1)
+                 or any($r[]?; ((.component // .wo // "") | tostring) == $name
+                               and ((.round | type) == "number") and (.round > 1)))
+        | $name]' <<<"$PAYLOAD" 2>/dev/null) || NO_ACCEPT="$JQ_ERR"
+  if [ "$NO_ACCEPT" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the set of components carrying no accept verdict could not be read, so whether a repair went unrecorded is unknown"
+    emit fail true "" 1
+  fi
+  NOACC_N=$(jq -r 'length' <<<"$NO_ACCEPT")
+  if [ "$NOACC_N" -gt 0 ]; then
+    set_ev unrecorded_accept "$NO_ACCEPT"
+    add_msg "$NOACC_N repaired component(s) carry no accept verdict: $NO_ACCEPT"
+    add_msg "record accept {action, suite, decided_by, reason} on every component that was repaired; a repair nobody accepted is not a repair that passed"
+    emit fail true "" 1
+  fi
+
+  UNACCEPTED=$(jq -c \
+    '[(.components // [])[]
+      | select(has("accept") and ((.accept | type) == "object"))
+      | select(((.accept.action // "") | tostring) != "accepted")
+      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || UNACCEPTED="$JQ_ERR"
+  if [ "$UNACCEPTED" = "$JQ_ERR" ]; then
+    set_ev_s accept_check "unreadable"
+    add_msg "the set of components ending on a non-acceptance could not be read, so whether any component shipped unaccepted is unknown"
+    emit fail true "" 1
+  fi
+  UNACC_N=$(jq -r 'length' <<<"$UNACCEPTED")
+  set_ev unaccepted_components "$UNACCEPTED"
+  if [ "$UNACC_N" -gt 0 ]; then
     # Two places are legitimate, and the second is the one a live build actually produced:
     # a top-level `escalation.reason`, or a `resolution` on the round it settled. The
     # per-round form is better -- a decision belongs with the round that provoked it -- and
-    # this check was written to demand the other one before anyone looked at a real record.
-    ESC=$(jq -r '((.escalation.reason // "") | tostring) as $top
+    # the check this read comes from demanded the other one before anyone looked at a real
+    # record.
+    #
+    # BOTH HALVES TRIM, the same `gsub("^\\s+|\\s+$";"")` BAD_BASIS applies forty lines above and
+    # the deferral and closing-fixes checks apply below. This is the field that clears every
+    # unaccepted component in the record on one string, so a decision of `" "` clearing them all
+    # was the loosest read in the block sitting on the widest blast radius. Trimmed for the
+    # comparison AND for what gets reported: the message prints the reason back, and a decision
+    # padded with newlines reads as a decision nobody wrote.
+    ESC=$(jq -r 'def trim: gsub("^\\s+|\\s+$";"");
+                 ((.escalation.reason // "") | tostring | trim) as $top
                  | if $top != "" then $top
-                   else ([(.rounds // [])[] | (.resolution // empty) | tostring]
+                   else ([(.rounds // [])[] | (.resolution // empty) | tostring | trim]
                          | map(select(. != "")) | last // "")
-                   end' <<<"$PAYLOAD")
-    [ "$ESC" = "null" ] && ESC=""
-    if [ -z "$ESC" ]; then
-      add_msg "$OVER_N component(s) reached $ROUND_LIMIT or more critique rounds with no escalation recorded; say who decided to keep going and why"
+                   end' <<<"$PAYLOAD" 2>/dev/null) || ESC="$JQ_ERR"
+    if [ "$ESC" = "$JQ_ERR" ]; then
+      # This read is the one place an empty result and a jq error already differed, and the
+      # difference ran the wrong way: an unreadable `escalation` or `rounds[]` produced an
+      # empty ESC, which the branch below reports as "no decision recorded". That accuses a
+      # record of a thing it may not have done, and hides the thing it did do, which is fail
+      # to parse. Unreadable is its own answer here as everywhere else in this block.
+      set_ev_s accept_check "unreadable"
+      add_msg "the recorded decision could not be read, so whether a non-acceptance was somebody's stated decision is unknown"
       emit fail true "" 1
     fi
-    add_msg "$OVER_N component(s) ran to $ROUND_LIMIT or more rounds; continuing was a recorded decision: $ESC"
+    [ "$ESC" = "null" ] && ESC=""
+    if [ -z "$ESC" ]; then
+      add_msg "$UNACC_N component(s) ended on an accept verdict other than accepted with no decision recorded; say who decided to ship them and why"
+      emit fail true "" 1
+    fi
+    add_msg "$UNACC_N component(s) ended on an accept verdict other than accepted; shipping them was a recorded decision: $ESC"
   fi
 
   # -------------------------------------------------- deferred findings (v5.35.0+)
@@ -444,9 +658,9 @@ if [ -e "$REC" ]; then
   fi
 
   ROUNDS_ARR=$(jq -c '(.rounds // [])' <<<"$PAYLOAD" 2>/dev/null) || ROUNDS_ARR='[]'
-  # A jq error on the deferral filter below must NOT read as "nothing found" -- it falls back
-  # to this sentinel rather than to `[]`, and the sentinel is reported as unresolved.
-  JQ_ERR="__jq_error__"
+  # `JQ_ERR` is the same sentinel the accept block above uses, defined once beside the first
+  # read that needs it. The deferral filter below falls back to it rather than to `[]`, and
+  # the sentinel is reported as unresolved.
 
   # A deferral carries three things and all three are required in `agents/wo-critic.md`,
   # `references/build-critique.md`, `references/gate-audit-schema.md` and `commands/implement.md`:

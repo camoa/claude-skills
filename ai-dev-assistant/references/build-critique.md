@@ -283,41 +283,77 @@ teaches a builder to write a different one. As everywhere else in this rung, the
 that the question was answered, not that the answer is true. **Applies to the in-session build
 path only** — see below.
 
-## The round budget — two blocking rounds, then somebody decides
+## Keep a `rounds` count and a `rounds[]` history
 
-`[a]ddress` starts a new round on the component. Nothing counted them, so the loop could run
-indefinitely and no artifact said whether it was converging.
+Keep a `rounds` count on each component row, and a `rounds[]` history of what each round found.
 
-Live, one component ran four blocking rounds. Round 1 found a fixture that proved the inverse of
-its purpose. Round 2's critical was caused by round 1's repair. Round 3's two criticals were both
-caused by round 2's repair. Round 4 then proved the premise behind the round-3 cut was
-arithmetically false. Every round was individually correct — the critics found real defects and
-the builder fixed them — and the sequence as a whole was not converging. The builder stopped and
-asked the operator whether to continue, which was the right instinct arriving from nowhere: no
-rule told it to, and an unattended run has nobody to ask.
+Neither is decoration. The deferred-findings check reads `.rounds[]`, and an absent key yields an
+empty list — a silent pass — so a build that defers a finding and writes no `rounds[]` has
+recorded that deferral nowhere any gate can see it. The count is how the accept check tells a
+component that was repaired from one that was never touched, which is what decides whether it owes
+an `accept` verdict at all. A decision to keep going past a round belongs on the `rounds[]` entry
+that provoked it, as a `resolution`, or as a top-level `escalation.reason`; the per-round form is
+the one a live build produced and the better of the two.
 
-At the second blocking round on one component, halt.
+**Write the `round` number on every entry, and write it as a number.** Round 1 is the initial
+critique and not a repair, so an entry is read as a repair only from round 2, the same boundary the
+`rounds` count on the row already uses. An entry whose `round` is absent, or is a string like
+`"2"`, cannot say which of the two it is, and the accept check reports that as unresolved rather
+than guessing either way.
 
-| `run_mode` | What happens |
-|---|---|
-| `interactive` | Put it to the person: continue, cut scope, or accept and record a bypass |
-| `autonomous` | **HALT.** Never start a fourth round unattended |
+## The repair gets an accept verdict, not a round count
 
-Record the outcome either as a top-level `escalation.reason` or as a `resolution` on the
-`rounds[]` entry it settled — the per-round form is the one a live build produced, and it is the
-better of the two, since a decision belongs with the round that provoked it. Keep a `rounds`
-count on each component row, and a `rounds[]` history of what each round found. Past the threshold the gate fails a record with no
-`escalation.reason`.
+Every `[a]ddress` ends with one. `scripts/repair-accept-check.sh` runs over the repaired tree and
+its verdict goes on the component row as `accept {action, suite, decided_by, reason}`. This is what
+replaced the round budget. A count was a proxy for a closing condition and never the condition
+itself: a component can converge on round one or fail to converge on round four, so keying the
+demand to the count asked the converged component to justify itself and asked nothing of the other.
 
-**This caps unsupervised iteration, not quality.** A fourth round is a legitimate choice; an
-unrecorded fourth round is not. The reason is the same one the whole rung rests on: a builder that
-has been wrong twice running is the least reliable judge of whether the third attempt is
-different.
+**The kernel runs nothing.** It compares two facts the caller hands it: the suite result over the
+repaired tree, and the test motion the repair made as `git diff --name-status` over the repair's own
+range, which is the SHA this round's `.after` checkpoint captured to the post-repair head, and not
+the range of the build being critiqued. Both ends are shas: a checkpoint label is not a revision, so
+`git diff` handed one exits 128 with the redirect's file already created and empty.
 
-**Why two and not three.** Measured on the run this rule came from: rounds 1 and 2 found real
-behavioural defects that no test caught and no amount of reading would have surfaced. Rounds 3, 4
-and 5 produced 58 findings between them and not one concerned a defect that pre-existed the
-round-1 and round-2 repairs. The value is front-loaded. Past that the loop audits its own repairs.
+`accepted` means the suite was green and the motion raised nothing unanswered. `not_accepted` means
+the suite was red, or a test file was modified with no `--modification-reason`; the tripwire demands
+a reason for a modified test, it never forbids the change. `cannot_judge` has three causes: the
+motion file was zero bytes, no suite was run over the repaired tree, or the caller could not
+establish what a test path is here. The first exists because an empty diff carries no claim. A
+caller who knows there are no test paths says `--test-globs '[]'`, and one who cannot tell says
+`--test-globs-source undetermined`, so a file with nothing in it means either the diff failed or the
+repair changed nothing, and neither is a repair that moved no test.
+
+**`cannot_judge` is not a pass.** It is the answer for nobody looked, and folding that into a clean
+result is the defect this framework has now found at five layers. Nothing halts on it: `blocks` is
+always false and `[a]ddress` loops as it always did. The demand lands on the record instead. A
+component that ends on anything other than `accepted` needs the decision to ship it, as a
+`resolution` on the round or a top-level `escalation.reason`, and a repaired component carrying no
+`accept` verdict at all is `unresolved` at `/review`.
+
+**One recorded decision clears every unaccepted component in the record.** The gate reads the
+decision once from the whole payload (the top-level `escalation.reason`, else the last `resolution`
+in `rounds[]` with a real word in it, from any round, about any component; both ends are trimmed
+before they are judged blank, so a decision of one space is no decision), so ten components ending
+`not_accepted` are satisfied by one sentence written about one of them, and the message then prints
+that one reason beside the count of ten. Do not read the per-round form as a per-component demand:
+the gate does not check that the decision it found is about the component it cleared, and nothing
+downstream does either. Write a `resolution` on each round that settled a component anyway. It is
+what a reader of the record needs, and it is the only place the per-component reason exists.
+
+**All four fields are read, not just `action`.** `suite` must be `green`, `red` or `not_run`,
+`decided_by` must be `suite_and_motion`, `motion` or `none`, and `reason` must not be blank. Absent
+or off-enum is `unresolved`, the same answer a missing verdict gets: a verdict that cannot say what
+suite result it weighed, or what settled it, or why, is not a verdict. All three are values
+`repair-accept-check.sh` returns on every run, so recording them is transcription, not judgement.
+
+**What it cannot see.** `suite: green` is a value somebody typed, not a suite this kernel ran, and
+nothing on disk tells a self-reported green from an observed one. On one live build phpcs, phpstan
+and phpunit all passed over a repaired tree that still carried two criticals a later critic found:
+the suite is a floor, not a proof, and `accepted` means these two facts raised no objection rather
+than that the repair is right. Motion is A / M / D, so a test modified in a way that weakened it, an
+assertion loosened or a case cut from inside a file, arrives as an ordinary `M`; the reason string
+is the only thing carrying direction and nothing here checks that it is true.
 
 ## Each round reviews its own delta, not the whole component again
 

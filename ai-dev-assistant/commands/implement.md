@@ -148,13 +148,13 @@ AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePa
 # time — findings accumulate instead of converging. Measured live: five rounds re-diffed from
 # base and none was clean; the sixth scoped to the delta and was the first non-blocking round
 # of the six. Keep each round's .after sha; the next round's base is that sha.
-git -C <codePath> diff --name-only <base-for-this-round>..$AFTER > "$CD/<component>.files.txt"
+git -C <codePath> diff --name-only <base-sha-for-this-round>..$AFTER > "$CD/<component>.files.txt"
 
 # 2b. proportion. Surfaced to the person while the build is still open, and NEVER blocking. Pass
 # --expected-lines only when the component declared one at design; absent, it returns `cannot_judge`,
 # the honest answer and never a pass. Measured: one build produced 1,637 insertions for ~150 lines of
 # necessary code, nothing noticed the ratio, and the operator interrupting was the only brake that worked.
-INS=$(git -C <codePath> diff --shortstat <base-for-this-round>..$AFTER | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
+INS=$(git -C <codePath> diff --shortstat <base-sha-for-this-round>..$AFTER | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
 ${CLAUDE_PLUGIN_ROOT}/scripts/proportionality-check.sh --actual-lines "$INS" [--expected-lines <declared>]
 
 # 3. the tier. --gate-floor is REQUIRED here: there is no work-order file to read it from,
@@ -172,7 +172,7 @@ security lens is guaranteed at `medium` and above, so executable code always get
 **5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
 **fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
 challenge. Give each the inputs the existing contract specifies: `<worktree>` = `codePath`,
-the `<base-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
+the `<base-sha-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
 lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
 `<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
 must not read an absent gate record as a clean one.
@@ -204,14 +204,47 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
   a non-blocking `concern` at low and medium tier.
 - `overall: "concern"` is surfaced and does not block.
 
+**Every `[a]ddress` ends with an accept verdict on the repair, before the rung re-runs.**
+
+```
+# The REPAIR's range, not the build's. Step 2's `--name-only` diff covers the code the critics
+# read; this covers what the repair itself changed, and the kernel needs A/M/D, not names.
+# BOTH ENDS ARE SHAS. $AFTER from step 1, never the literal `<component>.after`: that label
+# lives under refs/worktree/aida/build-checkpoints/, off git's rev-parse path, so git exits 128
+# and the redirect leaves a 0-byte file the kernel answers cannot_judge.
+REP=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePath> \
+        --label <component>.repaired | jq -r .sha)
+git -C <codePath> diff --name-status $AFTER..$REP > "$CD/<component>.repair.txt"
+${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> \
+  --test-motion-from "$CD/<component>.repair.txt" --test-globs '<test paths, JSON array>' \
+  [--test-globs-source undetermined] [--modification-reason "<why a test file changed>"]
+```
+
+`--suite` is a RESULT you hand in; the kernel runs nothing. Who runs the suite is settled by
+`run_mode` (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. With
+no suite over the repaired tree, `not_run` is the honest value and returns `cannot_judge`,
+which is not a pass. `--test-globs` is where this project's tests live; when that cannot be
+established pass `--test-globs-source undetermined`, never `[]`, which is the positive claim
+that the repair touched no test path.
+
+**Both ends of that diff are shas**, the same way the phase range at Step 12 is. A checkpoint
+label is not a revision, so handing one to `git diff` leaves an empty file rather than an error
+the rung would notice, and an empty file is `cannot_judge` at the kernel. **Every `rounds[]`
+entry carries a numeric `round`**: the gate reads the repair state from it and hard-fails an
+entry that has none, at `/review`, on an otherwise clean build.
+
+**Record `accept {action, suite, decided_by, reason}` on that component's row**, the first
+three from the kernel and `reason` from its `reasons[]`. Required on every repaired component:
+one with no `accept` is `unresolved` at `/review`, and any action other than `accepted` needs
+the decision to ship it recorded in `escalation.reason` or the round's `resolution`.
+
 Do not skip the rung because the component looks small. Whether it is small is a judgment by
 the same context that built it, which is the judgment being checked.
 
-**The round budget (v5.35.0+): two blocking rounds on one component, then stop.** Each
-`[a]ddress` starts a round, and a repair is itself unreviewed work — live, one component ran four
-rounds, each of 2 and 3 caused by the repair before it. At the second blocking round put the choice
-to the person; with `run_mode: autonomous` there is nobody to ask, so **HALT**.
-Record it in `escalation.reason` and carry a `rounds` count per component plus a `rounds[]` history; past the threshold the gate fails a record with no `escalation.reason`.
+**Carry a `rounds` count on each component row and a `rounds[]` history of what each round
+found.** The deferred-findings check below reads `.rounds[]`, and an absent key yields an empty
+list, which passes silently — so a build that defers a finding and writes no `rounds[]` records
+the deferral nowhere the gate can see it.
 
 **A finding you cannot answer yet is deferred, not fixed speculatively.** When a critic reports
 something whose resolution lives in a component later in the build order, carry it in the round's
@@ -352,7 +385,7 @@ non-functional change.
 
 ## Output
 
-Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`, and freezes the contract at `<task_folder>/build-critique/_contract-baseline/` (v5.34.0+) — copies of `alignment.md`, `architecture.md` and `architecture/*.md` as they stood before any code was written, so the critics judging scope can tell a design that authorised the work from one amended to describe it. Written once at Runtime Step 11 and never overwritten; it stays with the task folder rather than being cleared at end of phase, because it is the evidence for what the phase was judged against.
+Writes the code plus `implementation.md`, and one `_<gate>.json` per gate that fired, including `_preconditions.json` when a framework implement recipe resolved (v5.31.0+), `_framework.json` when the project had no recorded frameworks and the framework-resolution cascade ran to name one, and `_build-critique.json` for the build-critique rung (v5.33.0+). The rung also writes one verdict file per critic under `<task_folder>/build-critique/`, plus the two diff listings it hands the kernels there, `<component>.files.txt` (the build under critique) and `<component>.repair.txt` (the repair's own name-status range), and freezes the contract at `<task_folder>/build-critique/_contract-baseline/` (v5.34.0+) — copies of `alignment.md`, `architecture.md` and `architecture/*.md` as they stood before any code was written, so the critics judging scope can tell a design that authorised the work from one amended to describe it. Written once at Runtime Step 11 and never overwritten; it stays with the task folder rather than being cleared at end of phase, because it is the evidence for what the phase was judged against.
 
 **In the code repository (v5.33.0+):** the rung anchors its build checkpoints as refs under `refs/worktree/aida/build-checkpoints/` in the repository at `codePath`, plus a shared keep-ref per object at `refs/aida/build-checkpoints-keep/<sha>`. These are commit objects on no branch — HEAD, the index, the working tree, `git branch`, `git status` and `git stash` are all untouched, and a plain `git log` does not show them, though `git log --all` does. The rung removes them at end of phase with `build-checkpoint.sh clear`; `build-checkpoint.sh list --repo <codePath>` shows any left behind by an interrupted run. It is the only thing this command writes into the code repository other than the code itself.
 
