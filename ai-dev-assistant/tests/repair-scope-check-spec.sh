@@ -63,6 +63,16 @@ assert "out_of_scope, one unnamed file listed" out_of_scope false sets '["c.php"
 assert "allow glob covers the unnamed file -> in_scope" in_scope false sets '[]' \
   -- --finding-sites '["a.php"]' --touched-files '["a.php","tests/c-spec.sh"]' --allow 'tests/*'
 
+# --- --allow present but NOT covering, and covering only part of the set ---
+# These two exist because the assertion above cannot fail in the direction that matters. A mutant
+# that makes every --allow run report in_scope satisfies it, so on its own it proves the flag is
+# reachable and never that it discriminates. Found by a fresh reader seeding exactly that mutant:
+# the spec stayed green at 26 of 26 and no assertion reached the branch.
+assert "allow glob does not cover the unnamed file -> out_of_scope" out_of_scope false sets '["src/c.php"]' \
+  -- --finding-sites '["a.php"]' --touched-files '["a.php","src/c.php"]' --allow 'tests/*'
+assert "allow glob covers only part of the set -> out_of_scope on the remainder" out_of_scope false sets '["src/c.php"]' \
+  -- --finding-sites '["a.php"]' --touched-files '["a.php","tests/c-spec.sh","src/c.php"]' --allow 'tests/*'
+
 # --- cannot_judge on empty finding sites, never in_scope (the absence-reads-as-answer defect) ---
 assert "cannot_judge: empty finding-sites, non-empty touched" cannot_judge false none '[]' \
   -- --finding-sites '[]' --touched-files '["a.php"]'
@@ -112,7 +122,7 @@ bad "unknown arg"                                          --finding-sites '["a.
 bash "$K" --finding-sites '["a.php"]' --touched-files '["a.php"]' >/dev/null 2>&1
 [ $? -eq 0 ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: a valid call should exit 0"; }
 
-# --- guard: this spec must have checked something ---
-[ "$((PASS + FAIL))" -gt 0 ] || { echo "repair-scope-check-spec: checked nothing"; exit 2; }
+# --- guard: exact count, so a silently-skipped block cannot pass as green (D8) ---
+[ "$((PASS + FAIL))" -eq 28 ] || { echo "repair-scope-check-spec: expected 28 assertions, ran $((PASS + FAIL))"; exit 2; }
 
 echo "----"; echo "repair-scope-check-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

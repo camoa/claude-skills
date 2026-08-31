@@ -361,6 +361,88 @@ if [ -e "$REC" ]; then
   # or strayed past what a finding asked for, are gone. `scripts/repair-scope-check.sh` answers
   # the scope half instead, by comparing the finding's `where[]` against the touched-file set
   # rather than asking the builder to grade its own repair. See `finding_contract` design D6.)
+
+  # ------------------------------------------------- scope compliance (v5.40.0+, finding_contract D6)
+  #
+  # The kernel is `scripts/repair-scope-check.sh`; this is its only caller. It compares two sets --
+  # every file a critical/concern finding's `where[]` names, against every file this change set
+  # touched -- and surfaces (never blocks: `blocks` is always false) a touched file named by no
+  # finding, the same way most of this record surfaces rather than halts.
+  #
+  # FINDING_SITES is read from `components[].critique_ref`, which is not a reliable pointer: on
+  # real records it is null, a path relative to the task folder, an absolute path, or free prose
+  # ("paper test, structured 3-phase, 18 fixtures run against the real script" -- not a path at
+  # all). Every ref is resolved and read defensively; one that is not a readable JSON object
+  # contributes nothing. That is not folded into a clean scope -- it feeds the same empty set the
+  # kernel already reads as `cannot_judge`, so an unresolvable pointer surfaces as "could not
+  # judge", never as `in_scope`. As of this build, every real record in the corpus predates
+  # `where[]` (schema_version absent), so `cannot_judge` is the honest, expected answer today; the
+  # wiring is live for the day a critic starts writing it.
+  #
+  # TOUCHED_FILES is `review-change-set.sh`'s own `.files`, read from `$CHANGE_SET_FILE` --
+  # already required on this path (see build_identity below) -- independently of whether that
+  # later block validates it, so this check does not depend on a later block's success.
+  FS_COMPONENTS=$(jq -c '(.components // [])' <<<"$PAYLOAD" 2>/dev/null) || FS_COMPONENTS='[]'
+  FINDING_SITES='[]'
+  while IFS= read -r ref; do
+    if [ -z "$ref" ] || [ "$ref" = "null" ]; then continue; fi
+    case "$ref" in
+      /*) REF_PATH="$ref" ;;
+      *)  REF_PATH="$TASK_DIR/$ref" ;;
+    esac
+    [ -f "$REF_PATH" ] || continue
+    jq -e 'type == "object"' "$REF_PATH" >/dev/null 2>&1 || continue
+    REF_SITES=$(jq -c \
+      '[(.findings // [])[]?
+        | select((.severity // "") == "critical" or (.severity // "") == "concern")
+        | (.where // [])[]? | (.file // empty)]' \
+      "$REF_PATH" 2>/dev/null) || REF_SITES='[]'
+    FINDING_SITES=$(jq -c -n --argjson a "$FINDING_SITES" --argjson b "$REF_SITES" \
+      '($a + $b) | unique' 2>/dev/null) || FINDING_SITES='[]'
+  done < <(jq -r '.[] | (.critique_ref // "") | tostring' <<<"$FS_COMPONENTS" 2>/dev/null)
+
+  TOUCHED_SOURCE="undetermined"
+  TOUCHED_FILES='[]'
+  if [ -n "$CHANGE_SET_FILE" ] && [ -f "$CHANGE_SET_FILE" ] \
+     && jq -e 'type == "object"' "$CHANGE_SET_FILE" >/dev/null 2>&1; then
+    TOUCHED_FILES=$(jq -c '(.files // [])' "$CHANGE_SET_FILE" 2>/dev/null) || TOUCHED_FILES='[]'
+    TOUCHED_SOURCE="determined"
+  fi
+
+  SCOPE_SCRIPT="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/repair-scope-check.sh"
+  if [ -f "$SCOPE_SCRIPT" ]; then
+    SCOPE_OUT=$(bash "$SCOPE_SCRIPT" --finding-sites "$FINDING_SITES" \
+      --touched-files "$TOUCHED_FILES" --touched-files-source "$TOUCHED_SOURCE" 2>/dev/null) \
+      || SCOPE_OUT=""
+    if [ -n "$SCOPE_OUT" ] && jq -e 'type == "object"' >/dev/null 2>&1 <<<"$SCOPE_OUT"; then
+      set_ev scope_compliance "$SCOPE_OUT"
+      SCOPE_ACTION=$(jq -r '.action' <<<"$SCOPE_OUT")
+      case "$SCOPE_ACTION" in
+        out_of_scope)
+          SCOPE_UNNAMED=$(jq -r '.unnamed | join(", ")' <<<"$SCOPE_OUT")
+          add_msg "scope compliance: touched file(s) named by no finding: $SCOPE_UNNAMED -- surfaced, not blocking"
+          ;;
+        in_scope)
+          add_msg "scope compliance: every touched file is named by a finding or covered by an allow rule"
+          ;;
+        cannot_judge)
+          if [ "$(jq -r 'length' <<<"$FINDING_SITES")" -eq 0 ]; then
+            add_msg "scope compliance could not be judged: no finding named a site"
+          else
+            add_msg "scope compliance could not be judged: the touched-file set could not be determined"
+          fi
+          ;;
+        *) add_msg "scope compliance returned an unrecognised action: $SCOPE_ACTION" ;;
+      esac
+    else
+      set_ev_s scope_compliance "unreadable"
+      add_msg "scope compliance could not be computed: repair-scope-check.sh produced no readable verdict"
+    fi
+  else
+    set_ev_s scope_compliance "unavailable"
+    add_msg "scope compliance could not be computed: repair-scope-check.sh not found"
+  fi
+
   ROUNDS_ARR=$(jq -c '(.rounds // [])' <<<"$PAYLOAD" 2>/dev/null) || ROUNDS_ARR='[]'
   # A jq error on the deferral filter below must NOT read as "nothing found" -- it falls back
   # to this sentinel rather than to `[]`, and the sentinel is reported as unresolved.

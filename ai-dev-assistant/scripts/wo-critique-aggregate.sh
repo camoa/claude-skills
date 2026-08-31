@@ -86,7 +86,10 @@ effective() {
 shape_check() {
   jq -c '
     def n: (. // "" | tostring | ascii_downcase | gsub("^\\s+|\\s+$";""));
-    def blank: (. == null) or ((type=="string") and ((.|ascii_downcase|gsub("^\\s+|\\s+$";""))==""));
+    # Type-checked, not null-checked: anything that is not a non-blank string is blank. A required
+    # field of the wrong type (a number, an object, an array, a bool) used to satisfy this by not
+    # being null or the empty string; now only an actual non-whitespace string does.
+    def blank: (type != "string") or ((.|gsub("^\\s+|\\s+$";""))=="");
     def where_bad:
       (.where) as $w
       | ($w==null) or ($w|type!="array") or (($w|length)==0)
@@ -96,12 +99,17 @@ shape_check() {
       (.schema_version) as $sv
       | (if $sv==null then null
          elif ($sv|type)=="number" then $sv
-         # `tonumber?` yields EMPTY, not null, on a non-numeric string. An empty result makes the
-         # whole expression produce no output, so $SHAPE comes back as "" and the `--argjson shape`
-         # below aborts the entire aggregate with exit 2 and no envelope at all. `// null` turns
-         # that empty into a value the branch below can read. Found by a spec assertion, not by
-         # review: schema_version "abc" took the gate down completely.
-         elif ($sv|type)=="string" then (($sv|tonumber?) // null) else null end) as $svn
+         # A plain `tonumber?` handles "2", "2.0" and whitespace-padded forms, but yields EMPTY
+         # (not null) on a semver-shaped string like "2.0.1" — the most likely thing a critic
+         # writes when it means "newer than 2.0". Take the component before the first "." and
+         # parse THAT as the major version: "2.0.1" -> "2" -> 2, "2.1" -> "2" -> 2, "2abc" (no
+         # dot, whole string) and "v2.0" (before-dot segment "v2") both still fail to parse and
+         # stay pre-contract, same as today. `// null` turns the empty tonumber? result into a
+         # value the branch below can read — without it $SHAPE comes back as "" and the
+         # `--argjson shape` below aborts the entire aggregate with exit 2 and no envelope at all.
+         elif ($sv|type)=="string" then
+           (($sv|split(".")[0]|gsub("^\\s+|\\s+$";"")|tonumber?) // null)
+         else null end) as $svn
       | (.lens // "" | n) as $lens
       | if $svn == null then
           {status:"not_run", reason:(if $sv==null then "schema_version absent (pre-contract)"
@@ -109,18 +117,43 @@ shape_check() {
         elif $svn < 2 then
           {status:"not_run", reason:("schema_version "+($sv|tostring)+" < 2.0 (pre-contract)")}
         else
-          ([ ((.findings // []) | if type=="array" then . else [] end) | to_entries[]
-             | select((.value|type)=="object")
-             | select(((.value.severity // "")|n) as $sev | $sev=="critical" or $sev=="concern")
-             | (.key) as $i | (.value) as $f
-             | if ($f|where_bad) then {idx:$i, detail:"where[] missing/empty/not-an-array, or an element lacks file"}
-               elif ($f.remedy|blank) then {idx:$i, detail:"remedy missing or empty"}
-               elif ($lens=="security") and ($f.reachable_by|blank) then {idx:$i, detail:"lens=security and reachable_by missing or empty"}
-               elif ($f.id|blank) then {idx:$i, detail:"id missing or empty"}
-               else empty end
-           ]) as $bad
-          | if ($bad|length) > 0 then {status:"fail", reason:("finding["+($bad[0].idx|tostring)+"]: "+$bad[0].detail)}
-            else {status:"pass", reason:null} end
+          # A `findings` key that IS PRESENT and is not an array is a shape failure, not silently
+          # read as "no findings". Absent or null `findings` is not a failure — that is simply no
+          # findings to check. Once the container is known to be an array, an element that is not
+          # itself an object is likewise a failure, not a skip: both used to fall through to an
+          # empty $bad list and record shape_check:"pass" on a file the check structurally could
+          # not read.
+          (if (.findings != null) and ((.findings|type) != "array") then
+             {status:"fail", reason:"findings is not an array"}
+           else
+             ([ ((.findings // []) | if type=="array" then . else [] end) | to_entries[]
+                | (.key) as $i | (.value) as $f
+                | if ($f|type) != "object" then {idx:$i, detail:"finding is not an object"}
+                  else
+                    # Which severities the where[]/remedy/reachable_by rules bind. This MUST use
+                    # the same synonym set as `srank` above, not the two canonical literals.
+                    # `srank` already ranks `high`, `major`, `blocker`, `rce`, `sqli` and `severe`
+                    # as critical, and `medium`, `minor`, `low` and `warn` as concern. A gate
+                    # matching only the two literals let every one of those through with no
+                    # where[], no remedy and no id, recorded as `shape_check:"pass"` while still
+                    # ranking critical and blocking the build. Two tests for one idea, in one
+                    # file, disagreeing. `id`, unlike the other three, is required on every
+                    # finding regardless of severity (D1, and every authority doc that names it) —
+                    # so it is checked outside the $bound gate below.
+                    (((.value.severity // "")|n) as $sev
+                     | ($sev=="critical" or $sev=="concern"
+                        or ($sev|test("crit|rce|sqli|severe|blocker|major|^high$"))
+                        or ($sev|test("concern|medium|minor|^low$|warn"))) as $bound
+                     | if $bound and ($f|where_bad) then {idx:$i, detail:"where[] missing/empty/not-an-array, or an element lacks file"}
+                       elif $bound and ($f.remedy|blank) then {idx:$i, detail:"remedy missing or empty"}
+                       elif $bound and ($lens=="security") and ($f.reachable_by|blank) then {idx:$i, detail:"lens=security and reachable_by missing or empty"}
+                       elif ($f.id|blank) then {idx:$i, detail:"id missing or empty"}
+                       else empty end)
+                  end
+              ]) as $bad
+             | if ($bad|length) > 0 then {status:"fail", reason:("finding["+($bad[0].idx|tostring)+"]: "+$bad[0].detail)}
+               else {status:"pass", reason:null} end
+           end)
         end
     end
   ' "$1" 2>/dev/null || echo '{"status":"fail","reason":"shape check errored reading this critic file"}'
@@ -139,7 +172,37 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
     else
       EFF="$(effective "$cf")"
       SHAPE="$(shape_check "$cf")"
-      SHAPE_STATUS="$(printf '%s' "$SHAPE" | jq -r '.status')"
+      # GUARD THE CONSUMER, not each producer path. `shape_check` emits nothing at all for more
+      # inputs than are obvious: a whitespace-only file, two concatenated JSON documents, a jq that
+      # errors mid-expression. An empty $SHAPE then aborts BOTH --argjson calls below, the script
+      # exits 2, and NO ENVELOPE IS WRITTEN. Every caller reads .blocking off an empty file, gets
+      # nothing, writes no HALT, and the build proceeds — so a genuine `critical` from a sibling
+      # critic is silently lost. Measured: main returns blocking:true on the same fixtures, this
+      # path returned nothing.
+      #
+      # A per-cause fix was tried first and was wrong. `schema_version:"abc"` was patched at the
+      # source and this whole class stayed open, because the defect is that an empty producer output
+      # reaches a consumer that cannot survive one. Anything unreadable here is `not_run` with a
+      # reason, which is recorded and never reads as clean.
+      # Slurp, so EXACTLY ONE object is the passing condition. A per-document test is not enough:
+      # two concatenated JSON documents make jq emit two objects, each of which tests fine on its
+      # own, and `--argjson` still rejects the pair. That was the first version of this guard and it
+      # let the same crash through.
+      SHAPE="$(printf '%s' "$SHAPE" | jq -s -c '
+        if (length==1 and (.[0]|type)=="object" and (.[0]|has("status")))
+        then .[0]
+        else {status:"not_run", reason:"shape check produced no single readable result"} end
+      ' 2>/dev/null)"
+      [ -n "$SHAPE" ] || SHAPE='{"status":"not_run","reason":"shape check produced no readable result"}'
+      SHAPE_STATUS="$(printf '%s' "$SHAPE" | jq -r '.status' 2>/dev/null)"
+      [ -n "$SHAPE_STATUS" ] || SHAPE_STATUS="not_run"
+      # `effective` has the identical exposure: two documents in, two verdicts out, and EFF becomes
+      # a two-line string that every comparison below silently fails to match. Collapse it the same
+      # way, fail-closed to unresolved rather than to a verdict nobody computed.
+      case "$EFF" in
+        pass|concern|unresolved|critical) ;;
+        *) EFF="unresolved" ;;
+      esac
       if [ "$SHAPE_STATUS" = "fail" ]; then
         # D3: a malformed finding forces the file to (at least) unresolved — floor, not override,
         # so a finding already ranked critical never gets weakened by its own shape failure.

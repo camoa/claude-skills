@@ -387,8 +387,8 @@ prose, and its evidence is three rounds on one build.
 
 `scripts/wo-critique-aggregate.sh` reads `.severity` off a finding, plus, since `finding_contract`,
 a shape check against the required fields in `references/gate-audit-schema.md`: `where[]` and
-`remedy` on every finding, `reachable_by` when the critic file's `lens` is `security`, `id` on every
-finding. A finding that fails the check makes the whole critic file `unresolved`, recorded per file
+`remedy` on `critical` and `concern` findings, `reachable_by` when the critic file's `lens` is
+`security`, `id` on every finding. A finding that fails the check makes the whole critic file `unresolved`, recorded per file
 rather than per finding, so a critic cannot pass with its worst finding silently dropped. The check
 itself is gated on the critic file's own `schema_version`: absent means pre-contract, and the file
 gets the lenient, pre-`finding_contract` reading instead. Whatever the check decides, the kernel

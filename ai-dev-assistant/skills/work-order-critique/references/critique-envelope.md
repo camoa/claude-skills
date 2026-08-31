@@ -21,6 +21,7 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
     { "lens": "security", "verdict": "pass|concern|critical|unresolved",
       "effective": "pass|concern|critical|unresolved",
       "shape_check": "pass | fail | not_run",
+      "shape_check_reason": "<reason, present on fail and not_run>",
       "findings": [ { "severity": "concern|critical", "text": "<evidence-anchored>",
                       "where": [ { "file": "<path>", "line": 0, "symbol": "<name>" } ],
                       "remedy": "<smallest change that resolves this, as a sentence>",
@@ -43,6 +44,7 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
 | `overall` | `not_evaluated` ≠ `pass`. A required/high WO whose file is absent/unreadable is fail-closed to blocking by the **consumer** (③/`wo-ship-gate.sh`), not silently treated as pass. |
 | `critics[].effective` | `max(self verdict, worst finding severity)` — a `pass` carrying a `critical` finding is `critical` (the kernel's F8 cross-check). |
 | `critics[].shape_check` | The result of checking this critic file against the finding shape below: `"pass"`, `"fail"` with a reason, or `"not_run"` with a reason. `not_run` means the check did not run — it is never read as clean. |
+| `critics[].shape_check_reason` | The reason behind a `"fail"` or `"not_run"` `shape_check`. Absent (not present as a key) when `shape_check` is `"pass"`. |
 | `critics[].findings[].where[]` | Required on `critical` and `concern`. `[{file, line, symbol}]`, one entry per site the finding names — every site, not one example standing for the rest. |
 | `critics[].findings[].remedy` | v5.36.0+. The smallest change that resolves the finding, as a sentence, written by the critic that found it. It is what a repair is measured against, so that the repair is not the only party judging its own size. The sites a class or uniqueness claim covers go in `where[]`, not here; a search that was not exhaustive says so. `deferred[]` entries carry none. Rules live in `agents/wo-critic.md`. |
 | `critics[].findings[].reachable_by` | Required when this critic file's top-level `lens` is `security`. Who can trigger the finding and what they already hold. |

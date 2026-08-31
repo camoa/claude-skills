@@ -60,8 +60,9 @@ Use the **Write tool** to write exactly this JSON to the output path you were gi
 
 `schema_version` is `"2.0"` on this file; absent means pre-contract. `deferred` may be omitted or
 empty when you deferred nothing. `extends` may be omitted when a finding does not add a site to an
-earlier one. `reachable_by` is required only when this file's `lens` is `security`. Everything
-else — `severity`, `text`, `where[]`, `remedy`, `id` — is required on every finding.
+earlier one. `reachable_by` is required only when this file's `lens` is `security`. `severity`,
+`text` and `id` are required on every finding; `where[]` and `remedy` are required on `critical`
+and `concern` findings.
 
 **There is no slot for something you checked and found clean, and that is deliberate.** A verdict
 carries what is wrong, not an inventory of what you looked at. Do not invent a key for it: nothing
