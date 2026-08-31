@@ -587,6 +587,15 @@ by the `/implement` preflight backstop; **read by `/review`** which folds a fail
 into `overall_verdict`. Overwrite-on-fire (latest run wins), but the per-mechanism `decided_by` carries the
 settled disposition forward; `mechanisms_hash` lets a consumer detect a stale record.
 
+**This section was reconciled against the 22 real records on disk** rather than the shape the gate shipped
+with in v5.17.0. `mechanisms[]`'s per-entry fields below are the ones the deterministic
+`scripts/mechanism-disposition.sh` kernel actually decides on and the ones the record-writing flow actually
+emits: `grounding`, `native_pattern`, `action`, and `blocks` were never documented here at all,
+despite driving the disposition every record carries. `stated` is the name every record written this session
+uses, where this section previously documented `mechanism_stated`. The nested
+`supersede{pattern,source,verified,evidence_ref}` object never appears on a live record; the resolved
+pattern is written flat, as `native_pattern`.
+
 ```json
 {
   "gate_type": "mechanism-challenge",
@@ -599,34 +608,53 @@ settled disposition forward; `mechanisms_hash` lets a consumer detect a stale re
   "mechanisms_hash": "<sha256 of the normalized extracted stated-mechanism set>",
   "mechanisms": [
     {
-      "mechanism_stated": "build an image_style + emit <img> from a theme preprocess",
-      "requirement": "16:9 card thumbnail from the schema_image media reference",
-      "disposition": "kept | overridden | deferred",
-      "decided_by": "human | auto | deferred",
-      "hint_status": "none | suggested | required",
-      "supersede": {
-        "pattern": "media view mode + responsive_image formatter",
-        "source": "agentic_recipe | guide | web",
-        "recipe_name": "responsive_image_wiring",
-        "verified": true,
-        "evidence_ref": "<blob sha | guide slug | url+date>",
-        "recency": "<n/a for verified | ISO date for web>",
-        "reason": "<why it supersedes, or the human's keep-reason>"
-      }
+      "stated": "build an image_style + emit <img> from a theme preprocess",
+      "grounding": "verified | unverified | none | not_searched",
+      "native_pattern": "media view mode + responsive_image formatter",
+      "action": "keep | auto_adopt | defer | surface | unresolved",
+      "blocks": false,
+      "disposition": "kept | overridden | deferred | unresolved",
+      "decided_by": "human | auto | deferred | none",
+      "reason": "<why it supersedes, or the human's keep-reason>",
+      "hint_status": "none | suggested | required"
     }
   ]
   }
 }
 ```
 
-- `disposition` derives from the deterministic `scripts/mechanism-disposition.sh` `action`: `keep→kept`,
-  `auto_adopt→overridden`, `defer→deferred`, `surface→` the human's choice. `supersede: null` when
-  `disposition:"kept"` (no superseding pattern; optionally a `confirmed_by` source ref).
+| Field | Type | Contract |
+|---|---|---|
+| `stated` | string | The extracted stated mechanism. Documented `mechanism_stated` through v5.17.0-v5.37.x; every record written this session uses `stated`. Both names describe the same value (see the drift note below); this section does not rename the field on disk. |
+| `grounding` | enum | `verified` (tier-1/tier-2 hit), `unverified` (tier-3 web only), `none` (the cascade ran, tier-1 through tier-3, and found no superseding pattern, a search that came back empty), or `not_searched` (the cascade did not run for this mechanism at all; never write `none` for this case). **Required, was undocumented.** |
+| `native_pattern` | string \| null | The superseding pattern found, or `null` when `grounding` is `none` or `not_searched`. Replaces the old nested `supersede.pattern`. |
+| `action` | enum | The literal output of `mechanism-disposition.sh`: `keep \| auto_adopt \| defer \| surface \| unresolved`. Undocumented before this reconciliation, despite being the field the kernel actually emits. |
+| `blocks` | bool | The kernel's `blocks` output. `true` only for an attended `surface` (a human decision the `/implement` build halts on). Always `false` for `unresolved`: a mechanism nobody searched never blocks, by the kernel's deliberate design (`mechanism-challenge.md`). Undocumented before this reconciliation. |
+| `disposition` | enum | Derived 1:1 from `action`: `keep→kept`, `auto_adopt→overridden`, `defer→deferred`, `unresolved→unresolved`, `surface→` the human's eventual choice (`kept` or `overridden`, with a `reason`). `unresolved` added by this reconciliation: a `not_searched` grounding must never derive to `kept`, which is what let 57 of 99 real mechanisms read as confirmed when nobody had looked. |
+| `decided_by` | enum | `human \| auto \| deferred \| none`. `none` only pairs with `disposition:"unresolved"`: nobody decided, because nobody searched. Added by this reconciliation alongside `unresolved`. |
+| `reason` | string \| null | Free text: why the pattern supersedes, or the keep-reason. Optional; present on most but not all real records. |
+| `hint_status` | enum \| absent | `none \| suggested \| required` (`mechanism_hints`/body-tag status, `references/mechanism-challenge.md`). **Optional and usually absent.** Most real records carry no hint field at all, since most tasks set no `mechanism_hints`. When present it is spelled either `hint_status` (documented here) or the shorter `hint` (seen about as often on disk); both mean the same enum and neither spelling is being retired by this section. |
+
+**Drift note, so a reader of an older record is not surprised:** the 22 real records on disk span roughly
+two months and are not uniform. Some (written at the gate's introduction) match the original nested shape
+this section used to document (`mechanism_stated` plus `supersede{pattern,source,verified,evidence_ref}`
+plus `hint_status`, `supersede: null` on a kept mechanism). Others use the field `mechanism` instead of
+`stated` or `mechanism_stated`, or `approach`. None of that is corrected here; correcting it would mean
+rewriting live records, which is a migration and out of scope for a documentation reconciliation. This
+section documents the shape new records actually carry today. A consumer reading an old record still has
+to accept the field name it was written with.
+
 - **Fail-closed at `/review`:** `gates_run[]` entry `name:"mechanism-challenge"` is `pass` iff the record
   exists, `challenge_ran == true`, and no mechanism is an unresolved attended-supersede (a `deferred` whose
   origin was attended); an **absent** record ⇒ `skipped + unresolved:true` ⇒ fail (step-8 rule 2). Mirrors
-  the `agentic-verifier` aggregate pattern (§5.8).
-- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes.
+  the `agentic-verifier` aggregate pattern (§5.8). **A per-mechanism `disposition:"unresolved"` does not
+  affect this rule.** It is not an unresolved *supersede* (there is no supersede; nothing was found because
+  nothing was searched), so it never fails or blocks the gate. `/review` step 5.0c instead counts these
+  entries and surfaces the count in a dedicated `{{mechanism_unresolved_line}}` (`commands/review.md` step
+  13) rather than through the pass/fail rule above; see that step for the count contract.
+- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes. The field
+  additions in this reconciliation (`grounding`, `action`, `blocks`, `not_searched`, `unresolved`)
+  document values the kernel already emits; they are not a schema version bump.
 
 ### 5.15 `spec` (v5.20.0+, M2 — the Spec axis)
 

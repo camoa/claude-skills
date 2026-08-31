@@ -1,5 +1,72 @@
 # Changelog
 
+## [5.38.0] - 2026-08-31
+
+### Added
+- **The mechanism gate can now say nobody looked.** `scripts/mechanism-disposition.sh` takes a
+  fourth grounding value, `not_searched`, returning `unresolved / blocks:false / decided_by:none`.
+  Before this its enum was `verified|unverified|none`, so a caller whose resolver cascade did not run
+  had no honest value to write. It wrote `none`, and the kernel read `none` as "(confirmed)" and
+  returned `keep`.
+
+  Measured across the 22 real records on the author's machine: 99 mechanisms, **59 carrying
+  `grounding: none`**, of which **2** carried any evidence a search ran, and **59 of 59 cleared
+  automatically**. `blocks: true` has fired once in the gate's life and a human made that call. On
+  record, a task proposed a "selective 4xx-only upstream message passthrough with a length bound";
+  the gate cleared it; it was a 150-line invented control that four critics then spent roughly
+  310,000 tokens hardening before it was deleted on a four-word challenge.
+
+  Two references already told callers to write `not_searched` and both claimed the kernel
+  distinguished it. `--grounding not_searched` exited 2. The value the docs mandated was rejected by
+  the code, so every caller wrote `none`.
+
+  **It does not block, deliberately.** 59 of 99 would halt, most of them mechanisms like
+  `ddev restart` where no native pattern exists because it is not a design decision. A gate that
+  stops a person three times per design phase gets bypassed. `/research`, `/design` and
+  `/implement` now produce the value; `/review` counts unresolved mechanisms and shows the number
+  without failing on it.
+
+- **A proportionality check, because nothing in the lifecycle asked whether a change was bigger than
+  its problem.** `scripts/proportionality-check.sh` compares an actual line count against a declared
+  expectation and returns `within_expectation`, `disproportionate`, or `cannot_judge`. The third is
+  the point: a task that declared no expectation is unmeasured, never fine, which is the same
+  distinction as `none` versus `not_searched`.
+
+  The mechanism gate asks whether a better known way exists, which is comparison. It cannot ask
+  whether something is too big, which is proportion. One build produced 1,637 insertions for roughly
+  150 lines of necessary code and no gate, agent or record noticed the ratio at any point. The
+  operator interrupting on their own initiative was the only effective brake in that run.
+
+  `/design` records `expected_lines` per component, optional and the only new authoring burden here.
+  `/implement` surfaces the ratio at each component close, while the build is still open and a
+  person can still act. It never blocks.
+
+### Fixed
+- **A flag with no value hung both kernels forever, printing nothing.** `shift 2` needs two
+  positionals and fails with one, so `$#` never decreased and the arg loop spun. Measured: exit 124
+  under `timeout`, 0 bytes on stderr. Present in `mechanism-disposition.sh` since 5.17.0 and
+  inherited by the new kernel. Both now exit 2 with a message, and both specs assert it, watched
+  failing first.
+
+- **`tests/gate-prompts-literal.sh` forbade every template change, not just undeclared ones.** Its
+  header says it freezes literals against v1.0, but its baseline ref is `main`, so any deliberate
+  edit failed it. Templates do change: the registry carries a per-version changelog and marks
+  `review-summary` as `v1.2+; two-axis v1.6+`. A rule that forbids all change is one people merge
+  past rather than satisfy. It now fails on any baseline line modified or removed, and on an added
+  line whose `{{token}}` is not declared in the registry table. Four mutations confirm it: modified
+  line, removed line, undeclared token, and injected prose carrying no token at all.
+
+### Notes on what was deliberately not built
+- **A `tier` field was drafted and dropped.** It would have recorded how far the cascade got, but
+  `grounding` already carries that (`verified` is tier 1 or 2, `unverified` is tier 3, `none` ran and
+  found nothing, `not_searched` did not run) and the supersede block's `source` already says which.
+  No script read it. It was a required field with no consumer, and two documents in the same change
+  defined it with incompatible values, which is how it was caught.
+- **Design-time proportionality is not this.** This check needs an actual count, so the earliest it
+  can speak is during the build. A check that could refuse a disproportionate design before any code
+  exists is a different mechanism and is not here.
+
+
 ## [5.37.1] - 2026-08-31
 
 ### Fixed

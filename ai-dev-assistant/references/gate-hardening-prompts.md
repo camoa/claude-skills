@@ -25,7 +25,7 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `prior-art-ask` (v1.7+) | `/research` before the internal prior-art search | `project_name` | **none** — an unanswered ask is recorded as unasked |
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 | `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
-| `review-summary` (v1.2+; two-axis v1.6+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `spec_verdict_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
+| `review-summary` (v1.2+; two-axis v1.6+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `mechanism_unresolved_line`, `spec_verdict_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
 | `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
 | `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 | `visual-parity-gate-fail` (v1.5+) | `/validate:visual-parity` per failed surface | `surface_id`, `viewport`, `diff_percent`, `css_diff_mode`, `css_diff_count`, `css_diff_list`, `diff_path` | `[c]` |
@@ -257,11 +257,14 @@ No default. You MUST pick one.
 Mode: {{mode}}    Overall verdict: {{overall_verdict}}    PR ready: {{pr_ready}}
 ## Standards
 {{gates_run_table}}
+{{mechanism_unresolved_line}}
 ## Spec
 {{spec_verdict_line}} — never merged into the Standards score above
 Audit: {{audit_path}}
 {{pr_body_line_or_empty}}
 ```
+
+`{{mechanism_unresolved_line}}` renders the count of mechanisms whose disposition is `unresolved`, meaning the resolver cascade never ran for them, and is empty when that count is zero. It is informational and never changes a verdict: `not_searched` is non-blocking by design.
 
 `{{gates_run_table}}` renders every `gates_run[]` entry **EXCEPT** `name:"spec"` — that entry is excluded from the Standards table and renders ONLY via `{{spec_verdict_line}}`, never duplicated into both blocks. `{{spec_verdict_line}}` format: `Spec: <pass|fail|skipped> — <N> missing requirement(s), <M> scope-creep warning(s)[; skipped: <reason>]`, where `<N>` is `missing_requirements[]` length and `<M>` is `scope_creep[]` length (both read from `_spec.json`'s `gate_specific`), and the trailing `; skipped: <reason>` clause is present only when `verdict == "skipped"` (using `skip_reason`).
 

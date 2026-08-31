@@ -11,9 +11,14 @@ is the deterministic `scripts/mechanism-disposition.sh`; the audit is `_mechanis
 ## The flow (per mechanism-bearing phase)
 1. **Extract** the task's stated mechanism(s) — from the optional `mechanism_hints` frontmatter if present
    (authoritative), else by prose extraction from the task requirement/notes (the floor). Source-agnostic.
-2. **Resolve** the native/recommended mechanism via the fixed cascade (below); first hit wins.
+2. **Resolve** the native/recommended mechanism via the fixed cascade (below); first hit wins. The cascade
+   can fail to run at all for a mechanism: the tier-1 coverage map is missing, the navigator or the web
+   search is unavailable, or the step is skipped for any reason. That is a question with no answer, not a
+   finding, and it is fed to the kernel as `--grounding not_searched`. Only a tier that actually ran and
+   came back empty is `none`.
 3. **Disposition** each stated mechanism via `mechanism-disposition.sh` (the matrix).
 4. **Record** into `_mechanism-challenge.json` (`challenge_ran`, `mode`, `mechanisms_hash`, `mechanisms[]`).
+
 5. `/review` **asserts** the challenge ran (fail-closed).
 
 ## Resolver cascade — fixed order, identical attended + unattended
@@ -30,14 +35,29 @@ second research path.
 post-filter dropping any cited source whose date is absent or older than 12 months. A prompt-only bound is
 not trustworthy. Record `recency` (the ISO date) on a tier-3 supersede.
 
+### `none` vs `not_searched`: a finding is not the same fact as no attempt
+`--grounding` takes a fourth value beyond `verified | unverified | none`: `not_searched`
+(`scripts/mechanism-disposition.sh`, its own authority on the distinction). The rule for a caller
+choosing between the two:
+
+- **A tier that ran and found nothing is `none`.** The cascade walked its tiers and none superseded the
+  stated mechanism. That is an answer: keep the stated mechanism.
+- **A tier that was skipped, unavailable, or never reached is `not_searched`.** Nobody looked. Writing
+  `none` here is the defect this reference now exists to prevent. On the live corpus, 59 of 99
+  mechanisms carried `grounding: none` while only 2 carried any evidence a search ran, so 57 unasked
+  questions were recorded as confirmed findings and cleared automatically. `not_searched` does not block
+  (see the matrix below); it exists so a consumer can count what was never checked instead of reading it
+  as cleared.
+
 ## Disposition matrix (the deterministic kernel)
-`scripts/mechanism-disposition.sh --grounding <verified|unverified|none> --mode <attended|unattended> --hint <none|suggested|required>`
+`scripts/mechanism-disposition.sh --grounding <verified|unverified|none|not_searched> --mode <attended|unattended> --hint <none|suggested|required>`
 → `{action, blocks, decided_by}`. The recorded `disposition` derives: `keep→kept`, `auto_adopt→overridden`,
-`defer→deferred`, `surface→` the human's choice.
+`defer→deferred`, `unresolved→unresolved`, `surface→` the human's choice.
 
 | grounding | mode | hint | action | blocks | decided_by |
 |---|---|---|---|---|---|
-| none (no supersede) | * | * | keep | false | auto |
+| **not_searched** (cascade never ran) | * | * | **unresolved** | **false** | **none** |
+| none (searched, no supersede) | * | * | keep | false | auto |
 | verified | attended | any | surface | true | human |
 | verified | unattended | none/suggested | auto_adopt | false | auto |
 | verified | unattended | **required** | **defer** | false | deferred |
@@ -49,8 +69,21 @@ not trustworthy. Record `recency` (the ISO date) on a tier-3 supersede.
 - **`auto_adopt`** = build the native pattern now, record `overridden` + evidence, flag prominently for
   human review.
 - **`defer`** = record the proposed override + evidence, do NOT swap; re-surface on the next attended run.
+- **`unresolved`** = nobody searched, so there is nothing to decide. Recorded as `disposition: "unresolved"`,
+  never as `kept`: `kept` claims a search happened and confirmed the stated mechanism, which is a different
+  fact than not asking. It does **not** block (see "why `not_searched` never blocks" below), and it is never
+  read by `/review` as a passing outcome for the mechanism it is on, only as a mechanism nobody vetted. This
+  is a different fact from a `surface`d verified/unverified supersede a human has not yet acted on: that case
+  is a pending decision (`blocks:true`); `unresolved` is an absent question (`blocks:false`).
 - **`required`-hint exception** = a mechanism the author flagged `required` is NEVER auto-swapped: attended
   ⇒ surface/confirm, unattended ⇒ defer.
+
+### Why `not_searched` never blocks
+The kernel does not halt the build on `not_searched`, deliberately. On the live corpus, 59 of 99
+mechanisms carried no evidence a search ran, most of them things like `ddev restart`, where no native
+pattern exists to find because the mechanism is not a design decision. Blocking on all 59 would stop a
+person three times per design phase, and a gate that does that gets bypassed. The fix for the defect this
+reference documents is honesty (a consumer can now count what was never checked), not obstruction.
 
 ## Where it runs / asserts
 - **`/research` step 2c** — after the agentic-recipe gate, run the challenge over `coverage-map.json`

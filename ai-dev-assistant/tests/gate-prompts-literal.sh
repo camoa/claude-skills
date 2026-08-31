@@ -89,9 +89,37 @@ for id in "${TEMPLATE_IDS[@]}"; do
     continue
   fi
   if ! cmp -s "$LB_TMP" "$LC_TMP"; then
-    printf 'FAIL: literal block drift in template %s\n' "$id" >&2
-    diff -u "$LB_TMP" "$LC_TMP" >&2 || true
-    FAIL=1
+    # A baseline line that CHANGED or was REMOVED is drift, always. An ADDED line is only drift when
+    # nobody declared it: the registry table at the top of the file lists each template's variables,
+    # so a new `{{token}}` that appears there is a sanctioned addition with a paper trail.
+    #
+    # Why this distinction exists. The baseline ref is `main`, so before this the check read as "a
+    # template literal may never change" — and templates do change, which is why the registry carries
+    # a per-version changelog and why `review-summary` is marked `v1.2+; two-axis v1.6+`. A rule that
+    # forbids every change is one people merge past rather than satisfy, and CI is not a required
+    # check on main here, so that is exactly what happens. Guarding modification and deletion while
+    # requiring an addition to be declared keeps the rationalization-resistance contract and stops
+    # the check being a thing to route around.
+    REMOVED_OR_CHANGED=$(diff "$LB_TMP" "$LC_TMP" | grep -c '^<' || true)
+    ADDED=$(diff "$LB_TMP" "$LC_TMP" | grep '^>' | sed 's/^> //' || true)
+    UNDECLARED=""
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      tok=$(printf '%s' "$line" | grep -oE '\{\{[a-z_]+\}\}' | head -1 | tr -d '{}')
+      if [ -z "$tok" ] || ! grep -q "\`$tok\`" "$TARGET"; then
+        UNDECLARED="$UNDECLARED$line"$'\n'
+      fi
+    done <<< "$ADDED"
+
+    if [ "$REMOVED_OR_CHANGED" -gt 0 ] || [ -n "$UNDECLARED" ]; then
+      printf 'FAIL: literal block drift in template %s\n' "$id" >&2
+      [ "$REMOVED_OR_CHANGED" -gt 0 ] && printf '  %s baseline line(s) changed or removed\n' "$REMOVED_OR_CHANGED" >&2
+      [ -n "$UNDECLARED" ] && printf '  added line(s) with no declared variable in the registry:\n%s' "$UNDECLARED" >&2
+      diff -u "$LB_TMP" "$LC_TMP" >&2 || true
+      FAIL=1
+    else
+      printf 'OK   %s (baseline lines intact; additions declared in the registry)\n' "$id"
+    fi
   else
     printf 'OK   %s (literal block byte-identical)\n' "$id"
   fi

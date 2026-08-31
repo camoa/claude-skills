@@ -34,6 +34,7 @@ has "$REF" "reference: first hit wins (ordered cascade)"         -i 'first.*(hit
 has "$REF" "reference: web tier recency <=1 year"                 -i '1 year|12-month|<= ?1'
 has "$REF" "reference: recency double-enforced"                   -i 'double-enforced|post-filter'
 has "$REF" "reference: disposition matrix"                        -i 'disposition matrix'
+has "$REF" "reference: not_searched distinct from none"           -i 'not_searched'
 has "$REF" "reference: required-hint never auto-swapped"          -i 'required.*never|never auto-swap'
 has "$REF" "reference: runs research/design/implement, asserts review" -i 'implement.*backstop|backstop'
 has "$REF" "reference: mechanisms_hash freshness"                 'mechanisms_hash'
@@ -81,6 +82,27 @@ has "$IMPLEMENT" "implement backstop can HALT the build"          -i 'halt|block
 has "$REVIEW"    "review asserts mechanism-challenge gate"        'name: "mechanism-challenge"'
 has "$REVIEW"    "review gate is fail-closed on absent record"    -i 'fail-closed|absent.*fail|skipped.*unresolved'
 has "$REVIEW"    "review mechanism gate ALWAYS emits (not conditional)" -i 'always emits|NOT conditional|always runs'
+
+# --- the callers can actually PRODUCE not_searched (the repair itself) ---
+# Without these four, the whole repair is invisible to the suite. Measured before they existed:
+# restoring all four command files from HEAD removed every mention of `not_searched` from commands/
+# and every spec still passed, so the tree could regress to the exact defect this wiring fixes and
+# nothing went red. A check that guards only the reference doc guards the documentation, not the
+# behaviour, which is this plugin's recurring failure and the reason the defect shipped at all.
+has "$RESEARCH"  "research instructs not_searched when a tier did not run"    'not_searched'
+has "$DESIGN"    "design instructs not_searched when a tier did not run"      'not_searched'
+has "$IMPLEMENT" "implement instructs not_searched when a tier did not run"   'not_searched'
+has "$REVIEW"    "review counts unresolved mechanisms"                        -i 'unresolved'
+
+# The kernel must actually accept what the callers are told to send, and must not block on it.
+NS_OUT="$("$KERNEL" --grounding not_searched --mode attended --hint none 2>/dev/null)"
+[ "$(jq -r '.action' <<<"$NS_OUT" 2>/dev/null)" = "unresolved" ] \
+  && echo "PASS: kernel returns unresolved for not_searched" \
+  || { echo "FAIL: kernel does not return unresolved for not_searched"; fail=1; }
+[ "$(jq -r '.blocks' <<<"$NS_OUT" 2>/dev/null)" = "false" ] \
+  && echo "PASS: not_searched does not block" \
+  || { echo "FAIL: not_searched must never block"; fail=1; }
+
 
 # --- decoupling from the converter (scope guard) ---
 hasnt "$REF"      "reference has no /create-recipe authoring"     '/create-recipe'
