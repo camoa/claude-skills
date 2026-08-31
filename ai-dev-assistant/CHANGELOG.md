@@ -1,5 +1,71 @@
 # Changelog
 
+## [5.42.0] - 2026-08-31
+
+### Added
+- **A repair now has a closing condition it can be judged by, instead of a round count.**
+  `scripts/repair-accept-check.sh` answers whether a repair may be accepted from two facts a caller
+  hands it: the result of the existing suite over the repaired tree, and what the repair did to test
+  files. `accepted`, `not_accepted`, or `cannot_judge`. No model judgment anywhere in the decision.
+
+  The tripwire it carries is a motion split, not a prohibition. A repair that only ADDS or only
+  DELETES test files passes silently. One that MODIFIES a test demands a reason, supplied through
+  `--modification-reason`. On one build six of seven criticals were defects in tests the build itself
+  had written, so a check that forbade the change outright would be wrong more often than right.
+
+  **The kernel runs nothing.** `--suite` is a result, never a command. That is forced rather than
+  chosen: no project records a suite command anywhere, and `references/tdd-workflow.md` puts an
+  unattended whole-suite sweep outside what the agent does. Who runs it is already answered by
+  `run_mode`. A suite nobody ran is `not_run`, which returns `cannot_judge`, which is never a pass.
+
+  The design says `git diff --name-status`, not the hashes the task first specified. A hash answers
+  one bit, changed or not, and two of the three motions have nothing to hash on one side, so the
+  stated mechanism could not compute the split its own acceptance criterion demanded. Name-status
+  also gets right the case a hash gets positively wrong: a renamed test is one file, which a hash
+  comparison reports as an unrelated deletion plus an unrelated addition.
+
+### Changed
+- **`/review` demands the accept verdict where it used to demand a round count.**
+  `scripts/build-critique-assert.sh` reads `accept {action, suite, decided_by, reason}` on each
+  component row. A component that ends on anything other than `accepted` must carry somebody's
+  decision, read from exactly where the escalation demand read it before: a top-level
+  `escalation.reason`, or the `resolution` on the round that settled it. A repaired component with
+  no `accept` key at all is `unresolved`, fail-closed, because a field a builder can omit is an
+  advisory field.
+
+  `[a]ddress` still loops as it always did. What changed is what the record answers to.
+
+### Removed
+- **The round budget, and the 329-line spec that covered it.** `ROUND_LIMIT=2` counted repair rounds
+  and demanded a recorded decision once a component reached two. A count was never the closing
+  condition, only a proxy for one: it asked a converged component to justify itself and asked nothing
+  of an unconverged one that stopped early. 53 lines from `scripts/build-critique-assert.sh`, the
+  whole of `tests/critique-round-budget-spec.sh`, and three documentation sites.
+
+  What survives it: `tests/deferred-findings-spec.sh` now carries the deferral cases that spec held,
+  plus the two ordering assertions rewritten against neighbours that still exist, and it asserts its
+  own assertion count, which the deleted file never did.
+
+### Fixed
+- **A `rounds[]` entry no longer reads a component critiqued once as one that was repaired.** The
+  first version of the accept gate established "repaired" from any `rounds[]` entry naming the
+  component, while `references/build-critique.md` asks builders to write an entry for every round.
+  A clean component would have been failed for omitting a verdict it never owed. Found by the spec
+  before it shipped.
+
+### Known limits, recorded rather than left to be rediscovered
+- **A green suite is not proof a repair is correct, and the record says so.** On `event_archiving`,
+  phpcs, phpstan and phpunit all passed over the repaired tree while two criticals a later critic
+  found were live in it. `--suite green` would have returned `accepted` on a component carrying real
+  defects. The suite is a floor, not a proof, which is why the repair rounds were kept rather than
+  ended on it.
+- **A self-reported `suite: green` and a green suite are byte-identical on disk.** The kernel makes
+  the accept decision deterministic. It does not make its input verified.
+- **One recorded decision clears every unaccepted component in a record.** The escalation read is
+  computed once over the whole payload. Inherited from the check this replaced, not introduced here,
+  and now named in `references/build-critique.md` so a builder does not read the per-round form as
+  per-component.
+
 ## [5.41.0] - 2026-08-31
 
 ### Fixed

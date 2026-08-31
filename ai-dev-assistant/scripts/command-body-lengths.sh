@@ -84,7 +84,26 @@ budget_for() {
     # deletion is 14 lines of space that can be reclaimed later without anyone editing this line,
     # which is the whole thing the ratchet exists to prevent. Lowering on a deletion needs no
     # justification beyond the deletion; raising still does.
-    implement) printf '356' ;;
+    # 356 -> 380, raise 24: the accept step after `[a]ddress`. scripts/repair-accept-check.sh shipped
+    # with no caller anywhere in commands/, references/ or skills/, while scripts/build-critique-assert.sh
+    # already hard-fails any repaired component whose row carries no `accept` verdict. So every repaired
+    # component in the next real build would have failed /review for omitting a field no instruction told
+    # anyone to write. Nine lines are the runnable block (the post-repair checkpoint, the name-status diff
+    # of the REPAIR range rather than the build range, the kernel call with its four flags); the rest is
+    # the three things a caller gets wrong without being told: that --suite is a result handed in and never
+    # a command the kernel runs, that `not_run` and an undetermined glob source are honest values returning
+    # `cannot_judge` rather than a pass, and that the verdict is fail-closed at /review.
+    # 380 -> 389, raise 9: the repair range is two SHAS. The block shipped handing `git diff` the
+    # checkpoint LABEL `<component>.after`, which build-checkpoint.sh anchors under
+    # refs/worktree/aida/build-checkpoints/ and git's rev-parse never searches. Git exited 128 after
+    # the shell redirect had already created the file, so every repair on every real build handed the
+    # accept kernel a 0-byte diff and read back `accepted` off a comparison nobody made: the tripwire
+    # this block exists for could not fire once. Three of the nine lines are the comment saying why
+    # the range is built from $AFTER, four are the prose saying it again outside the fence plus the
+    # numeric `round` the gate requires and no instruction stated, and two are the blank lines around
+    # them. The kernel now abstains on an empty motion file, so the same mistake made later is
+    # `cannot_judge` rather than a clean repair, but nothing outside this body says to use the sha.
+    implement) printf '389' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

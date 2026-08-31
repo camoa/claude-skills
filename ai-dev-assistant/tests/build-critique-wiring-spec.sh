@@ -241,6 +241,28 @@ grep -q 'build-checkpoint\.sh clear' "$CMD" \
   && pass_check "/implement names build-checkpoint.sh clear" \
   || fail_check "/implement never names 'build-checkpoint.sh clear' — the refs stay in the code repository"
 
+# EVERY REV RANGE IN THE COMMAND BODY IS BUILT FROM SHAS. A checkpoint label is not a revision:
+# build-checkpoint.sh anchors its objects under refs/worktree/aida/build-checkpoints/, which is
+# not on git's rev-parse search path, so `git diff <component>.after..$REP` resolves nothing and
+# exits 128 with the redirect's file already created and empty. That shipped on the repair range
+# and made the accept kernel read a motion of nothing on every real build, answering `accepted`
+# off a diff nobody computed. The assertion reads every `git ... diff` line in the body and
+# demands both ends be a shell variable or a `<...>-sha` placeholder, so it holds for a range
+# added later as well as for the one it was written for.
+# Every end has to be a shell variable holding a captured sha, or a placeholder that says `sha`
+# in its own name. Two ends, checked separately, so a range that is half right still fails.
+RANGES=$(grep -E 'git -C [^ ]* diff ' "$CMD" | grep -oE '[A-Za-z0-9$<>._-]+\.\.[A-Za-z0-9$<>._-]+' || true)
+BAD_RANGE=$(printf '%s\n' "$RANGES" | grep -vE '^(\$[A-Za-z_][A-Za-z0-9_]*|<[^>]*sha[^>]*>)\.\.(\$[A-Za-z_][A-Za-z0-9_]*|<[^>]*sha[^>]*>)$' || true)
+if [ -z "$RANGES" ]; then
+  # A check that found nothing to check has not passed. If the ranges stop being greppable this
+  # assertion silently stops defending anything, which is the shape of every defect above it.
+  fail_check "/implement names no git diff rev range at all, so the range assertion had nothing to read"
+elif [ -z "$BAD_RANGE" ]; then
+  pass_check "/implement builds every git diff range from shas, never a checkpoint label ($(printf '%s\n' "$RANGES" | wc -l | tr -d ' ') ranges)"
+else
+  fail_check "/implement hands git a range that is not two shas: $(printf '%s' "$BAD_RANGE" | tr '\n' ' ')"
+fi
+
 # Reuse, not a second critique stack.
 for TOK in 'wo-critic' 'wo-risk-classify\.sh' 'wo-critique-aggregate\.sh' 'spec-axis-reviewer'; do
   NAME=$(printf '%s' "$TOK" | tr -d '\\')
