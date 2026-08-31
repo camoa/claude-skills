@@ -5,6 +5,137 @@
 # Portability: works in bash 4+ and zsh 5+. Avoid shell-specific syntax.
 # Requirements: python3 with yaml module, jq. Both standard on modern Linux.
 
+# --- extract one field's body from a markdown H2/H3 section -------------------------------------
+# MOVED here from scripts/ledger-index.sh (was ledger-index.sh:87-100). ledger-index.sh now sources
+# this file instead of keeping its own copy — one section extractor, not two files drifting apart.
+#
+# Reads from a file, returns the text under <heading> up to the next heading of the same or higher
+# level. Pure text handling; the value is passed to jq --arg by the caller, never interpolated.
+section_body(){ # section_body <file> <heading-regex>
+  local f="$1" h="$2"
+  [ -f "$f" ] || return 0
+  awk -v pat="$h" '
+    BEGIN { grab = 0 }
+    /^#{1,6} / {
+      if (grab) exit
+      if (tolower($0) ~ tolower(pat)) { grab = 1; next }
+    }
+    grab { print }
+  ' "$f" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | sed '/^$/d' | head -40
+}
+
+first_para(){ printf '%s' "$1" | awk 'NF { print; next } { exit }' | tr '\n' ' ' | sed -e 's/[[:space:]]\+/ /g' -e 's/^ //' -e 's/ $//'; }
+
+# heading_present <file> <heading-regex>
+# True (exit 0) when <file> contains a markdown heading (any level, `#{1,6} `) whose text matches
+# <heading-regex> case-insensitively. Companion to section_body: section_body cannot tell "no such
+# heading" apart from "heading present, body empty" — both return "". This is what tells them apart.
+heading_present(){
+  local f="$1" pat="$2" hit
+  [ -f "$f" ] || return 1
+  hit=$(awk -v pat="$pat" '
+    /^#{1,6} / { if (tolower($0) ~ tolower(pat)) { print "1"; exit } }
+  ' "$f" 2>/dev/null)
+  [ "$hit" = "1" ]
+}
+
+# stub_verdict <task_md_file>
+# Goal-scoped stub detector. Reads ONLY the `## Goal` section, never the whole file — a file-wide
+# phrase match calls a 330-word authored task a stub because /scope seeds `## Goal` but leaves the
+# Acceptance Criteria placeholder `_to be defined_` behind (see architecture.md section 2 of
+# stub_marker_overwrites_authored_task). Prints ONE JSON object to stdout and always exits 0 —
+# callers read `.verdict`, never the exit code.
+#
+#   verdict     stub | authored | undetermined
+#   decided_by  placeholder | empty_goal   (why stub)
+#               no_goal_section | unreadable   (why undetermined)
+#               content_present   (why authored — not enumerated in architecture.md, chosen for
+#               consistency with the others; no assertion in the spec depends on this value)
+#   matched     the placeholder phrase found, when decided_by is "placeholder"; [] otherwise
+#
+# The three phrases are one per known writer, confirmed in source: `To be authored via`
+# (commands/scope.md), `_to be defined_` (commands/scope.md), `(stub — populate when ready)`
+# (write_stub_task_md below). A fourth writer added without its phrase here fails a genuine stub as
+# `authored` rather than silently matching it — there is no registry a new writer's phrase joins
+# automatically, so a writer that skips this list is a real gap, not a design choice.
+stub_verdict(){
+  local f="$1"
+  local goal_pat='^##+ goal'
+  local goal_body phrase
+
+  if [ ! -f "$f" ] || [ ! -r "$f" ]; then
+    jq -nc --arg path "$f" \
+      '{verdict:"undetermined", blocks:false, decided_by:"unreadable", matched:[], path:$path}'
+    return 0
+  fi
+
+  if ! heading_present "$f" "$goal_pat"; then
+    jq -nc --arg path "$f" \
+      '{verdict:"undetermined", blocks:false, decided_by:"no_goal_section", matched:[], path:$path}'
+    return 0
+  fi
+
+  goal_body="$(first_para "$(section_body "$f" "$goal_pat")")"
+
+  if [ -z "$goal_body" ]; then
+    jq -nc --arg path "$f" \
+      '{verdict:"stub", blocks:false, decided_by:"empty_goal", matched:[], path:$path}'
+    return 0
+  fi
+
+  for phrase in 'To be authored via' '_to be defined_' '(stub — populate when ready)'; do
+    case "$goal_body" in
+      *"$phrase"*)
+        jq -nc --arg path "$f" --arg p "$phrase" \
+          '{verdict:"stub", blocks:false, decided_by:"placeholder", matched:[$p], path:$path}'
+        return 0
+        ;;
+    esac
+  done
+
+  jq -nc --arg path "$f" \
+    '{verdict:"authored", blocks:false, decided_by:"content_present", matched:[], path:$path}'
+  return 0
+}
+
+# verify_preserved <before-file> <after-file>
+# Read-back for a write that claims to preserve everything it did not mean to change. Captures every
+# heading in <before-file> that had CONTENT, and confirms each still exists in <after-file> with a
+# non-empty body. Exits non-zero and NAMES every section that vanished or was left with an empty
+# body — a truncated or half-written copy is not a preserved pass. Modelled on the cmp -s read-back
+# in scripts/review-record-archive.sh:81.
+#
+# Headings with no content in <before-file> (e.g. an H1 title line with nothing under it before the
+# next heading) are not checked — there is nothing to preserve there, and checking them anyway would
+# fail a byte-identical copy.
+verify_preserved(){
+  local before="$1" after="$2"
+  [ -f "$before" ] && [ -f "$after" ] || { echo "verify_preserved: both files must exist" >&2; return 2; }
+
+  local heading pat body_before body_after dropped=""
+  while IFS= read -r heading; do
+    [ -n "$heading" ] || continue
+    pat=$(printf '%s' "$heading" | sed -e 's/[][\.^$*+?(){}|\\]/\\&/g')
+    pat="^#{1,6}[[:space:]]*${pat}[[:space:]]*\$"
+
+    body_before="$(section_body "$before" "$pat")"
+    [ -n "$(printf '%s' "$body_before" | tr -d '[:space:]')" ] || continue
+
+    if ! heading_present "$after" "$pat"; then
+      dropped="${dropped}${dropped:+, }$heading"
+      continue
+    fi
+    body_after="$(section_body "$after" "$pat")"
+    [ -n "$(printf '%s' "$body_after" | tr -d '[:space:]')" ] || dropped="${dropped}${dropped:+, }$heading"
+  done < <(grep -E '^#{1,6}[[:space:]]' "$before" 2>/dev/null | sed -E 's/^#{1,6}[[:space:]]*//' | sed -e 's/[[:space:]]*$//')
+
+  if [ -n "$dropped" ]; then
+    echo "verify_preserved: section(s) dropped or emptied: $dropped" >&2
+    return 1
+  fi
+  return 0
+}
+
 # fm_read <task_folder>
 # Parse frontmatter on <task_folder>/task.md. Always prints a single JSON line
 # to stdout and exits 0, regardless of input. Warnings surface via warnings[].

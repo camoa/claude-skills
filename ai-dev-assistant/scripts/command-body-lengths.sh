@@ -62,7 +62,13 @@ PHASES="research design implement complete review"
 
 budget_for() {
   case "$1" in
-    research) printf '142' ;;
+    # 142 -> 144, raise 1: two lines to replace a marker test with a content test at step 2. The
+    # marker version overwrote an authored task.md; measured on the real corpus, 63 files carried
+    # `Phase 0 — Scope` and 30 of those were authored work up to 246 lines, and the project record
+    # is not a git repository so the loss was unrecoverable and undetectable. One line calls
+    # scripts/stub-detect.sh and branches; the rest is the evidence, which belongs next to the
+    # instruction rather than in a task folder nobody opens while editing this file.
+    research) printf '144' ;;
     design)   printf '82'  ;;
     # 363 -> 370, raise: wires scripts/proportionality-check.sh into the component close, so a build
     # that outgrows its plan is visible while it is still open. Nothing in the lifecycle asked whether

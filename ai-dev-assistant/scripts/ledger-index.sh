@@ -45,6 +45,8 @@ while [ $# -gt 0 ]; do
 done
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 ALIGNMENT_READ_SH="$SCRIPT_DIR/alignment-read.sh"
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/fm-helpers.sh"
 
 WARNINGS='[]'
 add_warn(){ WARNINGS=$(jq -c --arg w "$1" '. + [$w]' <<<"$WARNINGS"); }
@@ -81,23 +83,8 @@ if [ ! -d "$IP_DIR" ]; then
   emit '[]'
 fi
 
-# --- extract one field's body from a markdown H2/H3 section -------------------------------------
-# Reads from a file, returns the text under <heading> up to the next heading of the same or higher
-# level. Pure text handling; the value is passed to jq --arg by the caller, never interpolated.
-section_body(){ # section_body <file> <heading-regex>
-  local f="$1" h="$2"
-  [ -f "$f" ] || return 0
-  awk -v pat="$h" '
-    BEGIN { grab = 0 }
-    /^#{1,6} / {
-      if (grab) exit
-      if (tolower($0) ~ tolower(pat)) { grab = 1; next }
-    }
-    grab { print }
-  ' "$f" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | sed '/^$/d' | head -40
-}
-
-first_para(){ printf '%s' "$1" | awk 'NF { print; next } { exit }' | tr '\n' ' ' | sed -e 's/[[:space:]]\+/ /g' -e 's/^ //' -e 's/ $//'; }
+# section_body and first_para now live in fm-helpers.sh (sourced above) — moved from here so
+# stub-detect.sh's stub_verdict shares the same extractor instead of a third copy being written.
 
 # json1 <varname> <task-name> — true when the named variable holds EXACTLY ONE valid JSON
 # document. Guards every --argjson value. `jq empty` alone is not enough: it accepts an
