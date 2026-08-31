@@ -1,5 +1,47 @@
 # Changelog
 
+## [5.41.0] - 2026-08-31
+
+### Fixed
+- **`/research` no longer overwrites an authored `task.md`.** Step 2 decided a file was an unwritten
+  stub from one marker line, `**Current Phase:** Phase 0 — Scope`, and replaced it with the Phase 1
+  template.
+
+  A marker records that a tool created the file. It never records that nobody has written in it
+  since, because `/scope` writes the marker and a person then writes the substance underneath.
+  Measured on the real corpus: 63 `task.md` files carried that marker and **30 were authored work,
+  up to 246 lines**, holding goals, verified mechanisms with source line numbers, and records of how
+  a defect was found. A second marker, `Stub scaffolded by `, is wrong on 40 files. The project
+  record is not a git repository, so an overwrite is unrecoverable and undetectable.
+
+  `scripts/stub-detect.sh` now decides from the `## Goal` section's content, which is the test
+  `scripts/ledger-index.sh` already applied, at the same scope. `/scope`'s goal-seeding rule reads
+  the same detector, so neither command keeps its own idea of what a placeholder looks like.
+
+  **Goal-scoped, never file-wide, and that distinction is the whole fix.** `/scope` seeds `## Goal`
+  but leaves the acceptance-criteria placeholder `_to be defined_` behind by design, so a file-wide
+  phrase match calls an authored task a stub. A design draft made exactly that one change to the
+  working prior art and reproduced the bug on a real 330-word authored task; the assertion that
+  catches it is in the spec.
+
+  **`undetermined` is not `stub`.** 143 real files carry no `## Goal` heading, and a file whose goal
+  cannot be found is not a file known to be empty. Neither `authored` nor `undetermined` is written.
+
+### Added
+- **`verify_preserved` in `scripts/fm-helpers.sh`.** A write that claims to preserve something reads
+  it back and exits non-zero naming every section that vanished or emptied. Modelled on
+  `scripts/review-record-archive.sh:81`.
+
+  It compares content, not that a write happened. `scripts/migrate-to-epic.sh:33` claims a read-back
+  and validates only that the frontmatter parses, which is how a scope contract could be moved into
+  `shared/` and reported as preserved.
+
+### Changed
+- `section_body` and `first_para` moved from `scripts/ledger-index.sh` into `scripts/fm-helpers.sh`,
+  so the indexer and the stub detector share one section extractor rather than a second copy
+  drifting from the first. The detector also now lives fifteen lines from `write_stub_task_md`,
+  which emits one of the three placeholders it looks for.
+
 ## [5.40.0] - 2026-08-31
 
 ### Added
