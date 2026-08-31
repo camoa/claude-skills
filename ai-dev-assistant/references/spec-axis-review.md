@@ -45,15 +45,41 @@ whose reading of `architecture.md`) and hard-failing on it alone was producing f
 (`--headless`) runs. Missing requirements is the objective, hard signal and remains a full hard-block —
 it still drives `overall_verdict` via step 8 rule 1 exactly as before.
 
+## Provenance — does the criterion trace back to the owner? (v1.3+ alignment-contract, `criterion-provenance.sh`)
+
+A missing-requirements/scope-creep check answers "does the change match the contract?" It cannot answer
+"did anyone other than the builder ask for this line of the contract?" — the gap that let a builder-authored
+success criterion, describing a filter the builder had already decided to build, pass two rounds of faithful
+Spec-axis critique. Neither the diff nor `architecture.md` carries who wrote a criterion; only `alignment.md`
+does, via the optional ` — by: <owner|designer>` marker (`references/alignment-contract.md` §5.2).
+
+`/review` step 5.0d runs `scripts/criterion-provenance.sh --task-folder <task_folder> --section task_level`
+alongside the dispatch and hands the reviewer each criterion's recorded `author` — `"owner"`, `"designer"`,
+or `null`. `null` means nobody recorded one; it is never read as `"owner"`, the same discipline
+`mechanism-disposition.sh`'s `not_searched` and `proportionality-check.sh`'s `cannot_judge` already apply to
+an absent signal elsewhere in this framework. The agent sees `author` alongside the criteria it judges, but
+does not re-report it: naming which criteria are designer-authored or unrecorded is the kernel's own
+`designer_authored[]`/`unrecorded[]` output, deterministic and already computed — a second, agent-produced
+list of the same names would duplicate the kernel and add no information.
+
+**This is a report, not a gate.** The kernel's `blocks` is hardcoded `false`, and nothing about provenance
+feeds `verdict`. The Spec verdict rule above is unchanged: `fail` iff `missing_requirements[]` is non-empty.
+A designer-authored or unrecorded criterion with a corresponding implementation is still satisfied — it is a
+real requirement now, whoever wrote it — and is not a missing requirement. `/review` captures the kernel's
+counts and criterion lists into `_spec.json`'s `gate_specific.provenance`, and renders them in the `## Spec`
+block as `{{spec_provenance_line}}`, beside `{{spec_verdict_line}}` and never merged into it — same
+separation-of-axes discipline this whole file already applies to Standards vs. Spec.
+
 ## Dispatch
 
 `/review` dispatches `agents/spec-axis-reviewer.md` (Task tool, read-only, generic) with the parsed success
-criteria + `architecture.md` (if present) + the change set — the same command-owns-resolution /
-agent-stays-generic pattern `/review` step 5.0 already uses for `architecture-validator`. The dispatch
-hands it an **output path** and it writes its verdict to `<task_folder>/_spec-axis.json` (v5.35.7+);
-`/review` reads `verdict` / `missing_requirements[]` / `scope_creep[]` back as scalars and captures them
-into `<task_folder>/_spec.json` via `gate-audit-write.sh <task> spec <payload>` (`gate-audit-schema.md`
-§5.15), adding `gates_run[]` entry `name: "spec"`, `kind: "hard-block"`.
+criteria (each carrying its `author`, per the "Provenance" section above) + `architecture.md` (if present) +
+the change set — the same command-owns-resolution / agent-stays-generic pattern `/review` step 5.0 already
+uses for `architecture-validator`. The dispatch hands it an **output path** and it writes its verdict to
+`<task_folder>/_spec-axis.json` (v5.35.7+); `/review` reads `verdict` / `missing_requirements[]` /
+`scope_creep[]` back as scalars and captures them into `<task_folder>/_spec.json` via
+`gate-audit-write.sh <task> spec <payload>` (`gate-audit-schema.md` §5.15), adding `gates_run[]` entry
+`name: "spec"`, `kind: "hard-block"`.
 
 Until v5.35.7 the agent had no `Write` tool and its verdict was its Task response alone. On a live review
 that response truncated in transit repeatedly and the session had to improvise a scratchpad file mid-run

@@ -44,7 +44,7 @@
 # from here is that 363 cannot become 400 without someone editing this line.
 #
 # `review` is the one number that did not need setting: tests/review-command-
-# spec.sh has enforced it since v4.1.0, and each of its seven raises carries a
+# spec.sh has enforced it since v4.1.0, and each of its nine raises carries a
 # written reason. That is what enforcement produces (135 with a paper trail)
 # against what its absence produces (363 with none). That spec used to carry a
 # hand-mirrored copy of the number; it now reads it from here via --budget, so
@@ -79,7 +79,15 @@ budget_for() {
     # FOUND something. Measured on 22 records: 59 of 99 mechanisms were structurally invisible to it.
     # The explanatory prose was folded into 5.0c rather than added as its own paragraph, so the raise
     # is one line rather than three.
-    review)   printf '136' ;;
+    # 136 -> 137, raise 9: one line for the {{spec_provenance_line}} token in the review-summary
+    # template. Nothing distinguished a criterion the owner asked for from one the designer wrote,
+    # so an invented criterion carried the authority of a real requirement — criterion-provenance.sh
+    # and the alignment.md `— by:` marker (references/alignment-contract.md §5.2) exist to fix that.
+    # This line surfaces the kernel's per-run counts (owner/designer/unrecorded) and names the
+    # designer-authored and unrecorded criteria in the ## Spec block, so a reader sees provenance
+    # without opening `_spec.json`. Advisory only: the kernel's `blocks` is hardcoded false and the
+    # Spec verdict rule is unchanged — missing_requirements[] alone still drives fail.
+    review)   printf '137' ;;
     *) return 1 ;;
   esac
 }

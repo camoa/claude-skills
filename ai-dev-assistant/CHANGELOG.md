@@ -1,5 +1,69 @@
 # Changelog
 
+## [5.39.0] - 2026-08-31
+
+### Added
+- **An acceptance criterion can now record who wrote it.** A success-criterion line in
+  `alignment.md` takes an optional marker: `- [ ] <text> — by: <owner|designer> — verify: <how>`.
+  `scripts/alignment-read.sh` emits `author` on every criterion, and `scripts/criterion-provenance.sh`
+  counts the authors in a section and reports the state.
+
+  Nothing distinguished a criterion the owner asked for from one the designer wrote, so an invented
+  criterion carried the authority of a real requirement. In the case that produced this change, a
+  builder wrote a criterion at design time describing a filter it had already decided to build. Four
+  critics then checked the filter against that description, faithfully, for two rounds. Every one of
+  them was doing its job.
+
+  **`author: null` means nobody recorded an author. It never means the owner wrote it.** That is the
+  same split 5.38.0 gave the mechanism gate between `none` and `not_searched`, and it is the whole
+  value here. `owner` requires a person to have confirmed that exact criterion in an attended scope
+  conversation. Everything else is `designer`.
+
+  `/review` step 5.0d runs the kernel and names the designer-authored and unrecorded criteria in the
+  `## Spec` block. **The verdict rule does not change:** `fail` still means `missing_requirements[]`
+  is non-empty. Provenance is reported beside the verdict, never folded into it, and nothing blocks.
+
+  Measured on the 198 real `alignment.md` files on the author's machine: 166 `unrecorded_present`,
+  30 `no_criteria`, 2 `criteria_unreadable`, and **zero `all_owner`**. Both reader versions over all
+  198, ignoring the new field: zero files parse differently.
+
+  **What it does not do, stated plainly.** Nothing verifies a marker. A designer that writes
+  `— by: owner` on its own invention defeats the check completely. The change makes the question
+  recordable. It does not make it asked, and it never checks the answer. Verifying the record is a
+  separate problem and it is not solved here.
+
+### Fixed
+- **An absent marker could become `owner`.** Found by an adversarial review before merge, not after.
+  The reader first accepted a plain hyphen as the marker delimiter. `by:` is ordinary English, so a
+  criterion reading `filtered - by: owner` parsed as a marker, lost its last four words, and made the
+  kernel report `all_owner` on a contract carrying no marker at all. The marker now takes the em-dash
+  only. ` — verify: ` keeps its three-delimiter tolerance, because `verify:` does not occur in
+  ordinary criterion prose and `by:` does. The two extra branches had no test: deleting both left all
+  52 assertions green.
+- **A near-miss marker warned about nothing.** `— by:` written with a stray space or a tab recorded no
+  author and said nothing about why. A loose detector now fires `criterion_author_unrecognized` on an
+  attempt that did not parse. It fires zero times across all 198 real contracts.
+- **A bad `--task-folder` returned a calm verdict.** `criterion-provenance.sh` answered `no_criteria`
+  and exit 0 when its path did not exist, and took a following flag as a path value. Both now exit 2,
+  fail-closed, with no JSON. A caller that pointed at nothing was being told there was nothing to
+  find.
+- **Criteria written as prose read as no criteria.** Two of the 198 real contracts write their
+  criteria as sentences the reader cannot parse. The kernel called that `no_criteria`, which says
+  there are none. It now returns `criteria_unreadable`, which says they could not be read.
+- **A report line that fired on every task.** The rendered provenance line enumerated every criterion
+  on every run, median 588 characters, on 100% of the corpus. The kernel's own header argues that a
+  signal firing everywhere gets bypassed rather than satisfied. The line now enumerates only when a
+  contract carries a mix of recorded authors, capped at five names per list, and prints one short
+  line otherwise. Seven distinct states render distinctly, including the difference between "the
+  check did not run", "there was nothing to check", and "everything is owner-confirmed".
+
+### Changed
+- `references/alignment-contract.md` grammar v1.3. `references/gate-audit-schema.md` §5.15 documents
+  `_spec.json`'s `gate_specific.provenance`, including the `no_return` state written when the kernel
+  exits non-zero, and the fact that `counts.unrecognized` is a subset of `counts.unrecorded` rather
+  than a fourth bucket.
+- `references/gate-hardening-prompts.md` v1.8 adds `{{spec_provenance_line}}`.
+
 ## [5.38.0] - 2026-08-31
 
 ### Added

@@ -136,7 +136,7 @@ Operate conversationally. Over however many turns feel natural:
 
 - **Goal** — what problem this solves, why it matters. One to three sentences is fine.
 - **Expected result** — what's observable/different when the task ships.
-- **Success criteria** — the falsifiable checklist. Propose items as they surface in conversation; confirm at the end. Each criterion MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked (e.g. `- [ ] save persists — verify: playwright reload assertion`) — captured now rather than deferred to Phase 4. Optional, never required; don't force it, and never let it make a criterion less falsifiable.
+- **Success criteria** — the falsifiable checklist. Propose items as they surface in conversation; confirm at the end. Each criterion MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked (e.g. `- [ ] save persists — verify: playwright reload assertion`) — captured now rather than deferred to Phase 4. Optional, never required; don't force it, and never let it make a criterion less falsifiable. Every criterion also gets an author marker at write time — `owner` when this exact line is confirmed at Step 5 below via `[y]es`/`[e]dit`, `designer` otherwise. See "Author marker" under "Writing `alignment.md`"; there is nothing to ask the user about this — it is derived from the confirm, not a fifth field.
 - **Non-goals** — push proactively. Common drift sources: "Are we also doing X?" / "Is adjacent thing Y in scope?" / "Does this include migrating the existing data?". Non-goals prevent scope creep later — worth pulling a few out explicitly even if the user didn't mention them.
 
 The agent MAY propose drafts for any field after gathering enough context, but always marks them as drafts and asks for correction.
@@ -217,8 +217,8 @@ Where `<section>` is the H2 block you just authored, in exactly this shape:
 
 ### Success criteria
 
-- [ ] <falsifiable statement> — verify: <how it will be checked>
-- [ ] <falsifiable statement>
+- [ ] <falsifiable statement> — by: <owner|designer> — verify: <how it will be checked>
+- [ ] <falsifiable statement> — by: <owner|designer>
 
 ### Non-goals
 
@@ -227,7 +227,9 @@ Where `<section>` is the H2 block you just authored, in exactly this shape:
 
 **The four field names are H3 headings (`### Goal`), never bold labels (`**Goal**`).** The reader keys on the heading level: a section written with bold labels parses as having no fields at all, so `present` comes back `false` and the whole contract is invisible to `/research`, `/design` and `/implement` even though the file is full of content. Phase sections use the same four H3s under `## Phase 1 — Research` / `## Phase 2 — Architecture` / `## Phase 3 — Implementation`. Full grammar, including the optional `— verify:` suffix and every warning code, is in `references/alignment-contract.md`.
 
-**Success-criterion format.** Write each criterion as a task-list line `- [ ] <text>`. When the user declared how a criterion will be verified, append the optional suffix `- [ ] <text> — verify: <how>` (space, em-dash, space, `verify:`, space). Omit the suffix when no verification note was given. The reader parses it into `{text, checked, verification}` per `references/alignment-contract.md` §5.2.
+**Success-criterion format.** Write each criterion as a task-list line `- [ ] <text>`. When the user declared how a criterion will be verified, append the optional suffix `- [ ] <text> — verify: <how>` (space, em-dash, space, `verify:`, space). Omit the suffix when no verification note was given. The reader parses it into `{text, checked, verification, author}` per `references/alignment-contract.md` §5.2.
+
+**Author marker.** Append ` — by: owner` when a person saw this exact criterion and confirmed it — through the `[y]es` or `[e]dit` answer at Step 5 (task-level) or the equivalent phase-level confirm. Append ` — by: designer` for everything else: a criterion drafted under `--headless` or any unattended run where no interactive confirm was available, or a criterion written by anything other than a confirmed scope write. This command decides the author from **whether the confirm happened for this exact line**, never from which phase or command produced it — `/design` executes this same flow inline (see `commands/design.md`), and a criterion confirmed there by a person is still `owner`. When Step 5 (or its phase-level equivalent) has no interactive confirm available — an unattended/`--headless` run reaching this flow — skip the confirm and write every criterion in that write `— by: designer`; there is no third value. The author marker is positioned **before** the verify suffix when both are present: `- [ ] <text> — by: <owner|designer> — verify: <how>` (reversing the order leaves the marker unparsed — `references/alignment-contract.md` §5.2).
 
 **File exists, target section doesn't:**
 

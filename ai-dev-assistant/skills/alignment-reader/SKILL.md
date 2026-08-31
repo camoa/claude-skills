@@ -1,7 +1,7 @@
 ---
 name: alignment-reader
 description: Use when a framework command needs to parse a task's alignment.md (the scope contract — Goal / Expected result / Success criteria / Non-goals per section). Reads defensively via scripts/alignment-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.1.0
+version: 1.2.0
 user-invocable: false
 model: inherit
 allowed-tools: Bash
@@ -10,7 +10,7 @@ disallowed-tools: Write, Edit
 
 # Alignment Reader
 
-Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh`. The script parses `alignment.md` per the canonical grammar in `references/alignment-contract.md` v1.0 and emits structured JSON. This skill gives the parser a Skill-tool-callable name and documents the invocation contract.
+Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh`. The script parses `alignment.md` per the canonical grammar in `references/alignment-contract.md` v1.3 and emits structured JSON. This skill gives the parser a Skill-tool-callable name and documents the invocation contract.
 
 ## Contract
 
@@ -25,6 +25,7 @@ Fields:
 - `created` — from `**Created:** <YYYY-MM-DD>` metadata
 - `schema_version` — JSON string, currently `"1.0"`
 - `sections.{task_level,phase_1,phase_2,phase_3}` — each either `{present: false}` or a populated object with `goal`, `expected_result`, `success_criteria[]`, `non_goals[]`, `extras[]`, `fields_missing[]`
+  - Each `success_criteria[]` item: `{text, checked, verification, author}`. `verification` is a string or `null` (v1.1, from ` — verify: <how>`). `author` is `"owner"`, `"designer"`, or `null` (v1.3, from ` — by: <owner|designer>`) — `null` means no author was recorded, not that the owner wrote it.
 - `warnings[]` — array of `{code, …}` observations
 
 ## Defensive posture (never throws)
@@ -38,6 +39,7 @@ Fields:
 | Canonical H3 present but body empty | `empty_field` |
 | `Success criteria` body is prose, not a `- [ ]` task-list | `success_criteria_not_checklist` |
 | `Non-goals` body is prose, not a bulleted list | `non_goals_not_bulleted` |
+| ` — by:` marker present with a value other than `owner`/`designer` | `criterion_author_unrecognized` |
 | Unrecoverable read failure (permission, IO) | `error` (only case with non-zero exit) |
 
 ## Invocation

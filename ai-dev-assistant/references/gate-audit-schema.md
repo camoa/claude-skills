@@ -679,6 +679,12 @@ somebody looked and found nothing missing.
     "alignment_present": true,
     "missing_requirements": [ { "criterion": "<text>", "finding": "<what's missing>" } ],
     "scope_creep": [ { "change": "<file/hunk summary>", "finding": "<why it's untraceable>" } ],
+    "provenance": {
+      "status": "no_criteria | criteria_unreadable | unrecorded_present | designer_present | all_owner",
+      "counts": { "owner": 0, "designer": 0, "unrecorded": 0, "unrecognized": 0, "total": 0 },
+      "designer_authored": [ "<criterion text>" ],
+      "unrecorded": [ "<criterion text>" ]
+    },
     "skip_reason": null
   }
 }
@@ -693,12 +699,36 @@ somebody looked and found nothing missing.
   `references/spec-axis-review.md`.
 - `verdict: "skipped"` with `skip_reason` populated (never `null`) is the **benign** no-`alignment.md` path
   — shaped like `skipped-not-shipped`, never `unresolved`.
+- **`provenance` (v1.3+ alignment-contract).** `/review` step 5.0d runs
+  `scripts/criterion-provenance.sh --task-folder <task_folder> --section task_level` at the start of the
+  step, before it checks whether `alignment.md` exists. This call runs on every `/review` pass, not only
+  passes with criteria to judge. `/review` checks the kernel's exit code first.
+  - **On exit 0,** `/review` copies the kernel's own `status`, `counts`, `designer_authored[]`, and
+    `unrecorded[]` into `provenance`, verbatim. The kernel emits one of five `status` values —
+    `no_criteria`, `criteria_unreadable`, `unrecorded_present`, `designer_present`, `all_owner` — defined
+    in the kernel's own header, `scripts/criterion-provenance.sh`.
+  - **On a non-zero exit,** `/review` writes `provenance` as `{ "status": "no_return", "reason": "<the
+    kernel's stderr, or a generic note if none was captured>" }`. This shape carries no `counts` and no
+    lists, because the kernel produced none. A reader must not infer zeros from their absence. `no_return`
+    is a sixth `status` value; `/review` writes it, and the kernel itself never emits it.
+  - `counts.unrecognized` counts a criterion whose author marker the reader rejected — for example
+    `— by: architect`. This count is a subset of `counts.unrecorded`, not a fifth bucket. `counts.total`
+    still equals `counts.owner` plus `counts.designer` plus `counts.unrecorded`. Summing all four `counts`
+    fields over-counts the total.
+  - `/review` renders `provenance` in the `## Spec` block as `{{spec_provenance_line}}`, beside
+    `{{spec_verdict_line}}` and never merged into it. The kernel's `blocks` field is hardcoded `false`.
+    This field adds no halt, prompt, or failure condition. Full rationale, including why `null` never
+    reads as `"owner"`, is in `references/spec-axis-review.md` ("Provenance" section) and
+    `references/alignment-contract.md` §5.2.
 - `/review` folds this into `gates_run[]` as ONE entry `name: "spec"`, `kind: "hard-block"` — a `fail`
   triggers step 8 rule 1 like any other hard-block gate, but the entry's own name keeps it independently
   attributable, never collapsed into the Standards battery's aggregate signal. `gates_run_table` (the
   `review-summary` rendering, `references/gate-hardening-prompts.md`) excludes this `name:"spec"` entry —
   it renders only via `spec_verdict_line`, never duplicated into the Standards table.
-- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes.
+- Additive: new `gate_type`, own `schema_version "1.0"`; no existing audit shape changes. `provenance` is
+  a new optional field on this payload. It arrived after the `spec` gate_type. A consumer that reads only
+  `verdict`/`missing_requirements[]`/`scope_creep[]` is unaffected. The gate's own `schema_version` stays
+  unchanged.
 
 ## 6. Invariants
 

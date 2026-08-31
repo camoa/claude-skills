@@ -1,6 +1,6 @@
-# Gate Hardening Prompts v1.7
+# Gate Hardening Prompts v1.8
 
-**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions).
+**Introduced:** ai-dev-assistant v4.0.0 (v1.0); compressed v4.0.2 (v1.1, additive); v4.1.0 (v1.2, additive — adds `review-gate-fail` + `review-summary` for the new `/review` command); v4.12.0 (v1.3, additive — adds `e2e-gate-fail`); v4.13.0 (v1.4, additive — adds `visual-regression-gate-fail`); v4.14.0 (v1.5, additive — adds `visual-parity-gate-fail`); v5.20.0 (v1.6, additive — `review-summary` grows the `## Standards` / `## Spec` two-axis blocks + `spec_verdict_line` substitution, M2; also documents that `{{gates_run_table}}` excludes the `name:"spec"` entry and defines the `{{spec_verdict_line}}` format, fixing M1's spec double-render risk; template literal unchanged beyond the two-axis block additions); v5.26.0 (v1.7, additive — adds `prior-art-ask` for the internal prior-art search); v1.8 (additive — `review-summary` gains `{{spec_provenance_line}}` under `## Spec`, surfacing `criterion-provenance.sh`'s owner/designer/unrecorded counts and naming the designer-authored and unrecorded criteria; informational only, never feeds `{{spec_verdict_line}}`'s pass/fail; `{{mechanism_unresolved_line}}` under `## Standards`, GAP G's unresolved-mechanism count, was already documented here as of the prior commit on this branch and is unchanged by this edit).
 **Owner:** This reference; consumed by command bodies.
 **Consumers:** `commands/research.md` (pre-analysis + coverage-mapping), `commands/complete.md` (skill-review + plugin-validate), `commands/review.md` (review-gate-fail + review-summary, v4.1.0+), `hooks/phase-command-bypass.sh` (phase-command-bypass acknowledgment).
 
@@ -25,7 +25,7 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `prior-art-ask` (v1.7+) | `/research` before the internal prior-art search | `project_name` | **none** — an unanswered ask is recorded as unasked |
 | `phase-command-bypass-acknowledge` | `/audit-status` listing tasks with `_phase-command-bypass.json` | `artifact_written`, `phase_command_active`, `fired_at` | `[a]` |
 | `review-gate-fail` (v1.2+) | `/review` end-of-phase on any hard-block-gate `fail` | `failed_count`, `gates_failed_verbatim` | **none** — user MUST pick |
-| `review-summary` (v1.2+; two-axis v1.6+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `mechanism_unresolved_line`, `spec_verdict_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
+| `review-summary` (v1.2+; two-axis v1.6+; provenance v1.8+) | `/review` end-of-phase on any verdict | `task_name`, `mode`, `overall_verdict`, `pr_ready`, `gates_run_table`, `mechanism_unresolved_line`, `spec_verdict_line`, `spec_provenance_line`, `audit_path`, `pr_body_line_or_empty` | (no prompt; informational) |
 | `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
 | `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 | `visual-parity-gate-fail` (v1.5+) | `/validate:visual-parity` per failed surface | `surface_id`, `viewport`, `diff_percent`, `css_diff_mode`, `css_diff_count`, `css_diff_list`, `diff_path` | `[c]` |
@@ -260,6 +260,7 @@ Mode: {{mode}}    Overall verdict: {{overall_verdict}}    PR ready: {{pr_ready}}
 {{mechanism_unresolved_line}}
 ## Spec
 {{spec_verdict_line}} — never merged into the Standards score above
+{{spec_provenance_line}}
 Audit: {{audit_path}}
 {{pr_body_line_or_empty}}
 ```
@@ -267,6 +268,18 @@ Audit: {{audit_path}}
 `{{mechanism_unresolved_line}}` renders the count of mechanisms whose disposition is `unresolved`, meaning the resolver cascade never ran for them, and is empty when that count is zero. It is informational and never changes a verdict: `not_searched` is non-blocking by design.
 
 `{{gates_run_table}}` renders every `gates_run[]` entry **EXCEPT** `name:"spec"` — that entry is excluded from the Standards table and renders ONLY via `{{spec_verdict_line}}`, never duplicated into both blocks. `{{spec_verdict_line}}` format: `Spec: <pass|fail|skipped> — <N> missing requirement(s), <M> scope-creep warning(s)[; skipped: <reason>]`, where `<N>` is `missing_requirements[]` length and `<M>` is `scope_creep[]` length (both read from `_spec.json`'s `gate_specific`), and the trailing `; skipped: <reason>` clause is present only when `verdict == "skipped"` (using `skip_reason`).
+
+`{{spec_provenance_line}}` renders `_spec.json`'s `gate_specific.provenance` object, written whenever `/review` step 5.0d ran `scripts/criterion-provenance.sh` — unconditionally, as the first action of that step, not only when the Spec reviewer is dispatched. Seven facts, six rendered forms plus one omit; no two ever render the same:
+
+1. `gate_specific.provenance` key absent (a record from before this field existed) — omit the line. The only state that is genuinely "never checked."
+2. `status: "no_return"` (the kernel exited non-zero: a bad `--task-folder`, a malformed flag) — `Spec provenance: check did not run — <reason>`.
+3. `status: "no_criteria"` (no `alignment.md`, no Task-Level `### Success criteria`, or an empty section) — `Spec provenance: no criteria recorded for this section`.
+4. `status: "criteria_unreadable"` (criteria exist but did not parse as a checklist) — `Spec provenance: criteria present but not readable as a checklist (success_criteria_not_checklist)`, naming the reader's own warning code.
+5. No criterion records an author — `counts.owner`, `counts.designer`, and `counts.unrecognized` all zero — `Spec provenance: no criterion records an author (<T> total)`, `<T>` = `counts.total`. Do not enumerate; every criterion is in the same state and the count says so.
+6. A mix (at least one recorded author, or an unrecognized-but-attempted marker) — `Spec provenance: <O> owner, <D> designer, <U> unrecorded (<R> unrecognized) of <T> criteria[; designer: <name>[, <name>...][, and <N> more]][; unrecorded: <name>[, <name>...][, and <N> more]]`. `<O>`/`<D>`/`<U>`/`<R>`/`<T>` = `counts.owner`/`counts.designer`/`counts.unrecorded`/`counts.unrecognized`/`counts.total`; `<R>` always shown, including zero, and is a subset of `<U>`, never added to `<T>`; each `<name>` = the first 60 characters of a `designer_authored[]`/`unrecorded[]` entry, quoted; each list capped at 5 names, then `, and <N> more`; a clause is omitted when its list is empty.
+7. `status: "all_owner"` — `Spec provenance: all <T> criteria owner-confirmed`. The case a reader most needs to tell apart from silence.
+
+Forms 5–7 are exhaustive and never overlap: form 5 needs zero recorded/attempted authors, form 7 needs zero unrecorded, form 6 is everything between them. Informational only, like `{{mechanism_unresolved_line}}`: none of the seven forms feeds `{{spec_verdict_line}}`'s own pass/fail.
 
 ## Template ID: `e2e-gate-fail`
 

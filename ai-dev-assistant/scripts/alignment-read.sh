@@ -57,7 +57,8 @@ fi
 #   {"kind":"unknown_section","heading":"<raw>"}
 #   {"kind":"field","section":"<key>","field":"<key>","body":"<prose>"}
 #   {"kind":"unknown_field","section":"<key>","heading":"<raw>"}
-#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false,"verification":"..."|null}
+#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false,"verification":"..."|null,"author":"owner"|"designer"|null}
+#   {"kind":"criterion_author_unrecognized","section":"<key>","detail":"<bad tail>"}
 #   {"kind":"non_goal","section":"<key>","text":"..."}
 #   {"kind":"criteria_prose","section":"<key>","body":"..."}
 #   {"kind":"non_goals_prose","section":"<key>","body":"..."}
@@ -76,6 +77,22 @@ RECORDS=$(awk '
     sub(/^[[:space:]]+/, "", s)
     sub(/[[:space:]]+$/, "", s)
     return s
+  }
+  # last_index: byte-safe rightmost occurrence of needle in s, or 0. awk has no
+  # rindex(); this walks index() forward from just past each hit. from always
+  # advances by at least 1 per iteration (p >= 1 whenever a hit is found), so
+  # the loop terminates even on a needle that matches itself repeatedly.
+  function last_index(s, needle,    p, last, from, tail) {
+    last = 0
+    from = 1
+    while (1) {
+      tail = substr(s, from)
+      p = index(tail, needle)
+      if (p == 0) break
+      last = from + p - 1
+      from = last + 1
+    }
+    return last
   }
   function match_phase(h,   m) {
     # Match "Phase <N> <sep> <Name>" where sep is em-dash, en-dash, or hyphen
@@ -106,7 +123,8 @@ RECORDS=$(awk '
       }
     }
   }
-  function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3) {
+  function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3,
+                           b1, la1, abest, adl, atail, author) {
     if (cur_section == "" || cur_field == "") {
       # An H2 whose body sits under no recognized H3 field. Emitting nothing
       # here makes the section read as an empty stub, which names the wrong
@@ -150,9 +168,57 @@ RECORDS=$(awk '
           if (best > 0) {
             verif = trim(substr(text, best + dl))
             text = trim(substr(text, 1, best - 1))
-            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":\"%s\"}\n", cur_section, json_escape(text), checked, json_escape(verif)
+            has_verif = 1
           } else {
-            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":null}\n", cur_section, json_escape(text), checked
+            has_verif = 0
+          }
+          # Optional author suffix: "<text> — by: owner|designer", applied to
+          # the text AFTER the verify split above, never before — so an author
+          # marker written before a verify suffix on the same line is read
+          # correctly, and one written after "verify:" (wrong order) is left
+          # inside the captured verification note rather than stripped, which
+          # is the documented consequence of running verify-split first.
+          # Rightmost delimiter wins, so an em-dash inside the criterion prose
+          # itself does not pre-empt a trailing marker.
+          # Em-dash ONLY — unlike the verify split above, this does NOT accept
+          # en-dash or hyphen. "verify:" is a distinctive token that never
+          # occurs in ordinary criterion prose, so tolerating three delimiters
+          # there is safe. "by:" is ordinary English ("filtered - by: owner"
+          # reads as a hyphenated aside, not a marker), so a hyphen or en-dash
+          # here would silently promote unmarked prose to an author — the
+          # exact failure this field exists to prevent. One strict delimiter.
+          b1 = " — by: "   # em-dash U+2014 — the only accepted delimiter
+          la1 = last_index(text, b1)
+          abest = 0; adl = 0
+          if (la1 > 0) { abest = la1; adl = length(b1) }
+          author = "null"
+          if (abest > 0) {
+            atail = trim(substr(text, abest + adl))
+            if (atail == "owner" || atail == "designer") {
+              author = "\"" atail "\""
+              text = trim(substr(text, 1, abest - 1))
+            } else {
+              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(atail)
+            }
+          } else {
+            # Near-miss detection, not parsing. The strict delimiter above
+            # found nothing, but the writer may still have attempted a
+            # marker with the wrong spacing or a rejected dash (F1 dropped
+            # en-dash/hyphen as accepted delimiters; this is what makes that
+            # drop safe instead of silent). Loose match: an em-dash, en-dash,
+            # or hyphen, then a run of spaces/tabs, then "by:" in any case,
+            # then anything, matched anywhere in text. Never sets author,
+            # never touches text — it only flags that this looks like a
+            # failed attempt, so the writer learns the em-dash is required
+            # instead of getting a silent "unrecorded" with no cause.
+            if (match(text, /(—|–|-)[ \t]+[bB][yY]:.*$/)) {
+              printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(text, RSTART))
+            }
+          }
+          if (has_verif) {
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":\"%s\",\"author\":%s}\n", cur_section, json_escape(text), checked, json_escape(verif), author
+          } else {
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":null,\"author\":%s}\n", cur_section, json_escape(text), checked, author
           }
           had_item = 1
         }
@@ -336,7 +402,7 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     if $r.kind == "field" and .[$r.section].present then
       .[$r.section][$r.field] = $r.body
     elif $r.kind == "criterion" and .[$r.section].present then
-      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked, verification: $r.verification}]
+      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked, verification: $r.verification, author: $r.author}]
     elif $r.kind == "non_goal" and .[$r.section].present then
       .[$r.section].non_goals += [$r.text]
     elif $r.kind == "criteria_prose" and .[$r.section].present then
@@ -376,6 +442,7 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "unknown_section")) | map({code: "unknown_section", detail: ("unrecognized H2: " + .heading)})) as $w_unk_sec |
   (map(select(.kind == "unknown_field"))   | map({code: "unknown_field", section: .section, detail: ("unrecognized H3: " + .heading)})) as $w_unk_field |
   (map(select(.kind == "empty_field"))     | map({code: "empty_field", section: .section, field: .field})) as $w_empty |
+  (map(select(.kind == "criterion_author_unrecognized")) | map({code: "criterion_author_unrecognized", section: .section, detail: .detail})) as $w_author_unrec |
   (map(select(.kind == "criteria_prose"))  | map({code: "success_criteria_not_checklist", section: .section})) as $w_crit_prose |
   (map(select(.kind == "non_goals_prose")) | map({code: "non_goals_not_bulleted", section: .section})) as $w_ngoal_prose |
 
@@ -399,6 +466,6 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     created: ($meta_created.created // null),
     schema_version: "1.0",
     sections: $sections_final,
-    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_unparsed + $w_missing)
+    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_author_unrec + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_unparsed + $w_missing)
   }
 '

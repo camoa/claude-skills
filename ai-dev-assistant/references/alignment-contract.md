@@ -1,7 +1,8 @@
-# Alignment Contract — `alignment.md` Grammar v1.1
+# Alignment Contract — `alignment.md` Grammar v1.3
 
 **Introduced:** ai-dev-assistant v3.12.0
 **v1.1 adds optional per-criterion `verification`** — a success-criterion line MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked. Additive within v1.x (the emitted `schema_version` JSON value stays `"1.0"`; see §9). Consumers that ignore unknown keys are unaffected.
+**v1.3 adds optional per-criterion `author`** — a success-criterion line MAY carry a ` — by: <owner|designer>` marker recording who wrote it. Additive within v1.x (`schema_version` stays `"1.0"`; see §9).
 **Owner:** `skills/alignment-reader/SKILL.md` + `scripts/alignment-read.sh`
 **Consumers (as of v3.12.0):** `commands/scope.md`, `commands/research.md`, `commands/design.md`, `commands/implement.md`, `agents/analysis-agent.md` (via `scope_contract_recommended` signal evaluation)
 
@@ -83,7 +84,7 @@ Four fields, in this order when written:
 |---|---|---|
 | `### Goal` | `goal` | String (prose) |
 | `### Expected result` | `expected_result` | String (prose) |
-| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool, verification: string\|null}` — task-list format; `verification` from the optional ` — verify:` suffix (§5.2) |
+| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool, verification: string\|null, author: string\|null}` — task-list format; `verification` from the optional ` — verify:` suffix (§5.2), `author` from the optional ` — by:` marker (§5.2) |
 | `### Non-goals` | `non_goals` | Array of strings — bulleted list |
 
 Missing H3 → the field is emitted with `present: false, body: null` and the parser adds a `missing_field` warning keyed to section + field name.
@@ -102,8 +103,8 @@ Empty body → `{present: true, body: ""}` + warning `empty_field`.
 
 Expected as a markdown task-list:
 
-- `- [ ] <text>` → `{text: "<text>", checked: false, verification: null}`
-- `- [x] <text>` or `- [X] <text>` → `{text: "<text>", checked: true, verification: null}`
+- `- [ ] <text>` → `{text: "<text>", checked: false, verification: null, author: null}`
+- `- [x] <text>` or `- [X] <text>` → `{text: "<text>", checked: true, verification: null, author: null}`
 
 Parser regex: `^\s*-\s+\[([ xX])\]\s+(.+?)\s*$`, applied after line-joining (below).
 
@@ -123,8 +124,46 @@ Captured up-front at scope time, the suffix lets each criterion declare its veri
 
 Examples:
 
-- `- [ ] Playwright smoke test covers save + error paths — verify: playwright run asserts persisted value after reload` → `{text: "Playwright smoke test covers save + error paths", checked: false, verification: "playwright run asserts persisted value after reload"}`
-- `- [x] Config schema exists at the expected path` → `{text: "Config schema exists at the expected path", checked: true, verification: null}`
+- `- [ ] Playwright smoke test covers save + error paths — verify: playwright run asserts persisted value after reload` → `{text: "Playwright smoke test covers save + error paths", checked: false, verification: "playwright run asserts persisted value after reload", author: null}`
+- `- [x] Config schema exists at the expected path` → `{text: "Config schema exists at the expected path", checked: true, verification: null, author: null}`
+
+**Optional author marker (v1.3+).** A criterion line MAY declare *who wrote it* by appending a trailing marker:
+
+```markdown
+- [ ] <criterion text> — by: <owner|designer>
+```
+
+The delimiter is ` — by: ` (space, em-dash U+2014, space, the literal lowercase `by:`, space) — **em-dash only.** Unlike ` — verify: `, the reader does NOT accept en-dash `–` or hyphen `-` here. `verify:` is a distinctive token that does not occur in ordinary criterion prose, so tolerating three delimiter variants there is safe. `by:` is ordinary English — `- [ ] the task list can be filtered - by: owner` reads as a hyphenated aside, not a marker — so a hyphen or en-dash delimiter would silently promote unmarked prose to an author, the exact failure this field exists to prevent. The lowercase `by: ` token is required. The value must be exactly `owner` or `designer` — nothing else is accepted.
+
+**Near-miss detection (v1.3+).** When the strict em-dash delimiter above does not match, the reader runs a second, looser check on the same text: any of em-dash, en-dash, or hyphen, then a run of one or more spaces or tabs, then `by:` in any letter case, then anything. If that loose pattern matches, the reader emits warning `criterion_author_unrecognized` — but, unlike the strict path, it does NOT set `author` and does NOT alter `text`. This is detection, not parsing: it exists only to tell a writer whose marker did not parse — wrong spacing, a tab, the wrong dash, wrong case — that something looked like an attempt and failed, instead of leaving them with a silent `author: null` and no way to know why. A criterion whose prose contains an em-dash but no `by:` token at all does not match the loose pattern and raises no warning.
+
+Order matters. The author marker comes **before** the verification suffix, not after:
+
+```markdown
+- [ ] <criterion text> — by: <owner|designer> — verify: <how it will be verified>
+```
+
+The reader splits on ` — verify: ` first, then looks for the author marker in what is left of `text`. A line written the other way round — verify note before author marker — leaves the author marker inside the captured `verification` string, where it is not read, and the criterion records `author: null`. This is a rule, not a bug: fix the line order, don't patch the reader to search inside `verification`.
+
+The reader takes the **last** ` — by: ` delimiter in the remaining text, so a criterion whose own prose contains the phrase `— by:` is still parsed correctly by its tail.
+
+Absent marker → `author: null`. This is the pre-v1.3 behavior and every existing contract keeps it: a contract with no author markers parses exactly as it did before v1.3.
+
+Examples:
+
+- `- [ ] Rate limiter rejects the 101st request in a rolling minute — by: owner` → `{text: "Rate limiter rejects the 101st request in a rolling minute", checked: false, verification: null, author: "owner"}`
+- `- [ ] Rate limiter rejects the 101st request in a rolling minute — by: designer — verify: load test asserts HTTP 429 on request 101` → `{text: "Rate limiter rejects the 101st request in a rolling minute", checked: false, verification: "load test asserts HTTP 429 on request 101", author: "designer"}`
+- `- [ ] Rate limiter rejects the 101st request in a rolling minute` → `{text: "Rate limiter rejects the 101st request in a rolling minute", checked: false, verification: null, author: null}`
+- `- [ ] Rate limiter rejects the 101st request in a rolling minute — by: architect` → `{text: "Rate limiter rejects the 101st request in a rolling minute", checked: false, verification: null, author: null}`, plus warning `criterion_author_unrecognized` (`architect` is not `owner` or `designer`; the marker is present but the criterion text is left whole and no author is recorded)
+- `- [ ] the task list can be filtered - by: owner` (hyphen, not em-dash) → `{text: "the task list can be filtered - by: owner", checked: false, verification: null, author: null}`, plus warning `criterion_author_unrecognized` from the near-miss check (the hyphen is not an accepted delimiter, but the text still reads as an attempted marker)
+
+### Why the marker exists
+
+Nothing distinguished a criterion the owner asked for from one the designer wrote. So an invented criterion carried the authority of a real requirement. In the case that produced this change, a builder wrote a criterion at design time that described a filter it had already decided to build. Four critics then checked the filter against that description, faithfully, for two rounds. Every one of them was doing its job.
+
+`author: null` means nobody recorded who wrote the criterion. It does not mean the owner wrote it. A reader that treats an absent marker as `owner` reintroduces the exact defect the marker exists to catch. `scripts/mechanism-disposition.sh` draws the same line for a different question: it splits `none` (a search ran and found nothing) from `not_searched` (nobody looked), because collapsing the two hid 57 unasked questions as findings. The author marker keeps the same split for who-wrote-this: absence is a missing fact, not a default answer.
+
+The marker records a claim; it does not verify one. A designer that writes `— by: owner` on its own invention defeats it. The marker makes the question visible. It does not answer it.
 
 If the body contains prose only (no task-list lines at all), emit warning `success_criteria_not_checklist`, set `success_criteria: []`, and place the full prose into `success_criteria_prose` for the consumer to surface.
 
@@ -149,6 +188,7 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 | `section_unparsed_body` | **(v1.2+)** H2 section heading exists and carries body content, but none of it sits under a recognized H3 field, so nothing parsed. Almost always a shape error rather than a missing-content one — bold labels (`**Goal**`) where H3 headings (`### Goal`) are required is the common case. `sections.<key>.present` is `false`, same as a stub; the two are separated because "empty" sends an author looking for content they already wrote instead of at the heading level. |
 | `success_criteria_not_checklist` | `Success criteria` body is prose instead of `- [ ]` task-list |
 | `non_goals_not_bulleted` | `Non-goals` body is prose instead of `- …` bulleted list |
+| `criterion_author_unrecognized` | **(v1.3+)** Either a ` — by: ` delimiter was present but its value was not `owner` or `designer`, or the looser near-miss check matched a mistyped attempt (wrong spacing, a tab, a rejected dash, wrong case) that the strict delimiter did not. Either way `author` is recorded as `null` and the criterion text is left whole. |
 | `error` | Unrecoverable read failure (permission denied, invalid UTF-8). Only case producing non-zero exit. |
 
 ## 7. Reader JSON output contract
@@ -166,8 +206,8 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
       "goal": "Implement the feature …",
       "expected_result": "After this ships, users can …",
       "success_criteria": [
-        { "text": "Primary deliverable is live", "checked": false, "verification": "manual check of the live endpoint returns 200" },
-        { "text": "Static analysis clean at the configured level", "checked": false, "verification": null }
+        { "text": "Primary deliverable is live", "checked": false, "verification": "manual check of the live endpoint returns 200", "author": "owner" },
+        { "text": "Static analysis clean at the configured level", "checked": false, "verification": null, "author": null }
       ],
       "non_goals": [
         "Not refactoring adjacent components",
@@ -201,6 +241,7 @@ Reader emits all applicable warnings in a single `warnings[]` array. Never abort
 
 - **Adding fields within v1.x** — consumers ignore unknown keys. No schema bump needed.
 - **`verification` (v1.1)** — the per-criterion `verification` key on `success_criteria[]` items was added within v1.x as an additive field. `schema_version` remains `"1.0"`; consumers that read only `.text`/`.checked` ignore the new key and keep working.
+- **`author` (v1.3)** — the per-criterion `author` key on `success_criteria[]` items was added within v1.x as an additive field, same pattern as `verification` (v1.1). `schema_version` remains `"1.0"`; consumers that read only `.text`/`.checked`/`.verification` ignore the new key and keep working.
 - **Adding new warning codes within v1.x** — consumers should treat unknown codes as informational (display, don't error).
 - **Changing field semantics or the 4-field shape** — major bump to v2.0 with migration note.
 - **Removing fields** — major bump.
