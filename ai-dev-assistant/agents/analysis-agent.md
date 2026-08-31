@@ -5,7 +5,7 @@ capabilities: ["task-analysis", "scope-assessment", "epic-proposal", "sub-task-d
 version: 1.1.1
 model: sonnet
 tools: Read, Grep, Glob, Bash, Write
-disallowedTools: Edit, Write, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
+disallowedTools: Edit, Bash(rm:*), Bash(mv:*), Bash(cp:*), Bash(sed:*), Bash(tee:*), Bash(dd:*), Bash(chmod:*), Bash(chown:*)
 maxTurns: 10
 ---
 

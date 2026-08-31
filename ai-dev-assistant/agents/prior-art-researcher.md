@@ -5,7 +5,7 @@ capabilities: ["existing-solution-search", "prior-art-analysis", "pattern-extrac
 version: 1.0.0
 model: sonnet
 tools: Read, Grep, Glob, WebFetch, WebSearch, Write
-disallowedTools: Edit, Write, Bash
+disallowedTools: Edit, Bash
 maxTurns: 15
 ---
 

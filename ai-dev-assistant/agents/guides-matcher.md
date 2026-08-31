@@ -5,7 +5,7 @@ capabilities: ["catalog-match", "guide-discovery", "domain-coverage-inference", 
 version: 1.1.0
 model: haiku
 tools: Read, Glob, Write
-disallowedTools: Edit, Write, Bash
+disallowedTools: Edit, Bash
 maxTurns: 5
 ---
 

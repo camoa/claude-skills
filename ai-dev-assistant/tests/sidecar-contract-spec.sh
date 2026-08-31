@@ -56,10 +56,23 @@ for entry in $LOAD_BEARING; do
 
   TOOLS=$(grep -m1 '^tools:' "$f" | sed 's/^tools: *//')
   case ",${TOOLS// /}," in
-    *,Write,*) echo "PASS: $a can write" ;;
+    *,Write,*) echo "PASS: $a grants Write in tools:" ;;
     *) echo "FAIL: $a is load-bearing and has no Write in tools:, so it cannot write a sidecar"
-       echo "      (disallowedTools is NOT the blocker here: it does not bind on an explicit Task dispatch)"
        fail=1 ;;
+  esac
+
+  # Granting Write is not the same as having it. `disallowedTools` DOES bind on an explicit
+  # dispatch, and it wins over `tools:`. This spec asserted the opposite in a comment, and four
+  # agents shipped in 5.37.0 carrying Write in both lists: the release that made them deliver by
+  # file left every one of them unable to write. Measured on a live dispatch: the agent reported
+  # "No such tool available: Write", and a general-purpose agent in the same session wrote fine.
+  # Reading one line and not the line under it is how a grant and a denial coexist.
+  DISALLOWED=$(grep -m1 '^disallowedTools:' "$f" | sed 's/^disallowedTools: *//')
+  case ",${DISALLOWED// /}," in
+    *,Write,*) echo "FAIL: $a grants Write in tools: and denies it in disallowedTools:, which wins."
+               echo "      The agent runs without Write and cannot write its sidecar $token."
+               fail=1 ;;
+    *) echo "PASS: $a does not deny the Write it was granted" ;;
   esac
 
   HITS=$(grep -rlF -- "$token" "$REFS" 2>/dev/null | head -1)

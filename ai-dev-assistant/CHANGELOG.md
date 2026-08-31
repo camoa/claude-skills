@@ -1,5 +1,51 @@
 # Changelog
 
+## [5.37.1] - 2026-08-31
+
+### Fixed
+- **The four agents 5.37.0 made deliver by file could not write.** `analysis-agent`,
+  `prior-art-researcher`, `guides-matcher` and `ai-test-selector` carried `Write` in `tools:` and
+  `Write` in `disallowedTools:` at the same time. `disallowedTools` wins, so every one of them ran
+  without the tool the release had just granted it, and delivered by message exactly as before.
+  The feature did not work for any of them, in any session, from the moment it shipped.
+
+  Measured on a live dispatch: `guides-matcher` reported `No such tool available: Write`, while a
+  general-purpose agent with no `disallowedTools` wrote a file in the same session seconds later.
+  The only difference between them is the denial.
+
+  Consequence while it was broken: the `no_return` paths the same release added fired on every one
+  of these dispatches. A caller could not tell a tool restriction from an agent that found nothing,
+  which is the confusion the release was written to remove.
+
+- **One spec required the contradiction; another already forbade it.**
+  `tests/ai-test-selector-contract-spec.sh` asserted that `disallowedTools` must include *Edit and
+  Write*. So when 5.37.0 granted `Write`, that clause forced the denial to stay: removing it would
+  have turned the suite red, and the only way to pass was to ship both. The suite did not miss the
+  defect, it demanded it. The clause is now inverted, `Edit` denied and `Write` not, with a
+  `check_not` helper the file previously lacked, which is part of why it was written the wrong way
+  round.
+
+  `tests/sidecar-contract-spec.sh` checked only that `Write` appears in `tools:`, and printed on
+  failure that `disallowedTools` "does not bind on an explicit Task dispatch". That claim is false.
+  It now also fails when a load-bearing agent denies the `Write` it was granted, and the false
+  comment is gone.
+
+  `tests/gate-verdict-sidecar-spec.sh` has stated the correct rule since it was written, and
+  `tests/distill-agent-spec.sh` asserts it for one agent. Neither fired here: the first derives its
+  set from agents `/review` dispatches, and these four are dispatched by `/research` and
+  `/implement`. That is the limit `sidecar-contract-spec.sh` names in its own header, that it
+  cannot check whether the SET is right.
+
+  Both corrected specs were watched failing before the fix. `sidecar-contract-spec.sh` red on
+  exactly the four agents, with 4 of 4 fixes caught when removed one at a time;
+  `ai-test-selector-contract-spec.sh` red on a seeded denial and green on restore.
+
+### Note on verification
+The frontmatter fix is verified by the spec and by the runtime difference between an agent that
+denies `Write` and one that does not. It has **not** been re-confirmed by a live dispatch of a
+fixed agent, because a session resolves its agent definitions at start and cannot pick up an edit
+made mid-session. First run in a fresh session is the confirmation.
+
 ## [5.37.0] - 2026-08-30
 
 ### Added
