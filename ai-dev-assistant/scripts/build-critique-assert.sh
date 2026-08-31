@@ -49,6 +49,9 @@
 #   2 — usage: no task folder, or not a directory
 set -uo pipefail
 
+# shellcheck source=./accept-verdict.sh
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/accept-verdict.sh"
+
 TASK_DIR="${1:-}"
 CHANGE_SET_EMPTY=0
 CHANGE_SET_FILE=""
@@ -353,30 +356,10 @@ if [ -e "$REC" ]; then
   # The reads below run malformed-first: a verdict that cannot be read and a repair nobody
   # recorded are both `unresolved`, and both would otherwise fall through to the decision
   # demand and clear on an escalation reason written for something else.
-  ACCEPT_ACTIONS='["accepted","not_accepted","cannot_judge"]'
-  ACCEPT_SUITES='["green","red","not_run"]'
-  ACCEPT_DECIDERS='["suite_and_motion","motion","none"]'
-
-  # A JQ ERROR IS NOT AN EMPTY RESULT SET. Every read below used to end `2>/dev/null) || VAR='[]'`,
-  # which routed a jq failure into the same value as "I looked and found nothing wrong". That is
-  # a silent pass on a block whose entire purpose is to refuse silent passes, and it has already
-  # cost this file two checks: the first version of the suite and basis reads evaluated `.accept`
-  # against an array, jq exited 5 on every record, and both checks passed every fixture while
-  # enforcing nothing. Each read now falls back to this sentinel and is reported as unresolved,
-  # naming which read failed. It is the same sentinel and the same shape the deferral check
-  # further down already used; there is one mechanism here, not two.
-  JQ_ERR="__jq_error__"
-
   # An action outside the enum is a verdict nobody can read. It is not the same as
   # `not_accepted`: a typo and a refusal are different states, and picking one of them here
   # would be the guess this file refuses everywhere else.
-  BAD_ACTION=$(jq -c --argjson ok "$ACCEPT_ACTIONS" \
-    '[(.components // [])[]
-      | select(has("accept"))
-      | select(if (.accept | type) != "object" then true
-               else (((.accept.action // "") | tostring) as $a
-                     | ($ok | index($a)) == null) end)
-      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_ACTION="$JQ_ERR"
+  BAD_ACTION=$(accept_bad_action_components "$PAYLOAD")
   if [ "$BAD_ACTION" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the accept action enum could not be read, so whether any repair was accepted is unknown"
@@ -393,11 +376,7 @@ if [ -e "$REC" ]; then
   # suite result it weighed is a verdict about nothing. Absent and off-enum are one answer here
   # -- both leave the value unreadable, and neither is `not_run`, which is a real result a
   # builder states on purpose.
-  BAD_SUITE=$(jq -c --argjson ok "$ACCEPT_SUITES" \
-    '[(.components // [])[]
-      | select(has("accept") and ((.accept | type) == "object"))
-      | select((((.accept.suite // "") | tostring) as $s | ($ok | index($s)) == null))
-      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_SUITE="$JQ_ERR"
+  BAD_SUITE=$(accept_bad_suite_components "$PAYLOAD")
   if [ "$BAD_SUITE" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the accept suite field could not be read, so what suite result each verdict weighed is unknown"
@@ -414,12 +393,7 @@ if [ -e "$REC" ]; then
   # emits on every run. `reason` is the sentence carrying why; a blank one collapses a stated
   # decision into a recorded shrug, which is why the two checks further down this file reject a
   # blank `closing_fixes.reason` and a blank `why_now_is_wrong` on a deferral.
-  BAD_BASIS=$(jq -c --argjson ok "$ACCEPT_DECIDERS" \
-    '[(.components // [])[]
-      | select(has("accept") and ((.accept | type) == "object"))
-      | select(((((.accept.decided_by // "") | tostring) as $d | ($ok | index($d)) == null))
-               or ((((.accept.reason // "") | tostring) | gsub("^\\s+|\\s+$";"")) == ""))
-      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || BAD_BASIS="$JQ_ERR"
+  BAD_BASIS=$(accept_bad_basis_components "$PAYLOAD")
   if [ "$BAD_BASIS" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the accept decided_by and reason fields could not be read, so what drove each action is unknown"
@@ -435,11 +409,7 @@ if [ -e "$REC" ]; then
   # `rounds` count above one on the component row, and a top-level `rounds[]` entry naming the
   # component. A non-numeric count answers neither, and is reported as a repair state that
   # could not be established rather than folded into the clean set.
-  UNREADABLE_REPAIR=$(jq -c \
-    '[(.components // [])[]
-      | select((has("accept") | not) and has("rounds") and (.rounds != null)
-               and ((.rounds | type) != "number"))
-      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || UNREADABLE_REPAIR="$JQ_ERR"
+  UNREADABLE_REPAIR=$(accept_unreadable_repair_components "$PAYLOAD")
   if [ "$UNREADABLE_REPAIR" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the component rounds counts could not be read, so which components were repaired is unknown"
@@ -464,18 +434,7 @@ if [ -e "$REC" ]; then
   # silently is the guess this block refuses on `accept.action` twenty lines up. It is reported
   # only when nothing else already settled the component's repair state, so a readable round-2
   # entry beside a malformed one is still read as the repair it is.
-  UNREADABLE_ROUND=$(jq -c \
-    '(.rounds // []) as $r
-     | [(.components // [])[]
-        | . as $c
-        | select(has("accept") | not)
-        | (($c.component // "unnamed") | tostring) as $name
-        | select(((($c.rounds // 1) | if type == "number" then . else 1 end)) <= 1)
-        | select(any($r[]?; ((.component // .wo // "") | tostring) == $name
-                            and ((.round | type) == "number") and (.round > 1)) | not)
-        | select(any($r[]?; ((.component // .wo // "") | tostring) == $name
-                            and ((.round | type) != "number")))
-        | $name]' <<<"$PAYLOAD" 2>/dev/null) || UNREADABLE_ROUND="$JQ_ERR"
+  UNREADABLE_ROUND=$(accept_unreadable_round_components "$PAYLOAD")
   if [ "$UNREADABLE_ROUND" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the rounds[] entries could not be read, so whether each names a first critique or a repair is unknown"
@@ -487,16 +446,7 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
 
-  NO_ACCEPT=$(jq -c \
-    '(.rounds // []) as $r
-     | [(.components // [])[]
-        | . as $c
-        | select(has("accept") | not)
-        | (($c.component // "unnamed") | tostring) as $name
-        | select((((($c.rounds // 1) | if type == "number" then . else 1 end)) > 1)
-                 or any($r[]?; ((.component // .wo // "") | tostring) == $name
-                               and ((.round | type) == "number") and (.round > 1)))
-        | $name]' <<<"$PAYLOAD" 2>/dev/null) || NO_ACCEPT="$JQ_ERR"
+  NO_ACCEPT=$(accept_missing_verdict_components "$PAYLOAD")
   if [ "$NO_ACCEPT" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the set of components carrying no accept verdict could not be read, so whether a repair went unrecorded is unknown"
@@ -510,11 +460,7 @@ if [ -e "$REC" ]; then
     emit fail true "" 1
   fi
 
-  UNACCEPTED=$(jq -c \
-    '[(.components // [])[]
-      | select(has("accept") and ((.accept | type) == "object"))
-      | select(((.accept.action // "") | tostring) != "accepted")
-      | (.component // "unnamed")]' <<<"$PAYLOAD" 2>/dev/null) || UNACCEPTED="$JQ_ERR"
+  UNACCEPTED=$(accept_unaccepted_components "$PAYLOAD")
   if [ "$UNACCEPTED" = "$JQ_ERR" ]; then
     set_ev_s accept_check "unreadable"
     add_msg "the set of components ending on a non-acceptance could not be read, so whether any component shipped unaccepted is unknown"
@@ -535,12 +481,7 @@ if [ -e "$REC" ]; then
     # was the loosest read in the block sitting on the widest blast radius. Trimmed for the
     # comparison AND for what gets reported: the message prints the reason back, and a decision
     # padded with newlines reads as a decision nobody wrote.
-    ESC=$(jq -r 'def trim: gsub("^\\s+|\\s+$";"");
-                 ((.escalation.reason // "") | tostring | trim) as $top
-                 | if $top != "" then $top
-                   else ([(.rounds // [])[] | (.resolution // empty) | tostring | trim]
-                         | map(select(. != "")) | last // "")
-                   end' <<<"$PAYLOAD" 2>/dev/null) || ESC="$JQ_ERR"
+    ESC=$(accept_escalation_reason "$PAYLOAD")
     if [ "$ESC" = "$JQ_ERR" ]; then
       # This read is the one place an empty result and a jq error already differed, and the
       # difference ran the wrong way: an unreadable `escalation` or `rounds[]` produced an
