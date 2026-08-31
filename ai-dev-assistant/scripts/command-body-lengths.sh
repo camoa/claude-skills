@@ -71,7 +71,14 @@ budget_for() {
     # operator interrupting on their own initiative was the only effective brake in that whole run.
     # Seven lines: four of comment carrying that evidence, one to count insertions, two to call the
     # kernel. It never blocks, so the cost of being wrong about it is one printed line.
-    implement) printf '370' ;;
+    # 370 -> 356, LOWER: the finding_contract change deleted the beyond_remedy and repair_growth
+    # instructions from this body, because scripts/repair-scope-check.sh now answers the same
+    # question by comparing two sets of file paths instead of asking the builder to grade its own
+    # work. The body shrank by 14 lines, so the budget follows it down. A budget left at 370 after a
+    # deletion is 14 lines of space that can be reclaimed later without anyone editing this line,
+    # which is the whole thing the ratchet exists to prevent. Lowering on a deletion needs no
+    # justification beyond the deletion; raising still does.
+    implement) printf '356' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

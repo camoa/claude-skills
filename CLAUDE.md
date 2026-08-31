@@ -16,39 +16,68 @@ validator directly.
 | Check that inventory against the catalog | `make setup-doc-check` |
 | Regenerate the tool version table | `make tool-versions` |
 | Check documented claims against their authority | `make claims` |
-| Everything, same as the PR check | `make ci` |
+| Everything, the same seven CI runs | `make ci` |
 
 ## What to run before a PR
 
-`make ci` runs all seven checks even when one fails, so one run shows every
-problem, and CI runs the same seven the same way. It also takes about seven
-minutes, and two checks are 99% of that. Measured on this tree with all seven
-green: `test` 366s, `lint` 59s, `validate` 4.1s, `claims` 3.8s, `outputs`
-0.4s, `manifests` 0.1s, `setup-doc-check` 0.1s. Both slow ones are serial, not
-large; making them parallel is a queued task, `repo_checks_runtime` in the
-`camoa_skills` project.
+`make ci` shows you what CI will say. It is not the usual step before you push.
+The workflow does not call it. `.github/workflows/ci.yml` runs the same seven
+checks as seven steps. Each step fails on its own line. `make ci` groups the
+same seven the same way. CI runs them for you on the PR.
 
-Until then, run what the branch can actually break rather than the whole thing:
+`make ci` takes about seven minutes. Two checks are 99 percent of that time.
+These times are from this tree, with all seven checks green:
 
-1. **Always, on every branch.** The five cheap checks, 8.5 seconds together:
-   `make manifests outputs setup-doc-check claims validate`. Unlike `make ci`
-   this stops at the first failure, which at this speed is fine.
-2. **If the branch touched any `.sh`**, add `make lint`.
-3. **For tests**, `make test-<plugin>` for each plugin you touched. One plugin
-   is a fraction of the 366s.
-4. **Run the full `make ci`** before a release commit, when the branch changes
-   `scripts/` or `.claude-plugin/marketplace.json`, or any time you want the
-   number CI will produce.
+| check | time |
+|---|---|
+| `test` | 366s |
+| `lint` | 59s |
+| `validate` | 4.1s |
+| `claims` | 3.8s |
+| `outputs` | 0.4s |
+| `manifests` | 0.1s |
+| `setup-doc-check` | 0.1s |
 
-Two things this shortcut does not cover, so know you are skipping them. The
-specs are cross-plugin: ai-dev-assistant specs assert on `code-quality-tools`
-and `plugin-creation-tools`, code-quality-tools specs assert on
-`ai-dev-assistant` and `drupal-ai-contrib`, and `scripts/tests/claim-check-spec.sh`
-sits at repo root outside every plugin and tests code-quality-tools. So
-`make test-<plugin>` for the plugin you edited can miss a spec in a different
-plugin that your edit broke. And CI is not a required check on `main`, so a
-red CI does not block a merge on its own. A scoped local run is fast feedback,
-not a verdict.
+The two slow checks are serial. They are not large. A task in the
+`camoa_skills` project will make them parallel. The task is
+`repo_checks_runtime`.
+
+On your machine, run only the checks your branch can break:
+
+1. **Run these five on every branch.** They take 8.5 seconds together:
+   `make manifests outputs setup-doc-check claims validate`. This command stops
+   at the first failure. `make ci` does not. At this speed, the difference does
+   not matter.
+2. **Add `make lint`** if the branch changed a `.sh` file.
+3. **Add `make test-<plugin>`** for each plugin you changed.
+4. **Run the full `make ci`** if the branch changed the repo-root `scripts/`
+   folder or `.github/workflows/ci.yml`. Those files are the checks themselves.
+   Run it also when you want CI's result early.
+
+A new version number is not a reason to run all seven. A release commit can
+make `plugin.json` disagree with the catalog entry. `make manifests` and
+`make validate` find that. Both are in the five cheap checks.
+
+The short run does not do three things. Read them before you use it.
+
+**`make test-<plugin>` saves little time on an ai-dev-assistant branch.** The
+repo has 142 spec files. 134 of them are ai-dev-assistant. 6 are
+code-quality-tools. 1 is plugin-creation-tools. 1 is
+`scripts/tests/claim-check-spec.sh` at the repo root. So
+`make test-ai-dev-assistant` is almost the same as `make test`. You save real
+time only on a code-quality-tools or a plugin-creation-tools branch. The 366
+seconds is a serial-execution problem. It is not a scope problem.
+
+**The specs cross plugin borders.** ai-dev-assistant specs make assertions
+about `code-quality-tools` and `plugin-creation-tools`. code-quality-tools
+specs make assertions about `ai-dev-assistant` and `drupal-ai-contrib`. The
+root `claim-check-spec.sh` is outside every plugin and tests
+code-quality-tools. So `make test-<plugin>` can miss a spec in a different
+plugin that your change broke.
+
+**CI is not a required check on `main`.** The branch has no protection. A red
+CI does not stop a merge. Nothing later finds what you skip here. A person must
+look.
 
 ## What each check can fail on
 

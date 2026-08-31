@@ -142,13 +142,6 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    critic is told the deterministic gates have not run for this unit — it must not read an
    absent gate record as a clean one.
 
-   **From round 2 on, also hand it every `remedy` from the previous round's blocking findings** —
-   the ones the repair under review was answering; a round runs up to three lenses and can raise
-   several — and ask it to rule on whether the repair matched them.
-   `agents/wo-critic.md` carries what to do with it. Round 1 has no previous remedy and gets
-   none. This is the only independent check on `beyond_remedy`, a field the repair's own author
-   writes; without the remedy in this dispatch that field is self-report with nothing behind it.
-
    **And `implementation.md` is not a substitute for that missing record.** Its prose is
    written by the builder, at whatever moment the builder happened to write it, and nothing
    re-checks it afterwards. On a live build it was updated before a repair and never after, so
@@ -347,14 +340,20 @@ and the deterministic gates judge the whole change without an adversary. Delta-s
 known cost — findings that never converge because every round re-reads reviewed code — for a
 gap that was already there. Do not read the trade as a transfer.
 
-## The finding says what would fix it (v5.36.0+)
+## The finding says what would fix it, and where (v5.36.0+, extended by `finding_contract`)
 
-Every `critical` and `concern` finding carries a `remedy`: the smallest change that resolves it,
-naming every site it must touch. A finding asserting a class of defect backs the claim with an
-enumeration, and a search that was not exhaustive says so. `deferred[]` entries carry none, since a
-remedy for code that does not exist is the speculative fix the deferral exists to prevent. The
-rules live in `agents/wo-critic.md`; the shape is documented in
-`skills/work-order-critique/references/critique-envelope.md` as well, and the two move together.
+Every `critical` and `concern` finding carries a `remedy`: the smallest change that resolves it, as
+a sentence. The sites it touches live in `where[]`, one `{file, line, symbol}` entry per site —
+every site the finding names, not one example standing for the rest. A finding asserting a class of
+defect backs the claim with that enumeration, and a search that was not exhaustive says so.
+`reachable_by` names who can trigger the finding and what they already hold, required when the
+critic file's top-level `lens` is `security`. `id` is the handle a later finding's `extends` points
+at, when a repair leaves a site unfixed and the next round wants to record that as the same finding
+rather than a new one. `deferred[]` entries carry none of `where[]`, `remedy` or `reachable_by`,
+since a remedy for code that does not exist is the speculative fix the deferral exists to prevent.
+The rules live in `agents/wo-critic.md`; the shape is documented in
+`skills/work-order-critique/references/critique-envelope.md` and
+`references/gate-audit-schema.md` as well, and all three move together.
 
 It exists because of what the next section could not do. The repair rules below ask the builder to
 keep a repair minimal and to explain growth, and the builder is the only party in that transaction:
@@ -386,11 +385,17 @@ rule buys is that the fixer is now bound by a list somebody else wrote, which is
 remedy buys, and each entry in the list becomes a case in a spec that `make test` then holds. It is
 prose, and its evidence is three rounds on one build.
 
-`scripts/wo-critique-aggregate.sh` reads only `.severity` off a finding, plus a type check that the
-finding is an object at all; it copies the whole object into the envelope, so the added keys ride
-through untouched and reach the envelope. Verified by running the kernel on old-shape and new-shape
-verdicts at identical severities and comparing the envelopes, rather than by reading the script. The
-kernel's own header comment carries the shape too, and moves with the other two sites.
+`scripts/wo-critique-aggregate.sh` reads `.severity` off a finding, plus, since `finding_contract`,
+a shape check against the required fields in `references/gate-audit-schema.md`: `where[]` and
+`remedy` on `critical` and `concern` findings, `reachable_by` when the critic file's `lens` is
+`security`, `id` on every finding. A finding that fails the check makes the whole critic file `unresolved`, recorded per file
+rather than per finding, so a critic cannot pass with its worst finding silently dropped. The check
+itself is gated on the critic file's own `schema_version`: absent means pre-contract, and the file
+gets the lenient, pre-`finding_contract` reading instead. Whatever the check decides, the kernel
+still copies the whole finding object into the envelope untouched, so any key beyond the required
+ones rides through unread. Verified by running the kernel on old-shape and new-shape verdicts at
+identical severities and comparing the envelopes, rather than by reading the script. The kernel's
+own header comment carries the shape too, and moves with the other two sites.
 
 ## A finding built on a number states its threshold (v5.36.0+)
 
@@ -417,47 +422,7 @@ all of them and is satisfied by a sentence, so nothing could fail it. Measuremen
 rounds were actually spent and the only version that can come back false. A finding that is true,
 worthless and unquantified is not covered here, and is not claimed to be.
 
-## Repair the minimum, and defer what cannot be answered yet
-
-Two rules, one cause. The churn was never the critics.
-
-**Growth during repair.** Each round the builder answered a `concern` with new mechanism instead
-of the smallest fix, and every new mechanism was fresh attack surface. A method that did not
-exist before one round's repair collected 38 of the 58 findings raised in the three rounds after
-it; production code grew 72% across the loop while behaviour stopped changing after round 3.
-Record `repair_growth: {net_lines, beyond_remedy, reason}` on each repair round, measured against
-the previous round's checkpoint. Growth with no reason fails. Growth is allowed; unexamined
-growth is not.
-
-**The repair does the remedy (v5.36.0+).** Line count alone was the builder judging the builder:
-it produced the number and wrote the sentence, and the gate checked that a sentence existed. With
-a `remedy` on the finding there is an independent statement of what the repair should have been,
-so work outside it is sorted rather than excused. `beyond_remedy` names the bucket, independent of
-`net_lines`, because a repair can exceed its remedy while shrinking a file:
-
-| The extra work is | `beyond_remedy` | What happens |
-|---|---|---|
-| Nothing; the repair did the remedy | `none` | Proceed |
-| Needed to make the remedy work at all | `remedy_insufficient` | Do it, and record what had to be added, so the critic's statement is corrected rather than quietly exceeded |
-| A different defect noticed in passing | `new_finding` | Record it in `repair_growth.finding` and leave it. Do not fix it in this repair |
-| An improvement the finding did not ask for | no value exists | **Refused.** A record naming one is malformed, not explained |
-
-Anything but `none` needs a `reason`, whatever `net_lines` says. `new_finding` with an empty
-`finding` fails the same way a deferral with no `blocked_on` does, and for the same cause: the
-bucket exists so a defect noticed during a repair is kept rather than lost.
-
-**The refusal holds in both run modes**, which is what makes it a bound. "Do more and write a
-reason" documents scope creep instead of stopping it, and on an unattended run nobody reads the
-reason before the code lands. The third bucket is why the refusal is affordable: a builder that
-sees a real problem is not told to ignore it, it is told that noticing is a finding and fixing is a
-repair, and that the two do not travel together. Without that valve the refusal would push genuine
-defects into silence, which is worse than the churn it prevents.
-
-**From round 2 on, hand the critic the previous round's remedy** with the delta and ask it to rule
-on the match. A mismatch is a finding like any other. The bucket is still self-reported and a
-builder writing `none` untruthfully defeats it, exactly as `rounds` is defeated; what changed is
-that doing so requires writing a false record where before it required nothing. Round 1 has no
-previous remedy and is unaffected.
+## Defer what cannot be answered yet
 
 **Findings that cannot be answered yet.** "This method has no production caller" is true and
 unfixable when the caller is three components away. With nowhere to put it, the builder wrote a
@@ -468,8 +433,13 @@ generated by trying to close the first one. A critic now reports these in `defer
 `blocked_on` is built. A deferral naming no `blocked_on` fails: a finding nobody will return to is
 a dropped finding wearing a label.
 
-Neither rule is machine-checkable as "was this minimal" or "was this premature". Both are
-checkable as "did you say so", which is the same standard the rest of this record holds.
+Not machine-checkable as "was this premature". It is checkable as "did you say so", which is the
+same standard the rest of this record holds.
+
+(The checks that used to sit here, judging by self-report whether a repair grew or strayed past
+what a finding asked for, are gone. `scripts/repair-scope-check.sh` answers the scope question
+instead, by comparing the finding's `where[]` against the touched-file set. See the
+`finding_contract` design, D6.)
 
 **What this cannot do.** It counts rounds, not progress — three rounds that each fix something
 real trip the same threshold as three that thrash. It reads `rounds` off the record, so a builder

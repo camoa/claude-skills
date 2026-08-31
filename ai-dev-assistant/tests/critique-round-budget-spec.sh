@@ -226,38 +226,6 @@ run "$D"
 verdict_is fail "two rounds is AT the limit, not under it"
 msg_has "2 or more critique rounds" "the boundary case names the budget"
 
-# ------------------------------------------- 7d. repair growth needs a reason
-# The churn this rule exists for: each round answered a concern with new mechanism instead of
-# the smallest fix, and every new mechanism was fresh attack surface. Growth is allowed;
-# unexamined growth is not.
-D=$(mktask growth_unjustified)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none"}}]'
-run "$D"
-verdict_is fail "a repair round that grew the component with no reason fails"
-unresolved_is true "unexplained growth is a could-not-tell"
-rc_is 1 "unexplained repair growth exits 1"
-msg_has "grew the component with no reason recorded" "the message says what is missing"
-
-D=$(mktask growth_justified)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":140,"beyond_remedy":"none","reason":"the fix needed a new failure path"}}]'
-run "$D"
-verdict_is pass "growth passes once the round says why the minimum fix would not do"
-rc_is 0 "justified repair growth exits 0"
-
-D=$(mktask growth_negative)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":-44,"beyond_remedy":"none"}}]'
-run "$D"
-verdict_is pass "a repair that SHRANK the component needs no justification"
-
-D=$(mktask growth_zero)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"repair_growth":{"net_lines":0,"beyond_remedy":"none"}}]'
-run "$D"
-verdict_is pass "a repair that changed no net lines needs no justification"
-
 # ------------------------------- 7e. a deferral must name what it waits for
 # "This method has no production caller" is true and unfixable when the caller is three
 # components away. With nowhere to put it, a live build wrote a spec for the absent caller,
