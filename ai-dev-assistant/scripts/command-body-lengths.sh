@@ -44,7 +44,7 @@
 # from here is that 363 cannot become 400 without someone editing this line.
 #
 # `review` is the one number that did not need setting: tests/review-command-
-# spec.sh has enforced it since v4.1.0, and each of its seven raises carries a
+# spec.sh has enforced it since v4.1.0, and each of its nine raises carries a
 # written reason. That is what enforcement produces (135 with a paper trail)
 # against what its absence produces (363 with none). That spec used to carry a
 # hand-mirrored copy of the number; it now reads it from here via --budget, so
@@ -64,9 +64,30 @@ budget_for() {
   case "$1" in
     research) printf '142' ;;
     design)   printf '82'  ;;
-    implement) printf '363' ;;
+    # 363 -> 370, raise: wires scripts/proportionality-check.sh into the component close, so a build
+    # that outgrows its plan is visible while it is still open. Nothing in the lifecycle asked whether
+    # a change was bigger than its problem. Measured: one build produced 1,637 insertions for roughly
+    # 150 lines of necessary code and no gate, agent or record noticed the ratio at any point; the
+    # operator interrupting on their own initiative was the only effective brake in that whole run.
+    # Seven lines: four of comment carrying that evidence, one to count insertions, two to call the
+    # kernel. It never blocks, so the cost of being wrong about it is one printed line.
+    implement) printf '370' ;;
     complete) printf '67'  ;;
-    review)   printf '135' ;;
+    # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
+    # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its
+    # only failure condition was an unresolved attended supersede, which exists only when the search
+    # FOUND something. Measured on 22 records: 59 of 99 mechanisms were structurally invisible to it.
+    # The explanatory prose was folded into 5.0c rather than added as its own paragraph, so the raise
+    # is one line rather than three.
+    # 136 -> 137, raise 9: one line for the {{spec_provenance_line}} token in the review-summary
+    # template. Nothing distinguished a criterion the owner asked for from one the designer wrote,
+    # so an invented criterion carried the authority of a real requirement — criterion-provenance.sh
+    # and the alignment.md `— by:` marker (references/alignment-contract.md §5.2) exist to fix that.
+    # This line surfaces the kernel's per-run counts (owner/designer/unrecorded) and names the
+    # designer-authored and unrecorded criteria in the ## Spec block, so a reader sees provenance
+    # without opening `_spec.json`. Advisory only: the kernel's `blocks` is hardcoded false and the
+    # Spec verdict rule is unchanged — missing_requirements[] alone still drives fail.
+    review)   printf '137' ;;
     *) return 1 ;;
   esac
 }

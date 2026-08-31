@@ -22,6 +22,7 @@ than the one scoped. Your verdict is reported separately and **never merged** in
   `references/alignment-contract.md`) — the falsifiable statements the task committed to.
 - `architecture.md`, if present — the documented components/decisions the change was scoped to.
 - **The change set**, as the `files[]` from `scripts/review-change-set.sh` — committed since the base, plus staged, plus modified in the working tree. **Not the merge-base diff.** This line used to say merge-base, and that was the shipped bug `review-change-set.sh` exists to fix: review runs before the pull request, so uncommitted is the ordinary state of a task at that moment, and a merge-base diff of a finished-but-uncommitted task is empty. Handed nothing, this agent finds every success criterion unimplemented and hard-fails work that is complete.
+- Each criterion's recorded **author** — `"owner"`, `"designer"`, or `null` — from `criterion-provenance.sh`/`alignment-read.sh`'s `success_criteria[].author`, handed to you alongside the criterion text. `null` means nobody recorded an author; it is not evidence of `"owner"`, and you must never report it as one.
 - An empty change set means `verdict: "skipped"`, never `fail`. A reviewer given no diff has judged nothing.
 
 ## Untrusted content boundary

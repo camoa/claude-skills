@@ -1,5 +1,136 @@
 # Changelog
 
+## [5.39.0] - 2026-08-31
+
+### Added
+- **An acceptance criterion can now record who wrote it.** A success-criterion line in
+  `alignment.md` takes an optional marker: `- [ ] <text> — by: <owner|designer> — verify: <how>`.
+  `scripts/alignment-read.sh` emits `author` on every criterion, and `scripts/criterion-provenance.sh`
+  counts the authors in a section and reports the state.
+
+  Nothing distinguished a criterion the owner asked for from one the designer wrote, so an invented
+  criterion carried the authority of a real requirement. In the case that produced this change, a
+  builder wrote a criterion at design time describing a filter it had already decided to build. Four
+  critics then checked the filter against that description, faithfully, for two rounds. Every one of
+  them was doing its job.
+
+  **`author: null` means nobody recorded an author. It never means the owner wrote it.** That is the
+  same split 5.38.0 gave the mechanism gate between `none` and `not_searched`, and it is the whole
+  value here. `owner` requires a person to have confirmed that exact criterion in an attended scope
+  conversation. Everything else is `designer`.
+
+  `/review` step 5.0d runs the kernel and names the designer-authored and unrecorded criteria in the
+  `## Spec` block. **The verdict rule does not change:** `fail` still means `missing_requirements[]`
+  is non-empty. Provenance is reported beside the verdict, never folded into it, and nothing blocks.
+
+  Measured on the 198 real `alignment.md` files on the author's machine: 166 `unrecorded_present`,
+  30 `no_criteria`, 2 `criteria_unreadable`, and **zero `all_owner`**. Both reader versions over all
+  198, ignoring the new field: zero files parse differently.
+
+  **What it does not do, stated plainly.** Nothing verifies a marker. A designer that writes
+  `— by: owner` on its own invention defeats the check completely. The change makes the question
+  recordable. It does not make it asked, and it never checks the answer. Verifying the record is a
+  separate problem and it is not solved here.
+
+### Fixed
+- **An absent marker could become `owner`.** Found by an adversarial review before merge, not after.
+  The reader first accepted a plain hyphen as the marker delimiter. `by:` is ordinary English, so a
+  criterion reading `filtered - by: owner` parsed as a marker, lost its last four words, and made the
+  kernel report `all_owner` on a contract carrying no marker at all. The marker now takes the em-dash
+  only. ` — verify: ` keeps its three-delimiter tolerance, because `verify:` does not occur in
+  ordinary criterion prose and `by:` does. The two extra branches had no test: deleting both left all
+  52 assertions green.
+- **A near-miss marker warned about nothing.** `— by:` written with a stray space or a tab recorded no
+  author and said nothing about why. A loose detector now fires `criterion_author_unrecognized` on an
+  attempt that did not parse. It fires zero times across all 198 real contracts.
+- **A bad `--task-folder` returned a calm verdict.** `criterion-provenance.sh` answered `no_criteria`
+  and exit 0 when its path did not exist, and took a following flag as a path value. Both now exit 2,
+  fail-closed, with no JSON. A caller that pointed at nothing was being told there was nothing to
+  find.
+- **Criteria written as prose read as no criteria.** Two of the 198 real contracts write their
+  criteria as sentences the reader cannot parse. The kernel called that `no_criteria`, which says
+  there are none. It now returns `criteria_unreadable`, which says they could not be read.
+- **A report line that fired on every task.** The rendered provenance line enumerated every criterion
+  on every run, median 588 characters, on 100% of the corpus. The kernel's own header argues that a
+  signal firing everywhere gets bypassed rather than satisfied. The line now enumerates only when a
+  contract carries a mix of recorded authors, capped at five names per list, and prints one short
+  line otherwise. Seven distinct states render distinctly, including the difference between "the
+  check did not run", "there was nothing to check", and "everything is owner-confirmed".
+
+### Changed
+- `references/alignment-contract.md` grammar v1.3. `references/gate-audit-schema.md` §5.15 documents
+  `_spec.json`'s `gate_specific.provenance`, including the `no_return` state written when the kernel
+  exits non-zero, and the fact that `counts.unrecognized` is a subset of `counts.unrecorded` rather
+  than a fourth bucket.
+- `references/gate-hardening-prompts.md` v1.8 adds `{{spec_provenance_line}}`.
+
+## [5.38.0] - 2026-08-31
+
+### Added
+- **The mechanism gate can now say nobody looked.** `scripts/mechanism-disposition.sh` takes a
+  fourth grounding value, `not_searched`, returning `unresolved / blocks:false / decided_by:none`.
+  Before this its enum was `verified|unverified|none`, so a caller whose resolver cascade did not run
+  had no honest value to write. It wrote `none`, and the kernel read `none` as "(confirmed)" and
+  returned `keep`.
+
+  Measured across the 22 real records on the author's machine: 99 mechanisms, **59 carrying
+  `grounding: none`**, of which **2** carried any evidence a search ran, and **59 of 59 cleared
+  automatically**. `blocks: true` has fired once in the gate's life and a human made that call. On
+  record, a task proposed a "selective 4xx-only upstream message passthrough with a length bound";
+  the gate cleared it; it was a 150-line invented control that four critics then spent roughly
+  310,000 tokens hardening before it was deleted on a four-word challenge.
+
+  Two references already told callers to write `not_searched` and both claimed the kernel
+  distinguished it. `--grounding not_searched` exited 2. The value the docs mandated was rejected by
+  the code, so every caller wrote `none`.
+
+  **It does not block, deliberately.** 59 of 99 would halt, most of them mechanisms like
+  `ddev restart` where no native pattern exists because it is not a design decision. A gate that
+  stops a person three times per design phase gets bypassed. `/research`, `/design` and
+  `/implement` now produce the value; `/review` counts unresolved mechanisms and shows the number
+  without failing on it.
+
+- **A proportionality check, because nothing in the lifecycle asked whether a change was bigger than
+  its problem.** `scripts/proportionality-check.sh` compares an actual line count against a declared
+  expectation and returns `within_expectation`, `disproportionate`, or `cannot_judge`. The third is
+  the point: a task that declared no expectation is unmeasured, never fine, which is the same
+  distinction as `none` versus `not_searched`.
+
+  The mechanism gate asks whether a better known way exists, which is comparison. It cannot ask
+  whether something is too big, which is proportion. One build produced 1,637 insertions for roughly
+  150 lines of necessary code and no gate, agent or record noticed the ratio at any point. The
+  operator interrupting on their own initiative was the only effective brake in that run.
+
+  `/design` records `expected_lines` per component, optional and the only new authoring burden here.
+  `/implement` surfaces the ratio at each component close, while the build is still open and a
+  person can still act. It never blocks.
+
+### Fixed
+- **A flag with no value hung both kernels forever, printing nothing.** `shift 2` needs two
+  positionals and fails with one, so `$#` never decreased and the arg loop spun. Measured: exit 124
+  under `timeout`, 0 bytes on stderr. Present in `mechanism-disposition.sh` since 5.17.0 and
+  inherited by the new kernel. Both now exit 2 with a message, and both specs assert it, watched
+  failing first.
+
+- **`tests/gate-prompts-literal.sh` forbade every template change, not just undeclared ones.** Its
+  header says it freezes literals against v1.0, but its baseline ref is `main`, so any deliberate
+  edit failed it. Templates do change: the registry carries a per-version changelog and marks
+  `review-summary` as `v1.2+; two-axis v1.6+`. A rule that forbids all change is one people merge
+  past rather than satisfy. It now fails on any baseline line modified or removed, and on an added
+  line whose `{{token}}` is not declared in the registry table. Four mutations confirm it: modified
+  line, removed line, undeclared token, and injected prose carrying no token at all.
+
+### Notes on what was deliberately not built
+- **A `tier` field was drafted and dropped.** It would have recorded how far the cascade got, but
+  `grounding` already carries that (`verified` is tier 1 or 2, `unverified` is tier 3, `none` ran and
+  found nothing, `not_searched` did not run) and the supersede block's `source` already says which.
+  No script read it. It was a required field with no consumer, and two documents in the same change
+  defined it with incompatible values, which is how it was caught.
+- **Design-time proportionality is not this.** This check needs an actual count, so the earliest it
+  can speak is during the build. A check that could refuse a disproportionate design before any code
+  exists is a different mechanism and is not here.
+
+
 ## [5.37.1] - 2026-08-31
 
 ### Fixed

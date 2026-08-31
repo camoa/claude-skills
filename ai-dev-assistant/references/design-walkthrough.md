@@ -114,6 +114,10 @@ Default: `[c]`.
 2. If user says `[y]`, execute the `--phase 2` flow from `commands/scope.md` (context-aware phase-level conversation + "Writing alignment.md" for the `## Phase 2 — Architecture` section) within this command's context. Do NOT shell out to the sibling slash command. After the write, continue with architecture work.
 3. If user says `[n]` / `[skip]`, proceed. Never block.
 
+### Author marker on criteria written here
+
+Both Step 2a's task-level flow and Step 2b's `--phase 2` flow are `commands/scope.md`'s own conversation and write step, executed inline rather than shelled out to — see `commands/scope.md`'s "Author marker" paragraph under "Writing `alignment.md`". The rule keys on the confirm, not the command: a criterion this inline flow shows the user and the user accepts via `[y]es`/`[e]dit` is `owner`, exactly as if `/scope` had been invoked directly. Everything else — most notably an unattended run reaching this flow with no interactive confirm available — is `designer`. `/design` never decides the author itself; it only inherits whatever `commands/scope.md`'s write step recorded.
+
 **Why task-level retrofit lives here (v3.13.1 rationale):** Before v3.13.1, only `/research` offered task-level retrofit. Tasks that completed Phase 1 outside the `/research` command (plan-mode handoffs, manually-authored `research.md`, pre-v3.12.0 tasks) reached `/design` with no task-level scope and no chance to opt in. The v3.13.1 retrofit makes task-level alignment **discoverable** at every phase entry for users who don't know the feature exists — soft prompt, single-shot per invocation, fully skippable.
 
 ## What This Does (v3.0.0)
@@ -200,7 +204,7 @@ If `[n]` → skip the walkthrough; proceed to session-context-writer.
 On `[y]`:
 
 1. **Pull acceptance criteria** using this priority:
-   - Primary: `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked}`)
+   - Primary: `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked, verification, author}`)
    - Fallback: `task.md` → Acceptance Criteria list (extract `- [ ] ...` bullets)
    - Final fallback: explicit message — "This task has no declared acceptance criteria. Walkthrough can't map without criteria; consider `/scope <task>` to add them."
 2. **For each criterion**, scan `architecture.md` (+ any `architecture/{component}.md` files from step 7) and identify the section(s) that address it. Look for:
@@ -240,7 +244,7 @@ Design addresses these acceptance criteria:
 
   AC #1 "<first 60 chars of text>…"  →  architecture.md <short-hint>
         ↳ verify: <verification note>
-  AC #2 "<first 60 chars of text>…"  →  architecture.md <short-hint>
+  AC #2 [designer] "<first 60 chars of text>…"  →  architecture.md <short-hint>
   AC #3 "<first 60 chars of text>…"  →  — NOT YET ADDRESSED — raise in Phase 3?
   …
 ```
@@ -248,6 +252,8 @@ Design addresses these acceptance criteria:
 Section hints are lightweight (e.g., `validator-visual row` or `step 5`). The user doesn't need precise line numbers, just enough to jump to the right place.
 
 When a criterion carries a non-null `verification` (from the alignment-reader `success_criteria[].verification` field — the optional ` — verify:` scope-time note), print it as an indented `↳ verify: <note>` line under that AC row. Skip the line when `verification` is null. This surfaces the declared verification strategy alongside the design that addresses it.
+
+When a criterion's `author` (same `success_criteria[]` entry) is `"designer"` or `null`, prefix its `AC #N` label with a bracketed tag — `[designer]` or `[unrecorded]` respectively — right after the number, as shown on AC #2 above. An `owner`-authored criterion prints no tag, so the common case (a confirmed criterion, or a pre-author-marker contract with no markers at all) stays unflagged and only the two provenance states worth a second look stand out. `[unrecorded]`, never `[owner]`, for `null` — a missing marker means nobody recorded one, not that the owner is assumed.
 
 ### Step 4 — Three-way prompt
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Spec for scripts/alignment-read.sh — focuses on the v1.1 optional per-criterion
 # `verification` suffix (` — verify: <note>`) and its backward compatibility.
+# Also covers the v1.3 optional per-criterion `author` marker (` — by: owner|designer`).
 set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"; ROOT="$(dirname "$HERE")"
 export CLAUDE_PLUGIN_ROOT="$ROOT"
@@ -462,6 +463,387 @@ if [ "$RC" -eq 0 ] \
 else
   fail_check "T16 preamble under a populated H2 raises neither stub warning" \
     "warnings=$W present=$(jq -r '.sections.task_level.present' <<<"$OUT") rc=$RC"
+fi
+
+# ---------------------------------------------------------------------------
+# v1.3: optional per-criterion author marker (` — by: owner|designer`).
+
+# A1: `— by: owner` alone → author owner, text clean
+D="$(mkalign a1 <<'EOF'
+# Alignment: a1
+
+## Task-Level
+
+### Success criteria
+- [ ] Settings form persists values — by: owner
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Settings form persists values" ] \
+  && [ "$(tlcrit 0 author)" = "owner" ]; then
+  pass_check "A1 by: owner alone: author owner, text clean"
+else
+  fail_check "A1 by: owner alone: author owner, text clean" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A2: `— by: designer` alone → author designer
+D="$(mkalign a2 <<'EOF'
+# Alignment: a2
+
+## Task-Level
+
+### Success criteria
+- [ ] Landing page matches the mockup — by: designer
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Landing page matches the mockup" ] \
+  && [ "$(tlcrit 0 author)" = "designer" ]; then
+  pass_check "A2 by: designer alone: author designer"
+else
+  fail_check "A2 by: designer alone: author designer" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A3: both markers on one line, `— by: owner — verify: <how>` → author owner AND
+# verification captured AND text clean
+D="$(mkalign a3 <<'EOF'
+# Alignment: a3
+
+## Task-Level
+
+### Success criteria
+- [ ] Settings form persists values — by: owner — verify: playwright save+reload assertion
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Settings form persists values" ] \
+  && [ "$(tlcrit 0 author)" = "owner" ] \
+  && [ "$(tlcrit 0 verification)" = "playwright save+reload assertion" ]; then
+  pass_check "A3 both markers on one line: author + verification + clean text"
+else
+  fail_check "A3 both markers on one line: author + verification + clean text" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
+fi
+
+# A4: no marker → author null, text is the full criterion (backward compat)
+D="$(mkalign a4 <<'EOF'
+# Alignment: a4
+
+## Task-Level
+
+### Success criteria
+- [ ] Config schema exists at the expected path
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Config schema exists at the expected path" ] \
+  && [ "$(tlcrit 0 author)" = "null" ]; then
+  pass_check "A4 no marker: author null, full text (backward compat)"
+else
+  fail_check "A4 no marker: author null, full text (backward compat)" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A5: `— by: someone-else` → author null, text left WHOLE (marker not stripped),
+# warning criterion_author_unrecognized present
+D="$(mkalign a5 <<'EOF'
+# Alignment: a5
+
+## Task-Level
+
+### Success criteria
+- [ ] Bad tail case — by: someone-else
+EOF
+)"
+arun "$D"
+WARN5="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Bad tail case — by: someone-else" ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN5" = "1" ]; then
+  pass_check "A5 unrecognized tail: author null, text whole, warning present"
+else
+  fail_check "A5 unrecognized tail: author null, text whole, warning present" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) warn=$WARN5 rc=$RC"
+fi
+
+# A6: em-dash present in text but no `by:` token → author null, text intact
+D="$(mkalign a6 <<'EOF'
+# Alignment: a6
+
+## Task-Level
+
+### Success criteria
+- [ ] supports A — B mode
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "supports A — B mode" ] \
+  && [ "$(tlcrit 0 author)" = "null" ]; then
+  pass_check "A6 em-dash without by: token: author null, text intact"
+else
+  fail_check "A6 em-dash without by: token: author null, text intact" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A7: a wrapped (multi-line) criterion carrying the marker — join_wrapped runs
+# first, so the marker parses the same as on a single line
+D="$(mkalign a7 <<'EOF'
+# Alignment: a7
+
+## Task-Level
+
+### Success criteria
+- [ ] A fixture set exists, covering: an item wholly in the past and one wholly
+      in the future — by: owner
+EOF
+)"
+arun "$D"
+WANT_A7="A fixture set exists, covering: an item wholly in the past and one wholly in the future"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "$WANT_A7" ] \
+  && [ "$(tlcrit 0 author)" = "owner" ]; then
+  pass_check "A7 wrapped criterion with author marker: parses same as one line"
+else
+  fail_check "A7 wrapped criterion with author marker: parses same as one line" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A8: wrong order, `— verify: how — by: owner` → author null and the marker
+# stays inside verification. This is the documented consequence of running
+# the verify split first, not an accident.
+D="$(mkalign a8 <<'EOF'
+# Alignment: a8
+
+## Task-Level
+
+### Success criteria
+- [ ] Criterion text — verify: how — by: owner
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "Criterion text" ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$(tlcrit 0 verification)" = "how — by: owner" ]; then
+  pass_check "A8 wrong order: author null, marker stays inside verification"
+else
+  fail_check "A8 wrong order: author null, marker stays inside verification" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
+fi
+
+# ---------------------------------------------------------------------------
+# F1 regression: the author marker accepts EM-DASH ONLY. "by:" is ordinary
+# English, unlike the distinctive "verify:" token, so a hyphen or en-dash
+# delimiter here would read unmarked prose as a marker and silently promote
+# it to an author — the exact failure this field exists to prevent.
+
+# A9: hyphen delimiter is NOT a marker → author null, text is the FULL line,
+# nothing stripped
+D="$(mkalign a9 <<'EOF'
+# Alignment: a9
+
+## Task-Level
+
+### Success criteria
+- [ ] the task list can be filtered - by: owner
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "the task list can be filtered - by: owner" ] \
+  && [ "$(tlcrit 0 author)" = "null" ]; then
+  pass_check "A9 hyphen delimiter rejected: author null, text whole"
+else
+  fail_check "A9 hyphen delimiter rejected: author null, text whole" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A10: en-dash delimiter is NOT a marker → author null, text whole
+D="$(mkalign a10 <<'EOF'
+# Alignment: a10
+
+## Task-Level
+
+### Success criteria
+- [ ] the task list can be filtered – by: owner
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "the task list can be filtered – by: owner" ] \
+  && [ "$(tlcrit 0 author)" = "null" ]; then
+  pass_check "A10 en-dash delimiter rejected: author null, text whole"
+else
+  fail_check "A10 en-dash delimiter rejected: author null, text whole" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A11: em-dash delimiter still works (the accepted case, kept as a regression
+# guard alongside A1)
+D="$(mkalign a11 <<'EOF'
+# Alignment: a11
+
+## Task-Level
+
+### Success criteria
+- [ ] the task list can be filtered — by: owner
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "the task list can be filtered" ] \
+  && [ "$(tlcrit 0 author)" = "owner" ]; then
+  pass_check "A11 em-dash delimiter still accepted"
+else
+  fail_check "A11 em-dash delimiter still accepted" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) rc=$RC"
+fi
+
+# A12: hyphen "marker" plus a real verify suffix → verification captured,
+# author null, the hyphen text stays inside text (not stripped)
+D="$(mkalign a12 <<'EOF'
+# Alignment: a12
+
+## Task-Level
+
+### Success criteria
+- [ ] filtered - by: owner — verify: run the suite
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "filtered - by: owner" ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$(tlcrit 0 verification)" = "run the suite" ]; then
+  pass_check "A12 hyphen not a marker, verify still splits: text keeps hyphen tail"
+else
+  fail_check "A12 hyphen not a marker, verify still splits: text keeps hyphen tail" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) verif=$(tlcrit 0 verification) rc=$RC"
+fi
+
+# ---------------------------------------------------------------------------
+# F5 regression: a near-miss marker must fire criterion_author_unrecognized,
+# not fail silently. The strict em-dash delimiter (F1) rejects a wrong
+# spacing or a wrong dash character, same as it rejects wrong prose — but the
+# writer who typed it meant a marker, and needs to be told why it didn't
+# parse rather than just seeing an unrecorded author.
+
+# A13: double space around "by:" → author null, warning present
+D="$(mkalign a13 <<EOF
+# Alignment: a13
+
+## Task-Level
+
+### Success criteria
+- [ ] extra space —  by:  owner
+EOF
+)"
+arun "$D"
+WARN13="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN13" = "1" ]; then
+  pass_check "A13 near-miss: double space around by:, warning present"
+else
+  fail_check "A13 near-miss: double space around by:, warning present" \
+    "author=$(tlcrit 0 author) warn=$WARN13 rc=$RC"
+fi
+
+# A14: a tab in the delimiter → author null, warning present
+D="$(mkalign a14 <<EOF
+# Alignment: a14
+
+## Task-Level
+
+### Success criteria
+- [ ] tab before —$(printf '\t')by: owner
+EOF
+)"
+arun "$D"
+WARN14="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN14" = "1" ]; then
+  pass_check "A14 near-miss: tab in delimiter, warning present"
+else
+  fail_check "A14 near-miss: tab in delimiter, warning present" \
+    "author=$(tlcrit 0 author) warn=$WARN14 rc=$RC"
+fi
+
+# A15: hyphen delimiter (F1's rejected dash) → author null, text WHOLE,
+# warning present. Covers F1 and F5 together.
+D="$(mkalign a15 <<'EOF'
+# Alignment: a15
+
+## Task-Level
+
+### Success criteria
+- [ ] the task list can be filtered - by: owner
+EOF
+)"
+arun "$D"
+WARN15="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "the task list can be filtered - by: owner" ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN15" = "1" ]; then
+  pass_check "A15 near-miss: hyphen delimiter, text whole, warning present"
+else
+  fail_check "A15 near-miss: hyphen delimiter, text whole, warning present" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) warn=$WARN15 rc=$RC"
+fi
+
+# A16: exact delimiter, wrong-case tail ("Owner") → this is the EXISTING
+# exact-match-bad-tail path (not the near-miss path), and already warns
+D="$(mkalign a16 <<'EOF'
+# Alignment: a16
+
+## Task-Level
+
+### Success criteria
+- [ ] Landing page matches the mockup — by: Owner
+EOF
+)"
+arun "$D"
+WARN16="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN16" = "1" ]; then
+  pass_check "A16 capitalized tail: author null, warning present"
+else
+  fail_check "A16 capitalized tail: author null, warning present" \
+    "author=$(tlcrit 0 author) warn=$WARN16 rc=$RC"
+fi
+
+# A17: em-dash in text, no "by:" token at all → author null, NO warning. The
+# near-miss detector must not fire on ordinary prose.
+D="$(mkalign a17 <<'EOF'
+# Alignment: a17
+
+## Task-Level
+
+### Success criteria
+- [ ] supports A — B mode
+EOF
+)"
+arun "$D"
+WARN17="$(jq -r '[.warnings[] | select(.code=="criterion_author_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] \
+  && [ "$(tlcrit 0 text)" = "supports A — B mode" ] \
+  && [ "$(tlcrit 0 author)" = "null" ] \
+  && [ "$WARN17" = "0" ]; then
+  pass_check "A17 em-dash without by: token: no near-miss warning"
+else
+  fail_check "A17 em-dash without by: token: no near-miss warning" \
+    "text=$(tlcrit 0 text) author=$(tlcrit 0 author) warn=$WARN17 rc=$RC"
 fi
 
 # ---------------------------------------------------------------------------
