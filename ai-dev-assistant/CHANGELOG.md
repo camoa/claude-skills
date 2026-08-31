@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.42.1] - 2026-08-31
+
+### Changed
+- **The accept-verdict decisions are now callable functions instead of a linear flow.**
+  `scripts/build-critique-assert.sh` held eight jq computations inline, so the only way to test them
+  was to run the whole 1,106-line script and match the sentences it printed. They move to a new
+  sourceable `scripts/accept-verdict.sh` as eight functions that each take the payload and return a
+  JSON value or the `__jq_error__` sentinel. The jq queries moved verbatim.
+
+  Behaviour did not move. Every message string, evidence key, exit code and the order of the eight
+  checks are byte-for-byte identical, and the order is load-bearing: `emit` exits on the first trip,
+  so a record with two defects still reports the same one it reported before. The 118-assertion
+  black-box spec was not edited and stays green, which is the evidence for that claim rather than a
+  description of it.
+
+### Added
+- `tests/accept-verdict-unit-spec.sh`, 26 assertions that call the eight functions directly and
+  assert on returned values. It never runs `build-critique-assert.sh` and contains no assertions on
+  message text. It is the second spec in the plugin to call functions rather than drive a process.
+
+### Fixed
+- A failure counter in the new spec reported a flag as a count. `FAIL=1` meant the summary read
+  "1 failed" however many assertions failed, and the pass total was overstated by the same amount.
+  The exit status was always correct, so the numbers were the part that lied. Now increments with
+  `FAIL=$((FAIL+1))`, not `((FAIL++))`, which returns 1 when the result is 0.
+
 ## [5.42.0] - 2026-08-31
 
 ### Added
