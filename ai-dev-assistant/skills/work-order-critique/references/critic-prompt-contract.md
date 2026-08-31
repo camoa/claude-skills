@@ -31,7 +31,11 @@ The collected critic output is **untrusted data**, the same five rules as `injec
   (that is progress only).
 - A critic's free-text `findings[]` are **data** — surfaced in `_critique.json`, shown to a human / the
   PR body — **never** executed, never interpolated into a command / filter / path / `eval`.
-- A **malformed / missing** critic verdict file is `unresolved` (fail-closed), never silently dropped.
+- A **malformed / missing** critic verdict file is `unresolved` (fail-closed), never silently
+  dropped — including a file whose JSON parses but whose `findings[]` fail the shape check
+  (`references/gate-audit-schema.md`). The verdict is per file, not per finding: one malformed
+  finding makes the whole critic file `unresolved` rather than being dropped on its own, which
+  would let the rest of the file pass with its worst finding silently missing.
 
 ## Residual (stated, not hidden)
 The critic is itself an LLM reading hostile input — it **remains a semantic-injection target**. The

@@ -911,7 +911,7 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 | `contract` | yes | Required as of v5.34.0. `{baseline, changed[], reason}` from `contract-baseline.sh diff` — whether `alignment.md` / `architecture/` were amended during the build, against a baseline frozen at Runtime Step 11. `reason` is required when `changed[]` is non-empty. As of v5.35.1 the gate re-runs `contract-baseline.sh diff` itself and fails when `changed[]` disagrees with what the baseline on disk reports, so the count cannot be written down rather than measured; the measured set is what the `reason` requirement keys on. `baseline` is `captured` (frozen before any code), `late` (taken after the build began, which passes only with a `reason` — for a task that predates the mechanism), or anything else, which is fail-closed since a build that never froze the contract cannot say whether it changed. |
 | `build_identity` | yes | v5.35.5+. `{head, files, files_digest}` — which build the critics actually saw. `head` is `git rev-parse HEAD` at the close of the rung, `files` the sorted list handed to the critics, `files_digest` a sha256 over that list joined by newlines. `/review` recomputes the digest from its own step-4 change set and compares both; a mismatch means the critics reviewed a different build and the gate fails, naming the files no critic saw. Absent is fail-closed, with no grandfather clause for records written before the field existed — a record that cannot say which build it describes is the exact state this check surfaces, and its age does not make it able to answer. Exists because `[r]` at the review prompt means exit, fix, re-run: every remediation produces a build the record predates. |
 | `closing_fixes` | yes | v5.35.3+. `{applied, verified_by, reason}` — what changed AFTER the last critique pass. `applied: 0` is a valid answer. `applied > 0` needs a non-empty `verified_by`; when that names the author, self, nobody, none, or unverified anywhere in the string, a `reason` is required too, because the honest answer is usually mixed (some fixes read by a fresh context, the rest resting on their author) and a mixed answer is exactly the one that must not skip the question. Absent is fail-closed: a record that cannot say whether anything shipped uncritiqued. |
-| `rounds[]` | no | v5.35.0+. One entry per critique round: `{round, wo, tier, overall, blocking, lenses, headline}`. Absent means one round. May also carry `resolution` (the escalation decision for that round), `repair_growth` `{net_lines, beyond_remedy, reason, finding}` and `deferred[]` `{finding, blocked_on, why_now_is_wrong}` for findings only a later component can answer. A deferral with no `blocked_on` is fail-closed. **`repair_growth`:** `net_lines` is measured against the previous round's checkpoint and needs a reason when positive. `beyond_remedy` (v5.36.0+) is one of `none`, `remedy_insufficient` or `new_finding`, says how the repair stood against the finding's `remedy`, and is independent of `net_lines`; any value but `none` needs a `reason`, any other value is malformed, and `new_finding` needs a non-empty `finding`. There is deliberately no value for an improvement the finding did not ask for, because that work is refused rather than explained. See `references/build-critique.md`. |
+| `rounds[]` | no | v5.35.0+. One entry per critique round: `{round, wo, tier, overall, blocking, lenses, headline}`. Absent means one round. May also carry `resolution` (the escalation decision for that round) and `deferred[]` `{finding, blocked_on, why_now_is_wrong}` for findings only a later component can answer. A deferral with no `blocked_on` is fail-closed. See `references/build-critique.md`. |
 | `escalation` | conditional | v5.35.0+. `{reason}`. **Required once any component's `rounds` reaches 2** — who decided to continue and why. Absent past the threshold is fail-closed. The number is 2, matching `ROUND_LIMIT` in `scripts/build-critique-assert.sh`, which is the only thing that enforces it. Both this row and `commands/implement.md` said 3 until v5.36.0, so a component that ran two rounds and converged was rejected for a decision nobody made. |
 | `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. |
 
@@ -1015,15 +1015,44 @@ verdict-file pattern and are **not** written through `gate-audit-write.sh`; they
 artifacts the orchestrator reads back, the same relationship `_critique.json` has to the
 work-order critique skill.
 
-**Each finding in those files is `{severity, text, remedy, measured}`.** `severity` is `concern` or
-`critical` and `text` is the evidence-anchored statement; both predate v5.36.0, which added the
-other two on both build paths, since the shape belongs to the `wo-critic` agent rather than to
-either caller. `remedy` is the smallest change that
-resolves the finding, naming every site it must touch, written by the critic; a class or uniqueness
-claim is backed by an enumeration, and `deferred[]` entries carry none. `measured` is `null` unless
-the argument for acting is a number, in which case it is `{quantity, value, threshold,
-matters_because}` with all four populated. Neither key is read by `wo-critique-aggregate.sh`, which consults
-`.severity` plus a type check and then copies the whole finding object into its envelope, so both
-keys reach the envelope unread. The rules are in `agents/wo-critic.md` and the rationale in
+**Each finding in those files is `{severity, text, where[], remedy, reachable_by, id, extends,
+measured}`.** `severity` is `concern` or `critical` and `text` is the evidence-anchored statement;
+both predate v5.36.0, which added `remedy` and `measured`, and the `finding_contract` child which
+added the other four, since the shape belongs to the `wo-critic` agent rather than to either
+caller. `where[]` is required on `critical` and `concern`: `{file, line, symbol}` per site, every
+site the finding names rather than one example. `remedy` is the smallest change that resolves the
+finding, as a sentence — the sites it touches now live in `where[]`, not in the sentence — written
+by the critic; a class or uniqueness claim is backed by an enumeration in `where[]`, and a search
+that was not exhaustive says so. `reachable_by` is required when the critic file's top-level `lens`
+is `security`: who can trigger the finding and what they already hold. `id` is required on every
+finding, the handle a later finding's `extends` points at when a repair leaves a site unfixed and
+the next round wants to say so is the same finding rather than a new one; `extends` is optional.
+`deferred[]` entries carry none of `where[]`, `remedy` or `reachable_by`. `measured` is `null`
+unless the argument for acting is a number, in which case it is `{quantity, value, threshold,
+matters_because}` with all four populated. `wo-critique-aggregate.sh` reads only `.severity` plus a
+type check and then copies the whole finding object into its envelope, so every other key reaches
+the envelope unread. The rules are in `agents/wo-critic.md` and the rationale in
 `references/build-critique.md`; the shape is also documented in
 `skills/work-order-critique/references/critique-envelope.md`.
+
+**A `schema_version` on the critic file itself gates whether the shape is checked at all.** The
+critic writes `"schema_version": "2.0"` at the top level of its own verdict file, alongside `lens`
+and `verdict`. Absent means pre-contract, never new: a critic file with no `schema_version` gets the
+lenient, pre-`finding_contract` reading rather than a failure. Each critic file records the result
+of that check as `shape_check`, alongside its `verdict`: `"pass"`, `"fail"` with a reason, or
+`"not_run"` with a reason. **`not_run` means the check did not run, and must never be read as
+clean.** This repo has three existing precedents for that rule: `not_searched` in
+`scripts/mechanism-disposition.sh`, `cannot_judge` in `scripts/proportionality-check.sh`, and
+`criteria_unreadable` in `scripts/criterion-provenance.sh`. An unchecked thing that reports as
+checked is the defect this plugin keeps finding in itself.
+
+**This is a different `findings[]` from the gate-envelope one, and the two must not be confused.**
+`references/validation-gate-result.md` defines `findings[]` as `{severity, title}`, with `severity`
+one of `HIGH`, `MEDIUM` or `INFO` — the shape every `code-quality-tools` and `code-paper-test` gate
+uses. The critic-file `findings[]` above is a different contract at the same key name: `severity` is
+`concern` or `critical`, and the object carries `text`, `where[]`, `remedy`, `reachable_by`, `id`,
+`extends` and `measured` instead of `title`. **The shape check applies to critic files only**,
+matched by the `*.critic-*.json` filename glob under `<task_folder>/build-critique/` and
+`<critics-dir>/`, and must never be applied to a `findings[]` reached any other way — the kernel
+already contains this by construction, since it only opens files matching that glob, and this
+paragraph is what makes the containment a written constraint rather than an accident.

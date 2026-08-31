@@ -1,5 +1,67 @@
 # Changelog
 
+## [5.40.0] - 2026-08-31
+
+### Added
+- **A finding is now a shape a script can refuse.** A critic finding gains `where[]` (every site as
+  file, line and symbol), `reachable_by` (required when the critic's lens is `security`), `id`, and
+  an optional `extends`. `scripts/wo-critique-aggregate.sh` checks the shape as it reads each critic
+  file, and a malformed finding makes that file `unresolved`.
+
+  Before this, `severity` was the only field any code read. `text`, `remedy` and `measured` had no
+  consumer at all, and `scripts/wo-critique-aggregate.sh` said so in its own header. Measured across
+  122 real critique files holding 732 findings: 53 different field names, `remedy` present on 8.4%
+  of the criticals and concerns that require one, 263 findings claiming a class of defect while
+  naming fewer than two sites, and 205 of 265 security findings stating no reachability. Nothing
+  rejected a finding, so nothing held a shape.
+
+  **The enforcement needed no new wiring.** `unresolved` already feeds `blocking` for a required
+  critic, so a malformed finding stops a build through the consequence the kernel already had.
+
+  A shape failure raises the verdict to a **floor** of `unresolved` rather than overwriting it, so a
+  file that is already `critical` is never weakened by its own shape failure into something that
+  stops blocking.
+
+- **`scripts/repair-scope-check.sh`**, a deterministic kernel that compares the files a repair
+  touched against the sites its finding named. A repair touching a file the finding never named is
+  out of scope, decided by comparing two sets, with no agent dispatched.
+
+  `--touched-files-source undetermined` returns `cannot_judge`. An empty touched set means the repair
+  touched nothing; a caller that could not read the diff must say so rather than pass an empty array,
+  which would otherwise read as a clean pass.
+
+### Changed
+- **A critic file carries `schema_version: "2.0"`.** Absent means pre-contract: the shape check does
+  not run and the file is read exactly as before. Measured before relying on it: 63 of 80 real
+  critic files carry no version at all, so absent had to mean old.
+
+  **The skipped state records itself.** Every critic entry now carries `shape_check` of `pass`,
+  `fail` with the rule and finding index that failed, or `not_run` with the reason. A check that did
+  not run never reads as clean. That is the same rule as `not_searched` in
+  `scripts/mechanism-disposition.sh`, `cannot_judge` in `scripts/proportionality-check.sh`, and
+  `criteria_unreadable` in `scripts/criterion-provenance.sh`.
+
+- `references/gate-audit-schema.md` now names both `findings[]` shapes side by side: the critic
+  finding, and the gate envelope finding from `references/validation-gate-result.md`, which is
+  `{severity, title}` with severity `HIGH`, `MEDIUM` or `INFO`. The shape check is scoped to the
+  `*.critic-*.json` filename glob and must never be applied to a `findings[]` reached another way.
+
+### Removed
+- **`beyond_remedy` and `repair_growth`**, with the 212-line section of
+  `scripts/build-critique-assert.sh` that audited them, `tests/repair-remedy-gate-spec.sh` entire,
+  and their prose in `commands/implement.md` and two references. They asked the builder which of
+  three buckets its own repair landed in. `scripts/repair-scope-check.sh` answers the same question
+  by comparing two sets, so keeping both would give two answers to one question.
+
+  `beyond_remedy` appeared in 1 of 9 real records, and that record is the task that was dogfooding
+  this epic. It was built, documented across four files, given 212 lines of assertions and its own
+  spec, and never adopted.
+
+### Fixed
+- A critic file whose `schema_version` was a non-numeric string aborted the entire aggregate with
+  exit 2 and no envelope at all, because jq's `tonumber?` yields empty rather than null. Found by a
+  spec assertion during this change, not by review.
+
 ## [5.39.0] - 2026-08-31
 
 ### Added

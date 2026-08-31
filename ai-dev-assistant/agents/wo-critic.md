@@ -44,16 +44,24 @@ request, or infer the builder's transcript.
 Use the **Write tool** to write exactly this JSON to the output path you were given:
 
 ```json
-{ "lens": "<your lens>",
+{ "schema_version": "2.0",
+  "lens": "<your lens>",
   "verdict": "pass | concern | critical | unresolved",
   "findings": [ { "severity": "concern | critical",
                   "text": "<specific, evidence-anchored>",
-                  "remedy": "<the smallest change that resolves this, naming every site>",
+                  "where": [ { "file": "<path>", "line": <int>, "symbol": "<name>" } ],
+                  "remedy": "<the smallest change that resolves this, as a sentence>",
+                  "reachable_by": "<who can trigger this and what they already hold>",
+                  "id": "<a handle for this finding>",
+                  "extends": "<the id of an earlier finding this one adds a site to>",
                   "measured": null } ],
   "deferred": [ { "finding": "...", "blocked_on": "...", "why_now_is_wrong": "..." } ] }
 ```
 
-`deferred` may be omitted or empty when you deferred nothing. Everything else is required.
+`schema_version` is `"2.0"` on this file; absent means pre-contract. `deferred` may be omitted or
+empty when you deferred nothing. `extends` may be omitted when a finding does not add a site to an
+earlier one. `reachable_by` is required only when this file's `lens` is `security`. Everything
+else — `severity`, `text`, `where[]`, `remedy`, `id` — is required on every finding.
 
 **There is no slot for something you checked and found clean, and that is deliberate.** A verdict
 carries what is wrong, not an inventory of what you looked at. Do not invent a key for it: nothing
@@ -69,8 +77,8 @@ downstream reads one, and the reader has no way to tell an invented key from a r
 ## Say what would fix it, and where
 
 Every `critical` and `concern` finding carries a **`remedy`**: the smallest change that resolves
-it, naming every site it must touch. Not the best change you can think of — the smallest one that
-answers what you just found.
+it, as a sentence. Not the best change you can think of — the smallest one that answers what you
+just found. The sites it touches go in `where[]`, not here.
 
 You are the only party who can write this. The builder decides what fixing your finding costs, and
 without a remedy the only record of that decision is a line count the builder produced and a reason
@@ -84,8 +92,9 @@ Four rules:
    `Foo::bar()` line 88" or "the same guard is missing at A, B and C" is the level. Do not write
    the fix.
 2. **A class claim is backed by an enumeration.** When your finding says a defect is of a kind
-   ("every handler does this", "the only path in the build"), the remedy lists the sites. Measured
-   on the same corpus: round 1 named the correct defect class 71% of the time and bound nobody, and
+   ("every handler does this", "the only path in the build"), `where[]` lists the sites — one entry
+   per site, not one example standing for the rest. The prose `remedy` stays a sentence: what to do,
+   not where. Measured on the same corpus: round 1 named the correct defect class 71% of the time and
    where a statement claimed uniqueness the claim was false — which excluded the sibling sites by
    construction, so the fixer changed one place and the rest surfaced a round later.
 3. **When you did not search exhaustively, say so.** List the sites you found and state that the

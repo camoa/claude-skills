@@ -12,11 +12,16 @@
 #       --critics-dir <dir> --evaluated <true|false> [--diff-empty] [--required] [--run-at <iso>]
 #
 # Critic file (written by the wo-critic agent via Write): an OBJECT
-#   { "lens":..., "verdict":"pass|concern|critical|unresolved",
-#     "findings":[ {"severity":"concern|critical","text":...,
-#                     "remedy":..., "measured":null|{...}} ] }         # findings MUST be objects
-# `remedy` and `measured` (v5.36.0+) are the critic's contract, not this kernel's: nothing here
-# reads them. They are carried through into the envelope with the rest of each finding object.
+#   { "lens":..., "verdict":"pass|concern|critical|unresolved", "schema_version":<num, optional>,
+#     "findings":[ {"severity":"concern|critical","text":...,"where":[{"file":...}],
+#                     "remedy":...,"reachable_by":...,"id":...,"extends":...,
+#                     "measured":null|{...}} ] }         # findings MUST be objects
+# `text`, `extends` and `measured` are the critic's contract, not this kernel's: nothing here
+# reads them. When schema_version >= 2.0, this kernel DOES read and enforce where[]/remedy/id
+# (plus reachable_by when the file's lens is security) on every critical/concern finding — see
+# shape_check() below. One malformed finding forces effective=unresolved for the WHOLE file, never
+# just that finding (D3). No schema_version => pre-contract, read exactly as before this kernel
+# existed; shape_check:"not_run" is recorded either way, so a skipped check never reads as clean.
 # Shape and rules: agents/wo-critic.md.
 #
 # Fail-closed rules (AR-E + red-team CRIT-1/CRIT-2/HIGH-5/MED-7/MED-8):
@@ -74,6 +79,53 @@ effective() {
   ' "$1" 2>/dev/null || echo "unresolved"
 }
 
+# shape check of one critic file (D1-D5) — gated on schema_version >= 2.0; absent/unparseable/<2.0
+# => not_run (pre-contract, read as today). On critical/concern findings only: where[] must be a
+# non-empty array whose elements all carry `file`; remedy and id must be non-empty; reachable_by
+# must be non-empty when the file's lens is security. First violation wins; index + rule recorded.
+shape_check() {
+  jq -c '
+    def n: (. // "" | tostring | ascii_downcase | gsub("^\\s+|\\s+$";""));
+    def blank: (. == null) or ((type=="string") and ((.|ascii_downcase|gsub("^\\s+|\\s+$";""))==""));
+    def where_bad:
+      (.where) as $w
+      | ($w==null) or ($w|type!="array") or (($w|length)==0)
+        or ([ $w[] | (type!="object") or (.file|blank) ] | any);
+    if type != "object" then {status:"not_run", reason:"critic file not an object (pre-contract)"}
+    else
+      (.schema_version) as $sv
+      | (if $sv==null then null
+         elif ($sv|type)=="number" then $sv
+         # `tonumber?` yields EMPTY, not null, on a non-numeric string. An empty result makes the
+         # whole expression produce no output, so $SHAPE comes back as "" and the `--argjson shape`
+         # below aborts the entire aggregate with exit 2 and no envelope at all. `// null` turns
+         # that empty into a value the branch below can read. Found by a spec assertion, not by
+         # review: schema_version "abc" took the gate down completely.
+         elif ($sv|type)=="string" then (($sv|tonumber?) // null) else null end) as $svn
+      | (.lens // "" | n) as $lens
+      | if $svn == null then
+          {status:"not_run", reason:(if $sv==null then "schema_version absent (pre-contract)"
+             else "schema_version "+($sv|tostring)+" unparseable (pre-contract)" end)}
+        elif $svn < 2 then
+          {status:"not_run", reason:("schema_version "+($sv|tostring)+" < 2.0 (pre-contract)")}
+        else
+          ([ ((.findings // []) | if type=="array" then . else [] end) | to_entries[]
+             | select((.value|type)=="object")
+             | select(((.value.severity // "")|n) as $sev | $sev=="critical" or $sev=="concern")
+             | (.key) as $i | (.value) as $f
+             | if ($f|where_bad) then {idx:$i, detail:"where[] missing/empty/not-an-array, or an element lacks file"}
+               elif ($f.remedy|blank) then {idx:$i, detail:"remedy missing or empty"}
+               elif ($lens=="security") and ($f.reachable_by|blank) then {idx:$i, detail:"lens=security and reachable_by missing or empty"}
+               elif ($f.id|blank) then {idx:$i, detail:"id missing or empty"}
+               else empty end
+           ]) as $bad
+          | if ($bad|length) > 0 then {status:"fail", reason:("finding["+($bad[0].idx|tostring)+"]: "+$bad[0].detail)}
+            else {status:"pass", reason:null} end
+        end
+    end
+  ' "$1" 2>/dev/null || echo '{"status":"fail","reason":"shape check errored reading this critic file"}'
+}
+
 PRESENT=0; HAS_CRIT="false"; HAS_UNRES="false"; HAS_CONCERN="false"; CRITICS='[]'
 if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
   shopt -s nullglob
@@ -83,13 +135,26 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
       # empty / 0-byte / unparseable => unresolved (fail-closed, HIGH-5) — before effective()
       EFF="unresolved"
       CRITICS="$(jq -nc --argjson a "$CRITICS" --arg f "$(basename "$cf")" \
-        '$a + [{lens:"?",verdict:"unresolved",effective:"unresolved",findings:[],note:("unreadable:"+$f)}]')"
+        '$a + [{lens:"?",verdict:"unresolved",effective:"unresolved",findings:[],note:("unreadable:"+$f),shape_check:"not_run",shape_check_reason:"file unreadable"}]')"
     else
       EFF="$(effective "$cf")"
+      SHAPE="$(shape_check "$cf")"
+      SHAPE_STATUS="$(printf '%s' "$SHAPE" | jq -r '.status')"
+      if [ "$SHAPE_STATUS" = "fail" ]; then
+        # D3: a malformed finding forces the file to (at least) unresolved — floor, not override,
+        # so a finding already ranked critical never gets weakened by its own shape failure.
+        EFF="$(jq -nr --arg e "$EFF" \
+          'def rank(v): {"pass":0,"concern":1,"unresolved":2,"critical":3}[v] // 2;
+           ([rank($e), rank("unresolved")] | max) as $r
+           | {"0":"pass","1":"concern","2":"unresolved","3":"critical"}[$r|tostring]')"
+      fi
       # coerce a non-object value to a safe stub so the merge can never crash (CRIT-2)
-      CRITICS="$(jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --slurpfile c "$cf" \
-        '$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end) + {effective:$eff} ]' 2>/dev/null \
-        || jq -nc --argjson a "$CRITICS" --arg eff "$EFF" '$a + [{lens:"?",verdict:"unresolved",effective:$eff,findings:[]}]')"
+      CRITICS="$(jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" --slurpfile c "$cf" \
+        '$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end) + {effective:$eff}
+                + {shape_check:$shape.status} + (if $shape.reason then {shape_check_reason:$shape.reason} else {} end) ]' 2>/dev/null \
+        || jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" \
+             '$a + [{lens:"?",verdict:"unresolved",effective:$eff,findings:[],shape_check:$shape.status}
+                    + (if $shape.reason then {shape_check_reason:$shape.reason} else {} end)]')"
     fi
     case "$EFF" in
       critical)   HAS_CRIT="true" ;;

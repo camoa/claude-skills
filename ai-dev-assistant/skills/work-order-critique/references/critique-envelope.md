@@ -20,8 +20,13 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
   "critics": [
     { "lens": "security", "verdict": "pass|concern|critical|unresolved",
       "effective": "pass|concern|critical|unresolved",
+      "shape_check": "pass | fail | not_run",
       "findings": [ { "severity": "concern|critical", "text": "<evidence-anchored>",
-                      "remedy": "<smallest change that resolves this, naming every site>",
+                      "where": [ { "file": "<path>", "line": 0, "symbol": "<name>" } ],
+                      "remedy": "<smallest change that resolves this, as a sentence>",
+                      "reachable_by": "<who can trigger this and what they already hold>",
+                      "id": "<a handle for this finding>",
+                      "extends": "<an earlier finding's id, or omitted>",
                       "measured": null } ] }
   ],
   "overall": "pass | concern | critical | not_evaluated",
@@ -37,7 +42,12 @@ transcript). The fail-closed verdict math is the kernel's — this is the shape,
 | `evaluated` | `false` ⇒ the rung did not run (dial off / budget skip). A **present, explicit** skip — NOT an absent file. |
 | `overall` | `not_evaluated` ≠ `pass`. A required/high WO whose file is absent/unreadable is fail-closed to blocking by the **consumer** (③/`wo-ship-gate.sh`), not silently treated as pass. |
 | `critics[].effective` | `max(self verdict, worst finding severity)` — a `pass` carrying a `critical` finding is `critical` (the kernel's F8 cross-check). |
-| `critics[].findings[].remedy` | v5.36.0+. The smallest change that resolves the finding, naming every site it must touch, written by the critic that found it. It is what a repair is measured against, so that the repair is not the only party judging its own size. A class or uniqueness claim is backed by an enumeration; a search that was not exhaustive says so. `deferred[]` entries carry none. Rules live in `agents/wo-critic.md`. |
+| `critics[].shape_check` | The result of checking this critic file against the finding shape below: `"pass"`, `"fail"` with a reason, or `"not_run"` with a reason. `not_run` means the check did not run — it is never read as clean. |
+| `critics[].findings[].where[]` | Required on `critical` and `concern`. `[{file, line, symbol}]`, one entry per site the finding names — every site, not one example standing for the rest. |
+| `critics[].findings[].remedy` | v5.36.0+. The smallest change that resolves the finding, as a sentence, written by the critic that found it. It is what a repair is measured against, so that the repair is not the only party judging its own size. The sites a class or uniqueness claim covers go in `where[]`, not here; a search that was not exhaustive says so. `deferred[]` entries carry none. Rules live in `agents/wo-critic.md`. |
+| `critics[].findings[].reachable_by` | Required when this critic file's top-level `lens` is `security`. Who can trigger the finding and what they already hold. |
+| `critics[].findings[].id` | Required on every finding — the handle an `extends` on a later finding points at. |
+| `critics[].findings[].extends` | Optional. The `id` of an earlier finding this one adds a site to. |
 | `critics[].findings[].measured` | v5.36.0+. `null` unless the argument for acting on the finding is a number, in which case `{quantity, value, threshold, matters_because}` with all four populated. A ratio, multiple or delta on its own is not admissible: the measured value is compared against a threshold sourced from outside the measurement. |
 | `missing` | `expected − present`; each missing critic is a synthetic `unresolved`. |
 | **`blocking`** | The single field ③ acts on. `true` ⇒ ③ withholds auto-merge (treated like a recorded bypass). `wo-ship-gate.sh` ANDs every WO's `blocking==false` into `ship_ok`. |
