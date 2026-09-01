@@ -1,0 +1,169 @@
+56
+== 0 | periplus | cli. | r2 | critical ==
+src/periplus/cli.py ships two contradictory measurements of the same fact in one docblock, 11 lines apart. Line 43 (added by this delta): 'the narrower type is four ``arg-type`` errors against ``ArgumentParser``'s string parameters'. Line 54 (left untouched): 'a ``dict[str, bool]`` splat is six type errors against ``ArgumentParser``'s string parame
+
+== 1 | periplus | packaging. | r3 | medium ==
+test_a_bare_invocation_is_a_usage_error binds to <root>/.venv rather than to the interpreter running the suite.
+
+== 2 | periplus | packaging. | r3 | info ==
+__getattr__ returning str is honest for every name it can be called with.
+
+== 3 | periplus | packaging. | r3 | critical ==
+`!src/periplus/packs/**` re-includes every credential shape under a subtree third-party pack authors will contribute to, and because hatchling follows .gitignore this is a publish hole and not only a commit hole. `git check-ignore` against the shipped .gitignore says these are all COMMITTED under src/periplus/packs/drupal@0.1.0/: `.env`, `.env.prod
+
+== 4 | periplus | packaging. | r3 | concern ==
+No test bounds the sdist, and `uv build` produces it alongside the wheel while `uv publish` uploads both. No exploitable gap found today: the sdist carries `periplus_map-0.1.0/src/periplus/**` plus exactly `.gitignore`, LICENSE, NOTICE, PKG-INFO, pyproject.toml and README.md, and because the wheel's `packages` and the sdist's `include` both resolve
+
+== 5 | periplus | packaging. | r3 | note ==
+test_a_bare_invocation_is_a_usage_error binds to a hardcoded .venv rather than to the interpreter running the suite
+
+== 6 | periplus | packaging. | r2 | medium ==
+The .gitignore secret patterns added in this range can silently drop pack data out of the commit. `git check-ignore --no-index -v` against e25f226's .gitignore matches src/periplus/packs/drupal@0.1.0/secrets.yaml (line 19, *secret*), .../credentials.yaml (line 18, *credentials*), .../user/secret_scan.yaml (line 19), and .../php@0.1.0/settings.local
+
+== 7 | periplus | packaging. | r2 | medium ==
+The mypy repair bought attribute checking by making the only code that runs unchecked, and nothing records the trade. Five blatant type errors planted in the else branch -- including an undefined name and __dir__ declared to return int -- pass `mypy --strict` with 'Success: no issues found'. Ruff catches one of the five. Detail and the control run 
+
+== 8 | periplus | packaging. | r2 | low ==
+The three new install tests hide the cause of their own failures. _run passes capture_output=True with check=True, so CalledProcessError's message is argv plus exit status and the captured stderr is discarded. With the package indexes unreachable, all three fail with no indication that the network was the problem. Passing the captured stderr into t
+
+== 9 | periplus | packaging. | r2 | note ==
+Two small robustness issues in the same probe. The output parser `dict(line.split(maxsplit=1) for line in result.stdout.strip().splitlines() if line.strip())` raises ValueError on any single-token line, so a stray write to the child's stdout — a sitecustomize print, a warning routed to stdout, an interpreter banner on some builds — turns a clear as
+
+== 10 | periplus | packaging. | r2 | note ==
+.gitignore gaps, all verified NOT ignored with git check-ignore: .pypirc, .netrc, id_ed25519, app.pfx, ks.jks, store.keystore, auth.token, .npmrc, service-account.json. Two matter for this project specifically. .pypirc holds the PyPI upload token, which is the one credential a packaging component will actually handle, and id_ed25519 is ssh-keygen's
+
+== 11 | drupalhtx_refresh | event-fixtures | r5 | critical ==
+The '*' sentinel is spoofable from State and is NOT returned alone, so both new claims about it are false — and this is the item the round already corrected once. EventFixturesInterface.php:124-129 states the sentinel "is returned alone when the State record holds no nodes" and that "Every other key is a real node uuid." verify() builds every key o
+
+== 12 | drupalhtx_refresh | event-fixtures | r5 | critical ==
+The justification the round added to record() is false, and it is the stated reason for keeping the behaviour round 4 proved strands published nodes. EventFixtures.php:337-339 now reads: "That is a deliberate choice over refusing. Refusing would leave no way to clear a corrupt record — every create(), purge() and verify() would throw on it for good
+
+== 13 | drupalhtx_refresh | event-fixtures | r5 | concern ==
+verify()'s expanded docblock states its scope as though it were a property of the node, and never discloses that the selector is a value out of the untrusted store. EventFixturesInterface.php:107 now reads "It checks ONLY SHAPE_RECURRING_OPEN_ENDED." What the code checks is the shape LABEL recorded in State (EventFixtures.php:185-188 skips every en
+
+== 14 | drupalhtx_refresh | event-fixtures | r5 | concern ==
+The interface does not document the settings gate on verify() or purge(), nor their throws. EventFixturesInterface.php:14-15 says only "Local development only. create() refuses unless $settings['htx_event_archive_allow_fixtures'] is TRUE", and create() is the sole method carrying an @throws tag (:77-78). PROVEN BY EXECUTION: with the flag unset aft
+
+== 15 | drupalhtx_refresh | event-fixtures | r5 | nit ==
+The narrowed orphaned-rule claim is honest and its premise holds, but its harm ceiling is lower than the wording suggests. VERIFIED BY EXECUTION that the premise is real: the open-ended fixture's rule stores limit=NULL while the bounded shapes store 'COUNT=6' and 'COUNT=4', and RuleStorage::getRuleIdsToCheck() (modules/contrib/smart_date/modules/sm
+
+== 16 | drupalhtx_refresh | event-fixtures | r5 | concern ==
+openEndedProblem()'s rewritten docblock replaced one false claim with another. The r5 text opens 'This shape is the one whose decay is invisible from the node alone' and the retained sentence at :232 says 'Nothing about the drift is visible from the node alone, which is why it is checked rather than documented.' Both are contradicted by the branch 
+
+== 17 | drupalhtx_refresh | event-fixtures | r5 | nit ==
+New overgeneralisation in the same rewritten openEndedProblem() docblock: 'The others decay on a schedule you can compute from create() time.' Only two of the six others decay at all. Probe E4 sampled every shape's max end_value against now+11d, +12d, +30d, +31d and +400d: `future` flips past between +30 and +31, `recurring-mixed` flips between +11
+
+== 18 | drupalhtx_refresh | event-fixtures | r5 | nit ==
+Two smaller edges in the amended verify() return docblock. It promises 'Node uuid keyed to a description of the drift' and 'Every other key is a real node uuid', but the 'Recorded as a fixture but is not an event.' branch (:201, pinned by testVerifyToleratesRefusedNonEventRecord) is not drift — it reports a purge()-refused record — and the 'Node is
+
+== 19 | drupalhtx_refresh | event-fixtures | r6 | concern ==
+The amended verify() @return closed round-5 item 5 and introduced a new false claim on the security axis, which is the failure mode that has now recurred in every round. EventFixturesInterface.php: 'Otherwise, node uuids. The service refuses any record whose keys are not valid uuids, so every key here is a uuid it recorded itself.' Validation estab
+
+== 20 | drupalhtx_refresh | event-fixtures | r6 | nit ==
+Verified TRUE and recorded, because most of what round 6 changed I tried to falsify and could not. (a) The uuid validation is correct in both directions: 500 uuids from Drupal's own uuid service all pass Uuid::isValid, all 7 keys create() writes pass, and Uuid::isValid('*') is false — so it cannot break create(), which the brief flagged as the crit
+
+== 21 | drupalhtx_refresh | event-fixtures | r6 | concern ==
+The uuid validator accepts a key that is not a uuid, so the interface's categorical claim about verify()'s keys is falsified. Uuid::isValid() (core/lib/Drupal/Component/Uuid/Uuid.php:27-29) is preg_match('/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/'), and PCRE '$' matches before a final newline, so '<uuid>\n' passes. PROVEN BY EXECUTION against a
+
+== 22 | drupalhtx_refresh | event-fixtures | r6 | concern ==
+The recovery the exception message prints is real but strands everything the corrupt record named, and the message frames it as the fix without saying so. PROVEN BY EXECUTION: after create() (7 nodes), a corrupting State write, and one failed create(), $state->delete('htx_event_archive.fixtures') followed by create() succeeded and wrote a clean 7-e
+
+== 23 | drupalhtx_refresh | event-fixtures | r6 | nit ==
+record() validates 'nodes' exhaustively but does not validate 'created'. PROVEN BY EXECUTION: ['created'=>['a'],'nodes'=>{valid uuid:'past'}] was accepted, and (int) $record['created'] (EventFixtures.php:409) silently casts the array. purge() then writes the cast value back. No security consequence — 'created' selects nothing and gates nothing — bu
+
+== 24 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+verify() cannot tell an unused fixture set from one an archiver run has already consumed: no invariant looks at published status, including for the open-ended shape. Probe (/tmp/ProbeATest.php::testProbeUnpublishedOpenEnded): create(), then $node->setUnpublished()->save() on the open-ended fixture -> verify() === []. The open-ended shape exists pre
+
+== 25 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+Two shapes besides the open-ended one decay on wall-clock time alone, and after the cut nothing checks them. SHAPE_RECURRING_MIXED is built from $now-24d with COUNT=6 weekly, i.e. occurrences at -24,-17,-10,-3,+4,+11 days, so eleven days after create() it holds no future occurrence and is indistinguishable from SHAPE_RECURRING_FINISHED; SHAPE_FUTUR
+
+== 26 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+openEndedProblem()'s first arm misdiagnoses an emptied field. If field_when has no values at all it returns 'Every stored occurrence should be behind now; smart_date_recur cron has extended this series' — the opposite of what happened. Probe (/tmp/ProbeATest.php::testProbeOpenEndedNodeWithEmptyField): with field_when set to [], that message is what
+
+== 27 | drupalhtx_refresh | event-fixtures | r4 | critical ==
+The single remaining check in verify() is gated on a value read from an untrusted store, with zero corroboration -- and this module's own code says that store is untrusted. purge() at EventFixtures.php:110-114 argues at length that the State record 'is writable by anything with a database connection' and therefore requires THREE independent facts (
+
+== 28 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+Deleting htx_event_archive.install created a fresh stranding path on uninstall, and nothing in the module warns about it. PROVEN BY EXECUTION: probe created the set, then ran module_installer->uninstall(['htx_event_archive']). Afterwards the State key htx_event_archive.fixtures still held all seven uuids, all seven fixture nodes still existed (six 
+
+== 29 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+Gating verify() (EventFixtures.php:162) is defensible on its own -- it introduces no deletion risk and matches create()/purge() -- but combined with the removed install file it means an environment that HAS fixture content but NOT the settings flag has no in-module route to enumerate or remove it: create() throws, purge() throws, verify() throws, a
+
+== 30 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+The claim 'This shape is the only one with a half-life' (EventFixtures.php:216, and the equivalent in EventFixturesInterface.php:107-111) is false, and it is the stated justification for the cut that left verify() checking only the open-ended shape. Two other shapes decay on a clock measured in days: SHAPE_FUTURE is built at now+30d (:384-388), so 
+
+== 31 | drupalhtx_refresh | event-fixtures | r4 | concern ==
+remember() (EventFixtures.php:314-318) is a non-atomic read-modify-write executed seven times per create(), with no lock and no State transaction. Two create() runs overlapping -- two terminals, or a script invoked twice -- lose updates: the losing run's uuids never reach the record, and its nodes are then published event nodes that purge() will ne
+
+== 32 | drupalhtx_refresh | event-fixtures | r2 | concern ==
+The State key is still a single non-atomic point of failure; corroboration only flipped the failure direction. EventFixtures.php:454-458: rememberUuid() does an unlocked read-modify-write of one State key per node, called seven times per create(). Two concurrent create() runs, or a create() racing a purge(), silently lose uuids - and under the new 
+
+== 33 | drupalhtx_refresh | event-fixtures | r2 | concern ==
+No .install file and no hook_uninstall, so there is a route by which fixture content reaches a site and outlives the only tool that can remove it. The module ships one services.yml with htx_event_archive.event_fixtures as a public, always-registered service in the production container (htx_event_archive.services.yml). Both entry points are gated on
+
+== 34 | drupalhtx_refresh | event-fixtures | r2 | concern ==
+The open-ended fixture's distinguishing property has a shelf life measured in hours on this site, and nothing warns about it. Probe (kernel test, container /tmp, worktree untouched): immediately after create() rule 3 holds 9 stored instances (keys 1..9), max stored end_value = now-4.0d, node holds 9 deltas with max end_value = now-4.0d, getNewInsta
+
+== 35 | drupalhtx_refresh | event-fixtures | r2 | concern ==
+The open-ended fixture's delta count remains unpinned, as suspected. The only assertion on it is assertGreaterThan(1, $items->count()). Observed value is 9 (start -60d, month_limit 12). Changing the -60d offset or the field's month_limit to anything yielding 2..8 past occurrences passes the entire suite with a materially different fixture. The prop
+
+== 36 | drupalhtx_refresh | event-fixtures | r3 | critical ==
+verify() is blind to half the fixture set after two create() runs, which is the flow AC3 names and the suite's own testCreateTwiceThenPurgeLeavesSiteContentUntouched exercises. create() merges into the existing record ($record['nodes'][$uuid] = $shape), so two runs leave 14 uuids, but verify() collapses them into a shape-keyed map: `$found[$record[
+
+== 37 | drupalhtx_refresh | event-fixtures | r3 | concern ==
+verify() fatals on a State record purge() is explicitly written to distrust. shapeProblem() evaluates `$node->get('field_when')->getValue()` before the match, so any recorded uuid resolving to a bundle without field_when throws InvalidArgumentException: 'Field field_when is unknown.' Probe confirms it (both with a known shape and with an unknown on
+
+== 38 | drupalhtx_refresh | event-fixtures | r3 | concern ==
+Six of the seven shape invariants ignore published status, so verify() cannot see the drift this module's own subject matter causes. Probe: unpublish the 'past' fixture and verify() returns no problem for it (only 'no-date' and 'unpublished-past' were flagged, and those only because their own invariants happen to cover the change). SHAPE_UNPUBLISHE
+
+== 39 | drupalhtx_refresh | event-fixtures | r3 | concern ==
+The decay window the whole verify() rationale rests on is overstated by roughly two orders of magnitude. openEndedProblem()'s docblock says 'a few hours after create()' and 'On this site automated_cron runs every 10800 seconds, so that is roughly a three-hour window'. smart_date_recur's cron self-throttles: SmartDateRecurHooks::cron() returns early
+
+== 40 | drupalhtx_refresh | event-fixtures | r3 | critical ==
+The new verify() (EventFixtures.php:155-185) collapses the per-uuid record into a SHAPE-keyed map and then tests presence by shape, so it returns a false clean bill of health in the scenario acceptance criterion 3 names. Line 167: `$found[$record['nodes'][$node->uuid()] ?? 'unknown'] = $node;` - one slot per shape, later nodes overwrite earlier one
+
+== 41 | drupalhtx_refresh | event-fixtures | r3 | concern ==
+htx_event_archive.install:28 reads the same State value as EventFixtures::record() but without the is_array() guard that method has: `$uuids = array_keys($record['nodes'] ?? []);`. A malformed or partially-written record where 'nodes' is a scalar makes array_keys() throw TypeError ('array_keys(): Argument #1 ($array) must be of type array, string g
+
+== 42 | drupalhtx_refresh | event-fixtures | r3 | concern ==
+verify() is the only public method with no assertFixturesAllowed() gate (compare line 61 in create() and line 91 in purge()), while EventFixturesInterface:86-87 and the class docblock both state 'Local development only'. htx_event_archive.services.yml registers htx_event_archive.event_fixtures unconditionally, so on production verify() is a callabl
+
+== 43 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | critical ==
+Regression introduced by this delta: a generate 429 plants a countdown of up to RATE_LIMIT_WINDOW seconds that then falsely disables "Refresh Suggestions" for up to ~55 minutes. Before this change handleGenerate never touched `countdown`; it now does (TopicClusterSection.tsx:78-79) with the generate rate-limit remainder (up to 3600s), while the reg
+
+== 44 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+generateMutation calls `await response.json()` unconditionally on any non-ok response (hooks/useTopicClusters.ts:186-195). When the error body is not JSON — a proxy/CDN 502 HTML page, a Next.js 404, an aborted stream — json() throws SyntaxError and the mutation rejects with it; handleGenerate's else branch then renders `error.message` verbatim into
+
+== 45 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+The allow-list is materially narrower than the message vocabulary it may face. I ran all 14 message strings actually authored in contentbench_setup_intelligence controllers through upstreamErrorBody — all 14 pass, so there is no present regression. But 10/10 plausible next messages were suppressed: any message containing a double quote, parenthesis
+
+== 46 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+Asymmetry with the sibling route the module docblock cites as the model: app/api/organizations/[id]/topic-clusters/regenerate/route.ts:47-52 still returns `data.message` raw with no shape check and no fallback discipline, while the generate route now runs the strict allow-list. The suppression policy the new file argues for is applied to one of the
+
+== 47 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+The allow-list excludes punctuation-bearing internals, not internals as such — machine strings made only of alnum + space + `.,'?!-` and containing no camelCase pass. Executed against the real exported function (node --experimental-strip-types importing frontend/lib/api/upstream-error.ts, 400 + JSON message, probe run outside the repo and deleted).
+
+== 48 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+The allow-list is materially tighter than 'a sentence a human wrote', and every rejection degrades silently to the fallback — i.e. it reintroduces this work-order's own defect with no failing test. Executed against the real function, these legitimate guidance strings were SUPPRESSED: `ContentBench could not reach your site. Try again.` and `OpenAI 
+
+== 49 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+`retry_after` is forwarded with no upper bound and drives a UI disable. Validation is `typeof === 'number' && Number.isFinite && >= 0`. Executed: `retry_after: 999999999` is forwarded verbatim, as is `31536000` (one year) and the non-integer `0.5`. TopicClusterSection feeds it straight into `setCountdown(error.retryAfter)`, and `isCoolingDown` disa
+
+== 50 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+The new log line interpolates `response.url` unredacted, including its query string. Probe with a URL carrying `?token=SECRET123&api_key=abcdef` produced: `Upstream error (400) from https://cms.contentbench.io/api/organizations/abc/topic-clusters/generate?token=SECRET123&api_key=abcdef: {...}`. This is server-side console only and the current calle
+
+== 51 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+useTopicClusters generateMutation now surfaces `data.error` as `error.message`, and TopicClusterSection renders it via `{actionError}`. React escapes it and the allow-list forbids `<`, `>` and `&`, so there is no XSS path — but the same catch renders `error.message` for client-side failures too, so a `SyntaxError: Unexpected token '<'...` from `awa
+
+== 52 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r2 | concern ==
+What round 1 cleared is intact — verified by execution, not by reading. Probe results: the body is read exactly once (`response.bodyUsed === true` after the helper, second `text()` throws TypeError, and the route does not touch the body before calling the helper); a `text()` that rejects returns `{error: fallback}` and logs; `JSON.parse` of `{"__pr
+
+== 53 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r3 | concern ==
+`generateMutation` still parses the error body with an unconditional `await response.json()`, so a non-JSON error body renders a JavaScript engine string into the same user-facing slot this work order exists to make useful. Measured by executing the real hook (`renderHook(() => useTopicClusters('org-1'))` with `globalThis.fetch` stubbed to return a
+
+== 54 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r3 | concern ==
+The tree changed underneath this review. At the start, all six component files on disk were byte-identical to the reviewed commit d9bede4 (verified file by file against the commit's blobs), and every probe result above was taken in that state. Partway through, `frontend/app/api/organizations/[id]/topic-clusters/generate/route.ts` and its test began
+
+== 55 | contentbench:e11_t17_setup_first_org_dashboard | upstream-error-passthrough. | r3 | concern ==
+`generate/route.ts` has no authentication gate of its own. It calls `getDrupalForUser()` (`frontend/lib/drupal.ts`), which returns `drupalAnonymous` when there is no session, then passes `withAuth: true` to `drupal.fetch`. `drupalAnonymous` has no `auth` config, so next-drupal's `getAuthorizationHeader` hits its final `else` and throws `"auth is no
+

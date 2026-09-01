@@ -59,7 +59,7 @@ A guide-search miss on a near-duplicate topic is the case the metadata exists to
 | story.yml | `drupal/ui-patterns` | `drupal/storybook` |
 | stories.yml | `drupal/storybook` | `drupal/ui-patterns` |
 | inline blocks | `drupal/layout-builder` | `drupal/blocks` |
-| SOLID (Drupal) | `drupal/solid` | `dev-practices/solid-principles` |
+| SOLID (Drupal) | `drupal/solid-principles` | `development/solid-principles` |
 
 Full mechanics (the cache kernel, blob-addressed guide bodies, recipe search, process-recipe lookup, and create-on-miss for dev-guides maintainers) are in [docs/usage.md](docs/usage.md#what-it-does).
 
@@ -97,7 +97,7 @@ Two things worth knowing if the defaults don't fit:
 | Problem | Fix |
 |---------|-----|
 | AI uses WebFetch instead of curl | The `disallowed-tools: WebFetch` frontmatter hard-blocks it; if it still happens, confirm the plugin is installed and the skill is active |
-| curl fails (network error) | Falls back to the skill's built-in keyword table in `skills/dev-guides-navigator/references/guide-index.md` |
+| curl fails (network error) | Falls back to the last-fetched index in the shared store (`index-content llms`) — the full catalog as of the last successful fetch |
 | No topic matches | Broaden your keywords, or check the category sections in `llms.txt` directly |
 | Guide too large for context | Ask for the specific section named in the routing table, not the whole guide |
 

@@ -25,7 +25,7 @@ Skip it for edits that don't touch a pattern: a rename, a typo fix, a one-line c
 ## Prerequisites
 
 - **`curl` and `jq`** for the cache kernel (`scripts/dev-guides-store.sh`) and the fetches themselves. Without `jq`/`curl`, the cache pre-warming hook simply skips and the skill fills the cache lazily on first use instead.
-- **Network access** to `camoa.github.io` (indexes and hashes) and `raw.githubusercontent.com` (guide, recipe, and process-recipe bodies). A network failure on guide search falls back to the offline keyword table in the skill's bundled `skills/dev-guides-navigator/references/guide-index.md`; a network failure on recipe search or process-recipe lookup reports unavailable rather than fabricating a result.
+- **Network access** to `camoa.github.io` (indexes and hashes) and `raw.githubusercontent.com` (guide, recipe, and process-recipe bodies). A network failure on guide search falls back to the last-fetched index in the shared store (`index-content llms`), which is the full catalog as of the last successful fetch; a network failure on recipe search or process-recipe lookup reports unavailable rather than fabricating a result.
 - **No plugin dependencies.** This plugin installs standalone; nothing else has to be present first.
 - **Claude Code v2.1.129+** only if you want the `skillOverrides` setting to dial back proactive triggering; earlier CLI versions still get the skill, just without that override.
 - **A writable `~/.claude/` tree** for the shared store (`~/.claude/dev-guides-store/`, machine-level, shared across projects) and the per-project lockfile (`~/.claude/projects/<dasherized-cwd>/memory/dev-guides.lock.json`).

@@ -28,7 +28,7 @@ falls back exactly as it always has. Consumer behavior is unchanged.
 All of these must hold:
 
 1. **Genuine guide-search miss** — the guide-search flow (SKILL.md Core Workflow
-   steps 1–7) plus the `references/guide-index.md` fallback keyword table are
+   steps 1–7, against the live index or the store's last-fetched index when offline) are
    exhausted with **no** matching topic or guide. A weak/partial match is not a
    miss — only a true absence is.
 2. **Maintainer mode** — the dev-guides source repo is detected (below).
