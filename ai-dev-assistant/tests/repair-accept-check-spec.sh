@@ -65,6 +65,36 @@ MIX="$(mkns mix 'M\ttests/x_test.sh' 'M\tscripts/thing.sh')"
 MODPY="$(mkns modpy 'M\tsrc/pkg/test_x.py')"
 GHOST="$(mkns ghost 'M\ttests/ghost_never_created.sh')"
 
+# --- glob-source (review_ladder): the recipes' `**` globs work through THIS kernel, and the origin is recorded ---
+DRUPAL="$(mkns drupal 'M\ttests/src/Kernel/FooTest.php')"
+GO="$(mkns go 'M\tmain_test.go')"
+q "** glob: **/tests/**/*Test.php matches tests/src/Kernel/FooTest.php (modified, no reason -> not_accepted)" .action not_accepted \
+  --suite green --test-motion-from "$DRUPAL" --test-globs '["**/tests/**/*Test.php"]'
+q "** glob: **/*_test.go matches main_test.go at the root" .action not_accepted \
+  --suite green --test-motion-from "$GO" --test-globs '["**/*_test.go"]'
+q "* stays one segment: tests/*.php does not reach tests/src/Kernel/FooTest.php" '.motion.modified | length' 0 \
+  --suite green --test-motion-from "$DRUPAL" --test-globs '["tests/*.php"]'
+q "origin recorded: recipe" .test_globs_origin recipe \
+  --suite green --test-motion-from "$ADDTEST" --test-globs "$GLOBS" --test-globs-origin recipe
+q "origin recorded: convention" .test_globs_origin convention \
+  --suite green --test-motion-from "$ADDTEST" --test-globs "$GLOBS" --test-globs-origin convention
+q "origin absent: null, never a string" .test_globs_origin null \
+  --suite green --test-motion-from "$ADDTEST" --test-globs "$GLOBS"
+bad "origin outside the enum" --suite green --test-motion-from "$ADDTEST" --test-globs "$GLOBS" --test-globs-origin guess
+
+DELPHP="$(mkns delphp 'D\ttests/src/Kernel/FooTest.php')"
+q "metacharacter in a recipe glob is literal: [ does not swallow the deletion" '.motion.deleted | length' 0 \
+  --suite green --test-motion-from "$DELPHP" --test-globs '["**/tests/**/*Test.php["]'
+q "control: the same glob without the bracket lists the deletion" '.motion.deleted | length' 1 \
+  --suite green --test-motion-from "$DELPHP" --test-globs '["**/tests/**/*Test.php"]'
+q "| in a recipe glob is literal: a source file is not a modified test" '.motion.modified | length' 0 \
+  --suite green --test-motion-from "$MODSRC" --test-globs '["a|b"]'
+
+q "not_run still surfaces a modified test with no reason (motion-wiring)" .action not_accepted \
+  --suite not_run --test-motion-from "$MODTEST" --test-globs "$GLOBS"
+q "not_run with the reason given is still cannot_judge (the suite half is missing)" .action cannot_judge \
+  --suite not_run --test-motion-from "$MODTEST" --test-globs "$GLOBS" --modification-reason "x"
+
 # --- R1: "A repair that MODIFIES a test halts for a stated reason, while one that only adds or
 #          only deletes passes silently." ---
 q "R1 modified test, no reason -> not_accepted" .action not_accepted \
@@ -301,11 +331,11 @@ q "a path matching a glob but absent from disk still counts" '.motion.modified |
   --suite green --test-motion-from "$GHOST" --test-globs "$GLOBS"
 
 # --- a spec that checked nothing has not passed ---
-# 70 = 5 R1 + 2 R2 + 12 R3 + 9 R3b + 14 R4 + 5 R5 + 3 R6 + 3 R7 + 5 decided_by + 6 reasons
+# 82 = 12 glob-source + 5 R1 + 2 R2 + 12 R3 + 9 R3b + 14 R4 + 5 R5 + 3 R6 + 3 R7 + 5 decided_by + 6 reasons
 #      + 3 suite-echo + 3 glob.
 # Asserted rather than trusted: a block that fails to run, or a helper that returns early, subtracts
 # assertions silently and the run still prints "0 failed", which reads as green.
-EXPECTED=70
+EXPECTED=82
 TOTAL=$((PASS + FAIL))
 [ "$TOTAL" -eq "$EXPECTED" ] && ok || no "expected $EXPECTED assertions, ran $TOTAL (a skipped block reads as green)"
 

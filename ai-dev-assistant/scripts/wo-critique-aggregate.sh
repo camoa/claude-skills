@@ -37,7 +37,7 @@
 set -uo pipefail
 
 WO=""; TIER="high"; MODE="none"; EXPECTED=0; CDIR=""; EVALUATED="false"
-DIFF_EMPTY="false"; REQUIRED="false"; RUN_AT=""
+DIFF_EMPTY="false"; REQUIRED="false"; RUN_AT=""; NOT_DISPATCHED="[]"; ND_INVALID=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --wo) WO="${2:-}"; shift 2 || shift ;;
@@ -48,6 +48,15 @@ while [ "$#" -gt 0 ]; do
     --evaluated) EVALUATED="${2:-false}"; shift 2 || shift ;;
     --diff-empty) DIFF_EMPTY="true"; shift ;;
     --required) REQUIRED="true"; shift ;;
+    --not-dispatched) # <lens>:<reason>, repeatable: a lens the caller chose not to run, and why.
+      # Only `correctness` with a non-empty reason is accepted (the no-body rule). Anything else,
+      # a malformed value included, is recorded with accepted:false and COUNTED AS A MISSING CRITIC:
+      # the kernel always emits an envelope, so a withheld lens can never read as a clean run.
+      ND_RAW="${2:-}"; case "$ND_RAW" in --*) ND_RAW="" ;; esac; ND_L="$(printf '%s' "${ND_RAW%%:*}" | tr -d '[:space:]')"; ND_R="$(printf '%s' "${ND_RAW#*:}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+      ND_OK="false"; [[ "$ND_RAW" == *:* ]] && [ "$ND_L" = "correctness" ] && [ -n "$ND_R" ] && ND_OK="true"
+      [ "$ND_OK" = "true" ] || ND_INVALID=$((ND_INVALID + 1))
+      NOT_DISPATCHED=$(jq -c --arg l "$ND_L" --arg r "$ND_R" --argjson ok "$ND_OK" '. + [{lens:$l,reason:$r,accepted:$ok}]' <<<"$NOT_DISPATCHED")
+      [ -n "$ND_RAW" ] && shift 2 || shift ;;
     --run-at) RUN_AT="${2:-}"; shift 2 || shift ;;
     *) shift ;;
   esac
@@ -228,8 +237,17 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
   shopt -u nullglob
 fi
 
+# clean returns: verdict pass with nothing in findings[]. Credited HERE, from fields the critic already
+# writes; the per-critic file gets no key for it (agents/wo-critic.md says why). Consumer: the epic's
+# empty-return rate, read per critique off this envelope.
+# Read off `effective`, the ranking the loop just computed, so the count agrees with the envelope: a
+# malformed findings value ranks unresolved and is not clean, and cannot zero a sibling's credit.
+CLEAN_RETURNS="$(jq -r '[.[] | select(.effective=="pass" and ((.findings // []) | type=="array" and length==0))] | length' <<<"$CRITICS" 2>/dev/null)"; [ -n "$CLEAN_RETURNS" ] || CLEAN_RETURNS=0
 MISSING=$(( EXPECTED - PRESENT )); [ "$MISSING" -lt 0 ] && MISSING=0
+MISSING=$(( MISSING + ND_INVALID ))                      # a withheld lens the rule does not cover is missing
 [ "$MISSING" -gt 0 ] && HAS_UNRES="true"
+# a lens withheld with zero critics present is unresolved at every tier, low included: nobody looked
+[ "$NOT_DISPATCHED" != "[]" ] && [ "$PRESENT" -eq 0 ] && HAS_UNRES="true"
 # min-critic: an EVALUATED high/medium WO with zero critics is fail-closed unresolved (MED-8)
 if [ "$EVALUATED" = "true" ] && [ "$PRESENT" -eq 0 ]; then
   case "$TIER" in high|medium) HAS_UNRES="true" ;; esac
@@ -270,7 +288,9 @@ jq -nc \
   --argjson missing "$MISSING" --argjson critics "$CRITICS" \
   --arg overall "$OVERALL" --argjson blocking "$BLOCKING" --argjson degraded "$DEGRADED" \
   --argjson diff_empty "$DIFF_EMPTY" --argjson required "$REQUIRED" --argjson halt_reason "$HALT" \
+  --argjson not_dispatched "$NOT_DISPATCHED" --argjson clean "$CLEAN_RETURNS" \
   '{schema_version:"1.0", wo_id:$wo, risk_tier:$tier, run_at:$at, mode:$mode,
-    evaluated:$evaluated, required:$required, expected_critics:$expected, present:$present,
+    evaluated:$evaluated, required:$required, expected_critics:$expected, clean_returns:$clean, present:$present,
     missing:$missing, critics:$critics, overall:$overall, blocking:$blocking,
-    degraded:$degraded, diff_empty:$diff_empty, halt_reason:$halt_reason}'
+    degraded:$degraded, diff_empty:$diff_empty, halt_reason:$halt_reason,
+    not_dispatched:$not_dispatched}'

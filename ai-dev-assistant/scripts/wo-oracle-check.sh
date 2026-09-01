@@ -182,36 +182,10 @@ parse_oracle_classes() {
 
 ORACLE_CLASSES="$(parse_oracle_classes || true)"
 
-# --- glob-to-regex converter -------------------------------------------------
-# Converts a file glob pattern to a bash ERE regex anchored at start and end.
-#   *  matches any string within one path segment (no slash)  → [^/]*
-#   ** matches any string across path segments               → .*
-#   .  is literal in a path                                  → \.
-# Input:  glob pattern string (e.g. "tests/**/*Test.php")
-# Output: ERE regex string  (e.g. "^tests/(.*/)?[^/]*Test\.php$")
-glob_to_regex() {
-  local _g="$1" _r
-  # 1. Escape literal dots
-  _r="$(printf '%s' "$_g" | sed -e 's/[.]/\\./g')"
-  # 2. Replace **/ and ** with placeholders (no * chars) to prevent the
-  #    single-* pass from re-processing the .* introduced by these replacements
-  _r="$(printf '%s' "$_r" | sed -e 's|\*\*/|__GLOBSTAR_SLASH__|g')"
-  _r="$(printf '%s' "$_r" | sed -e 's|\*\*|__GLOBSTAR__|g')"
-  # 3. Replace remaining single * with one-segment wildcard
-  _r="$(printf '%s' "$_r" | sed -e 's|\*|[^/]*|g')"
-  # 4. Restore placeholders to their ERE regex equivalents
-  _r="$(printf '%s' "$_r" \
-    | sed -e 's|__GLOBSTAR_SLASH__|(.*/)?|g' \
-    | sed -e 's|__GLOBSTAR__|.*|g')"
-  printf '^%s$' "$_r"
-}
-
-# path_matches <path> <glob-pattern>  — returns 0 if the path matches the glob, 1 otherwise
-path_matches() {
-  local _pm_path="$1" _pm_pat="$2" _pm_rx
-  _pm_rx="$(glob_to_regex "$_pm_pat")"
-  [[ "$_pm_path" =~ $_pm_rx ]]
-}
+# --- glob matching: one semantics for every kernel (scripts/lib/glob-to-regex.sh) -------------
+# glob_to_regex and path_matches used to live here; repair-accept-check.sh matched the same recipe
+# globs with a bash `case`, where `**` is `*`. Two kernels, two semantics, one declaration.
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/glob-to-regex.sh"
 
 # is_in_oracle_classes <oracle-class>  — returns 0 if class is in ORACLE_CLASSES, 1 if not
 is_in_oracle_classes() {
@@ -243,7 +217,9 @@ classify_path() {
       *,"$_cp_st",*) ;;
       *) continue ;;
     esac
-    if path_matches "$_cp_p" "$_g"; then
+    path_matches "$_cp_p" "$_g"; _pm_rc=$?
+    [ "$_pm_rc" -eq 2 ] && { echo "wo-oracle-check: oracle glob did not compile: $_g" >&2; exit 2; }
+    if [ "$_pm_rc" -eq 0 ]; then
       _CLS_TYPE="$_t"; _CLS_ORACLE_CLASS="$_oc"; _CLS_SEVERITY="$_sev"
       return 0
     fi

@@ -67,6 +67,21 @@ check "research: declarations empty"  "$(jq -r '.declarations | length' <<<"$out
 "$KERNEL" --body "$TMP/vr-empty.md" --phase visual-regression >/dev/null
 check "absent recommended still exit 0" "$?" "0"
 
+# --- 5b. implement recipe: ## Oracle files is the seventh declaration (glob-source, review_ladder) ---
+cat > "$TMP/impl-oracle.md" <<'EOF'
+## Preconditions
+preconditions:
+  - id: x
+## Oracle files
+```json
+[ { "type": "test_delete", "globs": ["**/*_test.go"], "changes": ["D"], "oracle_class": "test-delete", "severity": "halt" } ]
+```
+EOF
+out=$("$KERNEL" --body "$TMP/impl-oracle.md" --phase implement)
+check "impl-oracle: Oracle files present"  "$(jq -r '.declarations[] | select(.token=="## Oracle files") | .status' <<<"$out")" "present"
+out=$("$KERNEL" --body "$TMP/vr-empty.md" --phase implement)
+check "impl-empty: Oracle files absent, not recommended" "$(jq -r '.declarations[] | select(.token=="## Oracle files") | "\(.status)/\(.recommended)"' <<<"$out")" "absent/false"
+
 # --- 6. error handling: missing body, missing args, bad phase → exit 2 ---
 "$KERNEL" --body "$TMP/nope.md" --phase review >/dev/null 2>&1
 check "missing body → exit 2" "$?" "2"

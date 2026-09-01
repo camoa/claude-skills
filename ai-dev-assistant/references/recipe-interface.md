@@ -27,7 +27,7 @@ the exact spelling; this contract is the source of truth for it.
 | `## Routing hints` | fail-open — agent's generic role buckets |
 | `## Preconditions` | **fail-closed** — an unmet precondition halts the phase; an absent block is recorded `undeclared`, never `met` |
 
-## The six declarations
+## The seven declarations
 
 ### 1. `## Screenshot capture` — phase `visual-regression`
 **Consumer:** `commands/setup-visual-regression.md` (the `## Step 7` capture-method substitution).
@@ -139,6 +139,31 @@ failed — halts), `unknown` (a block is present but something could not be run)
 A caller that folds `undeclared` into `met` has re-created the defect this declaration closes: the recipe
 declared nothing, so nothing was checked, and that is a different fact from everything passing.
 
+### 7. `## Oracle files` — phase `implement`
+**Consumer:** `scripts/oracle-globs.sh`, run by `commands/implement.md`'s build-critique rung (step 2c) to
+supply `repair-accept-check.sh --test-globs`. The tamper guard (`scripts/wo-oracle-check.sh`) reads the
+same block through its caller's `--oracle-files` file, not through this parser.
+
+The recipe already writes this block: an H2, and under it the first fenced `json` block, a top-level array
+of flat objects with the key set `type, globs, changes, oracle_class, severity`. The consumer selects the
+row whose `type` is `test_delete` and takes its `globs`; that is where the test-file globs come from, so a
+caller-supplied narrow list cannot satisfy the motion gate on the record while classifying nothing.
+
+````markdown
+## Oracle files
+```json
+[ { "type": "test_delete", "globs": ["**/tests/**/*Test.php"], "changes": ["D"], "oracle_class": "test-delete", "severity": "halt" } ]
+```
+````
+
+**Parse the JSON, never the markdown table beside it.** The table is a hand-maintained copy for a human
+reader; nothing checks the two agree, and when they differ the JSON is what the guard consumed. **Take
+`globs` only**; `changes` is the tamper guard's concern. A recipe without the block is an honest
+"no oracle declared" state: the consumer reports origin `convention` when the caller supplied a fallback
+set and `undetermined` when it did not, never an empty list read as "no test files changed". Globs are
+matched with `**` semantics by every kernel (`scripts/lib/glob-to-regex.sh`), so `**/tests/**/*Test.php`
+reaches `tests/src/Kernel/FooTest.php`.
+
 ## Which recipe carries which declaration
 
 A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its phase consumes:
@@ -147,7 +172,7 @@ A phase's recipe (key `<phase>/<framework>/<slug>`) carries the declarations its
 |---|---|
 | `visual-regression/<fw>/…` | `## Screenshot capture` (1), `## Change-impact globs` (5) |
 | `e2e-setup/<fw>/…` | `e2e.preflight_command` (2) |
-| `implement/<fw>/…` | `## Routing hints` (3), `## Preconditions` (6) |
+| `implement/<fw>/…` | `## Routing hints` (3), `## Preconditions` (6), `## Oracle files` (7) |
 | `review/<fw>/…` | `## Code-quality extensions` (4), `## Change-impact globs` (5) |
 
 The key is `<phase>/<framework>/<slug>`; the **phase segment**, not the recipe's filename, decides which

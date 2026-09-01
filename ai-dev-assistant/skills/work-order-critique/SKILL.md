@@ -116,7 +116,7 @@ bash "$KERNEL/wo-critique-aggregate.sh" --wo "$WO_ID" --tier "$TIER" --mode none
 ```
 
 **3 — form by tier (+ `${CLAUDE_EFFORT}` floor).** Lenses come from `risk-tiering-rules.json` `tier_lenses`:
-`low` → 1 critic `{skeptic}` · `medium` → panel `{security, correctness}` · `high` → red-team
+`low` → 1 critic `{correctness}` · `medium` → panel `{security, correctness}` · `high` → red-team
 `{security, correctness, meets-ac}`. `${CLAUDE_EFFORT}` ∈ {xhigh,max} raises the floor one step (never
 lowers high). **A security lens is guaranteed at medium+** (so executable-code changes always get one).
 

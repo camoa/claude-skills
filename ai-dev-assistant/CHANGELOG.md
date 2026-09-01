@@ -1,5 +1,53 @@
 # Changelog
 
+## [5.43.0] - 2026-09-01
+
+### Changed
+- **The per-slice critique judges against the method, and the empty return counts.** The
+  `security` and `correctness` critics at the build-critique rung now receive the resolved implement
+  recipe verbatim in the delimited block; `meets-ac` does not. A framework with no resolved body gets
+  no `correctness` critic and the envelope records why (`--not-dispatched <lens>:<reason>` on
+  `scripts/wo-critique-aggregate.sh`, emitted as `not_dispatched[]`; any other withheld lens counts as
+  a missing critic, and the kernel always emits). `clean_returns` on the envelope credits a critic
+  that returned `pass` with nothing in `findings[]`, read off the ranked `effective`, so a clean
+  return is a real outcome rather than an uncreditable silence.
+- **The `[a]ddress` step re-reads the recipe before authoring a fix** and records
+  `frameworks[].fix_recipe_read` on `_recipe-load.json` (`read | no_body_path | unreadable`, the
+  round, a reason), gated by `verified` and by the record's phase being `implement`. Schema §5.12.
+- **`skeptic` is gone.** Low tier takes `correctness`; `tier_lenses` is asserted to hold three
+  non-empty arrays with `security` on medium and high. `*hooks.json` is a security glob, so the hook
+  wiring file no longer tiers low. `meets-ac` reads `## Acceptance criteria` on a component file as
+  well as `## Done =` on a work-order.
+- **A reviewer cannot write to a test path.** `hooks/deny-reviewer-test-writes.sh` on `PreToolUse`
+  (`Write|Edit|MultiEdit|NotebookEdit` and `Bash`) denies the four reviewer agents, by the payload's
+  `agent_type`, a Write/Edit to a test path or a Bash form with a test path in the write position;
+  reads, spec runs and copies out to scratch pass, the builder passes, verdict sidecars pass. Fail-open
+  with a visible `systemMessage` when a sub-agent carries no `agent_type`. The inline frontmatter hook
+  on `architecture-validator.md` is deleted. Measured live: the deny reaches a `wo-critic` sub-agent.
+- **Test-file globs come from the recipe.** `scripts/oracle-globs.sh` reads the `## Oracle files`
+  JSON fence (`test_delete` row), else a caller-supplied convention, and records the origin;
+  `repair-accept-check.sh --test-globs-origin recipe|convention` records it on the verdict.
+  `## Oracle files` is the seventh declaration in `references/recipe-interface.md`. Both kernels match
+  through one translator (`scripts/lib/glob-to-regex.sh`): `**` semantics, every other ERE
+  metacharacter escaped, a pattern that does not compile is exit 2, never "not a test".
+- **Test motion is classified on every build,** at the rung's new step 2c on the component's own
+  range, not only on a repair; the verdict is read back, said aloud and recorded on the row. The
+  motion tripwire in `repair-accept-check.sh` now runs ahead of the `not_run` abstention, so an
+  interactive build still surfaces a modified test with no reason.
+- **The critic dispatch is the contract and nothing more** (step 5): criteria, recipe block, range,
+  lens, output path. A probe list or a posture in the prompt is the deleted lens by another name;
+  measured on this release's own build as a repair round per component.
+- **The per-repair suite is the specs that read the component's files, named in the record;**
+  `make` targets run once, when the PR is final, never per repair (`--suite` paragraph, step 8).
+
+### Removed
+- `scripts/proportionality-check.sh`, its spec, the `expected_lines` estimate in `/design`, and the
+  size-proportion step at the component close. The criterion it served was deleted from the epic.
+
+### Budget
+- `commands/implement.md` 389 → 417, each step justified in `scripts/command-body-lengths.sh`;
+  one lowering (the deletion) and four raises.
+
 ## [5.42.1] - 2026-08-31
 
 ### Changed

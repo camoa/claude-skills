@@ -44,7 +44,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # A payload satisfying every key the schema marks required for build-critique.
 GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"phase":"implement","verdict":"pass",
- "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
+ "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["correctness"],"verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],

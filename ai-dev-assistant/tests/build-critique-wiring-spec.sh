@@ -48,7 +48,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # A payload that satisfies every key the schema's build-critique table marks required.
 GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"phase":"implement","verdict":"pass",
- "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["skeptic"],"verdict":"pass",
+ "components":[{"component":"main","runtime":"executed","risk_tier":"low","lenses":["correctness"],"verdict":"pass",
    "blocking":false,"findings_count":0,"checkpoint_before":"aaa","checkpoint_after":"bbb",
    "critique_ref":"/x/build-critique/main.critique.json"}],
  "components_declared":1,"components_critiqued":1,"uncritiqued":[],
@@ -387,6 +387,45 @@ for F in "$CONTRACT" "$SCHEMA"; do
   fi
 done
 
+
+# recipe-to-critic (review_ladder): the two method-bearing lenses receive the resolved recipe, meets-ac does not,
+# and a framework with no body gets no correctness critic, recorded on the envelope.
+BLOCK="$(awk '/^\*\*5\. Critics\.\*\*/,/^\*\*Read each verdict/' "$CMD")"
+grep -q 'security. and .correctness. receive the resolved implement recipe' <<<"$BLOCK" \
+  && grep -q 'RESOLVED RECIPE\|recipe-resolution.md. step 4' <<<"$BLOCK" \
+  && pass_check "the critic dispatch injects the resolved recipe into security and correctness" \
+  || fail_check "the critic dispatch does not inject the resolved recipe into security and correctness"
+grep -q 'meets-ac.*does not receive it' <<<"$(tr '\n' ' ' <<<"$BLOCK")" \
+  && pass_check "meets-ac is excluded from the injection" \
+  || fail_check "meets-ac is not excluded from the injection"
+grep -q -- '--not-dispatched correctness:no_body_path' <<<"$BLOCK" \
+  && pass_check "no body_path → correctness is not dispatched and the envelope records why" \
+  || fail_check "the no-body rule for the correctness lens is not in the dispatch block"
+
+# fix-step-record (review_ladder): the fix step re-reads the method before authoring, records it, and
+# the schema names the field in the same change.
+ADDR="$(awk '/^\*\*Every `\[a\]ddress` begins/,/^\*\*Every `\[a\]ddress` ends/' "$CMD" | tr '\n' ' ')"
+grep -q 're-Reading each framework.s `body_path`' <<<"$ADDR" && grep -q 'fix_recipe_read' <<<"$ADDR" \
+  && grep -q 'read | no_body_path | unreadable' <<<"$ADDR" \
+  && pass_check "[a]ddress re-reads body_path before the fix and records fix_recipe_read with a three-value verdict" \
+  || fail_check "[a]ddress does not re-read body_path and record fix_recipe_read before the fix"
+grep -q '^| `frameworks\[\].fix_recipe_read`' "$SCHEMA" && grep -q '"fix_recipe_read":' "$SCHEMA" \
+  && pass_check "gate-audit-schema.md documents frameworks[].fix_recipe_read in the row table and the shape" \
+  || fail_check "gate-audit-schema.md does not document frameworks[].fix_recipe_read"
+
+# c9 (review_ladder, owner-added mid-build): the dispatch carries the contract and nothing more.
+grep -q 'That is the' <<<"$BLOCK" && grep -q 'whole dispatch' <<<"$BLOCK" && grep -q 'probe list' <<<"$BLOCK" \
+  && pass_check "step 5 says the dispatch is the contract and nothing more; a probe list is the deleted lens" \
+  || fail_check "step 5 does not forbid a probe list or posture in the critic dispatch"
+
+# motion-wiring (review_ladder): test motion is classified at the rung on every build, from the recipe's globs.
+RUNG="$(awk '/^# 2c\. test motion/,/^# 3\. the tier/' "$CMD")"
+grep -q 'repair-accept-check.sh' <<<"$RUNG" && grep -q -- '--test-motion-from "\$CD/<component>.motion.txt"' <<<"$RUNG" \
+  && pass_check "the rung runs the motion kernel on the component's own range, before any repair" \
+  || fail_check "the rung does not run repair-accept-check.sh on the component range"
+grep -q 'oracle-globs.sh' <<<"$RUNG" && grep -q -- '--test-globs-origin' <<<"$RUNG" && grep -q -- '--test-globs-source undetermined' <<<"$RUNG" && grep -q 'jq -r .*motion.json"' <<<"$RUNG" \
+  && pass_check "the rung takes its globs from oracle-globs.sh and records the origin" \
+  || fail_check "the rung's globs do not come from oracle-globs.sh with the origin recorded"
 if [ "$FAIL" = "0" ]; then
   printf '\nbuild-critique-wiring-spec: all checks passed\n'
 else

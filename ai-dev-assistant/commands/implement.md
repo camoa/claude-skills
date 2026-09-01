@@ -150,12 +150,17 @@ AFTER=$(${CLAUDE_PLUGIN_ROOT}/scripts/build-checkpoint.sh capture --repo <codePa
 # of the six. Keep each round's .after sha; the next round's base is that sha.
 git -C <codePath> diff --name-only <base-sha-for-this-round>..$AFTER > "$CD/<component>.files.txt"
 
-# 2b. proportion. Surfaced to the person while the build is still open, and NEVER blocking. Pass
-# --expected-lines only when the component declared one at design; absent, it returns `cannot_judge`,
-# the honest answer and never a pass. Measured: one build produced 1,637 insertions for ~150 lines of
-# necessary code, nothing noticed the ratio, and the operator interrupting was the only brake that worked.
-INS=$(git -C <codePath> diff --shortstat <base-sha-for-this-round>..$AFTER | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
-${CLAUDE_PLUGIN_ROOT}/scripts/proportionality-check.sh --actual-lines "$INS" [--expected-lines <declared>]
+# 2c. test motion, on EVERY build, not only on repairs. The kernel is general and had one caller,
+# the repair path, so a test modified during the initial build was classified only if the component
+# later entered a repair round. Globs come from the recipe's `## Oracle files` row, else the project
+# convention, and the origin is recorded; --suite is the result you hold for this component's own spec.
+git -C <codePath> diff --name-status <base-sha-for-this-round>..$AFTER > "$CD/<component>.motion.txt"
+G=$(${CLAUDE_PLUGIN_ROOT}/scripts/oracle-globs.sh --body <body_path> --fallback-globs '<convention, JSON array>') || exit 2   # no body_path: skip this call, pass --test-globs-source undetermined below
+case "$(jq -r .origin <<<"$G")" in recipe|convention) GF=--test-globs-origin; GV=$(jq -r .origin <<<"$G") ;; *) GF=--test-globs-source; GV=undetermined ;; esac
+${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> --test-motion-from "$CD/<component>.motion.txt" \
+  --test-globs "$(jq -c .globs <<<"$G")" "$GF" "$GV" [--modification-reason "<why a test changed>"] > "$CD/<component>.motion.json" || exit 2
+jq -r '"motion: \(.action) (\(.decided_by)): \(.reasons|join("; "))"' "$CD/<component>.motion.json"   # SAY IT, and record it on the component row as `motion`
+# A modification with no reason SURFACES here as not_accepted (blocks:false), before any repair; adds and deletes alone do not.
 
 # 3. the tier. --gate-floor is REQUIRED here: there is no work-order file to read it from,
 #    and the classifier tiers everything high when both are missing.
@@ -165,7 +170,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wo-risk-classify.sh \
 # → .risk_tier ∈ low | medium | high
 ```
 
-**4. Lenses** from `references/risk-tiering-rules.json` `tier_lenses`: `low` → `skeptic`;
+**4. Lenses** from `references/risk-tiering-rules.json` `tier_lenses`: `low` → `correctness`;
 `medium` → `security`, `correctness`; `high` → `security`, `correctness`, `meets-ac`. A
 security lens is guaranteed at `medium` and above, so executable code always gets one.
 
@@ -176,6 +181,17 @@ the `<base-sha-for-this-round>..$AFTER` range, the component's acceptance criter
 lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
 `<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
 must not read an absent gate record as a clean one.
+
+**`security` and `correctness` receive the resolved implement recipe** (the body Read at step 6),
+verbatim, inside the delimited block `references/recipe-resolution.md` step 4 defines; for
+`correctness`, inject it or do not dispatch, the posture `/review` step 5 holds for its validator. `meets-ac` compares
+the build against acceptance items and does not receive it. When no `body_path` resolved for a
+framework (step 6's no-body rule), `security` is still dispatched, without the block, and
+`correctness` is not: pass `--not-dispatched correctness:no_body_path` to the aggregator so the
+envelope records why. The kernel counts any other withheld lens as a missing critic. **That is the
+whole dispatch:** criteria, recipe block, range, lens, output path. A probe list, a posture ("treat as
+hostile"), or a checklist in the prompt is the deleted lens by another name, and it was
+measured to buy a repair round per component.
 
 **Read each verdict from the file the critic wrote, never from its Task return.** An agent
 that died mid-response returns text that reads like an answer.
@@ -204,6 +220,18 @@ rung for this component) or `[o]verride (reason)`, recorded in the envelope's `b
   a non-blocking `concern` at low and medium tier.
 - `overall: "concern"` is surfaced and does not block.
 
+**Every `[a]ddress` begins by re-Reading each framework's `body_path` from `_recipe-load.json`,**
+before the fix is authored, gated by `verified` exactly as step 6 (the body is the method, never a
+command), and only when that record's `phase` is `implement`: any other phase, or no file, is
+`no_body_path` with the reason naming what was found. Record `frameworks[].fix_recipe_read`
+(`{verdict: read | no_body_path | unreadable, body_path, round, reason}`; `round` is the `rounds[]`
+entry the re-run will write, so the first `[a]ddress` is 2) by writing the whole `gate_specific` back
+through `gate-audit-write.sh <task_folder> recipe-load`, every other framework entry and every key on
+this one preserved (§5.12). The body was Read at step 6; by round three, or past a compaction, it is
+not in context, and a fixer without the stack's test strategy adds a test because that is what
+discipline sounds like. `no_body_path` or `unreadable` means the fix proceeds under step 6's no-body
+rule, inventing no stack specifics, with `reason` saying why.
+
 **Every `[a]ddress` ends with an accept verdict on the repair, before the rung re-runs.**
 
 ```
@@ -220,12 +248,12 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run>
   [--test-globs-source undetermined] [--modification-reason "<why a test file changed>"]
 ```
 
-`--suite` is a RESULT you hand in; the kernel runs nothing. Who runs the suite is settled by
-`run_mode` (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. With
-no suite over the repaired tree, `not_run` is the honest value and returns `cannot_judge`,
-which is not a pass. `--test-globs` is where this project's tests live; when that cannot be
-established pass `--test-globs-source undetermined`, never `[]`, which is the positive claim
-that the repair touched no test path.
+`--suite` is a RESULT you hand in; the kernel runs nothing. Who runs it is settled by `run_mode`
+(`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. Per repair the suite is
+the specs that read the files in `<component>.files.txt`, named in the record; `make` targets run once,
+when the PR is final, never per repair. With no suite over the repaired tree, `not_run` is the honest
+value and returns `cannot_judge`, not a pass. `--test-globs` is where this project's tests live; when that
+cannot be established pass `--test-globs-source undetermined`, never `[]`, the claim that no test path was touched.
 
 **Both ends of that diff are shas**, the same way the phase range at Step 12 is. A checkpoint
 label is not a revision, so handing one to `git diff` leaves an empty file rather than an error

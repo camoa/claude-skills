@@ -7,12 +7,6 @@ model: sonnet
 tools: Read, Grep, Glob, Bash, Write
 memory: project
 disallowedTools: Edit
-hooks:
-  PreToolUse:
-    - matcher: "Edit"
-      hooks:
-        - type: prompt
-          prompt: "The architecture-validator agent is read-only on code. Its only legitimate write is its own verdict sidecar at the output path it was given. It attempted to edit a file. Return 'block' to prevent this action."
 maxTurns: 20
 ---
 

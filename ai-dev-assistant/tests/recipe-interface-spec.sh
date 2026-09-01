@@ -53,6 +53,10 @@ pair_check "preflight_command (registry seed)" 'preflight_command'     'scripts/
 pair_check "## Routing hints heading"          '## Routing hints'      'commands/implement.md'
 pair_check "routing_hints field"               'routing_hints'         'commands/implement.md'
 
+# 7. Oracle files (phase implement): the test-file globs and the tamper guard's list
+pair_check "## Oracle files heading"           '## Oracle files'       'scripts/oracle-globs.sh'
+pair_check "test_delete row"                   'test_delete'           'scripts/oracle-globs.sh'
+
 # 4. Code-quality extensions (phase review)
 pair_check "## Code-quality extensions heading" '## Code-quality extensions' 'commands/review.md'
 pair_check "code_quality_extensions field"      'code_quality_extensions'    'commands/review.md'

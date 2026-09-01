@@ -12,8 +12,7 @@
 # fm-helpers.sh's stub_verdict for the field meanings). Exit 0 with that JSON on any valid --file
 # argument, including a file that does not exist (verdict: undetermined, decided_by: unreadable) —
 # a missing target is a fact stub_verdict reports, not a usage error. Exit 2 with nothing on stdout
-# on a bad or missing argument: fail-closed, the same contract as proportionality-check.sh and
-# review-record-archive.sh.
+# on a bad or missing argument: fail-closed, the same contract as repair-scope-check.sh.
 set -uo pipefail
 
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")

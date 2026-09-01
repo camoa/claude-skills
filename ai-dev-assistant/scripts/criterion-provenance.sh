@@ -16,8 +16,8 @@
 # scripts/alignment-read.sh emits `author` on each success_criteria item: "owner", "designer", or null.
 # Null means nobody recorded an author. Null does NOT mean owner — collapsing the two is the exact
 # defect this kernel exists to avoid, the same reasoning as mechanism-disposition.sh's `not_searched`
-# (a question, never folded into the answer `none`) and proportionality-check.sh's `cannot_judge` (no
-# comparison was possible, never folded into a pass). This kernel treats any value that is not literally
+# (a question, never folded into the answer `none`) and repair-scope-check.sh's `cannot_judge` (no
+# site list to compare against, never folded into in_scope). This kernel treats any value that is not literally
 # "owner" or "designer" — null included, and any unrecognized string, fail-closed — as unrecorded.
 #
 # A marker can also be WRITTEN and REJECTED: alignment-read.sh emits `criterion_author_unrecognized` in
@@ -86,7 +86,7 @@
 #   alignment.md written before the `author` field existed carries zero markers, so a blocking version
 #   would halt every existing task on day one — and a gate that stops a person three times a phase gets
 #   bypassed rather than satisfied, the same lesson mechanism-disposition.sh's not_searched cell and
-#   proportionality-check.sh both already learned on this corpus.
+#   repair-scope-check.sh's surface-never-halt rule both already learned on this corpus.
 #
 # Exit: 0 with JSON on valid input (including the no_criteria case); 2 on a bad/missing arg, a
 # --task-folder that does not exist or is not a directory, an unreadable sibling reader, or the final

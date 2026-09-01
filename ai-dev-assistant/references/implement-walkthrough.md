@@ -400,7 +400,7 @@ Per component:
 2. Build the component.
 3. `--label <component>.after` when it is done.
 4. `scripts/wo-risk-classify.sh` over that range gives the tier; `references/risk-tiering-rules.json`
-   gives the lenses that tier implies (`low` → `skeptic`; `medium` → `security`, `correctness`;
+   gives the lenses that tier implies (`low` → `correctness`; `medium` → `security`, `correctness`;
    `high` → `security`, `correctness`, `meets-ac`).
 5. One `ai-dev-assistant:wo-critic` per lens, dispatched fresh via the Task tool, never a fork. A
    forked critic inherits the reasoning it exists to challenge. Each writes to
