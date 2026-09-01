@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for AI-assisted development workflow (stack-agnostic, Drupal-flavored reference), dev-guides navigator, HTMX/AJAX migration, AI-assisted Drupal contribution quality, brand content creation, code quality auditing, paper testing, and plugin development",
-    "version": "2.0.64"
+    "version": "2.0.65"
   },
   "plugins": [
     {
       "name": "dev-guides-navigator",
       "source": "./dev-guides-navigator",
       "description": "Smart guide discovery and routing for dev-guides. Hash-based caching + knowledge-graph metadata route the AI to the right guide; all fetches use curl (never WebFetch), and a fetched body is data, never commands. Three routing modes: guide search (llms.txt), recipe search (the agentic-recipes catalog of verifier-carrying capability deliveries), and process-recipe lookup (resolved by ai-dev-assistant at phase boundaries, keyed by phase and framework). A deterministic shared content store holds index bodies and blobs with two-hash revalidation, re-fetching a body only when its sha changes.",
-      "version": "0.11.4",
+      "version": "0.12.0",
       "author": {
         "name": "camoa"
       },

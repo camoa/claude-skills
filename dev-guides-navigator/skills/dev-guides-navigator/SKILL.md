@@ -1,7 +1,7 @@
 ---
 name: dev-guides-navigator
 description: Use when ANY development task might benefit from a guide. Use when user says "how do I", "best practice", "pattern for", "guide for", "Drupal form", "entity type", "plugin type", "routing", "caching", "config management", "SDC component", "design system", "Bootstrap mapping", "Radix theme", "JSX to Twig", "Tailwind tokens", "SOLID", "DRY", "TDD", "security", "CSS", "Next.js". Use PROACTIVELY before any design, architecture, or implementation work. MUST be invoked before writing code that touches Drupal APIs, theming, design systems, or security. NEVER skip guide check — patterns prevent bugs.
-version: 0.10.0
+version: 0.12.0
 allowed-tools: Read, Bash, Glob, Grep, Write
 disallowed-tools: WebFetch
 user-invocable: true
@@ -460,7 +460,8 @@ offers, and hands off — it **never** authors, partitions, commits, or deploys.
 this section never alters guide search, `llms.txt`, or the guides cache.
 
 **Fires only when both hold:** (1) a *genuine* guide-search miss — Core Workflow
-steps 1–7 **and** the `references/guide-index.md` fallback exhausted with no
+steps 1–7 exhausted against the live index (or, offline, the store's last-fetched
+index) with no
 matching topic/guide (a weak match is not a miss; recipe-search misses defer to
 guide search, not here); and (2) **maintainer mode** — a source root resolved
 from `DEV_GUIDES_SRC` → `$PWD` → `~/workspace/dev-guides`, accepted only on the
@@ -488,4 +489,3 @@ protocol, and the full `/create-guide` lifecycle.
 - `references/store-contract.md` — canonical store layout, lockfile schema, blob-addressing, freshness policy
 - `references/create-on-miss.md` — maintainer-mode detection + `/create-guide` handoff protocol
 - `references/manifest-schema.md` — build output (llms.txt + llms.hash)
-- `references/guide-index.md` — fallback keyword table (offline/network failure)

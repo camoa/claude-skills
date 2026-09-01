@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.0 (2026-09-01)
+
+### Removed
+- **`references/guide-index.md`, the hand-maintained offline keyword table.** It duplicated
+  `llms.txt` by hand and had drifted badly: it covered 44 of 91 published topics, 10 of its rows
+  pointed at paths that no longer exist (the whole `dev-practices/` prefix became `development/`
+  and `css/`, so every general SOLID / DRY / TDD / security / CSS row was a dead route), and 47
+  published topics were missing entirely. Nothing generated it, no CI validated it, and the plugin
+  has no tests, so the drift was silent and would have recurred.
+
+### Changed
+- **The offline fallback is now the store's last-fetched index.** `index-content llms` serves the
+  full catalog as of the last successful fetch, with no network call — strictly more coverage than
+  the table it replaces, and current by construction rather than by hand. An empty store means no
+  index has ever been fetched, which is reported as such rather than guessed at.
+- Repointed every reference to the deleted table: `SKILL.md` (create-on-miss trigger and See Also),
+  `references/troubleshooting.md`, `references/create-on-miss.md`, `README.md`, `docs/usage.md`.
+- Fixed a stale row in the README disambiguation table — `dev-practices/solid-principles` has been
+  `development/solid-principles` since the catalog was reorganised.
+- `SKILL.md` frontmatter said `version: 0.10.0` while `plugin.json` said `0.11.4`. Both now say
+  `0.12.0`.
+
 ## 0.11.4 (2026-07-13)
 
 ### Changed — docs
