@@ -726,13 +726,25 @@ components named. It is also not the same as a single component's empty diff, wh
   `uncritiqued[]` row is what makes that visible rather than silent.
 - **An architecture with no acceptance criteria per component** leaves `meets-ac` with
   nothing to check. The critique still runs; the row records the criteria were absent.
-- **The work-order build path carries no RED evidence at all.** The `tdd` block lives on
-  `_build-critique.json`, and only `/implement`'s in-session path writes that record. A build
-  that went through `/run-work-orders` owes `work-orders/wo-NN._critique.json` instead, and
-  nothing in that shape carries `red_observed`, `passed_first_run`, `ratified`, or `unobserved`. The
-  RED-observation half is not degraded on that path — it is entirely absent, and
-  `build-critique-assert.sh` does not ask it to be present, because the file it would live in
-  is never expected to exist there. Documented as not covered, not as covered-and-passing.
+- **The work-order build path owes RED evidence too, per work-order (v5.48.0+).** It did not
+  until then, and the paragraph that stood here said so: the `tdd` block lived on
+  `_build-critique.json`, only `/implement`'s in-session path wrote that record, and a
+  `/run-work-orders` build owed `work-orders/wo-NN._critique.json` instead, which carried nothing
+  equivalent. Since the orchestration rules route real builds to delegated agents, following them
+  routed every real build around this rung by construction. Measured on a live build: three
+  components built, reviewed and merged with no TDD record of any kind, every downstream check
+  satisfied, because each one read a record nobody was asked to write.
+
+  Now the unit of the record is the WORK-ORDER. The delegated builder writes
+  `work-orders/wo-NN.tdd.json`, the loop collects it into `wo-NN.run.json` via
+  `wo-run-state.sh collect --tdd-file`, and `build-critique-assert.sh` judges the `tdd` block on
+  that run record with the SAME function the in-session branch uses (`tdd_block_problems` in
+  `accept-verdict.sh`), so a record satisfies both paths or neither. A work-order that owes a
+  record and has none fails the review, fail-closed and `unresolved`. Which work-orders owe one is
+  a union: a run record exists, or a critique exists, or the status is anything but `ready` or
+  `blocked`. The full path end to end is in `references/tdd-workflow.md`, "When the build is
+  delegated". Evidence keys: `work_orders_owing_tdd`, `work_orders_without_tdd`,
+  `work_orders_bad_tdd`.
 - **A recorded `observed` is a report of an observation, not proof of one.** Nothing in this
   rung, or in `/review`, captures the test runner's actual exit code. The record is whatever
   Claude typed into the `tdd` block after the fact. A criterion whose test never ran, or whose

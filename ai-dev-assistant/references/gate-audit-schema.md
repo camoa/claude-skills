@@ -957,9 +957,10 @@ folding it into `overall_verdict`:
 unknown — the record says which kind of test it was. Everything else that is wrong about the
 block, an unexplained first-run pass included, reads as "could not tell," which is why
 it is `unresolved: true`; a real, named violation does not get filed the same way as a gap in
-the record. **Covers the in-session build path only** — `/implement` writes this record; a
-build that went through `/run-work-orders` has no `_build-critique.json` and owes
-`work-orders/wo-NN._critique.json` instead, which carries no RED-observation equivalent. Full
+the record. **This record covers the in-session build path** — `/implement` writes it. A build
+that went through `/run-work-orders` has no `_build-critique.json`; since v5.48.0 it owes a `tdd`
+block per work-order on `wo-NN.run.json`, judged by the same function, rather than owing no
+RED-observation equivalent at all (see the enforcement paragraph below). Full
 enforcement rationale and the who-runs-the-test-by-`run_mode` rule: `references/tdd-workflow.md`
 ("Who runs the tests, and what has to be recorded") and `references/build-critique.md`.
 
@@ -981,7 +982,15 @@ is a hard-block gate input, not documentation: `verdict: "critical"`, any compon
 `blocking: true`, `verdict: "unresolved"`, a payload missing the three count keys, a
 malformed or absent `tdd` block (table above), and a `skipped` with no reason all fail the
 review. The absence of the record fails it too, unless `work-orders/wo-NN._critique.json`
-files show the build went through `/run-work-orders` and owes those instead. An override is
+files show the build went through `/run-work-orders` — and since v5.48.0 that path owes its own
+per-work-order TDD record rather than owing nothing: a `tdd` block on `wo-NN.run.json`, written by
+the loop from the builder's `wo-NN.tdd.json` sidecar and judged by the same `tdd_block_problems`
+that judges the in-session block. A work-order that owes one and has none fails the review,
+fail-closed and `unresolved`; a work-order owes one when a run record exists, or a critique
+exists, or its status is anything but `ready` or `blocked`. The gate reports this in three
+evidence keys — `work_orders_owing_tdd` (int), `work_orders_without_tdd` (array of work-order
+ids) and `work_orders_bad_tdd` (array of `{work_order, problems[]}`), the last present on a pass
+too, so an empty list reads as checked-and-clean rather than as never-looked. An override is
 a `bypass_reason` on this record, which the writer hoists to the envelope and the gate
 surfaces rather than absorbs.
 

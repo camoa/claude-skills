@@ -171,27 +171,51 @@ unresolved_is true "a tdd block missing unobserved[] is unresolved"
 rc_is 1 "a tdd block missing unobserved[] exits 1"
 msg_has "omits red_observed, passed_first_run or unobserved" "the message names what the block cannot say (missing unobserved)"
 
-# ---------------------------------------------- 7. the work-order path is unaffected
+# ------------------------------------- 7. the work-order path owes its own tdd record
 #
-# No _build-critique.json at all: the build went through /run-work-orders, which owes
-# wo-NN._critique.json instead. The tdd block lives only inside _build-critique.json, so
-# this path must pass on its own record and never evaluate — or even mention — tdd.
+# THIS SECTION USED TO ASSERT THE OPPOSITE, AND THAT IS THE POINT. Until v5.48.0 it was
+# titled "the work-order path is unaffected" and required that this path "pass on its own
+# record and never evaluate — or even mention — tdd". Written in v5.34.0 that was a true
+# statement of what the change touched. It then sat here as a REQUIREMENT that the delegated
+# build path stay exempt, so closing the hole turned this file red and the file looked like
+# the authority. It was not. A spec can require a defect, not merely miss one.
+#
+# What it froze: the TDD rung was reachable only where the main context does the building,
+# while the orchestration rules route real builds to delegated agents. Measured on a live
+# build, three components were built, reviewed and merged with no TDD record of any kind and
+# every downstream check was satisfied, because each one reads a record nobody was asked to
+# write.
+#
+# The build-path resolution assertions below are unchanged and still matter. What changed is
+# that a work-order which recorded nothing is now a fail rather than a pass.
 
-D=$(mktask wo_unaffected); mkdir -p "$D/work-orders" >/dev/null 2>&1
-printf '# wo\n' > "$D/work-orders/wo-01.md"
+# `status: done` with NO run record at all is the lost-record case, and it is deliberately the
+# fixture here rather than a run record with the key missing. The loop marked this work-order
+# finished; the record of what it watched failing is nowhere. That has to fail, or "the file is
+# gone" becomes the cheapest way to satisfy the rung.
+D=$(mktask wo_no_tdd_record); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf -- '---\nid: wo-01\nstatus: done\n---\n# wo\n' > "$D/work-orders/wo-01.md"
 printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
 run "$D"
-verdict_is pass "a work-order build with no _build-critique.json still passes"
-rc_is 0 "the work-order path exits 0 with no tdd block anywhere on disk"
+verdict_is fail "a work-order marked done with no run record at all fails"
+[ "$(printf '%s' "$OUT" | jq -r '.unresolved')" = "true" ] \
+  && pass_check "a delegated build with no tdd record is a could-not-tell, not a clean pass" \
+  || fail_check "a delegated build with no tdd record was resolved rather than left unresolved"
+printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'tdd' \
+  && pass_check "the work-order path says out loud that a tdd block is missing" \
+  || fail_check "the work-order path failed without saying the tdd record is what is missing"
+
+D=$(mktask wo_with_tdd_record); mkdir -p "$D/work-orders" >/dev/null 2>&1
+printf '# wo\n' > "$D/work-orders/wo-01.md"
+printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
+run "$D"
+verdict_is pass "a work-order build that recorded its tdd block passes with no _build-critique.json"
+rc_is 0 "the work-order path exits 0 once the record it owes is present"
 [ "$(printf '%s' "$OUT" | jq -r '.build_path')" = "work-orders" ] \
   && pass_check "the work-order build path is resolved, not the in-session one" \
   || fail_check "the work-order build path was not resolved from disk"
-[ "$(printf '%s' "$OUT" | jq -r '.evidence.tdd // "absent"')" = "absent" ] \
-  && pass_check "the work-order path records no tdd evidence at all" \
-  || fail_check "the work-order path unexpectedly carries tdd evidence"
-printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'tdd' \
-  && fail_check "the work-order path's messages mention the RED-observation check" \
-  || pass_check "the work-order path's messages never mention the RED-observation check"
 
 # ------------------------------------------ 8. red_observed: 0, unobserved: [] (actual
 # behavior, read off the script rather than assumed): nothing here requires red_observed
@@ -284,16 +308,20 @@ printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -q 'ratifying' \
   && fail_check "the ratifying-suite message fired on a suite that constrained more than it ratified" \
   || pass_check "a ratified count below red_observed does not fire the ratifying-suite message"
 
-# --- the work-order path is still untouched ------------------------------------------
+# --- the work-order path owes `ratified` too ------------------------------------------
+#
+# Same correction as section 7. This asserted that a delegated build "with no tdd block
+# anywhere still passes", which is the exemption, not a property worth keeping. The gate
+# demands the same four fields on both paths, so a record cannot satisfy one and be refused
+# by the other.
 
 D=$(mktask wo_no_ratified); mkdir -p "$D/work-orders" >/dev/null 2>&1
 printf '# wo\n' > "$D/work-orders/wo-01.md"
 printf '{"blocking":false}' > "$D/work-orders/wo-01._critique.json"
+printf '{"wo":"wo-01","build_returned":true,"tdd":{"red_observed":1,"passed_first_run":0,"unobserved":[],"reason":null}}' \
+  > "$D/work-orders/wo-01.run.json"
 run "$D"
-verdict_is pass "a work-order build with no tdd block anywhere still passes"
-printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'ratified' \
-  && fail_check "the work-order path's messages mention the ratified count" \
-  || pass_check "the work-order path never mentions the ratified count"
+verdict_is fail "a work-order tdd block omitting ratified fails, as the in-session one does"
 
 # ===================================================================================
 # 11. the wiring: the value implement.md tells a builder to record is a value the gate,
@@ -308,6 +336,7 @@ printf '%s' "$OUT" | jq -r '.messages|join(" ")' | grep -qi 'ratified' \
 CMD="${PLUGIN_ROOT}/commands/implement.md"
 SCHEMA="${PLUGIN_ROOT}/references/gate-audit-schema.md"
 WORKFLOW="${PLUGIN_ROOT}/references/tdd-workflow.md"
+COMPANION="${PLUGIN_ROOT}/skills/tdd-companion/SKILL.md"
 REVIEW="${PLUGIN_ROOT}/commands/review.md"
 for f in "$CMD" "$SCHEMA" "$WORKFLOW" "$REVIEW"; do
   [ -f "$f" ] || { printf 'FAIL: %s missing\n' "$f" >&2; exit 1; }
@@ -379,6 +408,21 @@ PFR_ROW=$(grep '^| `passed_first_run` |' "$WORKFLOW" | head -1)
 printf '%s' "$PFR_ROW" | grep -qi 'characterization' \
   && fail_check "the passed_first_run row still claims the characterization case ratified now owns" \
   || pass_check "the passed_first_run row no longer claims the case ratified owns"
+
+# --- the THIRD copy of the rule, the one an agent is actually holding (v5.48.0+) ----------
+#
+# v5.46.0 corrected gate-audit-schema.md and implement.md, both asserted above, and missed
+# skills/tdd-companion/SKILL.md, which stated the same blanket rule for two more releases.
+# That file is the one `/implement` activates at step 65, so it is the copy most likely to be
+# acted on while building. Two documents were paired to the script and the third drifted,
+# which is why this assertion exists rather than a third careful edit.
+grep -q 'Test passes on first run (test might be wrong)' "$COMPANION" \
+  && fail_check "tdd-companion still calls any first-run pass a blocking violation, which the gate does not" \
+  || pass_check "tdd-companion no longer calls every first-run pass a blocking violation"
+
+grep -qi 'ratified' "$COMPANION" \
+  && pass_check "tdd-companion names ratified, so the skill an agent holds knows the fourth value" \
+  || fail_check "tdd-companion does not mention ratified, so a builder reports it as a violation"
 
 # /review step 5.0f: run the literal invocation the command body states, against a record
 # with a ratified count, and assert the gate really hands back what 5.0f promises to copy

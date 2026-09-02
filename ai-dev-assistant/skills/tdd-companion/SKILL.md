@@ -161,9 +161,33 @@ STOP and enforce:
 
 **These BLOCK implementation:**
 - Writing implementation before test exists
-- Test passes on first run (test might be wrong)
+- **An UNEXPLAINED** test passing on first run
 - Adding untested features
 - Skipping RED phase confirmation
+
+**A test passing on first run is not a violation by itself, and this file said it was until
+v5.48.0.** `scripts/build-critique-assert.sh` passes `passed_first_run` whenever a reason is
+recorded and fails only an unexplained one. v5.46.0 corrected the two documents that stated the
+blanket rule, `references/gate-audit-schema.md` and `commands/implement.md`; this file states the
+same rule and was missed. It is the copy an agent has loaded while building, so it was the one
+most likely to be acted on.
+
+**There are two legitimate reasons a test passes immediately**, and neither is the violation:
+
+- **`ratified` (v5.46.0+).** The behaviour it describes already existed, so the test locks in what
+  the code already did. Legitimate as a characterization or regression test. It owes no reason.
+  Report it under `ratified`, never under `passed_first_run`, and never as a violation. A `tdd`
+  block omitting the count fails closed, because absence and zero are different answers.
+- **A test whose expectation is that nothing happens.** A malformed input is not recognised, a
+  near-miss is not matched, a non-matching directory still exits 0. Authored test-first from the
+  criterion, against no implementation, and green from the first run because the default state
+  already satisfies them. Measured on one build: 11 of 21 tests. **These are the tests most likely
+  to be insensitive**, since they pass in every state until something fires, so verify them by
+  temporarily making the thing happen and watching each one fail at its own assertion.
+
+The violation is the third case: a test-first test that passes because it asserts nothing, or
+asserts something already true for a reason unrelated to the behaviour. That one owes the reason,
+and the gate is what refuses a blank one.
 
 ## Integration with Quality Gates
 

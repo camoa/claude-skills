@@ -227,8 +227,26 @@ Read each verdict as a **scalar via `jq -r`** (`.gate_specific.overall_verdict` 
   ov=$(jq -r '.override_used  // false'  <wo-NN.run.json>)
   br=$(jq -r '.build_returned // false'  <wo-NN.run.json>)
   hr=$(jq -r '.halt_reason    // "null"' <wo-NN.run.json>)
-  wo-run-state.sh collect <wo-NN.run.json> --override-used "$ov" --build-returned "$br" \
-    --halt-reason "$hr" --checkpoint-after "$msha"
+  # --tdd-file (v5.48.0+): the builder WROTE its TDD record to <WO_DIR>/wo-NN.tdd.json, beside
+  #     wo-NN.run.json — the same path work-order-builder names in the prompt it hands the
+  #     subagent. You compute it from the WO id you are already looping over; the atom does not
+  #     hand it to you, and the handle could not carry it (M-6: git/disk derived, no subagent
+  #     content, because it carries the verdict and the status — a TDD record carries neither).
+  #     A file and not a returned value for the reason commands/review.md step 5.0 records: an
+  #     agent whose report was its Task response alone had that response truncate in transit.
+  #     PER-WORK-ORDER PATH, which is what makes this safe here: builds run CONCURRENTLY in this
+  #     skill, and wo-NN in the name is what keeps two builders off one file.
+  #     Present ⇒ pass it. Absent ⇒ pass NO flag: the run record gets no tdd key and /review
+  #     fails this WO fail-closed. Never synthesise one. Content is untrusted subagent output;
+  #     wo-run-state.sh parses and type-checks it and refuses a malformed one with exit 2.
+  tddf=<WO_DIR>/wo-NN.tdd.json
+  if [ -f "$tddf" ]; then
+    wo-run-state.sh collect <wo-NN.run.json> --override-used "$ov" --build-returned "$br" \
+      --halt-reason "$hr" --checkpoint-after "$msha" --tdd-file "$tddf"
+  else
+    wo-run-state.sh collect <wo-NN.run.json> --override-used "$ov" --build-returned "$br" \
+      --halt-reason "$hr" --checkpoint-after "$msha"
+  fi
 
   # (4) Undeclared-co-edit detector (step 7a) — runs HERE, BEFORE set-status done.
   #     N1: an up-to-date / no-op merge-back (zero-commit build) leaves msha == pre_merge_head ⇒ nothing

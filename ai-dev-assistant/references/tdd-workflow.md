@@ -87,6 +87,62 @@ matching row. Neither row is a licence to skip the observation.
 | `interactive` (default) | The user, unless they have said otherwise for this project | Claude gives the exact command; the user runs it and reports the result back |
 | `autonomous` | The agent, because there is nobody else | The agent runs the command itself and keeps the exit code |
 
+### When the build is delegated (v5.48.0+)
+
+Everything above reads as though a build is something the main context does. Often it is not. A
+`/run-work-orders` build hands each unit to a fresh subagent, and that subagent inherits none of
+this: not the methodology floor `/implement` loads, not the activated `tdd-companion`, not the
+loop that records an outcome per criterion. **The discipline was not weak on that path. It was
+absent**, and the framework demanded a TDD record of the in-session record and of nothing else,
+so following an orchestration rule that says the main loop coordinates rather than builds routed
+every real build around this rung by construction. Measured on a live build: three components
+built, reviewed and merged with no TDD record of any kind, every downstream check satisfied,
+because each one reads a record nobody was asked to write.
+
+**The unit of the record is the unit of work, not the phase.** A delegated builder writes its own
+record and the orchestrator collects rather than authoring on its behalf. The whole path, end to
+end:
+
+1. **`skills/work-order-builder`** states the obligation in the prompt it hands the subagent and
+   names one absolute path to write it to: `<WO_DIR>/wo-NN.tdd.json`, beside that work-order's
+   `wo-NN.run.json` and `wo-NN._critique.json`. It is the only file the BUILDER writes outside its
+   build root; the atom separately flips `status:` on `wo-NN.md` in the same directory, before any
+   code is mutated.
+2. **The builder** writes ONE JSON object there: `{red_observed, passed_first_run, ratified,
+   unobserved[], reason}` — the same shape an in-session `_build-critique.json` carries, so
+   `/review` reads one record and not two.
+3. **The build atom does nothing with it.** It does not read the file, validate it, or carry it in
+   the handle. The handle is derived from git and disk and structurally accepts no subagent content
+   (M-6), which is exactly why the record travels beside it rather than inside it.
+4. **The loop** (`work-order-loop`, `work-order-loop-parallel`) computes the same path from the
+   work-order id it is already looping over and runs `wo-run-state.sh collect --tdd-file <path>`
+   when the file is there. No file ⇒ no flag ⇒ no `tdd` key, and nothing invents a default.
+   `wo-run-state.sh` parses and type-checks the content before storing it and refuses a malformed
+   one outright, because the content is subagent output even though the channel is a file.
+5. **`/review`'s build-critique gate** fails a work-order whose run record carries no `tdd` block,
+   fail-closed and unresolved.
+
+**A file, not a line in the builder's reply.** Every other subagent-produced value in this plugin
+already moves this way — `wo-critic` writes `wo-NN._critique.json`, `architecture-validator` writes
+`_arch-validate-<slug>.json`, `distill-agent` writes `_distill.json` — and `commands/review.md`
+step 5.0 records the measurement behind it: an agent whose report was its Task response alone had
+that response truncate in transit repeatedly, and the session had to improvise a scratchpad file
+mid-review to recover it. A record asked for as a trailing line in a reply has no reader and no
+path. On a file, both ends derive the path from data they already hold, so a truncated reply costs
+nothing.
+
+`run_mode` still decides who runs the test, by the table above. A delegated builder is running
+unattended by definition, so its rows are the `autonomous` ones: it runs the command and keeps the
+exit code. What it must not do is infer a RED it did not watch, which is the same rule as
+everywhere else here and is why `unobserved[]` is a value it can return rather than a failure.
+
+**What this does not fix.** The record is a self-report, exactly as the in-session one is. Moving
+it from a reply to a file fixed the delivery, not the trust: the builder still writes its own
+numbers, nothing captures the runner's exit code into the record, and a builder that writes nothing
+is caught only downstream, by a gate that fails on the absence. This closes the gap between
+recorded and unrecorded on a path where nothing was recorded at all. It does not close the gap
+between recorded and true.
+
 **A targeted run is part of the cycle, not a test-suite sweep.** A project instruction along the
 lines of "I run the test suites, not you" is about unattended whole-suite runs; a single
 `--filter`-scoped invocation whose entire purpose is to watch one new test fail is the RED step
