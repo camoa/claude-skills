@@ -23,10 +23,21 @@ PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1" >&2; }
 
-for w in design research; do
-  W="$ROOT/references/$w-walkthrough.md"
-  [ -f "$W" ] || { bad "$w-walkthrough.md exists"; continue; }
-
+# SCOPE, v5.44.0: `design` left this spec, `research` remains. /design's opt-in traceability
+# walkthrough was replaced by the deterministic coverage gate (design-close-gate component,
+# scripts/coverage-check.sh). The gate walks BOTH directions this spec exists to protect, and
+# walks them mechanically rather than by asking: `uncovered[]` is a criterion with nothing behind
+# it (direction 1, what NOT YET ADDRESSED printed), and `unreached[]` is an acceptance item
+# answering to no criterion (direction 2, what UNASKED printed). What changed is that the reverse
+# walk now HALTS the design close instead of being advisory, which is a deliberate design decision
+# recorded in architecture/design-close-gate.md, not a lost direction. tests/coverage-check-spec.sh
+# and tests/design-close-gate-spec.sh assert the gate; this file keeps /research's walkthrough,
+# which still asks rather than measures.
+w=research
+W="$ROOT/references/$w-walkthrough.md"
+if [ ! -f "$W" ]; then
+  bad "$w-walkthrough.md exists"
+else
   # Direction 1 survives unchanged.
   grep -q 'NOT YET ADDRESSED' "$W" \
     && ok "$w: a criterion with nothing behind it is still marked NOT YET ADDRESSED" \
@@ -53,7 +64,7 @@ for w in design research; do
   grep -q 'about severity, not about looking' "$W" \
     && ok "$w: distinguishes the never-hard-fail rule from never looking" \
     || bad "$w: distinguishes the never-hard-fail rule from never looking"
-done
+fi
 
 # The Phase 4 rule it defers to must still say scope creep never drives the verdict alone.
 S="$ROOT/references/spec-axis-review.md"

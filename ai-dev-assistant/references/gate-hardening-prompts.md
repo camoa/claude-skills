@@ -29,6 +29,7 @@ The 2 deterministic gates (`dev-guides-load`, `playbook-load`) have NO user prom
 | `e2e-gate-fail` (v1.3+) | `/validate:e2e` on `verdict: fail` | `failed_count`, `failed_test_list`, `report_path` | (no default; options listed) |
 | `visual-regression-gate-fail` (v1.4+) | `/validate:visual-regression` per failed surface | `surface_id`, `viewport`, `diff_percent`, `diff_pixels`, `diff_path` | `[c]` |
 | `visual-parity-gate-fail` (v1.5+) | `/validate:visual-parity` per failed surface | `surface_id`, `viewport`, `diff_percent`, `css_diff_mode`, `css_diff_count`, `css_diff_list`, `diff_path` | `[c]` |
+| `critic-dispatch` (v5.44.0+) | `/implement` build-critique rung, once per critic | `lens`, `worktree`, `range`, `files`, `component`, `acceptance_criteria` (multi-line), `recipe_block` (multi-line, empty for `meets-ac`), `output_path` | (no prompt; the whole dispatch) |
 
 ## Template authoring rules
 
@@ -359,3 +360,30 @@ Variables: `{{surface_id}}` (the registry surface id), `{{viewport}}` (viewport 
 - **v1.2 (2026-04-26, v4.1.0):** additive; adds `review-gate-fail` + `review-summary` for `/review` Phase 4. Templates byte-identical to inline literals shipped in `commands/review.md` PR #138 (verified by `tests/gate-prompts-vs-inline.sh`). Existing 5 templates byte-identical to v1.1 baseline (verified by `tests/gate-prompts-literal.sh`).
 - **v1.1 (2026-04-25, v4.0.2):** additive; added Templates index table consolidating defaults + substitutions + fire conditions; trimmed per-template prose. ALL literal blocks preserved byte-for-byte (verified by `tests/gate-prompts-literal.sh`).
 - **v1.0 (2026-04-25, v4.0.0):** initial; 5 templates covering all v4.0.0 user-prompt surfaces.
+
+## Template ID: `critic-dispatch`
+
+The whole of a critic dispatch at the build-critique rung: the acceptance criteria, the resolved
+recipe, the range and the lens, and nothing else. Written after this plugin's own build measured
+what a hand-written dispatch does: with the retired hostile lens gone, every prompt grew a six-to-eight
+item list of things to try and a posture to hold, rebuilding that lens by hand, and each bought
+a repair round. The lens definition lives in `agents/wo-critic.md`; the dispatch names the lens.
+`recipe_block` is the delimited block from `references/recipe-resolution.md` step 4 for `security`
+and `correctness`, and the empty string for `meets-ac`. Rendered by `scripts/prompt-render.sh
+critic-dispatch …` and handed to the Task tool exactly as printed.
+
+```
+Lens: {{lens}}.
+Worktree: {{worktree}}
+Range: {{range}}
+Files: {{files}}
+review_ref: null. There is no per-component /review record, and its absence is not a clean one.
+Output path: {{output_path}}
+If you run anything, run the component's own spec; never the plugin suite or a make target.
+
+Component: {{component}}. Acceptance criteria:
+{{acceptance_criteria}}
+
+{{recipe_block}}
+```
+

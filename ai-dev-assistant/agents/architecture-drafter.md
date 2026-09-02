@@ -63,7 +63,7 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 8. **Plan a programmatic entry point.** Provide a non-UI entry point for each major feature.
 9. **Ask clarifying questions.** Validate assumptions with the developer.
 10. **Run the architecture checklist.** All items must pass.
-11. **Draft architecture.** Create architecture/main.md.
+11. **Draft architecture.** Create `architecture.md` at the task root plus `architecture/<component>.md` per component.
 12. **Request review.** Present to the developer for approval.
 
 ## Mandatory Checklist
@@ -95,8 +95,8 @@ This boundary lives in this agent itself, so it holds regardless of what any res
 
 ## Output Format
 
-**Split by default.** Write a hub plus one file per component — `architecture.md` (or
-`architecture/main.md`) carries Overview, the compliance tables, a component index linking each file,
+**Split by default.** Write a hub plus one file per component — `architecture.md` at the task root (never under
+`architecture/`, which holds components only) carries Overview, the compliance tables, a component index linking each file,
 Data Flow, Pattern References and Implementation Order; each component's detail goes in its own
 `architecture/<component>.md`. The hub links; it does not restate. One flat file is right only for a
 genuinely single-component design.
@@ -113,6 +113,23 @@ Create the hub with these sections:
 - **Pattern References** — file paths to the framework's canonical examples (from the injected recipe).
 - **Implementation Order** — Services → entry points → UI → Integration.
 - **Open Questions** — decisions needing developer input.
+
+Each `architecture/<component>.md` ends with an `## Acceptance criteria` section; every item in it
+is a checkbox line (`- [ ]`) and carries exactly one marker, last on the line, saying what it is for:
+
+```
+## Acceptance criteria
+- [ ] <item> — serves: c<n>
+- [ ] <item> — supports: <component>
+```
+
+`serves:` names one criterion id from the resolved contract (`— id: c<n>` on a Task-Level criterion
+in `alignment.md`, else on a criterion in `task.md`, as `scripts/contract-resolve.sh` resolves it);
+an item that serves two criteria is written as two items. `supports:` names another component by its
+file basename under `architecture/` without `.md`, for an item whose only purpose is to make that
+component possible. One marker per item, never both, never none, no trailing punctuation after it: at design close `scripts/coverage-check.sh` follows `supports:` edges
+to a `serves:` edge and then to the contract, and an item that reaches no criterion is work nobody
+asked for. Do not write items in the hub; only the component files are read.
 
 ## Human Control Points
 

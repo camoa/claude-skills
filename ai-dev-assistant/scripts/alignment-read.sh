@@ -57,8 +57,10 @@ fi
 #   {"kind":"unknown_section","heading":"<raw>"}
 #   {"kind":"field","section":"<key>","field":"<key>","body":"<prose>"}
 #   {"kind":"unknown_field","section":"<key>","heading":"<raw>"}
-#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false,"verification":"..."|null,"author":"owner"|"designer"|null}
+#   {"kind":"criterion","section":"<key>","text":"...","checked":true|false,"verification":"..."|null,"author":"owner"|"designer"|null,"id":"c<n>"|null}
 #   {"kind":"criterion_author_unrecognized","section":"<key>","detail":"<bad tail>"}
+#   {"kind":"criterion_id_unrecognized","section":"<key>","detail":"<bad tail>"}
+#   {"kind":"criterion_id_duplicate","section":"<key>","detail":"<id>"}
 #   {"kind":"non_goal","section":"<key>","text":"..."}
 #   {"kind":"criteria_prose","section":"<key>","body":"..."}
 #   {"kind":"non_goals_prose","section":"<key>","body":"..."}
@@ -124,7 +126,7 @@ RECORDS=$(awk '
     }
   }
   function flush_field(   i, body, had_item, verif, has_verif, best, dl, p1, p2, p3, d1, d2, d3,
-                           b1, la1, abest, adl, atail, author) {
+                           b1, la1, abest, adl, atail, author, i1, li1, itail, cid) {
     if (cur_section == "" || cur_field == "") {
       # An H2 whose body sits under no recognized H3 field. Emitting nothing
       # here makes the section read as an empty stub, which names the wrong
@@ -215,10 +217,36 @@ RECORDS=$(awk '
               printf "{\"kind\":\"criterion_author_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(text, RSTART))
             }
           }
+          # Optional id marker (v1.4+): "<text> — id: c<n>", read from what is
+          # left after the verify and author splits, rightmost delimiter, em-dash
+          # only, for the same reason as "by:". The value must be c<n>; anything
+          # else is not an id: warned, text left intact, id null.
+          i1 = " — id: "
+          li1 = last_index(text, i1)
+          cid = "null"
+          if (li1 > 0) {
+            itail = trim(substr(text, li1 + length(i1)))
+            if (itail ~ /^c[1-9][0-9]*$/) {
+              cid = "\"" itail "\""
+              text = trim(substr(text, 1, li1 - 1))
+              # The reader is the only place every id is seen together: a second
+              # sighting of the same id is warned, both records kept.
+              if (itail in ids_seen) {
+                printf "{\"kind\":\"criterion_id_duplicate\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, itail
+              }
+              ids_seen[itail] = 1
+            } else {
+              printf "{\"kind\":\"criterion_id_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(itail)
+            }
+          } else if (match(text, /(—|–|-)[ \t]*[iI][dD]:.*$/)) {
+            # Near-miss, the same detection the author marker runs: wrong dash,
+            # spacing or case looked like an attempt; warned, nothing set.
+            printf "{\"kind\":\"criterion_id_unrecognized\",\"section\":\"%s\",\"detail\":\"%s\"}\n", cur_section, json_escape(substr(text, RSTART))
+          }
           if (has_verif) {
-            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":\"%s\",\"author\":%s}\n", cur_section, json_escape(text), checked, json_escape(verif), author
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":\"%s\",\"author\":%s,\"id\":%s}\n", cur_section, json_escape(text), checked, json_escape(verif), author, cid
           } else {
-            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":null,\"author\":%s}\n", cur_section, json_escape(text), checked, author
+            printf "{\"kind\":\"criterion\",\"section\":\"%s\",\"text\":\"%s\",\"checked\":%s,\"verification\":null,\"author\":%s,\"id\":%s}\n", cur_section, json_escape(text), checked, author, cid
           }
           had_item = 1
         }
@@ -402,7 +430,7 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     if $r.kind == "field" and .[$r.section].present then
       .[$r.section][$r.field] = $r.body
     elif $r.kind == "criterion" and .[$r.section].present then
-      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked, verification: $r.verification, author: $r.author}]
+      .[$r.section].success_criteria += [{text: $r.text, checked: $r.checked, verification: $r.verification, author: $r.author, id: $r.id}]
     elif $r.kind == "non_goal" and .[$r.section].present then
       .[$r.section].non_goals += [$r.text]
     elif $r.kind == "criteria_prose" and .[$r.section].present then
@@ -443,6 +471,8 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
   (map(select(.kind == "unknown_field"))   | map({code: "unknown_field", section: .section, detail: ("unrecognized H3: " + .heading)})) as $w_unk_field |
   (map(select(.kind == "empty_field"))     | map({code: "empty_field", section: .section, field: .field})) as $w_empty |
   (map(select(.kind == "criterion_author_unrecognized")) | map({code: "criterion_author_unrecognized", section: .section, detail: .detail})) as $w_author_unrec |
+  (map(select(.kind == "criterion_id_unrecognized")) | map({code: "criterion_id_unrecognized", section: .section, detail: .detail})) as $w_id_unrec |
+  (map(select(.kind == "criterion_id_duplicate")) | map({code: "criterion_id_duplicate", section: .section, detail: .detail})) as $w_id_dup |
   (map(select(.kind == "criteria_prose"))  | map({code: "success_criteria_not_checklist", section: .section})) as $w_crit_prose |
   (map(select(.kind == "non_goals_prose")) | map({code: "non_goals_not_bulleted", section: .section})) as $w_ngoal_prose |
 
@@ -466,6 +496,6 @@ printf '%s\n' "$RECORDS" | jq -cs --arg fp "$ALIGNMENT_MD" '
     created: ($meta_created.created // null),
     schema_version: "1.0",
     sections: $sections_final,
-    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_author_unrec + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_unparsed + $w_missing)
+    warnings: ($w_unk_sec + $w_unk_field + $w_empty + $w_author_unrec + $w_id_unrec + $w_id_dup + $w_crit_prose + $w_ngoal_prose + $w_empty_stub + $w_unparsed + $w_missing)
   }
 '

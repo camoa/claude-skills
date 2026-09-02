@@ -138,6 +138,7 @@ _distill.json|conditional|the distill-agent, when the end-of-phase seam is accep
 _dev-guides-load.json|required|dev-guides-detect.sh plus the guides-matcher agent|step 2
 _playbook-load.json|required|playbook-load-deterministic.sh|step 3
 architecture.md|required|the architecture-drafter agent|step 5
+_coverage.json|required|the design-close coverage gate, scripts/coverage-check.sh written via gate-audit-write.sh; not_run is a valid record, absence is not|step 7|implicit
 _recipe-load.json|conditional|the process-recipe-loader skill, when frameworks are defined|step 2
 _mechanism-challenge.json|required|the mechanism-challenge refresh, which the design step runs unconditionally|step 4|carryable
 _create-on-miss.json|conditional|the maintainer create-on-miss offer, on a genuine domain miss|step 2|carryable

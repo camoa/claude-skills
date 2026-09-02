@@ -131,12 +131,12 @@ Both Step 2a's task-level flow and Step 2b's `--phase 2` flow are `commands/scop
 6. Updates `task.md` to mark Phase 2 as in progress
 7. Optionally creates component file in `architecture/{component}.md`
 8. **(v3.13.5+)** Post-design epic check (see "Post-phase epic check" below) — re-runs `analysis-agent` in folder mode with `task.md` + `alignment.md` + `research.md` + `architecture.md` and surfaces `epic_candidate` if architecture-level decomposition revealed epic-shaped work
-9. **(v3.13.4+)** Offers an opt-in traceability walkthrough (see "Traceability walkthrough sub-step" below) mapping `architecture.md` sections to the task's acceptance criteria
+9. **(v5.44.0+)** Runs the coverage gate (see "Coverage gate" below): every criterion covered, every acceptance item reaching a criterion, recorded as `_coverage.json`; then the design records check
 10. **Invokes `session-context-writer` skill with the resolved project and task**
 
 ## Post-phase epic check (v3.13.5+)
 
-**Run after `architecture.md` has been authored (and optional component file written), before the traceability walkthrough.**
+**Run after `architecture.md` has been authored (and optional component file written), before the coverage gate.**
 
 Purpose: epic-shape sometimes only becomes obvious at architecture time when you see the component breakdown. Research might have missed it; architecture might reveal that what looked like one task is actually 3 loosely-coupled components that belong as separate sub-tasks. This step catches that case.
 
@@ -151,7 +151,7 @@ Invoke `ai-dev-assistant:analysis-agent` via Task tool with:
 ### Step 2 — Branch on `decision`
 
 - `epic_candidate` → continue to Step 3
-- `keep_flat` → proceed silently to traceability walkthrough
+- `keep_flat` → proceed silently to the coverage gate
 - `insufficient_info` → proceed silently
 
 ### Step 3 — Surface epic offer (only if `epic_candidate`)
@@ -166,7 +166,7 @@ Print:
 >   • …
 >
 > **[y]es** — convert to epic now via `/migrate-to-epic <task> --children "<list>"`. `research.md` + `architecture.md` stay on the parent epic; each child re-runs `/research` → `/design` on its slice.
-> **[n]o** — keep flat; proceed to traceability walkthrough (can always migrate later)
+> **[n]o** — keep flat; proceed to the coverage gate (can always migrate later)
 > **[d]iscuss** — show agent's `rationale` + `signals_used[]` before deciding
 
 Default: `[n]`.
@@ -174,7 +174,7 @@ Default: `[n]`.
 ### Step 4 — Act on the answer
 
 - `[y]` → invoke `/ai-dev-assistant:migrate-to-epic <task> --children "<comma-separated proposed names>"`. Stop this `/design` invocation after migration.
-- `[n]` → proceed to traceability walkthrough.
+- `[n]` → proceed to the coverage gate.
 - `[d]` → print rationale + signals_used, re-ask Step 3.
 
 ### Notes
@@ -183,97 +183,33 @@ Default: `[n]`.
 - **Cumulative authority.** Post-design check has the MOST context of any epic check in the framework (task+alignment+research+architecture). If it fires `epic_candidate`, that's the strongest signal the framework can emit.
 - **Mid-design migration is heavier than post-research migration** — architecture.md won't be automatically partitioned across children. User must rebuild design per child. Worth doing anyway if the signal is real.
 
-## Traceability walkthrough sub-step (v3.13.4+)
+## Coverage gate (v5.44.0+)
 
-**Run after `architecture.md` has been authored (and optional component file written), before `session-context-writer` is invoked.**
+**Runs at design close, after the component files are written and after the epic check, before
+`session-context-writer`.** It replaces the opt-in traceability walkthrough, which defaulted to not
+running and was model-driven: this is deterministic, on by default, and recorded.
 
-Purpose: let the user see, at a glance, how each acceptance criterion from the task is addressed by the freshly-authored design — without having to read the whole artifact and cross-reference by hand.
+`scripts/coverage-check.sh "<task_folder>"` resolves the contract's criterion ids (`— id: c<n>` on a
+Task-Level criterion in `alignment.md`, else on a criterion in `task.md`, through
+`scripts/contract-resolve.sh`) and reads every `architecture/*.md`; the hub is never read for items.
+Every unticked criterion must be served by an item, and every item must reach a criterion through its
+one marker (`— serves: c<n>`, or `— supports: <component>` to a component that itself reaches one).
+The command writes the printed JSON to a file and hands `@<path>` to `gate-audit-write.sh` as
+`gate_type: coverage`, so item text lifted from the component files never becomes a shell argument.
+The record's shape and every field's contract are in `references/gate-audit-schema.md` §5.19.
 
-### Step 1 — Ask (opt-in)
+- `fail` halts: each `unreached` item is named with its component and `why`, each `uncovered`
+  criterion by id. `[f]ix` re-runs after edits; `[o]verride <reason>` records the reason as
+  `bypass_reason` on the record and proceeds. The fix for an unreached item is one line, a marker or
+  a deletion, so clearing and flagging cost the same.
+- `not_run` prints its reason and proceeds, and is not a pass: `no_ids` (no criterion carries an id;
+  run `/scope`), or `no_components` (no `architecture/*.md`; a flat design is not checked).
+- `not_applicable` (every criterion already ticked) and `pass` proceed silently.
 
-Print the one-line prompt:
-
-> **Walk through how this design addresses the task's acceptance criteria?** [y]es / [n]o
-
-Default: `[n]` (user can always re-invoke via `/scope` or by re-reading the artifact).
-
-If `[n]` → skip the walkthrough; proceed to session-context-writer.
-
-### Step 2 — Build the mapping
-
-On `[y]`:
-
-1. **Pull acceptance criteria** using this priority:
-   - Primary: `alignment-reader` → `sections.task_level.success_criteria[]` (each carries `{text, checked, verification, author}`)
-   - Fallback: `task.md` → Acceptance Criteria list (extract `- [ ] ...` bullets)
-   - Final fallback: explicit message — "This task has no declared acceptance criteria. Walkthrough can't map without criteria; consider `/scope <task>` to add them."
-2. **For each criterion**, scan `architecture.md` (+ any `architecture/{component}.md` files from step 7) and identify the section(s) that address it. Look for:
-   - Section headings that match the criterion's domain keywords
-   - Explicit callouts in the artifact (e.g., "Acceptance criteria" row, "Risks" mitigations)
-   - Cross-references to fallback flows, invariants, or open questions resolutions
-3. **Honest mapping.** If a criterion has no clear section in the artifact, mark it **"NOT YET ADDRESSED"** — do not invent a section reference. Flag it for the discussion step.
-4. **Then walk it the other way.** Steps 2–3 answer "does every criterion have something behind
-   it". They cannot answer "does everything here answer to a criterion", because a section nobody
-   asked for is invisible to a scan that starts from the criteria list. Both directions matter and
-   only one was ever walked.
-
-   Go through `architecture.md` and its `architecture/{component}.md` files's substantive commitments — components, commands, flags, fixtures,
-   settings, anything the next phase would build — and for each, name the criterion or the recorded
-   decision it answers to. Anything that answers to neither is **UNASKED**: not wrong, not a
-   finding, just something the contract did not ask for and somebody should decide about while it
-   is still free to drop.
-
-   Observed live at the end of a Phase 2: the mapping came back with all nine criteria addressed
-   and nothing missing, and walking the other way surfaced a fixture row beyond the six the
-   contract listed, plus a `--dry-run` flag no criterion mentioned. Both were defensible. Neither
-   had been decided.
-
-   **This is advisory and produces no verdict.** `references/spec-axis-review.md` settled that
-   scope creep never hard-fails on its own — an untraceable-to-what judgment produced false fails
-   under unattended runs. That decision is about severity, not about looking, and this walkthrough
-   has no verdict to give: it is opt-in, it ends in `[c]/[r]/[d]`, and an UNASKED row is a line in
-   the decision log unless the person says otherwise. Surfacing it here rather than at Phase 4 is
-   the whole point — at Phase 4 the thing has already been built.
-
-### Step 3 — Print the table
-
-Format:
-
-```
-Design addresses these acceptance criteria:
-
-  AC #1 "<first 60 chars of text>…"  →  architecture.md <short-hint>
-        ↳ verify: <verification note>
-  AC #2 [designer] "<first 60 chars of text>…"  →  architecture.md <short-hint>
-  AC #3 "<first 60 chars of text>…"  →  — NOT YET ADDRESSED — raise in Phase 3?
-  …
-```
-
-Section hints are lightweight (e.g., `validator-visual row` or `step 5`). The user doesn't need precise line numbers, just enough to jump to the right place.
-
-When a criterion carries a non-null `verification` (from the alignment-reader `success_criteria[].verification` field — the optional ` — verify:` scope-time note), print it as an indented `↳ verify: <note>` line under that AC row. Skip the line when `verification` is null. This surfaces the declared verification strategy alongside the design that addresses it.
-
-When a criterion's `author` (same `success_criteria[]` entry) is `"designer"` or `null`, prefix its `AC #N` label with a bracketed tag — `[designer]` or `[unrecorded]` respectively — right after the number, as shown on AC #2 above. An `owner`-authored criterion prints no tag, so the common case (a confirmed criterion, or a pre-author-marker contract with no markers at all) stays unflagged and only the two provenance states worth a second look stand out. `[unrecorded]`, never `[owner]`, for `null` — a missing marker means nobody recorded one, not that the owner is assumed.
-
-### Step 4 — Three-way prompt
-
-After the table, ask:
-
-> **[c]ontinue** — looks right, proceed to session-context-writer
-> **[r]evise** — something's wrong or missing; let's edit `architecture.md` before continuing
-> **[d]iscuss** — not sure, let's talk through one or more rows before deciding
-
-Default: `[c]`.
-
-- `[c]` → proceed.
-- `[r]` → ask the user which row(s) need revision. Make the edit to `architecture.md` inline. After the edit, re-print the table (Step 3) so the user can verify, then re-ask Step 4.
-- `[d]` → ask which row(s) to discuss. Talk through them one at a time; after discussion, re-ask Step 4.
-
-### Notes
-
-- **Never blocks.** User can always pick `[n]` in Step 1 or `[c]` in Step 4.
-- **No schema writes.** The walkthrough is a print-and-optionally-edit flow. Nothing persists except the edits to `architecture.md` that happen under `[r]`.
-- **Opt-in by design.** Not every run needs this — experienced users working on tight scopes will skip; it shines on complex tasks or when the author wants a sanity check before locking Phase 2.
+The design records check, `scripts/phase-records-check.sh "<task_folder>" --phase design`, runs
+next and names every missing required record with its producer. `_coverage.json` is one of them: a
+`not_run` record satisfies the row, an absent one does not. `/implement`'s preflight reads the same
+record before the first component opens and halts on `fail`.
 
 ## Task-Based Workflow
 
@@ -340,10 +276,8 @@ Based on: `{library or framework path}`
 ## Security Considerations
 - {consideration}: {mitigation}
 
-## Acceptance Criteria (copied to task.md)
-- [ ] {Criterion 1}
-- [ ] {Criterion 2}
-- [ ] {Criterion 3}
+## Acceptance criteria
+{None in the hub: items live in architecture/{component}.md, where the coverage gate reads them}
 ```
 
 ## Component Architecture Files
@@ -368,9 +302,12 @@ For complex tasks, also creates `architecture/{component}.md`:
 ## Pattern Reference
 {Library or framework example to follow}
 
-## Acceptance Criteria
-{List of criteria for completion}
+## Acceptance criteria
+- [ ] {item} — serves: c{n}
+- [ ] {item} — supports: {component}
 ```
+One marker per item, never both, never none: `serves:` names a criterion id from the resolved contract,
+`supports:` names another component's basename. `scripts/coverage-check.sh` reads these at design close.
 
 ## Next Steps
 

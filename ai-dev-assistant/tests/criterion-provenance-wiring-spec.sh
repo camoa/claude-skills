@@ -36,17 +36,17 @@ has "$CONTRACT" "contract: absent marker is null, not owner"   -i 'null does not
 # --- commands/scope.md: who writes owner, who writes designer ---
 has "$SCOPE" "scope instructs the owner marker on confirm"       -i 'by: owner.*confirm|confirmed.*by: owner|— by: owner.{0,80}confirmed'
 has "$SCOPE" "scope instructs designer on the unattended path"   -i 'unattended.{0,120}designer|designer.{0,120}unattended'
-has "$SCOPE" "scope canonical template shows the by: marker"     -- '- \[ \] <falsifiable statement> — by: <owner\|designer>'
+has "$SCOPE" "scope canonical template shows the by: marker"     -- '- \[ \] <falsifiable statement> —( id: c[0-9]+ —)? by: <owner\|designer>'
 has "$SCOPE" "scope states marker precedes verify suffix"        -i 'before.{0,40}verify|marker.{0,40}before'
 
 # --- commands/design.md: names the author rule for its inline scope flow ---
 has "$DESIGN" "design names the author rule for inline scope"    -i 'author marker'
 has "$DESIGN" "design: command does not decide, confirm does"    -i 'confirm does'
 
-# --- design-walkthrough.md: traceability walkthrough tags provenance ---
-WALK="$ROOT/references/design-walkthrough.md"
-[ -f "$WALK" ] || { echo "FAIL: missing $WALK"; fail=1; }
-has "$WALK" "walkthrough tags [designer]/[unrecorded] AC rows"   -- '\[designer\]|\[unrecorded\]'
+# design-walkthrough.md no longer carries a provenance cell: the traceability walkthrough that
+# tagged [designer]/[unrecorded] AC rows was replaced by the deterministic coverage gate in
+# v5.44.0, and the gate prints no author. The design-time display site went with it; /review's
+# display (below) is the one that remains.
 
 # --- commands/review.md: invokes the kernel and never adds a new halt ---
 has "$REVIEW" "review invokes criterion-provenance.sh"           'criterion-provenance\.sh'

@@ -3,6 +3,7 @@
 **Introduced:** ai-dev-assistant v3.12.0
 **v1.1 adds optional per-criterion `verification`** — a success-criterion line MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked. Additive within v1.x (the emitted `schema_version` JSON value stays `"1.0"`; see §9). Consumers that ignore unknown keys are unaffected.
 **v1.3 adds optional per-criterion `author`** — a success-criterion line MAY carry a ` — by: <owner|designer>` marker recording who wrote it. Additive within v1.x (`schema_version` stays `"1.0"`; see §9).
+**v1.4 adds optional per-criterion `id`** — a success-criterion line MAY carry a ` — id: c<n>` marker, the identifier a design's acceptance items cite (`— serves: c<n>`). Additive within v1.x.
 **Owner:** `skills/alignment-reader/SKILL.md` + `scripts/alignment-read.sh`
 **Consumers (as of v3.12.0):** `commands/scope.md`, `commands/research.md`, `commands/design.md`, `commands/implement.md`, `agents/analysis-agent.md` (via `scope_contract_recommended` signal evaluation)
 
@@ -84,7 +85,7 @@ Four fields, in this order when written:
 |---|---|---|
 | `### Goal` | `goal` | String (prose) |
 | `### Expected result` | `expected_result` | String (prose) |
-| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool, verification: string\|null, author: string\|null}` — task-list format; `verification` from the optional ` — verify:` suffix (§5.2), `author` from the optional ` — by:` marker (§5.2) |
+| `### Success criteria` | `success_criteria` | Array of `{text: string, checked: bool, verification: string\|null, author: string\|null, id: string\|null}` — task-list format; `verification` from the optional ` — verify:` suffix (§5.2), `author` from the optional ` — by:` marker (§5.2), `id` from the optional ` — id:` marker (§5.2) |
 | `### Non-goals` | `non_goals` | Array of strings — bulleted list |
 
 Missing H3 → the field is emitted with `present: false, body: null` and the parser adds a `missing_field` warning keyed to section + field name.
@@ -124,8 +125,9 @@ Captured up-front at scope time, the suffix lets each criterion declare its veri
 
 Examples:
 
-- `- [ ] Playwright smoke test covers save + error paths — verify: playwright run asserts persisted value after reload` → `{text: "Playwright smoke test covers save + error paths", checked: false, verification: "playwright run asserts persisted value after reload", author: null}`
-- `- [x] Config schema exists at the expected path` → `{text: "Config schema exists at the expected path", checked: true, verification: null, author: null}`
+- `- [ ] Playwright smoke test covers save + error paths — verify: playwright run asserts persisted value after reload` → `{text: "Playwright smoke test covers save + error paths", checked: false, verification: "playwright run asserts persisted value after reload", author: null, id: null}`
+- `- [x] Config schema exists at the expected path` → `{text: "Config schema exists at the expected path", checked: true, verification: null, author: null, id: null}`
+- `- [ ] The reader emits an id — id: c1 — by: owner` → `{text: "The reader emits an id", checked: false, verification: null, author: "owner", id: "c1"}`
 
 **Optional author marker (v1.3+).** A criterion line MAY declare *who wrote it* by appending a trailing marker:
 
@@ -148,6 +150,16 @@ The reader splits on ` — verify: ` first, then looks for the author marker in 
 The reader takes the **last** ` — by: ` delimiter in the remaining text, so a criterion whose own prose contains the phrase `— by:` is still parsed correctly by its tail.
 
 Absent marker → `author: null`. This is the pre-v1.3 behavior and every existing contract keeps it: a contract with no author markers parses exactly as it did before v1.3.
+
+**Optional id marker (v1.4+).** A criterion line MAY carry an identifier:
+
+```markdown
+- [ ] <criterion text> — id: c<n> — by: <owner|designer> — verify: <how it will be verified>
+```
+
+The delimiter is ` — id: ` (space, em-dash U+2014, space, the literal lowercase `id:`, space), em-dash only, for the same reason as ` — by: `. The value must match `c<n>` (`c1`, `c12`); any other value (`c0`, `c007`, `goal-3`) is not an id: the reader emits warning `criterion_id_unrecognized` with the tail it saw, leaves `text` intact and records `id: null`. The marker follows the text and precedes the other two markers; the reader takes the **last** ` — id: ` in what remains after the verify and author splits, so a marker at a wrap (` —` closing one line, `id: c4` opening the next) reads exactly as one on a single line, by the joining rule above. Ids are assigned in authoring order by `/scope` and are never reassigned when a criterion is deleted: `c3` stays gone. A wrong dash, spacing or case that still looks like an attempt is warned the same way, nothing set. The same id on two lines is warned as `criterion_id_duplicate` on the second, both kept. Absent marker → `id: null`; every contract written before v1.4 parses as it did.
+
+The id is what a design cites. `architecture/<component>.md` acceptance items carry `— serves: c<n>`, and the design-close coverage check follows them back to these ids; a contract with no ids anywhere makes that check `not_run`, by name, rather than a pass.
 
 Examples:
 

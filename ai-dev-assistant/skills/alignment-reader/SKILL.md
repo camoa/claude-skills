@@ -25,7 +25,7 @@ Fields:
 - `created` — from `**Created:** <YYYY-MM-DD>` metadata
 - `schema_version` — JSON string, currently `"1.0"`
 - `sections.{task_level,phase_1,phase_2,phase_3}` — each either `{present: false}` or a populated object with `goal`, `expected_result`, `success_criteria[]`, `non_goals[]`, `extras[]`, `fields_missing[]`
-  - Each `success_criteria[]` item: `{text, checked, verification, author}`. `verification` is a string or `null` (v1.1, from ` — verify: <how>`). `author` is `"owner"`, `"designer"`, or `null` (v1.3, from ` — by: <owner|designer>`) — `null` means no author was recorded, not that the owner wrote it.
+  - Each `success_criteria[]` item: `{text, checked, verification, author, id}`. `verification` is a string or `null` (v1.1, from ` — verify: <how>`). `author` is `"owner"`, `"designer"`, or `null` (v1.3, from ` — by: <owner|designer>`) — `null` means no author was recorded, not that the owner wrote it. `id` is `"c<n>"` or `null` (v1.4, from ` — id: c<n>`); `null` means no id was recorded, and `scripts/contract-resolve.sh` then falls back to `task.md`.
 - `warnings[]` — array of `{code, …}` observations
 
 ## Defensive posture (never throws)
@@ -40,6 +40,8 @@ Fields:
 | `Success criteria` body is prose, not a `- [ ]` task-list | `success_criteria_not_checklist` |
 | `Non-goals` body is prose, not a bulleted list | `non_goals_not_bulleted` |
 | ` — by:` marker present with a value other than `owner`/`designer` | `criterion_author_unrecognized` |
+| ` — id:` marker present with a value that is not `c<n>` (or a near-miss such as a wrong dash) | `criterion_id_unrecognized` |
+| Two criteria in one section carry the same id | `criterion_id_duplicate` |
 | Unrecoverable read failure (permission, IO) | `error` (only case with non-zero exit) |
 
 ## Invocation

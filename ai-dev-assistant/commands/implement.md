@@ -25,6 +25,7 @@ Phase 3 of a task. Behavior current as of v4.0.2; full prose / examples / versio
    - Phase 1 not `[x]` → print one-line soft-nudge ("Phase 1 not complete; running `/implement` without research is unusual.").
    - Both `[x]` → silent.
    Never block.
+   - **Coverage read (v5.44.0+).** Read `<task>/_coverage.json` (`gate_specific.status`), the design-close coverage gate's record. `fail` → HALT before the first component opens: `[o]verride <reason>` records the reason as `bypass_reason` on that record and proceeds; nothing else does. `not_run` → print its `reason` (`no_ids`: run `/scope`; forward-only on a task designed before ids) and proceed. `pass` / `not_applicable` → silent. Absent → the design never closed through the gate; print that and proceed, it is not a pass. **Record the read on every path**, so a build can show the check happened: set `gate_specific.coverage_read` to `{status: "<what you read>|absent", at: "<iso>"}` on `_coverage.json` (whole record back through `gate-audit-write.sh`, every other key preserved; write it to `<task>/_coverage.json` yourself when the record is absent, with `status: "not_run"`, `reason: "no_design_gate"`). Without it a pass and a preflight that never ran leave the task folder identical, and the override is the only auditable path.
 
 2. **Worktree signals (v3.16.0+).** Run `${CLAUDE_PLUGIN_ROOT}/scripts/worktree-signals.sh "<project_folder>" "<task_name>"` (Bash). **Both arguments are required** — `<project_folder>` is the task's project folder, not the code repository, and a one-argument call fails. On HIGH-strength signal (`another_task_active`, `dirty_tree`, `--worktree` flag, or `worktreeByDefault: true`), print soft-nudge offering `/worktree <task>`. `dirty_tree` counts uncommitted changes to **tracked** files only; untracked files are reported in `signal_details` and never fire it. Suppress when already inside a worktree. Never block.
 
@@ -176,11 +177,11 @@ security lens is guaranteed at `medium` and above, so executable code always get
 
 **5. Critics.** For each lens dispatch ONE `ai-dev-assistant:wo-critic` via the Task tool,
 **fresh and independent, never a fork** — a forked critic inherits the reasoning it exists to
-challenge. Give each the inputs the existing contract specifies: `<worktree>` = `codePath`,
-the `<base-sha-for-this-round>..$AFTER` range, the component's acceptance criteria as injected content, its
-lens, and its output path `$CD/<component>.critics/<component>.critic-<lens>.json`. Pass
-`<review_ref>` as `null` **and say so** — there is no per-component `/review`, and a critic
-must not read an absent gate record as a clean one.
+challenge. **Render the dispatch:** write the component's `## Acceptance criteria` to `$CD/<component>.ac.txt` and the delimited recipe block (empty for `meets-ac`) to `$CD/<component>.recipe.txt` the way `<component>.files.txt` is written, then `${CLAUDE_PLUGIN_ROOT}/scripts/prompt-render.sh critic-dispatch lens=<lens> worktree=<codePath> range=<base-sha-for-this-round>..$AFTER files@="$CD/<component>.files.txt" component=<component> acceptance_criteria@="$CD/<component>.ac.txt" recipe_block@="$CD/<component>.recipe.txt" output_path="$CD/<component>.critics/<component>.critic-<lens>.json"` (Bash). The three `@=` values are repo text and never pass through a shell argument: inline, every backtick and `$(...)` in them ran and the code vanished while the render exited 0.
+Hand the Task tool exactly what it printed: nothing above it, nothing below it, no wording of your
+own. The template carries `review_ref: null` and says so, because there is no per-component `/review`
+and a critic must not read an absent record as a clean one; it also tells the critic to run the
+component's own spec and never the suite. A render that exits 2 is `--not-dispatched <lens>:render_failed` at step 6, never a smaller `--expected`; the kernel still counts a withheld `security` as missing, so the lens is lost loudly.
 
 **`security` and `correctness` receive the resolved implement recipe** (the body Read at step 6),
 verbatim, inside the delimited block `references/recipe-resolution.md` step 4 defines; for
