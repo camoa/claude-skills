@@ -207,9 +207,18 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wo-critique-aggregate.sh \
   --wo "<component>" --tier "<risk_tier>" --mode fanout \
   --expected <number of lenses dispatched> \
   --critics-dir "$CD/<component>.critics" \
+  --component-files-from "$CD/<component>.files.txt" \
   --evaluated true --required [--diff-empty] \
   > "$CD/<component>.critique.json"
 ```
+
+`--component-files-from` is the range the critics were handed, written at step 2 and already read
+at step 3 for tiering. A finding whose sites are ALL outside it is recorded in `out_of_range[]`,
+dropped from the severity that decides `blocking`, and carried to `/review` instead of opening a
+round here. Omitting the flag records `range_check.status: "not_run"` with its reason and suppresses
+nothing, so an unwired caller stays honest and stays unenforced. It does not fight `--diff-empty`:
+an empty range is refused as a range, because a range that excludes everything would suppress every
+sited finding.
 
 The kernel always exits 0 and always emits an envelope; **the verdict is in `blocking`**, not
 in the exit code. On `blocking: true` the component stops: `[a]ddress` (fix, then re-run this
@@ -247,7 +256,21 @@ git -C <codePath> diff --name-status $AFTER..$REP > "$CD/<component>.repair.txt"
 ${CLAUDE_PLUGIN_ROOT}/scripts/repair-accept-check.sh --suite <green|red|not_run> \
   --test-motion-from "$CD/<component>.repair.txt" --test-globs '<test paths, JSON array>' \
   [--test-globs-source undetermined] [--modification-reason "<why a test file changed>"]
+
+# And the scope half, from the SAME repair diff. Copy it verbatim, every value is computed here:
+# it surfaces a file the repair touched that no critical/concern finding named. `blocks` is false.
+${CLAUDE_PLUGIN_ROOT}/scripts/repair-scope-check.sh \
+  --finding-sites "$(jq -c '[(.critics[]?, .) | (.findings // [])[]? | select((.severity // "") == "critical" or (.severity // "") == "concern") | (.where // [])[]? | (.file // empty)] | unique' "$CD/<component>.critique.json" 2>/dev/null || echo '[]')" \
+  --touched-files "$(awk -F'\t' 'NF>1{for(i=2;i<=NF;i++) if($i!="") print $i}' "$CD/<component>.repair.txt" 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')" \
+  --touched-files-source "$([ -s "$CD/<component>.repair.txt" ] && echo determined || echo undetermined)" \
+  > "$CD/<component>.scope.json"
+jq -r '"scope: \(.action) (\(.decided_by)): \(.unnamed | join(", "))"' "$CD/<component>.scope.json"   # SAY IT
 ```
+
+`repair-scope-check.sh` ran once per task at `/review` and nowhere else, so its only verdict landed
+after every repair round was over and could not constrain the rounds it exists for. An unreadable
+critique yields `[]` sites and `cannot_judge`, never `in_scope`; a 0-byte repair diff is
+`undetermined`, the same abstention the accept kernel makes on one.
 
 `--suite` is a RESULT you hand in; the kernel runs nothing. Who runs it is settled by `run_mode`
 (`references/tdd-workflow.md:85-88`): the person interactive, you autonomous. Per repair the suite is

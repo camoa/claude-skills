@@ -1,5 +1,37 @@
 # Changelog
 
+## [5.45.0] - 2026-09-02
+
+### Added
+- **A build finding is judged against the slice it came from.** `wo-critique-aggregate.sh` takes
+  `--component-files-from`, the range the critics were handed, and a finding whose sites all lie
+  outside it is dropped from the severity that decides `blocking` and carried in `out_of_range[]`
+  instead. On this epic's own build, critics spent repair rounds on findings about files no
+  component's range contained. The flag is wired into the rung's aggregate call; omitting it records
+  `range_check.status: "not_run"` with a reason and suppresses nothing.
+- **`extends` is read.** A finding declaring `extends: "<id>"` appends its sites to the referenced
+  finding and marks that finding `under_enumerated`. The field was on the contract from the start
+  and nothing consumed it, so a link a critic declared went nowhere. A dangling or self-referential
+  link records why it did not resolve. It records the link and does not control the loop: an
+  extending `critical` still blocks.
+
+### Fixed
+- **The scope check could never once have compared anything.** `build-critique-assert.sh` read
+  findings from a top-level `.findings` while the aggregate envelope keeps them under
+  `.critics[].findings`, so it found zero sites on every real record and returned `cannot_judge`
+  permanently.
+- **A false clean in the same caller.** `TOUCHED_SOURCE` was stamped `determined` whenever the
+  change set was an object, so a change set with no `files` key compared an empty list and reported
+  "every touched file is named by a finding". `determined` now requires the key present and an array
+  of strings; key-present-but-empty stays `determined`, which is the distinction the kernel draws.
+- **The scope check judged the wrong thing, and ran too late to matter.** It compared the whole task
+  change set rather than the repair's own diff, and its only live path was once per task at
+  `/review`, after every round it exists to constrain was over. It now prefers the round's own
+  `*.repair.txt` and runs in the rung's `[a]ddress` path. A zero-byte repair diff abstains rather
+  than reading as a repair that touched nothing.
+- **`build-critique-gate-spec.sh`'s fixture pointed at a path that does not exist**, so every scope
+  assertion ran down `cannot_judge` without reaching a comparison.
+
 ## [5.44.2] - 2026-09-02
 
 ### Fixed

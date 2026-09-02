@@ -10,14 +10,16 @@
 #   wo-critique-aggregate.sh --wo <id> --tier <low|medium|high>
 #       --mode <team|fanout|team-fallback-to-fanout|none> --expected <int>
 #       --critics-dir <dir> --evaluated <true|false> [--diff-empty] [--required] [--run-at <iso>]
+#       [--component-files-from <path>]
 #
 # Critic file (written by the wo-critic agent via Write): an OBJECT
 #   { "lens":..., "verdict":"pass|concern|critical|unresolved", "schema_version":<num, optional>,
 #     "findings":[ {"severity":"concern|critical","text":...,"where":[{"file":...}],
 #                     "remedy":...,"reachable_by":...,"id":...,"extends":...,
 #                     "measured":null|{...}} ] }         # findings MUST be objects
-# `text`, `extends` and `measured` are the critic's contract, not this kernel's: nothing here
-# reads them. When schema_version >= 2.0, this kernel DOES read and enforce where[]/remedy/id
+# `text` and `measured` are the critic's contract, not this kernel's: nothing here reads them.
+# `extends` IS read — see the under-enumeration pass below.
+# When schema_version >= 2.0, this kernel DOES read and enforce where[]/remedy/id
 # (plus reachable_by when the file's lens is security) on every critical/concern finding — see
 # shape_check() below. One malformed finding forces effective=unresolved for the WHOLE file, never
 # just that finding (D3). No schema_version => pre-contract, read exactly as before this kernel
@@ -33,11 +35,51 @@
 #     elif any critical=>critical; elif any unresolved=>(high?critical:concern); elif any concern=>concern;
 #     else pass. blocking = critical | (not_evaluated&required) | (required&unresolved) | (degraded&high).
 #   ALWAYS emits a JSON envelope and exits 0 (the verdict is in `blocking`).
+#
+# Range check (--component-files-from) — a build finding is a defect in the SLICE'S OWN code.
+#   The same set comparison as scripts/repair-scope-check.sh, turned around: there, a repair's
+#   touched files against the sites a finding named; here, a finding's sites against the range the
+#   critics were handed (`<component>.files.txt`, one path per line). A finding EVERY one of whose
+#   where[] sites falls outside that range is marked `out_of_range:true`, is dropped from the
+#   `effective` computation (so it cannot make `blocking` true and cannot open a repair round), and
+#   is collected into the envelope's top-level `out_of_range[]` so the review phase still reads it.
+#   Comparison is LITERAL — no normalisation, no basename matching — same as repair-scope-check.sh.
+#   A finding with no readable where[] is NOT out of range: it cannot be judged, and shape_check
+#   already refuses those at critical/concern. So is any where[] entry whose `file` is not a string.
+#   THE FLAG ABSENT IS ITS OWN VALUE. `range_check.status` is `not_run` with a reason whenever no
+#   comparison was made — flag absent, file unreadable, or list empty — and `out_of_range:[]` then
+#   means "nobody looked", not "every finding was in range". A false all-clear is worse than silence.
+#   The file's own top-level `verdict` is dropped only when EVERY finding it carries is out of range
+#   and it carries at least one, AND the verdict is a rankable summary of those findings that claims
+#   no more than they did. agents/wo-critic.md defines the verdict as the max over the
+#   findings ("the kernel takes the worst severity across your findings and lifts your whole verdict
+#   to it"), so a verdict summarising nothing in range summarises nothing. Two verdicts are not that
+#   summary and survive the drop. `unresolved` means the critic could not investigate — the same
+#   file says so at :218-219, "which is a different thing and still blocks" — and `severity` is
+#   concern|critical only, so the file verdict is the only field that signal can live in; dropping it
+#   converts "I could not settle this" into a clean pass, which was measured happening before this
+#   condition existed. An unrecognised verdict ranks the same way, fail-closed. And a verdict ranking
+#   ABOVE every suppressed finding is claiming something the range check never judged, so it stands.
+#   One in-range finding, or no findings at all, and the verdict stands untouched: a verdict names no site of its own, so it
+#   is not a thing this kernel can judge against a range on its own.
+#
+# Under-enumeration (D7) — `extends` is a declared link, and it is READ here.
+#   A finding carrying a non-blank `extends` naming the `id` of another finding ANYWHERE in this
+#   aggregation appends its where[] sites to that finding (deduplicated, order preserved) and sets
+#   `under_enumerated:true` on the REFERENCED finding; the extending finding records
+#   `extends_resolved:true`. An `extends` naming an id that exists nowhere, or naming its own id,
+#   records `extends_resolved:false` with a reason naming the id — never silently dropped, never
+#   read as resolved. THIS RECORDS THE LINK, IT DOES NOT CONTROL THE LOOP: the pass runs AFTER every
+#   `effective` is computed, so an extending finding contributes to severity exactly as before.
+#   Single pass, no transitive chains: a finding's appended sites are the ORIGINAL where[] of each
+#   finding extending it, so f3->f2->f1 gives f1 f2's sites and not f3's. An id carried by more than
+#   one finding appends to every finding carrying it; keeping ids unique is the critic's job.
 
 set -uo pipefail
 
 WO=""; TIER="high"; MODE="none"; EXPECTED=0; CDIR=""; EVALUATED="false"
 DIFF_EMPTY="false"; REQUIRED="false"; RUN_AT=""; NOT_DISPATCHED="[]"; ND_INVALID=0
+CFILES=""; CF_BADVALUE=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --wo) WO="${2:-}"; shift 2 || shift ;;
@@ -57,6 +99,12 @@ while [ "$#" -gt 0 ]; do
       [ "$ND_OK" = "true" ] || ND_INVALID=$((ND_INVALID + 1))
       NOT_DISPATCHED=$(jq -c --arg l "$ND_L" --arg r "$ND_R" --argjson ok "$ND_OK" '. + [{lens:$l,reason:$r,accepted:$ok}]' <<<"$NOT_DISPATCHED")
       [ -n "$ND_RAW" ] && shift 2 || shift ;;
+    --component-files-from) # the component's realized range, one path per line (<component>.files.txt)
+      # A value that is itself a flag is rejected rather than consumed, and the flag is left for the
+      # loop to parse — the guard repair-scope-check.sh's require_value() applies, minus the exit:
+      # this kernel's contract is that it ALWAYS emits an envelope, so a bad value becomes not_run.
+      CFILES="${2:-}"; case "$CFILES" in --*) CFILES=""; CF_BADVALUE=1 ;; esac
+      [ -n "$CFILES" ] && shift 2 || shift ;;
     --run-at) RUN_AT="${2:-}"; shift 2 || shift ;;
     *) shift ;;
   esac
@@ -68,9 +116,47 @@ case "$EXPECTED" in ''|*[!0-9]*) EXPECTED=0 ;; esac                          # n
 case "$MODE" in team|fanout|team-fallback-to-fanout|none) ;; *) MODE="fanout" ;; esac
 [ -n "$RUN_AT" ] || RUN_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
 
+# --- the component's range (c5) ---------------------------------------------
+# RANGE is `null` when no comparison can be made, and the JSON array of paths when one can. Every
+# not_run branch carries a reason, because `out_of_range:[]` with no reason beside it reads exactly
+# like "every finding was in range" — the false all-clear this repo has shipped three times.
+RANGE='null'; RANGE_STATUS="not_run"; RANGE_REASON="--component-files-from absent: no range to compare against"
+if [ "$CF_BADVALUE" -eq 1 ] && [ -z "$CFILES" ]; then
+  RANGE_REASON="--component-files-from was given a flag, not a path"
+elif [ -n "$CFILES" ]; then
+  if [ ! -f "$CFILES" ] || [ ! -r "$CFILES" ]; then
+    RANGE_REASON="component file list unreadable: $CFILES"
+  else
+    R="$(jq -R -s -c '[ split("\n")[] | gsub("^\\s+|\\s+$";"") | select(length > 0) ]' < "$CFILES" 2>/dev/null)"
+    if [ -z "$R" ] || [ "$(jq 'length' <<<"$R" 2>/dev/null)" = "0" ]; then
+      # An empty range would put EVERY sited finding outside it and suppress the lot. That is a
+      # component that changed nothing (--diff-empty's case), not a licence to drop every finding.
+      RANGE_REASON="component file list is empty: $CFILES"
+    else
+      RANGE="$R"; RANGE_STATUS="ran"; RANGE_REASON=""
+    fi
+  fi
+fi
+
+# The out-of-range test for ONE finding, as a jq definition, shared verbatim by effective() and the
+# merge below so the severity that is dropped and the finding that is marked can never disagree.
+# $range null (no comparison made) makes this false everywhere: nothing is suppressed when nobody
+# looked. `all` over a guarded non-empty array, so a where[] entry that is not an object, or whose
+# `file` is not a string, makes the whole finding NOT out of range — unjudgeable is not outside.
+# `.file` is bound to $p BEFORE the `$range | index(...)`: inside index() the input is $range, so
+# a bare `index(.file)` indexes the range array with a string and errors the whole filter out.
+OOR_DEF='def oor:
+    ($range != null)
+    and ((.where|type) == "array") and ((.where|length) > 0)
+    and ([ .where[]
+           | if (type == "object") and ((.file|type) == "string")
+             then (.file as $p | ($range | index($p)) == null)
+             else false end ] | all);'
+
 # effective verdict of one critic file — fail-closed against label/shape drift (CRIT-1/HIGH-5).
+# $2 is the range (a JSON array, or `null` when no range check ran).
 effective() {
-  jq -er '
+  jq -er --argjson range "$2" "$OOR_DEF"'
     def n: (. // "" | tostring | ascii_downcase | gsub("^\\s+|\\s+$";""));
     def vrank(v): {"pass":0,"concern":1,"unresolved":2,"critical":3}[(v|n)] // 2;     # unknown verdict => unresolved
     def srank(s):
@@ -81,8 +167,26 @@ effective() {
             elif ($x=="pass" or $x=="ok")                               then 0
             else 2 end);                              # missing/empty/unknown severity => unresolved (fail-closed)
     if type != "object" then 2
-    else ([ vrank(.verdict) ]
-          + [ (.findings // [])[] | if type=="object" then srank(.severity) else 2 end ]) | max
+    else
+      # `(.findings // [])[]` is kept EXACTLY as it was: a `findings` value that is not an array
+      # errors here, jq exits non-zero and the `||` below returns unresolved. That fail-closed path
+      # predates the range check and a rewrite to a type-guarded form would quietly turn it into a
+      # pass. Bind it once, so the same list feeds the ranks and the out-of-range count.
+      [ (.findings // [])[] ] as $fs
+      | [ $fs[] | if type=="object" then (if oor then empty else srank(.severity) end) else 2 end ] as $ranks
+      | [ $fs[] | select((type=="object") and oor) ] as $oorfs
+      | ($oorfs | length) as $noor
+      | (if $noor > 0 then ([ $oorfs[] | srank(.severity) ] | max) else -1 end) as $oormax
+      | vrank(.verdict) as $v
+      # The verdict is dropped only when it summarises nothing that survived the range check, and
+      # only as far as the suppressed findings themselves went. Three conditions, all required:
+      # every finding out of range and at least one finding; the verdict is a rankable summary
+      # (rank 2 is `unresolved` or an unrecognised label, neither of which is a max over findings);
+      # and it ranks no higher than the worst finding the range check actually judged. See the
+      # header note on why each one is there.
+      | (if ($fs|length) > 0 and $noor == ($fs|length) and $v != 2 and $v <= $oormax
+         then [] else [ $v ] end) as $vr
+      | ($vr + $ranks) | if length == 0 then 0 else max end
     end
     | {"0":"pass","1":"concern","2":"unresolved","3":"critical"}[tostring]
   ' "$1" 2>/dev/null || echo "unresolved"
@@ -179,7 +283,7 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
       CRITICS="$(jq -nc --argjson a "$CRITICS" --arg f "$(basename "$cf")" \
         '$a + [{lens:"?",verdict:"unresolved",effective:"unresolved",findings:[],note:("unreadable:"+$f),shape_check:"not_run",shape_check_reason:"file unreadable"}]')"
     else
-      EFF="$(effective "$cf")"
+      EFF="$(effective "$cf" "$RANGE")"
       SHAPE="$(shape_check "$cf")"
       # GUARD THE CONSUMER, not each producer path. `shape_check` emits nothing at all for more
       # inputs than are obvious: a whitespace-only file, two concatenated JSON documents, a jq that
@@ -220,9 +324,15 @@ if [ -n "$CDIR" ] && [ -d "$CDIR" ]; then
            ([rank($e), rank("unresolved")] | max) as $r
            | {"0":"pass","1":"concern","2":"unresolved","3":"critical"}[$r|tostring]')"
       fi
-      # coerce a non-object value to a safe stub so the merge can never crash (CRIT-2)
-      CRITICS="$(jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" --slurpfile c "$cf" \
-        '$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end) + {effective:$eff}
+      # coerce a non-object value to a safe stub so the merge can never crash (CRIT-2), and mark
+      # each out-of-range finding on the copy the envelope carries. The per-critic file on disk is
+      # never touched (wo-critique-aggregate-spec.sh T-cc3 asserts the bytes).
+      CRITICS="$(jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" --argjson range "$RANGE" --slurpfile c "$cf" \
+        "$OOR_DEF"'$a + [ (($c[0] // {}) | if type=="object" then . else {raw:(tostring)} end)
+                | (if (.findings|type) == "array"
+                   then .findings |= map(if (type == "object") and oor then . + {out_of_range:true} else . end)
+                   else . end)
+                | . + {effective:$eff}
                 + {shape_check:$shape.status} + (if $shape.reason then {shape_check_reason:$shape.reason} else {} end) ]' 2>/dev/null \
         || jq -nc --argjson a "$CRITICS" --arg eff "$EFF" --argjson shape "$SHAPE" \
              '$a + [{lens:"?",verdict:"unresolved",effective:$eff,findings:[],shape_check:$shape.status}
@@ -243,6 +353,55 @@ fi
 # Read off `effective`, the ranking the loop just computed, so the count agrees with the envelope: a
 # malformed findings value ranks unresolved and is not clean, and cannot zero a sibling's credit.
 CLEAN_RETURNS="$(jq -r '[.[] | select(.effective=="pass" and ((.findings // []) | type=="array" and length==0))] | length' <<<"$CRITICS" 2>/dev/null)"; [ -n "$CLEAN_RETURNS" ] || CLEAN_RETURNS=0
+# --- out_of_range[] (c5): handed to review rather than discarded -------------
+# Derived BEFORE the under-enumeration pass, so what is recorded here is what was judged: an
+# `extends` append can add sites to a finding after the fact, and this record must not drift.
+# `[]` alone means nothing — read it beside range_check.status, which says whether anyone looked.
+OUT_OF_RANGE="$(jq -c '[ .[] | (.lens // null) as $l
+  | ((.findings // []) | if type=="array" then .[] else empty end)
+  | select((type == "object") and (.out_of_range == true))
+  | {lens:$l, id:(.id // null), severity:(.severity // null), where:(.where // [])} ]' <<<"$CRITICS" 2>/dev/null)"
+[ -n "$OUT_OF_RANGE" ] || OUT_OF_RANGE='[]'
+
+# --- under-enumeration (c3, D7): `extends` is read here ----------------------
+# Runs AFTER every `effective` is computed and after clean_returns is counted: this pass records a
+# link, it does not control the loop, and it must not move a verdict. It adds keys to findings in
+# the envelope only; it never adds or removes a finding, and never touches a file on disk.
+CRITICS_PRE="$CRITICS"
+CRITICS="$(jq -c '
+  def blank: (type != "string") or ((.|gsub("^\\s+|\\s+$";"")) == "");
+  def warr: (.where // []) | if type == "array" then . else [] end;
+  [ .[] | (.findings // []) | if type == "array" then .[] else empty end | select(type == "object") ] as $all
+  | [ $all[] | select((.id|blank) | not) | .id ] as $ids
+  # One pass, from the ORIGINAL where[] of each extender: a link to an id nobody carries, and a link
+  # to the extender'"'"'s own id, are both excluded here and recorded as failures on the extender below.
+  | [ $all[] | select((.extends|blank) | not) | select(.extends != .id)
+      | . as $x | select(($ids | index($x.extends)) != null) | {ext: .extends, w: warr} ] as $links
+  | map(if (.findings|type) == "array" then
+          .findings |= map(
+            if type == "object" then
+              . as $f
+              | (if ($f.id|blank) then [] else [ $links[] | select(.ext == $f.id) ] end) as $inc
+              | (if ($inc|length) > 0
+                 then . + {under_enumerated: true,
+                           where: (reduce ([ $inc[].w[] ] | .[]) as $e (warr;
+                                     if index($e) then . else . + [$e] end))}
+                 else . end)
+              | (if ($f.extends|blank) then .
+                 elif $f.extends == $f.id
+                   then . + {extends_resolved: false,
+                             extends_reason: ("extends names its own id \"" + ($f.extends|tostring) + "\"")}
+                 elif ($ids | index($f.extends)) != null
+                   then . + {extends_resolved: true}
+                 else . + {extends_resolved: false,
+                           extends_reason: ("extends names an unknown id \"" + ($f.extends|tostring) + "\"")}
+                 end)
+            else . end)
+        else . end)' <<<"$CRITICS_PRE" 2>/dev/null)"
+# Fall back to the UN-annotated critics, never to `[]`: this pass adds a record, and a pass that
+# errored must not be able to empty the critics list and turn a critical run into a clean one.
+[ -n "$CRITICS" ] || CRITICS="$CRITICS_PRE"
+
 MISSING=$(( EXPECTED - PRESENT )); [ "$MISSING" -lt 0 ] && MISSING=0
 MISSING=$(( MISSING + ND_INVALID ))                      # a withheld lens the rule does not cover is missing
 [ "$MISSING" -gt 0 ] && HAS_UNRES="true"
@@ -289,8 +448,12 @@ jq -nc \
   --arg overall "$OVERALL" --argjson blocking "$BLOCKING" --argjson degraded "$DEGRADED" \
   --argjson diff_empty "$DIFF_EMPTY" --argjson required "$REQUIRED" --argjson halt_reason "$HALT" \
   --argjson not_dispatched "$NOT_DISPATCHED" --argjson clean "$CLEAN_RETURNS" \
+  --arg rstatus "$RANGE_STATUS" --arg rreason "$RANGE_REASON" --argjson oor "$OUT_OF_RANGE" \
   '{schema_version:"1.0", wo_id:$wo, risk_tier:$tier, run_at:$at, mode:$mode,
     evaluated:$evaluated, required:$required, expected_critics:$expected, clean_returns:$clean, present:$present,
     missing:$missing, critics:$critics, overall:$overall, blocking:$blocking,
     degraded:$degraded, diff_empty:$diff_empty, halt_reason:$halt_reason,
-    not_dispatched:$not_dispatched}'
+    not_dispatched:$not_dispatched,
+    range_check:{status:$rstatus, decided_by:(if $rstatus=="ran" then "sets" else "none" end),
+                 reason:(if $rreason=="" then null else $rreason end)},
+    out_of_range:$oor}'

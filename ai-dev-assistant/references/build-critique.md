@@ -433,6 +433,41 @@ ones rides through unread. Verified by running the kernel on old-shape and new-s
 identical severities and comparing the envelopes, rather than by reading the script. The kernel's
 own header comment carries the shape too, and moves with the other two sites.
 
+## A finding outside the component's range is moved, not dropped (v5.45.0+, `finding_contract` c5)
+
+A critic reads the component it was handed and sometimes names a defect somewhere else. That
+finding is true and it is not this component's repair round: opening one against it makes the
+builder change code no critic in this run reviewed, on a slice nobody scoped.
+`scripts/wo-critique-aggregate.sh` is handed the component's own file list on
+`--component-files-from`, and a `critical` or `concern` finding whose `where[]` sites all fall
+outside that list is marked `out_of_range: true`, is left out of the severity that decides
+`blocking`, and is copied whole into the envelope's top-level `out_of_range[]`.
+
+**The array is the channel, and this is the reader at the other end of it.**
+`scripts/build-critique-assert.sh` walks each `components[].critique_ref`, reads `out_of_range[]`
+off every envelope it can resolve, and surfaces the count in `evidence.out_of_range_findings` with
+the sites in `evidence.out_of_range_sites` and a message naming both. It surfaces and never blocks,
+the same posture as `deferred_findings`: the finding is real, it is about code outside the slice,
+and the reviewer decides where it goes. Without that reader the suppression would be the finding
+vanishing rather than moving, which is what `references/gate-audit-schema.md` says it must not be.
+
+**Absence is not a clean answer at either end.** The kernel writes
+`range_check {status, decided_by, reason}` and stamps `not_run` with a reason whenever no
+comparison happened — flag absent, list unreadable, list empty — and suppresses nothing in that
+case, so an empty `out_of_range[]` beside `not_run` means nobody looked rather than nothing was
+found. The reader holds the same line: a `critique_ref` that does not resolve to a readable JSON
+object is counted in `evidence.out_of_range_unreadable_refs` and said out loud as unknown rather
+than folded into a count of zero. A readable envelope carrying no `out_of_range` key claims
+nothing and adds to neither count, which is every record written before the field existed.
+
+**The verdict drop is bounded.** `agents/wo-critic.md` defines a critic file's own `verdict` as
+the max over its findings, so a file whose findings are all out of range carries a verdict that
+summarises only suppressed findings, and the kernel drops it. It drops it only when the verdict is
+one of `pass`, `concern` or `critical` and ranks no higher than the worst suppressed finding. An
+`unresolved` or unrecognised verdict is never dropped: `unresolved` means the critic could not
+investigate, which is a separate signal with nowhere else to live, and a verdict ranking above
+everything the range check judged is claiming more than the suppressed findings said.
+
 ## A finding built on a number states its threshold (v5.36.0+)
 
 When the argument for acting on a finding is a measurement, it carries
