@@ -1,7 +1,7 @@
 ---
 name: alignment-reader
 description: Use when a framework command needs to parse a task's alignment.md (the scope contract — Goal / Expected result / Success criteria / Non-goals per section). Reads defensively via scripts/alignment-read.sh and returns structured JSON with warnings. Never blocks on malformed input.
-version: 1.2.0
+version: 1.3.0
 user-invocable: false
 model: inherit
 allowed-tools: Bash
@@ -10,7 +10,7 @@ disallowed-tools: Write, Edit
 
 # Alignment Reader
 
-Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh`. The script parses `alignment.md` per the canonical grammar in `references/alignment-contract.md` v1.3 and emits structured JSON. This skill gives the parser a Skill-tool-callable name and documents the invocation contract.
+Thin wrapper around `${CLAUDE_PLUGIN_ROOT}/scripts/alignment-read.sh`. The script parses `alignment.md` per the canonical grammar in `references/alignment-contract.md` v1.4 and emits structured JSON. This skill gives the parser a Skill-tool-callable name and documents the invocation contract.
 
 ## Contract
 
@@ -24,8 +24,10 @@ Fields:
 - `task_name` — from H1 `# Alignment: <name>` line (or `**Task:**` metadata fallback)
 - `created` — from `**Created:** <YYYY-MM-DD>` metadata
 - `schema_version` — JSON string, currently `"1.0"`
-- `sections.{task_level,phase_1,phase_2,phase_3}` — each either `{present: false}` or a populated object with `goal`, `expected_result`, `success_criteria[]`, `non_goals[]`, `extras[]`, `fields_missing[]`
-  - Each `success_criteria[]` item: `{text, checked, verification, author, id}`. `verification` is a string or `null` (v1.1, from ` — verify: <how>`). `author` is `"owner"`, `"designer"`, or `null` (v1.3, from ` — by: <owner|designer>`) — `null` means no author was recorded, not that the owner wrote it. `id` is `"c<n>"` or `null` (v1.4, from ` — id: c<n>`); `null` means no id was recorded, and `scripts/contract-resolve.sh` then falls back to `task.md`.
+- `sections.{task_level,phase_1,phase_2,phase_3}` — each either `{present: false}` or a populated object with `goal`, `expected_result`, `success_criteria[]`, `success_criteria_prose`, `non_goals[]`, `non_goals_prose`, `extras[]`, `fields_missing[]`. The two `*_prose` fields hold the raw body when it was written as prose instead of a list, and are `null` otherwise.
+  - Each `success_criteria[]` item: `{text, checked, verification, author, id}`. `verification` is a string or `null` (v1.1, from ` — verify: <how>`). `author` is `"owner"`, `"designer"`, or `null` (v1.3, from ` — by: <owner|designer>`) — `null` means no author was recorded, not that the owner wrote it. `id` is `"c<n>"` or `null` (v1.4, from ` — id: c<n>`); `null` means no id was recorded on that criterion.
+
+**A `null` id does not by itself send a resolver to `task.md`.** `scripts/contract-resolve.sh` reads **Task-Level ids only**. It resolves from `alignment.md` when at least one Task-Level criterion carries an id, and reports the rest as `unmarked` — criteria that are invisible to coverage. It falls back to `task.md` only when *no* Task-Level criterion carries one. An id on a phase section is parsed and returned here, but no resolver reads it, so putting ids on phase criteria has no effect.
 - `warnings[]` — array of `{code, …}` observations
 
 ## Defensive posture (never throws)
@@ -41,7 +43,9 @@ Fields:
 | `Non-goals` body is prose, not a bulleted list | `non_goals_not_bulleted` |
 | ` — by:` marker present with a value other than `owner`/`designer` | `criterion_author_unrecognized` |
 | ` — id:` marker present with a value that is not `c<n>` (or a near-miss such as a wrong dash) | `criterion_id_unrecognized` |
-| Two criteria in one section carry the same id | `criterion_id_duplicate` |
+| Two criteria anywhere in the document carry the same id — the reader is the only place every id is seen together, so detection spans sections | `criterion_id_duplicate` |
+| Recognized H2 present but the whole section body is empty | `section_empty_stub` |
+| Recognized H2 present with a body that matched no canonical H3 | `section_unparsed_body` |
 | Unrecoverable read failure (permission, IO) | `error` (only case with non-zero exit) |
 
 ## Invocation
@@ -74,7 +78,11 @@ Consumers checking "is the Phase 2 contract authored yet?" should test `.section
 - `/ai-dev-assistant:design` — Phase 2 sub-step appends Phase 2 section
 - `/ai-dev-assistant:implement` — Phase 3 sub-step appends Phase 3 section
 - `/ai-dev-assistant:complete` — (future) may surface unchecked success criteria
+- `/ai-dev-assistant:review` — Spec axis reads the Task-Level contract
 - `analysis-agent` — indirectly informs `scope_contract_recommended` signal (caller reads this skill's output)
+- `spec-axis-reviewer` — judges a change against the Task-Level success criteria
+- `scripts/contract-resolve.sh` — resolves the criteria list, `alignment.md` Task-Level ids first, then `task.md`
+- `scripts/criterion-provenance.sh` — reads the ` — by:` author marker
 
 Future consumers needing scope-contract data should call this skill rather than parsing `alignment.md` directly.
 

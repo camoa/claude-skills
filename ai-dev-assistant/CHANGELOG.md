@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.44.2] - 2026-09-02
+
+### Fixed
+- **`alignment-reader`'s SKILL.md described a resolution rule the shipped script does not have.**
+  The one sentence 5.44.0 added said a `null` per-criterion `id` sends `contract-resolve.sh` to
+  `task.md`. It does not: the fallback fires only when *no* Task-Level criterion carries an id, and a
+  file where some do resolves from `alignment.md` with the rest counted as `unmarked` and invisible
+  to coverage. The same sentence documented `id` as an ordinary `success_criteria[]` field on all
+  four sections, while `contract-resolve.sh:40` reads `task_level` only, so an id written on a phase
+  criterion does nothing. Both were measured against fixtures before and after the repair. Found by
+  the `skill-review` gate, which 5.44.0's review recorded as unresolved because it was never run.
+- The `criterion_id_duplicate` row said "two criteria in one section". Detection is document-wide:
+  `ids_seen` in the reader is global, which the reader's own comment states is deliberate.
+- The warning table listed 11 of the 13 codes the parser emits, omitting `section_empty_stub` and
+  `section_unparsed_body`; the field list omitted `success_criteria_prose` and `non_goals_prose`;
+  the consumers list predated `/review`, `spec-axis-reviewer`, `contract-resolve.sh` and
+  `criterion-provenance.sh`.
+- `references/alignment-contract.md`'s title still read "Grammar v1.3" while its own body documented
+  the v1.4 `id` marker.
+
 ## [5.44.1] - 2026-09-02
 
 ### Fixed

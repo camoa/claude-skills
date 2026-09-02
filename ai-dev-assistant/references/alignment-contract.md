@@ -1,4 +1,4 @@
-# Alignment Contract — `alignment.md` Grammar v1.3
+# Alignment Contract — `alignment.md` Grammar v1.4
 
 **Introduced:** ai-dev-assistant v3.12.0
 **v1.1 adds optional per-criterion `verification`** — a success-criterion line MAY carry a trailing ` — verify: <how>` suffix capturing how it will be checked. Additive within v1.x (the emitted `schema_version` JSON value stays `"1.0"`; see §9). Consumers that ignore unknown keys are unaffected.
