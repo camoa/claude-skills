@@ -102,6 +102,31 @@ assert 'path with a quote char -> out_of_scope, unnamed carries it' out_of_scope
 assert "space/quote paths, all named -> in_scope" in_scope false sets '[]' \
   -- --finding-sites '["my file.php","fo\"o.php"]' --touched-files '["my file.php","fo\"o.php"]'
 
+# --- c4: the inverse set, a named site the repair never touched ---------------------------
+# Written from the criterion before the kernel had the field. Under one critic round per
+# component nothing re-reads the repair, so "the repair did LESS than the remedy" has no
+# reader left. It is the same two sets already in hand, compared the other way.
+# assert_unaddressed <label> <want unaddressed json> -- <K args...>
+assert_unaddressed() {
+  local label="$1" eu="$2"; shift 2
+  [ "$1" = "--" ] && shift
+  local out u euc
+  out="$(bash "$K" "$@" 2>/dev/null)"
+  u="$(jq -c '.unaddressed' <<<"$out" 2>/dev/null)"
+  euc="$(jq -c . <<<"$eu")"
+  if [ "$u" = "$euc" ]; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); echo "FAIL $label: got unaddressed=$u want $euc"; echo "  raw: $out"; fi
+}
+
+assert_unaddressed "a named site the repair never touched is unaddressed" '["b.php"]' \
+  -- --finding-sites '["a.php","b.php"]' --touched-files '["a.php"]'
+assert_unaddressed "every named site touched leaves unaddressed empty" '[]' \
+  -- --finding-sites '["a.php"]' --touched-files '["a.php"]'
+assert_unaddressed "unaddressed is emitted even when the repair also went out of scope" '["b.php"]' \
+  -- --finding-sites '["a.php","b.php"]' --touched-files '["a.php","z.php"]'
+assert_unaddressed "cannot_judge emits an empty unaddressed, never a populated guess" '[]' \
+  -- --finding-sites '["a.php"]' --touched-files '[]' --touched-files-source undetermined
+
 # --- every bad-argument form: exit 2, nothing on stdout ---
 bad "missing --finding-sites"                          --touched-files '["a.php"]'
 bad "missing --touched-files"                           --finding-sites '["a.php"]'
@@ -123,6 +148,6 @@ bash "$K" --finding-sites '["a.php"]' --touched-files '["a.php"]' >/dev/null 2>&
 [ $? -eq 0 ] && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: a valid call should exit 0"; }
 
 # --- guard: exact count, so a silently-skipped block cannot pass as green (D8) ---
-[ "$((PASS + FAIL))" -eq 28 ] || { echo "repair-scope-check-spec: expected 28 assertions, ran $((PASS + FAIL))"; exit 2; }
+[ "$((PASS + FAIL))" -eq 32 ] || { echo "repair-scope-check-spec: expected 32 assertions, ran $((PASS + FAIL))"; exit 2; }
 
 echo "----"; echo "repair-scope-check-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

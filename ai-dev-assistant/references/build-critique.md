@@ -57,9 +57,17 @@ The shas were already here. Each component records its rev range at step 4 below
 sat in the record as prose nothing parsed. The fact was present and no code read it, which is the
 shape of nearly everything this gate has had to grow.
 
-After a remediation, re-run the rung over the delta — the same delta-scoping the later rounds
-already use — and write the record again. Both halves move together: a new critique and a new
+After a remediation, re-run the rung over the delta: the remediation's own range, never the
+component base. Write the record again. Both halves move together: a new critique and a new
 identity.
+
+**This is the one exception to one critic round per component, and it is not a loophole in it.**
+The rule binds inside the build: no critic is dispatched again to judge a repair it asked for, so
+a finding cannot buy a second opinion on its own fix. A `/review` remediation is a different
+thing. The phase closed, a later gate found something the rung did not, and the fix answers that
+gate rather than a critic. It opens a new `build_identity`, so the component's round count starts
+from zero on a record that is honestly a different record. A remediation is not a repair round,
+and counting it as one would mean the rule forbids fixing what review finds.
 
 ## The boundary problem, and the checkpoint
 
@@ -118,11 +126,10 @@ fail closed into `high` / non-blocking respectively when a required flag is abse
    --label <component>.before`; keep the sha.
 2. Build the component.
 3. **When its acceptance criteria are built**, capture `--label <component>.after`.
-4. **Realize the file list**, scoped to THIS round. Round 1's base is `<component>.before`;
-   every later round's base is the **previous round's `.after`**, never the component base.
-   `git -C <codePath> diff --name-only <base-for-this-round>..<after> >
-   <task_folder>/build-critique/<component>.files.txt`. The classifier takes a file list, not
-   a rev range.
+4. **Realize the file list.** The base is `<component>.before` and there is no other base: a
+   component gets one critic round. `git -C <codePath> diff --name-only
+   <component>.before..<after> > <task_folder>/build-critique/<component>.files.txt`. The
+   classifier takes a file list, not a rev range.
 5. **Tier.** `wo-risk-classify.sh --files-from <that file> --gate-floor
    "tdd,solid,dry,security,guides"`. **`--gate-floor` is required here.** It normally comes
    from a work-order's frontmatter; a component has none, and the classifier tiers everything
@@ -170,9 +177,9 @@ The kernel **always exits 0 and always emits an envelope**. The verdict is the e
 `blocking` field, never the exit code. `blocking` is
 `critical | (not_evaluated & required) | (required & unresolved) | (degraded & high)`.
 
-- `blocking: true` → the component stops. `[a]ddress` (fix, then re-run this rung for this
-  component) or `[o]verride (reason)`, recorded in `bypass_reason`. The build does not move to
-  the next component.
+- `blocking: true` → the component stops. `[a]ddress` (fix, then record the accept verdict,
+  which is where the component ends) or `[o]verride (reason)`, recorded in `bypass_reason`. The
+  build does not move to the next component.
 - `overall: "concern"` → surfaced, not blocking.
 - `overall: "pass"` → continue.
 
@@ -288,36 +295,56 @@ teaches a builder to write a different one. As everywhere else in this rung, the
 that the question was answered, not that the answer is true. **Applies to the in-session build
 path only** — see below.
 
-## Keep a `rounds` count and a `rounds[]` history
+## What a repaired component records
 
-Keep a `rounds` count on each component row, and a `rounds[]` history of what each round found.
+A component gets at most one critic round, so there is no `rounds` count and no `rounds[]`
+history. Three fields on the component row carry what a reader of the record needs.
 
-Neither is decoration. The deferred-findings check reads `.rounds[]`, and an absent key yields an
-empty list — a silent pass — so a build that defers a finding and writes no `rounds[]` has
-recorded that deferral nowhere any gate can see it. The count is how the accept check tells a
-component that was repaired from one that was never touched, which is what decides whether it owes
-an `accept` verdict at all. A decision to keep going past a round belongs on the `rounds[]` entry
-that provoked it, as a `resolution`, or as a top-level `escalation.reason`; the per-round form is
-the one a live build produced and the better of the two.
+**`checkpoint_repaired`** is the sha `build-checkpoint.sh capture --label <component>.repaired`
+returned at the end of `[a]ddress`. It is captured there and nowhere else, so a non-null value IS
+the fact that the repair path ran for that component, and it is what `build-critique-assert.sh`
+reads to decide who owes an accept verdict. A row that omits it on a repaired component is a
+repair the gate cannot see. A value that is neither a sha string nor null is a repair state
+written down and unreadable, reported as unresolved rather than folded into the clean set.
 
-**Write the `round` number on every entry, and write it as a number.** Round 1 is the initial
-critique and not a repair, so an entry is read as a repair only from round 2, the same boundary the
-`rounds` count on the row already uses. An entry whose `round` is absent, or is a string like
-`"2"`, cannot say which of the two it is, and the accept check reports that as unresolved rather
-than guessing either way.
+**`deferred[]`** carries `{finding, blocked_on, why_now_is_wrong}` for each finding only a later
+component can answer. The check reads it off the component rows, and an absent key yields an empty
+list, which passes silently, so a build that defers a finding and writes none has recorded that
+deferral nowhere any gate can see it.
 
-## The repair gets an accept verdict, not a round count
+**`accept {action, suite, decided_by, reason}`** is owed by every component carrying a
+`checkpoint_repaired`. One with no `accept` is `unresolved` at `/review`, and any action other
+than `accepted` needs the decision to ship it in the record's top-level `escalation.reason`.
 
-Every `[a]ddress` ends with one. `scripts/repair-accept-check.sh` runs over the repaired tree and
-its verdict goes on the component row as `accept {action, suite, decided_by, reason}`. This is what
-replaced the round budget. A count was a proxy for a closing condition and never the condition
-itself: a component can converge on round one or fail to converge on round four, so keying the
-demand to the count asked the converged component to justify itself and asked nothing of the other.
+The checkpoint is not merely the signal that survived the round count; it is the stronger one. On
+the last record built while the count still decided this, `rounds > 1` named 2 of 14 components
+while 13 of 14 carried a repaired checkpoint. Eleven repairs owed an accept verdict under the
+contract and none under the check.
+
+## The accept verdict is the closing condition
+
+Every `[a]ddress` ends with one, and the component ends there. `scripts/repair-accept-check.sh`
+runs over the repaired tree and its verdict goes on the component row as
+`accept {action, suite, decided_by, reason}`. No critic is dispatched again once it is recorded.
+
+A round count was a proxy for a closing condition and never the condition itself. So is a ceiling
+on that count: both answer "how many times did we go round" when the question is whether the
+repair answered what was found. What closes a component is the accept verdict plus the two set
+comparisons `scripts/repair-scope-check.sh` makes over the repair diff: `unnamed`, files the
+repair touched that no finding named, and `unaddressed`, sites a finding named that the repair
+never touched. One critic round per component is what that buys: the two questions a second critic
+was there to answer are now asked on every repair, by something that cannot be talked out of its
+answer.
+
+What the trade costs is stated in `agents/wo-critic.md` and is not re-argued here. A set
+comparison sees paths, never intent: it cannot tell a named site the repair deliberately left
+alone from one it forgot, and it cannot see a repair that edited the right file and fixed
+nothing.
 
 **The kernel runs nothing.** It compares two facts the caller hands it: the suite result over the
 repaired tree, and the test motion the repair made as `git diff --name-status` over the repair's own
-range, which is the SHA this round's `.after` checkpoint captured to the post-repair head, and not
-the range of the build being critiqued. Both ends are shas: a checkpoint label is not a revision, so
+range, which is the sha the component's `.after` checkpoint captured to the post-repair head, and
+not the range of the build being critiqued. Both ends are shas: a checkpoint label is not a revision, so
 `git diff` handed one exits 128 with the redirect's file already created and empty.
 
 `accepted` means the suite was green and the motion raised nothing unanswered. `not_accepted` means
@@ -331,20 +358,28 @@ repair changed nothing, and neither is a repair that moved no test.
 
 **`cannot_judge` is not a pass.** It is the answer for nobody looked, and folding that into a clean
 result is the defect this framework has now found at five layers. Nothing halts on it: `blocks` is
-always false and `[a]ddress` loops as it always did. The demand lands on the record instead. A
-component that ends on anything other than `accepted` needs the decision to ship it, as a
-`resolution` on the round or a top-level `escalation.reason`, and a repaired component carrying no
-`accept` verdict at all is `unresolved` at `/review`.
+always false and the repair goes ahead. The demand lands on the record instead. A
+component that ends on anything other than `accepted` needs the decision to ship it in the
+record's top-level `escalation.reason`, and a repaired component carrying no `accept` verdict at
+all is `unresolved` at `/review`.
 
 **One recorded decision clears every unaccepted component in the record.** The gate reads the
-decision once from the whole payload (the top-level `escalation.reason`, else the last `resolution`
-in `rounds[]` with a real word in it, from any round, about any component; both ends are trimmed
-before they are judged blank, so a decision of one space is no decision), so ten components ending
-`not_accepted` are satisfied by one sentence written about one of them, and the message then prints
-that one reason beside the count of ten. Do not read the per-round form as a per-component demand:
-the gate does not check that the decision it found is about the component it cleared, and nothing
-downstream does either. Write a `resolution` on each round that settled a component anyway. It is
-what a reader of the record needs, and it is the only place the per-component reason exists.
+decision once from the whole payload, as the top-level `escalation.reason`, trimmed before it is
+judged blank so that a decision of one space is no decision. Ten components ending `not_accepted`
+are satisfied by one sentence written about one of them, and the message then prints that one
+reason beside the count of ten. The gate does not check that the decision it found is about the
+component it cleared, and nothing downstream does either.
+
+There is no per-component slot left for that decision. The per-component form was a `resolution`
+on the `rounds[]` entry that settled the component, and no `rounds[]` is written; `accept.reason`
+says what drove the kernel's action, not who decided to ship a component the kernel did not
+accept. `scripts/accept-verdict.sh` still falls back to the last `rounds[].resolution` when the
+top-level reason is blank, and finds nothing on any record written since. **That fallback stays
+on purpose and is not dead code:** `/review` reads records it did not write, and a task built
+under v5.42.0 to v5.46.0 carries the array. Retrofitting those records is a stated non-goal, so
+the reader is how they stay readable. So name the component inside the sentence you write into
+`escalation.reason`. It is the only place that decision now exists, and giving it a per-component
+slot is a mechanism nobody has designed yet rather than a wording problem.
 
 **All four fields are read, not just `action`.** `suite` must be `green`, `red` or `not_run`,
 `decided_by` must be `suite_and_motion`, `motion` or `none`, and `reason` must not be blank. Absent
@@ -360,26 +395,27 @@ than that the repair is right. Motion is A / M / D, so a test modified in a way 
 assertion loosened or a case cut from inside a file, arrives as an ordinary `M`; the reason string
 is the only thing carrying direction and nothing here checks that it is true.
 
-## Each round reviews its own delta, not the whole component again
+## One range for the critics, and the repair diff for the repair
 
-Round 1's range is `<component>.before..<component>.after`. **Every later round's base is the
-previous round's `.after`.** A repair round that re-diffs from the component base hands three
-critics every line they already reviewed, and they find new things in old code every time, so
-findings accumulate instead of converging on what the repair actually changed.
+The critic range is `<component>.before..<component>.after` and there is no other base. Nothing
+re-diffs a component for a second read, because there is no second read.
 
 Measured on the run this rule came from: five rounds re-diffed the whole component from base and
 none came back clean. The sixth scoped to the delta and was the first non-blocking round of the
 six. The build's own orchestrator named it — "five rounds of critics re-reading already-reviewed
-code is a large part of why findings never converged."
+code is a large part of why findings never converged." Handing critics code they already reviewed
+makes them find new things in old code, so findings accumulate instead of converging on what the
+repair changed. That measurement is why the rounds are gone rather than why they are scoped.
 
-Keep each round's `.after` sha. It is the next round's base.
+Delta-scoping survives where it is still needed, on the repair diff. `<component>.after..$REP` is
+the range the accept verdict and both set comparisons are computed over, and it is the repair that
+gets scoped now, not a later critic round.
 
-**What this gives up, and nothing currently covers it.** A critic seeing only the delta cannot
-judge whether the repair fits the component as a whole, and no pass in this framework answers
-that: `wo-critic` only ever sees one unit's diff, on both build paths, while the alignment axis
-and the deterministic gates judge the whole change without an adversary. Delta-scoping trades a
-known cost — findings that never converge because every round re-reads reviewed code — for a
-gap that was already there. Do not read the trade as a transfer.
+**What this gives up, and nothing currently covers it.** No critic ever reads the repair. A critic
+sees one unit's build diff, on both build paths, while the alignment axis and the deterministic
+gates judge the whole change without an adversary; the repair itself is read by two set
+comparisons over paths and by nothing that reads it as code. `closing_fixes` below is the field
+that asks who did, and it is a self-report.
 
 ## The finding says what would fix it, and where (v5.36.0+, extended by `finding_contract`)
 
@@ -389,8 +425,9 @@ every site the finding names, not one example standing for the rest. A finding a
 defect backs the claim with that enumeration, and a search that was not exhaustive says so.
 `reachable_by` names who can trigger the finding and what they already hold, required when the
 critic file's top-level `lens` is `security`. `id` is the handle a later finding's `extends` points
-at, when a repair leaves a site unfixed and the next round wants to record that as the same finding
-rather than a new one. `deferred[]` entries carry none of `where[]`, `remedy` or `reachable_by`,
+at, when another critic on the same component names a further site of the same defect and it
+should read as one finding rather than two; the kernel appends those sites and marks the
+referenced finding `under_enumerated`. `deferred[]` entries carry none of `where[]`, `remedy` or `reachable_by`,
 since a remedy for code that does not exist is the speculative fix the deferral exists to prevent.
 The rules live in `agents/wo-critic.md`; the shape is documented in
 `skills/work-order-critique/references/critique-envelope.md` and
@@ -504,23 +541,24 @@ worthless and unquantified is not covered here, and is not claimed to be.
 unfixable when the caller is three components away. With nowhere to put it, the builder wrote a
 specification for the absent caller — and that answer produced the next round's critical, whose
 answer produced the round after. Three of the four unanswerable findings in that build were
-generated by trying to close the first one. A critic now reports these in `deferred[]` as
-`{finding, blocked_on, why_now_is_wrong}`. Deferred findings do not block and are re-checked when
-`blocked_on` is built. A deferral naming no `blocked_on` fails: a finding nobody will return to is
-a dropped finding wearing a label.
+generated by trying to close the first one. A critic now reports these in its verdict's `deferred[]` as
+`{finding, blocked_on, why_now_is_wrong}`, and the builder carries them to the component row's
+`deferred[]`, which is the array the gate reads. Deferred findings do not block and are re-checked
+when `blocked_on` is built. A deferral short any of the three fields fails: a finding nobody will
+return to is a dropped finding wearing a label.
 
 Not machine-checkable as "was this premature". It is checkable as "did you say so", which is the
 same standard the rest of this record holds.
 
 (The checks that used to sit here, judging by self-report whether a repair grew or strayed past
 what a finding asked for, are gone. `scripts/repair-scope-check.sh` answers the scope question
-instead, by comparing the finding's `where[]` against the touched-file set. See the
-`finding_contract` design, D6.)
+instead, by comparing the finding's `where[]` against the touched-file set in both directions:
+`unnamed`, files the repair touched that no finding named, and `unaddressed`, sites a finding
+named that the repair never touched. See the `finding_contract` design, D6.)
 
-**What this cannot do.** It counts rounds, not progress — three rounds that each fix something
-real trip the same threshold as three that thrash. It reads `rounds` off the record, so a builder
-that runs four rounds and writes `1` defeats it, exactly like every other self-reported field
-here.
+**What this cannot do.** Every signal it reads is self-reported. `checkpoint_repaired` is a sha
+the builder captured and wrote onto the row, so a repair that captures none is a repair the gate
+never asks about, exactly like every other self-reported field here.
 
 ## The contract baseline — Runtime Step 11, before any code exists
 
@@ -567,10 +605,11 @@ the first real use of this field recorded two fixes read by a fresh context and 
 the author's own tests. An exact match let that answer through without a reason, which made the
 check unable to fire on the most truthful thing a build can write.
 
-The rung critiques a build, findings come back, and the findings get repaired. On the path where
-that repair is the last thing to happen, nothing critiques it: under per-component rounds the
-next round sees the repair, but under a single closing pass there is no next round, so the code
-that ships is not the code any critic read.
+The rung critiques a build, findings come back, and the findings get repaired. Nothing critiques
+the repair. A component gets one critic round, so no critic reads the code a repair produced, and
+the code that ships is not the code any critic read. `repair-accept-check.sh` weighs a suite
+result and test motion and `repair-scope-check.sh` compares paths; neither reads the repair as
+code.
 
 Neither hypothetical nor rare. One live record invented
 `rung_resolution.closing_fixes_not_critiqued: true` because the situation existed and this schema
@@ -642,7 +681,7 @@ without merging their verdicts.
 |---|---|---|
 | `phase` | string | Always `"implement"`. |
 | `verdict` | enum | `pass` \| `concern` \| `critical` \| `unresolved` \| `skipped`. The rung's overall answer. |
-| `components[]` | array | One row per component: `component`, `risk_tier`, `lenses[]`, `verdict`, `blocking`, `checkpoint_before`, `checkpoint_after`, `critique_ref`, `findings_count`, and `runtime` (v5.35.2+). |
+| `components[]` | array | One row per component: `component`, `risk_tier`, `lenses[]`, `verdict`, `blocking`, `checkpoint_before`, `checkpoint_after`, `critique_ref`, `findings_count`, and `runtime` (v5.35.2+). A repaired row also carries `checkpoint_repaired` (v5.47.0+) and `accept` (v5.42.0+); `deferred[]` (v5.47.0+) is on the row of the component whose critique deferred a finding. |
 | `components_declared` | integer or array | How many components the architecture declares. An array of component names is accepted and its length is the count. |
 | `components_critiqued` | integer or array | How many actually got a critique. Same two shapes. |
 | `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. **Every entry needs a non-empty `reason`.** |

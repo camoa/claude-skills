@@ -19,12 +19,10 @@
 #       naming how many components. Present decision passes, non-blocking, naming the count
 #       and the reason.
 #   R2  a component that WAS repaired and carries no `accept` key at all is unresolved,
-#       fail-closed. Repaired is established two ways because real records carry both: a
-#       `rounds` count above one on the component row, or a top-level `rounds[]` entry naming
-#       the component whose round number is above one. Round 1 is the initial critique, not a
-#       repair, on either reading -- `references/build-critique.md` asks for a `rounds[]` entry
-#       on every round including the first, so a reading with no round condition would demand a
-#       verdict from every component of every clean build that followed that instruction.
+#       fail-closed. Repaired is read from `checkpoint_repaired` on the component row. That sha
+#       is captured inside the `[a]ddress` block in `commands/implement.md` and nowhere else, so
+#       a non-null value IS the fact that the repair path ran for that component. Absent and
+#       null both mean it did not, which is why the read is of the value and not of has().
 #   R3  an action outside the three-value enum is unresolved, not clean, and is a state
 #       distinct from `not_accepted`. A typo and a refusal are not the same answer.
 #   R4  a component that was never repaired and carries no `accept` key is clean. The gate
@@ -35,10 +33,19 @@
 #       file gives every other unreadable field, and the same answer its two neighbours give:
 #       `closing_fixes` demands `verified_by` and a non-blank `reason`, and a deferral is
 #       rejected short any of its three.
-#   R6  a repair state that cannot be established is unresolved rather than clean, on both
-#       readings: a non-numeric `rounds` count on the row with no `accept`, and a `rounds[]`
-#       entry naming such a component with no numeric `round`. Neither can say whether the
-#       component was repaired, and both would otherwise be read as untouched and pass.
+#   R6  a repair state that cannot be established is unresolved rather than clean: a
+#       `checkpoint_repaired` that is present, non-null and not a string. A repair state was
+#       written down and nobody can read it, and it would otherwise be read as untouched and
+#       pass.
+#
+# THE SIGNAL MOVED IN v5.47.0, and a quarter of this file moved with it. Until then R2 and R6
+# read the round count: `rounds` above one on the component row, or a top-level `rounds[]` entry
+# naming the component with a round number above one. A component now gets at most one critic
+# round, so `rounds` is 1 on every row and no `rounds[]` entry is written; the round count can no
+# longer say who was repaired. Every case that existed only to disambiguate a `rounds[]` entry's
+# round number is deleted rather than kept as a check that cannot fire. Every case whose
+# behaviour survives under the new signal keeps the verdict, the exit code and the message
+# assertions it had, on a fixture that says `checkpoint_repaired` instead of a round count.
 #
 # WHY cannot_judge GETS ITS OWN SECTION. It is the value most likely to be quietly read as an
 # acceptance, because it is the one a builder writes when the answer is uncomfortable. Under
@@ -76,8 +83,13 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 # An otherwise-valid, otherwise-passing build-critique payload: tdd, deferred findings, the
 # closing fixes and the contract baseline are all already clean, so every fixture below
-# isolates the accept block. The single component row carries no `accept` key and no `rounds`
-# key, which is the R4 shape: a component nobody repaired, which owes no verdict.
+# isolates the accept block. The single component row carries no `accept` key and no
+# `checkpoint_repaired` key, which is the R4 shape: a component nobody repaired, which owes no
+# verdict.
+#
+# Every repaired fixture below writes the same 40-character hex string into
+# `checkpoint_repaired`, the shape `[a]ddress` captures. The gate reads the value's TYPE and
+# never its content, so one sha serves them all and no fixture depends on which one it is.
 GOOD='{"build_identity":{"head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","files_digest":"da885006a736ed9ce06e3736845717d7f70d58abf15995f8977f551bbfafbf1f","files":["src/A.php"]},"verdict":"pass","components_declared":1,"components_critiqued":1,"uncritiqued":[],
  "closing_fixes":{"applied":0},
  "tdd":{"red_observed":1,"passed_first_run":0,"ratified":0,"unobserved":[]},
@@ -145,86 +157,96 @@ M_UNDECIDED="with no decision recorded"
 # The three shape reads added with R5 and R6, by the same rule: the fragment only they emit.
 M_NO_SUITE="accept verdict with no readable suite"
 M_NO_BASIS="no readable decided_by or a blank reason"
-M_BAD_ROUND="carries no numeric round"
-M_BAD_COUNT="non-numeric rounds count and no accept verdict"
+M_BAD_CHECKPOINT="checkpoint_repaired that is neither a sha nor null"
 # The jq-error sentinel, one fragment per converted read. A read that could not run has not
 # passed, so each of these is a distinct message and none of them is any of the above.
 M_UNREADABLE_ACTION="the accept action enum could not be read"
-M_UNREADABLE_ROUNDS_ENTRIES="the rounds[] entries could not be read"
 M_UNREADABLE_DECISION="the recorded decision could not be read"
-# The two messages a jq error used to produce instead, and the one thing it must never produce.
+# The message a jq error used to produce instead, and the one thing it must never produce.
 M_CLEAN="the build was challenged in-session"
-M_DEFERRAL_UNREADABLE="the deferred findings could not be read"
 
 # ===================================================================== R4
 # A component nobody repaired owes no verdict. This is the half that keeps the rule from
 # becoming a demand on every row in the record, which is what a gate does when it cannot tell
 # repaired from untouched.
 
-D=$(mktask r4_never_repaired_no_rounds_key)
+D=$(mktask r4_never_repaired_no_checkpoint_key)
 write_record "$D" '.'
 run "$D"
-verdict_is pass "a component with no rounds key and no accept verdict is clean"
+verdict_is pass "a component with no checkpoint_repaired key and no accept verdict is clean"
 rc_is 0 "an untouched component exits 0"
 msg_lacks "$M_UNRECORDED" "no verdict is demanded of a component nobody repaired"
 
+# The other half of "nobody repaired it", and the one the reading turns on. `[a]ddress` runs for
+# every component and writes the key either way, so the row of a component it did not repair
+# carries `checkpoint_repaired: null` rather than no key at all. A read using has() would demand
+# a verdict from every component of every clean build. The gate reads the VALUE, and this is the
+# case that says so.
+D=$(mktask r4_never_repaired_null_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":null}]'
+run "$D"
+verdict_is pass "a null checkpoint_repaired is a component nobody repaired, and it is clean"
+rc_is 0 "a null checkpoint exits 0"
+msg_lacks "$M_UNRECORDED" "null is not a repair, so it owes no accept verdict"
+msg_lacks "$M_BAD_CHECKPOINT" "null is a stated absence, not an unreadable repair state"
+
+# A round count is now decoration on the row: every component gets one critic round, and nothing
+# in the block reads the field. A component that carries one and no repair checkpoint is clean,
+# which is the case a reading left on the old signal would still fail.
 D=$(mktask r4_never_repaired_rounds_one)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]'
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,"checkpoint_repaired":null}]'
 run "$D"
 verdict_is pass "a component critiqued once, never repaired, is clean"
 msg_lacks "$M_UNRECORDED" "one round is not a repair, so it owes no accept verdict"
 
-# The round-number boundary on the OTHER reading, and the shape of every clean build:
-# `references/build-critique.md` asks for a `rounds[]` entry on every round, so a component
-# critiqued once and never repaired carries a round-1 entry naming it. A reading that took any
-# entry as a repair would demand a verdict here and hard-fail a build with nothing wrong with
-# it. The pair below is the boundary: the same fixture, one round number apart.
-
-D=$(mktask r4_toplevel_rounds_entry_round_one)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":1,"component":"a","headline":"first critique, nothing repaired"}]'
-run "$D"
-verdict_is pass "a round-1 rounds[] entry is the initial critique, not a repair"
-rc_is 0 "a clean build that wrote a rounds[] entry for round 1 exits 0"
-msg_lacks "$M_UNRECORDED" "no verdict is demanded of a component whose only entry is round 1"
-
-D=$(mktask r4_toplevel_rounds_entry_round_two)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":2,"component":"a","headline":"the repair round"}]'
-run "$D"
-verdict_is fail "the same component with a round-2 entry and no verdict fails"
-msg_has "$M_UNRECORDED" "round 2 on the entry is a repair, and a repair owes a verdict"
-
 # ===================================================================== R2
 # A repaired component with no accept key at all is unresolved, fail-closed. Without this half
-# the field is advisory and a builder routes around it by writing nothing. Repaired is read
-# two ways because real records carry both.
+# the field is advisory and a builder routes around it by writing nothing.
 
-D=$(mktask r2_repaired_by_round_count)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2}]'
+# THE CASE THE MOVE EXISTS FOR. This record is what a build that repairs a component under the
+# one-round rung writes: `rounds: 1`, a repaired checkpoint, and no verdict. Under the round
+# count it passed clean and the record never said a repair went unjudged.
+D=$(mktask r2_repaired_by_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1,
+    "checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293"}]'
 run "$D"
-verdict_is fail "a component with rounds above one and no accept verdict fails"
+verdict_is fail "a component with a repaired checkpoint and no accept verdict fails"
 unresolved_is true "a repair nobody recorded a verdict for is a could-not-tell"
 rc_is 1 "the unrecorded verdict exits 1"
 msg_has "1 repaired component(s) $M_UNRECORDED" "the message names how many components owe a verdict"
 msg_has "a repair nobody accepted is not a repair that passed" \
   "the message says what to record and why"
 
-D=$(mktask r2_repaired_by_toplevel_rounds_entry)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":2,"component":"a","resolution":""}]'
+# The count in that message is a count, not the word one. Two repaired rows, neither judged.
+D=$(mktask r2_two_repaired_no_verdict)
+write_record "$D" '.components_declared=2 | .components_critiqued=2
+  | .components=[{"component":"a","runtime":"executed","blocking":false,
+      "checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293"},
+     {"component":"b","runtime":"executed","blocking":false,
+      "checkpoint_repaired":"3c4d5e6f70819a2b3c4d5e6f708192a3b4c5d6e7"}]'
 run "$D"
-verdict_is fail "a component named by a top-level rounds[] entry and carrying no accept verdict fails"
-unresolved_is true "the second way of establishing a repair is fail-closed too"
-msg_has "1 repaired component(s) $M_UNRECORDED" \
-  "a rounds[] entry naming the component establishes the repair on its own"
+verdict_is fail "two repaired components with no verdict fail"
+unresolved_is true "two unjudged repairs are a could-not-tell"
+msg_has "2 repaired component(s) $M_UNRECORDED" "the message counts both components, and names them"
+msg_has '["a","b"]' "the message lists which components owe the verdict"
+
+# An empty-string checkpoint is a string, so R6 does not claim it, and it is not null, so the
+# repair read takes it. Fail-closed: a component whose repair sha came out empty is reported as
+# a repair owing a verdict rather than as a component nobody touched.
+D=$(mktask r2_empty_string_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":""}]'
+run "$D"
+verdict_is fail "an empty-string checkpoint is read as a repair, not as an untouched component"
+unresolved_is true "an empty sha with no verdict is a could-not-tell"
+msg_has "$M_UNRECORDED" "the empty string falls on the fail-closed side of the read"
+msg_lacks "$M_BAD_CHECKPOINT" "an empty string is a string, so it is not the unreadable-state finding"
 
 # ===================================================================== R1
 # A verdict other than accepted is a component that shipped on somebody's decision rather than
 # on a verdict, so the record has to carry that decision. Two places are legitimate.
 
 D=$(mktask r1_not_accepted_no_decision)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}}]'
 run "$D"
 verdict_is fail "not_accepted with no decision anywhere fails"
@@ -234,7 +256,7 @@ msg_has "1 component(s) ended on an accept verdict other than accepted $M_UNDECI
   "the message names how many components ended unaccepted and undecided"
 
 D=$(mktask r1_not_accepted_toplevel_escalation)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}}]
   | .escalation={"reason":"operator accepted the red suite, the two specs cover a component built next"}'
 run "$D"
@@ -245,7 +267,7 @@ msg_has "1 component(s) ended on an accept verdict other than accepted; shipping
 msg_has "operator accepted the red suite" "the passing message names the reason that was given"
 
 D=$(mktask r1_not_accepted_round_resolution)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"motion","reason":"suite not re-run"}}]
   | .rounds=[{"round":2,"component":"a","resolution":"shipped on the round that settled it, red suite noted"}]'
 run "$D"
@@ -253,7 +275,7 @@ verdict_is pass "a resolution on a rounds[] entry satisfies the decision demand"
 msg_has "shipped on the round that settled it" "the per-round resolution is the reason reported"
 
 D=$(mktask r1_accepted_is_clean)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted","suite":"green","decided_by":"suite_and_motion","reason":"suite green, no test deleted"}}]'
 run "$D"
 verdict_is pass "an accepted verdict needs no decision recorded"
@@ -277,9 +299,9 @@ msg_lacks "ended on an accept verdict other than accepted" \
 # tests is a limit nobody notices changing.
 D=$(mktask decision_one_reason_clears_all)
 write_record "$D" '.components_declared=2 | .components_critiqued=2
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}},
-     {"component":"b","runtime":"executed","blocking":false,"rounds":2,
+     {"component":"b","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"cannot_judge","suite":"not_run","decided_by":"none","reason":"nobody ran the suite"}}]
   | .escalation={"reason":"both stalled on the same root cause; one fix, reviewed once, cleared both"}'
 run "$D"
@@ -292,7 +314,7 @@ msg_has "2 component(s) ended on an accept verdict other than accepted; shipping
 # An escalation object whose reason is the empty string. jq's `//` substitutes on false and null
 # only, so `{"reason":""}` returns "" itself and the path is identical to no escalation at all.
 D=$(mktask decision_escalation_empty_reason)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}}]
   | .escalation={"reason":""}'
 run "$D"
@@ -304,7 +326,7 @@ msg_has "$M_UNDECIDED" "an empty reason produces the same undecided message as n
 # The same, one space in it. This is what shipped: `!= ""` is false for `" "`, so a whole record of
 # unaccepted components cleared on a reason nobody wrote.
 D=$(mktask decision_escalation_whitespace_reason)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}}]
   | .escalation={"reason":"   "}'
 run "$D"
@@ -314,7 +336,7 @@ msg_has "$M_UNDECIDED" "whitespace is not a decision, the same way it is not an 
 # The other half of the read, both ways. A live build records the answer on the round that provoked
 # it, so the per-round form has to be held to the same standard as the top-level one.
 D=$(mktask decision_round_resolution_empty)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"motion","reason":"suite not re-run"}}]
   | .rounds=[{"round":2,"component":"a","resolution":""}]'
 run "$D"
@@ -322,7 +344,7 @@ verdict_is fail "an empty per-round resolution is no decision at all"
 msg_has "$M_UNDECIDED" "an empty resolution reads as undecided"
 
 D=$(mktask decision_round_resolution_whitespace)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"motion","reason":"suite not re-run"}}]
   | .rounds=[{"round":2,"component":"a","resolution":"  "}]'
 run "$D"
@@ -333,7 +355,7 @@ msg_has "$M_UNDECIDED" "both halves of the decision read hold the same standard"
 # decision padded with spaces must be reported without them: the assertion below matches the
 # `decision: ` prefix immediately followed by the first real word, which only holds on a trim.
 D=$(mktask decision_padded_reason_reported_trimmed)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"not_accepted","suite":"red","decided_by":"suite_and_motion","reason":"two specs still red"}}]
   | .escalation={"reason":"   operator accepted the red suite   "}'
 run "$D"
@@ -346,7 +368,7 @@ msg_has "recorded decision: operator accepted the red suite" \
 # gate that read it as one would let exactly the unresolved case through.
 
 D=$(mktask cannot_judge_no_decision)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"cannot_judge","suite":"not_run","decided_by":"none","reason":"nobody ran the suite"}}]'
 run "$D"
 verdict_is fail "cannot_judge with no decision fails: it is not read as accepted"
@@ -354,7 +376,7 @@ unresolved_is true "cannot_judge with no decision is a could-not-tell"
 msg_has "$M_UNDECIDED" "cannot_judge owes a decision the same way not_accepted does"
 
 D=$(mktask cannot_judge_with_decision)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"cannot_judge","suite":"not_run","decided_by":"none","reason":"nobody ran the suite"}}]
   | .escalation={"reason":"shipped unjudged, the suite runs in CI on the merge"}'
 run "$D"
@@ -366,7 +388,7 @@ msg_has "shipped unjudged" "the decision behind an unjudged component is reporte
 # be a guess, and reading it as clean would be the silent pass this whole block exists against.
 
 D=$(mktask r3_off_enum_action)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"acccepted","suite":"green","decided_by":"suite_and_motion","reason":"typo in the action"}}]'
 run "$D"
 verdict_is fail "an action outside the three-value enum fails"
@@ -377,7 +399,7 @@ msg_lacks "$M_UNDECIDED" "a typo is not reported as a refusal to accept"
 msg_lacks "$M_UNRECORDED" "a typo is not reported as a missing verdict"
 
 D=$(mktask r3_accept_without_action)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"suite":"green","decided_by":"suite_and_motion","reason":"forgot the action"}}]'
 run "$D"
 verdict_is fail "an accept object carrying no action at all fails"
@@ -390,7 +412,7 @@ msg_has "$M_MALFORMED" "a missing action is the same unreadable verdict as a mis
 # means is written entirely in terms of it.
 
 D=$(mktask r5_action_only)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted"}}]'
 run "$D"
 verdict_is fail "an accept verdict carrying only an action fails"
@@ -400,14 +422,14 @@ msg_has "$M_NO_SUITE" "the message names the missing suite"
 msg_lacks "$M_UNRECORDED" "an incomplete verdict is not reported as a missing one"
 
 D=$(mktask r5_off_enum_suite)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted","suite":"passing","decided_by":"suite_and_motion","reason":"suite green"}}]'
 run "$D"
 verdict_is fail "a suite outside green, red and not_run fails"
 msg_has "$M_NO_SUITE" "an off-enum suite is the same unreadable value as an absent one"
 
 D=$(mktask r5_suite_not_run_is_a_real_answer)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"cannot_judge","suite":"not_run","decided_by":"none","reason":"no suite over the repaired tree"}}]
   | .escalation={"reason":"shipped unjudged, CI runs the suite on the merge"}'
 run "$D"
@@ -415,7 +437,7 @@ verdict_is pass "not_run is a stated result, not a missing one"
 msg_lacks "$M_NO_SUITE" "a builder who says the suite was not run is not told the suite is unreadable"
 
 D=$(mktask r5_missing_decided_by)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted","suite":"green","reason":"suite green, no test deleted"}}]'
 run "$D"
 verdict_is fail "an accept verdict with no decided_by fails"
@@ -423,14 +445,14 @@ msg_has "$M_NO_BASIS" "the message names the unreadable decided_by"
 msg_lacks "$M_NO_SUITE" "a present suite is not reported as missing alongside it"
 
 D=$(mktask r5_off_enum_decided_by)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted","suite":"green","decided_by":"the builder","reason":"looked fine"}}]'
 run "$D"
 verdict_is fail "a decided_by outside the three-value enum fails"
 msg_has "$M_NO_BASIS" "an off-enum decided_by is the same unreadable value as an absent one"
 
 D=$(mktask r5_blank_reason)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
     "accept":{"action":"accepted","suite":"green","decided_by":"suite_and_motion","reason":"   "}}]'
 run "$D"
 verdict_is fail "an accept verdict whose reason is blank fails"
@@ -439,43 +461,49 @@ msg_has "$M_NO_BASIS" "whitespace is not a reason, the same way it is not one fo
 
 # ===================================================================== R6
 # A repair state nobody can establish is the defect this epic is named for: read as untouched,
-# it passes clean and the record never says a repair went unjudged. Both readings get the same
-# answer.
+# it passes clean and the record never says a repair went unjudged.
 
-D=$(mktask r6_non_numeric_rounds_count)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":"two"}]'
+D=$(mktask r6_numeric_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":12345}]'
 run "$D"
-verdict_is fail "a non-numeric rounds count with no accept verdict fails"
+verdict_is fail "a checkpoint_repaired that is a number and not a sha fails"
 unresolved_is true "a record that cannot say whether a component was repaired is a could-not-tell"
 rc_is 1 "the unreadable repair state exits 1"
-msg_has "$M_BAD_COUNT" "the message says the repair state could not be established"
-msg_lacks "$M_UNRECORDED" "an unreadable count is not reported as a repair with a missing verdict"
+msg_has "$M_BAD_CHECKPOINT" "the message says the repair state could not be established"
+msg_lacks "$M_UNRECORDED" "an unreadable checkpoint is not reported as a repair with a missing verdict"
 
-D=$(mktask r6_rounds_entry_without_round_number)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"component":"a","headline":"somebody forgot the round number"}]'
+# `false` is the value a `//` fallback swallows: `(.checkpoint_repaired // null)` would read it
+# as null and pass the row through as untouched. It is non-null and not a string, so it is the
+# unreadable state, and the case exists to hold the read to the type and not to truthiness.
+D=$(mktask r6_false_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":false}]'
 run "$D"
-verdict_is fail "a rounds[] entry with no round number and no accept verdict fails"
-unresolved_is true "an entry that cannot say which round it is leaves the repair state unreadable"
-msg_has "$M_BAD_ROUND" "the message says the entry carries no numeric round"
-msg_lacks "$M_UNRECORDED" "an unreadable entry is not reported as a repair with a missing verdict"
+verdict_is fail "a checkpoint_repaired of false is unreadable, not a component nobody repaired"
+unresolved_is true "false is not null, and the difference is fail-closed"
+rc_is 1 "the false checkpoint exits 1"
+msg_has "$M_BAD_CHECKPOINT" "false is reported as a repair state that cannot be read"
 
-D=$(mktask r6_rounds_entry_non_numeric_round)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"round":"2","component":"a","headline":"the round number as a string"}]'
+# An object is the other shape a partially-written checkpoint takes. Same answer.
+D=$(mktask r6_object_checkpoint)
+write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,
+    "checkpoint_repaired":{"sha":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293"}}]'
 run "$D"
-verdict_is fail "a round number written as a string is not a number and does not establish a repair"
-msg_has "$M_BAD_ROUND" "a numeric string is unreadable here, exactly as it is on the component row"
+verdict_is fail "a checkpoint_repaired written as an object fails"
+msg_has "$M_BAD_CHECKPOINT" "a sha wrapped in an object is not a sha this gate can read"
 
-D=$(mktask r6_readable_entry_beside_an_unreadable_one)
-write_record "$D" '.components=[{"component":"a","runtime":"executed","blocking":false,"rounds":1}]
-  | .rounds=[{"component":"a","headline":"no round number"},
-             {"round":2,"component":"a","headline":"the repair round"}]'
+# The unreadable state is reported ahead of the missing verdict, and only one of the two. Both
+# reads claim this row -- it has no accept, and its checkpoint is non-null -- so without the
+# ordering the record would be accused of a missing verdict on a repair nobody established.
+D=$(mktask r6_unreadable_beside_a_readable_repair)
+write_record "$D" '.components_declared=2 | .components_critiqued=2
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":12345},
+     {"component":"b","runtime":"executed","blocking":false,
+      "checkpoint_repaired":"3c4d5e6f70819a2b3c4d5e6f708192a3b4c5d6e7"}]'
 run "$D"
-verdict_is fail "a component with a readable round-2 entry still owes a verdict"
-msg_has "$M_UNRECORDED" "a readable entry settles the repair state, so the repair is reported as one"
-msg_lacks "$M_BAD_ROUND" \
-  "the unreadable entry beside it is not reported: nothing about the repair state is in doubt"
+verdict_is fail "an unreadable checkpoint beside a readable repair fails"
+msg_has "$M_BAD_CHECKPOINT" "the unreadable repair state is reported first"
+msg_lacks "$M_UNRECORDED" \
+  "the missing-verdict read never runs: the script already exited on the unreadable state"
 
 # ===================================================================== the jq-error sentinel
 #
@@ -489,9 +517,14 @@ msg_lacks "$M_BAD_ROUND" \
 # The fixtures below are malformed in a way that makes one named read raise a jq error, and
 # each asserts three things: the record does not read as clean, the failure is unresolved, and
 # the message names the read that could not run rather than some other check's finding. The
-# last one is what a verdict/rc-only assertion would miss -- two of these three fixtures
-# already failed before the sentinel existed, but for the wrong reason and with a message that
-# accused the record of something it had not done.
+# last one is what a verdict/rc-only assertion would miss -- these fixtures already failed
+# before the sentinel existed, but for the wrong reason and with a message that accused the
+# record of something it had not done.
+#
+# WHY THERE IS NO FIXTURE FOR THE CHECKPOINT READ. Every per-component read iterates
+# `(.components // [])[]`, and the action read runs first, so any `.components` shape that makes
+# the checkpoint read raise makes the action read raise one branch earlier. The case below is
+# that shared failure, reached through the read that owns it.
 
 # `.components` carries an element that is not an object, so `has("accept")` raises. This is
 # the read that ran first, and before the sentinel this exact record returned verdict pass and
@@ -504,23 +537,6 @@ unresolved_is true "a read that could not run is unresolved"
 rc_is 1 "the unreadable accept action exits 1"
 msg_has "$M_UNREADABLE_ACTION" "the message names the read that could not run"
 msg_lacks "$M_CLEAN" "the gate never reports the build as challenged on a record it could not read"
-
-# A `rounds[]` element that is not an object, so the entry read's `.component` raises. Before
-# the sentinel this failed -- but on the DEFERRAL check further down the file, which read the
-# same malformed array later and reported it as a deferred-findings problem. The record's
-# repair state was the thing nobody could establish, and nothing said so.
-D=$(mktask jqerr_rounds_entries_unreadable)
-write_record "$D" '.rounds=["oops"]'
-run "$D"
-verdict_is fail "a rounds[] array jq cannot read is a failure"
-unresolved_is true "an unreadable rounds[] leaves the repair state unresolved"
-rc_is 1 "the unreadable rounds[] entries exit 1"
-msg_has "$M_UNREADABLE_ROUNDS_ENTRIES" "the message names the rounds[] read, not a later check"
-msg_lacks "$M_CLEAN" "an unreadable rounds[] never reads as a challenged build"
-msg_lacks "$M_DEFERRAL_UNREADABLE" \
-  "the accept block reports it, so it is not misattributed to the deferral check downstream"
-msg_lacks "$M_BAD_ROUND" \
-  "an unreadable entry array is not the same finding as an entry with no round number"
 
 # The recorded-decision read, reached only when a component ended on a non-acceptance.
 # `escalation` is a scalar, so `.escalation.reason` raises. Before the sentinel this read had
@@ -558,9 +574,9 @@ msg_lacks "$M_UNDECIDED" "neither half falls through to the missing-decision mes
 
 D=$(mktask order_malformed_before_undecided)
 write_record "$D" '.components_declared=2 | .components_critiqued=2
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"acccepted","suite":"green","decided_by":"suite_and_motion","reason":"typo"}},
-     {"component":"b","runtime":"executed","blocking":false,"rounds":2,
+     {"component":"b","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"not_accepted","suite":"red","decided_by":"motion","reason":"still red"}}]'
 run "$D"
 verdict_is fail "a record that is both malformed and undecided fails"
@@ -570,9 +586,9 @@ msg_lacks "$M_UNDECIDED" \
 
 D=$(mktask order_malformed_before_unrecorded)
 write_record "$D" '.components_declared=2 | .components_critiqued=2
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2,
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"acccepted","suite":"green","decided_by":"suite_and_motion","reason":"typo"}},
-     {"component":"b","runtime":"executed","blocking":false,"rounds":2}]'
+     {"component":"b","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293"}]'
 run "$D"
 msg_has "$M_MALFORMED" "the malformed read fires ahead of the missing-verdict read too"
 msg_lacks "$M_UNRECORDED" \
@@ -580,8 +596,8 @@ msg_lacks "$M_UNRECORDED" \
 
 D=$(mktask order_unrecorded_before_undecided)
 write_record "$D" '.components_declared=2 | .components_critiqued=2
-  | .components=[{"component":"a","runtime":"executed","blocking":false,"rounds":2},
-     {"component":"b","runtime":"executed","blocking":false,"rounds":2,
+  | .components=[{"component":"a","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293"},
+     {"component":"b","runtime":"executed","blocking":false,"checkpoint_repaired":"9f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60718293",
       "accept":{"action":"not_accepted","suite":"red","decided_by":"motion","reason":"still red"}}]'
 run "$D"
 msg_has "$M_UNRECORDED" "a component with no verdict at all is reported before the decision demand"
@@ -593,7 +609,13 @@ msg_lacks "$M_UNDECIDED" "the two demands are distinct messages, not one shared 
 # notices a fixture that never ran, and a `set -e` abort inside a helper would end the file
 # quietly with FAIL still 0. The count is the assertion that every other assertion happened.
 # Update it deliberately, in the same commit as the case you added or removed.
-EXPECTED_ASSERTIONS=118
+#
+# 118 until v5.47.0. The signal move took 24 assertions out across 7 cases -- everything whose
+# only subject was a `rounds[]` entry's round number, plus the jq-error case for the entry read
+# that no longer exists -- and put 21 back across 6 new ones: a null checkpoint, a two-component
+# count, an empty-string sha, a false and an object checkpoint, and the ordering of the
+# unreadable state ahead of the missing verdict. 118 - 24 + 21 = 115.
+EXPECTED_ASSERTIONS=115
 if [ "$ASSERTIONS" != "$EXPECTED_ASSERTIONS" ]; then
   printf 'FAIL: expected %s assertions, ran %s -- a block was skipped, added or removed\n' \
     "$EXPECTED_ASSERTIONS" "$ASSERTIONS" >&2

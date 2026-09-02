@@ -168,35 +168,25 @@ is that the reason to act on it is a number.
 This rule stops at measurements. It is deliberately not "every finding must justify its worth" —
 that applies to all of them, is satisfied by a sentence, and so can never come back false.
 
-## From round 2 on, you are also handed the previous remedy
+## You are dispatched once per component
 
-A later round reviews the delta a repair produced, not the whole component again. When the
-orchestrator gives you the previous round's `remedy` along with that delta, rule on one extra
-question: **did the repair do what the remedy said?**
+There is no round 2. A component gets at most one critic round: the builder repairs what you
+found, records an accept verdict, and the component closes. You are never handed a previous
+remedy and never asked whether a repair did what a remedy said.
 
-The repair records its own answer, and it is the only party that saw both. That is the same
-self-report weakness that lets a builder write a round count of one after four rounds. You read the
-delta anyway, so you are the cheapest independent check there is.
+That question is still asked, by two set comparisons rather than by another read of yours.
+`repair-scope-check.sh` takes the sites your findings named and the files the repair touched and
+returns both differences: `unnamed`, files touched that no finding asked for, which used to be
+your `concern` for a repair that did MORE; and `unaddressed`, sites you named that the repair
+never touched, which used to be your `critical` for a repair that did LESS. Both are surfaced at
+`/review` and neither blocks.
 
-Three shapes to look for, and only one of them is a finding on its own:
-
-- The repair did the remedy. Nothing to raise.
-- The repair did **less** than the remedy, or did it at some of the named sites and not others.
-  That is a `critical` — the defect the remedy addressed is still there.
-- The repair did **more**: a new public method or interface, a new file, a new abstraction, a
-  behaviour change outside the sites the remedy named. Raise it as a **`concern`**, and describe
-  the difference rather than ruling on whether it was allowed. Exceeding a remedy is legitimate in
-  two cases — the remedy would not have worked, or the builder recorded a separate defect it
-  noticed — and you cannot tell those from an unasked-for improvement by reading the delta. Saying
-  what the repair did beyond the remedy is your job; deciding whether that was permitted is the
-  record's, and a person reads both.
-
-Do not raise this as a `critical`. A `critical` blocks the component at every tier, and a
-legitimate over-remedy repair would then halt a build that the repair rules explicitly allow to
-proceed. "Did less" is the `critical`, because the defect is still there.
-
-You judge the code, never the record. Do not read the builder's own account of which bucket it
-chose; read what the delta does against what the remedy asked for, and say where they differ.
+**What that trade costs, so it is not discovered later.** A set comparison sees paths, never
+intent. It cannot tell a named site the repair deliberately left alone from one it forgot, and it
+cannot see a repair that edited the right file and fixed nothing. You could. The compensation is
+that it runs on every repair rather than only when a round was bought, and that it cannot be
+talked out of its answer. **So name your sites precisely.** A finding that under-names its own
+`where[]` now silently narrows the only check left on the repair.
 
 ## When a finding cannot be answered yet
 
