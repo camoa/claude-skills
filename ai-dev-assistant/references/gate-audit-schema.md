@@ -1085,6 +1085,28 @@ clean.** This repo has three existing precedents for that rule: `not_searched` i
 `criteria_unreadable` in `scripts/criterion-provenance.sh`. An unchecked thing that reports as
 checked is the defect this plugin keeps finding in itself.
 
+**Two fields on the envelope are written by the kernel, not the critic, and a consumer has to know
+they exist (v5.45.0+).** `extends` was on the finding contract from the start and nothing read it,
+so a link a critic declared went nowhere; it is now consumed. A finding naming an id in this
+aggregation appends its sites to that finding's `where[]` and sets `under_enumerated: true` on the
+REFERENCED finding, recording that the first sighting named fewer sites than the defect had. The
+extender records `extends_resolved`, and a link to an unknown id or to itself records `false` with
+`extends_reason`. It records the link and does not control the loop: an extending `critical` still
+blocks, exactly as before.
+
+`out_of_range[]` and `range_check` come from `--component-files-from`, the component range the
+critics were handed. A finding whose sites are ALL outside that range is dropped from the severity
+that decides `blocking` — so it opens no repair round — and is kept in full in `out_of_range[]`.
+**`out_of_range[]` is the channel by which such a finding reaches `/review`**; a consumer that does
+not read it will see the finding vanish rather than move. The consumer is
+`scripts/build-critique-assert.sh`, which walks each `components[].critique_ref`, counts the
+findings in `out_of_range[]` into `evidence.out_of_range_findings` with their sites in
+`evidence.out_of_range_sites`, and counts a ref it could not read into
+`evidence.out_of_range_unreadable_refs` rather than reading it as none suppressed. It surfaces and
+never blocks, the way `deferred_findings` does. `range_check.status` is `ran` or
+`not_run` with a reason, and `not_run` suppresses nothing, by the same rule `shape_check` follows
+above.
+
 **This is a different `findings[]` from the gate-envelope one, and the two must not be confused.**
 `references/validation-gate-result.md` defines `findings[]` as `{severity, title}`, with `severity`
 one of `HIGH`, `MEDIUM` or `INFO` — the shape every `code-quality-tools` and `code-paper-test` gate

@@ -141,7 +141,24 @@ budget_for() {
     # 417 -> 418, raise 1: the preflight reads the design-close coverage record. Before this the
     # design gate wrote a record nothing read, so a design that left a criterion uncovered or
     # carried an item reaching no goal opened a build anyway; one line makes the halt bind here.
-    implement) printf '418' ;;
+    # 418 -> 432, raise 14: scripts/repair-scope-check.sh is called from the [a]ddress path. It had
+    # exactly one live caller, build-critique-assert.sh at /review, which runs once per task after
+    # every repair round is over -- so the check that exists to constrain a repair could not reach
+    # one. Six lines are the runnable block (the kernel and its three flags, the record it writes,
+    # the verdict said aloud), two the comment saying the flags are computed rather than filled in,
+    # four the prose outside the fence saying why the rung is the call site and what the two
+    # abstentions are, and two the blank lines around them. Every flag value is a subshell rather
+    # than a `<placeholder>` on purpose: the same body shipped a repair-accept step whose diff went
+    # into $(mktemp) with the name discarded, and a step a reader cannot run verbatim is a step that
+    # runs wrong.
+    # 432 -> 441, raise 9: the aggregate invocation passes --component-files-from, the range the
+    # critics were handed. Without it the kernel that decides `blocking` cannot see the component's
+    # own file list, so a finding naming only files outside the slice opened a repair round -- the
+    # defect the criterion was written for, measured on this epic's own build. One flag line plus
+    # eight of prose saying what the flag suppresses, what it does NOT suppress when absent, and why
+    # an empty range is refused rather than applied. A kernel with no caller is the same defect this
+    # same body just fixed for repair-scope-check.sh, one round earlier.
+    implement) printf '441' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

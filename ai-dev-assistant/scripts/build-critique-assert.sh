@@ -534,9 +534,11 @@ if [ -e "$REC" ]; then
   # `where[]` (schema_version absent), so `cannot_judge` is the honest, expected answer today; the
   # wiring is live for the day a critic starts writing it.
   #
-  # TOUCHED_FILES is `review-change-set.sh`'s own `.files`, read from `$CHANGE_SET_FILE` --
-  # already required on this path (see build_identity below) -- independently of whether that
-  # later block validates it, so this check does not depend on a later block's success.
+  # TOUCHED_FILES is the repair's own `git diff --name-status` where the rung wrote one, and
+  # `review-change-set.sh`'s `.files` from `$CHANGE_SET_FILE` -- already required on this path (see
+  # build_identity below) -- only as a fallback. Read independently of whether that later block
+  # validates it, so this check does not depend on a later block's success. See the subject note
+  # below for why the two are not interchangeable.
   FS_COMPONENTS=$(jq -c '(.components // [])' <<<"$PAYLOAD" 2>/dev/null) || FS_COMPONENTS='[]'
   FINDING_SITES='[]'
   while IFS= read -r ref; do
@@ -547,8 +549,15 @@ if [ -e "$REC" ]; then
     esac
     [ -f "$REF_PATH" ] || continue
     jq -e 'type == "object"' "$REF_PATH" >/dev/null 2>&1 || continue
+    # BOTH envelope shapes, because `critique_ref` points at either. The aggregate
+    # `<component>.critique.json` that `references/gate-audit-schema.md:884` names keeps findings
+    # under `.critics[].findings`; a single critic's own file keeps them at the top level. Reading
+    # only the top level -- which is how this shipped -- found nothing on every aggregate envelope,
+    # so FINDING_SITES stayed empty and the whole check answered `cannot_judge` on records that DID
+    # name sites. `(.critics[]?, .)` reads both and unions them.
     REF_SITES=$(jq -c \
-      '[(.findings // [])[]?
+      '[(.critics[]?, .)
+        | (.findings // [])[]?
         | select((.severity // "") == "critical" or (.severity // "") == "concern")
         | (.where // [])[]? | (.file // empty)]' \
       "$REF_PATH" 2>/dev/null) || REF_SITES='[]'
@@ -556,13 +565,65 @@ if [ -e "$REC" ]; then
       '($a + $b) | unique' 2>/dev/null) || FINDING_SITES='[]'
   done < <(jq -r '.[] | (.critique_ref // "") | tostring' <<<"$FS_COMPONENTS" 2>/dev/null)
 
+  # THE SUBJECT. Two file sets are available here and they answer different questions. The rung
+  # writes `build-critique/<component>.repair.txt` at every `[a]ddress` -- `git diff --name-status`
+  # over the REPAIR's own range -- and that is what D6 asks about: did this repair stray past what
+  # the finding named. `review-change-set.sh`'s `.files` is the whole task change set, every
+  # component and every build in it, so comparing that against one round's finding sites reports
+  # the entire task as unnamed. Prefer the repair diffs; fall back to the change set when the task
+  # recorded no repair, and record which subject was compared, because a scope verdict read without
+  # knowing what it compared is not a readable verdict.
+  #
+  # THE `determined` CLAIM IS EARNED, NEVER ASSUMED. A change-set object with no `files` key passes
+  # `type == "object"` while `(.files // [])` yields `[]`, and stamping that `determined` -- which
+  # is how this shipped -- handed the kernel an empty touched set it answered `in_scope`, with the
+  # message "every touched file is named by a finding", over a comparison nobody made. The header
+  # of `repair-scope-check.sh` names this exact caller mistake as the reason
+  # `--touched-files-source` exists. The key PRESENT and holding an array of strings is
+  # `determined`, empty array included: a change set that genuinely recorded zero files is a fact.
+  # Key absent, wrong type, or unreadable is `undetermined`, which the kernel answers
+  # `cannot_judge`.
   TOUCHED_SOURCE="undetermined"
   TOUCHED_FILES='[]'
-  if [ -n "$CHANGE_SET_FILE" ] && [ -f "$CHANGE_SET_FILE" ] \
-     && jq -e 'type == "object"' "$CHANGE_SET_FILE" >/dev/null 2>&1; then
-    TOUCHED_FILES=$(jq -c '(.files // [])' "$CHANGE_SET_FILE" 2>/dev/null) || TOUCHED_FILES='[]'
-    TOUCHED_SOURCE="determined"
+  TOUCHED_SUBJECT="none"
+
+  REPAIR_FILES=()
+  while IFS= read -r rf; do
+    [ -n "$rf" ] && REPAIR_FILES+=("$rf")
+  done < <(find "$TASK_DIR/build-critique" -maxdepth 1 -type f -name '*.repair.txt' 2>/dev/null | sort)
+
+  if [ "${#REPAIR_FILES[@]}" -gt 0 ]; then
+    TOUCHED_SUBJECT="repair_diff"
+    # A ZERO-BYTE repair diff is not a repair that touched nothing. `git diff` writes its error to
+    # stderr after the shell redirect has already created the file, so a range handed a checkpoint
+    # LABEL instead of a sha leaves exactly this -- the failure `repair-accept-check.sh`'s header
+    # records shipping in commands/implement.md. One unreadable diff means the repair set was not
+    # established, so the whole subject is undetermined rather than partially compared.
+    RF_EMPTY=0
+    for rf in "${REPAIR_FILES[@]}"; do [ -s "$rf" ] || RF_EMPTY=1; done
+    if [ "$RF_EMPTY" -eq 0 ]; then
+      # name-status is "STATUS<TAB>path", and "R###<TAB>old<TAB>new" for a rename or copy. Every
+      # field after the status is a path the repair touched, so both ends of a rename count.
+      TOUCHED_FILES=$(awk -F'\t' 'NF>1{for(i=2;i<=NF;i++) if($i!="") print $i}' "${REPAIR_FILES[@]}" 2>/dev/null \
+        | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique' 2>/dev/null) || TOUCHED_FILES=""
+      if [ -n "$TOUCHED_FILES" ]; then
+        TOUCHED_SOURCE="determined"
+      else
+        TOUCHED_FILES='[]'
+      fi
+    fi
+  elif [ -n "$CHANGE_SET_FILE" ] && [ -f "$CHANGE_SET_FILE" ]; then
+    TOUCHED_SUBJECT="task_change_set"
+    if jq -e 'type == "object" and has("files")
+              and (.files | type == "array" and all(.[]; type == "string"))' \
+         "$CHANGE_SET_FILE" >/dev/null 2>&1 \
+       && TOUCHED_FILES=$(jq -c '.files' "$CHANGE_SET_FILE" 2>/dev/null); then
+      TOUCHED_SOURCE="determined"
+    else
+      TOUCHED_FILES='[]'
+    fi
   fi
+  set_ev_s scope_subject "$TOUCHED_SUBJECT"
 
   SCOPE_SCRIPT="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/repair-scope-check.sh"
   if [ -f "$SCOPE_SCRIPT" ]; then
@@ -575,16 +636,16 @@ if [ -e "$REC" ]; then
       case "$SCOPE_ACTION" in
         out_of_scope)
           SCOPE_UNNAMED=$(jq -r '.unnamed | join(", ")' <<<"$SCOPE_OUT")
-          add_msg "scope compliance: touched file(s) named by no finding: $SCOPE_UNNAMED -- surfaced, not blocking"
+          add_msg "scope compliance ($TOUCHED_SUBJECT): touched file(s) named by no finding: $SCOPE_UNNAMED -- surfaced, not blocking"
           ;;
         in_scope)
-          add_msg "scope compliance: every touched file is named by a finding or covered by an allow rule"
+          add_msg "scope compliance ($TOUCHED_SUBJECT): every touched file is named by a finding or covered by an allow rule"
           ;;
         cannot_judge)
           if [ "$(jq -r 'length' <<<"$FINDING_SITES")" -eq 0 ]; then
             add_msg "scope compliance could not be judged: no finding named a site"
           else
-            add_msg "scope compliance could not be judged: the touched-file set could not be determined"
+            add_msg "scope compliance could not be judged: the touched-file set could not be determined (subject: $TOUCHED_SUBJECT)"
           fi
           ;;
         *) add_msg "scope compliance returned an unrecognised action: $SCOPE_ACTION" ;;
@@ -635,6 +696,61 @@ if [ -e "$REC" ]; then
   if [ "$DEFERRED_N" -gt 0 ]; then
     set_ev deferred_findings "$DEFERRED_N"
     add_msg "$DEFERRED_N finding(s) deferred to a component not yet built; they carry forward rather than being answered speculatively"
+  fi
+
+  # ------------------- findings suppressed as out of range (v5.45.0+, finding_contract c5)
+  #
+  # `wo-critique-aggregate.sh` drops a finding whose every site falls outside the component's own
+  # range out of the severity that decides `blocking` -- it opens no repair round -- and collects it
+  # into the envelope's top-level `out_of_range[]`. `references/gate-audit-schema.md` states that
+  # that array is "the channel by which such a finding reaches /review; a consumer that does not
+  # read it will see the finding vanish rather than move." THIS IS THE CONSUMER at the other end of
+  # that sentence. It shipped without one, which made the sentence a description of a channel with
+  # nothing listening -- a kernel with no caller, the same defect `command-body-lengths.sh`'s own
+  # comment records this body fixing for `repair-scope-check.sh` one component earlier.
+  #
+  # It surfaces and never blocks, exactly as `deferred_findings` above does. An out-of-range finding
+  # is a real finding about real code, just not about the slice this component was asked to change,
+  # and the reviewer is the one who decides where it goes. Suppressing the round and then saying
+  # nothing would be the finding vanishing.
+  #
+  # AN UNREADABLE REF IS NOT ZERO. The refs are walked exactly the way FINDING_SITES walks them
+  # above, and one that does not resolve to a readable JSON object contributes nothing -- so a count
+  # on its own would read "nothing was suppressed" on a record whose pointers are all broken. The
+  # unreadable ones are counted separately and said out loud, which is the same posture as the
+  # kernel's own `range_check.status:"not_run"`: nobody looked is not the same answer as nothing
+  # was found. A readable envelope with no `out_of_range` key claims nothing either way -- every
+  # record written before the field existed is that shape -- so it adds to neither count.
+  OOR_N=0
+  OOR_UNREADABLE=0
+  OOR_SITES='[]'
+  while IFS= read -r ref; do
+    if [ -z "$ref" ] || [ "$ref" = "null" ]; then continue; fi
+    case "$ref" in
+      /*) REF_PATH="$ref" ;;
+      *)  REF_PATH="$TASK_DIR/$ref" ;;
+    esac
+    if [ ! -f "$REF_PATH" ] || ! jq -e 'type == "object"' "$REF_PATH" >/dev/null 2>&1; then
+      OOR_UNREADABLE=$(( OOR_UNREADABLE + 1 )); continue
+    fi
+    REF_OOR=$(jq -c '[ (.out_of_range // [])[]? | select(type == "object") ]' "$REF_PATH" 2>/dev/null) || REF_OOR="$JQ_ERR"
+    if [ "$REF_OOR" = "$JQ_ERR" ]; then
+      OOR_UNREADABLE=$(( OOR_UNREADABLE + 1 )); continue
+    fi
+    OOR_N=$(( OOR_N + $(jq -r 'length' <<<"$REF_OOR") ))
+    REF_OOR_SITES=$(jq -c '[ .[] | (.where // [])[]? | (.file // empty) ]' <<<"$REF_OOR" 2>/dev/null) || REF_OOR_SITES='[]'
+    OOR_SITES=$(jq -c -n --argjson a "$OOR_SITES" --argjson b "$REF_OOR_SITES" \
+      '($a + $b) | unique' 2>/dev/null) || OOR_SITES='[]'
+  done < <(jq -r '.[] | (.critique_ref // "") | tostring' <<<"$FS_COMPONENTS" 2>/dev/null)
+
+  if [ "$OOR_N" -gt 0 ]; then
+    set_ev out_of_range_findings "$OOR_N"
+    set_ev out_of_range_sites "$OOR_SITES"
+    add_msg "$OOR_N finding(s) were recorded out of the component's own range and opened no repair round; they are handed here rather than dropped, sited at: $(jq -r 'join(", ")' <<<"$OOR_SITES")"
+  fi
+  if [ "$OOR_UNREADABLE" -gt 0 ]; then
+    set_ev out_of_range_unreadable_refs "$OOR_UNREADABLE"
+    add_msg "$OOR_UNREADABLE component critique_ref(s) could not be read, so whether a finding was suppressed as out of range is unknown, not zero"
   fi
 
   # ----------------------- the repair AFTER the last critique pass (v5.35.3+)
