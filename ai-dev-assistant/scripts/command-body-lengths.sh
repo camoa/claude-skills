@@ -69,7 +69,10 @@ budget_for() {
     # scripts/stub-detect.sh and branches; the rest is the evidence, which belongs next to the
     # instruction rather than in a task folder nobody opens while editing this file.
     research) printf '144' ;;
-    design)   printf '82'  ;;
+    # 82 -> 83, raise 1: a design-close coverage gate that can halt, replacing a size estimate
+    # that could not. Step 7 is now the gate and its records check (two lines for one) and
+    # line 41 names the item-marker format in the clause that names acceptance criteria.
+    design)   printf '83'  ;;
     # 363 -> 370, raise: wires the size-estimate kernel (since deleted, see 389 -> 382) into the component close, so a build
     # that outgrows its plan is visible while it is still open. Nothing in the lifecycle asked whether
     # a change was bigger than its problem. Measured: one build produced 1,637 insertions for roughly
@@ -135,7 +138,10 @@ budget_for() {
     # verdict read back and said aloud), four the comment saying where the globs come from and why,
     # and three the surfaces-never-blocks rule. The first cut piped an `undetermined` origin into a
     # flag that rejects it and left a 0-byte record nothing read; three critics found it.
-    implement) printf '417' ;;
+    # 417 -> 418, raise 1: the preflight reads the design-close coverage record. Before this the
+    # design gate wrote a record nothing read, so a design that left a criterion uncovered or
+    # carried an item reaching no goal opened a build anyway; one line makes the halt bind here.
+    implement) printf '418' ;;
     complete) printf '67'  ;;
     # 135 -> 136, raise 8: one line for the {{mechanism_unresolved_line}} token in the
     # review-summary template. 5.0c could not see a mechanism the cascade never searched, because its

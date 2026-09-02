@@ -151,6 +151,32 @@ if [ -x "$RENDER" ]; then
   else
     fail_check "an unknown template id exited $RC, not 1"
   fi
+
+  # A value read from a file (key@=<path>) reaches the body byte for byte. Two critics measured the
+  # inline form on a real criterion and a real recipe block: inside a double-quoted argument every
+  # backtick and $(...) ran, the code vanished, and the render exited 0 looking clean.
+  VT=$(mktemp); printf 'a `tick` and $(id) and `whoami` and {{not_a_placeholder}} and $HOME\n```yaml\nk: v\n```' > "$VT"
+  GOT=$("$RENDER" scope-contract-offer task_name@="$VT" level=L 2>/dev/null || true)
+  if printf '%s' "$GOT" | grep -q -F 'a `tick` and $(id) and `whoami` and {{not_a_placeholder}} and $HOME' \
+     && printf '%s' "$GOT" | grep -q -F '```yaml'; then
+    pass_check "a key@=<path> value is read verbatim: backticks, \$(...), \$VAR, fences and {{...}} survive"
+  else
+    fail_check "a key@=<path> value was altered on the way into the body"
+  fi
+  rm -f "$VT"
+
+  # A {{...}} inside a VALUE is data, not an unfilled placeholder: the residual set is the
+  # template's own markers minus the keys supplied, decided before substitution. Before this a
+  # recipe body with Twig interpolation exited 2 and printed nothing, and a critic was never sent.
+  set +e
+  "$RENDER" scope-contract-offer task_name='{{ twig }}' level=L >/dev/null 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -eq 0 ]; then
+    pass_check "a {{...}} inside a supplied value does not read as an unfilled placeholder"
+  else
+    fail_check "a {{...}} inside a supplied value stopped the render (exit $RC)"
+  fi
 else
   fail_check "scripts/prompt-render.sh is missing — every prompt is improvised wording again"
 fi

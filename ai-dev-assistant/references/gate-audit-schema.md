@@ -968,6 +968,41 @@ files show the build went through `/run-work-orders` and owes those instead. An 
 a `bypass_reason` on this record, which the writer hoists to the envelope and the gate
 surfaces rather than absorbs.
 
+### 5.19 `coverage` (v1.9+, v5.44.0 — the design-close coverage gate)
+
+Written once at `/design` close by `scripts/coverage-check.sh` through `gate-audit-write.sh`, and
+read by `/implement`'s preflight before the first component opens. Every criterion is covered and
+every acceptance item reaches a criterion, as reachability over `architecture/*.md`; full contract in
+the script header and `references/alignment-contract.md` §5.2 (the `— id:` marker it resolves).
+
+```json
+{
+  "gate_type": "coverage",
+  "schema_version": "1.9",
+  "task_folder": "<abs path>",
+  "gate_specific": {
+    "status": "pass | fail | not_applicable | not_run",
+    "passes": false,
+    "reason": "all_ticked | no_ids | no_components | null",
+    "source": "alignment | task | null",
+    "criteria_count": 9, "items_count": 58,
+    "components": ["..."], "not_declared": ["..."], "ticked": ["c4"],
+    "unreached": [ {"component": "...", "item": "...", "why": "..."} ],
+    "uncovered": ["c3"]
+  }
+}
+```
+
+| Field | Contract |
+|---|---|
+| `status` | `fail` halts design close (`[f]ix` re-runs, `[o]verride <reason>` records the reason as `bypass_reason` and proceeds) and halts `/implement` before its first component. `not_run` is "nobody could look": no `— id:` anywhere (`no_ids`, run `/scope`) or no component files; printed by name, not a pass, and the phase proceeds, forward-only. `not_applicable` is "looked, nothing applies": ids exist and every criterion is ticked; passes. |
+| `passes` | `true` only for `pass` and `not_applicable`. A consumer reads this, never infers it from `status`. |
+| `unreached[]` | Forward half: an item with no marker or two, an id not in the contract, a `supports:` to a missing component, a self-edge, or a `supports:` chain that never meets a `serves:` edge. `why` says which. |
+| `uncovered[]` | Backward half: an unticked criterion no item serves. Ticked criteria are listed under `ticked[]` and are never uncovered. |
+| `not_declared[]` | Components with no `## Acceptance criteria` heading (case-insensitive, outside fences). They contribute no items; the run continues over the others. |
+
+A record is required at design close (`phase-records-check.sh <task> --phase design`); a `not_run` record satisfies the row, an absent one does not.
+
 ## Agent sidecars (v5.37.0+)
 
 Four agents that delivered by message now write their payload to a path the dispatcher hands them and

@@ -847,6 +847,140 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# v1.4 `id` marker (` — id: c<n>`), the identifier coverage-check cites. Absent → null.
+# I1: marker present, alone
+D="$(mkalign i1 <<'EOF'
+# Alignment: i1
+
+## Task-Level
+
+### Success criteria
+- [ ] The reader emits an id — id: c3
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "c3" ] && [ "$(tlcrit 0 text)" = "The reader emits an id" ]; then
+  pass_check "I1 id marker: id captured, text excludes it"
+else fail_check "I1 id marker: id captured, text excludes it" "id=$(tlcrit 0 id) text=$(tlcrit 0 text) rc=$RC"; fi
+
+# I2: marker absent → id null, nothing else changes
+D="$(mkalign i2 <<'EOF'
+# Alignment: i2
+
+## Task-Level
+
+### Success criteria
+- [ ] No marker here — by: owner — verify: run it
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "null" ] && [ "$(jq -r '.sections.task_level.success_criteria[0] | has("id")' <<<"$OUT")" = "true" ] \
+  && [ "$(tlcrit 0 author)" = "owner" ] && [ "$(tlcrit 0 verification)" = "run it" ]; then
+  pass_check "I2 no id marker: id null, author and verification intact"
+else fail_check "I2 no id marker: id null, author and verification intact" "id=$(tlcrit 0 id) author=$(tlcrit 0 author) ver=$(tlcrit 0 verification) rc=$RC"; fi
+
+# I3: the marker falls at a wrap: ` —` ends one line, `id: c4` starts the next
+D="$(mkalign i3 <<'EOF'
+# Alignment: i3
+
+## Task-Level
+
+### Success criteria
+- [ ] A criterion long enough to wrap onto a second line before its marker arrives —
+      id: c4 — verify: the spec
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "c4" ] && [ "$(tlcrit 0 verification)" = "the spec" ] \
+  && [ "$(tlcrit 0 text)" = "A criterion long enough to wrap onto a second line before its marker arrives" ]; then
+  pass_check "I3 id marker split across a wrap reads as on one line"
+else fail_check "I3 id marker split across a wrap reads as on one line" "id=$(tlcrit 0 id) text=$(tlcrit 0 text) ver=$(tlcrit 0 verification) rc=$RC"; fi
+
+# I4: all three markers in grammar order: id, by, verify
+D="$(mkalign i4 <<'EOF'
+# Alignment: i4
+
+## Task-Level
+
+### Success criteria
+- [x] Everything at once — id: c12 — by: designer — verify: all three fields
+EOF
+)"
+arun "$D"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "c12" ] && [ "$(tlcrit 0 author)" = "designer" ] \
+  && [ "$(tlcrit 0 verification)" = "all three fields" ] && [ "$(tlcrit 0 checked)" = "true" ] \
+  && [ "$(tlcrit 0 text)" = "Everything at once" ]; then
+  pass_check "I4 id, by and verify together: five fields, text clean"
+else fail_check "I4 id, by and verify together: five fields, text clean" "$(jq -c '.sections.task_level.success_criteria[0]' <<<"$OUT") rc=$RC"; fi
+
+# I5: a value that is not c<n> is not an id: null, warned, text left intact
+D="$(mkalign i5 <<'EOF'
+# Alignment: i5
+
+## Task-Level
+
+### Success criteria
+- [ ] Wrong shape — id: goal-3
+EOF
+)"
+arun "$D"
+WARNI5="$(jq -r '[.warnings[] | select(.code=="criterion_id_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "null" ] && [ "$(jq -r '.sections.task_level.success_criteria[0] | has("id")' <<<"$OUT")" = "true" ] \
+  && [ "$WARNI5" = "1" ] && [ "$(tlcrit 0 text)" = "Wrong shape — id: goal-3" ]; then
+  pass_check "I5 id value not c<n>: null, criterion_id_unrecognized, text intact"
+else fail_check "I5 id value not c<n>: null, criterion_id_unrecognized, text intact" "id=$(tlcrit 0 id) warn=$WARNI5 text=$(tlcrit 0 text) rc=$RC"; fi
+
+# I6: a near-miss (hyphen, no space) is warned, never parsed
+D="$(mkalign i6 <<'EOF'
+# Alignment: i6
+
+## Task-Level
+
+### Success criteria
+- [ ] Hyphen attempt -id: c3
+EOF
+)"
+arun "$D"
+WARNI6="$(jq -r '[.warnings[] | select(.code=="criterion_id_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "null" ] && [ "$WARNI6" = "1" ] && [ "$(tlcrit 0 text)" = "Hyphen attempt -id: c3" ]; then
+  pass_check "I6 id near-miss: warned, id null, text intact"
+else fail_check "I6 id near-miss: warned, id null, text intact" "id=$(tlcrit 0 id) warn=$WARNI6 text=$(tlcrit 0 text)"; fi
+
+# I7: the same id twice is warned on the second sighting, both records kept
+D="$(mkalign i7 <<'EOF'
+# Alignment: i7
+
+## Task-Level
+
+### Success criteria
+- [ ] First — id: c1
+- [ ] Second — id: c1
+EOF
+)"
+arun "$D"
+WARNI7="$(jq -r '[.warnings[] | select(.code=="criterion_id_duplicate" and .detail=="c1")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$WARNI7" = "1" ] && [ "$(tlcrit 1 id)" = "c1" ] && [ "$(jq -r '.sections.task_level.success_criteria|length' <<<"$OUT")" = "2" ]; then
+  pass_check "I7 duplicate id: criterion_id_duplicate once, both criteria kept"
+else fail_check "I7 duplicate id: criterion_id_duplicate once, both criteria kept" "warn=$WARNI7 $(jq -c .sections.task_level.success_criteria <<<"$OUT")"; fi
+
+# I8: c0 and a zero-padded number are not ids
+D="$(mkalign i8 <<'EOF'
+# Alignment: i8
+
+## Task-Level
+
+### Success criteria
+- [ ] Zero — id: c0
+- [ ] Padded — id: c007
+EOF
+)"
+arun "$D"
+WARNI8="$(jq -r '[.warnings[] | select(.code=="criterion_id_unrecognized")] | length' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$(tlcrit 0 id)" = "null" ] && [ "$(tlcrit 1 id)" = "null" ] && [ "$WARNI8" = "2" ]; then
+  pass_check "I8 c0 and c007 are not ids: null, warned"
+else fail_check "I8 c0 and c007 are not ids: null, warned" "ids=$(tlcrit 0 id),$(tlcrit 1 id) warn=$WARNI8"; fi
+
+# ---------------------------------------------------------------------------
 echo "----"
 echo "alignment-read-spec: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

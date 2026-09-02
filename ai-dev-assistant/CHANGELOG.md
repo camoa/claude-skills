@@ -1,5 +1,43 @@
 # Changelog
 
+## [5.44.0] - 2026-09-01
+
+### Added
+- **A criterion carries an id.** `— id: c<n>` on a Task-Level criterion in `alignment.md` (grammar
+  in `references/alignment-contract.md` §5.2; `/scope` authors it, `scripts/alignment-read.sh` emits
+  `id`, with `criterion_id_unrecognized` and `criterion_id_duplicate` warnings).
+  `scripts/contract-resolve.sh` resolves the ids from `alignment.md`, else from `task.md`, never from
+  a parent epic, and reports `not_run: no_ids` when neither carries one.
+- **Every acceptance item on a component file reaches a criterion.** The architecture-drafter writes
+  each item under `## Acceptance criteria` with one marker, `— serves: c<n>` or
+  `— supports: <component>`, never both, never none. `scripts/coverage-check.sh` walks the
+  `supports:` edges to a `serves:` edge and then to the contract: an item that reaches nothing is
+  `unreached` with its `why`, an unticked criterion no item serves is `uncovered`. Fences, HTML
+  comments and indented code are not parsed; the hub is never read; `architecture/main.md` is
+  skipped by name. Measured on the real corpus before the spec: 190 component files, 319 items.
+- **The design close is a gate, on by default and recorded.** `/design` step 7 runs the check,
+  writes the printed JSON to a file and hands `@<path>` to `gate-audit-write.sh` as
+  `gate_type: coverage` (schema §5.19), so item text lifted from a component file never becomes a
+  shell argument. `fail` halts with each item and criterion named: `[f]ix` re-runs, `[o]verride
+  <reason>` records the reason. `not_run` (`no_ids`, `no_components`) prints its reason and proceeds
+  and is not a pass; `not_applicable` and `pass` proceed. It replaces the opt-in traceability
+  walkthrough, which defaulted to not running.
+- **`/design` has a records check.** `scripts/phase-records-check.sh <task> --phase design` runs at
+  the close; `_coverage.json` is a required row (`implicit`: only `/design` writes it), and a
+  `not_run` record satisfies it where an absent one does not.
+- **`/implement` reads the coverage record before the first component opens.** `fail` halts with
+  `[o]verride <reason>` recorded; `not_run` prints its reason and proceeds; an absent record is said
+  aloud and is not a pass.
+- **The critic dispatch is rendered from a template.** `prompt-render.sh critic-dispatch` fills the
+  `critic-dispatch` template in `references/gate-hardening-prompts.md` with the lens, worktree, range,
+  files, component, acceptance criteria, recipe block and output path, and step 5 hands the Task tool
+  exactly what it printed. The template tells the critic to run the component's own spec and never
+  the suite, after one critic ran the whole plugin suite unasked.
+
+### Changed
+- `design` body budget 82 → 83 and `implement` 417 → 418 in `scripts/command-body-lengths.sh`, each
+  with its reason recorded.
+
 ## [5.43.0] - 2026-09-01
 
 ### Changed

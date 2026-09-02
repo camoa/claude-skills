@@ -13,7 +13,7 @@
 # that move for prompts: the command runs this, the script prints the filled template, and the
 # session shows what was printed. The rendered text is then in the transcript, produced by code.
 #
-# Usage: prompt-render.sh <template-id> [key=value ...]
+# Usage: prompt-render.sh <template-id> [key=value | key@=<path> ...]
 #
 # Values may contain newlines. Pass multi-line substitutions quoted:
 #   prompt-render.sh dev-guides-preflight task_name="dev env" matched_domain_guides="$LIST"
@@ -80,19 +80,38 @@ if not fence:
 
 body = fence.group(1)
 
+# key=value substitutes the literal; key@=<path> reads the value from a file, byte for byte.
+# The file form exists because a value that is repo text (a recipe body, a component's
+# acceptance criteria) cannot safely cross a shell argument: inside double quotes every
+# backtick and $(...) runs and the code vanishes, and the render exits 0 looking clean.
+subs = []
 for arg in sys.argv[1:]:
     if "=" not in arg:
-        sys.stderr.write("prompt-render: substitution must be key=value, got '%s'\n" % arg)
+        sys.stderr.write("prompt-render: substitution must be key=value or key@=<path>, got '%s'\n" % arg)
         sys.exit(1)
     key, value = arg.split("=", 1)
-    body = body.replace("{{%s}}" % key, value)
+    if key.endswith("@"):
+        key = key[:-1]
+        try:
+            with open(value, encoding="utf-8") as vf:
+                value = vf.read()
+        except OSError as e:
+            sys.stderr.write("prompt-render: cannot read value file for '%s': %s\n" % (key, e))
+            sys.exit(1)
+    subs.append((key, value))
 
-# Any residual {{...}} at all, not just a {{lower_snake}} placeholder. The narrow
-# pattern was the bug: a template carrying {{#if decision == "x"}} / {{/if}} matched
-# nothing, so this check passed and a person was shown three verdict branches and the
-# raw conditional markers. A guard that exists to stop an unrendered marker reaching a
-# reader has to be able to see every marker there is.
-left = sorted(set(m.strip() for m in re.findall(r"\{\{(.*?)\}\}", body, re.S)))
+# The residual set is decided BEFORE substitution: the template's own markers minus the keys
+# supplied. A {{...}} arriving inside a value is data (a recipe body with Twig in it), never an
+# unfilled placeholder; deciding after substitution read it as one, exited 2, printed nothing,
+# and a critic was silently never sent.
+# Any marker at all, not just a {{lower_snake}} placeholder. The narrow pattern was the bug: a
+# template carrying {{#if decision == "x"}} / {{/if}} matched nothing, so this check passed and
+# a person was shown three verdict branches and the raw conditional markers. A guard that
+# exists to stop an unrendered marker reaching a reader has to be able to see every marker.
+supplied = set(k for k, _ in subs)
+left = sorted(set(m.strip() for m in re.findall(r"\{\{(.*?)\}\}", body, re.S)) - supplied)
+for key, value in subs:
+    body = body.replace("{{%s}}" % key, value)
 if left:
     sys.stderr.write(
         "prompt-render: template '%s' still has unfilled placeholder(s): %s\n"

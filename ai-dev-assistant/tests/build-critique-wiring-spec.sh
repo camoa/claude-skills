@@ -426,6 +426,15 @@ grep -q 'repair-accept-check.sh' <<<"$RUNG" && grep -q -- '--test-motion-from "\
 grep -q 'oracle-globs.sh' <<<"$RUNG" && grep -q -- '--test-globs-origin' <<<"$RUNG" && grep -q -- '--test-globs-source undetermined' <<<"$RUNG" && grep -q 'jq -r .*motion.json"' <<<"$RUNG" \
   && pass_check "the rung takes its globs from oracle-globs.sh and records the origin" \
   || fail_check "the rung's globs do not come from oracle-globs.sh with the origin recorded"
+# render-dispatch (review_ladder, c9 amended): the dispatch is rendered from a template and handed over as printed.
+grep -q 'prompt-render.sh critic-dispatch' <<<"$BLOCK" && grep -q -i 'exactly what it printed' <<<"$BLOCK" \
+  && pass_check "step 5 renders the critic dispatch with prompt-render.sh critic-dispatch and hands over what it printed" \
+  || fail_check "step 5 does not render the critic dispatch from the template"
+TPL="$(awk '/^## Template ID: `critic-dispatch`/,0' "$PLUGIN_ROOT/references/gate-hardening-prompts.md" | awk '/^```/{n++; next} n==1')"
+[ -n "$TPL" ] && ! grep -q -i -E 'hostile|probe|checklist|treat the diff' <<<"$TPL" \
+  && grep -q '{{acceptance_criteria}}' <<<"$TPL" && grep -q '{{recipe_block}}' <<<"$TPL" && grep -q '{{range}}' <<<"$TPL" && grep -q '{{lens}}' <<<"$TPL" \
+  && pass_check "the critic-dispatch template holds the four inputs and no probe, posture or checklist" \
+  || fail_check "the critic-dispatch template is missing an input or carries a probe, posture or checklist"
 if [ "$FAIL" = "0" ]; then
   printf '\nbuild-critique-wiring-spec: all checks passed\n'
 else

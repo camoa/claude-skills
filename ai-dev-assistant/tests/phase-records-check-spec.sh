@@ -94,7 +94,7 @@ OUT=$(bash "$K" "$(mkp cond research $REQUIRED)" --phase research)
 # Research was the only phase with a contract until v5.30.1. A live design phase ran this and
 # got `unknown`: honest, and useless. The guardrail that had already caught one skipped gate
 # could not look at the phase after it, or at implementation after that.
-DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md _mechanism-challenge.json"
+DESIGN_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json architecture.md _mechanism-challenge.json _coverage.json"
 IMPL_REQ="_phase-active.json _dev-guides-load.json _playbook-load.json implementation.md _mechanism-challenge.json _build-critique.json"
 
 # shellcheck disable=SC2086

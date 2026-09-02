@@ -82,11 +82,11 @@ fi
 
 # Validate gate_type
 case "$GATE_TYPE" in
-  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions|framework|build-critique)
+  pre-analysis|coverage-mapping|skill-review|plugin-validate|phase-command-bypass|dev-guides-load|playbook-load|review|e2e|visual_regression|visual_parity|recipe-load|agentic-recipe|mechanism-challenge|spec|internal-prior-art|preconditions|framework|build-critique|coverage)
     ;;
   *)
     echo "gate-audit-write: invalid gate_type: $GATE_TYPE" >&2
-    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions, framework, build-critique" >&2
+    echo "  must be one of: pre-analysis, coverage-mapping, skill-review, plugin-validate, phase-command-bypass, dev-guides-load, playbook-load, review, e2e, visual_regression, visual_parity, recipe-load, agentic-recipe, mechanism-challenge, spec, internal-prior-art, preconditions, framework, build-critique, coverage" >&2
     exit 2
     ;;
 esac
@@ -128,6 +128,7 @@ case "$GATE_TYPE" in
   preconditions)      DEFAULT_SV="1.7" ;;
   framework)          DEFAULT_SV="1.8" ;;
   build-critique)     DEFAULT_SV="1.9" ;;
+  coverage)           DEFAULT_SV="1.9" ;;
   *) DEFAULT_SV="1.0" ;;
 esac
 
