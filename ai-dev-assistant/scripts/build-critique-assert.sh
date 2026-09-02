@@ -252,6 +252,7 @@ if [ -e "$REC" ]; then
   TDD=$(jq -c '.tdd' <<<"$PAYLOAD")
   RED_N=$(jq -r '(.red_observed // -1)' <<<"$TDD")
   FIRSTRUN_N=$(jq -r '(.passed_first_run // -1)' <<<"$TDD")
+  RATIFIED_N=$(jq -r '(.ratified // -1)' <<<"$TDD")
   UNOBS=$(jq -c '(.unobserved // [])' <<<"$TDD")
   UNOBS_N=$(jq -r 'length' <<<"$UNOBS")
   TDD_REASON=$(jq -r '(.reason // "") | tostring' <<<"$TDD")
@@ -261,6 +262,35 @@ if [ -e "$REC" ]; then
   if [ "$RED_N" = "-1" ] || [ "$FIRSTRUN_N" = "-1" ] || ! jq -e 'has("unobserved")' <<<"$TDD" >/dev/null 2>&1; then
     add_msg "the tdd block omits red_observed, passed_first_run or unobserved[], so it cannot say what it did not watch"
     emit fail true "" 1
+  fi
+
+  # ------------------------------------------------------- the ratified count (v5.46.0+)
+  #
+  # `red_observed` counts tests run before the implementation existed and seen to fail. That
+  # evidence cannot tell a test-first test from one authored while reading the implementation
+  # and then run against a reverted tree: both fail at their own assertion for the reason they
+  # name, and both were recorded as `observed`. The ordering of RUNS is what the count saw; the
+  # ordering of KNOWLEDGE is what separates them.
+  #
+  # `ratified` is the value that separates them: a test that passed the moment it was written
+  # because the code it describes already existed. It is not `passed_first_run`, which means the
+  # test is wrong and owes a reason. Ratification is legitimate and common -- characterization
+  # and regression tests are written this way on purpose -- so it NEVER blocks and owes no
+  # reason. It is required, counted and said aloud, because a count folded into a test-first
+  # claim is the state this block exists to end.
+  #
+  # Absence is fail-closed for the same reason its three siblings are: a record with no
+  # `ratified` key reads identically to a phase that ratified nothing, and those are different
+  # answers. Measured on one build: 19 assertions across two fixes, 11 red and 8 green on
+  # arrival, and nothing anywhere was counting the 8.
+  if [ "$RATIFIED_N" = "-1" ]; then
+    add_msg "the tdd block omits ratified, so it cannot say how many tests passed on arrival because the code they describe already existed"
+    emit fail true "" 1
+  fi
+  add_msg "$RATIFIED_N test(s) ratified code that already existed, against $RED_N seen to fail first"
+  if [ "$RATIFIED_N" -gt 0 ] && [ "$RATIFIED_N" -ge "$RED_N" ]; then
+    # Never blocking. Surfaced, because a number nobody sees is the same as no number.
+    add_msg "this suite is ratifying more than it is constraining: $RATIFIED_N ratified against $RED_N red"
   fi
 
   if [ "$FIRSTRUN_N" -gt 0 ] && [ -z "$TDD_REASON" ]; then

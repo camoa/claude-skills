@@ -896,6 +896,7 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
   "tdd": {
     "red_observed": 5,
     "passed_first_run": 0,
+    "ratified": 2,
     "unobserved": [],
     "reason": null
   }
@@ -916,11 +917,23 @@ Standards and Spec axes in one `_review.json` without merging their verdicts.
 | `closing_fixes` | yes | v5.35.3+. `{applied, verified_by, reason}` — what changed AFTER the last critique pass. `applied: 0` is a valid answer. `applied > 0` needs a non-empty `verified_by`; when that names the author, self, nobody, none, or unverified anywhere in the string, a `reason` is required too, because the honest answer is usually mixed (some fixes read by a fresh context, the rest resting on their author) and a mixed answer is exactly the one that must not skip the question. Absent is fail-closed: a record that cannot say whether anything shipped uncritiqued. |
 | `rounds[]` | no | v5.35.0+. One entry per critique round: `{round, wo, tier, overall, blocking, lenses, headline}`. Absent means one round. May also carry `resolution` (the decision recorded for that round) and `deferred[]` `{finding, blocked_on, why_now_is_wrong}` for findings only a later component can answer. A deferral with no `blocked_on` is fail-closed. **Write it even when nothing was deferred:** the deferral check reads `.rounds[]` and an absent key yields `[]`, which passes silently, so a build that defers a finding and omits `rounds[]` records it nowhere any gate can see. An entry naming a component, with a `round` above 1, is also one of the two ways the accept check below tells a repaired component from an untouched one; the other is a `rounds` count above 1 on the component row. Write `round` as a number: absent or non-numeric leaves the entry unable to say whether it is the first critique or a repair, and that is fail-closed. See `references/build-critique.md`. |
 | `escalation` | conditional | v5.35.0+. `{reason}`. **Required once any component's `accept.action` is anything other than `accepted`** — who decided to ship it that way and why. Absent is fail-closed. May equivalently be recorded as a `resolution` on the `rounds[]` entry that settled it, which is the form a live build produced and the better of the two. Until v5.42.0 the trigger was a count — `rounds` reaching 2 — which asked a converged component to justify itself and asked nothing of one that stopped early without being accepted. |
-| `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. |
+| `tdd` | yes | Required as of v5.34.0. `{red_observed, passed_first_run, ratified, unobserved[], reason}` — whether each acceptance criterion built this phase had its test run and watched fail before the implementation existed (loop step 4, `references/build-critique.md`). `reason` is required only when `unobserved[]` is non-empty. `ratified` is required as of v5.46.0 and owes no reason. |
 
-**`tdd` (v5.34.0+).** `red_observed` and `passed_first_run` are counts of criteria across the
-whole phase; `unobserved` is the list of criterion ids, not a count, because a criterion built
-with no watched RED has to be nameable, not just tallied. `gate-audit-write.sh`'s
+**`tdd` (v5.34.0+).** `red_observed`, `passed_first_run` and `ratified` are counts of criteria
+across the whole phase; `unobserved` is the list of criterion ids, not a count, because a
+criterion built with no watched RED has to be nameable, not just tallied.
+
+**`ratified` (v5.46.0+)** counts the tests that passed the moment they were written, because the
+code they describe already existed. It is a separate value from `passed_first_run`, which means
+the test is wrong. `red_observed` alone cannot tell a test-first test from one authored while
+reading the implementation and then run against a reverted tree: both fail at their own
+assertion, and both were recorded as `observed`. **A high `ratified` against a low `red_observed`
+means the suite is ratifying rather than constraining** — it locks in what the code already does
+and could not have found anything. `build-critique-assert.sh` says that aloud when `ratified` is
+at or above `red_observed`, and never blocks on it either way; absence of the key is fail-closed,
+because a record with no count reads identically to a phase that ratified nothing. Why the
+distinction matters is TDD principle and lives in the dev-guides TDD guide the implement recipe
+references, not here. `gate-audit-write.sh`'s
 REQUIRED_KEYS check (§4a) treats `tdd` the way it treats every other listed key here —
 absence gets a warning on stderr and the file is written anyway, the same non-blocking
 posture as `frameworks[].method_fit` above. The hard enforcement is downstream, in
@@ -931,14 +944,17 @@ folding it into `overall_verdict`:
 |---|---|---|---|
 | `tdd` key absent | fail | `true` | 1 |
 | `red_observed` / `passed_first_run` / `unobserved` — any missing | fail | `true` | 1 |
-| `passed_first_run > 0` | fail | `false` | 1 |
+| `ratified` missing | fail | `true` | 1 |
+| `passed_first_run > 0`, no `reason` | fail | `true` | 1 |
+| `passed_first_run > 0` with a `reason` | pass | `false` | 0 |
+| `ratified > 0`, any value | pass, count surfaced in `messages[]` | — | 0 |
 | `unobserved` non-empty, `reason` empty or absent | fail | `true` | 1 |
 | `unobserved` non-empty, `reason` populated | pass | — | 0 |
 | all present, `unobserved` empty | pass | — | 0 |
 
-`passed_first_run > 0` is `unresolved: false` because it is not an unknown — it is a test that
-passed before the code existed, which means the test asserts nothing about the behavior it
-names. Everything else that is wrong about the block reads as "could not tell," which is why
+`passed_first_run > 0` with a recorded `reason` is `unresolved: false` because it is not an
+unknown — the record says which kind of test it was. Everything else that is wrong about the
+block, an unexplained first-run pass included, reads as "could not tell," which is why
 it is `unresolved: true`; a real, named violation does not get filed the same way as a gap in
 the record. **Covers the in-session build path only** — `/implement` writes this record; a
 build that went through `/run-work-orders` has no `_build-critique.json` and owes

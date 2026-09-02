@@ -232,10 +232,11 @@ as a RED credits an observation nobody made. `references/tdd-workflow.md` carrie
 
 **What gets recorded, per acceptance criterion:** whether its test was run and seen to FAIL
 before the implementation existed (`observed`), ran and passed on the first try — meaning the
-test is wrong (`passed_first_run`) — or nobody ran it (`unobserved`, legal only with a
-reason). `references/tdd-workflow.md`'s "Who runs the tests, and what has to be recorded" is
-the source of these three values and of the rule that `unobserved` is a real, writable value
-rather than something silence implies.
+test is wrong (`passed_first_run`) — passed because the code it describes already existed
+(`ratified`, v5.46.0+) — or nobody ran it (`unobserved`, legal only with a reason).
+`references/tdd-workflow.md`'s "Who runs the tests, and what has to be recorded" is the source
+of these four values and of the rule that `unobserved` is a real, writable value rather than
+something silence implies.
 
 **Who runs the test depends on `run_mode`**, read from `project_state.md` /
 `scripts/project-state-read.sh` (task override via `scripts/fm-read.sh`):
@@ -252,8 +253,8 @@ to watch one new test fail is the RED step itself, still owed either way.
 
 **Where it lands.** The per-criterion outcomes aggregate once, at Runtime Step 12 part 2 —
 not per component — into the `tdd` key of this rung's own record:
-`{red_observed, passed_first_run, unobserved[], reason}`, counted and named across every
-criterion built the whole phase. `gate-audit-write.sh` lists `tdd` in `build-critique`'s
+`{red_observed, passed_first_run, ratified, unobserved[], reason}`, counted and named across
+every criterion built the whole phase. `gate-audit-write.sh` lists `tdd` in `build-critique`'s
 REQUIRED_KEYS, the same non-blocking check it runs against `phase`, `verdict`,
 `components_declared`, and the rest — absence gets a warning on stderr and the file is
 written anyway. The enforcement that actually stops a review is downstream, in
@@ -262,19 +263,23 @@ written anyway. The enforcement that actually stops a review is downstream, in
 | Payload state | Verdict | `unresolved` | exit |
 |---|---|---|---|
 | `tdd` key absent | fail | `true` | 1 |
-| `red_observed` / `passed_first_run` / `unobserved` — any missing | fail | `true` | 1 |
+| `red_observed` / `passed_first_run` / `ratified` / `unobserved` — any missing | fail | `true` | 1 |
 | `passed_first_run > 0`, no `reason` | fail | `true` | 1 |
 | `passed_first_run > 0` with a `reason` | pass | `false` | 0 |
 | `unobserved` non-empty, `reason` empty or absent | fail | `true` | 1 |
 | `unobserved` non-empty, `reason` populated | pass | — | 0 |
+| `ratified > 0`, any value | pass, count surfaced in `messages[]` | — | 0 |
 | all present, `unobserved` empty | pass | — | 0 |
 
 **Two different things pass on a first run, and only one is a defect.** A test written
 test-first that passes immediately is `tdd-companion`'s named violation: it asserts nothing
-about the behavior it claims to test. A characterization or regression test written
-deliberately against code that already exists passes on its first run by design, and is worth
-having — locking in behavior, or reproducing a defect a critic just found. Both land in
-`passed_first_run`, and the `reason` says which.
+about the behavior it claims to test, and lands in `passed_first_run` with a `reason`. A
+characterization or regression test written deliberately against code that already exists
+passes on its first run by design, and is worth having — locking in behavior, or reproducing a
+defect a critic just found. As of v5.46.0 that second kind lands in `ratified`, which owes no
+reason and never blocks. Until then both shared `passed_first_run` and the `reason` said which,
+so the count that says how much of a suite could not have found anything was folded into the
+count that says the suite is broken.
 
 v5.34.0 failed both with no reason path at all. A live build hit it immediately: several tests
 added during repair rounds were written against existing code and passed first time, and the
@@ -642,7 +647,7 @@ without merging their verdicts.
 | `components_critiqued` | integer or array | How many actually got a critique. Same two shapes. |
 | `uncritiqued[]` | array | `{component, reason}` for every declared component with no critique. **Every entry needs a non-empty `reason`.** |
 | `alignment` | object | `{verdict, missing_requirements[], scope_creep[], spec_ref}`, or `{verdict: "skipped", reason}`. |
-| `tdd` | object | `{red_observed, passed_first_run, unobserved[], reason}` — the RED-observation half, from loop step 4, aggregated across the whole phase (v5.34.0+, required). See above. |
+| `tdd` | object | `{red_observed, passed_first_run, ratified, unobserved[], reason}` — the RED-observation half, from loop step 4, aggregated across the whole phase (v5.34.0+, required; `ratified` v5.46.0+). See above. |
 
 **`components_declared`, `components_critiqued` and `uncritiqued[]` are all three required,
 and a partial run must not be able to read as a complete one.** A rung that critiqued three of seven components and
@@ -685,7 +690,7 @@ components named. It is also not the same as a single component's empty diff, wh
 - **The work-order build path carries no RED evidence at all.** The `tdd` block lives on
   `_build-critique.json`, and only `/implement`'s in-session path writes that record. A build
   that went through `/run-work-orders` owes `work-orders/wo-NN._critique.json` instead, and
-  nothing in that shape carries `red_observed`, `passed_first_run`, or `unobserved`. The
+  nothing in that shape carries `red_observed`, `passed_first_run`, `ratified`, or `unobserved`. The
   RED-observation half is not degraded on that path — it is entirely absent, and
   `build-critique-assert.sh` does not ask it to be present, because the file it would live in
   is never expected to exist there. Documented as not covered, not as covered-and-passing.

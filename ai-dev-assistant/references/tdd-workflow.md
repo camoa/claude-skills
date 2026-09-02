@@ -102,8 +102,13 @@ value that must be written down rather than implied by silence:
 | Value | Meaning |
 |---|---|
 | `observed` | The test was run before the implementation existed and failed **at its own assertion, for the reason it names** |
-| `passed_first_run` | It was run and it passed. The reason says which kind: a test-first test that passes immediately is wrong (`tdd-companion`'s named violation); a characterization or regression test written against existing code passes by design |
+| `passed_first_run` | It was run and it passed, and the test is wrong: `tdd-companion`'s named violation. The reason says what happened |
+| `ratified` | It passed the moment it was written, because the code it describes already existed — a characterization or regression test. Counted apart from `observed`, never standing in for it |
 | `unobserved` | Nobody ran it. Legal to record, never legal to leave unsaid |
+
+**Which value applies turns on what the test's author was reading, not on the order the commands
+ran in.** That distinction, and the three proxies for judging it, live in
+`development/tdd-spec-driven/what-a-failing-test-proves` and are not restated here.
 
 **A failure is not automatically a RED.** A test that dies in `setUp` — a missing schema, an
 unregistered service the test itself needs, a database error — has failed without ever reaching

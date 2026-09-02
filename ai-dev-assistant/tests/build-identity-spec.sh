@@ -51,7 +51,7 @@ mkrec() { # mkrec <dir> <head> <files_digest_json_array_or_null> <files json>
       components_declared:1, components_critiqued:1, uncritiqued:[],
       components:[{component:"c1", verdict:"pass", blocking:false, runtime:"executed"}],
       alignment:{ran:true, verdict:"pass", criteria_unverifiable:[]},
-      tdd:{red_observed:1, passed_first_run:0, unobserved:[]},
+      tdd:{red_observed:1, passed_first_run:0, ratified:0, unobserved:[]},
       contract:{baseline:"captured", changed:[], reason:null},
       closing_fixes:{applied:0},
       build_identity:$bi
