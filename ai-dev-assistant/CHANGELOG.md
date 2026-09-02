@@ -34,6 +34,12 @@
   exactly what it printed. The template tells the critic to run the component's own spec and never
   the suite, after one critic ran the whole plugin suite unasked.
 
+- **The coverage read leaves a mark.** `/implement`'s preflight records `coverage_read`
+  (`{status, at}`) on `_coverage.json` on every path, not only the halt. Without it a design that
+  passed and a preflight that never ran leave the task folder byte-identical, so the override was
+  the only auditable way through the gate. Schema §5.19; same shape as
+  `frameworks[].fix_recipe_read` on `_recipe-load.json`.
+
 ### Changed
 - `design` body budget 82 → 83 and `implement` 417 → 418 in `scripts/command-body-lengths.sh`, each
   with its reason recorded.

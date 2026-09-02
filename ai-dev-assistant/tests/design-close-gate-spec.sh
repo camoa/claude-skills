@@ -57,4 +57,10 @@ else bad "G5 command-body-lengths passes with design at 83 and its reason"; fi
 if grep -q '### 5.19 `coverage`' "$ROOT/references/gate-audit-schema.md" && grep -q -E 'not_run.{0,400}not_applicable|not_applicable.{0,400}not_run' "$ROOT/references/gate-audit-schema.md"; then ok "G6 schema section for coverage names not_run and not_applicable"
 else bad "G6 schema section for coverage names not_run and not_applicable"; fi
 
+# G7: the implement preflight records the read on every path, not only the halt, and the schema
+#     documents the field. Without it a pass and a preflight that never ran are indistinguishable.
+if grep -q -E '_coverage\.json.{0,600}coverage_read' "$IMP" && grep -q -i -E 'coverage_read.{0,200}every path|every path.{0,200}coverage_read' "$IMP" \
+  && grep -q '`coverage_read`' "$ROOT/references/gate-audit-schema.md"; then ok "G7 the implement preflight records coverage_read on every path and the schema documents it"
+else bad "G7 the implement preflight records coverage_read on every path and the schema documents it"; fi
+
 echo "----"; echo "design-close-gate-spec: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

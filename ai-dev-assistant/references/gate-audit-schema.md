@@ -1000,8 +1000,9 @@ the script header and `references/alignment-contract.md` §5.2 (the `— id:` ma
 | `unreached[]` | Forward half: an item with no marker or two, an id not in the contract, a `supports:` to a missing component, a self-edge, or a `supports:` chain that never meets a `serves:` edge. `why` says which. |
 | `uncovered[]` | Backward half: an unticked criterion no item serves. Ticked criteria are listed under `ticked[]` and are never uncovered. |
 | `not_declared[]` | Components with no `## Acceptance criteria` heading (case-insensitive, outside fences). They contribute no items; the run continues over the others. |
+| `coverage_read` | v5.44.0+. `{status, at}`, written by `/implement`'s preflight on EVERY path, not only the halt: which status it read (or `absent`), and when. Without it a design that passed and a preflight that never ran leave the task folder byte-identical, so the only auditable path through the gate is the override — backwards, since the override is the one path that already announces itself. The criterion this gate serves promises that an uncovered design never reaches a build, and that promise is checkable after the fact only if the read left a mark. Same shape and same reason as `frameworks[].fix_recipe_read` on `_recipe-load.json` (§5.12): a main-flow read that proves it happened. Absent on a record whose task has an implementation phase means nobody can say the build ever consulted it. |
 
-A record is required at design close (`phase-records-check.sh <task> --phase design`); a `not_run` record satisfies the row, an absent one does not.
+A record is required at design close (`phase-records-check.sh <task> --phase design`); a `not_run` record satisfies the row, an absent one does not. `/implement` then adds `coverage_read` to the same record rather than writing its own, so one file carries both what the design found and that the build read it.
 
 ## Agent sidecars (v5.37.0+)
 
